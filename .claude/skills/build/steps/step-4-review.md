@@ -1,5 +1,9 @@
 # Step 4: Review — Poll Linear, Rework, Reviewer, Architect, Smoke
 
+## HARD RULE — STILL NO PUSH
+
+The branch remains **local-only** through this step. Do NOT invoke `git push`, `gh pr create`, `gh pr merge --auto`, or the `/push` skill (even with `--skip-pr`) anywhere in Step 4 — including during rework loops. The first push lives in Step 5.
+
 ---
 
 ## 4a. Check Story Status in Linear

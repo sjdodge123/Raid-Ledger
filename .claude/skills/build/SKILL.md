@@ -40,10 +40,10 @@ Requirements Interview (plan mode, if spec incomplete)
   → Linear "In Progress" (1h)
   → E2E Test Agent writes FAILING test (2d — TDD)
   → Dev builds to pass test (2e)
-  → CI → Push → Deploy → Linear "In Review" → FULL STOP for operator
+  → CI → Deploy LOCAL (no push) → Linear "In Review" → FULL STOP for operator
   → Commit operator changes → Linear "Code Review" → Reviewer
   → Optional: Architect final (if needs_architect)
-  → Lead smoke tests → PR → Auto-merge (LAST) → Linear "Done"
+  → Lead smoke tests → git push → Create PR → Auto-merge (LAST) → Linear "Done"
 ```
 
 **Eight gates before PR:** requirements, e2e_test_first (N/A only for light), dev, ci, operator, reviewer, architect_final (if needed), smoke_test.
@@ -64,6 +64,8 @@ Requirements Interview (plan mode, if spec incomplete)
 
 **Agent comms:** mailbox via `SendMessage`. Never `TaskOutput` to check on agents. Never poll with `sleep + stat`. While waiting, do parallel useful work.
 
+**No `git push` before code review.** The branch stays LOCAL through Steps 1-4. The first push + PR creation happens only in Step 5, after operator approval AND reviewer approval. Do NOT invoke `/push`, `git push`, `gh pr create`, or `gh pr merge --auto` in Steps 1-4 — even with `--skip-pr`. Pushing pre-review risks PRs + auto-merge landing before a human has reviewed.
+
 **Auto-merge is the LAST action.** Never enable at PR creation. Create PR → complete all gates → enable auto-merge.
 
 **Subagent rules (applied via templates):** subagents stay in their worktree, never push, never create PRs, never enable auto-merge, never force-push, never call `mcp__linear__*`, never run destructive ops. Lead handles all of that.
@@ -78,9 +80,9 @@ Read each step file when you reach it — do not pre-load all steps.
 |------|------|-------------|
 | 1 | `steps/step-1-setup.md` | Cleanup, fetch, profile, requirements interview, init state, Linear → In Progress |
 | 2 | `steps/step-2-implement.md` | Worktrees, optional planner/architect, spawn devs + test agents |
-| 3 | `steps/step-3-validate.md` | CI, push, deploy, Linear → In Review, FULL STOP |
-| 4 | `steps/step-4-review.md` | Poll Linear, rework/approval, reviewer + architect + smoke |
-| 5 | `steps/step-5-ship.md` | Rebase, PR, auto-merge, Linear → Done, cleanup |
+| 3 | `steps/step-3-validate.md` | CI, deploy LOCAL (**no git push**), Linear → In Review, FULL STOP |
+| 4 | `steps/step-4-review.md` | Poll Linear, rework/approval, reviewer + architect + smoke (**still no push**) |
+| 5 | `steps/step-5-ship.md` | Rebase, `git push`, create PR, auto-merge, Linear → Done, cleanup |
 
 ---
 

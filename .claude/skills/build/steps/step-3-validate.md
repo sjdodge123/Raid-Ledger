@@ -1,6 +1,19 @@
 # Step 3: Validate — CI, Deploy Locally, FULL STOP
 
-Lead runs everything. The branch is NOT pushed to origin in this step — "push" here means **deploy locally** so the operator can browser-verify. Nothing leaves the worktree until after code review (step 5). Gate 3a must pass before deploy.
+Lead runs everything.
+
+## HARD RULE — NO PUSH IN STEP 3
+
+The branch stays **local-only** through Steps 1–4. Do NOT invoke any of the following in this step:
+
+- `git push` (including `--force`, `--force-with-lease`)
+- `gh pr create`
+- `gh pr merge --auto`
+- the `/push` skill (even with `--skip-pr`)
+
+The first push happens in **Step 5**, after the operator approves AND the reviewer approves. Pushing pre-review risks a PR and auto-merge landing before a human reviews. If you find yourself about to run any push-adjacent command, stop — you are in the wrong step.
+
+"Push to origin" ≠ "deploy locally." In this step, "deploy" means `./scripts/deploy_dev.sh` so the operator can browser-test. Nothing leaves the worktree here. Gate 3a must pass before deploy.
 
 ---
 
