@@ -13,12 +13,14 @@
  * - AC 10: GET /users/:id/similar-players
  */
 import { sql } from 'drizzle-orm';
+import { INTENSITY_TIERS } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { TIER_DESCRIPTIONS } from './archetype-copy';
 import { TasteProfileService } from './taste-profile.service';
 
 describe('Taste Profile (ROK-948)', () => {
@@ -81,6 +83,41 @@ describe('Taste Profile (ROK-948)', () => {
       source,
       playtimeForever: playtimeForever ?? null,
     });
+  }
+
+  /**
+   * Build a zeroed dimensions record for every axis in the pool. Used
+   * when seeding player_taste_vectors directly so we don't trip a NOT
+   * NULL jsonb constraint when a test doesn't care about axis shape.
+   */
+  function zeroPoolDimensions(): Record<string, number> {
+    const axes = [
+      'co_op',
+      'pvp',
+      'battle_royale',
+      'mmo',
+      'moba',
+      'fighting',
+      'shooter',
+      'racing',
+      'sports',
+      'rpg',
+      'fantasy',
+      'sci_fi',
+      'adventure',
+      'strategy',
+      'survival',
+      'crafting',
+      'automation',
+      'sandbox',
+      'horror',
+      'social',
+      'roguelike',
+      'puzzle',
+      'platformer',
+      'stealth',
+    ];
+    return Object.fromEntries(axes.map((a) => [a, 0]));
   }
 
   // ─── AC 2: schema ───────────────────────────────────────────────
@@ -371,28 +408,90 @@ describe('Taste Profile (ROK-948)', () => {
             breadth: expect.any(Number),
             consistency: expect.any(Number),
           }),
-          archetype: expect.stringMatching(
-            /^(Dedicated|Specialist|Explorer|Social Drifter|Casual)$/,
-          ),
+          archetype: expect.objectContaining({
+            intensityTier: expect.stringMatching(
+              /^(Hardcore|Dedicated|Regular|Casual)$/,
+            ),
+            vectorTitles: expect.any(Array),
+            descriptions: expect.objectContaining({
+              tier: expect.any(String),
+              titles: expect.any(Array),
+            }),
+          }),
           coPlayPartners: expect.any(Array),
           computedAt: expect.any(String),
         }),
       );
+      // vectorTitles cap is 2 — descriptions.titles must mirror length.
+      expect(res.body.archetype.vectorTitles.length).toBeLessThanOrEqual(2);
+      expect(res.body.archetype.descriptions.titles.length).toBe(
+        res.body.archetype.vectorTitles.length,
+      );
+      expect(INTENSITY_TIERS).toContain(res.body.archetype.intensityTier);
       expect(res.body.coPlayPartners.length).toBeLessThanOrEqual(10);
     });
 
-    it('returns zeroed dimensions + Casual for a user with no vector', async () => {
+    it('returns zeroed dimensions + composed Casual archetype for a user with no vector', async () => {
       const userId = await seedUser('d:prof2', 'prof2');
       const res = await testApp.request
         .get(`/users/${userId}/taste-profile`)
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
-      expect(res.body.archetype).toBe('Casual');
+      expect(res.body.archetype.intensityTier).toBe('Casual');
+      expect(res.body.archetype.vectorTitles).toEqual([]);
+      expect(res.body.archetype.descriptions.tier).toBe(
+        TIER_DESCRIPTIONS.Casual,
+      );
+      expect(res.body.archetype.descriptions.titles).toEqual([]);
       for (const axis of Object.values(
         res.body.dimensions as Record<string, number>,
       )) {
         expect(axis).toBe(0);
       }
+    });
+
+    it('AC 1 regression: high-intensity specialist earns the Hardcore tier, not Casual', async () => {
+      // Seed a user whose intensityMetrics lands in the Hardcore tier
+      // (intensity >= 85). This is the ROK-1083 bug anchor — the old
+      // 5-value enum dropped this shape to 'Casual' because the player's
+      // focus/breadth didn't match the 'Specialist' branch exactly.
+      const userId = await seedUser('d:hardcore-regression', 'hardcore');
+      const game = await seedGame('Hardcore Seed', [12], [1], []);
+      await seedInterest(userId, game, 'steam_library', 9000);
+
+      // Pre-seed the row with pinned intensityMetrics + archetype=null so
+      // the pipeline exercises the post-migration rebuild path. Dimensions
+      // stay zeroed so no vector-title floor is crossed — this isolates
+      // the assertion to the tier derivation.
+      const zeroDims = zeroPoolDimensions();
+      await testApp.db.insert(schema.playerTasteVectors).values({
+        userId,
+        vector: [0, 0, 0, 0, 0, 0, 0],
+        dimensions: zeroDims as never,
+        intensityMetrics: {
+          intensity: 95,
+          focus: 77,
+          breadth: 20,
+          consistency: 0,
+        } as never,
+        archetype: null,
+        // Hash intentionally stale so the pipeline reruns upsertVector for
+        // this user instead of skipping on the `existing.signalHash` check.
+        signalHash: `stale-${userId}`,
+      });
+
+      await service.aggregateVectors();
+
+      const res = await testApp.request
+        .get(`/users/${userId}/taste-profile`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.archetype.intensityTier).toBe('Hardcore');
+      expect(res.body.archetype.intensityTier).not.toBe('Casual');
+      expect(res.body.archetype.descriptions.tier).toBe(
+        TIER_DESCRIPTIONS.Hardcore,
+      );
     });
 
     it('returns 404 for a nonexistent user', async () => {
@@ -440,6 +539,9 @@ describe('Taste Profile (ROK-948)', () => {
       for (const s of res.body.similar) {
         expect(s.userId).not.toBe(anchor);
         expect(typeof s.similarity).toBe('number');
+        // ROK-1083: similar-player cards expose the composed archetype's
+        // intensityTier only (no vector titles on compact cards).
+        expect(INTENSITY_TIERS).toContain(s.intensityTier);
       }
       // Sorted by similarity — higher first (or distance lower first)
       for (let i = 1; i < res.body.similar.length; i++) {
