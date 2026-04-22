@@ -16,7 +16,10 @@ import type {
   LlmChatOptions,
   LlmChatResponse,
 } from '../../ai/llm-provider.interface';
-import { callAndParseLlmOutput } from './llm-output.helpers';
+import {
+  callAndParseLlmOutput,
+  LlmUnavailableError,
+} from './llm-output.helpers';
 
 type MockLlmService = Pick<LlmService, 'chat'>;
 
@@ -96,5 +99,37 @@ describe('callAndParseLlmOutput (ROK-931)', () => {
     });
     expect(chat).toHaveBeenCalledTimes(2);
     expect(result.suggestions).toEqual([]);
+  });
+
+  it('throws LlmUnavailableError when both attempts reject with provider errors (Gemini 5xx)', async () => {
+    // Review coverage gap: as-built reconcile #3 says two consecutive
+    // provider failures must throw LlmUnavailableError so the
+    // controller can map to HTTP 503. Previously untested.
+    const { service, chat } = makeMockLlmService([
+      new Error('503 upstream high demand'),
+      new Error('503 upstream high demand'),
+    ]);
+    await expect(
+      callAndParseLlmOutput(service as LlmService, {
+        messages: [{ role: 'user', content: 'suggest games' }],
+      }),
+    ).rejects.toBeInstanceOf(LlmUnavailableError);
+    expect(chat).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovers with parsed output when the first call errors and the retry succeeds', async () => {
+    // Review coverage gap: the retry path must handle a provider error
+    // on attempt 1 by retrying and consuming a valid payload on attempt
+    // 2 — exercised neither by the parse-retry test (error-then-ok) nor
+    // by the double-error test above.
+    const { service, chat } = makeMockLlmService([
+      new Error('upstream 500'),
+      makeChatResponse(VALID_PAYLOAD),
+    ]);
+    const result = await callAndParseLlmOutput(service as LlmService, {
+      messages: [{ role: 'user', content: 'suggest games' }],
+    });
+    expect(chat).toHaveBeenCalledTimes(2);
+    expect(result.suggestions).toHaveLength(2);
   });
 });
