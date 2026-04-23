@@ -14,17 +14,17 @@ const TIER_COLORS: Record<string, string> = {
 };
 
 const CANVAS_HEIGHT = 520;
-const CHARGE_STRENGTH = -600;
-const LINK_DISTANCE = 110;
+const CHARGE_STRENGTH = -1100;
+const LINK_DISTANCE = 170;
 
 // Screen-pixel sizes — constant regardless of zoom.
 const BASE_RADIUS_PX = 4;
 const DEGREE_RADIUS_STEP_PX = 1.1;
 const MAX_DEGREE_FOR_SIZE = 8;
 const HOVER_RADIUS_MULTIPLIER = 1.9;
-const LABEL_FONT_PX = 11;
-const LABEL_MIN_FONT_PX = 9;
-const MIN_ZOOM_FOR_DEFAULT_LABELS = 1.4;
+const LABEL_FONT_PX_DEFAULT = 9;
+const LABEL_FONT_PX_HOVER = 13;
+const LABEL_HALO_LINE_WIDTH_PX = 3;
 
 interface GraphNode {
     id: number;
@@ -185,17 +185,44 @@ export function SocialGraphCanvas({ data }: Props) {
                                 ctx.strokeStyle = 'rgba(255,255,255,0.95)';
                                 ctx.stroke();
                             }
-                            const showLabel = isFocusedSet
-                                ? hovered || isNeighbor
-                                : globalScale >= MIN_ZOOM_FOR_DEFAULT_LABELS;
-                            if (showLabel) {
-                                const fontPx = hovered ? LABEL_FONT_PX + 2 : LABEL_FONT_PX;
-                                const fontWorld = Math.max(LABEL_MIN_FONT_PX, fontPx) / globalScale;
+                            ctx.globalAlpha = 1;
+                        }}
+                        onRenderFramePost={(ctx, globalScale) => {
+                            const focused = hoveredId != null;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'top';
+                            // Hovered label drawn last so it's unambiguously on top.
+                            const drawOrder: GraphNode[] = [];
+                            for (const node of graphData.nodes) {
+                                const n = node as GraphNode;
+                                if (n.x == null || n.y == null) continue;
+                                const hovered = n.id === hoveredId;
+                                const isNeighbor = focused && hoveredNeighbors.has(n.id);
+                                const show = focused ? hovered || isNeighbor : true;
+                                if (!show) continue;
+                                if (hovered) continue;
+                                drawOrder.push(n);
+                            }
+                            const hoveredN = focused
+                                ? (graphData.nodes.find((x) => (x as GraphNode).id === hoveredId) as GraphNode | undefined)
+                                : undefined;
+                            if (hoveredN) drawOrder.push(hoveredN);
+                            for (const n of drawOrder) {
+                                if (n.x == null || n.y == null) continue;
+                                const hovered = n.id === hoveredId;
+                                const isNeighbor = focused && hoveredNeighbors.has(n.id);
+                                const faded = focused && !hovered && !isNeighbor;
+                                const basePx = hovered ? LABEL_FONT_PX_HOVER : LABEL_FONT_PX_DEFAULT;
+                                const fontWorld = basePx / globalScale;
                                 ctx.font = `${fontWorld}px Inter, ui-sans-serif, system-ui`;
-                                ctx.textAlign = 'center';
-                                ctx.textBaseline = 'top';
-                                ctx.fillStyle = hovered ? '#ffffff' : 'rgba(255,255,255,0.9)';
-                                ctx.fillText(n.label, n.x, n.y + radius + 2 / globalScale);
+                                const radius = nodeScreenRadius(n.degree, hovered) / globalScale;
+                                const labelY = n.y + radius + 2 / globalScale;
+                                ctx.globalAlpha = faded ? 0.4 : 1;
+                                ctx.lineWidth = LABEL_HALO_LINE_WIDTH_PX / globalScale;
+                                ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+                                ctx.strokeText(n.label, n.x, labelY);
+                                ctx.fillStyle = hovered ? '#ffffff' : 'rgba(255,255,255,0.95)';
+                                ctx.fillText(n.label, n.x, labelY);
                             }
                             ctx.globalAlpha = 1;
                         }}
