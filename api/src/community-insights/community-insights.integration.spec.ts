@@ -14,9 +14,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { buildSnapshotFixture } from './__fixtures__/snapshot-fixture';
 
-async function createMemberAndLogin(
-  testApp: TestApp,
-): Promise<string> {
+async function createMemberAndLogin(testApp: TestApp): Promise<string> {
   const email = 'member@test.local';
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
   const [user] = await testApp.db
@@ -183,7 +181,7 @@ describe('Community Insights (ROK-1099)', () => {
       expect(rows.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('overwrites today\'s snapshot when one already exists', async () => {
+    it("overwrites today's snapshot when one already exists", async () => {
       const today = new Date().toISOString().slice(0, 10);
       await seedSnapshot(testApp, today);
       const before = await testApp.db

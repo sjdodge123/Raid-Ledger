@@ -28,9 +28,7 @@ export function buildSnapshotFixture(snapshotDate: string): SnapshotFixture {
         { intensityTier: 'Regular', vectorTitle: 'Hero', count: 5 },
         { intensityTier: 'Casual', vectorTitle: null, count: 3 },
       ],
-      driftSeries: [
-        { weekStart: snapshotDate, axis: 'rpg', meanScore: 0.42 },
-      ],
+      driftSeries: [{ weekStart: snapshotDate, axis: 'rpg', meanScore: 0.42 }],
       dominantArchetype: {
         intensityTier: 'Regular',
         vectorTitles: ['Hero'],

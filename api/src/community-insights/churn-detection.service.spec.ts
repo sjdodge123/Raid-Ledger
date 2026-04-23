@@ -8,10 +8,7 @@ describe('ChurnDetectionService', () => {
 
   const settings = { thresholdPct: 70, baselineWeeks: 12, recentWeeks: 4 };
 
-  function buildRow(
-    userId: number,
-    hoursSeries: number[],
-  ): ChurnInputRow {
+  function buildRow(userId: number, hoursSeries: number[]): ChurnInputRow {
     return {
       userId,
       username: `user${userId}`,
