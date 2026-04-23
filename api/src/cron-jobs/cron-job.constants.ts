@@ -164,4 +164,9 @@ export const CORE_JOB_METADATA: Record<
     description: 'Recomputes per-game taste vectors daily at 06:00 UTC.',
     category: 'Data Sync',
   },
+  DiscoveryCategoriesService_weeklyGenerate: {
+    description:
+      'Generates LLM-proposed dynamic discover categories and expires stale approved rows weekly on Sundays at midnight.',
+    category: 'Data Sync',
+  },
 };

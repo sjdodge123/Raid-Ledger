@@ -107,7 +107,7 @@ async function loadGameVector(
   return rows[0].vector;
 }
 
-function elementwiseMean(vectors: number[][]): number[] {
+export function elementwiseMean(vectors: number[][]): number[] {
   const width = vectors[0].length;
   const out = new Array<number>(width).fill(0);
   for (const v of vectors) {
@@ -118,7 +118,7 @@ function elementwiseMean(vectors: number[][]): number[] {
   return out;
 }
 
-async function executeSimilarityQuery(
+export async function executeSimilarityQuery(
   db: Db,
   target: number[],
   limit: number,
