@@ -15,8 +15,12 @@ const TIER_COLORS: Record<string, string> = {
 
 const CANVAS_HEIGHT = 520;
 const LABEL_ZOOM_THRESHOLD = 1.2;
-const CHARGE_STRENGTH = -200;
-const LINK_DISTANCE = 60;
+const CHARGE_STRENGTH = -320;
+const LINK_DISTANCE = 70;
+const BASE_RADIUS = 3;
+const DEGREE_RADIUS_STEP = 0.9;
+const MAX_DEGREE_FOR_SIZE = 8;
+const HOVER_RADIUS_MULTIPLIER = 1.8;
 
 /**
  * Lazy-loaded canvas render. Node color is driven by intensity tier,
@@ -26,10 +30,27 @@ const LINK_DISTANCE = 60;
  * The canvas is marked `aria-hidden` — keyboard users consume the
  * fallback table via the "Show as table" toggle.
  */
+interface GraphNode {
+    id: number;
+    label: string;
+    color: string;
+    degree: number;
+    clique: number | null;
+    x?: number;
+    y?: number;
+}
+
+function nodeRadius(degree: number, hovered: boolean): number {
+    const clamped = Math.min(MAX_DEGREE_FOR_SIZE, Math.max(0, degree));
+    const base = BASE_RADIUS + Math.sqrt(clamped) * DEGREE_RADIUS_STEP;
+    return hovered ? base * HOVER_RADIUS_MULTIPLIER : base;
+}
+
 export function SocialGraphCanvas({ data }: Props) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const graphRef = useRef<ForceGraphMethods | undefined>(undefined);
     const [width, setWidth] = useState(0);
+    const [hoveredId, setHoveredId] = useState<number | null>(null);
 
     useLayoutEffect(() => {
         if (!containerRef.current) return;
@@ -46,7 +67,7 @@ export function SocialGraphCanvas({ data }: Props) {
                 id: n.userId,
                 label: n.username,
                 color: TIER_COLORS[n.intensityTier] ?? '#a855f7',
-                val: Math.max(1, n.degree),
+                degree: Math.max(1, n.degree),
                 clique: n.cliqueId,
             })),
             links: data.edges.map((e) => ({
@@ -81,23 +102,43 @@ export function SocialGraphCanvas({ data }: Props) {
                     height={CANVAS_HEIGHT}
                     backgroundColor="transparent"
                     nodeLabel="label"
-                    nodeRelSize={4}
                     linkWidth={(l: { value?: number }) => Math.min(4, (l.value ?? 1))}
                     linkColor={() => 'rgba(168,85,247,0.35)'}
                     enableNodeDrag={false}
                     cooldownTicks={120}
                     onEngineStop={() => graphRef.current?.zoomToFit(400, 80)}
-                    nodeCanvasObjectMode={() => 'after'}
-                    nodeCanvasObject={(node: { x?: number; y?: number; label?: string; val?: number }, ctx, globalScale) => {
-                        if (globalScale < LABEL_ZOOM_THRESHOLD) return;
-                        if (!node.label || node.x == null || node.y == null) return;
+                    onNodeHover={(n) => setHoveredId((n as GraphNode | null)?.id ?? null)}
+                    nodePointerAreaPaint={(node, color, ctx) => {
+                        const n = node as GraphNode;
+                        if (n.x == null || n.y == null) return;
+                        const r = nodeRadius(n.degree, false) + 2;
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(n.x, n.y, r, 0, 2 * Math.PI, false);
+                        ctx.fill();
+                    }}
+                    nodeCanvasObject={(node, ctx, globalScale) => {
+                        const n = node as GraphNode;
+                        if (n.x == null || n.y == null) return;
+                        const hovered = n.id === hoveredId;
+                        const radius = nodeRadius(n.degree, hovered);
+                        ctx.beginPath();
+                        ctx.arc(n.x, n.y, radius, 0, 2 * Math.PI, false);
+                        ctx.fillStyle = n.color;
+                        ctx.fill();
+                        if (hovered) {
+                            ctx.lineWidth = 1.5;
+                            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+                            ctx.stroke();
+                        }
+                        const showLabel = hovered || globalScale >= LABEL_ZOOM_THRESHOLD;
+                        if (!showLabel) return;
                         const fontSize = Math.max(9, 12 / Math.sqrt(globalScale));
                         ctx.font = `${fontSize}px Inter, ui-sans-serif, system-ui`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'top';
-                        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-                        const offset = Math.sqrt(node.val ?? 1) * 4 + 4;
-                        ctx.fillText(node.label, node.x, node.y + offset);
+                        ctx.fillStyle = hovered ? '#ffffff' : 'rgba(255,255,255,0.85)';
+                        ctx.fillText(n.label, n.x, n.y + radius + 2);
                     }}
                 />
             )}
