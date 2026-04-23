@@ -45,6 +45,7 @@ import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.
 import { TasteProfileModule } from './taste-profile/taste-profile.module';
 import { GameTasteModule } from './game-taste/game-taste.module';
 import { DiscoveryCategoriesModule } from './discovery-categories/discovery-categories.module';
+import { CommunityInsightsModule } from './community-insights/community-insights.module';
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { DiscoveryCategoriesModule } from './discovery-categories/discovery-cate
     TasteProfileModule,
     GameTasteModule,
     DiscoveryCategoriesModule,
+    CommunityInsightsModule,
   ],
   controllers: [AppController],
   providers: [
