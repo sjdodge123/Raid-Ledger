@@ -34,12 +34,14 @@ export class DiscoveryCategoriesService {
   async weeklyGenerateCron(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'DiscoveryCategoriesService_weeklyGenerate',
-      () => this.weeklyGenerate(),
+      async () => {
+        await this.weeklyGenerate();
+      },
     );
   }
 
   /** Same pass: generate new pending rows then expire stale approved ones. */
-  async weeklyGenerate(): Promise<void> {
+  async weeklyGenerate(): Promise<{ inserted: number; expired: number }> {
     const inserted = await runGenerateSuggestions(this.db, {
       llmService: this.llmService,
       settingsService: this.settingsService,
@@ -49,5 +51,6 @@ export class DiscoveryCategoriesService {
     this.logger.log(
       `dynamic_categories weekly pass: inserted=${inserted} expired=${expired}`,
     );
+    return { inserted, expired };
   }
 }

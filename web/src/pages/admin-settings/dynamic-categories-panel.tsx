@@ -134,6 +134,15 @@ function useCategoryActions(onError: (msg: string) => void) {
         );
     const runRegenerate = () =>
         regenerate.mutate(undefined, {
+            onSuccess: (res) => {
+                if (res.inserted === 0 && res.expired === 0) {
+                    toast.info('Regenerate ran — no new suggestions produced.');
+                } else {
+                    toast.success(
+                        `Generated ${res.inserted} new suggestion${res.inserted === 1 ? '' : 's'}${res.expired > 0 ? ` · expired ${res.expired}` : ''}`,
+                    );
+                }
+            },
             onError: (e) => onError(e.message),
         });
     return { approve, reject, patch, regenerate, runApprove, runReject, runRegenerate };

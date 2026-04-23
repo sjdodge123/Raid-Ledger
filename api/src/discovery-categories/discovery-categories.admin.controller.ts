@@ -18,7 +18,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   AdminCandidateGameDto,
@@ -98,11 +98,17 @@ export class DiscoveryCategoriesAdminController {
           .select()
           .from(schema.discoveryCategorySuggestions)
           .where(eq(schema.discoveryCategorySuggestions.status, status.data))
-          .orderBy(schema.discoveryCategorySuggestions.sortOrder)
+          .orderBy(
+            asc(schema.discoveryCategorySuggestions.sortOrder),
+            desc(schema.discoveryCategorySuggestions.generatedAt),
+          )
       : await this.db
           .select()
           .from(schema.discoveryCategorySuggestions)
-          .orderBy(schema.discoveryCategorySuggestions.sortOrder);
+          .orderBy(
+            asc(schema.discoveryCategorySuggestions.sortOrder),
+            desc(schema.discoveryCategorySuggestions.generatedAt),
+          );
     const gameMap = await this.loadCandidateGameMap(rows);
     return {
       suggestions: rows.map((r): AdminCategoryListSuggestionDto => {
@@ -224,7 +230,11 @@ export class DiscoveryCategoriesAdminController {
 
   @Post('regenerate')
   @HttpCode(HttpStatus.ACCEPTED)
-  async regenerate(): Promise<{ ok: true }> {
+  async regenerate(): Promise<{
+    ok: true;
+    inserted: number;
+    expired: number;
+  }> {
     const flag = await this.settings.get(
       SETTING_KEYS.AI_DYNAMIC_CATEGORIES_ENABLED,
     );
@@ -234,7 +244,7 @@ export class DiscoveryCategoriesAdminController {
         'Dynamic discovery categories are disabled',
       );
     }
-    await this.service.weeklyGenerate();
-    return { ok: true };
+    const { inserted, expired } = await this.service.weeklyGenerate();
+    return { ok: true, inserted, expired };
   }
 }

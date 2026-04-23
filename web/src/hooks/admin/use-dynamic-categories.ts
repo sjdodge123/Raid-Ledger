@@ -95,10 +95,16 @@ export function usePatchDynamicCategory() {
     });
 }
 
+export interface RegenerateResult {
+    ok: true;
+    inserted: number;
+    expired: number;
+}
+
 /** Trigger a weekly regenerate on demand. Returns 503 when the feature flag is off. */
 export function useRegenerateDynamicCategories() {
     const qc = useQueryClient();
-    return useMutation<{ ok: true }, Error, void>({
+    return useMutation<RegenerateResult, Error, void>({
         mutationFn: () =>
             adminFetch(
                 `/admin/discovery-categories/regenerate`,
