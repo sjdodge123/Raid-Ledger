@@ -9,13 +9,20 @@
  * re-fetch timing.
  */
 import type { JSX } from 'react';
-import type { DiscoveryCategorySuggestionDto } from '@raid-ledger/contract';
+import type {
+    AdminCandidateGameDto,
+    AdminCategoryListSuggestionDto,
+    DiscoveryCategorySuggestionDto,
+} from '@raid-ledger/contract';
 
 /** Axis order is locked by contract: [co_op, pvp, rpg, survival, strategy, social, mmo]. */
 const AXIS_LABELS = ['Co-op', 'PvP', 'RPG', 'Surv', 'Strat', 'Social', 'MMO'];
 
+/** Max thumbnails rendered inline — any extras roll up into a "+N more" tag. */
+const MAX_INLINE_THUMBS = 8;
+
 interface DynamicCategoryCardProps {
-    suggestion: DiscoveryCategorySuggestionDto;
+    suggestion: AdminCategoryListSuggestionDto;
     onApprove?: (id: string) => void;
     onReject?: (id: string) => void;
     onEdit?: (suggestion: DiscoveryCategorySuggestionDto) => void;
@@ -53,7 +60,35 @@ function ThemeStrip({ vector }: { vector: number[] }) {
     );
 }
 
-function CandidateSummary({ ids }: { ids: number[] }) {
+function CandidateThumb({ game }: { game: AdminCandidateGameDto }) {
+    return (
+        <div className="flex flex-col items-center gap-1 w-16 shrink-0">
+            {game.coverUrl ? (
+                <img
+                    src={game.coverUrl}
+                    alt={game.name}
+                    loading="lazy"
+                    className="w-16 h-20 object-cover rounded border border-edge/50"
+                />
+            ) : (
+                <div className="w-16 h-20 rounded border border-edge/50 bg-overlay flex items-center justify-center text-[10px] text-muted px-1 text-center">
+                    {game.name.slice(0, 3).toUpperCase()}
+                </div>
+            )}
+            <span className="text-[10px] text-muted truncate w-full text-center">
+                {game.name}
+            </span>
+        </div>
+    );
+}
+
+function CandidatePreview({
+    ids,
+    games,
+}: {
+    ids: number[];
+    games: AdminCandidateGameDto[] | undefined;
+}) {
     if (ids.length === 0) {
         return (
             <p className="text-xs text-amber-400">
@@ -61,10 +96,29 @@ function CandidateSummary({ ids }: { ids: number[] }) {
             </p>
         );
     }
+    if (!games || games.length === 0) {
+        return (
+            <p className="text-xs text-muted">
+                {`${ids.length} candidate game${ids.length === 1 ? '' : 's'}`}
+            </p>
+        );
+    }
+    const visible = games.slice(0, MAX_INLINE_THUMBS);
+    const extra = ids.length - visible.length;
     return (
-        <p className="text-xs text-muted">
-            {`${ids.length} candidate game${ids.length === 1 ? '' : 's'}`}
-        </p>
+        <div
+            data-testid="dynamic-category-candidates"
+            className="flex gap-2 overflow-x-auto py-1"
+        >
+            {visible.map((g) => (
+                <CandidateThumb key={g.id} game={g} />
+            ))}
+            {extra > 0 && (
+                <div className="flex flex-col items-center justify-center w-16 shrink-0 text-xs text-muted border border-dashed border-edge/50 rounded h-20">
+                    +{extra} more
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -130,7 +184,10 @@ export function DynamicCategoryCard(
                 </span>
             </div>
             <ThemeStrip vector={suggestion.themeVector} />
-            <CandidateSummary ids={suggestion.candidateGameIds} />
+            <CandidatePreview
+                ids={suggestion.candidateGameIds}
+                games={suggestion.candidateGames}
+            />
             <ActionButtons {...props} />
         </div>
     );

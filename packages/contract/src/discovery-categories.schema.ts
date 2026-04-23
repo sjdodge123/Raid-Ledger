@@ -91,8 +91,31 @@ export type DiscoveryCategorySuggestionDto = z.infer<
     typeof DiscoveryCategorySuggestionSchema
 >;
 
+/** Candidate game mini-preview for the admin review UI. */
+export const AdminCandidateGameSchema = z.object({
+    id: z.number().int(),
+    name: z.string(),
+    coverUrl: z.string().nullable(),
+});
+
+export type AdminCandidateGameDto = z.infer<typeof AdminCandidateGameSchema>;
+
+/**
+ * Admin list response. Each suggestion is optionally enriched with
+ * `candidateGames` — id/name/coverUrl resolved from `candidate_game_ids` so
+ * the admin card can render thumbnails without a second round-trip.
+ */
+export const AdminCategoryListSuggestionSchema =
+    DiscoveryCategorySuggestionSchema.extend({
+        candidateGames: z.array(AdminCandidateGameSchema).optional(),
+    });
+
+export type AdminCategoryListSuggestionDto = z.infer<
+    typeof AdminCategoryListSuggestionSchema
+>;
+
 export const AdminCategoryListResponseSchema = z.object({
-    suggestions: z.array(DiscoveryCategorySuggestionSchema),
+    suggestions: z.array(AdminCategoryListSuggestionSchema),
 });
 
 export type AdminCategoryListResponseDto = z.infer<

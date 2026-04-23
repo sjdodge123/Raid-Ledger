@@ -18,10 +18,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  AdminCandidateGameDto,
   AdminCategoryListResponseDto,
+  AdminCategoryListSuggestionDto,
   DiscoveryCategorySuggestionDto,
   SuggestionStatus,
   UserRole,
@@ -101,7 +103,34 @@ export class DiscoveryCategoriesAdminController {
           .select()
           .from(schema.discoveryCategorySuggestions)
           .orderBy(schema.discoveryCategorySuggestions.sortOrder);
-    return { suggestions: rows.map(toDto) };
+    const gameMap = await this.loadCandidateGameMap(rows);
+    return {
+      suggestions: rows.map((r): AdminCategoryListSuggestionDto => {
+        const dto = toDto(r);
+        const candidateGames = r.candidateGameIds
+          .map((id) => gameMap.get(id))
+          .filter((g): g is AdminCandidateGameDto => g !== undefined);
+        return { ...dto, candidateGames };
+      }),
+    };
+  }
+
+  private async loadCandidateGameMap(
+    rows: Array<{ candidateGameIds: number[] }>,
+  ): Promise<Map<number, AdminCandidateGameDto>> {
+    const ids = Array.from(
+      new Set(rows.flatMap((r) => r.candidateGameIds)),
+    ).filter((n) => Number.isFinite(n));
+    if (ids.length === 0) return new Map();
+    const gameRows = await this.db
+      .select({
+        id: schema.games.id,
+        name: schema.games.name,
+        coverUrl: schema.games.coverUrl,
+      })
+      .from(schema.games)
+      .where(inArray(schema.games.id, ids));
+    return new Map(gameRows.map((g) => [g.id, g]));
   }
 
   @Patch(':id')

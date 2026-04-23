@@ -11,6 +11,7 @@
  */
 import { useState, type JSX } from 'react';
 import type {
+    AdminCategoryListSuggestionDto,
     DiscoveryCategorySuggestionDto,
     SuggestionStatus,
 } from '@raid-ledger/contract';
@@ -139,7 +140,7 @@ function useCategoryActions(onError: (msg: string) => void) {
 }
 
 interface CardsListProps {
-    items: DiscoveryCategorySuggestionDto[];
+    items: AdminCategoryListSuggestionDto[];
     onApprove: (id: string) => void;
     onReject: (id: string) => void;
     onEdit: (s: DiscoveryCategorySuggestionDto) => void;
@@ -165,7 +166,7 @@ function CardsList({ items, onApprove, onReject, onEdit, isBusy }: CardsListProp
 
 function vectorsNotReady(
     status: SuggestionStatus,
-    items: DiscoveryCategorySuggestionDto[] | undefined,
+    items: AdminCategoryListSuggestionDto[] | undefined,
 ): boolean {
     if (status !== 'pending') return false;
     if (!items || items.length === 0) return false;
