@@ -15,9 +15,10 @@ const TIER_COLORS: Record<string, string> = {
 };
 
 /**
- * Archetype distribution bar chart — one bar per (intensityTier,
- * vectorTitle) bucket, tinted by tier. Title-less buckets show the bare
- * tier label (e.g. "Hardcore Player").
+ * Archetype distribution — horizontal bars so the composed
+ * `{intensityTier} {vectorTitle}` labels get room on the left without
+ * overlapping. Sorted descending by count; height scales with bucket
+ * count to keep bars readable.
  */
 export function ArchetypeDistribution({ archetypes }: Props) {
     if (archetypes.length === 0) {
@@ -27,20 +28,24 @@ export function ArchetypeDistribution({ archetypes }: Props) {
             </div>
         );
     }
-    const data = archetypes.map((a) => ({
-        label: a.vectorTitle ? `${a.intensityTier} ${a.vectorTitle}` : `${a.intensityTier} Player`,
-        tier: a.intensityTier,
-        count: a.count,
-    }));
+    const data = [...archetypes]
+        .map((a) => ({
+            label: a.vectorTitle ? `${a.intensityTier} ${a.vectorTitle}` : `${a.intensityTier} Player`,
+            tier: a.intensityTier,
+            count: a.count,
+        }))
+        .sort((a, b) => b.count - a.count);
+    const rowHeight = 26;
+    const chartHeight = Math.max(240, data.length * rowHeight + 40);
     return (
-        <div className="h-60 w-full" data-testid="archetype-distribution">
+        <div className="w-full" style={{ height: chartHeight }} data-testid="archetype-distribution">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
-                    <XAxis dataKey="label" stroke="#a1a1aa" fontSize={11} angle={-20} textAnchor="end" height={60} />
-                    <YAxis stroke="#a1a1aa" fontSize={11} allowDecimals={false} />
-                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} />
-                    <Bar dataKey="count" isAnimationActive={false}>
+                <BarChart data={data} layout="vertical" margin={{ top: 8, right: 24, bottom: 8, left: 8 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" stroke="#a1a1aa" fontSize={11} allowDecimals={false} />
+                    <YAxis type="category" dataKey="label" stroke="#a1a1aa" fontSize={11} width={170} interval={0} />
+                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                    <Bar dataKey="count" isAnimationActive={false} barSize={18}>
                         {data.map((d, i) => (
                             <Cell key={i} fill={TIER_COLORS[d.tier] ?? '#a855f7'} />
                         ))}
