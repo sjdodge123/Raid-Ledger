@@ -103,9 +103,9 @@ describe('Header — community name', () => {
 });
 
 describe('Header — authenticated user nav links', () => {
-    it('does not show Event Metrics when user is null', () => {
+    it('does not show Insights when user is null', () => {
         renderHeader();
-        expect(screen.queryByText('Event Metrics')).not.toBeInTheDocument();
+        expect(screen.queryByText('Insights')).not.toBeInTheDocument();
     });
 });
 
@@ -114,7 +114,7 @@ describe('Header — authenticated user', () => {
         vi.mocked(vi.importActual('../../hooks/use-auth')).catch(() => null);
     });
 
-    it('shows Event Metrics nav link when user is authenticated', () => {
+    it('shows Insights nav link when user is authenticated', () => {
         vi.doMock('../../hooks/use-auth', () => ({
             useAuth: () => ({
                 user: { id: 1, username: 'TestUser', role: 'member' },
@@ -125,7 +125,7 @@ describe('Header — authenticated user', () => {
         // Re-import after mock update is too complex for this test runner;
         // we verify the conditional logic is present by checking the non-auth case
         renderHeader();
-        // This test verifies that the logged-out path doesn't show Event Metrics
-        expect(screen.queryByText('Event Metrics')).not.toBeInTheDocument();
+        // This test verifies that the logged-out path doesn't show Insights
+        expect(screen.queryByText('Insights')).not.toBeInTheDocument();
     });
 });

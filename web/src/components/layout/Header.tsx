@@ -39,7 +39,7 @@ function DesktopNav({ pathname, user }: { pathname: string; user: User | null })
             {user && (
                 <>
                     <span className="w-px h-5 bg-edge" aria-hidden="true" />
-                    <Link to="/event-metrics" className={navClass(pathname, '/event-metrics')}>Event Metrics</Link>
+                    <Link to="/insights" className={navClass(pathname, '/insights')}>Insights</Link>
                 </>
             )}
         </nav>
