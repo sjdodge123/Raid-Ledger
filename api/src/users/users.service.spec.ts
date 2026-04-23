@@ -296,6 +296,36 @@ function describeUsersService() {
   }
   describe('resetOnboarding (ROK-312)', () => describeResetOnboarding());
 
+  describe('findByIds (ROK-1088)', () => {
+    it('short-circuits on empty input without querying', async () => {
+      const result = await service.findByIds([]);
+      expect(result).toEqual([]);
+      expect(mockDb.query.users.findMany).not.toHaveBeenCalled();
+    });
+
+    it('returns the rows findMany resolves with', async () => {
+      const rows = [
+        { id: 1, username: 'Aragorn' },
+        { id: 7, username: 'Legolas' },
+      ];
+      (mockDb.query.users.findMany as jest.Mock).mockResolvedValue(rows);
+
+      const result = await service.findByIds([1, 7]);
+
+      expect(result).toEqual(rows);
+      expect(mockDb.query.users.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns an empty array when no users match', async () => {
+      (mockDb.query.users.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.findByIds([999]);
+
+      expect(result).toEqual([]);
+      expect(mockDb.query.users.findMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('constants', () => {
     it('should export RECENT_MEMBER_DAYS as 30', () => {
       expect(RECENT_MEMBER_DAYS).toBe(30);

@@ -17,6 +17,7 @@ import type {
 } from '../../taste-profile/queries/taste-profile-queries';
 import { TIER_DESCRIPTIONS } from '../../taste-profile/archetype-copy';
 import { TasteProfileService } from '../../taste-profile/taste-profile.service';
+import { UsersService } from '../../users/users.service';
 import { TasteProfileContextBuilder } from './taste-profile-context.builder';
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -112,10 +113,21 @@ describe('TasteProfileContextBuilder', () => {
   let mockTasteProfileService: {
     getTasteProfile: jest.Mock<Promise<TasteProfileResult | null>, [number]>;
   };
+  let mockUsersService: {
+    findByIds: jest.Mock<
+      Promise<Array<{ id: number; username: string }>>,
+      [number[]]
+    >;
+  };
 
   beforeEach(async () => {
     mockTasteProfileService = {
       getTasteProfile: jest.fn(),
+    };
+    mockUsersService = {
+      findByIds: jest.fn((ids: number[]) =>
+        Promise.resolve(ids.map((id) => ({ id, username: `user${id}` }))),
+      ),
     };
 
     const module = await Test.createTestingModule({
@@ -124,6 +136,10 @@ describe('TasteProfileContextBuilder', () => {
         {
           provide: TasteProfileService,
           useValue: mockTasteProfileService,
+        },
+        {
+          provide: UsersService,
+          useValue: mockUsersService,
         },
       ],
     }).compile();
@@ -267,6 +283,50 @@ describe('TasteProfileContextBuilder', () => {
       expect(result.contexts[0].userId).toBe(1);
       expect(result.missingUserIds).toEqual(expect.arrayContaining([2, 3]));
       expect(result.missingUserIds).toHaveLength(2);
+    });
+  });
+
+  // ─── Username resolution (ROK-1088) ─────────────────────
+
+  describe('username resolution (ROK-1088)', () => {
+    it('resolves real usernames from UsersService and includes them in the context', async () => {
+      mockTasteProfileService.getTasteProfile.mockResolvedValueOnce(
+        buildProfile({ userId: 1, dimensions: { rpg: 80 } }),
+      );
+      mockUsersService.findByIds.mockResolvedValueOnce([
+        { id: 1, username: 'Aragorn' },
+      ]);
+
+      const result = await builder.build([1]);
+
+      expect(result.contexts[0].username).toBe('Aragorn');
+    });
+
+    it('falls back to "Unknown player" when a user is hard-deleted (not returned by findByIds)', async () => {
+      mockTasteProfileService.getTasteProfile.mockResolvedValueOnce(
+        buildProfile({ userId: 42, dimensions: { rpg: 80 } }),
+      );
+      mockUsersService.findByIds.mockResolvedValueOnce([]);
+
+      const result = await builder.build([42]);
+
+      expect(result.contexts[0].username).toBe('Unknown player');
+    });
+
+    it('calls UsersService.findByIds once with the resolved (non-missing) userIds', async () => {
+      mockTasteProfileService.getTasteProfile.mockImplementation(
+        (id: number) => {
+          if (id === 2) return Promise.resolve(null);
+          return Promise.resolve(
+            buildProfile({ userId: id, dimensions: { rpg: 80 } }),
+          );
+        },
+      );
+
+      await builder.build([1, 2, 3]);
+
+      expect(mockUsersService.findByIds).toHaveBeenCalledTimes(1);
+      expect(mockUsersService.findByIds).toHaveBeenCalledWith([1, 3]);
     });
   });
 
