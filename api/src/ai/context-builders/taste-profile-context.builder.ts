@@ -20,6 +20,7 @@ import type {
   TasteProfileResult,
 } from '../../taste-profile/queries/taste-profile-queries';
 import { TasteProfileService } from '../../taste-profile/taste-profile.service';
+import { UsersService } from '../../users/users.service';
 
 const MAX_TOP_AXES = 5;
 const MAX_LOW_AXES = 3;
@@ -28,7 +29,10 @@ const MAX_PARTNER_AXES = 3;
 
 @Injectable()
 export class TasteProfileContextBuilder {
-  constructor(private readonly tasteProfile: TasteProfileService) {}
+  constructor(
+    private readonly tasteProfile: TasteProfileService,
+    private readonly users: UsersService,
+  ) {}
 
   /**
    * Build taste context bundles for the given user IDs. Users without a
@@ -49,15 +53,20 @@ export class TasteProfileContextBuilder {
       (p): p is TasteProfileResult => p !== null,
     );
 
-    const partnerLists = await Promise.all(
-      resolved.map((profile) =>
-        this.buildPartnerContexts(profile.coPlayPartners),
+    const resolvedIds = resolved.map((p) => p.userId);
+    const [partnerLists, users] = await Promise.all([
+      Promise.all(
+        resolved.map((profile) =>
+          this.buildPartnerContexts(profile.coPlayPartners),
+        ),
       ),
-    );
+      this.users.findByIds(resolvedIds),
+    ]);
+    const usernameById = new Map(users.map((u) => [u.id, u.username]));
 
     const contexts: TasteProfileContextDto[] = resolved.map((profile, i) => ({
       userId: profile.userId,
-      username: lookupUsernameFromPartners(profile),
+      username: resolveUsername(profile.userId, usernameById),
       archetype: profile.archetype,
       intensityMetrics: profile.intensityMetrics,
       topAxes: pickTopAxes(profile.dimensions, MAX_TOP_AXES),
@@ -126,11 +135,13 @@ function toAxisEntries(
 }
 
 /**
- * Username is not present on the raw TasteProfileResult today — callers
- * provide it via a parallel lookup. Until a username field is added we
- * fall back to a synthetic identifier; the LLM context just needs a
- * stable handle.
+ * Resolve a real username from the batch lookup; fall back to
+ * "Unknown player" when the user was hard-deleted after their profile
+ * was computed.
  */
-function lookupUsernameFromPartners(profile: TasteProfileResult): string {
-  return `user:${profile.userId}`;
+function resolveUsername(
+  userId: number,
+  usernames: Map<number, string>,
+): string {
+  return usernames.get(userId) ?? 'Unknown player';
 }
