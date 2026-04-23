@@ -86,6 +86,15 @@ export const MyEventsPage = lazyWithRetry(() =>
 export const EventMetricsPage = lazyWithRetry(() =>
     import('./pages/event-metrics-page').then((m) => ({ default: m.EventMetricsPage })),
 );
+export const InsightsHubPage = lazyWithRetry(() =>
+    import('./pages/insights-hub-page').then((m) => ({ default: m.InsightsHubPage })),
+);
+export const InsightsCommunityTab = lazyWithRetry(() =>
+    import('./pages/insights-community-tab').then((m) => ({ default: m.InsightsCommunityTab })),
+);
+export const InsightsEventsTab = lazyWithRetry(() =>
+    import('./pages/insights-events-tab').then((m) => ({ default: m.InsightsEventsTab })),
+);
 export const UserProfilePage = lazyWithRetry(() =>
     import('./pages/user-profile-page').then((m) => ({ default: m.UserProfilePage })),
 );

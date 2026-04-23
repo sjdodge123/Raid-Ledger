@@ -13,7 +13,8 @@ import {
   JoinPage, InvitePage,
   CalendarPage, CreateEventPage, PlanEventPage, EditEventPage,
   GamesPage, GameDetailPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage,
-  PlayersPage, MyEventsPage, EventMetricsPage,
+  PlayersPage, EventMetricsPage,
+  InsightsHubPage, InsightsCommunityTab, InsightsEventsTab,
   UserProfilePage, OnboardingWizardPage,
   ProfileLayout, PreferencesPanel,
   NotificationsPanel, ProfileGameTimePanel,
@@ -103,7 +104,12 @@ export function AppRoutes() {
         <Route path="/characters/:id" element={<CharacterDetailPage />} />
         <Route path="/players" element={<PlayersPage />} />
         <Route path="/events" element={<EventsPage />} />
-        <Route path="/event-metrics" element={<MyEventsPage />} />
+        <Route path="/event-metrics" element={<Navigate to="/insights/events" replace />} />
+        <Route path="/insights" element={<InsightsHubPage />}>
+          <Route index element={<Navigate to="/insights/community" replace />} />
+          <Route path="community" element={<InsightsCommunityTab />} />
+          <Route path="events" element={<InsightsEventsTab />} />
+        </Route>
         <Route path="/events/new" element={<CreateEventPage />} />
         <Route path="/events/plan" element={<PlanEventPage />} />
         <Route path="/events/:id/metrics" element={<EventMetricsPage />} />
