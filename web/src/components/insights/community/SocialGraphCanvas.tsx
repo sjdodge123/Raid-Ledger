@@ -14,8 +14,8 @@ const TIER_COLORS: Record<string, string> = {
 };
 
 const CANVAS_HEIGHT = 520;
-const CHARGE_STRENGTH = -320;
-const LINK_DISTANCE = 70;
+const CHARGE_STRENGTH = -600;
+const LINK_DISTANCE = 110;
 
 // Screen-pixel sizes — constant regardless of zoom.
 const BASE_RADIUS_PX = 4;
@@ -133,7 +133,6 @@ export function SocialGraphCanvas({ data }: Props) {
                         width={width}
                         height={CANVAS_HEIGHT}
                         backgroundColor="transparent"
-                        nodeLabel="label"
                         linkWidth={(l: unknown) => {
                             const link = l as { source: number | { id: number }; target: number | { id: number }; value?: number };
                             const s = typeof link.source === 'object' ? link.source.id : link.source;
