@@ -186,9 +186,7 @@ describe('discovery-categories context loaders (ROK-567)', () => {
         },
       ]);
       const rows = await loadExistingApprovedCategories(testApp.db);
-      expect(rows).toEqual([
-        { name: 'Approved Row', categoryType: 'trend' },
-      ]);
+      expect(rows).toEqual([{ name: 'Approved Row', categoryType: 'trend' }]);
     });
   });
 });

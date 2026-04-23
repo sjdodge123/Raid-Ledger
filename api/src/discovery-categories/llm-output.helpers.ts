@@ -120,7 +120,9 @@ export async function callAndParseCategoryProposals(
       `dynamic_categories LLM attempt 1 unavailable: ${first.unavailable.message}`,
     );
   } else {
-    logger?.warn('dynamic_categories LLM attempt 1 returned unparseable output');
+    logger?.warn(
+      'dynamic_categories LLM attempt 1 returned unparseable output',
+    );
   }
 
   const retryOpts = buildRetryOptions(options);

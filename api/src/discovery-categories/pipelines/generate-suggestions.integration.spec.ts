@@ -46,7 +46,9 @@ function makeFakes(): Fakes {
   settingsStore.set(SETTING_KEYS.AI_DYNAMIC_CATEGORIES_ENABLED, 'true');
   const chat = jest.fn();
   const isAvailable = jest.fn().mockResolvedValue(true);
-  const get = jest.fn(async (k: string) => settingsStore.get(k) ?? null);
+  const get = jest.fn((k: string) =>
+    Promise.resolve(settingsStore.get(k) ?? null),
+  );
   return {
     chat,
     isAvailable,

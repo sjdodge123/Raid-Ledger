@@ -43,7 +43,8 @@ export async function loadApprovedDynamicRows(
       name: schema.discoveryCategorySuggestions.name,
       themeVector: schema.discoveryCategorySuggestions.themeVector,
       candidateGameIds: schema.discoveryCategorySuggestions.candidateGameIds,
-      populationStrategy: schema.discoveryCategorySuggestions.populationStrategy,
+      populationStrategy:
+        schema.discoveryCategorySuggestions.populationStrategy,
       filterCriteria: schema.discoveryCategorySuggestions.filterCriteria,
       sortOrder: schema.discoveryCategorySuggestions.sortOrder,
     })

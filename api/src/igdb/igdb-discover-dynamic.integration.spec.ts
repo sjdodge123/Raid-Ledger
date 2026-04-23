@@ -41,9 +41,10 @@ describe('GET /games/discover dynamic rows (ROK-567)', () => {
   }
 
   it('includes an approved dynamic row alongside static rows', async () => {
-    const gameId = await seedGameWithVector('Dynamic Candidate', [
-      1, 0, 0, 0, 0, 0, 0,
-    ]);
+    const gameId = await seedGameWithVector(
+      'Dynamic Candidate',
+      [1, 0, 0, 0, 0, 0, 0],
+    );
     const [sugg] = await testApp.db
       .insert(schema.discoveryCategorySuggestions)
       .values({
@@ -60,7 +61,15 @@ describe('GET /games/discover dynamic rows (ROK-567)', () => {
 
     const res = await testApp.request.get('/games/discover');
     expect(res.status).toBe(200);
-    const rows = (res.body as { rows: Array<{ category: string; isDynamic?: boolean; suggestionId?: string }> }).rows;
+    const rows = (
+      res.body as {
+        rows: Array<{
+          category: string;
+          isDynamic?: boolean;
+          suggestionId?: string;
+        }>;
+      }
+    ).rows;
     const dynamicRow = rows.find((r) => r.category === 'Dynamic Row Category');
     expect(dynamicRow).toBeDefined();
     expect(dynamicRow?.isDynamic).toBe(true);

@@ -62,8 +62,7 @@ describe('loadApprovedDynamicRows (ROK-567)', () => {
         name: opts.name,
         description: 'test',
         categoryType: 'trend',
-        themeVector:
-          opts.themeVector ?? [1, 0, 0, 0, 0, 0, 0],
+        themeVector: opts.themeVector ?? [1, 0, 0, 0, 0, 0, 0],
         status: opts.status ?? 'approved',
         populationStrategy: opts.strategy ?? 'vector',
         sortOrder: opts.sortOrder ?? 1000,

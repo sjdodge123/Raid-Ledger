@@ -92,9 +92,7 @@ function describeCentroid(centroid: number[] | null): string {
   if (centroid.length !== AXIS_KEYS.length) {
     return `Community centroid: malformed (length ${centroid.length}, expected ${AXIS_KEYS.length}).`;
   }
-  const parts = AXIS_KEYS.map(
-    (axis, i) => `${axis}=${centroid[i].toFixed(2)}`,
-  );
+  const parts = AXIS_KEYS.map((axis, i) => `${axis}=${centroid[i].toFixed(2)}`);
   return `Community centroid (7-axis taste average across active players): ${parts.join(', ')}`;
 }
 
@@ -118,7 +116,10 @@ function describeExisting(existing: ExistingCategorySummary[]): string {
   if (existing.length === 0)
     return 'Existing approved categories: (none — any name is available)';
   const rows = existing.map((c) => `- "${c.name}" [${c.categoryType}]`);
-  return ['Existing approved categories (do NOT repeat these names):', ...rows].join('\n');
+  return [
+    'Existing approved categories (do NOT repeat these names):',
+    ...rows,
+  ].join('\n');
 }
 
 function describeSeasonal(hints: string[]): string {
@@ -132,7 +133,9 @@ function describeSeasonal(hints: string[]): string {
  * user message carrying the current community signal (centroid, top-played,
  * trending, existing-category dedup list, seasonal hints).
  */
-export function buildGenerationPrompt(input: GenerationPromptInput): LlmChatOptions {
+export function buildGenerationPrompt(
+  input: GenerationPromptInput,
+): LlmChatOptions {
   const systemPrompt = [CURATOR_ROLE, RULES, OUTPUT_FORMAT].join('\n\n');
 
   const userBlocks = [

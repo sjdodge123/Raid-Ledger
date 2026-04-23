@@ -73,9 +73,9 @@ describe('DiscoveryCategoriesAdminController (ROK-567)', () => {
       .query({ status: 'approved' })
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
-    const names = (res.body as { suggestions: { name: string }[] }).suggestions.map(
-      (s) => s.name,
-    );
+    const names = (
+      res.body as { suggestions: { name: string }[] }
+    ).suggestions.map((s) => s.name);
     expect(names).toEqual(['Approved One']);
   });
 
@@ -118,7 +118,10 @@ describe('DiscoveryCategoriesAdminController (ROK-567)', () => {
   });
 
   it('returns 409 when approving an already-reviewed suggestion', async () => {
-    const id = await insertSuggestion({ name: 'Already Approved', status: 'approved' });
+    const id = await insertSuggestion({
+      name: 'Already Approved',
+      status: 'approved',
+    });
     const res = await testApp.request
       .post(`/admin/discovery-categories/${id}/approve`)
       .set('Authorization', `Bearer ${adminToken}`);

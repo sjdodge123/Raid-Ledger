@@ -22,8 +22,6 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   AdminCategoryListResponseDto,
-  AdminCategoryPatchDto,
-  AdminRejectBodyDto,
   DiscoveryCategorySuggestionDto,
   SuggestionStatus,
   UserRole,
@@ -54,7 +52,8 @@ function toDto(
     id: row.id,
     name: row.name,
     description: row.description,
-    categoryType: row.categoryType as DiscoveryCategorySuggestionDto['categoryType'],
+    categoryType:
+      row.categoryType as DiscoveryCategorySuggestionDto['categoryType'],
     themeVector: row.themeVector,
     filterCriteria:
       (row.filterCriteria as DiscoveryCategorySuggestionDto['filterCriteria']) ??
@@ -86,9 +85,7 @@ export class DiscoveryCategoriesAdminController {
   async list(
     @Query('status') rawStatus?: string,
   ): Promise<AdminCategoryListResponseDto> {
-    const status = rawStatus
-      ? SuggestionStatusEnum.safeParse(rawStatus)
-      : null;
+    const status = rawStatus ? SuggestionStatusEnum.safeParse(rawStatus) : null;
     if (rawStatus && (!status || !status.success)) {
       throw new BadRequestException(
         `Invalid status filter "${rawStatus}" — expected pending|approved|rejected|expired`,
@@ -114,13 +111,17 @@ export class DiscoveryCategoriesAdminController {
   ): Promise<DiscoveryCategorySuggestionDto> {
     const parsed = AdminCategoryPatchSchema.safeParse(body);
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.errors[0]?.message ?? 'Invalid patch body');
+      throw new BadRequestException(
+        parsed.error.errors[0]?.message ?? 'Invalid patch body',
+      );
     }
-    const patch = parsed.data as AdminCategoryPatchDto;
-    const updates: Partial<typeof schema.discoveryCategorySuggestions.$inferInsert> =
-      {};
+    const patch = parsed.data;
+    const updates: Partial<
+      typeof schema.discoveryCategorySuggestions.$inferInsert
+    > = {};
     if (patch.name !== undefined) updates.name = patch.name;
-    if (patch.description !== undefined) updates.description = patch.description;
+    if (patch.description !== undefined)
+      updates.description = patch.description;
     if (patch.sortOrder !== undefined) updates.sortOrder = patch.sortOrder;
     if (Object.keys(updates).length === 0) {
       throw new BadRequestException('No supported fields provided');
@@ -152,10 +153,12 @@ export class DiscoveryCategoriesAdminController {
   ): Promise<DiscoveryCategorySuggestionDto> {
     const parsed = AdminRejectBodySchema.safeParse(body ?? {});
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.errors[0]?.message ?? 'Invalid reject body');
+      throw new BadRequestException(
+        parsed.error.errors[0]?.message ?? 'Invalid reject body',
+      );
     }
     // v1 does not persist reason; the column isn't in the schema yet.
-    void (parsed.data as AdminRejectBodyDto);
+    void parsed.data;
     return this.reviewPending(id, req.user.id, 'rejected');
   }
 
@@ -172,9 +175,7 @@ export class DiscoveryCategoriesAdminController {
       const existing = rows[0];
       if (!existing) throw new NotFoundException('Suggestion not found');
       if (existing.status !== 'pending') {
-        throw new ConflictException(
-          `Suggestion is already ${existing.status}`,
-        );
+        throw new ConflictException(`Suggestion is already ${existing.status}`);
       }
       const [updated] = await tx
         .update(schema.discoveryCategorySuggestions)
@@ -186,7 +187,8 @@ export class DiscoveryCategoriesAdminController {
           ),
         )
         .returning();
-      if (!updated) throw new ConflictException('Suggestion is already reviewed');
+      if (!updated)
+        throw new ConflictException('Suggestion is already reviewed');
       return toDto(updated);
     });
   }

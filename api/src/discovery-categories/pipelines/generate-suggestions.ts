@@ -204,9 +204,9 @@ async function insertAllProposals(
 function extractGenreIds(
   proposal: LlmCategoryProposalDto,
 ): number[] | undefined {
-  const raw = (proposal.filter_criteria as Record<string, unknown> | undefined)?.[
-    'genre_ids'
-  ];
+  const raw = (
+    proposal.filter_criteria as Record<string, unknown> | undefined
+  )?.['genre_ids'];
   if (!Array.isArray(raw)) return undefined;
   const ids = raw.filter((v): v is number => typeof v === 'number');
   return ids.length > 0 ? ids : undefined;

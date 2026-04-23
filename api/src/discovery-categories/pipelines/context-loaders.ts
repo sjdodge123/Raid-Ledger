@@ -75,10 +75,7 @@ export async function loadTopPlayedLastMonth(
  * against the prior week and report percentage change per game. Empty when
  * fewer than two weekly buckets exist.
  */
-export async function loadTrending(
-  db: Db,
-  n: number,
-): Promise<TrendingGame[]> {
+export async function loadTrending(db: Db, n: number): Promise<TrendingGame[]> {
   const weeks = await db
     .selectDistinct({ periodStart: schema.gameActivityRollups.periodStart })
     .from(schema.gameActivityRollups)
@@ -87,7 +84,11 @@ export async function loadTrending(
     .limit(2);
   if (weeks.length < 2) return [];
   const [current, previous] = weeks;
-  const rows = await db.execute<{ name: string; curr: number; prev: number }>(sql`
+  const rows = await db.execute<{
+    name: string;
+    curr: number;
+    prev: number;
+  }>(sql`
     SELECT g.name AS name,
            COALESCE(curr.total, 0)::int AS curr,
            COALESCE(prev.total, 0)::int AS prev
@@ -111,7 +112,11 @@ export async function loadTrending(
       const prev = Number(r.prev) || 0;
       const curr = Number(r.curr) || 0;
       const deltaPct =
-        prev === 0 ? (curr > 0 ? 999 : 0) : Math.round(((curr - prev) / prev) * 100);
+        prev === 0
+          ? curr > 0
+            ? 999
+            : 0
+          : Math.round(((curr - prev) / prev) * 100);
       return { name: r.name, deltaPct };
     })
     .sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))

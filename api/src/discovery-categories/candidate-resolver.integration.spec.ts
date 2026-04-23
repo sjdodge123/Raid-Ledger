@@ -50,11 +50,9 @@ describe('resolveCandidates (ROK-567)', () => {
     const near = await seedGameWithVector('Near', [1, 0, 0, 0, 0, 0, 0]);
     const mid = await seedGameWithVector('Mid', [0.5, 0.5, 0, 0, 0, 0, 0]);
     const far = await seedGameWithVector('Far', [0, 0, 0, 0, 0, 1, 0]);
-    const ids = await resolveCandidates(
-      testApp.db,
-      [1, 0, 0, 0, 0, 0, 0],
-      { limit: 3 },
-    );
+    const ids = await resolveCandidates(testApp.db, [1, 0, 0, 0, 0, 0, 0], {
+      limit: 3,
+    });
     expect(ids[0]).toBe(near);
     expect(ids).toEqual([near, mid, far]);
   });
@@ -64,11 +62,9 @@ describe('resolveCandidates (ROK-567)', () => {
     await seedGameWithVector('Stub', [0.99, 0, 0, 0, 0, 0, 0], {
       confidence: 0,
     });
-    const ids = await resolveCandidates(
-      testApp.db,
-      [1, 0, 0, 0, 0, 0, 0],
-      { limit: 5 },
-    );
+    const ids = await resolveCandidates(testApp.db, [1, 0, 0, 0, 0, 0, 0], {
+      limit: 5,
+    });
     expect(ids).toEqual([keep]);
   });
 
@@ -81,21 +77,18 @@ describe('resolveCandidates (ROK-567)', () => {
       [0.9, 0, 0, 0, 0, 0, 0],
       { genres: [5] },
     );
-    const ids = await resolveCandidates(
-      testApp.db,
-      [1, 0, 0, 0, 0, 0, 0],
-      { limit: 5, genreIds: [12] },
-    );
+    const ids = await resolveCandidates(testApp.db, [1, 0, 0, 0, 0, 0, 0], {
+      limit: 5,
+      genreIds: [12],
+    });
     expect(ids).toEqual([rpg]);
     expect(ids).not.toContain(shooter);
   });
 
   it('returns [] when the similarity query finds no candidates', async () => {
-    const ids = await resolveCandidates(
-      testApp.db,
-      [1, 0, 0, 0, 0, 0, 0],
-      { limit: 5 },
-    );
+    const ids = await resolveCandidates(testApp.db, [1, 0, 0, 0, 0, 0, 0], {
+      limit: 5,
+    });
     expect(ids).toEqual([]);
   });
 });

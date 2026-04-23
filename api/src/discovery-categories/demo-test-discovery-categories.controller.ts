@@ -23,9 +23,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 const SeedBodySchema = z.object({
   name: z.string().min(1).max(120).optional(),
-  status: z
-    .enum(['pending', 'approved', 'rejected', 'expired'])
-    .optional(),
+  status: z.enum(['pending', 'approved', 'rejected', 'expired']).optional(),
   populationStrategy: z.enum(['vector', 'fixed', 'hybrid']).optional(),
   sortOrder: z.number().int().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
