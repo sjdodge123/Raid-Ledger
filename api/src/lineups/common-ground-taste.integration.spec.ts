@@ -108,6 +108,24 @@ function describeCommonGroundTaste() {
   }
 
   /**
+   * Insert a real vote row so the user qualifies as an actual lineup voter
+   * under the ROK-1086 narrowed `findLineupVoterIds`. The vote target
+   * (`gameId`) is not meaningful for taste-scoring math — only membership
+   * in the voter set matters.
+   */
+  async function insertVote(
+    lineupId: number,
+    userId: number,
+    gameId: number,
+  ): Promise<void> {
+    await testApp.db.insert(schema.communityLineupVotes).values({
+      lineupId,
+      userId,
+      gameId,
+    });
+  }
+
+  /**
    * Insert a player taste vector directly. The first 7 values of `vector`
    * are the pgvector(7) column; `dimensions` stores the full axis pool.
    * We only fill the axes we care about for each test — others default 0.
@@ -185,7 +203,7 @@ function describeCommonGroundTaste() {
 
   describe('AC 4: taste-based sort', () => {
     it("sorts games so voters' shared taste axis wins over an off-axis game", async () => {
-      await createBuildingLineup();
+      const lineupId = await createBuildingLineup();
 
       // Two voters with opposing tastes. Both own both games equally so
       // ownership alone cannot decide the sort — taste must break the tie.
@@ -215,6 +233,11 @@ function describeCommonGroundTaste() {
         await addGameInterest(u, coopGame.id, 'steam_library');
         await addGameInterest(u, pvpGame.id, 'steam_library');
       }
+
+      // Admin is already `created_by`; wire the two synthetic voters as
+      // real vote casters so the narrowed voter-id query picks them up.
+      await insertVote(lineupId, coopVoter.id, coopGame.id);
+      await insertVote(lineupId, pvpVoter.id, pvpGame.id);
 
       const res = await testApp.request
         .get('/lineups/common-ground')
@@ -246,7 +269,7 @@ function describeCommonGroundTaste() {
 
   describe('AC: intensity scoring discriminates', () => {
     it("scores a high-player-count game above a low-player-count game when voters' intensity is high", async () => {
-      await createBuildingLineup();
+      const lineupId = await createBuildingLineup();
 
       // Two voters whose average intensity metric lands them in the
       // 'high' bucket (≥67). Keep taste vectors empty so taste score
@@ -286,6 +309,10 @@ function describeCommonGroundTaste() {
         await addGameInterest(u, highGame.id, 'steam_library');
       }
 
+      // Admin is creator; add real votes for the synthetic voters.
+      await insertVote(lineupId, voterA.id, highGame.id);
+      await insertVote(lineupId, voterB.id, highGame.id);
+
       const res = await testApp.request
         .get('/lineups/common-ground')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -314,7 +341,7 @@ function describeCommonGroundTaste() {
       // The test module boots without `LlmService` configured to resolve a
       // provider. If the code path touches the provider registry, this
       // request would throw — we require the endpoint still respond 200.
-      await createBuildingLineup();
+      const lineupId = await createBuildingLineup();
       const voter = await createMember('nollm');
       await insertTasteVector(voter.id, { axisScores: { rpg: 80 } });
 
@@ -329,6 +356,7 @@ function describeCommonGroundTaste() {
         game.id,
         'steam_library',
       );
+      await insertVote(lineupId, voter.id, game.id);
 
       const res = await testApp.request
         .get('/lineups/common-ground')
@@ -356,7 +384,7 @@ function describeCommonGroundTaste() {
 
   describe('AC 6: weights configurable via SettingsService', () => {
     it('honors overridden tasteWeight — reflected in meta.appliedWeights and in taste score', async () => {
-      await createBuildingLineup();
+      const lineupId = await createBuildingLineup();
 
       const voter = await createMember('ac6');
       await insertTasteVector(voter.id, { axisScores: { strategy: 90 } });
@@ -372,6 +400,7 @@ function describeCommonGroundTaste() {
         game.id,
         'steam_library',
       );
+      await insertVote(lineupId, voter.id, game.id);
 
       // Baseline request with default weights
       const baseline = await testApp.request
@@ -489,7 +518,7 @@ function describeCommonGroundTaste() {
     });
 
     it('ignores a voter missing a taste vector without crashing; other voters still contribute', async () => {
-      await createBuildingLineup();
+      const lineupId = await createBuildingLineup();
 
       const voterWithVec = await createMember('withvec');
       const voterNoVec = await createMember('novec');
@@ -508,6 +537,12 @@ function describeCommonGroundTaste() {
         game.id,
         'steam_library',
       );
+
+      // Both users must cast real votes so they land in the voter set
+      // post-ROK-1086. voterNoVec must be a real voter for the
+      // "missing vector → silently skipped" scenario to be exercised.
+      await insertVote(lineupId, voterWithVec.id, game.id);
+      await insertVote(lineupId, voterNoVec.id, game.id);
 
       const res = await testApp.request
         .get('/lineups/common-ground')

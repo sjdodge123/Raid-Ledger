@@ -246,16 +246,17 @@ export function findBuildingLineup(db: PostgresJsDatabase<typeof schema>) {
 
 /**
  * Distinct union of users whose taste should inform Common Ground scoring
- * for a lineup (ROK-950). Combines:
- *   - vote casters on the lineup
- *   - nominators of games in the lineup
- *   - the lineup creator
- *   - any community member who has a stored taste vector (so nascent
- *     lineups with zero votes still benefit from known taste signals)
+ * for a lineup (ROK-950, narrowed in ROK-1086). The voter set is strictly
+ * the actual participants in the lineup:
+ *   - vote casters on the lineup (`community_lineup_votes.user_id`)
+ *   - nominators of games in the lineup (`community_lineup_entries.nominated_by`)
+ *   - the lineup creator (`community_lineups.created_by`)
  *
- * Returning a broader set is intentional: during the `building` phase the
- * scoring helper gets called before any votes exist, and the spec tests
- * require the taste factor to still reflect known community taste.
+ * Zero-voter contract: when this returns `[]`, `buildScoringContext`
+ * (`common-ground-context.helpers.ts`) yields `voterVector = null`,
+ * `voterIntensity = null`, and an empty `coPlayPartnerIds` set.
+ * `computeScoreBreakdown` then zeroes `tasteScore`, `socialScore`, and
+ * `intensityScore`. `baseScore` (ownership × owner-weight) is unaffected.
  */
 export async function findLineupVoterIds(
   db: PostgresJsDatabase<typeof schema>,
@@ -270,8 +271,6 @@ export async function findLineupVoterIds(
       UNION
       SELECT created_by AS user_id
         FROM community_lineups WHERE id = ${lineupId}
-      UNION
-      SELECT user_id FROM player_taste_vectors
     ) AS voters
   `);
   return rows.map((r) => r.user_id);
