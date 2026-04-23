@@ -11,7 +11,6 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { SETTING_KEYS } from '../../drizzle/schema';
 import type { LlmService } from '../../ai/llm.service';
-import type { LlmProviderRegistry } from '../../ai/llm-provider-registry';
 import type { SettingsService } from '../../settings/settings.service';
 import { runGenerateSuggestions } from './generate-suggestions';
 
@@ -35,10 +34,9 @@ const VALID_PROPOSAL: LlmCategoryProposalDto = {
 
 interface Fakes {
   chat: jest.Mock;
-  resolveActive: jest.Mock;
+  isAvailable: jest.Mock;
   get: jest.Mock;
   llmService: LlmService;
-  registry: LlmProviderRegistry;
   settings: SettingsService;
   settingsStore: Map<string, string>;
 }
@@ -47,15 +45,14 @@ function makeFakes(): Fakes {
   const settingsStore = new Map<string, string>();
   settingsStore.set(SETTING_KEYS.AI_DYNAMIC_CATEGORIES_ENABLED, 'true');
   const chat = jest.fn();
-  const resolveActive = jest.fn().mockResolvedValue({ key: 'ollama' });
+  const isAvailable = jest.fn().mockResolvedValue(true);
   const get = jest.fn(async (k: string) => settingsStore.get(k) ?? null);
   return {
     chat,
-    resolveActive,
+    isAvailable,
     get,
     settingsStore,
-    llmService: { chat } as unknown as LlmService,
-    registry: { resolveActive } as unknown as LlmProviderRegistry,
+    llmService: { chat, isAvailable } as unknown as LlmService,
     settings: { get } as unknown as SettingsService,
   };
 }
@@ -94,11 +91,10 @@ describe('runGenerateSuggestions (ROK-567)', () => {
 
   it('skips when no provider is registered', async () => {
     const fakes = makeFakes();
-    fakes.resolveActive.mockResolvedValueOnce(undefined);
+    fakes.isAvailable.mockResolvedValueOnce(false);
     const inserted = await runGenerateSuggestions(testApp.db, {
       llmService: fakes.llmService,
       settingsService: fakes.settings,
-      llmProviderRegistry: fakes.registry,
       logger: new Logger(),
     });
     expect(inserted).toBe(0);
@@ -114,7 +110,6 @@ describe('runGenerateSuggestions (ROK-567)', () => {
     const inserted = await runGenerateSuggestions(testApp.db, {
       llmService: fakes.llmService,
       settingsService: fakes.settings,
-      llmProviderRegistry: fakes.registry,
       logger: new Logger(),
     });
     expect(inserted).toBe(0);
@@ -135,7 +130,6 @@ describe('runGenerateSuggestions (ROK-567)', () => {
     const inserted = await runGenerateSuggestions(testApp.db, {
       llmService: fakes.llmService,
       settingsService: fakes.settings,
-      llmProviderRegistry: fakes.registry,
       logger: new Logger(),
     });
     expect(inserted).toBe(0);
@@ -152,7 +146,6 @@ describe('runGenerateSuggestions (ROK-567)', () => {
     const inserted = await runGenerateSuggestions(testApp.db, {
       llmService: fakes.llmService,
       settingsService: fakes.settings,
-      llmProviderRegistry: fakes.registry,
       logger: new Logger(),
     });
     expect(inserted).toBe(1);
@@ -174,7 +167,6 @@ describe('runGenerateSuggestions (ROK-567)', () => {
     const inserted = await runGenerateSuggestions(testApp.db, {
       llmService: fakes.llmService,
       settingsService: fakes.settings,
-      llmProviderRegistry: fakes.registry,
       logger: new Logger(),
     });
     expect(inserted).toBe(1);
@@ -201,7 +193,6 @@ describe('runGenerateSuggestions (ROK-567)', () => {
     const inserted = await runGenerateSuggestions(testApp.db, {
       llmService: fakes.llmService,
       settingsService: fakes.settings,
-      llmProviderRegistry: fakes.registry,
       logger: new Logger(),
     });
     expect(inserted).toBe(0);

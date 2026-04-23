@@ -3,9 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LlmCategoryProposalDto } from '@raid-ledger/contract';
 import type { LlmService } from '../../ai/llm.service';
-import type { LlmProviderRegistry } from '../../ai/llm-provider-registry';
 import type { SettingsService } from '../../settings/settings.service';
-import type { AiRequestLogService } from '../../ai/ai-request-log.service';
 import * as schema from '../../drizzle/schema';
 import { SETTING_KEYS } from '../../drizzle/schema';
 import { resolveCandidates } from '../candidate-resolver';
@@ -25,8 +23,6 @@ type Db = PostgresJsDatabase<typeof schema>;
 export interface GenerateDeps {
   llmService: LlmService;
   settingsService: SettingsService;
-  llmProviderRegistry: LlmProviderRegistry;
-  aiLogService?: AiRequestLogService;
   logger?: Logger;
   now?: Date;
 }
@@ -49,19 +45,19 @@ async function readNumberSetting(
 }
 
 async function isFeatureEnabled(deps: GenerateDeps): Promise<boolean> {
-  const provider = await deps.llmProviderRegistry.resolveActive();
-  if (!provider) {
-    deps.logger?.warn(
-      'dynamic_categories: skipping — no active LLM provider configured',
-    );
-    return false;
-  }
   const flag = await deps.settingsService.get(
     SETTING_KEYS.AI_DYNAMIC_CATEGORIES_ENABLED,
   );
   if (flag !== 'true') {
     deps.logger?.warn(
       'dynamic_categories: skipping — feature flag is disabled',
+    );
+    return false;
+  }
+  const available = await deps.llmService.isAvailable().catch(() => false);
+  if (!available) {
+    deps.logger?.warn(
+      'dynamic_categories: skipping — no reachable LLM provider',
     );
     return false;
   }
