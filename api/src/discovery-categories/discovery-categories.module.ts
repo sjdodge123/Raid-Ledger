@@ -5,6 +5,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { DiscoveryCategoriesService } from './discovery-categories.service';
 import { DiscoveryCategoriesAdminController } from './discovery-categories.admin.controller';
+import { DemoTestDiscoveryCategoriesController } from './demo-test-discovery-categories.controller';
 
 /**
  * Dynamic Discovery Categories (ROK-567).
@@ -15,7 +16,10 @@ import { DiscoveryCategoriesAdminController } from './discovery-categories.admin
  */
 @Module({
   imports: [DrizzleModule, AiModule, SettingsModule, CronJobModule],
-  controllers: [DiscoveryCategoriesAdminController],
+  controllers: [
+    DiscoveryCategoriesAdminController,
+    DemoTestDiscoveryCategoriesController,
+  ],
   providers: [DiscoveryCategoriesService],
   exports: [DiscoveryCategoriesService],
 })

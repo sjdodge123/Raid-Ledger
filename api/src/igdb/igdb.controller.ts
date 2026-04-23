@@ -46,6 +46,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { buildDiscoverCategories } from './igdb-discover.helpers';
 import { dispatchDiscoverRow } from './igdb-discover-dispatch.helpers';
+import { loadApprovedDynamicRows } from '../discovery-categories/discovery-categories.discover.helpers';
 import {
   batchCheckInterests,
   addInterest,
@@ -103,10 +104,16 @@ export class IgdbController {
     const cacheTtl = this.igdbService.config.DISCOVER_CACHE_TTL;
     const categories = buildDiscoverCategories();
 
-    const rows = await Promise.all(
-      categories.map((cat) => dispatchDiscoverRow(cat, db, redis, cacheTtl)),
+    const [staticRows, dynamicRows] = await Promise.all([
+      Promise.all(
+        categories.map((cat) => dispatchDiscoverRow(cat, db, redis, cacheTtl)),
+      ),
+      loadApprovedDynamicRows(db),
+    ]);
+    const merged = [...staticRows, ...dynamicRows].filter(
+      (r) => r.games.length > 0,
     );
-    return { rows: rows.filter((r) => r.games.length > 0) };
+    return { rows: merged };
   }
 
   /** GET /games/configured -- Returns enabled games with config columns. */
