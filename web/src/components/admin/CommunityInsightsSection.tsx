@@ -13,53 +13,67 @@ import { toast } from '../../lib/toast';
 export function CommunityInsightsSection() {
     const [threshold, setThreshold] = useState(70);
     const refresh = useRefreshCommunityInsights();
-
     const handleRefresh = () => {
         refresh.mutate(undefined, {
             onSuccess: () => toast.success('Community insights refresh queued'),
             onError: (err) => toast.error(err.message),
         });
     };
-
     return (
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
-            <div>
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-                    Community Insights
-                </h3>
-                <p className="text-xs text-muted mt-1">
-                    Tune the churn-risk threshold and trigger an immediate snapshot refresh. The
-                    nightly cron runs at 06:30 UTC.
-                </p>
-            </div>
-
-            <div>
-                <label htmlFor="community-insights-threshold" className="text-sm text-foreground block mb-1">
-                    Churn risk threshold: <span className="font-semibold">{threshold}%</span>
-                </label>
-                <input
-                    id="community-insights-threshold"
-                    type="range"
-                    min={1}
-                    max={100}
-                    value={threshold}
-                    onChange={(e) => setThreshold(Number(e.target.value))}
-                    className="w-full sm:max-w-md"
-                    aria-describedby="community-insights-threshold-help"
-                />
-                <p id="community-insights-threshold-help" className="text-xs text-muted mt-1">
-                    Session-level override (1-100). Applies to queries from this browser.
-                </p>
-            </div>
-
-            <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={refresh.isPending}
-                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-                {refresh.isPending ? 'Refreshing...' : 'Refresh insights now'}
-            </button>
+            <SectionHeader />
+            <ThresholdSlider threshold={threshold} onChange={setThreshold} />
+            <RefreshButton onClick={handleRefresh} pending={refresh.isPending} />
         </div>
+    );
+}
+
+function SectionHeader() {
+    return (
+        <div>
+            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+                Community Insights
+            </h3>
+            <p className="text-xs text-muted mt-1">
+                Tune the churn-risk threshold and trigger an immediate snapshot refresh. The
+                nightly cron runs at 06:30 UTC.
+            </p>
+        </div>
+    );
+}
+
+function ThresholdSlider({ threshold, onChange }: { threshold: number; onChange: (v: number) => void }) {
+    return (
+        <div>
+            <label htmlFor="community-insights-threshold" className="text-sm text-foreground block mb-1">
+                Churn risk threshold: <span className="font-semibold">{threshold}%</span>
+            </label>
+            <input
+                id="community-insights-threshold"
+                type="range"
+                min={1}
+                max={100}
+                value={threshold}
+                onChange={(e) => onChange(Number(e.target.value))}
+                className="w-full sm:max-w-md"
+                aria-describedby="community-insights-threshold-help"
+            />
+            <p id="community-insights-threshold-help" className="text-xs text-muted mt-1">
+                Session-level override (1-100). Applies to queries from this browser.
+            </p>
+        </div>
+    );
+}
+
+function RefreshButton({ onClick, pending }: { onClick: () => void; pending: boolean }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={pending}
+            className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors disabled:opacity-50"
+        >
+            {pending ? 'Refreshing...' : 'Refresh insights now'}
+        </button>
     );
 }
