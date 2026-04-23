@@ -911,6 +911,13 @@
       "when": 1776904495170,
       "tag": "0129_discovery_category_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1776904600000,
+      "tag": "0130_small_lester",
+      "breakpoints": true
     }
   ]
 }
