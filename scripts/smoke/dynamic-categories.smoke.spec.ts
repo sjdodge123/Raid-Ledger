@@ -179,7 +179,7 @@ test.describe('Dynamic categories — approve → render on /games', () => {
             `/admin/discovery-categories?status=approved`,
         );
         expect(
-            (approvedList?.items ?? []).some(
+            (approvedList?.suggestions ?? []).some(
                 (x: { id: string }) => x.id === seeded.id,
             ),
         ).toBe(true);
@@ -244,7 +244,7 @@ test.describe('Dynamic categories — reject path', () => {
                         adminToken,
                         `/admin/discovery-categories?status=rejected`,
                     );
-                    return (list?.items ?? []).some(
+                    return (list?.suggestions ?? []).some(
                         (x: { name: string }) => x.name === uniqueName,
                     );
                 },
