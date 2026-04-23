@@ -904,6 +904,13 @@
       "when": 1776891181152,
       "tag": "0128_majestic_junta",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1776904495170,
+      "tag": "0129_discovery_category_suggestions",
+      "breakpoints": true
     }
   ]
 }
