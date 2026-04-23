@@ -134,8 +134,23 @@ export function SocialGraphCanvas({ data }: Props) {
                         height={CANVAS_HEIGHT}
                         backgroundColor="transparent"
                         nodeLabel="label"
-                        linkWidth={(l: { value?: number }) => Math.min(4, (l.value ?? 1))}
-                        linkColor={() => 'rgba(168,85,247,0.35)'}
+                        linkWidth={(l: unknown) => {
+                            const link = l as { source: number | { id: number }; target: number | { id: number }; value?: number };
+                            const s = typeof link.source === 'object' ? link.source.id : link.source;
+                            const t = typeof link.target === 'object' ? link.target.id : link.target;
+                            const involved = hoveredId != null && (s === hoveredId || t === hoveredId);
+                            const base = Math.min(4, link.value ?? 1);
+                            return involved ? base + 1 : base;
+                        }}
+                        linkColor={(l: unknown) => {
+                            if (hoveredId == null) return 'rgba(168,85,247,0.35)';
+                            const link = l as { source: number | { id: number }; target: number | { id: number } };
+                            const s = typeof link.source === 'object' ? link.source.id : link.source;
+                            const t = typeof link.target === 'object' ? link.target.id : link.target;
+                            return s === hoveredId || t === hoveredId
+                                ? 'rgba(168,85,247,0.85)'
+                                : 'rgba(168,85,247,0.06)';
+                        }}
                         enableNodeDrag={false}
                         cooldownTicks={120}
                         onEngineStop={() => graphRef.current?.zoomToFit(400, 80)}
