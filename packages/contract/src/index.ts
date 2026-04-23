@@ -138,3 +138,6 @@ export * from './standalone-poll.schema.js';
 
 // AI Nomination Suggestions (ROK-931)
 export * from './lineup-ai-suggestions.schema.js';
+
+// Dynamic Discovery Categories (ROK-567)
+export * from './discovery-categories.schema.js';
