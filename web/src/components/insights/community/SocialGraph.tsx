@@ -17,7 +17,7 @@ const SocialGraphCanvas = lazy(() =>
  */
 export function SocialGraph() {
     const [showTable, setShowTable] = useState(false);
-    const q = useCommunitySocialGraph();
+    const q = useCommunitySocialGraph({ limit: 60 });
 
     const actions = (
         <button
