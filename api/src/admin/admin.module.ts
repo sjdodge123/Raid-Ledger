@@ -22,6 +22,7 @@ import { SlashCommandTestService } from './slash-command-test.service';
 import { LineupsModule } from '../lineups/lineups.module';
 import { AiChatModule } from '../discord-bot/ai-chat/ai-chat.module';
 import { TasteProfileModule } from '../taste-profile/taste-profile.module';
+import { CommunityInsightsModule } from '../community-insights/community-insights.module';
 import { AiChatTestController } from './ai-chat-test.controller';
 
 @Module({
@@ -32,6 +33,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     LineupsModule,
     AiChatModule,
     TasteProfileModule,
+    CommunityInsightsModule,
   ],
   controllers: [
     AdminController,

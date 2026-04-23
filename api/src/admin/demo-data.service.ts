@@ -17,6 +17,7 @@ import * as secondaryH from './demo-data-install-secondary.helpers';
 import * as tasteH from './demo-data-install-taste.helpers';
 import * as clearH from './demo-data-clear.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
+import { CommunityInsightsService } from '../community-insights/community-insights.service';
 
 const BATCH_SIZE = 500;
 
@@ -29,6 +30,7 @@ export class DemoDataService {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
     private readonly tasteProfileService: TasteProfileService,
+    private readonly communityInsightsService: CommunityInsightsService,
   ) {}
 
   async getStatus(): Promise<DemoDataStatusDto> {
@@ -278,6 +280,9 @@ export class DemoDataService {
       await this.tasteProfileService.aggregateVectors();
       await this.tasteProfileService.weeklyIntensityRollup();
       await tasteH.refreshArchetypesFromCurrentMetrics(this.db);
+      // ROK-1099: Path A — run the real community-insights orchestrator
+      // against the freshly-seeded taste data so the dashboard snapshot exists.
+      await this.communityInsightsService.refreshSnapshot();
     } catch (err) {
       this.logger.warn(
         `Taste-profile aggregation after demo install failed: ${

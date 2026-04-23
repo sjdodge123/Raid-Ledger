@@ -17,5 +17,6 @@ import { KeyInsightsService } from './key-insights.service';
     CliqueDetectionService,
     KeyInsightsService,
   ],
+  exports: [CommunityInsightsService],
 })
 export class CommunityInsightsModule {}
