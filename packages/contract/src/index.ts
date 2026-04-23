@@ -141,3 +141,6 @@ export * from './lineup-ai-suggestions.schema.js';
 
 // Dynamic Discovery Categories (ROK-567)
 export * from './discovery-categories.schema.js';
+
+// Community Insights (ROK-1099)
+export * from './community-insights.schema.js';
