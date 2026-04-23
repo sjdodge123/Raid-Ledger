@@ -1,15 +1,58 @@
+import { useCommunityRadar, isNoSnapshotYet } from '../../../hooks/use-community-insights';
+import { CommunityTasteRadar } from './CommunityTasteRadar';
+import { ArchetypeDistribution } from './ArchetypeDistribution';
+import { TasteDriftChart } from './TasteDriftChart';
+import { InsightsPanelShell } from './InsightsPanelShell';
+
 /**
- * ROK-1099 Community Taste Overview section — aggregate radar, archetype
- * distribution, and 8-week drift. Real implementation in C3.
+ * ROK-1099 Community Taste Overview — aggregate radar + archetype
+ * distribution + 8-week drift. Single section wrapper carries the TDD
+ * `community-insights-radar` testid.
  */
 export function CommunityTasteOverview() {
+    const q = useCommunityRadar();
+
     return (
-        <section
-            data-testid="community-insights-radar"
-            className="bg-panel/50 rounded-xl border border-edge/50 p-6"
+        <InsightsPanelShell
+            testid="community-insights-radar"
+            title="Community Taste Overview"
+            status={q}
+            emptyHint="Not enough taste data yet to render the community radar."
         >
-            <h2 className="text-xl font-semibold text-foreground mb-4">Community Taste Overview</h2>
-            <p className="text-sm text-muted">Aggregate radar, archetype distribution, and 8-week drift load here.</p>
-        </section>
+            {q.data && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-2">
+                            Aggregate Radar
+                        </h3>
+                        <CommunityTasteRadar axes={q.data.axes} />
+                    </div>
+                    <div className="space-y-6">
+                        <div>
+                            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-2">
+                                Archetype Distribution
+                            </h3>
+                            <ArchetypeDistribution archetypes={q.data.archetypes} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-2">
+                                8-week Taste Drift (top 3 axes)
+                            </h3>
+                            <TasteDriftChart driftSeries={q.data.driftSeries} />
+                        </div>
+                    </div>
+                </div>
+            )}
+            {q.isError && isNoSnapshotYet(q.error) && <NoSnapshotEmpty />}
+        </InsightsPanelShell>
+    );
+}
+
+function NoSnapshotEmpty() {
+    return (
+        <p className="text-sm text-muted">
+            No community snapshot has been computed yet. Run a refresh from the admin
+            settings to populate this view.
+        </p>
     );
 }
