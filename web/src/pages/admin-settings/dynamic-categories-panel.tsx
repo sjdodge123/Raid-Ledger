@@ -10,6 +10,7 @@
  * `/admin/settings/general` surfaces it alongside Site Settings.
  */
 import { useState, type JSX } from 'react';
+import { SparklesIcon } from '@heroicons/react/24/outline';
 import type {
     AdminCategoryListSuggestionDto,
     DiscoveryCategorySuggestionDto,
@@ -140,8 +141,12 @@ function EmptyPending({
                 type="button"
                 onClick={onRegenerate}
                 disabled={isRegenerating}
-                className="px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-foreground rounded-lg transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-foreground rounded-lg transition-colors"
             >
+                <SparklesIcon
+                    className={`h-4 w-4 ${isRegenerating ? 'animate-pulse' : ''}`}
+                    aria-hidden
+                />
                 {isRegenerating ? 'Regenerating…' : 'Regenerate'}
             </button>
         </div>
@@ -235,8 +240,12 @@ function Header({
                 type="button"
                 onClick={onRegenerate}
                 disabled={isRegenerating}
-                className="px-3 py-1.5 text-sm font-medium bg-overlay hover:bg-faint text-foreground border border-edge rounded-lg transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-overlay hover:bg-faint text-foreground border border-edge rounded-lg transition-colors disabled:opacity-50"
             >
+                <SparklesIcon
+                    className={`h-4 w-4 ${isRegenerating ? 'animate-pulse' : ''}`}
+                    aria-hidden
+                />
                 {isRegenerating ? 'Regenerating…' : 'Regenerate'}
             </button>
         </div>
