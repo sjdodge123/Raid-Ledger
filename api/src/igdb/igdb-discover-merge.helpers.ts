@@ -10,7 +10,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 /**
  * Merge static IGDB-driven rows with the approved dynamic rows from ROK-567.
- * Keeps the controller handler slim by hiding the `Promise.all` + filter.
+ * Dynamic (admin-curated, weekly-LLM-proposed) rows are prepended so they
+ * surface at the top of the Games page as a distinct "curated" section.
  */
 export async function buildDiscoverRows(
   categories: DiscoverCategory[],
@@ -24,5 +25,5 @@ export async function buildDiscoverRows(
     ),
     loadApprovedDynamicRows(db),
   ]);
-  return [...staticRows, ...dynamicRows].filter((r) => r.games.length > 0);
+  return [...dynamicRows, ...staticRows].filter((r) => r.games.length > 0);
 }
