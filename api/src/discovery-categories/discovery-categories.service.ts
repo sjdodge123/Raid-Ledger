@@ -40,16 +40,24 @@ export class DiscoveryCategoriesService {
     );
   }
 
-  /** Same pass: generate new pending rows then expire stale approved ones. */
-  async weeklyGenerate(): Promise<{ inserted: number; expired: number }> {
+  /**
+   * Same pass: generate new pending rows then expire stale approved ones.
+   * Pass `bypassQuota=true` for manual admin-triggered runs so the
+   * operator's explicit click isn't blocked by the backlog cap; the cron
+   * path always respects the quota.
+   */
+  async weeklyGenerate(opts?: {
+    bypassQuota?: boolean;
+  }): Promise<{ inserted: number; expired: number }> {
     const inserted = await runGenerateSuggestions(this.db, {
       llmService: this.llmService,
       settingsService: this.settingsService,
       logger: this.logger,
+      bypassQuota: opts?.bypassQuota,
     });
     const expired = await runExpireSuggestions(this.db);
     this.logger.log(
-      `dynamic_categories weekly pass: inserted=${inserted} expired=${expired}`,
+      `dynamic_categories weekly pass: inserted=${inserted} expired=${expired} bypassQuota=${opts?.bypassQuota ?? false}`,
     );
     return { inserted, expired };
   }

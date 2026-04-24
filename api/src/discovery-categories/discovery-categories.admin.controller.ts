@@ -244,7 +244,12 @@ export class DiscoveryCategoriesAdminController {
         'Dynamic discovery categories are disabled',
       );
     }
-    const { inserted, expired } = await this.service.weeklyGenerate();
+    // Manual admin click — bypass the pending-queue quota so the operator's
+    // explicit regenerate isn't blocked by prior un-reviewed proposals.
+    // The weekly cron still respects the quota.
+    const { inserted, expired } = await this.service.weeklyGenerate({
+      bypassQuota: true,
+    });
     return { ok: true, inserted, expired };
   }
 }

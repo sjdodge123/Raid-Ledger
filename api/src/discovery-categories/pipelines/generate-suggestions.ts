@@ -25,6 +25,13 @@ export interface GenerateDeps {
   settingsService: SettingsService;
   logger?: Logger;
   now?: Date;
+  /**
+   * Skip the max_pending quota gate. Set true for manual admin regenerate
+   * clicks (operator explicitly wants new proposals while looking at the
+   * queue); leave false for the weekly cron so the review backlog stays
+   * bounded.
+   */
+  bypassQuota?: boolean;
 }
 
 const DEFAULT_BLEND_ALPHA = 0.7;
@@ -122,17 +129,19 @@ export async function runGenerateSuggestions(
 ): Promise<number> {
   if (!(await isFeatureEnabled(deps))) return 0;
 
-  const maxPending = await readNumberSetting(
-    deps.settingsService,
-    SETTING_KEYS.DYNAMIC_CATEGORIES_MAX_PENDING,
-    DEFAULT_MAX_PENDING,
-  );
-  const pending = await countPending(db);
-  if (pending >= maxPending) {
-    deps.logger?.warn(
-      `dynamic_categories: skipping — pending quota ${pending}/${maxPending} reached`,
+  if (!deps.bypassQuota) {
+    const maxPending = await readNumberSetting(
+      deps.settingsService,
+      SETTING_KEYS.DYNAMIC_CATEGORIES_MAX_PENDING,
+      DEFAULT_MAX_PENDING,
     );
-    return 0;
+    const pending = await countPending(db);
+    if (pending >= maxPending) {
+      deps.logger?.warn(
+        `dynamic_categories: skipping — pending quota ${pending}/${maxPending} reached`,
+      );
+      return 0;
+    }
   }
 
   const context = buildGenerationContext(
