@@ -53,8 +53,8 @@ export function AiFeatureToggles({ disabled }: AiFeatureTogglesProps) {
                 onChange={(v) => mutate({ chatEnabled: v })}
             />
             <FeatureToggle
-                label="Dynamic Categories"
-                description="Use AI to suggest event categories"
+                label="Dynamic Discovery Categories"
+                description="Weekly LLM-proposed rows on the Games discover page (admin-reviewed)"
                 enabled={dynCatEnabled}
                 disabled={disabled}
                 onChange={(v) => mutate({ dynamicCategoriesEnabled: v })}

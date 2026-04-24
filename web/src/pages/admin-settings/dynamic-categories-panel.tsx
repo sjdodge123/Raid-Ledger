@@ -22,10 +22,7 @@ import {
     useRegenerateDynamicCategories,
     useRejectDynamicCategory,
 } from '../../hooks/admin/use-dynamic-categories';
-import {
-    useAiFeatures,
-    useUpdateAiFeatures,
-} from '../../hooks/admin/use-ai-settings';
+import { useAiFeatures } from '../../hooks/admin/use-ai-settings';
 import { toast } from '../../lib/toast';
 import { DynamicCategoryCard } from '../../components/admin/DynamicCategoryCard';
 import { DynamicCategoryEditModal } from '../../components/admin/DynamicCategoryEditModal';
@@ -245,40 +242,8 @@ function PanelBody({
     );
 }
 
-function FeatureToggle({
-    enabled,
-    disabled,
-    onChange,
-}: {
-    enabled: boolean;
-    disabled: boolean;
-    onChange: (v: boolean) => void;
-}): JSX.Element {
-    const btnCls = `relative w-11 h-6 rounded-full transition-colors ${
-        enabled ? 'bg-emerald-600' : 'bg-overlay'
-    } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`;
-    return (
-        <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-label="Enable dynamic discovery categories"
-            disabled={disabled}
-            onClick={() => onChange(!enabled)}
-            className={btnCls}
-        >
-            <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-foreground transition-transform ${
-                    enabled ? 'translate-x-5' : ''
-                }`}
-            />
-        </button>
-    );
-}
-
 export function DynamicCategoriesPanel(): JSX.Element {
     const features = useAiFeatures();
-    const updateFeatures = useUpdateAiFeatures();
     const enabled = features.data?.dynamicCategoriesEnabled ?? false;
     const [status, setStatus] = useState<SuggestionStatus>('pending');
     const [editing, setEditing] =
@@ -303,49 +268,37 @@ export function DynamicCategoriesPanel(): JSX.Element {
         );
     };
 
+    if (!enabled) return <></>;
     return (
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
-            <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                    <h2 className="text-xl font-semibold text-foreground">
-                        Dynamic Categories
-                    </h2>
-                    <p className="text-sm text-muted mt-1">
-                        Review LLM-generated discovery rows before they ship to
-                        the /games page.
-                    </p>
-                </div>
-                <FeatureToggle
-                    enabled={enabled}
-                    disabled={updateFeatures.isPending || features.isLoading}
-                    onChange={(v) =>
-                        updateFeatures.mutate({ dynamicCategoriesEnabled: v })
-                    }
-                />
+            <div>
+                <h2 className="text-xl font-semibold text-foreground">
+                    Dynamic Categories
+                </h2>
+                <p className="text-sm text-muted mt-1">
+                    Review LLM-generated discovery rows before they ship to the
+                    /games page.
+                </p>
             </div>
-            {enabled && (
-                <>
-                    <Header
-                        onRegenerate={actions.runRegenerate}
-                        isRegenerating={actions.regenerate.isPending}
-                    />
-                    <TabBar active={status} onSelect={setStatus} />
-                    {showVectorsBanner && <VectorsNotReadyBanner />}
-                    <PanelBody
-                        status={status}
-                        list={list}
-                        actions={actions}
-                        setEditing={setEditing}
-                    />
-                    <DynamicCategoryEditModal
-                        isOpen={!!editing}
-                        suggestion={editing}
-                        onClose={() => setEditing(null)}
-                        onSave={handleSaveEdit}
-                        isSaving={actions.patch.isPending}
-                    />
-                </>
-            )}
+            <Header
+                onRegenerate={actions.runRegenerate}
+                isRegenerating={actions.regenerate.isPending}
+            />
+            <TabBar active={status} onSelect={setStatus} />
+            {showVectorsBanner && <VectorsNotReadyBanner />}
+            <PanelBody
+                status={status}
+                list={list}
+                actions={actions}
+                setEditing={setEditing}
+            />
+            <DynamicCategoryEditModal
+                isOpen={!!editing}
+                suggestion={editing}
+                onClose={() => setEditing(null)}
+                onSave={handleSaveEdit}
+                isSaving={actions.patch.isPending}
+            />
         </div>
     );
 }
