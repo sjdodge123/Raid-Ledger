@@ -150,8 +150,7 @@ function parseOnce(content: string): ParseResult {
       }
     }
   }
-  if (validated.length === 0)
-    return { proposals: null, zodIssues, snippet };
+  if (validated.length === 0) return { proposals: null, zodIssues, snippet };
   return { proposals: validated, zodIssues, snippet };
 }
 

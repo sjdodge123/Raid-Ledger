@@ -17,6 +17,14 @@
  * dev agents land Phases A–C.
  */
 import { test, expect } from './base';
+
+// This spec mutates the shared discovery_category_suggestions table via the
+// DEMO_MODE seed endpoint. Running desktop + mobile workers in parallel
+// lets one worker's TRUNCATE race with another worker's seed, which makes
+// the admin-panel assertions flaky (the card the test seeded vanishes
+// before page.goto returns). Force serial execution across the suite so
+// each describe has a stable DB snapshot.
+test.describe.configure({ mode: 'serial' });
 import {
     API_BASE,
     getAdminToken,
@@ -46,6 +54,7 @@ async function seedSuggestion(
         expiresAt?: string | null;
         sortOrder?: number;
         themeVector?: number[];
+        candidateGameIds?: number[];
     } = {},
 ): Promise<SeededSuggestion> {
     const body: Record<string, unknown> = {
@@ -58,6 +67,9 @@ async function seedSuggestion(
         themeVector: opts.themeVector ?? DEFAULT_THEME_VECTOR,
     };
     if (opts.expiresAt !== undefined) body.expiresAt = opts.expiresAt;
+    if (opts.candidateGameIds !== undefined) {
+        body.candidateGameIds = opts.candidateGameIds;
+    }
     const res = await apiPost(
         token,
         '/admin/test/seed-discovery-categories',
@@ -101,16 +113,31 @@ async function deleteAllDiscoveryCategorySuggestions(
 
 let adminToken: string;
 
-test.beforeAll(async () => {
+// Extend beforeAll timeout via testInfo.setTimeout so the shared
+// getAdminToken helper can ride out a 429 back-off window when smoke runs
+// fire in rapid succession against local dev (auth rate limiter is stricter
+// than CI's bootstrap path which uses a different admin-password setup).
+//
+// NOTE: we do NOT truncate the table in beforeEach. Parallel Playwright
+// workers share the DB, and a cross-worker TRUNCATE races with another
+// worker's seed → tests vanish under their own feet. Tests rely on unique
+// seed names (timestamp + random suffix) to avoid collisions instead.
+// Only explicit describes that need a clean slate (e.g. vectors-not-ready)
+// clear before seeding.
+test.beforeAll(async ({}, testInfo) => {
+    testInfo.setTimeout(120_000);
     adminToken = await getAdminToken();
-    // Start each run from a known-empty state so assertions are deterministic.
+    // One-time clear so the approved/rejected/expired tabs are empty at the
+    // start of the run (otherwise Smoke-named residue from prior runs lingers).
     await deleteAllDiscoveryCategorySuggestions(adminToken);
     await setDynamicCategoriesFlag(adminToken, true);
 });
 
 test.afterAll(async () => {
-    // Leave the flag enabled + table empty for the next run.
-    await deleteAllDiscoveryCategorySuggestions(adminToken).catch(() => {});
+    // Leave the flag enabled for the next run. We intentionally do NOT
+    // TRUNCATE here — two workers (desktop/mobile) may race, and a
+    // too-eager afterAll truncate from one worker wipes in-flight test
+    // state in the other. beforeAll of the next suite run handles cleanup.
     await setDynamicCategoriesFlag(adminToken, true).catch(() => {});
 });
 
@@ -123,7 +150,7 @@ test.describe('Dynamic categories — approve → render on /games', () => {
     test('admin approves a seeded pending suggestion and it appears on /games', async ({
         page,
     }) => {
-        const uniqueName = `Smoke Approved ${Date.now()}`;
+        const uniqueName = `Smoke Approved ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const seeded = await seedSuggestion(adminToken, {
             name: uniqueName,
             description: 'Seeded for approval-then-render test.',
@@ -148,22 +175,24 @@ test.describe('Dynamic categories — approve → render on /games', () => {
         });
         await expect(card).toBeVisible({ timeout: 10_000 });
 
-        // Approve it.
+        // Approve it. The card leaves the pending tab (server-side status
+        // filter + list invalidation), so don't assert on the card's DOM
+        // transition — verify backend state + /games render instead.
         await card.getByRole('button', { name: 'Approve' }).click();
-        await expect(card).toHaveAttribute('data-status', 'approved', {
-            timeout: 10_000,
-        });
-
-        // Confirm backend state via the admin list endpoint (deterministic).
-        const approvedList = await apiGet(
-            adminToken,
-            `/admin/discovery-categories?status=approved`,
-        );
-        expect(
-            (approvedList?.suggestions ?? []).some(
-                (x: { id: string }) => x.id === seeded.id,
-            ),
-        ).toBe(true);
+        await expect
+            .poll(
+                async () => {
+                    const list = await apiGet(
+                        adminToken,
+                        `/admin/discovery-categories?status=approved`,
+                    );
+                    return (list?.suggestions ?? []).some(
+                        (x: { id: string }) => x.id === seeded.id,
+                    );
+                },
+                { timeout: 10_000 },
+            )
+            .toBe(true);
 
         // Now the approved row should render on /games.
         await page.goto('/games');
@@ -192,7 +221,7 @@ test.describe('Dynamic categories — reject path', () => {
             'Backend behavior identical across viewports — desktop-only',
         );
 
-        const uniqueName = `Smoke Rejected ${Date.now()}`;
+        const uniqueName = `Smoke Rejected ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         await seedSuggestion(adminToken, {
             name: uniqueName,
             description: 'Seeded for reject test.',
@@ -300,9 +329,21 @@ test.describe('Dynamic categories — edit path', () => {
         );
         await expect(renamedCard).toBeVisible({ timeout: 10_000 });
         await renamedCard.getByRole('button', { name: 'Approve' }).click();
-        await expect(renamedCard).toHaveAttribute('data-status', 'approved', {
-            timeout: 10_000,
-        });
+        // Card leaves the pending tab once approved — verify backend state.
+        await expect
+            .poll(
+                async () => {
+                    const list = await apiGet(
+                        adminToken,
+                        `/admin/discovery-categories?status=approved`,
+                    );
+                    return (list?.suggestions ?? []).some(
+                        (x: { name: string }) => x.name === editedName,
+                    );
+                },
+                { timeout: 10_000 },
+            )
+            .toBe(true);
 
         // Edited name renders on /games.
         await page.goto('/games');
@@ -402,9 +443,11 @@ test.describe('Dynamic categories — vectors-not-ready banner', () => {
             'Banner DOM identical across viewports — desktop verifies',
         );
 
-        // The panel's vectors-not-ready banner fires when every pending
-        // suggestion has empty candidateGameIds — this is the same signal the
-        // weekly cron emits when game_taste_vectors is empty. Seed directly.
+        // The panel's vectors-not-ready banner fires when EVERY pending
+        // suggestion has empty candidateGameIds — same signal the weekly cron
+        // emits when game_taste_vectors is empty. Clear first so prior tests'
+        // pending rows (with candidates) don't mask the banner.
+        await deleteAllDiscoveryCategorySuggestions(adminToken);
         await seedSuggestion(adminToken, {
             name: `Smoke Vectors Not Ready ${Date.now()}`,
             status: 'pending',

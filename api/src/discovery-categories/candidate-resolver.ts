@@ -52,7 +52,8 @@ export async function resolveCandidates(
 
   // Widen the fetch when we're post-filtering so a strict multiplayer or
   // tag filter doesn't starve the result set.
-  const fetchLimit = hasFilter || requireMultiplayer ? opts.limit * 5 : opts.limit;
+  const fetchLimit =
+    hasFilter || requireMultiplayer ? opts.limit * 5 : opts.limit;
   const rows = await executeSimilarityQuery(
     db,
     themeVector,
@@ -135,15 +136,13 @@ async function postFilter(
     const score = hasTagFilter ? scoreGameMatch(meta, filter) : 1;
     if (score > 0) ranked.push({ gameId: r.game_id, score, idx });
   });
-  ranked.sort((a, b) => (b.score - a.score) || (a.idx - b.idx));
+  ranked.sort((a, b) => b.score - a.score || a.idx - b.idx);
   return ranked.slice(0, limit).map((r) => r.gameId);
 }
 
 /** A game qualifies as multiplayer when we know max > 1. Missing player_count
  *  is treated as unknown → rejected so multiplayer categories stay clean. */
-function isMultiplayer(
-  pc: { min: number; max: number } | null,
-): boolean {
+function isMultiplayer(pc: { min: number; max: number } | null): boolean {
   if (!pc) return false;
   return typeof pc.max === 'number' && pc.max >= 2;
 }
