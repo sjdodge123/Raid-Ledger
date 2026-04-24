@@ -23,14 +23,19 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 const SeedBodySchema = z.object({
   name: z.string().min(1).max(120).optional(),
+  description: z.string().min(1).max(500).optional(),
   status: z.enum(['pending', 'approved', 'rejected', 'expired']).optional(),
   populationStrategy: z.enum(['vector', 'fixed', 'hybrid']).optional(),
   sortOrder: z.number().int().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
   candidateGameIds: z.array(z.number().int()).optional(),
+  themeVector: z.array(z.number()).length(7).optional(),
 });
 
 const DEFAULT_THEME_VECTOR: readonly number[] = [0.5, 0, 0.3, 0, 0.2, 0.4, 0];
+/** How many real game ids to default into the seed when the caller omits them.
+ * Keeps smoke tests deterministic AND ensures the row actually hydrates on /games. */
+const DEFAULT_SEED_GAME_COUNT = 3;
 
 /**
  * Demo-mode-only endpoints for dynamic discovery category fixtures (ROK-567).
@@ -68,14 +73,17 @@ export class DemoTestDiscoveryCategoriesController {
       );
     }
     const input = parsed.data;
+    const candidateGameIds =
+      input.candidateGameIds ?? (await this.pickDefaultSeedGameIds());
     const [row] = await this.db
       .insert(schema.discoveryCategorySuggestions)
       .values({
         name: input.name ?? `Demo Dynamic Category ${Date.now()}`,
         description:
+          input.description ??
           'Seeded by smoke tests — not a real LLM proposal (ROK-567).',
         categoryType: 'trend',
-        themeVector: [...DEFAULT_THEME_VECTOR],
+        themeVector: input.themeVector ?? [...DEFAULT_THEME_VECTOR],
         status: input.status ?? 'pending',
         populationStrategy: input.populationStrategy ?? 'fixed',
         sortOrder: input.sortOrder ?? 1000,
@@ -83,10 +91,28 @@ export class DemoTestDiscoveryCategoriesController {
           input.expiresAt === undefined || input.expiresAt === null
             ? null
             : new Date(input.expiresAt),
-        candidateGameIds: input.candidateGameIds ?? [],
+        candidateGameIds,
       })
       .returning({ id: schema.discoveryCategorySuggestions.id });
     return { id: row.id };
+  }
+
+  /**
+   * Pick the first few visible games as default candidate ids. Keeps a seeded
+   * `approved` row actually renderable on /games — without this, the default
+   * `populationStrategy='fixed' + candidateGameIds=[]` combo would silently
+   * drop the row from the discover response.
+   */
+  private async pickDefaultSeedGameIds(): Promise<number[]> {
+    const rows = await this.db
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(
+        sql`${schema.games.hidden} = false AND ${schema.games.banned} = false`,
+      )
+      .orderBy(schema.games.id)
+      .limit(DEFAULT_SEED_GAME_COUNT);
+    return rows.map((r) => r.id);
   }
 
   @Post('clear-discovery-categories')

@@ -144,13 +144,17 @@ export async function runGenerateSuggestions(
     }
   }
 
+  // Four independent signal queries — fan out in parallel.
+  const [centroid, topPlayed, trending, existingCategories] = await Promise.all(
+    [
+      loadCommunityCentroid(db),
+      loadTopPlayedLastMonth(db, TOP_PLAYED_N),
+      loadTrending(db, TRENDING_N),
+      loadExistingApprovedCategories(db),
+    ],
+  );
   const context = buildGenerationContext(
-    {
-      centroid: await loadCommunityCentroid(db),
-      topPlayed: await loadTopPlayedLastMonth(db, TOP_PLAYED_N),
-      trending: await loadTrending(db, TRENDING_N),
-      existingCategories: await loadExistingApprovedCategories(db),
-    },
+    { centroid, topPlayed, trending, existingCategories },
     deps.now ?? new Date(),
     MAX_PROPOSALS,
   );

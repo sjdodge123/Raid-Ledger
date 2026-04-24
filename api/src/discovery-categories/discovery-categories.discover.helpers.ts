@@ -60,23 +60,28 @@ export async function loadApprovedDynamicRows(
     )
     .orderBy(asc(schema.discoveryCategorySuggestions.sortOrder));
 
-  const out: GameDiscoverRowDto[] = [];
-  for (const raw of rows) {
-    const row: ApprovedRow = {
-      ...raw,
-      filterCriteria: (raw.filterCriteria ?? {}) as Record<string, unknown>,
-    };
-    const games = await resolveRowGames(db, row);
-    if (games.length === 0) continue;
-    out.push({
+  // Each approved row triggers 2-3 DB round-trips (cosine search, optional
+  // post-filter, hydrate). Fan the rows out via Promise.all so /games/discover
+  // doesn't degrade linearly with the approved count.
+  const resolved = await Promise.all(
+    rows.map(async (raw) => {
+      const row: ApprovedRow = {
+        ...raw,
+        filterCriteria: (raw.filterCriteria ?? {}) as Record<string, unknown>,
+      };
+      const games = await resolveRowGames(db, row);
+      return { row, games };
+    }),
+  );
+  return resolved
+    .filter(({ games }) => games.length > 0)
+    .map(({ row, games }) => ({
       category: row.name,
       slug: `dynamic-${row.id}`,
       games,
       suggestionId: row.id,
       isDynamic: true as const,
-    });
-  }
-  return out;
+    }));
 }
 
 async function resolveRowGames(

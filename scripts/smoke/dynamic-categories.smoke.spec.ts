@@ -71,24 +71,6 @@ async function seedSuggestion(
     return { id: res.id, name: body.name as string };
 }
 
-/**
- * Clear the game_taste_vectors table via a DEMO_MODE-only endpoint so the
- * admin panel shows the vectors-not-ready banner. Dev agents add this
- * endpoint alongside the seeder.
- */
-async function clearGameTasteVectors(token: string): Promise<void> {
-    await apiPost(token, '/admin/test/clear-game-taste-vectors');
-}
-
-/**
- * Restore a deterministic set of game_taste_vectors so /games works and
- * other smoke tests remain green. Dev agents add this endpoint alongside
- * the clear helper.
- */
-async function restoreGameTasteVectors(token: string): Promise<void> {
-    await apiPost(token, '/admin/test/restore-game-taste-vectors');
-}
-
 async function setDynamicCategoriesFlag(
     token: string,
     enabled: boolean,
@@ -130,7 +112,6 @@ test.afterAll(async () => {
     // Leave the flag enabled + table empty for the next run.
     await deleteAllDiscoveryCategorySuggestions(adminToken).catch(() => {});
     await setDynamicCategoriesFlag(adminToken, true).catch(() => {});
-    await restoreGameTasteVectors(adminToken).catch(() => {});
 });
 
 // ---------------------------------------------------------------------------
@@ -152,7 +133,7 @@ test.describe('Dynamic categories — approve → render on /games', () => {
         });
 
         // Load the admin Dynamic Categories panel.
-        await page.goto('/admin/settings/general');
+        await page.goto('/admin/settings/integrations/plugin/ai/ai');
         await expect(page.locator('body')).not.toHaveText(
             /something went wrong/i,
             { timeout: 10_000 },
@@ -218,7 +199,7 @@ test.describe('Dynamic categories — reject path', () => {
             status: 'pending',
         });
 
-        await page.goto('/admin/settings/general');
+        await page.goto('/admin/settings/integrations/plugin/ai/ai');
         await expect(
             page.getByRole('heading', { name: 'Dynamic Categories' }).first(),
         ).toBeVisible({ timeout: 15_000 });
@@ -286,7 +267,7 @@ test.describe('Dynamic categories — edit path', () => {
             expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         });
 
-        await page.goto('/admin/settings/general');
+        await page.goto('/admin/settings/integrations/plugin/ai/ai');
         await expect(
             page.getByRole('heading', { name: 'Dynamic Categories' }).first(),
         ).toBeVisible({ timeout: 15_000 });
@@ -413,7 +394,7 @@ test.describe('Dynamic categories — feature flag gate', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Dynamic categories — vectors-not-ready banner', () => {
-    test('admin panel shows the vectors-not-ready banner when game_taste_vectors is empty', async ({
+    test('admin panel shows the vectors-not-ready banner when every pending suggestion has no candidate games', async ({
         page,
     }, testInfo) => {
         test.skip(
@@ -421,29 +402,31 @@ test.describe('Dynamic categories — vectors-not-ready banner', () => {
             'Banner DOM identical across viewports — desktop verifies',
         );
 
-        await clearGameTasteVectors(adminToken);
-        try {
-            await page.goto('/admin/settings/general');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 10_000 },
-            );
+        // The panel's vectors-not-ready banner fires when every pending
+        // suggestion has empty candidateGameIds — this is the same signal the
+        // weekly cron emits when game_taste_vectors is empty. Seed directly.
+        await seedSuggestion(adminToken, {
+            name: `Smoke Vectors Not Ready ${Date.now()}`,
+            status: 'pending',
+            candidateGameIds: [],
+        });
 
-            await expect(
-                page
-                    .getByRole('heading', { name: 'Dynamic Categories' })
-                    .first(),
-            ).toBeVisible({ timeout: 15_000 });
+        await page.goto('/admin/settings/integrations/plugin/ai/ai');
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
 
-            const banner = page.locator(
-                '[data-testid="dynamic-categories-vectors-not-ready"]',
-            );
-            await expect(banner).toBeVisible({ timeout: 10_000 });
-            await expect(banner).toContainText(
-                /game taste vectors.*(computing|not ready|populated)/i,
-            );
-        } finally {
-            await restoreGameTasteVectors(adminToken);
-        }
+        await expect(
+            page.getByRole('heading', { name: 'Dynamic Categories' }).first(),
+        ).toBeVisible({ timeout: 15_000 });
+
+        const banner = page.locator(
+            '[data-testid="dynamic-categories-vectors-not-ready"]',
+        );
+        await expect(banner).toBeVisible({ timeout: 10_000 });
+        await expect(banner).toContainText(
+            /game taste vectors.*(computing|not ready|populated)/i,
+        );
     });
 });
