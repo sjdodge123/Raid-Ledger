@@ -5,8 +5,8 @@ import type {
 
 /** Cap LLM response tokens — 3-5 short category proposals. */
 const MAX_RESPONSE_TOKENS = 1500;
-/** Low-but-non-zero temperature to keep proposals coherent but varied week-to-week. */
-const PROMPT_TEMPERATURE = 0.5;
+/** Higher temperature to push genre + theme variety across proposals. */
+const PROMPT_TEMPERATURE = 0.8;
 
 export type CategoryTypeHint =
   | 'seasonal'
@@ -54,25 +54,30 @@ const CURATOR_ROLE = [
   'surfacing this week. Each proposal must be grounded in the community',
   'signal below — centroid taste axes, top-played titles, trending deltas,',
   'and the current season — and must NOT duplicate an existing category name.',
+  'Variety across proposals is critical: the user sees all of them side-by-side',
+  'on the Games page, so near-duplicate themes (e.g. two co-op picks, two MMO',
+  'picks) are a failure.',
 ].join(' ');
 
 const RULES = [
   'Rules:',
   `1. Return BETWEEN 3 AND 5 proposals — no more.`,
   '2. Each proposal MUST have a category_type of one of: seasonal, trend, community_pattern, event.',
-  '3. Each proposal MUST include a theme_vector object with EXACTLY these keys, each a float in [-1, 1]:',
+  '3. DIVERSITY: each proposal\'s DOMINANT axis (the axis with the highest absolute value in its theme_vector) MUST be DIFFERENT from every other proposal in this batch. Across 3-5 proposals you must span at least 3 different dominant axes out of [co_op, pvp, rpg, survival, strategy, social, mmo]. Never return two proposals that are both co_op-dominant, both mmo-dominant, etc.',
+  '4. DIVERSITY 2: category_types must be varied — do NOT return all community_pattern or all trend. Aim for a mix.',
+  '5. Each proposal MUST include a theme_vector object with EXACTLY these keys, each a float in [-1, 1]:',
   `   ${AXIS_KEYS.join(', ')}.`,
   '   Axis order matters — do not rename, add, or drop keys.',
-  '4. Each proposal MUST set population_strategy to ONE of: "vector", "fixed", "hybrid".',
+  '6. Each proposal MUST set population_strategy to ONE of: "vector", "fixed", "hybrid".',
   '   - "vector": candidates resolved at request time via cosine similarity against the theme vector.',
   '   - "fixed": candidate list locked at generation time; use only when a small hand-picked list is obviously best.',
   '   - "hybrid": vector similarity, post-filtered by genre_tags in filter_criteria.',
-  '5. filter_criteria may include genre_tags (array of strings) when a population strategy benefits from it.',
-  '6. name: 3–120 chars. description: 10–500 chars; write for end users, not for the LLM.',
-  '7. DO NOT repeat an existing category name from the list below.',
-  '8. When seasonal hints are present, AT LEAST ONE proposal SHOULD be category_type="seasonal".',
-  '9. expires_at is OPTIONAL — set it to a future ISO-8601 timestamp ONLY when the category is inherently time-boxed (seasonal, event).',
-  '10. Return ONLY JSON — no prose, no markdown fences.',
+  '7. filter_criteria may include genre_tags (array of strings) when a population strategy benefits from it.',
+  '8. name: 3–120 chars — make it evocative and specific, NOT generic. "Cozy Winter Co-op" beats "Co-op Favorites". description: 10–500 chars; write for end users, not for the LLM.',
+  '9. DO NOT repeat an existing category name from the list below AND do not propose themes that overlap semantically with an existing name (e.g. if "Ghost Hunt Crew" exists, do NOT propose "Haunted Co-op" or "Paranormal Night").',
+  '10. When seasonal hints are present, AT LEAST ONE proposal MUST be category_type="seasonal" and reference the current month or season in its name or description.',
+  '11. expires_at: REQUIRED for category_type="seasonal" and "event" — set it to a future ISO-8601 timestamp derived from "today is YYYY-MM-DD" above (e.g. 4-8 weeks out for a monthly seasonal row). OMIT for "trend" and "community_pattern".',
+  '12. Return ONLY JSON — no prose, no markdown fences.',
 ].join('\n');
 
 const OUTPUT_FORMAT = [

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { elementwiseMean } from '../../game-taste/queries/similarity-queries';
@@ -124,7 +124,9 @@ export async function loadTrending(db: Db, n: number): Promise<TrendingGame[]> {
 }
 
 /**
- * Existing approved categories the LLM must not duplicate by name.
+ * Existing categories the LLM must not duplicate by name. Includes both
+ * `pending` and `approved` so repeat regenerations don't produce near-duplicate
+ * themes while earlier proposals are still sitting in the review queue.
  */
 export async function loadExistingApprovedCategories(
   db: Db,
@@ -135,7 +137,12 @@ export async function loadExistingApprovedCategories(
       categoryType: schema.discoveryCategorySuggestions.categoryType,
     })
     .from(schema.discoveryCategorySuggestions)
-    .where(eq(schema.discoveryCategorySuggestions.status, 'approved'));
+    .where(
+      inArray(schema.discoveryCategorySuggestions.status, [
+        'pending',
+        'approved',
+      ]),
+    );
   return rows.map((r) => ({
     name: r.name,
     categoryType: r.categoryType as CategoryTypeHint,

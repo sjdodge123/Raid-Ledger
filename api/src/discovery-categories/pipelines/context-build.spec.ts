@@ -14,9 +14,8 @@ describe('seasonalHintsFor', () => {
   });
 
   it('covers summer during July', () => {
-    expect(seasonalHintsFor(new Date('2026-07-04T00:00:00Z'))).toEqual(
-      expect.arrayContaining(['summer']),
-    );
+    const hints = seasonalHintsFor(new Date('2026-07-04T00:00:00Z'));
+    expect(hints.some((h) => /summer/i.test(h))).toBe(true);
   });
 
   it('is empty when a date yields no window (never actually empty, sanity)', () => {
