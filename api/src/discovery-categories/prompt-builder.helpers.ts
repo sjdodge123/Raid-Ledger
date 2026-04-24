@@ -76,7 +76,12 @@ const RULES = [
   '8. name: 3–120 chars — make it evocative and specific, NOT generic. "Cozy Winter Co-op" beats "Co-op Favorites". description: 10–500 chars; write for end users, not for the LLM.',
   '9. DO NOT repeat an existing category name from the list below AND do not propose themes that overlap semantically with an existing name (e.g. if "Ghost Hunt Crew" exists, do NOT propose "Haunted Co-op" or "Paranormal Night").',
   '10. When seasonal hints are present, AT LEAST ONE proposal MUST be category_type="seasonal" and reference the current month or season in its name or description.',
-  '11. expires_at: REQUIRED for category_type="seasonal" and "event" — set it to a future ISO-8601 timestamp derived from "today is YYYY-MM-DD" above (e.g. 4-8 weeks out for a monthly seasonal row). OMIT for "trend" and "community_pattern".',
+  '11. expires_at: REQUIRED for EVERY proposal — set it to a future ISO-8601 timestamp derived from "today is YYYY-MM-DD" above. Suggested windows by category_type:',
+  '    - "trend": 14-28 days out (trends move fast)',
+  '    - "community_pattern": 28-56 days out',
+  '    - "seasonal": tied to the end of the season — typically 30-90 days',
+  '    - "event": tied to the actual event date',
+  '    Never return null or omit this field. Rows without expires_at would stick on the Games page forever.',
   '12. Return ONLY JSON — no prose, no markdown fences.',
 ].join('\n');
 
