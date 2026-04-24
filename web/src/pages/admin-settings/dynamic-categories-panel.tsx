@@ -27,6 +27,45 @@ import { toast } from '../../lib/toast';
 import { DynamicCategoryCard } from '../../components/admin/DynamicCategoryCard';
 import { DynamicCategoryEditModal } from '../../components/admin/DynamicCategoryEditModal';
 
+/** Pulse skeleton for a single card — matches LineupBannerSkeleton style. */
+function DynamicCategoryCardSkeleton(): JSX.Element {
+    return (
+        <div className="rounded-xl bg-panel border border-edge/50 p-4 animate-pulse space-y-3">
+            <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-zinc-700/50 rounded w-1/3" />
+                    <div className="h-3 bg-zinc-700/50 rounded w-2/3" />
+                </div>
+                <div className="h-3 bg-zinc-700/50 rounded w-16" />
+            </div>
+            <div className="h-16 bg-zinc-700/30 rounded-md" />
+            <div className="flex gap-2 overflow-hidden">
+                {Array.from({ length: 6 }, (_, i) => (
+                    <div
+                        key={i}
+                        className="w-16 h-20 bg-zinc-700/50 rounded flex-shrink-0"
+                    />
+                ))}
+            </div>
+            <div className="flex gap-2">
+                <div className="h-7 bg-zinc-700/50 rounded w-20" />
+                <div className="h-7 bg-zinc-700/50 rounded w-20" />
+                <div className="h-7 bg-zinc-700/50 rounded w-16" />
+            </div>
+        </div>
+    );
+}
+
+function SkeletonList({ count }: { count: number }): JSX.Element {
+    return (
+        <div className="space-y-3">
+            {Array.from({ length: count }, (_, i) => (
+                <DynamicCategoryCardSkeleton key={i} />
+            ))}
+        </div>
+    );
+}
+
 const TABS: { key: SuggestionStatus; label: string }[] = [
     { key: 'pending', label: 'Pending' },
     { key: 'approved', label: 'Approved' },
@@ -220,12 +259,18 @@ function PanelBody({
         actions.approve.isPending ||
         actions.reject.isPending ||
         actions.patch.isPending;
+    const isRegenerating = actions.regenerate.isPending;
     if (list.isLoading) return <LoadingSkeleton />;
+    // Regenerate pass replaces the pending view with skeleton cards so
+    // operators get immediate feedback that the LLM is working.
+    if (isRegenerating && status === 'pending') {
+        return <SkeletonList count={Math.max(items.length, 3)} />;
+    }
     if (items.length === 0) {
         return status === 'pending' ? (
             <EmptyPending
                 onRegenerate={actions.runRegenerate}
-                isRegenerating={actions.regenerate.isPending}
+                isRegenerating={isRegenerating}
             />
         ) : (
             <EmptyGeneric />

@@ -51,13 +51,25 @@ function extractJson(content: string): unknown {
   }
 }
 
+interface ParseResult {
+  proposals: LlmCategoryProposalDto[] | null;
+  /** Zod issues collected across rejected proposals (diagnostic only). */
+  zodIssues: string[];
+  /** First ~400 chars of the raw content (diagnostic only). */
+  snippet: string;
+}
+
 /**
- * Parse an LLM response into an array of validated proposals. Returns null on
- * any parse or schema failure so the caller can decide to retry or skip.
+ * Parse an LLM response into an array of validated proposals. Returns a
+ * structured result so the caller can log Zod issues + raw-content snippet
+ * when both attempts fail — critical for debugging prompt / model drift.
  */
-function parseOnce(content: string): LlmCategoryProposalDto[] | null {
+function parseOnce(content: string): ParseResult {
+  const snippet = content.slice(0, 400);
   const raw = extractJson(content);
-  if (raw === null) return null;
+  if (raw === null) {
+    return { proposals: null, zodIssues: ['no JSON found'], snippet };
+  }
   const asArray = Array.isArray(raw)
     ? raw
     : typeof raw === 'object' &&
@@ -65,14 +77,25 @@ function parseOnce(content: string): LlmCategoryProposalDto[] | null {
         Array.isArray((raw as Record<string, unknown>).proposals)
       ? ((raw as Record<string, unknown>).proposals as unknown[])
       : null;
-  if (asArray === null) return null;
+  if (asArray === null) {
+    return { proposals: null, zodIssues: ['not an array'], snippet };
+  }
   const validated: LlmCategoryProposalDto[] = [];
+  const zodIssues: string[] = [];
   for (const item of asArray) {
     const parsed = LlmCategoryProposalSchema.safeParse(item);
-    if (parsed.success) validated.push(parsed.data);
+    if (parsed.success) {
+      validated.push(parsed.data);
+    } else {
+      const first = parsed.error.errors[0];
+      if (first) {
+        zodIssues.push(`${first.path.join('.')}: ${first.message}`);
+      }
+    }
   }
-  if (validated.length === 0) return null;
-  return validated;
+  if (validated.length === 0)
+    return { proposals: null, zodIssues, snippet };
+  return { proposals: validated, zodIssues, snippet };
 }
 
 function buildRetryOptions(original: LlmChatOptions): LlmChatOptions {
@@ -82,7 +105,7 @@ function buildRetryOptions(original: LlmChatOptions): LlmChatOptions {
 
 type ChatAttempt =
   | { proposals: LlmCategoryProposalDto[] }
-  | { parseFail: true }
+  | { parseFail: true; zodIssues: string[]; snippet: string }
   | { unavailable: Error };
 
 async function tryChat(
@@ -93,8 +116,12 @@ async function tryChat(
   try {
     const response = await llmService.chat(options, context);
     const parsed = parseOnce(response.content);
-    if (parsed) return { proposals: parsed };
-    return { parseFail: true };
+    if (parsed.proposals) return { proposals: parsed.proposals };
+    return {
+      parseFail: true,
+      zodIssues: parsed.zodIssues,
+      snippet: parsed.snippet,
+    };
   } catch (err) {
     return { unavailable: err instanceof Error ? err : new Error(String(err)) };
   }
@@ -121,7 +148,7 @@ export async function callAndParseCategoryProposals(
     );
   } else {
     logger?.warn(
-      'dynamic_categories LLM attempt 1 returned unparseable output',
+      `dynamic_categories LLM attempt 1 parse fail — issues=[${first.zodIssues.join(' | ')}] snippet=${JSON.stringify(first.snippet)}`,
     );
   }
 
@@ -133,7 +160,7 @@ export async function callAndParseCategoryProposals(
     throw new LlmUnavailableError(second.unavailable.message);
   }
   logger?.warn(
-    'dynamic_categories LLM retry also returned unparseable output — skipping',
+    `dynamic_categories LLM retry also parse fail — skipping. issues=[${second.zodIssues.join(' | ')}] snippet=${JSON.stringify(second.snippet)}`,
   );
   return [];
 }
