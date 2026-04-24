@@ -96,20 +96,12 @@ function CuratedSection({
     return (
         <section
             data-testid="curated-dynamic-section"
-            className="rounded-2xl border-2 border-dashed border-emerald-500/50 bg-emerald-500/5 p-4 md:p-6"
+            className="border-l-2 border-emerald-500/40 pl-4 md:pl-5"
         >
-            <div className="flex items-center justify-between mb-4">
-                <div>
-                    <h2 className="text-lg md:text-xl font-semibold text-emerald-300">
-                        Curated This Week
-                    </h2>
-                    <p className="text-xs text-muted mt-0.5">
-                        Admin-approved AI picks · refreshes weekly
-                    </p>
-                </div>
-                <span className="hidden sm:inline-block text-[10px] uppercase tracking-wider text-emerald-400/80 border border-emerald-500/40 rounded-full px-2 py-0.5">
-                    temporary
-                </span>
+            <div className="mb-4">
+                <h2 className="text-sm font-medium text-emerald-300/90 uppercase tracking-wider">
+                    Curated This Week
+                </h2>
             </div>
             <div className="hidden md:block space-y-6">
                 {rows.map((row) => (
