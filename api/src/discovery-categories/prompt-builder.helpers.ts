@@ -3,8 +3,13 @@ import type {
   LlmChatOptions,
 } from '../ai/llm-provider.interface';
 
-/** Cap LLM response tokens — 3-5 short category proposals. */
-const MAX_RESPONSE_TOKENS = 1500;
+/**
+ * Cap LLM response tokens. Each proposal is ~350-500 tokens under the
+ * current schema (name, description, theme_vector, filter_criteria,
+ * population_strategy, expires_at) — budget 600/proposal × 5 proposals
+ * + overhead so the LLM never truncates mid-object.
+ */
+const MAX_RESPONSE_TOKENS = 3500;
 /** Higher temperature to push genre + theme variety across proposals. */
 const PROMPT_TEMPERATURE = 0.8;
 

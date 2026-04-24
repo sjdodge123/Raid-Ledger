@@ -28,27 +28,84 @@ export class LlmUnavailableError extends Error {
   readonly name = 'LlmUnavailableError';
 }
 
-/** Extract the first JSON value (array OR object) from an LLM text response. */
+/**
+ * Extract the first JSON value (array OR object) from an LLM text response.
+ * Resilient to truncated arrays — if the LLM hits a token cap mid-object,
+ * we recover the completed-object prefix and drop the unfinished tail.
+ */
 function extractJson(content: string): unknown {
   const arrayStart = content.indexOf('[');
   const objectStart = content.indexOf('{');
-  let start = -1;
-  let endChar = ']';
-  if (arrayStart !== -1 && (objectStart === -1 || arrayStart < objectStart)) {
-    start = arrayStart;
-    endChar = ']';
-  } else if (objectStart !== -1) {
-    start = objectStart;
-    endChar = '}';
+  const startsWithArray =
+    arrayStart !== -1 && (objectStart === -1 || arrayStart < objectStart);
+  if (startsWithArray) return parseArrayResilient(content, arrayStart);
+  if (objectStart !== -1) {
+    const end = content.lastIndexOf('}');
+    if (end < objectStart) return null;
+    try {
+      return JSON.parse(content.slice(objectStart, end + 1)) as unknown;
+    } catch {
+      return null;
+    }
   }
-  if (start === -1) return null;
-  const end = content.lastIndexOf(endChar);
-  if (end < start) return null;
-  try {
-    return JSON.parse(content.slice(start, end + 1)) as unknown;
-  } catch {
-    return null;
+  return null;
+}
+
+/**
+ * Try to parse a JSON array. If the full array is malformed (common when
+ * the LLM truncates mid-object), recover the completed objects by walking
+ * brace depth and keeping everything up to the last `}` that closes at
+ * depth 1 (i.e. inside the outer array).
+ */
+function parseArrayResilient(content: string, start: number): unknown {
+  const from = start + 1;
+  const end = content.lastIndexOf(']');
+  if (end > start) {
+    try {
+      return JSON.parse(content.slice(start, end + 1)) as unknown;
+    } catch {
+      // fall through to recovery
+    }
   }
+  // Recovery: collect objects that close cleanly at depth 1.
+  const completed: unknown[] = [];
+  let i = from;
+  while (i < content.length) {
+    // skip whitespace + comma
+    while (i < content.length && /[\s,]/.test(content[i])) i += 1;
+    if (i >= content.length || content[i] !== '{') break;
+    const objStart = i;
+    let depth = 0;
+    let inStr = false;
+    let escape = false;
+    for (; i < content.length; i += 1) {
+      const ch = content[i];
+      if (inStr) {
+        if (escape) escape = false;
+        else if (ch === '\\') escape = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') inStr = true;
+      else if (ch === '{') depth += 1;
+      else if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          const slice = content.slice(objStart, i + 1);
+          try {
+            completed.push(JSON.parse(slice));
+          } catch {
+            // malformed object — stop, keep what we have
+            return completed.length > 0 ? completed : null;
+          }
+          i += 1;
+          break;
+        }
+      }
+    }
+    if (depth !== 0) break; // truncated object
+  }
+  return completed.length > 0 ? completed : null;
 }
 
 interface ParseResult {
