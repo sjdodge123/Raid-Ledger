@@ -10,7 +10,6 @@ import {
 } from '../../constants/timezones';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { BrandingSection } from '../../components/admin/BrandingSection';
-import { DynamicCategoriesPanel } from '../admin-settings/dynamic-categories-panel';
 
 /**
  * General > Site Settings panel (ROK-359 consolidated).
@@ -52,7 +51,6 @@ export function GeneralPanel() {
                 <p className="text-sm text-muted mt-1">Configure your community timezone, branding, and general options.</p></div>
             <TimezoneSection isLoading={tz.isLoading} timezone={tz.timezone} isPending={tz.isPending} onChange={tz.handleChange} />
             <BrandingSection />
-            <DynamicCategoriesPanel />
             <SetupWizardSection isPending={resetOnboarding.isPending} onRerun={() => rerunWizard(resetOnboarding, queryClient, navigate)} />
         </div>
     );
