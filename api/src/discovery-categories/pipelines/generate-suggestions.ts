@@ -180,13 +180,18 @@ async function insertAllProposals(
   for (const proposal of proposals) {
     const themeArr = proposalToThemeArray(proposal);
     const blended = blendVectors(themeArr, centroid, alpha);
-    const genreIds = extractGenreIds(proposal);
+    const fc = (proposal.filter_criteria ?? {}) as Record<string, unknown>;
+    const genreIds = extractIdArray(fc, 'genre_ids');
+    const themeIds = extractIdArray(fc, 'theme_ids');
+    const tags = extractStringArray(fc, 'genre_tags');
     const candidates =
       proposal.population_strategy === 'fixed'
         ? []
         : await resolveCandidates(db, blended, {
             limit: candidateCount,
             genreIds,
+            themeIds,
+            tags,
           });
     try {
       await insertProposal(db, proposal, blended, candidates);
@@ -201,13 +206,22 @@ async function insertAllProposals(
   return inserted;
 }
 
-function extractGenreIds(
-  proposal: LlmCategoryProposalDto,
+function extractIdArray(
+  filterCriteria: Record<string, unknown>,
+  key: string,
 ): number[] | undefined {
-  const raw = (
-    proposal.filter_criteria as Record<string, unknown> | undefined
-  )?.['genre_ids'];
+  const raw = filterCriteria[key];
   if (!Array.isArray(raw)) return undefined;
   const ids = raw.filter((v): v is number => typeof v === 'number');
   return ids.length > 0 ? ids : undefined;
+}
+
+function extractStringArray(
+  filterCriteria: Record<string, unknown>,
+  key: string,
+): string[] | undefined {
+  const raw = filterCriteria[key];
+  if (!Array.isArray(raw)) return undefined;
+  const tags = raw.filter((v): v is string => typeof v === 'string');
+  return tags.length > 0 ? tags : undefined;
 }

@@ -86,21 +86,40 @@ async function resolveRowGames(
   if (row.populationStrategy === 'fixed') {
     return hydrateGameIds(db, row.candidateGameIds.slice(0, DYNAMIC_ROW_LIMIT));
   }
-  const genreIds = extractGenreIds(row.filterCriteria);
+  // Always honour the LLM's genre_tags / explicit genre_ids / theme_ids —
+  // when present they narrow the cosine result to the category's actual
+  // intent (e.g. "horror" = IGDB theme 19). vector strategy also benefits,
+  // not just hybrid: the LLM labeled `vector` is still stating intent.
+  const genreIds = extractIdArray(row.filterCriteria, 'genre_ids');
+  const themeIds = extractIdArray(row.filterCriteria, 'theme_ids');
+  const tags = extractStringArray(row.filterCriteria, 'genre_tags');
   const ids = await resolveCandidates(db, row.themeVector, {
     limit: DYNAMIC_ROW_LIMIT,
-    genreIds: row.populationStrategy === 'hybrid' ? genreIds : undefined,
+    genreIds,
+    themeIds,
+    tags,
   });
   return hydrateGameIds(db, ids);
 }
 
-function extractGenreIds(
+function extractIdArray(
   filterCriteria: Record<string, unknown>,
+  key: string,
 ): number[] | undefined {
-  const raw = filterCriteria['genre_ids'];
+  const raw = filterCriteria[key];
   if (!Array.isArray(raw)) return undefined;
   const ids = raw.filter((v): v is number => typeof v === 'number');
   return ids.length > 0 ? ids : undefined;
+}
+
+function extractStringArray(
+  filterCriteria: Record<string, unknown>,
+  key: string,
+): string[] | undefined {
+  const raw = filterCriteria[key];
+  if (!Array.isArray(raw)) return undefined;
+  const tags = raw.filter((v): v is string => typeof v === 'string');
+  return tags.length > 0 ? tags : undefined;
 }
 
 async function hydrateGameIds(

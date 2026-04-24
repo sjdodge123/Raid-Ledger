@@ -32,30 +32,36 @@ interface DynamicCategoryCardProps {
 function ThemeStrip({ vector }: { vector: number[] }) {
     return (
         <div
-            className="flex items-end gap-1 h-12"
+            className="rounded-md border border-edge/40 bg-overlay/40 px-3 py-2"
             role="img"
             aria-label={`Theme vector: ${vector
                 .map((v, i) => `${AXIS_LABELS[i]} ${v.toFixed(2)}`)
                 .join(', ')}`}
         >
-            {vector.slice(0, 7).map((raw, i) => {
-                const mag = Math.min(1, Math.abs(raw));
-                const heightPct = Math.max(6, Math.round(mag * 100));
-                return (
-                    <div
-                        key={AXIS_LABELS[i]}
-                        className="flex flex-col items-center flex-1 min-w-0"
-                    >
+            <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
+                Theme weights
+            </div>
+            <div className="flex items-end gap-1 h-10">
+                {vector.slice(0, 7).map((raw, i) => {
+                    const mag = Math.min(1, Math.abs(raw));
+                    const heightPct = Math.max(8, Math.round(mag * 100));
+                    return (
                         <div
-                            className={`w-full rounded-t ${raw >= 0 ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
-                            style={{ height: `${heightPct}%` }}
-                        />
-                        <span className="text-[10px] text-muted truncate mt-1">
-                            {AXIS_LABELS[i]}
-                        </span>
-                    </div>
-                );
-            })}
+                            key={AXIS_LABELS[i]}
+                            className="flex flex-col items-center flex-1 min-w-0"
+                            title={`${AXIS_LABELS[i]}: ${raw.toFixed(2)}`}
+                        >
+                            <div
+                                className={`w-full rounded-t ${raw >= 0 ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
+                                style={{ height: `${heightPct}%` }}
+                            />
+                            <span className="text-[9px] text-muted truncate mt-0.5">
+                                {AXIS_LABELS[i]}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -106,18 +112,23 @@ function CandidatePreview({
     const visible = games.slice(0, MAX_INLINE_THUMBS);
     const extra = ids.length - visible.length;
     return (
-        <div
-            data-testid="dynamic-category-candidates"
-            className="flex gap-2 overflow-x-auto py-1"
-        >
-            {visible.map((g) => (
-                <CandidateThumb key={g.id} game={g} />
-            ))}
-            {extra > 0 && (
-                <div className="flex flex-col items-center justify-center w-16 shrink-0 text-xs text-muted border border-dashed border-edge/50 rounded h-20">
-                    +{extra} more
-                </div>
-            )}
+        <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
+                Candidate games ({ids.length})
+            </div>
+            <div
+                data-testid="dynamic-category-candidates"
+                className="flex gap-2 overflow-x-auto py-1"
+            >
+                {visible.map((g) => (
+                    <CandidateThumb key={g.id} game={g} />
+                ))}
+                {extra > 0 && (
+                    <div className="flex flex-col items-center justify-center w-16 shrink-0 text-xs text-muted border border-dashed border-edge/50 rounded h-20">
+                        +{extra} more
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
