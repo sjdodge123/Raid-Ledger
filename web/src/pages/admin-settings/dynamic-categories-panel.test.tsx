@@ -14,10 +14,12 @@ vi.mock('../../hooks/use-auth', () => ({
 
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
+const mockToastInfo = vi.fn();
 vi.mock('../../lib/toast', () => ({
     toast: {
         success: (...args: unknown[]) => mockToastSuccess(...args),
         error: (...args: unknown[]) => mockToastError(...args),
+        info: (...args: unknown[]) => mockToastInfo(...args),
     },
 }));
 
@@ -57,7 +59,21 @@ function stubList(byStatus: Record<string, DiscoveryCategorySuggestionDto[]>) {
 }
 
 describe('DynamicCategoriesPanel', () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Default: feature enabled so the panel body renders.
+        server.use(
+            http.get(`${API_BASE}/admin/ai/features`, () =>
+                HttpResponse.json({
+                    chatEnabled: false,
+                    dynamicCategoriesEnabled: true,
+                }),
+            ),
+            http.put(`${API_BASE}/admin/ai/features`, () =>
+                HttpResponse.json({ success: true }),
+            ),
+        );
+    });
 
     it('renders the Dynamic Categories heading', async () => {
         stubList({ pending: [] });
@@ -83,8 +99,10 @@ describe('DynamicCategoriesPanel', () => {
     it('shows a generic empty state on approved tab', async () => {
         stubList({ pending: [], approved: [] });
         renderWithProviders(<DynamicCategoriesPanel />);
-        await screen.findByRole('heading', { name: 'Dynamic Categories' });
-        fireEvent.click(screen.getByRole('button', { name: 'Approved' }));
+        const approvedBtn = await screen.findByRole('button', {
+            name: 'Approved',
+        });
+        fireEvent.click(approvedBtn);
         expect(
             await screen.findByText(/nothing here yet/i),
         ).toBeInTheDocument();
