@@ -39,6 +39,50 @@ const EMPTY: TagFilterSet = {
 };
 
 /**
+ * Canonicalised tag strings that indicate a category is ABOUT multiplayer
+ * play. When any of these is present in the proposal's tag list, the
+ * candidate resolver should reject games whose player_count.max is 1.
+ */
+const MULTIPLAYER_TAG_SET: ReadonlySet<string> = new Set([
+  'coop',
+  'onlinecoop',
+  'localcoop',
+  'pvp',
+  'competitive',
+  'teambased',
+  'multiplayer',
+  'massivelymultiplayer',
+  'mmo',
+  'mmorpg',
+  'moba',
+  'party',
+  'partygame',
+  'versus',
+  'arena',
+  'battleroyale',
+  'socialdeduction',
+  '1v1',
+  'classbased',
+  'esports',
+  'deathmatch',
+  'freeforall',
+  'asymmetric',
+]);
+
+/**
+ * True when any tag in the list canonicalises to a multiplayer descriptor.
+ * Used by the candidate resolver to decide whether to enforce
+ * games.player_count.max >= 2 as a post-filter.
+ */
+export function tagsImplyMultiplayer(tags: string[] | undefined): boolean {
+  if (!tags || tags.length === 0) return false;
+  for (const tag of tags) {
+    if (MULTIPLAYER_TAG_SET.has(canonicalize(tag))) return true;
+  }
+  return false;
+}
+
+/**
  * Canonical-form synonyms for common LLM shorthand. Each entry maps a
  * normalised LLM string to the substring(s) that should be matched against
  * `games.itadTags`. Lets curators write "scifi" and still match

@@ -48,6 +48,7 @@ export async function loadTopPlayedLastMonth(
   const rows = await db
     .select({
       name: schema.games.name,
+      playerCount: schema.games.playerCount,
       totalSeconds: sql<number>`sum(${schema.gameActivityRollups.totalSeconds})::int`,
     })
     .from(schema.gameActivityRollups)
@@ -61,12 +62,13 @@ export async function loadTopPlayedLastMonth(
         eq(schema.gameActivityRollups.periodStart, latest.periodStart),
       ),
     )
-    .groupBy(schema.games.name)
+    .groupBy(schema.games.name, schema.games.playerCount)
     .orderBy(desc(sql`sum(${schema.gameActivityRollups.totalSeconds})`))
     .limit(n);
   return rows.map((r) => ({
     name: r.name,
     totalSeconds: Number(r.totalSeconds ?? 0),
+    playerCount: r.playerCount ?? null,
   }));
 }
 
@@ -86,10 +88,12 @@ export async function loadTrending(db: Db, n: number): Promise<TrendingGame[]> {
   const [current, previous] = weeks;
   const rows = await db.execute<{
     name: string;
+    player_count: { min: number; max: number } | null;
     curr: number;
     prev: number;
   }>(sql`
     SELECT g.name AS name,
+           g.player_count AS player_count,
            COALESCE(curr.total, 0)::int AS curr,
            COALESCE(prev.total, 0)::int AS prev
     FROM games g
@@ -117,7 +121,7 @@ export async function loadTrending(db: Db, n: number): Promise<TrendingGame[]> {
             ? 999
             : 0
           : Math.round(((curr - prev) / prev) * 100);
-      return { name: r.name, deltaPct };
+      return { name: r.name, deltaPct, playerCount: r.player_count ?? null };
     })
     .sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))
     .slice(0, n);

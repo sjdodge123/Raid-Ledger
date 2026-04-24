@@ -19,14 +19,21 @@ export type CategoryTypeHint =
   | 'community_pattern'
   | 'event';
 
+export interface PlayerCount {
+  min: number;
+  max: number;
+}
+
 export interface TopPlayedGame {
   name: string;
   totalSeconds: number;
+  playerCount?: PlayerCount | null;
 }
 
 export interface TrendingGame {
   name: string;
   deltaPct: number;
+  playerCount?: PlayerCount | null;
 }
 
 export interface ExistingCategorySummary {
@@ -80,6 +87,8 @@ const RULES = [
   '   - "hybrid": vector similarity + filter_criteria post-filter.',
   '5. HARD VARIETY RULE — within this single batch, NO two proposals may share a primary theme. Concretely: the FIRST entry of each proposal\'s filter_criteria.genre_tags (the "primary tag") must be distinct across the batch, AND the proposals must cover visibly different play patterns. Returning two horror rows, two MMO rows, or two co-op rows in the same batch is a failure — even if one is "Ghost Hunt Crew" (trend) and the other is "Spring Co-op Horror" (seasonal).',
   '5a. MULTIPLAYER PREFERENCE — roughly 4 out of every 5 proposals must be multiplayer-first (co-op, PvP, competitive, MMO, team-based, party, social). Single-player-first categories are allowed but rare: in a 5-proposal batch, AT MOST 1 single-player-first. In a 3- or 4-proposal batch, AT MOST 1 single-player-first, and 0 is also fine. If a category\'s primary tag is a single-player descriptor ("Story-Rich", "Roguelike", "Metroidvania", "Soulslike", "Open World") that tilts single-player, count it toward the SP quota. Co-op roguelikes, co-op survival, etc. count as multiplayer.',
+  '   The signal blocks below tag each game with its supported player count — e.g. "Helldivers 2 (47h, 1-4p)". Single-player titles show "(…, 1p (single-player))". Use this to propose categories that match how the community actually plays together: if most top-played titles are 2-4p, propose co-op rows; if trending shows 8p+ titles rising, propose a party or large-group row.',
+  '   Backend enforcement: when a proposal\'s primary tag is multiplayer-ish (Co-op, PvP, Multiplayer, MMO, Team-Based, Competitive, Party, Battle Royale, etc.) the candidate filter REJECTS games whose max-players is 1. So mis-labelling a single-player-heavy theme as "Co-op" will surface an almost-empty row.',
   '6. filter_criteria.genre_tags is the MOST IMPORTANT field for curation quality. The backend ranks candidate games by how many of these tags hit the game\'s Steam/ITAD user tags (rich vocabulary: "Horror", "Roguelike", "Cozy", "Time Loop", "Psychological Horror", "Crafting", "Battle Royale", "Souls-like", "Cute", "Metroidvania", "Vampire Survivors-like", …). More tag hits = better rank. A game that hits only the most generic tag (e.g. "Co-op") ranks below one that hits three of your tags.',
   '   Put the MOST DISCRIMINATING tag FIRST — it becomes the category\'s primary theme for variety checking (rule 5).',
   '   Pick 2-4 descriptors per proposal that actually narrow to what the category is about. Examples:',
@@ -126,10 +135,18 @@ function describeCentroid(centroid: number[] | null): string {
   return `Community centroid (7-axis taste average across active players): ${parts.join(', ')}`;
 }
 
+function formatPlayerCount(pc: PlayerCount | null | undefined): string {
+  if (!pc || !pc.max) return '';
+  if (pc.max === 1) return ', 1p (single-player)';
+  if (pc.min === pc.max) return `, ${pc.max}p`;
+  return `, ${pc.min}-${pc.max}p`;
+}
+
 function describeTopPlayed(games: TopPlayedGame[]): string {
   if (games.length === 0) return 'Top-played last 30 days: (no data)';
   const rows = games.map(
-    (g) => `- "${g.name}" (${Math.round(g.totalSeconds / 3600)}h)`,
+    (g) =>
+      `- "${g.name}" (${Math.round(g.totalSeconds / 3600)}h${formatPlayerCount(g.playerCount)})`,
   );
   return ['Top-played last 30 days:', ...rows].join('\n');
 }
@@ -137,7 +154,8 @@ function describeTopPlayed(games: TopPlayedGame[]): string {
 function describeTrending(games: TrendingGame[]): string {
   if (games.length === 0) return 'Trending (week-over-week delta): (no data)';
   const rows = games.map(
-    (g) => `- "${g.name}" (${g.deltaPct >= 0 ? '+' : ''}${g.deltaPct}%)`,
+    (g) =>
+      `- "${g.name}" (${g.deltaPct >= 0 ? '+' : ''}${g.deltaPct}%${formatPlayerCount(g.playerCount)})`,
   );
   return ['Trending (week-over-week delta):', ...rows].join('\n');
 }
