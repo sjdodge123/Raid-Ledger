@@ -115,6 +115,17 @@ export class LlmService {
     return provider.isAvailable();
   }
 
+  /**
+   * Return the active provider's key (e.g. 'claude', 'google', 'openai',
+   * 'ollama') or null if no provider is configured. Callers use this to
+   * pick feature-specific model overrides (e.g. pin a background cron to
+   * Haiku when the interactive chat is on Sonnet).
+   */
+  async getActiveProviderKey(): Promise<string | null> {
+    const provider = await this.registry.resolveActive();
+    return provider?.key ?? null;
+  }
+
   /** List models from the active provider. */
   async listModels(): Promise<LlmModelInfo[]> {
     const provider = await this.resolveOrThrow();

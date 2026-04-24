@@ -34,6 +34,19 @@ const TOP_PLAYED_N = 8;
 const TRENDING_N = 8;
 const MAX_PROPOSALS = 5;
 
+/**
+ * Per-provider model override for this feature. The weekly cron is a
+ * background curation task — Haiku 4.5 is the right quality/cost tier for
+ * it (admin-reviewed output, ~5x cheaper than Sonnet). Null = fall back to
+ * the provider's own default.
+ */
+const FEATURE_MODEL_BY_PROVIDER: Readonly<Record<string, string | null>> = {
+  claude: 'claude-haiku-4-5-20251001',
+  openai: null,
+  google: null,
+  ollama: null,
+};
+
 async function readNumberSetting(
   settings: SettingsService,
   key: (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS],
@@ -141,6 +154,13 @@ async function runLlmAndInsert(
   context: ReturnType<typeof buildGenerationContext>,
 ): Promise<number> {
   const options = buildGenerationPrompt(context);
+  const providerKey = await deps.llmService
+    .getActiveProviderKey()
+    .catch(() => null);
+  const modelOverride = providerKey
+    ? FEATURE_MODEL_BY_PROVIDER[providerKey]
+    : null;
+  if (modelOverride) options.model = modelOverride;
   let proposals: LlmCategoryProposalDto[];
   try {
     proposals = await callAndParseCategoryProposals(
