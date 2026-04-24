@@ -35,6 +35,7 @@ const VALID_PROPOSAL: LlmCategoryProposalDto = {
 interface Fakes {
   chat: jest.Mock;
   isAvailable: jest.Mock;
+  getActiveProviderKey: jest.Mock;
   get: jest.Mock;
   llmService: LlmService;
   settings: SettingsService;
@@ -46,15 +47,23 @@ function makeFakes(): Fakes {
   settingsStore.set(SETTING_KEYS.AI_DYNAMIC_CATEGORIES_ENABLED, 'true');
   const chat = jest.fn();
   const isAvailable = jest.fn().mockResolvedValue(true);
+  // Default to null so the pipeline falls through to the provider's default
+  // model (no FEATURE_MODEL_BY_PROVIDER override is applied).
+  const getActiveProviderKey = jest.fn().mockResolvedValue(null);
   const get = jest.fn((k: string) =>
     Promise.resolve(settingsStore.get(k) ?? null),
   );
   return {
     chat,
     isAvailable,
+    getActiveProviderKey,
     get,
     settingsStore,
-    llmService: { chat, isAvailable } as unknown as LlmService,
+    llmService: {
+      chat,
+      isAvailable,
+      getActiveProviderKey,
+    } as unknown as LlmService,
     settings: { get } as unknown as SettingsService,
   };
 }
