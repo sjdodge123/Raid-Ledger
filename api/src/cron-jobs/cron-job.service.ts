@@ -19,6 +19,7 @@ import {
 } from '../plugins/plugin-host/extension-points';
 import * as schema from '../drizzle/schema';
 import {
+  CORE_JOB_METADATA,
   FLUSH_INTERVAL_MS,
   NOOP_LIVENESS_INTERVAL_MS,
   PRUNE_EVERY_N_EXECUTIONS,
@@ -241,9 +242,20 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   // ─── Admin API methods ──────────────────────────────────────────
 
-  /** List all registered cron jobs. */
+  /**
+   * List all registered cron jobs, decorated with `usesAi` from
+   * CORE_JOB_METADATA so the admin panel can badge + filter AI-backed
+   * jobs without another round-trip.
+   */
   async listJobs() {
-    return this.db.select().from(schema.cronJobs).orderBy(schema.cronJobs.name);
+    const rows = await this.db
+      .select()
+      .from(schema.cronJobs)
+      .orderBy(schema.cronJobs.name);
+    return rows.map((row) => ({
+      ...row,
+      usesAi: CORE_JOB_METADATA[row.name]?.usesAi ?? false,
+    }));
   }
 
   /** Manually trigger a cron job by its DB id. */

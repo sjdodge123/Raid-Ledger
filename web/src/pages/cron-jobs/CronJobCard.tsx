@@ -1,6 +1,20 @@
 import type { JSX } from 'react';
+import { SparklesIcon } from '@heroicons/react/24/outline';
 import type { CronJobDto } from '@raid-ledger/contract';
 import { formatJobName, getCronLabel, formatTimestamp, THEME_COLORS } from './cron-utils';
+
+/** Emerald sparkles pill — marks a cron that issues LLM calls. */
+function AiBadge(): JSX.Element {
+    return (
+        <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
+            title="This job issues LLM calls"
+        >
+            <SparklesIcon className="h-3 w-3" aria-hidden />
+            AI
+        </span>
+    );
+}
 
 /** Source badge component */
 function SourceBadge({ source, pluginSlug }: { source: string; pluginSlug: string | null }): JSX.Element {
@@ -53,6 +67,7 @@ function JobCardHeader({ job }: { job: CronJobDto }) {
                 {job.description && <p className="text-xs text-muted mt-0.5">{job.description}</p>}
             </div>
             <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                {job.usesAi && <AiBadge />}
                 <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${THEME_COLORS[job.category] || THEME_COLORS['Other']}`}>{job.category}</span>
                 <SourceBadge source={job.source} pluginSlug={job.pluginSlug} />
                 <StatusBadge paused={job.paused} />

@@ -28,11 +28,16 @@ export type CronCategory =
 /**
  * Human-readable descriptions for the core @Cron jobs.
  * Keys match the NestJS SchedulerRegistry names (class.method format).
+ * `usesAi` flags jobs that issue LLM calls so the admin UI can badge + filter
+ * them at a glance (and so operators can reason about cron-path LLM spend).
  */
-export const CORE_JOB_METADATA: Record<
-  string,
-  { description: string; category: CronCategory }
-> = {
+export interface CoreJobMetadata {
+  description: string;
+  category: CronCategory;
+  usesAi?: boolean;
+}
+
+export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   IgdbService_handleScheduledSync: {
     description: 'Syncs game data from IGDB every 6 hours',
     category: 'Data Sync',
@@ -168,5 +173,6 @@ export const CORE_JOB_METADATA: Record<
     description:
       'Generates LLM-proposed dynamic discover categories and expires stale approved rows weekly on Sundays at midnight.',
     category: 'Data Sync',
+    usesAi: true,
   },
 };
