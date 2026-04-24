@@ -161,12 +161,14 @@ describe('discovery-categories context loaders (ROK-567)', () => {
         },
       ]);
       const rows = await loadTrending(testApp.db, 5);
-      expect(rows).toEqual([{ name: 'Gamma', deltaPct: 100 }]);
+      expect(rows).toEqual([
+        { name: 'Gamma', deltaPct: 100, playerCount: null },
+      ]);
     });
   });
 
   describe('loadExistingApprovedCategories', () => {
-    it('returns only approved rows with name + category_type', async () => {
+    it('returns pending + approved rows with name + category_type (dedup covers both queues)', async () => {
       await testApp.db.insert(schema.discoveryCategorySuggestions).values([
         {
           name: 'Approved Row',
@@ -184,9 +186,24 @@ describe('discovery-categories context loaders (ROK-567)', () => {
           status: 'pending',
           populationStrategy: 'vector',
         },
+        {
+          name: 'Rejected Row',
+          description: 'c',
+          categoryType: 'trend',
+          themeVector: [0, 0, 0, 0, 0, 0, 0],
+          status: 'rejected',
+          populationStrategy: 'vector',
+        },
       ]);
       const rows = await loadExistingApprovedCategories(testApp.db);
-      expect(rows).toEqual([{ name: 'Approved Row', categoryType: 'trend' }]);
+      const names = rows.map((r) => r.name).sort();
+      expect(names).toEqual(['Approved Row', 'Pending Row']);
+      expect(rows.find((r) => r.name === 'Approved Row')?.categoryType).toBe(
+        'trend',
+      );
+      expect(rows.find((r) => r.name === 'Pending Row')?.categoryType).toBe(
+        'seasonal',
+      );
     });
   });
 });
