@@ -53,7 +53,7 @@ export class LlmService {
     const provider = await this.resolveOrThrow();
     this.applyPreChecks(context);
     const prepared = this.prepareChatOptions(options);
-    const model = options.model ?? AI_DEFAULTS.model;
+    const model = options.model ?? provider.defaultModel;
     const timeoutMs = context.timeoutMs ?? AI_DEFAULTS.timeoutMs;
     this.logChatEntry(provider.key, model, context.feature, timeoutMs);
     const start = Date.now();
@@ -85,7 +85,7 @@ export class LlmService {
     const provider = await this.resolveOrThrow();
     this.applyPreChecks(context);
     const sanitizedPrompt = sanitizeInput(options.prompt);
-    const model = options.model ?? AI_DEFAULTS.model;
+    const model = options.model ?? provider.defaultModel;
 
     return this.concurrencyLimiter.withLimit(async () => {
       try {

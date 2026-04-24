@@ -32,6 +32,7 @@ export class OllamaProvider implements LlmProvider {
   readonly displayName = 'Ollama (Local)';
   readonly requiresApiKey = false;
   readonly selfHosted = true;
+  readonly defaultModel = AI_DEFAULTS.model;
 
   constructor(private readonly settings: SettingsService) {}
 

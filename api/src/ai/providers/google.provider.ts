@@ -27,6 +27,7 @@ export class GoogleProvider implements LlmProvider {
   readonly displayName = 'Google (Gemini)';
   readonly requiresApiKey = true;
   readonly selfHosted = false;
+  readonly defaultModel = CLOUD_DEFAULTS.google;
 
   constructor(private readonly settings: SettingsService) {}
 

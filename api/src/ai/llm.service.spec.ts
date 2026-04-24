@@ -11,6 +11,7 @@ function createMockProvider(): LlmProvider {
     displayName: 'Ollama',
     requiresApiKey: false,
     selfHosted: true,
+    defaultModel: 'mock-model',
     isAvailable: jest.fn().mockResolvedValue(true),
     listModels: jest
       .fn()
@@ -152,6 +153,7 @@ describe('LlmService (adversarial)', () => {
       displayName: 'Ollama',
       requiresApiKey: false,
       selfHosted: true,
+      defaultModel: 'mock-model',
       isAvailable: jest.fn().mockResolvedValue(true),
       listModels: jest.fn().mockResolvedValue([]),
       chat: jest.fn().mockResolvedValue({
@@ -382,6 +384,7 @@ describe('ROK-1000: LlmService diagnostic logging', () => {
       displayName: 'Ollama',
       requiresApiKey: false,
       selfHosted: true,
+      defaultModel: 'mock-model',
       isAvailable: jest.fn().mockResolvedValue(true),
       listModels: jest.fn().mockResolvedValue([]),
       chat: jest.fn().mockResolvedValue({
@@ -432,7 +435,7 @@ describe('ROK-1000: LlmService diagnostic logging', () => {
     expect(entryLog).toBeDefined();
     // Should include feature, model, and timeout
     expect(entryLog).toMatch(/admin-test/);
-    expect(entryLog).toMatch(/llama3\.2/);
+    expect(entryLog).toMatch(/mock-model/);
     expect(entryLog).toMatch(/30000|30_000|30s/);
   });
 
@@ -462,7 +465,7 @@ describe('ROK-1000: LlmService diagnostic logging', () => {
     expect(failLog).toBeDefined();
     // Should include provider and model
     expect(failLog).toMatch(/ollama/);
-    expect(failLog).toMatch(/llama3\.2/);
+    expect(failLog).toMatch(/mock-model/);
     // Should include elapsed time (a number)
     expect(failLog).toMatch(/\d+/);
   });

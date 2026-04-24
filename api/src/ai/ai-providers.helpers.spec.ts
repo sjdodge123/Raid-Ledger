@@ -7,6 +7,7 @@ function createMockProvider(overrides: Partial<LlmProvider> = {}): LlmProvider {
     displayName: 'OpenAI',
     requiresApiKey: true,
     selfHosted: false,
+    defaultModel: 'mock-model',
     isAvailable: jest.fn(),
     listModels: jest.fn(),
     chat: jest.fn(),

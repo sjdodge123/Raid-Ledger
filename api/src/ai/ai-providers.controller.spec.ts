@@ -17,6 +17,7 @@ function createMockProvider(overrides: Partial<LlmProvider> = {}): LlmProvider {
     displayName: 'Ollama (Local)',
     requiresApiKey: false,
     selfHosted: true,
+    defaultModel: 'mock-model',
     isAvailable: jest.fn().mockResolvedValue(true),
     listModels: jest.fn().mockResolvedValue([]),
     chat: jest.fn(),
@@ -120,6 +121,7 @@ describe('AiProvidersController', () => {
         displayName: 'OpenAI',
         requiresApiKey: true,
         selfHosted: false,
+        defaultModel: 'mock-model',
       });
       mockRegistry.list.mockReturnValue([provider]);
       mockSettings.get.mockResolvedValue('sk-test');
