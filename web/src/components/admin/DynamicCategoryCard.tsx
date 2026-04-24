@@ -29,6 +29,10 @@ interface DynamicCategoryCardProps {
     isBusy?: boolean;
 }
 
+/** Pixel-height track for each bar. % heights don't resolve without a fixed
+ * parent height — using px + a dedicated track per bar sidesteps that. */
+const BAR_TRACK_HEIGHT_PX = 40;
+
 function ThemeStrip({ vector }: { vector: number[] }) {
     return (
         <div
@@ -41,10 +45,10 @@ function ThemeStrip({ vector }: { vector: number[] }) {
             <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
                 Theme weights
             </div>
-            <div className="flex items-end gap-1 h-10">
+            <div className="flex gap-1">
                 {vector.slice(0, 7).map((raw, i) => {
                     const mag = Math.min(1, Math.abs(raw));
-                    const heightPct = Math.max(8, Math.round(mag * 100));
+                    const heightPx = Math.max(2, Math.round(mag * BAR_TRACK_HEIGHT_PX));
                     return (
                         <div
                             key={AXIS_LABELS[i]}
@@ -52,10 +56,15 @@ function ThemeStrip({ vector }: { vector: number[] }) {
                             title={`${AXIS_LABELS[i]}: ${raw.toFixed(2)}`}
                         >
                             <div
-                                className={`w-full rounded-t ${raw >= 0 ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
-                                style={{ height: `${heightPct}%` }}
-                            />
-                            <span className="text-[9px] text-muted truncate mt-0.5">
+                                className="w-full flex items-end"
+                                style={{ height: `${BAR_TRACK_HEIGHT_PX}px` }}
+                            >
+                                <div
+                                    className={`w-full rounded-t ${raw >= 0 ? 'bg-emerald-500/70' : 'bg-red-500/70'}`}
+                                    style={{ height: `${heightPx}px` }}
+                                />
+                            </div>
+                            <span className="text-[9px] text-muted truncate mt-1 w-full text-center">
                                 {AXIS_LABELS[i]}
                             </span>
                         </div>

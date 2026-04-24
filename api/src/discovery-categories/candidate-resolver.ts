@@ -3,8 +3,8 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { executeSimilarityQuery } from '../game-taste/queries/similarity-queries';
 import {
-  gameMatchesFilter,
   resolveTagFilter,
+  scoreGameMatch,
   type TagFilterSet,
 } from './tag-mapping';
 
@@ -98,12 +98,18 @@ async function postFilter(
       },
     ]),
   );
-  const out: number[] = [];
-  for (const r of rows) {
+  // Keep only games that match at least ONE matcher; rank by how many
+  // matchers they hit so a [horror, co-op, paranormal] filter surfaces
+  // Dead by Daylight (hits all three) above a pure co-op game (hits one).
+  // Ties fall back to the original cosine order (stable sort).
+  type Ranked = { gameId: number; score: number; idx: number };
+  const ranked: Ranked[] = [];
+  rows.forEach((r, idx) => {
     const meta = byId.get(r.game_id);
-    if (!meta) continue;
-    if (gameMatchesFilter(meta, filter)) out.push(r.game_id);
-    if (out.length >= limit) break;
-  }
-  return out;
+    if (!meta) return;
+    const score = scoreGameMatch(meta, filter);
+    if (score > 0) ranked.push({ gameId: r.game_id, score, idx });
+  });
+  ranked.sort((a, b) => (b.score - a.score) || (a.idx - b.idx));
+  return ranked.slice(0, limit).map((r) => r.gameId);
 }

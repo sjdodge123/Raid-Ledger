@@ -173,29 +173,53 @@ export function resolveTagFilter(tags: string[] | undefined): TagFilterSet {
 }
 
 /**
- * True when a game passes the filter by EITHER route:
- *   - at least one itadTag (lowercased) contains one of the matcher
- *     substrings, OR
- *   - at least one games.genres overlaps the IGDB genre fallback, OR
- *   - at least one games.themes overlaps the IGDB theme fallback.
- * Empty filter → always true (callers should check filter emptiness
- * before invoking and skip the post-filter entirely).
+ * Score a game against the filter. Each distinct matcher that fires adds 1:
+ *   - any itadTag containing a substring matcher,
+ *   - any games.genres overlap with a fallback genre ID,
+ *   - any games.themes overlap with a fallback theme ID.
+ * 0 = no match → game is dropped. Higher score = more aligned → ranked first.
+ *
+ * Callers: use scoreGameMatch for ranking post-filter results, and treat
+ * score === 0 as the drop signal. `gameMatchesFilter` is a thin boolean
+ * wrapper kept for legacy consumers.
+ */
+export function scoreGameMatch(
+  game: { itadTags: string[]; genres: number[]; themes: number[] },
+  filter: TagFilterSet,
+): number {
+  let score = 0;
+  if (filter.itadSubstrings.length > 0) {
+    const lowered = game.itadTags.map((t) => t.toLowerCase());
+    for (const sub of filter.itadSubstrings) {
+      if (lowered.some((t) => t.includes(sub))) score += 1;
+    }
+  }
+  if (filter.igdbGenreIds.length > 0) {
+    for (const id of filter.igdbGenreIds) {
+      if (game.genres.includes(id)) {
+        score += 1;
+        break;
+      }
+    }
+  }
+  if (filter.igdbThemeIds.length > 0) {
+    for (const id of filter.igdbThemeIds) {
+      if (game.themes.includes(id)) {
+        score += 1;
+        break;
+      }
+    }
+  }
+  return score;
+}
+
+/**
+ * True when a game passes the filter by ANY route. Retained for call sites
+ * that only need a boolean. New filter paths should prefer scoreGameMatch.
  */
 export function gameMatchesFilter(
   game: { itadTags: string[]; genres: number[]; themes: number[] },
   filter: TagFilterSet,
 ): boolean {
-  if (filter.itadSubstrings.length > 0) {
-    const lowered = game.itadTags.map((t) => t.toLowerCase());
-    for (const sub of filter.itadSubstrings) {
-      if (lowered.some((t) => t.includes(sub))) return true;
-    }
-  }
-  if (filter.igdbGenreIds.length > 0) {
-    if (game.genres.some((g) => filter.igdbGenreIds.includes(g))) return true;
-  }
-  if (filter.igdbThemeIds.length > 0) {
-    if (game.themes.some((t) => filter.igdbThemeIds.includes(t))) return true;
-  }
-  return false;
+  return scoreGameMatch(game, filter) > 0;
 }
