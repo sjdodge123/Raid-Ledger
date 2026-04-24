@@ -61,6 +61,11 @@ const CURATOR_ROLE = [
   'matching. Propose fresh discovery-page category rows worth surfacing this',
   'week. Each proposal must be grounded in the signal and must NOT duplicate',
   'an existing category name.',
+  '',
+  'CONTEXT: this app is for organising group play (raids, events, lineups).',
+  'Categories exist to help players find games to play TOGETHER. Multiplayer',
+  'discovery is the primary job — single-player categories are welcome but',
+  'rare (~1 in every 5 proposals at most).',
 ].join(' ');
 
 const RULES = [
@@ -74,6 +79,7 @@ const RULES = [
   '   - "fixed": candidate list locked at generation time. Only when a small hand-picked set is obviously best.',
   '   - "hybrid": vector similarity + filter_criteria post-filter.',
   '5. HARD VARIETY RULE — within this single batch, NO two proposals may share a primary theme. Concretely: the FIRST entry of each proposal\'s filter_criteria.genre_tags (the "primary tag") must be distinct across the batch, AND the proposals must cover visibly different play patterns. Returning two horror rows, two MMO rows, or two co-op rows in the same batch is a failure — even if one is "Ghost Hunt Crew" (trend) and the other is "Spring Co-op Horror" (seasonal).',
+  '5a. MULTIPLAYER PREFERENCE — roughly 4 out of every 5 proposals must be multiplayer-first (co-op, PvP, competitive, MMO, team-based, party, social). Single-player-first categories are allowed but rare: in a 5-proposal batch, AT MOST 1 single-player-first. In a 3- or 4-proposal batch, AT MOST 1 single-player-first, and 0 is also fine. If a category\'s primary tag is a single-player descriptor ("Story-Rich", "Roguelike", "Metroidvania", "Soulslike", "Open World") that tilts single-player, count it toward the SP quota. Co-op roguelikes, co-op survival, etc. count as multiplayer.',
   '6. filter_criteria.genre_tags is the MOST IMPORTANT field for curation quality. The backend ranks candidate games by how many of these tags hit the game\'s Steam/ITAD user tags (rich vocabulary: "Horror", "Roguelike", "Cozy", "Time Loop", "Psychological Horror", "Crafting", "Battle Royale", "Souls-like", "Cute", "Metroidvania", "Vampire Survivors-like", …). More tag hits = better rank. A game that hits only the most generic tag (e.g. "Co-op") ranks below one that hits three of your tags.',
   '   Put the MOST DISCRIMINATING tag FIRST — it becomes the category\'s primary theme for variety checking (rule 5).',
   '   Pick 2-4 descriptors per proposal that actually narrow to what the category is about. Examples:',
