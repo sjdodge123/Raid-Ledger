@@ -35,8 +35,9 @@ function SectionHeader() {
                 Community Insights
             </h3>
             <p className="text-xs text-muted mt-1">
-                Tune the churn-risk threshold and trigger an immediate snapshot refresh. The
-                nightly cron runs at 06:30 UTC.
+                The Insights dashboard aggregates 6 community-wide views — taste profile,
+                engagement health, churn risk, social graph, temporal patterns, and rule-based
+                key insights — from a daily snapshot. The snapshot rebuilds nightly at 06:30 UTC.
             </p>
         </div>
     );
@@ -58,22 +59,39 @@ function ThresholdSlider({ threshold, onChange }: { threshold: number; onChange:
                 className="w-full sm:max-w-md"
                 aria-describedby="community-insights-threshold-help"
             />
-            <p id="community-insights-threshold-help" className="text-xs text-muted mt-1">
-                Session-level override (1-100). Applies to queries from this browser.
-            </p>
+            <div id="community-insights-threshold-help" className="text-xs text-muted mt-2 space-y-1">
+                <p>
+                    A player is flagged "at risk" when their <strong className="text-secondary">recent
+                    activity</strong> (last 4 weeks) drops by at least <strong className="text-secondary">{threshold}%</strong>
+                    {' '}vs their <strong className="text-secondary">baseline</strong> (prior 12 weeks).
+                </p>
+                <p>
+                    Lower threshold → more candidates flagged. Higher threshold → only the most extreme drop-offs.
+                </p>
+                <p className="italic">
+                    This slider is a preview override — it changes only your current browser session.
+                    The persistent default (70%) drives the nightly snapshot and lives in app settings.
+                </p>
+            </div>
         </div>
     );
 }
 
 function RefreshButton({ onClick, pending }: { onClick: () => void; pending: boolean }) {
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={pending}
-            className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors disabled:opacity-50"
-        >
-            {pending ? 'Refreshing...' : 'Refresh insights now'}
-        </button>
+        <div>
+            <button
+                type="button"
+                onClick={onClick}
+                disabled={pending}
+                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors disabled:opacity-50"
+            >
+                {pending ? 'Refreshing...' : 'Refresh insights now'}
+            </button>
+            <p className="text-xs text-muted mt-2">
+                Recomputes all 6 sections of today's snapshot from current player data. Useful
+                after seeding test data or when a metric appears stale before the nightly cron runs.
+            </p>
+        </div>
     );
 }
