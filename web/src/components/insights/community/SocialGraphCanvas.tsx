@@ -174,12 +174,17 @@ export function SocialGraphCanvas({ data }: Props) {
                             const fg = graphRef.current;
                             const b = boundsRef.current;
                             if (!fg || !b) return;
-                            // Hard-clamp the canvas center (in world coords) to the node bbox.
-                            // d3-zoom: screen = world*k + tx → world = (screen - tx) / k
+                            // Pan clamp: the node bbox must remain at least partially in the
+                            // viewport. Equivalent constraint on canvas-center world coords:
+                            //   bbox.min - half_viewport ≤ center ≤ bbox.max + half_viewport
+                            // This leaves zoom-toward-cursor alone (it shifts center naturally
+                            // but the bbox is still on-screen).
+                            const halfW = width / (2 * t.k);
+                            const halfH = CANVAS_HEIGHT / (2 * t.k);
                             const cx = (width / 2 - t.x) / t.k;
                             const cy = (CANVAS_HEIGHT / 2 - t.y) / t.k;
-                            const clampedCx = Math.min(b.maxX, Math.max(b.minX, cx));
-                            const clampedCy = Math.min(b.maxY, Math.max(b.minY, cy));
+                            const clampedCx = Math.min(b.maxX + halfW, Math.max(b.minX - halfW, cx));
+                            const clampedCy = Math.min(b.maxY + halfH, Math.max(b.minY - halfH, cy));
                             if (clampedCx !== cx || clampedCy !== cy) {
                                 fg.centerAt(clampedCx, clampedCy, 0);
                             }
