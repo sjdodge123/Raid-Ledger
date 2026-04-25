@@ -84,22 +84,35 @@ async function seedSuggestion(
 }
 
 /**
- * Activate the AI plugin so that the plugin-content slot renders the
- * Dynamic Categories panel + so that useAiFeatures() returns a non-403
- * response. Idempotent: the endpoint is a no-op when the plugin is
- * already active. Required because CI spins up with plugins inactive.
+ * Ensure the AI plugin is installed AND activated. CI spins up with the
+ * plugin manifest registered but no DB row → activate() throws "not
+ * installed" (404). We POST install first (which installs + activates in
+ * one shot per plugin-registry.service.ts), then fall back to activate
+ * when the DB row already exists.
  */
-async function activateAiPlugin(token: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/admin/plugins/ai/activate`, {
+async function ensureAiPluginActive(token: string): Promise<void> {
+    const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+    };
+    const installRes = await fetch(`${API_BASE}/admin/plugins/ai/install`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
+        headers,
     });
-    // 200 = activated; 409/"already active" is fine too. Any other code is real.
-    if (!res.ok && res.status !== 409) {
-        throw new Error(`failed to activate AI plugin: ${res.status}`);
+    if (installRes.ok) return;
+    // 400 = already installed; fall through to a separate activate to handle
+    // the "installed but deactivated" case.
+    if (installRes.status !== 400) {
+        throw new Error(`failed to install AI plugin: ${installRes.status}`);
+    }
+    const activateRes = await fetch(
+        `${API_BASE}/admin/plugins/ai/activate`,
+        { method: 'POST', headers },
+    );
+    if (!activateRes.ok && activateRes.status !== 409) {
+        throw new Error(
+            `failed to activate AI plugin: ${activateRes.status}`,
+        );
     }
 }
 
@@ -150,10 +163,10 @@ let adminToken: string;
 test.beforeAll(async ({}, testInfo) => {
     testInfo.setTimeout(120_000);
     adminToken = await getAdminToken();
-    // CI boots with plugins inactive — activate AI so the Dynamic Categories
-    // panel (hosted inside AiPluginContent) actually renders, and so
-    // useAiFeatures() doesn't 403 via PluginActiveGuard.
-    await activateAiPlugin(adminToken);
+    // CI boots with plugins inactive — install + activate AI so the Dynamic
+    // Categories panel (hosted inside AiPluginContent) actually renders, and
+    // so useAiFeatures() doesn't 403 via PluginActiveGuard.
+    await ensureAiPluginActive(adminToken);
     // One-time clear so the approved/rejected/expired tabs are empty at the
     // start of the run (otherwise Smoke-named residue from prior runs lingers).
     await deleteAllDiscoveryCategorySuggestions(adminToken);
