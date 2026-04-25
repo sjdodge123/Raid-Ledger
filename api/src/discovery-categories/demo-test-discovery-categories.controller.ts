@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Inject,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -17,6 +18,7 @@ import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { SETTING_KEYS } from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -121,6 +123,29 @@ export class DemoTestDiscoveryCategoriesController {
     await this.assertDemoMode();
     await this.db.execute(
       sql`TRUNCATE TABLE discovery_category_suggestions RESTART IDENTITY`,
+    );
+    return { success: true };
+  }
+
+  /**
+   * Set the `ai_dynamic_categories_enabled` feature flag without going
+   * through the AI plugin's PUT /admin/ai/features endpoint. The usual
+   * route requires the AI plugin to be active (PluginActiveGuard); in CI
+   * the plugin is inactive by default, so smoke tests need a back-door
+   * to toggle this feature flag. DEMO_MODE only.
+   */
+  @Put('dynamic-categories-flag')
+  @HttpCode(HttpStatus.OK)
+  async setFlag(
+    @Body() body: { enabled?: boolean },
+  ): Promise<{ success: true }> {
+    await this.assertDemoMode();
+    if (typeof body?.enabled !== 'boolean') {
+      throw new BadRequestException('enabled must be a boolean');
+    }
+    await this.settingsService.set(
+      SETTING_KEYS.AI_DYNAMIC_CATEGORIES_ENABLED,
+      String(body.enabled),
     );
     return { success: true };
   }

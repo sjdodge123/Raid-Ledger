@@ -87,13 +87,16 @@ async function setDynamicCategoriesFlag(
     token: string,
     enabled: boolean,
 ): Promise<void> {
-    const res = await fetch(`${API_BASE}/admin/ai/features`, {
+    // Use the DEMO_MODE-only back-door instead of `PUT /admin/ai/features` —
+    // that endpoint requires the AI plugin to be active (PluginActiveGuard),
+    // and CI spins up with the plugin inactive by default.
+    const res = await fetch(`${API_BASE}/admin/test/dynamic-categories-flag`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ dynamicCategoriesEnabled: enabled }),
+        body: JSON.stringify({ enabled }),
     });
     if (!res.ok) {
         throw new Error(`failed to set dynamic categories flag: ${res.status}`);
