@@ -191,18 +191,28 @@ export function SocialGraphCanvas({ data }: Props) {
                         }}
                         onZoomEnd={(t) => {
                             const fg = graphRef.current;
-                            const b = worldBoundsRef.current;
-                            const fitK = fitKRef.current;
-                            if (!fg || !b || fitK <= 0) return;
-                            // Snap back to fit if pan drifted the world fully off-canvas.
-                            const screenMinX = b.minX * t.k + t.x;
-                            const screenMaxX = b.maxX * t.k + t.x;
-                            const screenMinY = b.minY * t.k + t.y;
-                            const screenMaxY = b.maxY * t.k + t.y;
-                            const fullyOff =
-                                screenMaxX < 0 || screenMinX > width ||
-                                screenMaxY < 0 || screenMinY > CANVAS_HEIGHT;
-                            if (fullyOff) fg.zoomToFit(300, 80);
+                            if (!fg) return;
+                            // Recompute bounds from current node positions — don't depend on a
+                            // possibly-stale captured snapshot.
+                            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                            for (const node of graphData.nodes) {
+                                const n = node as GraphNode;
+                                if (n.x == null || n.y == null) continue;
+                                if (n.x < minX) minX = n.x;
+                                if (n.x > maxX) maxX = n.x;
+                                if (n.y < minY) minY = n.y;
+                                if (n.y > maxY) maxY = n.y;
+                            }
+                            if (minX === Infinity) return;
+                            // Canvas center in world coordinates. d3-zoom: screen = world*k + tx.
+                            const centerWorldX = (width / 2 - t.x) / t.k;
+                            const centerWorldY = (CANVAS_HEIGHT / 2 - t.y) / t.k;
+                            const padX = (maxX - minX) * 0.2;
+                            const padY = (maxY - minY) * 0.2;
+                            const drifted =
+                                centerWorldX < minX - padX || centerWorldX > maxX + padX ||
+                                centerWorldY < minY - padY || centerWorldY > maxY + padY;
+                            if (drifted) fg.zoomToFit(300, 80);
                         }}
                         onNodeHover={(n) => setHoveredId((n as GraphNode | null)?.id ?? null)}
                         onNodeClick={(n) => {
