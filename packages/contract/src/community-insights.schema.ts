@@ -238,7 +238,7 @@ export type CommunityChurnQueryDto = z.infer<
 
 export const CommunitySocialGraphQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional(),
-  minWeight: z.coerce.number().min(0).max(0.99).optional(),
+  minWeight: z.coerce.number().int().min(0).max(1000).optional(),
 });
 
 export type CommunitySocialGraphQueryDto = z.infer<

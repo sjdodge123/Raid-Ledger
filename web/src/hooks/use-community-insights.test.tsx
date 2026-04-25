@@ -118,7 +118,7 @@ describe('other read hooks', () => {
     it('social graph resolves with limit + minWeight', async () => {
         const client = newClient();
         const { result } = renderHook(
-            () => useCommunitySocialGraph({ limit: 50, minWeight: 0.1 }),
+            () => useCommunitySocialGraph({ limit: 50, minWeight: 2 }),
             { wrapper: makeWrapper(client) },
         );
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
