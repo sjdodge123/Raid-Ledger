@@ -16,6 +16,10 @@ const TIER_COLORS: Record<string, string> = {
 const CANVAS_HEIGHT = 520;
 const CHARGE_STRENGTH = -1100;
 const LINK_DISTANCE = 170;
+const FOCUS_ZOOM_MULTIPLIER = 3;
+const FOCUS_ANIM_MS = 700;
+const FIT_ANIM_MS = 400;
+const FIT_PADDING_PX = 80;
 
 // Screen-pixel sizes — constant regardless of zoom.
 const BASE_RADIUS_PX = 4;
@@ -36,19 +40,17 @@ interface GraphNode {
     y?: number;
 }
 
-function nodeScreenRadius(degree: number, hovered: boolean): number {
+function nodeScreenRadius(degree: number, highlighted: boolean): number {
     const clamped = Math.min(MAX_DEGREE_FOR_SIZE, Math.max(0, degree));
     const base = BASE_RADIUS_PX + Math.sqrt(clamped) * DEGREE_RADIUS_STEP_PX;
-    return hovered ? base * HOVER_RADIUS_MULTIPLIER : base;
+    return highlighted ? base * HOVER_RADIUS_MULTIPLIER : base;
 }
 
 /**
- * Lazy-loaded canvas render. Node color is driven by intensity tier,
- * node size by weighted degree. All rendering is in screen pixels —
- * nodes and labels stay the same apparent size as the viewer zooms.
- * Hovering a node fades other labels, ringed + enlarges the hovered
- * node, and surfaces its clique in the overlay. Clicking opens the
- * player's profile in a new tab. Canvas is `aria-hidden` — keyboard
+ * Lazy-loaded canvas render. Free pan/zoom is disabled — clicking a
+ * node smooth-pans + zooms to it and highlights its neighbors. The
+ * overlay carries "Open profile" + "Reset view" buttons. Hover still
+ * works for transient highlight. Canvas is `aria-hidden` — keyboard
  * users consume the fallback table via the "Show as table" toggle.
  */
 export function SocialGraphCanvas({ data }: Props) {
@@ -56,9 +58,7 @@ export function SocialGraphCanvas({ data }: Props) {
     const graphRef = useRef<ForceGraphMethods | undefined>(undefined);
     const [width, setWidth] = useState(0);
     const [hoveredId, setHoveredId] = useState<number | null>(null);
-    // World bounding box of node positions. Captured on onEngineStop so
-    // the pan clamp can reject pan attempts past the cluster edge.
-    const boundsRef = useRef<{ minX: number; maxX: number; minY: number; maxY: number } | null>(null);
+    const [focusedId, setFocusedId] = useState<number | null>(null);
 
     useLayoutEffect(() => {
         if (!containerRef.current) return;
@@ -110,17 +110,41 @@ export function SocialGraphCanvas({ data }: Props) {
         return m;
     }, [data.nodes]);
 
-    const hoveredNode = hoveredId != null ? nodeById.get(hoveredId) ?? null : null;
-    const hoveredClique = hoveredNode ? cliqueById.get(hoveredNode.cliqueId) ?? null : null;
-    const hoveredNeighbors = hoveredId != null ? neighbors.get(hoveredId) ?? new Set<number>() : new Set<number>();
+    // Hover takes precedence over click-focus for transient highlight,
+    // but the overlay sticks to focused so the buttons remain usable.
+    const activeId = hoveredId ?? focusedId;
+    const focusedNode = focusedId != null ? nodeById.get(focusedId) ?? null : null;
+    const focusedClique = focusedNode ? cliqueById.get(focusedNode.cliqueId) ?? null : null;
+    const activeNeighbors = activeId != null ? neighbors.get(activeId) ?? new Set<number>() : new Set<number>();
 
     useEffect(() => {
         const fg = graphRef.current;
         if (!fg) return;
         fg.d3Force('charge')?.strength(CHARGE_STRENGTH);
         fg.d3Force('link')?.distance(LINK_DISTANCE);
-        fg.zoomToFit(400, 80);
+        fg.zoomToFit(FIT_ANIM_MS, FIT_PADDING_PX);
     }, [graphData]);
+
+    const focusOnNode = (id: number) => {
+        const fg = graphRef.current;
+        const node = nodeById.get(id);
+        const positioned = graphData.nodes.find((n) => (n as GraphNode).id === id) as GraphNode | undefined;
+        if (!fg || !node || !positioned || positioned.x == null || positioned.y == null) return;
+        setFocusedId(id);
+        fg.centerAt(positioned.x, positioned.y, FOCUS_ANIM_MS);
+        fg.zoom(fg.zoom() * FOCUS_ZOOM_MULTIPLIER, FOCUS_ANIM_MS);
+    };
+
+    const resetView = () => {
+        const fg = graphRef.current;
+        if (!fg) return;
+        setFocusedId(null);
+        fg.zoomToFit(FIT_ANIM_MS, FIT_PADDING_PX);
+    };
+
+    const openProfile = (id: number) => {
+        window.open(`/users/${id}`, '_blank', 'noopener');
+    };
 
     return (
         <div
@@ -140,60 +164,26 @@ export function SocialGraphCanvas({ data }: Props) {
                             const link = l as { source: number | { id: number }; target: number | { id: number }; value?: number };
                             const s = typeof link.source === 'object' ? link.source.id : link.source;
                             const t = typeof link.target === 'object' ? link.target.id : link.target;
-                            const involved = hoveredId != null && (s === hoveredId || t === hoveredId);
+                            const involved = activeId != null && (s === activeId || t === activeId);
                             const base = Math.min(4, link.value ?? 1);
                             return involved ? base + 1 : base;
                         }}
                         linkColor={(l: unknown) => {
-                            if (hoveredId == null) return 'rgba(168,85,247,0.35)';
+                            if (activeId == null) return 'rgba(168,85,247,0.35)';
                             const link = l as { source: number | { id: number }; target: number | { id: number } };
                             const s = typeof link.source === 'object' ? link.source.id : link.source;
                             const t = typeof link.target === 'object' ? link.target.id : link.target;
-                            return s === hoveredId || t === hoveredId
+                            return s === activeId || t === activeId
                                 ? 'rgba(168,85,247,0.85)'
                                 : 'rgba(168,85,247,0.06)';
                         }}
                         enableNodeDrag={false}
+                        enableZoomInteraction={false}
+                        enablePanInteraction={false}
                         cooldownTicks={120}
-                        onEngineStop={() => {
-                            const fg = graphRef.current;
-                            if (!fg) return;
-                            fg.zoomToFit(400, 80);
-                            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-                            for (const node of graphData.nodes) {
-                                const n = node as GraphNode;
-                                if (n.x == null || n.y == null) continue;
-                                if (n.x < minX) minX = n.x;
-                                if (n.x > maxX) maxX = n.x;
-                                if (n.y < minY) minY = n.y;
-                                if (n.y > maxY) maxY = n.y;
-                            }
-                            if (minX !== Infinity) boundsRef.current = { minX, maxX, minY, maxY };
-                        }}
-                        onZoom={(t) => {
-                            const fg = graphRef.current;
-                            const b = boundsRef.current;
-                            if (!fg || !b) return;
-                            // Pan clamp: the node bbox must remain at least partially in the
-                            // viewport. Equivalent constraint on canvas-center world coords:
-                            //   bbox.min - half_viewport ≤ center ≤ bbox.max + half_viewport
-                            // This leaves zoom-toward-cursor alone (it shifts center naturally
-                            // but the bbox is still on-screen).
-                            const halfW = width / (2 * t.k);
-                            const halfH = CANVAS_HEIGHT / (2 * t.k);
-                            const cx = (width / 2 - t.x) / t.k;
-                            const cy = (CANVAS_HEIGHT / 2 - t.y) / t.k;
-                            const clampedCx = Math.min(b.maxX + halfW, Math.max(b.minX - halfW, cx));
-                            const clampedCy = Math.min(b.maxY + halfH, Math.max(b.minY - halfH, cy));
-                            if (clampedCx !== cx || clampedCy !== cy) {
-                                fg.centerAt(clampedCx, clampedCy, 0);
-                            }
-                        }}
+                        onEngineStop={() => graphRef.current?.zoomToFit(FIT_ANIM_MS, FIT_PADDING_PX)}
                         onNodeHover={(n) => setHoveredId((n as GraphNode | null)?.id ?? null)}
-                        onNodeClick={(n) => {
-                            const id = (n as GraphNode).id;
-                            window.open(`/users/${id}`, '_blank', 'noopener');
-                        }}
+                        onNodeClick={(n) => focusOnNode((n as GraphNode).id)}
                         nodePointerAreaPaint={(node, color, ctx, globalScale) => {
                             const n = node as GraphNode;
                             if (n.x == null || n.y == null) return;
@@ -206,17 +196,17 @@ export function SocialGraphCanvas({ data }: Props) {
                         nodeCanvasObject={(node, ctx, globalScale) => {
                             const n = node as GraphNode;
                             if (n.x == null || n.y == null) return;
-                            const hovered = n.id === hoveredId;
-                            const radius = nodeScreenRadius(n.degree, hovered) / globalScale;
-                            const isFocusedSet = hoveredId != null;
-                            const isNeighbor = isFocusedSet && hoveredNeighbors.has(n.id);
-                            const faded = isFocusedSet && !hovered && !isNeighbor;
+                            const isActive = n.id === activeId;
+                            const radius = nodeScreenRadius(n.degree, isActive) / globalScale;
+                            const isFocusedSet = activeId != null;
+                            const isNeighbor = isFocusedSet && activeNeighbors.has(n.id);
+                            const faded = isFocusedSet && !isActive && !isNeighbor;
                             ctx.globalAlpha = faded ? 0.25 : 1;
                             ctx.beginPath();
                             ctx.arc(n.x, n.y, radius, 0, 2 * Math.PI, false);
                             ctx.fillStyle = n.color;
                             ctx.fill();
-                            if (hovered) {
+                            if (isActive) {
                                 ctx.lineWidth = 1.5 / globalScale;
                                 ctx.strokeStyle = 'rgba(255,255,255,0.95)';
                                 ctx.stroke();
@@ -224,40 +214,39 @@ export function SocialGraphCanvas({ data }: Props) {
                             ctx.globalAlpha = 1;
                         }}
                         onRenderFramePost={(ctx, globalScale) => {
-                            const focused = hoveredId != null;
+                            const focused = activeId != null;
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'top';
-                            // Hovered label drawn last so it's unambiguously on top.
                             const drawOrder: GraphNode[] = [];
                             for (const node of graphData.nodes) {
                                 const n = node as GraphNode;
                                 if (n.x == null || n.y == null) continue;
-                                const hovered = n.id === hoveredId;
-                                const isNeighbor = focused && hoveredNeighbors.has(n.id);
-                                const show = focused ? hovered || isNeighbor : true;
+                                const isActive = n.id === activeId;
+                                const isNeighbor = focused && activeNeighbors.has(n.id);
+                                const show = focused ? isActive || isNeighbor : true;
                                 if (!show) continue;
-                                if (hovered) continue;
+                                if (isActive) continue;
                                 drawOrder.push(n);
                             }
-                            const hoveredN = focused
-                                ? (graphData.nodes.find((x) => (x as GraphNode).id === hoveredId) as GraphNode | undefined)
+                            const activeN = focused
+                                ? (graphData.nodes.find((x) => (x as GraphNode).id === activeId) as GraphNode | undefined)
                                 : undefined;
-                            if (hoveredN) drawOrder.push(hoveredN);
+                            if (activeN) drawOrder.push(activeN);
                             for (const n of drawOrder) {
                                 if (n.x == null || n.y == null) continue;
-                                const hovered = n.id === hoveredId;
-                                const isNeighbor = focused && hoveredNeighbors.has(n.id);
-                                const faded = focused && !hovered && !isNeighbor;
-                                const basePx = hovered ? LABEL_FONT_PX_HOVER : LABEL_FONT_PX_DEFAULT;
+                                const isActive = n.id === activeId;
+                                const isNeighbor = focused && activeNeighbors.has(n.id);
+                                const faded = focused && !isActive && !isNeighbor;
+                                const basePx = isActive ? LABEL_FONT_PX_HOVER : LABEL_FONT_PX_DEFAULT;
                                 const fontWorld = basePx / globalScale;
                                 ctx.font = `${fontWorld}px Inter, ui-sans-serif, system-ui`;
-                                const radius = nodeScreenRadius(n.degree, hovered) / globalScale;
+                                const radius = nodeScreenRadius(n.degree, isActive) / globalScale;
                                 const labelY = n.y + radius + 2 / globalScale;
                                 ctx.globalAlpha = faded ? 0.4 : 1;
                                 ctx.lineWidth = LABEL_HALO_LINE_WIDTH_PX / globalScale;
                                 ctx.strokeStyle = 'rgba(0,0,0,0.9)';
                                 ctx.strokeText(n.label, n.x, labelY);
-                                ctx.fillStyle = hovered ? '#ffffff' : 'rgba(255,255,255,0.95)';
+                                ctx.fillStyle = isActive ? '#ffffff' : 'rgba(255,255,255,0.95)';
                                 ctx.fillText(n.label, n.x, labelY);
                             }
                             ctx.globalAlpha = 1;
@@ -265,18 +254,38 @@ export function SocialGraphCanvas({ data }: Props) {
                     />
                 )}
             </div>
-            {hoveredNode && (
-                <div className="absolute top-3 right-3 min-w-[180px] max-w-[240px] bg-surface/95 backdrop-blur-sm border border-edge rounded-lg px-3 py-2 text-xs pointer-events-none shadow-lg">
-                    <div className="font-semibold text-foreground">{hoveredNode.username}</div>
-                    <div className="text-secondary">{hoveredNode.intensityTier} · degree {hoveredNode.degree}</div>
-                    {hoveredClique && (
+            {focusedNode && (
+                <div className="absolute top-3 right-3 min-w-[200px] max-w-[260px] bg-surface/95 backdrop-blur-sm border border-edge rounded-lg px-3 py-2 text-xs shadow-lg">
+                    <div className="font-semibold text-foreground">{focusedNode.username}</div>
+                    <div className="text-secondary">{focusedNode.intensityTier} · degree {focusedNode.degree}</div>
+                    {focusedClique && (
                         <div className="mt-1.5 pt-1.5 border-t border-edge/60 text-secondary">
-                            <span className="text-muted">Clique #{hoveredClique.cliqueId}</span>
+                            <span className="text-muted">Clique #{focusedClique.cliqueId}</span>
                             <span className="mx-1">·</span>
-                            <span>{hoveredClique.memberUserIds.length} members</span>
+                            <span>{focusedClique.memberUserIds.length} members</span>
                         </div>
                     )}
-                    <div className="mt-1 text-muted text-[10px]">Click to open profile</div>
+                    <div className="mt-2 flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => openProfile(focusedNode.userId)}
+                            className="flex-1 px-2 py-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors"
+                        >
+                            Open profile
+                        </button>
+                        <button
+                            type="button"
+                            onClick={resetView}
+                            className="px-2 py-1 text-xs font-medium bg-surface hover:bg-overlay border border-edge rounded text-secondary hover:text-foreground transition-colors"
+                        >
+                            Reset
+                        </button>
+                    </div>
+                </div>
+            )}
+            {!focusedNode && (
+                <div className="absolute top-3 right-3 bg-surface/80 backdrop-blur-sm border border-edge rounded-lg px-3 py-1.5 text-[11px] text-muted pointer-events-none">
+                    Click a node to focus
                 </div>
             )}
         </div>
