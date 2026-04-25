@@ -6,12 +6,17 @@
  * invokes the orchestrator in-process.
  */
 import * as bcrypt from 'bcrypt';
+import { Logger } from '@nestjs/common';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
   truncateAllTables,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { SETTING_KEYS } from '../drizzle/schema';
+import { SettingsService } from '../settings/settings.service';
+import { ChurnDetectionService } from './churn-detection.service';
+import { CommunityInsightsService } from './community-insights.service';
 import { buildSnapshotFixture } from './__fixtures__/snapshot-fixture';
 
 async function createMemberAndLogin(testApp: TestApp): Promise<string> {
@@ -23,6 +28,28 @@ async function createMemberAndLogin(testApp: TestApp): Promise<string> {
       discordId: `local:${email}`,
       username: 'member',
       role: 'member',
+    })
+    .returning();
+  await testApp.db.insert(schema.localCredentials).values({
+    email,
+    passwordHash,
+    userId: user.id,
+  });
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: 'TestPassword123!' });
+  return res.body.access_token as string;
+}
+
+async function createOperatorAndLogin(testApp: TestApp): Promise<string> {
+  const email = 'operator@test.local';
+  const passwordHash = await bcrypt.hash('TestPassword123!', 4);
+  const [user] = await testApp.db
+    .insert(schema.users)
+    .values({
+      discordId: `local:${email}`,
+      username: 'operator',
+      role: 'operator',
     })
     .returning();
   await testApp.db.insert(schema.localCredentials).values({
@@ -198,6 +225,96 @@ describe('Community Insights (ROK-1099)', () => {
         .select()
         .from(schema.communityInsightsSnapshots);
       expect(after).toHaveLength(1);
+    });
+  });
+
+  describe('operator role hierarchy', () => {
+    beforeEach(async () => {
+      await seedSnapshot(testApp, '2026-04-22');
+    });
+
+    it('allows operator role with 200 on every GET endpoint and POST /refresh', async () => {
+      const operatorToken = await createOperatorAndLogin(testApp);
+      const endpoints = [
+        '/insights/community/radar',
+        '/insights/community/engagement',
+        '/insights/community/churn',
+        '/insights/community/social-graph',
+        '/insights/community/temporal',
+        '/insights/community/key-insights',
+      ];
+      for (const url of endpoints) {
+        const res = await testApp.request
+          .get(url)
+          .set('Authorization', `Bearer ${operatorToken}`);
+        expect(res.status).toBe(200);
+      }
+      const refreshRes = await testApp.request
+        .post('/insights/community/refresh')
+        .set('Authorization', `Bearer ${operatorToken}`);
+      expect(refreshRes.status).toBe(202);
+    });
+  });
+
+  describe('partial-failure orchestrator', () => {
+    it('logs the failing section, substitutes empty payload, and still upserts the snapshot', async () => {
+      const churn = testApp.app.get(ChurnDetectionService);
+      const findSpy = jest
+        .spyOn(churn, 'findAtRiskPlayers')
+        .mockImplementation(() => {
+          throw new Error('synthetic-churn-failure');
+        });
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      try {
+        const insights = testApp.app.get(CommunityInsightsService);
+        const result = await insights.refreshSnapshot();
+        expect(result.snapshotDate).toBeDefined();
+
+        const rows = await testApp.db
+          .select()
+          .from(schema.communityInsightsSnapshots);
+        expect(rows).toHaveLength(1);
+        const churnPayload = rows[0].churnPayload as { atRisk: unknown[] };
+        expect(churnPayload.atRisk).toEqual([]);
+
+        const churnLogCall = errorSpy.mock.calls.find((call) =>
+          String(call[0]).includes('churn'),
+        );
+        expect(churnLogCall).toBeDefined();
+      } finally {
+        findSpy.mockRestore();
+        errorSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('retention prune', () => {
+    it('deletes snapshots older than the retention window after a refresh', async () => {
+      const settings = testApp.app.get(SettingsService);
+      await settings.set(
+        SETTING_KEYS.COMMUNITY_INSIGHTS_SNAPSHOT_RETENTION_DAYS,
+        '90',
+      );
+
+      const oldDate = '2025-01-01';
+      const recentDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      await seedSnapshot(testApp, oldDate);
+      await seedSnapshot(testApp, recentDate);
+
+      const insights = testApp.app.get(CommunityInsightsService);
+      await insights.refreshSnapshot();
+
+      const remaining = await testApp.db
+        .select({ snapshotDate: schema.communityInsightsSnapshots.snapshotDate })
+        .from(schema.communityInsightsSnapshots);
+      const dates = remaining.map((r) => String(r.snapshotDate));
+      expect(dates).not.toContain(oldDate);
+      expect(dates).toContain(recentDate);
     });
   });
 });
