@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { desc } from 'drizzle-orm';
@@ -22,6 +22,8 @@ export type CommunityInsightsSnapshotRow =
  */
 @Injectable()
 export class CommunityInsightsService {
+  private readonly logger = new Logger(CommunityInsightsService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
@@ -53,6 +55,7 @@ export class CommunityInsightsService {
       churn: this.churn,
       clique: this.clique,
       keyInsights: this.keyInsights,
+      logger: this.logger,
     });
     return { jobId: randomUUID(), snapshotDate: result.snapshotDate };
   }

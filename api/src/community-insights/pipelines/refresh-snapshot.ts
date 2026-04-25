@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { lt, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -22,11 +23,19 @@ import { buildTemporalSection } from './temporal-section';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+type SectionId =
+  | 'radar'
+  | 'engagement'
+  | 'churn'
+  | 'social-graph'
+  | 'temporal';
+
 export interface RefreshSnapshotDeps {
   settings: SettingsService;
   churn: ChurnDetectionService;
   clique: CliqueDetectionService;
   keyInsights: KeyInsightsService;
+  logger?: Logger;
 }
 
 export interface RefreshSnapshotResult {
@@ -48,11 +57,17 @@ export async function runRefreshSnapshot(
   db: Db,
   deps: RefreshSnapshotDeps,
 ): Promise<RefreshSnapshotResult> {
+  const logger = deps.logger ?? new Logger('runRefreshSnapshot');
   const cfg = await loadConfig(deps.settings);
   const snapshotDate = todayUtcIso();
   const results = await runAllSections(db, deps, snapshotDate, cfg.churn);
   throwIfAllRejected(results);
-  const sections = materializeSections(results, snapshotDate, cfg.churn);
+  const sections = materializeSections(
+    results,
+    snapshotDate,
+    cfg.churn,
+    logger,
+  );
   const keyInsights = buildKeyInsightsSection(
     deps.keyInsights,
     snapshotDate,
@@ -97,14 +112,26 @@ function materializeSections(
   r: SectionResults,
   snapshotDate: string,
   churn: ChurnSettings,
+  logger: Logger,
 ) {
   return {
-    radar: settledRadar(r.radar, snapshotDate),
-    engagement: settledEngagement(r.engagement, snapshotDate),
-    churn: settledChurn(r.churn, snapshotDate, churn),
-    socialGraph: settledSocial(r.social, snapshotDate),
-    temporal: settledTemporal(r.temporal, snapshotDate),
+    radar: settledRadar(r.radar, snapshotDate, logger),
+    engagement: settledEngagement(r.engagement, snapshotDate, logger),
+    churn: settledChurn(r.churn, snapshotDate, churn, logger),
+    socialGraph: settledSocial(r.social, snapshotDate, logger),
+    temporal: settledTemporal(r.temporal, snapshotDate, logger),
   };
+}
+
+function logSectionFailure(
+  logger: Logger,
+  section: SectionId,
+  reason: unknown,
+): void {
+  logger.error(
+    `community-insights ${section} section failed`,
+    reason instanceof Error ? reason.stack : String(reason),
+  );
 }
 
 type ChurnSettings = {
@@ -159,8 +186,10 @@ async function upsertSnapshot(
 function settledRadar(
   r: PromiseSettledResult<CommunityRadarResponseDto>,
   snapshotDate: string,
+  logger: Logger,
 ): CommunityRadarResponseDto {
   if (r.status === 'fulfilled') return r.value;
+  logSectionFailure(logger, 'radar', r.reason);
   return {
     snapshotDate,
     axes: [],
@@ -173,8 +202,10 @@ function settledRadar(
 function settledEngagement(
   r: PromiseSettledResult<CommunityEngagementResponseDto>,
   snapshotDate: string,
+  logger: Logger,
 ): CommunityEngagementResponseDto {
   if (r.status === 'fulfilled') return r.value;
+  logSectionFailure(logger, 'engagement', r.reason);
   return { snapshotDate, weeklyActiveUsers: [], intensityHistogram: [] };
 }
 
@@ -186,8 +217,10 @@ function settledChurn(
     baselineWeeks: number;
     recentWeeks: number;
   },
+  logger: Logger,
 ): CommunityChurnResponseDto {
   if (r.status === 'fulfilled') return r.value;
+  logSectionFailure(logger, 'churn', r.reason);
   return {
     snapshotDate,
     thresholdPct: settings.thresholdPct,
@@ -202,8 +235,10 @@ function settledChurn(
 function settledSocial(
   r: PromiseSettledResult<CommunitySocialGraphResponseDto>,
   snapshotDate: string,
+  logger: Logger,
 ): CommunitySocialGraphResponseDto {
   if (r.status === 'fulfilled') return r.value;
+  logSectionFailure(logger, 'social-graph', r.reason);
   return {
     snapshotDate,
     nodes: [],
@@ -216,8 +251,10 @@ function settledSocial(
 function settledTemporal(
   r: PromiseSettledResult<CommunityTemporalResponseDto>,
   snapshotDate: string,
+  logger: Logger,
 ): CommunityTemporalResponseDto {
   if (r.status === 'fulfilled') return r.value;
+  logSectionFailure(logger, 'temporal', r.reason);
   return { snapshotDate, heatmap: [], peakHours: [] };
 }
 
