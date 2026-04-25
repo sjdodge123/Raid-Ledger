@@ -56,6 +56,10 @@ export function SocialGraphCanvas({ data }: Props) {
     const graphRef = useRef<ForceGraphMethods | undefined>(undefined);
     const [width, setWidth] = useState(0);
     const [hoveredId, setHoveredId] = useState<number | null>(null);
+    // Captured after the layout settles + zoomToFit completes. Locks the
+    // zoom-out floor so the user can't shrink past "all nodes visible".
+    const fitKRef = useRef<number>(0);
+    const worldBoundsRef = useRef<{ minX: number; maxX: number; minY: number; maxY: number } | null>(null);
 
     useLayoutEffect(() => {
         if (!containerRef.current) return;
@@ -152,7 +156,54 @@ export function SocialGraphCanvas({ data }: Props) {
                         }}
                         enableNodeDrag={false}
                         cooldownTicks={120}
-                        onEngineStop={() => graphRef.current?.zoomToFit(400, 80)}
+                        onEngineStop={() => {
+                            const fg = graphRef.current;
+                            if (!fg) return;
+                            fg.zoomToFit(400, 80);
+                            // After the fit animation, capture the floor zoom + world bounds.
+                            window.setTimeout(() => {
+                                const k = fg.zoom();
+                                fitKRef.current = k;
+                                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                                for (const node of graphData.nodes) {
+                                    const n = node as GraphNode;
+                                    if (n.x == null || n.y == null) continue;
+                                    if (n.x < minX) minX = n.x;
+                                    if (n.x > maxX) maxX = n.x;
+                                    if (n.y < minY) minY = n.y;
+                                    if (n.y > maxY) maxY = n.y;
+                                }
+                                if (minX !== Infinity) worldBoundsRef.current = { minX, maxX, minY, maxY };
+                            }, 450);
+                        }}
+                        onZoom={(t) => {
+                            const fg = graphRef.current;
+                            const fitK = fitKRef.current;
+                            if (!fg || fitK <= 0) return;
+                            // Floor: can't shrink past "all nodes visible". Ceiling: 4× fit.
+                            if (t.k < fitK * 0.98) {
+                                fg.zoom(fitK, 0);
+                                return;
+                            }
+                            if (t.k > fitK * 4) {
+                                fg.zoom(fitK * 4, 0);
+                            }
+                        }}
+                        onZoomEnd={(t) => {
+                            const fg = graphRef.current;
+                            const b = worldBoundsRef.current;
+                            const fitK = fitKRef.current;
+                            if (!fg || !b || fitK <= 0) return;
+                            // Snap back to fit if pan drifted the world fully off-canvas.
+                            const screenMinX = b.minX * t.k + t.x;
+                            const screenMaxX = b.maxX * t.k + t.x;
+                            const screenMinY = b.minY * t.k + t.y;
+                            const screenMaxY = b.maxY * t.k + t.y;
+                            const fullyOff =
+                                screenMaxX < 0 || screenMinX > width ||
+                                screenMaxY < 0 || screenMinY > CANVAS_HEIGHT;
+                            if (fullyOff) fg.zoomToFit(300, 80);
+                        }}
                         onNodeHover={(n) => setHoveredId((n as GraphNode | null)?.id ?? null)}
                         onNodeClick={(n) => {
                             const id = (n as GraphNode).id;
