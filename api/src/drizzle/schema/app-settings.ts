@@ -116,6 +116,13 @@ export const SETTING_KEYS = {
   COMMON_GROUND_SOCIAL_WEIGHT: 'common_ground_social_weight',
   /** ROK-950: Common Ground — weight when game intensity matches voter intensity bucket. */
   COMMON_GROUND_INTENSITY_WEIGHT: 'common_ground_intensity_weight',
+  /** ROK-567: Blend alpha between LLM theme vector and community centroid (0..1). */
+  DYNAMIC_CATEGORIES_THEME_CENTROID_BLEND:
+    'dynamic_categories_theme_centroid_blend',
+  /** ROK-567: How many candidate games to pre-resolve per dynamic category. */
+  DYNAMIC_CATEGORIES_CANDIDATE_COUNT: 'dynamic_categories_candidate_count',
+  /** ROK-567: Skip weekly generation when pending suggestions exceed this count. */
+  DYNAMIC_CATEGORIES_MAX_PENDING: 'dynamic_categories_max_pending',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

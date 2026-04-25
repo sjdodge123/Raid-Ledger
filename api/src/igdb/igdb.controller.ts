@@ -45,7 +45,7 @@ import { fetchGameEventTypes } from './igdb-event-types.helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { buildDiscoverCategories } from './igdb-discover.helpers';
-import { dispatchDiscoverRow } from './igdb-discover-dispatch.helpers';
+import { buildDiscoverRows } from './igdb-discover-merge.helpers';
 import {
   batchCheckInterests,
   addInterest,
@@ -98,15 +98,13 @@ export class IgdbController {
   /** GET /games/discover -- Returns category rows for the browse page. */
   @Get('discover')
   async discoverGames(): Promise<GameDiscoverResponseDto> {
-    const db = this.igdbService.database;
-    const redis = this.igdbService.redisClient;
-    const cacheTtl = this.igdbService.config.DISCOVER_CACHE_TTL;
-    const categories = buildDiscoverCategories();
-
-    const rows = await Promise.all(
-      categories.map((cat) => dispatchDiscoverRow(cat, db, redis, cacheTtl)),
+    const rows = await buildDiscoverRows(
+      buildDiscoverCategories(),
+      this.igdbService.database,
+      this.igdbService.redisClient,
+      this.igdbService.config.DISCOVER_CACHE_TTL,
     );
-    return { rows: rows.filter((r) => r.games.length > 0) };
+    return { rows };
   }
 
   /** GET /games/configured -- Returns enabled games with config columns. */

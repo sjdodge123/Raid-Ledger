@@ -93,6 +93,12 @@ export interface LlmProvider {
   readonly requiresApiKey: boolean;
   /** Whether the provider is self-hosted. */
   readonly selfHosted: boolean;
+  /**
+   * Model ID the provider will use when a request omits `options.model`.
+   * Drives LlmService telemetry (log line + ai_request_logs.model) so the
+   * audit record reflects the actual model the provider routes to.
+   */
+  readonly defaultModel: string;
 
   /** Check if the provider is reachable. */
   isAvailable(): Promise<boolean>;

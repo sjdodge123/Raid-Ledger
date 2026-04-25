@@ -53,7 +53,7 @@ export class LlmService {
     const provider = await this.resolveOrThrow();
     this.applyPreChecks(context);
     const prepared = this.prepareChatOptions(options);
-    const model = options.model ?? AI_DEFAULTS.model;
+    const model = options.model ?? provider.defaultModel;
     const timeoutMs = context.timeoutMs ?? AI_DEFAULTS.timeoutMs;
     this.logChatEntry(provider.key, model, context.feature, timeoutMs);
     const start = Date.now();
@@ -85,7 +85,7 @@ export class LlmService {
     const provider = await this.resolveOrThrow();
     this.applyPreChecks(context);
     const sanitizedPrompt = sanitizeInput(options.prompt);
-    const model = options.model ?? AI_DEFAULTS.model;
+    const model = options.model ?? provider.defaultModel;
 
     return this.concurrencyLimiter.withLimit(async () => {
       try {
@@ -113,6 +113,17 @@ export class LlmService {
     const provider = await this.registry.resolveActive();
     if (!provider) return false;
     return provider.isAvailable();
+  }
+
+  /**
+   * Return the active provider's key (e.g. 'claude', 'google', 'openai',
+   * 'ollama') or null if no provider is configured. Callers use this to
+   * pick feature-specific model overrides (e.g. pin a background cron to
+   * Haiku when the interactive chat is on Sonnet).
+   */
+  async getActiveProviderKey(): Promise<string | null> {
+    const provider = await this.registry.resolveActive();
+    return provider?.key ?? null;
   }
 
   /** List models from the active provider. */

@@ -86,6 +86,47 @@ export function DiscoverLoadingSkeleton(): JSX.Element {
     );
 }
 
+function CuratedSection({
+    rows,
+    pricingMap,
+}: {
+    rows: GameDiscoverRowDto[];
+    pricingMap: PricingMap;
+}): JSX.Element {
+    return (
+        <section
+            data-testid="curated-dynamic-section"
+            className="border-l-2 border-emerald-500/40 pl-4 md:pl-5"
+        >
+            <div className="mb-4">
+                <h2 className="text-sm font-medium text-emerald-300/90 uppercase tracking-wider">
+                    Curated This Week
+                </h2>
+            </div>
+            <div className="hidden md:block space-y-6">
+                {rows.map((row) => (
+                    <GameCarousel
+                        key={row.slug}
+                        category={row.category}
+                        games={row.games}
+                        pricingMap={pricingMap}
+                        metadata={row.metadata}
+                    />
+                ))}
+            </div>
+            <div className="md:hidden space-y-5">
+                {rows.map((row) => (
+                    <MobileDiscoverRow
+                        key={row.slug}
+                        row={row}
+                        pricingMap={pricingMap}
+                    />
+                ))}
+            </div>
+        </section>
+    );
+}
+
 export function DiscoverRows({
     filteredRows,
     pricingMap,
@@ -93,10 +134,15 @@ export function DiscoverRows({
     filteredRows: GameDiscoverRowDto[];
     pricingMap: PricingMap;
 }): JSX.Element {
+    const dynamicRows = filteredRows.filter((r) => r.isDynamic);
+    const staticRows = filteredRows.filter((r) => !r.isDynamic);
     return (
         <div className="space-y-8">
+            {dynamicRows.length > 0 && (
+                <CuratedSection rows={dynamicRows} pricingMap={pricingMap} />
+            )}
             <div className="hidden md:block space-y-8">
-                {filteredRows.map((row) => (
+                {staticRows.map((row) => (
                     <GameCarousel
                         key={row.slug}
                         category={row.category}
@@ -107,8 +153,12 @@ export function DiscoverRows({
                 ))}
             </div>
             <div className="md:hidden space-y-6">
-                {filteredRows.map((row) => (
-                    <MobileDiscoverRow key={row.slug} row={row} pricingMap={pricingMap} />
+                {staticRows.map((row) => (
+                    <MobileDiscoverRow
+                        key={row.slug}
+                        row={row}
+                        pricingMap={pricingMap}
+                    />
                 ))}
             </div>
         </div>

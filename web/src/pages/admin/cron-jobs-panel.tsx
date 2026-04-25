@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 import { useState } from 'react';
+import { SparklesIcon } from '@heroicons/react/24/outline';
 import type { CronJobDto } from '@raid-ledger/contract';
 import { useCronJobs } from '../../hooks/use-cron-jobs';
 import { useTimezoneStore } from '../../stores/timezone-store';
@@ -26,9 +27,19 @@ function sortJobs(jobs: CronJobDto[], sortBy: SortOption): CronJobDto[] {
     });
 }
 
-function filterJobs(data: CronJobDto[] | undefined, activeTheme: string | null, sortBy: SortOption): CronJobDto[] {
+function filterJobs(
+    data: CronJobDto[] | undefined,
+    activeTheme: string | null,
+    aiOnly: boolean,
+    sortBy: SortOption,
+): CronJobDto[] {
     if (!data) return [];
-    return sortJobs(data.filter((job) => !activeTheme || job.category === activeTheme), sortBy);
+    const filtered = data.filter((job) => {
+        if (activeTheme && job.category !== activeTheme) return false;
+        if (aiOnly && !job.usesAi) return false;
+        return true;
+    });
+    return sortJobs(filtered, sortBy);
 }
 
 function CronJobGrid({ jobs, tz, pauseJob, resumeJob, runJob, onHistory, onEdit }: {
@@ -56,15 +67,16 @@ export function CronJobsPanel() {
     const [historyJob, setHistoryJob] = useState<CronJobDto | null>(null);
     const [editJob, setEditJob] = useState<CronJobDto | null>(null);
     const [activeTheme, setActiveTheme] = useState<string | null>(null);
+    const [aiOnly, setAiOnly] = useState<boolean>(false);
     const [sortBy, setSortBy] = useState<SortOption>('name');
 
-    const filteredJobs = filterJobs(cronJobs.data, activeTheme, sortBy);
+    const filteredJobs = filterJobs(cronJobs.data, activeTheme, aiOnly, sortBy);
 
     return (
         <div className="space-y-6">
             <div><h2 className="text-xl font-semibold text-foreground">Scheduled Jobs</h2>
                 <p className="text-sm text-muted mt-1">Monitor and manage all scheduled jobs. Pause, resume, view execution history, or edit schedules.</p></div>
-            <FilterToolbar data={cronJobs.data} allThemes={getThemes(cronJobs.data)} activeTheme={activeTheme} onThemeChange={setActiveTheme} sortBy={sortBy} onSortChange={setSortBy} />
+            <FilterToolbar data={cronJobs.data} allThemes={getThemes(cronJobs.data)} activeTheme={activeTheme} onThemeChange={setActiveTheme} aiOnly={aiOnly} onAiToggle={setAiOnly} sortBy={sortBy} onSortChange={setSortBy} />
             <CronJobStates isLoading={cronJobs.isLoading} isError={cronJobs.isError} isEmpty={cronJobs.data?.length === 0} />
             <CronJobGrid jobs={filteredJobs} tz={tz} pauseJob={pauseJob} resumeJob={resumeJob} runJob={runJob} onHistory={setHistoryJob} onEdit={setEditJob} />
             {cronJobs.data && cronJobs.data.length > 0 && filteredJobs.length === 0 && <div className="py-12 text-center text-muted text-sm">No jobs match the selected filter.</div>}
@@ -75,15 +87,33 @@ export function CronJobsPanel() {
 }
 
 /** Filter + Sort toolbar */
-function FilterToolbar({ data, allThemes, activeTheme, onThemeChange, sortBy, onSortChange }: {
+function FilterToolbar({ data, allThemes, activeTheme, onThemeChange, aiOnly, onAiToggle, sortBy, onSortChange }: {
     data: CronJobDto[] | undefined; allThemes: string[]; activeTheme: string | null;
-    onThemeChange: (theme: string | null) => void; sortBy: SortOption; onSortChange: (sort: SortOption) => void;
+    onThemeChange: (theme: string | null) => void;
+    aiOnly: boolean; onAiToggle: (next: boolean) => void;
+    sortBy: SortOption; onSortChange: (sort: SortOption) => void;
 }): JSX.Element | null {
     if (!data || data.length === 0) return null;
+    const aiCount = data.filter((j) => j.usesAi).length;
 
     return (
         <div className="flex flex-wrap items-center gap-3">
             <FilterThemeButtons data={data} allThemes={allThemes} activeTheme={activeTheme} onThemeChange={onThemeChange} />
+            {aiCount > 0 && (
+                <button
+                    type="button"
+                    onClick={() => onAiToggle(!aiOnly)}
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                        aiOnly
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-surface/50 text-muted border-edge hover:text-foreground'
+                    }`}
+                    title="Show only jobs that issue LLM calls"
+                >
+                    <SparklesIcon className="h-3 w-3" aria-hidden />
+                    AI ({aiCount})
+                </button>
+            )}
             <div className="flex-1" />
             <select value={sortBy} onChange={(e) => onSortChange(e.target.value as SortOption)}
                 className="px-3 py-1.5 text-xs bg-surface/50 border border-edge rounded-lg text-muted focus:text-foreground focus:ring-1 focus:ring-accent/50">

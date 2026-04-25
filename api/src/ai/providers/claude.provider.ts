@@ -27,6 +27,7 @@ export class ClaudeProvider implements LlmProvider {
   readonly displayName = 'Claude (Anthropic)';
   readonly requiresApiKey = true;
   readonly selfHosted = false;
+  readonly defaultModel = CLOUD_DEFAULTS.claude;
 
   constructor(private readonly settings: SettingsService) {}
 

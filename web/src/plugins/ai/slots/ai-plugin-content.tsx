@@ -6,6 +6,7 @@ import { OllamaSetupCard } from './ollama-setup-card';
 import { CloudProviderCard } from './cloud-provider-card';
 import { AiFeatureToggles } from './ai-feature-toggles';
 import { AiUsageStats } from './ai-usage-stats';
+import { DynamicCategoriesPanel } from '../../../pages/admin-settings/dynamic-categories-panel';
 import type { AiProviderInfoDto } from '@raid-ledger/contract';
 
 /** Polling interval used during active setup/test operations (10s). */
@@ -74,6 +75,7 @@ export function AiPluginContent({ pluginSlug }: { pluginSlug?: string }) {
                 )}
                 {available && <TestChatSection />}
                 <AiFeatureToggles disabled={!available} />
+                <DynamicCategoriesPanel />
                 <AiUsageStats />
             </div>
         </IntegrationCard>

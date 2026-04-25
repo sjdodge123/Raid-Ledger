@@ -44,6 +44,7 @@ import { SchedulingModule } from './lineups/scheduling/scheduling.module';
 import { StandalonePollModule } from './lineups/standalone-poll/standalone-poll.module';
 import { TasteProfileModule } from './taste-profile/taste-profile.module';
 import { GameTasteModule } from './game-taste/game-taste.module';
+import { DiscoveryCategoriesModule } from './discovery-categories/discovery-categories.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { GameTasteModule } from './game-taste/game-taste.module';
     StandalonePollModule,
     TasteProfileModule,
     GameTasteModule,
+    DiscoveryCategoriesModule,
   ],
   controllers: [AppController],
   providers: [

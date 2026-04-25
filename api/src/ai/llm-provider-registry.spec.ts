@@ -9,6 +9,7 @@ function createMockProvider(key: string): LlmProvider {
     displayName: `${key} Provider`,
     requiresApiKey: false,
     selfHosted: true,
+    defaultModel: 'mock-model',
     isAvailable: jest.fn().mockResolvedValue(true),
     listModels: jest.fn().mockResolvedValue([]),
     chat: jest.fn().mockResolvedValue({ content: '', latencyMs: 0 }),

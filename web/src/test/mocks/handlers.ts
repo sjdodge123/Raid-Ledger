@@ -203,4 +203,57 @@ export const handlers = [
             );
         },
     ),
+
+    // Admin — dynamic discovery categories (ROK-567). Default: empty list.
+    // Individual tests override with server.use() for pending/approved/rejected fixtures.
+    http.get(`${API_BASE}/admin/discovery-categories`, () =>
+        HttpResponse.json({ suggestions: [] }),
+    ),
+    http.patch(
+        `${API_BASE}/admin/discovery-categories/:id`,
+        () => HttpResponse.json(buildDefaultSuggestion()),
+    ),
+    http.post(
+        `${API_BASE}/admin/discovery-categories/:id/approve`,
+        () =>
+            HttpResponse.json(
+                buildDefaultSuggestion({ status: 'approved' }),
+            ),
+    ),
+    http.post(
+        `${API_BASE}/admin/discovery-categories/:id/reject`,
+        () =>
+            HttpResponse.json(
+                buildDefaultSuggestion({ status: 'rejected' }),
+            ),
+    ),
+    http.post(`${API_BASE}/admin/discovery-categories/regenerate`, () =>
+        HttpResponse.json({ ok: true }),
+    ),
 ];
+
+function buildDefaultSuggestion(
+    overrides: Partial<{
+        id: string;
+        name: string;
+        status: 'pending' | 'approved' | 'rejected' | 'expired';
+    }> = {},
+) {
+    return {
+        id: overrides.id ?? '00000000-0000-4000-8000-000000000000',
+        name: overrides.name ?? 'Mock Category',
+        description: 'Mock description',
+        categoryType: 'trend',
+        themeVector: [0, 0, 0, 0, 0, 0, 0],
+        filterCriteria: {},
+        candidateGameIds: [],
+        status: overrides.status ?? 'pending',
+        populationStrategy: 'vector',
+        sortOrder: 0,
+        expiresAt: null,
+        generatedAt: '2026-04-22T00:00:00.000Z',
+        reviewedBy: null,
+        reviewedAt: null,
+        createdAt: '2026-04-22T00:00:00.000Z',
+    };
+}

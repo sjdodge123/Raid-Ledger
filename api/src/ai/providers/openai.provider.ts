@@ -27,6 +27,7 @@ export class OpenAiProvider implements LlmProvider {
   readonly displayName = 'OpenAI';
   readonly requiresApiKey = true;
   readonly selfHosted = false;
+  readonly defaultModel = CLOUD_DEFAULTS.openai;
 
   constructor(private readonly settings: SettingsService) {}
 

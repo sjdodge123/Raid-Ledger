@@ -114,6 +114,10 @@ export const GameDiscoverRowSchema = z.object({
     games: z.array(GameDetailSchema),
     /** ROK-565: Optional per-game metadata keyed by game id (string) — used by community-playing row. */
     metadata: z.record(z.string(), GameDiscoverRowMetadataEntrySchema).optional(),
+    /** ROK-567: UUID of the backing `discovery_category_suggestions` row when this is a dynamic category. */
+    suggestionId: z.string().uuid().optional(),
+    /** ROK-567: Marks rows sourced from the dynamic-category table so the UI can label/style them. */
+    isDynamic: z.literal(true).optional(),
 });
 
 export type GameDiscoverRowDto = z.infer<typeof GameDiscoverRowSchema>;

@@ -47,3 +47,4 @@ export * from './schema/player-intensity-snapshots';
 export * from './schema/player-co-play';
 export * from './schema/game-taste-vectors';
 export * from './schema/lineup-ai-suggestions';
+export * from './schema/discovery-category-suggestions';

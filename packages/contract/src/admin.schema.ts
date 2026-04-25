@@ -53,6 +53,8 @@ export const CronJobSchema = z.object({
   completedCount: z.number().optional(),
   /** Count of 'no-op' executions in recent history. */
   noOpCount: z.number().optional(),
+  /** True when the job issues LLM calls (surfaces an AI badge + filter in admin UI). */
+  usesAi: z.boolean().optional(),
 });
 
 export type CronJobDto = z.infer<typeof CronJobSchema>;
