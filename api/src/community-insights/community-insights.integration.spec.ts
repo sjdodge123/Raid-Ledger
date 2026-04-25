@@ -310,7 +310,9 @@ describe('Community Insights (ROK-1099)', () => {
       await insights.refreshSnapshot();
 
       const remaining = await testApp.db
-        .select({ snapshotDate: schema.communityInsightsSnapshots.snapshotDate })
+        .select({
+          snapshotDate: schema.communityInsightsSnapshots.snapshotDate,
+        })
         .from(schema.communityInsightsSnapshots);
       const dates = remaining.map((r) => String(r.snapshotDate));
       expect(dates).not.toContain(oldDate);

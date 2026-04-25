@@ -23,12 +23,7 @@ import { buildTemporalSection } from './temporal-section';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-type SectionId =
-  | 'radar'
-  | 'engagement'
-  | 'churn'
-  | 'social-graph'
-  | 'temporal';
+type SectionId = 'radar' | 'engagement' | 'churn' | 'social-graph' | 'temporal';
 
 export interface RefreshSnapshotDeps {
   settings: SettingsService;

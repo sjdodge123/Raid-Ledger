@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useCommunityInsightsSettings } from '../../hooks/admin/use-community-insights-settings';
 import { useRefreshCommunityInsights } from '../../hooks/use-community-insights';
 import { toast } from '../../lib/toast';
@@ -16,18 +16,18 @@ const SAVE_DEBOUNCE_MS = 500;
 export function CommunityInsightsSection() {
     const { settings, updateSettings } = useCommunityInsightsSettings();
     const refresh = useRefreshCommunityInsights();
-    const [threshold, setThreshold] = useState(70);
+    const [localThreshold, setLocalThreshold] = useState<number | null>(null);
     const dirty = useRef(false);
     const saveTimer = useRef<number | null>(null);
 
-    // Hydrate slider from server once settings load.
-    useEffect(() => {
-        if (!dirty.current && settings.data) setThreshold(settings.data.churnThresholdPct);
-    }, [settings.data]);
+    // Derive the displayed threshold: prefer in-flight local edits, then
+    // server data, then a stable default. Avoids a setState-in-effect loop.
+    const threshold =
+        localThreshold ?? settings.data?.churnThresholdPct ?? 70;
 
     const handleSliderChange = (next: number) => {
         dirty.current = true;
-        setThreshold(next);
+        setLocalThreshold(next);
         if (saveTimer.current != null) window.clearTimeout(saveTimer.current);
         saveTimer.current = window.setTimeout(() => {
             updateSettings.mutate(
@@ -35,6 +35,7 @@ export function CommunityInsightsSection() {
                 {
                     onSuccess: () => {
                         dirty.current = false;
+                        setLocalThreshold(null);
                         toast.success(`Churn threshold saved → ${next}%`);
                     },
                     onError: (err) => toast.error(err.message),

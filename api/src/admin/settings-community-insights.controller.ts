@@ -26,7 +26,9 @@ const DEFAULT_CHURN_THRESHOLD_PCT = 70;
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
 export class CommunityInsightsSettingsController {
-  private readonly logger = new Logger(CommunityInsightsSettingsController.name);
+  private readonly logger = new Logger(
+    CommunityInsightsSettingsController.name,
+  );
 
   constructor(private readonly settingsService: SettingsService) {}
 
