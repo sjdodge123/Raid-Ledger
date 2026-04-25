@@ -11,6 +11,7 @@ import { DemoTestGamesController } from './demo-test-games.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { LineupSettingsController } from './settings-lineup.controller';
+import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
 import { OnboardingController } from './onboarding.controller';
 import { SettingsModule } from '../settings/settings.module';
 import { AuthModule } from '../auth/auth.module';
@@ -49,6 +50,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     SlashCommandTestController,
     ItadSettingsController,
     LineupSettingsController,
+    CommunityInsightsSettingsController,
     OnboardingController,
   ],
   providers: [

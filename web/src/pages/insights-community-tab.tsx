@@ -12,11 +12,11 @@ import { KeyInsightsPanel } from '../components/insights/community/KeyInsightsPa
 export function InsightsCommunityTab() {
     return (
         <div className="space-y-8">
+            <KeyInsightsPanel />
             <CommunityTasteOverview />
             <EngagementHealthSection />
             <SocialGraph />
             <TemporalSection />
-            <KeyInsightsPanel />
         </div>
     );
 }

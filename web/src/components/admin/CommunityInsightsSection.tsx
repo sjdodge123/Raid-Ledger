@@ -1,28 +1,64 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useCommunityInsightsSettings } from '../../hooks/admin/use-community-insights-settings';
 import { useRefreshCommunityInsights } from '../../hooks/use-community-insights';
 import { toast } from '../../lib/toast';
 
+const SAVE_DEBOUNCE_MS = 500;
+
 /**
- * ROK-1099 Admin Community Insights settings. The slider adjusts the
- * churn-threshold override applied to the next `/churn` read; the
- * "Refresh insights now" button kicks off a server-side snapshot refresh.
- * Persistent default (community_insights_churn_threshold_pct) is read
- * server-side from app_settings and used by the nightly cron; this UI
- * only surfaces a session-level override to explore the distribution.
+ * ROK-1099 Admin Community Insights settings.
+ *
+ * The slider edits the persistent `community_insights.churn_threshold_pct`
+ * setting consumed by the nightly snapshot cron. Slider changes are
+ * debounced (500ms) and saved server-side; the next snapshot — manual or
+ * the 06:30 UTC cron — uses the new value.
  */
 export function CommunityInsightsSection() {
-    const [threshold, setThreshold] = useState(70);
+    const { settings, updateSettings } = useCommunityInsightsSettings();
     const refresh = useRefreshCommunityInsights();
+    const [threshold, setThreshold] = useState(70);
+    const dirty = useRef(false);
+    const saveTimer = useRef<number | null>(null);
+
+    // Hydrate slider from server once settings load.
+    useEffect(() => {
+        if (!dirty.current && settings.data) setThreshold(settings.data.churnThresholdPct);
+    }, [settings.data]);
+
+    const handleSliderChange = (next: number) => {
+        dirty.current = true;
+        setThreshold(next);
+        if (saveTimer.current != null) window.clearTimeout(saveTimer.current);
+        saveTimer.current = window.setTimeout(() => {
+            updateSettings.mutate(
+                { churnThresholdPct: next },
+                {
+                    onSuccess: () => {
+                        dirty.current = false;
+                        toast.success(`Churn threshold saved → ${next}%`);
+                    },
+                    onError: (err) => toast.error(err.message),
+                },
+            );
+        }, SAVE_DEBOUNCE_MS);
+    };
+
     const handleRefresh = () => {
         refresh.mutate(undefined, {
             onSuccess: () => toast.success('Community insights refresh queued'),
             onError: (err) => toast.error(err.message),
         });
     };
+
     return (
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
             <SectionHeader />
-            <ThresholdSlider threshold={threshold} onChange={setThreshold} />
+            <ThresholdSlider
+                threshold={threshold}
+                onChange={handleSliderChange}
+                saving={updateSettings.isPending}
+                disabled={settings.isLoading}
+            />
             <RefreshButton onClick={handleRefresh} pending={refresh.isPending} />
         </div>
     );
@@ -43,11 +79,22 @@ function SectionHeader() {
     );
 }
 
-function ThresholdSlider({ threshold, onChange }: { threshold: number; onChange: (v: number) => void }) {
+function ThresholdSlider({
+    threshold,
+    onChange,
+    saving,
+    disabled,
+}: {
+    threshold: number;
+    onChange: (v: number) => void;
+    saving: boolean;
+    disabled: boolean;
+}) {
     return (
         <div>
             <label htmlFor="community-insights-threshold" className="text-sm text-foreground block mb-1">
                 Churn risk threshold: <span className="font-semibold">{threshold}%</span>
+                {saving && <span className="ml-2 text-xs text-muted italic">saving…</span>}
             </label>
             <input
                 id="community-insights-threshold"
@@ -55,8 +102,9 @@ function ThresholdSlider({ threshold, onChange }: { threshold: number; onChange:
                 min={1}
                 max={100}
                 value={threshold}
+                disabled={disabled}
                 onChange={(e) => onChange(Number(e.target.value))}
-                className="w-full sm:max-w-md"
+                className="w-full sm:max-w-md disabled:opacity-50"
                 aria-describedby="community-insights-threshold-help"
             />
             <div id="community-insights-threshold-help" className="text-xs text-muted mt-2 space-y-1">
@@ -68,9 +116,9 @@ function ThresholdSlider({ threshold, onChange }: { threshold: number; onChange:
                 <p>
                     Lower threshold → more candidates flagged. Higher threshold → only the most extreme drop-offs.
                 </p>
-                <p className="italic">
-                    This slider is a preview override — it changes only your current browser session.
-                    The persistent default (70%) drives the nightly snapshot and lives in app settings.
+                <p>
+                    The new value applies to the <em>next snapshot</em>. Press <strong className="text-secondary">"Refresh insights now"</strong>
+                    {' '}below to regenerate immediately, or wait for the 06:30 UTC nightly cron.
                 </p>
             </div>
         </div>
@@ -90,7 +138,8 @@ function RefreshButton({ onClick, pending }: { onClick: () => void; pending: boo
             </button>
             <p className="text-xs text-muted mt-2">
                 Recomputes all 6 sections of today's snapshot from current player data. Useful
-                after seeding test data or when a metric appears stale before the nightly cron runs.
+                after changing the churn threshold, seeding test data, or whenever a metric
+                appears stale before the nightly cron runs.
             </p>
         </div>
     );
