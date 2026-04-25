@@ -19,12 +19,23 @@ export async function getSocialGraphResponse(
   const stored = row.socialGraphPayload;
   const limit = params.limit ?? DEFAULT_LIMIT;
   const minWeight = params.minWeight ?? 0;
-  const nodes = capNodesByDegree(stored.nodes, limit);
-  const nodeIds = new Set(nodes.map((n) => n.userId));
+  const capped = capNodesByDegree(stored.nodes, limit);
+  const cappedIds = new Set(capped.map((n) => n.userId));
+  const edges = filterEdges(stored.edges, cappedIds, minWeight);
+  // Drop nodes with no surviving in-set edges — orphans imply "no
+  // connections" to the viewer when they actually do connect outside
+  // the cap. Cleaner to omit them than mislead.
+  const connectedIds = new Set<number>();
+  for (const e of edges) {
+    connectedIds.add(e.sourceUserId);
+    connectedIds.add(e.targetUserId);
+  }
+  const nodes = capped.filter((n) => connectedIds.has(n.userId));
+  const nodeIds = connectedIds;
   return {
     snapshotDate: stored.snapshotDate,
     nodes,
-    edges: filterEdges(stored.edges, nodeIds, minWeight),
+    edges,
     cliques: filterCliques(stored.cliques, nodeIds),
     tasteLeaders: filterLeaders(stored.tasteLeaders, nodeIds),
   };

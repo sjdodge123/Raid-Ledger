@@ -2,7 +2,7 @@
  * insights-hub-page.test.tsx (ROK-1099)
  *
  * Asserts role-gated rendering of the /insights hub:
- *   - admin/operator see Community + Events + Trends tabs (Trends disabled)
+ *   - admin/operator see Community + Events tabs
  *   - member sees only the Events tab
  *   - member landing on /insights/community is redirected to /insights/events
  */
@@ -54,27 +54,26 @@ describe('InsightsHubPage (ROK-1099)', () => {
         expect(screen.getByTestId('insights-hub')).toBeInTheDocument();
     });
 
-    it('shows all 3 tab labels for admin', () => {
+    it('shows both tab labels for admin', () => {
         renderHub('/insights/community');
         expect(screen.getByRole('link', { name: 'Community' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument();
-        expect(screen.getByText('Trends')).toBeInTheDocument();
+        expect(screen.queryByText('Trends')).not.toBeInTheDocument();
     });
 
-    it('shows all 3 tab labels for operator', () => {
+    it('shows both tab labels for operator', () => {
         authState.role = 'operator';
         renderHub('/insights/community');
         expect(screen.getByRole('link', { name: 'Community' })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument();
-        expect(screen.getByText('Trends')).toBeInTheDocument();
+        expect(screen.queryByText('Trends')).not.toBeInTheDocument();
     });
 
-    it('hides Community + Trends tabs for a member', () => {
+    it('hides the Community tab for a member', () => {
         authState.role = 'member';
         renderHub('/insights/events');
         expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument();
         expect(screen.queryByRole('link', { name: 'Community' })).not.toBeInTheDocument();
-        expect(screen.queryByText('Trends')).not.toBeInTheDocument();
     });
 
     it('redirects a member who lands on /insights/community to /insights/events', () => {
