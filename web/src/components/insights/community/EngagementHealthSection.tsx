@@ -14,8 +14,8 @@ export function EngagementHealthSection() {
     const churn = useCommunityChurn();
 
     const status = {
-        isLoading: engagement.isLoading || churn.isLoading,
-        isError: engagement.isError || churn.isError,
+        isLoading: engagement.isLoading && churn.isLoading,
+        isError: engagement.isError && churn.isError,
         error: engagement.error ?? churn.error ?? null,
         data: engagement.data ?? churn.data ?? null,
     };
