@@ -18,7 +18,9 @@ export interface CliqueEdge {
  *
  * Louvain cluster IDs are non-deterministic across runs — we sort the
  * output by (member count desc, first member id asc) and renumber
- * cliqueIds sequentially from 0 so snapshot diffs and tests are stable.
+ * cliqueIds sequentially from 1 so snapshot diffs and tests are stable.
+ * cliqueId 0 is reserved as the "unassigned" sentinel for nodes that
+ * are not in any community.
  */
 @Injectable()
 export class CliqueDetectionService {
@@ -87,7 +89,7 @@ function sortAndRenumber(
     return a.memberUserIds[0] - b.memberUserIds[0];
   });
   return groups.map((g, idx) => ({
-    cliqueId: idx,
+    cliqueId: idx + 1,
     memberUserIds: g.memberUserIds,
   }));
 }

@@ -14,6 +14,14 @@ describe('CliqueDetectionService', () => {
     expect(cliques.flatMap((c) => c.memberUserIds).sort()).toEqual([1, 2, 3]);
   });
 
+  it('renumbers cliqueIds starting at 1 so 0 stays free as the unassigned sentinel', () => {
+    const nodes = [{ userId: 1 }, { userId: 2 }, { userId: 3 }];
+    const cliques = service.detectCliques(nodes, []);
+    const ids = cliques.map((c) => c.cliqueId).sort((a, b) => a - b);
+    expect(ids[0]).toBeGreaterThanOrEqual(1);
+    expect(ids).not.toContain(0);
+  });
+
   it('detects two distinct communities with a bridge edge between them', () => {
     const nodes = [
       { userId: 1 },
