@@ -11,6 +11,7 @@ import { DemoTestGamesController } from './demo-test-games.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { LineupSettingsController } from './settings-lineup.controller';
+import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
 import { OnboardingController } from './onboarding.controller';
 import { SettingsModule } from '../settings/settings.module';
 import { AuthModule } from '../auth/auth.module';
@@ -22,6 +23,7 @@ import { SlashCommandTestService } from './slash-command-test.service';
 import { LineupsModule } from '../lineups/lineups.module';
 import { AiChatModule } from '../discord-bot/ai-chat/ai-chat.module';
 import { TasteProfileModule } from '../taste-profile/taste-profile.module';
+import { CommunityInsightsModule } from '../community-insights/community-insights.module';
 import { AiChatTestController } from './ai-chat-test.controller';
 
 @Module({
@@ -32,6 +34,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     LineupsModule,
     AiChatModule,
     TasteProfileModule,
+    CommunityInsightsModule,
   ],
   controllers: [
     AdminController,
@@ -47,6 +50,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     SlashCommandTestController,
     ItadSettingsController,
     LineupSettingsController,
+    CommunityInsightsSettingsController,
     OnboardingController,
   ],
   providers: [

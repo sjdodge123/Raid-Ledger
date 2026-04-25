@@ -16,6 +16,9 @@ export function EventMetricsPage() {
     return (
         <div className="py-8 px-4">
             <div className="max-w-5xl mx-auto">
+                <Link to="/insights/events" className="text-xs text-emerald-400 hover:text-emerald-300 mb-2 inline-block">
+                    &larr; Insights / Events
+                </Link>
                 <MetricsHeader eventId={eventId} title={metrics.title} startTime={metrics.startTime} gameName={metrics.game?.name} />
                 <div className="space-y-6">
                     <EventAttendanceDonut summary={metrics.attendanceSummary} />

@@ -175,4 +175,9 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     category: 'Data Sync',
     usesAi: true,
   },
+  CommunityInsightsService_refreshSnapshot: {
+    description:
+      'Rebuilds the community insights snapshot (radar, engagement, churn, social graph, temporal, key insights) daily at 06:30 UTC',
+    category: 'Data Sync',
+  },
 };

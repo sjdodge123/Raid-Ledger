@@ -48,3 +48,4 @@ export * from './schema/player-co-play';
 export * from './schema/game-taste-vectors';
 export * from './schema/lineup-ai-suggestions';
 export * from './schema/discovery-category-suggestions';
+export * from './schema/community-insights-snapshots';

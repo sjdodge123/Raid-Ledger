@@ -123,6 +123,16 @@ export const SETTING_KEYS = {
   DYNAMIC_CATEGORIES_CANDIDATE_COUNT: 'dynamic_categories_candidate_count',
   /** ROK-567: Skip weekly generation when pending suggestions exceed this count. */
   DYNAMIC_CATEGORIES_MAX_PENDING: 'dynamic_categories_max_pending',
+  /** ROK-1099: Community Insights churn-risk threshold (percent 0-100). */
+  COMMUNITY_INSIGHTS_CHURN_THRESHOLD_PCT:
+    'community_insights_churn_threshold_pct',
+  /** ROK-1099: Churn baseline window (weeks). */
+  COMMUNITY_INSIGHTS_BASELINE_WEEKS: 'community_insights_baseline_weeks',
+  /** ROK-1099: Churn recent-activity window (weeks). */
+  COMMUNITY_INSIGHTS_RECENT_WEEKS: 'community_insights_recent_weeks',
+  /** ROK-1099: Community insights snapshot retention in days. */
+  COMMUNITY_INSIGHTS_SNAPSHOT_RETENTION_DAYS:
+    'community_insights_snapshot_retention_days',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

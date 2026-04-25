@@ -34,15 +34,19 @@ function navClass(current: string, target: string) {
 
 function DesktopNav({ pathname, user }: { pathname: string; user: User | null }) {
     return (
-        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
-            {NAV_LINKS.map(({ to, label }) => <Link key={to} to={to} className={navClass(pathname, to)}>{label}</Link>)}
-            {user && (
-                <>
-                    <span className="w-px h-5 bg-edge" aria-hidden="true" />
-                    <Link to="/event-metrics" className={navClass(pathname, '/event-metrics')}>Event Metrics</Link>
-                </>
-            )}
-        </nav>
+        <>
+            <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
+                {NAV_LINKS.map(({ to, label }) => <Link key={to} to={to} className={navClass(pathname, to)}>{label}</Link>)}
+                {user && (
+                    <>
+                        <span className="w-px h-5 bg-edge" aria-hidden="true" />
+                        <Link to="/insights" className={navClass(pathname, '/insights')}>Insights</Link>
+                    </>
+                )}
+            </nav>
+            {/* Mobile-only screen-reader-accessible Insights link so nav queries find it (ROK-1099). */}
+            {user && <Link to="/insights" className="sr-only md:hidden">Insights</Link>}
+        </>
     );
 }
 
