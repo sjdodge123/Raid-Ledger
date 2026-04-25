@@ -16,8 +16,8 @@ const TIER_COLORS: Record<string, string> = {
 const CANVAS_HEIGHT = 520;
 const CHARGE_STRENGTH = -1100;
 const LINK_DISTANCE = 170;
-const FOCUS_ZOOM_MULTIPLIER = 3;
 const FOCUS_ANIM_MS = 700;
+const FOCUS_PADDING_PX = 80;
 const FIT_ANIM_MS = 400;
 const FIT_PADDING_PX = 80;
 
@@ -127,12 +127,14 @@ export function SocialGraphCanvas({ data }: Props) {
 
     const focusOnNode = (id: number) => {
         const fg = graphRef.current;
-        const node = nodeById.get(id);
-        const positioned = graphData.nodes.find((n) => (n as GraphNode).id === id) as GraphNode | undefined;
-        if (!fg || !node || !positioned || positioned.x == null || positioned.y == null) return;
+        if (!fg) return;
         setFocusedId(id);
-        fg.centerAt(positioned.x, positioned.y, FOCUS_ANIM_MS);
-        fg.zoom(fg.zoom() * FOCUS_ZOOM_MULTIPLIER, FOCUS_ANIM_MS);
+        // Fit the clicked node + all its direct neighbors in view.
+        const ns = neighbors.get(id) ?? new Set<number>();
+        fg.zoomToFit(FOCUS_ANIM_MS, FOCUS_PADDING_PX, (n) => {
+            const nid = (n as GraphNode).id;
+            return nid === id || ns.has(nid);
+        });
     };
 
     const resetView = () => {
