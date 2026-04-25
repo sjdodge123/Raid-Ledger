@@ -56,6 +56,9 @@ export function SocialGraphCanvas({ data }: Props) {
     const graphRef = useRef<ForceGraphMethods | undefined>(undefined);
     const [width, setWidth] = useState(0);
     const [hoveredId, setHoveredId] = useState<number | null>(null);
+    // World bounding box of node positions. Captured on onEngineStop so
+    // the pan clamp can reject pan attempts past the cluster edge.
+    const boundsRef = useRef<{ minX: number; maxX: number; minY: number; maxY: number } | null>(null);
 
     useLayoutEffect(() => {
         if (!containerRef.current) return;
@@ -152,7 +155,35 @@ export function SocialGraphCanvas({ data }: Props) {
                         }}
                         enableNodeDrag={false}
                         cooldownTicks={120}
-                        onEngineStop={() => graphRef.current?.zoomToFit(400, 80)}
+                        onEngineStop={() => {
+                            const fg = graphRef.current;
+                            if (!fg) return;
+                            fg.zoomToFit(400, 80);
+                            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                            for (const node of graphData.nodes) {
+                                const n = node as GraphNode;
+                                if (n.x == null || n.y == null) continue;
+                                if (n.x < minX) minX = n.x;
+                                if (n.x > maxX) maxX = n.x;
+                                if (n.y < minY) minY = n.y;
+                                if (n.y > maxY) maxY = n.y;
+                            }
+                            if (minX !== Infinity) boundsRef.current = { minX, maxX, minY, maxY };
+                        }}
+                        onZoom={(t) => {
+                            const fg = graphRef.current;
+                            const b = boundsRef.current;
+                            if (!fg || !b) return;
+                            // Hard-clamp the canvas center (in world coords) to the node bbox.
+                            // d3-zoom: screen = world*k + tx → world = (screen - tx) / k
+                            const cx = (width / 2 - t.x) / t.k;
+                            const cy = (CANVAS_HEIGHT / 2 - t.y) / t.k;
+                            const clampedCx = Math.min(b.maxX, Math.max(b.minX, cx));
+                            const clampedCy = Math.min(b.maxY, Math.max(b.minY, cy));
+                            if (clampedCx !== cx || clampedCy !== cy) {
+                                fg.centerAt(clampedCx, clampedCy, 0);
+                            }
+                        }}
                         onNodeHover={(n) => setHoveredId((n as GraphNode | null)?.id ?? null)}
                         onNodeClick={(n) => {
                             const id = (n as GraphNode).id;
