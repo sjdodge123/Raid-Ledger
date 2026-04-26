@@ -1,18 +1,20 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameTimeEditor } from '../../../hooks/use-game-time-editor';
+import { useMediaQuery } from '../../../hooks/use-media-query';
 import { Modal } from '../../ui/modal';
 import { GameTimeGrid } from './GameTimeGrid';
 import type { GameTimePreviewBlock } from './GameTimeGrid';
-import type { GameTimeEventBlock } from '@raid-ledger/contract';
-import { EventBlockPopover } from './EventBlockPopover';
-import { AttendeeAvatars } from '../../calendar/AttendeeAvatars';
+import { MemberAvatarGroup } from '../../lineups/decided/MemberAvatarGroup';
 import { checkGameTimeOverlap, walkEventHours } from './game-time-overlap.utils';
 
 interface AttendeePreview {
     id: number;
     username: string;
     avatar: string | null;
+    customAvatarUrl?: string | null;
+    discordId?: string | null;
+    characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
 }
 
 interface GameTimeWidgetProps {
@@ -21,6 +23,7 @@ interface GameTimeWidgetProps {
     eventTitle?: string;
     gameName?: string;
     gameSlug?: string;
+    gameId?: number | null;
     coverUrl?: string | null;
     description?: string | null;
     creatorUsername?: string | null;
@@ -28,21 +31,18 @@ interface GameTimeWidgetProps {
     attendeeCount?: number;
 }
 
-function computeSmartHourRange(startTime: string, endTime: string): [number, number] {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const startHour = start.getHours();
-    const endHour = end.getHours() + (end.getMinutes() > 0 ? 1 : 0);
-    const rangeStart = Math.max(0, startHour - 2);
-    const rangeEnd = Math.min(24, endHour + 2);
-    const span = rangeEnd - rangeStart;
-    if (span < 12) {
-        const deficit = 12 - span;
-        const addBefore = Math.min(rangeStart, Math.ceil(deficit / 2));
-        const addAfter = Math.min(24 - rangeEnd, deficit - addBefore);
-        return [rangeStart - addBefore, rangeEnd + addAfter];
-    }
-    return [rangeStart, rangeEnd];
+interface PreviewBlockMeta {
+    label: string;
+    variant: 'selected';
+    title?: string;
+    gameName?: string;
+    gameSlug?: string;
+    coverUrl?: string | null;
+    description?: string | null;
+    creatorUsername?: string | null;
+    attendees?: AttendeePreview[];
+    attendeeCount?: number;
+    gameId?: number | null;
 }
 
 function collectDayHours(startTime: string, endTime: string): Map<number, number[]> {
@@ -107,72 +107,116 @@ function OverlapBadge({ hasOverlap }: { hasOverlap: boolean }) {
     );
 }
 
-function EventDetailCard({ title, coverUrl, gameName, timeLabel, creatorUsername, attendees, attendeeCount }: {
+function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creatorUsername, attendees }: {
     title: string; coverUrl?: string | null; gameName?: string; timeLabel: string; creatorUsername?: string | null;
-    attendees?: AttendeePreview[]; attendeeCount?: number;
+    gameId?: number | null; attendees?: AttendeePreview[];
 }) {
     return (
-        <div className="mt-3 p-3 rounded-lg border border-amber-500/20 bg-panel/60 flex items-start gap-3">
-            {coverUrl && <div className="w-10 h-10 rounded-md bg-cover bg-center shrink-0" style={{ backgroundImage: `url(${coverUrl})` }} />}
-            <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-semibold text-foreground truncate">{title}</h4>
-                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
-                    {gameName && <span>{gameName}</span>}
-                    {gameName && timeLabel && <span className="text-faint">·</span>}
-                    {timeLabel && <span>{timeLabel}</span>}
+        <div className="rounded-lg border border-edge bg-panel/50 overflow-hidden">
+            <div className="flex items-start gap-3 p-3">
+                {coverUrl && <div className="w-14 h-14 rounded-lg bg-cover bg-center shrink-0 ring-1 ring-white/10" style={{ backgroundImage: `url(${coverUrl})` }} />}
+                <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300/80">Highlighted Event</p>
+                    <h4 className="text-sm font-semibold text-foreground truncate mt-1">{title}</h4>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted">
+                        {gameName && <span>{gameName}</span>}
+                        {gameName && timeLabel && <span className="text-faint">·</span>}
+                        {timeLabel && <span>{timeLabel}</span>}
+                    </div>
+                    {creatorUsername && <p className="text-[11px] text-dim mt-1">Hosted by {creatorUsername}</p>}
                 </div>
-                {creatorUsername && <p className="text-[11px] text-dim mt-0.5">by {creatorUsername}</p>}
+                {attendees && attendees.length > 0 && (
+                    <div className="shrink-0 self-center">
+                        <MemberAvatarGroup
+                            members={attendees.map((attendee) => ({
+                                userId: attendee.id,
+                                displayName: attendee.username,
+                                avatar: attendee.avatar,
+                                discordId: attendee.discordId ?? null,
+                                customAvatarUrl: attendee.customAvatarUrl ?? null,
+                                characters: attendee.characters,
+                            }))}
+                            max={4}
+                            gameId={gameId ?? undefined}
+                        />
+                    </div>
+                )}
             </div>
-            {attendees && attendees.length > 0 && (
-                <div className="shrink-0">
-                    <AttendeeAvatars signups={attendees} totalCount={attendeeCount ?? attendees.length} maxVisible={4} size="xs" />
-                </div>
-            )}
         </div>
     );
 }
 
 function useGameTimeWidgetData(props: GameTimeWidgetProps) {
-    const { eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, coverUrl, description, creatorUsername, attendees, attendeeCount } = props;
-    const editor = useGameTimeEditor({ enabled: true, rolling: true });
+    const { eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, gameId, coverUrl, description, creatorUsername, attendees, attendeeCount } = props;
+    const editor = useGameTimeEditor({ enabled: true, rolling: false });
     const hasOverlap = useMemo(() => checkGameTimeOverlap(editor.slots, eventStartTime, eventEndTime), [editor.slots, eventStartTime, eventEndTime]);
     const previewBlocks = useMemo<GameTimePreviewBlock[]>(() => {
         const dayHours = collectDayHours(eventStartTime, eventEndTime);
-        const meta = { label: eventTitle ?? 'This Event', title: eventTitle, gameName, gameSlug, coverUrl, description, creatorUsername, attendees, attendeeCount };
+        const meta: PreviewBlockMeta = {
+            label: eventTitle ?? 'This Event',
+            variant: 'selected',
+            title: eventTitle,
+            gameName,
+            gameSlug,
+            coverUrl,
+            description,
+            creatorUsername,
+            attendees,
+            attendeeCount,
+            gameId,
+        };
         return buildPreviewBlocks(dayHours, meta);
-    }, [eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, coverUrl, description, creatorUsername, attendees, attendeeCount]);
-    const modalHourRange = useMemo<[number, number]>(() => computeSmartHourRange(eventStartTime, eventEndTime), [eventStartTime, eventEndTime]);
+    }, [eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, gameId, coverUrl, description, creatorUsername, attendees, attendeeCount]);
     const eventTimeLabel = useMemo(() => formatTimeLabel(eventStartTime, eventEndTime), [eventStartTime, eventEndTime]);
-    return { editor, hasOverlap, previewBlocks, modalHourRange, eventTimeLabel };
+    return { editor, hasOverlap, previewBlocks, eventTimeLabel };
 }
 
-function GameTimeWidgetModal({ editor, previewBlocks, modalHourRange, eventTitle, coverUrl, gameName, eventTimeLabel, creatorUsername, attendees, attendeeCount, onClose, onEventClick }: {
-    editor: ReturnType<typeof useGameTimeEditor>; previewBlocks: GameTimePreviewBlock[]; modalHourRange: [number, number];
-    eventTitle?: string; coverUrl?: string | null; gameName?: string; eventTimeLabel: string; creatorUsername?: string | null;
-    attendees?: { id: number; username: string; avatar: string | null }[]; attendeeCount?: number;
-    onClose: () => void; onEventClick: (event: GameTimeEventBlock, anchorRect: DOMRect) => void;
+function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, gameName, gameId, eventTimeLabel, creatorUsername, attendees, onClose }: {
+    editor: ReturnType<typeof useGameTimeEditor>; previewBlocks: GameTimePreviewBlock[];
+    eventTitle?: string; coverUrl?: string | null; gameName?: string; gameId?: number | null; eventTimeLabel: string; creatorUsername?: string | null;
+    attendees?: AttendeePreview[];
+    onClose: () => void;
 }) {
+    const isMobile = useMediaQuery('(max-width: 767px)');
+
     return (
-        <Modal isOpen onClose={onClose} title="My Game Time" maxWidth="max-w-3xl">
-            <div className="flex items-center justify-between mb-3">
-                <p className="text-muted text-xs">Read-only view — your weekly availability with this event highlighted</p>
-                <Link to="/profile/gaming" onClick={onClose} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium">Edit my game time &rarr;</Link>
+        <Modal isOpen onClose={onClose} title="My Game Time" maxWidth="max-w-3xl" bodyClassName="p-4 pb-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
+            <div className="space-y-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <p className="text-muted text-xs">Read-only view — your weekly availability with this event highlighted.</p>
+                        <p className="text-dim text-xs mt-1">Uses the same compact weekly layout as profile and scheduling.</p>
+                    </div>
+                    <Link
+                        to="/profile/gaming"
+                        onClick={onClose}
+                        className="inline-flex items-center justify-center rounded-lg border border-edge bg-panel px-3 py-2 text-xs font-medium text-emerald-300 hover:bg-overlay transition-colors"
+                    >
+                        Edit my game time &rarr;
+                    </Link>
+                </div>
+                <div className="rounded-lg border border-edge overflow-hidden">
+                    <GameTimeGrid
+                        slots={editor.slots}
+                        readOnly
+                        tzLabel={editor.tzLabel}
+                        previewBlocks={previewBlocks}
+                        hourRange={[9, 2]}
+                        compact
+                        noStickyOffset
+                        fullDayNames={!isMobile}
+                    />
+                </div>
+                {eventTitle && <EventDetailCard title={eventTitle} coverUrl={coverUrl} gameName={gameName} gameId={gameId} timeLabel={eventTimeLabel} creatorUsername={creatorUsername} attendees={attendees} />}
             </div>
-            <GameTimeGrid slots={editor.slots} readOnly tzLabel={editor.tzLabel} events={editor.events}
-                previewBlocks={previewBlocks} onEventClick={onEventClick} todayIndex={editor.todayIndex}
-                currentHour={editor.currentHour} hourRange={modalHourRange} nextWeekEvents={editor.nextWeekEvents}
-                nextWeekSlots={editor.nextWeekSlots} weekStart={editor.weekStart} />
-            {eventTitle && <EventDetailCard title={eventTitle} coverUrl={coverUrl} gameName={gameName} timeLabel={eventTimeLabel} creatorUsername={creatorUsername} attendees={attendees} attendeeCount={attendeeCount} />}
         </Modal>
     );
 }
 
 export function GameTimeWidget(props: GameTimeWidgetProps) {
-    const { eventTitle, gameName, coverUrl, creatorUsername, attendees, attendeeCount } = props;
-    const { editor, hasOverlap, previewBlocks, modalHourRange, eventTimeLabel } = useGameTimeWidgetData(props);
+    const { eventTitle, gameName, gameId, coverUrl, creatorUsername, attendees } = props;
+    const { editor, hasOverlap, previewBlocks, eventTimeLabel } = useGameTimeWidgetData(props);
     const [showModal, setShowModal] = useState(false);
-    const [popoverEvent, setPopoverEvent] = useState<{ event: GameTimeEventBlock; anchorRect: DOMRect } | null>(null);
-    const handleEventClick = useCallback((event: GameTimeEventBlock, anchorRect: DOMRect) => { setPopoverEvent({ event, anchorRect }); }, []);
     if (editor.isLoading) return null;
 
     return (
@@ -186,11 +230,10 @@ export function GameTimeWidget(props: GameTimeWidgetProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
             </div>
-            {showModal && <GameTimeWidgetModal editor={editor} previewBlocks={previewBlocks} modalHourRange={modalHourRange}
-                eventTitle={eventTitle} coverUrl={coverUrl} gameName={gameName} eventTimeLabel={eventTimeLabel}
-                creatorUsername={creatorUsername} attendees={attendees} attendeeCount={attendeeCount}
-                onClose={() => setShowModal(false)} onEventClick={handleEventClick} />}
-            {popoverEvent && <EventBlockPopover event={popoverEvent.event} anchorRect={popoverEvent.anchorRect} onClose={() => setPopoverEvent(null)} />}
+            {showModal && <GameTimeWidgetModal editor={editor} previewBlocks={previewBlocks}
+                eventTitle={eventTitle} coverUrl={coverUrl} gameName={gameName} gameId={gameId} eventTimeLabel={eventTimeLabel}
+                creatorUsername={creatorUsername} attendees={attendees}
+                onClose={() => setShowModal(false)} />}
         </>
     );
 }

@@ -13,6 +13,18 @@ import { VoiceRoster } from '../../components/events/VoiceRoster';
 import { toast } from '../../lib/toast';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
 
+function mapGameTimeAttendees(roster: EventRosterDto | undefined) {
+    return roster?.signups.slice(0, 6).map(s => ({
+        id: s.user.id,
+        username: s.user.username,
+        avatar: s.user.avatar ?? null,
+        discordId: s.user.discordId ?? null,
+        customAvatarUrl: s.user.customAvatarUrl ?? null,
+        characters: (s.user.characters as Array<{ gameId: number | string; name?: string; avatarUrl: string | null }> | undefined)
+            ?.map((character) => ({ gameId: character.gameId, name: character.name, avatarUrl: character.avatarUrl })),
+    }));
+}
+
 export function EventDetailError({ message, onBack }: { message: string; onBack: () => void }) {
     return (
         <div className="event-detail-page event-detail-page--error">
@@ -42,8 +54,8 @@ export function EventDetailGameTimeWidget({ rosterAssignments, isAuthenticated, 
     if (rosterAssignments || !isAuthenticated || !event.startTime || !event.endTime) return null;
     return (
         <GameTimeWidget eventStartTime={event.startTime} eventEndTime={event.endTime} eventTitle={event.title} gameName={event.game?.name}
-            gameSlug={event.game?.slug} coverUrl={event.game?.coverUrl} description={event.description} creatorUsername={event.creator?.username}
-            attendees={roster?.signups.slice(0, 6).map(s => ({ id: s.id, username: s.user.username, avatar: s.user.avatar ?? null }))} attendeeCount={roster?.count} />
+            gameSlug={event.game?.slug} gameId={event.game?.id} coverUrl={event.game?.coverUrl} description={event.description} creatorUsername={event.creator?.username}
+            attendees={mapGameTimeAttendees(roster)} attendeeCount={roster?.count} />
     );
 }
 
@@ -216,6 +228,8 @@ export function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortF
         ? [...roster!.signups].sort(sortFn).slice(0, 5).map(s => ({
             id: s.user.id, username: s.user.username, avatar: s.user.avatar ?? null,
             discordId: s.user.discordId ?? null, customAvatarUrl: s.user.customAvatarUrl ?? null,
+            characters: (s.user.characters as Array<{ gameId: number | string; name?: string; avatarUrl: string | null }> | undefined)
+                ?.map((character) => ({ gameId: character.gameId, name: character.name, avatarUrl: character.avatarUrl })),
         })) : null;
 
     return (
