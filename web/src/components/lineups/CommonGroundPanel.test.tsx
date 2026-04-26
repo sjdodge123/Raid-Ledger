@@ -13,12 +13,25 @@
  * `aiIsUnavailable`, and `aiIsError` and that `CommonGroundPanel` reads
  * them — both pieces are part of the ROK-1114 dev work.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
 import { CommonGroundPanel } from './CommonGroundPanel';
 import { renderWithProviders } from '../../test/render-helpers';
 import { server } from '../../test/mocks/server';
+import { usePluginStore } from '../../stores/plugin-store';
+
+// ROK-1114 round 3: the AI suggestions overlay (banner + ✨ AI badge
+// blend) is now gated on the `ai` plugin being active. Seed it active
+// for the existing AI-state assertions; the dedicated "feature off"
+// suite below clears it.
+beforeEach(() => {
+    usePluginStore.getState().setActiveSlugs(['ai']);
+});
+
+afterEach(() => {
+    usePluginStore.setState({ activeSlugs: new Set(), initialized: false });
+});
 
 const API_BASE = 'http://localhost:3000';
 
@@ -148,5 +161,46 @@ describe('CommonGroundPanel — AI suggestion state surfacing (ROK-1114)', () =>
         await waitFor(() => {
             expect(screen.getByText('Valheim')).toBeInTheDocument();
         });
+    });
+});
+
+describe('CommonGroundPanel — AI feature gate (ROK-1114 round 3)', () => {
+    it('keeps the grid but hides the AI status banner when the AI plugin is inactive', async () => {
+        // Wipe the active-plugins set seeded by the suite-level beforeEach.
+        usePluginStore.setState({ activeSlugs: new Set(), initialized: true });
+        let suggestionsCalls = 0;
+        server.use(
+            http.get(`${API_BASE}/lineups/active`, () =>
+                HttpResponse.json(buildActiveLineups()),
+            ),
+            http.get(`${API_BASE}/lineups/common-ground`, () =>
+                HttpResponse.json(buildCommonGroundResponse()),
+            ),
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () => {
+                suggestionsCalls += 1;
+                return HttpResponse.json(
+                    { error: 'AI_PROVIDER_UNAVAILABLE' },
+                    { status: 503 },
+                );
+            }),
+        );
+
+        renderWithProviders(<CommonGroundPanel />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Valheim')).toBeInTheDocument();
+        });
+        // No AI status text in any form (loading/unavailable/error).
+        expect(
+            screen.queryByText(/Suggestions temporarily unavailable/i),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByText(/AI suggestions loading/i),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByText(/AI suggestions unavailable/i),
+        ).not.toBeInTheDocument();
+        // No fetch fired against the suggestions endpoint.
+        expect(suggestionsCalls).toBe(0);
     });
 });

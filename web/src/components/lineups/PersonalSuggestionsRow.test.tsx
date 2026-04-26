@@ -11,7 +11,7 @@
  *   - Renders cards with Pick buttons on success, and Pick fires
  *     `onPickSuggestion(dto)`.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -19,6 +19,18 @@ import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
 import { PersonalSuggestionsRow } from './PersonalSuggestionsRow';
 import { renderWithProviders } from '../../test/render-helpers';
 import { server } from '../../test/mocks/server';
+import { usePluginStore } from '../../stores/plugin-store';
+
+// ROK-1114 round 3: PersonalSuggestionsRow now short-circuits to null
+// when the AI plugin is inactive. Seed it active for the existing
+// scenarios; the "feature off" suite below clears it explicitly.
+beforeEach(() => {
+    usePluginStore.getState().setActiveSlugs(['ai']);
+});
+
+afterEach(() => {
+    usePluginStore.setState({ activeSlugs: new Set(), initialized: false });
+});
 
 const API_BASE = 'http://localhost:3000';
 
@@ -168,5 +180,29 @@ describe('PersonalSuggestionsRow — AI surface states (ROK-1114)', () => {
                 screen.queryByText(/AI suggestions loading/i),
             ).not.toBeInTheDocument();
         });
+    });
+});
+
+describe('PersonalSuggestionsRow — AI feature gate (ROK-1114 round 3)', () => {
+    it('renders nothing AND fires no fetch when the AI plugin is inactive', async () => {
+        // Wipe the active-plugins set seeded by the suite-level beforeEach.
+        usePluginStore.setState({ activeSlugs: new Set(), initialized: true });
+        let calls = 0;
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () => {
+                calls += 1;
+                return HttpResponse.json(buildResponse());
+            }),
+        );
+        const { container } = renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        // Give React Query a beat — if it were going to fetch, it would
+        // queue inside this microtask cycle.
+        await waitFor(() => {
+            expect(container).toBeEmptyDOMElement();
+        });
+        expect(calls).toBe(0);
+        expect(screen.queryByText(/Suggested for you/i)).not.toBeInTheDocument();
     });
 });
