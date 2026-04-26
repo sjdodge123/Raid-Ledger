@@ -151,7 +151,8 @@ export class AiAdminController {
   @Put('features')
   @HttpCode(HttpStatus.OK)
   async updateFeatures(
-    @Body() body: {
+    @Body()
+    body: {
       chatEnabled?: boolean;
       dynamicCategoriesEnabled?: boolean;
       aiSuggestionsEnabled?: boolean;
