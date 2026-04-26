@@ -185,7 +185,9 @@ export class DemoDataService {
       evResult.origEvents,
       evResult.genEvents,
     );
-    await this.installActivityLog(
+    await activityH.installActivityLog(
+      this.db,
+      bi,
       evResult.createdEvents,
       suResult.createdSignups,
     );
@@ -194,28 +196,6 @@ export class DemoDataService {
       characters: chResult.createdChars.length,
       signups: suResult.uniqueSignups.length,
     };
-  }
-
-  /** Insert activity_log rows for demo events + signups (ROK-1116). */
-  private async installActivityLog(
-    createdEvents: (typeof schema.events.$inferSelect)[],
-    createdSignups: (typeof schema.eventSignups.$inferSelect)[],
-  ): Promise<void> {
-    if (createdEvents.length === 0) return;
-    const eventIds = createdEvents.map((e) => e.id);
-    const finalEvents = await this.db
-      .select({
-        id: schema.events.id,
-        creatorId: schema.events.creatorId,
-        title: schema.events.title,
-      })
-      .from(schema.events)
-      .where(inArray(schema.events.id, eventIds));
-    const rows = [
-      ...activityH.buildEventCreatedActivityRows(finalEvents),
-      ...activityH.buildSignupAddedActivityRows(createdSignups),
-    ];
-    if (rows.length > 0) await this.batchInsert(schema.activityLog, rows);
   }
 
   private async installSecondaryEntities(
