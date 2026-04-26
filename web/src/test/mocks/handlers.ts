@@ -171,6 +171,41 @@ export const handlers = [
     // Lineups — banner (ROK-1065: visibility surfaces in banner response).
     http.get(`${API_BASE}/lineups/banner`, () => HttpResponse.json(null)),
 
+    // Lineups — common ground (ROK-934). Default empty payload so panels
+    // mount without unhandled-request warnings; tests override per-case.
+    http.get(`${API_BASE}/lineups/common-ground`, () =>
+        HttpResponse.json({
+            data: [],
+            meta: {
+                total: 0,
+                appliedWeights: {
+                    ownerWeight: 1,
+                    saleBonus: 0,
+                    fullPricePenalty: 0,
+                    tasteWeight: 0,
+                    socialWeight: 0,
+                    intensityWeight: 0,
+                },
+                activeLineupId: 0,
+                nominatedCount: 0,
+                maxNominations: 20,
+            },
+        }),
+    ),
+
+    // Lineups — AI suggestions (ROK-931, ROK-1114). Default success payload
+    // so CommonGroundPanel mounts cleanly; tests override to assert
+    // loading/unavailable/error states.
+    http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
+        HttpResponse.json({
+            suggestions: [],
+            generatedAt: '2026-04-25T00:00:00.000Z',
+            voterCount: 0,
+            voterScopeStrategy: 'community',
+            cached: false,
+        }),
+    ),
+
     // Lineups — invitees add (ROK-1065). Returns refreshed detail.
     http.post(
         `${API_BASE}/lineups/:id/invitees`,

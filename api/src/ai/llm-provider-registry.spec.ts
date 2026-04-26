@@ -147,3 +147,55 @@ describe('LlmProviderRegistry (adversarial)', () => {
     });
   });
 });
+
+// ── ROK-1114: resolveActive must report resolution source ──────────
+//
+// To diagnose the prod outage where AI suggestions never loaded, the
+// LLM service needs to know whether the active provider came from a
+// real `app_settings` row (operator-configured) or from the hard-coded
+// `AI_DEFAULTS.provider` fallback. The current shape returns just the
+// provider, which loses that signal — we change the return type to
+// `{ provider, source: 'setting' | 'default' }` so logChatEntry can
+// emit `source=setting|default` and we can tell at-a-glance from logs
+// whether the operator missed the configuration step.
+
+describe('LlmProviderRegistry.resolveActive — source reporting (ROK-1114)', () => {
+  let registry: LlmProviderRegistry;
+  let mockSettings: { get: jest.Mock };
+
+  beforeEach(async () => {
+    mockSettings = { get: jest.fn() };
+    const module = await Test.createTestingModule({
+      providers: [
+        LlmProviderRegistry,
+        { provide: SettingsService, useValue: mockSettings },
+      ],
+    }).compile();
+    registry = module.get(LlmProviderRegistry);
+  });
+
+  it("returns source: 'setting' when ai_provider is set in app_settings", async () => {
+    const provider = createMockProvider('openai');
+    registry.register(provider);
+    mockSettings.get.mockResolvedValue('openai');
+
+    const result = await registry.resolveActive();
+
+    expect(result).toEqual({ provider, source: 'setting' });
+  });
+
+  it("returns source: 'default' when settings is empty (falls back to AI_DEFAULTS.provider)", async () => {
+    // The default key after ROK-1114 is 'google' — but this test should
+    // hold for whatever AI_DEFAULTS.provider is, so register that key
+    // dynamically rather than hard-coding 'ollama' or 'google'.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { AI_DEFAULTS } = require('./llm.constants');
+    const provider = createMockProvider(AI_DEFAULTS.provider);
+    registry.register(provider);
+    mockSettings.get.mockResolvedValue(null);
+
+    const result = await registry.resolveActive();
+
+    expect(result).toEqual({ provider, source: 'default' });
+  });
+});
