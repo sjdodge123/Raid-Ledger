@@ -9,6 +9,7 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { displayNameSql } from '../users/display-name.helpers';
 
 interface ActivityRow {
   id: number;
@@ -65,7 +66,7 @@ export class ActivityLogService {
         id: schema.activityLog.id,
         action: schema.activityLog.action,
         actorId: schema.activityLog.actorId,
-        actorName: schema.users.displayName,
+        actorName: displayNameSql(schema.users),
         metadata: schema.activityLog.metadata,
         createdAt: schema.activityLog.createdAt,
       })
