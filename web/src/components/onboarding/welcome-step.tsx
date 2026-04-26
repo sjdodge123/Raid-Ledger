@@ -1,16 +1,8 @@
-import { useState } from 'react';
-import { useAuth } from '../../hooks/use-auth';
-import { useCheckDisplayName, useUpdateUserProfile } from '../../hooks/use-onboarding-fte';
-
 interface WelcomeStepProps {
     onNext: () => void;
     onSkip: () => void;
 }
 
-/**
- * Step 1: Welcome & Display Name (ROK-219).
- * Pre-fills from Discord username, validates 2-30 chars with uniqueness check.
- */
 function WelcomeHeader() {
     return (
         <div>
@@ -20,57 +12,18 @@ function WelcomeHeader() {
                 </svg>
             </div>
             <h2 className="text-2xl font-bold text-foreground">Welcome to Raid Ledger!</h2>
-            <p className="text-muted mt-2">Let's set up your profile. Choose a display name that other players will see.</p>
-        </div>
-    );
-}
-
-function NameAvailabilityHint({ touched, length, checkingName, isAvailable }: {
-    touched: boolean; length: number; checkingName: boolean; isAvailable: boolean;
-}) {
-    if (!touched || length < 2) return null;
-    return <span className={checkingName ? 'text-dim' : isAvailable ? 'text-emerald-400' : 'text-red-400'}>{checkingName ? 'Checking...' : isAvailable ? 'Available' : 'Taken'}</span>;
-}
-
-function DisplayNameInput({ displayName, setDisplayName, touched, setTouched, checkingName, isAvailable, isValidLength, canSubmit, handleSubmit }: {
-    displayName: string; setDisplayName: (v: string) => void; touched: boolean; setTouched: (v: boolean) => void;
-    checkingName: boolean; isAvailable: boolean; isValidLength: boolean; canSubmit: boolean; handleSubmit: () => void;
-}) {
-    return (
-        <div className="max-w-sm mx-auto space-y-2">
-            <label htmlFor="display-name" className="block text-sm font-medium text-foreground text-left">Display Name</label>
-            <input id="display-name" type="text" value={displayName}
-                onChange={(e) => { setDisplayName(e.target.value); if (!touched) setTouched(true); }}
-                onKeyDown={(e) => { if (e.key === 'Enter' && canSubmit) handleSubmit(); }}
-                placeholder="Your display name" maxLength={30}
-                className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-base" autoFocus />
-            <div className="flex items-center justify-between text-xs">
-                <span className={displayName.length > 0 && !isValidLength ? 'text-red-400' : 'text-dim'}>{displayName.length}/30 characters (min 2)</span>
-                <NameAvailabilityHint touched={touched} length={displayName.length} checkingName={checkingName} isAvailable={isAvailable} />
-            </div>
+            <p className="text-muted mt-2">We'll get you set up so you can start joining events.</p>
         </div>
     );
 }
 
 export function WelcomeStep({ onNext, onSkip }: WelcomeStepProps) {
-    const { user } = useAuth();
-    const [displayName, setDisplayName] = useState(() => user?.displayName ?? user?.username ?? '');
-    const [touched, setTouched] = useState(false);
-    const { data: availability, isLoading: checkingName } = useCheckDisplayName(touched ? displayName : '');
-    const updateProfile = useUpdateUserProfile();
-    const isValidLength = displayName.length >= 2 && displayName.length <= 30;
-    const isAvailable = availability?.available ?? true;
-    const canSubmit = isValidLength && isAvailable && !checkingName;
-    const handleSubmit = () => { if (!canSubmit) return; updateProfile.mutate(displayName, { onSuccess: () => onNext() }); };
-
     return (
         <div className="text-center space-y-6">
             <WelcomeHeader />
-            <DisplayNameInput displayName={displayName} setDisplayName={setDisplayName} touched={touched} setTouched={setTouched}
-                checkingName={checkingName} isAvailable={isAvailable} isValidLength={isValidLength} canSubmit={canSubmit} handleSubmit={handleSubmit} />
             <div className="flex gap-3 justify-center max-w-sm mx-auto">
                 <button type="button" onClick={onSkip} className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm">Skip</button>
-                <button type="button" onClick={handleSubmit} disabled={!canSubmit || updateProfile.isPending} className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-medium rounded-lg transition-colors text-sm">{updateProfile.isPending ? 'Saving...' : 'Next'}</button>
+                <button type="button" onClick={onNext} className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors text-sm">Continue</button>
             </div>
         </div>
     );
