@@ -101,9 +101,35 @@ describe('DiscordNotificationService', () => {
       expect(mockQueue.add).not.toHaveBeenCalled();
     });
 
+    // ROK-1115: skip non-snowflake discord IDs (e.g. local:admin@local)
+    // — they cause the queue to retry forever on Discord's NUMBER_TYPE_COERCE
+    it.each([
+      ['local:admin@local'],
+      ['admin@example.com'],
+      ['short'],
+      ['123'],
+      ['12345678901234567890'],
+    ])(
+      'should skip when discord_id "%s" is not a Discord snowflake',
+      async (badId) => {
+        mockDb.limit.mockResolvedValueOnce([{ discordId: badId }]);
+
+        const result = await service.dispatch({
+          notificationId: 'notif-1',
+          userId: 1,
+          type: 'event_reminder',
+          title: 'Test',
+          message: 'Test message',
+        });
+
+        expect(result).toBe(false);
+        expect(mockQueue.add).not.toHaveBeenCalled();
+      },
+    );
+
     it('should skip when Discord is disabled in preferences', async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ discordId: '123456' }])
+        .mockResolvedValueOnce([{ discordId: '123456789012345678' }])
         .mockResolvedValueOnce([
           {
             channelPrefs: {
@@ -126,7 +152,7 @@ describe('DiscordNotificationService', () => {
 
     it('should skip when bot is not connected', async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ discordId: '123456' }])
+        .mockResolvedValueOnce([{ discordId: '123456789012345678' }])
         .mockResolvedValueOnce([]);
       mockClientService.isConnected.mockReturnValue(false);
 
@@ -144,7 +170,7 @@ describe('DiscordNotificationService', () => {
 
     it('should skip when rate limited', async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ discordId: '123456' }])
+        .mockResolvedValueOnce([{ discordId: '123456789012345678' }])
         .mockResolvedValueOnce([]);
       mockClientService.isConnected.mockReturnValue(true);
       mockRedis.get.mockResolvedValueOnce('1');
@@ -163,7 +189,7 @@ describe('DiscordNotificationService', () => {
 
     it('should enqueue when all checks pass', async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ discordId: '123456' }])
+        .mockResolvedValueOnce([{ discordId: '123456789012345678' }])
         .mockResolvedValueOnce([]);
       mockClientService.isConnected.mockReturnValue(true);
       mockRedis.get.mockResolvedValueOnce(null);
@@ -182,7 +208,7 @@ describe('DiscordNotificationService', () => {
         expect.objectContaining({
           notificationId: 'notif-1',
           userId: 1,
-          discordId: '123456',
+          discordId: '123456789012345678',
           type: 'event_reminder',
         }),
         expect.objectContaining({
@@ -206,7 +232,7 @@ describe('DiscordNotificationService', () => {
     });
 
     it('should skip when already sent (DB-backed dedup)', async () => {
-      mockDb.limit.mockResolvedValueOnce([{ discordId: '123456' }]);
+      mockDb.limit.mockResolvedValueOnce([{ discordId: '123456789012345678' }]);
       mockDedupService.checkAndMarkSent.mockResolvedValueOnce(true);
 
       await service.sendWelcomeDM(1);
@@ -219,7 +245,7 @@ describe('DiscordNotificationService', () => {
     });
 
     it('should send welcome DM and mark via dedup service', async () => {
-      mockDb.limit.mockResolvedValueOnce([{ discordId: '123456' }]);
+      mockDb.limit.mockResolvedValueOnce([{ discordId: '123456789012345678' }]);
       mockDedupService.checkAndMarkSent.mockResolvedValueOnce(false);
 
       await service.sendWelcomeDM(1);
@@ -229,7 +255,7 @@ describe('DiscordNotificationService', () => {
         null,
       );
       expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
-        '123456',
+        '123456789012345678',
         expect.anything(),
         expect.anything(),
       );

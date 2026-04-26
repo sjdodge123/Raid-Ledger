@@ -28,31 +28,25 @@ import type {
 } from './lineup-notification-embed.helpers';
 import {
   buildCreatedEmbed,
-  buildMilestoneEmbed,
   buildVotingOpenEmbed,
-  buildDecidedEmbed,
-  buildSchedulingEmbed,
-  buildEventCreatedEmbed,
 } from './lineup-notification-embed.helpers';
-import {
-  fanOutVotingDMs,
-  fanOutSchedulingDMs,
-  fanOutEventCreatedDMs,
-  fanOutMatchMemberDMs,
-} from './lineup-notification-dm-batch.helpers';
+import { fanOutVotingDMs } from './lineup-notification-dm-batch.helpers';
 import {
   routeLineupCreatedIfPrivate,
   routeVotingOpenIfPrivate,
 } from './lineup-notification-routing.helpers';
 import {
-  findMatchMemberUsers,
-  hasExistingPollEmbed,
-} from './lineup-notification-targets.helpers';
-import {
   postChannelEmbed,
   resolveEmbedCtx,
   type DispatchDeps,
 } from './lineup-notification-dispatch.helpers';
+import {
+  orchestrateMilestone,
+  orchestrateMatchesFound,
+  orchestrateSchedulingOpen,
+  orchestrateEventCreated,
+  type OrchestrationDeps,
+} from './lineup-notification-public-dispatch.helpers';
 
 /** Shape of a lineup passed to notification methods. */
 export interface LineupInfo {
@@ -98,6 +92,23 @@ export class LineupNotificationService {
   private get dispatchDeps(): DispatchDeps {
     const { db, settingsService, botClient, dedupService } = this;
     return { db, settingsService, botClient, dedupService };
+  }
+
+  private get orchestrationDeps(): OrchestrationDeps {
+    const {
+      db,
+      settingsService,
+      botClient,
+      dedupService,
+      notificationService,
+    } = this;
+    return {
+      db,
+      settingsService,
+      botClient,
+      dedupService,
+      notificationService,
+    };
   }
 
   private resolveCtx(
@@ -165,12 +176,14 @@ export class LineupNotificationService {
     lineupId: number,
     threshold: number,
     entries: NominationEntry[],
+    lineupInfo?: Partial<LineupInfo>,
   ): Promise<void> {
-    const ctx = await this.resolveCtx(lineupId, 'nominations');
-    await this.postChannelEmbed(
-      `lineup-milestone:${lineupId}:${threshold}`,
-      () => buildMilestoneEmbed(ctx, threshold, entries),
-      ctx,
+    await orchestrateMilestone(
+      this.orchestrationDeps,
+      lineupId,
+      threshold,
+      entries,
+      lineupInfo,
     );
   }
 
@@ -209,19 +222,13 @@ export class LineupNotificationService {
   async notifyMatchesFound(
     lineupId: number,
     matches: MatchInfo[],
+    lineupInfo?: Partial<LineupInfo>,
   ): Promise<void> {
-    const ctx = await this.resolveCtx(lineupId, 'decided');
-    await this.postChannelEmbed(
-      `lineup-decided:${lineupId}`,
-      () => buildDecidedEmbed(ctx, matches),
-      ctx,
-    );
-    await fanOutMatchMemberDMs(
-      this.db,
-      this.notificationService,
-      this.dedupService,
+    await orchestrateMatchesFound(
+      this.orchestrationDeps,
       lineupId,
       matches,
+      lineupInfo,
     );
   }
 
@@ -258,22 +265,11 @@ export class LineupNotificationService {
   }
 
   /** AC-8: Post per-match channel embed + DMs when scheduling opens. */
-  async notifySchedulingOpen(match: MatchInfo): Promise<void> {
-    const ctx = await this.resolveCtx(match.lineupId, 'decided');
-    await this.postChannelEmbed(
-      `lineup-scheduling:${match.id}`,
-      async () => {
-        if (await hasExistingPollEmbed(this.db, match.id)) return null;
-        return buildSchedulingEmbed(ctx, match.gameName, match.id);
-      },
-      ctx,
-    );
-    await fanOutSchedulingDMs(
-      this.db,
-      this.notificationService,
-      this.dedupService,
-      match,
-    );
+  async notifySchedulingOpen(
+    match: MatchInfo,
+    lineupInfo?: Partial<LineupInfo>,
+  ): Promise<void> {
+    await orchestrateSchedulingOpen(this.orchestrationDeps, match, lineupInfo);
   }
 
   /** AC-10: Post channel embed + DMs when event is created. */
@@ -281,29 +277,14 @@ export class LineupNotificationService {
     match: MatchInfo,
     eventDate: Date,
     eventId?: number,
+    lineupInfo?: Partial<LineupInfo>,
   ): Promise<void> {
-    const members = await findMatchMemberUsers(this.db, match.id);
-    const ctx = await this.resolveCtx(match.lineupId, 'decided');
-    await this.postChannelEmbed(
-      `lineup-event:${match.id}`,
-      () =>
-        buildEventCreatedEmbed(
-          ctx,
-          match.gameName,
-          match.gameId,
-          eventDate,
-          eventId,
-          members.map((m) => m.displayName),
-        ),
-      ctx,
-    );
-    await fanOutEventCreatedDMs(
-      this.notificationService,
-      this.dedupService,
+    await orchestrateEventCreated(
+      this.orchestrationDeps,
       match,
       eventDate,
       eventId,
-      members,
+      lineupInfo,
     );
   }
 

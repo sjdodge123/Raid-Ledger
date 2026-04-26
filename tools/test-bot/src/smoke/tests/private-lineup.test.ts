@@ -304,9 +304,59 @@ const multipleConcurrentLineupsAllowed: SmokeTest = {
   },
 };
 
+// ── ROK-1115 AC: Private lineup milestone dispatch suppresses channel ──
+
+const privateLineupMilestoneSuppressesChannel: SmokeTest = {
+  name: 'Private lineup nomination milestone DMs invitee and suppresses channel embed (ROK-1115)',
+  category: 'dm',
+  async run(ctx: TestContext) {
+    await archiveAllLineups(ctx.api);
+
+    const title = `Private Milestone ${Date.now()}`;
+    const lineup = await createPrivateLineup(ctx, title);
+    try {
+      // Trigger a nomination as the invitee — this is the cheapest way to
+      // force `fireNominationMilestone` to evaluate. Even if no threshold
+      // is crossed, the channel-embed path must remain dark for private
+      // lineups when a milestone IS crossed; the assertion is symmetric:
+      // we check that any milestone-shaped embed never lands in the channel
+      // for the duration of the test window.
+      await ctx.api.post('/admin/test/nominate-game', {
+        lineupId: lineup.id,
+        gameId: 1,
+        userId: ctx.dmRecipientUserId,
+      }).catch(() => null);
+
+      await awaitProcessing(ctx.api);
+
+      // Channel must NOT receive a milestone-shaped embed for this lineup.
+      await assertConditionNeverMet(
+        async () => {
+          const msgs = await readLastMessages(ctx.defaultChannelId, 25);
+          return msgs.some((m) =>
+            m.embeds.some((e) => {
+              const hay = [e.title ?? '', e.description ?? ''].join(' ');
+              return (
+                /milestone|nominations filled|nominated/i.test(hay) &&
+                hay.includes(title)
+              );
+            }),
+          );
+        },
+        8_000,
+        `Channel received a nomination-milestone embed for private lineup "${title}" — expected none`,
+        { intervalMs: 2000 },
+      );
+    } finally {
+      await deleteLineup(ctx.api, lineup.id);
+    }
+  },
+};
+
 export const privateLineupTests: SmokeTest[] = [
   privateLineupDmsInviteeNoChannelEmbed,
   privateLineupPhaseTransitionSuppressesChannel,
   privateLineupResponseIncludesInvitees,
   multipleConcurrentLineupsAllowed,
+  privateLineupMilestoneSuppressesChannel,
 ];

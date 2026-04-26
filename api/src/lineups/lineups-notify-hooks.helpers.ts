@@ -56,11 +56,17 @@ export function fireNominationMilestone(
   db: Db,
   lineupId: number,
 ): void {
-  checkNominationMilestone(db, lineupId)
-    .then(async (result) => {
+  loadLineupForNotification(db, lineupId)
+    .then(async (row) => {
+      if (!row) return;
+      const result = await checkNominationMilestone(db, lineupId);
       if (!result) return;
       const entries = await getEntryDetails(db, lineupId);
-      await svc.notifyNominationMilestone(lineupId, result.threshold, entries);
+      await svc.notifyNominationMilestone(lineupId, result.threshold, entries, {
+        id: row.id,
+        title: row.title,
+        visibility: row.visibility,
+      });
     })
     .catch(logError(logger, 'nomination-milestone'));
 }
@@ -118,11 +124,16 @@ export function fireDecidedNotifications(
   db: Db,
   lineupId: number,
 ): void {
-  loadMatchesForNotification(db, lineupId)
-    .then((matches) => {
-      if (matches.length > 0) {
-        return svc.notifyMatchesFound(lineupId, matches);
-      }
+  loadLineupForNotification(db, lineupId)
+    .then(async (row) => {
+      if (!row) return;
+      const matches = await loadMatchesForNotification(db, lineupId);
+      if (matches.length === 0) return;
+      await svc.notifyMatchesFound(lineupId, matches, {
+        id: row.id,
+        title: row.title,
+        visibility: row.visibility,
+      });
     })
     .catch(logError(logger, 'decided'));
 }
@@ -162,8 +173,10 @@ export function fireSchedulingOpen(
   matchId: number,
 ): void {
   loadSingleMatch(db, matchId)
-    .then((match) => {
-      if (match) return svc.notifySchedulingOpen(match);
+    .then(async (match) => {
+      if (!match) return;
+      const lineup = await loadLineupVisibility(db, match.lineupId);
+      await svc.notifySchedulingOpen(match, lineup ?? undefined);
     })
     .catch(logError(logger, 'scheduling-open'));
 }
@@ -178,10 +191,33 @@ export function fireEventCreated(
   eventId?: number,
 ): void {
   loadSingleMatch(db, matchId)
-    .then((match) => {
-      if (match) return svc.notifyEventCreated(match, eventDate, eventId);
+    .then(async (match) => {
+      if (!match) return;
+      const lineup = await loadLineupVisibility(db, match.lineupId);
+      await svc.notifyEventCreated(
+        match,
+        eventDate,
+        eventId,
+        lineup ?? undefined,
+      );
     })
     .catch(logError(logger, 'event-created'));
+}
+
+/** Load just visibility for a lineup (ROK-1115). Used by match-based hooks. */
+async function loadLineupVisibility(
+  db: Db,
+  lineupId: number,
+): Promise<{ id: number; visibility: 'public' | 'private' } | null> {
+  const [row] = await db
+    .select({
+      id: schema.communityLineups.id,
+      visibility: schema.communityLineups.visibility,
+    })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  return row ?? null;
 }
 
 // ─── Private: match loading queries ────────────────────────

@@ -11,6 +11,7 @@ import * as schema from '../drizzle/schema';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import {
   RATE_LIMIT_WINDOW_MS,
+  isDiscordSnowflake,
   type DiscordNotificationJobData,
 } from './discord-notification.constants';
 
@@ -33,7 +34,10 @@ async function loadDiscordIds(
     .from(schema.users)
     .where(inArray(schema.users.id, userIds));
   const out = new Map<number, string>();
-  for (const row of rows) if (row.discordId) out.set(row.id, row.discordId);
+  for (const row of rows) {
+    if (row.discordId && isDiscordSnowflake(row.discordId))
+      out.set(row.id, row.discordId);
+  }
   return out;
 }
 

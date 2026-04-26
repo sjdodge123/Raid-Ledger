@@ -13,6 +13,12 @@ import {
   sendEventCreatedDM,
   sendPrivateInviteDM,
 } from './lineup-notification-dm.helpers';
+import {
+  sendMilestoneDM,
+  sendMatchesFoundDM,
+  sendPrivateSchedulingDM,
+  sendPrivateEventCreatedDM,
+} from './lineup-notification-private-dm.helpers';
 import { dispatchMatchMemberDM } from './lineup-notification-dms.helpers';
 import {
   findDiscordLinkedMembers,
@@ -145,6 +151,100 @@ export async function fanOutEventCreatedDMs(
 ): Promise<void> {
   for (const member of members) {
     await sendEventCreatedDM(
+      notificationService,
+      dedupService,
+      match,
+      member,
+      eventDate,
+      eventId,
+    );
+  }
+}
+
+/**
+ * Fan-out milestone DMs to invitees + creator (ROK-1115).
+ * Used for `visibility === 'private'` lineups so invitees still hear about
+ * nomination progress even though the channel embed is suppressed.
+ */
+export async function fanOutMilestoneDMsToInvitees(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  threshold: number,
+  entryCount: number,
+): Promise<void> {
+  const members = await findInviteeDiscordMembers(db, lineup.id);
+  for (const member of members) {
+    await sendMilestoneDM(
+      notificationService,
+      dedupService,
+      lineup,
+      threshold,
+      entryCount,
+      member,
+    );
+  }
+}
+
+/**
+ * Fan-out matches-found (decided phase) DMs to invitees + creator (ROK-1115).
+ */
+export async function fanOutMatchesFoundDMsToInvitees(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  matchCount: number,
+): Promise<void> {
+  const members = await findInviteeDiscordMembers(db, lineup.id);
+  for (const member of members) {
+    await sendMatchesFoundDM(
+      notificationService,
+      dedupService,
+      lineup,
+      matchCount,
+      member,
+    );
+  }
+}
+
+/**
+ * Fan-out scheduling-open DMs to invitees + creator for a private lineup
+ * (ROK-1115). DM body references the specific match scheduling.
+ */
+export async function fanOutSchedulingDMsToInvitees(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  match: MatchInfo,
+): Promise<void> {
+  const members = await findInviteeDiscordMembers(db, match.lineupId);
+  for (const member of members) {
+    await sendPrivateSchedulingDM(
+      notificationService,
+      dedupService,
+      match,
+      member,
+    );
+  }
+}
+
+/**
+ * Fan-out event-created DMs to invitees + creator for a private lineup
+ * (ROK-1115).
+ */
+export async function fanOutEventCreatedDMsToInvitees(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  match: MatchInfo,
+  eventDate: Date,
+  eventId: number | undefined,
+): Promise<void> {
+  const members = await findInviteeDiscordMembers(db, match.lineupId);
+  for (const member of members) {
+    await sendPrivateEventCreatedDM(
       notificationService,
       dedupService,
       match,

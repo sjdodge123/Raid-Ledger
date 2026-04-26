@@ -16,6 +16,7 @@ import {
   DISCORD_NOTIFICATION_QUEUE,
   RATE_LIMIT_WINDOW_MS,
   MAX_CONSECUTIVE_FAILURES,
+  isDiscordSnowflake,
   type DiscordNotificationJobData,
 } from './discord-notification.constants';
 import {
@@ -104,6 +105,12 @@ export class DiscordNotificationService {
     if (!user?.discordId) {
       this.logger.debug(
         `User ${userId}: no Discord linked, skipping Discord notification`,
+      );
+      return null;
+    }
+    if (!isDiscordSnowflake(user.discordId)) {
+      this.logger.debug(
+        `User ${userId}: discord_id "${user.discordId}" is not a Discord snowflake, skipping`,
       );
       return null;
     }
