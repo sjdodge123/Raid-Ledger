@@ -105,33 +105,35 @@ function callMilestone(
   service: LineupNotificationService,
   ...args: AnyArgs
 ): Promise<void> {
-  return (service.notifyNominationMilestone as unknown as (
-    ...a: AnyArgs
-  ) => Promise<void>)(...args);
+  return (
+    service.notifyNominationMilestone as unknown as (
+      ...a: AnyArgs
+    ) => Promise<void>
+  )(...args);
 }
 function callMatchesFound(
   service: LineupNotificationService,
   ...args: AnyArgs
 ): Promise<void> {
-  return (service.notifyMatchesFound as unknown as (
-    ...a: AnyArgs
-  ) => Promise<void>)(...args);
+  return (
+    service.notifyMatchesFound as unknown as (...a: AnyArgs) => Promise<void>
+  )(...args);
 }
 function callSchedulingOpen(
   service: LineupNotificationService,
   ...args: AnyArgs
 ): Promise<void> {
-  return (service.notifySchedulingOpen as unknown as (
-    ...a: AnyArgs
-  ) => Promise<void>)(...args);
+  return (
+    service.notifySchedulingOpen as unknown as (...a: AnyArgs) => Promise<void>
+  )(...args);
 }
 function callEventCreated(
   service: LineupNotificationService,
   ...args: AnyArgs
 ): Promise<void> {
-  return (service.notifyEventCreated as unknown as (
-    ...a: AnyArgs
-  ) => Promise<void>)(...args);
+  return (
+    service.notifyEventCreated as unknown as (...a: AnyArgs) => Promise<void>
+  )(...args);
 }
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
@@ -174,10 +176,7 @@ const milestoneEntry = (name: string, id = 1) => ({
 // SQL text — that is the marker that the private-routing helper actually
 // loaded invitees (vs the existing match-member fan-outs which JOIN
 // `community_lineup_match_members`).
-function executeContainsSql(
-  mockDbExecute: jest.Mock,
-  needle: string,
-): boolean {
+function executeContainsSql(mockDbExecute: jest.Mock, needle: string): boolean {
   for (const [arg] of mockDbExecute.mock.calls) {
     const sqlText = extractSqlText(arg);
     if (sqlText.includes(needle)) return true;
@@ -189,7 +188,9 @@ function extractSqlText(sqlArg: unknown): string {
   if (!sqlArg) return '';
   if (typeof sqlArg === 'string') return sqlArg;
   // Drizzle SQL objects have a `queryChunks` array; toString yields the SQL.
-  const stringified = String(sqlArg);
+  const obj = sqlArg as { toString?: () => string };
+  const stringified =
+    typeof obj.toString === 'function' ? obj.toString() : '[object Object]';
   if (stringified !== '[object Object]') return stringified;
   try {
     return JSON.stringify(sqlArg);
@@ -223,13 +224,9 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
       const invitees = [makeMember(11), makeMember(12)];
       mockDb.execute.mockResolvedValue(invitees);
 
-      await callMilestone(
-        service,
-        LINEUP_ID,
-        50,
-        [milestoneEntry('Game A')],
-        { visibility: 'private' },
-      );
+      await callMilestone(service, LINEUP_ID, 50, [milestoneEntry('Game A')], {
+        visibility: 'private',
+      });
 
       expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
     });
@@ -238,13 +235,9 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
       const invitees = [makeMember(11), makeMember(12)];
       mockDb.execute.mockResolvedValue(invitees);
 
-      await callMilestone(
-        service,
-        LINEUP_ID,
-        50,
-        [milestoneEntry('Game A')],
-        { visibility: 'private' },
-      );
+      await callMilestone(service, LINEUP_ID, 50, [milestoneEntry('Game A')], {
+        visibility: 'private',
+      });
 
       // The invitee SQL probe must run (proves we routed via the private path,
       // not the existing match-member fan-out which queries a different table).
@@ -262,13 +255,9 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
     });
 
     it('still posts the milestone channel embed when visibility is public', async () => {
-      await callMilestone(
-        service,
-        LINEUP_ID,
-        50,
-        [milestoneEntry('Game A')],
-        { visibility: 'public' },
-      );
+      await callMilestone(service, LINEUP_ID, 50, [milestoneEntry('Game A')], {
+        visibility: 'public',
+      });
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
@@ -276,19 +265,19 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
     it('uses a per-invitee dedup key so retries are suppressed', async () => {
       mockDb.execute.mockResolvedValue([makeMember(11)]);
 
-      await callMilestone(
-        service,
-        LINEUP_ID,
-        50,
-        [milestoneEntry('Game A')],
-        { visibility: 'private' },
-      );
+      await callMilestone(service, LINEUP_ID, 50, [milestoneEntry('Game A')], {
+        visibility: 'private',
+      });
 
       // Some lineup-* dedup key keyed on lineupId + invitee userId must be checked.
       const dedupKeys = mockDedupService.checkAndMarkSent.mock.calls.map(
         ([k]) => String(k),
       );
-      expect(dedupKeys.some((k) => k.includes(String(LINEUP_ID)) && k.includes(':11'))).toBe(true);
+      expect(
+        dedupKeys.some(
+          (k) => k.includes(String(LINEUP_ID)) && k.includes(':11'),
+        ),
+      ).toBe(true);
     });
   });
 
@@ -350,11 +339,9 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
       const invitees = [makeMember(11), makeMember(12)];
       mockDb.execute.mockResolvedValue(invitees);
 
-      await callSchedulingOpen(
-        service,
-        makeMatch({ status: 'scheduling' }),
-        { visibility: 'private' },
-      );
+      await callSchedulingOpen(service, makeMatch({ status: 'scheduling' }), {
+        visibility: 'private',
+      });
 
       expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
     });
@@ -363,11 +350,9 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
       const invitees = [makeMember(11), makeMember(12)];
       mockDb.execute.mockResolvedValue(invitees);
 
-      await callSchedulingOpen(
-        service,
-        makeMatch({ status: 'scheduling' }),
-        { visibility: 'private' },
-      );
+      await callSchedulingOpen(service, makeMatch({ status: 'scheduling' }), {
+        visibility: 'private',
+      });
 
       // Invitee SQL probe must run.
       expect(
@@ -381,11 +366,9 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
     });
 
     it('still posts the per-match channel embed when visibility is public', async () => {
-      await callSchedulingOpen(
-        service,
-        makeMatch({ status: 'scheduling' }),
-        { visibility: 'public' },
-      );
+      await callSchedulingOpen(service, makeMatch({ status: 'scheduling' }), {
+        visibility: 'public',
+      });
 
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });

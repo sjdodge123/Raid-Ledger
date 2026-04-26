@@ -67,9 +67,7 @@ function describePrivateNotifications() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  async function createInvitee(
-    discordSuffix: string,
-  ): Promise<number> {
+  async function createInvitee(discordSuffix: string): Promise<number> {
     const [user] = await testApp.db
       .insert(schema.users)
       .values({
@@ -117,9 +115,11 @@ function describePrivateNotifications() {
   it('notifyNominationMilestone does not post channel embed for private lineup', async () => {
     const { lineupId, inviteeIds } = await setupPrivateLineup();
 
-    await (service.notifyNominationMilestone as unknown as (
-      ...a: unknown[]
-    ) => Promise<void>)(
+    await (
+      service.notifyNominationMilestone as unknown as (
+        ...a: unknown[]
+      ) => Promise<void>
+    )(
       lineupId,
       50,
       [{ gameId: 1, gameName: 'Game', nominatorName: 'U', coverUrl: null }],
@@ -151,9 +151,11 @@ function describePrivateNotifications() {
       })
       .returning();
 
-    await (service.notifyMatchesFound as unknown as (
-      ...a: unknown[]
-    ) => Promise<void>)(
+    await (
+      service.notifyMatchesFound as unknown as (
+        ...a: unknown[]
+      ) => Promise<void>
+    )(
       lineupId,
       [
         {
@@ -191,9 +193,11 @@ function describePrivateNotifications() {
       })
       .returning();
 
-    await (service.notifySchedulingOpen as unknown as (
-      ...a: unknown[]
-    ) => Promise<void>)(
+    await (
+      service.notifySchedulingOpen as unknown as (
+        ...a: unknown[]
+      ) => Promise<void>
+    )(
       {
         id: match.id,
         lineupId,
@@ -228,9 +232,11 @@ function describePrivateNotifications() {
       })
       .returning();
 
-    await (service.notifyEventCreated as unknown as (
-      ...a: unknown[]
-    ) => Promise<void>)(
+    await (
+      service.notifyEventCreated as unknown as (
+        ...a: unknown[]
+      ) => Promise<void>
+    )(
       {
         id: match.id,
         lineupId,

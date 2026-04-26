@@ -62,12 +62,11 @@ export function fireNominationMilestone(
       const result = await checkNominationMilestone(db, lineupId);
       if (!result) return;
       const entries = await getEntryDetails(db, lineupId);
-      await svc.notifyNominationMilestone(
-        lineupId,
-        result.threshold,
-        entries,
-        { id: row.id, title: row.title, visibility: row.visibility },
-      );
+      await svc.notifyNominationMilestone(lineupId, result.threshold, entries, {
+        id: row.id,
+        title: row.title,
+        visibility: row.visibility,
+      });
     })
     .catch(logError(logger, 'nomination-milestone'));
 }
