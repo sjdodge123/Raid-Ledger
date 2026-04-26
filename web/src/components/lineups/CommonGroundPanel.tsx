@@ -16,6 +16,7 @@ import type { CommonGroundParams } from '../../lib/api-client';
 import { CommonGroundFilters } from './CommonGroundFilters';
 import { CommonGroundGameCard } from './CommonGroundGameCard';
 import { useCommonGroundState } from './use-common-ground-state';
+import { AiStatusBanner } from './AiStatusBanner';
 
 /** Loading skeleton cards. */
 function LoadingSkeleton(): JSX.Element {
@@ -64,37 +65,6 @@ function PanelHeader({ nominated, max }: { nominated: number; max: number }): JS
             </span>
         </div>
     );
-}
-
-/**
- * Inline AI status indicator (ROK-1114).
- *
- * Surfaces the AI suggestions query state above the grid so a missing
- * provider configuration is visible to operators instead of silently
- * dropping the ✨ AI badges. MUST NOT block the Common Ground grid —
- * the indicator is purely additive.
- */
-function AiStatusBanner({
-    isLoading,
-    isUnavailable,
-    isError,
-}: {
-    isLoading: boolean;
-    isUnavailable: boolean;
-    isError: boolean;
-}): JSX.Element | null {
-    if (isUnavailable) {
-        return (
-            <p className="text-xs text-muted">Suggestions temporarily unavailable</p>
-        );
-    }
-    if (isError) {
-        return <p className="text-xs text-muted">AI suggestions unavailable</p>;
-    }
-    if (isLoading) {
-        return <p className="text-xs text-muted">AI suggestions loading…</p>;
-    }
-    return null;
 }
 
 const ARROW_CLS = 'absolute top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-surface/90 border border-edge rounded-full flex items-center justify-center text-foreground shadow-lg opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:bg-panel';

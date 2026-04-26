@@ -1,9 +1,13 @@
 /**
- * Tests for PersonalSuggestionsRow (ROK-931).
+ * Tests for PersonalSuggestionsRow (ROK-931, ROK-1114).
  *
  * Verifies that the per-user "Suggested for you" row:
  *   - Calls the backend with `?personalize=me` (not the group-scope URL).
- *   - Renders nothing (null) on 503 or empty suggestions.
+ *   - Renders nothing on empty success (don't pollute modal with empty section).
+ *   - Surfaces an inline "Suggestions temporarily unavailable" message
+ *     when the hook reports `kind === 'unavailable'` (503) — ROK-1114
+ *     replaces the silent-null behavior.
+ *   - Surfaces "AI suggestions unavailable" on a generic query error.
  *   - Renders cards with Pick buttons on success, and Pick fires
  *     `onPickSuggestion(dto)`.
  */
@@ -71,20 +75,6 @@ describe('PersonalSuggestionsRow (ROK-931)', () => {
         });
     });
 
-    it('renders nothing when the hook reports unavailable (503)', async () => {
-        server.use(
-            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
-                HttpResponse.json({ error: 'AI_PROVIDER_UNAVAILABLE' }, { status: 503 }),
-            ),
-        );
-        const { container } = renderWithProviders(
-            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
-        );
-        await waitFor(() => {
-            expect(container.textContent).not.toContain('Suggested for you');
-        });
-    });
-
     it('fires onPickSuggestion with the DTO when the Pick button is clicked', async () => {
         server.use(
             http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
@@ -102,5 +92,65 @@ describe('PersonalSuggestionsRow (ROK-931)', () => {
         expect(handlePick).toHaveBeenCalledWith(
             expect.objectContaining({ gameId: 99, name: 'It Takes Two' }),
         );
+    });
+});
+
+describe('PersonalSuggestionsRow — AI surface states (ROK-1114)', () => {
+    it('renders "Suggestions temporarily unavailable" when AI returns 503', async () => {
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
+                HttpResponse.json(
+                    { error: 'AI_PROVIDER_UNAVAILABLE' },
+                    { status: 503 },
+                ),
+            ),
+        );
+        renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        const message = await screen.findByText(
+            /Suggestions temporarily unavailable/i,
+        );
+        expect(message).toBeInTheDocument();
+        // Header still visible so the user knows what the section is for.
+        expect(screen.getByText(/Suggested for you/i)).toBeInTheDocument();
+    });
+
+    it('renders "AI suggestions unavailable" when the query errors out', async () => {
+        // Generic 500 — `getAiSuggestions` only special-cases 503, so a 500
+        // surfaces as a generic query error (`query.isError === true`).
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
+                HttpResponse.json({ error: 'INTERNAL' }, { status: 500 }),
+            ),
+        );
+        renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        const message = await screen.findByText(/AI suggestions unavailable/i);
+        expect(message).toBeInTheDocument();
+        expect(screen.getByText(/Suggested for you/i)).toBeInTheDocument();
+    });
+
+    it('renders the loading indicator while the suggestions query is pending', async () => {
+        let resolve: ((v: Response) => void) | undefined;
+        const pending = new Promise<Response>((r) => {
+            resolve = r;
+        });
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () => pending),
+        );
+        renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        const loading = await screen.findByText(/AI suggestions loading/i);
+        expect(loading).toBeInTheDocument();
+        // Cleanup the dangling promise so the test runner exits.
+        resolve?.(HttpResponse.json(buildResponse({ suggestions: [] })));
+        await waitFor(() => {
+            expect(
+                screen.queryByText(/AI suggestions loading/i),
+            ).not.toBeInTheDocument();
+        });
     });
 });
