@@ -75,7 +75,7 @@ describe('LlmProviderRegistry', () => {
       // picks the first one whose ai_<key>_api_key is configured.
       const claude = createCloudProvider('claude');
       registry.register(claude);
-      mockSettings.get.mockImplementation(async (key: string) => {
+      mockSettings.get.mockImplementation((key: string) => {
         if (key === 'ai_provider') return null;
         if (key === 'ai_claude_api_key') return 'sk-test-claude';
         return null;
@@ -211,7 +211,7 @@ describe('LlmProviderRegistry.resolveActive — source reporting (ROK-1114)', ()
     const google = createCloudProvider('google');
     registry.register(claude);
     registry.register(google);
-    mockSettings.get.mockImplementation(async (key: string) => {
+    mockSettings.get.mockImplementation((key: string) => {
       if (key === 'ai_provider') return null;
       if (key === 'ai_claude_api_key') return 'sk-ant-test';
       return null;
@@ -227,7 +227,7 @@ describe('LlmProviderRegistry.resolveActive — source reporting (ROK-1114)', ()
     const google = createCloudProvider('google');
     registry.register(claude);
     registry.register(google);
-    mockSettings.get.mockImplementation(async (key: string) => {
+    mockSettings.get.mockImplementation((key: string) => {
       if (key === 'ai_provider') return null;
       if (key === 'ai_google_api_key') return 'AIza-test';
       return null;
@@ -277,7 +277,7 @@ describe('LlmProviderRegistry.resolveActive — source reporting (ROK-1114)', ()
     const google = createCloudProvider('google');
     registry.register(claude);
     registry.register(google);
-    mockSettings.get.mockImplementation(async (key: string) => {
+    mockSettings.get.mockImplementation((key: string) => {
       if (key === 'ai_provider') return 'google';
       if (key === 'ai_claude_api_key') return 'sk-ant-test';
       if (key === 'ai_google_api_key') return 'AIza-test';
