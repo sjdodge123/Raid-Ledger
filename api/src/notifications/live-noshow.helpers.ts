@@ -6,6 +6,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and, sql, inArray, notInArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { resolveEventCapacity } from '../events/signups-signup.helpers';
+import { resolveDisplayName } from '../users/display-name.helpers';
 
 /** Minimum voice presence (seconds) to count as "showed up". */
 export const PRESENCE_THRESHOLD_SEC = 120;
@@ -274,7 +275,7 @@ export async function batchFetchPlayerDisplayInfo(
   for (const uid of userIds) {
     const user = userMap.get(uid);
     result.set(uid, {
-      displayName: user?.displayName ?? user?.username ?? 'Unknown',
+      displayName: user ? resolveDisplayName(user) : 'Unknown',
       role: roleMap.get(uid) ?? null,
     });
   }
