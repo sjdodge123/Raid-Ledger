@@ -107,6 +107,26 @@ function OverlapBadge({ hasOverlap }: { hasOverlap: boolean }) {
     );
 }
 
+function EventDetailHeader({ title, coverUrl, gameName, timeLabel, creatorUsername }: {
+    title: string; coverUrl?: string | null; gameName?: string; timeLabel: string; creatorUsername?: string | null;
+}) {
+    return (
+        <>
+            {coverUrl && <div className="w-14 h-14 rounded-lg bg-cover bg-center shrink-0 ring-1 ring-white/10" style={{ backgroundImage: `url(${coverUrl})` }} />}
+            <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300/80">Highlighted Event</p>
+                <h4 className="text-sm font-semibold text-foreground truncate mt-1">{title}</h4>
+                <div className="flex items-center gap-2 mt-1 text-xs text-muted">
+                    {gameName && <span>{gameName}</span>}
+                    {gameName && timeLabel && <span className="text-faint">·</span>}
+                    {timeLabel && <span>{timeLabel}</span>}
+                </div>
+                {creatorUsername && <p className="text-[11px] text-dim mt-1">Hosted by {creatorUsername}</p>}
+            </div>
+        </>
+    );
+}
+
 function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creatorUsername, attendees }: {
     title: string; coverUrl?: string | null; gameName?: string; timeLabel: string; creatorUsername?: string | null;
     gameId?: number | null; attendees?: AttendeePreview[];
@@ -114,17 +134,7 @@ function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creator
     return (
         <div className="rounded-lg border border-edge bg-panel/50 overflow-hidden">
             <div className="flex items-start gap-3 p-3">
-                {coverUrl && <div className="w-14 h-14 rounded-lg bg-cover bg-center shrink-0 ring-1 ring-white/10" style={{ backgroundImage: `url(${coverUrl})` }} />}
-                <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300/80">Highlighted Event</p>
-                    <h4 className="text-sm font-semibold text-foreground truncate mt-1">{title}</h4>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-muted">
-                        {gameName && <span>{gameName}</span>}
-                        {gameName && timeLabel && <span className="text-faint">·</span>}
-                        {timeLabel && <span>{timeLabel}</span>}
-                    </div>
-                    {creatorUsername && <p className="text-[11px] text-dim mt-1">Hosted by {creatorUsername}</p>}
-                </div>
+                <EventDetailHeader title={title} coverUrl={coverUrl} gameName={gameName} timeLabel={timeLabel} creatorUsername={creatorUsername} />
                 {attendees && attendees.length > 0 && (
                     <div className="shrink-0 self-center">
                         <MemberAvatarGroup
@@ -171,6 +181,24 @@ function useGameTimeWidgetData(props: GameTimeWidgetProps) {
     return { editor, hasOverlap, previewBlocks, eventTimeLabel };
 }
 
+function GameTimeWidgetModalHeader({ onClose }: { onClose: () => void }) {
+    return (
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+                <p className="text-muted text-xs">Read-only view — your weekly availability with this event highlighted.</p>
+                <p className="text-dim text-xs mt-1">Uses the same compact weekly layout as profile and scheduling.</p>
+            </div>
+            <Link
+                to="/profile/gaming"
+                onClick={onClose}
+                className="inline-flex items-center justify-center rounded-lg border border-edge bg-panel px-3 py-2 text-xs font-medium text-emerald-300 hover:bg-overlay transition-colors"
+            >
+                Edit my game time &rarr;
+            </Link>
+        </div>
+    );
+}
+
 function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, gameName, gameId, eventTimeLabel, creatorUsername, attendees, onClose }: {
     editor: ReturnType<typeof useGameTimeEditor>; previewBlocks: GameTimePreviewBlock[];
     eventTitle?: string; coverUrl?: string | null; gameName?: string; gameId?: number | null; eventTimeLabel: string; creatorUsername?: string | null;
@@ -182,19 +210,7 @@ function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, game
     return (
         <Modal isOpen onClose={onClose} title="My Game Time" maxWidth="max-w-3xl" bodyClassName="p-4 pb-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                        <p className="text-muted text-xs">Read-only view — your weekly availability with this event highlighted.</p>
-                        <p className="text-dim text-xs mt-1">Uses the same compact weekly layout as profile and scheduling.</p>
-                    </div>
-                    <Link
-                        to="/profile/gaming"
-                        onClick={onClose}
-                        className="inline-flex items-center justify-center rounded-lg border border-edge bg-panel px-3 py-2 text-xs font-medium text-emerald-300 hover:bg-overlay transition-colors"
-                    >
-                        Edit my game time &rarr;
-                    </Link>
-                </div>
+                <GameTimeWidgetModalHeader onClose={onClose} />
                 <div className="rounded-lg border border-edge overflow-hidden">
                     <GameTimeGrid
                         slots={editor.slots}

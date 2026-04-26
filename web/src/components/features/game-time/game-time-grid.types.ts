@@ -23,7 +23,16 @@ export interface GameTimePreviewBlock {
     coverUrl?: string | null;
     description?: string | null;
     creatorUsername?: string | null;
-    attendees?: Array<{ id: number; username: string; avatar: string | null }>;
+    /** Game ID threaded through so RichEventBlock can resolve character avatars (ROK-1133) */
+    gameId?: number | null;
+    attendees?: Array<{
+        id: number;
+        username: string;
+        avatar: string | null;
+        customAvatarUrl?: string | null;
+        discordId?: string | null;
+        characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
+    }>;
     attendeeCount?: number;
 }
 
