@@ -24,6 +24,7 @@ import {
     useNominateGame,
 } from '../../hooks/use-lineups';
 import { useAiSuggestions } from '../../hooks/use-ai-suggestions';
+import { useAiSuggestionsAvailable } from '../../hooks/use-ai-suggestions-available';
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { mergeAiIntoCommonGround } from './common-ground-ai-merge.helpers';
 
@@ -98,14 +99,23 @@ export function useCommonGroundState(
     // them into the same grid. The map drives the ✨ AI badge + tooltip
     // reasoning on matching cards; AI-only games (not owned yet) are
     // synthesised as stub CommonGroundGameDto entries.
-    const aiQuery = useAiSuggestions(resolvedId, { enabled: hasBuilding });
+    //
+    // ROK-1114 round 3: gate the entire AI side on the combined
+    // plugin+admin-toggle hook. When the AI surface is off, never fire
+    // the request and never seed the badge map — the grid keeps
+    // rendering, just without the ✨ AI overlay.
+    const aiAvailable = useAiSuggestionsAvailable();
+    const aiQuery = useAiSuggestions(resolvedId, {
+        enabled: hasBuilding && aiAvailable,
+    });
     const aiSuggestionsByGameId = useMemo(() => {
         const map = new Map<number, AiSuggestionDto>();
+        if (!aiAvailable) return map;
         if (aiQuery.data?.kind === 'ok') {
             for (const s of aiQuery.data.data.suggestions) map.set(s.gameId, s);
         }
         return map;
-    }, [aiQuery.data]);
+    }, [aiAvailable, aiQuery.data]);
 
     const mergedData = useMemo(
         () => mergeAiIntoCommonGround(data, aiSuggestionsByGameId, filters, search),
@@ -140,9 +150,12 @@ export function useCommonGroundState(
 
     const stableRefetch = useCallback(() => void refetch(), [refetch]);
 
-    const aiIsUnavailable = aiQuery.data?.kind === 'unavailable';
-    const aiIsLoading = hasBuilding && aiQuery.isLoading;
-    const aiIsError = aiQuery.isError && !aiIsUnavailable;
+    // When the AI feature is disabled (plugin off or admin toggle off),
+    // collapse all AI status flags so CommonGroundPanel never renders
+    // the AI status banner. The grid still renders normally.
+    const aiIsUnavailable = aiAvailable && aiQuery.data?.kind === 'unavailable';
+    const aiIsLoading = aiAvailable && hasBuilding && aiQuery.isLoading;
+    const aiIsError = aiAvailable && aiQuery.isError && !aiIsUnavailable;
 
     return {
         hasBuilding,
