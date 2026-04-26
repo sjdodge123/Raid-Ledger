@@ -440,9 +440,7 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
 
   describe('fail-closed when lineup row is missing (ROK-1134)', () => {
     /** Override the visibility-probe chain to simulate a missing row. */
-    function mockMissingLineupRow(
-      db: ReturnType<typeof makeMockDb>,
-    ): void {
+    function mockMissingLineupRow(db: ReturnType<typeof makeMockDb>): void {
       db.select.mockReturnValue({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
