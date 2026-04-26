@@ -143,7 +143,7 @@ export class LlmService {
   /** Log diagnostic info on chat entry. */
   private logChatEntry(
     providerKey: string,
-    source: 'setting' | 'default',
+    source: 'setting' | 'auto',
     model: string,
     feature: string,
     timeoutMs: number,

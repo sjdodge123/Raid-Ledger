@@ -211,7 +211,8 @@ export class AiSuggestionsService {
   }> {
     const provider =
       (await this.settings.get(AI_SETTING_KEYS.PROVIDER as never)) ??
-      AI_DEFAULTS.provider;
+      (await this.llmService.getActiveProviderKey()) ??
+      'unknown';
     const model =
       (await this.settings.get(AI_SETTING_KEYS.MODEL as never)) ??
       AI_DEFAULTS.model;

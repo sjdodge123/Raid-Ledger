@@ -1,6 +1,12 @@
-/** Default configuration values for the AI subsystem. */
+/**
+ * Default configuration values for the AI subsystem.
+ *
+ * Provider selection is no longer hard-coded here (ROK-1114) — the registry
+ * either honours `app_settings.ai_provider` or auto-picks the first cloud
+ * provider whose API key is configured. Self-hosted Ollama remains
+ * keyless and must be selected explicitly via the setting.
+ */
 export const AI_DEFAULTS = {
-  provider: 'google',
   model: 'llama3.2:3b',
   ollamaUrl: 'http://localhost:11434',
   maxTokens: 1024,
