@@ -259,6 +259,24 @@ jobs:
       - name: Build contract
         run: npm run build -w packages/contract
 
+      - name: Bump Postgres max_connections
+        # GHA service containers don't accept `command:`, so we ALTER SYSTEM
+        # and restart the postgres container in place. Default 100 is too
+        # low for the shard's combined NestJS boot + parallel-query load.
+        run: |
+          PG_CONTAINER=$(docker ps --filter "ancestor=pgvector/pgvector:pg16" --format "{{.ID}}" | head -1)
+          if [ -z "$PG_CONTAINER" ]; then echo "Postgres container not found"; exit 1; fi
+          docker exec "$PG_CONTAINER" psql -U user -d raid_ledger_test -c "ALTER SYSTEM SET max_connections = 300;"
+          docker restart "$PG_CONTAINER"
+          for i in $(seq 1 30); do
+            if docker exec "$PG_CONTAINER" pg_isready -U user -d raid_ledger_test >/dev/null 2>&1; then
+              echo "Postgres ready"
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$PG_CONTAINER" psql -U user -d raid_ledger_test -tAc "SHOW max_connections;"
+
       - name: Run integration tests (shard ${{ matrix.shard }})
         run: npm run test:integration -w api -- --shard=${{ matrix.shard }}
 
@@ -359,6 +377,24 @@ jobs:
 
       - name: Build web
         run: npm run build -w web
+
+      - name: Bump Postgres max_connections
+        # GHA service containers don't accept `command:`, so we ALTER SYSTEM
+        # and restart the postgres container in place. Default 100 is too
+        # low for the boot connection burst + parallel-query test load.
+        run: |
+          PG_CONTAINER=$(docker ps --filter "ancestor=pgvector/pgvector:pg16" --format "{{.ID}}" | head -1)
+          if [ -z "$PG_CONTAINER" ]; then echo "Postgres container not found"; exit 1; fi
+          docker exec "$PG_CONTAINER" psql -U user -d raid_ledger -c "ALTER SYSTEM SET max_connections = 300;"
+          docker restart "$PG_CONTAINER"
+          for i in $(seq 1 30); do
+            if docker exec "$PG_CONTAINER" pg_isready -U user -d raid_ledger >/dev/null 2>&1; then
+              echo "Postgres ready"
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$PG_CONTAINER" psql -U user -d raid_ledger -tAc "SHOW max_connections;"
 
       - name: Run database migrations
         run: npm run db:migrate -w api
