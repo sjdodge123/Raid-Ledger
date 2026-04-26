@@ -95,6 +95,16 @@ export async function sendPrivateSchedulingDM(
   });
 }
 
+function formatEventWhen(eventDate: Date): string {
+  return eventDate.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 /** Send the per-invitee event-created DM for a private lineup (ROK-1115). */
 export async function sendPrivateEventCreatedDM(
   notificationService: NotificationService,
@@ -106,13 +116,7 @@ export async function sendPrivateEventCreatedDM(
 ): Promise<void> {
   const key = `lineup-event-invitee-dm:${match.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-  const when = eventDate.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  const when = formatEventWhen(eventDate);
 
   await notificationService.create({
     userId: member.userId,
