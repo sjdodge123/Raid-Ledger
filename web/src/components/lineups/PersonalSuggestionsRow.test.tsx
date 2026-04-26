@@ -1,13 +1,17 @@
 /**
- * Tests for PersonalSuggestionsRow (ROK-931).
+ * Tests for PersonalSuggestionsRow (ROK-931, ROK-1114).
  *
  * Verifies that the per-user "Suggested for you" row:
  *   - Calls the backend with `?personalize=me` (not the group-scope URL).
- *   - Renders nothing (null) on 503 or empty suggestions.
+ *   - Renders nothing on empty success (don't pollute modal with empty section).
+ *   - Surfaces an inline "Suggestions temporarily unavailable" message
+ *     when the hook reports `kind === 'unavailable'` (503) — ROK-1114
+ *     replaces the silent-null behavior.
+ *   - Surfaces "AI suggestions unavailable" on a generic query error.
  *   - Renders cards with Pick buttons on success, and Pick fires
  *     `onPickSuggestion(dto)`.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -15,6 +19,18 @@ import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
 import { PersonalSuggestionsRow } from './PersonalSuggestionsRow';
 import { renderWithProviders } from '../../test/render-helpers';
 import { server } from '../../test/mocks/server';
+import { usePluginStore } from '../../stores/plugin-store';
+
+// ROK-1114 round 3: PersonalSuggestionsRow now short-circuits to null
+// when the AI plugin is inactive. Seed it active for the existing
+// scenarios; the "feature off" suite below clears it explicitly.
+beforeEach(() => {
+    usePluginStore.getState().setActiveSlugs(['ai']);
+});
+
+afterEach(() => {
+    usePluginStore.setState({ activeSlugs: new Set(), initialized: false });
+});
 
 const API_BASE = 'http://localhost:3000';
 
@@ -71,20 +87,6 @@ describe('PersonalSuggestionsRow (ROK-931)', () => {
         });
     });
 
-    it('renders nothing when the hook reports unavailable (503)', async () => {
-        server.use(
-            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
-                HttpResponse.json({ error: 'AI_PROVIDER_UNAVAILABLE' }, { status: 503 }),
-            ),
-        );
-        const { container } = renderWithProviders(
-            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
-        );
-        await waitFor(() => {
-            expect(container.textContent).not.toContain('Suggested for you');
-        });
-    });
-
     it('fires onPickSuggestion with the DTO when the Pick button is clicked', async () => {
         server.use(
             http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
@@ -102,5 +104,105 @@ describe('PersonalSuggestionsRow (ROK-931)', () => {
         expect(handlePick).toHaveBeenCalledWith(
             expect.objectContaining({ gameId: 99, name: 'It Takes Two' }),
         );
+    });
+
+    it('lays out cards in a responsive grid (ROK-1114 round 3)', async () => {
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
+                HttpResponse.json(buildResponse()),
+            ),
+        );
+        renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        const grid = await screen.findByTestId('personal-suggestions-grid');
+        // Grid container — not flex/overflow-x — so mouse users can see all
+        // suggestions without horizontal scroll inside the wider modal.
+        expect(grid.className).toMatch(/\bgrid\b/);
+        expect(grid.className).toMatch(/grid-cols-/);
+    });
+});
+
+describe('PersonalSuggestionsRow — AI surface states (ROK-1114)', () => {
+    it('renders "Suggestions temporarily unavailable" when AI returns 503', async () => {
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
+                HttpResponse.json(
+                    { error: 'AI_PROVIDER_UNAVAILABLE' },
+                    { status: 503 },
+                ),
+            ),
+        );
+        renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        const message = await screen.findByText(
+            /Suggestions temporarily unavailable/i,
+        );
+        expect(message).toBeInTheDocument();
+        // Header still visible so the user knows what the section is for.
+        expect(screen.getByText(/Suggested for you/i)).toBeInTheDocument();
+    });
+
+    it('renders "AI suggestions unavailable" when the query errors out', async () => {
+        // Generic 500 — `getAiSuggestions` only special-cases 503, so a 500
+        // surfaces as a generic query error (`query.isError === true`).
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
+                HttpResponse.json({ error: 'INTERNAL' }, { status: 500 }),
+            ),
+        );
+        renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        const message = await screen.findByText(/AI suggestions unavailable/i);
+        expect(message).toBeInTheDocument();
+        expect(screen.getByText(/Suggested for you/i)).toBeInTheDocument();
+    });
+
+    it('renders the loading indicator while the suggestions query is pending', async () => {
+        let resolve: ((v: Response) => void) | undefined;
+        const pending = new Promise<Response>((r) => {
+            resolve = r;
+        });
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () => pending),
+        );
+        renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        const loading = await screen.findByText(/AI suggestions loading/i);
+        expect(loading).toBeInTheDocument();
+        // Cleanup the dangling promise so the test runner exits.
+        resolve?.(HttpResponse.json(buildResponse({ suggestions: [] })));
+        await waitFor(() => {
+            expect(
+                screen.queryByText(/AI suggestions loading/i),
+            ).not.toBeInTheDocument();
+        });
+    });
+});
+
+describe('PersonalSuggestionsRow — AI feature gate (ROK-1114 round 3)', () => {
+    it('renders nothing AND fires no fetch when the AI plugin is inactive', async () => {
+        // Wipe the active-plugins set seeded by the suite-level beforeEach.
+        usePluginStore.setState({ activeSlugs: new Set(), initialized: true });
+        let calls = 0;
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () => {
+                calls += 1;
+                return HttpResponse.json(buildResponse());
+            }),
+        );
+        const { container } = renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        // Give React Query a beat — if it were going to fetch, it would
+        // queue inside this microtask cycle.
+        await waitFor(() => {
+            expect(container).toBeEmptyDOMElement();
+        });
+        expect(calls).toBe(0);
+        expect(screen.queryByText(/Suggested for you/i)).not.toBeInTheDocument();
     });
 });

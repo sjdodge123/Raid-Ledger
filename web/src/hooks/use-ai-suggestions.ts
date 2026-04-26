@@ -10,6 +10,7 @@ import {
   getAiSuggestions,
   type AiSuggestionsResult,
 } from '../lib/api/ai-suggestions-api';
+import { useAiSuggestionsAvailable } from './use-ai-suggestions-available';
 
 /** Query key prefix for AI suggestion queries. */
 const AI_SUGGESTIONS_KEY = ['ai-suggestions'] as const;
@@ -24,10 +25,13 @@ export function useAiSuggestions(
   options: UseAiSuggestionsOptions = {},
 ) {
   const { enabled = true, personalize = false } = options;
+  const aiAvailable = useAiSuggestionsAvailable();
   return useQuery<AiSuggestionsResult>({
     queryKey: [...AI_SUGGESTIONS_KEY, lineupId, { personalize }],
     queryFn: () => getAiSuggestions(lineupId as number, { personalize }),
-    enabled: enabled && lineupId != null,
+    // ROK-1114: gate on the combined plugin+feature flag so a disabled
+    // AI plugin (or admin toggle) never fires the request.
+    enabled: enabled && aiAvailable && lineupId != null,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     retry: false,

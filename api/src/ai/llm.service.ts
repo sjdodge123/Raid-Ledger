@@ -50,12 +50,12 @@ export class LlmService {
     options: LlmChatOptions,
     context: LlmRequestContext,
   ): Promise<LlmChatResponse> {
-    const provider = await this.resolveOrThrow();
+    const { provider, source } = await this.resolveOrThrow();
     this.applyPreChecks(context);
     const prepared = this.prepareChatOptions(options);
     const model = options.model ?? provider.defaultModel;
     const timeoutMs = context.timeoutMs ?? AI_DEFAULTS.timeoutMs;
-    this.logChatEntry(provider.key, model, context.feature, timeoutMs);
+    this.logChatEntry(provider.key, source, model, context.feature, timeoutMs);
     const start = Date.now();
 
     return this.concurrencyLimiter.withLimit(async () => {
@@ -82,7 +82,7 @@ export class LlmService {
     options: LlmGenerateOptions,
     context: LlmRequestContext,
   ): Promise<LlmGenerateResponse> {
-    const provider = await this.resolveOrThrow();
+    const { provider } = await this.resolveOrThrow();
     this.applyPreChecks(context);
     const sanitizedPrompt = sanitizeInput(options.prompt);
     const model = options.model ?? provider.defaultModel;
@@ -110,9 +110,9 @@ export class LlmService {
 
   /** Check if the active provider is reachable. */
   async isAvailable(): Promise<boolean> {
-    const provider = await this.registry.resolveActive();
-    if (!provider) return false;
-    return provider.isAvailable();
+    const resolution = await this.registry.resolveActive();
+    if (!resolution) return false;
+    return resolution.provider.isAvailable();
   }
 
   /**
@@ -122,33 +122,34 @@ export class LlmService {
    * Haiku when the interactive chat is on Sonnet).
    */
   async getActiveProviderKey(): Promise<string | null> {
-    const provider = await this.registry.resolveActive();
-    return provider?.key ?? null;
+    const resolution = await this.registry.resolveActive();
+    return resolution?.provider.key ?? null;
   }
 
   /** List models from the active provider. */
   async listModels(): Promise<LlmModelInfo[]> {
-    const provider = await this.resolveOrThrow();
+    const { provider } = await this.resolveOrThrow();
     return provider.listModels();
   }
 
   private async resolveOrThrow() {
-    const provider = await this.registry.resolveActive();
-    if (!provider) {
+    const resolution = await this.registry.resolveActive();
+    if (!resolution) {
       throw new NotFoundException('No AI provider configured');
     }
-    return provider;
+    return resolution;
   }
 
   /** Log diagnostic info on chat entry. */
   private logChatEntry(
     providerKey: string,
+    source: 'setting' | 'auto',
     model: string,
     feature: string,
     timeoutMs: number,
   ): void {
     this.logger.log(
-      `LLM chat | provider=${providerKey} model=${model} feature=${feature} timeout=${timeoutMs}ms`,
+      `LLM chat | provider=${providerKey} source=${source} model=${model} feature=${feature} timeout=${timeoutMs}ms`,
     );
   }
 

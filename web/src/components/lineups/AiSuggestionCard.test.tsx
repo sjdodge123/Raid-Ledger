@@ -1,5 +1,5 @@
 /**
- * Tests for AiSuggestionCard (ROK-931).
+ * Tests for AiSuggestionCard (ROK-931, ROK-1114).
  *
  * Verifies:
  *   - `mode='nominate'` renders a Nominate button that becomes "At cap"
@@ -7,6 +7,8 @@
  *   - `mode='pick'` renders a Pick button that fires `onPick` with the
  *     suggestion DTO.
  *   - Ownership pill only renders when voterTotal > 0.
+ *   - Reasoning is exposed via the AI badge `title` tooltip rather than
+ *     inline body text (ROK-1114 round-3 cleanup).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
@@ -29,7 +31,7 @@ function buildSuggestion(overrides: Partial<AiSuggestionDto> = {}): AiSuggestion
 }
 
 describe('AiSuggestionCard (ROK-931)', () => {
-    it('renders the game name, reasoning, and ownership pill', () => {
+    it('renders the game name, ownership pill, and exposes reasoning via the AI badge tooltip', () => {
         renderWithProviders(
             <AiSuggestionCard
                 suggestion={buildSuggestion()}
@@ -37,8 +39,24 @@ describe('AiSuggestionCard (ROK-931)', () => {
             />,
         );
         expect(screen.getByText('Valheim')).toBeInTheDocument();
-        expect(screen.getByText('Fits co-op taste')).toBeInTheDocument();
         expect(screen.getByText('3/5 own')).toBeInTheDocument();
+        // Reasoning is no longer inline body text — it's the badge tooltip.
+        expect(screen.queryByText('Fits co-op taste')).not.toBeInTheDocument();
+        const badge = screen.getByText(/AI Pick/i);
+        expect(badge).toHaveAttribute('title', 'Fits co-op taste');
+    });
+
+    it('falls back to the default badge tooltip when reasoning is missing', () => {
+        renderWithProviders(
+            <AiSuggestionCard
+                // @ts-expect-error — reasoning is required on the schema; we
+                // intentionally drop it to exercise the badge fallback.
+                suggestion={{ ...buildSuggestion(), reasoning: undefined }}
+                lineupId={7}
+            />,
+        );
+        const badge = screen.getByText(/AI Pick/i);
+        expect(badge).toHaveAttribute('title', 'Suggested by AI');
     });
 
     it('hides the ownership pill when voterTotal is 0', () => {

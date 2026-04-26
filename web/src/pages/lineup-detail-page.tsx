@@ -20,6 +20,8 @@ import { SteamNudgeBanner } from '../components/lineups/SteamNudgeBanner';
 import { TiebreakerView } from '../components/lineups/tiebreaker/TiebreakerView';
 import { TiebreakerPromptModal } from '../components/lineups/tiebreaker/TiebreakerPromptModal';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
+import { useAiSuggestions } from '../hooks/use-ai-suggestions';
+import { useAiSuggestionsAvailable } from '../hooks/use-ai-suggestions-available';
 import { useSteamPasteDetection } from '../hooks/use-steam-paste';
 import { canParticipateInLineup } from '../lib/lineup-eligibility';
 
@@ -81,6 +83,16 @@ export function LineupDetailPage(): JSX.Element {
   const isBuilding = !isLoading && !error && lineup?.status === 'building';
   const canParticipate = canParticipateInLineup(lineup, user);
   const canNominate = isBuilding && canParticipate;
+
+  // ROK-1114 round 3: warm the per-user suggestions cache while the
+  // user is on the lineup page so opening the Nominate modal feels
+  // instant instead of waiting 5-20s for the LLM. Gated on the combined
+  // plugin+admin toggle so we don't fire when AI is uninstalled or off.
+  const aiAvailable = useAiSuggestionsAvailable();
+  useAiSuggestions(lineupId, {
+    personalize: true,
+    enabled: !!canNominate && aiAvailable,
+  });
 
   const handleGameResolved = useCallback((game: SelectedGame) => {
     setPreSelectedGame(game);

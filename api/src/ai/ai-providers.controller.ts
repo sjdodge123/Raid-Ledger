@@ -19,7 +19,7 @@ import { SettingsService } from '../settings/settings.service';
 import { OllamaDockerService } from './providers/ollama-docker.service';
 import { OllamaNativeService } from './providers/ollama-native.service';
 import { OllamaSetupService } from './providers/ollama-setup.service';
-import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
+import { AI_SETTING_KEYS } from './llm.constants';
 import type {
   AiProviderInfoDto,
   AiOllamaSetupDto,
@@ -96,12 +96,19 @@ export class AiProvidersController {
     return { success: true };
   }
 
-  /** Resolve active provider key from settings. */
+  /**
+   * Resolve active provider key. Honours an explicit `ai_provider` setting,
+   * else falls back to the registry's auto-pick (first cloud provider with
+   * a key configured). Returns empty string when nothing is configured so
+   * the per-provider "active" badge stays unset.
+   */
   private async getActiveProviderKey(): Promise<string> {
-    return (
-      (await this.settings.get(AI_SETTING_KEYS.PROVIDER as SettingKey)) ??
-      AI_DEFAULTS.provider
+    const explicit = await this.settings.get(
+      AI_SETTING_KEYS.PROVIDER as SettingKey,
     );
+    if (explicit) return explicit;
+    const resolution = await this.registry.resolveActive();
+    return resolution?.provider.key ?? '';
   }
 
   /** Build provider info including configuration and availability. */

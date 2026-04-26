@@ -36,7 +36,10 @@ describe('AiAdminController', () => {
       listModels: jest.fn().mockResolvedValue([]),
     };
     mockRegistry = {
-      resolveActive: jest.fn().mockResolvedValue(createMockProvider()),
+      resolveActive: jest.fn().mockResolvedValue({
+        provider: createMockProvider(),
+        source: 'setting',
+      }),
     };
     mockLogService = {
       getUsageStats: jest.fn().mockResolvedValue({
@@ -179,15 +182,18 @@ describe('AiAdminController (adversarial)', () => {
     it('includes currentModel from settings', async () => {
       mockSettings.get.mockResolvedValue('phi3:mini');
       mockRegistry.resolveActive.mockResolvedValue({
-        key: 'ollama',
-        displayName: 'Ollama (Local)',
-        selfHosted: true,
-        defaultModel: 'mock-model',
-        requiresApiKey: false,
-        isAvailable: jest.fn(),
-        listModels: jest.fn(),
-        chat: jest.fn(),
-        generate: jest.fn(),
+        provider: {
+          key: 'ollama',
+          displayName: 'Ollama (Local)',
+          selfHosted: true,
+          defaultModel: 'mock-model',
+          requiresApiKey: false,
+          isAvailable: jest.fn(),
+          listModels: jest.fn(),
+          chat: jest.fn(),
+          generate: jest.fn(),
+        },
+        source: 'setting',
       });
       const result = await controller.getStatus();
       expect(result.currentModel).toBe('phi3:mini');
@@ -281,15 +287,18 @@ describe('ROK-1000: testChat timeout and diagnostics', () => {
     };
     mockRegistry = {
       resolveActive: jest.fn().mockResolvedValue({
-        key: 'ollama',
-        displayName: 'Ollama (Local)',
-        requiresApiKey: false,
-        selfHosted: true,
-        defaultModel: 'mock-model',
-        isAvailable: jest.fn().mockResolvedValue(true),
-        listModels: jest.fn().mockResolvedValue([]),
-        chat: jest.fn(),
-        generate: jest.fn(),
+        provider: {
+          key: 'ollama',
+          displayName: 'Ollama (Local)',
+          requiresApiKey: false,
+          selfHosted: true,
+          defaultModel: 'mock-model',
+          isAvailable: jest.fn().mockResolvedValue(true),
+          listModels: jest.fn().mockResolvedValue([]),
+          chat: jest.fn(),
+          generate: jest.fn(),
+        },
+        source: 'setting',
       }),
     };
     mockLogService = {
@@ -425,9 +434,10 @@ describe('ROK-1019: model resolution per provider', () => {
       }),
     };
     mockRegistry = {
-      resolveActive: jest
-        .fn()
-        .mockResolvedValue(createCloudProvider('google', 'Google (Gemini)')),
+      resolveActive: jest.fn().mockResolvedValue({
+        provider: createCloudProvider('google', 'Google (Gemini)'),
+        source: 'setting',
+      }),
     };
     mockLogService = {
       getUsageStats: jest.fn().mockResolvedValue({
@@ -468,9 +478,10 @@ describe('ROK-1019: model resolution per provider', () => {
     });
 
     it('AC4: error includes openai cloud default when provider is openai', async () => {
-      mockRegistry.resolveActive.mockResolvedValue(
-        createCloudProvider('openai', 'OpenAI'),
-      );
+      mockRegistry.resolveActive.mockResolvedValue({
+        provider: createCloudProvider('openai', 'OpenAI'),
+        source: 'setting',
+      });
       mockLlmService.chat.mockRejectedValue(new Error('HTTP 401'));
 
       const result = await controller.testChat();
@@ -481,9 +492,10 @@ describe('ROK-1019: model resolution per provider', () => {
     });
 
     it('AC4: error includes claude cloud default when provider is claude', async () => {
-      mockRegistry.resolveActive.mockResolvedValue(
-        createCloudProvider('claude', 'Claude'),
-      );
+      mockRegistry.resolveActive.mockResolvedValue({
+        provider: createCloudProvider('claude', 'Claude'),
+        source: 'setting',
+      });
       mockLlmService.chat.mockRejectedValue(new Error('HTTP 401'));
 
       const result = await controller.testChat();
@@ -497,15 +509,18 @@ describe('ROK-1019: model resolution per provider', () => {
   describe('testChat error — ollama keeps using ai_model setting', () => {
     it('AC4: ollama provider still uses the global ai_model setting', async () => {
       mockRegistry.resolveActive.mockResolvedValue({
-        key: 'ollama',
-        displayName: 'Ollama (Local)',
-        requiresApiKey: false,
-        selfHosted: true,
-        defaultModel: 'mock-model',
-        isAvailable: jest.fn().mockResolvedValue(true),
-        listModels: jest.fn().mockResolvedValue([]),
-        chat: jest.fn(),
-        generate: jest.fn(),
+        provider: {
+          key: 'ollama',
+          displayName: 'Ollama (Local)',
+          requiresApiKey: false,
+          selfHosted: true,
+          defaultModel: 'mock-model',
+          isAvailable: jest.fn().mockResolvedValue(true),
+          listModels: jest.fn().mockResolvedValue([]),
+          chat: jest.fn(),
+          generate: jest.fn(),
+        },
+        source: 'setting',
       });
       mockLlmService.chat.mockRejectedValue(new Error('Connection refused'));
 
@@ -526,15 +541,18 @@ describe('ROK-1019: model resolution per provider', () => {
 
     it('AC4: getStatus shows ai_model setting for ollama provider', async () => {
       mockRegistry.resolveActive.mockResolvedValue({
-        key: 'ollama',
-        displayName: 'Ollama (Local)',
-        requiresApiKey: false,
-        selfHosted: true,
-        defaultModel: 'mock-model',
-        isAvailable: jest.fn().mockResolvedValue(true),
-        listModels: jest.fn().mockResolvedValue([]),
-        chat: jest.fn(),
-        generate: jest.fn(),
+        provider: {
+          key: 'ollama',
+          displayName: 'Ollama (Local)',
+          requiresApiKey: false,
+          selfHosted: true,
+          defaultModel: 'mock-model',
+          isAvailable: jest.fn().mockResolvedValue(true),
+          listModels: jest.fn().mockResolvedValue([]),
+          chat: jest.fn(),
+          generate: jest.fn(),
+        },
+        source: 'setting',
       });
 
       const result = await controller.getStatus();

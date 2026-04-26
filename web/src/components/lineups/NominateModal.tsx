@@ -2,10 +2,13 @@
  * Game nomination modal for Community Lineup (ROK-935).
  * Provides game search, preview with art, and optional note input.
  */
-import { type JSX, useState, useCallback } from 'react';
+import { type JSX, useState, useCallback, useEffect, useRef } from 'react';
 import { Modal } from '../ui/modal';
 import { useGameSearch } from '../../hooks/use-game-search';
 import { useNominateGame } from '../../hooks/use-lineups';
+import { extractSteamAppId } from '../../hooks/use-steam-paste';
+import { getGameBySteamAppId } from '../../lib/api-client';
+import { toast } from '../../lib/toast';
 import { PersonalSuggestionsRow } from './PersonalSuggestionsRow';
 
 export interface SelectedGame {
@@ -29,8 +32,9 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
             type="text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Search games..."
+            placeholder="Search by name or paste a Steam store URL"
             className="w-full px-4 py-2.5 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3"
+            autoFocus
         />
     );
 }
@@ -115,13 +119,68 @@ function PreviewCard({ game, note, onNoteChange, onSubmit, onBack, isPending }: 
     );
 }
 
+/**
+ * Watch the search query for a Steam store URL and resolve it via the
+ * library API. Mirrors the page-level paste flow (`useSteamPasteDetection`)
+ * which bails when an input is focused — so the modal owns its own copy.
+ *
+ * Each appId is resolved at most once even if the user re-pastes; loading
+ * is tracked in a ref so the effect doesn't re-fire on the toast/state churn.
+ */
+function useSteamUrlAutoResolve(
+    query: string,
+    isOpen: boolean,
+    onResolved: (game: SelectedGame) => void,
+): void {
+    const lastTriedRef = useRef<number | null>(null);
+    const inFlightRef = useRef(false);
+    useEffect(() => {
+        if (!isOpen) {
+            lastTriedRef.current = null;
+            return;
+        }
+        const appId = extractSteamAppId(query);
+        if (appId == null || appId === lastTriedRef.current) return;
+        if (inFlightRef.current) return;
+        lastTriedRef.current = appId;
+        inFlightRef.current = true;
+        (async () => {
+            try {
+                const game = await getGameBySteamAppId(appId);
+                onResolved({
+                    id: game.id,
+                    name: game.name,
+                    coverUrl: game.coverUrl ?? null,
+                });
+            } catch {
+                toast.error('Game not found in library');
+            } finally {
+                inFlightRef.current = false;
+            }
+        })();
+    }, [query, isOpen, onResolved]);
+}
+
 /** Game nomination modal with search and preview. */
 export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: NominateModalProps): JSX.Element {
     const [query, setQuery] = useState('');
     const [selected, setSelected] = useState<SelectedGame | null>(null);
     const [note, setNote] = useState('');
-    const { data: searchData, isLoading: searchLoading } = useGameSearch(query, isOpen);
+    const isSteamUrl = extractSteamAppId(query) !== null;
+    // When a Steam URL is in the input we don't want to run the name
+    // search — it just wastes a request and renders "No games found".
+    const { data: searchData, isLoading: searchLoading } = useGameSearch(
+        isSteamUrl ? '' : query,
+        isOpen,
+    );
     const nominate = useNominateGame();
+    // Resolve any Steam store URL pasted into the search input. The
+    // page-level paste detector skips the modal (its global listener
+    // bails when an input is focused), so the modal owns this flow.
+    useSteamUrlAutoResolve(query, isOpen, (game) => {
+        setSelected(game);
+        setQuery('');
+    });
 
     // Sync pre-selected game when modal opens with one (ROK-945)
     const [appliedPreSelect, setAppliedPreSelect] = useState<SelectedGame | null>(null);
@@ -159,7 +218,7 @@ export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: No
     const results = searchData?.data ?? [];
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title="Nominate a Game" maxWidth="max-w-lg">
+        <Modal isOpen={isOpen} onClose={handleClose} title="Nominate a Game" maxWidth="max-w-4xl">
             {selected ? (
                 <PreviewCard
                     game={selected}
@@ -171,17 +230,16 @@ export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: No
                 />
             ) : (
                 <>
-                    <p className="text-xs text-dim mb-3">Search by name or paste a Steam store URL</p>
-                    <PersonalSuggestionsRow
-                        lineupId={lineupId}
-                        onPickSuggestion={(s) => handleSelect({ id: s.gameId, name: s.name, coverUrl: s.coverUrl })}
-                    />
                     <SearchInput value={query} onChange={setQuery} />
                     {searchLoading && <p className="text-sm text-muted py-4 text-center">Searching...</p>}
                     {results.length > 0 && <SearchResults results={results} onSelect={handleSelect} />}
                     {query.length >= 2 && !searchLoading && results.length === 0 && (
                         <p className="text-sm text-muted py-4 text-center">No games found</p>
                     )}
+                    <PersonalSuggestionsRow
+                        lineupId={lineupId}
+                        onPickSuggestion={(s) => handleSelect({ id: s.gameId, name: s.name, coverUrl: s.coverUrl })}
+                    />
                 </>
             )}
         </Modal>

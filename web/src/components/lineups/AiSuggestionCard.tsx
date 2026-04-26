@@ -23,19 +23,20 @@ export interface AiSuggestionCardProps {
     onPick?: (suggestion: AiSuggestionDto) => void;
 }
 
-/** ✨ AI Pick chip rendered in the top-left of every suggestion cover. */
-function AiBadge(): JSX.Element {
+/** ✨ AI Pick chip rendered in the top-left of every suggestion cover.
+ * `reasoning` surfaces in the native title tooltip so the modal stays clean. */
+function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
     return (
         <span
             className="absolute top-2 left-2 text-[10px] font-semibold tracking-wide uppercase bg-violet-500/90 text-white rounded-full px-2 py-0.5 shadow-sm"
-            title="Suggested by AI"
+            title={reasoning ?? 'Suggested by AI'}
         >
             ✨ AI Pick
         </span>
     );
 }
 
-function Cover({ src, alt }: { src: string | null; alt: string }): JSX.Element {
+function Cover({ src, alt, reasoning }: { src: string | null; alt: string; reasoning?: string }): JSX.Element {
     if (src) {
         return (
             <div className="relative">
@@ -44,14 +45,14 @@ function Cover({ src, alt }: { src: string | null; alt: string }): JSX.Element {
                     alt={alt}
                     className="w-full aspect-[3/4] object-cover rounded-t-xl"
                 />
-                <AiBadge />
+                <AiBadge reasoning={reasoning} />
             </div>
         );
     }
     return (
         <div className="relative w-full aspect-[3/4] bg-panel rounded-t-xl flex items-center justify-center text-dim">
             No art
-            <AiBadge />
+            <AiBadge reasoning={reasoning} />
         </div>
     );
 }
@@ -85,11 +86,10 @@ export function AiSuggestionCard({
     };
 
     return (
-        <div className="w-[180px] flex-shrink-0 rounded-xl bg-panel border border-edge/50 overflow-hidden flex flex-col">
-            <Cover src={suggestion.coverUrl} alt={suggestion.name} />
+        <div className="min-w-0 rounded-xl bg-panel border border-edge/50 overflow-hidden flex flex-col">
+            <Cover src={suggestion.coverUrl} alt={suggestion.name} reasoning={suggestion.reasoning} />
             <div className="p-3 flex flex-col gap-2 flex-1">
                 <h3 className="text-sm font-medium text-foreground line-clamp-1">{suggestion.name}</h3>
-                <p className="text-xs text-muted line-clamp-2 min-h-[2rem]">{suggestion.reasoning}</p>
                 <OwnershipPill count={suggestion.ownershipCount} total={suggestion.voterTotal} />
                 {mode === 'nominate' ? (
                     <button

@@ -42,6 +42,10 @@ export function AiFeatureToggles({ disabled }: AiFeatureTogglesProps) {
 
     const chatEnabled = data?.chatEnabled ?? false;
     const dynCatEnabled = data?.dynamicCategoriesEnabled ?? false;
+    // Default true so an unconfigured install gets the feature; admin
+    // must explicitly disable. Mirrors the backend default in
+    // ai-admin.controller.getFeatures.
+    const aiSuggestionsEnabled = data?.aiSuggestionsEnabled ?? true;
 
     return (
         <div className="space-y-1 divide-y divide-edge/50">
@@ -58,6 +62,13 @@ export function AiFeatureToggles({ disabled }: AiFeatureTogglesProps) {
                 enabled={dynCatEnabled}
                 disabled={disabled}
                 onChange={(v) => mutate({ dynamicCategoriesEnabled: v })}
+            />
+            <FeatureToggle
+                label="AI Nomination Suggestions"
+                description="Per-user 'Suggested for you' picks in the Nominate modal and ✨ AI badges on the Common Ground grid. Disable to cap LLM costs."
+                enabled={aiSuggestionsEnabled}
+                disabled={disabled}
+                onChange={(v) => mutate({ aiSuggestionsEnabled: v })}
             />
         </div>
     );

@@ -16,6 +16,7 @@ import type { CommonGroundParams } from '../../lib/api-client';
 import { CommonGroundFilters } from './CommonGroundFilters';
 import { CommonGroundGameCard } from './CommonGroundGameCard';
 import { useCommonGroundState } from './use-common-ground-state';
+import { AiStatusBanner } from './AiStatusBanner';
 
 /** Loading skeleton cards. */
 function LoadingSkeleton(): JSX.Element {
@@ -210,6 +211,11 @@ export function CommonGroundPanel({
     return (
         <section className="space-y-3">
             <PanelHeader nominated={state.rawMeta.nominatedCount} max={state.rawMeta.maxNominations} />
+            <AiStatusBanner
+                isLoading={state.aiIsLoading}
+                isUnavailable={state.aiIsUnavailable}
+                isError={state.aiIsError}
+            />
             <PanelContent {...state} />
         </section>
     );

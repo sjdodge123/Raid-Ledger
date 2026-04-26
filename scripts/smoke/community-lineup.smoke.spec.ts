@@ -178,7 +178,7 @@ test.describe('Nomination modal', () => {
         await expect(modal.getByRole('heading', { name: 'Nominate a Game' })).toBeVisible({ timeout: 5_000 });
 
         // Search input inside the modal should be present
-        await expect(modal.getByPlaceholder('Search games...')).toBeVisible({ timeout: 3_000 });
+        await expect(modal.getByPlaceholder('Search by name or paste a Steam store URL')).toBeVisible({ timeout: 3_000 });
     });
 
     test('search input accepts text and shows results or empty state', async ({ page }) => {
@@ -189,7 +189,7 @@ test.describe('Nomination modal', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal.getByRole('heading', { name: 'Nominate a Game' })).toBeVisible({ timeout: 5_000 });
 
-        const searchInput = modal.getByPlaceholder('Search games...');
+        const searchInput = modal.getByPlaceholder('Search by name or paste a Steam store URL');
         await searchInput.fill('xyznonexistent999');
 
         // Should show "No games found" or "Searching..." then "No games found"
@@ -207,7 +207,7 @@ test.describe('Nomination modal', () => {
         await expect(modal.getByRole('heading', { name: 'Nominate a Game' })).toBeVisible({ timeout: 5_000 });
 
         // Search for a game known to exist in most demo/IGDB-seeded databases
-        const searchInput = modal.getByPlaceholder('Search games...');
+        const searchInput = modal.getByPlaceholder('Search by name or paste a Steam store URL');
         await searchInput.fill('Lethal');
 
         // Wait for debounced search (300ms) + API response

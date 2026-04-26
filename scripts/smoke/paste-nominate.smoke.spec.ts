@@ -209,7 +209,7 @@ test.describe('Input focus suppresses detection (AC4)', () => {
         await expect(modal).toBeVisible({ timeout: 5_000 });
 
         // Focus the search input
-        const searchInput = modal.getByPlaceholder('Search games...');
+        const searchInput = modal.getByPlaceholder('Search by name or paste a Steam store URL');
         await searchInput.focus();
 
         // Dispatch paste on the focused input element

@@ -43,7 +43,9 @@ describe('LlmService', () => {
   beforeEach(async () => {
     mockProvider = createMockProvider();
     mockRegistry = {
-      resolveActive: jest.fn().mockResolvedValue(mockProvider),
+      resolveActive: jest
+        .fn()
+        .mockResolvedValue({ provider: mockProvider, source: 'setting' }),
       list: jest.fn().mockReturnValue([mockProvider]),
     };
     mockLogService = { log: jest.fn().mockResolvedValue(undefined) };
@@ -172,7 +174,9 @@ describe('LlmService (adversarial)', () => {
   beforeEach(async () => {
     mockProvider = createMockProvider();
     mockRegistry = {
-      resolveActive: jest.fn().mockResolvedValue(mockProvider),
+      resolveActive: jest
+        .fn()
+        .mockResolvedValue({ provider: mockProvider, source: 'setting' }),
       list: jest.fn().mockReturnValue([mockProvider]),
     };
     mockLogService = { log: jest.fn().mockResolvedValue(undefined) };
@@ -402,7 +406,9 @@ describe('ROK-1000: LlmService diagnostic logging', () => {
   beforeEach(async () => {
     mockProvider = createLoggingMockProvider();
     mockRegistry = {
-      resolveActive: jest.fn().mockResolvedValue(mockProvider),
+      resolveActive: jest
+        .fn()
+        .mockResolvedValue({ provider: mockProvider, source: 'setting' }),
       list: jest.fn().mockReturnValue([mockProvider]),
     };
     mockLogService = { log: jest.fn().mockResolvedValue(undefined) };
