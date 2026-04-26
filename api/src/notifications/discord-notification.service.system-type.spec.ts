@@ -296,7 +296,7 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
   describe('dispatch — system notification type handling', () => {
     it('should skip system notification if discord is explicitly disabled for system type', async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ discordId: 'discord-123' }])
+        .mockResolvedValueOnce([{ discordId: '111111111111111111' }])
         .mockResolvedValueOnce([
           {
             channelPrefs: {
@@ -320,7 +320,7 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
 
     it('should enqueue system notification when discord is enabled for system type', async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ discordId: 'discord-123' }])
+        .mockResolvedValueOnce([{ discordId: '111111111111111111' }])
         .mockResolvedValueOnce([
           {
             channelPrefs: {
@@ -350,7 +350,7 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
     it('should enqueue system notification when no prefs row exists (defaults apply)', async () => {
       // No prefs row → dispatch skips type check → proceeds to bot check
       mockDb.limit
-        .mockResolvedValueOnce([{ discordId: 'discord-456' }])
+        .mockResolvedValueOnce([{ discordId: '222222222222222222' }])
         .mockResolvedValueOnce([]); // No prefs
       mockClientService.isConnected.mockReturnValue(true);
       mockRedis.get.mockResolvedValueOnce(null);
