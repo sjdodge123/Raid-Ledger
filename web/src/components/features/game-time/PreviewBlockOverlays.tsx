@@ -85,6 +85,7 @@ function PreviewBlock({ block, pos, hasEventUnderneath }: {
                         coverUrl: block.coverUrl, startHour: block.startHour,
                         endHour: block.endHour, description: block.description,
                         creatorUsername: block.creatorUsername,
+                        gameId: block.gameId,
                         signupsPreview: block.attendees, signupCount: block.attendeeCount,
                     }}
                     spanHours={block.endHour - block.startHour}

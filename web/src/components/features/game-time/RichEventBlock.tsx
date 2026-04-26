@@ -25,7 +25,7 @@ interface RichEventBlockProps {
             id: number;
             username: string;
             avatar: string | null;
-            characters?: Array<{ gameId: number; avatarUrl: string | null }>;
+            characters?: Array<{ gameId: number | string; avatarUrl: string | null }>;
         }>;
         signupCount?: number;
     };

@@ -429,4 +429,71 @@ describe('LineupNotificationService — private-visibility gating (ROK-1115)', (
       expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ── ROK-1134: fail-closed when underlying lineup row is missing ──────────
+  //
+  // When the orchestrator is called without a caller-provided visibility AND
+  // the DB lookup returns no row (race against a hard delete or broken FK),
+  // `resolveLineupVisibility` must NOT default to 'public'. It must return
+  // null, and every `route*IfPrivate` must treat that null as "private path
+  // taken" so the channel embed (and DM fan-out) is suppressed.
+
+  describe('fail-closed when lineup row is missing (ROK-1134)', () => {
+    /** Override the visibility-probe chain to simulate a missing row. */
+    function mockMissingLineupRow(db: ReturnType<typeof makeMockDb>): void {
+      db.select.mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+    }
+
+    it('notifyNominationMilestone — does not post channel embed when lineup row is missing', async () => {
+      mockMissingLineupRow(mockDb);
+
+      // No `visibility` passed → resolveLineupVisibility falls through to DB,
+      // which now returns [] (no row).
+      await callMilestone(service, LINEUP_ID, 50, [milestoneEntry('Game A')]);
+
+      expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('notifyMatchesFound — does not post channel embed when lineup row is missing', async () => {
+      mockMissingLineupRow(mockDb);
+
+      await callMatchesFound(service, LINEUP_ID, [
+        makeMatch({ thresholdMet: true }),
+      ]);
+
+      expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('notifySchedulingOpen — does not post channel embed when lineup row is missing', async () => {
+      mockMissingLineupRow(mockDb);
+
+      await callSchedulingOpen(service, makeMatch({ status: 'scheduling' }));
+
+      expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('notifyEventCreated — does not post channel embed when lineup row is missing', async () => {
+      mockMissingLineupRow(mockDb);
+      const eventDate = new Date('2026-04-20T18:00:00Z');
+
+      await callEventCreated(
+        service,
+        makeMatch({ status: 'scheduled', linkedEventId: 200 }),
+        eventDate,
+        200,
+      );
+
+      expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+  });
 });

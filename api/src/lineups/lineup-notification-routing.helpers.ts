@@ -27,18 +27,28 @@ type Db = PostgresJsDatabase<typeof schema>;
 /**
  * Resolve lineup visibility: prefer the caller-provided value, fall back
  * to a DB lookup so older callers aren't broken (ROK-1065).
+ *
+ * Fail-closed (ROK-1134): if no caller-provided visibility AND the lineup
+ * row is missing (race against hard delete or broken FK), return `null`.
+ * Callers must treat `null` as "skip the channel embed" so we never leak
+ * to the public channel for a non-existent lineup.
  */
 export async function resolveLineupVisibility(
   db: Db,
   lineup: LineupInfo,
-): Promise<'public' | 'private'> {
+): Promise<'public' | 'private' | null> {
   if (lineup.visibility) return lineup.visibility;
   const [row] = await db
     .select({ visibility: schema.communityLineups.visibility })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineup.id))
     .limit(1);
-  return row?.visibility ?? 'public';
+  // Fail-closed: no row means the lineup vanished (race against hard delete
+  // or broken FK). Return null so callers suppress the channel embed.
+  // The column is NOT NULL with default 'public', so an existing row always
+  // resolves to a real visibility value.
+  if (!row) return null;
+  return row.visibility ?? 'public';
 }
 
 /**
@@ -52,6 +62,7 @@ export async function routeLineupCreatedIfPrivate(
   lineup: LineupInfo,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility === null) return true;
   if (visibility !== 'private') return false;
   await fanOutLineupCreatedDMsToInvitees(
     db,
@@ -76,6 +87,7 @@ export async function routeVotingOpenIfPrivate(
   baseUrl: string | undefined,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility === null) return true;
   if (visibility !== 'private') return false;
   await fanOutVotingDMsToInvitees(
     db,
@@ -101,6 +113,7 @@ export async function routeNominationMilestoneIfPrivate(
   entryCount: number,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility === null) return true;
   if (visibility !== 'private') return false;
   await fanOutMilestoneDMsToInvitees(
     db,
@@ -126,6 +139,7 @@ export async function routeMatchesFoundIfPrivate(
   matchCount: number,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility === null) return true;
   if (visibility !== 'private') return false;
   await fanOutMatchesFoundDMsToInvitees(
     db,
@@ -149,6 +163,7 @@ export async function routeSchedulingOpenIfPrivate(
   match: MatchInfo,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility === null) return true;
   if (visibility !== 'private') return false;
   await fanOutSchedulingDMsToInvitees(
     db,
@@ -173,6 +188,7 @@ export async function routeEventCreatedIfPrivate(
   eventId: number | undefined,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility === null) return true;
   if (visibility !== 'private') return false;
   await fanOutEventCreatedDMsToInvitees(
     db,

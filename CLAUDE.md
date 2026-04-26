@@ -37,6 +37,26 @@ Three custom MCP servers provide tools for environment management, story trackin
 - **Always enable auto-merge (squash)** after creating or pushing to a PR: `gh pr merge <branch> --auto --squash`
 - This is safe to run whether the PR was just created or already existed — it's a no-op if already enabled.
 
+## Operator Config Files (STRICT — applies to ALL agents)
+
+The following paths are **operator-authored configuration**. They are intentionally bundled into whatever PR is open at the time, regardless of which story the PR is for:
+
+- `.claude/skills/**` — slash commands and agent skills
+- `.claude/agents/**` — agent definitions
+- `.claude/settings.json`, `.claude/settings.local.json` — Claude Code harness config
+- `CLAUDE.md` (this file) — project instructions
+- `.mcp.json` — MCP server registrations
+
+**Rules:**
+
+1. **Never cherry-pick around them.** If you encounter commits or staged changes touching these paths on a branch you're working on, treat them as in-scope and let them ride along.
+2. **Never revert them** because "they look unrelated to my story." They are intentionally unrelated — the operator updates them opportunistically and they ship with the next PR that goes out.
+3. **Never exclude them** from `git add` / `git commit` / `git push` / `git rebase` / cherry-pick / squash flows.
+4. **When committing them**, use a `chore(config): ...` prefix in the commit message so they're easy to spot in PR diffs. Do NOT mention the active story ID — they're independent.
+5. **`/push` (and any agent that pushes)** must check for unstaged or untracked changes under these paths and stage + commit them before pushing. Do not leave them in the working tree.
+
+This rule exists because parallel agents kept seeing these commits, assuming "not my work," and cherry-picking around them — leaving operator config changes orphaned across batches.
+
 ## Local Dev Environment
 
 - **Start everything:** `./scripts/deploy_dev.sh` — ensures Docker is up, runs migrations, seeds data, starts API + web in watch mode
@@ -112,6 +132,11 @@ Run `./scripts/validate-ci.sh --full` before pushing any branch. This replaces m
 | Playwright | `npx playwright test` (desktop + mobile) | Manual (after deploy) |
 
 Migration and container checks run conditionally based on `git diff` against `origin/main`. Playwright remains a separate step because it requires a running dev environment.
+
+**Backup integration tests** (`api/src/backup/backup.integration.spec.ts`) shell out to `pg_dump` / `pg_restore`. They are gated by `SKIP_BACKUP_INTEGRATION`:
+
+- Locally: `validate-ci.sh` checks for `pg_dump` on PATH. If missing, it prints a yellow warning, sets `SKIP_BACKUP_INTEGRATION=1`, and the suite skips. Install `postgresql-client` (e.g. `brew install libpq` on macOS) to run them.
+- In CI: pass `--ci` to `validate-ci.sh`. Missing `pg_dump` then hard-fails instead of skipping, so CI never silently misses these tests.
 
 ### Smoke Test Verification (STRICT — learned from ROK-935 incident)
 

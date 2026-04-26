@@ -9,6 +9,10 @@
 # Usage:
 #   ./scripts/validate-ci.sh          # Run all checks
 #   ./scripts/validate-ci.sh --full   # Same (accepted for explicitness)
+#   ./scripts/validate-ci.sh --ci     # Hard-fail on missing local prereqs
+#                                     # (e.g. pg_dump). Use in CI to ensure
+#                                     # backup integration tests never silently
+#                                     # skip.
 # =============================================================================
 
 set -euo pipefail
@@ -30,6 +34,9 @@ FAILURES=0
 # Scope flags
 migrations_changed=false
 container_changed=false
+
+# Mode flags
+ci_mode=false
 
 # ---------------------------------------------------------------------------
 # Result tracking helpers
@@ -116,7 +123,33 @@ run_unit_tests() {
   (cd "$REPO_ROOT/web" && npx vitest run --coverage)
 }
 
+check_backup_prereqs() {
+  # Backup integration tests shell out to pg_dump/pg_restore. On dev machines
+  # without postgresql-client installed they hard-fail with 500 → 200 mismatch
+  # and obscure real failures. CI runners install postgresql-client, so the
+  # binary is always present there.
+  if command -v pg_dump >/dev/null 2>&1; then
+    export SKIP_BACKUP_INTEGRATION=0
+    return 0
+  fi
+
+  if $ci_mode; then
+    echo -e "${RED}pg_dump not found on PATH.${NC}"
+    echo -e "${RED}CI mode requires postgresql-client installed for backup integration tests.${NC}"
+    return 1
+  fi
+
+  echo -e "${YELLOW}pg_dump not found on PATH — skipping backup integration tests.${NC}"
+  echo -e "${YELLOW}Install postgresql-client (e.g. \`brew install libpq\` on macOS) to run them locally.${NC}"
+  export SKIP_BACKUP_INTEGRATION=1
+  return 0
+}
+
 run_integration_tests() {
+  # Explicit `|| return` — `set -e` is disabled inside `||`/`&&` lists, and
+  # run_step calls us with `"$@" || rc=$?`, so a bare check_backup_prereqs
+  # would not halt this function on failure.
+  check_backup_prereqs || return $?
   npm run test:integration -w api
 }
 
@@ -222,10 +255,13 @@ print_summary() {
 # ---------------------------------------------------------------------------
 
 main() {
-  # Accept --full for explicitness (default behavior)
+  # Accept --full for explicitness (default behavior).
+  # --ci hard-fails on missing local prereqs (pg_dump) instead of skipping
+  # so CI never silently skips backup integration tests.
   while [ $# -gt 0 ]; do
     case "$1" in
       --full) shift ;;
+      --ci) ci_mode=true; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
     esac
   done

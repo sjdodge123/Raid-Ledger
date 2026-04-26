@@ -39,7 +39,7 @@ Evaluate the changed files and classify the changeset:
 
 | Files Changed | Checks Needed |
 |---------------|---------------|
-| **Only** `.claude/skills/`, `.md` files, `docs/` | **None** — skip to Step 9 (push) |
+| **Only** `.claude/`, `CLAUDE.md`, `.mcp.json`, `.md` files, `docs/` | **None** — skip to Step 9 (push). Still run Step 2a to make sure operator config is staged. |
 | **Only** `web/src/` (no api, no contract) | Web only: build contract + web, typecheck web, lint web, test web, Playwright |
 | **Only** `api/src/` (no web, no contract) | API only: build contract + api, typecheck api, lint api, test api |
 | **Only** `packages/contract/` | Contract + both: build all, typecheck all, lint all, test all |
@@ -79,6 +79,22 @@ git status --short
 - If there are unstaged changes that should be included → stage and commit them
 - If there are untracked files that should be included → add and commit them
 - If changes are intentionally uncommitted → proceed (they won't be pushed)
+
+### Step 2a: Operator config files MUST ride along (STRICT)
+
+Before continuing, explicitly check for **operator-authored config** that must never be left behind:
+
+```bash
+git status --short -- .claude/skills .claude/agents .claude/settings.json .claude/settings.local.json CLAUDE.md .mcp.json 2>/dev/null
+```
+
+If anything appears (modified, staged, or untracked):
+
+1. Stage all of it: `git add .claude/skills .claude/agents .claude/settings.json .claude/settings.local.json CLAUDE.md .mcp.json` (only paths that exist)
+2. Commit with a `chore(config): ...` prefix — do NOT tag the active story ID, these are independent operator config updates riding along.
+3. Example: `git commit -m "chore(config): update /opt skill, deploy etiquette memory, MCP fix story refs"`
+
+This rule is in CLAUDE.md ("Operator Config Files"). The reason: parallel agents would otherwise assume these aren't theirs, cherry-pick around them, and leave them behind.
 
 ---
 

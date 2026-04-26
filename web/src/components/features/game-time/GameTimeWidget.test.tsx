@@ -171,6 +171,36 @@ describe('GameTimeWidget — part 1', () => {
         expect(titleMatches.length).toBeGreaterThanOrEqual(2);
     });
 
+    it('preview block resolves character avatars when gameId is threaded through (ROK-1133)', () => {
+        mockEditorData({
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
+        });
+
+        renderWidget({
+            eventStart: '2026-02-09T19:00:00',
+            eventEnd: '2026-02-09T22:00:00',
+            eventTitle: 'Raid Night',
+            gameName: 'World of Warcraft',
+            gameId: 5,
+            attendees: [
+                {
+                    id: 42,
+                    username: 'Astra',
+                    avatar: null,
+                    discordId: null,
+                    characters: [{ gameId: 5, avatarUrl: '/char.png' }],
+                },
+            ],
+            attendeeCount: 1,
+        });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        const previewBlock = screen.getByTestId('preview-block-1-19');
+        const charAvatar = previewBlock.querySelector('img[src*="/char.png"]');
+        expect(charAvatar).not.toBeNull();
+    });
+
 });
 
 describe('GameTimeWidget — part 2', () => {
