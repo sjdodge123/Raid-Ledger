@@ -154,7 +154,7 @@ function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, game
     const isMobile = useMediaQuery('(max-width: 767px)');
 
     return (
-        <Modal isOpen onClose={onClose} title="My Game Time" maxWidth="max-w-3xl">
+        <Modal isOpen onClose={onClose} title="My Game Time" maxWidth="max-w-3xl" bodyClassName="p-4 pb-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
             <div className="space-y-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
