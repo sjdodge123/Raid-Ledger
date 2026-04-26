@@ -16,6 +16,7 @@
 import { type JSX } from 'react';
 import type { AiSuggestionDto } from '@raid-ledger/contract';
 import { useAiSuggestions } from '../../hooks/use-ai-suggestions';
+import { useAiSuggestionsAvailable } from '../../hooks/use-ai-suggestions-available';
 import { AiSuggestionCard } from './AiSuggestionCard';
 import { AiStatusBanner } from './AiStatusBanner';
 
@@ -51,12 +52,22 @@ export function PersonalSuggestionsRow({
     lineupId,
     onPickSuggestion,
 }: PersonalSuggestionsRowProps): JSX.Element | null {
-    const query = useAiSuggestions(lineupId, { personalize: true });
+    // ROK-1114 round 3: when the AI plugin is uninstalled or admins
+    // disabled the suggestions feature, render nothing — no header, no
+    // skeleton, no banner. The query call below is also gated via the
+    // shared `enabled` flag inside useAiSuggestions, so it never fires.
+    const aiAvailable = useAiSuggestionsAvailable();
+    const query = useAiSuggestions(lineupId, {
+        personalize: true,
+        enabled: aiAvailable,
+    });
     const result = query.data;
     const isUnavailable = result?.kind === 'unavailable';
     const isError = query.isError;
     const suggestions =
         result && result.kind !== 'unavailable' ? result.data.suggestions : [];
+
+    if (!aiAvailable) return null;
 
     // Suppress the section entirely on empty success — keeps the modal
     // tidy when the LLM had no candidates to recommend.

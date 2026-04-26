@@ -111,9 +111,16 @@ export function useOllamaStop() {
     });
 }
 
+export interface AiFeaturesResponse {
+    chatEnabled: boolean;
+    dynamicCategoriesEnabled: boolean;
+    /** ROK-1114: master switch for per-user AI nomination suggestions. */
+    aiSuggestionsEnabled: boolean;
+}
+
 /** Query AI feature toggle states. */
 export function useAiFeatures() {
-    return useQuery<{ chatEnabled: boolean; dynamicCategoriesEnabled: boolean }>({
+    return useQuery<AiFeaturesResponse>({
         queryKey: [...AI_KEY, 'features'],
         queryFn: () => adminFetch('/admin/ai/features'),
         enabled: !!getAuthToken(),
@@ -127,7 +134,7 @@ export function useUpdateAiFeatures() {
     return useMutation<
         { success: boolean },
         Error,
-        { chatEnabled?: boolean; dynamicCategoriesEnabled?: boolean }
+        Partial<AiFeaturesResponse>
     >({
         mutationFn: (body) =>
             adminFetch('/admin/ai/features', {
