@@ -9,17 +9,19 @@
     },
     "mcp-env": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "tools/mcp-env/dist/index.js"
+        "tsx",
+        "tools/mcp-env/src/index.ts"
       ],
       "env": {}
     },
     "mcp-discord": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "tools/mcp-discord/dist/index.js"
+        "tsx",
+        "tools/mcp-discord/src/index.ts"
       ],
       "env": {}
     }
