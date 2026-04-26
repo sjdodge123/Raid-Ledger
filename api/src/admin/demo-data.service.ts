@@ -14,6 +14,7 @@ import { getEventsDefinitions } from './demo-data.constants';
 import * as coreH from './demo-data-install-core.helpers';
 import * as signupsH from './demo-data-install-signups.helpers';
 import * as secondaryH from './demo-data-install-secondary.helpers';
+import * as activityH from './demo-data-install-activity.helpers';
 import * as tasteH from './demo-data-install-taste.helpers';
 import * as clearH from './demo-data-clear.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
@@ -184,11 +185,34 @@ export class DemoDataService {
       evResult.origEvents,
       evResult.genEvents,
     );
+    await this.installActivityLog(evResult.createdEvents, suResult.createdSignups);
     return {
       events: evResult.createdEvents.length,
       characters: chResult.createdChars.length,
       signups: suResult.uniqueSignups.length,
     };
+  }
+
+  /** Insert activity_log rows for demo events + signups (ROK-1116). */
+  private async installActivityLog(
+    createdEvents: (typeof schema.events.$inferSelect)[],
+    createdSignups: (typeof schema.eventSignups.$inferSelect)[],
+  ): Promise<void> {
+    if (createdEvents.length === 0) return;
+    const eventIds = createdEvents.map((e) => e.id);
+    const finalEvents = await this.db
+      .select({
+        id: schema.events.id,
+        creatorId: schema.events.creatorId,
+        title: schema.events.title,
+      })
+      .from(schema.events)
+      .where(inArray(schema.events.id, eventIds));
+    const rows = [
+      ...activityH.buildEventCreatedActivityRows(finalEvents),
+      ...activityH.buildSignupAddedActivityRows(createdSignups),
+    ];
+    if (rows.length > 0) await this.batchInsert(schema.activityLog, rows);
   }
 
   private async installSecondaryEntities(
