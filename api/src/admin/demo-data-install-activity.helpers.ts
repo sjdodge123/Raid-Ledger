@@ -35,7 +35,7 @@ export function buildSignupAddedActivityRows(
   return signups
     .filter((s): s is SignupRow & { userId: number } => s.userId != null)
     .map((s) => {
-      const roles = s.preferredRoles as string[] | null;
+      const roles = s.preferredRoles;
       return {
         entityType: 'event' as const,
         entityId: s.eventId,

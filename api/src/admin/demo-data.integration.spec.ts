@@ -150,9 +150,7 @@ function describeDemoData() {
         .set('Authorization', `Bearer ${adminToken}`);
 
       const demoEventIds = (
-        await testApp.db
-          .select({ id: schema.events.id })
-          .from(schema.events)
+        await testApp.db.select({ id: schema.events.id }).from(schema.events)
       ).map((r) => r.id);
       expect(demoEventIds.length).toBeGreaterThan(0);
 
@@ -170,8 +168,11 @@ function describeDemoData() {
           ),
         );
 
-      const eventsWithActivity = new Set(eventCreatedRows.map((r) => r.entityId));
-      for (const id of demoEventIds) expect(eventsWithActivity.has(id)).toBe(true);
+      const eventsWithActivity = new Set(
+        eventCreatedRows.map((r) => r.entityId),
+      );
+      for (const id of demoEventIds)
+        expect(eventsWithActivity.has(id)).toBe(true);
       for (const r of eventCreatedRows) expect(r.actorId).not.toBeNull();
     });
 
@@ -219,10 +220,7 @@ function describeDemoData() {
       const orphanActors = await testApp.db
         .select({ id: schema.activityLog.id })
         .from(schema.activityLog)
-        .leftJoin(
-          schema.users,
-          eq(schema.users.id, schema.activityLog.actorId),
-        )
+        .leftJoin(schema.users, eq(schema.users.id, schema.activityLog.actorId))
         .where(isNull(schema.users.id));
 
       expect(orphanActors).toHaveLength(0);

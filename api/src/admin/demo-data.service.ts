@@ -185,7 +185,10 @@ export class DemoDataService {
       evResult.origEvents,
       evResult.genEvents,
     );
-    await this.installActivityLog(evResult.createdEvents, suResult.createdSignups);
+    await this.installActivityLog(
+      evResult.createdEvents,
+      suResult.createdSignups,
+    );
     return {
       events: evResult.createdEvents.length,
       characters: chResult.createdChars.length,
