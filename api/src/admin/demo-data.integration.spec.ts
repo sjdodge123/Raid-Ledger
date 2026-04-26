@@ -230,6 +230,42 @@ function describeDemoData() {
     describeActivityLogOnInstall());
 
   // ===================================================================
+  // Clear with FK blockers (ROK-1116)
+  // ===================================================================
+
+  function describeClearWithBlockers() {
+    it('should clear demo data even when demo users own community_lineups', async () => {
+      await testApp.request
+        .post('/admin/settings/demo/install')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const [seedAdmin] = await testApp.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.username, 'SeedAdmin'));
+      await testApp.db.insert(schema.communityLineups).values({
+        createdBy: seedAdmin.id,
+        title: 'Demo blocker lineup',
+      });
+
+      const clearRes = await testApp.request
+        .post('/admin/settings/demo/clear')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(clearRes.status).toBe(200);
+      expect(clearRes.body.success).toBe(true);
+
+      const remainingUsers = await testApp.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.username, 'SeedAdmin'));
+      expect(remainingUsers).toHaveLength(0);
+    });
+  }
+  describe('clear with FK blockers (ROK-1116)', () =>
+    describeClearWithBlockers());
+
+  // ===================================================================
   // Auth Guards
   // ===================================================================
 
