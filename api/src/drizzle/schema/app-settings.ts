@@ -92,6 +92,8 @@ export const SETTING_KEYS = {
   AI_CHAT_ENABLED: 'ai_chat_enabled',
   /** ROK-542: Whether AI dynamic categories feature is enabled */
   AI_DYNAMIC_CATEGORIES_ENABLED: 'ai_dynamic_categories_enabled',
+  /** ROK-1114: Whether per-user AI nomination suggestions are enabled. */
+  AI_SUGGESTIONS_ENABLED: 'ai_suggestions_enabled',
   /** ROK-542: OpenAI API key */
   AI_OPENAI_API_KEY: 'ai_openai_api_key',
   /** ROK-542: Claude (Anthropic) API key */

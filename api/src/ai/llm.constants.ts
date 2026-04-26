@@ -37,6 +37,8 @@ export const AI_SETTING_KEYS = {
   OLLAMA_URL: 'ai_ollama_url',
   CHAT_ENABLED: 'ai_chat_enabled',
   DYNAMIC_CATEGORIES_ENABLED: 'ai_dynamic_categories_enabled',
+  /** ROK-1114: master switch for per-user AI nomination suggestions. */
+  SUGGESTIONS_ENABLED: 'ai_suggestions_enabled',
   OPENAI_API_KEY: 'ai_openai_api_key',
   CLAUDE_API_KEY: 'ai_claude_api_key',
   GOOGLE_API_KEY: 'ai_google_api_key',
