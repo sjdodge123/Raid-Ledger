@@ -52,15 +52,19 @@ describe('LlmProviderRegistry', () => {
       registry.register(provider);
       mockSettings.get.mockResolvedValue('ollama');
       const result = await registry.resolveActive();
-      expect(result).toBe(provider);
+      expect(result).toEqual({ provider, source: 'setting' });
     });
 
     it('falls back to default provider when setting is null', async () => {
-      const provider = createMockProvider('ollama');
+      // AI_DEFAULTS.provider drives the fallback key — register a provider
+      // with that key so the lookup resolves regardless of the constant value.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { AI_DEFAULTS } = require('./llm.constants');
+      const provider = createMockProvider(AI_DEFAULTS.provider);
       registry.register(provider);
       mockSettings.get.mockResolvedValue(null);
       const result = await registry.resolveActive();
-      expect(result).toBe(provider);
+      expect(result).toEqual({ provider, source: 'default' });
     });
 
     it('returns undefined when no provider matches', async () => {
@@ -143,7 +147,8 @@ describe('LlmProviderRegistry (adversarial)', () => {
       registry.register(createMockProvider('openai'));
       mockSettings.get.mockResolvedValue('openai');
       const result = await registry.resolveActive();
-      expect(result?.key).toBe('openai');
+      expect(result?.provider.key).toBe('openai');
+      expect(result?.source).toBe('setting');
     });
   });
 });

@@ -5,6 +5,18 @@ import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
 import type { SettingKey } from '../drizzle/schema';
 
 /**
+ * Resolution outcome for the active LLM provider.
+ *
+ * `source` distinguishes operator configuration (`'setting'`) from the
+ * hard-coded `AI_DEFAULTS.provider` fallback (`'default'`) so the LLM
+ * service can surface that signal in logs (ROK-1114).
+ */
+export interface ActiveProviderResolution {
+  provider: LlmProvider;
+  source: 'setting' | 'default';
+}
+
+/**
  * Registry of available LLM providers.
  * Manages provider registration and active-provider resolution via settings.
  */
@@ -25,11 +37,16 @@ export class LlmProviderRegistry {
   }
 
   /** Resolve the currently active provider from settings. */
-  async resolveActive(): Promise<LlmProvider | undefined> {
-    const key =
-      (await this.settings.get(AI_SETTING_KEYS.PROVIDER as SettingKey)) ??
-      AI_DEFAULTS.provider;
-    return this.providers.get(key);
+  async resolveActive(): Promise<ActiveProviderResolution | undefined> {
+    const configured = await this.settings.get(
+      AI_SETTING_KEYS.PROVIDER as SettingKey,
+    );
+    const source: 'setting' | 'default' =
+      configured == null ? 'default' : 'setting';
+    const key = configured ?? AI_DEFAULTS.provider;
+    const provider = this.providers.get(key);
+    if (!provider) return undefined;
+    return { provider, source };
   }
 
   /** List all registered providers. */

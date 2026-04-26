@@ -1,6 +1,6 @@
 /** Default configuration values for the AI subsystem. */
 export const AI_DEFAULTS = {
-  provider: 'ollama',
+  provider: 'google',
   model: 'llama3.2:3b',
   ollamaUrl: 'http://localhost:11434',
   maxTokens: 1024,

@@ -48,7 +48,8 @@ export class AiAdminController {
   /** GET /admin/ai/status — provider connectivity and current model. */
   @Get('status')
   async getStatus(): Promise<AiStatusDto> {
-    const provider = await this.registry.resolveActive();
+    const resolution = await this.registry.resolveActive();
+    const provider = resolution?.provider;
     const isAvailable = await this.withTimeout(
       this.llmService.isAvailable(),
       false,
@@ -169,7 +170,8 @@ export class AiAdminController {
   }> {
     const isUp = await this.withTimeout(this.llmService.isAvailable(), false);
     if (!isUp) return this.notAvailableResult();
-    const provider = await this.registry.resolveActive();
+    const resolution = await this.registry.resolveActive();
+    const provider = resolution?.provider;
     const modelSetting = await this.settings.get(
       AI_SETTING_KEYS.MODEL as SettingKey,
     );
