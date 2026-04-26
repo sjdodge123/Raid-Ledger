@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import * as envCheck from './tools/env-check.js';
 import * as envCopy from './tools/env-copy.js';
+import * as mcpHealth from './tools/mcp-health.js';
 import * as serviceStatus from './tools/service-status.js';
 import * as storyStatus from './tools/story-status.js';
 
@@ -61,10 +62,28 @@ server.tool(
   },
 );
 
+server.tool(
+  mcpHealth.TOOL_NAME,
+  mcpHealth.TOOL_DESCRIPTION,
+  {},
+  async () => {
+    const result = await mcpHealth.execute();
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
 // --- Server lifecycle ---
 
 /** Start the MCP server on stdio transport. */
 async function main(): Promise<void> {
+  // --self-check is a "module loaded fine" probe used by mcp_health.
+  if (process.argv.includes('--self-check')) {
+    console.log('[mcp-env] self-check OK');
+    process.exit(0);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[mcp-env] MCP server running on stdio');
