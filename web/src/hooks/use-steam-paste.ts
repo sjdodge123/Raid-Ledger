@@ -38,8 +38,13 @@ export function extractSteamAppId(text: string): number | null {
 interface UseSteamPasteOptions {
   /** Only listen when true (e.g. lineup is in building status). */
   enabled: boolean;
-  /** Whether the nominate modal is currently open. */
-  modalOpen: boolean;
+  /**
+   * Modal-open flag. Retained for backward compatibility but no longer
+   * gates the listener — the modal's own input-focused check is enough
+   * to prevent double-handling, and detaching the page-level handler
+   * meant pasting outside the search input did nothing (ROK-1114).
+   */
+  modalOpen?: boolean;
   /** Called with the resolved game to open the modal. */
   onGameResolved: (game: IgdbGameDto) => void;
 }
@@ -47,10 +52,16 @@ interface UseSteamPasteOptions {
 /**
  * Registers a document-level paste listener that detects Steam
  * store URLs, resolves them via the API, and triggers the callback.
+ *
+ * The listener stays attached even while the nominate modal is open
+ * so a paste anywhere outside an input field still resolves and slots
+ * the game into the modal's preview card. Pastes that land inside an
+ * input (the modal's search box) are skipped here — the modal owns
+ * its own resolver for that path so the URL stays visible in the
+ * field while resolving.
  */
 export function useSteamPasteDetection({
   enabled,
-  modalOpen,
   onGameResolved,
 }: UseSteamPasteOptions): void {
   const loadingRef = useRef(false);
@@ -78,8 +89,8 @@ export function useSteamPasteDetection({
   );
 
   useEffect(() => {
-    if (!enabled || modalOpen) return;
+    if (!enabled) return;
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [enabled, modalOpen, handlePaste]);
+  }, [enabled, handlePaste]);
 }
