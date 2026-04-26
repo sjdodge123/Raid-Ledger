@@ -12,10 +12,14 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { NotificationService } from '../notifications/notification.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';
-import type { LineupInfo } from './lineup-notification.service';
+import type { LineupInfo, MatchInfo } from './lineup-notification.service';
 import {
   fanOutLineupCreatedDMsToInvitees,
   fanOutVotingDMsToInvitees,
+  fanOutMilestoneDMsToInvitees,
+  fanOutMatchesFoundDMsToInvitees,
+  fanOutSchedulingDMsToInvitees,
+  fanOutEventCreatedDMsToInvitees,
 } from './lineup-notification-dm-batch.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -80,6 +84,103 @@ export async function routeVotingOpenIfPrivate(
     lineup,
     games,
     baseUrl,
+  );
+  return true;
+}
+
+/**
+ * Private-branch dispatch for `notifyNominationMilestone` (ROK-1115):
+ * DM invitees about the milestone and skip the channel embed.
+ */
+export async function routeNominationMilestoneIfPrivate(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  threshold: number,
+  entryCount: number,
+): Promise<boolean> {
+  const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility !== 'private') return false;
+  await fanOutMilestoneDMsToInvitees(
+    db,
+    notificationService,
+    dedupService,
+    lineup,
+    threshold,
+    entryCount,
+  );
+  return true;
+}
+
+/**
+ * Private-branch dispatch for `notifyMatchesFound` decided-tier embed
+ * (ROK-1115): DM invitees with the matches summary and skip the channel
+ * embed.
+ */
+export async function routeMatchesFoundIfPrivate(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  matchCount: number,
+): Promise<boolean> {
+  const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility !== 'private') return false;
+  await fanOutMatchesFoundDMsToInvitees(
+    db,
+    notificationService,
+    dedupService,
+    lineup,
+    matchCount,
+  );
+  return true;
+}
+
+/**
+ * Private-branch dispatch for `notifySchedulingOpen` (ROK-1115): DM invitees
+ * about the scheduling-open match and skip the per-match channel embed.
+ */
+export async function routeSchedulingOpenIfPrivate(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  match: MatchInfo,
+): Promise<boolean> {
+  const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility !== 'private') return false;
+  await fanOutSchedulingDMsToInvitees(
+    db,
+    notificationService,
+    dedupService,
+    match,
+  );
+  return true;
+}
+
+/**
+ * Private-branch dispatch for `notifyEventCreated` (ROK-1115): DM invitees
+ * about the locked-in event and skip the channel embed.
+ */
+export async function routeEventCreatedIfPrivate(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  match: MatchInfo,
+  eventDate: Date,
+  eventId: number | undefined,
+): Promise<boolean> {
+  const visibility = await resolveLineupVisibility(db, lineup);
+  if (visibility !== 'private') return false;
+  await fanOutEventCreatedDMsToInvitees(
+    db,
+    notificationService,
+    dedupService,
+    match,
+    eventDate,
+    eventId,
   );
   return true;
 }
