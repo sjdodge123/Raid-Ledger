@@ -5,6 +5,7 @@
  * Tests cover: direct DB logging, GET endpoints for lineups and events,
  * and that mutations (create lineup, signup) produce activity entries.
  */
+import { sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -235,5 +236,105 @@ function describeActivityLog() {
     });
   }
   describe('Direct DB logging', describeDirectLogging);
+
+  // ── displayName fallback (ROK-1116) ───────────────────────────
+
+  function describeUsernameFallback() {
+    const ENTITY_TYPE = 'event' as const;
+
+    it('returns username when actor displayName is null', async () => {
+      const [user] = await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'rok-1116:null-display',
+          username: 'alice',
+          displayName: null,
+        })
+        .returning();
+
+      const entityId = 90001;
+      await testApp.db.insert(schema.activityLog).values({
+        entityType: ENTITY_TYPE,
+        entityId,
+        action: 'event_created',
+        actorId: user.id,
+        metadata: null,
+      });
+
+      const res = await testApp.request
+        .get(`/events/${entityId}/activity`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const body = timeline(res);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].actor).not.toBeNull();
+      expect(body.data[0].actor!.displayName).toBe('alice');
+      expect(body.data[0].actor!.displayName).not.toBe('Unknown');
+    });
+
+    it('returns displayName when set', async () => {
+      const [user] = await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'rok-1116:has-display',
+          username: 'alice',
+          displayName: 'AliceCustom',
+        })
+        .returning();
+
+      const entityId = 90002;
+      await testApp.db.insert(schema.activityLog).values({
+        entityType: ENTITY_TYPE,
+        entityId,
+        action: 'event_created',
+        actorId: user.id,
+        metadata: null,
+      });
+
+      const res = await testApp.request
+        .get(`/events/${entityId}/activity`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const body = timeline(res);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].actor!.displayName).toBe('AliceCustom');
+    });
+
+    it('returns "Unknown" only when actor row is missing entirely', async () => {
+      // Simulate the legitimate orphan case: an activity_log row whose
+      // actor_id no longer resolves to a users row. The schema FK
+      // (`onDelete: 'set null'`) makes this unreachable via normal user
+      // deletion, so we bypass FK enforcement to insert a stale id —
+      // mirroring DBs that were restored from a backup taken before the
+      // FK existed, or migrated from another system.
+      const entityId = 90003;
+      const orphanActorId = 9_999_999;
+      await testApp.db.transaction(async (tx) => {
+        await tx.execute(
+          sql`SET LOCAL session_replication_role = 'replica'`,
+        );
+        await tx.insert(schema.activityLog).values({
+          entityType: ENTITY_TYPE,
+          entityId,
+          action: 'event_created',
+          actorId: orphanActorId,
+          metadata: null,
+        });
+      });
+
+      const res = await testApp.request
+        .get(`/events/${entityId}/activity`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      const body = timeline(res);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].actor).not.toBeNull();
+      expect(body.data[0].actor!.displayName).toBe('Unknown');
+    });
+  }
+  describe('displayName fallback (ROK-1116)', describeUsernameFallback);
 }
 describe('Activity Log (integration)', describeActivityLog);
