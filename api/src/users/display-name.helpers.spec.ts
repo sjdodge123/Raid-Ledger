@@ -31,15 +31,15 @@ describe('resolveDisplayName', () => {
   it('falls back to username when displayName is empty string', () => {
     // Mirrors the existing identity-panel.tsx pattern (`||` not `??`) so empty
     // strings are treated as "no displayName chosen".
-    expect(
-      resolveDisplayName({ displayName: '', username: 'alice123' }),
-    ).toBe('alice123');
+    expect(resolveDisplayName({ displayName: '', username: 'alice123' })).toBe(
+      'alice123',
+    );
   });
 
   it('returns username unchanged for live user record', () => {
-    expect(
-      resolveDisplayName({ displayName: null, username: 'bob' }),
-    ).toBe('bob');
+    expect(resolveDisplayName({ displayName: null, username: 'bob' })).toBe(
+      'bob',
+    );
   });
 });
 

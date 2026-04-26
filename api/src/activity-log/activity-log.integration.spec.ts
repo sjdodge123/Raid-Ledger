@@ -312,9 +312,7 @@ function describeActivityLog() {
       const entityId = 90003;
       const orphanActorId = 9_999_999;
       await testApp.db.transaction(async (tx) => {
-        await tx.execute(
-          sql`SET LOCAL session_replication_role = 'replica'`,
-        );
+        await tx.execute(sql`SET LOCAL session_replication_role = 'replica'`);
         await tx.insert(schema.activityLog).values({
           entityType: ENTITY_TYPE,
           entityId,
