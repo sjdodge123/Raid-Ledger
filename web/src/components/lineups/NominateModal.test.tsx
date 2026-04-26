@@ -56,7 +56,7 @@ describe('NominateModal — search state', () => {
         renderWithProviders(
             <NominateModal isOpen={true} onClose={vi.fn()} lineupId={1} />,
         );
-        expect(screen.getByPlaceholderText(/search games/i)).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(/Search by name or paste a Steam store URL/i)).toBeInTheDocument();
     });
 
     it('shows search results when available', () => {
