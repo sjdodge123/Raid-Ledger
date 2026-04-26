@@ -172,5 +172,21 @@ async function deleteDemoUserDependents(
       .delete(schema.events)
       .where(inArray(schema.events.id, demoEventIds));
   }
+  // ROK-1116: also delete/null-out rows referencing demo users via NO ACTION
+  // FKs (community_lineups.created_by, event_templates.user_id, pug_slots.*).
+  // Without this the user delete below fails with a 23503 FK violation.
+  await db
+    .delete(schema.communityLineups)
+    .where(inArray(schema.communityLineups.createdBy, demoUserIds));
+  await db
+    .delete(schema.eventTemplates)
+    .where(inArray(schema.eventTemplates.userId, demoUserIds));
+  await db
+    .delete(schema.pugSlots)
+    .where(inArray(schema.pugSlots.createdBy, demoUserIds));
+  await db
+    .update(schema.pugSlots)
+    .set({ claimedByUserId: null })
+    .where(inArray(schema.pugSlots.claimedByUserId, demoUserIds));
   await db.delete(schema.users).where(inArray(schema.users.id, demoUserIds));
 }

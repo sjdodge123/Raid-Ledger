@@ -9,6 +9,7 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { displayNameSql } from '../users/display-name.helpers';
 
 interface ActivityRow {
   id: number;
@@ -24,7 +25,8 @@ function mapRow(r: ActivityRow): ActivityEntryDto {
     id: r.id,
     action: r.action as ActivityActionDto,
     actor: r.actorId
-      ? { id: r.actorId, displayName: r.actorName ?? 'Unknown' }
+      ? // 'Unknown' fallback fires only for orphan rows whose actorId points at a user the LEFT JOIN couldn't resolve (residue from before the activity_log.actor_id FK was enforced).
+        { id: r.actorId, displayName: r.actorName ?? 'Unknown' }
       : null,
     metadata: (r.metadata as Record<string, unknown>) ?? null,
     createdAt: r.createdAt.toISOString(),
@@ -65,7 +67,7 @@ export class ActivityLogService {
         id: schema.activityLog.id,
         action: schema.activityLog.action,
         actorId: schema.activityLog.actorId,
-        actorName: schema.users.displayName,
+        actorName: displayNameSql(schema.users),
         metadata: schema.activityLog.metadata,
         createdAt: schema.activityLog.createdAt,
       })

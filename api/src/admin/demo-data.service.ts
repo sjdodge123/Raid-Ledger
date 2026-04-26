@@ -14,6 +14,7 @@ import { getEventsDefinitions } from './demo-data.constants';
 import * as coreH from './demo-data-install-core.helpers';
 import * as signupsH from './demo-data-install-signups.helpers';
 import * as secondaryH from './demo-data-install-secondary.helpers';
+import * as activityH from './demo-data-install-activity.helpers';
 import * as tasteH from './demo-data-install-taste.helpers';
 import * as clearH from './demo-data-clear.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
@@ -183,6 +184,12 @@ export class DemoDataService {
       allUsers,
       evResult.origEvents,
       evResult.genEvents,
+    );
+    await activityH.installActivityLog(
+      this.db,
+      bi,
+      evResult.createdEvents,
+      suResult.createdSignups,
     );
     return {
       events: evResult.createdEvents.length,

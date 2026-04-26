@@ -8,11 +8,13 @@
  * Note: installDemoData depends on having games in the DB (seeded baseline
  * has one game). The full ~100-user install is tested end-to-end.
  */
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
+import * as schema from '../drizzle/schema';
 
 function describeDemoData() {
   let testApp: TestApp;
@@ -136,6 +138,146 @@ function describeDemoData() {
   }
   describe('install and clear lifecycle', () =>
     describeInstallAndClearLifecycle());
+
+  // ===================================================================
+  // Activity log entries (ROK-1116)
+  // ===================================================================
+
+  function describeActivityLogOnInstall() {
+    it('should log event_created for every demo event with a live actor', async () => {
+      await testApp.request
+        .post('/admin/settings/demo/install')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const demoEventIds = (
+        await testApp.db.select({ id: schema.events.id }).from(schema.events)
+      ).map((r) => r.id);
+      expect(demoEventIds.length).toBeGreaterThan(0);
+
+      const eventCreatedRows = await testApp.db
+        .select({
+          entityId: schema.activityLog.entityId,
+          actorId: schema.activityLog.actorId,
+        })
+        .from(schema.activityLog)
+        .where(
+          and(
+            eq(schema.activityLog.entityType, 'event'),
+            eq(schema.activityLog.action, 'event_created'),
+            inArray(schema.activityLog.entityId, demoEventIds),
+          ),
+        );
+
+      const eventsWithActivity = new Set(
+        eventCreatedRows.map((r) => r.entityId),
+      );
+      for (const id of demoEventIds)
+        expect(eventsWithActivity.has(id)).toBe(true);
+      for (const r of eventCreatedRows) expect(r.actorId).not.toBeNull();
+    });
+
+    it('should log signup_added for every demo signup with a live actor', async () => {
+      await testApp.request
+        .post('/admin/settings/demo/install')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const demoSignups = await testApp.db
+        .select({
+          eventId: schema.eventSignups.eventId,
+          userId: schema.eventSignups.userId,
+        })
+        .from(schema.eventSignups);
+      const linkedSignups = demoSignups.filter((s) => s.userId !== null);
+      expect(linkedSignups.length).toBeGreaterThan(0);
+
+      const signupRows = await testApp.db
+        .select({
+          entityId: schema.activityLog.entityId,
+          actorId: schema.activityLog.actorId,
+        })
+        .from(schema.activityLog)
+        .where(
+          and(
+            eq(schema.activityLog.entityType, 'event'),
+            eq(schema.activityLog.action, 'signup_added'),
+          ),
+        );
+
+      const present = new Set(
+        signupRows.map((r) => `${r.entityId}:${r.actorId}`),
+      );
+      for (const s of linkedSignups) {
+        expect(present.has(`${s.eventId}:${s.userId}`)).toBe(true);
+      }
+      for (const r of signupRows) expect(r.actorId).not.toBeNull();
+    });
+
+    it('should not produce orphan activity actor refs after install', async () => {
+      await testApp.request
+        .post('/admin/settings/demo/install')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const orphanActors = await testApp.db
+        .select({ id: schema.activityLog.id })
+        .from(schema.activityLog)
+        .leftJoin(schema.users, eq(schema.users.id, schema.activityLog.actorId))
+        .where(isNull(schema.users.id));
+
+      expect(orphanActors).toHaveLength(0);
+    });
+  }
+  describe('activity_log on install (ROK-1116)', () =>
+    describeActivityLogOnInstall());
+
+  // ===================================================================
+  // Clear with FK blockers (ROK-1116)
+  // ===================================================================
+
+  function describeClearWithBlockers() {
+    it('should clear demo data even when demo users own community_lineups', async () => {
+      await testApp.request
+        .post('/admin/settings/demo/install')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const [seedAdmin] = await testApp.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.username, 'SeedAdmin'));
+      const adminUserId = testApp.seed.adminUser.id;
+      const [demoLineup] = await testApp.db
+        .insert(schema.communityLineups)
+        .values({ createdBy: seedAdmin.id, title: 'Demo blocker lineup' })
+        .returning({ id: schema.communityLineups.id });
+      const [adminLineup] = await testApp.db
+        .insert(schema.communityLineups)
+        .values({ createdBy: adminUserId, title: 'Real admin lineup' })
+        .returning({ id: schema.communityLineups.id });
+
+      const clearRes = await testApp.request
+        .post('/admin/settings/demo/clear')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(clearRes.status).toBe(200);
+      expect(clearRes.body.success).toBe(true);
+
+      const remainingUsers = await testApp.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.username, 'SeedAdmin'));
+      expect(remainingUsers).toHaveLength(0);
+
+      // Demo-owned lineup gone, non-demo lineup preserved.
+      const survivors = await testApp.db
+        .select({ id: schema.communityLineups.id })
+        .from(schema.communityLineups)
+        .where(
+          inArray(schema.communityLineups.id, [demoLineup.id, adminLineup.id]),
+        );
+      expect(survivors.map((r) => r.id)).toEqual([adminLineup.id]);
+    });
+  }
+  describe('clear with FK blockers (ROK-1116)', () =>
+    describeClearWithBlockers());
 
   // ===================================================================
   // Auth Guards

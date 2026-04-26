@@ -1,221 +1,49 @@
+/**
+ * WelcomeStep tests (ROK-1116).
+ *
+ * The displayName input has been removed from the FTE welcome step. The step
+ * now renders a static welcome message plus Continue/Skip buttons. Continue
+ * advances to the next step without invoking any profile-update mutation.
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { WelcomeStep } from './welcome-step';
-
-// Mock the hooks
-vi.mock('../../hooks/use-auth', () => ({
-    useAuth: vi.fn(() => ({
-        user: {
-            id: 1,
-            username: 'testuser',
-            displayName: null,
-            role: 'member',
-            onboardingCompletedAt: null,
-        },
-    })),
-}));
-
-vi.mock('../../hooks/use-onboarding-fte', () => ({
-    useCheckDisplayName: vi.fn((name: string) => ({
-        data: name === 'TakenName' ? { available: false } : { available: true },
-        isLoading: false,
-    })),
-    useUpdateUserProfile: vi.fn(() => ({
-        mutate: vi.fn((_displayName, options) => {
-            options?.onSuccess?.();
-        }),
-        isPending: false,
-    })),
-}));
-
-function createQueryClient() {
-    return new QueryClient({
-        defaultOptions: {
-            queries: { retry: false },
-        },
-    });
-}
-
-function renderWithProviders(ui: React.ReactElement) {
-    return render(
-        <QueryClientProvider client={createQueryClient()}>
-            {ui}
-        </QueryClientProvider>
-    );
-}
 
 const mockOnNext = vi.fn();
 const mockOnSkip = vi.fn();
-function welcomestepGroup1() {
-it('renders welcome message and display name input', () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
 
-        expect(screen.getByText(/welcome to raid ledger!/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/display name/i)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /skip/i })).toBeInTheDocument();
+describe('WelcomeStep (ROK-1116 — displayName input hidden)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
     });
 
-it('pre-fills display name from user username', () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
+    it('does NOT render a display name input', () => {
+        render(<WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />);
 
-        const input = screen.getByLabelText(/display name/i) as HTMLInputElement;
-        expect(input.value).toBe('testuser');
+        expect(screen.queryByLabelText(/display name/i)).toBeNull();
     });
 
-}
+    it('renders welcome heading "Welcome to Raid Ledger"', () => {
+        render(<WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />);
 
-function welcomestepGroup2() {
-it('validates display name length (min 2 chars)', () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
-
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'a' } });
-
-        expect(screen.getByText(/1\/30 characters \(min 2\)/i)).toBeInTheDocument();
+        expect(
+            screen.getByText(/welcome to raid ledger/i),
+        ).toBeInTheDocument();
     });
 
-it('validates display name length (max 30 chars)', () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
+    it('Continue button calls onNext when clicked', () => {
+        render(<WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />);
 
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'a'.repeat(30) } });
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }));
 
-        expect(screen.getByText(/30\/30 characters/i)).toBeInTheDocument();
+        expect(mockOnNext).toHaveBeenCalledOnce();
     });
 
-}
-
-function welcomestepGroup3() {
-it('shows availability indicator when name is available', async () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
-
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'AvailableName' } });
-
-        await waitFor(() => {
-            expect(screen.getByText(/available/i)).toBeInTheDocument();
-        });
-    });
-
-it('shows taken indicator when name is unavailable', async () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
-
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'TakenName' } });
-
-        await waitFor(() => {
-            expect(screen.getByText(/taken/i)).toBeInTheDocument();
-        });
-    });
-
-}
-
-function welcomestepGroup4() {
-it('calls onSkip when Skip button is clicked', () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
+    it('Skip button calls onSkip when clicked', () => {
+        render(<WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />);
 
         fireEvent.click(screen.getByRole('button', { name: /skip/i }));
 
         expect(mockOnSkip).toHaveBeenCalledOnce();
     });
-
-it('calls onNext after successful update', async () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
-
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'ValidName' } });
-
-        await waitFor(() => {
-            expect(screen.getByText(/available/i)).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', { name: /next/i }));
-
-        await waitFor(() => {
-            expect(mockOnNext).toHaveBeenCalledOnce();
-        });
-    });
-
-}
-
-function welcomestepGroup5() {
-it('supports Enter key to submit', async () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
-
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'ValidName' } });
-
-        await waitFor(() => {
-            expect(screen.getByText(/available/i)).toBeInTheDocument();
-        });
-
-        fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
-
-        await waitFor(() => {
-            expect(mockOnNext).toHaveBeenCalledOnce();
-        });
-    });
-
-}
-
-function welcomestepGroup6() {
-it('disables Next button when name is too short', () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
-
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'a' } });
-
-        const nextButton = screen.getByRole('button', { name: /next/i });
-        expect(nextButton).toBeDisabled();
-    });
-
-it('disables Next button when name is taken', async () => {
-        renderWithProviders(
-            <WelcomeStep onNext={mockOnNext} onSkip={mockOnSkip} />
-        );
-
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'TakenName' } });
-
-        await waitFor(() => {
-            const nextButton = screen.getByRole('button', { name: /next/i });
-            expect(nextButton).toBeDisabled();
-        });
-    });
-
-}
-
-describe('WelcomeStep', () => {
-beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    welcomestepGroup1();
-    welcomestepGroup2();
-    welcomestepGroup3();
-    welcomestepGroup4();
-    welcomestepGroup5();
-    welcomestepGroup6();
 });

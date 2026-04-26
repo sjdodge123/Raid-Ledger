@@ -38,6 +38,7 @@ export type ActivityEntityTypeDto = z.infer<typeof ActivityEntityTypeSchema>;
 /** Actor identity embedded in activity entries. */
 const ActivityActorSchema = z.object({
     id: z.number(),
+    // Non-null at the API boundary — backend uses displayNameSql(users).
     displayName: z.string(),
 });
 
