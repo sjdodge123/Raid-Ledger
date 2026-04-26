@@ -14,6 +14,9 @@ import {
   truncateAllTables,
   loginAsAdmin,
 } from '../../common/testing/integration-helpers';
+import { SettingsService } from '../../settings/settings.service';
+import { LlmService } from '../../ai/llm.service';
+import { SETTING_KEYS } from '../../drizzle/schema';
 
 function describeAiSuggestions() {
   let testApp: TestApp;
@@ -66,6 +69,35 @@ function describeAiSuggestions() {
       const lineupId = await createLineup();
       const res = await testApp.request.get(`/lineups/${lineupId}/suggestions`);
       expect(res.status).toBe(401);
+    });
+
+    /**
+     * ROK-1114 round 3: when admin disables the feature, the endpoint
+     * MUST return 200 with empty suggestions and MUST NOT call the LLM.
+     * 503 would be wrong — it maps to "temporarily unavailable" UX,
+     * which is misleading for an intentional admin disable.
+     */
+    it('returns 200 with empty suggestions and does NOT call LlmService.chat when ai_suggestions_enabled is false', async () => {
+      const lineupId = await createLineup();
+      const settings = testApp.app.get(SettingsService);
+      const llm = testApp.app.get(LlmService);
+      const chatSpy = jest.spyOn(llm, 'chat');
+      await settings.set(SETTING_KEYS.AI_SUGGESTIONS_ENABLED, 'false');
+      try {
+        const res = await testApp.request
+          .get(`/lineups/${lineupId}/suggestions`)
+          .set('Authorization', `Bearer ${adminToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({
+          suggestions: [],
+          voterCount: 0,
+          cached: false,
+        });
+        expect(chatSpy).not.toHaveBeenCalled();
+      } finally {
+        chatSpy.mockRestore();
+        await settings.set(SETTING_KEYS.AI_SUGGESTIONS_ENABLED, 'true');
+      }
     });
   });
 }
