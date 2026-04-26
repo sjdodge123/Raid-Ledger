@@ -25,7 +25,8 @@ function mapRow(r: ActivityRow): ActivityEntryDto {
     id: r.id,
     action: r.action as ActivityActionDto,
     actor: r.actorId
-      ? { id: r.actorId, displayName: r.actorName ?? 'Unknown' }
+      ? // 'Unknown' fallback fires only for orphan rows whose actorId points at a user the LEFT JOIN couldn't resolve (residue from before the activity_log.actor_id FK was enforced).
+        { id: r.actorId, displayName: r.actorName ?? 'Unknown' }
       : null,
     metadata: (r.metadata as Record<string, unknown>) ?? null,
     createdAt: r.createdAt.toISOString(),

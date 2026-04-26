@@ -243,10 +243,15 @@ function describeDemoData() {
         .select({ id: schema.users.id })
         .from(schema.users)
         .where(eq(schema.users.username, 'SeedAdmin'));
-      await testApp.db.insert(schema.communityLineups).values({
-        createdBy: seedAdmin.id,
-        title: 'Demo blocker lineup',
-      });
+      const adminUserId = testApp.seed.adminUser.id;
+      const [demoLineup] = await testApp.db
+        .insert(schema.communityLineups)
+        .values({ createdBy: seedAdmin.id, title: 'Demo blocker lineup' })
+        .returning({ id: schema.communityLineups.id });
+      const [adminLineup] = await testApp.db
+        .insert(schema.communityLineups)
+        .values({ createdBy: adminUserId, title: 'Real admin lineup' })
+        .returning({ id: schema.communityLineups.id });
 
       const clearRes = await testApp.request
         .post('/admin/settings/demo/clear')
@@ -260,6 +265,15 @@ function describeDemoData() {
         .from(schema.users)
         .where(eq(schema.users.username, 'SeedAdmin'));
       expect(remainingUsers).toHaveLength(0);
+
+      // Demo-owned lineup gone, non-demo lineup preserved.
+      const survivors = await testApp.db
+        .select({ id: schema.communityLineups.id })
+        .from(schema.communityLineups)
+        .where(
+          inArray(schema.communityLineups.id, [demoLineup.id, adminLineup.id]),
+        );
+      expect(survivors.map((r) => r.id)).toEqual([adminLineup.id]);
     });
   }
   describe('clear with FK blockers (ROK-1116)', () =>
