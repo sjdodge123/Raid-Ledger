@@ -24,15 +24,25 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
+// Allow opting out locally when pg_dump/pg_restore are not on PATH.
+// validate-ci.sh sets this when it detects a missing pg_dump binary in
+// non-CI mode. In CI the env var is never set, so the suite always runs.
+const SKIP_BACKUP_INTEGRATION = process.env.SKIP_BACKUP_INTEGRATION === '1';
+const describeBackup = SKIP_BACKUP_INTEGRATION ? describe.skip : describe;
+
 // Force direct pg_dump/pg_restore execution (no Docker routing)
 // so it works with the Testcontainers DB.
 process.env.DB_CONTAINER_NAME = '';
 
 // Isolate test backups in a temp directory so we never touch real backup files.
-const TEST_BACKUP_DIR = fs.mkdtempSync(
-  path.join(os.tmpdir(), 'raid-ledger-backup-test-'),
-);
-process.env.BACKUP_DIR = TEST_BACKUP_DIR;
+// Skip directory creation when the suite is gated off — it would leak temp dirs
+// every run on machines without pg_dump.
+const TEST_BACKUP_DIR = SKIP_BACKUP_INTEGRATION
+  ? ''
+  : fs.mkdtempSync(path.join(os.tmpdir(), 'raid-ledger-backup-test-'));
+if (!SKIP_BACKUP_INTEGRATION) {
+  process.env.BACKUP_DIR = TEST_BACKUP_DIR;
+}
 
 function describeBackupCRUD() {
   let testApp: TestApp;
@@ -242,9 +252,9 @@ function describeBackupCRUD() {
   describe('POST /admin/backups/:type/:filename/restore', () =>
     describePOSTAdminBackupsTypeFilenameRestore());
 }
-describe('Backup CRUD (integration)', () => describeBackupCRUD());
+describeBackup('Backup CRUD (integration)', () => describeBackupCRUD());
 
-describe('Backup auth enforcement (integration)', () => {
+describeBackup('Backup auth enforcement (integration)', () => {
   let testApp: TestApp;
 
   beforeAll(async () => {

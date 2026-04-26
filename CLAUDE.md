@@ -133,6 +133,11 @@ Run `./scripts/validate-ci.sh --full` before pushing any branch. This replaces m
 
 Migration and container checks run conditionally based on `git diff` against `origin/main`. Playwright remains a separate step because it requires a running dev environment.
 
+**Backup integration tests** (`api/src/backup/backup.integration.spec.ts`) shell out to `pg_dump` / `pg_restore`. They are gated by `SKIP_BACKUP_INTEGRATION`:
+
+- Locally: `validate-ci.sh` checks for `pg_dump` on PATH. If missing, it prints a yellow warning, sets `SKIP_BACKUP_INTEGRATION=1`, and the suite skips. Install `postgresql-client` (e.g. `brew install libpq` on macOS) to run them.
+- In CI: pass `--ci` to `validate-ci.sh`. Missing `pg_dump` then hard-fails instead of skipping, so CI never silently misses these tests.
+
 ### Smoke Test Verification (STRICT — learned from ROK-935 incident)
 
 **CI runs BOTH desktop AND mobile Playwright projects.** Local verification MUST match CI:
