@@ -31,6 +31,20 @@ interface GameTimeWidgetProps {
     attendeeCount?: number;
 }
 
+interface PreviewBlockMeta {
+    label: string;
+    variant: 'selected';
+    title?: string;
+    gameName?: string;
+    gameSlug?: string;
+    coverUrl?: string | null;
+    description?: string | null;
+    creatorUsername?: string | null;
+    attendees?: AttendeePreview[];
+    attendeeCount?: number;
+    gameId?: number | null;
+}
+
 function collectDayHours(startTime: string, endTime: string): Map<number, number[]> {
     const dayHours = new Map<number, number[]>();
     walkEventHours(startTime, endTime, (dayOfWeek, hour) => {
@@ -133,14 +147,26 @@ function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creator
 }
 
 function useGameTimeWidgetData(props: GameTimeWidgetProps) {
-    const { eventStartTime, eventEndTime, eventTitle } = props;
+    const { eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, gameId, coverUrl, description, creatorUsername, attendees, attendeeCount } = props;
     const editor = useGameTimeEditor({ enabled: true, rolling: false });
     const hasOverlap = useMemo(() => checkGameTimeOverlap(editor.slots, eventStartTime, eventEndTime), [editor.slots, eventStartTime, eventEndTime]);
     const previewBlocks = useMemo<GameTimePreviewBlock[]>(() => {
         const dayHours = collectDayHours(eventStartTime, eventEndTime);
-        const meta = { label: eventTitle ?? 'This Event', variant: 'selected' as const };
+        const meta: PreviewBlockMeta = {
+            label: eventTitle ?? 'This Event',
+            variant: 'selected',
+            title: eventTitle,
+            gameName,
+            gameSlug,
+            coverUrl,
+            description,
+            creatorUsername,
+            attendees,
+            attendeeCount,
+            gameId,
+        };
         return buildPreviewBlocks(dayHours, meta);
-    }, [eventStartTime, eventEndTime, eventTitle]);
+    }, [eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, gameId, coverUrl, description, creatorUsername, attendees, attendeeCount]);
     const eventTimeLabel = useMemo(() => formatTimeLabel(eventStartTime, eventEndTime), [eventStartTime, eventEndTime]);
     return { editor, hasOverlap, previewBlocks, eventTimeLabel };
 }

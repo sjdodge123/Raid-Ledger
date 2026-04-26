@@ -52,6 +52,7 @@ function renderWidget(props: {
     eventStart: string;
     eventEnd: string;
     eventTitle?: string;
+    gameName?: string;
     attendees?: Array<{
         id: number;
         username: string;
@@ -71,6 +72,7 @@ function renderWidget(props: {
                     eventStartTime={props.eventStart}
                     eventEndTime={props.eventEnd}
                     eventTitle={props.eventTitle}
+                    gameName={props.gameName}
                     gameId={props.gameId}
                     attendees={props.attendees}
                     attendeeCount={props.attendeeCount}
@@ -144,7 +146,7 @@ describe('GameTimeWidget — part 1', () => {
         expect(previewBlock).toHaveTextContent('');
     });
 
-    it('modal shows event title in the detail card below the grid', () => {
+    it('modal shows event title inside the highlighted preview block AND in the detail card below', () => {
         mockEditorData({
             slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         });
@@ -153,15 +155,20 @@ describe('GameTimeWidget — part 1', () => {
             eventStart: '2026-02-09T19:00:00',
             eventEnd: '2026-02-09T22:00:00',
             eventTitle: 'Raid Night',
+            gameName: 'World of Warcraft',
         });
 
         fireEvent.click(screen.getByTestId('game-time-widget'));
 
-        // Preview block is border-only (no content inside)
+        // Preview block now renders a brief event summary (RichEventBlock) — matches reschedule modal pattern.
         const previewBlock = screen.getByTestId('preview-block-1-19');
         expect(previewBlock).toBeInTheDocument();
+        expect(previewBlock).toHaveTextContent('Raid Night');
+        expect(previewBlock).toHaveTextContent('World of Warcraft');
 
-        expect(screen.getByText('Raid Night')).toBeInTheDocument();
+        // Title also appears in the EventDetailCard below the grid → 2 matches total.
+        const titleMatches = screen.getAllByText('Raid Night');
+        expect(titleMatches.length).toBeGreaterThanOrEqual(2);
     });
 
 });
