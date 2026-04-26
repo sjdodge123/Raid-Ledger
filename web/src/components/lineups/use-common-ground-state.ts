@@ -55,6 +55,12 @@ export interface UseCommonGroundStateResult {
     nominatingId: number | null;
     atCap: boolean;
     aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
+    /** AI suggestions query is in flight (and the panel actually has a lineup). */
+    aiIsLoading: boolean;
+    /** AI endpoint returned 503 (no provider configured) — see ROK-1114. */
+    aiIsUnavailable: boolean;
+    /** AI suggestions query errored for any other reason. */
+    aiIsError: boolean;
 }
 
 export function useCommonGroundState(
@@ -134,6 +140,10 @@ export function useCommonGroundState(
 
     const stableRefetch = useCallback(() => void refetch(), [refetch]);
 
+    const aiIsUnavailable = aiQuery.data?.kind === 'unavailable';
+    const aiIsLoading = hasBuilding && aiQuery.isLoading;
+    const aiIsError = aiQuery.isError && !aiIsUnavailable;
+
     return {
         hasBuilding,
         mergedData,
@@ -150,5 +160,8 @@ export function useCommonGroundState(
         nominatingId,
         atCap,
         aiSuggestionsByGameId,
+        aiIsLoading,
+        aiIsUnavailable,
+        aiIsError,
     };
 }

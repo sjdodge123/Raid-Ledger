@@ -3,6 +3,34 @@ import * as matchers from 'vitest-axe/matchers';
 import { expect, beforeAll, afterEach, afterAll } from 'vitest';
 import { server } from './mocks/server';
 
+// Node 24 ships a built-in `localStorage` whose prototype shadows the jsdom
+// polyfill — the result is an empty object with no `getItem`/`setItem`. Restore
+// a working in-memory storage on `globalThis` and `window` before any source
+// module reads `localStorage` at import time. See ROK-1114.
+if (typeof globalThis.localStorage?.getItem !== 'function') {
+    const store = new Map<string, string>();
+    const polyfill: Storage = {
+        get length() {
+            return store.size;
+        },
+        clear: () => store.clear(),
+        getItem: (key: string) => store.get(key) ?? null,
+        key: (i: number) => Array.from(store.keys())[i] ?? null,
+        removeItem: (key: string) => void store.delete(key),
+        setItem: (key: string, value: string) => void store.set(key, String(value)),
+    };
+    Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: polyfill,
+    });
+    if (typeof window !== 'undefined') {
+        Object.defineProperty(window, 'localStorage', {
+            configurable: true,
+            value: polyfill,
+        });
+    }
+}
+
 // vitest-axe matchers (toHaveNoViolations)
 expect.extend(matchers);
 
