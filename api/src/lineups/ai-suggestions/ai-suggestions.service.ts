@@ -14,6 +14,7 @@ import { LlmService } from '../../ai/llm.service';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from '../../ai/llm.constants';
 import { GameTasteService } from '../../game-taste/game-taste.service';
 import * as schema from '../../drizzle/schema';
+import type { SettingKey } from '../../drizzle/schema';
 import {
   resolveVoterScope,
   type ResolvedVoterScope,
@@ -63,12 +64,20 @@ export class AiSuggestionsService {
   /**
    * Public entry point called from the controller. Delegates to
    * `getOrGenerate` with stampede dedupe keyed on lineupId + hash.
+   *
+   * Returns an empty payload (without calling the LLM) when admins have
+   * disabled the feature via `ai_suggestions_enabled = 'false'`. The UI
+   * collapses on empty success, hiding the section entirely (ROK-1114
+   * round 3).
    */
   async getSuggestions(
     lineupId: number,
     opts: GetSuggestionsOpts = {},
   ): Promise<AiSuggestionsResponseDto> {
     const lineup = await this.loadLineup(lineupId);
+    if (await this.isFeatureDisabled()) {
+      return this.emptyResponse();
+    }
     const scope = await resolveVoterScope(this.db, lineup, {
       personalizeUserId: opts.personalizeUserId,
     });
@@ -80,6 +89,23 @@ export class AiSuggestionsService {
     });
     this.inFlight.set(key, promise);
     return promise;
+  }
+
+  private async isFeatureDisabled(): Promise<boolean> {
+    const value = await this.settings.get(
+      AI_SETTING_KEYS.SUGGESTIONS_ENABLED as SettingKey,
+    );
+    return value === 'false';
+  }
+
+  private emptyResponse(): AiSuggestionsResponseDto {
+    return {
+      suggestions: [],
+      generatedAt: new Date().toISOString(),
+      voterCount: 0,
+      voterScopeStrategy: 'community',
+      cached: false,
+    } satisfies AiSuggestionsResponseDto;
   }
 
   private async loadLineup(lineupId: number): Promise<

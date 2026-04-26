@@ -127,6 +127,7 @@ export class AiAdminController {
   async getFeatures(): Promise<{
     chatEnabled: boolean;
     dynamicCategoriesEnabled: boolean;
+    aiSuggestionsEnabled: boolean;
   }> {
     const chat = await this.settings.get(
       AI_SETTING_KEYS.CHAT_ENABLED as SettingKey,
@@ -134,9 +135,15 @@ export class AiAdminController {
     const dynCat = await this.settings.get(
       AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED as SettingKey,
     );
+    const sugg = await this.settings.get(
+      AI_SETTING_KEYS.SUGGESTIONS_ENABLED as SettingKey,
+    );
     return {
       chatEnabled: chat === 'true',
       dynamicCategoriesEnabled: dynCat === 'true',
+      // ROK-1114: defaults to true so an unconfigured install gets the
+      // feature; admin must explicitly set 'false' to disable.
+      aiSuggestionsEnabled: sugg !== 'false',
     };
   }
 
@@ -144,7 +151,11 @@ export class AiAdminController {
   @Put('features')
   @HttpCode(HttpStatus.OK)
   async updateFeatures(
-    @Body() body: { chatEnabled?: boolean; dynamicCategoriesEnabled?: boolean },
+    @Body() body: {
+      chatEnabled?: boolean;
+      dynamicCategoriesEnabled?: boolean;
+      aiSuggestionsEnabled?: boolean;
+    },
   ): Promise<{ success: boolean }> {
     if (body.chatEnabled !== undefined) {
       await this.settings.set(
@@ -156,6 +167,12 @@ export class AiAdminController {
       await this.settings.set(
         AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED as SettingKey,
         String(body.dynamicCategoriesEnabled),
+      );
+    }
+    if (body.aiSuggestionsEnabled !== undefined) {
+      await this.settings.set(
+        AI_SETTING_KEYS.SUGGESTIONS_ENABLED as SettingKey,
+        String(body.aiSuggestionsEnabled),
       );
     }
     return { success: true };
