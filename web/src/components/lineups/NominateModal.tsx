@@ -159,7 +159,7 @@ export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: No
     const results = searchData?.data ?? [];
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title="Nominate a Game" maxWidth="max-w-lg">
+        <Modal isOpen={isOpen} onClose={handleClose} title="Nominate a Game" maxWidth="max-w-4xl">
             {selected ? (
                 <PreviewCard
                     game={selected}

@@ -93,6 +93,22 @@ describe('PersonalSuggestionsRow (ROK-931)', () => {
             expect.objectContaining({ gameId: 99, name: 'It Takes Two' }),
         );
     });
+
+    it('lays out cards in a responsive grid (ROK-1114 round 3)', async () => {
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
+                HttpResponse.json(buildResponse()),
+            ),
+        );
+        renderWithProviders(
+            <PersonalSuggestionsRow lineupId={7} onPickSuggestion={vi.fn()} />,
+        );
+        const grid = await screen.findByTestId('personal-suggestions-grid');
+        // Grid container — not flex/overflow-x — so mouse users can see all
+        // suggestions without horizontal scroll inside the wider modal.
+        expect(grid.className).toMatch(/\bgrid\b/);
+        expect(grid.className).toMatch(/grid-cols-/);
+    });
 });
 
 describe('PersonalSuggestionsRow — AI surface states (ROK-1114)', () => {

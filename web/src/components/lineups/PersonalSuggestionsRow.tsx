@@ -26,11 +26,11 @@ export interface PersonalSuggestionsRowProps {
 
 function SuggestionSkeletons(): JSX.Element {
     return (
-        <div className="flex gap-3 overflow-x-auto pb-2">
-            {Array.from({ length: 3 }, (_, i) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-2">
+            {Array.from({ length: 4 }, (_, i) => (
                 <div
                     key={i}
-                    className="w-[180px] flex-shrink-0 rounded-xl bg-panel border border-edge/50 animate-pulse"
+                    className="min-w-0 rounded-xl bg-panel border border-edge/50 animate-pulse"
                 >
                     <div className="aspect-[3/4] bg-zinc-800/50 rounded-t-xl" />
                 </div>
@@ -75,8 +75,8 @@ export function PersonalSuggestionsRow({
             {query.isLoading && <SuggestionSkeletons />}
             {suggestions.length > 0 && (
                 <div
-                    className="flex gap-3 overflow-x-auto overflow-y-hidden pb-2"
-                    style={{ scrollbarWidth: 'none' }}
+                    className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-2"
+                    data-testid="personal-suggestions-grid"
                 >
                     {suggestions.map((s) => (
                         <AiSuggestionCard
