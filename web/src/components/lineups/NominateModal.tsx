@@ -29,8 +29,9 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
             type="text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Search games..."
+            placeholder="Search by name or paste a Steam store URL"
             className="w-full px-4 py-2.5 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3"
+            autoFocus
         />
     );
 }
@@ -171,17 +172,16 @@ export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: No
                 />
             ) : (
                 <>
-                    <p className="text-xs text-dim mb-3">Search by name or paste a Steam store URL</p>
-                    <PersonalSuggestionsRow
-                        lineupId={lineupId}
-                        onPickSuggestion={(s) => handleSelect({ id: s.gameId, name: s.name, coverUrl: s.coverUrl })}
-                    />
                     <SearchInput value={query} onChange={setQuery} />
                     {searchLoading && <p className="text-sm text-muted py-4 text-center">Searching...</p>}
                     {results.length > 0 && <SearchResults results={results} onSelect={handleSelect} />}
                     {query.length >= 2 && !searchLoading && results.length === 0 && (
                         <p className="text-sm text-muted py-4 text-center">No games found</p>
                     )}
+                    <PersonalSuggestionsRow
+                        lineupId={lineupId}
+                        onPickSuggestion={(s) => handleSelect({ id: s.gameId, name: s.name, coverUrl: s.coverUrl })}
+                    />
                 </>
             )}
         </Modal>
