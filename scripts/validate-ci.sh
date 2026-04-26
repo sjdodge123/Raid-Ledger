@@ -146,7 +146,10 @@ check_backup_prereqs() {
 }
 
 run_integration_tests() {
-  check_backup_prereqs
+  # Explicit `|| return` — `set -e` is disabled inside `||`/`&&` lists, and
+  # run_step calls us with `"$@" || rc=$?`, so a bare check_backup_prereqs
+  # would not halt this function on failure.
+  check_backup_prereqs || return $?
   npm run test:integration -w api
 }
 
