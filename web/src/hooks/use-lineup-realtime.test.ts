@@ -7,8 +7,13 @@
  * Behaviors covered:
  *   1. When the underlying socket emits `lineup:status`, the hook invalidates
  *      the React Query detail key `['lineups', 'detail', lineupId]`.
- *   2. The hook subscribes on mount (`emit('lineup:subscribe', { lineupId })`)
- *      and unsubscribes on unmount (`emit('lineup:unsubscribe', { lineupId })`).
+ *   2. The hook subscribes on mount (`emit('subscribe', { lineupId })`)
+ *      and unsubscribes on unmount (`emit('unsubscribe', { lineupId })`).
+ *
+ * Note: Phase A contract (`LineupRealtimeEventNames`) and Phase C gateway
+ * (`@SubscribeMessage('subscribe')`) use bare client→server names per the
+ * architect correction. The earlier draft of this test asserted on the
+ * `lineup:`-prefixed names, which would never be matched by the server.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
@@ -126,18 +131,18 @@ describe('useLineupRealtime (ROK-1118)', () => {
 
         const { unmount } = renderHook(() => useLineupRealtime(42), { wrapper });
 
-        // After mount the hook should have emitted 'lineup:subscribe' once.
+        // After mount the hook should have emitted 'subscribe' once.
         const subscribeCalls = mockEmit.mock.calls.filter(
-            ([event]) => event === 'lineup:subscribe',
+            ([event]) => event === 'subscribe',
         );
         expect(subscribeCalls).toHaveLength(1);
         expect(subscribeCalls[0][1]).toEqual({ lineupId: 42 });
 
-        // After unmount the hook should emit 'lineup:unsubscribe'.
+        // After unmount the hook should emit 'unsubscribe'.
         unmount();
 
         const unsubscribeCalls = mockEmit.mock.calls.filter(
-            ([event]) => event === 'lineup:unsubscribe',
+            ([event]) => event === 'unsubscribe',
         );
         expect(unsubscribeCalls).toHaveLength(1);
         expect(unsubscribeCalls[0][1]).toEqual({ lineupId: 42 });
