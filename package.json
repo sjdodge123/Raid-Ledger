@@ -5,7 +5,9 @@
     "workspaces": [
         "api",
         "web",
-        "packages/*"
+        "packages/*",
+        "tools/mcp-discord",
+        "tools/mcp-env"
     ],
     "scripts": {
         "dev": "docker-compose up",

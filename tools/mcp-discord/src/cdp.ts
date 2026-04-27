@@ -4,6 +4,13 @@ import { CDP_URL } from './config.js';
 let browser: Browser | null = null;
 let page: Page | null = null;
 
+export class CdpUnreachableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CdpUnreachableError';
+  }
+}
+
 /**
  * Connect to Discord Electron via CDP.
  *
@@ -15,7 +22,7 @@ export async function connectCDP(): Promise<Page> {
     browser = await chromium.connectOverCDP(CDP_URL, { timeout: 10_000 });
     console.error('[mcp-discord] Connected to CDP');
   } catch (err) {
-    throw new Error(
+    throw new CdpUnreachableError(
       `Failed to connect to Discord via CDP at ${CDP_URL}. ` +
         'Ensure Discord is running with --remote-debugging-port=9222.\n' +
         `Original error: ${err}`,

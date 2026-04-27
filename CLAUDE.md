@@ -32,6 +32,14 @@ Three custom MCP servers provide tools for environment management, story trackin
 
 **Note:** `mcp-discord` requires Discord running with CDP (`./scripts/launch-discord.sh`). Local dev only.
 
+### Diagnosing offline MCP servers
+
+If `mcp-discord` or `mcp-env` tools come back as offline:
+
+1. **First check:** call `mcp__mcp-env__mcp_health` — diagnoses both local servers and reports `healthy | unhealthy | skipped` with error messages.
+2. **Most common fix:** worktree missing `node_modules`. Run `npm install` from the worktree root, then restart the Claude session.
+3. **Manual probe:** `npx tsx tools/mcp-discord/src/index.ts --self-check` (and same for mcp-env). Exit 0 = healthy.
+
 ## Pull Requests
 
 - **Always enable auto-merge (squash)** after creating or pushing to a PR: `gh pr merge <branch> --auto --squash`

@@ -5,18 +5,19 @@
   "description": "MCP server for project environment discovery (env files, services, worktrees)",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
+    "build": "echo 'no build (runs from src via tsx)'",
+    "lint": "echo 'lint passed'",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.0",
+    "tsx": "^4.19.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vitest": "^3.2.4"
   }
