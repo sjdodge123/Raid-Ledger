@@ -14,7 +14,10 @@
 import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { SETTING_KEYS, type SettingKey } from '../../drizzle/schema/app-settings';
+import {
+  SETTING_KEYS,
+  type SettingKey,
+} from '../../drizzle/schema/app-settings';
 import type { SettingsService } from '../../settings/settings.service';
 import { loadExpectedVoters } from './quorum-voters.helpers';
 
