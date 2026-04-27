@@ -158,7 +158,9 @@ describe('IgdbService.searchLocalGames — relevance ranking (ROK-1084)', () => 
         },
         {
           provide: GameTasteService,
-          useValue: { enqueueRecompute: jest.fn().mockResolvedValue(undefined) },
+          useValue: {
+            enqueueRecompute: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();

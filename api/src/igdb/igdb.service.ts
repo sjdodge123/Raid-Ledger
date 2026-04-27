@@ -215,7 +215,12 @@ export class IgdbService {
   }
 
   async searchLocalGames(query: string): Promise<SearchResult> {
-    return searchLocalGames(this.db, query, await this.isAdultFilterEnabled());
+    const result = await searchLocalGames(
+      this.db,
+      query,
+      await this.isAdultFilterEnabled(),
+    );
+    return sortByRelevance(this.db, result, this.normalizeQuery(query));
   }
   async getGameById(id: number): Promise<IgdbGameDto | null> {
     return lookupGameById(this.db, id);

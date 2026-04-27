@@ -32,7 +32,9 @@ function makeDeps(opts: {
 }): AiChatDeps {
   return {
     logger: new Logger('events.tree.spec'),
-    eventsService: { findAll: opts.findAll } as unknown as AiChatDeps['eventsService'],
+    eventsService: {
+      findAll: opts.findAll,
+    } as unknown as AiChatDeps['eventsService'],
     usersService: {} as AiChatDeps['usersService'],
     llmService: {} as AiChatDeps['llmService'],
     settingsService: {} as AiChatDeps['settingsService'],
@@ -58,7 +60,10 @@ function makeSession(): TreeSession {
 /** Five sibling rows mirroring the prod scenario. id 101 is the row that holds the events. */
 const FIVE_GAMES: FakeGame[] = [
   { id: 100, name: 'World of Warcraft' },
-  { id: 101, name: 'World of Warcraft: Burning Crusade Classic - Anniversary Edition' },
+  {
+    id: 101,
+    name: 'World of Warcraft: Burning Crusade Classic - Anniversary Edition',
+  },
   { id: 102, name: 'World of Warcraft: Burning Crusade Classic' },
   { id: 103, name: 'World of Warcraft: Wrath of the Lich King Classic' },
   { id: 104, name: 'World of Warcraft Classic' },
@@ -76,11 +81,7 @@ describe('events.tree — searchEventsByGame fan-out (ROK-1084)', () => {
     const findAll = jest.fn().mockResolvedValue({ data: [], total: 0 });
     const deps = makeDeps({ searchLocalGames, findAll });
 
-    await handleEvents(
-      'events:search:world of warcraft',
-      deps,
-      makeSession(),
-    );
+    await handleEvents('events:search:world of warcraft', deps, makeSession());
 
     const calledGameIds = findAll.mock.calls.map(
       ([arg]: [FindAllArgs]) => arg?.gameId,
