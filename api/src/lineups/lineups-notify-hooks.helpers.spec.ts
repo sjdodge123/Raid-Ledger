@@ -59,7 +59,7 @@ function makeServiceMock(): jest.Mocked<LineupNotificationService> {
 
 /**
  * Build a Drizzle-shaped mock that supports the chained .select().from()
- * .where().limit() pattern used by both `loadLineupForNotification` and
+ * .where().limit() pattern used by both `loadLineupForHook` and
  * `loadSingleMatch`. Each call to `select()` returns a fresh chain seeded
  * with the next response from `responses`.
  */

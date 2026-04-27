@@ -56,7 +56,7 @@ export function fireNominationMilestone(
   db: Db,
   lineupId: number,
 ): void {
-  loadLineupForNotification(db, lineupId)
+  loadLineupForHook(db, lineupId)
     .then(async (row) => {
       if (!row) return;
       const result = await checkNominationMilestone(db, lineupId);
@@ -79,7 +79,7 @@ export function fireVotingOpen(
   lineupId: number,
   phaseDeadline: Date | null,
 ): void {
-  loadLineupForNotification(db, lineupId)
+  loadLineupForHook(db, lineupId)
     .then(async (row) => {
       if (!row) return;
       const games = await findNominatedGames(db, lineupId);
@@ -96,8 +96,8 @@ export function fireVotingOpen(
     .catch(logError(logger, 'voting-open'));
 }
 
-/** Load fields notify hooks need from the lineup row (ROK-1065). */
-async function loadLineupForNotification(
+/** Load fields notify hooks need from the lineup row (ROK-1132). */
+async function loadLineupForHook(
   db: Db,
   lineupId: number,
 ): Promise<{
@@ -124,7 +124,7 @@ export function fireDecidedNotifications(
   db: Db,
   lineupId: number,
 ): void {
-  loadLineupForNotification(db, lineupId)
+  loadLineupForHook(db, lineupId)
     .then(async (row) => {
       if (!row) return;
       const matches = await loadMatchesForNotification(db, lineupId);
@@ -175,7 +175,7 @@ export function fireSchedulingOpen(
   loadSingleMatch(db, matchId)
     .then(async (match) => {
       if (!match) return;
-      const lineup = await loadLineupVisibility(db, match.lineupId);
+      const lineup = await loadLineupForHook(db, match.lineupId);
       await svc.notifySchedulingOpen(match, lineup ?? undefined);
     })
     .catch(logError(logger, 'scheduling-open'));
@@ -193,7 +193,7 @@ export function fireEventCreated(
   loadSingleMatch(db, matchId)
     .then(async (match) => {
       if (!match) return;
-      const lineup = await loadLineupVisibility(db, match.lineupId);
+      const lineup = await loadLineupForHook(db, match.lineupId);
       await svc.notifyEventCreated(
         match,
         eventDate,
@@ -202,22 +202,6 @@ export function fireEventCreated(
       );
     })
     .catch(logError(logger, 'event-created'));
-}
-
-/** Load just visibility for a lineup (ROK-1115). Used by match-based hooks. */
-async function loadLineupVisibility(
-  db: Db,
-  lineupId: number,
-): Promise<{ id: number; visibility: 'public' | 'private' } | null> {
-  const [row] = await db
-    .select({
-      id: schema.communityLineups.id,
-      visibility: schema.communityLineups.visibility,
-    })
-    .from(schema.communityLineups)
-    .where(eq(schema.communityLineups.id, lineupId))
-    .limit(1);
-  return row ?? null;
 }
 
 // ─── Private: match loading queries ────────────────────────
