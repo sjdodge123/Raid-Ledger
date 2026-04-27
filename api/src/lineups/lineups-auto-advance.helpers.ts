@@ -21,6 +21,7 @@ import {
   checkBuildingQuorum,
   checkVotingQuorum,
 } from './quorum/quorum-check.helpers';
+import type { LineupsGateway } from './lineups.gateway';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -30,6 +31,7 @@ export interface AutoAdvanceDeps {
   settings: SettingsService;
   phaseQueue: LineupPhaseQueueService;
   lineupNotifications: LineupNotificationService;
+  lineupsGateway: LineupsGateway;
   logger: Logger;
 }
 

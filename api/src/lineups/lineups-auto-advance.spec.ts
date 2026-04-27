@@ -42,6 +42,7 @@ function makeDeps(logger: Logger = makeLogger()) {
     settings: {} as never,
     phaseQueue: {} as never,
     lineupNotifications: {} as never,
+    lineupsGateway: {} as never,
     logger,
   };
 }

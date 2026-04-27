@@ -45,6 +45,7 @@ import {
   runRemoveNomination,
 } from './lineups-actions.helpers';
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
+import { LineupsGateway } from './lineups.gateway';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -86,6 +87,7 @@ export class LineupsService {
     private readonly botClient: DiscordBotClientService,
     private readonly tasteProfile: TasteProfileService,
     private readonly aiSuggestionsCache: AiSuggestionsCacheInvalidator,
+    private readonly lineupsGateway: LineupsGateway,
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
@@ -166,6 +168,7 @@ export class LineupsService {
       settings: this.settings,
       phaseQueue: this.phaseQueue,
       lineupNotifications: this.lineupNotifications,
+      lineupsGateway: this.lineupsGateway,
       logger: this.logger,
     };
   }
@@ -182,6 +185,7 @@ export class LineupsService {
         settings: this.settings,
         phaseQueue: this.phaseQueue,
         lineupNotifications: this.lineupNotifications,
+        lineupsGateway: this.lineupsGateway,
         logger: this.logger,
       },
       id,

@@ -30,6 +30,7 @@ import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
+import { LineupsGateway } from './lineups.gateway';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
 jest.mock('./lineups-matching.helpers', () => ({
@@ -138,6 +139,10 @@ async function buildHarness(
       {
         provide: AiSuggestionsCacheInvalidator,
         useValue: invalidator,
+      },
+      {
+        provide: LineupsGateway,
+        useValue: { emitStatusChange: jest.fn() },
       },
     ],
   }).compile();

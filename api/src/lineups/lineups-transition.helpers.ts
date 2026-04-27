@@ -27,6 +27,7 @@ import {
   fireVotingOpen,
   fireDecidedNotifications,
 } from './lineups-notify-hooks.helpers';
+import type { LineupsGateway } from './lineups.gateway';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -36,6 +37,7 @@ export interface TransitionDeps {
   settings: SettingsService;
   phaseQueue: LineupPhaseQueueService;
   lineupNotifications: LineupNotificationService;
+  lineupsGateway: LineupsGateway;
   logger: Logger;
 }
 
@@ -62,6 +64,10 @@ export async function runStatusTransition(
     dto,
     lineup,
   );
+  // ROK-1118: emit immediately after the conditional UPDATE succeeds so
+  // subscribed clients see the phase flip without polling. The timestamp
+  // matches the row's `updatedAt` we just wrote (within milliseconds).
+  deps.lineupsGateway.emitStatusChange(id, dto.status, new Date());
   if (dto.status === 'decided') {
     await runMatchingAlgorithm(deps.db, id, deps.logger);
   }
