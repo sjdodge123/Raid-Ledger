@@ -1,0 +1,260 @@
+/**
+ * ROK-1117 — Tiebreaker open notifications (integration).
+ *
+ * TDD gate: these tests pin down the spec for tiebreaker-open
+ * notification fan-out. They MUST fail until the dev agent wires
+ * `LineupNotificationService.notifyTiebreakerOpen` into
+ * `TiebreakerService.start()`.
+ *
+ * Coverage:
+ *   - Public lineup tiebreaker.start() → DMs fan out to every user
+ *     returned by `loadExpectedVoters` (nominators ∪ voters), and a
+ *     channel embed is posted with dedup key
+ *     `lineup-tiebreaker-open:<tbId>`.
+ *   - Private lineup tiebreaker.start() → DMs fan out to invitees +
+ *     creator, channel embed is suppressed (mirrors ROK-1065 routing).
+ *
+ * Strategy:
+ *   - Real DB (Testcontainers) for lineup / entries / votes / users.
+ *   - Stub `DiscordBotClientService.sendEmbed` so we can assert whether
+ *     the channel-embed path was invoked.
+ *   - Drive `TiebreakerService.start()` directly (deterministic), then
+ *     read notification rows + the sendEmbed spy.
+ */
+import { eq } from 'drizzle-orm';
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import {
+  truncateAllTables,
+  loginAsAdmin,
+} from '../common/testing/integration-helpers';
+import * as schema from '../drizzle/schema';
+import { TiebreakerService } from './tiebreaker/tiebreaker.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { SettingsService } from '../settings/settings.service';
+import { NotificationDedupService } from '../notifications/notification-dedup.service';
+
+interface PublicLineupSetup {
+  lineupId: number;
+  tiedGameIds: [number, number];
+  participantIds: number[];
+}
+
+interface PrivateLineupSetup {
+  lineupId: number;
+  tiedGameIds: [number, number];
+  inviteeIds: number[];
+  creatorId: number;
+}
+
+function describeTiebreakerNotifications() {
+  let testApp: TestApp;
+  let adminToken: string;
+  let tiebreakerService: TiebreakerService;
+  let botClient: DiscordBotClientService;
+  let settings: SettingsService;
+  let dedup: NotificationDedupService;
+  let sendEmbedSpy: jest.SpyInstance;
+  let dedupSpy: jest.SpyInstance;
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+    tiebreakerService = testApp.app.get(TiebreakerService);
+    botClient = testApp.app.get(DiscordBotClientService);
+    settings = testApp.app.get(SettingsService);
+    dedup = testApp.app.get(NotificationDedupService);
+    void adminToken;
+  });
+
+  beforeEach(async () => {
+    sendEmbedSpy = jest
+      .spyOn(botClient, 'sendEmbed')
+      .mockResolvedValue({ id: 'mock-msg-tb' } as never);
+    dedupSpy = jest.spyOn(dedup, 'checkAndMarkSent');
+    // Bind a default channel so the channel-dispatch path WOULD fire if
+    // visibility were public — needed for the public-channel assertion.
+    await settings.setDiscordBotDefaultChannel('test-channel-tb-1117');
+  });
+
+  afterEach(async () => {
+    sendEmbedSpy.mockRestore();
+    dedupSpy.mockRestore();
+    testApp.seed = await truncateAllTables(testApp.db);
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+
+  async function createMember(tag: string): Promise<number> {
+    const [user] = await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `discord:${tag}`,
+        username: `mem-${tag}`,
+        role: 'member',
+      })
+      .returning();
+    return user.id;
+  }
+
+  async function createGame(name: string): Promise<number> {
+    const [g] = await testApp.db
+      .insert(schema.games)
+      .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
+      .returning();
+    return g.id;
+  }
+
+  /**
+   * Build a public lineup in voting status with two tied games and
+   * three distinct participants (one nominator-only, two voters).
+   * The expected DM target = nominators ∪ voters.
+   */
+  async function setupPublicLineup(): Promise<PublicLineupSetup> {
+    const nominator = await createMember('pub-nom-1117');
+    const voterA = await createMember('pub-voter-a-1117');
+    const voterB = await createMember('pub-voter-b-1117');
+    const gameAId = await createGame('TBGameA-1117');
+    const gameBId = await createGame('TBGameB-1117');
+
+    const [lineup] = await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'ROK-1117 public',
+        status: 'voting',
+        visibility: 'public',
+        createdBy: testApp.seed.adminUser.id,
+      })
+      .returning();
+
+    // Nominate both games (nominator owns gameA, voterA owns gameB).
+    await testApp.db.insert(schema.communityLineupEntries).values([
+      { lineupId: lineup.id, gameId: gameAId, nominatedBy: nominator },
+      { lineupId: lineup.id, gameId: gameBId, nominatedBy: voterA },
+    ]);
+    // Cast equal votes to produce a tie.
+    await testApp.db.insert(schema.communityLineupVotes).values([
+      { lineupId: lineup.id, gameId: gameAId, userId: voterA },
+      { lineupId: lineup.id, gameId: gameBId, userId: voterB },
+    ]);
+
+    return {
+      lineupId: lineup.id,
+      tiedGameIds: [gameAId, gameBId],
+      participantIds: Array.from(new Set([nominator, voterA, voterB])),
+    };
+  }
+
+  /**
+   * Build a private lineup in voting status with two tied games and
+   * two invitees + creator. Expected DM target = creator ∪ invitees.
+   */
+  async function setupPrivateLineup(): Promise<PrivateLineupSetup> {
+    const inviteeA = await createMember('priv-inv-a-1117');
+    const inviteeB = await createMember('priv-inv-b-1117');
+    const gameAId = await createGame('TBPrivA-1117');
+    const gameBId = await createGame('TBPrivB-1117');
+    const creatorId = testApp.seed.adminUser.id;
+
+    const [lineup] = await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'ROK-1117 private',
+        status: 'voting',
+        visibility: 'private',
+        createdBy: creatorId,
+      })
+      .returning();
+    await testApp.db.insert(schema.communityLineupInvitees).values([
+      { lineupId: lineup.id, userId: inviteeA },
+      { lineupId: lineup.id, userId: inviteeB },
+    ]);
+    await testApp.db.insert(schema.communityLineupEntries).values([
+      { lineupId: lineup.id, gameId: gameAId, nominatedBy: creatorId },
+      { lineupId: lineup.id, gameId: gameBId, nominatedBy: inviteeA },
+    ]);
+    await testApp.db.insert(schema.communityLineupVotes).values([
+      { lineupId: lineup.id, gameId: gameAId, userId: inviteeA },
+      { lineupId: lineup.id, gameId: gameBId, userId: inviteeB },
+    ]);
+
+    // Give the creator a discordId so they qualify for DM dispatch.
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: 'discord:admin-1117' })
+      .where(eq(schema.users.id, creatorId));
+
+    return {
+      lineupId: lineup.id,
+      tiedGameIds: [gameAId, gameBId],
+      inviteeIds: [inviteeA, inviteeB],
+      creatorId,
+    };
+  }
+
+  async function notificationsForUser(userId: number): Promise<unknown[]> {
+    return testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, userId));
+  }
+
+  function dedupKeysSeen(): string[] {
+    return dedupSpy.mock.calls.map((c) => String(c[0]));
+  }
+
+  // ── AC: public lineup → DMs + channel embed ────────────────────────────
+
+  it('public tiebreaker.start() DMs every expected voter and posts channel embed', async () => {
+    const { lineupId, participantIds } = await setupPublicLineup();
+
+    const tiebreaker = await tiebreakerService.start(lineupId, {
+      mode: 'veto',
+      roundDurationHours: 24,
+    });
+    expect(tiebreaker).toBeTruthy();
+
+    // Wait briefly for fire-and-forget hook to settle.
+    await new Promise((r) => setImmediate(r));
+
+    // Every expected voter receives a community_lineup notification row.
+    for (const userId of participantIds) {
+      const rows = await notificationsForUser(userId);
+      expect(rows.length).toBeGreaterThan(0);
+    }
+
+    // Public lineup → channel embed dispatched.
+    expect(sendEmbedSpy).toHaveBeenCalled();
+
+    // Dedup key for the channel embed is `lineup-tiebreaker-open:<tbId>`.
+    const expectedKey = `lineup-tiebreaker-open:${tiebreaker.id}`;
+    expect(dedupKeysSeen()).toContain(expectedKey);
+  });
+
+  // ── AC: private lineup → DMs only, no channel embed ────────────────────
+
+  it('private tiebreaker.start() DMs invitees + creator and suppresses channel embed', async () => {
+    const { lineupId, inviteeIds, creatorId } = await setupPrivateLineup();
+
+    const tiebreaker = await tiebreakerService.start(lineupId, {
+      mode: 'bracket',
+      roundDurationHours: 24,
+    });
+    expect(tiebreaker).toBeTruthy();
+
+    await new Promise((r) => setImmediate(r));
+
+    expect(sendEmbedSpy).not.toHaveBeenCalled();
+
+    // Every invitee + creator receives a notification row.
+    for (const userId of [...inviteeIds, creatorId]) {
+      const rows = await notificationsForUser(userId);
+      expect(rows.length).toBeGreaterThan(0);
+    }
+  });
+}
+
+describe(
+  'Lineup tiebreaker-open notifications (integration, ROK-1117)',
+  describeTiebreakerNotifications,
+);
