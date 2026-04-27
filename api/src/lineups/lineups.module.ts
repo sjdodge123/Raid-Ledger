@@ -1,10 +1,13 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LineupsController } from './lineups.controller';
 import { LineupsService } from './lineups.service';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { LineupReminderService } from './lineup-reminder.service';
+import { LineupsGateway } from './lineups.gateway';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { NotificationModule } from '../notifications/notification.module';
@@ -28,6 +31,14 @@ import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
     TiebreakerModule,
     TasteProfileModule,
     AiSuggestionsModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET'),
+        signOptions: { expiresIn: '24h' },
+      }),
+      inject: [ConfigService],
+    }),
   ],
   controllers: [LineupsController],
   providers: [
@@ -37,6 +48,7 @@ import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
     LineupReminderService,
     LineupPhaseQueueService,
     LineupPhaseProcessor,
+    LineupsGateway,
   ],
   exports: [LineupsService, LineupSteamNudgeService, LineupNotificationService],
 })
