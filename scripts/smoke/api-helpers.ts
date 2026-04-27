@@ -6,42 +6,70 @@
  * smoke spec files don't duplicate this boilerplate.
  */
 
+import { readFile } from 'node:fs/promises';
+import { resolve as resolvePath } from 'node:path';
+
 export const API_BASE = process.env.API_URL || 'http://localhost:3000';
 
 // ---------------------------------------------------------------------------
 // Admin token — cached at module level, with 429 back-off retry
 // ---------------------------------------------------------------------------
 
+// ROK-1085: globalSetup writes the JWT to scripts/.auth/admin-token.json so
+// each Playwright worker can read the cached token instead of hammering
+// /auth/local in parallel (the rate limiter rejected the fan-out and caused
+// flaky smoke runs). Falls back to the live login if the file is absent.
+const TOKEN_FILE_PATH = resolvePath(__dirname, '..', '.auth', 'admin-token.json');
+
 let _cachedToken: string | null = null;
 let _tokenPromise: Promise<string> | null = null;
+
+async function readTokenFromDisk(): Promise<string | null> {
+    try {
+        const raw = await readFile(TOKEN_FILE_PATH, 'utf8');
+        const parsed = JSON.parse(raw) as { access_token?: unknown };
+        if (typeof parsed.access_token === 'string' && parsed.access_token) {
+            return parsed.access_token;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+async function loginViaApi(): Promise<string> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch(`${API_BASE}/auth/local`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: 'admin@local',
+                password: process.env.ADMIN_PASSWORD || 'password',
+            }),
+        });
+        if (res.ok) {
+            const { access_token } = (await res.json()) as {
+                access_token: string;
+            };
+            return access_token;
+        }
+        if (res.status === 429) {
+            const wait = attempt === 0 ? 5_000 : 15_000;
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
+        }
+        throw new Error(`Auth failed: ${res.status}`);
+    }
+    throw new Error('Auth failed after 3 attempts (rate limited)');
+}
 
 export async function getAdminToken(): Promise<string> {
     if (_cachedToken) return _cachedToken;
     if (_tokenPromise) return _tokenPromise;
     _tokenPromise = (async () => {
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const res = await fetch(`${API_BASE}/auth/local`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: 'admin@local',
-                    password: process.env.ADMIN_PASSWORD || 'password',
-                }),
-            });
-            if (res.ok) {
-                const { access_token } = (await res.json()) as {
-                    access_token: string;
-                };
-                return access_token;
-            }
-            if (res.status === 429) {
-                const wait = attempt === 0 ? 5_000 : 15_000;
-                await new Promise((r) => setTimeout(r, wait));
-                continue;
-            }
-            throw new Error(`Auth failed: ${res.status}`);
-        }
-        throw new Error('Auth failed after 3 attempts (rate limited)');
+        const fromDisk = await readTokenFromDisk();
+        if (fromDisk) return fromDisk;
+        return loginViaApi();
     })();
     _cachedToken = await _tokenPromise;
     _tokenPromise = null;

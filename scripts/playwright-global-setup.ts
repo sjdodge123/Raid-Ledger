@@ -23,6 +23,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password';
 
 const AUTH_DIR = path.resolve(__dirname, '.auth');
 const STORAGE_STATE_PATH = path.join(AUTH_DIR, 'admin.json');
+// ROK-1085: workers in scripts/smoke read this file via getAdminToken() to
+// avoid each one POSTing /auth/local in parallel (the rate limiter dropped
+// requests and caused did-not-run flakes under full-suite parallel run).
+const TOKEN_FILE_PATH = path.join(AUTH_DIR, 'admin-token.json');
 
 export default async function globalSetup(_config: FullConfig) {
     // Ensure .auth directory exists
@@ -43,6 +47,11 @@ export default async function globalSetup(_config: FullConfig) {
     }
 
     const { access_token } = (await loginRes.json()) as { access_token: string };
+
+    fs.writeFileSync(
+        TOKEN_FILE_PATH,
+        JSON.stringify({ access_token, issued_at: new Date().toISOString() }),
+    );
 
     // 2. Seed demo data (idempotent — safe to call if already seeded)
     const seedRes = await fetch(`${API_BASE}/admin/settings/demo/install`, {

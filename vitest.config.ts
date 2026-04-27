@@ -13,7 +13,12 @@ export default defineConfig({
         environment: 'jsdom',
         globals: true,
         setupFiles: ['./web/src/test/setup.ts'],
-        include: ['web/src/**/*.test.{ts,tsx}'],
+        include: [
+            'web/src/**/*.test.{ts,tsx}',
+            // ROK-1085: unit tests for scripts/smoke helpers (excludes Playwright .smoke.spec.ts files).
+            'scripts/smoke/**/*.spec.ts',
+        ],
+        exclude: ['**/node_modules/**', 'scripts/smoke/**/*.smoke.spec.ts'],
     },
     resolve: {
         alias: {
