@@ -427,6 +427,94 @@ const backAndHomeNavigation: SmokeTest = {
   },
 };
 
+// ── ROK-1084: Search by Game finds events on sibling game variants ──
+
+/**
+ * Reproduces the prod incident where a search term matches multiple sibling
+ * rows in the games table (e.g. "World of Warcraft" vs "WoW: Burning Crusade
+ * Classic - Anniversary Edition"). The current single-id search picks games[0]
+ * and misses events tagged to a sibling row. The fix queries the top 5 ranked
+ * matches and merges results.
+ *
+ * Strategy: pick a non-first WoW sibling from the seeded games list, attach an
+ * event to it, then trigger the AI chat events:search flow with a query that
+ * `searchLocalGames` returns multiple rows for. The merged response must
+ * surface the seeded event title.
+ */
+const searchByGameMultiVariant: SmokeTest = {
+  name: 'AI Chat: [Search by Game] surfaces events on sibling game variants (ROK-1084)',
+  category: 'dm',
+  async run(ctx) {
+    // Find sibling WoW rows. Two are needed: one would be ranked first by the
+    // current naive picker; we attach the event to the OTHER one so the bug
+    // is triggered if the handler only looks at games[0].
+    const wowRows = ctx.games.filter((g) =>
+      g.name.toLowerCase().includes('warcraft'),
+    );
+    if (wowRows.length < 2) {
+      throw new Error(
+        `Expected at least 2 WoW variants in seed data for ROK-1084 repro, got ${wowRows.length}: ` +
+          JSON.stringify(wowRows.map((g) => g.name)),
+      );
+    }
+    // Prefer the most-specific variant (longest name) — current picker tends
+    // to surface the shortest exact-match row first, so the longer sibling is
+    // the one the bug hides events behind.
+    const targetGame = [...wowRows].sort(
+      (a, b) => b.name.length - a.name.length,
+    )[0];
+
+    const ev = await createEvent(ctx.api, 'rok1084-search', {
+      gameId: targetGame.id,
+      startTime: futureTime(60),
+      endTime: futureTime(120),
+    });
+    try {
+      await awaitProcessing(ctx.api);
+
+      // Step 1: open the events:search node so the session expects text input.
+      await simulate(ctx, {
+        discordUserId: ctx.testBotDiscordId,
+        buttonId: 'ai:events:search',
+      });
+
+      // Step 2: send a query that matches multiple sibling rows. Poll because
+      // events index updates may lag the create call.
+      const searchTerm = 'world of warcraft';
+      const finalRes = await pollForCondition(
+        async () => {
+          const r = await simulate(ctx, {
+            discordUserId: ctx.testBotDiscordId,
+            text: searchTerm,
+          });
+          const text = allText(r);
+          if (text.includes(ev.title.toLowerCase())) return r;
+          return null;
+        },
+        SIM_TIMEOUT,
+      );
+
+      const finalText = allText(finalRes);
+      // The merged response must surface the event title and use the
+      // "Upcoming events" copy. Today this fails because games[0] is a
+      // sibling row with no events and the handler short-circuits.
+      if (!finalText.includes(ev.title.toLowerCase())) {
+        throw new Error(
+          `Search for "${searchTerm}" did not return the event tagged to gameId=${targetGame.id} ("${targetGame.name}"). ` +
+            `Expected response to include "${ev.title}". Got: "${finalText.slice(0, 300)}"`,
+        );
+      }
+      if (!finalText.includes('upcoming events')) {
+        throw new Error(
+          `Search response missing "Upcoming events" header. Got: "${finalText.slice(0, 300)}"`,
+        );
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 export const aiChatTests: SmokeTest[] = [
   enableAiChat,
   welcomeMenuMember,
@@ -439,4 +527,5 @@ export const aiChatTests: SmokeTest[] = [
   sessionTimeout,
   featureGateDisabled,
   backAndHomeNavigation,
+  searchByGameMultiVariant,
 ];
