@@ -156,7 +156,9 @@ export class AiProvidersController {
     let probeResult: { available: boolean; error?: string } | null = null;
     const available = await deriveAvailability({
       providerKey: provider.key,
-      lastSuccessAt: await this.logService.getLastSuccessfulChatAt(provider.key),
+      lastSuccessAt: await this.logService.getLastSuccessfulChatAt(
+        provider.key,
+      ),
       probe: async () => {
         probeResult = await this.checkAvailableWithError(provider);
         return probeResult.available;
