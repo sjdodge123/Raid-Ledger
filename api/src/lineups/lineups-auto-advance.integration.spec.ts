@@ -129,8 +129,9 @@ function describeAutoAdvance() {
 
   // -- AC: voting → decided auto-advance for a private lineup ---------------
 
-  it('flips a private lineup from voting → decided when all invitees + creator vote', async () => {
+  it('flips a private lineup from voting → decided when all voters use their full vote allotment', async () => {
     // Two invitees + the admin creator = 3 expected voters.
+    // Default lineup.maxVotesPerPlayer = 3, so each must cast 3 votes.
     const invitee1 = await createMember('priv-voter-1');
     const invitee2 = await createMember('priv-voter-2');
 
@@ -141,40 +142,49 @@ function describeAutoAdvance() {
     expect(createRes.status).toBe(201);
     const lineupId = createRes.body.id as number;
 
-    // Each invitee nominates a game (so there's something to vote on).
-    const games = await createGames(3);
-    await nominate(invitee1.token, lineupId, games[0].id);
-    await nominate(invitee2.token, lineupId, games[1].id);
-    await nominate(adminToken, lineupId, games[2].id);
+    // Need enough games so each voter can cast 3 distinct votes plus a
+    // shared favorite that wins. Layout: g0 is the shared favorite (3 votes);
+    // each voter also picks 2 personal games. Total games: 1 + 2*3 = 7.
+    const games = await createGames(7);
+    await nominate(adminToken, lineupId, games[0].id);
+    await nominate(invitee1.token, lineupId, games[1].id);
+    await nominate(invitee2.token, lineupId, games[2].id);
+    await nominate(adminToken, lineupId, games[3].id);
+    await nominate(invitee1.token, lineupId, games[4].id);
+    await nominate(invitee2.token, lineupId, games[5].id);
+    await nominate(adminToken, lineupId, games[6].id);
 
-    // Operator advances to voting.
+    // Manually advance to voting (we're testing voting→decided, not
+    // building→voting; default per-voter min nominations = 3 isn't reached).
     const adv = await advanceToVoting(lineupId, adminToken);
     expect(adv.status).toBe(200);
     expect(await readStatus(lineupId)).toBe('voting');
 
-    // All three voters back the same game so the auto-advance landing
-    // state has a clear winner — `guardTiebreakerOnTransition` would
-    // otherwise block the transition (spec: ROK-1118, edge case "tie").
-    const v1 = await vote(adminToken, lineupId, games[0].id);
-    expect(v1.status).toBe(200);
+    // Each voter casts 1/3 votes — quorum NOT met (operator's bug report).
+    await vote(adminToken, lineupId, games[0].id);
+    await vote(invitee1.token, lineupId, games[0].id);
+    await vote(invitee2.token, lineupId, games[0].id);
     expect(await readStatus(lineupId)).toBe('voting');
 
-    const v2 = await vote(invitee1.token, lineupId, games[0].id);
-    expect(v2.status).toBe(200);
+    // Each voter casts 2/3 votes — still not full allotment.
+    await vote(adminToken, lineupId, games[1].id);
+    await vote(invitee1.token, lineupId, games[2].id);
+    await vote(invitee2.token, lineupId, games[3].id);
     expect(await readStatus(lineupId)).toBe('voting');
 
-    // Third (final) vote — invitee2 closes the quorum.
-    // After this call the auto-advance hook should fire.
-    const v3 = await vote(invitee2.token, lineupId, games[0].id);
-    expect(v3.status).toBe(200);
+    // Each voter casts their 3rd (final) vote — quorum closes. The shared
+    // favorite g0 has 3 votes; everything else has 1, so no tie at the top.
+    await vote(adminToken, lineupId, games[4].id);
+    await vote(invitee1.token, lineupId, games[5].id);
+    await vote(invitee2.token, lineupId, games[6].id);
 
-    // Status should now be 'decided' WITHOUT any explicit PATCH /status call.
+    // Status should flip without any explicit PATCH /status call.
     expect(await readStatus(lineupId)).toBe('decided');
   });
 
-  // -- AC: voting → decided does NOT advance with one invitee missing -------
+  // -- AC: voting → decided does NOT advance with partial participation -----
 
-  it('does not advance a private lineup when one invitee has not voted', async () => {
+  it('does not advance a private lineup when one invitee has not voted at all', async () => {
     const invitee1 = await createMember('partial-1');
     const invitee2 = await createMember('partial-2');
 
@@ -193,44 +203,70 @@ function describeAutoAdvance() {
     await advanceToVoting(lineupId, adminToken);
     expect(await readStatus(lineupId)).toBe('voting');
 
-    // Only 2 of the 3 expected voters cast a vote.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(invitee1.token, lineupId, games[0].id);
+    // Two of three voters use their full allotment of 3.
+    for (let i = 0; i < 3; i++) {
+      await vote(adminToken, lineupId, games[i].id);
+      await vote(invitee1.token, lineupId, games[i].id);
+    }
 
     // invitee2 stays silent → quorum not met → no auto-advance.
     expect(await readStatus(lineupId)).toBe('voting');
   });
 
+  it('does not advance a private lineup when voters have only used part of their allotment', async () => {
+    // Operator's bug report: cast 1 of 3 available votes, room advances.
+    const invitee = await createMember('partial-allotment');
+
+    const createRes = await createPrivateLineup(adminToken, [invitee.userId]);
+    expect(createRes.status).toBe(201);
+    const lineupId = createRes.body.id as number;
+
+    const games = await createGames(3);
+    await nominate(invitee.token, lineupId, games[0].id);
+    await nominate(adminToken, lineupId, games[1].id);
+
+    await advanceToVoting(lineupId, adminToken);
+    expect(await readStatus(lineupId)).toBe('voting');
+
+    // Each voter casts only 1 of their 3 available votes.
+    await vote(adminToken, lineupId, games[0].id);
+    await vote(invitee.token, lineupId, games[0].id);
+
+    // Quorum NOT met — voters still have 2 unused votes each.
+    expect(await readStatus(lineupId)).toBe('voting');
+  });
+
   // -- AC: building → voting auto-advance for a public lineup ---------------
 
-  it('auto-advances a public lineup from building → voting once the floor is met', async () => {
-    // Default floor is 4 distinct nominations. Use 4 distinct nominators so
-    // both AC conditions (every expected nominator has nominated AND total
-    // nominations ≥ floor) line up.
+  it('auto-advances a public lineup from building → voting once each voter hits their per-voter minimum', async () => {
+    // Default per-voter min nominations = 3, default total floor = 4.
+    // With 2 nominators × 3 noms = 6 noms total → both gates pass.
     const m1 = await createMember('pub-nom-1');
     const m2 = await createMember('pub-nom-2');
-    const m3 = await createMember('pub-nom-3');
-    const m4 = await createMember('pub-nom-4');
 
     const createRes = await createPublicLineup(adminToken);
     expect(createRes.status).toBe(201);
     const lineupId = createRes.body.id as number;
     expect(await readStatus(lineupId)).toBe('building');
 
-    const games = await createGames(4);
+    const games = await createGames(6);
 
-    // 3 distinct nominators — below the floor of 4. Status must NOT change.
-    const n1 = await nominate(m1.token, lineupId, games[0].id);
-    expect(n1.status).toBe(201);
-    const n2 = await nominate(m2.token, lineupId, games[1].id);
-    expect(n2.status).toBe(201);
-    const n3 = await nominate(m3.token, lineupId, games[2].id);
-    expect(n3.status).toBe(201);
+    // m1 nominates 2 of 3 → below per-voter min, no advance.
+    await nominate(m1.token, lineupId, games[0].id);
+    await nominate(m1.token, lineupId, games[1].id);
     expect(await readStatus(lineupId)).toBe('building');
 
-    // 4th distinct nominator hits the floor — auto-advance should fire.
-    const n4 = await nominate(m4.token, lineupId, games[3].id);
-    expect(n4.status).toBe(201);
+    // m1 hits 3, but m2 has 0 → still below.
+    await nominate(m1.token, lineupId, games[2].id);
+    expect(await readStatus(lineupId)).toBe('building');
+
+    // m2 hits 2 of 3 → still below per-voter min.
+    await nominate(m2.token, lineupId, games[3].id);
+    await nominate(m2.token, lineupId, games[4].id);
+    expect(await readStatus(lineupId)).toBe('building');
+
+    // m2's 3rd nomination closes the quorum — total = 6, both at min 3.
+    await nominate(m2.token, lineupId, games[5].id);
     expect(await readStatus(lineupId)).toBe('voting');
   });
 

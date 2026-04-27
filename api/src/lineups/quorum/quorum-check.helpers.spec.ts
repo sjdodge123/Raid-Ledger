@@ -1,5 +1,10 @@
 /**
  * Unit tests for quorum predicates (ROK-1118).
+ *
+ * Both predicates require participants to use their full allotment:
+ *   - building → voting: each voter has nominated ≥ minPerVoter games AND
+ *     total distinct nominations ≥ floor.
+ *   - voting → decided: each voter has cast `lineup.maxVotesPerPlayer` votes.
  */
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 
@@ -9,6 +14,7 @@ jest.mock('./quorum-voters.helpers', () => ({
 
 import { loadExpectedVoters } from './quorum-voters.helpers';
 import { checkBuildingQuorum, checkVotingQuorum } from './quorum-check.helpers';
+import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import type * as schema from '../../drizzle/schema';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -41,20 +47,33 @@ function setExpectedVoters(ids: number[]): void {
   (loadExpectedVoters as jest.Mock).mockResolvedValue(ids);
 }
 
-function makeNominationRows(userIds: number[]) {
-  return userIds.map((userId) => ({ userId }));
+function nominationsPerVoter(rows: Array<{ userId: number; count: number }>) {
+  return rows;
 }
 
-function makeEntryIdRows(count: number) {
-  return Array.from({ length: count }, (_, i) => ({ id: i + 1 }));
+function totalRow(count: number) {
+  return [{ total: count }];
 }
 
 interface QuorumTestSettings {
   get: jest.Mock;
 }
 
-function makeSettings(value: string | null = null): QuorumTestSettings {
-  return { get: jest.fn().mockResolvedValue(value) };
+/**
+ * Settings mock that returns different values per key. Building reads:
+ *   1. LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS (floor)
+ *   2. LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER (per-voter min)
+ */
+function makeSettings(
+  overrides: Record<string, string> = {},
+): QuorumTestSettings {
+  return {
+    get: jest
+      .fn()
+      .mockImplementation((key: string) =>
+        Promise.resolve(overrides[key] ?? null),
+      ),
+  };
 }
 
 describe('checkBuildingQuorum', () => {
@@ -63,7 +82,8 @@ describe('checkBuildingQuorum', () => {
   it('reports not ready when there are no expected voters', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([]);
-    db.where.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    db.groupBy.mockResolvedValueOnce(nominationsPerVoter([]));
+    db.execute.mockResolvedValueOnce(totalRow(0));
 
     const result = await checkBuildingQuorum(
       db as never,
@@ -78,9 +98,14 @@ describe('checkBuildingQuorum', () => {
   it('reports not ready when an expected nominator has not nominated', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3, 4]);
-    db.where
-      .mockResolvedValueOnce(makeNominationRows([1, 2, 3]))
-      .mockResolvedValueOnce(makeEntryIdRows(3));
+    db.groupBy.mockResolvedValueOnce(
+      nominationsPerVoter([
+        { userId: 1, count: 3 },
+        { userId: 2, count: 3 },
+        { userId: 3, count: 3 },
+      ]),
+    );
+    db.execute.mockResolvedValueOnce(totalRow(9));
 
     const result = await checkBuildingQuorum(
       db as never,
@@ -89,19 +114,50 @@ describe('checkBuildingQuorum', () => {
     );
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toContain('missing');
+    expect(result.reason).toMatch(/below 3 nominations/);
   });
 
-  it('reports not ready when nominators are covered but floor not met', async () => {
+  it('reports not ready when nominators have only 1 of 3 nominations each', async () => {
     const db = createDrizzleMock();
-    setExpectedVoters([1, 2]);
-    db.where
-      .mockResolvedValueOnce(makeNominationRows([1, 2]))
-      .mockResolvedValueOnce(makeEntryIdRows(2));
+    setExpectedVoters([1, 2, 3, 4]);
+    db.groupBy.mockResolvedValueOnce(
+      nominationsPerVoter([
+        { userId: 1, count: 1 },
+        { userId: 2, count: 1 },
+        { userId: 3, count: 1 },
+        { userId: 4, count: 1 },
+      ]),
+    );
+    db.execute.mockResolvedValueOnce(totalRow(4));
 
     const result = await checkBuildingQuorum(
       db as never,
       makeSettings() as never,
+      baseLineup,
+    );
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toMatch(/below 3 nominations/);
+  });
+
+  it('reports not ready when per-voter is met but total floor not met', async () => {
+    const db = createDrizzleMock();
+    // Two voters × 1 nomination each = 2 (below default floor of 4) but each
+    // hits a custom per-voter min of 1.
+    setExpectedVoters([1, 2]);
+    db.groupBy.mockResolvedValueOnce(
+      nominationsPerVoter([
+        { userId: 1, count: 1 },
+        { userId: 2, count: 1 },
+      ]),
+    );
+    db.execute.mockResolvedValueOnce(totalRow(2));
+
+    const result = await checkBuildingQuorum(
+      db as never,
+      makeSettings({
+        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER]: '1',
+      }) as never,
       baseLineup,
     );
 
@@ -109,28 +165,16 @@ describe('checkBuildingQuorum', () => {
     expect(result.reason).toContain('floor');
   });
 
-  it('reports ready when nominators are covered and floor is just met', async () => {
+  it('reports ready when each voter hits the per-voter min and the floor is met', async () => {
     const db = createDrizzleMock();
-    setExpectedVoters([1, 2, 3, 4]);
-    db.where
-      .mockResolvedValueOnce(makeNominationRows([1, 2, 3, 4]))
-      .mockResolvedValueOnce(makeEntryIdRows(4));
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
+    setExpectedVoters([1, 2]);
+    db.groupBy.mockResolvedValueOnce(
+      nominationsPerVoter([
+        { userId: 1, count: 3 },
+        { userId: 2, count: 3 },
+      ]),
     );
-
-    expect(result.ready).toBe(true);
-  });
-
-  it('reports ready beyond the floor', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2, 3, 4]);
-    db.where
-      .mockResolvedValueOnce(makeNominationRows([1, 2, 3, 4]))
-      .mockResolvedValueOnce(makeEntryIdRows(7));
+    db.execute.mockResolvedValueOnce(totalRow(6));
 
     const result = await checkBuildingQuorum(
       db as never,
@@ -144,13 +188,42 @@ describe('checkBuildingQuorum', () => {
   it('honors a custom floor from settings', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2]);
-    db.where
-      .mockResolvedValueOnce(makeNominationRows([1, 2]))
-      .mockResolvedValueOnce(makeEntryIdRows(2));
+    db.groupBy.mockResolvedValueOnce(
+      nominationsPerVoter([
+        { userId: 1, count: 3 },
+        { userId: 2, count: 3 },
+      ]),
+    );
+    db.execute.mockResolvedValueOnce(totalRow(6));
 
     const result = await checkBuildingQuorum(
       db as never,
-      makeSettings('2') as never,
+      makeSettings({
+        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS]: '2',
+      }) as never,
+      baseLineup,
+    );
+
+    expect(result.ready).toBe(true);
+  });
+
+  it('honors a custom per-voter min from settings', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2]);
+    db.groupBy.mockResolvedValueOnce(
+      nominationsPerVoter([
+        { userId: 1, count: 1 },
+        { userId: 2, count: 1 },
+      ]),
+    );
+    db.execute.mockResolvedValueOnce(totalRow(2));
+
+    const result = await checkBuildingQuorum(
+      db as never,
+      makeSettings({
+        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS]: '2',
+        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER]: '1',
+      }) as never,
       baseLineup,
     );
 
@@ -164,7 +237,7 @@ describe('checkVotingQuorum', () => {
   it('reports not ready when no expected voters', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([]);
-    db.where.mockResolvedValueOnce([]);
+    db.groupBy.mockResolvedValueOnce([]);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -174,10 +247,14 @@ describe('checkVotingQuorum', () => {
     expect(result.ready).toBe(false);
   });
 
-  it('reports not ready with partial participation', async () => {
+  it('reports not ready when each voter has cast 1 of 3 votes', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3]);
-    db.where.mockResolvedValueOnce([{ userId: 1 }, { userId: 2 }]);
+    db.groupBy.mockResolvedValueOnce([
+      { userId: 1, count: 1 },
+      { userId: 2, count: 1 },
+      { userId: 3, count: 1 },
+    ]);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -185,16 +262,34 @@ describe('checkVotingQuorum', () => {
     });
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toContain('missing');
+    expect(result.reason).toMatch(/below 3 votes/);
   });
 
-  it('reports ready when every expected voter has voted', async () => {
+  it('reports not ready when one voter is one vote short', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3]);
-    db.where.mockResolvedValueOnce([
-      { userId: 1 },
-      { userId: 2 },
-      { userId: 3 },
+    db.groupBy.mockResolvedValueOnce([
+      { userId: 1, count: 3 },
+      { userId: 2, count: 3 },
+      { userId: 3, count: 2 },
+    ]);
+
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toMatch(/below 3 votes/);
+  });
+
+  it('reports ready when every voter has used their full allotment', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2, 3]);
+    db.groupBy.mockResolvedValueOnce([
+      { userId: 1, count: 3 },
+      { userId: 2, count: 3 },
+      { userId: 3, count: 3 },
     ]);
 
     const result = await checkVotingQuorum(db as never, {
@@ -209,10 +304,10 @@ describe('checkVotingQuorum', () => {
   it('private lineup ignores extra public voters when quorum already met', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2]);
-    db.where.mockResolvedValueOnce([
-      { userId: 1 },
-      { userId: 2 },
-      { userId: 99 },
+    db.groupBy.mockResolvedValueOnce([
+      { userId: 1, count: 3 },
+      { userId: 2, count: 3 },
+      { userId: 99, count: 1 },
     ]);
 
     const result = await checkVotingQuorum(db as never, {
@@ -220,6 +315,26 @@ describe('checkVotingQuorum', () => {
       status: 'voting',
       visibility: 'private',
     });
+
+    expect(result.ready).toBe(true);
+  });
+
+  it('honors a custom maxVotesPerPlayer on the lineup', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2]);
+    db.groupBy.mockResolvedValueOnce([
+      { userId: 1, count: 5 },
+      { userId: 2, count: 5 },
+    ]);
+
+    const result = await checkVotingQuorum(
+      db as never,
+      {
+        ...baseLineup,
+        status: 'voting',
+        maxVotesPerPlayer: 5,
+      } as LineupRow,
+    );
 
     expect(result.ready).toBe(true);
   });

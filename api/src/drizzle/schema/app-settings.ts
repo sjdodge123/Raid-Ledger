@@ -108,6 +108,9 @@ export const SETTING_KEYS = {
   DISCORD_BOT_LINEUP_CHANNEL: 'discord_bot_lineup_channel',
   /** ROK-1118: Minimum distinct nominations required for building→voting auto-advance. */
   LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS: 'lineup_auto_advance_min_nominations',
+  /** ROK-1118: Minimum nominations per voter required for building→voting auto-advance. */
+  LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER:
+    'lineup_auto_advance_min_nominations_per_voter',
   /** ROK-946: Default hours for lineup building phase */
   LINEUP_DEFAULT_BUILDING_HOURS: 'lineup_default_building_hours',
   /** ROK-946: Default hours for lineup voting phase */
