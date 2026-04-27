@@ -117,6 +117,27 @@ async function loadLineupForHook(
   return row ?? null;
 }
 
+/** Load tiebreaker row fields needed for the open-dispatch payload. */
+async function loadTiebreakerForHook(
+  db: Db,
+  tiebreakerId: number,
+): Promise<{
+  id: number;
+  mode: 'bracket' | 'veto';
+  roundDeadline: Date | null;
+} | null> {
+  const [tb] = await db
+    .select({
+      id: schema.communityLineupTiebreakers.id,
+      mode: schema.communityLineupTiebreakers.mode,
+      roundDeadline: schema.communityLineupTiebreakers.roundDeadline,
+    })
+    .from(schema.communityLineupTiebreakers)
+    .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId))
+    .limit(1);
+  return tb ?? null;
+}
+
 /**
  * Fire tiebreaker-open notifications (channel embed + DMs) (ROK-1117).
  *
@@ -132,25 +153,14 @@ export function fireTiebreakerOpen(
   lineupId: number,
   tiebreakerId: number,
 ): void {
-  loadLineupForHook(db, lineupId)
-    .then(async (lineup) => {
-      if (!lineup) return;
-      const [tb] = await db
-        .select({
-          id: schema.communityLineupTiebreakers.id,
-          mode: schema.communityLineupTiebreakers.mode,
-          roundDeadline: schema.communityLineupTiebreakers.roundDeadline,
-        })
-        .from(schema.communityLineupTiebreakers)
-        .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId))
-        .limit(1);
-      if (!tb) return;
-      await svc.notifyTiebreakerOpen(
-        {
-          id: lineup.id,
-          title: lineup.title,
-          visibility: lineup.visibility,
-        },
+  Promise.all([
+    loadLineupForHook(db, lineupId),
+    loadTiebreakerForHook(db, tiebreakerId),
+  ])
+    .then(([lineup, tb]) => {
+      if (!lineup || !tb) return;
+      return svc.notifyTiebreakerOpen(
+        { id: lineup.id, title: lineup.title, visibility: lineup.visibility },
         { id: tb.id, mode: tb.mode, roundDeadline: tb.roundDeadline },
       );
     })

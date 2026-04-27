@@ -28,7 +28,7 @@ import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
     forwardRef(() => DiscordBotModule),
     SettingsModule,
     BullModule.registerQueue({ name: LINEUP_PHASE_QUEUE }),
-    TiebreakerModule,
+    forwardRef(() => TiebreakerModule),
     TasteProfileModule,
     AiSuggestionsModule,
     JwtModule.registerAsync({
@@ -50,6 +50,11 @@ import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
     LineupPhaseProcessor,
     LineupsGateway,
   ],
-  exports: [LineupsService, LineupSteamNudgeService, LineupNotificationService],
+  exports: [
+    LineupsService,
+    LineupSteamNudgeService,
+    LineupNotificationService,
+    LineupsGateway,
+  ],
 })
 export class LineupsModule {}

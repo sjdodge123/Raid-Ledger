@@ -8,6 +8,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -19,6 +20,9 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { LineupNotificationService } from '../lineup-notification.service';
+import { LineupsGateway } from '../lineups.gateway';
+import { dispatchTiebreakerOpen } from './tiebreaker-dispatch.helpers';
 import { detectTies } from './tiebreaker-detect.helpers';
 import { runMatchingAlgorithm } from '../lineups-lifecycle.helpers';
 import {
@@ -49,6 +53,10 @@ export class TiebreakerService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: Db,
+    @Inject(forwardRef(() => LineupNotificationService))
+    private readonly notificationService: LineupNotificationService,
+    @Inject(forwardRef(() => LineupsGateway))
+    private readonly lineupsGateway: LineupsGateway,
   ) {}
 
   /** Get tiebreaker detail for a lineup. */
@@ -91,10 +99,28 @@ export class TiebreakerService {
       `Tiebreaker ${tiebreaker.id} started (${dto.mode}) for lineup ${lineupId}`,
     );
 
-    return buildTiebreakerDetail(this.db, {
-      ...tiebreaker,
-      status: 'active',
-    });
+    await this.dispatchOpen(
+      lineupId,
+      tiebreaker.id,
+      dto.mode,
+      tiebreaker.roundDeadline,
+    );
+    return buildTiebreakerDetail(this.db, { ...tiebreaker, status: 'active' });
+  }
+
+  private async dispatchOpen(
+    lineupId: number,
+    tiebreakerId: number,
+    mode: 'bracket' | 'veto',
+    roundDeadline: Date | null,
+  ): Promise<void> {
+    await dispatchTiebreakerOpen(
+      this.notificationService,
+      this.lineupsGateway,
+      this.logger,
+      this.db,
+      { lineupId, tiebreakerId, mode, roundDeadline },
+    );
   }
 
   /** Dismiss tiebreaker — proceed to decided without resolution. */
