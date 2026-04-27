@@ -27,7 +27,10 @@ describe('AiAdminController', () => {
   let controller: AiAdminController;
   let mockLlmService: { isAvailable: jest.Mock; listModels: jest.Mock };
   let mockRegistry: { resolveActive: jest.Mock };
-  let mockLogService: { getUsageStats: jest.Mock };
+  let mockLogService: {
+    getUsageStats: jest.Mock;
+    getLastSuccessfulChatAt: jest.Mock;
+  };
   let mockSettings: { get: jest.Mock };
 
   beforeEach(async () => {
@@ -49,6 +52,7 @@ describe('AiAdminController', () => {
         errorRate: 0.02,
         byFeature: [],
       }),
+      getLastSuccessfulChatAt: jest.fn().mockResolvedValue(null),
     };
     mockSettings = { get: jest.fn().mockResolvedValue(null) };
 
@@ -113,6 +117,35 @@ describe('AiAdminController', () => {
       });
     });
   });
+
+  describe('heartbeat-derived availability (ROK-1138)', () => {
+    it('getStatus marks available when log heartbeat is recent and skips probe', async () => {
+      mockLogService.getLastSuccessfulChatAt.mockResolvedValue(new Date());
+      mockLlmService.isAvailable.mockResolvedValue(false);
+      const result = await controller.getStatus();
+      expect(result.available).toBe(true);
+      expect(mockLogService.getLastSuccessfulChatAt).toHaveBeenCalledWith(
+        'ollama',
+      );
+      expect(mockLlmService.isAvailable).not.toHaveBeenCalled();
+    });
+
+    it('getStatus falls through to probe when no heartbeat exists', async () => {
+      mockLogService.getLastSuccessfulChatAt.mockResolvedValue(null);
+      mockLlmService.isAvailable.mockResolvedValue(true);
+      const result = await controller.getStatus();
+      expect(result.available).toBe(true);
+      expect(mockLlmService.isAvailable).toHaveBeenCalled();
+    });
+
+    it('testConnection uses the same heartbeat path so it matches getStatus', async () => {
+      mockLogService.getLastSuccessfulChatAt.mockResolvedValue(new Date());
+      mockLlmService.isAvailable.mockResolvedValue(false);
+      const result = await controller.testConnection();
+      expect(result.success).toBe(true);
+      expect(mockLlmService.isAvailable).not.toHaveBeenCalled();
+    });
+  });
 });
 
 // — Adversarial tests —
@@ -121,7 +154,10 @@ describe('AiAdminController (adversarial)', () => {
   let controller: AiAdminController;
   let mockLlmService: { isAvailable: jest.Mock; listModels: jest.Mock };
   let mockRegistry: { resolveActive: jest.Mock };
-  let mockLogService: { getUsageStats: jest.Mock };
+  let mockLogService: {
+    getUsageStats: jest.Mock;
+    getLastSuccessfulChatAt: jest.Mock;
+  };
   let mockSettings: { get: jest.Mock };
 
   beforeEach(async () => {
@@ -138,6 +174,7 @@ describe('AiAdminController (adversarial)', () => {
         errorRate: 0,
         byFeature: [],
       }),
+      getLastSuccessfulChatAt: jest.fn().mockResolvedValue(null),
     };
     mockSettings = { get: jest.fn().mockResolvedValue(null) };
 
@@ -237,6 +274,20 @@ describe('AiAdminController (adversarial)', () => {
     });
 
     it('includes latency in the success message when available', async () => {
+      mockRegistry.resolveActive.mockResolvedValue({
+        provider: {
+          key: 'ollama',
+          displayName: 'Ollama (Local)',
+          requiresApiKey: false,
+          selfHosted: true,
+          defaultModel: 'mock-model',
+          isAvailable: jest.fn().mockResolvedValue(true),
+          listModels: jest.fn(),
+          chat: jest.fn(),
+          generate: jest.fn(),
+        },
+        source: 'setting',
+      });
       mockLlmService.isAvailable.mockResolvedValue(true);
       const result = await controller.testConnection();
       expect(result.message).toContain('ms');
@@ -273,7 +324,10 @@ describe('ROK-1000: testChat timeout and diagnostics', () => {
     chat: jest.Mock;
   };
   let mockRegistry: { resolveActive: jest.Mock };
-  let mockLogService: { getUsageStats: jest.Mock };
+  let mockLogService: {
+    getUsageStats: jest.Mock;
+    getLastSuccessfulChatAt: jest.Mock;
+  };
   let mockSettings: { get: jest.Mock };
 
   beforeEach(async () => {
@@ -309,6 +363,7 @@ describe('ROK-1000: testChat timeout and diagnostics', () => {
         errorRate: 0,
         byFeature: [],
       }),
+      getLastSuccessfulChatAt: jest.fn().mockResolvedValue(null),
     };
     mockSettings = { get: jest.fn().mockResolvedValue('llama3.2:3b') };
 
@@ -407,7 +462,10 @@ describe('ROK-1019: model resolution per provider', () => {
     chat: jest.Mock;
   };
   let mockRegistry: { resolveActive: jest.Mock };
-  let mockLogService: { getUsageStats: jest.Mock };
+  let mockLogService: {
+    getUsageStats: jest.Mock;
+    getLastSuccessfulChatAt: jest.Mock;
+  };
   let mockSettings: { get: jest.Mock };
 
   function createCloudProvider(key: string, name: string): LlmProvider {
@@ -447,6 +505,7 @@ describe('ROK-1019: model resolution per provider', () => {
         errorRate: 0,
         byFeature: [],
       }),
+      getLastSuccessfulChatAt: jest.fn().mockResolvedValue(null),
     };
     // Simulate a stale Ollama model in the global ai_model setting
     mockSettings = { get: jest.fn().mockResolvedValue('llama3.2:3b') };

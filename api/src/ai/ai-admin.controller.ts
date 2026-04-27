@@ -20,7 +20,11 @@ import { LlmProviderRegistry } from './llm-provider-registry';
 import { AiRequestLogService } from './ai-request-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { AI_DEFAULTS, AI_SETTING_KEYS, CLOUD_DEFAULTS } from './llm.constants';
-import { buildStatusResponse, buildUsageResponse } from './ai-admin.helpers';
+import {
+  buildStatusResponse,
+  buildUsageResponse,
+  deriveAvailability,
+} from './ai-admin.helpers';
 import type {
   AiStatusDto,
   AiTestConnectionDto,
@@ -50,10 +54,7 @@ export class AiAdminController {
   async getStatus(): Promise<AiStatusDto> {
     const resolution = await this.registry.resolveActive();
     const provider = resolution?.provider;
-    const isAvailable = await this.withTimeout(
-      this.llmService.isAvailable(),
-      false,
-    );
+    const isAvailable = await this.resolveAvailability(provider?.key ?? null);
     const modelSetting = await this.settings.get(
       AI_SETTING_KEYS.MODEL as SettingKey,
     );
@@ -76,9 +77,9 @@ export class AiAdminController {
   @Post('test-connection')
   async testConnection(): Promise<AiTestConnectionDto> {
     const start = Date.now();
-    const available = await this.withTimeout(
-      this.llmService.isAvailable(),
-      false,
+    const resolution = await this.registry.resolveActive();
+    const available = await this.resolveAvailability(
+      resolution?.provider?.key ?? null,
     );
     const latencyMs = Date.now() - start;
     return {
@@ -108,6 +109,26 @@ export class AiAdminController {
       return CLOUD_DEFAULTS[providerKey as keyof typeof CLOUD_DEFAULTS];
     }
     return modelSetting ?? AI_DEFAULTS.model;
+  }
+
+  /**
+   * Heartbeat-first availability check (ROK-1138). If a successful chat ran
+   * within `AI_DEFAULTS.availabilityFreshnessMs` we skip the live probe;
+   * otherwise fall back to the existing timeout-wrapped probe.
+   */
+  private async resolveAvailability(
+    providerKey: string | null,
+  ): Promise<boolean> {
+    const lastSuccessAt = providerKey
+      ? await this.logService.getLastSuccessfulChatAt(providerKey)
+      : null;
+    return deriveAvailability({
+      providerKey,
+      lastSuccessAt,
+      probe: () => this.withTimeout(this.llmService.isAvailable(), false),
+      now: new Date(),
+      freshnessMs: AI_DEFAULTS.availabilityFreshnessMs,
+    });
   }
 
   /** Race a promise against a 3s timeout, returning fallback on timeout/error. */
