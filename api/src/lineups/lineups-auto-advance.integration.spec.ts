@@ -152,19 +152,20 @@ function describeAutoAdvance() {
     expect(adv.status).toBe(200);
     expect(await readStatus(lineupId)).toBe('voting');
 
-    // First vote — creator. Status should remain 'voting'.
+    // All three voters back the same game so the auto-advance landing
+    // state has a clear winner — `guardTiebreakerOnTransition` would
+    // otherwise block the transition (spec: ROK-1118, edge case "tie").
     const v1 = await vote(adminToken, lineupId, games[0].id);
     expect(v1.status).toBe(200);
     expect(await readStatus(lineupId)).toBe('voting');
 
-    // Second vote — invitee1. Still missing invitee2.
-    const v2 = await vote(invitee1.token, lineupId, games[1].id);
+    const v2 = await vote(invitee1.token, lineupId, games[0].id);
     expect(v2.status).toBe(200);
     expect(await readStatus(lineupId)).toBe('voting');
 
     // Third (final) vote — invitee2 closes the quorum.
     // After this call the auto-advance hook should fire.
-    const v3 = await vote(invitee2.token, lineupId, games[2].id);
+    const v3 = await vote(invitee2.token, lineupId, games[0].id);
     expect(v3.status).toBe(200);
 
     // Status should now be 'decided' WITHOUT any explicit PATCH /status call.

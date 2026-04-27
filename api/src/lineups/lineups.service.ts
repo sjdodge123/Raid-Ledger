@@ -154,11 +154,11 @@ export class LineupsService {
       userId,
       callerRole,
     );
-    void maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
     return result;
   }
 
-  /** Build deps for the fire-and-forget auto-advance helper (ROK-1118). */
+  /** Build deps for the auto-advance helper (ROK-1118). */
   private autoAdvanceDeps() {
     return {
       db: this.db,
@@ -222,7 +222,7 @@ export class LineupsService {
       callerRole,
     );
     await this.invalidateAiCache(lineupId);
-    void maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
     return result;
   }
 
@@ -244,7 +244,7 @@ export class LineupsService {
       caller,
     );
     await this.invalidateAiCache(lineupId);
-    void maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
   }
 
   /** Get banner data for the Games page. Returns null if no eligible lineup. */

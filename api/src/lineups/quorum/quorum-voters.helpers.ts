@@ -1,14 +1,16 @@
 /**
  * Expected-voter resolution for lineup quorum checks (ROK-1118).
  *
- * Public lineups: every distinct nominator + every actual voter +
- *   the creator (via `findLineupVoterIds`).
- * Private lineups: creator + invitee roster.
+ * Public lineups: every user who has actually participated — either
+ *   nominated an entry or cast a vote. Creators don't gate quorum unless
+ *   they participate, otherwise no public lineup could ever advance.
+ * Private lineups: creator + invitee roster — these are the only people
+ *   who CAN participate, so they're the gating set regardless of whether
+ *   they have yet.
  */
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { findLineupVoterIds } from '../lineups-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -28,11 +30,11 @@ async function loadPublicExpectedVoters(
   db: Db,
   lineupId: number,
 ): Promise<number[]> {
-  const [voters, nominators] = await Promise.all([
-    findLineupVoterIds(db, lineupId),
+  const [nominators, voters] = await Promise.all([
     findDistinctNominators(db, lineupId),
+    findDistinctVoters(db, lineupId),
   ]);
-  return Array.from(new Set([...voters, ...nominators]));
+  return Array.from(new Set([...nominators, ...voters]));
 }
 
 async function loadPrivateExpectedVoters(
@@ -56,5 +58,13 @@ async function findDistinctNominators(
     .select({ userId: schema.communityLineupEntries.nominatedBy })
     .from(schema.communityLineupEntries)
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));
+  return Array.from(new Set(rows.map((r) => r.userId)));
+}
+
+async function findDistinctVoters(db: Db, lineupId: number): Promise<number[]> {
+  const rows = await db
+    .select({ userId: schema.communityLineupVotes.userId })
+    .from(schema.communityLineupVotes)
+    .where(eq(schema.communityLineupVotes.lineupId, lineupId));
   return Array.from(new Set(rows.map((r) => r.userId)));
 }
