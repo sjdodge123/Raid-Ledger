@@ -15,6 +15,13 @@ import type {
 } from './lineup-notification-dm.helpers';
 import { DEDUP_TTL } from './lineup-notification.constants';
 
+/** Tiebreaker shape needed by the open-notification DM (ROK-1117). */
+export interface TiebreakerNotificationInfo {
+  id: number;
+  mode: 'bracket' | 'veto';
+  roundDeadline?: Date | null;
+}
+
 /** Send the per-invitee nomination-milestone DM (ROK-1115). */
 export async function sendMilestoneDM(
   notificationService: NotificationService,
@@ -102,6 +109,45 @@ function formatEventWhen(eventDate: Date): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+  });
+}
+
+/**
+ * Send the per-user tiebreaker-open DM (ROK-1117).
+ *
+ * Used for both public (every expected voter) and private (creator +
+ * invitees) lineups since the body is the same. Dedup key includes the
+ * tiebreaker id so a future re-open fires its own DM.
+ */
+export async function sendTiebreakerOpenDM(
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupDmInfo,
+  tiebreaker: TiebreakerNotificationInfo,
+  member: DiscordMember,
+): Promise<void> {
+  const key = `lineup-tiebreaker-open-dm:${tiebreaker.id}:${member.userId}`;
+  if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  const cta =
+    tiebreaker.mode === 'veto' ? 'Cast your veto now' : 'Vote in the bracket';
+  const deadlineLine = tiebreaker.roundDeadline
+    ? ` Round closes <t:${Math.floor(tiebreaker.roundDeadline.getTime() / 1000)}:R>.`
+    : '';
+
+  await notificationService.create({
+    userId: member.userId,
+    type: 'community_lineup',
+    title: `Tiebreaker open${titleSuffix}`,
+    message:
+      `It's a tie! A ${tiebreaker.mode} tiebreaker is now running. ` +
+      `${cta}.${deadlineLine}`,
+    payload: {
+      subtype: 'lineup_tiebreaker_open',
+      lineupId: lineup.id,
+      tiebreakerId: tiebreaker.id,
+      mode: tiebreaker.mode,
+    },
   });
 }
 
