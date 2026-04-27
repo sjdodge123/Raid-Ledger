@@ -185,4 +185,25 @@ describe('AiRequestLogService (adversarial)', () => {
       expect(stats.errorRate).toBe(0);
     });
   });
+
+  describe('getLastSuccessfulChatAt', () => {
+    it('returns null when no rows exist for the provider', async () => {
+      mockDb.where.mockResolvedValueOnce([{ lastAt: null }]);
+      const result = await service.getLastSuccessfulChatAt('claude');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when no row is returned at all', async () => {
+      mockDb.where.mockResolvedValueOnce([]);
+      const result = await service.getLastSuccessfulChatAt('claude');
+      expect(result).toBeNull();
+    });
+
+    it('returns the latest createdAt when successful entries exist', async () => {
+      const latest = new Date('2026-04-27T11:55:00.000Z');
+      mockDb.where.mockResolvedValueOnce([{ lastAt: latest }]);
+      const result = await service.getLastSuccessfulChatAt('claude');
+      expect(result).toEqual(latest);
+    });
+  });
 });

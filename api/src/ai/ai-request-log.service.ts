@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { sql, gte } from 'drizzle-orm';
+import { sql, gte, and, eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { aiRequestLogs } from '../drizzle/schema';
@@ -50,6 +50,24 @@ export class AiRequestLogService {
       success: entry.success,
       errorMessage: entry.errorMessage ?? null,
     });
+  }
+
+  /**
+   * Returns the timestamp of the most recent successful chat for a given
+   * provider, or `null` if no successful entry exists. Used to derive
+   * availability from a recent heartbeat (ROK-1138).
+   */
+  async getLastSuccessfulChatAt(providerKey: string): Promise<Date | null> {
+    const [row] = await this.db
+      .select({ lastAt: sql<Date | null>`max(${aiRequestLogs.createdAt})` })
+      .from(aiRequestLogs)
+      .where(
+        and(
+          eq(aiRequestLogs.provider, providerKey),
+          eq(aiRequestLogs.success, true),
+        ),
+      );
+    return row?.lastAt ?? null;
   }
 
   /** Get aggregated usage stats since a given date. */
