@@ -20,6 +20,34 @@ export function buildStatusResponse(
   };
 }
 
+/**
+ * Derive whether an AI provider is available.
+ *
+ * Heartbeat-first: if a successful chat ran within the freshness window we
+ * skip the live probe (cheaper, and avoids probe/chat divergence — see
+ * ROK-1138). Otherwise fall through to the caller-supplied probe.
+ */
+export async function deriveAvailability(opts: {
+  providerKey: string | null;
+  lastSuccessAt: Date | null;
+  probe: () => Promise<boolean>;
+  now: Date;
+  freshnessMs: number;
+}): Promise<boolean> {
+  if (opts.providerKey === null) return false;
+  if (
+    opts.lastSuccessAt !== null &&
+    opts.now.getTime() - opts.lastSuccessAt.getTime() <= opts.freshnessMs
+  ) {
+    return true;
+  }
+  try {
+    return await opts.probe();
+  } catch {
+    return false;
+  }
+}
+
 /** Build the AI usage response DTO from raw stats. */
 export function buildUsageResponse(stats: AiUsageStats): AiUsageDto {
   return {

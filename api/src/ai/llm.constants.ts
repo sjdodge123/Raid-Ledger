@@ -16,6 +16,7 @@ export const AI_DEFAULTS = {
   rateLimitPerMinute: 20,
   circuitBreakerThreshold: 5,
   circuitBreakerCooldownMs: 60_000,
+  availabilityFreshnessMs: 5 * 60 * 1000,
 } as const;
 
 /** System prompt prepended to all LLM requests as a guardrail. */
