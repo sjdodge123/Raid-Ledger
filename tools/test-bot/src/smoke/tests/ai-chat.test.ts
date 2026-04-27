@@ -445,10 +445,13 @@ const searchByGameMultiVariant: SmokeTest = {
   name: 'AI Chat: [Search by Game] surfaces events on sibling game variants (ROK-1084)',
   category: 'dm',
   async run(ctx) {
-    // Find sibling WoW rows. Two are needed: one would be ranked first by the
-    // current naive picker; we attach the event to the OTHER one so the bug
-    // is triggered if the handler only looks at games[0].
-    const wowRows = ctx.games.filter((g) =>
+    // ctx.games carries placeholder names (ROK-1084 fix scope). Query the
+    // admin games endpoint directly to get real names + ids for sibling
+    // detection.
+    const wowRes = await ctx.api.get<{
+      data: { id: number; name: string }[];
+    }>('/admin/settings/games?search=warcraft&limit=20');
+    const wowRows = (wowRes.data ?? []).filter((g) =>
       g.name.toLowerCase().includes('warcraft'),
     );
     if (wowRows.length < 2) {
