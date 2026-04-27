@@ -19,13 +19,15 @@ import { SettingsService } from '../settings/settings.service';
 import { OllamaDockerService } from './providers/ollama-docker.service';
 import { OllamaNativeService } from './providers/ollama-native.service';
 import { OllamaSetupService } from './providers/ollama-setup.service';
-import { AI_SETTING_KEYS } from './llm.constants';
+import { AiRequestLogService } from './ai-request-log.service';
+import { AI_DEFAULTS, AI_SETTING_KEYS } from './llm.constants';
 import type {
   AiProviderInfoDto,
   AiOllamaSetupDto,
   AiProviderConfigDto,
 } from '@raid-ledger/contract';
 import { getApiKeySettingKey, buildProviderInfo } from './ai-providers.helpers';
+import { deriveAvailability } from './ai-admin.helpers';
 import type { SettingKey } from '../drizzle/schema';
 
 /**
@@ -43,6 +45,7 @@ export class AiProvidersController {
     private readonly docker: OllamaDockerService,
     private readonly native: OllamaNativeService,
     private readonly ollamaSetup: OllamaSetupService,
+    private readonly logService: AiRequestLogService,
   ) {}
 
   /** GET /admin/ai/providers — List all providers with status. */
@@ -124,7 +127,7 @@ export class AiProvidersController {
   ): Promise<AiProviderInfoDto> {
     const configured = await this.isConfigured(provider);
     const { available, error } = configured
-      ? await this.checkAvailableWithError(provider)
+      ? await this.resolveAvailability(provider, provider.key === activeKey)
       : { available: false, error: undefined };
     const info = buildProviderInfo(
       provider as never,
@@ -137,6 +140,34 @@ export class AiProvidersController {
       await this.enrichOllamaInfo(info);
     }
     return info;
+  }
+
+  /**
+   * Active provider: heartbeat-first availability (ROK-1138). If a recent
+   * successful chat is logged we skip the live probe (and there is no error
+   * to surface). Otherwise — and for non-active providers — fall back to the
+   * existing probe path so error messaging stays intact.
+   */
+  private async resolveAvailability(
+    provider: { key: string; isAvailable: () => Promise<boolean> },
+    isActive: boolean,
+  ): Promise<{ available: boolean; error?: string }> {
+    if (!isActive) return this.checkAvailableWithError(provider);
+    let probeResult: { available: boolean; error?: string } | null = null;
+    const available = await deriveAvailability({
+      providerKey: provider.key,
+      lastSuccessAt: await this.logService.getLastSuccessfulChatAt(
+        provider.key,
+      ),
+      probe: async () => {
+        probeResult = await this.checkAvailableWithError(provider);
+        return probeResult.available;
+      },
+      now: new Date(),
+      freshnessMs: AI_DEFAULTS.availabilityFreshnessMs,
+    });
+    if (probeResult) return probeResult;
+    return { available };
   }
 
   /** Add Ollama-specific setup state from DB to provider info. */
