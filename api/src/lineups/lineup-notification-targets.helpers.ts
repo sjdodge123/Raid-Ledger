@@ -2,7 +2,7 @@
  * Target resolution queries for Community Lineup notifications (ROK-932).
  * Finds Discord-linked members and match members for DM dispatch.
  */
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { DiscordMember } from './lineup-notification-dm.helpers';
@@ -75,4 +75,33 @@ export async function findMatchMemberUsers(
     WHERE lmm.match_id = ${matchId}
       AND u.discord_id IS NOT NULL
   `)) as unknown as DiscordMember[];
+}
+
+/**
+ * Resolve a list of user IDs into Discord-linked member rows (ROK-1117).
+ *
+ * Adapter for `loadExpectedVoters` (which returns bare user IDs) so we can
+ * feed the same DM-fan-out helpers everything else uses. Filters out users
+ * that have no `discord_id`, because they cannot receive a Discord DM.
+ */
+export async function findDiscordMembersByUserIds(
+  db: Db,
+  userIds: ReadonlyArray<number>,
+): Promise<DiscordMember[]> {
+  if (userIds.length === 0) return [];
+  const rows = await db
+    .select({
+      id: schema.users.id,
+      userId: schema.users.id,
+      displayName: sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`,
+      discordId: schema.users.discordId,
+    })
+    .from(schema.users)
+    .where(
+      and(
+        isNotNull(schema.users.discordId),
+        inArray(schema.users.id, [...userIds]),
+      ),
+    );
+  return rows as DiscordMember[];
 }
