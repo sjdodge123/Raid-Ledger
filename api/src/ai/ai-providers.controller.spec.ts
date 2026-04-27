@@ -9,6 +9,7 @@ import { OllamaDockerService } from './providers/ollama-docker.service';
 import { OllamaModelService } from './providers/ollama-model.service';
 import { OllamaSetupService } from './providers/ollama-setup.service';
 import { OllamaNativeService } from './providers/ollama-native.service';
+import { AiRequestLogService } from './ai-request-log.service';
 import type { LlmProvider } from './llm-provider.interface';
 
 function createMockProvider(overrides: Partial<LlmProvider> = {}): LlmProvider {
@@ -49,6 +50,7 @@ describe('AiProvidersController', () => {
     getSetupState: jest.Mock;
     startSetup: jest.Mock;
   };
+  let mockLogService: { getLastSuccessfulChatAt: jest.Mock };
 
   beforeEach(async () => {
     mockRegistry = {
@@ -83,6 +85,9 @@ describe('AiProvidersController', () => {
         success: true,
       }),
     };
+    mockLogService = {
+      getLastSuccessfulChatAt: jest.fn().mockResolvedValue(null),
+    };
 
     const module = await Test.createTestingModule({
       controllers: [AiProvidersController],
@@ -93,6 +98,7 @@ describe('AiProvidersController', () => {
         { provide: OllamaNativeService, useValue: mockNative },
         { provide: OllamaModelService, useValue: {} },
         { provide: OllamaSetupService, useValue: mockSetupService },
+        { provide: AiRequestLogService, useValue: mockLogService },
         { provide: PluginRegistryService, useValue: { isActive: jest.fn() } },
         { provide: Reflector, useValue: new Reflector() },
       ],
@@ -340,6 +346,92 @@ describe('AiProvidersController', () => {
       const result = await controller.stopOllama();
 
       expect(result).toEqual({ success: true });
+    });
+  });
+
+  describe('ROK-1138: heartbeat-derived availability for active provider', () => {
+    it('marks active provider available when heartbeat is recent and skips probe', async () => {
+      const probe = jest.fn().mockResolvedValue(false);
+      const provider = createMockProvider({
+        key: 'claude',
+        displayName: 'Claude',
+        requiresApiKey: true,
+        selfHosted: false,
+        isAvailable: probe,
+      });
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockImplementation((key: string) => {
+        if (key === 'ai_provider') return Promise.resolve('claude');
+        if (key === 'ai_claude_api_key') return Promise.resolve('sk-test');
+        return Promise.resolve(null);
+      });
+      mockLogService.getLastSuccessfulChatAt.mockResolvedValue(new Date());
+
+      const result = await controller.listProviders();
+      const claude = result.find((p) => p.key === 'claude');
+
+      expect(claude!.available).toBe(true);
+      expect(claude!.active).toBe(true);
+      expect(probe).not.toHaveBeenCalled();
+    });
+
+    it('falls through to probe when active provider has no recent heartbeat', async () => {
+      const probe = jest.fn().mockResolvedValue(true);
+      const provider = createMockProvider({
+        key: 'claude',
+        displayName: 'Claude',
+        requiresApiKey: true,
+        selfHosted: false,
+        isAvailable: probe,
+      });
+      mockRegistry.list.mockReturnValue([provider]);
+      mockSettings.get.mockImplementation((key: string) => {
+        if (key === 'ai_provider') return Promise.resolve('claude');
+        if (key === 'ai_claude_api_key') return Promise.resolve('sk-test');
+        return Promise.resolve(null);
+      });
+      mockLogService.getLastSuccessfulChatAt.mockResolvedValue(null);
+
+      const result = await controller.listProviders();
+      const claude = result.find((p) => p.key === 'claude');
+
+      expect(claude!.available).toBe(true);
+      expect(probe).toHaveBeenCalled();
+    });
+
+    it('non-active provider keeps probe-only path (no heartbeat lookup)', async () => {
+      const activeProbe = jest.fn().mockResolvedValue(true);
+      const inactiveProbe = jest.fn().mockResolvedValue(true);
+      const active = createMockProvider({
+        key: 'claude',
+        displayName: 'Claude',
+        requiresApiKey: true,
+        selfHosted: false,
+        isAvailable: activeProbe,
+      });
+      const inactive = createMockProvider({
+        key: 'openai',
+        displayName: 'OpenAI',
+        requiresApiKey: true,
+        selfHosted: false,
+        isAvailable: inactiveProbe,
+      });
+      mockRegistry.list.mockReturnValue([active, inactive]);
+      mockSettings.get.mockImplementation((key: string) => {
+        if (key === 'ai_provider') return Promise.resolve('claude');
+        if (key === 'ai_claude_api_key') return Promise.resolve('sk-test');
+        if (key === 'ai_openai_api_key') return Promise.resolve('sk-other');
+        return Promise.resolve(null);
+      });
+      mockLogService.getLastSuccessfulChatAt.mockResolvedValue(null);
+
+      await controller.listProviders();
+
+      expect(mockLogService.getLastSuccessfulChatAt).toHaveBeenCalledTimes(1);
+      expect(mockLogService.getLastSuccessfulChatAt).toHaveBeenCalledWith(
+        'claude',
+      );
+      expect(inactiveProbe).toHaveBeenCalled();
     });
   });
 });
