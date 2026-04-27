@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LineupStatusSchema } from '../lineup.schema.js';
+import { TiebreakerModeSchema } from '../lineup-tiebreaker.schema.js';
 
 // ============================================================
 // Lineup Realtime WebSocket Events (ROK-1118)
@@ -14,6 +15,7 @@ import { LineupStatusSchema } from '../lineup.schema.js';
 export const LineupRealtimeEventNames = {
     // Server -> client
     Status: 'lineup:status',
+    TiebreakerOpen: 'lineup:tiebreaker:open',
     // Client -> server (bare names — no namespace prefix)
     Subscribe: 'subscribe',
     Unsubscribe: 'unsubscribe',
@@ -29,3 +31,12 @@ export const LineupStatusEventSchema = z.object({
 });
 
 export type LineupStatusEvent = z.infer<typeof LineupStatusEventSchema>;
+
+export const LineupTiebreakerOpenEventSchema = z.object({
+    lineupId: z.number().int(),
+    tiebreakerId: z.number().int(),
+    mode: TiebreakerModeSchema,
+    roundDeadline: z.string().datetime().nullable().optional(),
+});
+
+export type LineupTiebreakerOpenEvent = z.infer<typeof LineupTiebreakerOpenEventSchema>;
