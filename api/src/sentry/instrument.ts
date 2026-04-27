@@ -19,12 +19,24 @@ if (!telemetryDisabled && isProduction) {
     tracesSampleRate: isProduction ? 0.1 : 1.0,
     beforeSend(event) {
       const exceptionType = event.exception?.values?.[0]?.type;
+      const exceptionValue = event.exception?.values?.[0]?.value;
       // Don't report rate-limit (ThrottlerException) events to Sentry
       if (exceptionType === 'ThrottlerException') {
         return null;
       }
       // Don't report transient Discord OAuth failures (ROK-668)
       if (exceptionType === 'InternalOAuthError') {
+        return null;
+      }
+      // Don't report intentional 503s emitted by community-insights panels
+      // before the daily snapshot cron has run (ROK-1143). The endpoints are
+      // doing the right thing operationally — the dashboard renders an empty
+      // state — but the 503 status used to spam Sentry → GitHub on every
+      // pre-cron page-view.
+      if (
+        typeof exceptionValue === 'string' &&
+        exceptionValue.includes('no_snapshot_yet')
+      ) {
         return null;
       }
       return event;
