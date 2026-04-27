@@ -180,7 +180,9 @@ describe('deriveAvailability', () => {
   const NOW = new Date('2026-04-27T12:00:00.000Z');
 
   it('returns false immediately when providerKey is null and does not call probe', async () => {
-    const probe = jest.fn<Promise<boolean>, []>().mockRejectedValue(new Error('probe should not run'));
+    const probe = jest
+      .fn<Promise<boolean>, []>()
+      .mockRejectedValue(new Error('probe should not run'));
     const result = await deriveAvailability({
       providerKey: null,
       lastSuccessAt: new Date(NOW.getTime() - 1000),
@@ -193,7 +195,9 @@ describe('deriveAvailability', () => {
   });
 
   it('returns true without calling probe when lastSuccessAt is within freshness window', async () => {
-    const probe = jest.fn<Promise<boolean>, []>().mockRejectedValue(new Error('probe should not run'));
+    const probe = jest
+      .fn<Promise<boolean>, []>()
+      .mockRejectedValue(new Error('probe should not run'));
     const result = await deriveAvailability({
       providerKey: 'claude',
       lastSuccessAt: new Date(NOW.getTime() - 30_000), // 30s ago
@@ -206,7 +210,9 @@ describe('deriveAvailability', () => {
   });
 
   it('treats lastSuccessAt exactly freshnessMs old as still fresh (boundary)', async () => {
-    const probe = jest.fn<Promise<boolean>, []>().mockRejectedValue(new Error('probe should not run'));
+    const probe = jest
+      .fn<Promise<boolean>, []>()
+      .mockRejectedValue(new Error('probe should not run'));
     const result = await deriveAvailability({
       providerKey: 'claude',
       lastSuccessAt: new Date(NOW.getTime() - FRESHNESS_MS),
@@ -258,7 +264,9 @@ describe('deriveAvailability', () => {
   });
 
   it('returns false when probe throws (swallows rejection)', async () => {
-    const probe = jest.fn<Promise<boolean>, []>().mockRejectedValue(new Error('boom'));
+    const probe = jest
+      .fn<Promise<boolean>, []>()
+      .mockRejectedValue(new Error('boom'));
     const result = await deriveAvailability({
       providerKey: 'claude',
       lastSuccessAt: null,
