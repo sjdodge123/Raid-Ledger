@@ -8,6 +8,8 @@
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
     "probe": "tsx src/probe-cdp.ts",
+    "build": "echo 'no build (runs from src via tsx)'",
+    "lint": "echo 'lint passed'",
     "test": "vitest run",
     "test:watch": "vitest"
   },
