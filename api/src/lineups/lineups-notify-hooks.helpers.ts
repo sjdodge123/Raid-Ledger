@@ -117,6 +117,46 @@ async function loadLineupForHook(
   return row ?? null;
 }
 
+/**
+ * Fire tiebreaker-open notifications (channel embed + DMs) (ROK-1117).
+ *
+ * Mirrors `fireVotingOpen`: loads the lineup row, fetches the tiebreaker
+ * row for mode + roundDeadline, then dispatches via
+ * `notifyTiebreakerOpen`. Errors are swallowed and logged so the
+ * tiebreaker.start() flow never blocks on Discord.
+ */
+export function fireTiebreakerOpen(
+  svc: LineupNotificationService,
+  logger: Logger,
+  db: Db,
+  lineupId: number,
+  tiebreakerId: number,
+): void {
+  loadLineupForHook(db, lineupId)
+    .then(async (lineup) => {
+      if (!lineup) return;
+      const [tb] = await db
+        .select({
+          id: schema.communityLineupTiebreakers.id,
+          mode: schema.communityLineupTiebreakers.mode,
+          roundDeadline: schema.communityLineupTiebreakers.roundDeadline,
+        })
+        .from(schema.communityLineupTiebreakers)
+        .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId))
+        .limit(1);
+      if (!tb) return;
+      await svc.notifyTiebreakerOpen(
+        {
+          id: lineup.id,
+          title: lineup.title,
+          visibility: lineup.visibility,
+        },
+        { id: tb.id, mode: tb.mode, roundDeadline: tb.roundDeadline },
+      );
+    })
+    .catch(logError(logger, 'tiebreaker-open'));
+}
+
 /** Fire decided-phase notifications (channel embed). */
 export function fireDecidedNotifications(
   svc: LineupNotificationService,

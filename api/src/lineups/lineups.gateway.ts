@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import {
   LineupRealtimeEventNames,
   LineupStatusEventSchema,
+  LineupTiebreakerOpenEventSchema,
 } from '@raid-ledger/contract';
 import type { LineupStatus } from '../drizzle/schema';
 import { perfLog } from '../common/perf-logger';
@@ -115,5 +116,34 @@ export class LineupsGateway
       lineupId,
       status,
     });
+  }
+
+  /**
+   * Emit a tiebreaker-open event to all clients watching the lineup
+   * (ROK-1117). Validates the payload with `LineupTiebreakerOpenEventSchema`
+   * before broadcast so a malformed call (e.g. unknown mode) fails fast.
+   */
+  emitTiebreakerOpen(
+    lineupId: number,
+    tiebreakerId: number,
+    mode: 'bracket' | 'veto',
+    roundDeadline?: Date | null,
+  ): void {
+    const start = performance.now();
+    const payload = LineupTiebreakerOpenEventSchema.parse({
+      lineupId,
+      tiebreakerId,
+      mode,
+      roundDeadline: roundDeadline ? roundDeadline.toISOString() : undefined,
+    });
+    this.server
+      .to(`lineup:${lineupId}`)
+      .emit(LineupRealtimeEventNames.TiebreakerOpen, payload);
+    perfLog(
+      'WS',
+      LineupRealtimeEventNames.TiebreakerOpen,
+      performance.now() - start,
+      { lineupId, tiebreakerId, mode },
+    );
   }
 }
