@@ -107,6 +107,77 @@ function describeSentryInstrumentTs() {
       const regex = ignoreSpans[0];
       expect(regex.test('pg_catalog.pg_type')).toBe(true);
     });
+
+    describe('beforeSend filter', () => {
+      type SentryEvent = {
+        exception?: { values?: { type?: string; value?: string }[] };
+      };
+      type BeforeSend = (event: SentryEvent) => SentryEvent | null;
+
+      function getBeforeSend(): BeforeSend {
+        const config = sentryInitMock.mock.calls[0][0] as Record<
+          string,
+          unknown
+        >;
+        return config['beforeSend'] as BeforeSend;
+      }
+
+      it('drops ThrottlerException events', () => {
+        const result = getBeforeSend()({
+          exception: { values: [{ type: 'ThrottlerException' }] },
+        });
+        expect(result).toBeNull();
+      });
+
+      it('drops InternalOAuthError events (ROK-668)', () => {
+        const result = getBeforeSend()({
+          exception: { values: [{ type: 'InternalOAuthError' }] },
+        });
+        expect(result).toBeNull();
+      });
+
+      it('drops intentional no_snapshot_yet 503s (ROK-1143)', () => {
+        const result = getBeforeSend()({
+          exception: {
+            values: [
+              {
+                type: 'HttpException',
+                value: "{ error: 'no_snapshot_yet' }",
+              },
+            ],
+          },
+        });
+        expect(result).toBeNull();
+      });
+
+      it('still reports real 5xx HttpExceptions', () => {
+        const event: SentryEvent = {
+          exception: {
+            values: [{ type: 'HttpException', value: 'Internal Server Error' }],
+          },
+        };
+        expect(getBeforeSend()(event)).toBe(event);
+      });
+
+      it('still reports unrelated exceptions', () => {
+        const event: SentryEvent = {
+          exception: {
+            values: [
+              {
+                type: 'TypeError',
+                value: "Cannot read property 'x' of undefined",
+              },
+            ],
+          },
+        };
+        expect(getBeforeSend()(event)).toBe(event);
+      });
+
+      it('passes through events without an exception payload', () => {
+        const event: SentryEvent = {};
+        expect(getBeforeSend()(event)).toBe(event);
+      });
+    });
   });
 
   describe('when DISABLE_TELEMETRY=true', () => {
