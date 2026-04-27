@@ -2,8 +2,12 @@
  * Lifecycle helpers extracted from LineupsService to stay
  * under the 300-line file limit (ROK-932).
  */
-import { BadRequestException, type Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import {
+  BadRequestException,
+  ConflictException,
+  type Logger,
+} from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import { clearLinkedEventsByLineup } from './standalone-poll/standalone-poll-query.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -66,7 +70,17 @@ export function insertLineup(
   });
 }
 
-/** Apply a status transition with phase scheduling. */
+/**
+ * Apply a status transition with phase scheduling.
+ *
+ * ROK-1118: the UPDATE is conditional on the lineup's current status to
+ * make concurrent auto-advance callers safe. If two voters race to close
+ * the quorum, both will compute `expectedPre = 'voting'` from their own
+ * snapshot, but only one UPDATE will match the row's actual status —
+ * the loser sees `rowCount === 0` and we throw `ConflictException`. The
+ * manual `PATCH /lineups/:id/status` path surfaces this as 409;
+ * `maybeAutoAdvance` swallows it.
+ */
 export async function applyStatusUpdate(
   db: Db,
   settings: SettingsService,
@@ -81,10 +95,22 @@ export async function applyStatusUpdate(
     settings,
   );
   const values = buildTransitionValues(dto, phaseDeadline);
-  await db
+  const expectedPre = lineup.status;
+  const updated = await db
     .update(schema.communityLineups)
     .set(values)
-    .where(eq(schema.communityLineups.id, id));
+    .where(
+      and(
+        eq(schema.communityLineups.id, id),
+        eq(schema.communityLineups.status, expectedPre),
+      ),
+    )
+    .returning({ id: schema.communityLineups.id });
+  if (updated.length === 0) {
+    throw new ConflictException(
+      `Lineup ${id} status changed concurrently; expected '${expectedPre}'`,
+    );
+  }
 
   const nextPhase = getNextPhase(dto.status);
   if (nextPhase && phaseDeadline) {

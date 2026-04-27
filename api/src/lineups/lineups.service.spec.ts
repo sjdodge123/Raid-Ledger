@@ -143,7 +143,9 @@ function describeLineupsService() {
   function mockUpdate() {
     mockDb.update.mockReturnValue({
       set: jest.fn().mockReturnValue({
-        where: jest.fn().mockResolvedValue(undefined),
+        where: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+        }),
       }),
     });
   }
@@ -418,10 +420,12 @@ function describeLineupsService() {
       mockSelects(
         makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 1 }] }),
       );
-      // applyStatusUpdate (update)
+      // applyStatusUpdate (conditional update)
       mockDb.update.mockReturnValue({
         set: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue(undefined),
+          where: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
         }),
       });
       // buildDetailResponse chain (findLineupById + enrichment queries)
