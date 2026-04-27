@@ -1,4 +1,8 @@
-import { buildStatusResponse, buildUsageResponse } from './ai-admin.helpers';
+import {
+  buildStatusResponse,
+  buildUsageResponse,
+  deriveAvailability,
+} from './ai-admin.helpers';
 import type { LlmProvider } from './llm-provider.interface';
 
 describe('ai-admin.helpers', () => {
@@ -168,5 +172,101 @@ describe('ai-admin.helpers (adversarial)', () => {
       // Math.round(0.123456789 * 10000) / 10000 = 0.1235
       expect(result.errorRate).toBe(0.1235);
     });
+  });
+});
+
+describe('deriveAvailability', () => {
+  const FRESHNESS_MS = 5 * 60 * 1000;
+  const NOW = new Date('2026-04-27T12:00:00.000Z');
+
+  it('returns false immediately when providerKey is null and does not call probe', async () => {
+    const probe = jest.fn<Promise<boolean>, []>().mockRejectedValue(new Error('probe should not run'));
+    const result = await deriveAvailability({
+      providerKey: null,
+      lastSuccessAt: new Date(NOW.getTime() - 1000),
+      probe,
+      now: NOW,
+      freshnessMs: FRESHNESS_MS,
+    });
+    expect(result).toBe(false);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('returns true without calling probe when lastSuccessAt is within freshness window', async () => {
+    const probe = jest.fn<Promise<boolean>, []>().mockRejectedValue(new Error('probe should not run'));
+    const result = await deriveAvailability({
+      providerKey: 'claude',
+      lastSuccessAt: new Date(NOW.getTime() - 30_000), // 30s ago
+      probe,
+      now: NOW,
+      freshnessMs: FRESHNESS_MS,
+    });
+    expect(result).toBe(true);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('treats lastSuccessAt exactly freshnessMs old as still fresh (boundary)', async () => {
+    const probe = jest.fn<Promise<boolean>, []>().mockRejectedValue(new Error('probe should not run'));
+    const result = await deriveAvailability({
+      providerKey: 'claude',
+      lastSuccessAt: new Date(NOW.getTime() - FRESHNESS_MS),
+      probe,
+      now: NOW,
+      freshnessMs: FRESHNESS_MS,
+    });
+    expect(result).toBe(true);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('falls through to probe and returns true when probe resolves true and lastSuccessAt is stale', async () => {
+    const probe = jest.fn<Promise<boolean>, []>().mockResolvedValue(true);
+    const result = await deriveAvailability({
+      providerKey: 'claude',
+      lastSuccessAt: new Date(NOW.getTime() - (FRESHNESS_MS + 1)), // just past window
+      probe,
+      now: NOW,
+      freshnessMs: FRESHNESS_MS,
+    });
+    expect(result).toBe(true);
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls through to probe and returns false when probe resolves false and lastSuccessAt is stale', async () => {
+    const probe = jest.fn<Promise<boolean>, []>().mockResolvedValue(false);
+    const result = await deriveAvailability({
+      providerKey: 'claude',
+      lastSuccessAt: new Date(NOW.getTime() - 10 * 60 * 1000), // 10 min ago
+      probe,
+      now: NOW,
+      freshnessMs: FRESHNESS_MS,
+    });
+    expect(result).toBe(false);
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls through to probe when lastSuccessAt is null', async () => {
+    const probe = jest.fn<Promise<boolean>, []>().mockResolvedValue(true);
+    const result = await deriveAvailability({
+      providerKey: 'claude',
+      lastSuccessAt: null,
+      probe,
+      now: NOW,
+      freshnessMs: FRESHNESS_MS,
+    });
+    expect(result).toBe(true);
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns false when probe throws (swallows rejection)', async () => {
+    const probe = jest.fn<Promise<boolean>, []>().mockRejectedValue(new Error('boom'));
+    const result = await deriveAvailability({
+      providerKey: 'claude',
+      lastSuccessAt: null,
+      probe,
+      now: NOW,
+      freshnessMs: FRESHNESS_MS,
+    });
+    expect(result).toBe(false);
+    expect(probe).toHaveBeenCalledTimes(1);
   });
 });
