@@ -5,6 +5,7 @@
 import type { JSX } from 'react';
 import type { TiebreakerDetailDto } from '@raid-ledger/contract';
 import { VetoGameCard } from './VetoGameCard';
+import { TiebreakerClosedNotice } from './TiebreakerClosedNotice';
 import { useCastVeto, useForceResolve } from '../../../hooks/use-tiebreaker';
 
 interface Props {
@@ -17,6 +18,15 @@ export function VetoView({ tiebreaker, lineupId }: Props): JSX.Element {
     const forceResolve = useForceResolve();
     const veto = tiebreaker.vetoStatus;
     if (!veto) return <div>No veto data</div>;
+
+    if (tiebreaker.status === 'resolved' || tiebreaker.status === 'dismissed') {
+        return (
+            <TiebreakerClosedNotice
+                title="Veto Elimination"
+                resolvedAt={tiebreaker.resolvedAt}
+            />
+        );
+    }
 
     const remaining = veto.vetoCap - veto.totalVetoes;
     const canVeto = tiebreaker.status === 'active' && !veto.myVetoGameId && remaining > 0;
