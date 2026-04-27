@@ -8,10 +8,7 @@ jest.mock('./quorum-voters.helpers', () => ({
 }));
 
 import { loadExpectedVoters } from './quorum-voters.helpers';
-import {
-  checkBuildingQuorum,
-  checkVotingQuorum,
-} from './quorum-check.helpers';
+import { checkBuildingQuorum, checkVotingQuorum } from './quorum-check.helpers';
 import type * as schema from '../../drizzle/schema';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -169,10 +166,10 @@ describe('checkVotingQuorum', () => {
     setExpectedVoters([]);
     db.where.mockResolvedValueOnce([]);
 
-    const result = await checkVotingQuorum(
-      db as never,
-      { ...baseLineup, status: 'voting' },
-    );
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+    });
 
     expect(result.ready).toBe(false);
   });
@@ -182,10 +179,10 @@ describe('checkVotingQuorum', () => {
     setExpectedVoters([1, 2, 3]);
     db.where.mockResolvedValueOnce([{ userId: 1 }, { userId: 2 }]);
 
-    const result = await checkVotingQuorum(
-      db as never,
-      { ...baseLineup, status: 'voting' },
-    );
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+    });
 
     expect(result.ready).toBe(false);
     expect(result.reason).toContain('missing');
@@ -200,10 +197,11 @@ describe('checkVotingQuorum', () => {
       { userId: 3 },
     ]);
 
-    const result = await checkVotingQuorum(
-      db as never,
-      { ...baseLineup, status: 'voting', visibility: 'private' },
-    );
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      visibility: 'private',
+    });
 
     expect(result.ready).toBe(true);
   });
@@ -217,10 +215,11 @@ describe('checkVotingQuorum', () => {
       { userId: 99 },
     ]);
 
-    const result = await checkVotingQuorum(
-      db as never,
-      { ...baseLineup, status: 'voting', visibility: 'private' },
-    );
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      visibility: 'private',
+    });
 
     expect(result.ready).toBe(true);
   });

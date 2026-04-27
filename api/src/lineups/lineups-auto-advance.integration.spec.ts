@@ -71,10 +71,7 @@ function describeAutoAdvance() {
       .send({ title: 'Auto Advance Public' });
   }
 
-  async function createPrivateLineup(
-    token: string,
-    inviteeUserIds: number[],
-  ) {
+  async function createPrivateLineup(token: string, inviteeUserIds: number[]) {
     return testApp.request
       .post('/lineups')
       .set('Authorization', `Bearer ${token}`)

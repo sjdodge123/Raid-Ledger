@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   BandwagonJoinResponseDto,
@@ -27,7 +21,6 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
-import { findLineupById } from './lineups-query.helpers';
 import {
   runAddInvitees,
   runRemoveInvitee,
@@ -38,11 +31,6 @@ import { runCommonGroundForBuildingLineup } from './common-ground-context.helper
 import { buildDetailResponse } from './lineups-response.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
 import { buildActiveLineupSummaries } from './lineups-summary.helpers';
-import {
-  findEntry,
-  validateRemoval,
-  deleteEntry,
-} from './lineups-removal.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
 import { runMetadataUpdate } from './lineups-metadata.helpers';
 import { runStatusTransition } from './lineups-transition.helpers';
@@ -50,12 +38,13 @@ import {
   runBandwagonJoin,
   runAdvanceMatch,
 } from './lineups-match-actions.helpers';
-import { fireNominationRemoved } from './lineups-notify-hooks.helpers';
 import {
   runCreateLineup,
   runToggleVote,
   runNominate,
+  runRemoveNomination,
 } from './lineups-actions.helpers';
+import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 
 /** Caller identity for authorization checks. */
 export interface CallerIdentity {
@@ -148,13 +137,13 @@ export class LineupsService {
   }
 
   /** Toggle a vote for a game in a lineup (ROK-936). */
-  toggleVote(
+  async toggleVote(
     lineupId: number,
     gameId: number,
     userId: number,
     callerRole?: string,
   ): Promise<LineupDetailResponseDto> {
-    return runToggleVote(
+    const result = await runToggleVote(
       {
         db: this.db,
         activityLog: this.activityLog,
@@ -165,6 +154,20 @@ export class LineupsService {
       userId,
       callerRole,
     );
+    void maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
+    return result;
+  }
+
+  /** Build deps for the fire-and-forget auto-advance helper (ROK-1118). */
+  private autoAdvanceDeps() {
+    return {
+      db: this.db,
+      activityLog: this.activityLog,
+      settings: this.settings,
+      phaseQueue: this.phaseQueue,
+      lineupNotifications: this.lineupNotifications,
+      logger: this.logger,
+    };
   }
 
   /** Transition a lineup to a new status. */
@@ -219,6 +222,7 @@ export class LineupsService {
       callerRole,
     );
     await this.invalidateAiCache(lineupId);
+    void maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
     return result;
   }
 
@@ -228,33 +232,19 @@ export class LineupsService {
     gameId: number,
     caller: CallerIdentity,
   ) {
-    const [lineup] = await findLineupById(this.db, lineupId);
-    if (!lineup) throw new NotFoundException('Lineup not found');
-    if (lineup.status !== 'building')
-      throw new BadRequestException('Can only remove during building');
-
-    const entry = await findEntry(this.db, lineupId, gameId);
-    validateRemoval(entry, caller);
-    await deleteEntry(this.db, lineupId, gameId);
-    await this.activityLog.log(
-      'lineup',
-      lineupId,
-      'nomination_removed',
-      caller.id,
-      { gameId },
-    );
-
-    fireNominationRemoved(
-      this.lineupNotifications,
-      this.logger,
-      this.db,
+    await runRemoveNomination(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+      },
       lineupId,
       gameId,
-      entry,
       caller,
     );
-
     await this.invalidateAiCache(lineupId);
+    void maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
   }
 
   /** Get banner data for the Games page. Returns null if no eligible lineup. */

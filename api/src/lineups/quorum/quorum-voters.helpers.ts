@@ -43,7 +43,9 @@ async function loadPrivateExpectedVoters(
     .select({ userId: schema.communityLineupInvitees.userId })
     .from(schema.communityLineupInvitees)
     .where(eq(schema.communityLineupInvitees.lineupId, lineup.id));
-  return Array.from(new Set([lineup.createdBy, ...invitees.map((r) => r.userId)]));
+  return Array.from(
+    new Set([lineup.createdBy, ...invitees.map((r) => r.userId)]),
+  );
 }
 
 async function findDistinctNominators(

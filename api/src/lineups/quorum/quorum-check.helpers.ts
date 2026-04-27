@@ -40,7 +40,10 @@ export async function checkBuildingQuorum(
   const nominatorSet = new Set(nominators);
   const missing = expected.filter((id) => !nominatorSet.has(id));
   if (missing.length > 0) {
-    return { ready: false, reason: `${missing.length} expected nominator(s) missing` };
+    return {
+      ready: false,
+      reason: `${missing.length} expected nominator(s) missing`,
+    };
   }
   if (totalNominations < floor) {
     return {
@@ -66,7 +69,10 @@ export async function checkVotingQuorum(
   const voterSet = new Set(voters);
   const missing = expected.filter((id) => !voterSet.has(id));
   if (missing.length > 0) {
-    return { ready: false, reason: `${missing.length} expected voter(s) missing` };
+    return {
+      ready: false,
+      reason: `${missing.length} expected voter(s) missing`,
+    };
   }
   return { ready: true };
 }
@@ -102,7 +108,9 @@ async function countNominations(db: Db, lineupId: number): Promise<number> {
 }
 
 async function readMinNominations(settings: SettingsService): Promise<number> {
-  const raw = await settings.get(SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS);
+  const raw = await settings.get(
+    SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS,
+  );
   if (!raw) return DEFAULT_MIN_NOMINATIONS;
   const parsed = parseInt(raw, 10);
   return Number.isNaN(parsed) || parsed < 1 ? DEFAULT_MIN_NOMINATIONS : parsed;

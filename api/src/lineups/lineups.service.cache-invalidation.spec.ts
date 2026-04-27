@@ -67,6 +67,7 @@ jest.mock('./lineups-actions.helpers', () => ({
   runCreateLineup: jest.fn(),
   runToggleVote: jest.fn(),
   runNominate: jest.fn().mockResolvedValue({ id: 1, status: 'building' }),
+  runRemoveNomination: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('./lineups-invitees-actions.helpers', () => ({
   runAddInvitees: jest.fn().mockResolvedValue({ id: 1, status: 'building' }),

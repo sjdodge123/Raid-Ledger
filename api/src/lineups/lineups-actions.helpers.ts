@@ -38,7 +38,14 @@ import { carryOverFromLastDecided } from './lineups-carryover.helpers';
 import {
   fireLineupCreated,
   fireNominationMilestone,
+  fireNominationRemoved,
 } from './lineups-notify-hooks.helpers';
+import {
+  findEntry,
+  validateRemoval,
+  deleteEntry,
+} from './lineups-removal.helpers';
+import type { CallerIdentity } from './lineups.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type ResolveChannelName = (channelId: string) => string | null;
@@ -149,6 +156,48 @@ export interface NominateDeps {
   lineupNotifications: LineupNotificationService;
   logger: Logger;
   resolveChannelName: ResolveChannelName;
+}
+
+export interface RemoveNominationDeps {
+  db: Db;
+  activityLog: ActivityLogService;
+  lineupNotifications: LineupNotificationService;
+  logger: Logger;
+}
+
+/** Remove a nomination during the building phase. */
+export async function runRemoveNomination(
+  deps: RemoveNominationDeps,
+  lineupId: number,
+  gameId: number,
+  caller: CallerIdentity,
+): Promise<void> {
+  const [lineup] = await findLineupById(deps.db, lineupId);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  if (lineup.status !== 'building') {
+    throw new BadRequestException('Can only remove during building');
+  }
+
+  const entry = await findEntry(deps.db, lineupId, gameId);
+  validateRemoval(entry, caller);
+  await deleteEntry(deps.db, lineupId, gameId);
+  await deps.activityLog.log(
+    'lineup',
+    lineupId,
+    'nomination_removed',
+    caller.id,
+    { gameId },
+  );
+
+  fireNominationRemoved(
+    deps.lineupNotifications,
+    deps.logger,
+    deps.db,
+    lineupId,
+    gameId,
+    entry,
+    caller,
+  );
 }
 
 /** Nominate a game into a lineup. */
