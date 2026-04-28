@@ -84,9 +84,14 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
         await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gid });
     }
 
-    // Advance to decided (generates matches from voting results)
+    // Advance to decided (generates matches from voting results).
+    // Pass decidedGameId so the transition can't fail with TIEBREAKER_REQUIRED
+    // when admin's three votes happen to land on tied games — that previously
+    // left the lineup in 'voting', the matchId fallback hit 1, and every
+    // wizard test downstream blew up with "wizard surface never rendered".
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'decided',
+        decidedGameId: gameIds[0],
     });
 
     // Fetch matches and find one in "scheduling" status
