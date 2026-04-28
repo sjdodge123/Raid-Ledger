@@ -88,6 +88,11 @@ function parseProfessionsResponse(json: unknown): ExternalCharacterProfessions {
   };
 }
 
+/** True when the parsed response has no primary or secondary entries. */
+function hasNoEntries(p: ExternalCharacterProfessions): boolean {
+  return p.primary.length === 0 && p.secondary.length === 0;
+}
+
 /** Issue the request and translate HTTP states into the contract types. */
 async function requestProfessions(
   url: string,
@@ -96,26 +101,18 @@ async function requestProfessions(
   realmSlug: string,
   logger: Logger,
 ): Promise<ExternalCharacterProfessions | null> {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (res.status === 404) {
-    logger.debug?.(
-      `Professions 404 for ${charName}-${realmSlug} — leaving prior value alone`,
-    );
+    logger.debug?.(`Professions 404 for ${charName}-${realmSlug} — leaving prior value alone`);
     return null;
   }
   if (!res.ok) {
-    logger.warn(
-      `Professions fetch failed for ${charName}-${realmSlug}: ${res.status}`,
-    );
+    logger.warn(`Professions fetch failed for ${charName}-${realmSlug}: ${res.status}`);
     return null;
   }
   const parsed = parseProfessionsResponse(await res.json());
-  if (parsed.primary.length === 0 && parsed.secondary.length === 0) {
-    logger.debug?.(
-      `Professions empty for ${charName}-${realmSlug} — leaving prior value alone`,
-    );
+  if (hasNoEntries(parsed)) {
+    logger.debug?.(`Professions empty for ${charName}-${realmSlug} — leaving prior value alone`);
     return null;
   }
   return parsed;

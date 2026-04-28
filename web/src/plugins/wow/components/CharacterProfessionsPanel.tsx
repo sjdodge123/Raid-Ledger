@@ -14,35 +14,26 @@ interface CharacterProfessionsPanelProps {
     gameId: number;
 }
 
+function hasProfessionData(professions: CharacterProfessionsDto | null): professions is CharacterProfessionsDto {
+    return !!professions && (professions.primary.length > 0 || professions.secondary.length > 0);
+}
+
 export function CharacterProfessionsPanel({
     professions, isOwner, characterId, gameId,
 }: CharacterProfessionsPanelProps) {
     const [isEditing, setIsEditing] = useState(false);
-    const hasData = !!(
-        professions &&
-        (professions.primary.length > 0 || professions.secondary.length > 0)
-    );
-
+    const hasData = hasProfessionData(professions);
     if (!hasData && !isOwner) return null;
-
+    const openEdit = () => setIsEditing(true);
     return (
         <>
             <div className="bg-panel border border-edge rounded-lg p-6">
-                <PanelHeader showEdit={isOwner && hasData} onEdit={() => setIsEditing(true)} />
-                {hasData ? (
-                    <ProfessionsBody professions={professions!} />
-                ) : (
-                    <AddProfessionsCta onAdd={() => setIsEditing(true)} />
-                )}
+                <PanelHeader showEdit={isOwner && hasData} onEdit={openEdit} />
+                {hasData ? <ProfessionsBody professions={professions} /> : <AddProfessionsCta onAdd={openEdit} />}
             </div>
             {isOwner && (
-                <EditProfessionsModal
-                    isOpen={isEditing}
-                    onClose={() => setIsEditing(false)}
-                    characterId={characterId}
-                    gameId={gameId}
-                    initial={professions}
-                />
+                <EditProfessionsModal isOpen={isEditing} onClose={() => setIsEditing(false)}
+                    characterId={characterId} gameId={gameId} initial={professions} />
             )}
         </>
     );

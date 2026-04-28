@@ -64,70 +64,65 @@ function draftToEntries(drafts: DraftEntry[], maxSkill: number): ProfessionEntry
         }));
 }
 
-export function EditProfessionsModal({
-    isOpen, onClose, characterId, gameId, initial,
-}: EditProfessionsModalProps) {
-    const { games } = useGameRegistry();
-    const game = games.find((g) => g.id === gameId);
-    const gameSlug = game?.slug ?? null;
-    const maxSkill = getMaxProfessionSkill(gameSlug);
+function buildProfessionsPayload(
+    primary: DraftEntry[],
+    secondary: DraftEntry[],
+    maxSkill: number,
+): CharacterProfessionsDto | null {
+    const primaryEntries = draftToEntries(primary, maxSkill);
+    const secondaryEntries = draftToEntries(secondary, maxSkill);
+    if (primaryEntries.length === 0 && secondaryEntries.length === 0) return null;
+    return {
+        primary: primaryEntries,
+        secondary: secondaryEntries,
+        syncedAt: new Date().toISOString(),
+    };
+}
 
+function useEditProfessionsState(
+    gameId: number,
+    initial: CharacterProfessionsDto | null,
+) {
+    const { games } = useGameRegistry();
+    const gameSlug = games.find((g) => g.id === gameId)?.slug ?? null;
+    const maxSkill = getMaxProfessionSkill(gameSlug);
     const [primary, setPrimary] = useState<DraftEntry[]>(
         () => entriesToDraft(initial?.primary ?? []),
     );
     const [secondary, setSecondary] = useState<DraftEntry[]>(
         () => entriesToDraft(initial?.secondary ?? []),
     );
+    return { gameSlug, maxSkill, primary, setPrimary, secondary, setSecondary };
+}
+
+export function EditProfessionsModal({
+    isOpen, onClose, characterId, gameId, initial,
+}: EditProfessionsModalProps) {
+    const s = useEditProfessionsState(gameId, initial);
     const update = useUpdateCharacter();
 
-    function handleSave() {
-        const primaryEntries = draftToEntries(primary, maxSkill);
-        const secondaryEntries = draftToEntries(secondary, maxSkill);
-        const professions =
-            primaryEntries.length === 0 && secondaryEntries.length === 0
-                ? null
-                : {
-                    primary: primaryEntries,
-                    secondary: secondaryEntries,
-                    syncedAt: new Date().toISOString(),
-                };
-        update.mutate(
-            { id: characterId, dto: { professions } },
-            { onSuccess: onClose },
-        );
-    }
+    const handleSave = () => update.mutate(
+        { id: characterId, dto: { professions: buildProfessionsPayload(s.primary, s.secondary, s.maxSkill) } },
+        { onSuccess: onClose },
+    );
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Edit Professions">
             <div className="space-y-6">
                 <p className="text-xs text-muted">
-                    Skill cap for this game variant: <span className="font-mono">{maxSkill}</span>
+                    Skill cap for this game variant: <span className="font-mono">{s.maxSkill}</span>
                 </p>
-                <ProfessionSection
-                    heading="Primary"
-                    category="primary"
-                    drafts={primary}
-                    onChange={setPrimary}
-                    maxEntries={getMaxEntriesForCategory('primary', gameSlug)}
-                    maxSkill={maxSkill}
-                    gameSlug={gameSlug}
-                    siblingNames={primary.map((d) => d.name)}
-                />
-                <ProfessionSection
-                    heading="Secondary"
-                    category="secondary"
-                    drafts={secondary}
-                    onChange={setSecondary}
-                    maxEntries={getMaxEntriesForCategory('secondary', gameSlug)}
-                    maxSkill={maxSkill}
-                    gameSlug={gameSlug}
-                    siblingNames={secondary.map((d) => d.name)}
-                />
-                <ModalActions
-                    onCancel={onClose}
-                    onSave={handleSave}
-                    isPending={update.isPending}
-                />
+                <ProfessionSection heading="Primary" category="primary"
+                    drafts={s.primary} onChange={s.setPrimary}
+                    maxEntries={getMaxEntriesForCategory('primary', s.gameSlug)}
+                    maxSkill={s.maxSkill} gameSlug={s.gameSlug}
+                    siblingNames={s.primary.map((d) => d.name)} />
+                <ProfessionSection heading="Secondary" category="secondary"
+                    drafts={s.secondary} onChange={s.setSecondary}
+                    maxEntries={getMaxEntriesForCategory('secondary', s.gameSlug)}
+                    maxSkill={s.maxSkill} gameSlug={s.gameSlug}
+                    siblingNames={s.secondary.map((d) => d.name)} />
+                <ModalActions onCancel={onClose} onSave={handleSave} isPending={update.isPending} />
             </div>
         </Modal>
     );
