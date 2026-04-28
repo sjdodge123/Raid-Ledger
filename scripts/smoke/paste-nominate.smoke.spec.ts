@@ -13,15 +13,20 @@
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiPost, apiGet, apiPatch } from './api-helpers';
 
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'paste-nominate';
+let workerPrefix: string;
+let lineupTitle: string;
+
 /**
- * Archive every non-archived lineup atomically (ROK-1147).
+ * Archive lineups owned by THIS worker (ROK-1147).
  *
- * `id` is ignored (kept for call-site compatibility) — the new endpoint
- * archives every lineup in a single SQL UPDATE, eliminating the multi-
- * second status-walk race window that destabilised parallel workers.
+ * `id` is ignored (kept for call-site compatibility) — the reset is scoped
+ * per-worker via prefix, not by lineup id.
  */
 async function archiveLineup(token: string, _id: number): Promise<void> {
-    await apiPost(token, '/admin/test/reset-lineups');
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 async function ensureBuildingLineup(token: string): Promise<number> {
@@ -32,9 +37,9 @@ async function ensureBuildingLineup(token: string): Promise<number> {
     if (banner && typeof banner.id === 'number' && banner.status === 'building') {
         return banner.id;
     }
-    await apiPost(token, '/admin/test/reset-lineups');
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
     const lineup = (await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
     })) as { id?: number };
     if (lineup?.id) return lineup.id;
@@ -87,7 +92,10 @@ async function ensureGameWithSteamAppId(token: string): Promise<void> {
     });
 }
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
     adminToken = await getAdminToken();
     await ensureGameWithSteamAppId(adminToken);
     lineupId = await ensureBuildingLineup(adminToken);
@@ -279,7 +287,7 @@ test.describe('Paste disabled in non-building phases (AC6)', () => {
         }
 
         const created = (await apiPost(adminToken, '/lineups', {
-            title: 'Smoke Lineup',
+            title: lineupTitle,
             targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         })) as { id: number };
         votingLineupId = created.id;

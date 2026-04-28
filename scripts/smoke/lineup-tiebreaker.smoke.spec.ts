@@ -42,16 +42,20 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
     return body.data.slice(0, count).map((g) => g.id);
 }
 
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'lineup-tiebreaker';
+let workerPrefix: string;
+let lineupTitle: string;
+
 /**
- * Archive every non-archived lineup atomically (ROK-1147).
+ * Archive lineups owned by THIS worker (ROK-1147).
  *
- * Replaces the prior status-walk that raced across parallel workers — one
- * worker's archive sweep would invalidate another worker's just-created
- * lineup mid-test. The DEMO_MODE-only `/admin/test/reset-lineups` endpoint
- * archives every lineup in a single SQL UPDATE.
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
  */
 async function archiveActiveLineup(token: string): Promise<void> {
-    await apiPost(token, '/admin/test/reset-lineups');
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 /**
@@ -76,7 +80,7 @@ async function createVotingLineupWithTiebreaker(
     const gameIds = await fetchGameIds(token, 4);
 
     const createRes = (await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         buildingDurationHours: 720,
         votingDurationHours: 720,
         decidedDurationHours: 720,
@@ -114,7 +118,9 @@ async function createVotingLineupWithTiebreaker(
 
 let adminToken: string;
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
     adminToken = await getAdminToken();
 });
 
@@ -136,7 +142,7 @@ test.describe('Tiebreaker prompt modal', () => {
         gameIds = await fetchGameIds(adminToken, 4);
 
         const createRes = (await apiPost(adminToken, '/lineups', {
-            title: 'Smoke Lineup',
+            title: lineupTitle,
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,

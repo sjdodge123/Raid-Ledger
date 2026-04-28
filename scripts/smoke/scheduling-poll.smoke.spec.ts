@@ -15,15 +15,20 @@ import { getAdminToken, apiPost, apiGet, apiPatch, apiPut } from './api-helpers'
 // Setup helpers
 // ---------------------------------------------------------------------------
 
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'scheduling-poll';
+let workerPrefix: string;
+let lineupTitle: string;
+
 /**
- * Archive every non-archived lineup atomically (ROK-1147).
+ * Archive lineups owned by THIS worker (ROK-1147).
  *
- * Replaces the prior status-walk that raced across parallel workers.
- * `/admin/test/reset-lineups` (DEMO_MODE-only) archives every lineup in
- * a single SQL UPDATE so workers don't leak state between each other.
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
  */
 async function archiveActiveLineup(token: string): Promise<void> {
-    await apiPost(token, '/admin/test/reset-lineups');
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 /** Fetch real game IDs from the admin games endpoint. */
@@ -49,7 +54,7 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 
     // Create lineup with a low match threshold to maximize match generation
     const createRes = await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         buildingDurationHours: 24,
         votingDurationHours: 48,
         decidedDurationHours: 24,
@@ -177,7 +182,10 @@ let lineupId: number;
 let matchId: number;
 let gameIds: number[];
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
     adminToken = await getAdminToken();
     const result = await createSchedulingLineupWithMatch(adminToken);
     lineupId = result.lineupId;
