@@ -11,12 +11,12 @@ import { useSlowQueriesDigest, useCaptureSlowQuerySnapshot, type SlowQueriesResp
 export function SlowQueriesCard() {
     const digest = useSlowQueriesDigest();
     const capture = useCaptureSlowQuerySnapshot();
-    const isPopulated = hasDigest(digest.data);
+    const capturedAt = hasDigest(digest.data) ? digest.data.snapshot.capturedAt : null;
 
     return (
         <section className="border border-edge rounded-xl p-5 bg-surface/30 space-y-4">
             <SlowQueriesHeader
-                capturedAt={isPopulated ? digest.data.snapshot.capturedAt : null}
+                capturedAt={capturedAt}
                 onRefresh={() => capture.mutate()}
                 isRefreshing={capture.isPending}
             />
@@ -44,28 +44,40 @@ function SlowQueriesHeader({
 }) {
     return (
         <div className="flex items-start justify-between gap-3">
-            <div>
-                <h2 className="text-xl font-semibold text-foreground">Slow Queries</h2>
-                {capturedAt ? (
-                    <p className="text-xs text-muted mt-1">
-                        Last captured: {formatCapturedAt(capturedAt)}
-                    </p>
-                ) : (
-                    <p className="text-sm text-muted mt-1">
-                        Top queries by mean execution time over the last cron window.
-                    </p>
-                )}
-            </div>
-            <button
-                type="button"
-                onClick={onRefresh}
-                disabled={isRefreshing}
-                aria-label="Refresh now"
-                className="px-4 py-2 text-sm font-medium bg-accent/20 text-accent border border-accent/40 rounded-lg hover:bg-accent/30 transition-colors disabled:opacity-50 whitespace-nowrap"
-            >
-                {isRefreshing ? 'Refreshing...' : 'Refresh now'}
-            </button>
+            <SlowQueriesTitle capturedAt={capturedAt} />
+            <RefreshButton onRefresh={onRefresh} isRefreshing={isRefreshing} />
         </div>
+    );
+}
+
+function SlowQueriesTitle({ capturedAt }: { capturedAt: string | null }) {
+    return (
+        <div>
+            <h2 className="text-xl font-semibold text-foreground">Slow Queries</h2>
+            {capturedAt ? (
+                <p className="text-xs text-muted mt-1">
+                    Last captured: {formatCapturedAt(capturedAt)}
+                </p>
+            ) : (
+                <p className="text-sm text-muted mt-1">
+                    Top queries by mean execution time over the last cron window.
+                </p>
+            )}
+        </div>
+    );
+}
+
+function RefreshButton({ onRefresh, isRefreshing }: { onRefresh: () => void; isRefreshing: boolean }) {
+    return (
+        <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label="Refresh now"
+            className="px-4 py-2 text-sm font-medium bg-accent/20 text-accent border border-accent/40 rounded-lg hover:bg-accent/30 transition-colors disabled:opacity-50 whitespace-nowrap"
+        >
+            {isRefreshing ? 'Refreshing...' : 'Refresh now'}
+        </button>
     );
 }
 
@@ -105,22 +117,7 @@ function SlowQueriesTable({ entries }: { entries: SlowQueryEntryDto[] }) {
                 <caption className="sr-only">
                     Slow queries ranked by mean execution time
                 </caption>
-                <thead>
-                    <tr className="border-b border-edge bg-surface/50">
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
-                            Query
-                        </th>
-                        <th className="text-right px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider w-20">
-                            Calls
-                        </th>
-                        <th className="text-right px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider w-24">
-                            Mean (ms)
-                        </th>
-                        <th className="text-right px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider w-24">
-                            Total (ms)
-                        </th>
-                    </tr>
-                </thead>
+                <SlowQueriesTableHeader />
                 <tbody className="divide-y divide-edge">
                     {entries.map((entry) => (
                         <SlowQueryRow key={entry.queryid} entry={entry} />
@@ -128,6 +125,27 @@ function SlowQueriesTable({ entries }: { entries: SlowQueryEntryDto[] }) {
                 </tbody>
             </table>
         </div>
+    );
+}
+
+function SlowQueriesTableHeader() {
+    return (
+        <thead>
+            <tr className="border-b border-edge bg-surface/50">
+                <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">
+                    Query
+                </th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider w-20">
+                    Calls
+                </th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider w-24">
+                    Mean (ms)
+                </th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider w-24">
+                    Total (ms)
+                </th>
+            </tr>
+        </thead>
     );
 }
 

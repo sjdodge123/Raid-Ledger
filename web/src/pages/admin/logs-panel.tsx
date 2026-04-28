@@ -3,6 +3,7 @@ import type { LogService } from '@raid-ledger/contract';
 import { useLogs, downloadLogFile, exportLogs } from '../../hooks/use-logs';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { toast } from 'sonner';
+import { SlowQueriesCard } from './slow-queries-card';
 
 type FilterService = 'all' | LogService;
 
@@ -60,6 +61,7 @@ export function LogsPanel() {
 
   return (
     <div className="space-y-6">
+      <SlowQueriesCard />
       <LogsHeader exporting={exporting} hasFiles={allFiles.length > 0} onExport={() => handleLogExport(filter, setExporting)} />
       {allFiles.length > 0 && <LogFilterPills filter={filter} allCount={allFiles.length} serviceCounts={computeServiceCounts(allFiles)} onFilter={setFilter} />}
       <LogsStatusMessages isLoading={logs.isLoading} isError={logs.isError} isEmpty={logs.data != null && allFiles.length === 0} />
