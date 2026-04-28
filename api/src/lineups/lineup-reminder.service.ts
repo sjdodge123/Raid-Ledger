@@ -88,7 +88,14 @@ export class LineupReminderService {
   async checkTiebreakerReminders(): Promise<void> {
     const tiebreakers = await findActiveTiebreakersWithDeadline(this.db);
     for (const tb of tiebreakers) {
-      await this.processTiebreakerReminder(tb);
+      try {
+        await this.processTiebreakerReminder(tb);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Tiebreaker reminder failed for tb ${tb.tiebreakerId} (lineup ${tb.lineupId}): ${msg}`,
+        );
+      }
     }
   }
 

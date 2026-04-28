@@ -58,7 +58,7 @@ function TiebreakerOrVotingBanner({ lineupId, gameId, gameName }: {
         lineupId={lineupId}
         gameName={gameName}
         mode={tiebreaker.mode}
-        hasEngaged={hasEngaged(tiebreaker, gameId)}
+        hasEngaged={hasEngaged(tiebreaker)}
       />
     );
   }
@@ -68,7 +68,6 @@ function TiebreakerOrVotingBanner({ lineupId, gameId, gameName }: {
 /** Whether the current user has already engaged with the tiebreaker. */
 function hasEngaged(
   tiebreaker: NonNullable<ReturnType<typeof useTiebreakerDetail>['data']>,
-  _gameId: number,
 ): boolean {
   if (tiebreaker.mode === 'veto') {
     return tiebreaker.vetoStatus?.myVetoGameId != null;
