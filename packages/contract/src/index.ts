@@ -147,3 +147,6 @@ export * from './community-insights.schema.js';
 
 // Community Lineup Realtime WS Events (ROK-1118)
 export * from './lineups/index.js';
+
+// Slow Query Snapshots (ROK-1156)
+export * from './slow-queries.schema.js';
