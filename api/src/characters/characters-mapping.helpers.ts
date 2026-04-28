@@ -42,6 +42,7 @@ function mapExtendedFields(row: typeof schema.characters.$inferSelect) {
     gameVariant: row.gameVariant ?? null,
     equipment: (row.equipment as CharacterDto['equipment']) ?? null,
     talents: row.talents ?? null,
+    professions: (row.professions as CharacterDto['professions']) ?? null,
     displayOrder: row.displayOrder,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

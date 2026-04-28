@@ -1,5 +1,6 @@
 import type { CharacterDto } from '@raid-ledger/contract';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
+import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
 
 /**
  * ROK-461: Selectable character card for admin assignment flow.
@@ -60,6 +61,7 @@ function CharacterInfo({ character, isMain }: { character: CharacterDto; isMain?
                 {character.itemLevel && (
                     <><span>·</span><span className="text-purple-400">{character.itemLevel} iLvl</span></>
                 )}
+                <ProfessionBadges professions={character.professions} />
             </div>
         </div>
     );

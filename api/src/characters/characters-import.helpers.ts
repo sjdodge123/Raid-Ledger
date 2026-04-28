@@ -11,6 +11,7 @@ import type {
   ImportWowCharacterDto,
 } from '@raid-ledger/contract';
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
+import type { ExternalCharacterProfessions } from '../plugins/plugin-host/extension-types';
 import { variantToNamespacePrefix } from '../plugins/wow-common/blizzard.constants';
 import {
   fetchFullProfile,
@@ -98,12 +99,14 @@ export function buildImportInsertValues(
   dto: ImportWowCharacterDto,
   equipment: unknown,
   talents: unknown,
+  professions: ExternalCharacterProfessions | null,
   shouldBeMain: boolean,
 ) {
   const syncFields = buildSyncUpdateFields(
     profile as never,
     equipment,
     talents,
+    professions,
     { region: dto.region, gameVariant: dto.gameVariant },
   );
   return {
@@ -143,6 +146,7 @@ export async function executeImportTx(
   dto: ImportWowCharacterDto,
   equipment: unknown,
   talents: unknown,
+  professions: ExternalCharacterProfessions | null,
   logger: Logger,
 ): Promise<CharacterDto> {
   await checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
@@ -159,6 +163,7 @@ export async function executeImportTx(
     dto,
     equipment,
     talents,
+    professions,
     shouldBeMain,
   );
   const [character] = await tx
@@ -203,6 +208,7 @@ export async function mergeIntoExisting(
   dto: ImportWowCharacterDto,
   equipment: unknown,
   talents: unknown,
+  professions: ExternalCharacterProfessions | null,
   logger: Logger,
 ): Promise<CharacterDto> {
   const existing = await findExistingByProfile(
@@ -216,10 +222,13 @@ export async function mergeIntoExisting(
     throw new ConflictException(
       `Character ${profile.name} on ${profile.realm} already exists`,
     );
-  const fields = buildSyncUpdateFields(profile as never, equipment, talents, {
-    region: dto.region,
-    gameVariant: dto.gameVariant,
-  });
+  const fields = buildSyncUpdateFields(
+    profile as never,
+    equipment,
+    talents,
+    professions,
+    { region: dto.region, gameVariant: dto.gameVariant },
+  );
   const [merged] = await db
     .update(schema.characters)
     .set(fields)
@@ -251,6 +260,7 @@ export async function insertOrMergeImport(
         dto,
         fetched.equipment,
         fetched.talents,
+        fetched.professions,
         logger,
       ),
     );
@@ -264,6 +274,7 @@ export async function insertOrMergeImport(
         dto,
         fetched.equipment,
         fetched.talents,
+        fetched.professions,
         logger,
       );
     throw error;

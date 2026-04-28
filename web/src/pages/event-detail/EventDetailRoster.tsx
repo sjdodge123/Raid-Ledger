@@ -36,6 +36,8 @@ interface SignupItem {
         role: string | null;
         itemLevel: number | null;
         isMain?: boolean;
+        /** ROK-1130 — for the inline ProfessionBadges meta pills. */
+        professions?: import('@raid-ledger/contract').CharacterProfessionsDto | null;
     } | null;
 }
 
@@ -131,7 +133,8 @@ function ConfirmedGroup({ signups, event }: { signups: SignupItem[]; event: Even
                         {s.character && (
                             <CharacterCardCompact id={s.character.id} name={s.character.name} avatarUrl={s.character.avatarUrl}
                                 faction={s.character.faction} level={s.character.level} race={s.character.race}
-                                className={s.character.class} spec={s.character.spec} role={s.character.role} itemLevel={s.character.itemLevel} />
+                                className={s.character.class} spec={s.character.spec} role={s.character.role} itemLevel={s.character.itemLevel}
+                                professions={s.character.professions} />
                         )}
                     </div>
                 ))}

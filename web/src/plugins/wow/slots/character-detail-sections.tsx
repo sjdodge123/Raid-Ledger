@@ -6,18 +6,27 @@ import { useState } from 'react';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { ItemDetailModal } from '../components/item-detail-modal';
 import { TalentDisplay } from '../components/talent-display';
+import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
 import { EquipmentGrid } from './equipment-grid';
 import { buildOrderedItems } from './equipment-constants';
-import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
+import type {
+    CharacterEquipmentDto,
+    CharacterProfessionsDto,
+    EquipmentItemDto,
+} from '@raid-ledger/contract';
 
 /** Props passed via PluginSlot context from character-detail-page */
 interface CharacterDetailSectionsProps {
     equipment: CharacterEquipmentDto | null;
     talents: unknown;
+    professions: CharacterProfessionsDto | null;
     gameVariant: string | null;
     renderUrl: string | null;
     isArmoryImported: boolean;
     characterClass: string | null;
+    isOwner: boolean;
+    characterId: string;
+    gameId: number;
 }
 
 /** Equipment panel with items and item detail modal */
@@ -52,8 +61,9 @@ function EquipmentWithItems({ equipment, gameVariant, renderUrl, isArmoryImporte
 
 /** Main character detail sections component */
 export function CharacterDetailSections({
-    equipment, talents, gameVariant,
+    equipment, talents, professions, gameVariant,
     renderUrl, isArmoryImported, characterClass,
+    isOwner, characterId, gameId,
 }: CharacterDetailSectionsProps) {
     useWowheadTooltips(equipment ? [equipment] : []);
 
@@ -67,6 +77,8 @@ export function CharacterDetailSections({
             )}
             <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={gameVariant} />
+            <CharacterProfessionsPanel professions={professions}
+                isOwner={isOwner} characterId={characterId} gameId={gameId} />
         </>
     );
 }

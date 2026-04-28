@@ -8,6 +8,7 @@ let mockBlizzardService: {
   fetchCharacterProfile: jest.Mock;
   fetchCharacterSpecializations: jest.Mock;
   fetchCharacterEquipment: jest.Mock;
+  fetchCharacterProfessions: jest.Mock;
 };
 
 async function setupEach() {
@@ -15,6 +16,7 @@ async function setupEach() {
     fetchCharacterProfile: jest.fn(),
     fetchCharacterSpecializations: jest.fn(),
     fetchCharacterEquipment: jest.fn(),
+    fetchCharacterProfessions: jest.fn(),
   };
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -144,5 +146,77 @@ describe('BlizzardCharacterSyncAdapter — fetchEquipment', () => {
     );
     expect(result.equippedItemLevel).toBeNull();
     expect(result.items).toEqual([]);
+  });
+});
+
+/**
+ * ROK-1130 — fetchProfessions adapter tests.
+ *
+ * Architect §3 (mandatory correction): the adapter must NOT fall back to
+ * empty arrays. It is a thin pass-through to BlizzardService. The
+ * orchestrator's `if (professions !== null)` check is the *only* source
+ * of "skip the column" behavior. Returning empty arrays here would erase
+ * the 5xx-skip signal before the orchestrator ever saw it.
+ */
+describe('BlizzardCharacterSyncAdapter — fetchProfessions', () => {
+  beforeEach(() => setupEach());
+
+  it('should delegate to BlizzardService with apiNamespacePrefix', async () => {
+    const mockProfessions = {
+      primary: [
+        {
+          id: 197,
+          name: 'Tailoring',
+          slug: 'tailoring',
+          skillLevel: 450,
+          maxSkillLevel: 450,
+          tiers: [],
+        },
+      ],
+      secondary: [],
+      syncedAt: '2026-04-28T00:00:00.000Z',
+    };
+    mockBlizzardService.fetchCharacterProfessions.mockResolvedValue(
+      mockProfessions,
+    );
+    const result = await adapter.fetchProfessions(
+      'Thrall',
+      'area-52',
+      'us',
+      'classic1x',
+    );
+    expect(result).toBe(mockProfessions);
+    expect(mockBlizzardService.fetchCharacterProfessions).toHaveBeenCalledWith(
+      'Thrall',
+      'area-52',
+      'us',
+      'classic1x',
+    );
+  });
+
+  it('should pass null gameVariant through when retail (no variant)', async () => {
+    mockBlizzardService.fetchCharacterProfessions.mockResolvedValue({
+      primary: [],
+      secondary: [],
+      syncedAt: '2026-04-28T00:00:00.000Z',
+    });
+    await adapter.fetchProfessions('Thrall', 'area-52', 'us');
+    expect(mockBlizzardService.fetchCharacterProfessions).toHaveBeenCalledWith(
+      'Thrall',
+      'area-52',
+      'us',
+      null,
+    );
+  });
+
+  it('should pass through null when BlizzardService returns null (no fallback — architect §3)', async () => {
+    mockBlizzardService.fetchCharacterProfessions.mockResolvedValue(null);
+    const result = await adapter.fetchProfessions(
+      'Thrall',
+      'area-52',
+      'us',
+      'classic1x',
+    );
+    expect(result).toBeNull();
   });
 });

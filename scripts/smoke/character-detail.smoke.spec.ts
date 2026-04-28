@@ -36,6 +36,19 @@ interface SeedCharacter {
     race: string | null;
     level: number | null;
     itemLevel: number | null;
+    professions?: {
+        primary: Array<{
+            name: string;
+            skillLevel: number;
+            maxSkillLevel: number;
+        }>;
+        secondary: Array<{
+            name: string;
+            skillLevel: number;
+            maxSkillLevel: number;
+        }>;
+        syncedAt: string;
+    } | null;
 }
 
 /**
@@ -55,6 +68,33 @@ async function findCharacterWithMetadata(
     };
 
     return data.find((c) => c.class && c.level) ?? null;
+}
+
+/**
+ * ROK-1130 — find a seeded WoW character whose `professions` JSONB is
+ * populated (non-null + has at least one primary). Used by the
+ * professions-panel smoke test below.
+ */
+async function findCharacterWithProfessions(
+    token: string,
+): Promise<SeedCharacter | null> {
+    const res = await fetch(`${API_BASE}/users/me/characters`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+
+    const { data } = (await res.json()) as {
+        data: Array<SeedCharacter>;
+    };
+
+    return (
+        data.find(
+            (c) =>
+                c.professions != null &&
+                c.professions.primary &&
+                c.professions.primary.length > 0,
+        ) ?? null
+    );
 }
 
 test.describe('Character detail page', () => {
@@ -157,6 +197,52 @@ test.describe('Character detail page', () => {
         // The back button contains "Back" text
         await expect(
             page.getByRole('button', { name: 'Back', exact: true }),
+        ).toBeVisible({ timeout: 5_000 });
+    });
+
+    /**
+     * ROK-1130 (AC #13) — Professions panel renders when a synced WoW
+     * character has a non-null `professions` blob. Runs on both desktop
+     * and mobile projects (inherits from playwright.config.ts).
+     */
+    test('renders professions panel for a synced WoW character', async ({
+        page,
+    }) => {
+        const token = getTokenFromStorageState();
+        test.skip(!token, 'No admin token in storage state');
+
+        const profChar = await findCharacterWithProfessions(token!);
+        test.skip(
+            !profChar,
+            'No seeded WoW character with non-null professions',
+        );
+
+        await page.goto(`/characters/${profChar!.id}`);
+
+        // Heading
+        await expect(
+            page.getByRole('heading', {
+                name: profChar!.name,
+                level: 1,
+            }),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // Professions panel heading
+        await expect(
+            page.getByRole('heading', { name: 'Professions' }),
+        ).toBeVisible({ timeout: 10_000 });
+
+        // First primary profession name + its skill text render
+        const firstPrimary = profChar!.professions!.primary[0];
+        await expect(
+            page.getByText(firstPrimary.name, { exact: true }).first(),
+        ).toBeVisible({ timeout: 5_000 });
+        await expect(
+            page
+                .getByText(
+                    `${firstPrimary.skillLevel}/${firstPrimary.maxSkillLevel}`,
+                )
+                .first(),
         ).toBeVisible({ timeout: 5_000 });
     });
 });

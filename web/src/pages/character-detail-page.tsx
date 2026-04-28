@@ -162,10 +162,10 @@ function CharacterHeader({ character, isOwner, isArmoryImported }: { character: 
     );
 }
 
-function CharacterEquipmentSection({ character, isArmoryImported }: { character: CharacterDto; isArmoryImported: boolean }) {
+function CharacterEquipmentSection({ character, isArmoryImported, isOwner }: { character: CharacterDto; isArmoryImported: boolean; isOwner: boolean }) {
     return (
         <PluginSlot name="character-detail:sections"
-            context={{ equipment: character.equipment, talents: character.talents, gameVariant: character.gameVariant, renderUrl: character.renderUrl, isArmoryImported, characterClass: character.class ?? null, enrichments: character.enrichments ?? [] }}
+            context={{ equipment: character.equipment, talents: character.talents, professions: character.professions, gameVariant: character.gameVariant, renderUrl: character.renderUrl, isArmoryImported, characterClass: character.class ?? null, enrichments: character.enrichments ?? [], isOwner, characterId: character.id, gameId: character.gameId }}
             fallback={character.equipment?.items.length ? null : (
                 <div className="bg-panel border border-edge rounded-lg p-6">
                     <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
@@ -193,7 +193,7 @@ export function CharacterDetailPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg> Back
             </button>
             <CharacterHeader character={character} isOwner={isOwner} isArmoryImported={isArmoryImported} />
-            <CharacterEquipmentSection character={character} isArmoryImported={isArmoryImported} />
+            <CharacterEquipmentSection character={character} isArmoryImported={isArmoryImported} isOwner={isOwner} />
         </div>
     );
 }

@@ -72,6 +72,8 @@ export const characters = pgTable(
     equipment: jsonb('equipment'),
     /** Raw talent tree data from Blizzard API (JSONB) */
     talents: jsonb('talents'),
+    /** Normalized profession data from Blizzard API (JSONB) */
+    professions: jsonb('professions'),
     /** Display order for drag-to-reorder UI */
     displayOrder: integer('display_order').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),

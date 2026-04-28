@@ -5,6 +5,7 @@ import type {
   ExternalCharacterProfile,
   ExternalInferredSpecialization,
   ExternalCharacterEquipment,
+  ExternalCharacterProfessions,
 } from '../plugin-host/extension-types';
 import { ALL_WOW_GAME_SLUGS } from './manifest';
 
@@ -73,6 +74,25 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
         items: [],
         syncedAt: new Date().toISOString(),
       }
+    );
+  }
+
+  /**
+   * Thin pass-through: returns the service result as-is, including null
+   * (architect §3 — orchestrator's `if (professions !== null)` is the only
+   * source of "skip the column" behavior; do NOT fall back to empty arrays).
+   */
+  async fetchProfessions(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string | null,
+  ): Promise<ExternalCharacterProfessions | null> {
+    return this.blizzardService.fetchCharacterProfessions(
+      name,
+      realm,
+      region,
+      gameVariant ?? null,
     );
   }
 }

@@ -257,7 +257,7 @@ async function performCharacterSync(
     return 'skipped';
   }
   const nsPrefix = await resolveNsPrefix(db, char.gameId);
-  const { profile, talents, equipment } = await fetchFullProfile(
+  const { profile, talents, equipment, professions } = await fetchFullProfile(
     adapter,
     char.name,
     char.realm!,
@@ -266,7 +266,7 @@ async function performCharacterSync(
   );
   await db
     .update(schema.characters)
-    .set(buildSyncUpdateFields(profile, equipment, talents))
+    .set(buildSyncUpdateFields(profile, equipment, talents, professions))
     .where(eq(schema.characters.id, char.id));
   return 'synced';
 }

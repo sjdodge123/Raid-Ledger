@@ -43,6 +43,32 @@ export interface ExternalCharacterEquipment {
   syncedAt: string;
 }
 
+/** Profession tier (e.g., "Dragon Isles Tailoring") */
+export interface ExternalProfessionTier {
+  id: number;
+  name: string;
+  skillLevel: number;
+  maxSkillLevel: number;
+}
+
+/** Single profession entry (primary or secondary) */
+export interface ExternalProfessionEntry {
+  id: number;
+  name: string;
+  /** Lowercased name with spaces replaced by '-' */
+  slug: string;
+  skillLevel: number;
+  maxSkillLevel: number;
+  tiers: ExternalProfessionTier[];
+}
+
+/** Profession data returned from an external game API */
+export interface ExternalCharacterProfessions {
+  primary: ExternalProfessionEntry[];
+  secondary: ExternalProfessionEntry[];
+  syncedAt: string;
+}
+
 /** Character profile data returned from an external game API */
 export interface ExternalCharacterProfile {
   name: string;
