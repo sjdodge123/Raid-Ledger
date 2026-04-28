@@ -121,6 +121,7 @@ export async function fanOutTiebreakerOpenDMs(
   dedupService: NotificationDedupService,
   lineup: LineupInfo,
   tiebreaker: TiebreakerNotificationInfo,
+  clientUrl?: string,
 ): Promise<void> {
   const [row] = await db
     .select()
@@ -138,6 +139,7 @@ export async function fanOutTiebreakerOpenDMs(
       lineup,
       tiebreaker,
       member,
+      clientUrl,
     );
   }
 }

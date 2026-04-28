@@ -74,6 +74,11 @@ async function runTiebreakerOpenNotify(
     .where(eq(schema.communityLineups.id, payload.lineupId))
     .limit(1);
   if (!lineupRow) return;
+  const [tbRow] = await db
+    .select({ tiedGameIds: schema.communityLineupTiebreakers.tiedGameIds })
+    .from(schema.communityLineupTiebreakers)
+    .where(eq(schema.communityLineupTiebreakers.id, payload.tiebreakerId))
+    .limit(1);
   await notificationService.notifyTiebreakerOpen(
     {
       id: lineupRow.id,
@@ -85,5 +90,6 @@ async function runTiebreakerOpenNotify(
       mode: payload.mode,
       roundDeadline: payload.roundDeadline,
     },
+    tbRow?.tiedGameIds,
   );
 }

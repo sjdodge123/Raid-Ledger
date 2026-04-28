@@ -8,6 +8,7 @@ import { LineupReminderService } from './lineup-reminder.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { SettingsService } from '../settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // Shared mocks
@@ -25,6 +26,12 @@ function makeMockDedupService() {
   return { checkAndMarkSent: jest.fn().mockResolvedValue(false) };
 }
 
+function makeMockSettingsService() {
+  return {
+    getClientUrl: jest.fn().mockResolvedValue('https://rl.test'),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Test module builder
 // ---------------------------------------------------------------------------
@@ -33,6 +40,7 @@ async function createTestModule() {
   const mockDb = makeMockDb();
   const mockNotificationService = makeMockNotificationService();
   const mockDedupService = makeMockDedupService();
+  const mockSettingsService = makeMockSettingsService();
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -40,6 +48,7 @@ async function createTestModule() {
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: NotificationService, useValue: mockNotificationService },
       { provide: NotificationDedupService, useValue: mockDedupService },
+      { provide: SettingsService, useValue: mockSettingsService },
     ],
   }).compile();
 
@@ -48,6 +57,7 @@ async function createTestModule() {
     mockDb,
     mockNotificationService,
     mockDedupService,
+    mockSettingsService,
   };
 }
 
@@ -333,6 +343,7 @@ describe('LineupReminderService', () => {
     function makeActiveTiebreakerRow(
       hoursUntilDeadline: number,
       mode: 'bracket' | 'veto' = 'bracket',
+      tiedGameIds: number[] = [],
     ) {
       const deadline = new Date(NOW.getTime() + hoursUntilDeadline * 3600_000);
       return {
@@ -341,6 +352,7 @@ describe('LineupReminderService', () => {
         mode,
         roundDeadline: deadline,
         currentRound: 1,
+        tiedGameIds,
       };
     }
 
@@ -520,6 +532,44 @@ describe('LineupReminderService', () => {
           }),
         }),
       );
+    });
+
+    // ROK-1117 rework: reminder DM body lists tied games as deep links
+    // and ends with a CTA pointing at the lineup detail page.
+    it('renders tied-game deep-link list and lineup CTA in the DM body', async () => {
+      const tb = makeActiveTiebreakerRow(20, 'veto', [101, 202]);
+      mockDb.execute.mockResolvedValueOnce([tb]);
+      mockChainedSelect([
+        // resolveReminderTargets — community_lineups lookup
+        [makePublicLineupRow()],
+        // findDistinctNominators
+        [{ userId: 50 }],
+        // findDistinctVoters
+        [],
+        // findVetoEngagedUserIds — none
+        [],
+        // findGamesByIds — id+name pairs for the ballot
+        [
+          { id: 101, name: 'Civ VI' },
+          { id: 202, name: 'Stellaris' },
+        ],
+      ]);
+
+      await service.checkTiebreakerReminders();
+
+      const call = mockNotificationService.create.mock.calls[0][0] as {
+        message: string;
+      };
+      expect(call.message).toMatch(
+        /🎮 \[\*\*Civ VI\*\*\]\(https:\/\/rl\.test\/games\/101\)/,
+      );
+      expect(call.message).toMatch(
+        /🎮 \[\*\*Stellaris\*\*\]\(https:\/\/rl\.test\/games\/202\)/,
+      );
+      expect(call.message).toContain(
+        `[Cast your veto](https://rl.test/community-lineup/${LINEUP_ID})`,
+      );
+      expect(call.message).toContain('Tiebreaker closing in 24 hours');
     });
   });
 });

@@ -219,6 +219,18 @@ export async function findNominatedGames(
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));
 }
 
+/** Batch-fetch id + name for a set of game IDs (ROK-1117). */
+export async function findGamesByIds(
+  db: PostgresJsDatabase<typeof schema>,
+  gameIds: ReadonlyArray<number>,
+): Promise<{ id: number; name: string }[]> {
+  if (gameIds.length === 0) return [];
+  return db
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.games)
+    .where(inArray(schema.games.id, [...gameIds]));
+}
+
 /** Validate the decided game exists in the lineup entries. */
 export async function validateDecidedGame(
   db: PostgresJsDatabase<typeof schema>,

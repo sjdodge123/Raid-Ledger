@@ -200,6 +200,21 @@ function describeTiebreakerNotifications() {
       .where(eq(schema.notifications.userId, userId));
   }
 
+  /**
+   * Pick the tiebreaker-open DM row for a given user (ROK-1117 rework).
+   * Returns `undefined` when no matching DM was created so the
+   * `toBeTruthy` assertion gives a clear failure.
+   */
+  async function findTiebreakerOpenDM(
+    userId: number,
+  ): Promise<{ message: string; payload: unknown } | undefined> {
+    const rows = (await notificationsForUser(userId)) as Array<{
+      message: string;
+      payload: { subtype?: string } | null;
+    }>;
+    return rows.find((r) => r.payload?.subtype === 'lineup_tiebreaker_open');
+  }
+
   function dedupKeysSeen(): string[] {
     return dedupSpy.mock.calls.map((c) => String(c[0]));
   }
@@ -207,7 +222,7 @@ function describeTiebreakerNotifications() {
   // ── AC: public lineup → DMs + channel embed ────────────────────────────
 
   it('public tiebreaker.start() DMs every expected voter and posts channel embed', async () => {
-    const { lineupId, participantIds } = await setupPublicLineup();
+    const { lineupId, participantIds, tiedGameIds } = await setupPublicLineup();
 
     const tiebreaker = await tiebreakerService.start(lineupId, {
       mode: 'veto',
@@ -230,6 +245,22 @@ function describeTiebreakerNotifications() {
     // Dedup key for the channel embed is `lineup-tiebreaker-open:<tbId>`.
     const expectedKey = `lineup-tiebreaker-open:${tiebreaker.id}`;
     expect(dedupKeysSeen()).toContain(expectedKey);
+
+    // ROK-1117 rework: the open-DM body lists tied games as deep links
+    // and ends with a CTA pointing at the lineup detail page.
+    const openDmRow = await findTiebreakerOpenDM(participantIds[0]);
+    expect(openDmRow).toBeTruthy();
+    const message = openDmRow!.message;
+    for (const gameId of tiedGameIds) {
+      expect(message).toMatch(
+        new RegExp(`🎮 \\[\\*\\*.+\\*\\*\\]\\(.+/games/${gameId}\\)`),
+      );
+    }
+    expect(message).toMatch(
+      new RegExp(
+        `\\[(Cast your veto( now)?|Vote in the bracket)\\]\\(.+/community-lineup/${lineupId}\\)`,
+      ),
+    );
   });
 
   // ── AC: private lineup → DMs only, no channel embed ────────────────────
@@ -361,7 +392,9 @@ function describeTiebreakerReminders() {
     await reminderService.checkTiebreakerReminders();
 
     // Each expected voter should have received at least one reminder
-    // notification with the tiebreaker-reminder subtype.
+    // notification with the tiebreaker-reminder subtype. The DM body
+    // must list the tied games as deep links and end with a CTA
+    // pointing at the lineup detail page (ROK-1117 rework).
     for (const userId of participantIds) {
       const rows = await testApp.db
         .select()
@@ -372,6 +405,13 @@ function describeTiebreakerReminders() {
         return payload?.subtype === 'lineup_tiebreaker_reminder';
       });
       expect(reminderRows.length).toBeGreaterThan(0);
+      const message = reminderRows[0].message;
+      expect(message).toMatch(/🎮 \[\*\*.+\*\*\]\(.+\/games\/\d+\)/);
+      expect(message).toMatch(
+        new RegExp(
+          `\\[(Cast your veto|Vote in the bracket)\\]\\(.+/community-lineup/${lineupId}\\)`,
+        ),
+      );
     }
   });
 

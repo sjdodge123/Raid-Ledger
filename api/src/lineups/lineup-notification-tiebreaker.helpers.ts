@@ -26,6 +26,7 @@ import { fanOutTiebreakerOpenDMs } from './lineup-notification-dm-batch.helpers'
 import { resolveLineupVisibility } from './lineup-notification-routing.helpers';
 import type { LineupInfo } from './lineup-notification.service';
 import type { TiebreakerNotificationInfo } from './lineup-notification-private-dm.helpers';
+import { findGamesByIds } from './lineups-query.helpers';
 
 export type { TiebreakerNotificationInfo } from './lineup-notification-private-dm.helpers';
 
@@ -46,6 +47,21 @@ function dispatchDeps(deps: TiebreakerOpenDeps): DispatchDeps {
 }
 
 /**
+ * Enrich tiebreaker info with tied-game id+name for the DM ballot list
+ * (ROK-1117). Falls back to the input when tiedGameIds is missing/empty
+ * so older callers stay backwards-compatible during the rollout.
+ */
+async function enrichTiebreakerWithGames(
+  db: Db,
+  tiebreaker: TiebreakerNotificationInfo,
+  tiedGameIds: ReadonlyArray<number> | undefined,
+): Promise<TiebreakerNotificationInfo> {
+  if (!tiedGameIds || tiedGameIds.length === 0) return tiebreaker;
+  const games = await findGamesByIds(db, tiedGameIds);
+  return { ...tiebreaker, tiedGames: games };
+}
+
+/**
  * Orchestrate the tiebreaker-open dispatch:
  *   1. Fan-out DMs to every expected voter (visibility-aware via
  *      `loadExpectedVoters`).
@@ -56,13 +72,21 @@ export async function notifyTiebreakerOpen(
   deps: TiebreakerOpenDeps,
   lineup: LineupInfo,
   tiebreaker: TiebreakerNotificationInfo,
+  tiedGameIds?: ReadonlyArray<number>,
 ): Promise<void> {
+  const clientUrl = await deps.settingsService.getClientUrl();
+  const enriched = await enrichTiebreakerWithGames(
+    deps.db,
+    tiebreaker,
+    tiedGameIds,
+  );
   await fanOutTiebreakerOpenDMs(
     deps.db,
     deps.notificationService,
     deps.dedupService,
     lineup,
-    tiebreaker,
+    enriched,
+    clientUrl,
   );
 
   const visibility = await resolveLineupVisibility(deps.db, lineup);

@@ -11,6 +11,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { loadExpectedVoters } from './quorum/quorum-voters.helpers';
+import { findGamesByIds } from './lineups-query.helpers';
+import { buildTiedGamesList } from './lineup-notification-private-dm.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -21,6 +23,8 @@ export interface ActiveTiebreakerRow {
   mode: 'bracket' | 'veto';
   roundDeadline: Date;
   currentRound: number;
+  /** Tied game IDs surfaced as a deep-linked list in the reminder DM (ROK-1117). */
+  tiedGameIds: number[];
 }
 
 interface RawTiebreakerRow {
@@ -29,6 +33,7 @@ interface RawTiebreakerRow {
   mode: 'bracket' | 'veto';
   roundDeadline: Date | string;
   currentRound: number;
+  tiedGameIds: number[] | null;
 }
 
 /**
@@ -45,6 +50,7 @@ export async function findActiveTiebreakersWithDeadline(
            t.lineup_id AS "lineupId",
            t.mode      AS "mode",
            t.round_deadline AS "roundDeadline",
+           t.tied_game_ids  AS "tiedGameIds",
            COALESCE(MAX(m.round), 1) AS "currentRound"
       FROM community_lineup_tiebreakers t
       LEFT JOIN community_lineup_tiebreaker_bracket_matchups m
@@ -65,6 +71,7 @@ function normalizeTiebreakerRow(r: RawTiebreakerRow): ActiveTiebreakerRow {
         ? r.roundDeadline
         : new Date(r.roundDeadline),
     currentRound: Number(r.currentRound) || 1,
+    tiedGameIds: Array.isArray(r.tiedGameIds) ? r.tiedGameIds : [],
   };
 }
 
@@ -178,4 +185,27 @@ export async function resolveReminderTargets(
 export function classifyThreshold(hoursLeft: number): '24h' | '1h' | null {
   if (hoursLeft <= 0 || hoursLeft > 24) return null;
   return hoursLeft <= 1 ? '1h' : '24h';
+}
+
+/**
+ * Compose the tiebreaker-reminder DM body with the headline, tied-game
+ * deep-link list, and a CTA pointing at the lineup detail page (ROK-1117).
+ */
+export async function buildTiebreakerReminderMessage(
+  db: Db,
+  tb: ActiveTiebreakerRow,
+  threshold: '24h' | '1h',
+  clientUrl?: string,
+): Promise<string> {
+  const headline =
+    threshold === '1h'
+      ? 'Tiebreaker closing in 1 hour — cast your vote!'
+      : "Tiebreaker closing in 24 hours — don't miss your chance to vote.";
+  const games = await findGamesByIds(db, tb.tiedGameIds);
+  const ballot = buildTiedGamesList(games, clientUrl);
+  const ctaText = tb.mode === 'veto' ? 'Cast your veto' : 'Vote in the bracket';
+  const ctaLink = clientUrl
+    ? `\n\n[${ctaText}](${clientUrl}/community-lineup/${tb.lineupId})`
+    : '';
+  return `${headline}${ballot}${ctaLink}`;
 }

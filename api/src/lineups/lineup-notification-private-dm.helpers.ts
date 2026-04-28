@@ -20,6 +20,29 @@ export interface TiebreakerNotificationInfo {
   id: number;
   mode: 'bracket' | 'veto';
   roundDeadline?: Date | null;
+  /** Tied games surfaced as deep-linked markdown in the DM body (ROK-1117). */
+  tiedGames?: ReadonlyArray<{ id: number; name: string }>;
+}
+
+/**
+ * Render up to 15 tied games as a bulleted list of deep links, mirroring
+ * the voting-open ballot pattern. Falls back to plain bold names when no
+ * `clientUrl` is configured.
+ */
+export function buildTiedGamesList(
+  games: ReadonlyArray<{ id: number; name: string }>,
+  clientUrl?: string,
+): string {
+  if (games.length === 0) return '';
+  const lines = games.slice(0, 15).map((g) => {
+    const label = clientUrl
+      ? `[**${g.name}**](${clientUrl}/games/${g.id})`
+      : `**${g.name}**`;
+    return `\u{1F3AE} ${label}`;
+  });
+  const overflow =
+    games.length > 15 ? `\n*...and ${games.length - 15} more*` : '';
+  return `\n\n**Tied Games**\n${lines.join('\n')}${overflow}`;
 }
 
 /** Send the per-invitee nomination-milestone DM (ROK-1115). */
@@ -112,6 +135,27 @@ function formatEventWhen(eventDate: Date): string {
   });
 }
 
+/** Compose the tiebreaker-open DM body with tied-game links + CTA (ROK-1117). */
+function composeTiebreakerOpenMessage(
+  lineup: LineupDmInfo,
+  tiebreaker: TiebreakerNotificationInfo,
+  clientUrl?: string,
+): string {
+  const cta =
+    tiebreaker.mode === 'veto' ? 'Cast your veto now' : 'Vote in the bracket';
+  const deadlineLine = tiebreaker.roundDeadline
+    ? ` Round closes <t:${Math.floor(tiebreaker.roundDeadline.getTime() / 1000)}:R>.`
+    : '';
+  const ballot = buildTiedGamesList(tiebreaker.tiedGames ?? [], clientUrl);
+  const ctaLink = clientUrl
+    ? `\n\n[${cta}](${clientUrl}/community-lineup/${lineup.id})`
+    : '';
+  return (
+    `It's a tie! A ${tiebreaker.mode} tiebreaker is now running. ` +
+    `${cta}.${deadlineLine}${ballot}${ctaLink}`
+  );
+}
+
 /**
  * Send the per-user tiebreaker-open DM (ROK-1117).
  *
@@ -125,23 +169,17 @@ export async function sendTiebreakerOpenDM(
   lineup: LineupDmInfo,
   tiebreaker: TiebreakerNotificationInfo,
   member: DiscordMember,
+  clientUrl?: string,
 ): Promise<void> {
   const key = `lineup-tiebreaker-open-dm:${tiebreaker.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
   const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
-  const cta =
-    tiebreaker.mode === 'veto' ? 'Cast your veto now' : 'Vote in the bracket';
-  const deadlineLine = tiebreaker.roundDeadline
-    ? ` Round closes <t:${Math.floor(tiebreaker.roundDeadline.getTime() / 1000)}:R>.`
-    : '';
 
   await notificationService.create({
     userId: member.userId,
     type: 'community_lineup',
     title: `Tiebreaker open${titleSuffix}`,
-    message:
-      `It's a tie! A ${tiebreaker.mode} tiebreaker is now running. ` +
-      `${cta}.${deadlineLine}`,
+    message: composeTiebreakerOpenMessage(lineup, tiebreaker, clientUrl),
     payload: {
       subtype: 'lineup_tiebreaker_open',
       lineupId: lineup.id,

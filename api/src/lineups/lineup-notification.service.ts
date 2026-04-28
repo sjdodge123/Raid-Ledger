@@ -227,6 +227,7 @@ export class LineupNotificationService {
   async notifyTiebreakerOpen(
     lineup: LineupInfo,
     tiebreaker: TiebreakerNotificationInfo,
+    tiedGameIds?: ReadonlyArray<number>,
   ): Promise<void> {
     const deps: TiebreakerOpenDeps = {
       db: this.db,
@@ -235,7 +236,7 @@ export class LineupNotificationService {
       botClient: this.botClient,
       settingsService: this.settingsService,
     };
-    await notifyTiebreakerOpen(deps, lineup, tiebreaker);
+    await notifyTiebreakerOpen(deps, lineup, tiebreaker, tiedGameIds);
   }
 
   /** AC-5: Post combined tier embed + per-member DMs when matches are found. */

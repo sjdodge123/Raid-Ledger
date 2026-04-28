@@ -12,11 +12,13 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { SettingsService } from '../settings/settings.service';
 import { DEDUP_TTL } from './lineup-notification.constants';
 import {
   findActiveTiebreakersWithDeadline,
   resolveReminderTargets,
   classifyThreshold,
+  buildTiebreakerReminderMessage,
   type ActiveTiebreakerRow,
 } from './lineup-tiebreaker-reminder.helpers';
 
@@ -55,6 +57,7 @@ export class LineupReminderService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly dedupService: NotificationDedupService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /** Check and send vote reminders for active voting lineups. */
@@ -191,15 +194,18 @@ export class LineupReminderService {
   ): Promise<void> {
     const key = `tiebreaker-reminder:${tb.tiebreakerId}:${threshold}:${userId}`;
     if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-    const headline =
-      threshold === '1h'
-        ? 'Tiebreaker closing in 1 hour — cast your vote!'
-        : "Tiebreaker closing in 24 hours — don't miss your chance to vote.";
+    const clientUrl = await this.settingsService.getClientUrl();
+    const message = await buildTiebreakerReminderMessage(
+      this.db,
+      tb,
+      threshold,
+      clientUrl,
+    );
     await this.notificationService.create({
       userId,
       type: 'community_lineup',
       title: 'Tiebreaker Reminder',
-      message: headline,
+      message,
       payload: {
         subtype: 'lineup_tiebreaker_reminder',
         lineupId: tb.lineupId,
