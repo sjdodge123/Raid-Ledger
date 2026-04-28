@@ -15,6 +15,36 @@ import type {
 } from './lineup-notification-dm.helpers';
 import { DEDUP_TTL } from './lineup-notification.constants';
 
+/** Tiebreaker shape needed by the open-notification DM (ROK-1117). */
+export interface TiebreakerNotificationInfo {
+  id: number;
+  mode: 'bracket' | 'veto';
+  roundDeadline?: Date | null;
+  /** Tied games surfaced as deep-linked markdown in the DM body (ROK-1117). */
+  tiedGames?: ReadonlyArray<{ id: number; name: string }>;
+}
+
+/**
+ * Render up to 15 tied games as a bulleted list of deep links, mirroring
+ * the voting-open ballot pattern. Falls back to plain bold names when no
+ * `clientUrl` is configured.
+ */
+export function buildTiedGamesList(
+  games: ReadonlyArray<{ id: number; name: string }>,
+  clientUrl?: string,
+): string {
+  if (games.length === 0) return '';
+  const lines = games.slice(0, 15).map((g) => {
+    const label = clientUrl
+      ? `[**${g.name}**](${clientUrl}/games/${g.id})`
+      : `**${g.name}**`;
+    return `\u{1F3AE} ${label}`;
+  });
+  const overflow =
+    games.length > 15 ? `\n*...and ${games.length - 15} more*` : '';
+  return `\n\n**Tied Games**\n${lines.join('\n')}${overflow}`;
+}
+
 /** Send the per-invitee nomination-milestone DM (ROK-1115). */
 export async function sendMilestoneDM(
   notificationService: NotificationService,
@@ -102,6 +132,60 @@ function formatEventWhen(eventDate: Date): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+  });
+}
+
+/** Compose the tiebreaker-open DM body with tied-game links + CTA (ROK-1117). */
+function composeTiebreakerOpenMessage(
+  lineup: LineupDmInfo,
+  tiebreaker: TiebreakerNotificationInfo,
+  clientUrl?: string,
+): string {
+  const cta =
+    tiebreaker.mode === 'veto' ? 'Cast your veto now' : 'Vote in the bracket';
+  const deadlineLine = tiebreaker.roundDeadline
+    ? ` Round closes <t:${Math.floor(tiebreaker.roundDeadline.getTime() / 1000)}:R>.`
+    : '';
+  const ballot = buildTiedGamesList(tiebreaker.tiedGames ?? [], clientUrl);
+  const ctaLink = clientUrl
+    ? `\n\n[${cta}](${clientUrl}/community-lineup/${lineup.id})`
+    : '';
+  return (
+    `It's a tie! A ${tiebreaker.mode} tiebreaker is now running. ` +
+    `${cta}.${deadlineLine}${ballot}${ctaLink}`
+  );
+}
+
+/**
+ * Send the per-user tiebreaker-open DM (ROK-1117).
+ *
+ * Used for both public (every expected voter) and private (creator +
+ * invitees) lineups since the body is the same. Dedup key includes the
+ * tiebreaker id so a future re-open fires its own DM.
+ */
+export async function sendTiebreakerOpenDM(
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupDmInfo,
+  tiebreaker: TiebreakerNotificationInfo,
+  member: DiscordMember,
+  clientUrl?: string,
+): Promise<void> {
+  const key = `lineup-tiebreaker-open-dm:${tiebreaker.id}:${member.userId}`;
+  if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+  const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+
+  await notificationService.create({
+    userId: member.userId,
+    type: 'community_lineup',
+    title: `Tiebreaker open${titleSuffix}`,
+    message: composeTiebreakerOpenMessage(lineup, tiebreaker, clientUrl),
+    payload: {
+      subtype: 'lineup_tiebreaker_open',
+      lineupId: lineup.id,
+      tiebreakerId: tiebreaker.id,
+      mode: tiebreaker.mode,
+    },
   });
 }
 

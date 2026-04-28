@@ -124,6 +124,54 @@ function testEmitStatusChangeRejectsUnknownStatus() {
   expect(mockEmit).not.toHaveBeenCalled();
 }
 
+// ─── ROK-1117: tiebreaker-open event ─────────────────────────────────────
+//
+// `emitTiebreakerOpen(lineupId, tiebreakerId, mode)` must validate its
+// payload with a zod schema and broadcast `lineup:tiebreaker:open` to
+// the room `lineup:<id>`. These tests will fail until the dev agent
+// adds the method on the gateway and the contract event name + schema.
+
+type LineupsGatewayWithTiebreaker = LineupsGateway & {
+  emitTiebreakerOpen: (
+    lineupId: number,
+    tiebreakerId: number,
+    mode: 'bracket' | 'veto',
+  ) => void;
+};
+
+function tbGateway(): LineupsGatewayWithTiebreaker {
+  return gateway as LineupsGatewayWithTiebreaker;
+}
+
+function testEmitTiebreakerOpenBracket() {
+  tbGateway().emitTiebreakerOpen(42, 7, 'bracket');
+  expect(mockServer.to).toHaveBeenCalledWith('lineup:42');
+  expect(mockEmit).toHaveBeenCalledWith('lineup:tiebreaker:open', {
+    lineupId: 42,
+    tiebreakerId: 7,
+    mode: 'bracket',
+  });
+}
+
+function testEmitTiebreakerOpenVeto() {
+  tbGateway().emitTiebreakerOpen(99, 13, 'veto');
+  expect(mockServer.to).toHaveBeenCalledWith('lineup:99');
+  expect(mockEmit).toHaveBeenCalledWith('lineup:tiebreaker:open', {
+    lineupId: 99,
+    tiebreakerId: 13,
+    mode: 'veto',
+  });
+}
+
+function testEmitTiebreakerOpenRejectsUnknownMode() {
+  // Sanity: the method must exist before we assert on validation.
+  expect(typeof tbGateway().emitTiebreakerOpen).toBe('function');
+  expect(() =>
+    tbGateway().emitTiebreakerOpen(1, 2, 'bogus' as unknown as 'bracket'),
+  ).toThrow();
+  expect(mockEmit).not.toHaveBeenCalled();
+}
+
 beforeEach(() => setupEach());
 
 describe('LineupsGateway — connection', () => {
@@ -146,4 +194,13 @@ describe('LineupsGateway — emit', () => {
   it('emits decided status', () => testEmitStatusChangeDecided());
   it('rejects unknown status before emit', () =>
     testEmitStatusChangeRejectsUnknownStatus());
+});
+
+describe('LineupsGateway — emitTiebreakerOpen (ROK-1117)', () => {
+  it('broadcasts bracket tiebreaker-open to the correct room', () =>
+    testEmitTiebreakerOpenBracket());
+  it('broadcasts veto tiebreaker-open to the correct room', () =>
+    testEmitTiebreakerOpenVeto());
+  it('rejects unknown mode before emit', () =>
+    testEmitTiebreakerOpenRejectsUnknownMode());
 });

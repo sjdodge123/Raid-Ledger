@@ -19,6 +19,7 @@ import { DecidedView } from '../components/lineups/decided/DecidedView';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import { SteamNudgeBanner } from '../components/lineups/SteamNudgeBanner';
 import { TiebreakerView } from '../components/lineups/tiebreaker/TiebreakerView';
+import { TiebreakerClosedNotice } from '../components/lineups/tiebreaker/TiebreakerClosedNotice';
 import { TiebreakerPromptModal } from '../components/lineups/tiebreaker/TiebreakerPromptModal';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useAiSuggestions } from '../hooks/use-ai-suggestions';
@@ -111,7 +112,24 @@ export function LineupDetailPage(): JSX.Element {
   if (error || !lineup) return <LineupNotFound />;
 
   const hasEntries = lineup.entries.length > 0;
-  const hasTiebreaker = lineup.status === 'voting' && tiebreaker && ['active', 'pending', 'resolved'].includes(tiebreaker.status);
+  // ROK-1117: also render when the lineup has already advanced to 'decided'
+  // and the tiebreaker is 'resolved' so late-arriving users see the
+  // "Vote closed at HH:MM" notice instead of jumping straight to results.
+  // Dismissed tiebreakers are intentionally excluded — findPendingOrActiveTiebreaker
+  // filters them out server-side, so the API never returns a dismissed row here.
+  // Voting branch: show TiebreakerView when a tiebreaker is in flight.
+  const hasTiebreaker =
+    !!tiebreaker &&
+    lineup.status === 'voting' &&
+    ['active', 'pending', 'resolved'].includes(tiebreaker.status);
+
+  // Decided branch: render the "Vote closed at HH:MM" banner above the
+  // DecidedView so users who arrive after a tiebreaker resolved see both
+  // the historical tiebreaker context AND the decided podium (ROK-1117).
+  const showDecidedTiebreakerNotice =
+    !!tiebreaker &&
+    lineup.status === 'decided' &&
+    tiebreaker.status === 'resolved';
   const isOperator = isOperatorOrAdmin(user);
 
   // Tiebreaker prompt: server-created pending tiebreaker OR operator tried to advance with ties
@@ -179,7 +197,15 @@ export function LineupDetailPage(): JSX.Element {
       {hasTiebreaker && (tiebreaker?.status === 'active' || tiebreaker?.status === 'resolved') ? (
         <TiebreakerView tiebreaker={tiebreaker} lineupId={lineup.id} />
       ) : lineup.status === 'decided' ? (
-        <DecidedView lineup={lineup} />
+        <>
+          {showDecidedTiebreakerNotice && tiebreaker && (
+            <TiebreakerClosedNotice
+              title={tiebreaker.mode === 'veto' ? 'Veto Elimination' : 'Bracket Tiebreaker'}
+              resolvedAt={tiebreaker.resolvedAt}
+            />
+          )}
+          <DecidedView lineup={lineup} />
+        </>
       ) : lineup.status === 'voting' && hasEntries ? (
         <VotingLeaderboard
           entries={lineup.entries}

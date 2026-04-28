@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
 import { LineupRealtimeEventNames } from '@raid-ledger/contract';
 import { DETAIL_KEY, LINEUPS_PREFIX } from './use-lineups';
+import { TIEBREAKER_KEY } from './use-tiebreaker';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -52,11 +53,19 @@ export function useLineupRealtime(lineupId: number | undefined): void {
       });
     };
 
+    const handleTiebreakerOpen = () => {
+      void queryClient.invalidateQueries({
+        queryKey: [...TIEBREAKER_KEY, lineupId],
+      });
+    };
+
     socket.on(LineupRealtimeEventNames.Status, handleStatus);
+    socket.on(LineupRealtimeEventNames.TiebreakerOpen, handleTiebreakerOpen);
 
     return () => {
       socket.emit(LineupRealtimeEventNames.Unsubscribe, { lineupId });
       socket.off(LineupRealtimeEventNames.Status, handleStatus);
+      socket.off(LineupRealtimeEventNames.TiebreakerOpen, handleTiebreakerOpen);
       socket.disconnect();
     };
   }, [lineupId, queryClient]);

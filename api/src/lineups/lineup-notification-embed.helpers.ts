@@ -328,3 +328,23 @@ export function buildTiebreakerStartedEmbed(
   applyChrome(embed, ctx, 'Tiebreaker');
   return { embed, row: ctaButton(ctx, cta) };
 }
+
+/** Tiebreaker reminder (24h or 1h before round deadline) — ROK-1117. */
+export function buildTiebreakerReminderEmbed(
+  ctx: EmbedContext,
+  mode: 'bracket' | 'veto',
+  deadline: Date,
+  threshold: '24h' | '1h',
+): EmbedWithRow {
+  const cta = mode === 'veto' ? 'Cast Your Vetoes' : 'Vote in Bracket';
+  const headline =
+    threshold === '1h'
+      ? '⏰ Tiebreaker closing in 1 hour — cast your vote!'
+      : "⏰ Tiebreaker closing in 24 hours — don't miss your chance to vote.";
+  const embed = new EmbedBuilder()
+    .setTitle(resolveEmbedTitle(ctx, '⏰', 'Tiebreaker Reminder'))
+    .setDescription(`${headline}\n\n**Closes** ${discordTs(deadline)}`)
+    .setColor(EMBED_COLORS.ANNOUNCEMENT);
+  applyChrome(embed, ctx, 'Tiebreaker Reminder');
+  return { embed, row: ctaButton(ctx, cta) };
+}

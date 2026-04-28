@@ -47,6 +47,11 @@ import {
   orchestrateEventCreated,
   type OrchestrationDeps,
 } from './lineup-notification-public-dispatch.helpers';
+import {
+  notifyTiebreakerOpen,
+  type TiebreakerNotificationInfo,
+  type TiebreakerOpenDeps,
+} from './lineup-notification-tiebreaker.helpers';
 
 /** Shape of a lineup passed to notification methods. */
 export interface LineupInfo {
@@ -216,6 +221,22 @@ export class LineupNotificationService {
       games,
       clientUrl,
     );
+  }
+
+  /** ROK-1117: Post tiebreaker-open channel embed + DMs to expected voters. */
+  async notifyTiebreakerOpen(
+    lineup: LineupInfo,
+    tiebreaker: TiebreakerNotificationInfo,
+    tiedGameIds?: ReadonlyArray<number>,
+  ): Promise<void> {
+    const deps: TiebreakerOpenDeps = {
+      db: this.db,
+      notificationService: this.notificationService,
+      dedupService: this.dedupService,
+      botClient: this.botClient,
+      settingsService: this.settingsService,
+    };
+    await notifyTiebreakerOpen(deps, lineup, tiebreaker, tiedGameIds);
   }
 
   /** AC-5: Post combined tier embed + per-member DMs when matches are found. */

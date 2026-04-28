@@ -1,16 +1,27 @@
 /**
- * Cron-driven reminder service for Community Lineup (ROK-932).
- * Sends vote reminders (24h + 1h before voting deadline) and
- * scheduling reminders (24h + 1h before decided phase end).
+ * Cron-driven reminder service for Community Lineup (ROK-932, ROK-1117).
+ * Sends vote reminders (24h + 1h before voting deadline), scheduling
+ * reminders (24h + 1h before decided phase end), and tiebreaker reminders
+ * (24h + 1h before round deadline).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { SettingsService } from '../settings/settings.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DEDUP_TTL } from './lineup-notification.constants';
+import {
+  findActiveTiebreakersWithDeadline,
+  resolveReminderTargets,
+  classifyThreshold,
+  buildTiebreakerReminderMessage,
+  type ActiveTiebreakerRow,
+} from './lineup-tiebreaker-reminder.helpers';
 
 /** Shape of a lineup returned from reminder queries. */
 interface ReminderLineup {
@@ -47,6 +58,8 @@ export class LineupReminderService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly dedupService: NotificationDedupService,
+    private readonly settingsService: SettingsService,
+    private readonly cronJobService: CronJobService,
   ) {}
 
   /** Check and send vote reminders for active voting lineups. */
@@ -62,6 +75,37 @@ export class LineupReminderService {
     const lineups = await this.getDecidedLineups();
     for (const lineup of lineups) {
       await this.processSchedulingReminder(lineup);
+    }
+  }
+
+  /**
+   * Check and send tiebreaker reminders for active tiebreakers
+   * approaching their round deadline (ROK-1117). Targets users who
+   * have not yet engaged with this tiebreaker (vetoed or voted on
+   * every active-round matchup).
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES, {
+    name: 'LineupReminderService_checkTiebreakerReminders',
+  })
+  async checkTiebreakerReminders(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkTiebreakerReminders',
+      () => this.runTiebreakerReminders(),
+    );
+  }
+
+  /** Inner body — wrapped by `executeWithTracking` for cron-jobs admin visibility. */
+  private async runTiebreakerReminders(): Promise<void> {
+    const tiebreakers = await findActiveTiebreakersWithDeadline(this.db);
+    for (const tb of tiebreakers) {
+      try {
+        await this.processTiebreakerReminder(tb);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Tiebreaker reminder failed for tb ${tb.tiebreakerId} (lineup ${tb.lineupId}): ${msg}`,
+        );
+      }
     }
   }
 
@@ -141,6 +185,50 @@ export class LineupReminderService {
       payload: {
         subtype: 'lineup_scheduling_reminder',
         matchId: voter.matchId,
+      },
+    });
+  }
+
+  // ─── Private: tiebreaker reminders (ROK-1117) ─────────────
+
+  /** Process a single active tiebreaker for reminder dispatch. */
+  private async processTiebreakerReminder(
+    tb: ActiveTiebreakerRow,
+  ): Promise<void> {
+    const threshold = classifyThreshold(this.hoursUntil(tb.roundDeadline));
+    if (!threshold) return;
+    const userIds = await resolveReminderTargets(this.db, tb);
+    for (const userId of userIds) {
+      await this.sendTiebreakerReminder(tb, userId, threshold);
+    }
+  }
+
+  /** Send a single tiebreaker reminder DM. */
+  private async sendTiebreakerReminder(
+    tb: ActiveTiebreakerRow,
+    userId: number,
+    threshold: '24h' | '1h',
+  ): Promise<void> {
+    const key = `tiebreaker-reminder:${tb.tiebreakerId}:${threshold}:${userId}`;
+    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+    const clientUrl = await this.settingsService.getClientUrl();
+    const message = await buildTiebreakerReminderMessage(
+      this.db,
+      tb,
+      threshold,
+      clientUrl,
+    );
+    await this.notificationService.create({
+      userId,
+      type: 'community_lineup',
+      title: 'Tiebreaker Reminder',
+      message,
+      payload: {
+        subtype: 'lineup_tiebreaker_reminder',
+        lineupId: tb.lineupId,
+        tiebreakerId: tb.tiebreakerId,
+        mode: tb.mode,
+        threshold,
       },
     });
   }

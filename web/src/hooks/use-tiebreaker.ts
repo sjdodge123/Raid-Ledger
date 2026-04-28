@@ -12,7 +12,7 @@ import {
     forceResolveTiebreaker,
 } from '../lib/api/tiebreaker-api';
 
-const TIEBREAKER_KEY = ['tiebreaker'] as const;
+export const TIEBREAKER_KEY = ['tiebreaker'] as const;
 const LINEUPS_PREFIX = ['lineups'] as const;
 
 /** Fetch tiebreaker detail for a lineup. */

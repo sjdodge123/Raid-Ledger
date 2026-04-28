@@ -6,6 +6,7 @@ import type { JSX } from 'react';
 import type { TiebreakerDetailDto } from '@raid-ledger/contract';
 import { BracketTree } from './BracketTree';
 import { BracketMatchupCard } from './BracketMatchupCard';
+import { TiebreakerClosedNotice } from './TiebreakerClosedNotice';
 import { useForceResolve } from '../../../hooks/use-tiebreaker';
 
 interface Props {
@@ -18,6 +19,15 @@ export function BracketView({ tiebreaker, lineupId }: Props): JSX.Element {
     const matchups = tiebreaker.matchups ?? [];
     const currentRound = tiebreaker.currentRound ?? 1;
     const totalRounds = tiebreaker.totalRounds ?? 1;
+
+    if (tiebreaker.status !== 'active') {
+        return (
+            <TiebreakerClosedNotice
+                title="Bracket Tiebreaker"
+                resolvedAt={tiebreaker.resolvedAt}
+            />
+        );
+    }
 
     return (
         <div data-testid="bracket-view" className="mt-4">

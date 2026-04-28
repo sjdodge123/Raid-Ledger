@@ -22,9 +22,16 @@ import {
 import { dispatchMatchMemberDM } from './lineup-notification-dms.helpers';
 import {
   findDiscordLinkedMembers,
+  findDiscordMembersByUserIds,
   findInviteeDiscordMembers,
   findMatchMemberUsers,
 } from './lineup-notification-targets.helpers';
+import { eq } from 'drizzle-orm';
+import { loadExpectedVoters } from './quorum/quorum-voters.helpers';
+import {
+  sendTiebreakerOpenDM,
+  type TiebreakerNotificationInfo,
+} from './lineup-notification-private-dm.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -96,6 +103,43 @@ export async function fanOutLineupCreatedDMsToInvitees(
       dedupService,
       lineup,
       member,
+    );
+  }
+}
+
+/**
+ * Fan-out tiebreaker-open DMs (ROK-1117).
+ *
+ * Visibility-aware via `loadExpectedVoters`: public lineups DM
+ * nominators ∪ voters; private lineups DM creator + invitees. We then
+ * adapt those user IDs to `DiscordMember` rows (skipping users without
+ * a Discord link) and reuse the shared per-user DM sender.
+ */
+export async function fanOutTiebreakerOpenDMs(
+  db: Db,
+  notificationService: NotificationService,
+  dedupService: NotificationDedupService,
+  lineup: LineupInfo,
+  tiebreaker: TiebreakerNotificationInfo,
+  clientUrl?: string,
+): Promise<void> {
+  const [row] = await db
+    .select()
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineup.id))
+    .limit(1);
+  if (!row) return;
+  const userIds = await loadExpectedVoters(db, row);
+  if (userIds.length === 0) return;
+  const members = await findDiscordMembersByUserIds(db, userIds);
+  for (const member of members) {
+    await sendTiebreakerOpenDM(
+      notificationService,
+      dedupService,
+      lineup,
+      tiebreaker,
+      member,
+      clientUrl,
     );
   }
 }

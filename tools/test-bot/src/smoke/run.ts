@@ -27,6 +27,7 @@ import { scheduledEventCompletionTests } from './tests/scheduled-event-completio
 import { aiChatTests } from './tests/ai-chat.test.js';
 import { lineupTitleTests } from './tests/lineup-title.test.js';
 import { privateLineupTests } from './tests/private-lineup.test.js';
+import { lineupTiebreakerOpenTests } from './tests/lineup-tiebreaker-open.test.js';
 
 /** Build a TestResult from a test, status, and timing info. */
 function buildResult(
@@ -143,6 +144,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...aiChatTests,
     ...lineupTitleTests,
     ...privateLineupTests,
+    ...lineupTiebreakerOpenTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 

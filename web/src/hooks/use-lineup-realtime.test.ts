@@ -148,3 +148,61 @@ describe('useLineupRealtime (ROK-1118)', () => {
         expect(unsubscribeCalls[0][1]).toEqual({ lineupId: 42 });
     });
 });
+
+// ─── ROK-1117: tiebreaker-open event ─────────────────────────────────────
+//
+// When the gateway emits `lineup:tiebreaker:open`, the hook must invalidate
+// the tiebreaker detail query (`['tiebreaker', lineupId]`) so that any UI
+// using `useTiebreakerDetail` re-fetches and the late-join voting form
+// becomes visible without a manual reload.
+
+describe('useLineupRealtime — tiebreaker:open (ROK-1117)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        socketHandlers.clear();
+    });
+
+    it('invalidates the tiebreaker detail query on lineup:tiebreaker:open', async () => {
+        const queryClient = new QueryClient({
+            defaultOptions: {
+                queries: { retry: false, gcTime: Infinity, staleTime: Infinity },
+                mutations: { retry: false },
+            },
+        });
+        // Seed the tiebreaker cache so invalidation has a target.
+        queryClient.setQueryData(['tiebreaker', 42], {
+            id: 1,
+            mode: 'veto',
+            status: 'active',
+        });
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+        function wrapper({ children }: { children: ReactNode }) {
+            return createElement(
+                QueryClientProvider,
+                { client: queryClient },
+                children,
+            );
+        }
+
+        const mod = await import('./use-lineup-realtime');
+        const useLineupRealtime = mod.useLineupRealtime;
+
+        renderHook(() => useLineupRealtime(42), { wrapper });
+
+        await act(async () => {
+            fireSocketEvent('lineup:tiebreaker:open', {
+                lineupId: 42,
+                tiebreakerId: 1,
+                mode: 'veto',
+            });
+        });
+
+        const tbCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) =>
+                JSON.stringify(opts?.queryKey) ===
+                JSON.stringify(['tiebreaker', 42]),
+        );
+        expect(tbCalls.length).toBeGreaterThanOrEqual(1);
+    });
+});
