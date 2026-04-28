@@ -32,6 +32,7 @@ import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { LineupReminderService } from './lineup-reminder.service';
 
 interface PublicLineupSetup {
   lineupId: number;
@@ -257,4 +258,132 @@ function describeTiebreakerNotifications() {
 describe(
   'Lineup tiebreaker-open notifications (integration, ROK-1117)',
   describeTiebreakerNotifications,
+);
+
+// ── ROK-1117: Tiebreaker reminder cron (integration) ──────────────────────
+
+function describeTiebreakerReminders() {
+  let testApp: TestApp;
+  let tiebreakerService: TiebreakerService;
+  let reminderService: LineupReminderService;
+  let dedup: NotificationDedupService;
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    tiebreakerService = testApp.app.get(TiebreakerService);
+    reminderService = testApp.app.get(LineupReminderService);
+    dedup = testApp.app.get(NotificationDedupService);
+    // Stub the bot's sendEmbed so the start() side-effects don't fail.
+    jest
+      .spyOn(testApp.app.get(DiscordBotClientService), 'sendEmbed')
+      .mockResolvedValue({ id: 'mock-msg-tb-rem' } as never);
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    testApp.seed = await truncateAllTables(testApp.db);
+    // Clear dedup keys so the next test isn't blocked by prior ones.
+    jest.spyOn(dedup, 'checkAndMarkSent').mockResolvedValue(false);
+  });
+
+  async function createMember(tag: string): Promise<number> {
+    const [user] = await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `discord:${tag}`,
+        username: `mem-${tag}`,
+        role: 'member',
+      })
+      .returning();
+    return user.id;
+  }
+
+  async function createGame(name: string): Promise<number> {
+    const [g] = await testApp.db
+      .insert(schema.games)
+      .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
+      .returning();
+    return g.id;
+  }
+
+  async function setupLineupWithActiveTiebreaker(): Promise<{
+    lineupId: number;
+    participantIds: number[];
+  }> {
+    const nominator = await createMember('rem-nom-1117');
+    const voterA = await createMember('rem-voter-a-1117');
+    const voterB = await createMember('rem-voter-b-1117');
+    const gameAId = await createGame('TBRemA-1117');
+    const gameBId = await createGame('TBRemB-1117');
+
+    const [lineup] = await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'ROK-1117 reminder',
+        status: 'voting',
+        visibility: 'public',
+        createdBy: testApp.seed.adminUser.id,
+      })
+      .returning();
+    await testApp.db.insert(schema.communityLineupEntries).values([
+      { lineupId: lineup.id, gameId: gameAId, nominatedBy: nominator },
+      { lineupId: lineup.id, gameId: gameBId, nominatedBy: voterA },
+    ]);
+    await testApp.db.insert(schema.communityLineupVotes).values([
+      { lineupId: lineup.id, gameId: gameAId, userId: voterA },
+      { lineupId: lineup.id, gameId: gameBId, userId: voterB },
+    ]);
+    await tiebreakerService.start(lineup.id, {
+      mode: 'veto',
+      roundDurationHours: 1,
+    });
+    return {
+      lineupId: lineup.id,
+      participantIds: [nominator, voterA, voterB],
+    };
+  }
+
+  it('checkTiebreakerReminders DMs every non-engaged expected voter at the 1h threshold', async () => {
+    const { lineupId, participantIds } =
+      await setupLineupWithActiveTiebreaker();
+
+    // Move the round_deadline to ~50 minutes from now so classifyThreshold
+    // returns '1h' and the cron path fires reminders.
+    const newDeadline = new Date(Date.now() + 50 * 60 * 1000);
+    await testApp.db
+      .update(schema.communityLineupTiebreakers)
+      .set({ roundDeadline: newDeadline })
+      .where(eq(schema.communityLineupTiebreakers.lineupId, lineupId));
+
+    // Reset the dedup spy so the open-DMs from start() don't bleed.
+    jest.spyOn(dedup, 'checkAndMarkSent').mockResolvedValue(false);
+
+    await reminderService.checkTiebreakerReminders();
+
+    // Each expected voter should have received at least one reminder
+    // notification with the tiebreaker-reminder subtype.
+    for (const userId of participantIds) {
+      const rows = await testApp.db
+        .select()
+        .from(schema.notifications)
+        .where(eq(schema.notifications.userId, userId));
+      const reminderRows = rows.filter((r) => {
+        const payload = r.payload as { subtype?: string } | null;
+        return payload?.subtype === 'lineup_tiebreaker_reminder';
+      });
+      expect(reminderRows.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('checkTiebreakerReminders is a no-op when no tiebreakers are active', async () => {
+    // No setup: empty DB. Just verify it doesn't throw.
+    await expect(
+      reminderService.checkTiebreakerReminders(),
+    ).resolves.toBeUndefined();
+  });
+}
+
+describe(
+  'Lineup tiebreaker reminder cron (integration, ROK-1117)',
+  describeTiebreakerReminders,
 );

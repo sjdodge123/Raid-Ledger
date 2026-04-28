@@ -325,4 +325,201 @@ describe('LineupReminderService', () => {
       );
     });
   });
+
+  // -----------------------------------------------------------------------
+  // ROK-1117: Tiebreaker reminders at 24h and 1h before round deadline
+  // -----------------------------------------------------------------------
+  describe('tiebreaker reminders', () => {
+    function makeActiveTiebreakerRow(
+      hoursUntilDeadline: number,
+      mode: 'bracket' | 'veto' = 'bracket',
+    ) {
+      const deadline = new Date(NOW.getTime() + hoursUntilDeadline * 3600_000);
+      return {
+        tiebreakerId: 77,
+        lineupId: LINEUP_ID,
+        mode,
+        roundDeadline: deadline,
+        currentRound: 1,
+      };
+    }
+
+    function makePublicLineupRow() {
+      return {
+        id: LINEUP_ID,
+        visibility: 'public',
+        createdBy: 100,
+      };
+    }
+
+    function makePrivateLineupRow() {
+      return {
+        id: LINEUP_ID,
+        visibility: 'private',
+        createdBy: 100,
+      };
+    }
+
+    /**
+     * Mock the chained `.select().from().where().limit()` pattern used by
+     * `loadExpectedVoters` and `resolveReminderTargets`. We sequence the
+     * resolved values so each call returns a specific result.
+     */
+    function mockChainedSelect(results: unknown[][]) {
+      let i = 0;
+      const select = jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => {
+            const result = results[i] ?? [];
+            const ret = {
+              limit: jest.fn().mockResolvedValue(result),
+              then: (resolve: (v: unknown[]) => unknown) => resolve(result),
+            };
+            i += 1;
+            return ret;
+          }),
+        })),
+      }));
+      (mockDb as unknown as { select: jest.Mock }).select = select;
+    }
+
+    it('fires 24h threshold for active tiebreakers approaching deadline', async () => {
+      const tb = makeActiveTiebreakerRow(20);
+      mockDb.execute
+        // findActiveTiebreakersWithDeadline
+        .mockResolvedValueOnce([tb])
+        // loadVoteCountsPerUser (bracket mode, no votes yet)
+        .mockResolvedValueOnce([]);
+      mockChainedSelect([
+        // resolveReminderTargets — community_lineups lookup
+        [makePublicLineupRow()],
+        // findDistinctNominators
+        [{ userId: 1 }],
+        // findDistinctVoters
+        [{ userId: 2 }],
+        // findBracketEngagedUserIds — countActiveRoundMatchups (no matchups)
+        [],
+      ]);
+
+      await service.checkTiebreakerReminders();
+
+      expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+        expect.stringContaining('tiebreaker-reminder:77:24h:'),
+        expect.anything(),
+      );
+      expect(mockNotificationService.create).toHaveBeenCalled();
+    });
+
+    it('fires 1h threshold when <= 1h remains', async () => {
+      const tb = makeActiveTiebreakerRow(0.5);
+      mockDb.execute.mockResolvedValueOnce([tb]).mockResolvedValueOnce([]); // bracket vote counts
+      mockChainedSelect([
+        [makePublicLineupRow()],
+        [{ userId: 5 }],
+        [{ userId: 6 }],
+        [], // no matchups
+      ]);
+
+      await service.checkTiebreakerReminders();
+
+      expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+        expect.stringContaining('tiebreaker-reminder:77:1h:'),
+        expect.anything(),
+      );
+    });
+
+    it('is a no-op when no active tiebreakers exist', async () => {
+      mockDb.execute.mockResolvedValueOnce([]);
+
+      await service.checkTiebreakerReminders();
+
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('skips users who have already vetoed (veto mode)', async () => {
+      const tb = makeActiveTiebreakerRow(20, 'veto');
+      mockDb.execute.mockResolvedValueOnce([tb]);
+      mockChainedSelect([
+        [makePublicLineupRow()],
+        [{ userId: 7 }, { userId: 8 }], // nominators
+        [], // voters
+        [{ userId: 7 }], // already vetoed
+      ]);
+
+      await service.checkTiebreakerReminders();
+
+      // Only user 8 receives a reminder (user 7 already engaged)
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 8 }),
+      );
+    });
+
+    it('targets nominators ∪ voters minus already-engaged for public lineup', async () => {
+      const tb = makeActiveTiebreakerRow(12, 'veto');
+      mockDb.execute.mockResolvedValueOnce([tb]);
+      mockChainedSelect([
+        [makePublicLineupRow()],
+        [{ userId: 11 }], // nominator
+        [{ userId: 12 }, { userId: 11 }], // voters (11 also voted)
+        [], // no vetoes yet
+      ]);
+
+      await service.checkTiebreakerReminders();
+
+      const targets = mockNotificationService.create.mock.calls.map(
+        (c) => (c[0] as { userId: number }).userId,
+      );
+      expect(new Set(targets)).toEqual(new Set([11, 12]));
+    });
+
+    it('targets invitees + creator minus already-engaged for private lineup', async () => {
+      const tb = makeActiveTiebreakerRow(12, 'veto');
+      mockDb.execute.mockResolvedValueOnce([tb]);
+      mockChainedSelect([
+        [makePrivateLineupRow()],
+        // private branch: invitees query
+        [{ userId: 21 }, { userId: 22 }],
+        [], // no vetoes
+      ]);
+
+      await service.checkTiebreakerReminders();
+
+      const targets = mockNotificationService.create.mock.calls.map(
+        (c) => (c[0] as { userId: number }).userId,
+      );
+      // creator (100) + invitees (21, 22)
+      expect(new Set(targets)).toEqual(new Set([100, 21, 22]));
+    });
+
+    it('dedup key prevents double-fire for the same threshold', async () => {
+      const tb = makeActiveTiebreakerRow(20, 'veto');
+      mockDb.execute.mockResolvedValueOnce([tb]);
+      mockChainedSelect([[makePublicLineupRow()], [{ userId: 30 }], [], []]);
+      mockDedupService.checkAndMarkSent.mockResolvedValueOnce(true);
+
+      await service.checkTiebreakerReminders();
+
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('uses subtype lineup_tiebreaker_reminder in notification payload', async () => {
+      const tb = makeActiveTiebreakerRow(20, 'veto');
+      mockDb.execute.mockResolvedValueOnce([tb]);
+      mockChainedSelect([[makePublicLineupRow()], [{ userId: 40 }], [], []]);
+
+      await service.checkTiebreakerReminders();
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'community_lineup',
+          payload: expect.objectContaining({
+            subtype: 'lineup_tiebreaker_reminder',
+            tiebreakerId: 77,
+            threshold: '24h',
+          }),
+        }),
+      );
+    });
+  });
 });
