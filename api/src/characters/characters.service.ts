@@ -209,7 +209,7 @@ export class CharactersService {
       (v) => this.findCharacterSyncAdapter(v),
     );
     const nsPrefix = await crudH.resolveNsPrefix(this.db, character.gameId);
-    const fetched = await fetchFullProfile(
+    const { profile, talents, equipment, professions } = await fetchFullProfile(
       adapter,
       character.name,
       character.realm ?? '',
@@ -217,10 +217,14 @@ export class CharactersService {
       nsPrefix,
     );
     const fields = buildSyncUpdateFields(
-      fetched.profile,
-      fetched.equipment,
-      fetched.talents,
-      { region, gameVariant },
+      profile,
+      equipment,
+      talents,
+      professions,
+      {
+        region,
+        gameVariant,
+      },
     );
     const result = await crudH.applyRefreshUpdate(
       this.db,

@@ -3,6 +3,7 @@
  * Extracted from characters.service.ts for file size compliance (ROK-711).
  */
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
+import type { ExternalCharacterProfessions } from '../plugins/plugin-host/extension-types';
 
 /** Profile with enriched spec/role/talents from adapter. */
 export interface EnrichedProfile {
@@ -22,11 +23,16 @@ export interface EnrichedProfile {
   };
   talents: unknown;
   equipment: unknown;
+  professions: ExternalCharacterProfessions | null;
 }
 
 /**
- * Fetch profile, specialization, and equipment from an adapter.
+ * Fetch profile, specialization, equipment, and professions from an adapter.
  * Shared across importExternal, refreshExternal, and syncAllCharacters.
+ *
+ * Equipment + professions are fetched in parallel. Adapters without the
+ * optional `fetchProfessions` method resolve to `null`, which the
+ * orchestrator interprets as "leave the prior `professions` column alone."
  * @param apiNamespacePrefix - The game's namespace prefix (null for retail)
  */
 export async function fetchFullProfile(
@@ -53,15 +59,27 @@ export async function fetchFullProfile(
     talents = inferred.talents ?? null;
   }
 
-  const equipment = await adapter.fetchEquipment(name, realm, region, nsArg);
-  return { profile, talents, equipment };
+  const [equipment, professions] = await Promise.all([
+    adapter.fetchEquipment(name, realm, region, nsArg),
+    adapter.fetchProfessions
+      ? adapter.fetchProfessions(name, realm, region, nsArg)
+      : Promise.resolve(null),
+  ]);
+  return { profile, talents, equipment, professions };
 }
 
-/** Build the set fields for a character sync update. */
+/**
+ * Build the set fields for a character sync update.
+ *
+ * The `professions` column is **only** included when the value is non-null.
+ * A null signals that the adapter encountered a non-404 failure (5xx, timeout,
+ * etc.) and the prior column value should be preserved (architect §3).
+ */
 export function buildSyncUpdateFields(
   profile: EnrichedProfile['profile'],
   equipment: unknown,
   talents: unknown,
+  professions: ExternalCharacterProfessions | null,
   extra?: { region?: string; gameVariant?: string },
 ): Record<string, unknown> {
   return {
@@ -78,6 +96,7 @@ export function buildSyncUpdateFields(
     profileUrl: profile.profileUrl,
     equipment,
     talents,
+    ...(professions !== null ? { professions } : {}),
     updatedAt: new Date(),
     ...(extra?.region ? { region: extra.region } : {}),
     ...(extra?.gameVariant ? { gameVariant: extra.gameVariant } : {}),
