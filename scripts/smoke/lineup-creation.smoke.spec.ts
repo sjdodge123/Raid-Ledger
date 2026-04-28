@@ -10,6 +10,13 @@
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiGet } from './api-helpers';
 
+// ROK-1147: this whole file asserts global state ("Start Lineup button visible
+// when no active lineup exists"). With per-worker title-prefix isolation,
+// sibling workers can hold their own lineups concurrently and the banner
+// shows their lineup, masking the Start Lineup button. Run serially so only
+// one worker exercises this file at a time.
+test.describe.configure({ mode: 'serial' });
+
 /** Local apiPatch that returns raw Response (used by this file's callers). */
 async function apiPatch(
     token: string,
