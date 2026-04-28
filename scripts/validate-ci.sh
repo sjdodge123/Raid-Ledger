@@ -227,6 +227,18 @@ _wait_for_container_health() {
     return 1
   fi
   echo -e "${GREEN}pgvector: loaded${NC}"
+
+  # Verify pg_stat_statements extension is loaded (ROK-1156). The migration is a
+  # no-op IF NOT EXISTS, so a missing shared_preload_libraries flag would not
+  # surface as a migration failure — but the slow-query digest cron (PR B) would
+  # silently see empty stats. Explicit check catches that.
+  if ! docker exec "$cname" su-exec postgres \
+    psql -d raid_ledger -tAc "SELECT extname FROM pg_extension WHERE extname='pg_stat_statements'" \
+    | grep -q '^pg_stat_statements$'; then
+    echo -e "${RED}pg_stat_statements extension not loaded in allinone DB${NC}"
+    return 1
+  fi
+  echo -e "${GREEN}pg_stat_statements: loaded${NC}"
 }
 
 # ---------------------------------------------------------------------------
