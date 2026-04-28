@@ -8,6 +8,10 @@ import { useUpdateCharacter } from '../../../hooks/use-character-mutations';
 import { useGameRegistry } from '../../../hooks/use-game-registry';
 import { professionNameToSlug } from '../lib/profession-icons';
 import { getMaxProfessionSkill } from '../lib/profession-max-skill';
+import {
+    getProfessionOptions,
+    type ProfessionCategory,
+} from '../lib/profession-categories';
 
 interface EditProfessionsModalProps {
     isOpen: boolean;
@@ -16,13 +20,6 @@ interface EditProfessionsModalProps {
     gameId: number;
     initial: CharacterProfessionsDto | null;
 }
-
-/** Known retail profession names — used as `<datalist>` suggestions; free-text still allowed. */
-const PROFESSION_SUGGESTIONS = [
-    'Alchemy', 'Blacksmithing', 'Enchanting', 'Engineering', 'Herbalism',
-    'Inscription', 'Jewelcrafting', 'Leatherworking', 'Mining', 'Skinning',
-    'Tailoring', 'Cooking', 'Fishing', 'First Aid', 'Archaeology',
-];
 
 interface DraftEntry {
     name: string;
@@ -37,6 +34,13 @@ function entriesToDraft(entries: ProfessionEntryDto[]): DraftEntry[] {
     return entries.map((e) => ({ name: e.name, skillLevel: e.skillLevel }));
 }
 
+function clampSkill(value: number, max: number): number {
+    const n = Number(value) || 0;
+    if (n < 0) return 0;
+    if (n > max) return max;
+    return n;
+}
+
 function draftToEntries(drafts: DraftEntry[], maxSkill: number): ProfessionEntryDto[] {
     return drafts
         .filter((d) => d.name.trim().length > 0)
@@ -48,13 +52,6 @@ function draftToEntries(drafts: DraftEntry[], maxSkill: number): ProfessionEntry
             maxSkillLevel: maxSkill,
             tiers: [],
         }));
-}
-
-function clampSkill(value: number, max: number): number {
-    const n = Number(value) || 0;
-    if (n < 0) return 0;
-    if (n > max) return max;
-    return n;
 }
 
 export function EditProfessionsModal({
@@ -97,17 +94,21 @@ export function EditProfessionsModal({
                 </p>
                 <ProfessionSection
                     heading="Primary"
+                    category="primary"
                     drafts={primary}
                     onChange={setPrimary}
                     maxEntries={2}
                     maxSkill={maxSkill}
+                    siblingNames={primary.map((d) => d.name)}
                 />
                 <ProfessionSection
                     heading="Secondary"
+                    category="secondary"
                     drafts={secondary}
                     onChange={setSecondary}
-                    maxEntries={5}
+                    maxEntries={4}
                     maxSkill={maxSkill}
+                    siblingNames={secondary.map((d) => d.name)}
                 />
                 <ModalActions
                     onCancel={onClose}
@@ -115,30 +116,35 @@ export function EditProfessionsModal({
                     isPending={update.isPending}
                 />
             </div>
-            <datalist id="profession-name-options">
-                {PROFESSION_SUGGESTIONS.map((n) => <option key={n} value={n} />)}
-            </datalist>
         </Modal>
     );
 }
 
 function ProfessionSection({
-    heading, drafts, onChange, maxEntries, maxSkill,
+    heading, category, drafts, onChange, maxEntries, maxSkill, siblingNames,
 }: {
     heading: string;
+    category: ProfessionCategory;
     drafts: DraftEntry[];
     onChange: (next: DraftEntry[]) => void;
     maxEntries: number;
     maxSkill: number;
+    siblingNames: string[];
 }) {
+    const allOptions = getProfessionOptions(category);
     return (
         <section>
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted mb-2">{heading}</h3>
             <div className="space-y-2">
                 {drafts.map((d, idx) => (
-                    <ProfessionRowEditor key={idx} draft={d} maxSkill={maxSkill}
+                    <ProfessionRowEditor
+                        key={idx}
+                        draft={d}
+                        maxSkill={maxSkill}
+                        availableOptions={availableFor(allOptions, siblingNames, d.name)}
                         onChange={(next) => onChange(drafts.map((x, i) => i === idx ? next : x))}
-                        onRemove={() => onChange(drafts.filter((_, i) => i !== idx))} />
+                        onRemove={() => onChange(drafts.filter((_, i) => i !== idx))}
+                    />
                 ))}
                 {drafts.length < maxEntries && (
                     <button type="button" onClick={() => onChange([...drafts, emptyEntry()])}
@@ -151,19 +157,36 @@ function ProfessionSection({
     );
 }
 
+/** Hide options already chosen by sibling rows so the user can't pick the same profession twice. */
+function availableFor(
+    all: readonly string[],
+    siblingNames: string[],
+    selfName: string,
+): readonly string[] {
+    const taken = new Set(siblingNames.filter((n) => n && n !== selfName));
+    return all.filter((opt) => !taken.has(opt));
+}
+
 function ProfessionRowEditor({
-    draft, onChange, onRemove, maxSkill,
+    draft, onChange, onRemove, maxSkill, availableOptions,
 }: {
     draft: DraftEntry;
     onChange: (next: DraftEntry) => void;
     onRemove: () => void;
     maxSkill: number;
+    availableOptions: readonly string[];
 }) {
     return (
         <div className="flex items-center gap-2">
-            <input type="text" list="profession-name-options" value={draft.name} placeholder="Profession name"
+            <select value={draft.name}
                 onChange={(e) => onChange({ ...draft, name: e.target.value })}
-                className="flex-1 bg-overlay border border-edge rounded-md px-2 py-1 text-foreground" />
+                aria-label="Profession"
+                className="flex-1 bg-overlay border border-edge rounded-md px-2 py-1 text-foreground">
+                <option value="">Select profession…</option>
+                {availableOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                ))}
+            </select>
             <input type="number" min="0" max={maxSkill} value={draft.skillLevel} aria-label="Skill"
                 onChange={(e) => onChange({ ...draft, skillLevel: Number(e.target.value) })}
                 className="w-20 bg-overlay border border-edge rounded-md px-2 py-1 text-foreground" />
