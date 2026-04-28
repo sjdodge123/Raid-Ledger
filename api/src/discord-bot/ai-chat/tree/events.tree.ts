@@ -81,33 +81,101 @@ function nextWeekRange(): { start: Date; end: Date } {
   return { start, end };
 }
 
-/** Search events by game name — returns formatted list, no LLM. */
+interface RankedEvent {
+  id: number;
+  title: string;
+  startTime: string;
+  gameName: string;
+}
+
+/** Merge fan-out results into a deduped, time-sorted RankedEvent list. */
+function mergeRankedEvents(
+  settled: PromiseSettledResult<{
+    data?: { id: number; title: string; startTime: string }[];
+  }>[],
+  games: { id: number; name: string }[],
+): RankedEvent[] {
+  const merged = new Map<number, RankedEvent>();
+  settled.forEach((s, i) => {
+    if (s.status !== 'fulfilled') return;
+    for (const e of s.value.data ?? []) {
+      if (merged.has(e.id)) continue;
+      merged.set(e.id, {
+        id: e.id,
+        title: e.title,
+        startTime: e.startTime,
+        gameName: games[i].name,
+      });
+    }
+  });
+  return [...merged.values()]
+    .sort(
+      (a, b) =>
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    )
+    .slice(0, 10);
+}
+
+/** Fan out findAll across the top 5 ranked games (ROK-1084). */
+async function fetchEventsForTopGames(
+  deps: AiChatDeps,
+  games: { id: number; name: string }[],
+): Promise<RankedEvent[]> {
+  const top = games.slice(0, 5);
+  const settled = await Promise.allSettled(
+    top.map((g) =>
+      deps.eventsService.findAll({
+        gameId: String(g.id),
+        page: 1,
+        limit: 10,
+        upcoming: 'true',
+      }),
+    ),
+  );
+  if (settled.every((s) => s.status === 'rejected')) {
+    throw new Error('all-rejected');
+  }
+  return mergeRankedEvents(settled, top);
+}
+
+/** Format the merged event list, using single- or multi-game header. */
+function formatMergedEvents(events: RankedEvent[], query: string): string {
+  const uniqueNames = new Set(events.map((e) => e.gameName));
+  if (uniqueNames.size === 1) {
+    const list = events
+      .map(
+        (e) => `• ${e.title} — ${new Date(e.startTime).toLocaleDateString()}`,
+      )
+      .join('\n');
+    return `**Upcoming events for ${events[0].gameName}:**\n${list}`;
+  }
+  const list = events
+    .map(
+      (e) =>
+        `• ${e.title} — ${new Date(e.startTime).toLocaleDateString()} (${e.gameName})`,
+    )
+    .join('\n');
+  return `**Upcoming events matching "${query}":**\n${list}`;
+}
+
+/** Search events by game name — fans out to top 5 ranked games (ROK-1084). */
 async function searchEventsByGame(
   deps: AiChatDeps,
   query: string,
 ): Promise<TreeResult> {
   try {
     const games = await deps.igdbService.searchLocalGames(query);
-    const match = games.games?.[0];
-    if (!match) {
+    if (!games.games?.length) {
       return staticLeaf(`No games found matching "${query}".`, deps);
     }
-    const result = await deps.eventsService.findAll({
-      gameId: String(match.id),
-      page: 1,
-      limit: 10,
-      upcoming: 'true',
-    });
-    const events = result.data ?? [];
-    if (events.length === 0) {
-      return staticLeaf(`No upcoming events for ${match.name}.`, deps);
+    const merged = await fetchEventsForTopGames(deps, games.games);
+    if (merged.length === 0) {
+      return staticLeaf(
+        `No upcoming events for any game matching "${query}".`,
+        deps,
+      );
     }
-    const list = events
-      .map(
-        (e) => `• ${e.title} — ${new Date(e.startTime).toLocaleDateString()}`,
-      )
-      .join('\n');
-    return staticLeaf(`**Upcoming events for ${match.name}:**\n${list}`, deps);
+    return staticLeaf(formatMergedEvents(merged, query), deps);
   } catch {
     return staticLeaf('Unable to search events right now.', deps);
   }
