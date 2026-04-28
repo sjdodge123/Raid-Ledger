@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CharacterProfessionsSchema } from './characters.schema.js';
 
 // ============================================================
 // Signup Schemas (FR-006 + ROK-131 Character Confirmation + ROK-137 Interactive Buttons)
@@ -45,6 +46,8 @@ export const SignupCharacterSchema = z.object({
     avatarUrl: z.string().nullable(),
     race: z.string().nullable().optional(),
     faction: z.enum(['alliance', 'horde']).nullable().optional(),
+    /** ROK-1130: profession data for the roster meta-row pills. */
+    professions: CharacterProfessionsSchema.nullable().optional(),
 });
 
 export type SignupCharacterDto = z.infer<typeof SignupCharacterSchema>;

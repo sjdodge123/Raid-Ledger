@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import type { CharacterDto } from '@raid-ledger/contract';
+import type { CharacterDto, CharacterProfessionsDto } from '@raid-ledger/contract';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
+import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
 
 const FACTION_STYLES: Record<string, string> = {
     alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -35,6 +36,8 @@ interface CharacterCardCompactProps {
     role?: string | null;
     itemLevel?: number | null;
     isMain?: boolean;
+    /** ROK-1130: profession data threaded into the meta row. */
+    professions?: CharacterProfessionsDto | null;
     /** Visual size variant: 'default' for standard, 'sm' for compact/onboarding. */
     size?: 'default' | 'sm';
 }
@@ -52,6 +55,7 @@ interface ResolvedChar {
     level?: number | null; race?: string | null; charClass?: string | null;
     spec?: string | null; role?: string | null; itemLevel?: number | null;
     isMain?: boolean; variantLabel: string | null;
+    professions?: CharacterProfessionsDto | null;
 }
 
 function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
@@ -64,6 +68,7 @@ function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
         role: c?.effectiveRole ?? props.role, itemLevel: c?.itemLevel ?? props.itemLevel,
         isMain: c?.isMain ?? props.isMain,
         variantLabel: c?.gameVariant ? VARIANT_LABELS[c.gameVariant] : null,
+        professions: c?.professions ?? props.professions ?? null,
     };
 }
 
@@ -87,9 +92,10 @@ function NameRow({ charName, isMain, faction, variantLabel, textSize }: {
     );
 }
 
-function MetadataRow({ level, race, charClass, spec, role, itemLevel, textSize }: {
+function MetadataRow({ level, race, charClass, spec, role, itemLevel, professions, textSize }: {
     level?: number | null; race?: string | null; charClass?: string | null;
-    spec?: string | null; role?: string | null; itemLevel?: number | null; textSize: string;
+    spec?: string | null; role?: string | null; itemLevel?: number | null;
+    professions?: CharacterProfessionsDto | null; textSize: string;
 }) {
     return (
         <div className={`flex items-center gap-1.5 ${textSize} text-muted flex-wrap`}>
@@ -105,6 +111,7 @@ function MetadataRow({ level, race, charClass, spec, role, itemLevel, textSize }
             {spec && <span className="truncate max-w-[80px] sm:max-w-none">• {spec}</span>}
             {role && <span className={`px-1.5 py-0.5 rounded text-xs text-foreground flex-shrink-0 ${ROLE_COLORS[role] ?? 'bg-faint'}`}>{role.toUpperCase()}</span>}
             {itemLevel != null && itemLevel > 0 && <><span>•</span><span className="text-purple-400 whitespace-nowrap">{itemLevel} iLvl</span></>}
+            <ProfessionBadges professions={professions ?? null} separator="•" />
         </div>
     );
 }
@@ -120,7 +127,7 @@ export function CharacterCardCompact(props: CharacterCardCompactProps) {
             <CharacterAvatar avatarUrl={c.avatarUrl} charName={c.charName} size={isSm ? 'w-8 h-8' : 'w-10 h-10'} />
             <div className="min-w-0 overflow-hidden">
                 <NameRow charName={c.charName} isMain={c.isMain} faction={c.faction} variantLabel={c.variantLabel} textSize={isSm ? 'text-sm' : ''} />
-                <MetadataRow level={c.level} race={c.race} charClass={c.charClass} spec={c.spec} role={c.role} itemLevel={c.itemLevel} textSize={isSm ? 'text-xs' : 'text-sm'} />
+                <MetadataRow level={c.level} race={c.race} charClass={c.charClass} spec={c.spec} role={c.role} itemLevel={c.itemLevel} professions={c.professions} textSize={isSm ? 'text-xs' : 'text-sm'} />
             </div>
         </Link>
     );

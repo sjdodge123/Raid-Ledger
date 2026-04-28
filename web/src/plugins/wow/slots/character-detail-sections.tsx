@@ -26,6 +26,7 @@ interface CharacterDetailSectionsProps {
     characterClass: string | null;
     isOwner: boolean;
     characterId: string;
+    gameId: number;
 }
 
 /** Equipment panel with items and item detail modal */
@@ -62,7 +63,7 @@ function EquipmentWithItems({ equipment, gameVariant, renderUrl, isArmoryImporte
 export function CharacterDetailSections({
     equipment, talents, professions, gameVariant,
     renderUrl, isArmoryImported, characterClass,
-    isOwner, characterId,
+    isOwner, characterId, gameId,
 }: CharacterDetailSectionsProps) {
     useWowheadTooltips(equipment ? [equipment] : []);
 
@@ -77,7 +78,7 @@ export function CharacterDetailSections({
             <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={gameVariant} />
             <CharacterProfessionsPanel professions={professions}
-                isOwner={isOwner} characterId={characterId} />
+                isOwner={isOwner} characterId={characterId} gameId={gameId} />
         </>
     );
 }

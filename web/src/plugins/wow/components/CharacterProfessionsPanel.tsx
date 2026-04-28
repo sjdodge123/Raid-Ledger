@@ -11,10 +11,11 @@ interface CharacterProfessionsPanelProps {
     professions: CharacterProfessionsDto | null;
     isOwner: boolean;
     characterId: string;
+    gameId: number;
 }
 
 export function CharacterProfessionsPanel({
-    professions, isOwner, characterId,
+    professions, isOwner, characterId, gameId,
 }: CharacterProfessionsPanelProps) {
     const [isEditing, setIsEditing] = useState(false);
     const hasData = !!(
@@ -39,6 +40,7 @@ export function CharacterProfessionsPanel({
                     isOpen={isEditing}
                     onClose={() => setIsEditing(false)}
                     characterId={characterId}
+                    gameId={gameId}
                     initial={professions}
                 />
             )}
