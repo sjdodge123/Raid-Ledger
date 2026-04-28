@@ -1,192 +1,130 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { ConfigService } from '@nestjs/config';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type {
-  SlowQueryDigestDto,
-  SlowQuerySnapshotDto,
-  SourceDto,
-} from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import {
-  diffEntries,
+  DIGEST_TOP_N,
+  formatDigestBlock,
   normalizeRawRow,
   selectPgStatStatementsSql,
   type RawPgStatStatementsRow,
   type SlowQueryEntryRecord,
 } from './slow-queries.helpers';
 
-const PRUNE_DAYS_DEFAULT = 30;
-const DIGEST_LIMIT_DEFAULT = 10;
-const SNAPSHOT_TOP_N = 100;
-
-interface CapturedSnapshot {
-  snapshotId: number;
-  capturedAt: Date;
-}
+const DEFAULT_LOG_DIR = '/data/logs';
+const SLOW_QUERY_LOG_FILENAME = 'slow-queries.log';
 
 /**
- * Slow-query digest service (ROK-1156).
+ * Slow-query log writer (ROK-1156).
  *
- * Snapshots `pg_stat_statements`, persists per-statement counters, and
- * exposes a per-window diff for the admin Logs panel.
+ * Hourly cron reads `pg_stat_statements`, formats the top-N as a fixed-width
+ * block, and appends to `<LOG_DIR>/slow-queries.log` so it surfaces in the
+ * admin Logs panel and the existing tar export. No persistence, no UI, no
+ * admin endpoints — the operator reads the log file directly.
  */
 @Injectable()
 export class SlowQueriesService {
   private readonly logger = new Logger(SlowQueriesService.name);
+  private readonly logFilePath: string;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
-  ) {}
-
-  /**
-   * Read top-N from pg_stat_statements, persist a snapshot row + entries.
-   * Returns the new snapshot id and capture time.
-   */
-  async captureSnapshot(source: SourceDto): Promise<CapturedSnapshot> {
-    const rows = await this.readPgStatStatements();
-    const snapshot = await this.insertSnapshotRow(source);
-    if (rows.length > 0) {
-      await this.insertEntries(snapshot.id, rows);
-    }
-    this.logger.log(
-      `Captured slow-query snapshot id=${snapshot.id} source=${source} entries=${rows.length}`,
-    );
-    return { snapshotId: snapshot.id, capturedAt: snapshot.capturedAt };
+    private readonly configService: ConfigService,
+  ) {
+    const logDir = this.configService.get<string>('LOG_DIR') || DEFAULT_LOG_DIR;
+    this.logFilePath = path.join(logDir, SLOW_QUERY_LOG_FILENAME);
   }
 
   /**
-   * Latest snapshot of any source, diffed against the most recent
-   * cron-source snapshot strictly older than the current snapshot.
+   * Read top-N from `pg_stat_statements`, format a digest block, and append
+   * to the slow-query log file. Idempotent and best-effort: missing extension
+   * or unwritable log dir are warnings, not errors.
    */
-  async getLatestDigest(
-    limit = DIGEST_LIMIT_DEFAULT,
-  ): Promise<SlowQueryDigestDto | null> {
-    const current = await this.findLatestSnapshot();
-    if (!current) return null;
-    const baseline = await this.findBaselineForCron(current.capturedAt);
-    const [currentEntries, baselineEntries] = await Promise.all([
-      this.loadEntries(current.id),
-      baseline ? this.loadEntries(baseline.id) : Promise.resolve([]),
-    ]);
-    const diffed = diffEntries(currentEntries, baselineEntries);
-    return {
-      snapshot: this.toSnapshotDto(current),
-      baseline: baseline ? this.toSnapshotDto(baseline) : null,
-      entries: diffed.slice(0, limit),
-    };
-  }
-
-  /** Delete snapshots older than `daysToKeep` (cascades to entries). */
-  async pruneOldSnapshots(daysToKeep = PRUNE_DAYS_DEFAULT): Promise<number> {
-    const cutoff = new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000);
-    const deletedRows = await this.db
-      .delete(schema.slowQuerySnapshots)
-      .where(lt(schema.slowQuerySnapshots.capturedAt, cutoff))
-      .returning({ id: schema.slowQuerySnapshots.id });
-    if (deletedRows.length > 0) {
+  async appendDigestToLog(): Promise<void> {
+    const entries = await this.readPgStatStatements();
+    const block = formatDigestBlock(entries);
+    const written = await this.appendBlock(block);
+    if (written) {
       this.logger.log(
-        `Pruned ${deletedRows.length} slow-query snapshots older than ${daysToKeep}d`,
+        `Appended slow-query digest entries=${entries.length} → ${this.logFilePath}`,
       );
     }
-    return deletedRows.length;
   }
 
-  // ─── Private helpers (≤30 lines each) ────────────────────────────
+  /** Returns the absolute path to the slow-query log file. */
+  getLogFilePath(): string {
+    return this.logFilePath;
+  }
+
+  /**
+   * Read the last `maxBytes` of the slow-query log file. Returns null if the
+   * file does not exist (cron has not yet run on this deployment) or is empty.
+   * Used by the feedback flow to attach recent slow-query context to admin
+   * bug reports.
+   */
+  async readLogTail(maxBytes = 16_384): Promise<string | null> {
+    try {
+      const stat = await fs.promises.stat(this.logFilePath);
+      if (stat.size === 0) return null;
+      const start = Math.max(0, stat.size - maxBytes);
+      const handle = await fs.promises.open(this.logFilePath, 'r');
+      try {
+        const length = stat.size - start;
+        const buf = Buffer.alloc(length);
+        await handle.read(buf, 0, length, start);
+        return buf.toString('utf8');
+      } finally {
+        await handle.close();
+      }
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') return null;
+      this.logger.warn(
+        `Failed to read slow-query log tail: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  // ─── Private helpers ─────────────────────────────────────────────
 
   /** Issue the pg_stat_statements query; returns [] when extension absent. */
   private async readPgStatStatements(): Promise<SlowQueryEntryRecord[]> {
     try {
       const rows = await this.db.execute<RawPgStatStatementsRow>(
-        selectPgStatStatementsSql(SNAPSHOT_TOP_N),
+        selectPgStatStatementsSql(DIGEST_TOP_N),
       );
       return rows.map(normalizeRawRow);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `pg_stat_statements unavailable (${msg}); recording empty snapshot`,
+        `pg_stat_statements unavailable (${msg}); writing empty digest`,
       );
       return [];
     }
   }
 
-  /** Insert one row into slow_query_snapshots. */
-  private async insertSnapshotRow(source: SourceDto) {
-    const [row] = await this.db
-      .insert(schema.slowQuerySnapshots)
-      .values({ source })
-      .returning();
-    return row;
-  }
-
-  /** Bulk-insert entries for a snapshot. */
-  private async insertEntries(
-    snapshotId: number,
-    entries: SlowQueryEntryRecord[],
-  ): Promise<void> {
-    const values = entries.map((e) => ({
-      snapshotId,
-      queryid: BigInt(e.queryid),
-      queryText: e.queryText,
-      calls: BigInt(Math.trunc(e.calls)),
-      meanExecTimeMs: e.meanExecTimeMs,
-      totalExecTimeMs: e.totalExecTimeMs,
-    }));
-    await this.db.insert(schema.slowQuerySnapshotEntries).values(values);
-  }
-
-  /** Most recent snapshot row of any source, or null. */
-  private async findLatestSnapshot() {
-    const [row] = await this.db
-      .select()
-      .from(schema.slowQuerySnapshots)
-      .orderBy(desc(schema.slowQuerySnapshots.capturedAt))
-      .limit(1);
-    return row ?? null;
-  }
-
-  /** Most recent cron snapshot strictly older than `before`. */
-  private async findBaselineForCron(before: Date) {
-    const [row] = await this.db
-      .select()
-      .from(schema.slowQuerySnapshots)
-      .where(
-        and(
-          eq(schema.slowQuerySnapshots.source, 'cron'),
-          lt(schema.slowQuerySnapshots.capturedAt, before),
-        ),
-      )
-      .orderBy(desc(schema.slowQuerySnapshots.capturedAt))
-      .limit(1);
-    return row ?? null;
-  }
-
-  /** Load entries for a snapshot, normalised to contract shape. */
-  private async loadEntries(
-    snapshotId: number,
-  ): Promise<SlowQueryEntryRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(schema.slowQuerySnapshotEntries)
-      .where(eq(schema.slowQuerySnapshotEntries.snapshotId, snapshotId));
-    return rows.map((r) => ({
-      queryid: r.queryid.toString(),
-      queryText: r.queryText,
-      calls: Number(r.calls),
-      meanExecTimeMs: r.meanExecTimeMs,
-      totalExecTimeMs: r.totalExecTimeMs,
-    }));
-  }
-
-  /** Map a snapshot row to its contract DTO. */
-  private toSnapshotDto(
-    row: typeof schema.slowQuerySnapshots.$inferSelect,
-  ): SlowQuerySnapshotDto {
-    return {
-      id: row.id,
-      capturedAt: row.capturedAt.toISOString(),
-      source: row.source as SourceDto,
-    };
+  /**
+   * Append a formatted block to the log file, creating the dir if needed.
+   * Returns true on success, false on any IO failure (warning logged).
+   */
+  private async appendBlock(block: string): Promise<boolean> {
+    try {
+      await fs.promises.mkdir(path.dirname(this.logFilePath), {
+        recursive: true,
+      });
+      await fs.promises.appendFile(this.logFilePath, block, 'utf8');
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Failed to append slow-query digest to ${this.logFilePath}: ${msg}`,
+      );
+      return false;
+    }
   }
 }

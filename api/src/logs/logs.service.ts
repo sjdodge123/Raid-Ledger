@@ -26,6 +26,7 @@ const VALID_SERVICES: LogService[] = [
   'postgresql',
   'redis',
   'supervisor',
+  'slow-queries',
 ];
 
 /** Patterns to scrub from exported log content. */

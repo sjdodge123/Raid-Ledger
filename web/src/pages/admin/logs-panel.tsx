@@ -3,7 +3,6 @@ import type { LogService } from '@raid-ledger/contract';
 import { useLogs, downloadLogFile, exportLogs } from '../../hooks/use-logs';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { toast } from 'sonner';
-import { SlowQueriesCard } from './slow-queries-card';
 
 type FilterService = 'all' | LogService;
 
@@ -31,9 +30,10 @@ const SERVICE_BADGE: Record<string, string> = {
   postgresql: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
   redis: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
   supervisor: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  'slow-queries': 'bg-rose-500/15 text-rose-400 border-rose-500/30',
 };
 
-const SERVICES: LogService[] = ['api', 'nginx', 'postgresql', 'redis', 'supervisor'];
+const SERVICES: LogService[] = ['api', 'nginx', 'postgresql', 'redis', 'supervisor', 'slow-queries'];
 
 async function handleLogExport(filter: FilterService, setExporting: (v: boolean) => void) {
   setExporting(true);
@@ -61,7 +61,6 @@ export function LogsPanel() {
 
   return (
     <div className="space-y-6">
-      <SlowQueriesCard />
       <LogsHeader exporting={exporting} hasFiles={allFiles.length > 0} onExport={() => handleLogExport(filter, setExporting)} />
       {allFiles.length > 0 && <LogFilterPills filter={filter} allCount={allFiles.length} serviceCounts={computeServiceCounts(allFiles)} onFilter={setFilter} />}
       <LogsStatusMessages isLoading={logs.isLoading} isError={logs.isError} isEmpty={logs.data != null && allFiles.length === 0} />

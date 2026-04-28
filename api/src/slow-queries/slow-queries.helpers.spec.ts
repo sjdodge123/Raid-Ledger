@@ -1,85 +1,93 @@
-/**
- * Unit tests for slow-queries helpers (ROK-1156).
- *
- * `diffEntries` is the load-bearing pure function the digest cron and
- * the on-demand snapshot endpoint share. It is responsible for turning
- * two cumulative `pg_stat_statements` snapshots into a per-window delta.
- */
-import { diffEntries, type SlowQueryEntryRecord } from './slow-queries.helpers';
+import {
+  formatDigestBlock,
+  normalizeRawRow,
+  type SlowQueryEntryRecord,
+  type RawPgStatStatementsRow,
+} from './slow-queries.helpers';
 
-function entry(
-  queryid: string,
-  calls: number,
-  totalExecTimeMs: number,
-  queryText = 'SELECT 1',
-): SlowQueryEntryRecord {
-  const meanExecTimeMs = calls > 0 ? totalExecTimeMs / calls : 0;
-  return { queryid, queryText, calls, totalExecTimeMs, meanExecTimeMs };
-}
+const FIXED_AT = new Date('2026-04-28T13:00:00.000Z');
 
-describe('diffEntries', () => {
-  it('passes every current entry through when baseline is empty (first snapshot)', () => {
-    const current = [entry('1', 10, 1000), entry('2', 4, 200)];
-    const result = diffEntries(current, []);
-    expect(result).toHaveLength(2);
-    const ids = result.map((e) => e.queryid).sort();
-    expect(ids).toEqual(['1', '2']);
-    const r1 = result.find((e) => e.queryid === '1')!;
-    expect(r1.calls).toBe(10);
-    expect(r1.totalExecTimeMs).toBe(1000);
-    expect(r1.meanExecTimeMs).toBeCloseTo(100, 6);
+const SAMPLE_ENTRY: SlowQueryEntryRecord = {
+  queryid: '12345',
+  queryText: 'SELECT * FROM events WHERE id = $1',
+  calls: 42,
+  meanExecTimeMs: 234.567,
+  totalExecTimeMs: 9851.81,
+};
+
+describe('formatDigestBlock', () => {
+  it('renders header + subtitle + rows + footer when entries exist', () => {
+    const block = formatDigestBlock([SAMPLE_ENTRY], FIXED_AT);
+    expect(block).toContain(
+      '=== Slow Query Digest @ 2026-04-28T13:00:00.000Z ===',
+    );
+    expect(block).toContain('top 10 by mean_exec_time');
+    expect(block).toContain('calls');
+    expect(block).toContain('mean_ms');
+    expect(block).toContain('total_ms');
+    expect(block).toContain('query');
+    expect(block).toMatch(/42\s+234\.57\s+9851\.81\s+SELECT \* FROM events/);
+    expect(block).toContain('=== End ===');
   });
 
-  it('computes deltas when the same queryid appears in both snapshots', () => {
-    const baseline = [entry('1', 10, 1000)];
-    const current = [entry('1', 14, 1800)];
-    const [r1] = diffEntries(current, baseline);
-    expect(r1.calls).toBe(4);
-    expect(r1.totalExecTimeMs).toBe(800);
-    expect(r1.meanExecTimeMs).toBeCloseTo(200, 6);
+  it('renders an empty marker when there are no entries', () => {
+    const block = formatDigestBlock([], FIXED_AT);
+    expect(block).toContain('(no statements crossed the filter)');
+    expect(block).not.toContain('mean_ms');
+    expect(block).toContain('=== End ===');
   });
 
-  it('treats a queryid that exists only in current as fully in-window', () => {
-    const baseline = [entry('1', 5, 500)];
-    const current = [entry('1', 7, 700), entry('2', 3, 900)];
-    const r2 = diffEntries(current, baseline).find((e) => e.queryid === '2')!;
-    expect(r2.calls).toBe(3);
-    expect(r2.totalExecTimeMs).toBe(900);
-    expect(r2.meanExecTimeMs).toBeCloseTo(300, 6);
+  it('collapses multi-line query whitespace to a single line', () => {
+    const multiline: SlowQueryEntryRecord = {
+      ...SAMPLE_ENTRY,
+      queryText:
+        'SELECT id\n  FROM users\n  WHERE last_seen > $1\n  ORDER BY id',
+    };
+    const block = formatDigestBlock([multiline], FIXED_AT);
+    expect(block).toContain(
+      'SELECT id FROM users WHERE last_seen > $1 ORDER BY id',
+    );
+    expect(block).not.toContain('\n  FROM');
   });
 
-  it('drops queryids that exist only in baseline', () => {
-    const baseline = [entry('stale', 100, 5000)];
-    const current = [entry('fresh', 1, 50)];
-    const result = diffEntries(current, baseline);
-    expect(result).toHaveLength(1);
-    expect(result[0].queryid).toBe('fresh');
+  it('terminates with a trailing newline so successive appends do not concatenate', () => {
+    const block = formatDigestBlock([SAMPLE_ENTRY], FIXED_AT);
+    expect(block.endsWith('\n')).toBe(true);
   });
 
-  it('detects pg_stat_statements_reset (curr.calls < prev.calls) and treats current as fully in-window', () => {
-    const baseline = [entry('1', 100, 10000)];
-    const current = [entry('1', 5, 750)];
-    const [r1] = diffEntries(current, baseline);
-    expect(r1.calls).toBe(5);
-    expect(r1.totalExecTimeMs).toBe(750);
-    expect(r1.meanExecTimeMs).toBeCloseTo(150, 6);
+  it('uses the provided capturedAt timestamp', () => {
+    const earlier = new Date('2020-01-01T00:00:00.000Z');
+    const block = formatDigestBlock([], earlier);
+    expect(block).toContain('2020-01-01T00:00:00.000Z');
+  });
+});
+
+describe('normalizeRawRow', () => {
+  it('coerces string-encoded numerics from postgres into JS numbers', () => {
+    const raw: RawPgStatStatementsRow = {
+      queryid: '999',
+      query_text: 'SELECT 1',
+      calls: '17',
+      mean_exec_time_ms: '12.5',
+      total_exec_time_ms: '212.5',
+    };
+    expect(normalizeRawRow(raw)).toEqual({
+      queryid: '999',
+      queryText: 'SELECT 1',
+      calls: 17,
+      meanExecTimeMs: 12.5,
+      totalExecTimeMs: 212.5,
+    });
   });
 
-  it('filters out entries with zero calls in the window', () => {
-    const baseline = [entry('1', 10, 1000), entry('2', 4, 800)];
-    const current = [entry('1', 10, 1000), entry('2', 9, 1800)];
-    const result = diffEntries(current, baseline);
-    expect(result.map((e) => e.queryid)).toEqual(['2']);
-  });
-
-  it('sorts results descending by meanExecTimeMs', () => {
-    const baseline: SlowQueryEntryRecord[] = [];
-    const current = [
-      entry('slow', 2, 800), // mean 400
-      entry('fast', 4, 80), // mean 20
-      entry('mid', 5, 500), // mean 100
-    ];
-    const result = diffEntries(current, baseline);
-    expect(result.map((e) => e.queryid)).toEqual(['slow', 'mid', 'fast']);
+  it('passes through already-typed numerics', () => {
+    const raw: RawPgStatStatementsRow = {
+      queryid: '999',
+      query_text: 'SELECT 1',
+      calls: 17,
+      mean_exec_time_ms: 12.5,
+      total_exec_time_ms: 212.5,
+    };
+    expect(normalizeRawRow(raw).calls).toBe(17);
   });
 });
