@@ -9,6 +9,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 // ---------------------------------------------------------------------------
 // Shared mocks
@@ -42,6 +43,14 @@ async function createTestModule() {
   const mockDedupService = makeMockDedupService();
   const mockSettingsService = makeMockSettingsService();
 
+  const mockCronJobService = {
+    executeWithTracking: jest
+      .fn()
+      .mockImplementation(async (_name: string, fn: () => Promise<void>) => {
+        await fn();
+      }),
+  };
+
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       LineupReminderService,
@@ -49,6 +58,7 @@ async function createTestModule() {
       { provide: NotificationService, useValue: mockNotificationService },
       { provide: NotificationDedupService, useValue: mockDedupService },
       { provide: SettingsService, useValue: mockSettingsService },
+      { provide: CronJobService, useValue: mockCronJobService },
     ],
   }).compile();
 
@@ -58,6 +68,7 @@ async function createTestModule() {
     mockNotificationService,
     mockDedupService,
     mockSettingsService,
+    mockCronJobService,
   };
 }
 

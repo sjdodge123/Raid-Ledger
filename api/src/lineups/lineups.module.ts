@@ -19,6 +19,7 @@ import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { TiebreakerModule } from './tiebreaker/tiebreaker.module';
 import { TasteProfileModule } from '../taste-profile/taste-profile.module';
 import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
+import { CronJobModule } from '../cron-jobs/cron-job.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
     NotificationModule,
     forwardRef(() => DiscordBotModule),
     SettingsModule,
+    CronJobModule,
     BullModule.registerQueue({ name: LINEUP_PHASE_QUEUE }),
     forwardRef(() => TiebreakerModule),
     TasteProfileModule,

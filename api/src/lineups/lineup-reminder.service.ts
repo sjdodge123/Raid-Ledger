@@ -13,6 +13,7 @@ import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DEDUP_TTL } from './lineup-notification.constants';
 import {
   findActiveTiebreakersWithDeadline,
@@ -58,6 +59,7 @@ export class LineupReminderService {
     private readonly notificationService: NotificationService,
     private readonly dedupService: NotificationDedupService,
     private readonly settingsService: SettingsService,
+    private readonly cronJobService: CronJobService,
   ) {}
 
   /** Check and send vote reminders for active voting lineups. */
@@ -86,6 +88,14 @@ export class LineupReminderService {
     name: 'LineupReminderService_checkTiebreakerReminders',
   })
   async checkTiebreakerReminders(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkTiebreakerReminders',
+      () => this.runTiebreakerReminders(),
+    );
+  }
+
+  /** Inner body — wrapped by `executeWithTracking` for cron-jobs admin visibility. */
+  private async runTiebreakerReminders(): Promise<void> {
     const tiebreakers = await findActiveTiebreakersWithDeadline(this.db);
     for (const tb of tiebreakers) {
       try {
