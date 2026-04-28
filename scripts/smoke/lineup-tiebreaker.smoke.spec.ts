@@ -11,6 +11,14 @@
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiPost, apiGet } from './api-helpers';
 
+// ROK-1147: every describe in this file creates a lineup, votes, advances
+// through phases, and starts a tiebreaker. The fixture falls back to
+// /lineups/banner on 409 (sibling-owned lineup) and then tries to mutate
+// it, producing "Cannot transition from 'voting' to 'voting'" and
+// downstream UI failures. Run the file serially so each fixture creates
+// its own lineup without colliding with siblings.
+test.describe.configure({ mode: 'serial' });
+
 async function apiPatch(token: string, path: string, body: Record<string, unknown>) {
     const res = await fetch(`${API_BASE}${path}`, {
         method: 'PATCH',
