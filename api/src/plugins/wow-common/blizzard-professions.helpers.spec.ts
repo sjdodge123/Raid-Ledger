@@ -159,7 +159,9 @@ describe('fetchCharacterProfessions — graceful handling', () => {
   it('returns null when fetch throws (network/timeout)', async () => {
     global.fetch = jest
       .fn()
-      .mockRejectedValueOnce(new Error('ECONNRESET')) as unknown as typeof fetch;
+      .mockRejectedValueOnce(
+        new Error('ECONNRESET'),
+      ) as unknown as typeof fetch;
 
     const result = await fetchCharacterProfessions(
       'X',

@@ -24,8 +24,10 @@ import {
 import { buildCharacterParams } from './blizzard-character.helpers';
 import * as profileH from './blizzard-profile.helpers';
 import * as equipH from './blizzard-equipment.helpers';
+import * as profH from './blizzard-professions.helpers';
 import * as specH from './blizzard-spec.helpers';
 import * as instH from './blizzard-instance.helpers';
+import type { ExternalCharacterProfessions } from '../plugin-host/extension-types';
 
 // Re-export types for backward compatibility
 export type {
@@ -107,6 +109,26 @@ export class BlizzardService {
   ): Promise<BlizzardCharacterEquipment | null> {
     const token = await this.getAccessToken(region);
     return equipH.fetchCharacterEquipment(
+      name,
+      realm,
+      region,
+      apiNamespacePrefix,
+      token,
+      this.logger,
+    );
+  }
+
+  /** Fetch character professions from the Blizzard API.
+   * @param apiNamespacePrefix - From the game row (null for retail)
+   */
+  async fetchCharacterProfessions(
+    name: string,
+    realm: string,
+    region: string,
+    apiNamespacePrefix: string | null = null,
+  ): Promise<ExternalCharacterProfessions | null> {
+    const token = await this.getAccessToken(region);
+    return profH.fetchCharacterProfessions(
       name,
       realm,
       region,

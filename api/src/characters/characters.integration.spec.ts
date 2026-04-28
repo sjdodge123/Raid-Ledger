@@ -645,7 +645,12 @@ interface ProfessionFixture {
     slug: string;
     skillLevel: number;
     maxSkillLevel: number;
-    tiers: unknown[];
+    tiers: Array<{
+      id: number;
+      name: string;
+      skillLevel: number;
+      maxSkillLevel: number;
+    }>;
   }>;
   syncedAt: string;
 }
@@ -833,9 +838,7 @@ function describeProfessionSync() {
     });
 
     // Service returns null (signals 5xx / network failure).
-    jest
-      .spyOn(blizzard, 'fetchCharacterProfessions')
-      .mockResolvedValue(null);
+    jest.spyOn(blizzard, 'fetchCharacterProfessions').mockResolvedValue(null);
 
     await charactersService.syncAllCharacters();
 
@@ -853,9 +856,7 @@ function describeProfessionSync() {
       secondary: [],
       syncedAt: '2026-04-28T00:00:00.000Z',
     };
-    jest
-      .spyOn(blizzard, 'fetchCharacterProfessions')
-      .mockResolvedValue(empty);
+    jest.spyOn(blizzard, 'fetchCharacterProfessions').mockResolvedValue(empty);
 
     const char = await insertSyncableCharacter(testApp, userId, gameId);
     await charactersService.syncAllCharacters();
@@ -883,9 +884,8 @@ describe('Character profession sync (ROK-1130 integration)', () =>
 // exists, which is the TDD signal.
 describe('seed-testing buildSeedProfessions (ROK-1130, AC #14)', () => {
   it('produces a CharacterProfessions shape for retail WoW classes', async () => {
-    const { buildSeedProfessions } = await import(
-      '../../scripts/seed-testing.helpers'
-    );
+    const { buildSeedProfessions } =
+      await import('../../scripts/seed-testing.helpers');
     const result = buildSeedProfessions('Mage', 'world-of-warcraft');
     expect(result).not.toBeNull();
     expect(Array.isArray(result!.primary)).toBe(true);
@@ -895,18 +895,16 @@ describe('seed-testing buildSeedProfessions (ROK-1130, AC #14)', () => {
   });
 
   it('produces empty tiers for classic WoW characters', async () => {
-    const { buildSeedProfessions } = await import(
-      '../../scripts/seed-testing.helpers'
-    );
+    const { buildSeedProfessions } =
+      await import('../../scripts/seed-testing.helpers');
     const result = buildSeedProfessions('Mage', 'world-of-warcraft-classic');
     expect(result).not.toBeNull();
     expect(result!.primary[0].tiers).toEqual([]);
   });
 
   it('returns null for non-WoW games', async () => {
-    const { buildSeedProfessions } = await import(
-      '../../scripts/seed-testing.helpers'
-    );
+    const { buildSeedProfessions } =
+      await import('../../scripts/seed-testing.helpers');
     const result = buildSeedProfessions('Monk', 'valheim');
     expect(result).toBeNull();
   });

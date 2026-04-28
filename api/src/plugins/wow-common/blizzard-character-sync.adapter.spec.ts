@@ -179,16 +179,19 @@ describe('BlizzardCharacterSyncAdapter — fetchProfessions', () => {
     mockBlizzardService.fetchCharacterProfessions.mockResolvedValue(
       mockProfessions,
     );
-    const result = await adapter.fetchProfessions!(
+    const result = await adapter.fetchProfessions(
       'Thrall',
       'area-52',
       'us',
       'classic1x',
     );
     expect(result).toBe(mockProfessions);
-    expect(
-      mockBlizzardService.fetchCharacterProfessions,
-    ).toHaveBeenCalledWith('Thrall', 'area-52', 'us', 'classic1x');
+    expect(mockBlizzardService.fetchCharacterProfessions).toHaveBeenCalledWith(
+      'Thrall',
+      'area-52',
+      'us',
+      'classic1x',
+    );
   });
 
   it('should pass null gameVariant through when retail (no variant)', async () => {
@@ -197,15 +200,18 @@ describe('BlizzardCharacterSyncAdapter — fetchProfessions', () => {
       secondary: [],
       syncedAt: '2026-04-28T00:00:00.000Z',
     });
-    await adapter.fetchProfessions!('Thrall', 'area-52', 'us');
-    expect(
-      mockBlizzardService.fetchCharacterProfessions,
-    ).toHaveBeenCalledWith('Thrall', 'area-52', 'us', null);
+    await adapter.fetchProfessions('Thrall', 'area-52', 'us');
+    expect(mockBlizzardService.fetchCharacterProfessions).toHaveBeenCalledWith(
+      'Thrall',
+      'area-52',
+      'us',
+      null,
+    );
   });
 
   it('should pass through null when BlizzardService returns null (no fallback — architect §3)', async () => {
     mockBlizzardService.fetchCharacterProfessions.mockResolvedValue(null);
-    const result = await adapter.fetchProfessions!(
+    const result = await adapter.fetchProfessions(
       'Thrall',
       'area-52',
       'us',
