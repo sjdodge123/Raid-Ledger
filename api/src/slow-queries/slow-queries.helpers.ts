@@ -23,13 +23,13 @@ export interface SlowQueryEntryRecord {
 }
 
 /** Raw row shape returned by `selectPgStatStatements()`. */
-export interface RawPgStatStatementsRow {
+export type RawPgStatStatementsRow = {
   queryid: string;
   query_text: string;
   calls: string | number;
   mean_exec_time_ms: string | number;
   total_exec_time_ms: string | number;
-}
+} & Record<string, unknown>;
 
 /**
  * Diff two cumulative `pg_stat_statements` snapshots into a per-window delta.
