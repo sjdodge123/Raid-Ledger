@@ -51,9 +51,11 @@ test.describe('Activity Timeline on event detail', () => {
     test('renders Activity heading with timeline entries', async ({ page }) => {
         await page.goto(`/events/${eventId}`);
 
-        // Wait for event detail page to load
+        // ROK-1147: scope to the heading — getByText also matches a
+        // "you're already signed up for…" paragraph that contains the
+        // event name, which triggers strict-mode collisions.
         await expect(
-            page.getByText('Timeline Smoke Test Event'),
+            page.getByRole('heading', { name: 'Timeline Smoke Test Event' }),
         ).toBeVisible({ timeout: 15_000 });
 
         // Activity section is a collapsible button "Activity · N events"
