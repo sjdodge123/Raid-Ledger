@@ -144,3 +144,6 @@ export * from './discovery-categories.schema.js';
 
 // Community Insights (ROK-1099)
 export * from './community-insights.schema.js';
+
+// Community Lineup Realtime WS Events (ROK-1118)
+export * from './lineups/index.js';

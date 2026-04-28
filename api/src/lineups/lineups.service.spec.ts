@@ -8,6 +8,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
+import { LineupsGateway } from './lineups.gateway';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
@@ -143,7 +144,9 @@ function describeLineupsService() {
   function mockUpdate() {
     mockDb.update.mockReturnValue({
       set: jest.fn().mockReturnValue({
-        where: jest.fn().mockResolvedValue(undefined),
+        where: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+        }),
       }),
     });
   }
@@ -222,6 +225,10 @@ function describeLineupsService() {
           useValue: {
             invalidateForLineup: jest.fn().mockResolvedValue(undefined),
           },
+        },
+        {
+          provide: LineupsGateway,
+          useValue: { emitStatusChange: jest.fn() },
         },
       ],
     }).compile();
@@ -418,10 +425,12 @@ function describeLineupsService() {
       mockSelects(
         makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 1 }] }),
       );
-      // applyStatusUpdate (update)
+      // applyStatusUpdate (conditional update)
       mockDb.update.mockReturnValue({
         set: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue(undefined),
+          where: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
         }),
       });
       // buildDetailResponse chain (findLineupById + enrichment queries)

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLineupDetail } from '../hooks/use-lineups';
+import { useLineupRealtime } from '../hooks/use-lineup-realtime';
 import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
 import { InviteeList } from '../components/lineups/InviteeList';
@@ -73,6 +74,7 @@ export function LineupDetailPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const lineupId = id ? parseInt(id, 10) : undefined;
   const { data: lineup, isLoading, error } = useLineupDetail(lineupId);
+  useLineupRealtime(lineupId);
   const { data: tiebreaker } = useTiebreakerDetail(lineupId);
   const { user } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);

@@ -34,11 +34,11 @@ const ACTIVE_LINEUP_KEY = ['lineups', 'active'] as const;
 /** Query key for the banner. */
 const BANNER_KEY = ['lineups', 'banner'] as const;
 /** Query key prefix for lineup detail queries. */
-const DETAIL_KEY = ['lineups', 'detail'] as const;
+export const DETAIL_KEY = ['lineups', 'detail'] as const;
 /** Query key prefix for common ground queries. */
 const COMMON_GROUND_KEY = ['common-ground'] as const;
 /** Shared prefix for all lineup query invalidation. */
-const LINEUPS_PREFIX = ['lineups'] as const;
+export const LINEUPS_PREFIX = ['lineups'] as const;
 
 /**
  * Hook for fetching every currently active lineup (ROK-1065).
