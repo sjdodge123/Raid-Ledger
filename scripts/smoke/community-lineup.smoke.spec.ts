@@ -23,22 +23,29 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
 // Setup: ensure an active lineup exists for the test suite
 // ---------------------------------------------------------------------------
 
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so sibling
+// workers don't archive each other's lineups mid-test. The trailing `-` makes
+// `smoke-w1-…` a non-prefix of `smoke-w10-…` etc.
+const FILE_PREFIX = 'community-lineup';
+let workerPrefix: string;
+let lineupTitle: string;
+
 let adminToken: string;
 let lineupId: number;
 let createdLineup = false;
 
 /**
- * Archive every non-archived lineup atomically (ROK-1147).
+ * Archive lineups owned by THIS worker (ROK-1147).
  *
- * Replaces the prior status-walk that raced across parallel workers — one
- * worker's archive sweep would invalidate another worker's just-created
- * lineup mid-test. The DEMO_MODE-only `/admin/test/reset-lineups` endpoint
- * archives every lineup in a single SQL UPDATE.
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) archives every `building`/
+ * `voting` lineup whose title starts with the supplied prefix. Each smoke
+ * worker uses a unique prefix so sibling workers' lineups are untouched.
  *
- * `id` is ignored (kept for call-site compatibility) — the reset is global.
+ * `id` is ignored (kept for call-site compatibility) — the reset is scoped
+ * per-worker via prefix, not by lineup id.
  */
 async function archiveLineup(token: string, _id: number): Promise<void> {
-    await apiPost(token, '/admin/test/reset-lineups');
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 /**
@@ -55,7 +62,7 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
         await archiveLineup(token, banner.id);
     }
     const lineup = (await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         buildingDurationHours: 720,
         votingDurationHours: 720,
@@ -70,16 +77,18 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
     return lineupId; // fallback to last known
 }
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
     adminToken = await getAdminToken();
 
-    // ROK-1147: reset first so this worker starts with no active lineup.
-    // Replaces the prior banner-check-then-conditionally-archive that raced
-    // with sibling workers during the multi-second status-walk.
-    await apiPost(adminToken, '/admin/test/reset-lineups');
+    // ROK-1147: reset only THIS worker's lineups so sibling workers'
+    // in-flight lineups are untouched.
+    await apiPost(adminToken, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 
     const lineup = (await apiPost(adminToken, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         buildingDurationHours: 720,
         votingDurationHours: 720,
@@ -412,7 +421,7 @@ test.describe('Voting phase', () => {
             if (banner.status !== 'building') {
                 await archiveLineup(adminToken, banner.id);
                 const created = (await apiPost(adminToken, '/lineups', {
-                    title: 'Smoke Lineup',
+                    title: lineupTitle,
                     targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
                     buildingDurationHours: 720,
                     votingDurationHours: 720,
@@ -425,7 +434,7 @@ test.describe('Voting phase', () => {
         } else {
             // No active lineup -- create one
             const created = (await apiPost(adminToken, '/lineups', {
-                title: 'Smoke Lineup',
+                title: lineupTitle,
                 targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
                 buildingDurationHours: 720,
                 votingDurationHours: 720,

@@ -22,17 +22,23 @@ async function apiPatch(token: string, path: string, body: Record<string, unknow
     });
 }
 
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'lineup-phase-breadcrumb';
+let workerPrefix: string;
+let lineupTitle: string;
+
 /**
- * Archive every non-archived lineup atomically (ROK-1147).
+ * Archive lineups owned by THIS worker (ROK-1147).
  *
- * Replaces the prior status-walk that raced across parallel workers.
- * `/admin/test/reset-lineups` (DEMO_MODE-only) archives every lineup in
- * a single SQL UPDATE, eliminating the multi-second race window.
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
  */
 async function archiveActiveLineup(token: string): Promise<void> {
     await fetch(`${API_BASE}/admin/test/reset-lineups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ titlePrefix: workerPrefix }),
     });
 }
 
@@ -42,7 +48,7 @@ async function ensureActiveLineup(token: string): Promise<number> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-            title: 'Smoke Lineup',
+            title: lineupTitle,
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
@@ -88,6 +94,13 @@ async function gotoLineupDetail(page: ReturnType<typeof test.info>['_test'] exte
         page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
     ).toBeVisible({ timeout: 10_000 });
 }
+
+// ROK-1147: initialise per-worker prefix + title before any describe-level
+// `beforeAll` hooks run.
+test.beforeAll(({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+});
 
 // ---------------------------------------------------------------------------
 // Breadcrumb visibility and interaction

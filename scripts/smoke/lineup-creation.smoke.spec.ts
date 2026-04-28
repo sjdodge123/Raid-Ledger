@@ -26,13 +26,17 @@ async function apiPatch(
     });
 }
 
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so sibling
+// workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'lineup-creation';
+let workerPrefix: string;
+let lineupTitle: string;
+
 /**
- * Archive every non-archived lineup atomically (ROK-1147).
+ * Archive lineups owned by THIS worker (ROK-1147).
  *
- * Replaces the prior status-walk that raced across parallel workers — one
- * worker's archive sweep would invalidate another worker's just-created
- * lineup mid-test. The DEMO_MODE-only `/admin/test/reset-lineups` endpoint
- * archives every lineup in a single SQL UPDATE.
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
  */
 async function archiveActiveLineup(token: string): Promise<void> {
     await fetch(`${API_BASE}/admin/test/reset-lineups`, {
@@ -41,6 +45,7 @@ async function archiveActiveLineup(token: string): Promise<void> {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ titlePrefix: workerPrefix }),
     });
 }
 
@@ -60,7 +65,7 @@ async function ensureActiveLineup(
             Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-            title: 'Smoke Lineup',
+            title: lineupTitle,
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
@@ -77,6 +82,13 @@ async function ensureActiveLineup(
     if (banner && typeof banner.id === 'number') return banner.id;
     throw new Error('Failed to create or find an active lineup');
 }
+
+// ROK-1147: initialise per-worker prefix + title before any describe-level
+// `beforeAll` hooks run.
+test.beforeAll(({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+});
 
 // ---------------------------------------------------------------------------
 // "Start Lineup" button visibility on Games page
@@ -118,7 +130,7 @@ test.describe('Start Lineup button on Games page', () => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${adminToken}`,
                 },
-                body: JSON.stringify({ title: 'Smoke Lineup' }),
+                body: JSON.stringify({ title: lineupTitle }),
             });
             expect(createRes.ok).toBe(true);
         }
