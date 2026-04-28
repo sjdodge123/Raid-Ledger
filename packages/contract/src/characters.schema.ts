@@ -67,6 +67,39 @@ export const CharacterEquipmentSchema = z.object({
 export type CharacterEquipmentDto = z.infer<typeof CharacterEquipmentSchema>;
 
 // ==========================================
+// Profession Types (Character Detail Page)
+// ==========================================
+
+export const ProfessionTierSchema = z.object({
+    id: z.number().int(),
+    name: z.string(),
+    skillLevel: z.number().int(),
+    maxSkillLevel: z.number().int(),
+});
+
+export type ProfessionTierDto = z.infer<typeof ProfessionTierSchema>;
+
+export const ProfessionEntrySchema = z.object({
+    id: z.number().int(),
+    name: z.string(),
+    /** Lowercased name with spaces replaced by '-' (e.g. 'tailoring', 'inscription') */
+    slug: z.string(),
+    skillLevel: z.number().int(),
+    maxSkillLevel: z.number().int(),
+    tiers: z.array(ProfessionTierSchema),
+});
+
+export type ProfessionEntryDto = z.infer<typeof ProfessionEntrySchema>;
+
+export const CharacterProfessionsSchema = z.object({
+    primary: z.array(ProfessionEntrySchema),
+    secondary: z.array(ProfessionEntrySchema),
+    syncedAt: z.string().datetime(),
+});
+
+export type CharacterProfessionsDto = z.infer<typeof CharacterProfessionsSchema>;
+
+// ==========================================
 // Character DTOs
 // ==========================================
 
@@ -99,6 +132,7 @@ export const CharacterSchema = z.object({
     gameVariant: z.string().max(30).nullable(),
     equipment: CharacterEquipmentSchema.nullable(),
     talents: z.unknown().nullable(),
+    professions: CharacterProfessionsSchema.nullable(),
     /** Cached enrichment data from third-party APIs (ROK-269) */
     enrichments: z.array(z.object({
         enricherKey: z.string(),

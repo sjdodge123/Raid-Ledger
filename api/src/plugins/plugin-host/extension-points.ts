@@ -8,6 +8,7 @@ import type {
   ExternalCharacterProfile,
   ExternalInferredSpecialization,
   ExternalCharacterEquipment,
+  ExternalCharacterProfessions,
   ExternalRealm,
   ExternalContentInstance,
   ExternalContentInstanceDetail,
@@ -37,6 +38,12 @@ export interface CharacterSyncAdapter {
     region: string,
     gameVariant?: string,
   ): Promise<ExternalCharacterEquipment>;
+  fetchProfessions?(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string | null,
+  ): Promise<ExternalCharacterProfessions | null>;
 }
 
 /** Provides game content data (realms, instances) */

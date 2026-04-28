@@ -925,6 +925,13 @@
       "when": 1777593600000,
       "tag": "0131_pg_stat_statements_extension",
       "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1777593700000,
+      "tag": "0132_equal_mandarin",
+      "breakpoints": true
     }
   ]
 }
