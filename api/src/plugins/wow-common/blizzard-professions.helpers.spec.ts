@@ -122,7 +122,7 @@ describe('fetchCharacterProfessions — happy path', () => {
 });
 
 describe('fetchCharacterProfessions — graceful handling', () => {
-  it('returns empty arrays + syncedAt on 404 (no throw)', async () => {
+  it('returns null on 404 (leaves prior column / manual entry alone)', async () => {
     mockFetchOnce(404, { code: 404, detail: 'not found' });
 
     const result = await fetchCharacterProfessions(
@@ -134,10 +134,7 @@ describe('fetchCharacterProfessions — graceful handling', () => {
       fakeLogger,
     );
 
-    expect(result).not.toBeNull();
-    expect(result!.primary).toEqual([]);
-    expect(result!.secondary).toEqual([]);
-    expect(typeof result!.syncedAt).toBe('string');
+    expect(result).toBeNull();
   });
 
   it('returns null on 500 (signals orchestrator to leave prior value alone)', async () => {
@@ -176,7 +173,7 @@ describe('fetchCharacterProfessions — graceful handling', () => {
     expect(fakeLogger.warn).toHaveBeenCalled();
   });
 
-  it('treats missing primaries/secondaries arrays as empty', async () => {
+  it('returns null when 200 OK but parsed primary AND secondary are empty (no real data — manual entry preserved)', async () => {
     mockFetchOnce(200, {});
 
     const result = await fetchCharacterProfessions(
@@ -188,9 +185,22 @@ describe('fetchCharacterProfessions — graceful handling', () => {
       fakeLogger,
     );
 
-    expect(result).not.toBeNull();
-    expect(result!.primary).toEqual([]);
-    expect(result!.secondary).toEqual([]);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when 200 OK but explicit empty primaries+secondaries arrays', async () => {
+    mockFetchOnce(200, { primaries: [], secondaries: [] });
+
+    const result = await fetchCharacterProfessions(
+      'X',
+      'Y',
+      'us',
+      null,
+      't',
+      fakeLogger,
+    );
+
+    expect(result).toBeNull();
   });
 
   it('drops top-level specializations array (only nested tiers persisted)', async () => {
@@ -238,8 +248,8 @@ describe('fetchCharacterProfessions — Classic short-circuit', () => {
     },
   );
 
-  it('does NOT short-circuit for retail (apiNamespacePrefix=null)', async () => {
-    mockFetchOnce(200, { primaries: [], secondaries: [] });
+  it('does NOT short-circuit for retail (apiNamespacePrefix=null) — actually hits the API', async () => {
+    mockFetchOnce(200, RETAIL_PAYLOAD);
 
     const result = await fetchCharacterProfessions(
       'Thrall',
@@ -251,7 +261,6 @@ describe('fetchCharacterProfessions — Classic short-circuit', () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result!.primary).toEqual([]);
-    expect(result!.secondary).toEqual([]);
+    expect(result!.primary.length).toBeGreaterThan(0);
   });
 });
