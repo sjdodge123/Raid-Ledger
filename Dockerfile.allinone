@@ -286,6 +286,20 @@ if ! /sbin/su-exec postgres psql -v ON_ERROR_STOP=1 -qt -d raid_ledger \
 fi
 echo "✅ pgvector extension ensured"
 
+# Ensure pg_stat_statements extension is installed (ROK-1156). Same superuser
+# constraint as pgvector — the raid_ledger app role cannot install it via the
+# drizzle migration. Requires shared_preload_libraries=pg_stat_statements in
+# the postgres command (see [program:postgres] above) so the shared memory
+# allocation happens at server start. Migration 0131 is then a no-op.
+if ! /sbin/su-exec postgres psql -v ON_ERROR_STOP=1 -qt -d raid_ledger \
+    -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" > /dev/null 2>&1; then
+  echo "❌ FATAL: pg_stat_statements extension could not be installed"
+  echo "   shared_preload_libraries may not include pg_stat_statements."
+  echo "   Check the [program:postgres] command in supervisord.conf."
+  exit 1
+fi
+echo "✅ pg_stat_statements extension ensured"
+
 # Wait for Redis to be ready (Unix socket)
 echo "⏳ Waiting for Redis..."
 until redis-cli -s /tmp/redis.sock ping > /dev/null 2>&1; do
@@ -365,6 +379,11 @@ if [ ! -s "${PGDATA}/PG_VERSION" ]; then
   # Enable pgvector extension (ROK-948) — requires superuser, must run before
   # Drizzle migrations create the vector-typed columns.
   /sbin/su-exec postgres psql -q -d raid_ledger -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+  # Enable pg_stat_statements extension (ROK-1156) — requires superuser and a
+  # postgres restart to take effect, but `pg_ctl stop` happens below so the
+  # supervisor-managed restart picks up the shared_preload_libraries flag.
+  /sbin/su-exec postgres psql -q -d raid_ledger -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
 
   # Stop PostgreSQL (supervisor will start it)
   /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -m fast -w stop 2>/dev/null
