@@ -1,5 +1,11 @@
-import type { CharacterDto } from '@raid-ledger/contract';
+import { Fragment } from 'react';
+import type {
+    CharacterDto,
+    CharacterProfessionsDto,
+    ProfessionEntryDto,
+} from '@raid-ledger/contract';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
+import { getProfessionIconUrl } from '../../plugins/wow/lib/profession-icons';
 
 /**
  * ROK-461: Selectable character card for admin assignment flow.
@@ -60,8 +66,39 @@ function CharacterInfo({ character, isMain }: { character: CharacterDto; isMain?
                 {character.itemLevel && (
                     <><span>·</span><span className="text-purple-400">{character.itemLevel} iLvl</span></>
                 )}
+                <ProfessionBadges professions={character.professions} />
             </div>
         </div>
+    );
+}
+
+function ProfessionBadges({ professions }: { professions: CharacterProfessionsDto | null }) {
+    if (!professions) return null;
+    const all = [...professions.primary, ...professions.secondary];
+    if (all.length === 0) return null;
+    return (
+        <>
+            {all.map((entry) => (
+                <Fragment key={entry.id}>
+                    <span>·</span>
+                    <ProfessionPill entry={entry} />
+                </Fragment>
+            ))}
+        </>
+    );
+}
+
+function ProfessionPill({ entry }: { entry: ProfessionEntryDto }) {
+    const iconUrl = getProfessionIconUrl(entry.slug);
+    const title = `${entry.name} ${entry.skillLevel}/${entry.maxSkillLevel}`;
+    if (!iconUrl) {
+        return <span title={title}>{entry.name} {entry.skillLevel}</span>;
+    }
+    return (
+        <span className="inline-flex items-center gap-1" title={title}>
+            <img src={iconUrl} alt={entry.name} className="w-4 h-4" />
+            {entry.skillLevel}
+        </span>
     );
 }
 
