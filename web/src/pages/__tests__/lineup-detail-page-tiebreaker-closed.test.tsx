@@ -167,14 +167,16 @@ describe('LineupDetailPage tiebreaker closed notice (ROK-1117)', () => {
         vi.clearAllMocks();
     });
 
-    it('renders TiebreakerClosedNotice for decided lineup with resolved tiebreaker', () => {
+    it('renders TiebreakerClosedNotice ABOVE DecidedView for decided lineup with resolved tiebreaker', () => {
         mockLineup = makeLineup({ status: 'decided' });
         mockTiebreaker = makeTiebreaker({ status: 'resolved' });
 
         renderPage();
 
+        // Both the historical tiebreaker context AND the decided podium are
+        // shown. The closed notice is a banner above the decided view.
         expect(screen.getByTestId('tiebreaker-vote-closed')).toBeInTheDocument();
-        expect(screen.queryByTestId('decided-view')).not.toBeInTheDocument();
+        expect(screen.getByTestId('decided-view')).toBeInTheDocument();
     });
 
     it('falls back to DecidedView when no tiebreaker exists', () => {

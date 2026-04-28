@@ -320,8 +320,14 @@ test.describe('Bracket tiebreaker flow', () => {
             expect(voteButtonCount).toBeGreaterThanOrEqual(1);
 
             await voteButtons.first().click();
+            // Single-voter setup auto-resolves the bracket as soon as the last
+            // expected voter casts. Once that happens, lineup transitions to
+            // 'decided' and ROK-1117's gate replaces BracketView with the
+            // TiebreakerClosedNotice — `bracket-matchup-card[data-voted=true]`
+            // is no longer rendered. Either outcome is a valid AC pass.
             const votedCard = bracketView.locator('[data-testid="bracket-matchup-card"][data-voted="true"]');
-            await expect(votedCard.first()).toBeVisible({ timeout: 5_000 });
+            const closedNotice = page.locator('[data-testid="tiebreaker-vote-closed"]');
+            await expect(votedCard.first().or(closedNotice)).toBeVisible({ timeout: 5_000 });
         } else {
             // All matchups may be byes or already completed — still valid
             const matchupCards = bracketView.locator('[data-testid="bracket-matchup-card"]');
