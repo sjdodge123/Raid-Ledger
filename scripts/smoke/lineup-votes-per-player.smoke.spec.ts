@@ -9,6 +9,13 @@
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiGet } from './api-helpers';
 
+// ROK-1147: tests assert the Start Lineup button is visible (only true
+// when no active lineup exists globally). Per-worker isolation lets
+// siblings hold concurrent lineups, so the banner shows their lineup
+// and the button is hidden. Run serially so this worker owns the
+// global state for the duration of the file.
+test.describe.configure({ mode: 'serial' });
+
 /** Local apiPatch that returns raw Response (callers check .ok). */
 async function apiPatch(token: string, path: string, body: Record<string, unknown>) {
     return fetch(`${API_BASE}${path}`, {
