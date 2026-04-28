@@ -111,24 +111,56 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 // Wizard bypass helper (ROK-999)
 // ---------------------------------------------------------------------------
 
-/** Navigate to the scheduling poll and advance past all 3 wizard steps to the full poll view. */
-async function goToPoll(page: import('@playwright/test').Page, lid: number, mid: number): Promise<void> {
+/**
+ * Navigate to the scheduling poll and advance past all 3 wizard steps
+ * to the full poll view (ROK-1147 rewrite).
+ *
+ * The 3-step wizard renders one step at a time:
+ *   step 0 → [data-testid="scheduling-wizard-step-1"] (gametime grid)
+ *   step 1 → [data-testid="scheduling-wizard-step-2"] (vote on times)
+ *   step 2 → children (the "Scheduling Poll" h1 + full poll body)
+ *
+ * The wizard's `computeInitialStep` may auto-skip step 0 (when gametime
+ * is fresh) or step 1 (when no slots exist), so this helper polls each
+ * step's testid and only clicks the advance button when that step is
+ * actually rendered. The Save & Continue button on step 0 is disabled
+ * when no edits are pending — we always use the Skip button so we don't
+ * race the disabled→enabled transition.
+ */
+async function goToPoll(
+    page: import('@playwright/test').Page,
+    lid: number,
+    mid: number,
+): Promise<void> {
     await page.goto(`/community-lineup/${lid}/schedule/${mid}`);
     const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-    // Wait for page to load, then click through wizard steps.
-    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    for (let i = 0; i < 5; i++) {
-        if (await pollHeading.isVisible({ timeout: 3_000 }).catch(() => false)) return;
-        // Click any wizard advancement button visible on the page
-        for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
-            const btn = page.locator('button', { hasText: label }).first();
-            if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-                await btn.click();
-                await page.waitForTimeout(500); // let React re-render
-                break;
-            }
-        }
+    const step1 = page.locator('[data-testid="scheduling-wizard-step-1"]');
+    const step2 = page.locator('[data-testid="scheduling-wizard-step-2"]');
+
+    // Wait for *some* wizard surface to render (spinner gone, dom mounted).
+    await expect
+        .poll(
+            async () =>
+                (await step1.isVisible().catch(() => false)) ||
+                (await step2.isVisible().catch(() => false)) ||
+                (await pollHeading.isVisible().catch(() => false)),
+            { timeout: 20_000, message: 'wizard surface never rendered' },
+        )
+        .toBe(true);
+
+    // Step 0 (gametime). Use Skip to avoid the disabled-button race.
+    if (await step1.isVisible().catch(() => false)) {
+        await page.getByRole('button', { name: /^Skip$/i }).click();
+        await expect(step1).toBeHidden({ timeout: 10_000 });
     }
+
+    // Step 1 (vote on times). Click Continue to advance to step 2.
+    if (await step2.isVisible().catch(() => false)) {
+        await page.getByRole('button', { name: /^Continue$/i }).click();
+        await expect(step2).toBeHidden({ timeout: 10_000 });
+    }
+
+    // Step 2 — full poll body should now be rendered.
     await expect(pollHeading).toBeVisible({ timeout: 15_000 });
 }
 
