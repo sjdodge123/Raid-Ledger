@@ -68,8 +68,10 @@ export class DemoTestLineupService {
     await archiveActiveLineupForTest(this.db);
   }
 
-  async resetLineupsForTest(): Promise<{ archivedCount: number }> {
+  async resetLineupsForTest(
+    titlePrefix: string,
+  ): Promise<{ archivedCount: number }> {
     await this.assertDemoMode();
-    return resetLineupsForTest(this.db);
+    return resetLineupsForTest(this.db, titlePrefix);
   }
 }

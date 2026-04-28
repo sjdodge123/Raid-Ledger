@@ -24,6 +24,7 @@ import {
   NominateGameTestSchema,
   ArchiveLineupSchema,
   SetAutoNominatePrefSchema,
+  ResetLineupsSchema,
 } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 
@@ -190,20 +191,23 @@ export class DemoTestGamesController {
   }
 
   /**
-   * Archive every non-archived lineup (ROK-1147). DEMO_MODE only.
+   * Archive `building`/`voting` lineups whose title begins with `titlePrefix`
+   * (ROK-1147). DEMO_MODE only.
    *
-   * Smoke specs call this in their per-worker `beforeAll` so each
-   * lineup-* file starts with an empty active-lineup slot, eliminating
-   * the cross-worker race where one worker's archive sweep wipes another
-   * worker's just-created lineup.
+   * Each smoke worker passes a unique prefix in its `beforeAll`, so sibling
+   * workers' lineups are not touched. The earlier global wipe wiped lineups
+   * mid-test for other workers and is no longer used.
    */
   @Post('reset-lineups')
   @HttpCode(HttpStatus.OK)
-  async resetLineupsForTest(): Promise<{
+  async resetLineupsForTest(@Body() body: unknown): Promise<{
     success: boolean;
     archivedCount: number;
   }> {
-    const { archivedCount } = await this.demoTestLineup.resetLineupsForTest();
+    const parsed = parseDemoBody(ResetLineupsSchema, body);
+    const { archivedCount } = await this.demoTestLineup.resetLineupsForTest(
+      parsed.titlePrefix,
+    );
     return { success: true, archivedCount };
   }
 }

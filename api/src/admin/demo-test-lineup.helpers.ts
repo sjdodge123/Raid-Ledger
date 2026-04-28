@@ -6,7 +6,7 @@
  * pass through the normal LineupsService guards so tests can set up and
  * tear down lineups regardless of status-transition rules.
  */
-import { sql } from 'drizzle-orm';
+import { sql, and, like } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -62,26 +62,29 @@ export async function archiveActiveLineupForTest(db: Db): Promise<void> {
 }
 
 /**
- * Archive lineups that are blocking the singleton "active lineup" slot
- * (ROK-1147). Only `building` and `voting` lineups are archived — those
- * are the ones that prevent `POST /lineups` from succeeding due to the
- * one-active-lineup constraint.
+ * Archive `building`/`voting` lineups whose title starts with `titlePrefix`
+ * (ROK-1147). Scoped per worker so sibling workers' lineups are untouched.
  *
- * Crucially, lineups already in `decided` or `scheduling` status are
- * left alone: those belong to whichever sibling worker advanced them
- * past voting, and that worker's tests still need to navigate to them.
- * This is the difference that makes parallel-worker setup safe.
+ * The caller's prefix is escaped against LIKE wildcards (`%`, `_`, `\`)
+ * before a trailing `%` is appended, so callers cannot inject patterns
+ * that would match other workers' titles.
  *
  * Returns `archivedCount` for visibility/debugging.
  */
 export async function resetLineupsForTest(
   db: Db,
+  titlePrefix: string,
 ): Promise<{ archivedCount: number }> {
+  const escapedPrefix = titlePrefix.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const pattern = `${escapedPrefix}%`;
   const result = await db
     .update(schema.communityLineups)
     .set({ status: 'archived', updatedAt: new Date() })
     .where(
-      sql`${schema.communityLineups.status} IN ('building', 'voting')`,
+      and(
+        sql`${schema.communityLineups.status} IN ('building', 'voting')`,
+        like(schema.communityLineups.title, pattern),
+      ),
     )
     .returning({ id: schema.communityLineups.id });
   return { archivedCount: result.length };

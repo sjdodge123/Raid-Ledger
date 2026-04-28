@@ -85,6 +85,10 @@ export const ArchiveLineupSchema = z.object({
   lineupId: z.number().int().positive(),
 });
 
+export const ResetLineupsSchema = z.object({
+  titlePrefix: z.string().min(1).max(64),
+});
+
 export const SetAutoNominatePrefSchema = z.object({
   userId: z.number().int().positive(),
   enabled: z.boolean(),
