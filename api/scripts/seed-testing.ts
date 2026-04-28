@@ -6,6 +6,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../src/drizzle/schema';
 import * as dotenv from 'dotenv';
+import { buildSeedProfessions } from './seed-testing.helpers';
 
 dotenv.config();
 
@@ -150,6 +151,7 @@ async function bootstrap() {
                         isMain,
                         avatarUrl: getClassIconUrl(charData.wowClass),
                         displayOrder: isMain ? 0 : 1,
+                        professions: buildSeedProfessions(charData.class, charData.gameSlug),
                     });
                     const tag = isMain ? 'MAIN' : 'ALT';
                     console.log(`  ✅ Created ${charData.charName} [${charData.class}/${charData.spec}] (${game.name}) [${tag}]`);

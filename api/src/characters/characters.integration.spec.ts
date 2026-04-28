@@ -885,7 +885,7 @@ describe('Character profession sync (ROK-1130 integration)', () =>
 describe('seed-testing buildSeedProfessions (ROK-1130, AC #14)', () => {
   it('produces a CharacterProfessions shape for retail WoW classes', async () => {
     const { buildSeedProfessions } =
-      await import('../../scripts/seed-testing.helpers');
+      await import('../../scripts/seed-testing.helpers.js');
     const result = buildSeedProfessions('Mage', 'world-of-warcraft');
     expect(result).not.toBeNull();
     expect(Array.isArray(result!.primary)).toBe(true);
@@ -896,7 +896,7 @@ describe('seed-testing buildSeedProfessions (ROK-1130, AC #14)', () => {
 
   it('produces empty tiers for classic WoW characters', async () => {
     const { buildSeedProfessions } =
-      await import('../../scripts/seed-testing.helpers');
+      await import('../../scripts/seed-testing.helpers.js');
     const result = buildSeedProfessions('Mage', 'world-of-warcraft-classic');
     expect(result).not.toBeNull();
     expect(result!.primary[0].tiers).toEqual([]);
@@ -904,7 +904,7 @@ describe('seed-testing buildSeedProfessions (ROK-1130, AC #14)', () => {
 
   it('returns null for non-WoW games', async () => {
     const { buildSeedProfessions } =
-      await import('../../scripts/seed-testing.helpers');
+      await import('../../scripts/seed-testing.helpers.js');
     const result = buildSeedProfessions('Monk', 'valheim');
     expect(result).toBeNull();
   });
