@@ -1,11 +1,11 @@
 /**
  * Vitest — CharacterProfessionsPanel (ROK-1130).
  *
- * Architect §3 + operator directive: panel renders nothing when professions
- * are null OR both primary/secondary arrays are empty. Empty-state copy was
- * removed because the Blizzard Classic Profile API does not expose
- * /professions for any classic namespace, so empty data is the common case
- * and a placeholder card adds clutter without information.
+ * Visibility rules:
+ *   • non-owner + no data  → render nothing
+ *   • non-owner + has data → render the panel (read-only)
+ *   • owner    + no data   → render an "Add Professions" CTA card
+ *   • owner    + has data  → render the panel + an "Edit" affordance
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -22,103 +22,83 @@ vi.mock('../lib/profession-icons', () => ({
         name.toLowerCase().replace(/\s+/g, '-'),
 }));
 
+vi.mock('./EditProfessionsModal', () => ({
+    EditProfessionsModal: ({ isOpen }: { isOpen: boolean }) =>
+        isOpen ? <div data-testid="edit-modal" /> : null,
+}));
+
 const TAILORING_WITH_TIER: CharacterProfessionsDto = {
     primary: [
-        {
-            id: 197,
-            name: 'Tailoring',
-            slug: 'tailoring',
-            skillLevel: 450,
-            maxSkillLevel: 450,
-            tiers: [
-                {
-                    id: 2823,
-                    name: 'Dragon Isles Tailoring',
-                    skillLevel: 100,
-                    maxSkillLevel: 100,
-                },
-            ],
-        },
+        { id: 197, name: 'Tailoring', slug: 'tailoring', skillLevel: 450, maxSkillLevel: 450, tiers: [{ id: 2823, name: 'Dragon Isles Tailoring', skillLevel: 100, maxSkillLevel: 100 }] },
     ],
     secondary: [
-        {
-            id: 185,
-            name: 'Cooking',
-            slug: 'cooking',
-            skillLevel: 150,
-            maxSkillLevel: 150,
-            tiers: [],
-        },
+        { id: 185, name: 'Cooking', slug: 'cooking', skillLevel: 150, maxSkillLevel: 150, tiers: [] },
     ],
     syncedAt: '2026-04-28T00:00:00.000Z',
 };
 
-describe('CharacterProfessionsPanel — short-circuit hide (AC #6, operator directive)', () => {
-    it('renders nothing when professions === null', () => {
+const EMPTY_PROFESSIONS: CharacterProfessionsDto = {
+    primary: [],
+    secondary: [],
+    syncedAt: '2026-04-28T00:00:00.000Z',
+};
+
+describe('CharacterProfessionsPanel — visibility short-circuit', () => {
+    it('renders nothing when professions === null and viewer is NOT the owner', () => {
         const { container } = render(
-            <CharacterProfessionsPanel professions={null} />,
+            <CharacterProfessionsPanel professions={null} isOwner={false} characterId="c1" />,
         );
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('renders nothing when both primary and secondary are empty', () => {
-        const empty: CharacterProfessionsDto = {
-            primary: [],
-            secondary: [],
-            syncedAt: '2026-04-28T00:00:00.000Z',
-        };
+    it('renders nothing when both arrays are empty and viewer is NOT the owner', () => {
         const { container } = render(
-            <CharacterProfessionsPanel professions={empty} />,
+            <CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner={false} characterId="c1" />,
         );
         expect(container).toBeEmptyDOMElement();
     });
 });
 
-describe('CharacterProfessionsPanel — populated state (AC #5)', () => {
-    it('renders primary, secondary, tiers, and skill numbers', () => {
-        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} />);
+describe('CharacterProfessionsPanel — owner CTA when no data', () => {
+    it('renders an "Add Professions" CTA when owner has no data', () => {
+        render(<CharacterProfessionsPanel professions={null} isOwner characterId="c1" />);
+        expect(screen.getByRole('heading', { name: /professions/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
+    });
 
-        expect(
-            screen.getByRole('heading', { name: /professions/i }),
-        ).toBeInTheDocument();
+    it('renders the CTA when owner has empty arrays (sync-with-no-data path)', () => {
+        render(<CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner characterId="c1" />);
+        expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
+    });
+});
 
-        // Primary profession name + skill text
+describe('CharacterProfessionsPanel — populated state', () => {
+    it('renders primary, secondary, tiers, and skill numbers (non-owner)', () => {
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner={false} characterId="c1" />);
+        expect(screen.getByRole('heading', { name: /professions/i })).toBeInTheDocument();
         expect(screen.getByText('Tailoring')).toBeInTheDocument();
         expect(screen.getByText(/450\s*\/\s*450/)).toBeInTheDocument();
-
-        // Secondary profession name + skill text
         expect(screen.getByText('Cooking')).toBeInTheDocument();
         expect(screen.getByText(/150\s*\/\s*150/)).toBeInTheDocument();
-
-        // Tier entry
         expect(screen.getByText('Dragon Isles Tailoring')).toBeInTheDocument();
         expect(screen.getByText(/100\s*\/\s*100/)).toBeInTheDocument();
+        // No edit affordance for non-owners
+        expect(screen.queryByRole('button', { name: /^edit$/i })).toBeNull();
+    });
 
-        // Profession icons rendered (one per profession with a known slug)
-        const tailoringImg = screen.getByAltText(/tailoring/i);
-        expect(tailoringImg.getAttribute('src')).toContain('tailoring.jpg');
+    it('renders an Edit affordance for owners with data', () => {
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" />);
+        expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument();
     });
 
     it('falls back to text-only when getProfessionIconUrl returns null', () => {
         const unknown: CharacterProfessionsDto = {
-            primary: [
-                {
-                    id: 999,
-                    name: 'Mystery Craft',
-                    slug: 'mystery-craft',
-                    skillLevel: 25,
-                    maxSkillLevel: 100,
-                    tiers: [],
-                },
-            ],
+            primary: [{ id: 999, name: 'Mystery Craft', slug: 'mystery-craft', skillLevel: 25, maxSkillLevel: 100, tiers: [] }],
             secondary: [],
             syncedAt: '2026-04-28T00:00:00.000Z',
         };
-        render(<CharacterProfessionsPanel professions={unknown} />);
+        render(<CharacterProfessionsPanel professions={unknown} isOwner={false} characterId="c1" />);
         expect(screen.getByText('Mystery Craft')).toBeInTheDocument();
-        // No <img> should render with the unknown slug as alt text.
-        expect(
-            screen.queryByRole('img', { name: /mystery craft/i }),
-        ).toBeNull();
+        expect(screen.queryByRole('img', { name: /mystery craft/i })).toBeNull();
     });
 });

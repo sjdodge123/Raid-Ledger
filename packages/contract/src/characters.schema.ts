@@ -188,6 +188,8 @@ export const UpdateCharacterSchema = z.object({
     itemLevel: z.number().int().positive().nullable().optional(),
     avatarUrl: z.string().url().nullable().optional(),
     displayOrder: z.number().int().optional(),
+    /** ROK-1130: manual profession entry (Classic players, retail overrides). */
+    professions: CharacterProfessionsSchema.nullable().optional(),
 });
 
 export type UpdateCharacterDto = z.infer<typeof UpdateCharacterSchema>;
