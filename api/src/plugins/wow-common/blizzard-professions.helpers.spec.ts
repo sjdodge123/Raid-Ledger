@@ -211,3 +211,47 @@ describe('fetchCharacterProfessions — graceful handling', () => {
     expect(result!.primary[0].tiers[0]).not.toHaveProperty('known_recipes');
   });
 });
+
+describe('fetchCharacterProfessions — Classic short-circuit', () => {
+  it.each([
+    ['classicann', 'Anniversary'],
+    ['classic1x', 'Classic 1x'],
+    ['classic', 'Classic'],
+    ['classicwrath', 'Wrath Classic'],
+  ])(
+    'returns null without making an HTTP request for %s namespace (Blizzard %s API does not expose /professions)',
+    async (prefix) => {
+      const fetchSpy = jest.fn();
+      global.fetch = fetchSpy as unknown as typeof fetch;
+
+      const result = await fetchCharacterProfessions(
+        'Roknua',
+        'Dreamscythe',
+        'us',
+        prefix,
+        'token-1',
+        fakeLogger,
+      );
+
+      expect(result).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does NOT short-circuit for retail (apiNamespacePrefix=null)', async () => {
+    mockFetchOnce(200, { primaries: [], secondaries: [] });
+
+    const result = await fetchCharacterProfessions(
+      'Thrall',
+      'Area 52',
+      'us',
+      null,
+      'token-1',
+      fakeLogger,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.primary).toEqual([]);
+    expect(result!.secondary).toEqual([]);
+  });
+});

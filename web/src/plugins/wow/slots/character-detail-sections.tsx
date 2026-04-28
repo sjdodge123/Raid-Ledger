@@ -73,7 +73,7 @@ export function CharacterDetailSections({
             )}
             <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={gameVariant} />
-            <CharacterProfessionsPanel professions={professions} isArmoryImported={isArmoryImported} />
+            <CharacterProfessionsPanel professions={professions} />
         </>
     );
 }

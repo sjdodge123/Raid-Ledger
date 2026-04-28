@@ -1,10 +1,11 @@
 /**
  * Vitest — CharacterProfessionsPanel (ROK-1130).
  *
- * Covers AC #5 (renders with data) and AC #6 (empty/null states).
- * Also covers the icon-fallback case — when `getProfessionIconUrl`
- * returns null the component should render text only without a broken
- * `<img>`.
+ * Architect §3 + operator directive: panel renders nothing when professions
+ * are null OR both primary/secondary arrays are empty. Empty-state copy was
+ * removed because the Blizzard Classic Profile API does not expose
+ * /professions for any classic namespace, so empty data is the common case
+ * and a placeholder card adds clutter without information.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -52,63 +53,34 @@ const TAILORING_WITH_TIER: CharacterProfessionsDto = {
     syncedAt: '2026-04-28T00:00:00.000Z',
 };
 
-describe('CharacterProfessionsPanel — empty / null states (AC #6)', () => {
-    it('renders the never-synced empty hint when professions === null and not armory-imported', () => {
-        render(
-            <CharacterProfessionsPanel
-                professions={null}
-                isArmoryImported={false}
-            />,
+describe('CharacterProfessionsPanel — short-circuit hide (AC #6, operator directive)', () => {
+    it('renders nothing when professions === null', () => {
+        const { container } = render(
+            <CharacterProfessionsPanel professions={null} />,
         );
-        expect(
-            screen.getByRole('heading', { name: /professions/i }),
-        ).toBeInTheDocument();
-        expect(
-            screen.getByText(/armory|import|sync/i),
-        ).toBeInTheDocument();
+        expect(container).toBeEmptyDOMElement();
     });
 
-    it('renders an empty hint when professions === null and armory-imported (different copy)', () => {
-        render(
-            <CharacterProfessionsPanel
-                professions={null}
-                isArmoryImported={true}
-            />,
-        );
-        expect(
-            screen.getByRole('heading', { name: /professions/i }),
-        ).toBeInTheDocument();
-    });
-
-    it('renders "no professions" copy when both arrays are empty', () => {
+    it('renders nothing when both primary and secondary are empty', () => {
         const empty: CharacterProfessionsDto = {
             primary: [],
             secondary: [],
             syncedAt: '2026-04-28T00:00:00.000Z',
         };
-        render(
-            <CharacterProfessionsPanel
-                professions={empty}
-                isArmoryImported={true}
-            />,
+        const { container } = render(
+            <CharacterProfessionsPanel professions={empty} />,
         );
-        expect(
-            screen.getByRole('heading', { name: /professions/i }),
-        ).toBeInTheDocument();
-        expect(
-            screen.getByText(/no professions/i),
-        ).toBeInTheDocument();
+        expect(container).toBeEmptyDOMElement();
     });
 });
 
 describe('CharacterProfessionsPanel — populated state (AC #5)', () => {
     it('renders primary, secondary, tiers, and skill numbers', () => {
-        render(
-            <CharacterProfessionsPanel
-                professions={TAILORING_WITH_TIER}
-                isArmoryImported={true}
-            />,
-        );
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} />);
+
+        expect(
+            screen.getByRole('heading', { name: /professions/i }),
+        ).toBeInTheDocument();
 
         // Primary profession name + skill text
         expect(screen.getByText('Tailoring')).toBeInTheDocument();
@@ -142,12 +114,7 @@ describe('CharacterProfessionsPanel — populated state (AC #5)', () => {
             secondary: [],
             syncedAt: '2026-04-28T00:00:00.000Z',
         };
-        render(
-            <CharacterProfessionsPanel
-                professions={unknown}
-                isArmoryImported={true}
-            />,
-        );
+        render(<CharacterProfessionsPanel professions={unknown} />);
         expect(screen.getByText('Mystery Craft')).toBeInTheDocument();
         // No <img> should render with the unknown slug as alt text.
         expect(

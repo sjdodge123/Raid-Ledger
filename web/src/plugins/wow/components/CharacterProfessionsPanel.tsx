@@ -7,39 +7,26 @@ import { getProfessionIconUrl } from '../lib/profession-icons';
 
 interface CharacterProfessionsPanelProps {
     professions: CharacterProfessionsDto | null;
-    isArmoryImported: boolean;
 }
 
-export function CharacterProfessionsPanel({
-    professions,
-    isArmoryImported,
-}: CharacterProfessionsPanelProps) {
+export function CharacterProfessionsPanel({ professions }: CharacterProfessionsPanelProps) {
+    if (
+        professions === null ||
+        (professions.primary.length === 0 && professions.secondary.length === 0)
+    ) {
+        return null;
+    }
     return (
         <div className="bg-panel border border-edge rounded-lg p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4">Professions</h2>
-            <ProfessionsBody professions={professions} isArmoryImported={isArmoryImported} />
-        </div>
-    );
-}
-
-function ProfessionsBody({
-    professions,
-    isArmoryImported,
-}: CharacterProfessionsPanelProps) {
-    if (professions === null) {
-        return <ProfessionsEmpty isArmoryImported={isArmoryImported} reason="never-synced" />;
-    }
-    if (professions.primary.length === 0 && professions.secondary.length === 0) {
-        return <ProfessionsEmpty isArmoryImported={isArmoryImported} reason="no-data" />;
-    }
-    return (
-        <div className="space-y-6">
-            {professions.primary.length > 0 && (
-                <ProfessionGroup heading="Primary" entries={professions.primary} />
-            )}
-            {professions.secondary.length > 0 && (
-                <ProfessionGroup heading="Secondary" entries={professions.secondary} />
-            )}
+            <div className="space-y-6">
+                {professions.primary.length > 0 && (
+                    <ProfessionGroup heading="Primary" entries={professions.primary} />
+                )}
+                {professions.secondary.length > 0 && (
+                    <ProfessionGroup heading="Secondary" entries={professions.secondary} />
+                )}
+            </div>
         </div>
     );
 }
@@ -98,31 +85,4 @@ function ProfessionTierList({ tiers }: { tiers: ProfessionTierDto[] }) {
             ))}
         </ul>
     );
-}
-
-function ProfessionsEmpty({
-    isArmoryImported,
-    reason,
-}: {
-    isArmoryImported: boolean;
-    reason: 'never-synced' | 'no-data';
-}) {
-    return (
-        <div className="text-center py-8 text-muted">
-            <p className="text-lg">{reason === 'no-data' ? 'No professions' : 'No profession data'}</p>
-            <p className="text-sm mt-1">{getEmptyHint(isArmoryImported, reason)}</p>
-        </div>
-    );
-}
-
-function getEmptyHint(
-    isArmoryImported: boolean,
-    reason: 'never-synced' | 'no-data',
-): string {
-    if (reason === 'no-data') {
-        return 'This character has no primary or secondary professions.';
-    }
-    return isArmoryImported
-        ? 'No profession data. Try refreshing.'
-        : 'Profession data is only available for characters imported from the Blizzard Armory.';
 }

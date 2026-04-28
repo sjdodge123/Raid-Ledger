@@ -3,8 +3,11 @@
  * Mirrors blizzard-equipment.helpers.ts (ROK-1130).
  *
  * Edge-case posture (architect §3):
- *   404 → return `{ primary: [], secondary: [], syncedAt: now }`
- *   non-OK status / network throw → return `null` (orchestrator leaves prior column alone)
+ *   Classic-stack namespace → short-circuit to `null` (Blizzard does not
+ *     expose `/professions` for any classic Profile API namespace; verified
+ *     2026-04-28 against profile-classicann-us / -classic1x-us / -classic-us).
+ *   404 (retail) → `{ primary: [], secondary: [], syncedAt: now }`
+ *   non-OK status / network throw → `null` (orchestrator leaves prior column alone)
  */
 import type {
   ExternalCharacterProfessions,
@@ -119,6 +122,12 @@ export async function fetchCharacterProfessions(
   token: string,
   logger: Logger,
 ): Promise<ExternalCharacterProfessions | null> {
+  if (apiNamespacePrefix !== null) {
+    logger.debug?.(
+      `Skipping professions fetch for ${name}-${realm} — Classic Profile API does not expose /professions`,
+    );
+    return null;
+  }
   const { realmSlug, charName, namespace, baseUrl } = buildCharacterParams(
     name,
     realm,
