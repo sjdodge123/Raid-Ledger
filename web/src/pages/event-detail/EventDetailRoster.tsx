@@ -36,6 +36,8 @@ interface SignupItem {
         role: string | null;
         itemLevel: number | null;
         isMain?: boolean;
+        /** ROK-1130 — for the inline ProfessionBadges meta pills. */
+        professions?: import('@raid-ledger/contract').CharacterProfessionsDto | null;
     } | null;
 }
 
