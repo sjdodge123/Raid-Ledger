@@ -165,7 +165,7 @@ function CharacterHeader({ character, isOwner, isArmoryImported }: { character: 
 function CharacterEquipmentSection({ character, isArmoryImported }: { character: CharacterDto; isArmoryImported: boolean }) {
     return (
         <PluginSlot name="character-detail:sections"
-            context={{ equipment: character.equipment, talents: character.talents, gameVariant: character.gameVariant, renderUrl: character.renderUrl, isArmoryImported, characterClass: character.class ?? null, enrichments: character.enrichments ?? [] }}
+            context={{ equipment: character.equipment, talents: character.talents, professions: character.professions, gameVariant: character.gameVariant, renderUrl: character.renderUrl, isArmoryImported, characterClass: character.class ?? null, enrichments: character.enrichments ?? [] }}
             fallback={character.equipment?.items.length ? null : (
                 <div className="bg-panel border border-edge rounded-lg p-6">
                     <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
