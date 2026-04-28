@@ -15,35 +15,15 @@ import { getAdminToken, apiPost, apiGet, apiPatch, apiPut } from './api-helpers'
 // Setup helpers
 // ---------------------------------------------------------------------------
 
-/** Archive an active lineup by walking through all valid transitions. */
+/**
+ * Archive every non-archived lineup atomically (ROK-1147).
+ *
+ * Replaces the prior status-walk that raced across parallel workers.
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) archives every lineup in
+ * a single SQL UPDATE so workers don't leak state between each other.
+ */
 async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'archived'],
-            voting: ['decided', 'archived'],
-            decided: ['archived'],
-        };
-
-        const steps = transitions[detail.status];
-        if (!steps) return;
-
-        for (const status of steps) {
-            const body: Record<string, unknown> = { status };
-            if (status === 'decided' && detail.entries?.length > 0) {
-                body.decidedGameId = detail.entries[0].gameId;
-            }
-            await apiPatch(token, `/lineups/${banner.id}/status`, body);
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
+    await apiPost(token, '/admin/test/reset-lineups');
 }
 
 /** Fetch real game IDs from the admin games endpoint. */

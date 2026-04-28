@@ -22,46 +22,18 @@ async function apiPatch(token: string, path: string, body: Record<string, unknow
     });
 }
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await fetch(`${API_BASE}/admin/test/cancel-lineup-phase-jobs`, {
+/**
+ * Archive every non-archived lineup atomically (ROK-1147).
+ *
+ * Replaces the prior status-walk that raced across parallel workers.
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) archives every lineup in
+ * a single SQL UPDATE, eliminating the multi-second race window.
+ */
+async function archiveActiveLineup(token: string): Promise<void> {
+    await fetch(`${API_BASE}/admin/test/reset-lineups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lineupId: id }),
     });
-}
-
-async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        await cancelLineupPhaseJobs(token, banner.id);
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'scheduling', 'archived'],
-            voting: ['decided', 'scheduling', 'archived'],
-            decided: ['scheduling', 'archived'],
-            scheduling: ['archived'],
-        };
-        const steps = transitions[detail.status];
-        if (!steps) return;
-
-        for (const status of steps) {
-            const body: Record<string, unknown> = { status };
-            if (status === 'decided' && detail.entries?.length > 0) {
-                body.decidedGameId = detail.entries[0].gameId;
-            }
-            const patchRes = await apiPatch(token, `/lineups/${banner.id}/status`, body);
-            if (!patchRes.ok) break;
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
 }
 
 async function ensureActiveLineup(token: string): Promise<number> {

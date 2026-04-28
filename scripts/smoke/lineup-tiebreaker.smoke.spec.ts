@@ -42,57 +42,16 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
     return body.data.slice(0, count).map((g) => g.id);
 }
 
-/** Transition voting → decided, handling tiebreaker guard. */
-async function transitionVotingToDecided(token: string, id: number, entries: { gameId: number }[]): Promise<void> {
-    const decidedGameId = entries?.[0]?.gameId;
-    try {
-        await apiPatch(token, `/lineups/${id}/status`, {
-            status: 'decided',
-            ...(decidedGameId ? { decidedGameId } : {}),
-        });
-    } catch {
-        // TIEBREAKER_REQUIRED — start (or reuse) and force-resolve
-        await apiPost(token, `/lineups/${id}/tiebreaker`, { mode: 'bracket', roundDurationHours: 1 }).catch(() => {});
-        await apiPost(token, `/lineups/${id}/tiebreaker/resolve`).catch(() => {});
-        await apiPatch(token, `/lineups/${id}/status`, { status: 'decided' });
-    }
-}
-
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
-}
-
-/** Archive an active lineup by walking through all valid transitions. */
+/**
+ * Archive every non-archived lineup atomically (ROK-1147).
+ *
+ * Replaces the prior status-walk that raced across parallel workers — one
+ * worker's archive sweep would invalidate another worker's just-created
+ * lineup mid-test. The DEMO_MODE-only `/admin/test/reset-lineups` endpoint
+ * archives every lineup in a single SQL UPDATE.
+ */
 async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        await cancelLineupPhaseJobs(token, banner.id);
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const id = banner.id;
-        try {
-            if (detail.status === 'voting') {
-                await transitionVotingToDecided(token, id, detail.entries ?? []);
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'archived' });
-            } else if (detail.status === 'decided') {
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'archived' });
-            } else if (detail.status === 'building') {
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'voting' });
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'decided' });
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'archived' });
-            }
-        } catch {
-            // If any step fails, continue to next attempt
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
+    await apiPost(token, '/admin/test/reset-lineups');
 }
 
 /**

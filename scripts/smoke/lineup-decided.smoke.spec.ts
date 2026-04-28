@@ -36,42 +36,19 @@ async function apiPost(
 // Setup helpers
 // ---------------------------------------------------------------------------
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
-}
-
-/** Archive an active lineup by walking through all valid transitions. */
+/**
+ * Archive every non-archived lineup atomically (ROK-1147).
+ *
+ * Replaces the prior status-walk that raced across parallel workers — one
+ * worker's archive sweep would invalidate another worker's just-created
+ * lineup mid-test. The DEMO_MODE-only `/admin/test/reset-lineups` endpoint
+ * archives every lineup in a single SQL UPDATE.
+ *
+ * Each per-worker beforeAll calls this once before creating its lineup,
+ * so workers no longer see leaked state from siblings.
+ */
 async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        await cancelLineupPhaseJobs(token, banner.id);
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'archived'],
-            voting: ['decided', 'archived'],
-            decided: ['archived'],
-        };
-
-        const steps = transitions[detail.status];
-        if (!steps) return;
-
-        for (const status of steps) {
-            const body: Record<string, unknown> = { status };
-            if (status === 'decided' && detail.entries?.length > 0) {
-                body.decidedGameId = detail.entries[0].gameId;
-            }
-            await apiPatch(token, `/lineups/${banner.id}/status`, body);
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
+    await apiPost(token, '/admin/test/reset-lineups');
 }
 
 /** Fetch real game IDs from the admin games endpoint. */

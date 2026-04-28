@@ -27,32 +27,18 @@ let adminToken: string;
 let lineupId: number;
 let createdLineup = false;
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
-}
-
-/** Archive an active lineup by walking through all valid transitions. */
-async function archiveLineup(token: string, id: number): Promise<void> {
-    await cancelLineupPhaseJobs(token, id);
-    const detail = await apiGet(token, `/lineups/${id}`);
-    if (!detail) return;
-    const transitions: Record<string, string[]> = {
-        building: ['voting', 'decided', 'archived'],
-        voting: ['decided', 'archived'],
-        decided: ['archived'],
-        scheduling: ['archived'],
-    };
-    const steps = transitions[detail.status];
-    if (!steps) return;
-    for (const status of steps) {
-        const body: Record<string, unknown> = { status };
-        // Provide decidedGameId to bypass tiebreaker guard (ROK-938)
-        if (status === 'decided' && detail.entries?.length > 0) {
-            body.decidedGameId = detail.entries[0].gameId;
-        }
-        await apiPatch(token, `/lineups/${id}/status`, body);
-    }
+/**
+ * Archive every non-archived lineup atomically (ROK-1147).
+ *
+ * Replaces the prior status-walk that raced across parallel workers — one
+ * worker's archive sweep would invalidate another worker's just-created
+ * lineup mid-test. The DEMO_MODE-only `/admin/test/reset-lineups` endpoint
+ * archives every lineup in a single SQL UPDATE.
+ *
+ * `id` is ignored (kept for call-site compatibility) — the reset is global.
+ */
+async function archiveLineup(token: string, _id: number): Promise<void> {
+    await apiPost(token, '/admin/test/reset-lineups');
 }
 
 /**
@@ -87,18 +73,11 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
 test.beforeAll(async () => {
     adminToken = await getAdminToken();
 
-    // Check if an active lineup already exists
-    const banner = await apiGet(adminToken, '/lineups/banner');
-    if (banner && typeof banner.id === 'number') {
-        // Must be in building phase for nomination tests; archive and recreate if not
-        if (banner.status === 'building') {
-            lineupId = banner.id;
-            return;
-        }
-        await archiveLineup(adminToken, banner.id);
-    }
+    // ROK-1147: reset first so this worker starts with no active lineup.
+    // Replaces the prior banner-check-then-conditionally-archive that raced
+    // with sibling workers during the multi-second status-walk.
+    await apiPost(adminToken, '/admin/test/reset-lineups');
 
-    // Create a fresh lineup in building phase with long durations (ROK-1007)
     const lineup = (await apiPost(adminToken, '/lineups', {
         title: 'Smoke Lineup',
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
