@@ -107,10 +107,18 @@ async function waitForTiebreakerDM(
   );
 }
 
-/** Build a public lineup ready for a tiebreaker. */
+/** Build a public lineup ready for a tiebreaker.
+ *
+ * For PUBLIC lineups, `loadExpectedVoters` returns nominators ∪ voters.
+ * The smoke bot's `dmRecipientUserId` must be in that set, otherwise no
+ * tiebreaker-open DM is dispatched to them. We use the DEMO_MODE-only
+ * `/admin/test/nominate-game` endpoint to record a nomination on the
+ * dmRecipientUserId's behalf so they show up as a participant.
+ */
 async function buildPublicLineupWithTie(
   api: ApiClient,
   title: string,
+  dmRecipientUserId: number,
 ): Promise<{ lineup: LineupPayload; gameIds: number[] }> {
   const created = await api.post<LineupPayload>('/lineups', {
     title,
@@ -132,6 +140,19 @@ async function buildPublicLineupWithTie(
   for (const gid of gameIds) {
     await api.post(`/lineups/${created.id}/nominate`, { gameId: gid });
   }
+
+  // Add dmRecipientUserId as a nominator (DEMO_MODE-only test endpoint) so
+  // they enter the public-lineup expected-voters set and receive the DM.
+  if (gameIds[0]) {
+    await api
+      .post('/admin/test/nominate-game', {
+        lineupId: created.id,
+        gameId: gameIds[0],
+        userId: dmRecipientUserId,
+      })
+      .catch(() => null);
+  }
+
   await api.patch(`/lineups/${created.id}/status`, { status: 'voting' });
 
   // Cast equal votes on top 2 to force a tie.
@@ -150,7 +171,11 @@ const publicTiebreakerOpenDmsAndEmbed: SmokeTest = {
     await archiveAllLineups(ctx.api);
 
     const title = `Public TB Open ${Date.now()}`;
-    const { lineup } = await buildPublicLineupWithTie(ctx.api, title);
+    const { lineup } = await buildPublicLineupWithTie(
+      ctx.api,
+      title,
+      ctx.dmRecipientUserId,
+    );
 
     try {
       // Start the tiebreaker — this is the trigger under test.
