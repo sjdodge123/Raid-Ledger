@@ -610,3 +610,304 @@ function describeCharactersUserManagement() {
 }
 describe('Characters & User Management (integration)', () =>
   describeCharactersUserManagement());
+
+// =====================================================================
+// ROK-1130 — WoW profession sync persistence
+//
+// Verifies that BlizzardService.fetchCharacterProfessions feeds the
+// orchestrator (AC #2), re-sync overwrites instead of appending (AC #10),
+// and the architect-required 5xx-leaves-prior-value contract holds
+// (architect §3 / brief mandatory correction #1 + #5). The test exercises
+// the cron-style `syncAllCharacters` path directly so it does not need
+// the `RequirePlugin('blizzard')` HTTP guard.
+// =====================================================================
+
+import { CharactersService } from './characters.service';
+import { BlizzardService } from '../plugins/wow-common/blizzard.service';
+
+interface ProfessionFixture {
+  primary: Array<{
+    id: number;
+    name: string;
+    slug: string;
+    skillLevel: number;
+    maxSkillLevel: number;
+    tiers: Array<{
+      id: number;
+      name: string;
+      skillLevel: number;
+      maxSkillLevel: number;
+    }>;
+  }>;
+  secondary: Array<{
+    id: number;
+    name: string;
+    slug: string;
+    skillLevel: number;
+    maxSkillLevel: number;
+    tiers: unknown[];
+  }>;
+  syncedAt: string;
+}
+
+function buildFixture(
+  primaryName: string,
+  primarySkill: number,
+): ProfessionFixture {
+  return {
+    primary: [
+      {
+        id: 197,
+        name: primaryName,
+        slug: primaryName.toLowerCase().replace(/\s+/g, '-'),
+        skillLevel: primarySkill,
+        maxSkillLevel: 450,
+        tiers: [
+          {
+            id: 2823,
+            name: 'Dragon Isles Tailoring',
+            skillLevel: 100,
+            maxSkillLevel: 100,
+          },
+        ],
+      },
+    ],
+    secondary: [
+      {
+        id: 185,
+        name: 'Cooking',
+        slug: 'cooking',
+        skillLevel: 150,
+        maxSkillLevel: 150,
+        tiers: [],
+      },
+    ],
+    syncedAt: '2026-04-28T00:00:00.000Z',
+  };
+}
+
+async function ensureWowGame(testApp: TestApp): Promise<number> {
+  const existing = await testApp.db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.slug, 'world-of-warcraft'))
+    .limit(1);
+  if (existing[0]) return existing[0].id;
+  const [game] = await testApp.db
+    .insert(schema.games)
+    .values({
+      name: 'World of Warcraft',
+      slug: 'world-of-warcraft',
+      coverUrl: null,
+      igdbId: null,
+    })
+    .returning();
+  return game.id;
+}
+
+async function insertSyncableCharacter(
+  testApp: TestApp,
+  userId: number,
+  gameId: number,
+  overrides: Partial<typeof schema.characters.$inferInsert> = {},
+): Promise<typeof schema.characters.$inferSelect> {
+  const [char] = await testApp.db
+    .insert(schema.characters)
+    .values({
+      userId,
+      gameId,
+      name: 'Profsync',
+      realm: 'area-52',
+      class: 'Mage',
+      spec: 'Frost',
+      role: 'dps',
+      isMain: true,
+      region: 'us',
+      gameVariant: 'retail',
+      ...overrides,
+    })
+    .returning();
+  return char;
+}
+
+function describeProfessionSync() {
+  let testApp: TestApp;
+  let blizzard: BlizzardService;
+  let charactersService: CharactersService;
+  let userId: number;
+  let gameId: number;
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    blizzard = testApp.app.get(BlizzardService);
+    charactersService = testApp.app.get(CharactersService);
+  });
+
+  beforeEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+    gameId = await ensureWowGame(testApp);
+    const created = await createMemberAndLogin(
+      testApp,
+      'profowner',
+      'profowner@test.local',
+    );
+    userId = created.userId;
+    // Stable returns for non-profession Blizzard calls so syncAllCharacters
+    // doesn't error out before reaching fetchCharacterProfessions.
+    jest.spyOn(blizzard, 'fetchCharacterProfile').mockResolvedValue({
+      name: 'Profsync',
+      realm: 'area-52',
+      class: 'Mage',
+      spec: 'Frost',
+      role: 'dps',
+      level: 80,
+      race: 'Gnome',
+      faction: 'alliance',
+      itemLevel: 480,
+      avatarUrl: null,
+      renderUrl: null,
+      profileUrl: null,
+    });
+    jest
+      .spyOn(blizzard, 'fetchCharacterSpecializations')
+      .mockResolvedValue({ spec: 'Frost', role: 'dps', talents: null });
+    jest.spyOn(blizzard, 'fetchCharacterEquipment').mockResolvedValue({
+      equippedItemLevel: 480,
+      items: [],
+      syncedAt: '2026-04-28T00:00:00.000Z',
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('persists professions JSONB when service returns a fixture (AC #2)', async () => {
+    const fixture = buildFixture('Tailoring', 450);
+    jest
+      .spyOn(blizzard, 'fetchCharacterProfessions')
+      .mockResolvedValue(fixture);
+
+    const char = await insertSyncableCharacter(testApp, userId, gameId);
+    await charactersService.syncAllCharacters();
+
+    const [reloaded] = await testApp.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, char.id))
+      .limit(1);
+    expect(reloaded.professions).toEqual(fixture);
+  });
+
+  it('overwrites prior professions on re-sync — no concat (AC #10)', async () => {
+    const first = buildFixture('Tailoring', 200);
+    const second = buildFixture('Enchanting', 425);
+    const spy = jest
+      .spyOn(blizzard, 'fetchCharacterProfessions')
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+
+    const char = await insertSyncableCharacter(testApp, userId, gameId);
+    await charactersService.syncAllCharacters();
+    await charactersService.syncAllCharacters();
+
+    const [reloaded] = await testApp.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, char.id))
+      .limit(1);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(reloaded.professions).toEqual(second);
+    // Defensive: not a concat / not duplicated
+    const professions = reloaded.professions as ProfessionFixture | null;
+    expect(professions?.primary).toHaveLength(1);
+    expect(professions?.primary[0].name).toBe('Enchanting');
+  });
+
+  it('leaves prior professions untouched when service returns null (5xx — architect §3)', async () => {
+    const prior = buildFixture('Mining', 300);
+
+    // Pre-populate professions on the row.
+    const char = await insertSyncableCharacter(testApp, userId, gameId, {
+      professions: prior,
+    });
+
+    // Service returns null (signals 5xx / network failure).
+    jest
+      .spyOn(blizzard, 'fetchCharacterProfessions')
+      .mockResolvedValue(null);
+
+    await charactersService.syncAllCharacters();
+
+    const [reloaded] = await testApp.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, char.id))
+      .limit(1);
+    expect(reloaded.professions).toEqual(prior);
+  });
+
+  it('persists empty arrays when service returns the 404-graceful payload (AC #2 edge case)', async () => {
+    const empty = {
+      primary: [],
+      secondary: [],
+      syncedAt: '2026-04-28T00:00:00.000Z',
+    };
+    jest
+      .spyOn(blizzard, 'fetchCharacterProfessions')
+      .mockResolvedValue(empty);
+
+    const char = await insertSyncableCharacter(testApp, userId, gameId);
+    await charactersService.syncAllCharacters();
+
+    const [reloaded] = await testApp.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, char.id))
+      .limit(1);
+    expect(reloaded.professions).toEqual(empty);
+  });
+}
+
+describe('Character profession sync (ROK-1130 integration)', () =>
+  describeProfessionSync());
+
+// AC #14 — seed-testing.ts populates professions on each WoW seed character.
+//
+// The Phase D1 dev brief mandates a `buildSeedProfessions(charClass, gameSlug)`
+// helper inside seed-testing.ts (per-class profession map). To make that
+// helper unit-testable without triggering the script's top-level `bootstrap()`,
+// dev must extract it into a small importable module — e.g.
+// `api/scripts/seed-testing.helpers.ts` — that seed-testing.ts then consumes.
+// This test pins the contract; the import will fail until the helper module
+// exists, which is the TDD signal.
+describe('seed-testing buildSeedProfessions (ROK-1130, AC #14)', () => {
+  it('produces a CharacterProfessions shape for retail WoW classes', async () => {
+    const { buildSeedProfessions } = await import(
+      '../../scripts/seed-testing.helpers'
+    );
+    const result = buildSeedProfessions('Mage', 'world-of-warcraft');
+    expect(result).not.toBeNull();
+    expect(Array.isArray(result!.primary)).toBe(true);
+    expect(result!.primary.length).toBeGreaterThan(0);
+    expect(result!.primary[0].tiers.length).toBeGreaterThan(0);
+    expect(typeof result!.syncedAt).toBe('string');
+  });
+
+  it('produces empty tiers for classic WoW characters', async () => {
+    const { buildSeedProfessions } = await import(
+      '../../scripts/seed-testing.helpers'
+    );
+    const result = buildSeedProfessions('Mage', 'world-of-warcraft-classic');
+    expect(result).not.toBeNull();
+    expect(result!.primary[0].tiers).toEqual([]);
+  });
+
+  it('returns null for non-WoW games', async () => {
+    const { buildSeedProfessions } = await import(
+      '../../scripts/seed-testing.helpers'
+    );
+    const result = buildSeedProfessions('Monk', 'valheim');
+    expect(result).toBeNull();
+  });
+});
