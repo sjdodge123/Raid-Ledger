@@ -407,6 +407,15 @@ test.describe('Community Lineup responsive layout', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Voting phase', () => {
+    // ROK-1147: this describe reads the global /lineups/banner to find a
+    // voting lineup and also archives the active lineup to assert the
+    // Start Lineup button. Both assumptions break under per-worker
+    // title-prefix isolation because sibling workers can hold concurrent
+    // lineups in mixed phases. Run the block serially so only one worker
+    // manipulates this state at a time.
+    test.describe.configure({ mode: 'serial' });
+
+
     let votingLineupId: number;
 
     test.beforeAll(async () => {
