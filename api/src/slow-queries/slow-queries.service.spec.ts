@@ -81,7 +81,9 @@ describe('SlowQueriesService', () => {
       // must keep chaining (returns `this`), then its `.limit()` (limit#2)
       // resolves to []; loadEntries(current.id) is `.where()` call #2.
       db.limit
-        .mockResolvedValueOnce([{ id: 1, capturedAt: captured, source: 'cron' }])
+        .mockResolvedValueOnce([
+          { id: 1, capturedAt: captured, source: 'cron' },
+        ])
         .mockResolvedValueOnce([]);
       db.where
         .mockReturnValueOnce(db) // findBaselineForCron — keep chain going

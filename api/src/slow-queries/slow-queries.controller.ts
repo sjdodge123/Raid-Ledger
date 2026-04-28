@@ -32,7 +32,9 @@ export class SlowQueriesController {
   @Get('digest')
   async getDigest(
     @Query('limit') limitParam?: string,
-  ): Promise<SlowQueryDigestDto | { snapshot: null; baseline: null; entries: [] }> {
+  ): Promise<
+    SlowQueryDigestDto | { snapshot: null; baseline: null; entries: [] }
+  > {
     const limit = this.parseLimit(limitParam);
     const digest = await this.slowQueries.getLatestDigest(limit);
     return digest ?? { snapshot: null, baseline: null, entries: [] };

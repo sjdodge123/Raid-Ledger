@@ -21,9 +21,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { SlowQueriesService } from './slow-queries.service';
 
-async function isPgStatStatementsLoaded(
-  testApp: TestApp,
-): Promise<boolean> {
+async function isPgStatStatementsLoaded(testApp: TestApp): Promise<boolean> {
   try {
     await testApp.db.execute(sql`SELECT 1 FROM pg_stat_statements LIMIT 1`);
     return true;
@@ -50,9 +48,7 @@ describe('SlowQueriesService (integration)', () => {
       const result = await service.captureSnapshot('manual');
 
       expect(result.snapshotId).toBeGreaterThan(0);
-      const [row] = await testApp.db
-        .select()
-        .from(schema.slowQuerySnapshots);
+      const [row] = await testApp.db.select().from(schema.slowQuerySnapshots);
       expect(row.source).toBe('manual');
     });
 
@@ -99,8 +95,16 @@ describe('SlowQueriesService (integration)', () => {
       const cron2 = await service.captureSnapshot('cron');
 
       const now = Date.now();
-      await setCapturedAt(testApp, cron1.snapshotId, new Date(now - 10 * 60_000));
-      await setCapturedAt(testApp, manual.snapshotId, new Date(now - 5 * 60_000));
+      await setCapturedAt(
+        testApp,
+        cron1.snapshotId,
+        new Date(now - 10 * 60_000),
+      );
+      await setCapturedAt(
+        testApp,
+        manual.snapshotId,
+        new Date(now - 5 * 60_000),
+      );
       await setCapturedAt(testApp, cron2.snapshotId, new Date(now));
 
       const digest = await service.getLatestDigest();
