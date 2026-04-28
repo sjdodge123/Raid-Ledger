@@ -13,34 +13,26 @@
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiPost, apiGet, apiPatch } from './api-helpers';
 
-async function archiveLineup(token: string, id: number): Promise<void> {
-    const detail = await apiGet(token, `/lineups/${id}`);
-    if (!detail) return;
-    const transitions: Record<string, string[]> = {
-        building: ['voting', 'decided', 'archived'],
-        voting: ['decided', 'archived'],
-        decided: ['archived'],
-        scheduling: ['archived'],
-    };
-    const steps = transitions[detail.status];
-    if (!steps) return;
-    for (const status of steps) {
-        const body: Record<string, unknown> = { status };
-        if (status === 'decided' && detail.entries?.length > 0) {
-            body.decidedGameId = detail.entries[0].gameId;
-        }
-        await apiPatch(token, `/lineups/${id}/status`, body);
-    }
+/**
+ * Archive every non-archived lineup atomically (ROK-1147).
+ *
+ * `id` is ignored (kept for call-site compatibility) — the new endpoint
+ * archives every lineup in a single SQL UPDATE, eliminating the multi-
+ * second status-walk race window that destabilised parallel workers.
+ */
+async function archiveLineup(token: string, _id: number): Promise<void> {
+    await apiPost(token, '/admin/test/reset-lineups');
 }
 
 async function ensureBuildingLineup(token: string): Promise<number> {
+    // ROK-1147: keep the "is the existing banner already building?" fast
+    // path so beforeEach hooks don't churn the DB on every test, but
+    // fall through to a reset-then-create when state is wrong.
     const banner = await apiGet(token, '/lineups/banner');
     if (banner && typeof banner.id === 'number' && banner.status === 'building') {
         return banner.id;
     }
-    if (banner && typeof banner.id === 'number') {
-        await archiveLineup(token, banner.id);
-    }
+    await apiPost(token, '/admin/test/reset-lineups');
     const lineup = (await apiPost(token, '/lineups', {
         title: 'Smoke Lineup',
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),

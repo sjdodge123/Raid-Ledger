@@ -27,7 +27,12 @@ test.describe('Navigation (desktop)', () => {
         await expect(nav).toBeVisible({ timeout: 15_000 });
 
         await nav.getByRole('link', { name: 'Events' }).click();
-        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 10_000 });
+        // ROK-1147: scope to the page's <h1> so the locator doesn't race
+        // against the nav link text "Events" (which also matches /Events/i
+        // and renders before the page heading does).
+        await expect(
+            page.getByRole('heading', { level: 1, name: /Events/i }),
+        ).toBeVisible({ timeout: 10_000 });
 
         await nav.getByRole('link', { name: 'Games' }).click();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });

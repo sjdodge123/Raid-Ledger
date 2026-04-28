@@ -145,8 +145,12 @@ test.describe('Profile gaming — Watched Games (desktop)', () => {
             expect(count).toBeGreaterThan(0);
         }
 
-        // Auto-heart setting should be present
-        await expect(page.getByRole('heading', { name: 'Auto-heart games' })).toBeVisible();
+        // ROK-1147: Auto-heart toggle is conditionally rendered for
+        // Discord-connected users (ROK-444). The Discord-link query
+        // resolves async, so the toggle may mount after first paint.
+        await expect(
+            page.getByRole('heading', { name: 'Auto-heart games' }),
+        ).toBeVisible({ timeout: 10_000 });
         await expect(page.getByRole('switch')).toBeVisible();
     });
 });
