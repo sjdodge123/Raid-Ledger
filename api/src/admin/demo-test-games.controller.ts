@@ -203,8 +203,7 @@ export class DemoTestGamesController {
     success: boolean;
     archivedCount: number;
   }> {
-    const { archivedCount } =
-      await this.demoTestLineup.resetLineupsForTest();
+    const { archivedCount } = await this.demoTestLineup.resetLineupsForTest();
     return { success: true, archivedCount };
   }
 }
