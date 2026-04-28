@@ -10,6 +10,7 @@ import { professionNameToSlug } from '../lib/profession-icons';
 import { getMaxProfessionSkill } from '../lib/profession-max-skill';
 import {
     getProfessionOptions,
+    getMaxEntriesForCategory,
     type ProfessionCategory,
 } from '../lib/profession-categories';
 
@@ -59,7 +60,8 @@ export function EditProfessionsModal({
 }: EditProfessionsModalProps) {
     const { games } = useGameRegistry();
     const game = games.find((g) => g.id === gameId);
-    const maxSkill = getMaxProfessionSkill(game?.slug);
+    const gameSlug = game?.slug ?? null;
+    const maxSkill = getMaxProfessionSkill(gameSlug);
 
     const [primary, setPrimary] = useState<DraftEntry[]>(
         () => entriesToDraft(initial?.primary ?? []),
@@ -97,8 +99,9 @@ export function EditProfessionsModal({
                     category="primary"
                     drafts={primary}
                     onChange={setPrimary}
-                    maxEntries={2}
+                    maxEntries={getMaxEntriesForCategory('primary', gameSlug)}
                     maxSkill={maxSkill}
+                    gameSlug={gameSlug}
                     siblingNames={primary.map((d) => d.name)}
                 />
                 <ProfessionSection
@@ -106,8 +109,9 @@ export function EditProfessionsModal({
                     category="secondary"
                     drafts={secondary}
                     onChange={setSecondary}
-                    maxEntries={4}
+                    maxEntries={getMaxEntriesForCategory('secondary', gameSlug)}
                     maxSkill={maxSkill}
+                    gameSlug={gameSlug}
                     siblingNames={secondary.map((d) => d.name)}
                 />
                 <ModalActions
@@ -121,7 +125,7 @@ export function EditProfessionsModal({
 }
 
 function ProfessionSection({
-    heading, category, drafts, onChange, maxEntries, maxSkill, siblingNames,
+    heading, category, drafts, onChange, maxEntries, maxSkill, gameSlug, siblingNames,
 }: {
     heading: string;
     category: ProfessionCategory;
@@ -129,9 +133,10 @@ function ProfessionSection({
     onChange: (next: DraftEntry[]) => void;
     maxEntries: number;
     maxSkill: number;
+    gameSlug: string | null;
     siblingNames: string[];
 }) {
-    const allOptions = getProfessionOptions(category);
+    const allOptions = getProfessionOptions(category, gameSlug);
     return (
         <section>
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted mb-2">{heading}</h3>

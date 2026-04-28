@@ -1,33 +1,26 @@
 /**
- * WoW profession max skill cap by game variant.
+ * WoW profession max skill cap by era.
  *
- * The `apiNamespacePrefix` alone is ambiguous (the `classic` prefix covers
- * both BC Classic at 375 and Wrath Classic at 450), so we key the lookup off
- * the games table slug. Retail variants and unmapped slugs default to 100,
- * which matches the per-expansion tier cap Blizzard returns on retail.
+ * Era is derived from the game slug via `getWowEra` so the lookup is
+ * consistent with profession availability filtering.
  */
 
-const BY_SLUG: Record<string, number> = {
-  // Vanilla / Era / Anniversary 1x
-  'world-of-warcraft-classic': 300,
-  // Burning Crusade era
-  'world-of-warcraft-burning-crusade-classic': 375,
-  'world-of-warcraft-burning-crusade-classic-anniversary-edition': 375,
-  // Wrath of the Lich King era
-  'world-of-warcraft-wrath-of-the-lich-king-classic': 450,
-  // Cataclysm era
-  'world-of-warcraft-cataclysm-classic': 525,
-  // Mists of Pandaria era
-  'world-of-warcraft-mists-of-pandaria-classic': 600,
-  // Season of Discovery rides Vanilla 1x's cap
-  'world-of-warcraft-classic-season-of-discovery': 300,
+import type { WowEra } from './wow-era';
+import { getWowEra } from './wow-era';
+
+const MAX_BY_ERA: Record<WowEra, number> = {
+    vanilla: 300,
+    bc: 375,
+    wrath: 450,
+    cataclysm: 525,
+    mop: 600,
+    // Retail uses a per-expansion tier system where each expansion's
+    // tier caps at 100. The parent profession aggregates higher in the
+    // legacy API but the editable manual cap surfaces 100 by default.
+    retail: 100,
 };
 
-/**
- * Derive the max skill cap for a profession in the given game.
- * Retail variants and unrecognised slugs return 100 (current per-expansion tier).
- */
+/** Derive the max skill cap for a profession in the given game. */
 export function getMaxProfessionSkill(gameSlug: string | null | undefined): number {
-  if (!gameSlug) return 100;
-  return BY_SLUG[gameSlug] ?? 100;
+    return MAX_BY_ERA[getWowEra(gameSlug)];
 }
