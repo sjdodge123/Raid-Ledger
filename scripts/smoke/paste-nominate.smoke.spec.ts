@@ -13,6 +13,12 @@
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiPost, apiGet, apiPatch } from './api-helpers';
 
+// ROK-1147: ensureBuildingLineup checks /lineups/banner and reuses any
+// active lineup, including siblings'. The paste-on-detail-page tests then
+// dispatch on the wrong lineup's UI, so the modal/toast never appears.
+// Serialise so each test owns the page state for its full duration.
+test.describe.configure({ mode: 'serial' });
+
 // ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
 // sibling workers don't archive each other's lineups mid-test.
 const FILE_PREFIX = 'paste-nominate';
