@@ -22,22 +22,31 @@ interface EditProfessionsModalProps {
     initial: CharacterProfessionsDto | null;
 }
 
+/**
+ * Skill level is held as a string while editing so the user can fully
+ * clear the field — number-typed controlled inputs can't be backspaced
+ * past 0 because empty input would round-trip through `Number('')` → 0
+ * and re-render as "0", trapping a leading zero.
+ */
 interface DraftEntry {
     name: string;
-    skillLevel: number;
+    skillLevel: string;
 }
 
 function emptyEntry(): DraftEntry {
-    return { name: '', skillLevel: 0 };
+    return { name: '', skillLevel: '' };
 }
 
 function entriesToDraft(entries: ProfessionEntryDto[]): DraftEntry[] {
-    return entries.map((e) => ({ name: e.name, skillLevel: e.skillLevel }));
+    return entries.map((e) => ({
+        name: e.name,
+        skillLevel: e.skillLevel === 0 ? '' : String(e.skillLevel),
+    }));
 }
 
-function clampSkill(value: number, max: number): number {
-    const n = Number(value) || 0;
-    if (n < 0) return 0;
+function clampSkill(value: string, max: number): number {
+    const n = Number.parseInt(value, 10);
+    if (Number.isNaN(n) || n < 0) return 0;
     if (n > max) return max;
     return n;
 }
@@ -192,8 +201,9 @@ function ProfessionRowEditor({
                     <option key={name} value={name}>{name}</option>
                 ))}
             </select>
-            <input type="number" min="0" max={maxSkill} value={draft.skillLevel} aria-label="Skill"
-                onChange={(e) => onChange({ ...draft, skillLevel: Number(e.target.value) })}
+            <input type="number" inputMode="numeric" min="0" max={maxSkill} value={draft.skillLevel}
+                aria-label="Skill" placeholder="0"
+                onChange={(e) => onChange({ ...draft, skillLevel: e.target.value })}
                 className="w-20 bg-overlay border border-edge rounded-md px-2 py-1 text-foreground" />
             <span className="text-muted">/</span>
             <span className="w-16 text-center text-muted font-mono" aria-label="Max skill">{maxSkill}</span>
