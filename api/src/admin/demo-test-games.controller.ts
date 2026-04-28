@@ -188,4 +188,23 @@ export class DemoTestGamesController {
     await this.demoTestLineup.archiveActiveLineupForTest();
     return { success: true };
   }
+
+  /**
+   * Archive every non-archived lineup (ROK-1147). DEMO_MODE only.
+   *
+   * Smoke specs call this in their per-worker `beforeAll` so each
+   * lineup-* file starts with an empty active-lineup slot, eliminating
+   * the cross-worker race where one worker's archive sweep wipes another
+   * worker's just-created lineup.
+   */
+  @Post('reset-lineups')
+  @HttpCode(HttpStatus.OK)
+  async resetLineupsForTest(): Promise<{
+    success: boolean;
+    archivedCount: number;
+  }> {
+    const { archivedCount } =
+      await this.demoTestLineup.resetLineupsForTest();
+    return { success: true, archivedCount };
+  }
 }

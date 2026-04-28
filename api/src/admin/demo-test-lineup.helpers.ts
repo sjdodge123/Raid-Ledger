@@ -60,3 +60,23 @@ export async function archiveActiveLineupForTest(db: Db): Promise<void> {
     .set({ status: 'archived', updatedAt: new Date() })
     .where(sql`${schema.communityLineups.status} IN ('building', 'voting')`);
 }
+
+/**
+ * Archive every lineup not already archived (ROK-1147).
+ *
+ * Smoke specs that share the singleton "active lineup" race when running
+ * in parallel workers — one worker's `archiveActiveLineup` invalidates
+ * another worker's just-created lineup mid-test. Each lineup-* spec calls
+ * this once per worker in `beforeAll` so the worker starts from a known
+ * empty state. Returns `archivedCount` for visibility/debugging.
+ */
+export async function resetLineupsForTest(
+  db: Db,
+): Promise<{ archivedCount: number }> {
+  const result = await db
+    .update(schema.communityLineups)
+    .set({ status: 'archived', updatedAt: new Date() })
+    .where(sql`${schema.communityLineups.status} <> 'archived'`)
+    .returning({ id: schema.communityLineups.id });
+  return { archivedCount: result.length };
+}

@@ -22,6 +22,7 @@ function createMockLineupService() {
     nominateGameForTest: jest.fn().mockResolvedValue(undefined),
     archiveLineupForTest: jest.fn().mockResolvedValue(undefined),
     archiveActiveLineupForTest: jest.fn().mockResolvedValue(undefined),
+    resetLineupsForTest: jest.fn().mockResolvedValue({ archivedCount: 3 }),
   };
 }
 
@@ -71,6 +72,13 @@ describe('DemoTestGamesController', () => {
     triggerSteamNudgeTests(getController, getNudge));
   describe('cancelLineupPhaseJobs (ROK-1007)', () =>
     cancelLineupPhaseJobsTests(getController, getService));
+  describe('resetLineups (ROK-1147)', () => {
+    it('delegates to lineup service and returns archivedCount', async () => {
+      const result = await controller.resetLineupsForTest();
+      expect(result).toEqual({ success: true, archivedCount: 3 });
+      expect(mockLineupService.resetLineupsForTest).toHaveBeenCalled();
+    });
+  });
 });
 
 function addGameInterestTests(
