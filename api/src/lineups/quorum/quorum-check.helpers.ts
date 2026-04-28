@@ -39,8 +39,10 @@ export async function checkBuildingQuorum(
   lineup: LineupRow,
 ): Promise<QuorumResult> {
   const expected = await loadExpectedVoters(db, lineup);
-  if (expected.length === 0) {
-    return { ready: false, reason: 'no expected voters' };
+  if (expected.length < 2) {
+    // Solo lineup (creator alone or no participants yet) — manual advance only.
+    // Auto-advancing here would surprise the operator who's still setting up.
+    return { ready: false, reason: 'solo lineup; manual advance required' };
   }
   const perVoterCounts = await countNominationsPerVoter(db, lineup.id);
   const minPerVoter = await readMinNominationsPerVoter(settings);
@@ -71,8 +73,9 @@ export async function checkVotingQuorum(
 ): Promise<QuorumResult> {
   const expected = await loadExpectedVoters(db, lineup);
   const perVoterCounts = await countVotesPerVoter(db, lineup.id);
-  if (expected.length === 0) {
-    return { ready: false, reason: 'no expected voters' };
+  if (expected.length < 2) {
+    // Solo lineup — manual advance only. Same reasoning as building quorum.
+    return { ready: false, reason: 'solo lineup; manual advance required' };
   }
   const required = lineup.maxVotesPerPlayer ?? 3;
   const short = expected.filter(

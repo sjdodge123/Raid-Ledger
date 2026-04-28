@@ -82,8 +82,6 @@ describe('checkBuildingQuorum', () => {
   it('reports not ready when there are no expected voters', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([]);
-    db.groupBy.mockResolvedValueOnce(nominationsPerVoter([]));
-    db.execute.mockResolvedValueOnce(totalRow(0));
 
     const result = await checkBuildingQuorum(
       db as never,
@@ -92,7 +90,21 @@ describe('checkBuildingQuorum', () => {
     );
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toContain('no expected voters');
+    expect(result.reason).toContain('solo lineup');
+  });
+
+  it('reports not ready for a solo lineup (1 expected voter)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1]);
+
+    const result = await checkBuildingQuorum(
+      db as never,
+      makeSettings() as never,
+      baseLineup,
+    );
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toContain('solo lineup');
   });
 
   it('reports not ready when an expected nominator has not nominated', async () => {
@@ -245,6 +257,21 @@ describe('checkVotingQuorum', () => {
     });
 
     expect(result.ready).toBe(false);
+    expect(result.reason).toContain('solo lineup');
+  });
+
+  it('reports not ready for a solo lineup (1 expected voter)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1]);
+    db.groupBy.mockResolvedValueOnce([{ userId: 1, count: 3 }]);
+
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toContain('solo lineup');
   });
 
   it('reports not ready when each voter has cast 1 of 3 votes', async () => {
