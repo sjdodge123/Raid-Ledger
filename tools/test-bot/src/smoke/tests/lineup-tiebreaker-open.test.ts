@@ -137,20 +137,21 @@ async function buildPublicLineupWithTie(
     throw new Error(`Need at least 2 configured games, got ${gameIds.length}`);
   }
 
-  for (const gid of gameIds) {
+  // Admin nominates the first three games; dmRecipientUserId nominates the
+  // fourth via the DEMO_MODE-only test endpoint so they enter the public
+  // expected-voters set (loadExpectedVoters returns nominators ∪ voters).
+  // The (lineupId, gameId) uniqueness constraint means each game can only be
+  // nominated once, so the two paths must operate on different games.
+  for (const gid of gameIds.slice(0, gameIds.length - 1)) {
     await api.post(`/lineups/${created.id}/nominate`, { gameId: gid });
   }
-
-  // Add dmRecipientUserId as a nominator (DEMO_MODE-only test endpoint) so
-  // they enter the public-lineup expected-voters set and receive the DM.
-  if (gameIds[0]) {
-    await api
-      .post('/admin/test/nominate-game', {
-        lineupId: created.id,
-        gameId: gameIds[0],
-        userId: dmRecipientUserId,
-      })
-      .catch(() => null);
+  const dmRecipientGame = gameIds[gameIds.length - 1];
+  if (dmRecipientGame !== undefined) {
+    await api.post('/admin/test/nominate-game', {
+      lineupId: created.id,
+      gameId: dmRecipientGame,
+      userId: dmRecipientUserId,
+    });
   }
 
   await api.patch(`/lineups/${created.id}/status`, { status: 'voting' });
