@@ -191,7 +191,8 @@ loglevel=warn
 pidfile=/run/supervisord.pid
 
 [program:postgres]
-command=/bin/bash -c '/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /data/postgresql -c log_min_messages=FATAL 2>&1 | tee -a /data/logs/postgresql.log'
+# ROK-1156: pg_stat_statements is preloaded so the extension can capture per-query stats; log_min_duration_statement surfaces any statement slower than 200ms in postgresql.log.
+command=/bin/bash -c '/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /data/postgresql -c log_min_messages=FATAL -c shared_preload_libraries=pg_stat_statements -c log_min_duration_statement=200ms -c pg_stat_statements.track=all 2>&1 | tee -a /data/logs/postgresql.log'
 autostart=true
 autorestart=true
 priority=10
