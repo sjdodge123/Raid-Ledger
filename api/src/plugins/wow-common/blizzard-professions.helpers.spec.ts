@@ -60,7 +60,7 @@ function mockFetchOnce(status: number, body: unknown) {
   global.fetch = jest.fn().mockResolvedValueOnce({
     ok: status >= 200 && status < 300,
     status,
-    json: async () => body,
+    json: () => Promise.resolve(body),
   } as Response) as unknown as typeof fetch;
 }
 
