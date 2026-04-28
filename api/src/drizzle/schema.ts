@@ -49,3 +49,4 @@ export * from './schema/game-taste-vectors';
 export * from './schema/lineup-ai-suggestions';
 export * from './schema/discovery-category-suggestions';
 export * from './schema/community-insights-snapshots';
+export * from './schema/slow-query-snapshots';
