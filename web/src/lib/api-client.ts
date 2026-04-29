@@ -186,6 +186,7 @@ export {
     updateLineupMetadata,
     addLineupInvitees,
     removeLineupInvitee,
+    abortLineup,
 } from './api/lineups-api';
 
 // Activity Log (ROK-930)
