@@ -77,7 +77,10 @@ export class SchedulingService {
     const [gameInfo, [lineup], members, slots, voterCount] = await Promise.all([
       resolveGameInfo(this.db, match.gameId),
       this.db
-        .select({ status: schema.communityLineups.status })
+        .select({
+          status: schema.communityLineups.status,
+          createdBy: schema.communityLineups.createdBy,
+        })
         .from(schema.communityLineups)
         .where(eq(schema.communityLineups.id, match.lineupId))
         .limit(1),
@@ -92,7 +95,7 @@ export class SchedulingService {
       : undefined;
     return {
       ...buildPollResponse(
-        { ...match, ...gameInfo },
+        { ...match, ...gameInfo, lineupCreatedById: lineup?.createdBy ?? null },
         members,
         slots,
         votes,

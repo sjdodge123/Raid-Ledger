@@ -175,4 +175,71 @@ describe('buildMatchDetailDto', () => {
     expect(dto.createdAt).toMatch(/^\d{4}-/);
     expect(dto.members[0].displayName).toBe('Alice');
   });
+
+  it('omits lineupCreatedById when not provided (ROK-1121)', () => {
+    const dto = buildMatchDetailDto(
+      baseMatch,
+      baseMembers,
+      'Elden Ring',
+      'https://img.example.com/cover.jpg',
+    );
+
+    expect(dto.lineupCreatedById).toBeUndefined();
+  });
+
+  it('omits lineupCreatedById when null is passed (ROK-1121)', () => {
+    const dto = buildMatchDetailDto(
+      baseMatch,
+      baseMembers,
+      'Elden Ring',
+      'https://img.example.com/cover.jpg',
+      null,
+    );
+
+    expect(dto.lineupCreatedById).toBeUndefined();
+  });
+
+  it('emits lineupCreatedById when supplied (ROK-1121)', () => {
+    const dto = buildMatchDetailDto(
+      baseMatch,
+      baseMembers,
+      'Elden Ring',
+      'https://img.example.com/cover.jpg',
+      42,
+    );
+
+    expect(dto.lineupCreatedById).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1121: lineupCreatedById flows through buildPollResponse
+// ---------------------------------------------------------------------------
+
+describe('buildPollResponse — lineupCreatedById (ROK-1121)', () => {
+  it('passes lineupCreatedById from match input through to match DTO', () => {
+    const result = buildPollResponse(
+      { ...baseMatch, lineupCreatedById: 77 },
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+    );
+
+    expect(result.match.lineupCreatedById).toBe(77);
+  });
+
+  it('omits lineupCreatedById when match input does not include it', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+    );
+
+    expect(result.match.lineupCreatedById).toBeUndefined();
+  });
 });
