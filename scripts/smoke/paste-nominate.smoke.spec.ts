@@ -11,7 +11,14 @@
  * pass vacuously now and serve as regression guards.
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiPost, apiGet, apiPatch } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiPost,
+    apiGet,
+    apiPatch,
+    createLineupOrRetry,
+} from './api-helpers';
 
 // ROK-1147: ensureBuildingLineup checks /lineups/banner and reuses any
 // active lineup, including siblings'. The paste-on-detail-page tests then
@@ -36,22 +43,29 @@ async function archiveLineup(token: string, _id: number): Promise<void> {
 }
 
 async function ensureBuildingLineup(token: string): Promise<number> {
-    // ROK-1147: keep the "is the existing banner already building?" fast
-    // path so beforeEach hooks don't churn the DB on every test, but
-    // fall through to a reset-then-create when state is wrong.
+    // ROK-1167: keep the fast-path reuse so beforeEach doesn't churn the DB,
+    // but only reuse the banner when it belongs to THIS worker (title prefix
+    // match). Sibling-owned banners must fall through to reset + recreate.
     const banner = await apiGet(token, '/lineups/banner');
-    if (banner && typeof banner.id === 'number' && banner.status === 'building') {
+    if (
+        banner &&
+        typeof banner.id === 'number' &&
+        banner.status === 'building' &&
+        typeof banner.title === 'string' &&
+        banner.title.startsWith(workerPrefix)
+    ) {
         return banner.id;
     }
     await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
-    const lineup = (await apiPost(token, '/lineups', {
-        title: lineupTitle,
-        targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-    })) as { id?: number };
-    if (lineup?.id) return lineup.id;
-    const reBanner = await apiGet(token, '/lineups/banner');
-    if (reBanner && typeof reBanner.id === 'number') return reBanner.id;
-    throw new Error('Failed to create lineup in building phase');
+    const { id } = await createLineupOrRetry(
+        token,
+        {
+            title: lineupTitle,
+            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        },
+        workerPrefix,
+    );
+    return id;
 }
 
 // ---------------------------------------------------------------------------
