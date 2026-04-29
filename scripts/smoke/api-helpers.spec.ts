@@ -113,3 +113,100 @@ describe('getAdminToken (ROK-1085)', () => {
         expect(fetchSpy).not.toHaveBeenCalled();
     });
 });
+
+// ---------------------------------------------------------------------------
+// createLineupOrRetry (ROK-1167)
+// ---------------------------------------------------------------------------
+
+function jsonRes(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+    });
+}
+
+function textRes(body: string, status: number) {
+    return new Response(body, {
+        status,
+        headers: { 'Content-Type': 'text/plain' },
+    });
+}
+
+describe('createLineupOrRetry (ROK-1167)', () => {
+    let fetchSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        vi.resetModules();
+        fetchSpy = vi.fn();
+        vi.stubGlobal('fetch', fetchSpy);
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('returns id when first POST /lineups responds 201', async () => {
+        fetchSpy.mockResolvedValueOnce(jsonRes({ id: 42 }, 201));
+
+        const { createLineupOrRetry } = await import('./api-helpers');
+        const result = await createLineupOrRetry(
+            'token-abc',
+            { title: 'smoke-w0-foo Smoke Lineup' },
+            'smoke-w0-foo-',
+            { delayMs: 0 },
+        );
+
+        expect(result).toEqual({ id: 42 });
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        expect(String(url)).toContain('/lineups');
+        expect(init?.method).toBe('POST');
+    });
+
+    it('on 409 → calls /admin/test/reset-lineups with prefix, retries, returns id', async () => {
+        fetchSpy.mockResolvedValueOnce(textRes('conflict', 409));
+        fetchSpy.mockResolvedValueOnce(jsonRes({ ok: true }, 200));
+        fetchSpy.mockResolvedValueOnce(jsonRes({ id: 7 }, 201));
+
+        const { createLineupOrRetry } = await import('./api-helpers');
+        const result = await createLineupOrRetry(
+            'token-abc',
+            { title: 'smoke-w1-bar Smoke Lineup' },
+            'smoke-w1-bar-',
+            { delayMs: 0 },
+        );
+
+        expect(result).toEqual({ id: 7 });
+        expect(fetchSpy).toHaveBeenCalledTimes(3);
+        const [resetUrl, resetInit] = fetchSpy.mock.calls[1] as [
+            string,
+            RequestInit,
+        ];
+        expect(String(resetUrl)).toContain('/admin/test/reset-lineups');
+        expect(resetInit?.method).toBe('POST');
+        expect(JSON.parse(String(resetInit?.body))).toEqual({
+            titlePrefix: 'smoke-w1-bar-',
+        });
+    });
+
+    it('throws after exhausting attempts with prefix + last status + body in the message', async () => {
+        for (let i = 0; i < 10; i++) {
+            fetchSpy.mockResolvedValueOnce(textRes('still conflict', 409));
+        }
+
+        const { createLineupOrRetry } = await import('./api-helpers');
+        const promise = createLineupOrRetry(
+            'token-abc',
+            { title: 'smoke-w2-baz Smoke Lineup' },
+            'smoke-w2-baz-',
+            { attempts: 3, delayMs: 0 },
+        );
+
+        await expect(promise).rejects.toThrow(/smoke-w2-baz-/);
+        await expect(promise).rejects.toThrow(/409/);
+        await expect(promise).rejects.toThrow(/still conflict/);
+
+        // 3 attempts × (POST /lineups + reset) = 6 fetch calls.
+        expect(fetchSpy).toHaveBeenCalledTimes(6);
+    });
+});
