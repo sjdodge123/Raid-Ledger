@@ -36,6 +36,7 @@ export function rosterKey(eventId: number) {
 export function invalidateRosterQueries(queryClient: ReturnType<typeof useQueryClient>, eventId: number): void {
     queryClient.invalidateQueries({ queryKey: rosterKey(eventId), exact: true });
     queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'], exact: true });
+    queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
 }
 
 export function useUpdateRoster(eventId: number) {

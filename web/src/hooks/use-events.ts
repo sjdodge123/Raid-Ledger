@@ -88,6 +88,7 @@ export function useCancelEvent(eventId: number) {
         mutationFn: (reason?: string) => cancelEvent(eventId, reason),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });
@@ -99,6 +100,7 @@ export function useDeleteEvent(eventId: number) {
     return useMutation({
         mutationFn: () => deleteEvent(eventId),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });
@@ -111,6 +113,7 @@ export function useUpdateSeries(eventId: number) {
         mutationFn: (args: { scope: SeriesScope; data: UpdateEventDto }) =>
             updateSeries(eventId, args.scope, args.data),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });
@@ -122,6 +125,7 @@ export function useDeleteSeries(eventId: number) {
     return useMutation({
         mutationFn: (scope: SeriesScope) => deleteSeries(eventId, scope),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });
@@ -134,6 +138,7 @@ export function useCancelSeries(eventId: number) {
         mutationFn: (args: { scope: SeriesScope; reason?: string }) =>
             cancelSeries(eventId, args.scope, args.reason),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });

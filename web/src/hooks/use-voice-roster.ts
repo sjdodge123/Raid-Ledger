@@ -50,6 +50,7 @@ function bindSocketEvents(
   socket.on('event:endTimeExtended', (data: { eventId: number; newEndTime: string }) => {
     setState((prev) => ({ ...prev, endTime: data.newEndTime }));
     queryClient.setQueryData<EventResponseDto>(['events', data.eventId], (old) => old ? { ...old, endTime: data.newEndTime } : old);
+    queryClient.invalidateQueries({ queryKey: ['events', data.eventId, 'detail'], exact: true });
   });
 }
 
