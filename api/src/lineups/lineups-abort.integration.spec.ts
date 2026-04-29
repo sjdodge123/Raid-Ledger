@@ -36,15 +36,17 @@ function describeLineupAbort() {
   beforeAll(async () => {
     testApp = await getTestApp();
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-    // Resolve via LineupsService so the spy lands on the same instance the
-    // orchestrator uses (LineupPhaseQueueService is registered in two modules
-    // — LineupsModule and StandalonePollModule — so app.get() can return a
-    // different singleton than the one wired into LineupsService).
-    const lineupsService = testApp.app.get(LineupsService);
-    // Reach a private field so the spy targets the runtime instance.
-    phaseQueue = (
-      lineupsService as unknown as { phaseQueue: LineupPhaseQueueService }
-    ).phaseQueue;
+    // `LineupPhaseQueueService` is registered as a provider in both
+    // `LineupsModule` and `StandalonePollModule` (latter is intentionally
+    // self-contained — see comment in `standalone-poll.module.ts`). Each
+    // module gets its own singleton in NestJS DI. We tried both
+    // `app.get(LineupPhaseQueueService)` and
+    // `app.select(LineupsModule).get(...)` — neither returned the instance
+    // wired into LineupsService (likely because BullModule.registerQueue
+    // forks the provider graph). The only reliable way to spy on the same
+    // instance the runtime uses is to read it off the LineupsService.
+    // @ts-expect-error — `phaseQueue` is private but we need the runtime ref for the spy
+    phaseQueue = testApp.app.get(LineupsService).phaseQueue;
   });
 
   beforeEach(() => {
