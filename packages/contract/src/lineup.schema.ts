@@ -108,6 +108,13 @@ export const UpdateLineupStatusSchema = z.object({
 
 export type UpdateLineupStatusDto = z.infer<typeof UpdateLineupStatusSchema>;
 
+/** Abort a lineup with optional operator-authored reason (ROK-1062). */
+export const AbortLineupSchema = z.object({
+    reason: z.string().trim().max(500).nullable().optional(),
+});
+
+export type AbortLineupDto = z.infer<typeof AbortLineupSchema>;
+
 // ============================================================
 // Response Schemas
 // ============================================================
