@@ -2,6 +2,7 @@ import type {
     EventListResponseDto,
     EventResponseDto,
     EventRosterDto,
+    EventDetailResponseDto,
     DashboardResponseDto,
     SignupResponseDto,
     CreateEventDto,
@@ -18,6 +19,7 @@ import {
     EventListResponseSchema,
     EventResponseSchema,
     EventRosterSchema,
+    EventDetailResponseSchema,
     SignupResponseSchema,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
@@ -73,6 +75,13 @@ export async function getEventRoster(
     eventId: number,
 ): Promise<EventRosterDto> {
     return fetchApi(`/events/${eventId}/roster`, {}, EventRosterSchema);
+}
+
+/** Fetch composite event detail bundle (ROK-1046) */
+export async function getEventDetail(
+    eventId: number,
+): Promise<EventDetailResponseDto> {
+    return fetchApi(`/events/${eventId}/detail`, {}, EventDetailResponseSchema);
 }
 
 /** Fetch event variant context (ROK-587) */

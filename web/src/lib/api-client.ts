@@ -19,6 +19,7 @@ export {
     getEvents,
     getEvent,
     getEventRoster,
+    getEventDetail,
     getEventVariantContext,
     createEvent,
     updateEvent,

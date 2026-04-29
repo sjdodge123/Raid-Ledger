@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEvents, getEvent, getEventRoster, getEventVariantContext, cancelEvent, deleteEvent, updateSeries, deleteSeries, cancelSeries } from '../lib/api-client';
+import { getEvents, getEvent, getEventRoster, getEventDetail, getEventVariantContext, cancelEvent, deleteEvent, updateSeries, deleteSeries, cancelSeries } from '../lib/api-client';
 import type { EventListParams } from '../lib/api-client';
 import { useInfiniteList } from './use-infinite-list';
 import type { EventResponseDto, SeriesScope, UpdateEventDto } from '@raid-ledger/contract';
@@ -48,6 +48,18 @@ export function useEventRoster(eventId: number) {
     return useQuery({
         queryKey: ['events', eventId, 'roster'],
         queryFn: () => getEventRoster(eventId),
+        enabled: !!eventId,
+    });
+}
+
+/**
+ * Hook to fetch the composite event-detail bundle (ROK-1046).
+ * Returns `{ event, roster, rosterAssignments, pugs, voiceChannel }` in one call.
+ */
+export function useEventDetail(eventId: number) {
+    return useQuery({
+        queryKey: ['events', eventId, 'detail'],
+        queryFn: () => getEventDetail(eventId),
         enabled: !!eventId,
     });
 }
