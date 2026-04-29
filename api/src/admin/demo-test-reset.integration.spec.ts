@@ -12,6 +12,7 @@ import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
+import { SettingsService } from '../settings/settings.service';
 import * as schema from '../drizzle/schema';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
@@ -20,10 +21,21 @@ function describeReset() {
   let testApp: TestApp;
   let adminToken: string;
 
+  /**
+   * Controller gates on env DEMO_MODE AND the DB demoMode flag.
+   * `truncateAllTables` wipes app_settings, so we re-set demoMode=true
+   * after every truncate (mirrors a real DEMO_MODE deployment where
+   * demo data has been installed).
+   */
+  async function enableDemoMode(): Promise<void> {
+    process.env.DEMO_MODE = 'true';
+    await testApp.app.get(SettingsService).setDemoMode(true);
+  }
+
   beforeAll(async () => {
     testApp = await getTestApp();
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-    process.env.DEMO_MODE = 'true';
+    await enableDemoMode();
   });
 
   afterAll(() => {
@@ -34,7 +46,7 @@ function describeReset() {
   afterEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-    process.env.DEMO_MODE = 'true';
+    await enableDemoMode();
   });
 
   describe('POST /admin/test/reset-to-seed', () => {
@@ -54,10 +66,14 @@ function describeReset() {
     it('wipes orphan events and signups, then reseeds demo data', async () => {
       // Insert a stale orphan event + signup directly (simulates the
       // 80+ ORBITALIS polls visible at /events on dirty dev DBs).
+      // Identify by title (NOT id) — TRUNCATE … RESTART IDENTITY resets
+      // the events sequence, so a freshly-installed demo event will
+      // collide with the orphan's old id.
+      const orphanTitle = 'ORBITALIS-orphan';
       const [orphan] = await testApp.db
         .insert(schema.events)
         .values({
-          title: 'ORBITALIS-orphan',
+          title: orphanTitle,
           duration: [
             new Date(Date.now() + 60_000),
             new Date(Date.now() + 120_000),
@@ -78,11 +94,11 @@ function describeReset() {
       expect(res.body.deleted.events).toBeGreaterThanOrEqual(1);
       expect(res.body.reseed.ok).toBe(true);
 
-      // Orphan event is gone.
+      // Orphan event is gone (matched by title, not id — see comment above).
       const remaining = await testApp.db
         .select({ id: schema.events.id })
         .from(schema.events)
-        .where(eq(schema.events.id, orphan.id));
+        .where(eq(schema.events.title, orphanTitle));
       expect(remaining).toHaveLength(0);
 
       // Demo events were created (~30 from installer).
