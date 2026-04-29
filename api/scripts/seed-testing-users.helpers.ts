@@ -60,165 +60,56 @@ export async function seedUsers(db: Db): Promise<User[]> {
   return createdUsers;
 }
 
-const charactersToCreate = [
-  // WoW Retail characters
-  {
-    username: 'ShadowMage',
-    gameSlug: 'world-of-warcraft',
-    charName: 'Shadowmage',
-    class: 'Mage',
-    spec: 'Arcane',
-    role: 'dps' as const,
-    wowClass: 'mage',
-  },
-  {
-    username: 'DragonSlayer99',
-    gameSlug: 'world-of-warcraft',
-    charName: 'Dragonslayer',
-    class: 'Rogue',
-    spec: 'Assassination',
-    role: 'dps' as const,
-    wowClass: 'rogue',
-  },
-  {
-    username: 'HealzForDayz',
-    gameSlug: 'world-of-warcraft',
-    charName: 'Healzfordays',
-    class: 'Priest',
-    spec: 'Holy',
-    role: 'healer' as const,
-    wowClass: 'priest',
-  },
-  {
-    username: 'TankMaster',
-    gameSlug: 'world-of-warcraft',
-    charName: 'Tankmaster',
-    class: 'Warrior',
-    spec: 'Protection',
-    role: 'tank' as const,
-    wowClass: 'warrior',
-  },
-  {
-    username: 'ProRaider',
-    gameSlug: 'world-of-warcraft',
-    charName: 'Deathbringer',
-    class: 'Death Knight',
-    spec: 'Unholy',
-    role: 'dps' as const,
-    wowClass: 'deathknight',
-  },
-  {
-    username: 'NightOwlGamer',
-    gameSlug: 'world-of-warcraft',
-    charName: 'Moonweaver',
-    class: 'Druid',
-    spec: 'Restoration',
-    role: 'healer' as const,
-    wowClass: 'druid',
-  },
-  {
-    username: 'LootGoblin',
-    gameSlug: 'world-of-warcraft',
-    charName: 'Felstrike',
-    class: 'Warlock',
-    spec: 'Destruction',
-    role: 'dps' as const,
-    wowClass: 'warlock',
-  },
-  {
-    username: 'CasualCarl',
-    gameSlug: 'world-of-warcraft',
-    charName: 'Shieldwall',
-    class: 'Paladin',
-    spec: 'Protection',
-    role: 'tank' as const,
-    wowClass: 'paladin',
-  },
-  // WoW Classic characters
-  {
-    username: 'ShadowMage',
-    gameSlug: 'world-of-warcraft-classic',
-    charName: 'Frostbolt',
-    class: 'Mage',
-    spec: 'Frost',
-    role: 'dps' as const,
-    wowClass: 'mage',
-  },
-  {
-    username: 'TankMaster',
-    gameSlug: 'world-of-warcraft-classic',
-    charName: 'Ironfist',
-    class: 'Warrior',
-    spec: 'Protection',
-    role: 'tank' as const,
-    wowClass: 'warrior',
-  },
-  {
-    username: 'HealzForDayz',
-    gameSlug: 'world-of-warcraft-classic',
-    charName: 'Lightbringer',
-    class: 'Priest',
-    spec: 'Holy',
-    role: 'healer' as const,
-    wowClass: 'priest',
-  },
-  {
-    username: 'ProRaider',
-    gameSlug: 'world-of-warcraft-classic',
-    charName: 'Backstab',
-    class: 'Rogue',
-    spec: 'Combat',
-    role: 'dps' as const,
-    wowClass: 'rogue',
-  },
-  // Valheim characters
-  {
-    username: 'ShadowMage',
-    gameSlug: 'valheim',
-    charName: 'Windwalker',
-    class: 'Monk',
-    spec: 'Windwalker',
-    role: 'dps' as const,
-    wowClass: 'monk',
-  },
-  {
-    username: 'TankMaster',
-    gameSlug: 'valheim',
-    charName: 'Earthguard',
-    class: 'Shaman',
-    spec: 'Restoration',
-    role: 'healer' as const,
-    wowClass: 'shaman',
-  },
-  {
-    username: 'ProRaider',
-    gameSlug: 'valheim',
-    charName: 'Hawkeye',
-    class: 'Hunter',
-    spec: 'Marksmanship',
-    role: 'dps' as const,
-    wowClass: 'hunter',
-  },
-  // FFXIV characters
-  {
-    username: 'NightOwlGamer',
-    gameSlug: 'final-fantasy-xiv-online',
-    charName: 'Voidcaller',
-    class: 'Evoker',
-    spec: 'Preservation',
-    role: 'healer' as const,
-    wowClass: 'evoker',
-  },
-  {
-    username: 'LootGoblin',
-    gameSlug: 'final-fantasy-xiv-online',
-    charName: 'Demonbane',
-    class: 'Demon Hunter',
-    spec: 'Havoc',
-    role: 'dps' as const,
-    wowClass: 'demonhunter',
-  },
+type Role = 'dps' | 'tank' | 'healer';
+type CharSeed = {
+  username: string;
+  gameSlug: string;
+  charName: string;
+  class: string;
+  spec: string;
+  role: Role;
+  wowClass: string;
+};
+
+// [username, gameSlug, charName, class, spec, role, wowClass]
+type CharRow = [string, string, string, string, string, Role, string];
+
+// prettier-ignore
+const CHAR_ROWS: readonly CharRow[] = [
+  // WoW Retail
+  ['ShadowMage',     'world-of-warcraft', 'Shadowmage',   'Mage',         'Arcane',        'dps',    'mage'],
+  ['DragonSlayer99', 'world-of-warcraft', 'Dragonslayer', 'Rogue',        'Assassination', 'dps',    'rogue'],
+  ['HealzForDayz',   'world-of-warcraft', 'Healzfordays', 'Priest',       'Holy',          'healer', 'priest'],
+  ['TankMaster',     'world-of-warcraft', 'Tankmaster',   'Warrior',      'Protection',    'tank',   'warrior'],
+  ['ProRaider',      'world-of-warcraft', 'Deathbringer', 'Death Knight', 'Unholy',        'dps',    'deathknight'],
+  ['NightOwlGamer',  'world-of-warcraft', 'Moonweaver',   'Druid',        'Restoration',   'healer', 'druid'],
+  ['LootGoblin',     'world-of-warcraft', 'Felstrike',    'Warlock',      'Destruction',   'dps',    'warlock'],
+  ['CasualCarl',     'world-of-warcraft', 'Shieldwall',   'Paladin',      'Protection',    'tank',   'paladin'],
+  // WoW Classic
+  ['ShadowMage',   'world-of-warcraft-classic', 'Frostbolt',    'Mage',    'Frost',      'dps',    'mage'],
+  ['TankMaster',   'world-of-warcraft-classic', 'Ironfist',     'Warrior', 'Protection', 'tank',   'warrior'],
+  ['HealzForDayz', 'world-of-warcraft-classic', 'Lightbringer', 'Priest',  'Holy',       'healer', 'priest'],
+  ['ProRaider',    'world-of-warcraft-classic', 'Backstab',     'Rogue',   'Combat',     'dps',    'rogue'],
+  // Valheim
+  ['ShadowMage', 'valheim', 'Windwalker', 'Monk',   'Windwalker',   'dps',    'monk'],
+  ['TankMaster', 'valheim', 'Earthguard', 'Shaman', 'Restoration',  'healer', 'shaman'],
+  ['ProRaider',  'valheim', 'Hawkeye',    'Hunter', 'Marksmanship', 'dps',    'hunter'],
+  // FFXIV
+  ['NightOwlGamer', 'final-fantasy-xiv-online', 'Voidcaller', 'Evoker',       'Preservation', 'healer', 'evoker'],
+  ['LootGoblin',    'final-fantasy-xiv-online', 'Demonbane',  'Demon Hunter', 'Havoc',        'dps',    'demonhunter'],
 ];
+
+const charactersToCreate: CharSeed[] = CHAR_ROWS.map(
+  ([username, gameSlug, charName, cls, spec, role, wowClass]) => ({
+    username,
+    gameSlug,
+    charName,
+    class: cls,
+    spec,
+    role,
+    wowClass,
+  }),
+);
 
 export async function seedCharacters(
   db: Db,
