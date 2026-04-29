@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const LogServiceEnum = z.enum(['api', 'nginx', 'postgresql', 'redis', 'supervisor']);
+export const LogServiceEnum = z.enum(['api', 'nginx', 'postgresql', 'redis', 'supervisor', 'slow-queries']);
 export type LogService = z.infer<typeof LogServiceEnum>;
 
 export const LogFileSchema = z.object({

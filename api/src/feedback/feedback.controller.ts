@@ -13,6 +13,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import * as Sentry from '@sentry/nestjs';
 import { AdminGuard } from '../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { RateLimit } from '../throttler/rate-limit.decorator';
@@ -25,6 +26,7 @@ import {
 import { eq, desc, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { SlowQueriesService } from '../slow-queries/slow-queries.service';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -41,6 +43,7 @@ export class FeedbackController {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: NodePgDatabase<typeof schema>,
+    private readonly slowQueries: SlowQueriesService,
   ) {}
 
   /**
@@ -60,7 +63,7 @@ export class FeedbackController {
     if (!parsed.success)
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     const userId = req.user.id;
-    const { category, message, pageUrl } = parsed.data;
+    const { category, message, pageUrl, clientLogs } = parsed.data;
     const [inserted] = await this.db
       .insert(schema.feedback)
       .values({ userId, category, message, pageUrl: pageUrl ?? null })
@@ -68,6 +71,7 @@ export class FeedbackController {
     this.logger.log(
       `Feedback submitted: id=${inserted.id} category=${category} user=${userId}`,
     );
+    await this.attachSlowQueryContext(inserted.id, req.user.role, clientLogs);
     return {
       id: inserted.id,
       category: inserted.category as FeedbackResponseDto['category'],
@@ -76,6 +80,34 @@ export class FeedbackController {
       githubIssueUrl: null,
       createdAt: inserted.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * ROK-1156: when an admin submits feedback with the "Capture and send
+   * client logs" checkbox on, attach the tail of `slow-queries.log` as a
+   * separate Sentry event tagged with the same feedback_id. Operators
+   * triaging in Sentry then see the slow-query context next to the bug
+   * report. No-op for non-admins or when the checkbox is off.
+   */
+  private async attachSlowQueryContext(
+    feedbackId: number,
+    role: UserRole,
+    clientLogs: string | undefined,
+  ): Promise<void> {
+    if (role !== 'admin' || !clientLogs) return;
+    try {
+      const tail = await this.slowQueries.readLogTail();
+      if (!tail) return;
+      Sentry.captureMessage(`[Feedback ${feedbackId}] Slow query context`, {
+        level: 'info',
+        tags: { feedback_id: String(feedbackId), source: 'slow_query_attach' },
+        extra: { slowQueryLogTail: tail },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to attach slow-query context for feedback ${feedbackId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /** Parse and clamp pagination params. */

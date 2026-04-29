@@ -100,7 +100,9 @@ export class LogsController {
       service === 'api' ||
       service === 'nginx' ||
       service === 'postgresql' ||
-      service === 'redis'
+      service === 'redis' ||
+      service === 'supervisor' ||
+      service === 'slow-queries'
     );
   }
 }

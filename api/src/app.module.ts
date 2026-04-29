@@ -46,6 +46,7 @@ import { TasteProfileModule } from './taste-profile/taste-profile.module';
 import { GameTasteModule } from './game-taste/game-taste.module';
 import { DiscoveryCategoriesModule } from './discovery-categories/discovery-categories.module';
 import { CommunityInsightsModule } from './community-insights/community-insights.module';
+import { SlowQueriesModule } from './slow-queries/slow-queries.module';
 
 @Module({
   imports: [
@@ -93,6 +94,7 @@ import { CommunityInsightsModule } from './community-insights/community-insights
     GameTasteModule,
     DiscoveryCategoriesModule,
     CommunityInsightsModule,
+    SlowQueriesModule,
   ],
   controllers: [AppController],
   providers: [

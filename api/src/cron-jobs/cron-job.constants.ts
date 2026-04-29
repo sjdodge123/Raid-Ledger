@@ -185,4 +185,9 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'DMs lineup tiebreaker participants 24h and 1h before round deadline every 5 minutes',
     category: 'Notifications',
   },
+  SlowQueriesCron_appendDigest: {
+    description:
+      'Reads pg_stat_statements every hour and appends a top-N digest to slow-queries.log',
+    category: 'Monitoring',
+  },
 };

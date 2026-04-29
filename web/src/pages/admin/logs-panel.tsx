@@ -30,9 +30,10 @@ const SERVICE_BADGE: Record<string, string> = {
   postgresql: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
   redis: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
   supervisor: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  'slow-queries': 'bg-rose-500/15 text-rose-400 border-rose-500/30',
 };
 
-const SERVICES: LogService[] = ['api', 'nginx', 'postgresql', 'redis', 'supervisor'];
+const SERVICES: LogService[] = ['api', 'nginx', 'postgresql', 'redis', 'supervisor', 'slow-queries'];
 
 async function handleLogExport(filter: FilterService, setExporting: (v: boolean) => void) {
   setExporting(true);
