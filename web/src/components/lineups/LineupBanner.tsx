@@ -216,12 +216,16 @@ export function LineupBanner(): JSX.Element | null {
     // ROK-1167: smoke-test entry point. `?test=open-lineup-modal` opens the
     // StartLineupModal directly so smoke specs can avoid racing on the global
     // "no active lineup" banner state. Gated by demoMode + admin role.
+    // Synchronizes URL state (external) into local React state on first match;
+    // processedRef + setSearchParams consumption guarantee the effect is one-shot.
     useEffect(() => {
         if (processedRef.current) return;
         if (searchParams.get('test') !== 'open-lineup-modal') return;
         if (!systemStatus?.demoMode) return;
         if (!isOperatorOrAdmin(user)) return;
         processedRef.current = true;
+        // Legitimate URL → local-state sync (one-shot, latched by processedRef).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setStartOpen(true);
         const next = new URLSearchParams(searchParams);
         next.delete('test');
