@@ -253,11 +253,11 @@ async function testDetailPublicAccessShape() {
       assignments: expect.any(Array),
     }),
     pugs: expect.any(Array),
-    voiceChannel: expect.objectContaining({
-      channelId: expect.anything(),
-      channelName: expect.anything(),
-      guildId: expect.anything(),
-    }),
+    voiceChannel: {
+      channelId: null,
+      channelName: null,
+      guildId: null,
+    },
   });
 }
 
