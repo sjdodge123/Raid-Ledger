@@ -1,14 +1,28 @@
 /**
  * Create Event section for the scheduling poll page (ROK-965).
  * User picks a slot, optionally enables recurring, then creates the event.
+ *
+ * ROK-1121: Create / Reschedule actions are gated behind a majority-voter
+ * threshold (max(2, floor(N/2)+1) distinct voters on the selected slot).
+ * Operators, admins, and the lineup creator can bypass with a confirm modal.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { ScheduleSlotWithVotesDto, MatchDetailResponseDto } from '@raid-ledger/contract';
+import type {
+    ScheduleSlotWithVotesDto,
+    MatchDetailResponseDto,
+} from '@raid-ledger/contract';
+import { useAuth } from '../../hooks/use-auth';
 import { useRescheduleEvent } from '../../hooks/use-reschedule';
 import { completeStandalonePoll } from '../../lib/api-client';
 import { toast } from '../../lib/toast';
+import {
+    computeRequiredVoters,
+    countDistinctVoters,
+    canBypassThreshold,
+} from './threshold';
+import { EarlyCreateConfirmModal } from './EarlyCreateConfirmModal';
 
 interface CreateEventSectionProps {
   slots: ScheduleSlotWithVotesDto[];
@@ -77,11 +91,49 @@ function CreatedSuccessState({ eventId, matchStatus }: {
   );
 }
 
+interface ThresholdGate {
+  canBypass: boolean;
+  requiredVoters: number;
+  distinctVoters: number;
+  thresholdMet: boolean;
+  shouldHide: boolean;
+  showHelperText: boolean;
+  helperText: string;
+}
+
+/** Compute the gate state for a slot + match + user. */
+function useThresholdGate(
+  match: MatchDetailResponseDto,
+  selectedSlot: ScheduleSlotWithVotesDto | undefined,
+  hasVoted: boolean,
+): ThresholdGate {
+  const { user } = useAuth();
+  return useMemo(() => {
+    const memberCount = match.members.length;
+    const canBypass = canBypassThreshold(user, match);
+    const requiredVoters = computeRequiredVoters(memberCount);
+    const distinctVoters = countDistinctVoters(selectedSlot);
+    const thresholdMet = distinctVoters >= requiredVoters;
+    const shouldHide = !canBypass && !hasVoted;
+    const showHelperText = !canBypass && hasVoted && !thresholdMet;
+    const helperText = `${distinctVoters} of ${memberCount} participants have voted — Create Event unlocks when majority has chosen a time`;
+    return {
+      canBypass,
+      requiredVoters,
+      distinctVoters,
+      thresholdMet,
+      shouldHide,
+      showHelperText,
+      helperText,
+    };
+  }, [user, match, selectedSlot, hasVoted]);
+}
+
 /** Section for creating an event or rescheduling from a selected slot. */
 export function CreateEventSection({
   slots, match, matchId, hasVoted, readOnly, createdEventId, linkedEventId,
   matchStatus,
-}: CreateEventSectionProps): JSX.Element {
+}: CreateEventSectionProps): JSX.Element | null {
   const isReschedule = linkedEventId !== null;
 
   if (createdEventId) {
@@ -89,7 +141,7 @@ export function CreateEventSection({
   }
 
   if (isReschedule) {
-    return <RescheduleFromSlot slots={slots} matchId={matchId}
+    return <RescheduleFromSlot slots={slots} match={match} matchId={matchId}
       linkedEventId={linkedEventId} hasVoted={hasVoted} readOnly={readOnly} />;
   }
 
@@ -98,18 +150,19 @@ export function CreateEventSection({
 }
 
 /** Reschedule the linked event to the selected slot's time. */
-function RescheduleFromSlot({ slots, matchId, linkedEventId, hasVoted, readOnly }: {
-  slots: ScheduleSlotWithVotesDto[]; matchId: number; linkedEventId: number;
-  hasVoted: boolean; readOnly: boolean;
-}): JSX.Element {
+function RescheduleFromSlot({ slots, match, matchId, linkedEventId, hasVoted, readOnly }: {
+  slots: ScheduleSlotWithVotesDto[]; match: MatchDetailResponseDto; matchId: number;
+  linkedEventId: number; hasVoted: boolean; readOnly: boolean;
+}): JSX.Element | null {
   const sorted = sortedSlots(slots);
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(sorted[0]?.id ?? null);
   const [done, setDone] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const reschedule = useRescheduleEvent(linkedEventId);
   const selectedSlot = slots.find((s) => s.id === selectedSlotId);
-  const canAct = hasVoted && !readOnly && !reschedule.isPending && selectedSlotId !== null;
+  const gate = useThresholdGate(match, selectedSlot, hasVoted);
 
-  const handleReschedule = () => {
+  const performReschedule = () => {
     if (!selectedSlot) return;
     const start = new Date(selectedSlot.proposedTime);
     if (start <= new Date()) {
@@ -126,20 +179,16 @@ function RescheduleFromSlot({ slots, matchId, linkedEventId, hasVoted, readOnly 
     );
   };
 
-  if (done) {
-    return (
-      <div className="space-y-3">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-          Rescheduled
-        </div>
-        <p className="text-sm text-emerald-400">Event rescheduled successfully!</p>
-        <Link to={`/events/${linkedEventId}`}
-          className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-          View Event &rarr;
-        </Link>
-      </div>
-    );
-  }
+  const handleClick = () => {
+    if (!gate.thresholdMet) { setShowConfirm(true); return; }
+    performReschedule();
+  };
+
+  if (done) return <RescheduledSuccessState linkedEventId={linkedEventId} />;
+  if (gate.shouldHide) return null;
+
+  const canAct = gate.canBypass || (hasVoted && gate.thresholdMet);
+  const buttonDisabled = !canAct || readOnly || reschedule.isPending || selectedSlotId === null;
 
   return (
     <div className="space-y-3">
@@ -147,13 +196,40 @@ function RescheduleFromSlot({ slots, matchId, linkedEventId, hasVoted, readOnly 
       {slots.length > 0 && (
         <SlotSelector slots={slots} selectedId={selectedSlotId} onChange={setSelectedSlotId} />
       )}
-      <button type="button" onClick={handleReschedule} disabled={!canAct}
+      <button type="button" onClick={handleClick} disabled={buttonDisabled}
         className="px-6 py-2.5 text-sm font-medium bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
         {reschedule.isPending ? 'Rescheduling...' : 'Reschedule Event'}
       </button>
-      {!hasVoted && !readOnly && (
+      {gate.showHelperText && (
+        <p className="text-xs text-muted">{gate.helperText}</p>
+      )}
+      {!gate.showHelperText && !hasVoted && !readOnly && (
         <p className="text-xs text-muted">Vote on a time slot to enable rescheduling.</p>
       )}
+      {showConfirm && (
+        <EarlyCreateConfirmModal
+          distinctVoters={gate.distinctVoters}
+          memberCount={match.members.length}
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={() => { setShowConfirm(false); performReschedule(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Success state for a completed reschedule. */
+function RescheduledSuccessState({ linkedEventId }: { linkedEventId: number }): JSX.Element {
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+        Rescheduled
+      </div>
+      <p className="text-sm text-emerald-400">Event rescheduled successfully!</p>
+      <Link to={`/events/${linkedEventId}`}
+        className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+        View Event &rarr;
+      </Link>
     </div>
   );
 }
@@ -162,14 +238,15 @@ function RescheduleFromSlot({ slots, matchId, linkedEventId, hasVoted, readOnly 
 function CreateFromSlot({ slots, match, matchId, hasVoted, readOnly }: {
   slots: ScheduleSlotWithVotesDto[]; match: MatchDetailResponseDto;
   matchId: number; hasVoted: boolean; readOnly: boolean;
-}): JSX.Element {
+}): JSX.Element | null {
   const navigate = useNavigate();
   const sorted = sortedSlots(slots);
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(sorted[0]?.id ?? null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const selectedSlot = slots.find((s) => s.id === selectedSlotId);
-  const canCreate = hasVoted && !readOnly && selectedSlotId !== null;
+  const gate = useThresholdGate(match, selectedSlot, hasVoted);
 
-  const handleCreate = () => {
+  const performNavigate = () => {
     if (!selectedSlot) return;
     const start = new Date(selectedSlot.proposedTime);
     if (start <= new Date()) { toast.error('Cannot create event for a past time slot'); return; }
@@ -180,18 +257,39 @@ function CreateFromSlot({ slots, match, matchId, hasVoted, readOnly }: {
     navigate(`/events/new?${params.toString()}`);
   };
 
+  const handleClick = () => {
+    if (!gate.thresholdMet) { setShowConfirm(true); return; }
+    performNavigate();
+  };
+
+  if (gate.shouldHide) return null;
+
+  const canAct = gate.canBypass || (hasVoted && gate.thresholdMet);
+  const buttonDisabled = !canAct || readOnly || selectedSlotId === null;
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Create Event</h3>
       {slots.length > 0 && (
         <SlotSelector slots={slots} selectedId={selectedSlotId} onChange={setSelectedSlotId} />
       )}
-      <button type="button" onClick={handleCreate} disabled={!canCreate}
+      <button type="button" onClick={handleClick} disabled={buttonDisabled}
         className="px-6 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
         Create Event
       </button>
-      {!hasVoted && !readOnly && (
+      {gate.showHelperText && (
+        <p className="text-xs text-muted">{gate.helperText}</p>
+      )}
+      {!gate.showHelperText && !hasVoted && !readOnly && (
         <p className="text-xs text-muted">Vote on a time slot to enable event creation.</p>
+      )}
+      {showConfirm && (
+        <EarlyCreateConfirmModal
+          distinctVoters={gate.distinctVoters}
+          memberCount={match.members.length}
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={() => { setShowConfirm(false); performNavigate(); }}
+        />
       )}
     </div>
   );
