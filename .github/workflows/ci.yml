@@ -345,6 +345,11 @@ jobs:
       ADMIN_PASSWORD: playwright-ci-password
       BASE_URL: http://localhost:5173
       API_URL: http://localhost:3000
+      # ROK-1156: smoke job runs the API on the GHA runner directly (not in a
+      # container), so the default `/data/logs` is not writable. Point the
+      # LogsService + SlowQueriesService at a runner-writable temp dir so the
+      # admin Logs panel + slow-queries cron actually surface files in tests.
+      LOG_DIR: /tmp/raid-ledger-logs
 
     steps:
       - name: Checkout code
@@ -377,6 +382,11 @@ jobs:
 
       - name: Build web
         run: npm run build -w web
+
+      - name: Create LOG_DIR
+        # ROK-1156: pre-create the runner-writable log directory so the API's
+        # ConfigService + the SlowQueriesService cron both find a usable path.
+        run: mkdir -p /tmp/raid-ledger-logs
 
       - name: Bump Postgres max_connections
         # GHA service containers don't accept `command:`, so we ALTER SYSTEM
