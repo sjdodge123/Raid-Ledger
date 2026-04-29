@@ -22,7 +22,6 @@ import { EventsService } from './events.service';
 import { EventSeriesService } from './event-series.service';
 import { SignupsService } from './signups.service';
 import { ShareService } from './share.service';
-import { EventDetailService } from './event-detail.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
@@ -33,7 +32,6 @@ import {
   CancelSeriesSchema,
   SeriesScopeSchema,
   EventResponseDto,
-  EventDetailResponseDto,
   EventListResponseDto,
   DashboardResponseDto,
   AggregateGameTimeResponse,
@@ -62,7 +60,6 @@ export class EventsController {
     private readonly signupsService: SignupsService,
     private readonly shareService: ShareService,
     private readonly activityLog: ActivityLogService,
-    private readonly eventDetailService: EventDetailService,
   ) {}
 
   @Post()
@@ -125,15 +122,6 @@ export class EventsController {
     return enrichEventWithConflicts(event, req.user?.id ?? null, (p) =>
       findConflictingEvents(this.db, p),
     );
-  }
-
-  @Get(':id/detail')
-  @UseGuards(OptionalJwtGuard)
-  async findOneDetail(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req: { user?: { id: number } },
-  ): Promise<EventDetailResponseDto> {
-    return this.eventDetailService.findDetail(id, req.user?.id ?? null);
   }
 
   @Get(':id/activity')

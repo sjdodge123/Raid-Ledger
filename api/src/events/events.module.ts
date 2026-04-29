@@ -19,6 +19,7 @@ import { EventsController } from './events.controller';
 import { EventsSignupsController } from './events-signups.controller';
 import { EventsPugsController } from './events-pugs.controller';
 import { EventsAttendanceController } from './events-attendance.controller';
+import { EventsDetailController } from './events-detail.controller';
 import { EventPlansController } from './event-plans.controller';
 import { InviteController } from './invite.controller';
 import { TemplatesController } from './templates.controller';
@@ -61,6 +62,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     EventsSignupsController,
     EventsPugsController,
     EventsAttendanceController,
+    EventsDetailController,
     EventPlansController,
     InviteController,
     TemplatesController,
