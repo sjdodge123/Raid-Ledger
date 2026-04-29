@@ -19,9 +19,22 @@ vi.mock('./NominateModal', () => ({
     NominateModal: () => null,
 }));
 
+// Mock StartLineupModal — its internals (useCreateLineup, durations, etc.)
+// are out of scope for banner-level role-gating tests.
+vi.mock('./start-lineup-modal', () => ({
+    StartLineupModal: () => null,
+}));
+
+vi.mock('../../hooks/use-auth', () => ({
+    useAuth: vi.fn(() => ({ user: null })),
+    isOperatorOrAdmin: vi.fn(() => false),
+}));
+
 import { useLineupBanner } from '../../hooks/use-lineups';
+import { isOperatorOrAdmin } from '../../hooks/use-auth';
 
 const mockUseLineupBanner = vi.mocked(useLineupBanner);
+const mockIsOperatorOrAdmin = vi.mocked(isOperatorOrAdmin);
 
 function mockHookReturn(data: ReturnType<typeof createMockBanner> | null | undefined, isLoading = false) {
     mockUseLineupBanner.mockReturnValue({
@@ -110,5 +123,39 @@ describe('LineupBanner — populated state', () => {
         renderWithProviders(<LineupBanner />);
         // Should render a formatted date string
         expect(screen.getByText(/mar/i)).toBeInTheDocument();
+    });
+});
+
+// ROK-1061: admin/operator-gated lineup creation. The "Start Lineup" CTA
+// (no active lineup) and the "Start another lineup" button (active lineup
+// present) must only render for users with operator or admin role.
+describe('LineupBanner — role gating (ROK-1061)', () => {
+    it('renders nothing when no banner and user lacks operator/admin role', () => {
+        mockIsOperatorOrAdmin.mockReturnValue(false);
+        mockHookReturn(null);
+        const { container } = renderWithProviders(<LineupBanner />);
+        expect(container.firstChild).toBeNull();
+        expect(screen.queryByRole('button', { name: /start lineup/i })).not.toBeInTheDocument();
+    });
+
+    it('renders Start Lineup CTA when no banner and user is operator/admin', () => {
+        mockIsOperatorOrAdmin.mockReturnValue(true);
+        mockHookReturn(null);
+        renderWithProviders(<LineupBanner />);
+        expect(screen.getByRole('button', { name: /start lineup/i })).toBeInTheDocument();
+    });
+
+    it('hides "Start another lineup" button on populated banner for non-role users', () => {
+        mockIsOperatorOrAdmin.mockReturnValue(false);
+        mockHookReturn(createMockBanner());
+        renderWithProviders(<LineupBanner />);
+        expect(screen.queryByTestId('start-another-lineup')).not.toBeInTheDocument();
+    });
+
+    it('shows "Start another lineup" button on populated banner for operator/admin', () => {
+        mockIsOperatorOrAdmin.mockReturnValue(true);
+        mockHookReturn(createMockBanner());
+        renderWithProviders(<LineupBanner />);
+        expect(screen.getByTestId('start-another-lineup')).toBeInTheDocument();
     });
 });
