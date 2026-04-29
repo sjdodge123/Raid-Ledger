@@ -21,15 +21,14 @@ import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
-import type {
-  EmbedContext,
-  NominationEntry,
-  LineupPhase,
-} from './lineup-notification-embed.helpers';
 import {
   buildCreatedEmbed,
   buildVotingOpenEmbed,
+  type EmbedContext,
+  type NominationEntry,
+  type LineupPhase,
 } from './lineup-notification-embed.helpers';
+import { notifyLineupAborted as dispatchLineupAborted } from './lineup-notification-aborted.helpers';
 import { fanOutVotingDMs } from './lineup-notification-dm-batch.helpers';
 import {
   routeLineupCreatedIfPrivate,
@@ -50,7 +49,6 @@ import {
 import {
   notifyTiebreakerOpen,
   type TiebreakerNotificationInfo,
-  type TiebreakerOpenDeps,
 } from './lineup-notification-tiebreaker.helpers';
 
 /** Shape of a lineup passed to notification methods. */
@@ -67,6 +65,8 @@ export interface LineupInfo {
   channelOverrideId?: string | null;
   /** Lineup visibility (ROK-1065). 'private' routes to invitee DMs only. */
   visibility?: 'public' | 'private';
+  /** Pre-abort status, consumed only by `notifyLineupAborted` (ROK-1062). */
+  preAbortStatus?: 'building' | 'voting' | 'decided' | 'archived';
 }
 
 /** Shape of a match passed to notification methods. */
@@ -224,19 +224,17 @@ export class LineupNotificationService {
   }
 
   /** ROK-1117: Post tiebreaker-open channel embed + DMs to expected voters. */
-  async notifyTiebreakerOpen(
+  notifyTiebreakerOpen(
     lineup: LineupInfo,
     tiebreaker: TiebreakerNotificationInfo,
     tiedGameIds?: ReadonlyArray<number>,
   ): Promise<void> {
-    const deps: TiebreakerOpenDeps = {
-      db: this.db,
-      notificationService: this.notificationService,
-      dedupService: this.dedupService,
-      botClient: this.botClient,
-      settingsService: this.settingsService,
-    };
-    await notifyTiebreakerOpen(deps, lineup, tiebreaker, tiedGameIds);
+    return notifyTiebreakerOpen(
+      this.orchestrationDeps,
+      lineup,
+      tiebreaker,
+      tiedGameIds,
+    );
   }
 
   /** AC-5: Post combined tier embed + per-member DMs when matches are found. */
@@ -308,6 +306,14 @@ export class LineupNotificationService {
       lineupInfo,
     );
   }
+
+  /** ROK-1062: Post the channel-level "Aborted" embed. No DMs. */
+  notifyLineupAborted = (
+    lineup: LineupInfo,
+    reason: string | null,
+    actor: string,
+  ): Promise<void> =>
+    dispatchLineupAborted(this.dispatchDeps, lineup, reason, actor);
 
   /** AC-16: DM to nominator when operator removes their nomination. */
   async notifyNominationRemoved(
