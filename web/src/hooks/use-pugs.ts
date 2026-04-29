@@ -23,6 +23,11 @@ export function usePugs(eventId: number) {
     });
 }
 
+function invalidatePugQueries(queryClient: ReturnType<typeof useQueryClient>, eventId: number): void {
+    queryClient.invalidateQueries({ queryKey: ['events', eventId, 'pugs'] });
+    queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
+}
+
 /**
  * Mutation hook for creating a PUG slot (ROK-262).
  */
@@ -31,11 +36,7 @@ export function useCreatePug(eventId: number) {
 
     return useMutation<PugSlotResponseDto, Error, CreatePugSlotDto>({
         mutationFn: (dto) => createPugSlot(eventId, dto),
-        onSuccess: () => {
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'pugs'],
-            });
-        },
+        onSuccess: () => invalidatePugQueries(queryClient, eventId),
     });
 }
 
@@ -51,11 +52,7 @@ export function useUpdatePug(eventId: number) {
         { pugId: string; dto: UpdatePugSlotDto }
     >({
         mutationFn: ({ pugId, dto }) => updatePugSlot(eventId, pugId, dto),
-        onSuccess: () => {
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'pugs'],
-            });
-        },
+        onSuccess: () => invalidatePugQueries(queryClient, eventId),
     });
 }
 
@@ -67,11 +64,7 @@ export function useDeletePug(eventId: number) {
 
     return useMutation<void, Error, string>({
         mutationFn: (pugId) => deletePugSlot(eventId, pugId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'pugs'],
-            });
-        },
+        onSuccess: () => invalidatePugQueries(queryClient, eventId),
     });
 }
 
@@ -83,10 +76,6 @@ export function useRegeneratePugInviteCode(eventId: number) {
 
     return useMutation<PugSlotResponseDto, Error, string>({
         mutationFn: (pugId) => regeneratePugInviteCode(eventId, pugId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({
-                queryKey: ['events', eventId, 'pugs'],
-            });
-        },
+        onSuccess: () => invalidatePugQueries(queryClient, eventId),
     });
 }

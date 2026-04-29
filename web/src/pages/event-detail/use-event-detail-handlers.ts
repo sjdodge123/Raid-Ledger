@@ -4,10 +4,10 @@ import { toast } from '../../lib/toast';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../../hooks/use-signups';
 import { useUpdateRoster, useSelfUnassign, useAdminRemoveUser, buildRosterUpdate } from '../../hooks/use-roster';
 import { useUpdateAutoUnbench } from '../../hooks/use-auto-unbench';
-import { useCreatePug, useDeletePug, usePugs, useRegeneratePugInviteCode } from '../../hooks/use-pugs';
+import { useCreatePug, useDeletePug, useRegeneratePugInviteCode } from '../../hooks/use-pugs';
 import { useDeleteEvent, useDeleteSeries, useCancelSeries } from '../../hooks/use-events';
 import { CHARACTER_ROLES } from '@raid-ledger/contract';
-import type { RosterAssignmentResponse, RosterRole, PugRole, CharacterRole, SeriesScope } from '@raid-ledger/contract';
+import type { PugSlotResponseDto, RosterAssignmentResponse, RosterRole, PugRole, CharacterRole, SeriesScope } from '@raid-ledger/contract';
 import { getSignupToast } from './signup-toast.helpers';
 
 /**
@@ -71,11 +71,10 @@ function useSignupHandlers(eventId: number, options: { shouldShowCharacterModal:
         closeConfirmModal: resetModal, setPreSelectedRole, setPendingSlot, setShowConfirmModal };
 }
 
-function usePugHandlers(eventId: number) {
+function usePugHandlers(eventId: number, pugs: PugSlotResponseDto[]) {
     const createPug = useCreatePug(eventId);
     const deletePug = useDeletePug(eventId);
     const regeneratePugCode = useRegeneratePugInviteCode(eventId);
-    const { data: pugData } = usePugs(eventId);
 
     const handleGenerateInviteLink = useCallback(async (role: RosterRole) => {
         try {
@@ -99,7 +98,7 @@ function usePugHandlers(eventId: number) {
         } catch (err) { toast.error('Failed to regenerate link', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     }, [regeneratePugCode]);
 
-    return { pugs: pugData?.pugs ?? [], handleGenerateInviteLink, handleRemovePug, handleRegeneratePugLink };
+    return { pugs, handleGenerateInviteLink, handleRemovePug, handleRegeneratePugLink };
 }
 
 function useRosterHandlers(eventId: number, canManageRoster: boolean, signupHandlers: ReturnType<typeof useSignupHandlers>) {
@@ -159,13 +158,13 @@ function useSeriesHandlers(eventId: number) {
 }
 
 export function useEventDetailHandlers(eventId: number, options: {
-    canManageRoster: boolean; isAuthenticated: boolean; shouldShowCharacterModal: boolean;
+    canManageRoster: boolean; isAuthenticated: boolean; shouldShowCharacterModal: boolean; pugs: PugSlotResponseDto[];
 }) {
     const signupHandlers = useSignupHandlers(eventId, options);
     const updateStatus = useUpdateSignupStatus(eventId);
     const updateAutoUnbench = useUpdateAutoUnbench(eventId);
     const adminRemoveUser = useAdminRemoveUser(eventId);
-    const pugHandlers = usePugHandlers(eventId);
+    const pugHandlers = usePugHandlers(eventId, options.pugs);
     const [removeConfirm, setRemoveConfirm] = useState<{ signupId: number; username: string } | null>(null);
     const rosterHandlers = useRosterHandlers(eventId, options.canManageRoster, signupHandlers);
     const handleSlotClick = useSlotClickHandler(options, signupHandlers);

@@ -14,6 +14,7 @@ export function useUpdateAutoUnbench(eventId: number) {
       updateEvent(eventId, { autoUnbench }),
     onSuccess: (_, autoUnbench) => {
       queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
       toast.success(autoUnbench ? 'Auto-sub enabled' : 'Auto-sub disabled');
     },
     onError: (error: Error) => {

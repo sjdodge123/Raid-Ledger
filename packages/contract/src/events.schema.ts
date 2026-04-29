@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { SignupUserSchema } from './signups.schema.js';
+import { SignupUserSchema, EventRosterSchema } from './signups.schema.js';
+import { RosterWithAssignmentsSchema } from './roster.schema.js';
+import { PugSlotResponseSchema } from './pug.schema.js';
 
 // ============================================================
 // Slot Configuration Schema
@@ -292,4 +294,24 @@ export const CancelEventSchema = z.object({
 });
 
 export type CancelEventDto = z.infer<typeof CancelEventSchema>;
+
+// ============================================================
+// Event Detail Bundle Schema (ROK-1046)
+// ============================================================
+
+export const VoiceChannelResponseSchema = z.object({
+    channelId: z.string().nullable(),
+    channelName: z.string().nullable(),
+    guildId: z.string().nullable(),
+});
+export type VoiceChannelResponseDto = z.infer<typeof VoiceChannelResponseSchema>;
+
+export const EventDetailResponseSchema = z.object({
+    event: EventResponseSchema,
+    roster: EventRosterSchema,
+    rosterAssignments: RosterWithAssignmentsSchema,
+    pugs: z.array(PugSlotResponseSchema),
+    voiceChannel: VoiceChannelResponseSchema,
+});
+export type EventDetailResponseDto = z.infer<typeof EventDetailResponseSchema>;
 

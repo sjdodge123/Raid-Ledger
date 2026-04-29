@@ -41,6 +41,7 @@ export function useConfirmSignup(eventId: number) {
             confirmSignup(eventId, signupId, characterId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'], exact: true });
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
         },
     });
 }

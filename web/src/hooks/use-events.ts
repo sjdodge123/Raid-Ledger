@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEvents, getEvent, getEventRoster, getEventVariantContext, cancelEvent, deleteEvent, updateSeries, deleteSeries, cancelSeries } from '../lib/api-client';
+import { getEvents, getEvent, getEventRoster, getEventDetail, getEventVariantContext, cancelEvent, deleteEvent, updateSeries, deleteSeries, cancelSeries } from '../lib/api-client';
 import type { EventListParams } from '../lib/api-client';
 import { useInfiniteList } from './use-infinite-list';
 import type { EventResponseDto, SeriesScope, UpdateEventDto } from '@raid-ledger/contract';
@@ -53,6 +53,18 @@ export function useEventRoster(eventId: number) {
 }
 
 /**
+ * Hook to fetch the composite event-detail bundle (ROK-1046).
+ * Returns `{ event, roster, rosterAssignments, pugs, voiceChannel }` in one call.
+ */
+export function useEventDetail(eventId: number) {
+    return useQuery({
+        queryKey: ['events', eventId, 'detail'],
+        queryFn: () => getEventDetail(eventId),
+        enabled: !!eventId,
+    });
+}
+
+/**
  * ROK-587: Hook to fetch dominant game variant/region context from an event's signups.
  * Used to auto-populate the variant selector when importing a character.
  * @param eventId - Event ID to fetch context for
@@ -76,6 +88,7 @@ export function useCancelEvent(eventId: number) {
         mutationFn: (reason?: string) => cancelEvent(eventId, reason),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });
@@ -87,6 +100,7 @@ export function useDeleteEvent(eventId: number) {
     return useMutation({
         mutationFn: () => deleteEvent(eventId),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });
@@ -99,6 +113,7 @@ export function useUpdateSeries(eventId: number) {
         mutationFn: (args: { scope: SeriesScope; data: UpdateEventDto }) =>
             updateSeries(eventId, args.scope, args.data),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });
@@ -110,6 +125,7 @@ export function useDeleteSeries(eventId: number) {
     return useMutation({
         mutationFn: (scope: SeriesScope) => deleteSeries(eventId, scope),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });
@@ -122,6 +138,7 @@ export function useCancelSeries(eventId: number) {
         mutationFn: (args: { scope: SeriesScope; reason?: string }) =>
             cancelSeries(eventId, args.scope, args.reason),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
             queryClient.invalidateQueries({ queryKey: ['events'] });
         },
     });

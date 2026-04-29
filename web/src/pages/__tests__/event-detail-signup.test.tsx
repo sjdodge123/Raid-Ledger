@@ -232,14 +232,13 @@ function setupMSWHandlers(event: EventResponseDto, opts: {
     userCharacters?: Array<{ id: string; name: string }>;
 } = {}) {
     server.use(
-        http.get(`${API_BASE}/events/:id`, () =>
-            HttpResponse.json(event),
-        ),
-        http.get(`${API_BASE}/events/:id/roster`, () =>
+        http.get(`${API_BASE}/events/:id/detail`, () =>
             HttpResponse.json({
-                eventId: event.id,
-                signups: [],
-                count: 0,
+                event,
+                roster: { eventId: event.id, signups: [], count: 0 },
+                rosterAssignments: { eventId: event.id, pool: [], assignments: [] },
+                pugs: [],
+                voiceChannel: { channelId: null, channelName: null, guildId: null },
             }),
         ),
         http.get(`${API_BASE}/games/configured`, () =>
@@ -250,9 +249,6 @@ function setupMSWHandlers(event: EventResponseDto, opts: {
                 data: opts.userCharacters ?? [],
                 meta: { total: opts.userCharacters?.length ?? 0 },
             }),
-        ),
-        http.get(`${API_BASE}/events/:id/voice-channel`, () =>
-            HttpResponse.json(null),
         ),
     );
 }
@@ -298,7 +294,7 @@ describe('EventDetailPage signup flow (ROK-600) — part 1', () => {
         renderEventDetailPage();
 
         // Wait for the event to load and the signup button to appear
-        const signupBtn = await screen.findByRole('button', { name: /sign up for event/i });
+        const signupBtn = await screen.findByRole('button', { name: /(sign up for event|join event)/i });
         fireEvent.click(signupBtn);
 
         // The character modal should appear
@@ -326,7 +322,7 @@ describe('EventDetailPage signup flow (ROK-600) — part 1', () => {
 
         renderEventDetailPage();
 
-        const signupBtn = await screen.findByRole('button', { name: /sign up for event/i });
+        const signupBtn = await screen.findByRole('button', { name: /(sign up for event|join event)/i });
         fireEvent.click(signupBtn);
 
         // The modal should NOT appear
@@ -357,7 +353,7 @@ describe('EventDetailPage signup flow (ROK-600) — part 2', () => {
 
         renderEventDetailPage();
 
-        const signupBtn = await screen.findByRole('button', { name: /sign up for event/i });
+        const signupBtn = await screen.findByRole('button', { name: /(sign up for event|join event)/i });
         fireEvent.click(signupBtn);
 
         // The modal should NOT appear
@@ -388,7 +384,7 @@ describe('EventDetailPage signup flow (ROK-600) — part 2', () => {
 
         renderEventDetailPage();
 
-        const signupBtn = await screen.findByRole('button', { name: /sign up for event/i });
+        const signupBtn = await screen.findByRole('button', { name: /(sign up for event|join event)/i });
         fireEvent.click(signupBtn);
 
         // The character modal SHOULD appear (user has characters for this non-MMO game)

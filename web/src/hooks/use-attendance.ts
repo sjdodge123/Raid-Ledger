@@ -37,6 +37,10 @@ export function useRecordAttendance(eventId: number) {
             queryClient.invalidateQueries({
                 queryKey: ['events', eventId, 'metrics'],
             });
+            queryClient.invalidateQueries({
+                queryKey: ['events', eventId, 'detail'],
+                exact: true,
+            });
         },
     });
 }

@@ -19,11 +19,13 @@ import { EventsController } from './events.controller';
 import { EventsSignupsController } from './events-signups.controller';
 import { EventsPugsController } from './events-pugs.controller';
 import { EventsAttendanceController } from './events-attendance.controller';
+import { EventsDetailController } from './events-detail.controller';
 import { EventPlansController } from './event-plans.controller';
 import { InviteController } from './invite.controller';
 import { TemplatesController } from './templates.controller';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
+import { EventDetailService } from './event-detail.service';
 import { ActiveEventCacheService } from './active-event-cache.service';
 import { AvailabilityModule } from '../availability/availability.module';
 import { NotificationModule } from '../notifications/notification.module';
@@ -60,6 +62,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     EventsSignupsController,
     EventsPugsController,
     EventsAttendanceController,
+    EventsDetailController,
     EventPlansController,
     InviteController,
     TemplatesController,
@@ -83,6 +86,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     EventPlansProcessor,
     AdHocEventsGateway,
     AnalyticsService,
+    EventDetailService,
     ActiveEventCacheService,
   ],
   exports: [

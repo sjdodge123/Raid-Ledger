@@ -1,19 +1,17 @@
 import type { JSX } from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { useEvent, useEventRoster } from '../hooks/use-events';
+import { useEventDetail } from '../hooks/use-events';
 import { useAuth, isOperatorOrAdmin, type User } from '../hooks/use-auth';
-import { useRoster } from '../hooks/use-roster';
 import { EventBanner } from '../components/events/EventBanner';
 import { isMMOSlotConfig } from '../utils/game-utils';
-import type { EventResponseDto, EventRosterDto } from '@raid-ledger/contract';
+import type { EventResponseDto, EventRosterDto, RosterWithAssignments, VoiceChannelResponseDto } from '@raid-ledger/contract';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useMyCharacters } from '../hooks/use-characters';
 import { getEventStatus } from '../lib/event-utils';
 import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { PluginSlot } from '../plugins';
 import { useVoiceRoster } from '../hooks/use-voice-roster';
-import { fetchApi } from '../lib/api-client';
 import { EventDetailSkeleton } from './event-detail/EventDetailSkeleton';
 import { EventDetailRoster } from './event-detail/EventDetailRoster';
 import { alphabetical } from './event-detail/event-detail-helpers';
@@ -40,21 +38,10 @@ import { RosterSlotSection } from './event-detail/EventDetailRosterSlot';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import './event-detail-page.css';
 
-function useVoiceChannelFetch(eventId: number, isAdHoc: boolean) {
-    const [voiceChannel, setVoiceChannel] = useState<{ name: string; url: string } | null>(null);
-    useEffect(() => {
-        if (!eventId || isAdHoc) return;
-        let cancelled = false;
-        fetchApi<{ channelId: string | null; channelName: string | null; guildId: string | null }>(`/events/${eventId}/voice-channel`)
-            .then((data) => {
-                if (!cancelled && data?.channelName && data.channelId) {
-                    setVoiceChannel({ name: data.channelName, url: data.guildId ? `discord://discord.com/channels/${data.guildId}/${data.channelId}` : '' });
-                }
-            })
-            .catch(() => { /* ignore */ });
-        return () => { cancelled = true; };
-    }, [eventId, isAdHoc]);
-    return voiceChannel;
+function buildVoiceChannelLink(data: VoiceChannelResponseDto | null | undefined): { name: string; url: string } | null {
+    if (!data?.channelName || !data.channelId) return null;
+    const url = data.guildId ? `discord://discord.com/channels/${data.guildId}/${data.channelId}` : '';
+    return { name: data.channelName, url };
 }
 
 function useBannerCollapse(event: EventResponseDto | undefined) {
@@ -70,7 +57,7 @@ function useBannerCollapse(event: EventResponseDto | undefined) {
     return { bannerRef, isBannerCollapsed };
 }
 
-function useEventDetailDerived(event: EventResponseDto | undefined, roster: EventRosterDto | undefined, user: User | null | undefined, isAuthenticated: boolean) {
+function useEventDetailDerived(event: EventResponseDto | undefined, roster: EventRosterDto | undefined, rosterAssignments: RosterWithAssignments | undefined, user: User | null | undefined, isAuthenticated: boolean) {
     const { games } = useGameRegistry();
     const gameRegistryEntry = games.find((g) => g.id === event?.game?.id || g.slug === event?.game?.slug);
     const gameHasRoles = gameRegistryEntry?.hasRoles ?? event?.game?.hasRoles ?? false;
@@ -85,7 +72,6 @@ function useEventDetailDerived(event: EventResponseDto | undefined, roster: Even
 
     const isCancelled = !!event?.cancelledAt;
     const isEnded = event ? getEventStatus(event.startTime, event.endTime) === 'ended' : false;
-    const { data: rosterAssignments } = useRoster(event?.id ?? 0);
     const isInPool = isSignedUp && rosterAssignments?.pool.some(p => p.userId === user?.id);
     const canJoinSlot = isAuthenticated && (!isSignedUp || isInPool) && !isCancelled;
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
@@ -105,18 +91,22 @@ function useEventDetailPageState() {
     const hasHistory = location.key !== 'default';
 
     const { user, isAuthenticated } = useAuth();
-    const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
-    const { data: roster } = useEventRoster(eventId);
+    const { data: detail, isLoading: detailLoading, error: detailError } = useEventDetail(eventId);
+    const event = detail?.event;
+    const roster = detail?.roster;
+    const rosterAssignments = detail?.rosterAssignments;
+    const pugs = detail?.pugs ?? [];
+    const voiceChannelData = detail?.voiceChannel ?? null;
 
-    return { eventId, navigate, navState, fromCalendar, hasHistory, user, isAuthenticated, event, eventLoading, eventError, roster };
+    return { eventId, navigate, navState, fromCalendar, hasHistory, user, isAuthenticated, event, detailLoading, detailError, roster, rosterAssignments, pugs, voiceChannelData };
 }
 
-function useEventDetailVoice(event: EventResponseDto | undefined, eventId: number) {
+function useEventDetailVoice(event: EventResponseDto | undefined, eventId: number, voiceChannelData: VoiceChannelResponseDto | null) {
     const isAdHoc = event?.isAdHoc ?? false;
     const eventStatus = event ? getEventStatus(event.startTime, event.endTime) : null;
     const showVoiceRoster = isAdHoc || eventStatus === 'live';
     const voiceRoster = useVoiceRoster(showVoiceRoster ? eventId : null);
-    const voiceChannel = useVoiceChannelFetch(eventId, isAdHoc);
+    const voiceChannel = isAdHoc ? null : buildVoiceChannelLink(voiceChannelData);
     return { isAdHoc, eventStatus, showVoiceRoster, voiceRoster, voiceChannel };
 }
 
@@ -228,14 +218,14 @@ function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, h
 
 export function EventDetailPage(): JSX.Element | null {
     const page = useEventDetailPageState();
-    const voice = useEventDetailVoice(page.event, page.eventId);
+    const voice = useEventDetailVoice(page.event, page.eventId, page.voiceChannelData);
     const { bannerRef, isBannerCollapsed } = useBannerCollapse(page.event);
-    const derived = useEventDetailDerived(page.event, page.roster, page.user, page.isAuthenticated);
+    const derived = useEventDetailDerived(page.event, page.roster, page.rosterAssignments, page.user, page.isAuthenticated);
     const modals = useModalState();
-    const handlers = useEventDetailHandlers(page.eventId, { canManageRoster: derived.canManageRoster, isAuthenticated: page.isAuthenticated, shouldShowCharacterModal: derived.shouldShowCharacterModal });
+    const handlers = useEventDetailHandlers(page.eventId, { canManageRoster: derived.canManageRoster, isAuthenticated: page.isAuthenticated, shouldShowCharacterModal: derived.shouldShowCharacterModal, pugs: page.pugs });
 
-    if (page.eventError) return <EventDetailError message={page.eventError.message} onBack={() => page.navigate('/calendar')} />;
-    if (page.eventLoading) return <div className="event-detail-page"><EventDetailSkeleton /></div>;
+    if (page.detailError) return <EventDetailError message={page.detailError.message} onBack={() => page.navigate('/calendar')} />;
+    if (page.detailLoading) return <div className="event-detail-page"><EventDetailSkeleton /></div>;
     if (!page.event) return null;
 
     return <EventDetailBody page={page as PageState & { event: EventResponseDto }} voice={voice} bannerRef={bannerRef} isBannerCollapsed={isBannerCollapsed} derived={derived} handlers={handlers} modals={modals} />;

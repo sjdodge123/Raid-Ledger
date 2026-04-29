@@ -157,18 +157,20 @@ function createMockEvent(overrides: Partial<EventResponseDto> = {}): EventRespon
 
 function setupHandlers(event: EventResponseDto) {
     server.use(
-        http.get(`${API_BASE}/events/:id`, () => HttpResponse.json(event)),
-        http.get(`${API_BASE}/events/:id/roster`, () =>
-            HttpResponse.json({ eventId: event.id, signups: [], count: 0 }),
+        http.get(`${API_BASE}/events/:id/detail`, () =>
+            HttpResponse.json({
+                event,
+                roster: { eventId: event.id, signups: [], count: 0 },
+                rosterAssignments: { eventId: event.id, pool: [], assignments: [] },
+                pugs: [],
+                voiceChannel: { channelId: null, channelName: null, guildId: null },
+            }),
         ),
         http.get(`${API_BASE}/games/configured`, () =>
             HttpResponse.json({ data: [], meta: { total: 0 } }),
         ),
         http.get(`${API_BASE}/users/me/characters`, () =>
             HttpResponse.json({ data: [], meta: { total: 0 } }),
-        ),
-        http.get(`${API_BASE}/events/:id/voice-channel`, () =>
-            HttpResponse.json(null),
         ),
     );
 }
