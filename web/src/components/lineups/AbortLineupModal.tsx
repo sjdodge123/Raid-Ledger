@@ -48,26 +48,66 @@ function ReasonField({
     );
 }
 
+function ModalFooter({
+    onCancel,
+    onConfirm,
+    isPending,
+}: {
+    onCancel: () => void;
+    onConfirm: () => void;
+    isPending: boolean;
+}): JSX.Element {
+    return (
+        <div className="flex justify-end gap-3 pt-2">
+            <button
+                type="button"
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-medium text-secondary bg-panel border border-edge rounded-lg hover:bg-overlay transition-colors"
+            >
+                Cancel
+            </button>
+            <button
+                type="button"
+                onClick={onConfirm}
+                disabled={isPending}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-rose-600 text-white rounded-lg hover:bg-rose-500 transition-colors disabled:opacity-50"
+            >
+                {isPending && (
+                    <span
+                        aria-hidden="true"
+                        className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin"
+                    />
+                )}
+                {isPending ? 'Aborting...' : 'Abort Lineup'}
+            </button>
+        </div>
+    );
+}
+
+async function submitAbort(
+    abort: ReturnType<typeof useAbortLineup>,
+    lineupId: number,
+    reason: string,
+    onClose: () => void,
+): Promise<void> {
+    const trimmed = reason.trim();
+    try {
+        await abort.mutateAsync({
+            lineupId,
+            body: { reason: trimmed === '' ? null : trimmed },
+        });
+        toast.success('Lineup aborted.');
+        onClose();
+    } catch (err) {
+        toast.error(
+            err instanceof Error ? err.message : 'Failed to abort lineup',
+        );
+    }
+}
+
 export function AbortLineupModal({ lineupId, onClose }: Props): JSX.Element {
     const [reason, setReason] = useState('');
     const abort = useAbortLineup();
-
-    async function handleConfirm() {
-        const trimmed = reason.trim();
-        try {
-            await abort.mutateAsync({
-                lineupId,
-                body: { reason: trimmed === '' ? null : trimmed },
-            });
-            toast.success('Lineup aborted.');
-            onClose();
-        } catch (err) {
-            toast.error(
-                err instanceof Error ? err.message : 'Failed to abort lineup',
-            );
-        }
-    }
-
     return (
         <Modal isOpen={true} onClose={onClose} title="Abort lineup?">
             <div className="space-y-4">
@@ -75,29 +115,13 @@ export function AbortLineupModal({ lineupId, onClose }: Props): JSX.Element {
                     This cannot be undone.
                 </p>
                 <ReasonField value={reason} onChange={setReason} />
-                <div className="flex justify-end gap-3 pt-2">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-secondary bg-panel border border-edge rounded-lg hover:bg-overlay transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => void handleConfirm()}
-                        disabled={abort.isPending}
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-rose-600 text-white rounded-lg hover:bg-rose-500 transition-colors disabled:opacity-50"
-                    >
-                        {abort.isPending && (
-                            <span
-                                aria-hidden="true"
-                                className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin"
-                            />
-                        )}
-                        {abort.isPending ? 'Aborting...' : 'Abort Lineup'}
-                    </button>
-                </div>
+                <ModalFooter
+                    onCancel={onClose}
+                    onConfirm={() =>
+                        void submitAbort(abort, lineupId, reason, onClose)
+                    }
+                    isPending={abort.isPending}
+                />
             </div>
         </Modal>
     );
