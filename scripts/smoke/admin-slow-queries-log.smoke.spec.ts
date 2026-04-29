@@ -22,6 +22,15 @@ interface LogListResponse {
     files: LogFileDto[];
 }
 
+interface CronJob {
+    id: number;
+    name: string;
+    lastRunAt: string | null;
+    lastDurationMs: number | null;
+    lastStatus: string | null;
+    lastError: string | null;
+}
+
 /**
  * Poll `/admin/logs` until a `service: 'slow-queries'` file is listed by the
  * API. Returns once the API has fully observed the cron's append; this
@@ -29,16 +38,27 @@ interface LogListResponse {
  * trigger endpoint and the React Query fetch on the panel page (which has a
  * 15s staleTime — without this poll, an empty initial fetch can be served
  * for the lifetime of the test).
+ *
+ * On timeout, fetch the cron's recorded `lastStatus` / `lastError` and
+ * include them in the failure message so CI logs surface the real reason
+ * the file was never written (e.g., permissions on /data/logs, missing
+ * pg_stat_statements extension in the test container).
  */
 async function waitForSlowQueryFile(token: string, timeoutMs = 30_000) {
     const start = Date.now();
+    let lastFiles: string[] = [];
     while (Date.now() - start < timeoutMs) {
         const res = (await apiGet(token, '/admin/logs')) as LogListResponse | null;
         if (res?.files.some((f) => f.service === 'slow-queries')) return;
+        if (res?.files) lastFiles = res.files.map((f) => `${f.service}:${f.filename}`);
         await new Promise((r) => setTimeout(r, 250));
     }
+    const crons = (await apiGet(token, '/admin/cron-jobs')) as CronJob[] | null;
+    const cron = crons?.find((c) => c.name === SLOW_QUERIES_CRON);
     throw new Error(
-        `slow-queries log did not appear in /admin/logs within ${timeoutMs}ms`,
+        `slow-queries log did not appear in /admin/logs within ${timeoutMs}ms.\n` +
+            `  Files seen: [${lastFiles.join(', ') || '(none)'}]\n` +
+            `  Cron lastStatus=${cron?.lastStatus} lastRunAt=${cron?.lastRunAt} lastError=${cron?.lastError ?? '(null)'}`,
     );
 }
 
