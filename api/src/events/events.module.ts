@@ -24,6 +24,7 @@ import { InviteController } from './invite.controller';
 import { TemplatesController } from './templates.controller';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
+import { EventDetailService } from './event-detail.service';
 import { ActiveEventCacheService } from './active-event-cache.service';
 import { AvailabilityModule } from '../availability/availability.module';
 import { NotificationModule } from '../notifications/notification.module';
@@ -83,6 +84,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     EventPlansProcessor,
     AdHocEventsGateway,
     AnalyticsService,
+    EventDetailService,
     ActiveEventCacheService,
   ],
   exports: [
