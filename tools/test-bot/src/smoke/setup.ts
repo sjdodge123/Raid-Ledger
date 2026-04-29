@@ -6,7 +6,7 @@ import { connect, getClient } from '../client.js';
 import { readLastMessages } from '../helpers/messages.js';
 import { ApiClient } from './api.js';
 import { SMOKE } from './config.js';
-import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents } from './fixtures.js';
+import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents, resetToSeed } from './fixtures.js';
 import { setupChannelPool } from './channel-pool.js';
 import type { TestContext, DiscordChannel } from './types.js';
 
@@ -104,7 +104,7 @@ async function discoverChannels(api: ApiClient) {
   };
 }
 
-/** Log in, install demo data, and fetch the user list. */
+/** Log in, reset DB to seed baseline, and fetch the user list. */
 async function initApi(): Promise<{
   api: ApiClient;
   testUserId: number;
@@ -117,10 +117,11 @@ async function initApi(): Promise<{
   const testUserId = api.userId;
   console.log(`  Admin user ID: ${testUserId}`);
 
-  console.log('  Installing demo data...');
-  await api.post('/admin/settings/demo/install').catch(() => {
-    console.log('  (demo data already exists)');
-  });
+  // ROK-1186: hard reset wipes any leftover test fixtures (orphan events,
+  // signups, lineups, characters, voice sessions) and re-runs the demo
+  // installer. Replaces the standalone /admin/settings/demo/install call.
+  console.log('  Resetting DB to demo seed baseline (ROK-1186)...');
+  await resetToSeed(api);
 
   console.log('  Fetching demo users...');
   const usersRes = await api.get<{ data: { id: number; username: string }[] }>(
