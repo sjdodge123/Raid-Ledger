@@ -1,6 +1,9 @@
 import { aiCustomId } from '../ai-chat.constants';
 import type { TreeResult, AiChatDeps, TreeSession } from './tree.types';
 
+const TOP_RANKED_GAME_FANOUT = 5;
+const MERGED_EVENT_CAP = 10;
+
 const SUB_BUTTONS = [
   { customId: aiCustomId('events:this-week'), label: 'This Week' },
   { customId: aiCustomId('events:next-week'), label: 'Next Week' },
@@ -113,7 +116,7 @@ function mergeRankedEvents(
       (a, b) =>
         new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
     )
-    .slice(0, 10);
+    .slice(0, MERGED_EVENT_CAP);
 }
 
 /** Fan out findAll across the top 5 ranked games (ROK-1084). */
@@ -121,7 +124,7 @@ async function fetchEventsForTopGames(
   deps: AiChatDeps,
   games: { id: number; name: string }[],
 ): Promise<RankedEvent[]> {
-  const top = games.slice(0, 5);
+  const top = games.slice(0, TOP_RANKED_GAME_FANOUT);
   const settled = await Promise.allSettled(
     top.map((g) =>
       deps.eventsService.findAll({
