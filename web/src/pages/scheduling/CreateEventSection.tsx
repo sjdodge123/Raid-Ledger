@@ -203,7 +203,7 @@ function RescheduleFromSlot({ slots, match, matchId, linkedEventId, hasVoted, re
       {gate.showHelperText && (
         <p className="text-xs text-muted">{gate.helperText}</p>
       )}
-      {!gate.showHelperText && !hasVoted && !readOnly && (
+      {!gate.showHelperText && !gate.canBypass && !hasVoted && !readOnly && (
         <p className="text-xs text-muted">Vote on a time slot to enable rescheduling.</p>
       )}
       {showConfirm && (
@@ -280,7 +280,7 @@ function CreateFromSlot({ slots, match, matchId, hasVoted, readOnly }: {
       {gate.showHelperText && (
         <p className="text-xs text-muted">{gate.helperText}</p>
       )}
-      {!gate.showHelperText && !hasVoted && !readOnly && (
+      {!gate.showHelperText && !gate.canBypass && !hasVoted && !readOnly && (
         <p className="text-xs text-muted">Vote on a time slot to enable event creation.</p>
       )}
       {showConfirm && (
