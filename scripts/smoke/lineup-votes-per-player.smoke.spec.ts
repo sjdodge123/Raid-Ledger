@@ -7,7 +7,12 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiGet } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiGet,
+    createLineupOrRetry,
+} from './api-helpers';
 
 // ROK-1147: tests assert the Start Lineup button is visible (only true
 // when no active lineup exists globally). Per-worker isolation lets
@@ -15,6 +20,17 @@ import { API_BASE, getAdminToken, apiGet } from './api-helpers';
 // and the button is hidden. Run serially so this worker owns the
 // global state for the duration of the file.
 test.describe.configure({ mode: 'serial' });
+
+// ROK-1167: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'lineup-votes-per-player';
+let workerPrefix: string;
+let lineupTitle: string;
+
+test.beforeAll(({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+});
 
 /** Local apiPatch that returns raw Response (callers check .ok). */
 async function apiPatch(token: string, path: string, body: Record<string, unknown>) {
@@ -35,41 +51,12 @@ async function apiPost(token: string, path: string, body?: Record<string, unknow
     return res;
 }
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
-}
-
 async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        await cancelLineupPhaseJobs(token, banner.id);
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'archived'],
-            voting: ['decided', 'archived'],
-            decided: ['archived'],
-        };
-        const steps = transitions[detail.status];
-        if (!steps) return;
-
-        for (const status of steps) {
-            const body: Record<string, unknown> = { status };
-            if (status === 'decided' && detail.entries?.length > 0) {
-                body.decidedGameId = detail.entries[0].gameId;
-            }
-            const patchRes = await apiPatch(token, `/lineups/${banner.id}/status`, body);
-            if (!patchRes.ok) break;
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
+    // ROK-1167: prefix-scoped reset only archives this worker's lineups,
+    // so sibling workers (and any in-flight phase jobs they own) are
+    // unaffected. Replaces the manual phase-walk that contended with
+    // /lineups/banner returning siblings' rows.
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 /** Fetch real game IDs from the admin endpoint (seed data IDs are non-sequential). */
@@ -91,21 +78,17 @@ async function createVotingLineupWithVotesPerPlayer(
 
     const gameIds = await fetchGameIds(token, 3);
 
-    const createRes = await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
-        buildingDurationHours: 720,
-        votingDurationHours: 720,
-        decidedDurationHours: 720,
-        votesPerPlayer,
-    });
-    if (!createRes.ok) {
-        // 409 race — another worker created one; use it
-        const banner = await apiGet(token, '/lineups/banner');
-        if (banner && typeof banner.id === 'number') return banner.id;
-        throw new Error(`Failed to create lineup: ${createRes.status}`);
-    }
-    const lineup = (await createRes.json()) as { id: number };
-    const lineupId = lineup.id;
+    const { id: lineupId } = await createLineupOrRetry(
+        token,
+        {
+            title: lineupTitle,
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
+            votesPerPlayer,
+        },
+        workerPrefix,
+    );
 
     // Nominate real games from the seed data
     for (const gid of gameIds) {
