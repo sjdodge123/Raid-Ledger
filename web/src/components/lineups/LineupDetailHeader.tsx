@@ -10,6 +10,7 @@ import { toast } from '../../lib/toast';
 import { UnlinkedSteamCount } from './UnlinkedSteamCount';
 import { MarkdownText } from '../ui/markdown-text';
 import { EditLineupMetadataModal } from './edit-lineup-metadata-modal';
+import { AbortLineupButton } from './AbortLineupButton';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -229,6 +230,7 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
           </span>
         )}
         {canEdit && <EditButton onClick={() => setEditOpen(true)} />}
+        <AbortLineupButton lineup={lineup} />
         {/* Desktop-only inline breadcrumb + circle after edit */}
         <div className="hidden md:flex items-center gap-3 flex-shrink-0">
           <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
