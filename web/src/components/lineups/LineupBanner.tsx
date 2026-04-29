@@ -3,11 +3,12 @@
  * Shows a compact hero with nomination thumbnails and CTA links.
  * When no active lineup, shows "Start Lineup" button for operators.
  */
-import { type JSX, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { type JSX, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 import { useLineupBanner } from '../../hooks/use-lineups';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
+import { useSystemStatus } from '../../hooks/use-system-status';
 import { LineupStatusBadge } from './LineupStatusBadge';
 import { LineupBannerSkeleton } from './LineupBannerSkeleton';
 import { NominateModal } from './NominateModal';
@@ -206,8 +207,26 @@ function StartLineupCTA({ onStart }: { onStart: () => void }): JSX.Element {
 export function LineupBanner(): JSX.Element | null {
     const { data: banner, isLoading } = useLineupBanner();
     const { user } = useAuth();
+    const { data: systemStatus } = useSystemStatus();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [nominateOpen, setNominateOpen] = useState(false);
     const [startOpen, setStartOpen] = useState(false);
+    const processedRef = useRef(false);
+
+    // ROK-1167: smoke-test entry point. `?test=open-lineup-modal` opens the
+    // StartLineupModal directly so smoke specs can avoid racing on the global
+    // "no active lineup" banner state. Gated by demoMode + admin role.
+    useEffect(() => {
+        if (processedRef.current) return;
+        if (searchParams.get('test') !== 'open-lineup-modal') return;
+        if (!systemStatus?.demoMode) return;
+        if (!isOperatorOrAdmin(user)) return;
+        processedRef.current = true;
+        setStartOpen(true);
+        const next = new URLSearchParams(searchParams);
+        next.delete('test');
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams, systemStatus, user]);
 
     if (isLoading) return <LineupBannerSkeleton />;
 
