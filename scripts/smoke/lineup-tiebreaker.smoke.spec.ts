@@ -36,6 +36,19 @@ async function apiPatch(token: string, path: string, body: Record<string, unknow
     });
     if (!res.ok) {
         const text = await res.text().catch(() => '');
+        // ROK-1167: tolerate the auto-advance race introduced by ROK-1118.
+        // When the API auto-advances a lineup from building → voting before
+        // the test's explicit PATCH lands, the status endpoint 400s with
+        // "Cannot transition from 'voting' to 'voting'". Treat same-state
+        // transitions as success — the lineup is already where we wanted it.
+        const target = (body as { status?: string }).status;
+        if (
+            res.status === 400 &&
+            typeof target === 'string' &&
+            text.includes(`Cannot transition from '${target}' to '${target}'`)
+        ) {
+            return null;
+        }
         throw new Error(`PATCH ${path} failed: ${res.status} ${text}`);
     }
     return res.json();
