@@ -8,7 +8,6 @@ import type {
     MatchDetailResponseDto,
     ScheduleSlotWithVotesDto,
 } from '@raid-ledger/contract';
-import { isOperatorOrAdmin } from '../../hooks/use-auth';
 
 export interface ThresholdUser {
     id?: number;
@@ -34,7 +33,7 @@ export function canBypassThreshold(
     match: MatchDetailResponseDto,
 ): boolean {
     if (!user) return false;
-    if (isOperatorOrAdmin({ ...user, role: user.role as never })) return true;
+    if (user.role === 'operator' || user.role === 'admin') return true;
     return (
         typeof match.lineupCreatedById === 'number' &&
         match.lineupCreatedById === user.id
