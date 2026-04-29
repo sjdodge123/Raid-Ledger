@@ -36,42 +36,20 @@ async function apiPost(
 // Setup helpers
 // ---------------------------------------------------------------------------
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
-}
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'lineup-decided';
+let workerPrefix: string;
+let lineupTitle: string;
 
-/** Archive an active lineup by walking through all valid transitions. */
+/**
+ * Archive lineups owned by THIS worker (ROK-1147).
+ *
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
+ */
 async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        await cancelLineupPhaseJobs(token, banner.id);
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'archived'],
-            voting: ['decided', 'archived'],
-            decided: ['archived'],
-        };
-
-        const steps = transitions[detail.status];
-        if (!steps) return;
-
-        for (const status of steps) {
-            const body: Record<string, unknown> = { status };
-            if (status === 'decided' && detail.entries?.length > 0) {
-                body.decidedGameId = detail.entries[0].gameId;
-            }
-            await apiPatch(token, `/lineups/${banner.id}/status`, body);
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 /** Fetch real game IDs from the admin games endpoint. */
@@ -111,7 +89,7 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
     // Create lineup with a lower match threshold to maximise match generation
     // Use 720h durations to prevent BullMQ auto-transitions (ROK-1007)
     const createRes = await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         buildingDurationHours: 720,
         votingDurationHours: 720,
         decidedDurationHours: 720,
@@ -164,7 +142,10 @@ let decidedLineupId: number;
 let gameIds: number[];
 let matchesData: Record<string, unknown> | null;
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
     adminToken = await getAdminToken();
     const result = await createDecidedLineupWithMatches(adminToken);
     decidedLineupId = result.lineupId;
@@ -179,6 +160,7 @@ test.beforeAll(async () => {
 /** Navigate to the decided lineup and wait for the view to render. */
 async function gotoDecidedView(page: import('@playwright/test').Page): Promise<void> {
     await page.goto(`/community-lineup/${decidedLineupId}`);
+    await page.waitForURL(`**/community-lineup/${decidedLineupId}`, { timeout: 10_000 });
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
     // Stats panel always renders regardless of entries — use as readiness gate

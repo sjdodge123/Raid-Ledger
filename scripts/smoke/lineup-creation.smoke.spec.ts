@@ -10,6 +10,13 @@
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiGet } from './api-helpers';
 
+// ROK-1147: this whole file asserts global state ("Start Lineup button visible
+// when no active lineup exists"). With per-worker title-prefix isolation,
+// sibling workers can hold their own lineups concurrently and the banner
+// shows their lineup, masking the Start Lineup button. Run serially so only
+// one worker exercises this file at a time.
+test.describe.configure({ mode: 'serial' });
+
 /** Local apiPatch that returns raw Response (used by this file's callers). */
 async function apiPatch(
     token: string,
@@ -26,55 +33,27 @@ async function apiPatch(
     });
 }
 
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so sibling
+// workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'lineup-creation';
+let workerPrefix: string;
+let lineupTitle: string;
+
 /**
- * Archive any active lineup so each test starts clean.
- * Walks through all valid transitions to reach archived status.
- * Retries once to handle cross-project races (desktop/mobile workers).
+ * Archive lineups owned by THIS worker (ROK-1147).
+ *
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
  */
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await fetch(`${API_BASE}/admin/test/cancel-lineup-phase-jobs`, {
+async function archiveActiveLineup(token: string): Promise<void> {
+    await fetch(`${API_BASE}/admin/test/reset-lineups`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ lineupId: id }),
+        body: JSON.stringify({ titlePrefix: workerPrefix }),
     });
-}
-
-async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        await cancelLineupPhaseJobs(token, banner.id);
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'archived'],
-            voting: ['decided', 'archived'],
-            decided: ['archived'],
-        };
-
-        const steps = transitions[detail.status];
-        if (!steps) return;
-
-        for (const status of steps) {
-            const body: Record<string, unknown> = { status };
-            if (status === 'decided' && detail.entries?.length > 0) {
-                body.decidedGameId = detail.entries[0].gameId;
-            }
-            const patchRes = await apiPatch(token, `/lineups/${banner.id}/status`, body);
-            if (!patchRes.ok) break; // transition failed, stop trying
-        }
-
-        // Verify archived — if another worker recreated, retry
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
 }
 
 /**
@@ -93,7 +72,7 @@ async function ensureActiveLineup(
             Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-            title: 'Smoke Lineup',
+            title: lineupTitle,
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
@@ -111,6 +90,13 @@ async function ensureActiveLineup(
     throw new Error('Failed to create or find an active lineup');
 }
 
+// ROK-1147: initialise per-worker prefix + title before any describe-level
+// `beforeAll` hooks run.
+test.beforeAll(({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+});
+
 // ---------------------------------------------------------------------------
 // "Start Lineup" button visibility on Games page
 // ---------------------------------------------------------------------------
@@ -120,25 +106,6 @@ test.describe('Start Lineup button on Games page', () => {
 
     test.beforeAll(async () => {
         adminToken = await getAdminToken();
-    });
-
-    test('shows Start Lineup button when no active lineup and user is operator', async ({ page }) => {
-        test.setTimeout(60_000);
-        // Ensure no active lineup exists — retry to handle cross-project races
-        // (community-lineup tests may recreate the lineup between archive and assertion)
-        await expect(async () => {
-            await archiveActiveLineup(adminToken);
-
-            await page.goto('/games');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 3_000 },
-            );
-
-            // The "Start Lineup" button should be visible for operators/admins
-            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-            await expect(startBtn).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 45_000 });
     });
 
     test('Games page shows lineup banner with countdown instead of Start Lineup when active', async ({ page }) => {
@@ -151,7 +118,7 @@ test.describe('Start Lineup button on Games page', () => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${adminToken}`,
                 },
-                body: JSON.stringify({ title: 'Smoke Lineup' }),
+                body: JSON.stringify({ title: lineupTitle }),
             });
             expect(createRes.ok).toBe(true);
         }
@@ -185,25 +152,18 @@ test.describe('Lineup creation modal', () => {
     });
 
     test('modal opens with duration fields pre-filled from admin defaults', async ({ page }) => {
-        test.setTimeout(60_000);
-        await expect(async () => {
-            await archiveActiveLineup(adminToken);
-            await page.goto('/games');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 3_000 },
-            );
-            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-            await expect(startBtn).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 45_000 });
-
-        // Click "Start Lineup" to open modal
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await startBtn.click();
+        // ROK-1167: use the test-mode query param to open the modal directly.
+        // Avoids racing on the global "no active lineup" banner state — sibling
+        // workers may hold their own lineups, masking the Start Lineup button.
+        await page.goto('/games?test=open-lineup-modal');
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
 
         // Modal should open with duration configuration fields
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         // Duration sliders for building and voting should be present
         const buildingDuration = modal.locator('[data-testid="building-duration"]');
@@ -222,23 +182,19 @@ test.describe('Lineup creation modal', () => {
     });
 
     test('submitting modal creates lineup and navigates to detail page', async ({ page }) => {
-        test.setTimeout(60_000);
-        await expect(async () => {
-            await archiveActiveLineup(adminToken);
-            await page.goto('/games');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 3_000 },
-            );
-            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-            await expect(startBtn).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 45_000 });
+        // ROK-1167: pre-archive this worker's prior lineups so the POST inside
+        // the modal succeeds (sibling-worker rows are scoped out by prefix).
+        await archiveActiveLineup(adminToken);
 
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await startBtn.click();
+        // ROK-1167: open the modal via test query param — no race on global banner.
+        await page.goto('/games?test=open-lineup-modal');
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
 
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         // Listen for the POST /lineups response while clicking submit
         const [apiResponse] = await Promise.all([
@@ -304,8 +260,14 @@ test.describe('Phase countdown display', () => {
             { timeout: 10_000 },
         );
 
-        // Click through to lineup detail via banner link
-        const bannerLink = page.getByRole('link', { name: /View Lineup|Lineup/i });
+        // Click through to lineup detail via banner link.
+        // ROK-1167: scope to .first() — under parallel CI load, OtherActiveLineups
+        // (rendered below the banner) shows sibling workers' lineups as additional
+        // matching links, breaking strict mode. The primary banner link is first
+        // in DOM order.
+        const bannerLink = page
+            .getByRole('link', { name: /View Lineup|Lineup/i })
+            .first();
         await expect(bannerLink).toBeVisible({ timeout: 15_000 });
         await bannerLink.click();
         await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 10_000 });

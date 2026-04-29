@@ -148,3 +148,80 @@ export async function apiDelete(token: string, path: string) {
         headers: { Authorization: `Bearer ${token}` },
     });
 }
+
+// ---------------------------------------------------------------------------
+// Lineup creation with bounded retry on 409 (ROK-1167)
+// ---------------------------------------------------------------------------
+
+interface CreateLineupOpts {
+    /** Max attempts including the first POST. Default 5. */
+    attempts?: number;
+    /** Pacing between attempts in ms. Default 1000. */
+    delayMs?: number;
+}
+
+async function postLineup(token: string, body: Record<string, unknown>) {
+    return fetch(`${API_BASE}/lineups`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+    });
+}
+
+async function resetLineupsByPrefix(token: string, workerPrefix: string) {
+    await fetch(`${API_BASE}/admin/test/reset-lineups`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ titlePrefix: workerPrefix }),
+    });
+}
+
+/**
+ * POST /lineups with bounded retry on 409 collisions.
+ *
+ * When a sibling worker has just created a lineup, our POST returns 409.
+ * We then call /admin/test/reset-lineups (prefix-scoped) to archive the
+ * sibling's row, wait for the transaction to settle, and retry. Throws a
+ * descriptive error after exhausting attempts.
+ *
+ * ROK-1167: replaces the ad-hoc 409 fallback in lineup-tiebreaker /
+ * lineup-votes-per-player / paste-nominate fixtures.
+ */
+export async function createLineupOrRetry(
+    token: string,
+    body: Record<string, unknown>,
+    workerPrefix: string,
+    opts: CreateLineupOpts = {},
+): Promise<{ id: number }> {
+    const attempts = opts.attempts ?? 5;
+    const delayMs = opts.delayMs ?? 1000;
+    let lastStatus = 0;
+    let lastText = '';
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        const res = await postLineup(token, body);
+        if (res.status === 201) {
+            const json = (await res.json()) as { id: number };
+            return { id: json.id };
+        }
+        lastStatus = res.status;
+        lastText = await res.text().catch(() => '');
+        if (res.status !== 409) {
+            throw new Error(
+                `createLineupOrRetry failed for prefix=${workerPrefix}; status=${lastStatus} body=${lastText}`,
+            );
+        }
+        await resetLineupsByPrefix(token, workerPrefix);
+        // Retry pacing for 409 collision recovery between server-side reset
+        // and re-POST — not a UI assertion delay (test infra only).
+        await new Promise((r) => setTimeout(r, delayMs));
+    }
+    throw new Error(
+        `createLineupOrRetry exhausted ${attempts} attempts for prefix=${workerPrefix}; last status=${lastStatus} body=${lastText}`,
+    );
+}

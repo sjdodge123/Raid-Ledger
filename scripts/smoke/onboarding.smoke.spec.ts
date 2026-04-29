@@ -66,6 +66,29 @@ async function skipPastSteamIfPresent(dialog: import('@playwright/test').Locator
     }
 }
 
+/**
+ * Advance the wizard until the Games step ("What Do You Play?") is visible
+ * (ROK-1147). Robust to whichever optional steps render first
+ * (Connect/Discord, Steam) — clicks Skip up to 4 times. Conditional steps
+ * also flip in/out as system status / steam status hooks settle, so we
+ * use `expect.poll` to ride out the resolver instead of a fixed sleep.
+ */
+async function advanceToGamesStep(
+    dialog: import('@playwright/test').Locator,
+): Promise<void> {
+    const gamesHeading = dialog.getByRole('heading', { name: 'What Do You Play?' });
+    if (await gamesHeading.isVisible({ timeout: 5_000 }).catch(() => false)) return;
+
+    for (let i = 0; i < 4; i++) {
+        const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
+        const hasSkip = await skipBtn.isVisible({ timeout: 2_000 }).catch(() => false);
+        if (!hasSkip) break;
+        await skipBtn.click();
+        if (await gamesHeading.isVisible({ timeout: 3_000 }).catch(() => false)) return;
+    }
+    await expect(gamesHeading).toBeVisible({ timeout: 10_000 });
+}
+
 // ---------------------------------------------------------------------------
 // Wizard rendering
 // ---------------------------------------------------------------------------
@@ -90,22 +113,30 @@ test.describe('Onboarding wizard', () => {
     test('first step is Steam (when configured) or Games (when not)', async ({ page }) => {
         const dialog = await openWizard(page);
 
-        // When Steam is configured AND the admin has no Steam linked,
-        // the first step is "Connect Your Steam Account" (ROK-941).
-        // When Steam is NOT configured, the first step is Games.
-        // Check which is shown — at least one must be visible.
+        // ROK-1147: the wizard's first step depends on what's configured
+        // and what the admin has linked. Possibilities (any can be first):
+        //   Connect (Discord configured, admin not linked)
+        //   Steam   (Steam configured, admin not linked)
+        //   Games   (default)
+        // Conditional step flags also flip in/out as system-status and
+        // steam-status queries settle, so we accept any of the three
+        // headings as a valid "first step".
+        const connectHeading = dialog.getByRole('heading', { name: 'Connect Your Account' });
         const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
         const gamesHeading = dialog.getByRole('heading', { name: 'What Do You Play?' });
 
-        const isSteamStep = await steamHeading.isVisible({ timeout: 10_000 }).catch(() => false);
-        if (isSteamStep) {
-            // Steam step is first — verify its content
-            await expect(steamHeading).toBeVisible();
-        } else {
-            // Games step is first — original assertion
-            await expect(gamesHeading).toBeVisible({ timeout: 10_000 });
-            await expect(dialog.getByPlaceholder('Search for a game...')).toBeVisible();
-        }
+        await expect
+            .poll(
+                async () =>
+                    (await connectHeading.isVisible().catch(() => false)) ||
+                    (await steamHeading.isVisible().catch(() => false)) ||
+                    (await gamesHeading.isVisible().catch(() => false)),
+                {
+                    timeout: 15_000,
+                    message: 'No first-step heading rendered',
+                },
+            )
+            .toBe(true);
     });
 
     test('wizard loads without error boundary', async ({ page }) => {
@@ -180,8 +211,8 @@ test.describe('Onboarding wizard step navigation', () => {
         // The "Games" label should always be visible in breadcrumbs
         await expect(dialog.getByRole('button', { name: 'Games' })).toBeVisible({ timeout: 5_000 });
 
-        // Skip past Steam if it's the first step so we land on Games
-        await skipPastSteamIfPresent(dialog);
+        // ROK-1147: handle Connect/Steam optional steps before Games.
+        await advanceToGamesStep(dialog);
 
         // Now on Games step — advance to verify breadcrumbs update
         await dialog.getByRole('button', { name: 'Next' }).click();
@@ -196,10 +227,7 @@ test.describe('Onboarding wizard step navigation', () => {
 test.describe('Onboarding wizard games step', () => {
     test('genre filter chips are visible', async ({ page }) => {
         const dialog = await openWizard(page);
-        await skipPastSteamIfPresent(dialog);
-
-        // Wait for games step header
-        await expect(dialog.getByRole('heading', { name: 'What Do You Play?' })).toBeVisible({ timeout: 10_000 });
+        await advanceToGamesStep(dialog);
 
         // Genre chips: All is always present, plus specific genres
         await expect(dialog.getByRole('button', { name: 'All', exact: true })).toBeVisible();
@@ -209,7 +237,7 @@ test.describe('Onboarding wizard games step', () => {
 
     test('game search input accepts text', async ({ page }) => {
         const dialog = await openWizard(page);
-        await skipPastSteamIfPresent(dialog);
+        await advanceToGamesStep(dialog);
 
         const searchInput = dialog.getByPlaceholder('Search for a game...');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });

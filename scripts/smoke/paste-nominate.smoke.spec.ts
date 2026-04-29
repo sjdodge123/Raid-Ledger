@@ -11,44 +11,61 @@
  * pass vacuously now and serve as regression guards.
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiPost, apiGet, apiPatch } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiPost,
+    apiGet,
+    apiPatch,
+    createLineupOrRetry,
+} from './api-helpers';
 
-async function archiveLineup(token: string, id: number): Promise<void> {
-    const detail = await apiGet(token, `/lineups/${id}`);
-    if (!detail) return;
-    const transitions: Record<string, string[]> = {
-        building: ['voting', 'decided', 'archived'],
-        voting: ['decided', 'archived'],
-        decided: ['archived'],
-        scheduling: ['archived'],
-    };
-    const steps = transitions[detail.status];
-    if (!steps) return;
-    for (const status of steps) {
-        const body: Record<string, unknown> = { status };
-        if (status === 'decided' && detail.entries?.length > 0) {
-            body.decidedGameId = detail.entries[0].gameId;
-        }
-        await apiPatch(token, `/lineups/${id}/status`, body);
-    }
+// ROK-1147: ensureBuildingLineup checks /lineups/banner and reuses any
+// active lineup, including siblings'. The paste-on-detail-page tests then
+// dispatch on the wrong lineup's UI, so the modal/toast never appears.
+// Serialise so each test owns the page state for its full duration.
+test.describe.configure({ mode: 'serial' });
+
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'paste-nominate';
+let workerPrefix: string;
+let lineupTitle: string;
+
+/**
+ * Archive lineups owned by THIS worker (ROK-1147).
+ *
+ * `id` is ignored (kept for call-site compatibility) — the reset is scoped
+ * per-worker via prefix, not by lineup id.
+ */
+async function archiveLineup(token: string, _id: number): Promise<void> {
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 async function ensureBuildingLineup(token: string): Promise<number> {
+    // ROK-1167: keep the fast-path reuse so beforeEach doesn't churn the DB,
+    // but only reuse the banner when it belongs to THIS worker (title prefix
+    // match). Sibling-owned banners must fall through to reset + recreate.
     const banner = await apiGet(token, '/lineups/banner');
-    if (banner && typeof banner.id === 'number' && banner.status === 'building') {
+    if (
+        banner &&
+        typeof banner.id === 'number' &&
+        banner.status === 'building' &&
+        typeof banner.title === 'string' &&
+        banner.title.startsWith(workerPrefix)
+    ) {
         return banner.id;
     }
-    if (banner && typeof banner.id === 'number') {
-        await archiveLineup(token, banner.id);
-    }
-    const lineup = (await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
-        targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-    })) as { id?: number };
-    if (lineup?.id) return lineup.id;
-    const reBanner = await apiGet(token, '/lineups/banner');
-    if (reBanner && typeof reBanner.id === 'number') return reBanner.id;
-    throw new Error('Failed to create lineup in building phase');
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
+    const { id } = await createLineupOrRetry(
+        token,
+        {
+            title: lineupTitle,
+            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        },
+        workerPrefix,
+    );
+    return id;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +112,10 @@ async function ensureGameWithSteamAppId(token: string): Promise<void> {
     });
 }
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
     adminToken = await getAdminToken();
     await ensureGameWithSteamAppId(adminToken);
     lineupId = await ensureBuildingLineup(adminToken);
@@ -287,7 +307,7 @@ test.describe('Paste disabled in non-building phases (AC6)', () => {
         }
 
         const created = (await apiPost(adminToken, '/lineups', {
-            title: 'Smoke Lineup',
+            title: lineupTitle,
             targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         })) as { id: number };
         votingLineupId = created.id;

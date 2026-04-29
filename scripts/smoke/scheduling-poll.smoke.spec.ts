@@ -15,35 +15,20 @@ import { getAdminToken, apiPost, apiGet, apiPatch, apiPut } from './api-helpers'
 // Setup helpers
 // ---------------------------------------------------------------------------
 
-/** Archive an active lineup by walking through all valid transitions. */
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'scheduling-poll';
+let workerPrefix: string;
+let lineupTitle: string;
+
+/**
+ * Archive lineups owned by THIS worker (ROK-1147).
+ *
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
+ */
 async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'archived'],
-            voting: ['decided', 'archived'],
-            decided: ['archived'],
-        };
-
-        const steps = transitions[detail.status];
-        if (!steps) return;
-
-        for (const status of steps) {
-            const body: Record<string, unknown> = { status };
-            if (status === 'decided' && detail.entries?.length > 0) {
-                body.decidedGameId = detail.entries[0].gameId;
-            }
-            await apiPatch(token, `/lineups/${banner.id}/status`, body);
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 /** Fetch real game IDs from the admin games endpoint. */
@@ -69,7 +54,7 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 
     // Create lineup with a low match threshold to maximize match generation
     const createRes = await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         buildingDurationHours: 24,
         votingDurationHours: 48,
         decidedDurationHours: 24,
@@ -99,9 +84,14 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
         await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gid });
     }
 
-    // Advance to decided (generates matches from voting results)
+    // Advance to decided (generates matches from voting results).
+    // Pass decidedGameId so the transition can't fail with TIEBREAKER_REQUIRED
+    // when admin's three votes happen to land on tied games — that previously
+    // left the lineup in 'voting', the matchId fallback hit 1, and every
+    // wizard test downstream blew up with "wizard surface never rendered".
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'decided',
+        decidedGameId: gameIds[0],
     });
 
     // Fetch matches and find one in "scheduling" status
@@ -131,24 +121,56 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
 // Wizard bypass helper (ROK-999)
 // ---------------------------------------------------------------------------
 
-/** Navigate to the scheduling poll and advance past all 3 wizard steps to the full poll view. */
-async function goToPoll(page: import('@playwright/test').Page, lid: number, mid: number): Promise<void> {
+/**
+ * Navigate to the scheduling poll and advance past all 3 wizard steps
+ * to the full poll view (ROK-1147 rewrite).
+ *
+ * The 3-step wizard renders one step at a time:
+ *   step 0 → [data-testid="scheduling-wizard-step-1"] (gametime grid)
+ *   step 1 → [data-testid="scheduling-wizard-step-2"] (vote on times)
+ *   step 2 → children (the "Scheduling Poll" h1 + full poll body)
+ *
+ * The wizard's `computeInitialStep` may auto-skip step 0 (when gametime
+ * is fresh) or step 1 (when no slots exist), so this helper polls each
+ * step's testid and only clicks the advance button when that step is
+ * actually rendered. The Save & Continue button on step 0 is disabled
+ * when no edits are pending — we always use the Skip button so we don't
+ * race the disabled→enabled transition.
+ */
+async function goToPoll(
+    page: import('@playwright/test').Page,
+    lid: number,
+    mid: number,
+): Promise<void> {
     await page.goto(`/community-lineup/${lid}/schedule/${mid}`);
     const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-    // Wait for page to load, then click through wizard steps.
-    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    for (let i = 0; i < 5; i++) {
-        if (await pollHeading.isVisible({ timeout: 3_000 }).catch(() => false)) return;
-        // Click any wizard advancement button visible on the page
-        for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
-            const btn = page.locator('button', { hasText: label }).first();
-            if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-                await btn.click();
-                await page.waitForTimeout(500); // let React re-render
-                break;
-            }
-        }
+    const step1 = page.locator('[data-testid="scheduling-wizard-step-1"]');
+    const step2 = page.locator('[data-testid="scheduling-wizard-step-2"]');
+
+    // Wait for *some* wizard surface to render (spinner gone, dom mounted).
+    await expect
+        .poll(
+            async () =>
+                (await step1.isVisible().catch(() => false)) ||
+                (await step2.isVisible().catch(() => false)) ||
+                (await pollHeading.isVisible().catch(() => false)),
+            { timeout: 20_000, message: 'wizard surface never rendered' },
+        )
+        .toBe(true);
+
+    // Step 0 (gametime). Use Skip to avoid the disabled-button race.
+    if (await step1.isVisible().catch(() => false)) {
+        await page.getByRole('button', { name: /^Skip$/i }).click();
+        await expect(step1).toBeHidden({ timeout: 10_000 });
     }
+
+    // Step 1 (vote on times). Click Continue to advance to step 2.
+    if (await step2.isVisible().catch(() => false)) {
+        await page.getByRole('button', { name: /^Continue$/i }).click();
+        await expect(step2).toBeHidden({ timeout: 10_000 });
+    }
+
+    // Step 2 — full poll body should now be rendered.
     await expect(pollHeading).toBeVisible({ timeout: 15_000 });
 }
 
@@ -165,7 +187,10 @@ let lineupId: number;
 let matchId: number;
 let gameIds: number[];
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
     adminToken = await getAdminToken();
     const result = await createSchedulingLineupWithMatch(adminToken);
     lineupId = result.lineupId;

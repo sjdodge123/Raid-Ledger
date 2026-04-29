@@ -178,8 +178,11 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         await chipRemoveBtnB.click();
         await expect(chips.filter({ hasText: 'TDB' })).not.toBeVisible({ timeout: 5_000 });
 
-        // Content browser section should STILL be visible even with no selections
-        await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 5_000 });
+        // ROK-1147: Content browser section should STILL be visible even
+        // with no selections. Bumped timeout — the section can briefly
+        // re-render as the parent recomputes selection state, racing the
+        // 5s assertion under load.
+        await expect(page.getByText('Dungeons', { exact: true })).toBeVisible({ timeout: 10_000 });
 
         // When Blizzard is configured, the search input is visible; otherwise the "not configured" fallback renders
         const blizzardUp = await isBlizzardConfigured(token);

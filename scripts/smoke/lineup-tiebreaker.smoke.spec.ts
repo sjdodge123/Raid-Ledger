@@ -9,7 +9,21 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiPost, apiGet } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiPost,
+    apiGet,
+    createLineupOrRetry,
+} from './api-helpers';
+
+// ROK-1147: every describe in this file creates a lineup, votes, advances
+// through phases, and starts a tiebreaker. The fixture falls back to
+// /lineups/banner on 409 (sibling-owned lineup) and then tries to mutate
+// it, producing "Cannot transition from 'voting' to 'voting'" and
+// downstream UI failures. Run the file serially so each fixture creates
+// its own lineup without colliding with siblings.
+test.describe.configure({ mode: 'serial' });
 
 async function apiPatch(token: string, path: string, body: Record<string, unknown>) {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -22,6 +36,19 @@ async function apiPatch(token: string, path: string, body: Record<string, unknow
     });
     if (!res.ok) {
         const text = await res.text().catch(() => '');
+        // ROK-1167: tolerate the auto-advance race introduced by ROK-1118.
+        // When the API auto-advances a lineup from building → voting before
+        // the test's explicit PATCH lands, the status endpoint 400s with
+        // "Cannot transition from 'voting' to 'voting'". Treat same-state
+        // transitions as success — the lineup is already where we wanted it.
+        const target = (body as { status?: string }).status;
+        if (
+            res.status === 400 &&
+            typeof target === 'string' &&
+            text.includes(`Cannot transition from '${target}' to '${target}'`)
+        ) {
+            return null;
+        }
         throw new Error(`PATCH ${path} failed: ${res.status} ${text}`);
     }
     return res.json();
@@ -42,57 +69,20 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
     return body.data.slice(0, count).map((g) => g.id);
 }
 
-/** Transition voting → decided, handling tiebreaker guard. */
-async function transitionVotingToDecided(token: string, id: number, entries: { gameId: number }[]): Promise<void> {
-    const decidedGameId = entries?.[0]?.gameId;
-    try {
-        await apiPatch(token, `/lineups/${id}/status`, {
-            status: 'decided',
-            ...(decidedGameId ? { decidedGameId } : {}),
-        });
-    } catch {
-        // TIEBREAKER_REQUIRED — start (or reuse) and force-resolve
-        await apiPost(token, `/lineups/${id}/tiebreaker`, { mode: 'bracket', roundDurationHours: 1 }).catch(() => {});
-        await apiPost(token, `/lineups/${id}/tiebreaker/resolve`).catch(() => {});
-        await apiPatch(token, `/lineups/${id}/status`, { status: 'decided' });
-    }
-}
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'lineup-tiebreaker';
+let workerPrefix: string;
+let lineupTitle: string;
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
-}
-
-/** Archive an active lineup by walking through all valid transitions. */
+/**
+ * Archive lineups owned by THIS worker (ROK-1147).
+ *
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
+ */
 async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        await cancelLineupPhaseJobs(token, banner.id);
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const id = banner.id;
-        try {
-            if (detail.status === 'voting') {
-                await transitionVotingToDecided(token, id, detail.entries ?? []);
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'archived' });
-            } else if (detail.status === 'decided') {
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'archived' });
-            } else if (detail.status === 'building') {
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'voting' });
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'decided' });
-                await apiPatch(token, `/lineups/${id}/status`, { status: 'archived' });
-            }
-        } catch {
-            // If any step fails, continue to next attempt
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 /**
@@ -116,17 +106,17 @@ async function createVotingLineupWithTiebreaker(
 
     const gameIds = await fetchGameIds(token, 4);
 
-    const createRes = (await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
-        buildingDurationHours: 720,
-        votingDurationHours: 720,
-        decidedDurationHours: 720,
-        matchThreshold: 10,
-    })) as { id?: number };
-
-    const lineupId =
-        createRes?.id ?? (await apiGet(token, '/lineups/banner'))?.id;
-    if (!lineupId) throw new Error('Failed to create lineup');
+    const { id: lineupId } = await createLineupOrRetry(
+        token,
+        {
+            title: lineupTitle,
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
+            matchThreshold: 10,
+        },
+        workerPrefix,
+    );
 
     // Nominate all 4 games
     for (const gid of gameIds) {
@@ -155,7 +145,9 @@ async function createVotingLineupWithTiebreaker(
 
 let adminToken: string;
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
     adminToken = await getAdminToken();
 });
 
@@ -176,16 +168,18 @@ test.describe('Tiebreaker prompt modal', () => {
 
         gameIds = await fetchGameIds(adminToken, 4);
 
-        const createRes = (await apiPost(adminToken, '/lineups', {
-            title: 'Smoke Lineup',
-            buildingDurationHours: 720,
-            votingDurationHours: 720,
-            decidedDurationHours: 720,
-            matchThreshold: 10,
-        })) as { id?: number };
-
-        lineupId =
-            createRes?.id ?? (await apiGet(adminToken, '/lineups/banner'))?.id;
+        const created = await createLineupOrRetry(
+            adminToken,
+            {
+                title: lineupTitle,
+                buildingDurationHours: 720,
+                votingDurationHours: 720,
+                decidedDurationHours: 720,
+                matchThreshold: 10,
+            },
+            workerPrefix,
+        );
+        lineupId = created.id;
 
         for (const gid of gameIds) {
             await apiPost(adminToken, `/lineups/${lineupId}/nominate`, { gameId: gid });

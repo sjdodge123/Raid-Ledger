@@ -3,8 +3,8 @@
  * Shows a compact hero with nomination thumbnails and CTA links.
  * When no active lineup, shows "Start Lineup" button for operators.
  */
-import { type JSX, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { type JSX, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 import { useLineupBanner } from '../../hooks/use-lineups';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
@@ -206,8 +206,34 @@ function StartLineupCTA({ onStart }: { onStart: () => void }): JSX.Element {
 export function LineupBanner(): JSX.Element | null {
     const { data: banner, isLoading } = useLineupBanner();
     const { user } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [nominateOpen, setNominateOpen] = useState(false);
     const [startOpen, setStartOpen] = useState(false);
+    const processedRef = useRef(false);
+
+    // ROK-1167: smoke-test entry point. `?test=open-lineup-modal` opens the
+    // StartLineupModal directly so smoke specs can avoid racing on the global
+    // "no active lineup" banner state. Gated by admin role only — the original
+    // `systemStatus.demoMode` belt-and-suspenders gate caused a race under
+    // parallel smoke load: when /system/status takes >15s on first paint, the
+    // effect early-returns and the test times out. Functionally equivalent to
+    // an admin clicking the existing Start Lineup button, so production safety
+    // is unchanged (modal hits the standard `/lineups` POST, not a test-only
+    // endpoint).
+    // Synchronizes URL state (external) into local React state on first match;
+    // processedRef + setSearchParams consumption guarantee the effect is one-shot.
+    useEffect(() => {
+        if (processedRef.current) return;
+        if (searchParams.get('test') !== 'open-lineup-modal') return;
+        if (!isOperatorOrAdmin(user)) return;
+        processedRef.current = true;
+        // Legitimate URL → local-state sync (one-shot, latched by processedRef).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setStartOpen(true);
+        const next = new URLSearchParams(searchParams);
+        next.delete('test');
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams, user]);
 
     if (isLoading) return <LineupBannerSkeleton />;
 

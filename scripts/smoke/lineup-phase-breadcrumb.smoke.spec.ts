@@ -22,46 +22,24 @@ async function apiPatch(token: string, path: string, body: Record<string, unknow
     });
 }
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await fetch(`${API_BASE}/admin/test/cancel-lineup-phase-jobs`, {
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test.
+const FILE_PREFIX = 'lineup-phase-breadcrumb';
+let workerPrefix: string;
+let lineupTitle: string;
+
+/**
+ * Archive lineups owned by THIS worker (ROK-1147).
+ *
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
+ * title starts with `workerPrefix`, so sibling workers are unaffected.
+ */
+async function archiveActiveLineup(token: string): Promise<void> {
+    await fetch(`${API_BASE}/admin/test/reset-lineups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lineupId: id }),
+        body: JSON.stringify({ titlePrefix: workerPrefix }),
     });
-}
-
-async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-
-        await cancelLineupPhaseJobs(token, banner.id);
-
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-
-        const transitions: Record<string, string[]> = {
-            building: ['voting', 'decided', 'scheduling', 'archived'],
-            voting: ['decided', 'scheduling', 'archived'],
-            decided: ['scheduling', 'archived'],
-            scheduling: ['archived'],
-        };
-        const steps = transitions[detail.status];
-        if (!steps) return;
-
-        for (const status of steps) {
-            const body: Record<string, unknown> = { status };
-            if (status === 'decided' && detail.entries?.length > 0) {
-                body.decidedGameId = detail.entries[0].gameId;
-            }
-            const patchRes = await apiPatch(token, `/lineups/${banner.id}/status`, body);
-            if (!patchRes.ok) break;
-        }
-
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
 }
 
 async function ensureActiveLineup(token: string): Promise<number> {
@@ -70,7 +48,7 @@ async function ensureActiveLineup(token: string): Promise<number> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-            title: 'Smoke Lineup',
+            title: lineupTitle,
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
@@ -116,6 +94,13 @@ async function gotoLineupDetail(page: ReturnType<typeof test.info>['_test'] exte
         page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
     ).toBeVisible({ timeout: 10_000 });
 }
+
+// ROK-1147: initialise per-worker prefix + title before any describe-level
+// `beforeAll` hooks run.
+test.beforeAll(({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+});
 
 // ---------------------------------------------------------------------------
 // Breadcrumb visibility and interaction

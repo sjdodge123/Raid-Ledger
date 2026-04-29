@@ -23,36 +23,29 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
 // Setup: ensure an active lineup exists for the test suite
 // ---------------------------------------------------------------------------
 
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so sibling
+// workers don't archive each other's lineups mid-test. The trailing `-` makes
+// `smoke-w1-…` a non-prefix of `smoke-w10-…` etc.
+const FILE_PREFIX = 'community-lineup';
+let workerPrefix: string;
+let lineupTitle: string;
+
 let adminToken: string;
 let lineupId: number;
 let createdLineup = false;
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelLineupPhaseJobs(token: string, id: number): Promise<void> {
-    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
-}
-
-/** Archive an active lineup by walking through all valid transitions. */
-async function archiveLineup(token: string, id: number): Promise<void> {
-    await cancelLineupPhaseJobs(token, id);
-    const detail = await apiGet(token, `/lineups/${id}`);
-    if (!detail) return;
-    const transitions: Record<string, string[]> = {
-        building: ['voting', 'decided', 'archived'],
-        voting: ['decided', 'archived'],
-        decided: ['archived'],
-        scheduling: ['archived'],
-    };
-    const steps = transitions[detail.status];
-    if (!steps) return;
-    for (const status of steps) {
-        const body: Record<string, unknown> = { status };
-        // Provide decidedGameId to bypass tiebreaker guard (ROK-938)
-        if (status === 'decided' && detail.entries?.length > 0) {
-            body.decidedGameId = detail.entries[0].gameId;
-        }
-        await apiPatch(token, `/lineups/${id}/status`, body);
-    }
+/**
+ * Archive lineups owned by THIS worker (ROK-1147).
+ *
+ * `/admin/test/reset-lineups` (DEMO_MODE-only) archives every `building`/
+ * `voting` lineup whose title starts with the supplied prefix. Each smoke
+ * worker uses a unique prefix so sibling workers' lineups are untouched.
+ *
+ * `id` is ignored (kept for call-site compatibility) — the reset is scoped
+ * per-worker via prefix, not by lineup id.
+ */
+async function archiveLineup(token: string, _id: number): Promise<void> {
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
 /**
@@ -69,7 +62,7 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
         await archiveLineup(token, banner.id);
     }
     const lineup = (await apiPost(token, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         buildingDurationHours: 720,
         votingDurationHours: 720,
@@ -84,23 +77,18 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
     return lineupId; // fallback to last known
 }
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
     adminToken = await getAdminToken();
 
-    // Check if an active lineup already exists
-    const banner = await apiGet(adminToken, '/lineups/banner');
-    if (banner && typeof banner.id === 'number') {
-        // Must be in building phase for nomination tests; archive and recreate if not
-        if (banner.status === 'building') {
-            lineupId = banner.id;
-            return;
-        }
-        await archiveLineup(adminToken, banner.id);
-    }
+    // ROK-1147: reset only THIS worker's lineups so sibling workers'
+    // in-flight lineups are untouched.
+    await apiPost(adminToken, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 
-    // Create a fresh lineup in building phase with long durations (ROK-1007)
     const lineup = (await apiPost(adminToken, '/lineups', {
-        title: 'Smoke Lineup',
+        title: lineupTitle,
         targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
         buildingDurationHours: 720,
         votingDurationHours: 720,
@@ -419,6 +407,15 @@ test.describe('Community Lineup responsive layout', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Voting phase', () => {
+    // ROK-1147: this describe reads the global /lineups/banner to find a
+    // voting lineup and also archives the active lineup to assert the
+    // Start Lineup button. Both assumptions break under per-worker
+    // title-prefix isolation because sibling workers can hold concurrent
+    // lineups in mixed phases. Run the block serially so only one worker
+    // manipulates this state at a time.
+    test.describe.configure({ mode: 'serial' });
+
+
     let votingLineupId: number;
 
     test.beforeAll(async () => {
@@ -433,7 +430,7 @@ test.describe('Voting phase', () => {
             if (banner.status !== 'building') {
                 await archiveLineup(adminToken, banner.id);
                 const created = (await apiPost(adminToken, '/lineups', {
-                    title: 'Smoke Lineup',
+                    title: lineupTitle,
                     targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
                     buildingDurationHours: 720,
                     votingDurationHours: 720,
@@ -446,7 +443,7 @@ test.describe('Voting phase', () => {
         } else {
             // No active lineup -- create one
             const created = (await apiPost(adminToken, '/lineups', {
-                title: 'Smoke Lineup',
+                title: lineupTitle,
                 targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
                 buildingDurationHours: 720,
                 votingDurationHours: 720,
@@ -516,19 +513,14 @@ test.describe('Voting phase', () => {
     });
 
     test('match threshold slider is present in StartLineupModal', async ({ page }) => {
-        // Archive the voting lineup so we can see the "Start Lineup" button
-        await archiveLineup(adminToken, votingLineupId);
-
-        await page.goto('/games');
+        // ROK-1167: open StartLineupModal via test query param — works regardless
+        // of whether this worker's voting lineup is still active. Avoids racing
+        // on the empty-banner state.
+        await page.goto('/games?test=open-lineup-modal');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // Click "Start Lineup" to open the creation modal
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await expect(startBtn).toBeVisible({ timeout: 15_000 });
-        await startBtn.click();
-
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         // Match threshold slider should be present with correct labels
         const thresholdSlider = modal.locator('[data-testid="match-threshold"]');

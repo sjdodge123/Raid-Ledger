@@ -22,6 +22,7 @@ function createMockLineupService() {
     nominateGameForTest: jest.fn().mockResolvedValue(undefined),
     archiveLineupForTest: jest.fn().mockResolvedValue(undefined),
     archiveActiveLineupForTest: jest.fn().mockResolvedValue(undefined),
+    resetLineupsForTest: jest.fn().mockResolvedValue({ archivedCount: 3 }),
   };
 }
 
@@ -71,6 +72,39 @@ describe('DemoTestGamesController', () => {
     triggerSteamNudgeTests(getController, getNudge));
   describe('cancelLineupPhaseJobs (ROK-1007)', () =>
     cancelLineupPhaseJobsTests(getController, getService));
+  describe('resetLineups (ROK-1147)', () => {
+    it('forwards titlePrefix to the lineup service', async () => {
+      const result = await controller.resetLineupsForTest({
+        titlePrefix: 'smoke-w0-lineup-decided',
+      });
+      expect(result).toEqual({ success: true, archivedCount: 3 });
+      expect(mockLineupService.resetLineupsForTest).toHaveBeenCalledWith(
+        'smoke-w0-lineup-decided',
+      );
+    });
+
+    it('rejects bodies without a titlePrefix', async () => {
+      await expect(controller.resetLineupsForTest({})).rejects.toThrow(
+        /Validation failed/,
+      );
+    });
+
+    it('rejects empty titlePrefix', async () => {
+      await expect(
+        controller.resetLineupsForTest({ titlePrefix: '' }),
+      ).rejects.toThrow(/Validation failed/);
+    });
+
+    it('passes LIKE-special prefixes through unchanged (escaping handled by helper)', async () => {
+      const result = await controller.resetLineupsForTest({
+        titlePrefix: "smoke-w0%_'--",
+      });
+      expect(result).toEqual({ success: true, archivedCount: 3 });
+      expect(mockLineupService.resetLineupsForTest).toHaveBeenCalledWith(
+        "smoke-w0%_'--",
+      );
+    });
+  });
 });
 
 function addGameInterestTests(
