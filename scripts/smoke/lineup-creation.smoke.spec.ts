@@ -260,8 +260,14 @@ test.describe('Phase countdown display', () => {
             { timeout: 10_000 },
         );
 
-        // Click through to lineup detail via banner link
-        const bannerLink = page.getByRole('link', { name: /View Lineup|Lineup/i });
+        // Click through to lineup detail via banner link.
+        // ROK-1167: scope to .first() — under parallel CI load, OtherActiveLineups
+        // (rendered below the banner) shows sibling workers' lineups as additional
+        // matching links, breaking strict mode. The primary banner link is first
+        // in DOM order.
+        const bannerLink = page
+            .getByRole('link', { name: /View Lineup|Lineup/i })
+            .first();
         await expect(bannerLink).toBeVisible({ timeout: 15_000 });
         await bannerLink.click();
         await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 10_000 });
