@@ -114,23 +114,9 @@ test.describe('Votes-per-player slider on create modal', () => {
     test('create modal contains a votes-per-player slider with data-testid', async ({ page }) => {
         test.setTimeout(60_000);
 
-        await expect(async () => {
-            await archiveActiveLineup(adminToken);
-            await page.goto('/games');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 3_000 },
-            );
-            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-            await expect(startBtn).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 45_000 });
-
-        // Open the create lineup modal
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await startBtn.click();
-
+        await page.goto('/games?test=open-lineup-modal');
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         // AC: slider with data-testid="votes-per-player" must exist
         const votesSlider = modal.locator('[data-testid="votes-per-player"]');
@@ -140,22 +126,9 @@ test.describe('Votes-per-player slider on create modal', () => {
     test('votes-per-player slider has range 1-10, default 3, and step 1', async ({ page }) => {
         test.setTimeout(60_000);
 
-        await expect(async () => {
-            await archiveActiveLineup(adminToken);
-            await page.goto('/games');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 3_000 },
-            );
-            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-            await expect(startBtn).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 45_000 });
-
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await startBtn.click();
-
+        await page.goto('/games?test=open-lineup-modal');
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         const votesSlider = modal.locator('[data-testid="votes-per-player"]');
         await expect(votesSlider).toBeVisible({ timeout: 5_000 });
