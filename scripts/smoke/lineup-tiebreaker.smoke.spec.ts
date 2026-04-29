@@ -9,7 +9,13 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiPost, apiGet } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiPost,
+    apiGet,
+    createLineupOrRetry,
+} from './api-helpers';
 
 // ROK-1147: every describe in this file creates a lineup, votes, advances
 // through phases, and starts a tiebreaker. The fixture falls back to
@@ -87,17 +93,17 @@ async function createVotingLineupWithTiebreaker(
 
     const gameIds = await fetchGameIds(token, 4);
 
-    const createRes = (await apiPost(token, '/lineups', {
-        title: lineupTitle,
-        buildingDurationHours: 720,
-        votingDurationHours: 720,
-        decidedDurationHours: 720,
-        matchThreshold: 10,
-    })) as { id?: number };
-
-    const lineupId =
-        createRes?.id ?? (await apiGet(token, '/lineups/banner'))?.id;
-    if (!lineupId) throw new Error('Failed to create lineup');
+    const { id: lineupId } = await createLineupOrRetry(
+        token,
+        {
+            title: lineupTitle,
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
+            matchThreshold: 10,
+        },
+        workerPrefix,
+    );
 
     // Nominate all 4 games
     for (const gid of gameIds) {
@@ -149,16 +155,18 @@ test.describe('Tiebreaker prompt modal', () => {
 
         gameIds = await fetchGameIds(adminToken, 4);
 
-        const createRes = (await apiPost(adminToken, '/lineups', {
-            title: lineupTitle,
-            buildingDurationHours: 720,
-            votingDurationHours: 720,
-            decidedDurationHours: 720,
-            matchThreshold: 10,
-        })) as { id?: number };
-
-        lineupId =
-            createRes?.id ?? (await apiGet(adminToken, '/lineups/banner'))?.id;
+        const created = await createLineupOrRetry(
+            adminToken,
+            {
+                title: lineupTitle,
+                buildingDurationHours: 720,
+                votingDurationHours: 720,
+                decidedDurationHours: 720,
+                matchThreshold: 10,
+            },
+            workerPrefix,
+        );
+        lineupId = created.id;
 
         for (const gid of gameIds) {
             await apiPost(adminToken, `/lineups/${lineupId}/nominate`, { gameId: gid });
