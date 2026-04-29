@@ -190,4 +190,14 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Reads pg_stat_statements every hour and appends a top-N digest to slow-queries.log',
     category: 'Monitoring',
   },
+  ActiveEventCacheService_refresh: {
+    description:
+      'Safety-net refresh of the in-memory active-event cache (recently-ended, active, upcoming) every 5 minutes',
+    category: 'Events',
+  },
+  AdHocReaperService_reapOrphans: {
+    description:
+      'Force-finalizes orphaned Quick Play (ad-hoc) events whose end time passed >30 min ago every 5 minutes',
+    category: 'Events',
+  },
 };
