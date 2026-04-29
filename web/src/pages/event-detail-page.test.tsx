@@ -49,6 +49,7 @@ vi.mock('../hooks/use-game-registry', () => ({
 
 vi.mock('../hooks/use-characters', () => ({
     useMyCharacters: () => ({ data: { data: [], meta: { total: 0 } }, isLoading: false }),
+    useUserCharacters: () => ({ data: [], isLoading: false }),
 }));
 
 vi.mock('../hooks/use-voice-roster', () => ({
@@ -79,7 +80,7 @@ function buildDetailFixture() {
                 id: 1,
                 username: 'TestUser',
                 avatar: null,
-                discordId: null,
+                discordId: '1000000000',
                 customAvatarUrl: null,
             },
             game: {
@@ -107,19 +108,18 @@ function buildDetailFixture() {
                     eventId: EVENT_ID,
                     user: {
                         id: 2,
+                        discordId: '2000000000',
                         username: FIXTURE_SIGNUP_USERNAME,
                         avatar: null,
-                        discordId: null,
                         customAvatarUrl: null,
                     },
                     note: null,
-                    slotRole: 'tank',
-                    slotPosition: null,
-                    status: 'confirmed',
-                    signupStatus: 'signed_up',
+                    signedUpAt: '2026-08-02T00:00:00.000Z',
+                    characterId: null,
                     character: null,
-                    createdAt: '2026-08-02T00:00:00.000Z',
-                    updatedAt: '2026-08-02T00:00:00.000Z',
+                    confirmationStatus: 'pending',
+                    status: 'signed_up',
+                    preferredRoles: ['tank'],
                 },
             ],
         },
@@ -128,11 +128,16 @@ function buildDetailFixture() {
             pool: [],
             assignments: [
                 {
+                    id: 901,
+                    signupId: 901,
                     userId: 2,
+                    discordId: '2000000000',
                     username: FIXTURE_SIGNUP_USERNAME,
                     avatar: null,
-                    role: 'tank',
-                    slotPosition: 1,
+                    customAvatarUrl: null,
+                    slot: 'tank',
+                    position: 1,
+                    isOverride: false,
                     character: null,
                     preferredRoles: ['tank'],
                     signupStatus: 'signed_up',
@@ -270,9 +275,10 @@ describe('EventDetailPage — composite endpoint consumer (ROK-1046)', () => {
         renderEventDetailPage();
         await waitFor(
             () => {
-                expect(
-                    screen.getByText(new RegExp(FIXTURE_SIGNUP_USERNAME, 'i')),
-                ).toBeInTheDocument();
+                const matches = screen.getAllByText(
+                    new RegExp(FIXTURE_SIGNUP_USERNAME, 'i'),
+                );
+                expect(matches.length).toBeGreaterThan(0);
             },
             { timeout: 4000 },
         );
