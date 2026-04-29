@@ -44,7 +44,7 @@ interface CronJob {
  * the file was never written (e.g., permissions on /data/logs, missing
  * pg_stat_statements extension in the test container).
  */
-async function waitForSlowQueryFile(token: string, timeoutMs = 30_000) {
+async function waitForSlowQueryFile(token: string, timeoutMs = 15_000) {
     const start = Date.now();
     let lastFiles: string[] = [];
     while (Date.now() - start < timeoutMs) {
@@ -53,13 +53,18 @@ async function waitForSlowQueryFile(token: string, timeoutMs = 30_000) {
         if (res?.files) lastFiles = res.files.map((f) => `${f.service}:${f.filename}`);
         await new Promise((r) => setTimeout(r, 250));
     }
+    // Stay well inside Playwright's 30s beforeEach hook timeout so the
+    // diagnostic actually flushes to stdout before Playwright kills the
+    // worker. Without console.error here, the throw is invisible — Playwright
+    // only reports the hook timeout.
     const crons = (await apiGet(token, '/admin/cron-jobs')) as CronJob[] | null;
     const cron = crons?.find((c) => c.name === SLOW_QUERIES_CRON);
-    throw new Error(
-        `slow-queries log did not appear in /admin/logs within ${timeoutMs}ms.\n` +
-            `  Files seen: [${lastFiles.join(', ') || '(none)'}]\n` +
-            `  Cron lastStatus=${cron?.lastStatus} lastRunAt=${cron?.lastRunAt} lastError=${cron?.lastError ?? '(null)'}`,
-    );
+    const diagnostic =
+        `[ROK-1156 smoke] slow-queries log did not appear in /admin/logs within ${timeoutMs}ms.\n` +
+        `  Files seen: [${lastFiles.join(', ') || '(none)'}]\n` +
+        `  Cron lastStatus=${cron?.lastStatus} lastRunAt=${cron?.lastRunAt} lastError=${cron?.lastError ?? '(null)'}`;
+    console.error(diagnostic);
+    throw new Error(diagnostic);
 }
 
 test.describe('Admin Slow Queries log surfacing', () => {
