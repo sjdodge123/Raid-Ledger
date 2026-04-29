@@ -14,6 +14,7 @@ import {
   seedUsers,
   seedCharacters,
 } from './seed-testing-users.helpers';
+import { seedThemePreferences } from './seed-testing-theme.helpers';
 
 dotenv.config();
 
@@ -195,64 +196,7 @@ async function bootstrap() {
       }
     }
 
-    // =====================
-    // Seed Theme Preferences (ROK-124)
-    // =====================
-    console.log('\n🎨 Setting theme preferences...\n');
-
-    const themeAssignments: Record<string, string> = {
-      ShadowMage: 'default-dark',
-      TankMaster: 'default-light',
-      HealzForDayz: 'auto',
-      DragonSlayer99: 'default-light',
-      CasualCarl: 'default-dark',
-      NightOwlGamer: 'auto',
-      ProRaider: 'auto',
-      LootGoblin: 'auto',
-    };
-
-    for (const [username, theme] of Object.entries(themeAssignments)) {
-      const user = createdUsers.find((u) => u.username === username);
-      if (!user) continue;
-
-      try {
-        await db
-          .insert(schema.userPreferences)
-          .values({
-            userId: user.id,
-            key: 'theme',
-            value: theme,
-          })
-          .onConflictDoNothing();
-        console.log(`  🎨 ${username} → ${theme}`);
-      } catch {
-        console.log(`  ⏭️  Skipped theme for ${username} (may exist)`);
-      }
-    }
-
-    // Also set admin theme preference
-    const adminUser = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.role, 'admin'))
-      .limit(1)
-      .then((rows) => rows[0]);
-
-    if (adminUser) {
-      try {
-        await db
-          .insert(schema.userPreferences)
-          .values({
-            userId: adminUser.id,
-            key: 'theme',
-            value: 'auto',
-          })
-          .onConflictDoNothing();
-        console.log(`  🎨 ${adminUser.username} (admin) → auto`);
-      } catch {
-        console.log(`  ⏭️  Skipped theme for admin (may exist)`);
-      }
-    }
+    await seedThemePreferences(db, createdUsers);
 
     // =====================
     // Seed Game Time Templates (ROK-227)
