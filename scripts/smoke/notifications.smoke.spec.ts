@@ -6,7 +6,7 @@ import { test, expect } from './base';
 test.describe('Notifications', () => {
     test('bell icon is visible in header', async ({ page }) => {
         await page.goto('/calendar');
-        await expect(page.getByRole('button', { name: 'Notifications' })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole('button', { name: 'Notifications' }).first()).toBeVisible({ timeout: 15_000 });
     });
 
     test('dropdown opens and shows content', async ({ page }) => {

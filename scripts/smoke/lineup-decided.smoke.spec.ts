@@ -160,6 +160,7 @@ test.beforeAll(async ({}, testInfo) => {
 /** Navigate to the decided lineup and wait for the view to render. */
 async function gotoDecidedView(page: import('@playwright/test').Page): Promise<void> {
     await page.goto(`/community-lineup/${decidedLineupId}`);
+    await page.waitForURL(`**/community-lineup/${decidedLineupId}`, { timeout: 10_000 });
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
     // Stats panel always renders regardless of entries — use as readiness gate
