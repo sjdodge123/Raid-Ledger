@@ -14,6 +14,34 @@ import { apiGet, apiPost, getAdminToken } from './api-helpers';
 
 const SLOW_QUERIES_CRON = 'SlowQueriesCron_appendDigest';
 
+interface LogFileDto {
+    filename: string;
+    service: string;
+}
+interface LogListResponse {
+    files: LogFileDto[];
+}
+
+/**
+ * Poll `/admin/logs` until a `service: 'slow-queries'` file is listed by the
+ * API. Returns once the API has fully observed the cron's append; this
+ * eliminates the race between the cron's `fs.appendFile` returning to the
+ * trigger endpoint and the React Query fetch on the panel page (which has a
+ * 15s staleTime — without this poll, an empty initial fetch can be served
+ * for the lifetime of the test).
+ */
+async function waitForSlowQueryFile(token: string, timeoutMs = 30_000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        const res = (await apiGet(token, '/admin/logs')) as LogListResponse | null;
+        if (res?.files.some((f) => f.service === 'slow-queries')) return;
+        await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(
+        `slow-queries log did not appear in /admin/logs within ${timeoutMs}ms`,
+    );
+}
+
 test.describe('Admin Slow Queries log surfacing', () => {
     test.beforeEach(async () => {
         // Resolve the cron's id and trigger it synchronously so a fresh
@@ -31,6 +59,10 @@ test.describe('Admin Slow Queries log surfacing', () => {
         ).toBeTruthy();
         const triggered = await apiPost(token, `/admin/cron-jobs/${cron!.id}/run`);
         expect(triggered, 'POST /admin/cron-jobs/{id}/run returned non-OK').toBeTruthy();
+        // Poll the API until the file is observable — the cron's write is
+        // synchronous from its handler's perspective but the file may not be
+        // listable for a tick or two on slower CI runners.
+        await waitForSlowQueryFile(token);
     });
 
     test('slow-queries.log appears in /admin/logs with the correct service badge', async ({ page }) => {
@@ -47,10 +79,13 @@ test.describe('Admin Slow Queries log surfacing', () => {
         await expect(slowQueryCell).toBeVisible({ timeout: 10_000 });
 
         // The new "slow-queries" filter pill renders once any file of that
-        // service exists. Other pills (api, postgresql, etc.) may or may not
-        // appear depending on dev env state, so we only assert ours.
-        const slowQueriesPill = page.getByRole('button', { name: /^slow-queries \(\d+\)$/ });
-        await expect(slowQueriesPill).toBeVisible({ timeout: 5_000 });
+        // service exists. Use a loose selector — the button label is
+        // `{service} ({count})` and CI sometimes wraps the text differently
+        // than local; matching by hasText avoids whitespace/anchor brittleness.
+        const slowQueriesPill = page
+            .getByRole('button')
+            .filter({ hasText: /slow-queries/ });
+        await expect(slowQueriesPill).toBeVisible({ timeout: 10_000 });
 
         // Filter narrows to slow-queries only — api.log etc. should disappear.
         await slowQueriesPill.click();
