@@ -311,6 +311,31 @@ export async function enableScheduledEvents(api: ApiClient): Promise<void> {
   await api.post('/admin/test/enable-scheduled-events', {}).catch(() => null);
 }
 
+/**
+ * Hard reset: wipe events/signups/lineups/characters/voice sessions and
+ * re-run demo install (ROK-1186). DEMO_MODE only. Called once at the
+ * start of every smoke / Playwright run so tests start from a clean
+ * baseline. Safe on already-clean DBs (no-op fast path).
+ *
+ * On failure (older API without the endpoint, transient error), falls
+ * back to `/admin/settings/demo/install` so seed data is at least
+ * present — matches `scripts/playwright-global-setup.ts`. A silent
+ * skip would defeat the purpose of the reset (orphans accumulate).
+ */
+export async function resetToSeed(api: ApiClient): Promise<void> {
+  try {
+    await api.post('/admin/test/reset-to-seed', {});
+    return;
+  } catch (err) {
+    console.warn(
+      `  reset-to-seed failed (${err}) — falling back to demo/install`,
+    );
+  }
+  await api.post('/admin/settings/demo/install', {}).catch((err) => {
+    console.warn(`  demo/install fallback also failed: ${err}`);
+  });
+}
+
 /** Inject a synthetic voice session into the DB — DEMO_MODE only (ROK-943). */
 export async function injectVoiceSession(
   api: ApiClient,

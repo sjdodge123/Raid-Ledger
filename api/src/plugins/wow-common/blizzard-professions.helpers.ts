@@ -101,18 +101,26 @@ async function requestProfessions(
   realmSlug: string,
   logger: Logger,
 ): Promise<ExternalCharacterProfessions | null> {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (res.status === 404) {
-    logger.debug?.(`Professions 404 for ${charName}-${realmSlug} — leaving prior value alone`);
+    logger.debug?.(
+      `Professions 404 for ${charName}-${realmSlug} — leaving prior value alone`,
+    );
     return null;
   }
   if (!res.ok) {
-    logger.warn(`Professions fetch failed for ${charName}-${realmSlug}: ${res.status}`);
+    logger.warn(
+      `Professions fetch failed for ${charName}-${realmSlug}: ${res.status}`,
+    );
     return null;
   }
   const parsed = parseProfessionsResponse(await res.json());
   if (hasNoEntries(parsed)) {
-    logger.debug?.(`Professions empty for ${charName}-${realmSlug} — leaving prior value alone`);
+    logger.debug?.(
+      `Professions empty for ${charName}-${realmSlug} — leaving prior value alone`,
+    );
     return null;
   }
   return parsed;

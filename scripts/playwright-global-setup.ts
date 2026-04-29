@@ -1,5 +1,5 @@
 /**
- * Playwright Global Setup (ROK-653)
+ * Playwright Global Setup (ROK-653, updated ROK-1186)
  *
  * Authenticates admin@local via the API and saves browser storageState
  * so all tests run as an authenticated admin user.
@@ -9,7 +9,10 @@
  *   2. Bootstrap admin with ADMIN_PASSWORD=playwright-ci-password
  *   3. Start API, wait for /system/status health check
  *   4. Authenticate via POST /auth/local → get JWT
- *   5. Seed demo data via POST /admin/settings/demo/install
+ *   5. ROK-1186: hard-reset DB (wipe + reseed demo) via
+ *      POST /admin/test/reset-to-seed — replaces the old
+ *      /admin/settings/demo/install call so every Playwright run
+ *      starts from a clean baseline (no stale ORBITALIS polls etc).
  *   6. Save storageState for Playwright tests
  */
 import { chromium, type FullConfig } from '@playwright/test';
@@ -53,8 +56,13 @@ export default async function globalSetup(_config: FullConfig) {
         JSON.stringify({ access_token, issued_at: new Date().toISOString() }),
     );
 
-    // 2. Seed demo data (idempotent — safe to call if already seeded)
-    const seedRes = await fetch(`${API_BASE}/admin/settings/demo/install`, {
+    // 2. ROK-1186: Hard reset to demo seed baseline. Wipes any stale
+    // test fixtures (orphan events, signups, lineups) left over from
+    // previous runs and re-runs the demo installer. Replaces the
+    // previous standalone demo/install call. Non-fatal — falls back
+    // to demo/install if the reset endpoint isn't available yet
+    // (covers branches that haven't deployed ROK-1186 in their API).
+    const resetRes = await fetch(`${API_BASE}/admin/test/reset-to-seed`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -62,10 +70,22 @@ export default async function globalSetup(_config: FullConfig) {
         },
     });
 
-    if (!seedRes.ok) {
-        const body = await seedRes.text();
-        // Non-fatal — demo data may already be installed or IGDB unavailable
-        console.warn(`Demo data seed returned ${seedRes.status}: ${body}`);
+    if (!resetRes.ok) {
+        const body = await resetRes.text();
+        console.warn(
+            `Reset-to-seed returned ${resetRes.status}: ${body} — falling back to demo/install`,
+        );
+        const seedRes = await fetch(`${API_BASE}/admin/settings/demo/install`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${access_token}`,
+            },
+        });
+        if (!seedRes.ok) {
+            const seedBody = await seedRes.text();
+            console.warn(`Demo data seed returned ${seedRes.status}: ${seedBody}`);
+        }
     }
 
     // 3. Launch browser, set JWT in localStorage, save storageState

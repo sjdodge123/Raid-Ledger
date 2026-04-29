@@ -34,7 +34,8 @@ export function buildCharacterDto(character: CharacterRow): SignupCharacterDto {
     avatarUrl: character.avatarUrl,
     race: character.race,
     faction: character.faction as 'alliance' | 'horde' | null,
-    professions: (character.professions as CharacterProfessionsDto | null) ?? null,
+    professions:
+      (character.professions as CharacterProfessionsDto | null) ?? null,
   };
 }
 
