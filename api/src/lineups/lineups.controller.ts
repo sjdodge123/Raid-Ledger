@@ -18,6 +18,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import {
+  AbortLineupSchema,
   CreateLineupSchema,
   UpdateLineupMetadataSchema,
   UpdateLineupStatusSchema,
@@ -153,6 +154,23 @@ export class LineupsController {
       id: req.user.id,
       role: req.user.role,
     });
+  }
+
+  /** POST /lineups/:id/abort — force-archive a lineup (operator/admin) (ROK-1062). */
+  @Post(':id/abort')
+  @UseGuards(RolesGuard)
+  @Roles('operator')
+  @HttpCode(HttpStatus.OK)
+  async abort(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<LineupDetailResponseDto> {
+    const parsed = AbortLineupSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.lineupsService.abort(id, parsed.data, { id: req.user.id });
   }
 
   /** PATCH /lineups/:id/status — transition status (operator/admin). */

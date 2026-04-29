@@ -9,6 +9,7 @@ import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
 import { LineupsGateway } from './lineups.gateway';
+import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
@@ -229,6 +230,10 @@ function describeLineupsService() {
         {
           provide: LineupsGateway,
           useValue: { emitStatusChange: jest.fn() },
+        },
+        {
+          provide: TiebreakerService,
+          useValue: { reset: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();

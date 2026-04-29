@@ -24,7 +24,8 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { LineupsService } from './lineups.service';
+import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 
 function describeLineupAbort() {
   let testApp: TestApp;
@@ -35,7 +36,15 @@ function describeLineupAbort() {
   beforeAll(async () => {
     testApp = await getTestApp();
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-    phaseQueue = testApp.app.get(LineupPhaseQueueService);
+    // Resolve via LineupsService so the spy lands on the same instance the
+    // orchestrator uses (LineupPhaseQueueService is registered in two modules
+    // — LineupsModule and StandalonePollModule — so app.get() can return a
+    // different singleton than the one wired into LineupsService).
+    const lineupsService = testApp.app.get(LineupsService);
+    // Reach a private field so the spy targets the runtime instance.
+    phaseQueue = (
+      lineupsService as unknown as { phaseQueue: LineupPhaseQueueService }
+    ).phaseQueue;
   });
 
   beforeEach(() => {
