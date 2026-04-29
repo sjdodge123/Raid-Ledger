@@ -25,6 +25,10 @@ export function useRescheduleEvent(eventId: number) {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['events'] });
             queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+            queryClient.invalidateQueries({
+                queryKey: ['events', eventId, 'detail'],
+                exact: true,
+            });
         },
     });
 }
