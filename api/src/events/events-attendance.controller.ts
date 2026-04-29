@@ -26,10 +26,12 @@ import {
   VoiceAttendanceSummaryDto,
   EventMetricsResponseDto,
   AdHocRosterResponseDto,
+  VoiceChannelResponseDto,
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
+import { resolveVoiceChannelForEvent } from './voice-channel-resolver.helpers';
 
 @Controller('events')
 export class EventsAttendanceController {
@@ -90,22 +92,16 @@ export class EventsAttendanceController {
   async getVoiceChannel(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: { user?: { id: number; role: UserRole } },
-  ): Promise<{
-    channelId: string | null;
-    channelName: string | null;
-    guildId: string | null;
-  }> {
+  ): Promise<VoiceChannelResponseDto> {
     const event = await this.eventsService.findOne(id);
-    const channelId =
-      event.notificationChannelOverride ??
-      (await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
-        event.game?.id ?? null,
-        event.recurrenceGroupId ?? null,
-      ));
-    if (!channelId) {
-      return { channelId: null, channelName: null, guildId: null };
-    }
-    return this.resolveChannelName(channelId, !!req.user);
+    return resolveVoiceChannelForEvent(
+      {
+        channelResolver: this.channelResolverService,
+        bot: this.discordBotClientService,
+      },
+      event,
+      !!req.user,
+    );
   }
 
   @Patch(':id/attendance')
@@ -154,29 +150,4 @@ export class EventsAttendanceController {
     }
   }
 
-  private async resolveChannelName(
-    channelId: string,
-    isAuthenticated: boolean,
-  ) {
-    try {
-      const guildId = this.discordBotClientService.getGuildId();
-      const client = this.discordBotClientService.getClient();
-      if (guildId && client) {
-        const guild =
-          client.guilds.cache.get(guildId) ??
-          (await client.guilds.fetch(guildId));
-        const channel =
-          guild.channels.cache.get(channelId) ??
-          (await guild.channels.fetch(channelId));
-        return {
-          channelId,
-          channelName: channel?.name ?? null,
-          guildId: isAuthenticated ? guildId : null,
-        };
-      }
-    } catch {
-      // Discord API failure — return ID without name
-    }
-    return { channelId, channelName: null, guildId: null };
-  }
 }
