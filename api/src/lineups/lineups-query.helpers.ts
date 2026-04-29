@@ -134,6 +134,29 @@ export function findUserById(
     .limit(1);
 }
 
+/**
+ * Resolve a user's display name for embedding/logging (ROK-1062).
+ * Returns `username` fallback if `displayName` is null. Returns the literal
+ * string `'Unknown'` if the user row does not exist (defensive — JWT carries
+ * an id but the row could be deleted between login and use).
+ */
+export async function findUserDisplayName(
+  db: PostgresJsDatabase<typeof schema>,
+  userId: number,
+): Promise<string> {
+  const [row] = await db
+    .select({
+      displayName:
+        sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`.as(
+          'display_name',
+        ),
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  return row?.displayName ?? 'Unknown';
+}
+
 /** Lookup a game name by ID. */
 export function findGameName(
   db: PostgresJsDatabase<typeof schema>,
