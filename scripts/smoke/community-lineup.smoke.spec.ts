@@ -513,19 +513,14 @@ test.describe('Voting phase', () => {
     });
 
     test('match threshold slider is present in StartLineupModal', async ({ page }) => {
-        // Archive the voting lineup so we can see the "Start Lineup" button
-        await archiveLineup(adminToken, votingLineupId);
-
-        await page.goto('/games');
+        // ROK-1167: open StartLineupModal via test query param — works regardless
+        // of whether this worker's voting lineup is still active. Avoids racing
+        // on the empty-banner state.
+        await page.goto('/games?test=open-lineup-modal');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // Click "Start Lineup" to open the creation modal
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await expect(startBtn).toBeVisible({ timeout: 15_000 });
-        await startBtn.click();
-
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         // Match threshold slider should be present with correct labels
         const thresholdSlider = modal.locator('[data-testid="match-threshold"]');

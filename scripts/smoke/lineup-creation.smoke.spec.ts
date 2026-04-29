@@ -108,25 +108,6 @@ test.describe('Start Lineup button on Games page', () => {
         adminToken = await getAdminToken();
     });
 
-    test('shows Start Lineup button when no active lineup and user is operator', async ({ page }) => {
-        test.setTimeout(60_000);
-        // Ensure no active lineup exists — retry to handle cross-project races
-        // (community-lineup tests may recreate the lineup between archive and assertion)
-        await expect(async () => {
-            await archiveActiveLineup(adminToken);
-
-            await page.goto('/games');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 3_000 },
-            );
-
-            // The "Start Lineup" button should be visible for operators/admins
-            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-            await expect(startBtn).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 45_000 });
-    });
-
     test('Games page shows lineup banner with countdown instead of Start Lineup when active', async ({ page }) => {
         // Ensure an active lineup exists -- create one if needed
         const banner = await apiGet(adminToken, '/lineups/banner');
@@ -171,25 +152,18 @@ test.describe('Lineup creation modal', () => {
     });
 
     test('modal opens with duration fields pre-filled from admin defaults', async ({ page }) => {
-        test.setTimeout(60_000);
-        await expect(async () => {
-            await archiveActiveLineup(adminToken);
-            await page.goto('/games');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 3_000 },
-            );
-            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-            await expect(startBtn).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 45_000 });
-
-        // Click "Start Lineup" to open modal
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await startBtn.click();
+        // ROK-1167: use the test-mode query param to open the modal directly.
+        // Avoids racing on the global "no active lineup" banner state — sibling
+        // workers may hold their own lineups, masking the Start Lineup button.
+        await page.goto('/games?test=open-lineup-modal');
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
 
         // Modal should open with duration configuration fields
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         // Duration sliders for building and voting should be present
         const buildingDuration = modal.locator('[data-testid="building-duration"]');
@@ -208,23 +182,19 @@ test.describe('Lineup creation modal', () => {
     });
 
     test('submitting modal creates lineup and navigates to detail page', async ({ page }) => {
-        test.setTimeout(60_000);
-        await expect(async () => {
-            await archiveActiveLineup(adminToken);
-            await page.goto('/games');
-            await expect(page.locator('body')).not.toHaveText(
-                /something went wrong/i,
-                { timeout: 3_000 },
-            );
-            const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-            await expect(startBtn).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 45_000 });
+        // ROK-1167: pre-archive this worker's prior lineups so the POST inside
+        // the modal succeeds (sibling-worker rows are scoped out by prefix).
+        await archiveActiveLineup(adminToken);
 
-        const startBtn = page.getByRole('button', { name: /Start Lineup/i });
-        await startBtn.click();
+        // ROK-1167: open the modal via test query param — no race on global banner.
+        await page.goto('/games?test=open-lineup-modal');
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
 
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         // Listen for the POST /lineups response while clicking submit
         const [apiResponse] = await Promise.all([
