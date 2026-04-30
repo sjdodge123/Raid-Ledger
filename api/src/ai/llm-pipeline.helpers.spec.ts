@@ -144,15 +144,12 @@ describe('llm-pipeline.helpers (adversarial)', () => {
   describe('executeWithTimeout — edge cases', () => {
     it('does not reject before timeout expires', async () => {
       jest.useFakeTimers();
-      let resolved = false;
       const promise = executeWithTimeout(
         () => new Promise<string>((res) => setTimeout(() => res('done'), 50)),
         200,
       );
       jest.advanceTimersByTime(50);
       const result = await promise;
-      resolved = true;
-      expect(resolved).toBe(true);
       expect(result).toBe('done');
     });
 
