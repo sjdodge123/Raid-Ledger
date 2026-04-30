@@ -32,6 +32,19 @@ interface StandaloneNonVoter {
 
 const MS_PER_HOUR = 3_600_000;
 
+/**
+ * `phase_deadline` is a `timestamp without time zone` column. postgres-js
+ * returns it as a naïve string ("YYYY-MM-DD HH:MM:SS.SSS") which `new Date()`
+ * would parse in the runtime's local TZ, shifting the value by hours. We
+ * INSERT JS Dates as UTC, so re-parse with an explicit UTC suffix.
+ */
+function parseTimestampUtc(value: Date | string): Date {
+  if (value instanceof Date) return value;
+  const s = String(value);
+  if (s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
+
 @Injectable()
 export class StandalonePollReminderService {
   private readonly logger = new Logger(StandalonePollReminderService.name);
@@ -142,8 +155,16 @@ export class StandalonePollReminderService {
         AND cl.phase_duration_override->>'standalone' = 'true'
         AND cl.phase_deadline IS NOT NULL
         AND clm.status = 'scheduling'
-    `)) as unknown as ActiveStandalonePoll[];
-    return rows;
+    `)) as unknown as Array<{
+      lineupId: number;
+      matchId: number;
+      phaseDeadline: Date | string;
+    }>;
+    return rows.map((r) => ({
+      lineupId: r.lineupId,
+      matchId: r.matchId,
+      phaseDeadline: parseTimestampUtc(r.phaseDeadline),
+    }));
   }
 
   /** Match members who haven't voted on any schedule slot for this match. */
