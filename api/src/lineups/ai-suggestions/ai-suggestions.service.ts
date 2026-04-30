@@ -14,7 +14,6 @@ import { LlmService } from '../../ai/llm.service';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from '../../ai/llm.constants';
 import { GameTasteService } from '../../game-taste/game-taste.service';
 import * as schema from '../../drizzle/schema';
-import type { SettingKey } from '../../drizzle/schema';
 import {
   resolveVoterScope,
   type ResolvedVoterScope,
@@ -93,7 +92,7 @@ export class AiSuggestionsService {
 
   private async isFeatureDisabled(): Promise<boolean> {
     const value = await this.settings.get(
-      AI_SETTING_KEYS.SUGGESTIONS_ENABLED as SettingKey,
+      AI_SETTING_KEYS.SUGGESTIONS_ENABLED,
     );
     return value === 'false';
   }

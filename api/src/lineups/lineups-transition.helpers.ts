@@ -9,7 +9,6 @@ import type {
   UpdateLineupStatusDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import type { LineupStatus } from '../drizzle/schema';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
 import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
@@ -50,7 +49,7 @@ export async function runStatusTransition(
   const [lineup] = await findLineupById(deps.db, id);
   if (!lineup) throw new NotFoundException('Lineup not found');
 
-  validateTransition(lineup.status as LineupStatus, dto);
+  validateTransition(lineup.status, dto);
   if (dto.status === 'decided' && dto.decidedGameId) {
     await validateDecidedGame(deps.db, id, dto.decidedGameId);
   }

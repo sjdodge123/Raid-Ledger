@@ -2,22 +2,18 @@ You are a dev subagent for Raid Ledger. Worktree: `<WORKTREE_PATH>` (Lead has al
 
 ## Task: <ROK-XXX> — <TITLE>  (<NEW | REWORK>)
 
-### Spec
-<paste Linear issue description — especially ACs>
-
-### Planner Output
-<paste plan, or "None">
-
-### Architect Guidance
-<paste notes, or "None">
+### Read first (do NOT request paste-back from Lead)
+- `planning-artifacts/dev-brief-ROK-XXX.md` — Lead's brief covering operator decisions, architect corrections, phase order, and TDD test file path. **This is your primary source.**
+- `planning-artifacts/specs/ROK-XXX.md` — full spec.
+- `planning-artifacts/plan-ROK-XXX.md` — planner output (if a planner ran).
+- `planning-artifacts/architect-ROK-XXX.md` — architect findings (if an architect ran).
+- The TDD test file referenced by the brief — read it before writing any code.
 
 ### Rework Feedback (REWORK only)
-<paste reviewer/operator feedback>
+<paste reviewer/operator feedback ONLY for REWORK — keep it ≤200 words>
 
-### TDD Test File
-A failing test exists at `<TEST_FILE>`. Your primary job: make it pass. Do not consider the story done until it's green.
-
-If `<TEST_FILE>` is blank or N/A (light-scope story with no TDD test), skip the TDD-specific workflow step; still run the AC trace and CI scope checks.
+### TDD
+A failing test exists per the brief. Your primary job: make it pass. Do not consider the story done until it's green. If no TDD test (light-scope story), skip the TDD step but still run AC trace + CI checks.
 
 ### Guidelines
 
@@ -65,42 +61,32 @@ If task type is REWORK, assess the scope of the change against operator/reviewer
 
 Default to `material` if uncertain. Lead uses this to decide whether to re-run full pipeline validation (material) or a fast path (trivial).
 
-### Output Format (mandatory — Lead parses this)
+### Output Format (mandatory — ≤300 words to team-lead)
+
+Send this short report via `SendMessage` to `team-lead`. Detailed output (full runner logs, AC trace tables) goes to `planning-artifacts/dev-report-ROK-XXX.md` so Lead can read on demand.
 
 ```
-## CI Scope
+## ROK-XXX dev complete
+
 ci_scope: <full | api | web | tests | docs>
-rework_scope: <trivial | material | N/A>  # only if REWORK
-Reason: <1 sentence — which files drove the choice>
+rework_scope: <trivial | material | N/A>
 
-## Local CI Proof
-| Check | Result |
-|-------|--------|
-| (list only the checks your scope ran) |
-| Build | PASS |
-| TypeScript | PASS |
-| Lint | PASS — 0 errors |
-| Tests | PASS — N suites, M tests |
-| Integration (if api scope) | PASS — N suites, M tests |
+CI: <one line — "all PASS" or list failures>
+TDD: <test file>: <N passing, was N failing>
+ACs: <N/N PASSED>  (full trace in planning-artifacts/dev-report-ROK-XXX.md)
+Files: <count> changed, <count> new
+Commits: <hash> — <subject> (× N commits)
 
-## TDD Test Result
-Test file: <TEST_FILE>
-Command: <exact command>
-Result: PASS — <N> tests green
-<paste runner output>
-
-## AC Verification Trace
-| AC | Frontend | API | Service | Query | Status |
-|----|----------|-----|---------|-------|--------|
-
-## Files Changed
-<list>
-
-## Summary
-<what was done>
+<one short paragraph if anything is non-obvious — known follow-ups, deviations from brief, etc. Otherwise omit.>
 ```
 
-Lead rejects and respawns if: CI Scope missing, Local CI Proof missing/any FAIL, TDD Test Result missing/FAIL, any AC = FAIL.
+**Strict cost rules:**
+- Do NOT paste runner output. Cite counts only ("833 tests PASS").
+- Do NOT paste AC trace tables in the message. Write them to the dev-report file.
+- Do NOT paste diffs.
+- Keep the SendMessage body under 300 words. If you can't, you're including too much.
+
+Lead rejects and respawns if: ci_scope missing, any CI FAIL not addressed, TDD test still failing, AC count mismatched. Lead reads the dev-report file when it needs more detail.
 
 ### Standing rules (build pipeline)
 Stay in your worktree. Never push, create PRs, enable auto-merge, force-push, call `mcp__linear__*`, run `deploy_dev.sh`, or run destructive ops (`rm -rf`, `git reset --hard`) — Lead handles all of that.

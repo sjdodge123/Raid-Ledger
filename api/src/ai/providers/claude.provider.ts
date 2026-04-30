@@ -9,7 +9,6 @@ import type {
   LlmGenerateResponse,
 } from '../llm-provider.interface';
 import { AI_SETTING_KEYS, CLOUD_DEFAULTS } from '../llm.constants';
-import type { SettingKey } from '../../drizzle/schema';
 import {
   fetchClaude,
   extractSystemPrompt,
@@ -33,7 +32,7 @@ export class ClaudeProvider implements LlmProvider {
 
   /** Resolve the Claude API key from settings. */
   private async getApiKey(): Promise<string | null> {
-    return this.settings.get(AI_SETTING_KEYS.CLAUDE_API_KEY as SettingKey);
+    return this.settings.get(AI_SETTING_KEYS.CLAUDE_API_KEY);
   }
 
   /** Check if the Anthropic API is reachable with a valid key. */

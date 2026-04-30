@@ -53,12 +53,16 @@ function useImportFormState(isMain: boolean, defaultRealm?: string, defaultRegio
     const [realm, setRealm] = useState(defaultRealm ?? '');
     const [region, setRegion] = useState<WowRegion>(defaultRegion ?? 'us');
     const [setAsMain, setSetAsMain] = useState(isMain);
+    const [prevIsMain, setPrevIsMain] = useState(isMain);
     const [error, setError] = useState('');
     const [formState, setFormState] = useState<FormState>('idle');
     const [previewData, setPreviewData] = useState<BlizzardCharacterPreviewDto | null>(null);
     const formStateRef = useRef(formState);
     useEffect(() => { formStateRef.current = formState; }, [formState]);
-    useEffect(() => { setSetAsMain(isMain); }, [isMain]);
+    if (isMain !== prevIsMain) {
+        setPrevIsMain(isMain);
+        setSetAsMain(isMain);
+    }
     return { name, setName, realm, setRealm, region, setRegion, setAsMain, setSetAsMain, error, setError, formState, setFormState, previewData, setPreviewData, formStateRef };
 }
 

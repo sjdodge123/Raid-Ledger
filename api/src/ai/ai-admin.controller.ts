@@ -31,7 +31,6 @@ import type {
   AiUsageDto,
 } from '@raid-ledger/contract';
 import type { AiModelDto } from '@raid-ledger/contract';
-import type { SettingKey } from '../drizzle/schema';
 
 /**
  * Admin endpoints for AI plugin status, models, and usage.
@@ -56,7 +55,7 @@ export class AiAdminController {
     const provider = resolution?.provider;
     const isAvailable = await this.resolveAvailability(provider?.key ?? null);
     const modelSetting = await this.settings.get(
-      AI_SETTING_KEYS.MODEL as SettingKey,
+      AI_SETTING_KEYS.MODEL,
     );
     const model = this.resolveDisplayModel(provider?.key, modelSetting);
     return buildStatusResponse(provider, model, isAvailable);
@@ -151,13 +150,13 @@ export class AiAdminController {
     aiSuggestionsEnabled: boolean;
   }> {
     const chat = await this.settings.get(
-      AI_SETTING_KEYS.CHAT_ENABLED as SettingKey,
+      AI_SETTING_KEYS.CHAT_ENABLED,
     );
     const dynCat = await this.settings.get(
-      AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED as SettingKey,
+      AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED,
     );
     const sugg = await this.settings.get(
-      AI_SETTING_KEYS.SUGGESTIONS_ENABLED as SettingKey,
+      AI_SETTING_KEYS.SUGGESTIONS_ENABLED,
     );
     return {
       chatEnabled: chat === 'true',
@@ -181,19 +180,19 @@ export class AiAdminController {
   ): Promise<{ success: boolean }> {
     if (body.chatEnabled !== undefined) {
       await this.settings.set(
-        AI_SETTING_KEYS.CHAT_ENABLED as SettingKey,
+        AI_SETTING_KEYS.CHAT_ENABLED,
         String(body.chatEnabled),
       );
     }
     if (body.dynamicCategoriesEnabled !== undefined) {
       await this.settings.set(
-        AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED as SettingKey,
+        AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED,
         String(body.dynamicCategoriesEnabled),
       );
     }
     if (body.aiSuggestionsEnabled !== undefined) {
       await this.settings.set(
-        AI_SETTING_KEYS.SUGGESTIONS_ENABLED as SettingKey,
+        AI_SETTING_KEYS.SUGGESTIONS_ENABLED,
         String(body.aiSuggestionsEnabled),
       );
     }
@@ -212,7 +211,7 @@ export class AiAdminController {
     const resolution = await this.registry.resolveActive();
     const provider = resolution?.provider;
     const modelSetting = await this.settings.get(
-      AI_SETTING_KEYS.MODEL as SettingKey,
+      AI_SETTING_KEYS.MODEL,
     );
     const model = this.resolveDisplayModel(provider?.key, modelSetting);
     const start = Date.now();
