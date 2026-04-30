@@ -104,15 +104,18 @@ function DurationPicker({ value, onChange }: {
   value: number; onChange: (v: number) => void;
 }) {
   return (
-    <div data-testid="poll-duration-picker">
-      <label className="text-sm font-medium text-secondary mb-2 block">
+    <div
+      data-testid="poll-duration-picker"
+      className="flex items-center justify-between gap-3"
+    >
+      <label className="text-sm font-medium text-secondary shrink-0">
         Voting window
       </label>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-1">
         {DURATION_OPTIONS.map((opt) => (
           <label
             key={opt.hours}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm border transition-colors ${
+            className={`px-2.5 py-1 rounded-md cursor-pointer text-xs border transition-colors ${
               value === opt.hours
                 ? 'bg-emerald-600 border-emerald-500 text-foreground'
                 : 'bg-surface/50 border-surface text-muted hover:border-emerald-500/50'
