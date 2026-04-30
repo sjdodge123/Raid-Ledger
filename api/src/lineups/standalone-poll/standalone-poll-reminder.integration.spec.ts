@@ -228,9 +228,8 @@ function describeStandalonePollReminders() {
     expect(createSpy).toHaveBeenCalled();
     const subtypes = dmSubtypesSent();
     expect(
-      subtypes.filter(
-        (s) => s === 'standalone_scheduling_poll_reminder',
-      ).length,
+      subtypes.filter((s) => s === 'standalone_scheduling_poll_reminder')
+        .length,
     ).toBeGreaterThanOrEqual(memberIds.length);
 
     // Each DM carries the correct payload + the 24h window marker.
@@ -316,9 +315,7 @@ function describeStandalonePollReminders() {
 
     // Sanity: dedup key uses the spec's exact shape.
     expect(dedup.checkAndMarkSent).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /^standalone-poll-reminder:\d+:\d+:(24h|1h)$/,
-      ),
+      expect.stringMatching(/^standalone-poll-reminder:\d+:\d+:(24h|1h)$/),
       expect.anything(),
     );
     // Window-by-user: each user got at most one window across both runs.
