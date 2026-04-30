@@ -154,7 +154,8 @@ async function wipeChildren(db: Db): Promise<void> {
       discord_event_messages,
       availability,
       event_plans,
-      wow_classic_quest_progress
+      wow_classic_quest_progress,
+      notification_dedup
     RESTART IDENTITY CASCADE
   `);
 }
