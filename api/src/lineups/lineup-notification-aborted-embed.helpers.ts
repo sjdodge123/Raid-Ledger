@@ -16,7 +16,10 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
-import { applyChrome } from './lineup-notification-embed-chrome.helpers';
+import {
+  applyChrome,
+  resolveEmbedTitle,
+} from './lineup-notification-embed-chrome.helpers';
 import type {
   EmbedContext,
   EmbedWithRow,
@@ -38,7 +41,7 @@ export function buildAbortedEmbed(
   const reasonBlock = trimmedReason ? `\n\n${trimmedReason}` : '';
 
   const embed = new EmbedBuilder()
-    .setTitle('\u{1F6D1} Lineup Aborted')
+    .setTitle(resolveEmbedTitle(ctx, '\u{1F6D1}', 'Aborted'))
     .setDescription(
       `This lineup was aborted by **${actorDisplayName}**.` + reasonBlock,
     )
