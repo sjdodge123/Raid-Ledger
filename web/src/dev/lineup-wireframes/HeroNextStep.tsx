@@ -89,15 +89,15 @@ function HeroBody({ tone, label, headline, detail, cta, secondary }: HeroProps):
 
 function HeroCompactBody({ headline, cta, tone }: { headline: string; cta?: HeroProps['cta']; tone: HeroTone }): JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <p className={`text-xs font-semibold uppercase tracking-[0.15em] truncate ${TONE_LABEL[tone]}`}>
+    <div className="flex items-center justify-between gap-3 min-h-[44px]">
+      <p className={`text-sm font-semibold uppercase tracking-[0.15em] truncate ${TONE_LABEL[tone]}`}>
         Next: <span className="text-foreground normal-case font-semibold">{headline}</span>
       </p>
       {cta && (
         <button
           type="button"
           aria-label={cta.ariaLabel ?? cta.text}
-          className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold rounded bg-emerald-500 hover:bg-emerald-400 text-emerald-950"
+          className="flex-shrink-0 min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-300 text-emerald-950"
         >
           {cta.text}
         </button>
