@@ -17,11 +17,24 @@ interface CreatePollModalProps {
   onClose: () => void;
 }
 
+/** Duration options for the standalone poll picker (ROK-1192). */
+const DURATION_OPTIONS = [
+  { hours: 24, label: '24 hours' },
+  { hours: 48, label: '48 hours' },
+  { hours: 72, label: '72 hours' },
+  { hours: 168, label: '7 days' },
+] as const;
+
+const DEFAULT_DURATION_HOURS = 72;
+
 /** Form state for the create poll modal. */
 function useCreatePollForm() {
   const [selectedGame, setSelectedGame] = useState<IgdbGameDto | null>(null);
   const [memberIds, setMemberIdsRaw] = useState<number[]>([]);
   const [minVoteThreshold, setMinVoteThreshold] = useState<number>(3);
+  const [durationHours, setDurationHours] = useState<number>(
+    DEFAULT_DURATION_HOURS,
+  );
 
   // Sync threshold to member count on change (ROK-1015)
   const setMemberIds = useCallback((ids: number[]) => {
@@ -33,11 +46,13 @@ function useCreatePollForm() {
     setSelectedGame(null);
     setMemberIdsRaw([]);
     setMinVoteThreshold(3);
+    setDurationHours(DEFAULT_DURATION_HOURS);
   }, []);
   return {
     selectedGame, setSelectedGame,
     memberIds, setMemberIds,
     minVoteThreshold, setMinVoteThreshold,
+    durationHours, setDurationHours,
     reset,
   };
 }
@@ -62,6 +77,7 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
       gameId: form.selectedGame.id,
       memberUserIds: form.memberIds.length > 0 ? form.memberIds : undefined,
       minVoteThreshold: form.minVoteThreshold > 0 ? form.minVoteThreshold : undefined,
+      durationHours: form.durationHours,
     });
     handleClose();
     navigate(`/community-lineup/${result.lineupId}/schedule/${result.id}`);
@@ -80,6 +96,41 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
         onSubmit={handleSubmit}
       />
     </Modal>
+  );
+}
+
+/** Duration picker — voting window for the poll (ROK-1192). */
+function DurationPicker({ value, onChange }: {
+  value: number; onChange: (v: number) => void;
+}) {
+  return (
+    <div data-testid="poll-duration-picker">
+      <label className="text-sm font-medium text-secondary mb-2 block">
+        Voting window
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {DURATION_OPTIONS.map((opt) => (
+          <label
+            key={opt.hours}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm border transition-colors ${
+              value === opt.hours
+                ? 'bg-emerald-600 border-emerald-500 text-foreground'
+                : 'bg-surface/50 border-surface text-muted hover:border-emerald-500/50'
+            }`}
+          >
+            <input
+              type="radio"
+              name="poll-duration"
+              value={opt.hours}
+              checked={value === opt.hours}
+              onChange={() => onChange(opt.hours)}
+              className="sr-only"
+            />
+            {opt.label}
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -135,6 +186,10 @@ function CreatePollFormBody({ form, isPending, onSubmit }: {
       <MemberPicker
         selectedIds={form.memberIds}
         onChange={form.setMemberIds}
+      />
+      <DurationPicker
+        value={form.durationHours}
+        onChange={form.setDurationHours}
       />
       <MinVoteThresholdSlider
         value={form.minVoteThreshold}
