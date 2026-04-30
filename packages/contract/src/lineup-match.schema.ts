@@ -100,6 +100,8 @@ export type LineupScheduleVoteDto = z.infer<typeof LineupScheduleVoteSchema>;
 export const MatchDetailResponseSchema = LineupMatchSchema.extend({
     gameName: z.string(),
     gameCoverUrl: z.string().nullable(),
+    /** ROK-1121: lineup creator user ID for early-create override. */
+    lineupCreatedById: z.number().int().optional(),
     members: z.array(
         LineupMatchMemberSchema.extend({
             displayName: z.string(),

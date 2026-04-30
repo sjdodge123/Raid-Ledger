@@ -56,7 +56,7 @@ describe('SteamService', () => {
           }),
         },
         games: { findFirst: jest.fn().mockResolvedValue(null) },
-      } as unknown as jest.Mock;
+      };
 
       (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
         communityvisibilitystate: 3,

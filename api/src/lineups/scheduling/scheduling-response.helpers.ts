@@ -40,6 +40,7 @@ export function buildMatchDetailDto(
   members: MatchMemberRow[],
   gameName: string,
   gameCoverUrl: string | null,
+  lineupCreatedById: number | null = null,
 ): MatchDetailResponseDto {
   return {
     id: match.id,
@@ -56,6 +57,7 @@ export function buildMatchDetailDto(
     updatedAt: match.updatedAt.toISOString(),
     gameName,
     gameCoverUrl,
+    ...(lineupCreatedById !== null ? { lineupCreatedById } : {}),
     members: members.map((m) => ({
       id: m.id,
       matchId: m.matchId,
@@ -108,7 +110,11 @@ function extractMyVotedSlotIds(
 
 /** Build the full poll page response. */
 export function buildPollResponse(
-  match: MatchRow & { gameName?: string; gameCoverUrl?: string | null },
+  match: MatchRow & {
+    gameName?: string;
+    gameCoverUrl?: string | null;
+    lineupCreatedById?: number | null;
+  },
   members: MatchMemberRow[],
   slots: SlotRow[],
   votes: ScheduleVoteRow[],
@@ -118,9 +124,17 @@ export function buildPollResponse(
   const gameName = (match as { gameName?: string }).gameName ?? 'Unknown';
   const gameCoverUrl =
     (match as { gameCoverUrl?: string | null }).gameCoverUrl ?? null;
+  const lineupCreatedById =
+    (match as { lineupCreatedById?: number | null }).lineupCreatedById ?? null;
 
   return {
-    match: buildMatchDetailDto(match, members, gameName, gameCoverUrl),
+    match: buildMatchDetailDto(
+      match,
+      members,
+      gameName,
+      gameCoverUrl,
+      lineupCreatedById,
+    ),
     slots: mapSlotsWithVotes(slots, votes),
     myVotedSlotIds: extractMyVotedSlotIds(votes, userId),
     lineupStatus,

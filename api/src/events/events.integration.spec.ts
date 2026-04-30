@@ -5,11 +5,13 @@
  * like slotConfig, recurrence, and content instances. This catches bugs where
  * optional fields are silently dropped during DB persistence.
  */
+import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
+import { events } from '../drizzle/schema';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -310,8 +312,6 @@ async function testDetailHonorsNotificationChannelOverride() {
   // Architect §3: the override branch (event.notificationChannelOverride ?? …)
   // was missing from the original brief. Without it, every event with a custom
   // channel returns null. Set the override directly via DB to bypass /bind.
-  const { events } = await import('../drizzle/schema');
-  const { eq } = await import('drizzle-orm');
   await testApp.db
     .update(events)
     .set({ notificationChannelOverride: overrideChannelId })

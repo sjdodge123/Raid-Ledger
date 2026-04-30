@@ -46,7 +46,7 @@ describe('SteamWishlistService', () => {
             steamId: '76561198000000001',
           }),
         },
-      } as unknown as jest.Mock;
+      };
 
       (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
         communityvisibilitystate: 3,
@@ -121,7 +121,7 @@ describe('SteamWishlistService', () => {
         users: {
           findFirst: jest.fn().mockResolvedValue({ id: 1, steamId: null }),
         },
-      } as unknown as jest.Mock;
+      };
 
       await expect(service.syncWishlist(1)).rejects.toThrow(
         'User has no linked Steam account',
@@ -171,7 +171,7 @@ describe('SteamWishlistService', () => {
         users: {
           findFirst: jest.fn().mockResolvedValue(null),
         },
-      } as unknown as jest.Mock;
+      };
 
       await expect(service.syncWishlist(1)).rejects.toThrow(
         'User has no linked Steam account',
@@ -287,7 +287,7 @@ describe('SteamWishlistService', () => {
             steamId: '76561198000000001',
           }),
         },
-      } as unknown as jest.Mock;
+      };
 
       (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
         communityvisibilitystate: 3,

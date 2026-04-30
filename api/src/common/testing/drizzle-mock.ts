@@ -36,8 +36,20 @@ const CHAIN_METHODS = [
   'as',
 ];
 
-export function createDrizzleMock() {
-  const mock: Record<string, jest.Mock> = {};
+/**
+ * `query` mirrors Drizzle's relational-query namespace. Tests may overwrite
+ * this object wholesale (with arbitrary subsets of relations), so we keep it
+ * loose to match runtime flexibility.
+ */
+
+type DrizzleQueryNamespace = Record<string, any>;
+
+export type MockDb = Record<string, jest.Mock> & {
+  query: DrizzleQueryNamespace;
+};
+
+export function createDrizzleMock(): MockDb {
+  const mock = {} as MockDb;
   for (const m of CHAIN_METHODS) {
     mock[m] = jest.fn().mockReturnThis();
   }
@@ -49,8 +61,6 @@ export function createDrizzleMock() {
   mock.query = {
     users: { findFirst: jest.fn(), findMany: jest.fn() },
     events: { findFirst: jest.fn(), findMany: jest.fn() },
-  } as unknown as jest.Mock;
+  };
   return mock;
 }
-
-export type MockDb = ReturnType<typeof createDrizzleMock>;
