@@ -8,6 +8,16 @@ argument-hint: "[--dry-run] [--no-group]"
 
 **Goal:** Get all open PRs merged with the **fewest CI runs possible**. Default behavior is to combine compatible PRs into a single branch and merge once. Each separate PR triggers its own CI pipeline on push + merge, so grouping saves GitHub Actions minutes.
 
+**Autonomy contract — STRICT:** this skill runs end-to-end without operator gates. Do **not** call `AskUserQuestion`, do **not** print `(y/n)` prompts, do **not** ask "should I proceed?", do **not** wait for "go" or "looks good". Print plans and progress as FYI only; the operator can interrupt with STOP/PAUSE if something looks wrong. The decision rules below cover every branching path so no human-in-the-loop is needed:
+
+* **Group plan** — execute as soon as it's computed (Step 2). Don't wait for approval.
+* **Combined-branch CI failure with non-trivial fix** — drop the failing PR from the group automatically, continue with the rest (Step 3e).
+* **Individual rebase needs >~50 LOC of non-mechanical edits** — abort the rebase, skip the PR, continue (Step 3-alt-d).
+* **Stale branches (PR merged/closed)** — delete automatically (Step 6c).
+* **Dormant branches (no PR, >14 days old)** — leave alone, list them in the final report.
+
+Only halt for: a STOP/PAUSE from the operator, main-branch CI failure (Step 4 — that's an actual blocker), or auth/permission errors that no automatic action can resolve.
+
 **References:** Read `CLAUDE.md` for project conventions and `TESTING.md` for test failure rules.
 
 ---
@@ -89,7 +99,7 @@ If two branches conflict with each other (not just with main), they cannot be in
 CI runs: 2 (instead of 4)
 ```
 
-**Ask the operator** to confirm the plan before proceeding.
+Print the plan as an FYI line — **do not ask for confirmation**. Proceed directly to Step 3. The operator runs this skill expecting work to happen, not approval gates; they'll see the same plan in the final report and can interrupt if something looks wrong.
 
 If `--no-group` was passed, skip grouping and process PRs one at a time (legacy behavior, Step 3-alt).
 
@@ -149,7 +159,7 @@ If build/lint/tests fail:
 2. Fix the issue and commit: `git commit -m "fix: resolve integration issues in combined branch"`
 3. Re-run failing checks to confirm
 
-**If a fix requires significant changes:** report to operator and ask whether to drop that PR from the group.
+**If a fix requires significant changes** (more than ~50 LOC of non-mechanical edits, or touches files outside the failing PR's diff): drop the PR from the group automatically — `git reset --hard HEAD~1` to back out the merge, note it as "skipped — non-trivial integration fix", and continue with the remaining PRs. Do not ask.
 
 ### 3f: Push and create the combined PR
 
@@ -253,9 +263,7 @@ If build, lint, or tests fail AFTER the rebase:
 3. Commit the fix: `git commit -m "fix: resolve rebase conflicts with main"`
 4. Re-run the failing checks to confirm
 
-**If a fix requires significant code changes:**
-- Report to operator: "PR #N needs non-trivial fixes after rebase: <description>"
-- Ask whether to proceed or skip
+**If a fix requires significant code changes** (>~50 LOC of non-mechanical edits, or touches files outside the PR's diff): skip this PR automatically — `git rebase --abort` if the rebase is mid-flight, note it as "skipped — non-trivial fix after rebase", and continue with the next PR. Do not ask.
 
 ### 3-alt-e: Push and Merge
 
@@ -339,24 +347,21 @@ done
 
 ### 6c: Delete stale branches
 
-Present the list and **ask the operator to confirm** before deleting:
+**Stale branches** (PR merged or closed, or 0 commits ahead of main) are deleted automatically — these are unambiguously resolved work. Print the list as an FYI, then delete:
 
 ```
-## Stale Branches to Delete
+## Stale Branches Deleted
 | Branch | Reason | Last updated |
 |--------|--------|-------------|
 | chore/pre-push-playwright-hook-v2 | PR #512 merged | 18 hours ago |
 | fix/batch-2026-03-01-r3 | PR #317 merged | 3 weeks ago |
-
-Delete these N branches? (y/n)
 ```
 
-If confirmed:
 ```bash
 git push origin --delete <branch1> <branch2> ...
 ```
 
-For **dormant** branches (no PR, old commits), present separately and ask.
+**Dormant branches** (no PR, commits ahead, last commit > 14 days old) are *not* deleted automatically — they may represent unfinished work that nobody opened a PR for yet. List them in the final report (Step 7) under a "Dormant — review manually" section so the operator can act later, but don't ask inline.
 
 ### 6d: Local cleanup
 

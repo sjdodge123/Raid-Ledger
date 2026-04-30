@@ -21,7 +21,7 @@ Pull from these sources, stopping as soon as you can fill the template:
 4. **`planning-artifacts/specs/ROK-XXX.md`** (created by `/build`) — fuller spec if present.
 5. **Linear story** — only call `mcp__linear__get_issue` if no local artifact has the title.
 6. **Git status** — `git status --porcelain` for uncommitted work, `git log -5 --oneline` for recent commits.
-7. **PR state** — `gh pr list --head <branch> --json number,state,isDraft` if a branch exists.
+7. **PR state** — `gh pr list --head <branch> --json number,state,isDraft` if a branch exists. If a PR exists AND Phase will be `PR-Open`, fetch the full snapshot in Step 2.5 — don't pre-fetch here.
 
 Do not run an exhaustive sweep. Stop the moment you have enough to fill the template.
 
@@ -71,6 +71,39 @@ You are about to claim review-readiness. Answer **both** questions honestly. Do 
 
 The `AC TRACE` block (see Step 3) is **mandatory** when Phase is `Reviewing` — including the case where it gets downgraded. The trace explains the downgrade.
 
+### If Phase == `PR-Open`
+
+You are about to claim a PR is open. Pull the live state once and translate any failure signal into a BLOCKERS bullet — "PR is open" without details wastes the operator's next decision.
+
+1. **Fetch the snapshot:**
+
+   ```
+   gh pr view <branch> --json number,state,isDraft,mergeable,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,url
+   ```
+
+2. **Read each field and decide:**
+
+   | Field | What to look for | Translation |
+   |---|---|---|
+   | `state` | `MERGED` | Downgrade Phase to `Merged`; this skill is mis-phased. |
+   | `state` | `CLOSED` (not merged) | Phase → `Blocked`; BLOCKERS bullet `PR #N closed without merge`. |
+   | `isDraft` | `true` | BLOCKERS bullet `PR #N is still draft — convert when ready`. |
+   | `autoMergeRequest` | `null` | BLOCKERS bullet `auto-merge not enabled — run gh pr merge <branch> --auto --squash` (per CLAUDE.md). |
+   | `reviewDecision` | `CHANGES_REQUESTED` | BLOCKERS bullet `review requested changes — address before merge`. |
+   | `reviewDecision` | `REVIEW_REQUIRED` | Informational, not a blocker — note in PR STATUS. |
+   | `mergeable` | `CONFLICTING` | BLOCKERS bullet `merge conflicts — rebase onto origin/main`. |
+   | `mergeStateStatus` | `BLOCKED` / `BEHIND` / `DIRTY` | BLOCKERS bullet describing the specific state. |
+   | `statusCheckRollup` | any check with `conclusion: FAILURE` or `state: FAILURE` | BLOCKERS bullet per failing check `CI failing: <check name>`. |
+   | `statusCheckRollup` | checks with `status: IN_PROGRESS` / `PENDING` | Informational — count them in PR STATUS, not a blocker. |
+
+3. **Tally the checks** for the PR STATUS block:
+   * `passing = checks where conclusion in (SUCCESS, NEUTRAL, SKIPPED)`
+   * `failing = checks where conclusion in (FAILURE, CANCELLED, TIMED_OUT, ACTION_REQUIRED)`
+   * `running = checks where status in (IN_PROGRESS, QUEUED, PENDING, WAITING)`
+   * Total = sum of the three.
+
+The `PR STATUS` block (see Step 3) is **mandatory** when Phase is `PR-Open` (including when downgraded to `Merged` / `Blocked` — the trace explains why).
+
 ### Other phases
 
 No additional self-checks today. Do not invent them.
@@ -111,6 +144,21 @@ AC TRACE
 
 The block must list **every** AC, not just the failing ones. The operator scans for any `no` or `missing` and knows immediately what's left.
 
+**PR-Open addendum (insert PR STATUS between NEXT and BLOCKERS, only when Step 2.5 ran the PR-Open checks):**
+
+```
+PR STATUS
+- PR #<n>          <url>
+- State:           OPEN | MERGED | CLOSED  (draft: yes/no)
+- Auto-merge:      enabled (squash) | not enabled
+- Review:          APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED | none
+- Mergeable:       MERGEABLE | CONFLICTING | UNKNOWN  (state: <mergeStateStatus>)
+- CI:              <passing>/<total> passing, <failing> failing, <running> running
+- Failing checks:  <name1>, <name2>  (omit line if zero)
+```
+
+Cite check names verbatim from `statusCheckRollup` so the operator can `gh run view` directly. If `state: MERGED`, write the same block (now under Phase `Merged`) and add a single `BLOCKERS` line `branch cleanup pending` if local branch still exists.
+
 ### Rules
 
 - **Story line** — uppercase ID + em-dash + title. If no Linear story is associated, write `Story:    no story — <one-line description of work>`.
@@ -119,6 +167,7 @@ The block must list **every** AC, not just the failing ones. The operator scans 
 - **NEXT** — the single next concrete action, not a roadmap. 1–3 bullets max. Each ≤80 chars.
 - **BLOCKERS** — anything preventing forward progress: failing tests, missing decisions, missing creds, awaiting operator approval, unresolved questions, plus every AC-trace gap surfaced in Step 2.5. Write `none` if there are none.
 - **AC TRACE** — required when Phase started as `Reviewing` in Step 2 (even if downgraded by Step 2.5). Omit entirely for any other phase. One line per AC, ≤120 chars per line. The `e2e` field cites the actual test path (e.g. `web/e2e/lineup-vote.spec.ts`) or writes `missing`.
+- **PR STATUS** — required when Phase started as `PR-Open` in Step 2 (even if downgraded to `Merged` or `Blocked` by Step 2.5). Omit entirely for any other phase. Field labels are fixed; values come straight from `gh pr view --json` output.
 - Do **not** add summary, recommendations, or "let me know if…" lines after the template. Stop at `BLOCKERS`.
 - Do **not** wrap the report in additional markdown headers, code fences, or callouts. Print it as-is.
 - If invoked twice in the same conversation, the report should be reproducible — same phase + same DONE list as last time, plus any new entries.
