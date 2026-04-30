@@ -9,7 +9,6 @@ import type {
   LlmGenerateResponse,
 } from '../llm-provider.interface';
 import { AI_SETTING_KEYS, CLOUD_DEFAULTS } from '../llm.constants';
-import type { SettingKey } from '../../drizzle/schema';
 import {
   fetchOpenAi,
   mapOpenAiModel,
@@ -33,7 +32,7 @@ export class OpenAiProvider implements LlmProvider {
 
   /** Resolve the OpenAI API key from settings. */
   private async getApiKey(): Promise<string | null> {
-    return this.settings.get(AI_SETTING_KEYS.OPENAI_API_KEY as SettingKey);
+    return this.settings.get(AI_SETTING_KEYS.OPENAI_API_KEY);
   }
 
   /** Check if OpenAI is reachable with a valid API key. */

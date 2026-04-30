@@ -21,7 +21,6 @@ import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from './types';
 
 function buildMockRequest(userId = 1): AuthenticatedRequest {
@@ -29,7 +28,7 @@ function buildMockRequest(userId = 1): AuthenticatedRequest {
     user: {
       id: userId,
       username: 'testuser',
-      role: 'member' as UserRole,
+      role: 'member',
       discordId: null,
       impersonatedBy: null,
     },

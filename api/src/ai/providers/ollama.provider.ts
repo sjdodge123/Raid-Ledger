@@ -9,7 +9,6 @@ import type {
   LlmGenerateResponse,
 } from '../llm-provider.interface';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from '../llm.constants';
-import type { SettingKey } from '../../drizzle/schema';
 import {
   fetchOllama,
   mapOllamaModel,
@@ -39,7 +38,7 @@ export class OllamaProvider implements LlmProvider {
   /** Resolve the Ollama base URL from settings or use default. */
   private async getBaseUrl(): Promise<string> {
     const url = await this.settings.get(
-      AI_SETTING_KEYS.OLLAMA_URL as SettingKey,
+      AI_SETTING_KEYS.OLLAMA_URL,
     );
     return url || AI_DEFAULTS.ollamaUrl;
   }

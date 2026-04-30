@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SettingsService } from '../../settings/settings.service';
 import { AI_DEFAULTS, AI_SETTING_KEYS } from '../llm.constants';
-import type { SettingKey } from '../../drizzle/schema';
 import { fetchOllama } from './ollama.helpers';
 import type { OllamaRawModel } from './ollama.helpers';
 
@@ -14,9 +13,7 @@ export class OllamaModelService {
 
   /** Resolve the Ollama base URL from settings or default. */
   private async getBaseUrl(): Promise<string> {
-    const url = await this.settings.get(
-      AI_SETTING_KEYS.OLLAMA_URL as SettingKey,
-    );
+    const url = await this.settings.get(AI_SETTING_KEYS.OLLAMA_URL);
     return url || AI_DEFAULTS.ollamaUrl;
   }
 

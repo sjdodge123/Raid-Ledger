@@ -9,7 +9,6 @@ import type {
   LlmGenerateResponse,
 } from '../llm-provider.interface';
 import { AI_SETTING_KEYS, CLOUD_DEFAULTS } from '../llm.constants';
-import type { SettingKey } from '../../drizzle/schema';
 import {
   fetchGemini,
   mapGeminiMessages,
@@ -33,7 +32,7 @@ export class GoogleProvider implements LlmProvider {
 
   /** Resolve the Google API key from settings. */
   private async getApiKey(): Promise<string | null> {
-    return this.settings.get(AI_SETTING_KEYS.GOOGLE_API_KEY as SettingKey);
+    return this.settings.get(AI_SETTING_KEYS.GOOGLE_API_KEY);
   }
 
   /** Check if the Gemini API is reachable with a valid key. */

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import type { AvailabilityDto, AvailabilityStatus } from '@raid-ledger/contract';
 import { useCreateAvailability, useUpdateAvailability } from '../../../hooks/use-availability';
 import { toast } from '../../../lib/toast';
@@ -77,7 +77,8 @@ function useAvailabilityFormState(isOpen: boolean, editingAvailability?: Availab
     const [endTime, setEndTime] = useState('');
     const [status, setStatus] = useState<AvailabilityStatus>('available');
     const [error, setError] = useState<string | null>(null);
-    useEffect(() => { if (isOpen) setSessionKey((k) => k + 1); }, [isOpen]);
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+    const [prevSessionKey, setPrevSessionKey] = useState(sessionKey);
     const defaultValues = useMemo(() => {
         if (editingAvailability) {
             return { startTime: formatDateTimeLocal(editingAvailability.timeRange.start), endTime: formatDateTimeLocal(editingAvailability.timeRange.end), status: editingAvailability.status };
@@ -85,10 +86,19 @@ function useAvailabilityFormState(isOpen: boolean, editingAvailability?: Availab
         const defaults = getDefaultTimes();
         return { startTime: defaults.start, endTime: defaults.end, status: 'available' as AvailabilityStatus };
     }, [editingAvailability]);
-    useEffect(() => {
-        if (sessionKey > 0) { setStartTime(defaultValues.startTime); setEndTime(defaultValues.endTime); setStatus(defaultValues.status); setError(null); }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionKey]);
+    if (isOpen !== prevIsOpen) {
+        setPrevIsOpen(isOpen);
+        if (isOpen) setSessionKey((k) => k + 1);
+    }
+    if (sessionKey !== prevSessionKey) {
+        setPrevSessionKey(sessionKey);
+        if (sessionKey > 0) {
+            setStartTime(defaultValues.startTime);
+            setEndTime(defaultValues.endTime);
+            setStatus(defaultValues.status);
+            setError(null);
+        }
+    }
     return { startTime, setStartTime, endTime, setEndTime, status, setStatus, error, setError };
 }
 

@@ -29,10 +29,22 @@ function useInviteModalMembers(isOpen: boolean) {
     const [isLoadingMembers, setIsLoadingMembers] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    if (isOpen !== prevIsOpen) {
+        setPrevIsOpen(isOpen);
+        if (isOpen) setIsLoadingMembers(true);
+    }
+
     useEffect(() => {
-        if (isOpen) { setIsLoadingMembers(true); listDiscordMembers().then(setMembers).catch(() => setMembers([])).finally(() => setIsLoadingMembers(false)); }
+        if (!isOpen) return;
+        let cancelled = false;
+        listDiscordMembers()
+            .then((result) => { if (!cancelled) setMembers(result); })
+            .catch(() => { if (!cancelled) setMembers([]); })
+            .finally(() => { if (!cancelled) setIsLoadingMembers(false); });
+        return () => { cancelled = true; };
     }, [isOpen]);
 
     const handleSearchChange = useCallback((value: string) => {
