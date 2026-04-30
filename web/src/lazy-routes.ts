@@ -131,6 +131,14 @@ export const AccountPanel = lazyWithRetry(() =>
     import('./pages/profile/account-panel').then((m) => ({ default: m.AccountPanel })),
 );
 
+// -- DEMO_MODE-gated dev wireframes (ROK-1193 spike) --
+export const LineupWireframesRoute = lazyWithRetry(() =>
+    import('./dev/lineup-wireframes/LineupWireframesRoute').then((m) => ({ default: m.LineupWireframesRoute })),
+);
+export const LineupWireframesIndexRoute = lazyWithRetry(() =>
+    import('./dev/lineup-wireframes/LineupWireframesRoute').then((m) => ({ default: m.LineupWireframesIndexRoute })),
+);
+
 // -- Lazy loaded admin panels --
 export const AdminSettingsLayout = lazyWithRetry(() =>
     import('./components/admin/admin-settings-layout').then((m) => ({ default: m.AdminSettingsLayout })),

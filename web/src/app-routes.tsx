@@ -27,6 +27,7 @@ import {
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
   DiscordFeaturesPage,
+  LineupWireframesRoute, LineupWireframesIndexRoute,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -83,6 +84,19 @@ function AdminSettingsRoutes() {
   );
 }
 
+/**
+ * ROK-1193 spike — lineup UX wireframes (DEMO_MODE-gated).
+ * Component redirects to / when demoMode is false.
+ */
+function DevWireframeRoutes() {
+  return (
+    <>
+      <Route path="/dev/wireframes/lineup" element={<LineupWireframesIndexRoute />} />
+      <Route path="/dev/wireframes/lineup/:page/:persona/:state" element={<LineupWireframesRoute />} />
+    </>
+  );
+}
+
 /** All application routes */
 export function AppRoutes() {
   return (
@@ -116,6 +130,7 @@ export function AppRoutes() {
         <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="/events/:id/edit" element={<EditEventPage />} />
         <Route path="/users/:userId" element={<UserProfilePage />} />
+        {DevWireframeRoutes()}
         {ProfileRoutes()}
         {AdminSettingsRoutes()}
       </Route>
