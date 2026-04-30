@@ -7,6 +7,19 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - **Project context:** `project-context.md` — architecture, stack, conventions
 - **Testing guide:** `TESTING.md` — patterns, anti-patterns, coverage thresholds, exemplary files
 
+## Reference designs before coding (STRICT — applies to ALL agents)
+
+Before writing implementation code for ANY feature/fix that has a visual or UX dimension, scan for design references that may already exist. The operator regularly approves simplified-flow targets, wireframes, or design specs ahead of implementation — agents picking up follow-up work should be **implementing the approved target, not redesigning it**.
+
+Where designs live in this repo:
+
+1. **Spike outputs** — `docs/spikes/*.md` and any DEMO_MODE-gated routes under `web/src/dev/**` (e.g. `/dev/wireframes/...`). Spikes commonly produce both an audit doc and previewable React routes.
+2. **The Linear issue body** — read the WHOLE description. Operators frequently link Figma URLs, wireframe URLs, audit docs, or sibling tickets that carry the visual direction. Don't skim past inline links.
+3. **Operator memory** — entries named `reference_*.md` (Figma URLs, design-system pointers, prior-art snapshots).
+4. **Existing components/pages** that solve a similar problem — match the established pattern rather than introducing a parallel one.
+
+If you can't find a design reference and the UX direction matters, **ask the operator before coding**. Don't guess at the target — implementations of the wrong target are more expensive to undo than asking up front.
+
 ## MCP Tools (registered in `.mcp.json`)
 
 Three custom MCP servers provide tools for environment management, story tracking, and Discord testing. **Use these instead of manual shell commands.**
