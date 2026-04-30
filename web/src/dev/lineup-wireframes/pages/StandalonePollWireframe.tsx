@@ -1,59 +1,17 @@
 /**
- * Wireframe: standalone scheduling poll page.
- * Demonstrates F-33 (recommended-default), F-34 (vote pill rollup),
- * F-35 (quorum celebration), F-36 (deadline display),
- * F-37 (back-to-lineup breadcrumb), F-38 (cancel-poll confirm).
+ * Wireframe: standalone scheduling poll page (share-link variant).
+ * Hero leads. Body is the slot grid only — no lineup chrome.
+ * The full in-lineup scheduling experience lives at /scheduling.
  * DEV-ONLY.
  */
 import type { JSX } from 'react';
 import { SLOTS, LINEUP } from '../fixtures';
-import { LineupHeader } from '../LineupHeader';
-import {
-  PrimaryCta, SecondaryCta, GhostCta, ConfirmationPill, StatusBanner, VoteBar,
-} from '../ui-bits';
+import { ConfirmationPill, VoteBar } from '../ui-bits';
+import { HeroNextStep } from '../HeroNextStep';
+import { getHeroCopy } from '../hero-copy';
 import type { Persona, PhaseState } from '../types';
 
 interface Props { persona: Persona; phaseState: PhaseState }
-
-function MatchContextCard(): JSX.Element {
-  return (
-    <section className="mb-4 p-4 bg-panel/40 border border-edge rounded-lg">
-      <p className="text-xs uppercase tracking-wider text-muted">Scheduling</p>
-      <h3 className="text-base font-semibold text-foreground mt-1">Hollowforge — Saturday Night Crew</h3>
-      <p className="text-sm text-secondary mt-1">{SLOTS.length} time slots proposed · 5 of {LINEUP.totalMembers} members voted</p>
-    </section>
-  );
-}
-
-function QuorumBanner({ phaseState }: { phaseState: PhaseState }): JSX.Element | null {
-  if (phaseState === 'aborted' || phaseState === 'phase-complete') return null;
-  return (
-    <StatusBanner tone="success">
-      <strong>Quorum reached at Sat 7:00 PM.</strong> 5 voters have agreed — schedule it now or wait for more.
-    </StatusBanner>
-  );
-}
-
-function ReadOnlyReason({ phaseState }: { phaseState: PhaseState }): JSX.Element | null {
-  if (phaseState !== 'phase-complete') return null;
-  return (
-    <StatusBanner tone="info">
-      <strong>Poll complete.</strong> Voting closed because quorum was reached. The event is on the calendar.
-      {' '}
-      <button type="button" className="underline ml-1">View event →</button>
-    </StatusBanner>
-  );
-}
-
-function CompletedActions({ phaseState }: { phaseState: PhaseState }): JSX.Element | null {
-  if (phaseState !== 'phase-complete') return null;
-  return (
-    <div className="flex gap-2 mb-4">
-      <PrimaryCta>View event</PrimaryCta>
-      <SecondaryCta>← Back to lineup</SecondaryCta>
-    </div>
-  );
-}
 
 function SlotLabel({ s }: { s: typeof SLOTS[number] }): JSX.Element {
   return (
@@ -101,9 +59,10 @@ function ParticipationRollup({ persona }: { persona: Persona }): JSX.Element | n
 
 function SlotList({ persona }: { persona: Persona }): JSX.Element {
   return (
-    <section className="bg-surface border border-edge rounded-xl overflow-hidden mb-4">
+    <section className="bg-surface border border-edge rounded-xl overflow-hidden">
       <div className="bg-panel/40 px-4 py-2 flex items-center justify-between">
         <span className="text-xs uppercase tracking-wider text-muted">Suggested times</span>
+        <span className="text-xs text-muted">5 of {LINEUP.totalMembers} voted</span>
       </div>
       <ul>
         {SLOTS.map((s) => <SlotRow key={s.id} s={s} persona={persona} />)}
@@ -112,48 +71,30 @@ function SlotList({ persona }: { persona: Persona }): JSX.Element {
   );
 }
 
-function SuggestSection({ persona }: { persona: Persona }): JSX.Element | null {
-  if (persona === 'uninvited') return null;
+function AbortedSnapshot(): JSX.Element {
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-4">
-      <input
-        type="datetime-local"
-        className="bg-panel border border-edge rounded px-2 py-1.5 text-sm text-foreground"
-        aria-label="Suggest a new time"
-      />
-      <SecondaryCta>Suggest this time</SecondaryCta>
-    </div>
-  );
-}
-
-function OperatorTools({ persona }: { persona: Persona }): JSX.Element | null {
-  if (persona !== 'organizer' && persona !== 'admin') return null;
-  return (
-    <div className="mt-6 flex flex-wrap gap-2 border-t border-edge pt-4">
-      <PrimaryCta>Create event for Sat 7:00 PM</PrimaryCta>
-      <GhostCta>Cancel poll (confirm twice)</GhostCta>
-    </div>
+    <p className="text-sm text-muted opacity-80">
+      The lineup containing this poll was cancelled. Voting is closed; the snapshot is preserved above the fold.
+    </p>
   );
 }
 
 export function StandalonePollWireframe({ persona, phaseState }: Props): JSX.Element {
+  const hero = getHeroCopy('standalone-poll', persona, phaseState);
   return (
     <>
-      <LineupHeader
-        persona={persona}
-        phaseState={phaseState}
-        phaseLabel="Scheduling poll"
-        phaseIndex={3}
-        totalPhases={4}
-      />
-      <MatchContextCard />
-      <QuorumBanner phaseState={phaseState} />
-      <ReadOnlyReason phaseState={phaseState} />
-      <ParticipationRollup persona={persona} />
-      <CompletedActions phaseState={phaseState} />
-      <SlotList persona={persona} />
-      <SuggestSection persona={persona} />
-      <OperatorTools persona={persona} />
+      <HeroNextStep {...hero} />
+      <p className="text-[11px] text-dim mb-3">
+        Share-link variant — the lean poll without lineup chrome. The full in-lineup version lives at /dev/wireframes/lineup/scheduling/...
+      </p>
+      {phaseState === 'aborted' ? (
+        <AbortedSnapshot />
+      ) : (
+        <>
+          <ParticipationRollup persona={persona} />
+          <SlotList persona={persona} />
+        </>
+      )}
     </>
   );
 }

@@ -1,22 +1,22 @@
 /**
  * Wireframe: Tiebreaker (bracket + veto modes).
- * Demonstrates F-29 (progress meter), F-30 (verb rename), F-31 (waiting empty-state),
- * F-32 (operator force-resolve UI).
+ * Hero leads. Body is the bracket/veto interface — the action surface.
+ * Operator force-resolve lives as a ghost tail.
  * DEV-ONLY.
  */
 import { useState, type JSX } from 'react';
 import { TIEBREAKER_BRACKET, GAMES } from '../fixtures';
 import { LineupHeader } from '../LineupHeader';
-import {
-  PrimaryCta, SecondaryCta, ConfirmationPill, StatusBanner, CoverThumbnail,
-} from '../ui-bits';
+import { ConfirmationPill, CoverThumbnail, GhostCta } from '../ui-bits';
+import { HeroNextStep } from '../HeroNextStep';
+import { getHeroCopy } from '../hero-copy';
 import type { Persona, PhaseState } from '../types';
 
 interface Props { persona: Persona; phaseState: PhaseState }
 
 function ModeSwitcher({ mode, setMode }: { mode: 'bracket' | 'veto'; setMode: (m: 'bracket' | 'veto') => void }): JSX.Element {
   return (
-    <div className="inline-flex rounded-lg border border-edge overflow-hidden mb-4" data-testid="tiebreaker-mode-switcher">
+    <div className="inline-flex rounded-lg border border-edge overflow-hidden mb-3" data-testid="tiebreaker-mode-switcher">
       {(['bracket', 'veto'] as const).map((m) => (
         <button
           key={m}
@@ -60,27 +60,22 @@ function BracketMatchup({ a, b, choice }: { a: string; b: string; choice: 'a' | 
 
 function BracketProgress({ done, total }: { done: number; total: number }): JSX.Element {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <p className="text-xs uppercase tracking-wider text-muted">Bracket progress</p>
-      <p className="text-sm text-foreground tabular-nums">
+    <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+      <span className="uppercase tracking-wider text-muted">Bracket progress</span>
+      <span className="text-foreground tabular-nums">
         Voted in <span className="font-semibold text-emerald-300">{done}</span> of {total} matchups
-      </p>
+      </span>
     </div>
   );
 }
 
-function BracketView({ persona }: { persona: Persona }): JSX.Element {
+function BracketView(): JSX.Element {
   const matchups = TIEBREAKER_BRACKET;
   const done = matchups.filter((m) => m.myVote != null).length;
   return (
     <section>
       <BracketProgress done={done} total={matchups.length} />
       {matchups.map((m) => <BracketMatchup key={m.id} a={m.a} b={m.b} choice={m.myVote} />)}
-      {done === matchups.length && persona !== 'uninvited' && (
-        <StatusBanner tone="success">
-          <strong>You're done.</strong> Waiting for the others — results post when everyone has voted (or the deadline hits).
-        </StatusBanner>
-      )}
     </section>
   );
 }
@@ -90,9 +85,7 @@ function VetoTile({ g, isVetoed }: { g: typeof GAMES[number]; isVetoed: boolean 
     <button
       type="button"
       className={`bg-panel/40 border rounded-lg p-2 transition-colors ${
-        isVetoed
-          ? 'border-red-500 ring-2 ring-red-500/40'
-          : 'border-edge hover:border-edge-strong'
+        isVetoed ? 'border-red-500 ring-2 ring-red-500/40' : 'border-edge hover:border-edge-strong'
       }`}
     >
       <CoverThumbnail name={g.name} color={g.coverColor} size="lg" />
@@ -107,44 +100,48 @@ function VetoView({ persona }: { persona: Persona }): JSX.Element {
   const vetoed = persona === 'invitee-acted' ? games[2].id : null;
   return (
     <section>
-      <StatusBanner tone="info">
-        <strong>Eliminate one game.</strong> Tap the game you'd most like to remove from contention. Each member gets one veto.
-      </StatusBanner>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {games.map((g) => <VetoTile key={g.id} g={g} isVetoed={vetoed === g.id} />)}
       </div>
-      {vetoed && (
-        <div className="mt-3"><ConfirmationPill>You eliminated a game</ConfirmationPill></div>
-      )}
+      {vetoed && <div className="mt-3"><ConfirmationPill>You eliminated a game</ConfirmationPill></div>}
     </section>
   );
 }
 
-function OperatorTools({ persona }: { persona: Persona }): JSX.Element | null {
+function OperatorTail({ persona }: { persona: Persona }): JSX.Element | null {
   if (persona !== 'organizer' && persona !== 'admin') return null;
   return (
-    <div className="mt-6 flex flex-wrap gap-2 border-t border-edge pt-4">
-      <SecondaryCta>Force-resolve now</SecondaryCta>
-      <PrimaryCta>Pick winner manually</PrimaryCta>
-      <p className="text-xs text-dim w-full mt-2">Use these only if the tiebreaker stalls past deadline with no votes.</p>
+    <div className="mt-4 flex flex-wrap gap-2">
+      <GhostCta>Pick winner manually</GhostCta>
+      <p className="text-[11px] text-dim w-full mt-1">Use these only if the tiebreaker stalls past deadline with no votes.</p>
     </div>
+  );
+}
+
+function AbortedSnapshot(): JSX.Element {
+  return (
+    <p className="text-sm text-muted opacity-80">
+      Final tiebreaker state preserved before the lineup was cancelled. The decision was reverted.
+    </p>
   );
 }
 
 export function TiebreakerWireframe({ persona, phaseState }: Props): JSX.Element {
   const [mode, setMode] = useState<'bracket' | 'veto'>('bracket');
+  const hero = getHeroCopy('tiebreaker', persona, phaseState);
   return (
     <>
-      <LineupHeader
-        persona={persona}
-        phaseState={phaseState}
-        phaseLabel="Tiebreaker"
-        phaseIndex={2}
-        totalPhases={4}
-      />
-      <ModeSwitcher mode={mode} setMode={setMode} />
-      {mode === 'bracket' ? <BracketView persona={persona} /> : <VetoView persona={persona} />}
-      <OperatorTools persona={persona} />
+      <HeroNextStep {...hero} />
+      <LineupHeader phaseState={phaseState} phaseLabel="Tiebreaker" phaseIndex={2} totalPhases={4} />
+      {phaseState === 'aborted' ? (
+        <AbortedSnapshot />
+      ) : (
+        <>
+          <ModeSwitcher mode={mode} setMode={setMode} />
+          {mode === 'bracket' ? <BracketView /> : <VetoView persona={persona} />}
+          <OperatorTail persona={persona} />
+        </>
+      )}
     </>
   );
 }

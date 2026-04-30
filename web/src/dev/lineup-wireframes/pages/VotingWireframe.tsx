@@ -1,15 +1,15 @@
 /**
  * Wireframe: Voting phase.
- * Demonstrates F-12 (empty-state coaching), F-13 (disabled tooltips),
- * F-14 (waiting empty-state), F-18 (operator readiness signal).
+ * Hero leads. Body is the leaderboard — the page's primary action surface.
+ * Operator's advance/force-tiebreaker actions live as ghost buttons under the list.
  * DEV-ONLY.
  */
 import type { JSX } from 'react';
 import { GAMES, LINEUP } from '../fixtures';
 import { LineupHeader } from '../LineupHeader';
-import {
-  PrimaryCta, SecondaryCta, ConfirmationPill, StatusBanner, CoverThumbnail, VoteBar,
-} from '../ui-bits';
+import { ConfirmationPill, CoverThumbnail, GhostCta, VoteBar } from '../ui-bits';
+import { HeroNextStep } from '../HeroNextStep';
+import { getHeroCopy } from '../hero-copy';
 import type { Persona, PhaseState } from '../types';
 
 interface Props { persona: Persona; phaseState: PhaseState }
@@ -20,45 +20,15 @@ function votedCount(persona: Persona): number {
   return 0;
 }
 
-function VotingCoach({ persona }: { persona: Persona }): JSX.Element | null {
-  if (persona === 'invitee-not-acted') {
-    return (
-      <StatusBanner tone="info">
-        <strong>You have {LINEUP.maxVotesPerPlayer} votes.</strong> Pick the games you want to play — you can change your votes any time before the deadline.
-      </StatusBanner>
-    );
-  }
-  if (persona === 'invitee-acted') {
-    return (
-      <StatusBanner tone="success">
-        <strong>You're all set.</strong> Waiting for the others to vote — currently {LINEUP.totalVoters} of {LINEUP.totalMembers}. We'll notify you when it advances.
-      </StatusBanner>
-    );
-  }
-  return null;
-}
-
-function OperatorReadiness({ persona }: { persona: Persona }): JSX.Element | null {
-  if (persona !== 'organizer' && persona !== 'admin') return null;
-  return (
-    <StatusBanner tone="success">
-      <strong>Quorum reached</strong> ({LINEUP.totalVoters}/{LINEUP.totalMembers} voted). Top picks are stable. Advance to Decided when you're ready.
-    </StatusBanner>
-  );
-}
-
-function VoteStatusRow({ persona }: { persona: Persona }): JSX.Element {
+function VoteStatusStrip({ persona }: { persona: Persona }): JSX.Element {
   const used = votedCount(persona);
   const max = LINEUP.maxVotesPerPlayer;
   return (
-    <div className="flex items-center justify-between gap-4 mb-3 px-4 py-2.5 bg-panel/40 border border-edge rounded-lg">
-      <div>
-        <p className="text-xs text-muted uppercase tracking-wider">Your votes</p>
-        <p className="text-sm text-foreground font-medium">{used} of {max} used</p>
-      </div>
-      {used >= max && persona !== 'uninvited' && (
-        <ConfirmationPill>You've voted</ConfirmationPill>
-      )}
+    <div className="flex items-center justify-between mb-3 text-xs">
+      <span className="text-muted">
+        Your votes: <span className="text-foreground font-medium">{used}/{max}</span>
+      </span>
+      {used >= max && persona !== 'uninvited' && <ConfirmationPill>You've voted</ConfirmationPill>}
     </div>
   );
 }
@@ -120,31 +90,40 @@ function Leaderboard({ persona }: { persona: Persona }): JSX.Element {
   );
 }
 
-function OperatorAdvance({ persona }: { persona: Persona }): JSX.Element | null {
+function OperatorTail({ persona }: { persona: Persona }): JSX.Element | null {
   if (persona !== 'organizer' && persona !== 'admin') return null;
   return (
-    <div className="mt-4 flex flex-wrap gap-2">
-      <PrimaryCta>Advance to Decided</PrimaryCta>
-      <SecondaryCta>Force tiebreaker</SecondaryCta>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <GhostCta>Force tiebreaker</GhostCta>
+      <GhostCta>Cancel lineup</GhostCta>
+    </div>
+  );
+}
+
+function AbortedSnapshot({ persona }: { persona: Persona }): JSX.Element {
+  return (
+    <div className="opacity-70">
+      <p className="text-sm text-muted mb-3">Final leaderboard before the lineup was cancelled.</p>
+      <Leaderboard persona={persona} />
     </div>
   );
 }
 
 export function VotingWireframe({ persona, phaseState }: Props): JSX.Element {
+  const hero = getHeroCopy('voting', persona, phaseState);
   return (
     <>
-      <LineupHeader
-        persona={persona}
-        phaseState={phaseState}
-        phaseLabel="Voting"
-        phaseIndex={2}
-        totalPhases={4}
-      />
-      <VotingCoach persona={persona} />
-      <OperatorReadiness persona={persona} />
-      <VoteStatusRow persona={persona} />
-      <Leaderboard persona={persona} />
-      <OperatorAdvance persona={persona} />
+      <HeroNextStep {...hero} />
+      <LineupHeader phaseState={phaseState} phaseLabel="Voting" phaseIndex={2} totalPhases={4} />
+      {phaseState === 'aborted' ? (
+        <AbortedSnapshot persona={persona} />
+      ) : (
+        <>
+          <VoteStatusStrip persona={persona} />
+          <Leaderboard persona={persona} />
+          <OperatorTail persona={persona} />
+        </>
+      )}
     </>
   );
 }
