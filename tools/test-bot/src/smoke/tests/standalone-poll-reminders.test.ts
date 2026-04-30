@@ -118,8 +118,21 @@ const standalonePoll1hReminderDm: SmokeTest = {
   name: 'Standalone poll fires 1h "Vote on a Time" reminder DM (ROK-1192)',
   category: 'dm',
   async run(ctx: TestContext) {
-    if (!ctx.games.length) throw new Error('Need at least 1 configured game');
-    const gameId = ctx.games[0].id;
+    // Prefer ctx.games (built from MMO binding); fall back to
+    // /games/configured for environments without an MMO binding —
+    // matches the lineup-tiebreaker-open.test pattern.
+    let gameId = ctx.games[0]?.id;
+    if (!gameId) {
+      const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+        '/games/configured',
+      );
+      gameId = gamesRes?.data?.[0]?.id;
+    }
+    if (!gameId) {
+      throw new Error(
+        'Need at least 1 configured game (MMO binding or /games/configured)',
+      );
+    }
 
     // 1. Create the poll. `durationHours: 24` → poll's phase_deadline
     //    sits 24h in the future and the invited member is on the
