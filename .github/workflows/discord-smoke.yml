@@ -145,7 +145,22 @@ jobs:
           echo "API failed to start within 60s"
           exit 1
 
+      # Dependabot PRs don't have access to repository secrets. The
+      # test-bot smoke tests require Discord credentials, so we short-circuit
+      # the secret-dependent steps and report success when they're unavailable.
+      # Real validation runs on push to main.
+      - name: Check for Discord secrets
+        id: secrets
+        run: |
+          if [ -z "$DISCORD_BOT_TOKEN" ] || [ -z "$TEST_BOT_TOKEN" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Discord secrets unavailable — skipping live smoke tests (likely a Dependabot PR). Push to main runs the full suite."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure and connect Discord bot
+        if: steps.secrets.outputs.available == 'true'
         run: |
           echo "Authenticating..."
           TOKEN=$(curl -sf http://localhost:3000/auth/local \
@@ -191,30 +206,35 @@ jobs:
       # locally with: SMOKE_CATEGORY=cdp-command npx tsx src/smoke/run.ts
 
       - name: Run embed smoke tests
+        if: steps.secrets.outputs.available == 'true'
         run: npx tsx src/smoke/run.ts
         working-directory: tools/test-bot
         env:
           SMOKE_CATEGORY: embed
 
       - name: Run flow smoke tests
+        if: steps.secrets.outputs.available == 'true'
         run: npx tsx src/smoke/run.ts
         working-directory: tools/test-bot
         env:
           SMOKE_CATEGORY: flow
 
       - name: Run DM smoke tests
+        if: steps.secrets.outputs.available == 'true'
         run: npx tsx src/smoke/run.ts
         working-directory: tools/test-bot
         env:
           SMOKE_CATEGORY: dm
 
       - name: Run command smoke tests
+        if: steps.secrets.outputs.available == 'true'
         run: npx tsx src/smoke/run.ts
         working-directory: tools/test-bot
         env:
           SMOKE_CATEGORY: command
 
       - name: Run voice smoke tests
+        if: steps.secrets.outputs.available == 'true'
         run: npx tsx src/smoke/run.ts
         working-directory: tools/test-bot
         env:

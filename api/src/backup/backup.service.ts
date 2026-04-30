@@ -284,7 +284,7 @@ export class BackupService implements OnModuleInit {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`pg_dump failed: ${msg}`);
       cleanupPartialFile(outputPath);
-      throw new Error(`pg_dump failed: ${msg}`);
+      throw new Error(`pg_dump failed: ${msg}`, { cause: err });
     }
   }
 
