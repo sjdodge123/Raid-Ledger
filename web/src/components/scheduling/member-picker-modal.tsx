@@ -83,7 +83,7 @@ export function MemberPicker({ selectedIds, onChange }: MemberPickerProps) {
         aria-label="Search members"
         className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-sm text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
       />
-      <div className="max-h-40 overflow-y-auto border border-edge rounded-lg">
+      <div className="max-h-32 overflow-y-auto border border-edge rounded-lg">
         {isLoading && (
           <div className="px-3 py-2 text-sm text-muted">Loading...</div>
         )}
