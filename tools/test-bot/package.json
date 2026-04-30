@@ -13,7 +13,7 @@
   "dependencies": {
     "@discordjs/voice": "^0.19.1",
     "discord.js": "^14.25.1",
-    "dotenv": "^16.4.7",
+    "dotenv": "^17.4.2",
     "sodium-native": "^4.3.1"
   },
   "devDependencies": {
