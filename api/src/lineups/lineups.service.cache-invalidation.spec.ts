@@ -31,6 +31,7 @@ import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
 import { LineupsGateway } from './lineups.gateway';
+import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
 jest.mock('./lineups-matching.helpers', () => ({
@@ -143,6 +144,10 @@ async function buildHarness(
       {
         provide: LineupsGateway,
         useValue: { emitStatusChange: jest.fn() },
+      },
+      {
+        provide: TiebreakerService,
+        useValue: { reset: jest.fn().mockResolvedValue(undefined) },
       },
     ],
   }).compile();

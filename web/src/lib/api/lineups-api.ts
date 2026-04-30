@@ -8,6 +8,7 @@ import type {
   LineupSummaryResponseDto,
   CommonGroundResponseDto,
   NominateGameDto,
+  AbortLineupDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 
@@ -169,5 +170,19 @@ export async function removeLineupInvitee(
 ): Promise<LineupDetailResponseDto> {
   return fetchApi(`/lineups/${lineupId}/invitees/${userId}`, {
     method: 'DELETE',
+  });
+}
+
+/**
+ * Abort a lineup (ROK-1062). Admin/operator only; force-archives the
+ * lineup with an optional reason recorded in activity log + Discord embed.
+ */
+export async function abortLineup(
+  lineupId: number,
+  body: AbortLineupDto,
+): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${lineupId}/abort`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
 }

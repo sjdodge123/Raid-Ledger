@@ -14,6 +14,7 @@ export const ActivityActionSchema = z.enum([
     'voting_started',
     'vote_cast',
     'lineup_decided',
+    'lineup_aborted',
     'event_linked',
     // Event actions
     'event_created',

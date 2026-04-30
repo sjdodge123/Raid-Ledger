@@ -5,6 +5,7 @@ import { DemoDataService } from './demo-data.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../redis/redis.module';
 
 /**
  * Build a mock drizzle db whose `.execute()` returns the given snapshot
@@ -67,10 +68,15 @@ async function buildService(
       throw new Error(`Unexpected ModuleRef.get(${String(token)})`);
     }),
   };
+  const redis = {
+    keys: jest.fn(() => Promise.resolve([])),
+    del: jest.fn(() => Promise.resolve(0)),
+  };
   const module = await Test.createTestingModule({
     providers: [
       DemoTestResetService,
       { provide: DrizzleAsyncProvider, useValue: db },
+      { provide: REDIS_CLIENT, useValue: redis },
       { provide: DemoDataService, useValue: demoData },
       { provide: SettingsService, useValue: settings },
       { provide: ModuleRef, useValue: moduleRef },

@@ -8,6 +8,7 @@ import type {
   LineupSummaryResponseDto,
   CommonGroundResponseDto,
   NominateGameDto,
+  AbortLineupDto,
 } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../lib/api-client';
 import {
@@ -23,6 +24,7 @@ import {
   updateLineupMetadata,
   addLineupInvitees,
   removeLineupInvitee,
+  abortLineup,
 } from '../lib/api-client';
 import type {
   CreateLineupParams,
@@ -212,6 +214,25 @@ export function useRemoveLineupInvitee() {
     mutationFn: ({ lineupId, userId }) =>
       removeLineupInvitee(lineupId, userId),
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/** Hook for aborting a lineup (ROK-1062). */
+export function useAbortLineup() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    { lineupId: number; body: AbortLineupDto }
+  >({
+    mutationFn: ({ lineupId, body }) => abortLineup(lineupId, body),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: [...DETAIL_KEY, variables.lineupId],
+      });
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
     },
   });
