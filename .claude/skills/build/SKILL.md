@@ -24,12 +24,24 @@ Read `<worktree>/build-state.yaml`, follow `pipeline.next_action`. Stories with 
 | Scope | Criteria | E2E Test Type | Gates |
 |-------|----------|---------------|-------|
 | **light** | Config, copy, style-only, docs | Lint + type check | dev → ci → operator → smoke |
-| **standard** | Single-module feature, bug fix | Playwright/Discord smoke (TDD) | e2e_first → dev → ci → operator → reviewer → smoke |
-| **full** | Cross-module, migrations, contract changes | Full suite (TDD) + planner + architect | e2e_first → dev → ci → operator → reviewer → architect_final → smoke |
+| **standard** | Single-module feature, bug fix, OR straightforward cross-module add (≤10 files) — including new contract schemas with matching backend + frontend | Playwright/Discord smoke (TDD) | e2e_first → dev → ci → operator → reviewer → smoke |
+| **full** | DB migration, breaking change to existing contract schema, Dockerfile/entrypoint/nginx, OR ≥4 unrelated modules with non-trivial logic in each | Full suite (TDD) + planner + architect + phase-split dev | e2e_first → dev → ci → operator → reviewer → architect_final → smoke |
 
 **E2E type by area touched:** UI → Playwright (desktop + mobile); Discord bot/notifications → Discord smoke; API-only → Jest integration; Pure logic → Unit test.
 
-**Full scope triggers:** `packages/contract` change, DB migration, 3+ modules. UI-only with no logic → light. Single module → standard.
+### Full-scope triggers (be strict — full is expensive)
+
+A story is `full` ONLY if at least one is true:
+
+1. **DB migration** in `api/src/drizzle/migrations/`.
+2. **Dockerfile / docker-entrypoint / nginx / supervisor** change.
+3. **Breaking change to an existing contract schema** — field removed, field renamed, type narrowed, enum value removed. Adding a new schema or appending an optional field is NOT breaking.
+4. **≥4 unrelated modules** each with non-trivial logic (not just an import or a one-line wire-up).
+5. Operator says "this needs full".
+
+A new Zod schema + matching backend route + matching UI = `standard`. Don't promote to `full` just because `packages/contract` is touched. The 30-line schema doesn't need a planner + architect + phase-split.
+
+When in doubt, run `standard` first — Lead can escalate mid-story if the dev hits real architectural ambiguity (and that should be rare).
 
 ---
 
@@ -69,6 +81,14 @@ Requirements Interview (plan mode, if spec incomplete)
 **Auto-merge is the LAST action.** Never enable at PR creation. Create PR → complete all gates → enable auto-merge.
 
 **Subagent rules (applied via templates):** subagents stay in their worktree, never push, never create PRs, never enable auto-merge, never force-push, never call `mcp__linear__*`, never run destructive ops. Lead handles all of that.
+
+**Cost discipline (STRICT — applies to ALL agents):**
+
+- **Do not paste the spec into agent prompts.** Lead writes `planning-artifacts/dev-brief-ROK-XXX.md` once per story. Every agent prompt body is 2-4 lines: "Read `planning-artifacts/dev-brief-ROK-XXX.md` and `planning-artifacts/specs/ROK-XXX.md`. Execute <task>. Commit and report." That's it. The full spec/plan/architect findings already live on disk.
+- **Report cap:** every agent's terminal `SendMessage` to team-lead is **≤300 words**. Cite commit hashes, file paths, and PASS/FAIL counts — do NOT paste runner output, AC trace tables, or full diffs. Detailed write-ups go to a file in `planning-artifacts/` so Lead can read on demand.
+- **Lead does not capture stdout into context.** Long-running command output (`validate-ci.sh`, `npx playwright test`, `deploy_dev.sh`) is read via `tail -20` or a one-line summary line — never the full log. If the command exits 0, accept it. If it exits non-zero, read only the failing block.
+- **One agent at a time per story for `standard` scope.** No phase split. No planner. No architect. The dev reads the brief and executes the whole story start-to-finish, with TDD test agent ahead of it.
+- **Skip the reviewer when** the diff is `<300 lines net` AND no risk markers present (no migration, no Dockerfile, no auth code, no money/payments code). Operator approval is the gate; reviewer is for genuinely complex diffs.
 
 ---
 

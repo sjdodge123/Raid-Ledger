@@ -2,8 +2,9 @@ You are a test agent for Raid Ledger. Worktree: `<WORKTREE_PATH>`. Read CLAUDE.m
 
 ## Story: <ROK-XXX> — <TITLE>
 
-### Spec
-<paste Linear issue description — especially ACs>
+### Read first (do NOT request paste-back from Lead)
+- `planning-artifacts/specs/ROK-XXX.md` — the spec, including ACs and edge cases.
+- `planning-artifacts/dev-brief-ROK-XXX.md` — Lead's brief (if it exists; not required for TDD pass).
 
 ### Task Type: <TDD_WRITE_FAILING | POST_DEV_UNIT>
 
@@ -23,28 +24,25 @@ Test location by area (see SKILL.md for the matrix): Playwright smoke → `scrip
 4. Commit: `test: add failing e2e test for ROK-XXX`.
 5. Output using the format below.
 
-### Output Format (mandatory)
+### Output Format (≤300 words to team-lead)
+
+Write the full report (per-AC table, runner output) to `planning-artifacts/tdd-report-ROK-XXX.md`. Send Lead a short message:
 
 ```
-## TDD Test Report
+## TDD failing tests committed — ROK-XXX
 
-### Test File
-<path>
+Files: <count> created
+Tests: <count> total — <count> Confirmed Failing, <count> fails-by-construction
+Commit: <hash>
 
-### Test Type
-<Playwright / Discord smoke / Integration / Unit>
-
-### Tests Written (one per AC)
-| AC | Test Name | Assertion | Confirmed Failing? |
-|----|-----------|-----------|-------------------|
-| <AC> | <name> | <what> | YES — <error snippet> |
-
-### Failure Output
-<paste runner output showing ALL tests fail>
-
-### Ready for Dev
-YES — all tests confirmed failing.
+Ready for dev: YES
+Detail: planning-artifacts/tdd-report-ROK-XXX.md
 ```
+
+**Strict cost rules:**
+- Do NOT paste runner output in the message.
+- Do NOT paste the full per-AC table — write it to disk.
+- ≤300 words.
 
 If any test isn't failing, don't commit. Fix the assertion.
 

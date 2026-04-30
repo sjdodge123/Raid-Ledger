@@ -41,16 +41,30 @@ Update state: `status: "worktree_ready"`.
 
 ---
 
-## 2b. Optional: Planner (full scope)
+## 2b. Planner — STRICT gating
 
-For `needs_planner: true`: read `templates/planner.md`, fill variables, spawn. The returned plan goes into the dev's prompt.
+**Skip the planner unless:**
+- DB migration, OR
+- ≥4 modules with non-trivial logic in each, OR
+- Operator explicitly asked for planner.
+
+A new Zod schema + matching backend + matching UI does NOT need a planner. The dev reads the spec directly.
+
+If you do spawn it: `templates/planner.md` — pass only `<WORKTREE_PATH>`, `<ROK-XXX>`, `<TITLE>`, and the file path to the spec. The planner reads everything else from disk. Planner writes its plan to `planning-artifacts/plan-ROK-XXX.md` and sends Lead a ≤300-word summary.
 
 ---
 
-## 2c. Optional: Architect Pre-Dev (full scope)
+## 2c. Architect Pre-Dev — STRICT gating
 
-For `needs_architect: true`: read `templates/architect.md`, set `<TASK_TYPE>` = `PRE_DEV`, pass planner output (or spec), spawn. Verdicts:
-- **APPROVED / GUIDANCE:** proceed to dev (pass guidance along).
+**Skip the architect unless:**
+- Migration with non-trivial schema change, OR
+- Cross-cutting infrastructure change (Dockerfile, supervisor, nginx, auth core), OR
+- Operator explicitly asked for architect.
+
+For most stories the dev follows existing patterns and an architect adds zero value.
+
+If you do spawn it: `templates/architect.md`, `<TASK_TYPE>` = `PRE_DEV`. Architect reads spec + plan from disk. Verdicts (≤300-word summary; full findings on disk):
+- **APPROVED / GUIDANCE:** proceed to dev.
 - **BLOCKED:** present to operator before spawning dev.
 
 ---
@@ -86,23 +100,18 @@ For each `standard` or `light` story with a failing test ready:
 2. Fill variables: `<WORKTREE_PATH>`, `<ROK-XXX>`, `<TITLE>`, `<NEW | REWORK>`, `<TEST_FILE>`, plus planner/architect output if applicable.
 3. Spawn in parallel (single message, multiple `Agent` calls).
 
-### Full scope — sequence phase-bounded dev agents per story
+### Full scope — phase-split is RARE
 
-For `full` scope stories, do NOT spawn one monolithic dev. Sequence phase-bounded agents on that story, writing a brief file first so each phase picks up cheaply:
+Phase-split is sequential and expensive (each new dev re-loads context). **Only split when:**
+- The story has a DB migration (Phase A = migration alone, then Phase B+ for code), OR
+- ≥30 files will change, OR
+- The dev's first attempt actually ran out of context mid-story.
 
-1. **Write `planning-artifacts/dev-brief-ROK-XXX.md`** (Lead owns this file). Capture:
-   - Story summary + spec file pointer
-   - Architect guidance (the concrete corrections, not the full prose)
-   - Planner phase order (what each phase owns)
-   - TDD test file path
-   - "Commit after every small cluster" rule
-2. **Spawn Phase A** (contract + migration) via `templates/dev.md`. Prompt body is 1-2 lines: "Read `planning-artifacts/dev-brief-ROK-XXX.md`. Execute Phase A (contract + migration). Commit each logical cluster. Report when done."
-3. Wait for completion. Lead quickly verifies commits landed (e.g. `git log --oneline origin/main..HEAD`).
-4. **Spawn Phase B** (backend) with the same brief pointer + "Execute Phase B. Commit each cluster."
-5. Same for **Phase C** (frontend) and **Phase D** (smoke + `validate-ci.sh --full` + dev.md output).
-6. Collapse phases if the story has no frontend work, no migration, etc. — adjust the brief accordingly.
+For most `full`-scope stories: spawn ONE dev with the full brief and let it commit incrementally as it goes. Lead writes `planning-artifacts/dev-brief-ROK-XXX.md` once, the dev reads it once, and works the whole story end-to-end.
 
-Parallelism across *different* stories in the batch is unchanged (still max 2-3 concurrent devs). Phase split is sequential *within* one full-scope story.
+When you do split: write the brief, spawn Phase A, wait for the ≤300-word completion report, spawn Phase B, etc. Each phase prompt body is 1-2 lines pointing at the brief. Collapse phases (e.g. fold smoke into Phase B) when the work doesn't justify a separate agent.
+
+Parallelism across *different* stories in the batch is unchanged (still max 2-3 concurrent devs).
 
 Update state: `status: "dev_active"`, `gates.dev: PENDING`, `pipeline.next_action: "Devs active: ROK-XXX [phase], ROK-YYY. On completion: Lead AC audit. When all ready_for_validate → read step-3-validate.md."`.
 
