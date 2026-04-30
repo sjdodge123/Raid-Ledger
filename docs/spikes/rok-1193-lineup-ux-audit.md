@@ -222,6 +222,22 @@ Total unique findings: **40**.
 
 Listed only — do **not** auto-create. Note overlap with existing tickets where applicable. Title prefix per memory convention (`feat:` / `fix:` / `tech-debt:`).
 
+> ### MANDATORY for the agent / dev picking up any of these stories
+>
+> **Open the wireframes BEFORE writing code.** The wireframes ship in this same PR (#696) and are the operator-approved "simplified flow" target — these stories are *implementations of the wireframe targets*, not greenfield design.
+>
+> 1. Run `./scripts/deploy_dev.sh --ci` (any worktree, DEMO_MODE on).
+> 2. Open the relevant wireframe at:
+>    `http://localhost:5173/dev/wireframes/lineup/:page/:persona/:state`
+>    where:
+>    - `:page` ∈ `index | lineup-detail | building | voting | decided | tiebreaker | scheduling | standalone-poll`
+>    - `:persona` ∈ `invitee-not-acted | invitee-acted | organizer | admin | uninvited`
+>    - `:state` ∈ `plenty-of-time | deadline-soon | deadline-missed | phase-complete | aborted`
+> 3. Click through the persona/state combinations relevant to the story. Match the implementation to the wireframe — do not redesign.
+> 4. The audit page-section above (`### Page N — …`) lists the F-numbers feeding each story. Use those to drill into the specific finding context.
+>
+> If your Linear story body does not cite a wireframe URL or this audit, **stop and ask the operator before coding** — likely the story was filed without context and the spec is incomplete.
+
 ### Blocker
 
 1. **`fix:` Surface aborted-lineup state on detail page (ROK-1193 → F-5)** — banner + read-only mode when lineup is killed. Closes the ROK-1062 frontend gap.

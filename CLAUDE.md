@@ -6,6 +6,7 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 
 - **Project context:** `project-context.md` — architecture, stack, conventions
 - **Testing guide:** `TESTING.md` — patterns, anti-patterns, coverage thresholds, exemplary files
+- **Lineup UX target (ROK-1193 spike):** `docs/spikes/rok-1193-lineup-ux-audit.md` + DEMO_MODE-only wireframes at `/dev/wireframes/lineup/:page/:persona/:state`. **Any agent picking up a Community Lineup-related story MUST open the relevant wireframe before writing code** — the wireframes are the operator-approved simplified-flow target. URL pattern, persona/state values, and per-finding F-numbers are documented in the audit. If your Linear story doesn't cite a wireframe URL, ask the operator before coding.
 
 ## MCP Tools (registered in `.mcp.json`)
 
