@@ -147,11 +147,20 @@ Renders `DecidedView`: `VotingPodium` (top-3) → `PodiumActionButtons` (Share) 
 
 ---
 
-### Page 6 — Scheduling phase (slot grid for decided games)
+### Page 6 — Scheduling phase (in-lineup slot picker for the decided game)
 
-This is the standalone Scheduling Poll page (`/community-lineup/:lineupId/schedule/:matchId`) reached from the "Schedule This →" CTA. See Page 8 for full audit. The "scheduling phase" as a *mode of the detail page* is the same as Page 5 — the detail page never enters a separate scheduling mode; users navigate to the standalone poll.
+The audit originally folded this into Page 8 (Standalone Scheduling Poll) because the detail page never enters a dedicated scheduling mode in the current code — users are redirected out to the standalone poll. The rework wireframe **proposes the missing in-lineup Scheduling page** as the canonical scheduling experience, repurposing the standalone poll as a lean share-link variant only. F-28 (scheduling has two faces) is treated as the highest-priority gap; the proposal is to **collapse them** so users stay in the lineup context.
 
-> **Audit takeaway:** "Scheduling" is split between (a) the scheduling tier on the decided detail page and (b) the standalone poll page. Users frequently lose track of which one they're on. Mark this fragmentation as **F-28: scheduling has two faces — collapse them or signpost the boundary clearly.** Severity: high.
+| Cell | What's there today | What user should do | Gap | Sev |
+|---|---|---|---|---|
+| All personas, S1 | NO dedicated in-lineup scheduling — clicking "Schedule this →" on the Decided view bounces users to the standalone poll page. | Pick the times you can play. | **F-28-A** Context loss on transition: lineup chrome (header, breadcrumb, member list, activity timeline) disappears when the user is sent to the standalone page. Disorients. | **high** |
+| P1, S1 | n/a (page doesn't exist) | Open the slot picker for the decided game. | **F-28-B** No clear "this is where I pick when to play" affordance from the Decided phase — it looks like another match action rather than a phase transition. | high |
+| P2 (already picked some slots), S1 | n/a | Wait or refine picks. | **F-28-C** No participation rollup like "you picked 3 slots" inside the lineup; the rollup only exists on the standalone poll. | medium |
+| P3/P4 (operator), S1 | n/a | Lock in the winning slot when ready. | **F-28-D** Operator's "create event from poll" CTA only exists on the standalone page. They have to leave the lineup to lock things in. | high |
+| All, S2/S3 | n/a | Hurry / wait. | (covered by F-2, F-3) | medium |
+| P5 (uninvited, public lineup) | n/a (and on the standalone page voting probably API-blocked but UI doesn't pre-disable) | Browse / request invite. | (covered by F-7, F-40) | medium |
+
+> **Audit takeaway:** the rework's Scheduling wireframe demonstrates the consolidated experience. The Standalone Poll wireframe is now the lean share-link variant — same slot grid, no lineup chrome, used for direct-link access (Discord embed, calendar widget, etc.). F-28 is closed by collapse.
 
 ---
 
@@ -261,15 +270,19 @@ Listed only — do **not** auto-create. Note overlap with existing tickets where
 
 Live at `/dev/wireframes/lineup/:page/:persona/:state` with persona + phase switchers and a breadcrumb sidebar (DEMO_MODE-gated). Each wireframe demonstrates the proposed solution shape for the highest-severity findings on that page. They are **not implementations** — they are clickable mockups for stakeholder review before tickets are filed.
 
+**Universal pattern across every page:** a hero "Your next step:" banner is the visually loudest element. The banner pins to the top on mobile and fades to a compact form on scroll-down (mobile only — desktop stays in flow). The banner CTA is the page's primary action; everything else (breadcrumbs, vote results, history) is de-emphasized. This pattern was the operator's headline rework feedback (REWORK pass 1, 2026-04-29).
+
 Pages covered (8 unique routes):
-- `index` — proposed `/lineups` list view
-- `lineup-detail` — shell + building-mode default
-- `building` — nominating phase with new confirmation pill + last-chance banner
-- `voting` — leaderboard with vote-confirmation empty-state
-- `decided` — single-CTA-hierarchy rollup ("Your next step")
-- `tiebreaker` — bracket + veto, with progress meter
-- `standalone-poll` — scheduling poll with consolidated affordances
-- `aborted` — F-5 banner state
+- `index` — proposed `/lineups` list view (focused on the active lineup card)
+- `lineup-detail` — cross-phase shell with compact metadata strip + hero
+- `building` — nominating phase with hero CTA driving the action; nomination grid as body
+- `voting` — leaderboard as the action surface; vote-confirmation pill as inline empty-state
+- `decided` — hero CTA absorbs the "your next step" rollup; matches grid as body; podium collapsed
+- `tiebreaker` — bracket + veto with progress meter; force-resolve as ghost tail
+- `scheduling` — **NEW** in-lineup slot picker (closes F-28 gap, replaces previous redirect to standalone)
+- `standalone-poll` — share-link variant: same slot grid, no lineup chrome
+
+**Aborted is a phase-state, not a page.** When `?state=aborted` is selected on any page, the page renders the aborted hero ("Nothing to do — this lineup was cancelled") and the body collapses to a final-state snapshot. This closes F-5 (ROK-1062 frontend gap).
 
 Persona switcher: P1–P5. Phase-state switcher: S1–S5. URL params control all three.
 
