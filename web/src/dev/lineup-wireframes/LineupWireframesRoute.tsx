@@ -18,15 +18,15 @@ import { BuildingWireframe } from './pages/BuildingWireframe';
 import { VotingWireframe } from './pages/VotingWireframe';
 import { DecidedWireframe } from './pages/DecidedWireframe';
 import { TiebreakerWireframe } from './pages/TiebreakerWireframe';
+import { SchedulingWireframe } from './pages/SchedulingWireframe';
 import { StandalonePollWireframe } from './pages/StandalonePollWireframe';
-import { AbortedWireframe } from './pages/AbortedWireframe';
 
 function PageBody({ pageId, persona, phaseState }: {
   pageId: PageId; persona: Persona; phaseState: PhaseState;
 }): JSX.Element {
   switch (pageId) {
     case 'index':
-      return <IndexWireframe persona={persona} />;
+      return <IndexWireframe persona={persona} phaseState={phaseState} />;
     case 'lineup-detail':
       return <LineupDetailWireframe persona={persona} phaseState={phaseState} />;
     case 'building':
@@ -37,10 +37,10 @@ function PageBody({ pageId, persona, phaseState }: {
       return <DecidedWireframe persona={persona} phaseState={phaseState} />;
     case 'tiebreaker':
       return <TiebreakerWireframe persona={persona} phaseState={phaseState} />;
+    case 'scheduling':
+      return <SchedulingWireframe persona={persona} phaseState={phaseState} />;
     case 'standalone-poll':
       return <StandalonePollWireframe persona={persona} phaseState={phaseState} />;
-    case 'aborted-state':
-      return <AbortedWireframe persona={persona} />;
   }
 }
 

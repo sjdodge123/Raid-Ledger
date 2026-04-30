@@ -24,8 +24,8 @@ export type PageId =
   | 'voting'
   | 'decided'
   | 'tiebreaker'
-  | 'standalone-poll'
-  | 'aborted-state';
+  | 'scheduling'
+  | 'standalone-poll';
 
 export const PERSONAS: ReadonlyArray<Persona> = [
   'invitee-not-acted',
@@ -50,8 +50,8 @@ export const PAGE_IDS: ReadonlyArray<PageId> = [
   'voting',
   'decided',
   'tiebreaker',
+  'scheduling',
   'standalone-poll',
-  'aborted-state',
 ];
 
 export const PERSONA_LABELS: Record<Persona, string> = {
@@ -77,8 +77,8 @@ export const PAGE_LABELS: Record<PageId, string> = {
   voting: 'Voting',
   decided: 'Decided',
   tiebreaker: 'Tiebreaker',
+  scheduling: 'Scheduling (slot picker)',
   'standalone-poll': 'Standalone scheduling poll',
-  'aborted-state': 'Aborted state',
 };
 
 export interface WireframeContext {
