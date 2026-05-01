@@ -43,6 +43,7 @@ import {
   syncOnePluginRegistrar,
   getExecutionHistory,
   updateJobSchedule,
+  findPluginHandler,
 } from './cron-job.admin-helpers';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
@@ -60,6 +61,9 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     { lastRunAt: Date; cronExpression: string }
   >();
   private flushInterval: ReturnType<typeof setInterval> | null = null;
+  // ROK-1058: deferred sync timers, cancelled in onModuleDestroy.
+  private bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
+  private pluginActivatedTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -69,7 +73,8 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   ) {}
 
   onApplicationBootstrap() {
-    setTimeout(() => {
+    this.bootstrapTimer = setTimeout(() => {
+      this.bootstrapTimer = null;
       this.syncJobs().catch((err) =>
         this.logger.error(`Failed to sync cron jobs: ${err}`),
       );
@@ -82,16 +87,19 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    if (this.flushInterval) {
-      clearInterval(this.flushInterval);
-      this.flushInterval = null;
-    }
+    if (this.bootstrapTimer) clearTimeout(this.bootstrapTimer);
+    if (this.pluginActivatedTimer) clearTimeout(this.pluginActivatedTimer);
+    if (this.flushInterval) clearInterval(this.flushInterval);
+    this.bootstrapTimer = null;
+    this.pluginActivatedTimer = null;
+    this.flushInterval = null;
     await this.flushLastRunUpdates();
   }
 
   @OnEvent(PLUGIN_EVENTS.ACTIVATED)
   handlePluginActivated(): void {
-    setTimeout(() => {
+    this.pluginActivatedTimer = setTimeout(() => {
+      this.pluginActivatedTimer = null;
       this.syncJobs().catch((err) =>
         this.logger.error(
           `Failed to sync cron jobs after plugin activation: ${err}`,
@@ -283,27 +291,12 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       return;
     }
     this.logger.log(`Manually triggering cron job: ${job.name}`);
-    const handler = this.findPluginHandler(job);
+    const handler = findPluginHandler(job, this.pluginRegistry);
     if (handler) {
       await this.executeWithTracking(job.name, handler);
     } else {
       void cronJob.fireOnTick();
     }
-  }
-
-  /** Find a plugin handler for a job, if applicable. */
-  private findPluginHandler(job: CronJobRow): (() => Promise<void>) | null {
-    if (job.source !== 'plugin' || !job.pluginSlug || !this.pluginRegistry) {
-      return null;
-    }
-    const reg = this.pluginRegistry.getAdapter<CronRegistrar>(
-      EXTENSION_POINTS.CRON_REGISTRAR,
-      job.pluginSlug,
-    );
-    const def = reg
-      ?.getCronJobs()
-      .find((j) => `${job.pluginSlug}:${j.name}` === job.name);
-    return def ? async () => def.handler() : null;
   }
 
   /** Get execution history for a specific job. */
