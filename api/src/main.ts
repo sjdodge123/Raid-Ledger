@@ -3,7 +3,7 @@
 import './sentry/instrument';
 
 import { NestFactory } from '@nestjs/core';
-import type { LogLevel } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import compression from 'compression';
 import helmet from 'helmet';
@@ -15,13 +15,9 @@ import {
   validateCorsConfig,
   buildCorsOriginFn,
   buildHelmetOptions,
+  getLogLevels,
+  buildLoggerSelfTest,
 } from './main.helpers';
-
-function getLogLevels(): LogLevel[] {
-  return process.env.DEBUG === 'true'
-    ? ['error', 'warn', 'log', 'debug', 'verbose']
-    : ['error', 'warn', 'log'];
-}
 
 function installAutoClientUrlDetection(app: NestExpressApplication): void {
   app.use(
@@ -70,7 +66,11 @@ function configureStaticAssets(
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger: getLogLevels(),
+    logger: getLogLevels({
+      DEBUG: process.env.DEBUG,
+      LOG_LEVEL: process.env.LOG_LEVEL,
+      NODE_ENV: process.env.NODE_ENV,
+    }),
     rawBody: false,
   });
   app.useBodyParser('json', { limit: '2mb' });
@@ -93,5 +93,8 @@ async function bootstrap() {
     new ThrottlerExceptionFilter(),
   );
   await app.listen(process.env.PORT ?? 3000);
+  if (process.env.LOGGER_SELF_TEST === 'true') {
+    buildLoggerSelfTest(new Logger('Bootstrap'))();
+  }
 }
 void bootstrap();
