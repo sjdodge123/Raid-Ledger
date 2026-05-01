@@ -35,6 +35,25 @@ async function getCommunityMembers(token: string): Promise<number[]> {
 
 test.describe.configure({ timeout: 120_000 });
 
+// ROK-1070: SchedulingWizard intercepts the poll page when `gameTimeStale=true`
+// (no `gameTimeConfirmedAt` on the user). The previous in-test "click through
+// wizard buttons" loop was non-deterministic because some steps require Save
+// rather than Skip. We unfreeze the wizard once per file by calling the
+// production endpoint `PUT /users/me/game-time` with an empty slots array,
+// which sets `gameTimeConfirmedAt = NOW()` (see game-time.service.ts).
+// Architect recipe: planning-artifacts/architect-ROK-1070.md (Class 1).
+test.beforeAll(async () => {
+    const token = await getAdminToken();
+    await fetch(`${API_BASE}/users/me/game-time`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ slots: [] }),
+    });
+});
+
 // ---------------------------------------------------------------------------
 // AC1: CreatePollModal shows "Minimum votes" slider when members are selected
 // ---------------------------------------------------------------------------
