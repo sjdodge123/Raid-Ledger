@@ -249,6 +249,12 @@ describe('My Feature (integration)', () => {
 - **Timeout:** 120s per test (container startup takes ~10-20s on first run).
 - **Teardown:** `closeTestApp()` runs automatically via a global `afterAll` hook registered in `setupFilesAfterEnv`. Do not call it manually in your test files.
 
+### Local startup timeout (macOS, parallel jest)
+
+`provisionDatabase()` in `api/src/common/testing/test-app.ts` chains `.withStartupTimeout(60_000)` on the `pgvector/pgvector:pg16` testcontainer to absorb macOS Docker Desktop's vmnet port-binding latency under parallel jest workers. The library default of 10s is too tight when multiple suites spin containers simultaneously and was tripping `Timed out after 10000ms while waiting for container ports to be bound to the host` during `./scripts/validate-ci.sh --full`.
+
+CI is unaffected: GitHub Actions sets `DATABASE_URL` to a Postgres service container, which short-circuits `provisionDatabase()` before testcontainers is touched. The 60s timeout only governs the local fallback path.
+
 ### HTTP endpoints vs direct DB operations
 
 Prefer **HTTP endpoints** (`testApp.request.get/post/put/delete`) for tests that verify the full request-response cycle — auth, validation, serialization, and persistence through the real controller+service stack.
