@@ -8,6 +8,11 @@ import { CronTime } from 'cron';
 import { eq, desc } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import {
+  EXTENSION_POINTS,
+  type CronRegistrar,
+} from '../plugins/plugin-host/extension-points';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { computeNextRun, upsertJob } from './cron-job.helpers';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
@@ -127,4 +132,22 @@ export async function setPaused(
     .where(eq(schema.cronJobs.id, id))
     .returning();
   return updated;
+}
+
+/** Find a plugin handler for a job, if applicable. */
+export function findPluginHandler(
+  job: CronJobRow,
+  pluginRegistry: PluginRegistryService | undefined,
+): (() => Promise<void>) | null {
+  if (job.source !== 'plugin' || !job.pluginSlug || !pluginRegistry) {
+    return null;
+  }
+  const reg = pluginRegistry.getAdapter<CronRegistrar>(
+    EXTENSION_POINTS.CRON_REGISTRAR,
+    job.pluginSlug,
+  );
+  const def = reg
+    ?.getCronJobs()
+    .find((j) => `${job.pluginSlug}:${j.name}` === job.name);
+  return def ? async () => def.handler() : null;
 }

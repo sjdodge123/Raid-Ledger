@@ -32,82 +32,9 @@ import { AppModule } from '../../app.module';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
+import { createRedisMock, type RedisMockHandle } from './redis-mock';
 
-/** Redis mock set with NX support. */
-function mockRedisSet(store: Map<string, string>) {
-  return (key: string, value: string, ...args: (string | number)[]) => {
-    const hasNX = args.some(
-      (a) => typeof a === 'string' && a.toUpperCase() === 'NX',
-    );
-    if (hasNX && store.has(key)) return Promise.resolve(null);
-    store.set(key, value);
-    return Promise.resolve('OK');
-  };
-}
-
-/** Redis mock glob-style key search. */
-function mockRedisKeys(store: Map<string, string>) {
-  return (pattern: string) => {
-    if (pattern === '*') return Promise.resolve([...store.keys()]);
-    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
-    return Promise.resolve([...store.keys()].filter((k) => re.test(k)));
-  };
-}
-
-/** Redis mock del helper. */
-function mockRedisDel(store: Map<string, string>) {
-  return (...keys: string[]) => {
-    let count = 0;
-    for (const k of keys) {
-      if (store.delete(k)) count++;
-    }
-    return Promise.resolve(count);
-  };
-}
-
-/** Redis mock incr helper. */
-function mockRedisIncr(store: Map<string, string>) {
-  return (key: string) => {
-    const next = parseInt(store.get(key) ?? '0', 10) + 1;
-    store.set(key, String(next));
-    return Promise.resolve(next);
-  };
-}
-
-export interface RedisMockHandle {
-  client: ReturnType<typeof buildRedisMockClient>;
-  store: Map<string, string>;
-}
-
-function buildRedisMockClient(store: Map<string, string>) {
-  return {
-    get: (key: string) => Promise.resolve(store.get(key) ?? null),
-    set: mockRedisSet(store),
-    setex: (key: string, _seconds: number, value: string) => {
-      store.set(key, value);
-      return Promise.resolve('OK');
-    },
-    del: mockRedisDel(store),
-    incr: mockRedisIncr(store),
-    expire: () => Promise.resolve(1),
-    ttl: () => Promise.resolve(-1),
-    exists: (...keys: string[]) =>
-      Promise.resolve(keys.filter((k) => store.has(k)).length),
-    keys: mockRedisKeys(store),
-    ping: () => Promise.resolve('PONG'),
-    quit: () => Promise.resolve('OK'),
-    disconnect: () => undefined,
-    status: 'ready',
-    duplicate: () => buildRedisMockClient(store),
-  };
-}
-
-/** In-memory Redis mock whose backing store is exposed for cross-suite reset. */
-function createRedisMock(): RedisMockHandle {
-  const store = new Map<string, string>();
-  return { client: buildRedisMockClient(store), store };
-}
+export type { RedisMockHandle } from './redis-mock';
 
 export interface TestApp {
   app: INestApplication;
@@ -119,14 +46,23 @@ export interface TestApp {
   /** Handle to the in-memory Redis mock. Exposed so truncateAllTables can
    * clear cross-suite state (e.g. jwt_block:* keys) without call-site changes. */
   redisMock: RedisMockHandle;
+  /**
+   * Internal: raw postgres-js client. Stored so `closeTestApp` can end the
+   * pool — `app.close()` does NOT cascade to it (DrizzleModule has no
+   * onModuleDestroy hook), and 49 spec files × max:10 sockets exhausts the
+   * Postgres `max_connections` budget without explicit teardown. ROK-1104.
+   */
+  _appClient: ReturnType<typeof postgres>;
 }
 
 /**
- * Store singleton on `process` so it survives Jest's per-file module
- * re-evaluation. Jest creates a separate VM context (and therefore a
- * separate `globalThis`) for each test file, even with --runInBand.
- * The `process` object IS shared across VM contexts in the same
- * Node.js process, making it a reliable cross-file singleton store.
+ * Each Jest spec file (with `setupFilesAfterEnv`) gets its OWN VM context.
+ * `process.env` and module-level state are NOT shared across files — every
+ * `*.integration.spec.ts` evaluates this module afresh and gets its own
+ * `process[INSTANCE_KEY]` slot. `closeTestApp` clears the slot in every
+ * file's `afterAll`, so each file actually re-provisions a NestJS app +
+ * pool. The per-file boundary is what gives us BullMQ prefix isolation
+ * (each file's prefix is a fresh `test-<pid>-<ts>-`). ROK-1058.
  */
 export const INSTANCE_KEY = '__raid_ledger_test_app';
 
@@ -163,8 +99,11 @@ async function provisionDatabase(): Promise<{
   return { connectionString: container.getConnectionUri(), container };
 }
 
-/** Run migrations and return an app-level DB connection. */
-async function setupDatabase(connectionString: string) {
+/** Run migrations and return an app-level DB connection plus the raw client. */
+async function setupDatabase(connectionString: string): Promise<{
+  db: PostgresJsDatabase<typeof schema>;
+  appClient: ReturnType<typeof postgres>;
+}> {
   const migrationClient = postgres(connectionString, { max: 1 });
   const migrationDb = drizzle(migrationClient);
   await migrate(migrationDb, {
@@ -172,7 +111,7 @@ async function setupDatabase(connectionString: string) {
   });
   await migrationClient.end();
   const appClient = postgres(connectionString, { max: 10 });
-  return drizzle(appClient, { schema });
+  return { db: drizzle(appClient, { schema }), appClient };
 }
 
 /** Set env vars needed by the test NestJS app. */
@@ -183,20 +122,23 @@ function setTestEnvVars(connectionString: string): void {
   process.env.CORS_ORIGIN = 'http://localhost:5173';
   process.env.THROTTLE_DEFAULT_LIMIT = '999999';
   process.env.THROTTLE_DISABLED = 'true';
+  // ROK-1058: namespace BullMQ keys under a per-process-PID prefix so test
+  // queues never touch the shared `raid-ledger-redis` container's prod keys
+  // (`bull:*`). Each Jest spec file evaluates this module in its own VM
+  // context, so the env var resets to undefined per file — meaning every
+  // file gets its own fresh prefix at first `getTestApp()`. The Date.now()
+  // suffix guards against pid reuse across rapid CI matrix runs. MUST be
+  // set BEFORE `Test.createTestingModule(...)` compiles AppModule so
+  // BullModule.forRootAsync's factory captures the prefix at config time.
+  if (!process.env.BULLMQ_KEY_PREFIX) {
+    process.env.BULLMQ_KEY_PREFIX = `test-${process.pid}-${Date.now()}-`;
+  }
 }
 
-export async function getTestApp(): Promise<TestApp> {
-  const cached = getInstance();
-  if (cached) return cached;
-  const { connectionString, container } = await provisionDatabase();
-  const db = await setupDatabase(connectionString);
-  const redisMock = createRedisMock();
-  // Register the mock BEFORE seeding so truncateAllTables can reset it
-  // via the process-level singleton during its first (pre-app-init) call.
-  const preInstance: Partial<TestApp> = { db, redisMock };
-  setInstance(preInstance as TestApp);
-  const seed = await truncateAllTables(db);
-  setTestEnvVars(connectionString);
+async function buildNestApp(
+  db: PostgresJsDatabase<typeof schema>,
+  redisMock: RedisMockHandle,
+): Promise<{ app: INestApplication; request: TestAgent<supertest.Test> }> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DrizzleAsyncProvider)
     .useValue(db)
@@ -208,7 +150,35 @@ export async function getTestApp(): Promise<TestApp> {
   const request = supertest.default(
     app.getHttpServer() as import('http').Server,
   );
-  const testApp: TestApp = { app, request, db, seed, container, redisMock };
+  return { app, request };
+}
+
+export async function getTestApp(): Promise<TestApp> {
+  const cached = getInstance();
+  if (cached) return cached;
+  const { connectionString, container } = await provisionDatabase();
+  const { db, appClient } = await setupDatabase(connectionString);
+  const redisMock = createRedisMock();
+  // Register the mock BEFORE seeding so truncateAllTables can reset it
+  // via the process-level singleton during its first (pre-app-init) call.
+  const preInstance: Partial<TestApp> = {
+    db,
+    redisMock,
+    _appClient: appClient,
+  };
+  setInstance(preInstance as TestApp);
+  const seed = await truncateAllTables(db);
+  setTestEnvVars(connectionString);
+  const { app, request } = await buildNestApp(db, redisMock);
+  const testApp: TestApp = {
+    app,
+    request,
+    db,
+    seed,
+    container,
+    redisMock,
+    _appClient: appClient,
+  };
   setInstance(testApp);
   return testApp;
 }
@@ -216,12 +186,21 @@ export async function getTestApp(): Promise<TestApp> {
 /**
  * Shut down the TestApp singleton.
  * Called automatically by the global afterAll hook in integration-setup.ts.
+ *
+ * Order matters: app.close() must run first so any in-flight queries drain
+ * via DrizzleModule's provider; then end the postgres-js pool (DrizzleModule
+ * has no onModuleDestroy, so app.close() does NOT cascade); then stop the
+ * Testcontainer. The 5s end timeout caps teardown latency on the last
+ * spec — postgres-js default 30s reintroduces ROK-1104 symptoms.
  */
 export async function closeTestApp(): Promise<void> {
   const instance = getInstance();
   if (!instance) return;
 
   await instance.app.close();
+  if (instance._appClient) {
+    await instance._appClient.end({ timeout: 5 });
+  }
   if (instance.container) {
     await instance.container.stop();
   }

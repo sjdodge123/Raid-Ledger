@@ -27,6 +27,10 @@ module.exports = {
   testTimeout: 120_000,
   // Run sequentially — tests share a single Testcontainers instance
   maxWorkers: 1,
+  // ROK-1058 AC3: file-order randomization is opt-in via the CLI `--randomize`
+  // flag (passed by the CI matrix). Local default stays deterministic so
+  // bisecting a true cross-suite flake remains tractable. CI's `run: [1,2,3]`
+  // matrix runs with `--randomize`, surfacing order-dependent leaks per PR.
   // Runs in the worker process (where the TestApp singleton lives) so
   // afterAll can actually close the app and Testcontainers instance.
   setupFilesAfterEnv: ['<rootDir>/common/testing/integration-setup.ts'],

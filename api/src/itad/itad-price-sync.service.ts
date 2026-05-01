@@ -7,6 +7,7 @@ import {
   Inject,
   Logger,
   OnApplicationBootstrap,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { isNotNull, and, lt, sql } from 'drizzle-orm';
@@ -117,8 +118,11 @@ export function extractErrorDetail(err: unknown): string {
 }
 
 @Injectable()
-export class ItadPriceSyncService implements OnApplicationBootstrap {
+export class ItadPriceSyncService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(ItadPriceSyncService.name);
+  private bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
@@ -129,11 +133,17 @@ export class ItadPriceSyncService implements OnApplicationBootstrap {
 
   /** Trigger initial pricing sync after startup delay. */
   onApplicationBootstrap(): void {
-    setTimeout(() => {
+    this.bootstrapTimer = setTimeout(() => {
+      this.bootstrapTimer = null;
       this.syncPricing().catch((err) =>
         this.logger.error(`Bootstrap pricing sync failed: ${err}`),
       );
     }, BOOTSTRAP_DELAY_MS);
+  }
+
+  onModuleDestroy(): void {
+    if (this.bootstrapTimer) clearTimeout(this.bootstrapTimer);
+    this.bootstrapTimer = null;
   }
 
   /** Cron: sync ITAD pricing every 4 hours. */

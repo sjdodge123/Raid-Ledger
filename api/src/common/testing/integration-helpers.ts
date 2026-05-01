@@ -9,9 +9,15 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as supertest from 'supertest';
 import type TestAgent from 'supertest/lib/agent';
+import { Logger } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import * as schema from '../../drizzle/schema';
 import { clearAuthUserCache } from '../../auth/auth-user-cache';
+import { ALL_QUEUE_NAMES } from '../../queue/queue-registry';
 import { INSTANCE_KEY, type TestApp } from './test-app';
+
+const obliterateLogger = new Logger('truncateAllTables.obliterate');
 
 export interface SeededData {
   adminUser: typeof schema.users.$inferSelect;
@@ -120,9 +126,40 @@ export async function truncateAllTables(
   // to the freshly re-seeded admin (whose new id may collide with a stale key).
   clearAuthUserCache();
   clearJwtBlockKeysFromMockRedis();
+  await obliterateAllQueues();
 
   // Re-seed baseline data
   return seedBaseline(db);
+}
+
+/**
+ * Obliterate every BullMQ queue registered in the test app's DI container.
+ * No-op when the app isn't booted yet (the very first truncate runs BEFORE
+ * `app.init()` — see test-app.ts:getTestApp). When the app is up, this is
+ * the only thing that purges Redis-side queue state between suites: BullMQ
+ * uses an out-of-Node `raid-ledger-redis` container, so neither
+ * `app.close()` nor row-level DELETE reaches it.
+ *
+ * Safe blast radius: `BULLMQ_KEY_PREFIX` (set in setTestEnvVars) namespaces
+ * the obliterate sweep under `test-<pid>-<ts>-:bull:*`, so this never
+ * touches dev/prod `bull:*` keys in the shared Redis container. ROK-1058.
+ */
+async function obliterateAllQueues(): Promise<void> {
+  const instance = (process as unknown as Record<string, TestApp | null>)[
+    INSTANCE_KEY
+  ];
+  const app = instance?.app;
+  if (!app) return;
+  for (const name of ALL_QUEUE_NAMES) {
+    try {
+      const queue = app.get<Queue>(getQueueToken(name), { strict: false });
+      if (!queue) continue;
+      await queue.obliterate({ force: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      obliterateLogger.warn(`Failed to obliterate queue ${name}: ${msg}`);
+    }
+  }
 }
 
 /**
