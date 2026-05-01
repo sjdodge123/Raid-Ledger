@@ -31,6 +31,22 @@ jest.mock('./scheduling-auto-heart.helpers', () => ({
 jest.mock('./scheduling-query.helpers', () => ({
   ...jest.requireActual('./scheduling-query.helpers'),
   findScheduleVotes: jest.fn().mockResolvedValue([]),
+  findScheduleSlots: jest.fn().mockResolvedValue([]),
+  countUniqueVoters: jest.fn().mockResolvedValue(0),
+}));
+jest.mock('../lineups-match-query.helpers', () => ({
+  ...jest.requireActual('../lineups-match-query.helpers'),
+  findMatchMembers: jest.fn().mockResolvedValue([]),
+}));
+jest.mock('./scheduling-event.helpers', () => ({
+  ...jest.requireActual('./scheduling-event.helpers'),
+  resolveGameInfo: jest
+    .fn()
+    .mockResolvedValue({ gameName: 'Test Game', gameCoverUrl: null }),
+}));
+jest.mock('./scheduling-conflict.helpers', () => ({
+  ...jest.requireActual('./scheduling-conflict.helpers'),
+  findConflictingSlotIds: jest.fn().mockResolvedValue([]),
 }));
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -361,6 +377,46 @@ describe('SchedulingService', () => {
       await expect(service.retractAllVotes(10, 1)).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  // ROK-1194 item 4: pin the community_lineups.created_by join wired through
+  // getSchedulePoll → buildPollResponse so future refactors don't accidentally
+  // drop lineupCreatedById on the way to the response DTO.
+  describe('getSchedulePoll lineupCreatedById', () => {
+    const FULL_MATCH = {
+      ...SCHEDULING_MATCH,
+      thresholdMet: false,
+      voteCount: 0,
+      votePercentage: null,
+      fitType: null,
+      minVoteThreshold: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+
+    it('passes lineupCreatedById from the lineup join into the response', async () => {
+      // 1. findMatchOrThrow
+      mockDb.limit.mockResolvedValueOnce([FULL_MATCH]);
+      // 2. lineup status + createdBy join (the row under test)
+      mockDb.limit.mockResolvedValueOnce([
+        { status: 'decided', createdBy: 42 },
+      ]);
+
+      const result = await service.getSchedulePoll(10, null);
+      expect(result.match.lineupCreatedById).toBe(42);
+    });
+
+    it('omits lineupCreatedById when lineup row is missing', async () => {
+      // 1. findMatchOrThrow
+      mockDb.limit.mockResolvedValueOnce([FULL_MATCH]);
+      // 2. lineup join returns no rows
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const result = await service.getSchedulePoll(10, null);
+      // buildPollResponse → buildMatchDetailDto omits the field when null,
+      // so the contract DTO surfaces it as undefined rather than null.
+      expect(result.match.lineupCreatedById).toBeUndefined();
     });
   });
 });
