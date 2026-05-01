@@ -143,6 +143,26 @@ function describeQueueHealthService() {
     service.register(mockQueue);
     await expect(service.awaitDrained(500)).rejects.toThrow(/timed out/i);
   });
+
+  it('should treat delayed jobs as busy in awaitDrained (ROK-1196)', async () => {
+    // The embed-sync queue uses a coalescing delay so jobs sit in `delayed`
+    // until the timer fires. awaitDrained must not return early while jobs
+    // are still scheduled.
+    const mockQueue = {
+      name: 'delayed-queue',
+      drain: jest.fn(),
+      getJobCounts: jest.fn().mockResolvedValue({
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 3,
+      }),
+    } as unknown as Queue;
+
+    service.register(mockQueue);
+    await expect(service.awaitDrained(500)).rejects.toThrow(/timed out/i);
+  });
 }
 describe('QueueHealthService', () => describeQueueHealthService());
 

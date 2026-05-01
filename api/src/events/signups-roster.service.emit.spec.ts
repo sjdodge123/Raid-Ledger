@@ -17,7 +17,7 @@ import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
 describe('SignupsRosterService — emit timing (ROK-824)', () => {
   let service: SignupsRosterService;
   let mockDb: Record<string, jest.Mock>;
-  let mockEventEmitter: { emit: jest.Mock };
+  let mockEventEmitter: { emit: jest.Mock; emitAsync: jest.Mock };
   let callOrder: string[];
 
   const mockEvent = {
@@ -41,6 +41,10 @@ describe('SignupsRosterService — emit timing (ROK-824)', () => {
     mockEventEmitter = {
       emit: jest.fn().mockImplementation(() => {
         callOrder.push('emit');
+      }),
+      emitAsync: jest.fn().mockImplementation(() => {
+        callOrder.push('emit');
+        return Promise.resolve([]);
       }),
     };
 

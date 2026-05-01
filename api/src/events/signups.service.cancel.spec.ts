@@ -143,7 +143,13 @@ describe('SignupsService — cancel', () => {
           },
         },
         SignupsRosterService,
-        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+            emitAsync: jest.fn().mockResolvedValue([]),
+          },
+        },
         {
           provide: ActivityLogService,
           useValue: {

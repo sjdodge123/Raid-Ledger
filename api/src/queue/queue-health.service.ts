@@ -61,7 +61,11 @@ export class QueueHealthService {
   }
 
   /**
-   * Poll all registered queues until none have waiting or active jobs.
+   * Poll all registered queues until none have waiting, active, OR delayed jobs.
+   * Delayed jobs must be drained too — the embed-sync queue uses a coalescing
+   * delay (ROK-119), so a job in `delayed` state has been enqueued but hasn't
+   * fired yet. Returning before it fires causes downstream tests to race the
+   * Discord edit. (ROK-1196.)
    * Throws if the timeout expires before all queues are idle.
    */
   async awaitDrained(timeoutMs = 30_000): Promise<void> {
@@ -70,7 +74,9 @@ export class QueueHealthService {
 
     while (Date.now() < deadline) {
       const statuses = await this.getHealthStatus();
-      const busy = statuses.some((s) => s.waiting > 0 || s.active > 0);
+      const busy = statuses.some(
+        (s) => s.waiting > 0 || s.active > 0 || s.delayed > 0,
+      );
       if (!busy) return;
 
       const remaining = deadline - Date.now();
