@@ -392,6 +392,8 @@ render(<MyComponent featureEnabled={true} />);
 
 Playwright smoke tests verify end-to-end UI flows in a real browser against a running dev server with demo data. They run in CI via the `smoke-tests` job with `DEMO_MODE=true`.
 
+> **Per-spec fixture requirements** are documented in [`scripts/smoke/README.md`](scripts/smoke/README.md) — read before adding a new spec or debugging a "first-run-only" failure (ROK-1070).
+
 ### Directory structure
 
 Tests are split per feature in `scripts/smoke/`:
