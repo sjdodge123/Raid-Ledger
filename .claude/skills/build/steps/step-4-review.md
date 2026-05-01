@@ -93,43 +93,36 @@ Reviewer prompts in 4b point at the updated spec.
 
 ---
 
-## 4b. Size the Diff, Then Spawn Reviewer(s)
+## 4b. Codex Review (single shell command — no subagent)
 
-**Run the sizing check BEFORE spawning.** Pre-flight prevents burning tokens on a reviewer that runs out of context mid-run.
+Reviewer is **Codex CLI**, not a Claude subagent. Different model = different blind spots, and one shell call is faster than spawning subagents into a team and aggregating outputs.
+
+**Skip the reviewer entirely if:**
+- Diff is `<300 net lines` AND no risk markers (no migration, no Dockerfile, no `packages/contract/`, no auth code, no money/payments code). Operator approval was the gate; Codex is for genuinely risky diffs.
+- `codex` CLI is not on PATH (record `gates.reviewer: SKIPPED — codex unavailable`, proceed).
+
+### Run Codex
 
 ```bash
 cd <worktree>
-git diff origin/main..HEAD --stat | tail -1     # N files changed, +A -D
-git diff origin/main..HEAD --stat | grep -v "snapshot\|package-lock" | wc -l
-git log --oneline origin/main..HEAD | wc -l
+codex review --base main "Review this Raid-Ledger PR for: (1) security/auth bugs, (2) correctness/regressions, (3) contract integrity (Zod/types/migration consistency), (4) Discord bot listener safety. Skip style nits, naming preferences, doc gaps. For each finding: severity (BLOCKER | HIGH | MEDIUM | LOW), file:line, one-line description, suggested fix. Final line: 'VERDICT: APPROVED' or 'VERDICT: APPROVED WITH FIXES' or 'VERDICT: BLOCKED'." 2>&1 | tee planning-artifacts/review-ROK-XXX.md
+cd -
 ```
 
-| Signals | Strategy |
-|---|---|
-| ≤500 lines, ≤10 files, 1 workspace | **Single agent** |
-| ≤2000 lines, ≤25 files, ≤2 workspaces | **Single agent** (incremental file flush) |
-| 2000–5000 lines **OR** contract+api+web **OR** migration + 20+ files | **3-agent parallel split** |
-| 5000+ lines **OR** full cross-cutting **OR** 30+ commits | **4+ agent split** (add dedicated "integration + cross-layer" pass) |
+The custom prompt is critical — without scope, Codex returns broad style feedback. The format string keeps findings actionable and comparable across stories.
 
-### Single agent (default)
-Read `templates/reviewer.md`, fill variables, spawn as a team member. Agent writes findings to `planning-artifacts/review-ROK-XXX.md` incrementally.
+### Verdict handling
 
-### Parallel split (for large diffs) — use dev team agents
+Read the last line of `planning-artifacts/review-ROK-XXX.md`:
 
-1. Create a team: `TeamCreate({ name: "review-ROK-XXX", description: "..." })`.
-2. Create three tasks via `TaskCreate`, one per slice:
-   - **security-correctness** — critical/security + correctness + auto-fix authority → `review-ROK-XXX-security.md`
-   - **tests-contract** — tests + contract integrity → `review-ROK-XXX-tests.md`
-   - **perf-style** — performance/complexity + style + tech debt → `review-ROK-XXX-style.md`
-3. Spawn three `Agent` calls (same single message, parallel) with matching `team_name` and `subagent_type: devedup-rl:reviewer`. Each agent picks up its task via `TaskList` + owner assignment.
-4. When all three tasks are `completed`, Lead reads the three findings files and writes the aggregated `review-ROK-XXX.md` with unified verdict + commit-SHA footer.
-5. Delete the team: `TeamDelete({ name: "review-ROK-XXX" })`.
+- **`VERDICT: APPROVED`** → `gates.reviewer: PASS`. Proceed.
+- **`VERDICT: APPROVED WITH FIXES`** → Lead reads findings, applies trivial fixes inline (1-3 lines per fix), commits `fix: address Codex review (ROK-XXX)`. `gates.reviewer: PASS`. For non-trivial fixes, respawn the dev with the findings file as context.
+- **`VERDICT: BLOCKED`** → present blockers to operator. May need dev respawn or scope discussion.
+- **No clear verdict / Codex errored / output garbled** → fall back to a single `devedup-rl:reviewer` Claude subagent run with the same prompt focus. Don't bypass the reviewer gate just because Codex misbehaved.
 
-Why teams (not loose subagents): shared context means each agent can reference the others' findings, one agent can flag something and hand it to the right specialist via `SendMessage`, and the shared task board gives Lead a single `TaskList` call to monitor progress.
+### Why no team / no parallel split
 
-### Verdict handling (applies to single or aggregated)
-- **APPROVED / APPROVED WITH FIXES:** `gates.reviewer: PASS`. Auto-fix commits stay local — Step 5 handles the push.
-- **BLOCKED:** present blockers to operator. May need dev respawn.
+Codex handles diffs of any size in one shot — it doesn't run out of context the way a Claude subagent does, so the size-bucket sizing (small/medium/large/XL) doesn't apply. Single command, single output file, no aggregation work. If the diff is genuinely massive (>10k lines) and Codex's output is shallow, run a second Codex pass scoped to a specific path: `codex review --base main "Focus only on api/src/auth/** for this pass."`
 
 ---
 
@@ -141,7 +134,9 @@ Sequential — must finish before smoke. Read `templates/architect.md`, `<TASK_T
 
 ## 4d. Lead Smoke Tests
 
-Never skipped, even for light scope. From main worktree:
+**Skip entirely for `scope: light`** — fast CI in step 2-light-c plus operator approval is sufficient. Set `gates.smoke_test: N/A` and proceed to 4e.
+
+For standard / full scope, never skipped. From main worktree:
 
 ```bash
 git pull --rebase origin main

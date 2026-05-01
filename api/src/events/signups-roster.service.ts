@@ -60,12 +60,16 @@ export class SignupsRosterService {
     this.logger.log(
       `User ${userId} canceled signup for event ${eventId} (${cancelInfo.cancelStatus})`,
     );
-    this.emit(SIGNUP_EVENTS.DELETED, {
+    // ROK-1196: emitAsync awaits @OnEvent handlers so the embed-sync enqueue
+    // completes before the controller returns. With plain emit(), the
+    // /admin/test/await-processing call could observe an empty queue and
+    // return before DiscordSyncListener has even called embedSyncQueue.enqueue.
+    await this.eventEmitter.emitAsync(SIGNUP_EVENTS.DELETED, {
       eventId,
       userId,
       signupId: signup.id,
       action: 'signup_cancelled',
-    });
+    } satisfies SignupEventPayload);
     if (notifyData && assignment) {
       this.bufferLeave(eventId, userId, assignment, notifyData);
       await this.triggerBackfill(eventId, assignment);

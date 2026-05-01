@@ -2,6 +2,52 @@
 
 Lead runs everything.
 
+## Light Scope Fast Path (skip 3a-3c.5 if scope=light)
+
+Fast CI already passed in Step 2-light-c. No worktree to deploy. No Playwright.
+
+### 3-light-a. Linear → "In Review"
+
+```
+mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "In Review" })
+```
+
+### 3-light-b. Present to operator (compact)
+
+```
+## Ready for Review (Light Scope)
+
+| Story | Branch | Status |
+|-------|--------|--------|
+| ROK-XXX: Title | rok-xxx-name | In Review |
+
+Diff: `git diff main..HEAD --stat`
+Fast CI: PASS (lint + tsc + tests on <touched-workspace>)
+Files: <N>
+
+Light scope — no worktree deploy, no Playwright. Review the diff and update Linear:
+- **Code Review** = approved
+- **Changes Requested** = needs rework
+
+I'll wait.
+```
+
+### 3-light-c. State + FULL STOP
+
+```yaml
+stories.ROK-XXX:
+  status: "waiting_for_operator"
+  gates.operator: WAITING
+```
+
+Skip to **Step 4** (light path: operator approval polling only).
+
+---
+
+(Standard / Full scope continues below.)
+
+---
+
 ## HARD RULE — NO PUSH IN STEP 3
 
 The branch stays **local-only** through Steps 1–4. Do NOT invoke any of the following in this step:

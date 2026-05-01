@@ -117,13 +117,32 @@ If Step 1.5 determined "docs-only" → skip steps 4–8, jump to Step 9.
 
 ### Steps 4–7: Build, Typecheck, Lint, Tests, Migration & Container Validation
 
-Run the unified validation script. It handles build, typecheck, lint, unit tests with coverage, integration tests, and conditionally runs migration validation and container startup checks based on changed files.
+#### Cache check — skip if validate-ci passed in the last 5 min on this commit
+
+Before running, check for a fresh marker:
 
 ```bash
-./scripts/validate-ci.sh --full
+HEAD_SHA=$(git rev-parse HEAD)
+MARKER="/tmp/.validate-ci-pass-${HEAD_SHA}"
+if [ -f "$MARKER" ] && [ $(( $(date +%s) - $(stat -f %m "$MARKER" 2>/dev/null || stat -c %Y "$MARKER") )) -lt 300 ]; then
+  echo "✓ validate-ci.sh passed <5min ago for HEAD=${HEAD_SHA:0:7}; skipping re-run"
+  SKIP_VALIDATE_CI=1
+else
+  SKIP_VALIDATE_CI=0
+fi
 ```
 
-**STOP** and fix any failures before continuing. **NEVER dismiss failures as "pre-existing"** — investigate and fix them, or create a Linear story with root cause.
+The marker is invalidated automatically by HEAD changing — any new commit produces a different SHA and forces a re-run. Skip is purely time-based on the same commit.
+
+#### Run validate-ci (or skip)
+
+```bash
+if [ "$SKIP_VALIDATE_CI" = "0" ]; then
+  ./scripts/validate-ci.sh --full && touch "$MARKER"
+fi
+```
+
+**STOP** and fix any failures before continuing. **NEVER dismiss failures as "pre-existing"** — investigate and fix them, or create a Linear story with root cause. On failure, do NOT touch the marker.
 
 The script auto-detects scope (migration files, Dockerfile changes) and runs the appropriate conditional checks. You do NOT need to manually decide which checks to run — the script handles it.
 
@@ -156,6 +175,29 @@ If Playwright fails:
 - **NEVER re-push and re-run CI hoping it passes** — fix locally first
 
 If the branch is API-only (no web changes), this step can be skipped.
+
+---
+
+## Step 8.5: Codex Pre-Push Review (second opinion)
+
+**Skip if:** scope is `docs-only` (from Step 1.5), OR `--no-codex` flag was passed, OR no `codex` CLI on PATH.
+
+Run Codex as a second-opinion reviewer against `main`. Different model = catches issues Claude's reviewer misses (and vice versa). Synchronous because we want blockers BEFORE push.
+
+```bash
+which codex >/dev/null 2>&1 && [ -z "$NO_CODEX" ] && [ "$SCOPE" != "docs-only" ] && {
+  echo "Running Codex pre-push review (this takes ~30-90s)..."
+  codex review --base main "Pre-push sanity review. Flag CRITICAL bugs only — security, correctness, regressions, contract violations. Skip style nits, naming, doc gaps. Output format: BLOCKERS list (or 'No blockers') + 1-line rationale per finding." 2>&1 | tee /tmp/codex-review-$(git rev-parse --short HEAD).txt
+}
+```
+
+**Verdict handling:**
+
+- Output starts with "No blockers" or equivalent → proceed to Step 9.
+- Output lists BLOCKERS → **STOP**, present them to the operator with the question: "Codex flagged N blockers — fix before pushing, or override and continue?" Wait for operator decision.
+- Codex CLI errors out (network, auth) → log and proceed (don't block push on tooling failure). Note in Step 12 report.
+
+The custom prompt is critical: without it Codex returns broad style feedback that adds noise. Keeping it scoped to "critical only" makes the second opinion actionable.
 
 ---
 
