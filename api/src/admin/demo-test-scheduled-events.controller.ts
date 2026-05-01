@@ -10,7 +10,10 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoTestService } from './demo-test.service';
-import { SetEventTimesSchema } from './demo-test.schemas';
+import {
+  SetEventTimesSchema,
+  ResetEventsSchema,
+} from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 
 /**
@@ -69,5 +72,25 @@ export class DemoTestScheduledEventsController {
       parsed.startTime,
       parsed.endTime,
     );
+  }
+
+  /**
+   * Hard-delete events whose title begins with `titlePrefix` — DEMO_MODE
+   * only (ROK-1070). Mirrors `/admin/test/reset-lineups`. Each smoke worker
+   * passes a unique prefix so sibling workers' events are not touched.
+   * `event_signups` and other cascading children are removed via FK
+   * `onDelete: cascade`.
+   */
+  @Post('reset-events')
+  @HttpCode(HttpStatus.OK)
+  async resetEventsForTest(@Body() body: unknown): Promise<{
+    success: boolean;
+    deletedCount: number;
+  }> {
+    const parsed = parseDemoBody(ResetEventsSchema, body);
+    const { deletedCount } = await this.demoTestService.resetEventsForTest(
+      parsed.titlePrefix,
+    );
+    return { success: true, deletedCount };
   }
 }
