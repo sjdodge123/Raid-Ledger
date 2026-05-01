@@ -144,24 +144,41 @@ function describeQueueHealthService() {
     await expect(service.awaitDrained(500)).rejects.toThrow(/timed out/i);
   });
 
-  it('should treat delayed jobs as busy in awaitDrained (ROK-1196)', async () => {
-    // The embed-sync queue uses a coalescing delay so jobs sit in `delayed`
-    // until the timer fires. awaitDrained must not return early while jobs
-    // are still scheduled.
-    const mockQueue = {
-      name: 'delayed-queue',
+  it('should treat delayed jobs in discord-embed-sync as busy (ROK-1196)', async () => {
+    // The embed-sync queue uses a 2s coalescing delay; awaitDrained must
+    // wait for it. Other queues (bench-promotion, etc.) intentionally
+    // schedule long-lived delayed jobs and must NOT block awaitDrained.
+    const embedQueue = {
+      name: 'discord-embed-sync',
       drain: jest.fn(),
       getJobCounts: jest.fn().mockResolvedValue({
         waiting: 0,
         active: 0,
         completed: 0,
         failed: 0,
-        delayed: 3,
+        delayed: 1,
       }),
     } as unknown as Queue;
 
-    service.register(mockQueue);
+    service.register(embedQueue);
     await expect(service.awaitDrained(500)).rejects.toThrow(/timed out/i);
+  });
+
+  it('should ignore delayed jobs in long-lived queues like bench-promotion (ROK-1196)', async () => {
+    const benchQueue = {
+      name: 'bench-promotion',
+      drain: jest.fn(),
+      getJobCounts: jest.fn().mockResolvedValue({
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 5,
+      }),
+    } as unknown as Queue;
+
+    service.register(benchQueue);
+    await expect(service.awaitDrained(500)).resolves.not.toThrow();
   });
 }
 describe('QueueHealthService', () => describeQueueHealthService());

@@ -10,6 +10,26 @@ export interface QueueHealthStatus {
   delayed: number;
 }
 
+/**
+ * Queues whose `delayed` jobs should be treated as busy by `awaitDrained`.
+ *
+ * Most queues (bench-promotion, departure-grace, etc.) schedule jobs minutes
+ * or hours into the future as part of normal business logic — counting their
+ * delayed jobs would make awaitDrained block indefinitely. The only queues
+ * here are those using short-window *coalescing* delays where the test must
+ * wait for the in-flight job to actually fire. (ROK-1196.)
+ */
+const SHORT_COALESCE_QUEUES = new Set<string>(['discord-embed-sync']);
+
+/** A queue is busy if it has waiting/active jobs, or delayed jobs in a
+ * short-coalesce queue. Long-lived delayed jobs (e.g. bench-promotion
+ * 5-minute scheduled promotions) are never considered busy. */
+function isQueueBusy(status: QueueHealthStatus): boolean {
+  if (status.waiting > 0 || status.active > 0) return true;
+  if (status.delayed > 0 && SHORT_COALESCE_QUEUES.has(status.name)) return true;
+  return false;
+}
+
 @Injectable()
 export class QueueHealthService {
   private readonly queues = new Map<string, Queue>();
@@ -61,11 +81,8 @@ export class QueueHealthService {
   }
 
   /**
-   * Poll all registered queues until none have waiting, active, OR delayed jobs.
-   * Delayed jobs must be drained too — the embed-sync queue uses a coalescing
-   * delay (ROK-119), so a job in `delayed` state has been enqueued but hasn't
-   * fired yet. Returning before it fires causes downstream tests to race the
-   * Discord edit. (ROK-1196.)
+   * Poll all registered queues until none have waiting/active jobs (and no
+   * delayed jobs in short-coalesce queues — see `SHORT_COALESCE_QUEUES`).
    * Throws if the timeout expires before all queues are idle.
    */
   async awaitDrained(timeoutMs = 30_000): Promise<void> {
@@ -74,9 +91,7 @@ export class QueueHealthService {
 
     while (Date.now() < deadline) {
       const statuses = await this.getHealthStatus();
-      const busy = statuses.some(
-        (s) => s.waiting > 0 || s.active > 0 || s.delayed > 0,
-      );
+      const busy = statuses.some((s) => isQueueBusy(s));
       if (!busy) return;
 
       const remaining = deadline - Date.now();
