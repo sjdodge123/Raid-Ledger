@@ -8,7 +8,7 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
-import { getAdminToken, apiGet, apiPatch } from './api-helpers';
+import { getAdminToken, apiGet, apiPatch, createLineupOrRetry } from './api-helpers';
 // lineup-decided needs a throwing apiPost — keep local override
 import { API_BASE } from './api-helpers';
 
@@ -86,21 +86,22 @@ async function createDecidedLineupWithMatches(token: string): Promise<{
 
     const gameIds = await fetchGameIds(token, 4);
 
-    // Create lineup with a lower match threshold to maximise match generation
-    // Use 720h durations to prevent BullMQ auto-transitions (ROK-1007)
-    const createRes = await apiPost(token, '/lineups', {
-        title: lineupTitle,
-        buildingDurationHours: 720,
-        votingDurationHours: 720,
-        decidedDurationHours: 720,
-        matchThreshold: 10,
-    });
-
-    const lineupId: number =
-        createRes?.id ??
-        (await apiGet(token, '/lineups/banner'))?.id;
-
-    if (!lineupId) throw new Error('Failed to create lineup');
+    // Create lineup with a lower match threshold to maximise match generation.
+    // Use 720h durations to prevent BullMQ auto-transitions (ROK-1007).
+    // ROK-1070: switched from bare POST /lineups to createLineupOrRetry so a
+    // sibling-worker 409 collision triggers a prefix-scoped reset + retry
+    // instead of returning whatever banner lineup happens to be active.
+    const { id: lineupId } = await createLineupOrRetry(
+        token,
+        {
+            title: lineupTitle,
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
+            matchThreshold: 10,
+        },
+        workerPrefix,
+    );
 
     // Nominate games (parallel — nominations are independent)
     await Promise.all(

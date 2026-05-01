@@ -8,7 +8,7 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiGet } from './api-helpers';
+import { API_BASE, getAdminToken, apiGet, createLineupOrRetry } from './api-helpers';
 
 // ROK-1147: this whole file asserts global state ("Start Lineup button visible
 // when no active lineup exists"). With per-worker title-prefix isolation,
@@ -63,31 +63,24 @@ async function archiveActiveLineup(token: string): Promise<void> {
 async function ensureActiveLineup(
     token: string,
 ): Promise<number> {
+    // ROK-1070: switched from bare POST /lineups + /lineups/banner fallback on
+    // 409 to createLineupOrRetry. The fallback returned whatever active lineup
+    // existed (possibly a sibling-worker row in voting/decided), making
+    // subsequent phase assertions non-deterministic. The retry helper archives
+    // sibling rows by prefix and re-POSTs, guaranteeing a fresh `building`
+    // lineup for this worker.
     await archiveActiveLineup(token);
-
-    const createRes = await fetch(`${API_BASE}/lineups`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+    const { id } = await createLineupOrRetry(
+        token,
+        {
             title: lineupTitle,
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
-        }),
-    });
-
-    if (createRes.ok) {
-        const data = (await createRes.json()) as { id: number };
-        return data.id;
-    }
-
-    // 409 — another worker created one; use it
-    const banner = await apiGet(token, '/lineups/banner');
-    if (banner && typeof banner.id === 'number') return banner.id;
-    throw new Error('Failed to create or find an active lineup');
+        },
+        workerPrefix,
+    );
+    return id;
 }
 
 // ROK-1147: initialise per-worker prefix + title before any describe-level
