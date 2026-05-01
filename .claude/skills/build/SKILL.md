@@ -23,7 +23,7 @@ Read `<worktree>/build-state.yaml`, follow `pipeline.next_action`. Stories with 
 
 | Scope | Criteria | E2E Test Type | Gates |
 |-------|----------|---------------|-------|
-| **light** | Config, copy, style-only, docs | Lint + type check | dev → ci → operator → smoke |
+| **light** | Config, copy, style-only, docs, single-file simple fix (typo, import order, isolated edit) — no team, no worktree, no dev agent | Fast CI on touched workspace ONLY (lint + tsc + workspace tests) | lead_direct → fast_ci → operator |
 | **standard** | Single-module feature, bug fix, OR straightforward cross-module add (≤10 files) — including new contract schemas with matching backend + frontend | Playwright/Discord smoke (TDD) | e2e_first → dev → ci → operator → reviewer → smoke |
 | **full** | DB migration, breaking change to existing contract schema, Dockerfile/entrypoint/nginx, OR ≥4 unrelated modules with non-trivial logic in each | Full suite (TDD) + planner + architect + phase-split dev | e2e_first → dev → ci → operator → reviewer → architect_final → smoke |
 
@@ -66,6 +66,14 @@ Requirements Interview (plan mode, if spec incomplete)
 
 **All subagents run as team members, not loose `Agent()` calls.** Step 1 creates a team (`build-ROK-XXX` or `build-batch-N`); every subagent spawn — planner, architect, test agent, dev, reviewer, pr-writer — passes `team_name` and joins the team. Step 5 tears it down. Solo subagents are a pipeline violation.
 
+**Light scope bypasses team / worktree / dev-agent overhead.** For `scope: light` ONLY:
+- No team, no worktree, no `Agent()` spawn — Lead implements directly on a feature branch in the main repo.
+- No TDD test-first, no reviewer, no architect, no Lead final smoke run.
+- Fast CI only — lint + tsc + workspace tests for touched workspace; skip full `validate-ci.sh`, migration validation, container-startup, Playwright.
+- No `deploy_dev.sh` re-run.
+- Pipeline collapses to: Step 1 (setup + Linear flip) → Step 2 light fast-path → Step 3 light fast-path (Linear "In Review" + operator stop) → Step 4 (operator approval only) → Step 5 (push + PR + auto-merge).
+- Escape hatch: if mid-implementation you find real complexity (≥3 files, cross-workspace, real architectural decision), STOP, escalate to `standard`, create a worktree, restart Step 2 from 2a.
+
 **STOP / PAUSE / halt from operator:** cease all tool calls immediately, acknowledge "Stopped.", wait.
 
 **Destructive ops require operator approval:** `deploy_dev.sh --fresh`, `git push --force`, `git reset --hard`, `rm -rf` on project dirs, DB volume deletes, table drops. If in doubt, it's destructive.
@@ -99,9 +107,9 @@ Read each step file when you reach it — do not pre-load all steps.
 | Step | File | Description |
 |------|------|-------------|
 | 1 | `steps/step-1-setup.md` | Cleanup, fetch, profile, requirements interview, init state, Linear → In Progress |
-| 2 | `steps/step-2-implement.md` | Worktrees, optional planner/architect, spawn devs + test agents |
-| 3 | `steps/step-3-validate.md` | CI, deploy LOCAL (**no git push**), Linear → In Review, FULL STOP |
-| 4 | `steps/step-4-review.md` | Poll Linear, rework/approval, reviewer + architect + smoke (**still no push**) |
+| 2 | `steps/step-2-implement.md` | **Light:** Lead implements directly on a feature branch (skip 2a-2f). **Standard/Full:** worktrees, planner/architect (gated), dev + test agents |
+| 3 | `steps/step-3-validate.md` | **Light:** Linear → In Review + FULL STOP (fast CI from step 2 already passed). **Standard/Full:** full CI, deploy LOCAL (no push), Linear → In Review |
+| 4 | `steps/step-4-review.md` | **Light:** operator approval polling only (no reviewer/architect/Lead-smoke). **Standard/Full:** poll Linear, rework/approval, reviewer + architect + smoke (**still no push**) |
 | 5 | `steps/step-5-ship.md` | Rebase, `git push`, create PR, auto-merge, Linear → Done, cleanup |
 
 ---

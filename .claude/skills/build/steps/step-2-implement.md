@@ -4,6 +4,63 @@ Lead creates worktrees, spawns subagents. Max 2-3 devs in parallel.
 
 ---
 
+## Light Scope Fast Path (skip 2a-2f if scope=light for ALL stories in batch)
+
+Lead implements directly in the main repo — no worktree, no team, no dev agent.
+
+### 2-light-a. Branch in main repo
+
+```bash
+git checkout main && git pull --rebase origin/main
+git checkout -b rok-<num>-<short-name>
+```
+
+### 2-light-b. Implement
+
+Lead reads `planning-artifacts/specs/ROK-XXX.md` and edits files directly. Multi-story batches: do them sequentially, one logical commit per story (`feat:` / `fix:` / `tech-debt:` / `chore:` per memory convention).
+
+### 2-light-c. Fast CI on touched workspace ONLY
+
+Identify from `git diff main..HEAD --name-only`:
+
+| Touched | Run |
+|---------|-----|
+| `web/**` only | `npm run lint -w web && cd web && npx tsc --noEmit && npx vitest run --coverage && cd -` |
+| `api/**` only | `npm run lint -w api && cd api && npx tsc --noEmit && npm run test -w api && cd -` |
+| `packages/contract/**` only | `npm run build -w packages/contract` |
+| `.claude/**`, root configs, `*.md`, `*.yml` | skip CI (no compiled code) |
+| Multi-workspace | **escalate to `standard`** — run 2-light-e escape hatch |
+
+Lint/type errors → fix directly, commit `fix: resolve CI issues (ROK-XXX)`. Test failures → fix directly. Don't push with known failures.
+
+### 2-light-d. Update state, skip to Step 3 (light fast path)
+
+```yaml
+stories.ROK-XXX:
+  status: "ready_for_validate"
+  gates:
+    e2e_test_first: N/A
+    dev: PASS         # Lead self-audited
+    ci: PASS          # fast workspace CI
+    operator: PENDING
+    reviewer: N/A
+    smoke_test: N/A
+```
+
+### 2-light-e. Escape hatch — escalate light → standard
+
+If you find real complexity mid-implementation (≥3 files, cross-workspace, real architectural decision), STOP:
+
+1. Stash or commit current state.
+2. Create worktree from current branch: `git worktree add ../Raid-Ledger--rok-<num> rok-<num>-<short-name>`.
+3. Update state: `scope: standard`, restart Step 2 from 2a.
+
+---
+
+(Standard / Full scope continues below.)
+
+---
+
 ## 2a. Bring Up Environment (once per batch) and Create Worktrees
 
 **Lead owns Docker. Devs never touch it.** This step has two parts.

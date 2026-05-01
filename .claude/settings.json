@@ -2,6 +2,32 @@
   "enabledPlugins": {
     "devedup-rl@devedup-rl": true
   },
+  "permissions": {
+    "allow": [
+      "mcp__linear__list_issues",
+      "mcp__linear__get_issue",
+      "mcp__linear__list_cycles",
+      "mcp__linear__list_projects",
+      "mcp__linear__list_teams",
+      "mcp__linear__list_issue_statuses",
+      "mcp__linear__list_issue_labels",
+      "mcp__linear__list_milestones",
+      "mcp__linear__list_comments",
+      "mcp__linear__get_team",
+      "mcp__linear__get_project",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__read_console_messages",
+      "mcp__claude-in-chrome__read_network_requests",
+      "mcp__claude-in-chrome__read_page",
+      "mcp__claude-in-chrome__get_page_text",
+      "mcp__claude-in-chrome__find",
+      "mcp__mcp-env__story_status",
+      "mcp__mcp-env__env_check",
+      "mcp__mcp-env__env_service_status",
+      "mcp__mcp-env__mcp_health",
+      "Bash(./scripts/deploy_dev.sh --status:*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
