@@ -25,7 +25,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { getTestApp, type TestApp } from './test-app';
 import { LINEUP_PHASE_QUEUE } from '../../lineups/queue/lineup-phase.constants';
-import { ROK_1058_PROBE_JOB_ID } from './bullmq-leak-a-enqueue.integration.spec';
+import { ROK_1058_PROBE_JOB_ID } from './bullmq-leak.constants';
 
 function describeSuiteB() {
   let testApp: TestApp;

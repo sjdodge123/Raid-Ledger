@@ -38,9 +38,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { getTestApp, type TestApp } from './test-app';
 import { LINEUP_PHASE_QUEUE } from '../../lineups/queue/lineup-phase.constants';
-
-/** Deterministic, intentionally non-PID-keyed so Suite B can look it up. */
-export const ROK_1058_PROBE_JOB_ID = 'rok-1058-bullmq-leak-probe';
+import { ROK_1058_PROBE_JOB_ID } from './bullmq-leak.constants';
 
 function describeSuiteA() {
   let testApp: TestApp;
