@@ -562,8 +562,11 @@ test.describe('Decided view rendering', () => {
         const matchSections = page.locator(
             '[data-testid="match-tier-section"]',
         );
+        // ROK-1070: bumped 10_000 -> 20_000 to match desktop behaviour and
+        // the existing 15s React Query staleTime. Mobile renders run slightly
+        // slower in CI and the tighter timeout produced false-empty hits.
         const hasSections = await matchSections.first()
-            .isVisible({ timeout: 10_000 })
+            .isVisible({ timeout: 20_000 })
             .catch(() => false);
 
         if (!hasSections) {

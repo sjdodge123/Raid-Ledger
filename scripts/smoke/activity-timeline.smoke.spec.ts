@@ -5,7 +5,7 @@
  * then navigates to that event's detail page and verifies the timeline renders.
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken } from './api-helpers';
+import { API_BASE, apiPost, getAdminToken } from './api-helpers';
 
 async function createTestEvent(token: string): Promise<number> {
     const start = new Date(Date.now() + 86400000).toISOString();
@@ -40,6 +40,11 @@ test.describe('Activity Timeline on event detail', () => {
     test.beforeAll(async () => {
         adminToken = await getAdminToken();
         eventId = await createTestEvent(adminToken);
+        // ROK-1070: createSingleFlow does NOT auto-signup the creator, so the
+        // "signed up" timeline assertion below would fail deterministically.
+        // Explicit signup; the activity_log row is committed before the
+        // response returns (signups.service.ts ~line 100).
+        await apiPost(adminToken, `/events/${eventId}/signups`, {});
     });
 
     test.afterAll(async () => {
