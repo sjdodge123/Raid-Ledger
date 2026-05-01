@@ -3,8 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
-import { isPerfEnabled } from '../common/perf-logger';
-import { PerfDrizzleLogger } from './perf-drizzle-logger';
+import { withQueryPerfLogging } from './perf-drizzle-logger';
 
 export const DrizzleAsyncProvider = 'drizzleProvider';
 
@@ -20,14 +19,13 @@ export const DrizzleAsyncProvider = 'drizzleProvider';
         if (!connectionString) {
           throw new Error('DATABASE_URL is undefined');
         }
-        const client = postgres(connectionString, {
-          max: configService.get<number>('DB_POOL_MAX', 10),
-          idle_timeout: configService.get<number>('DB_IDLE_TIMEOUT', 0),
-        });
-        const db = drizzle(client, {
-          schema,
-          logger: isPerfEnabled() ? new PerfDrizzleLogger() : undefined,
-        });
+        const client = withQueryPerfLogging(
+          postgres(connectionString, {
+            max: configService.get<number>('DB_POOL_MAX', 10),
+            idle_timeout: configService.get<number>('DB_IDLE_TIMEOUT', 0),
+          }),
+        );
+        const db = drizzle(client, { schema });
         return db;
       },
     },

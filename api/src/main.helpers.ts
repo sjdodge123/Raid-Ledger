@@ -3,8 +3,86 @@
  * These configure CORS, helmet CSP, and validate environment settings.
  */
 
+import type { LogLevel } from '@nestjs/common';
+
 type CorsCallback = (err: Error | null, allow?: boolean) => void;
 type CorsOriginFn = (origin: string | undefined, cb: CorsCallback) => void;
+
+// Descending severity. A threshold like 'log' enables itself plus everything
+// to its left (more severe), e.g. error+warn+log. Order matches the original
+// inline whitelist that used to live in main.ts so existing log-shipping
+// behavior is preserved.
+const LOG_LEVELS_DESCENDING: readonly LogLevel[] = [
+  'error',
+  'warn',
+  'log',
+  'debug',
+  'verbose',
+];
+
+export function parseLogLevel(value: string | undefined): LogLevel | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if ((LOG_LEVELS_DESCENDING as readonly string[]).includes(normalized)) {
+    return normalized as LogLevel;
+  }
+  return null;
+}
+
+export interface LogLevelEnv {
+  DEBUG?: string;
+  LOG_LEVEL?: string;
+  NODE_ENV?: string;
+}
+
+interface ConsoleLike {
+  warn: (msg: string) => void;
+}
+
+export function getLogLevels(
+  env: LogLevelEnv,
+  consoleLike: ConsoleLike = console,
+): LogLevel[] {
+  const rawLogLevel = env.LOG_LEVEL?.trim();
+  let threshold: LogLevel;
+  if (rawLogLevel) {
+    const parsed = parseLogLevel(rawLogLevel);
+    if (parsed) {
+      threshold = parsed;
+    } else {
+      consoleLike.warn(
+        `Invalid LOG_LEVEL="${rawLogLevel}" — falling back to "log". ` +
+          `Valid values: ${LOG_LEVELS_DESCENDING.join(', ')}`,
+      );
+      threshold = 'log';
+    }
+  } else if (env.DEBUG === 'true') {
+    threshold = 'debug';
+  } else if (env.NODE_ENV === 'development') {
+    threshold = 'debug';
+  } else {
+    threshold = 'log';
+  }
+  const endIdx = LOG_LEVELS_DESCENDING.indexOf(threshold);
+  return LOG_LEVELS_DESCENDING.slice(0, endIdx + 1);
+}
+
+interface LoggerLike {
+  warn: (message: string) => void;
+  error: (message: string) => void;
+}
+
+export const LOGGER_SELF_TEST_WARN_SENTINEL =
+  '[bootstrap-self-test] logger.warn channel active';
+export const LOGGER_SELF_TEST_ERROR_SENTINEL =
+  '[bootstrap-self-test] logger.error channel active';
+
+export function buildLoggerSelfTest(logger: LoggerLike): () => void {
+  return () => {
+    logger.warn(LOGGER_SELF_TEST_WARN_SENTINEL);
+    logger.error(LOGGER_SELF_TEST_ERROR_SENTINEL);
+  };
+}
 
 export interface HelmetOptions {
   crossOriginResourcePolicy: { policy: 'cross-origin' };
