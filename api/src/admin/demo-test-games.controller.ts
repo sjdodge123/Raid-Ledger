@@ -207,6 +207,7 @@ export class DemoTestGamesController {
     const parsed = parseDemoBody(ResetLineupsSchema, body);
     const { archivedCount } = await this.demoTestLineup.resetLineupsForTest(
       parsed.titlePrefix,
+      parsed.phases,
     );
     return { success: true, archivedCount };
   }

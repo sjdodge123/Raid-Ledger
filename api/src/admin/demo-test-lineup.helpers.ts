@@ -61,28 +61,49 @@ export async function archiveActiveLineupForTest(db: Db): Promise<void> {
     .where(sql`${schema.communityLineups.status} IN ('building', 'voting')`);
 }
 
+/** Lineup phases that may be archived by the test-only reset helper. */
+export type ResetLineupPhase =
+  | 'building'
+  | 'voting'
+  | 'decided'
+  | 'scheduling';
+
+const DEFAULT_RESET_PHASES: ResetLineupPhase[] = ['building', 'voting'];
+
 /**
- * Archive `building`/`voting` lineups whose title starts with `titlePrefix`
- * (ROK-1147). Scoped per worker so sibling workers' lineups are untouched.
+ * Archive lineups whose title starts with `titlePrefix` (ROK-1147). Scoped
+ * per worker so sibling workers' lineups are untouched.
  *
  * The caller's prefix is escaped against LIKE wildcards (`%`, `_`, `\`)
  * before a trailing `%` is appended, so callers cannot inject patterns
  * that would match other workers' titles.
+ *
+ * `phases` defaults to `['building', 'voting']` for back-compat (ROK-1070).
+ * Pass a broader array (e.g. `['building', 'voting', 'decided', 'scheduling']`)
+ * when fixtures depend on archiving lineups already past `voting`
+ * (e.g. scheduling-poll fixtures live on `decided` rows).
  *
  * Returns `archivedCount` for visibility/debugging.
  */
 export async function resetLineupsForTest(
   db: Db,
   titlePrefix: string,
+  phases?: ResetLineupPhase[],
 ): Promise<{ archivedCount: number }> {
   const escapedPrefix = titlePrefix.replace(/[\\%_]/g, (c) => `\\${c}`);
   const pattern = `${escapedPrefix}%`;
+  const effectivePhases =
+    phases && phases.length > 0 ? phases : DEFAULT_RESET_PHASES;
+  // Phase values are constrained to the `ResetLineupPhase` union (validated
+  // upstream by Zod). Building the IN-list via `sql.join` keeps the column
+  // reference parameterised while inlining the safe enum literals.
+  const phaseLiterals = effectivePhases.map((p) => sql`${p}`);
   const result = await db
     .update(schema.communityLineups)
     .set({ status: 'archived', updatedAt: new Date() })
     .where(
       and(
-        sql`${schema.communityLineups.status} IN ('building', 'voting')`,
+        sql`${schema.communityLineups.status} IN (${sql.join(phaseLiterals, sql`, `)})`,
         like(schema.communityLineups.title, pattern),
       ),
     )

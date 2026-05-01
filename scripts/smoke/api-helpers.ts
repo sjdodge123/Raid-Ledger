@@ -225,3 +225,35 @@ export async function createLineupOrRetry(
         `createLineupOrRetry exhausted ${attempts} attempts for prefix=${workerPrefix}; last status=${lastStatus} body=${lastText}`,
     );
 }
+
+// ---------------------------------------------------------------------------
+// Async-write coordination helpers (ROK-1070)
+// ---------------------------------------------------------------------------
+
+/**
+ * Drain all BullMQ queues and any buffered async writes so subsequent
+ * assertions see the final post-write state. Thin wrapper around the
+ * existing test-only endpoint `/admin/test/await-processing`.
+ *
+ * Use this after a write whose downstream side-effects (event listeners,
+ * BullMQ jobs, embed-sync, notifications) must complete before the next
+ * read. See `feedback_smoke_polling_for_async_writes.md`.
+ */
+export async function awaitProcessing(token: string): Promise<void> {
+    await apiPost(token, '/admin/test/await-processing');
+}
+
+/**
+ * Cancel all queued BullMQ phase-advance jobs for `lineupId`. Thin wrapper
+ * around the existing test-only endpoint
+ * `/admin/test/cancel-lineup-phase-jobs`. Used by smoke fixtures that need
+ * to keep a lineup in a fixed phase regardless of the auto-advance schedule.
+ */
+export async function cancelLineupPhaseJobs(
+    token: string,
+    lineupId: number,
+): Promise<void> {
+    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', {
+        lineupId,
+    });
+}
