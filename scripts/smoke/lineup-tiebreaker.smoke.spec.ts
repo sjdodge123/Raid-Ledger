@@ -15,6 +15,7 @@ import {
     apiPost,
     apiGet,
     createLineupOrRetry,
+    awaitProcessing,
 } from './api-helpers';
 
 // ROK-1147: every describe in this file creates a lineup, votes, advances
@@ -136,7 +137,39 @@ async function createVotingLineupWithTiebreaker(
         roundDurationHours: 24,
     });
 
+    // ROK-1070: drain BullMQ + buffered async writes so the tiebreaker-init
+    // job, embed-sync, and notification-dedup writes all settle before the
+    // test navigates. Then poll the API directly to confirm the bracket has
+    // matchups before relying on the React Query (`useQuery` honours a 15s
+    // staleTime, so the first refetch after the page mount can be served
+    // stale otherwise — see feedback_smoke_polling_for_async_writes.md).
+    await awaitProcessing(token);
+    await pollTiebreakerHasMatchups(token, lineupId);
+
     return { lineupId, gameIds };
+}
+
+/**
+ * Poll `/lineups/:id/tiebreaker` until the response carries at least one
+ * matchup. The tiebreaker-init job is queued from the POST handler, so the
+ * response can land before the bracket rows are materialised.
+ */
+async function pollTiebreakerHasMatchups(
+    token: string,
+    lineupId: number,
+    timeoutMs = 10_000,
+): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        const tb = (await apiGet(token, `/lineups/${lineupId}/tiebreaker`)) as
+            | { matchups?: unknown[]; mode?: string }
+            | null;
+        if (tb && Array.isArray(tb.matchups) && tb.matchups.length > 0) return;
+        await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(
+        `Tiebreaker for lineup ${lineupId} had no matchups within ${timeoutMs}ms`,
+    );
 }
 
 // ---------------------------------------------------------------------------

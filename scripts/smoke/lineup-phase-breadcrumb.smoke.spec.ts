@@ -11,7 +11,13 @@
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiGet } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiGet,
+    createLineupOrRetry,
+    cancelLineupPhaseJobs,
+} from './api-helpers';
 
 /** Local apiPatch that returns raw Response (callers check .ok). */
 async function apiPatch(token: string, path: string, body: Record<string, unknown>) {
@@ -43,24 +49,28 @@ async function archiveActiveLineup(token: string): Promise<void> {
 }
 
 async function ensureActiveLineup(token: string): Promise<number> {
+    // ROK-1070: switched from a bare POST /lineups + fallback to
+    // /lineups/banner on 409, to `createLineupOrRetry`. The old fallback
+    // returned whatever active lineup happened to exist, which on a
+    // sibling-worker collision could be a `voting`/`decided` row — the
+    // breadcrumb test then advanced from the wrong phase. The retry helper
+    // archives sibling rows by prefix and re-POSTs, guaranteeing a fresh
+    // `building` lineup for this worker. Defensive: also cancel the
+    // BullMQ phase-advance job so a slow CI run can't auto-advance the
+    // 720h-window lineup mid-test (matches lineup-auto-advance fixture).
     await archiveActiveLineup(token);
-    const createRes = await fetch(`${API_BASE}/lineups`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
+    const { id } = await createLineupOrRetry(
+        token,
+        {
             title: lineupTitle,
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
-        }),
-    });
-    if (createRes.ok) {
-        const data = (await createRes.json()) as { id: number };
-        return data.id;
-    }
-    const banner = await apiGet(token, '/lineups/banner');
-    if (banner && typeof banner.id === 'number') return banner.id;
-    throw new Error('Failed to create or find an active lineup');
+        },
+        workerPrefix,
+    );
+    await cancelLineupPhaseJobs(token, id);
+    return id;
 }
 
 async function ensureLineupInPhase(token: string, targetPhase: string): Promise<number> {
