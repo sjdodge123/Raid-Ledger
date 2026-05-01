@@ -28,6 +28,8 @@ import { aiChatTests } from './tests/ai-chat.test.js';
 import { lineupTitleTests } from './tests/lineup-title.test.js';
 import { privateLineupTests } from './tests/private-lineup.test.js';
 import { lineupTiebreakerOpenTests } from './tests/lineup-tiebreaker-open.test.js';
+import { lineupAbortTests } from './tests/lineup-abort.test.js';
+import { standalonePollReminderTests } from './tests/standalone-poll-reminders.test.js';
 
 /** Build a TestResult from a test, status, and timing info. */
 function buildResult(
@@ -145,6 +147,8 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...lineupTitleTests,
     ...privateLineupTests,
     ...lineupTiebreakerOpenTests,
+    ...lineupAbortTests,
+    ...standalonePollReminderTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 

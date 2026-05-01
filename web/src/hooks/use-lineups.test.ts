@@ -17,6 +17,7 @@ const mockRemoveNomination = vi.fn();
 const mockToggleVote = vi.fn();
 const mockAddLineupInvitees = vi.fn();
 const mockRemoveLineupInvitee = vi.fn();
+const mockAbortLineup = vi.fn();
 
 vi.mock('../lib/api-client', () => ({
     getActiveLineups: (...args: unknown[]) => mockGetActiveLineups(...args),
@@ -29,6 +30,7 @@ vi.mock('../lib/api-client', () => ({
     addLineupInvitees: (...args: unknown[]) => mockAddLineupInvitees(...args),
     removeLineupInvitee: (...args: unknown[]) =>
         mockRemoveLineupInvitee(...args),
+    abortLineup: (...args: unknown[]) => mockAbortLineup(...args),
 }));
 
 import {
@@ -36,6 +38,7 @@ import {
     useLineupBanner, useLineupDetail, useRemoveNomination,
     useToggleVote,
     useAddLineupInvitees, useRemoveLineupInvitee,
+    useAbortLineup,
 } from './use-lineups';
 
 // --- Helpers ---
@@ -442,5 +445,63 @@ describe('useToggleVote', () => {
         await expect(
             act(() => result.current.mutateAsync({ lineupId: 1, gameId: 99 })),
         ).rejects.toThrow('Vote limit');
+    });
+});
+
+describe('useAbortLineup (ROK-1062)', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('calls abortLineup with lineupId and body', async () => {
+        mockAbortLineup.mockResolvedValue({ ...mockLineupResponse, status: 'archived' });
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useAbortLineup(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({
+                lineupId: 1,
+                body: { reason: 'wrong scope' },
+            });
+        });
+        expect(mockAbortLineup).toHaveBeenCalledWith(1, { reason: 'wrong scope' });
+    });
+
+    it('invalidates lineup detail and lineups prefix on success', async () => {
+        mockAbortLineup.mockResolvedValue({ ...mockLineupResponse, status: 'archived' });
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useAbortLineup(), { wrapper });
+        await act(async () => {
+            await result.current.mutateAsync({
+                lineupId: 7,
+                body: { reason: null },
+            });
+        });
+        const detailCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) =>
+                JSON.stringify(opts?.queryKey) ===
+                JSON.stringify(['lineups', 'detail', 7]),
+        );
+        expect(detailCalls.length).toBeGreaterThanOrEqual(1);
+        const lineupCalls = invalidateSpy.mock.calls.filter(
+            ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(['lineups']),
+        );
+        expect(lineupCalls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not invalidate queries on mutation error', async () => {
+        mockAbortLineup.mockRejectedValue(new Error('Conflict'));
+        const { wrapper, queryClient } = createWrapper();
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+        const { result } = renderHook(() => useAbortLineup(), { wrapper });
+        await act(async () => {
+            try {
+                await result.current.mutateAsync({
+                    lineupId: 1,
+                    body: { reason: null },
+                });
+            } catch {
+                // expected
+            }
+        });
+        expect(invalidateSpy).not.toHaveBeenCalled();
     });
 });

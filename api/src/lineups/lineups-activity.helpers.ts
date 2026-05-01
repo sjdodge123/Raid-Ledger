@@ -42,3 +42,15 @@ export async function logNomination(
     note: dto.note ?? null,
   });
 }
+
+/** Log an admin abort of a lineup (ROK-1062). */
+export async function logAborted(
+  activityLog: ActivityLogService,
+  lineupId: number,
+  actorId: number,
+  reason: string | null,
+): Promise<void> {
+  await activityLog.log('lineup', lineupId, 'lineup_aborted', actorId, {
+    reason,
+  });
+}

@@ -10,10 +10,12 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { DemoDataService } from './demo-data.service';
 import { QueueHealthService } from '../queue/queue-health.service';
+import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
 import { wipeAllTestData, type WipeCounts } from './demo-test-reset.helpers';
 
@@ -31,6 +33,8 @@ export class DemoTestResetService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    @Inject(REDIS_CLIENT)
+    private readonly redis: Redis,
     private readonly demoDataService: DemoDataService,
     private readonly settingsService: SettingsService,
     private readonly moduleRef: ModuleRef,
@@ -44,6 +48,7 @@ export class DemoTestResetService {
   async resetToSeed(): Promise<ResetToSeedResult> {
     this.logger.log('reset-to-seed: wiping test data...');
     const deleted = await wipeAllTestData(this.db);
+    await this.flushDedupRedisCache();
     this.logger.log(
       `reset-to-seed: wiped ${describeCounts(deleted)} — reseeding...`,
     );
@@ -51,6 +56,29 @@ export class DemoTestResetService {
     await this.drainQueues();
     this.logger.log('reset-to-seed: complete');
     return { success: reseed.ok, deleted, reseed };
+  }
+
+  /**
+   * Drop notification-dedup keys from Redis so smoke runs that reset
+   * lineup IDs back to 1, 2, 3 don't collide with stale dedup entries
+   * cached from prior runs (ROK-1062). The DB rows are wiped by
+   * `wipeAllTestData` via `notification_dedup` in the truncate list,
+   * but `NotificationDedupService` checks Redis first.
+   */
+  private async flushDedupRedisCache(): Promise<void> {
+    const patterns = [
+      'lineup-*',
+      'event-*',
+      'tiebreaker-*',
+      'scheduling-*',
+      'standalone-poll-*',
+    ];
+    for (const pattern of patterns) {
+      const keys = await this.redis.keys(pattern);
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+      }
+    }
   }
 
   /**

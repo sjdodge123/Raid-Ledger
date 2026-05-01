@@ -127,3 +127,8 @@ export const ExpireAiChatSessionSchema = z.object({
 export const SetAiChatEnabledSchema = z.object({
   enabled: z.boolean(),
 });
+
+export const AdvanceStandalonePollDeadlineSchema = z.object({
+  lineupId: z.number().int().positive(),
+  hoursUntilDeadline: z.number().min(-720).max(720),
+});

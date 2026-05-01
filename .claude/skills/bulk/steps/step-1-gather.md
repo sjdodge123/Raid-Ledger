@@ -49,15 +49,41 @@ After reconciliation:
 
 ## 1c. Fetch Stories from Linear
 
+**Cycle-first ordering.** Linear auto-rolls incomplete cycle issues forward, so anything sitting in the current cycle is already on the operator's "this week" radar. Drain the cycle before reaching into the wider backlog.
+
+### Pool A — current cycle (PRIMARY)
+
 ```
-mcp__linear__list_issues({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", statusName: "Dispatch Ready", first: 20 })
+mcp__linear__list_issues({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", cycle: "current", limit: 30 })
 ```
 
-Filter results to labels: **Tech Debt**, **Chore**, or **Performance**.
+Filter results to labels: **Tech Debt**, **Chore**, or **Performance**, AND state != Done/Cancelled. This is the preferred pool — start here every run.
 
-Secondary pool (opt-in): same query with `statusName: "Backlog"`.
+### Pool B — Dispatch Ready outside the cycle (FALLBACK)
 
-For specific stories: `mcp__linear__get_issue({ issueId: "ROK-XXX" })` per ID. Verify label is eligible — if Bug/Feature, flag and recommend `/build`.
+Only if Pool A is empty or has fewer than the operator's requested batch size:
+
+```
+mcp__linear__list_issues({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", state: "Dispatch Ready", limit: 20 })
+```
+
+Same label filter (Tech Debt / Chore / Performance). Skip stories already returned by Pool A.
+
+### Pool C — Backlog (LAST RESORT, opt-in)
+
+```
+mcp__linear__list_issues({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", state: "Backlog", limit: 20 })
+```
+
+Only when operator explicitly says "go wider" or both A + B are empty. Same label filter.
+
+### Specific story IDs
+
+For specific stories named by the operator: `mcp__linear__get_issue({ id: "ROK-XXX" })` per ID. Verify label is eligible — if Bug/Feature, flag and recommend `/build`. Cycle membership is informational only when the operator named the IDs.
+
+### Presentation
+
+When presenting the batch (1e), tag each story's source pool: `[cycle]`, `[ready]`, or `[backlog]`. Operator should see at a glance whether they're draining the cycle or reaching past it.
 
 ### Verify "Chore" label exists (first run only)
 
@@ -94,8 +120,10 @@ When in doubt, plan.
 ```
 ## Bulk — YYYY-MM-DD
 
-| # | Story | Label | Scope | Planner? | Notes |
-|---|-------|-------|-------|----------|-------|
+| # | Story | Pool | Label | Scope | Planner? | Notes |
+|---|-------|------|-------|-------|----------|-------|
+
+`Pool` is `cycle` / `ready` / `backlog` per 1c.
 
 **Flagged (not eligible — recommend /build):**
 - ROK-AAA: Title — <reason>

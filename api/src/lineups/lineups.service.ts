@@ -1,6 +1,7 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  AbortLineupDto,
   BandwagonJoinResponseDto,
   CommonGroundQueryDto,
   CommonGroundResponseDto,
@@ -34,6 +35,8 @@ import { buildActiveLineupSummaries } from './lineups-summary.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
 import { runMetadataUpdate } from './lineups-metadata.helpers';
 import { runStatusTransition } from './lineups-transition.helpers';
+import { runLineupAbort } from './lineups-abort.helpers';
+import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import {
   runBandwagonJoin,
   runAdvanceMatch,
@@ -88,6 +91,8 @@ export class LineupsService {
     private readonly tasteProfile: TasteProfileService,
     private readonly aiSuggestionsCache: AiSuggestionsCacheInvalidator,
     private readonly lineupsGateway: LineupsGateway,
+    @Inject(forwardRef(() => TiebreakerService))
+    private readonly tiebreaker: TiebreakerService,
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
@@ -178,18 +183,20 @@ export class LineupsService {
     id: number,
     dto: UpdateLineupStatusDto,
   ): Promise<LineupDetailResponseDto> {
-    return runStatusTransition(
-      {
-        db: this.db,
-        activityLog: this.activityLog,
-        settings: this.settings,
-        phaseQueue: this.phaseQueue,
-        lineupNotifications: this.lineupNotifications,
-        lineupsGateway: this.lineupsGateway,
-        logger: this.logger,
-      },
+    return runStatusTransition(this.autoAdvanceDeps(), id, dto);
+  }
+
+  /** ROK-1062: Force-archive a lineup with optional reason (admin/operator). */
+  abort(
+    id: number,
+    dto: AbortLineupDto,
+    actor: { id: number },
+  ): Promise<LineupDetailResponseDto> {
+    return runLineupAbort(
+      { ...this.autoAdvanceDeps(), tiebreaker: this.tiebreaker },
       id,
-      dto,
+      dto.reason ?? null,
+      actor.id,
     );
   }
 

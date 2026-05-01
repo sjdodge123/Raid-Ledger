@@ -64,6 +64,20 @@ const ACTION_MAP: Record<string, ActionDisplay> = {
     label: (_actor, meta) =>
       `${(meta?.gameName as string) ?? 'A game'} was chosen`,
   },
+  lineup_aborted: {
+    color: 'text-rose-400',
+    dotColor: 'bg-rose-400',
+    bgColor: 'bg-rose-500/20',
+    borderColor: 'border-rose-500/40',
+    label: (actor, meta) => {
+      const reason = meta?.reason as string | null | undefined;
+      const trimmed = typeof reason === 'string' ? reason.trim() : '';
+      const who = actor ?? 'An admin';
+      return trimmed
+        ? `${who} aborted the lineup: ${trimmed}`
+        : `${who} aborted the lineup`;
+    },
+  },
   event_linked: {
     color: 'text-blue-400',
     dotColor: 'bg-blue-400',
