@@ -158,6 +158,7 @@ async function provisionDatabase(): Promise<{
     .withDatabase('raid_ledger_test')
     .withUsername('test')
     .withPassword('test')
+    .withStartupTimeout(60_000)
     .start();
   return { connectionString: container.getConnectionUri(), container };
 }
