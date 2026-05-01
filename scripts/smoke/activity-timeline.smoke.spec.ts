@@ -81,9 +81,13 @@ test.describe('Activity Timeline on event detail', () => {
             await activityBtn.click();
         }
 
-        // The creator auto-signs up, so we should see both actions
+        // The creator auto-signs up, so we should see both actions.
+        // ROK-1070: scope to .first() — earlier specs (notifications/events/
+        // plan-event/create-event) call reset-to-seed which re-seeds demo
+        // events that already have "created the event" activity rows, so
+        // the page can show 3+ matching elements and break strict mode.
         await expect(
-            page.getByText(/created the event/),
+            page.getByText(/created the event/).first(),
         ).toBeVisible({ timeout: 10_000 });
 
         // "signed up" may be below the maxVisible fold — check it's in the DOM
