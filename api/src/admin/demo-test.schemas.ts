@@ -85,7 +85,43 @@ export const ArchiveLineupSchema = z.object({
   lineupId: z.number().int().positive(),
 });
 
+/**
+ * Phases archived by `/admin/test/reset-lineups` (ROK-1070).
+ *
+ * Default behaviour (no phases supplied) preserves the original ROK-1147
+ * contract — only `building` and `voting` rows are archived. Pass a broader
+ * array (e.g. `['building', 'voting', 'decided', 'scheduling']`) when the
+ * caller's fixtures depend on archiving lineups already past `voting`
+ * (e.g. scheduling-poll fixtures live on `decided` rows).
+ */
+const VALID_LINEUP_PHASES = [
+  'building',
+  'voting',
+  'decided',
+  'scheduling',
+] as const;
+
 export const ResetLineupsSchema = z.object({
+  titlePrefix: z.string().min(1).max(64),
+  phases: z.array(z.enum(VALID_LINEUP_PHASES)).min(1).optional(),
+});
+
+/**
+ * Body for `/admin/test/seed-slow-queries-log` (ROK-1070).
+ *
+ * Empty object is the only valid shape today. Reserved for a future
+ * `entryCount` knob if smoke tests ever need to control how many
+ * digest blocks are pre-seeded.
+ */
+export const SeedSlowQueriesLogSchema = z.object({}).strict();
+
+/**
+ * Body for `/admin/test/reset-events` (ROK-1070).
+ *
+ * Mirrors the lineup reset contract — caller passes a per-worker
+ * `titlePrefix` so sibling workers' events are untouched.
+ */
+export const ResetEventsSchema = z.object({
   titlePrefix: z.string().min(1).max(64),
 });
 

@@ -16,6 +16,16 @@ function createMockService() {
     flushEmbedQueueForTest: jest.fn().mockResolvedValue({ success: true }),
     awaitProcessingForTest: jest.fn().mockResolvedValue(undefined),
     clearGameTimeConfirmationForTest: jest.fn().mockResolvedValue(undefined),
+    resetOnboardingForTest: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+function createMockSlowQueries() {
+  return {
+    appendDigestToLog: jest.fn().mockResolvedValue(undefined),
+    getLogFilePath: jest
+      .fn()
+      .mockReturnValue('/tmp/raid-ledger-smoke/slow-queries.log'),
   };
 }
 
