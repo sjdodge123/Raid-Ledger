@@ -1,21 +1,26 @@
 name: Rebase Dependabot PRs after main update
 
 # When main moves, branch protection's "up to date" requirement causes any open
-# Dependabot PR to become BEHIND and stop auto-merging. This workflow nudges
-# Dependabot to rebase every open bot PR so auto-merge can resume.
+# Dependabot PR to become BEHIND and stop auto-merging. The previous version
+# of this workflow posted "@dependabot rebase" comments, but Dependabot
+# rejects @-commands from the github-actions[bot] account ("only users with
+# push access can use that command"). Use the REST update-branch endpoint
+# instead — it runs under the workflow's own contents: write token, so the
+# permission check is satisfied without involving Dependabot's parser.
 
 on:
   push:
     branches: [main]
 
 permissions:
-  pull-requests: write
+  contents: write
+  pull-requests: read
 
 jobs:
   rebase:
     runs-on: ubuntu-latest
     steps:
-      - name: Comment '@dependabot rebase' on every open Dependabot PR
+      - name: Update branch on every open Dependabot PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -31,6 +36,13 @@ jobs:
             exit 0
           fi
           for n in $numbers; do
-            echo "Triggering rebase on PR #$n"
-            gh pr comment "$n" --body "@dependabot rebase" || true
+            echo "Updating branch on PR #$n"
+            # update-branch is a no-op when the PR is already current with
+            # the base branch. `expected_head_sha=` skips the optimistic
+            # concurrency check; we tolerate the rare 422 (e.g. PR closed
+            # mid-loop) so one bad PR doesn't fail the whole job.
+            gh api "repos/$GH_REPO/pulls/$n/update-branch" \
+              -X PUT \
+              -f expected_head_sha= \
+              || true
           done
