@@ -12,7 +12,7 @@
  * The same gate must apply to BOTH CreateFromSlot and RescheduleFromSlot.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
     MatchDetailResponseDto,
@@ -463,6 +463,3 @@ describe('CreateEventSection — AC9: reschedule path is also gated', () => {
         ).toBeInTheDocument();
     });
 });
-
-// Helper export to silence "within is unused" if it isn't referenced.
-void within;

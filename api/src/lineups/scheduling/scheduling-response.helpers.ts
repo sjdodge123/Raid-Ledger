@@ -121,11 +121,9 @@ export function buildPollResponse(
   userId: number | null,
   lineupStatus: string,
 ): SchedulePollPageResponseDto {
-  const gameName = (match as { gameName?: string }).gameName ?? 'Unknown';
-  const gameCoverUrl =
-    (match as { gameCoverUrl?: string | null }).gameCoverUrl ?? null;
-  const lineupCreatedById =
-    (match as { lineupCreatedById?: number | null }).lineupCreatedById ?? null;
+  const gameName = match.gameName ?? 'Unknown';
+  const gameCoverUrl = match.gameCoverUrl ?? null;
+  const lineupCreatedById = match.lineupCreatedById ?? null;
 
   return {
     match: buildMatchDetailDto(
