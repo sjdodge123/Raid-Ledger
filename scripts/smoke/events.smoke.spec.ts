@@ -5,6 +5,14 @@ import { test, expect } from './base';
 import { navigateToFirstEvent } from './helpers';
 import { getAdminToken, apiGet, apiPost, apiDelete } from './api-helpers';
 
+// ROK-1070: reset-to-seed before this file's tests so stale events from
+// prior smoke runs don't pollute the events list (e.g., the mobile search
+// test depends on baseline demo events being the only rows present).
+test.beforeAll(async () => {
+    const token = await getAdminToken();
+    await apiPost(token, '/admin/test/reset-to-seed', {});
+});
+
 // ---------------------------------------------------------------------------
 // Events List
 // ---------------------------------------------------------------------------

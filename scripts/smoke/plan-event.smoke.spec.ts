@@ -7,6 +7,15 @@
  * (to avoid creating data that affects other tests).
  */
 import { test, expect } from './base';
+import { apiPost, getAdminToken } from './api-helpers';
+
+// ROK-1070: reset-to-seed before this file's tests so stale events from
+// prior smoke runs don't leak into the form's "scheduled events" list and
+// upset the game-selection assertion.
+test.beforeAll(async () => {
+    const token = await getAdminToken();
+    await apiPost(token, '/admin/test/reset-to-seed', {});
+});
 
 // ---------------------------------------------------------------------------
 // Plan Event Form — Rendering

@@ -2,6 +2,15 @@
  * Notifications smoke tests — bell icon, dropdown, mark all read.
  */
 import { test, expect } from './base';
+import { apiPost, getAdminToken } from './api-helpers';
+
+// ROK-1070: reset-to-seed before this file's tests so stale notifications
+// from prior smoke runs don't leak into the dropdown content assertion.
+// Single-test file with no fixture creation, so the heavier reset is cheap.
+test.beforeAll(async () => {
+    const token = await getAdminToken();
+    await apiPost(token, '/admin/test/reset-to-seed', {});
+});
 
 test.describe('Notifications', () => {
     test('bell icon is visible in header', async ({ page }) => {
