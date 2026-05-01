@@ -300,17 +300,18 @@ test.describe('Paste disabled in non-building phases (AC6)', () => {
     let votingLineupId: number;
 
     test.beforeAll(async () => {
-        // Always create a fresh lineup to avoid state contamination from parallel tests
-        const banner = await apiGet(adminToken, '/lineups/banner');
-        if (banner && typeof banner.id === 'number') {
-            await archiveLineup(adminToken, banner.id);
-        }
-
-        const created = (await apiPost(adminToken, '/lineups', {
-            title: lineupTitle,
-            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-        })) as { id: number };
-        votingLineupId = created.id;
+        // ROK-1070: switched bare POST /lineups + banner-fallback pattern to
+        // createLineupOrRetry so a sibling-worker 409 triggers a prefix-scoped
+        // reset + retry rather than reusing a stale active lineup.
+        const { id } = await createLineupOrRetry(
+            adminToken,
+            {
+                title: lineupTitle,
+                targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+            },
+            workerPrefix,
+        );
+        votingLineupId = id;
 
         // Add nominations then advance to voting
         const gamesRes = await fetch(`${API_BASE}/games/configured`, {
