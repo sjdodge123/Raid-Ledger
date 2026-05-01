@@ -42,7 +42,13 @@ export async function toggleScheduleVote(
   });
 }
 
-/** Create an event from a schedule slot. */
+/**
+ * Create an event from a schedule slot.
+ *
+ * @deprecated Use POST /events with matchId param instead (ROK-1121).
+ * Endpoint retained for smoke-test compatibility — full removal tracked
+ * separately.
+ */
 export async function createEventFromSlot(
   lineupId: number,
   matchId: number,

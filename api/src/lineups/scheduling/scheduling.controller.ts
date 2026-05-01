@@ -99,7 +99,13 @@ export class SchedulingController {
     );
   }
 
-  /** POST /lineups/:lineupId/schedule/:matchId/create-event — create event. */
+  /**
+   * POST /lineups/:lineupId/schedule/:matchId/create-event — create event.
+   *
+   * @deprecated Use POST /events with matchId param instead (ROK-1121).
+   * Endpoint retained for smoke-test compatibility — full removal tracked
+   * separately.
+   */
   @Post(':lineupId/schedule/:matchId/create-event')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.CREATED)

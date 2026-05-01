@@ -88,7 +88,13 @@ export function useRetractAllVotes() {
   });
 }
 
-/** Hook for creating an event from a selected slot. */
+/**
+ * Hook for creating an event from a selected slot.
+ *
+ * @deprecated Use POST /events with matchId param instead (ROK-1121).
+ * Endpoint retained for smoke-test compatibility — full removal tracked
+ * separately.
+ */
 export function useCreateEventFromSlot() {
   const qc = useQueryClient();
   return useMutation<{ eventId: number }, Error, { lineupId: number; matchId: number; slotId: number; recurring?: boolean }>({
