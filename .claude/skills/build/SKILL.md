@@ -90,13 +90,15 @@ Requirements Interview (plan mode, if spec incomplete)
 
 **Subagent rules (applied via templates):** subagents stay in their worktree, never push, never create PRs, never enable auto-merge, never force-push, never call `mcp__linear__*`, never run destructive ops. Lead handles all of that.
 
-**Cost discipline (STRICT — applies to ALL agents):**
+**Cost discipline (applies to ALL agents — favor avoiding rework over saving tokens):**
+
+These rules cut tokens without cutting quality. They DO NOT trade quality for cost — if a rule risks rework on a given story, override it.
 
 - **Do not paste the spec into agent prompts.** Lead writes `planning-artifacts/dev-brief-ROK-XXX.md` once per story. Every agent prompt body is 2-4 lines: "Read `planning-artifacts/dev-brief-ROK-XXX.md` and `planning-artifacts/specs/ROK-XXX.md`. Execute <task>. Commit and report." That's it. The full spec/plan/architect findings already live on disk.
-- **Report cap:** every agent's terminal `SendMessage` to team-lead is **≤300 words**. Cite commit hashes, file paths, and PASS/FAIL counts — do NOT paste runner output, AC trace tables, or full diffs. Detailed write-ups go to a file in `planning-artifacts/` so Lead can read on demand.
+- **Report cap (soft):** agents target **≤500 words** for routine `SendMessage` reports — cite commit hashes, file paths, PASS/FAIL counts. Detailed write-ups (architect findings, planner output, full AC trace, reviewer report) go to a file in `planning-artifacts/` and the message is a pointer + headlines. The cap is a target, not a gag — if a story genuinely needs more nuance to avoid rework, write more.
 - **Lead does not capture stdout into context.** Long-running command output (`validate-ci.sh`, `npx playwright test`, `deploy_dev.sh`) is read via `tail -20` or a one-line summary line — never the full log. If the command exits 0, accept it. If it exits non-zero, read only the failing block.
-- **One agent at a time per story for `standard` scope.** No phase split. No planner. No architect. The dev reads the brief and executes the whole story start-to-finish, with TDD test agent ahead of it.
-- **Skip the reviewer when** the diff is `<300 lines net` AND no risk markers present (no migration, no Dockerfile, no auth code, no money/payments code). Operator approval is the gate; reviewer is for genuinely complex diffs.
+- **Architect for `standard`:** allowed when the story has genuine architectural ambiguity — ≥2 viable implementation paths, or AC bar high enough that picking the wrong path means redo. Lead's call. Default is still no architect for standard, but don't ration it when it would prevent rework.
+- **Reviewer is the default, not the exception.** Reviewer runs for `standard` and `full`. Skip ONLY when the diff is genuinely trivial: single-file, <100 lines, pure copy/config/dep-bump with no logic change. Operator approval is NOT a substitute for reviewer on anything with logic — past skipped reviews caused the rework this section exists to prevent.
 
 ---
 

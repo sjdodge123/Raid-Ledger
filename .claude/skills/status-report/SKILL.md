@@ -17,7 +17,7 @@ Pull from these sources, stopping as soon as you can fill the template:
 
 1. **In-conversation tasks** — call `TaskList`. In-progress tasks → `NOW`, pending → `NEXT`, completed → `DONE`.
 2. **Branch name** — `git branch --show-current`. Extract story ID via `rok-\d+` (uppercase for display).
-3. **`task.md`** at repo root (created by `/start`) — source for story title + acceptance criteria.
+3. **`task.md`** at repo root (created by `/build` Step 1) — source for story title + acceptance criteria.
 4. **`planning-artifacts/specs/ROK-XXX.md`** (created by `/build`) — fuller spec if present.
 5. **Linear story** — only call `mcp__linear__get_issue` if no local artifact has the title.
 6. **Git status** — `git status --porcelain` for uncommitted work, `git log -5 --oneline` for recent commits.

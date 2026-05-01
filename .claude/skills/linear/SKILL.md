@@ -11,7 +11,52 @@ Operator-invoked. When the operator types `/linear`, run the full Linear-sync pi
 
 The goal: Linear should never be more than one prompt out of date. The operator should be able to walk away and come back, read the active story, and know exactly where things stand without asking.
 
-## Inputs (auto-detect, do not ask)
+## Phase detection (run FIRST, before any other step)
+
+The skill has two phases. Detect which one is active before doing anything
+else.
+
+- **`sync` phase** — there is an active story. Run all Steps below.
+- **`none` phase** — there is no active story (no `task.md`, branch is
+  `main` / `batch/*` / `chore/*` with no `ROK-XXX` references in recent
+  commits, and the conversation has no obvious in-flight story).
+  Skip the sync pipeline entirely and run **Create-Only Mode** instead.
+
+Detection logic:
+
+1. Check `task.md` — if present and contains `ROK-XXX`, phase = `sync`.
+2. Check current branch name — if it matches `*/rok-XXXX-*` or contains
+   `ROK-XXXX`, phase = `sync`.
+3. Check `git log --oneline origin/main..HEAD` — if any commit references
+   `ROK-XXXX`, phase = `sync`.
+4. Otherwise, phase = `none` → enter **Create-Only Mode**.
+
+The operator can also force phases:
+- `/linear create` → force `none` phase (always prompt for new stories)
+- `/linear sync` → force `sync` phase (require an active story; ask if missing)
+
+## Create-Only Mode (phase = `none`)
+
+When no active story is detected, do NOT auto-run the sync steps. Instead:
+
+1. Greet the operator with: *"No active story detected. What would you
+   like to create? Paste one or more story ideas (titles, bullets, or
+   freeform) and I'll draft them with the scope template."*
+2. Wait for the operator's input.
+3. For each story idea:
+   - Investigate referenced files/behavior (`feedback_investigate_before_stories`).
+   - Draft a full story body using the **Story Description Template**
+     below.
+   - Show the operator the draft (title, labels, estimate, full
+     description) and ask for confirmation before calling
+     `mcp__linear__save_issue`.
+4. After creation, link any dependencies (Step 4 below) and report back
+   with the new IDs.
+
+Do NOT skip the template, the estimate, or the operator confirmation step.
+Scope-light stories are exactly what this rework exists to prevent.
+
+## Inputs (sync phase — auto-detect, do not ask)
 
 1. **Active story ID** — derive from, in order:
    - `task.md` at repo root (if present, parse the `ROK-XXX` from the header)
@@ -28,6 +73,40 @@ The goal: Linear should never be more than one prompt out of date. The operator 
 3. **Surfaced tech debt** — anything in the conversation flagged as "we should clean this up later", "TODO", "this is a workaround", reviewer findings not in scope, etc.
 
 4. **New dependencies surfaced** — anything in the conversation indicating "this is blocked by X", "we need Y first", "this depends on Z being merged".
+
+## Story Description Template (MANDATORY for new stories)
+
+Every story created via this skill MUST use this scaffold so scope is
+captured up front rather than discovered mid-build.
+
+```markdown
+## Scope
+<1–3 sentences: what this story delivers and the boundary>
+
+## Acceptance Criteria
+- [ ] <observable behavior 1>
+- [ ] <observable behavior 2>
+- [ ] <test coverage requirement>
+
+## Out of Scope
+- <explicit non-goal 1>
+- <follow-up tracked elsewhere → ROK-YYY>
+
+## References
+- file:line pointers
+- Related stories / Figma / docs
+
+## Notes
+<implementation hints, only if non-obvious>
+```
+
+Additional fields to set on creation:
+- **estimate** — t-shirt size (1/2/3/5/8). Required.
+- **Sub-issues** — if AC has >5 checkboxes OR scope spans >1 workspace
+  (api / web / contract / infra), break into sub-issues via `parentId`
+  instead of one mega-story.
+- **relatedTo / blockedBy** — link any dependency surfaced during
+  investigation.
 
 ## Steps
 
@@ -55,7 +134,8 @@ If the changes are non-trivial, use `mcp__linear__save_issue { id, description }
 For each piece of tech debt surfaced in the conversation that is NOT in scope of the current story:
 
 1. Verify it isn't already tracked: `mcp__linear__list_issues { query: "<short keywords>", project: "Raid Ledger" }`.
-2. If not tracked, create a new story:
+2. If not tracked, create a new story using the **Story Description
+   Template** above (Scope / AC / Out-of-Scope / References / Notes):
 
 ```
 mcp__linear__save_issue {
@@ -64,8 +144,10 @@ mcp__linear__save_issue {
   title: "tech-debt: <concise>",          // or fix:, chore:, perf:
   labels: ["Tech Debt", "<Area>"],         // pick the correct area label
   priority: 3,                              // medium by default
-  description: "<what / why / pointers to file:line / any AC>",
+  estimate: 2,                              // REQUIRED — t-shirt size 1/2/3/5/8
+  description: "<full template body — Scope, AC checklist, Out of Scope, References, Notes>",
   relatedTo: ["ROK-XXXX"],                  // link back to the story that surfaced it
+  parentId: "<ROK-PARENT>",                 // only if this is a sub-issue
 }
 ```
 
@@ -74,6 +156,8 @@ mcp__linear__save_issue {
    - One area label (no `Area:` prefix — labels are bare names)
    - Always project = "Raid Ledger", team = "Roknua's projects"
 4. Investigate before creating — verify the file paths and behavior referenced are real (`feedback_investigate_before_stories`).
+5. If scope spans multiple workspaces or AC has >5 checkboxes, create
+   a parent + sub-issues instead of a single mega-story.
 
 ### Step 4 — Map dependencies
 
@@ -146,12 +230,19 @@ Return a concise summary to the operator:
 
 ## Rules
 
+- **Scope must be captured up front.** Every new story MUST use the
+  Story Description Template (Scope / AC checklist / Out of Scope /
+  References) and set an `estimate`. No exceptions — scope creep starts
+  where the scaffold is skipped.
+- **Phase before action.** Always run Phase Detection first. In `none`
+  phase, never invent a story; prompt the operator and confirm each
+  draft before creation.
 - **Always investigate before creating new stories** (`feedback_investigate_before_stories`) — verify the file paths and code referenced before writing speculative AC.
 - **Never close stories**. Only the operator (or a merged PR) closes work.
 - **Never delete stories** the operator created. If something is genuinely a dupe, mark `duplicateOf` instead.
 - **Append-only relations**: don't try to "set" the blocked-by list — use `blockedBy` to add and `removeBlockedBy` to remove.
 - **One story per concern**: if the conversation surfaced 3 unrelated cleanups, file 3 stories, not one mega-story.
-- **Stay terse in descriptions** — link to commits / file paths rather than re-explaining what the code does.
+- **Stay terse in descriptions** — link to commits / file paths rather than re-explaining what the code does. The template enforces structure; bullets stay short.
 - This skill is **operator-invoked only**. Do not auto-run it inside `/build`, `/dispatch`, or `/bulk` pipelines — those have their own Linear sync steps.
 
 ## Edge cases
