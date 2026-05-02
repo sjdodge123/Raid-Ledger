@@ -16,11 +16,15 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { AdminGuard } from '../auth/admin.guard';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
 import { ItadService } from '../itad/itad.service';
+import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
 import { SettingsService } from '../settings/settings.service';
+import { handleBatchPricing } from './igdb-pricing-batch.handler';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import {
   GameSearchQuerySchema,
@@ -53,10 +57,7 @@ import {
   fetchGameInterestResponse,
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
-import {
-  fetchGamePricing,
-  fetchBatchGamePricing,
-} from './igdb-pricing.helpers';
+import { fetchGamePricing } from './igdb-pricing.helpers';
 import { parseBatchIds } from './igdb-batch.util';
 import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
 
@@ -73,6 +74,8 @@ export class IgdbController {
     private readonly itadPriceService: ItadPriceService,
     private readonly itadService: ItadService,
     private readonly settingsService: SettingsService,
+    @InjectQueue(ITAD_PRICE_SYNC_QUEUE)
+    private readonly priceSyncQueue: Queue,
   ) {}
 
   /** GET /games/search -- Search for games by name. */
@@ -169,14 +172,13 @@ export class IgdbController {
   async batchPricing(
     @Query('ids') idsParam: string,
   ): Promise<ItadBatchPricingResponseDto> {
-    const gameIds = parseBatchIds(idsParam);
-    if (gameIds.length === 0) return { data: {} };
-    const data = await fetchBatchGamePricing(
-      this.igdbService.database,
-      this.itadPriceService,
-      gameIds,
-    );
-    return { data };
+    return handleBatchPricing({
+      db: this.igdbService.database,
+      itadPriceService: this.itadPriceService,
+      priceSyncQueue: this.priceSyncQueue,
+      logger: this.logger,
+      gameIds: parseBatchIds(idsParam),
+    });
   }
 
   /** GET /games/by-steam-id/:steamAppId -- Lookup or discover game (ROK-945). */

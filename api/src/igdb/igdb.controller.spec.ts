@@ -3,11 +3,13 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
 import { ItadService } from '../itad/itad.service';
 import { SettingsService } from '../settings/settings.service';
+import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
 
 function describeIgdbController() {
   let controller: IgdbController;
@@ -37,6 +39,10 @@ function describeIgdbController() {
         { provide: ItadPriceService, useValue: {} },
         { provide: ItadService, useValue: {} },
         { provide: SettingsService, useValue: {} },
+        {
+          provide: getQueueToken(ITAD_PRICE_SYNC_QUEUE),
+          useValue: { add: jest.fn() },
+        },
       ],
     }).compile();
 

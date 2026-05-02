@@ -1,27 +1,42 @@
 /**
- * Adversarial unit tests for IgdbController.batchPricing (ROK-800).
- * Tests GET /games/pricing/batch endpoint routing and edge cases.
+ * Adversarial unit tests for IgdbController.batchPricing.
+ * ROK-800: original wrapping/parsing semantics.
+ * ROK-1047: cached-immediate + async-fetch behavior — no synchronous
+ *   ITAD calls; uncached IDs come back null and are enqueued for
+ *   out-of-band fetch.
  */
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
 import { ItadService } from '../itad/itad.service';
 import { SettingsService } from '../settings/settings.service';
+import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
+
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
-function buildMockDb(
-  batchResult: Record<string, unknown>,
-): Record<string, jest.Mock> {
+interface DbBuilder {
+  idRows?: { id: number; itadGameId: string | null }[];
+  cacheRows?: unknown[];
+}
+
+/**
+ * DB mock that returns the configured ID rows on the first .where() call
+ * (the itad-id lookup) and the configured cache rows on the second call
+ * (cached pricing lookup). Helpers return [] / [] by default.
+ */
+function buildDb({ idRows = [], cacheRows = [] }: DbBuilder = {}): Record<
+  string,
+  jest.Mock
+> {
   const db: Record<string, jest.Mock> = {};
   db.select = jest.fn().mockReturnThis();
   db.from = jest.fn().mockReturnThis();
-  db.where = jest.fn().mockResolvedValue(
-    Object.keys(batchResult).map((k) => ({
-      id: Number(k),
-      itadGameId: `itad-${k}`,
-    })),
-  );
+  db.where = jest
+    .fn()
+    .mockResolvedValueOnce(idRows)
+    .mockResolvedValueOnce(cacheRows);
   return db;
 }
 
@@ -39,10 +54,15 @@ function buildMockService(db: Record<string, jest.Mock>): Partial<IgdbService> {
   };
 }
 
+function buildMockQueue(): { add: jest.Mock } {
+  return { add: jest.fn().mockResolvedValue(undefined) };
+}
+
 async function createController(
   mockService: Partial<IgdbService>,
   mockItadService: Partial<ItadPriceService>,
-): Promise<IgdbController> {
+  mockQueue: { add: jest.Mock } = buildMockQueue(),
+): Promise<{ ctrl: IgdbController; queue: { add: jest.Mock } }> {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [IgdbController],
     providers: [
@@ -50,40 +70,43 @@ async function createController(
       { provide: ItadPriceService, useValue: mockItadService },
       { provide: ItadService, useValue: {} },
       { provide: SettingsService, useValue: {} },
+      { provide: getQueueToken(ITAD_PRICE_SYNC_QUEUE), useValue: mockQueue },
     ],
   }).compile();
-  return module.get<IgdbController>(IgdbController);
+  return { ctrl: module.get<IgdbController>(IgdbController), queue: mockQueue };
 }
 
 // ─── batchPricing — empty / short-circuit paths ──────────────────────────────
 
-describe('IgdbController.batchPricing — empty/null paths (ROK-800)', () => {
+describe('IgdbController.batchPricing — empty/null paths', () => {
   it('returns empty data object when idsParam is undefined', async () => {
-    const mockItad = { getOverviewBatch: jest.fn() };
-    const db = buildMockDb({});
-    const ctrl = await createController(buildMockService(db), mockItad);
+    const { ctrl, queue } = await createController(
+      buildMockService(buildDb()),
+      { getOverviewBatch: jest.fn() },
+    );
 
     const result = await ctrl.batchPricing(undefined as unknown as string);
 
     expect(result).toEqual({ data: {} });
-    expect(mockItad.getOverviewBatch).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
   });
 
   it('returns empty data object when idsParam is empty string', async () => {
-    const mockItad = { getOverviewBatch: jest.fn() };
-    const db = buildMockDb({});
-    const ctrl = await createController(buildMockService(db), mockItad);
+    const { ctrl, queue } = await createController(
+      buildMockService(buildDb()),
+      { getOverviewBatch: jest.fn() },
+    );
 
     const result = await ctrl.batchPricing('');
 
     expect(result).toEqual({ data: {} });
-    expect(mockItad.getOverviewBatch).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
   });
 
   it('returns empty data object when all IDs are invalid', async () => {
-    const mockItad = { getOverviewBatch: jest.fn() };
-    const db = buildMockDb({});
-    const ctrl = await createController(buildMockService(db), mockItad);
+    const { ctrl } = await createController(buildMockService(buildDb()), {
+      getOverviewBatch: jest.fn(),
+    });
 
     const result = await ctrl.batchPricing('abc,xyz,-1,0');
 
@@ -91,109 +114,127 @@ describe('IgdbController.batchPricing — empty/null paths (ROK-800)', () => {
   });
 });
 
-// ─── batchPricing — valid IDs delegates to fetchBatchGamePricing ─────────────
+// ─── batchPricing — ROK-1047 async-fetch behavior ───────────────────────────
 
-describe('IgdbController.batchPricing — valid IDs (ROK-800)', () => {
-  it('returns wrapped data object with pricing keyed by game ID', async () => {
-    // Use a db that returns no rows (so all games get null pricing)
-    const db: Record<string, jest.Mock> = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockResolvedValue([]),
-    };
-    const mockItad = { getOverviewBatch: jest.fn().mockResolvedValue([]) };
-    const ctrl = await createController(buildMockService(db), mockItad);
+describe('IgdbController.batchPricing — ROK-1047 async fetch', () => {
+  it('returns null for uncached games and enqueues a sync per id', async () => {
+    const db = buildDb({
+      idRows: [
+        { id: 1, itadGameId: 'itad-1' },
+        { id: 2, itadGameId: 'itad-2' },
+      ],
+      cacheRows: [],
+    });
+    const { ctrl, queue } = await createController(buildMockService(db), {
+      getOverviewBatch: jest.fn(),
+    });
 
-    const result = await ctrl.batchPricing('1,2,3');
+    const result = await ctrl.batchPricing('1,2');
 
-    expect(result).toHaveProperty('data');
-    expect(typeof result.data).toBe('object');
-    // All 3 IDs should appear in result (as null since no ITAD data)
-    expect(Object.keys(result.data)).toHaveLength(3);
-  });
-
-  it('result data keys are string game IDs', async () => {
-    const db: Record<string, jest.Mock> = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockResolvedValue([]),
-    };
-    const mockItad = { getOverviewBatch: jest.fn().mockResolvedValue([]) };
-    const ctrl = await createController(buildMockService(db), mockItad);
-
-    const result = await ctrl.batchPricing('5,10');
-
-    expect(Object.keys(result.data)).toEqual(
-      expect.arrayContaining(['5', '10']),
+    expect(result.data['1']).toBeNull();
+    expect(result.data['2']).toBeNull();
+    expect(queue.add).toHaveBeenCalledTimes(2);
+    expect(queue.add).toHaveBeenCalledWith(
+      'sync',
+      { gameId: 1 },
+      expect.objectContaining({ jobId: 'itad-price-1' }),
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      'sync',
+      { gameId: 2 },
+      expect.objectContaining({ jobId: 'itad-price-2' }),
     );
   });
 
-  it('returns null for games without ITAD IDs', async () => {
-    // DB returns no itad IDs (first query), no cached pricing (second query)
-    const db: Record<string, jest.Mock> = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest
-        .fn()
-        .mockResolvedValueOnce([{ id: 7, itadGameId: null }])
-        .mockResolvedValueOnce([]),
-    };
-    const mockItad = { getOverviewBatch: jest.fn().mockResolvedValue([]) };
-    const ctrl = await createController(buildMockService(db), mockItad);
+  it('does not call ITAD getOverviewBatch on the request path', async () => {
+    const db = buildDb({
+      idRows: [{ id: 1, itadGameId: 'itad-1' }],
+      cacheRows: [],
+    });
+    const itad = { getOverviewBatch: jest.fn() };
+    const { ctrl } = await createController(buildMockService(db), itad);
+
+    await ctrl.batchPricing('1');
+
+    expect(itad.getOverviewBatch).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue when game has no ITAD ID — nothing to fetch', async () => {
+    const db = buildDb({
+      idRows: [{ id: 7, itadGameId: null }],
+      cacheRows: [],
+    });
+    const { ctrl, queue } = await createController(buildMockService(db), {
+      getOverviewBatch: jest.fn(),
+    });
 
     const result = await ctrl.batchPricing('7');
 
     expect(result.data['7']).toBeNull();
+    expect(queue.add).not.toHaveBeenCalled();
   });
 
-  it('returns pricing for games with ITAD IDs and overview data', async () => {
-    // First query: ID lookup, second query: no cached pricing
-    const db: Record<string, jest.Mock> = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest
-        .fn()
-        .mockResolvedValueOnce([{ id: 42, itadGameId: 'itad-42' }])
-        .mockResolvedValueOnce([]),
-    };
-    const overviewEntry = {
-      id: 'itad-42',
-      current: {
-        shop: { id: 61, name: 'Steam' },
-        price: { amount: 29.99, amountInt: 2999, currency: 'USD' },
-        regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-        cut: 50,
-        url: 'https://steam.com/app/42',
-      },
-      lowest: null,
-      bundled: 0,
-      urls: { game: 'https://isthereanydeal.com/game/42/' },
-    };
-    const mockItad = {
-      getOverviewBatch: jest.fn().mockResolvedValue([overviewEntry]),
-    };
-    const ctrl = await createController(buildMockService(db), mockItad);
-
-    const result = await ctrl.batchPricing('42');
-
-    expect(result.data['42']).toMatchObject({
-      currentBest: expect.objectContaining({ shop: 'Steam' }),
-      currency: 'USD',
+  it('responds in <50ms even when ITAD service throws (no sync call)', async () => {
+    const ids = Array.from({ length: 50 }, (_, i) => i + 1);
+    const db = buildDb({
+      idRows: ids.map((id) => ({ id, itadGameId: `itad-${id}` })),
+      cacheRows: [],
     });
+    const itad = {
+      getOverviewBatch: jest.fn(() => {
+        throw new Error('ITAD unavailable');
+      }),
+    };
+    const { ctrl } = await createController(buildMockService(db), itad);
+
+    const t0 = Date.now();
+    const result = await ctrl.batchPricing(ids.join(','));
+    const elapsed = Date.now() - t0;
+
+    expect(elapsed).toBeLessThan(50);
+    expect(itad.getOverviewBatch).not.toHaveBeenCalled();
+    for (const id of ids) {
+      expect(result.data[String(id)]).toBeNull();
+    }
+  });
+
+  it('returns cached pricing immediately without enqueueing', async () => {
+    const fresh = new Date(); // freshly cached
+    const db = buildDb({
+      idRows: [{ id: 1, itadGameId: 'itad-1' }],
+      cacheRows: [
+        {
+          id: 1,
+          itadCurrentPrice: '9.99',
+          itadCurrentCut: 50,
+          itadCurrentShop: 'Steam',
+          itadCurrentUrl: 'https://steam.com/app/1',
+          itadLowestPrice: '4.99',
+          itadLowestCut: 75,
+          itadPriceUpdatedAt: fresh,
+        },
+      ],
+    });
+    const { ctrl, queue } = await createController(buildMockService(db), {
+      getOverviewBatch: jest.fn(),
+    });
+
+    const result = await ctrl.batchPricing('1');
+
+    expect(result.data['1']).toMatchObject({
+      currentBest: expect.objectContaining({ shop: 'Steam', price: 9.99 }),
+    });
+    expect(queue.add).not.toHaveBeenCalled();
   });
 });
 
-// ─── batchPricing — caps at 100 IDs (via parseBatchIds) ─────────────────────
+// ─── batchPricing — ID parsing edge cases (ROK-800) ─────────────────────────
 
-describe('IgdbController.batchPricing — ID parsing edge cases (ROK-800)', () => {
+describe('IgdbController.batchPricing — ID parsing edge cases', () => {
   it('strips whitespace and parses valid IDs from query string', async () => {
-    const db: Record<string, jest.Mock> = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockResolvedValue([]),
-    };
-    const mockItad = { getOverviewBatch: jest.fn().mockResolvedValue([]) };
-    const ctrl = await createController(buildMockService(db), mockItad);
+    const { ctrl } = await createController(buildMockService(buildDb()), {
+      getOverviewBatch: jest.fn(),
+    });
 
     const result = await ctrl.batchPricing(' 1 , 2 , 3 ');
 
@@ -201,15 +242,10 @@ describe('IgdbController.batchPricing — ID parsing edge cases (ROK-800)', () =
   });
 
   it('filters out negative and zero IDs from query string', async () => {
-    const db: Record<string, jest.Mock> = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockResolvedValue([]),
-    };
-    const mockItad = { getOverviewBatch: jest.fn().mockResolvedValue([]) };
-    const ctrl = await createController(buildMockService(db), mockItad);
+    const { ctrl } = await createController(buildMockService(buildDb()), {
+      getOverviewBatch: jest.fn(),
+    });
 
-    // Only ID 5 is valid
     const result = await ctrl.batchPricing('-1,0,5');
 
     expect(Object.keys(result.data)).toHaveLength(1);
@@ -217,13 +253,9 @@ describe('IgdbController.batchPricing — ID parsing edge cases (ROK-800)', () =
   });
 
   it('accepts a single valid ID', async () => {
-    const db: Record<string, jest.Mock> = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockResolvedValue([]),
-    };
-    const mockItad = { getOverviewBatch: jest.fn().mockResolvedValue([]) };
-    const ctrl = await createController(buildMockService(db), mockItad);
+    const { ctrl } = await createController(buildMockService(buildDb()), {
+      getOverviewBatch: jest.fn(),
+    });
 
     const result = await ctrl.batchPricing('99');
 
@@ -234,7 +266,7 @@ describe('IgdbController.batchPricing — ID parsing edge cases (ROK-800)', () =
 
 // ─── Individual pricing endpoint still works (AC: unchanged behavior) ─────────
 
-describe('IgdbController.getGamePricing — individual pricing unchanged (ROK-800)', () => {
+describe('IgdbController.getGamePricing — individual pricing unchanged', () => {
   it('returns wrapped data from fetchGamePricing', async () => {
     const db: Record<string, jest.Mock> = {
       select: jest.fn().mockReturnThis(),
@@ -255,24 +287,11 @@ describe('IgdbController.getGamePricing — individual pricing unchanged (ROK-80
       bundled: 0,
       urls: { game: 'https://isthereanydeal.com/game/99/' },
     };
-    const mockItad = {
+    const itad = {
       getOverview: jest.fn().mockResolvedValue(overviewEntry),
     };
+    const { ctrl } = await createController(buildMockService(db), itad);
 
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [IgdbController],
-      providers: [
-        {
-          provide: IgdbService,
-          useValue: buildMockService(db),
-        },
-        { provide: ItadPriceService, useValue: mockItad },
-        { provide: ItadService, useValue: {} },
-        { provide: SettingsService, useValue: {} },
-      ],
-    }).compile();
-
-    const ctrl = module.get<IgdbController>(IgdbController);
     const result = await ctrl.getGamePricing(99);
 
     expect(result).toHaveProperty('data');
@@ -289,23 +308,13 @@ describe('IgdbController.getGamePricing — individual pricing unchanged (ROK-80
       where: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([]),
     };
-    const mockItad = { getOverview: jest.fn() };
+    const itad = { getOverview: jest.fn() };
+    const { ctrl } = await createController(buildMockService(db), itad);
 
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [IgdbController],
-      providers: [
-        { provide: IgdbService, useValue: buildMockService(db) },
-        { provide: ItadPriceService, useValue: mockItad },
-        { provide: ItadService, useValue: {} },
-        { provide: SettingsService, useValue: {} },
-      ],
-    }).compile();
-
-    const ctrl = module.get<IgdbController>(IgdbController);
     const result = await ctrl.getGamePricing(404);
 
     expect(result.data).toBeNull();
-    expect(mockItad.getOverview).not.toHaveBeenCalled();
+    expect(itad.getOverview).not.toHaveBeenCalled();
   });
 
   it('individual pricing does not use getOverviewBatch', async () => {
@@ -315,7 +324,7 @@ describe('IgdbController.getGamePricing — individual pricing unchanged (ROK-80
       where: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([{ itadGameId: 'itad-x' }]),
     };
-    const mockItad = {
+    const itad = {
       getOverview: jest.fn().mockResolvedValue({
         id: 'itad-x',
         current: {
@@ -331,21 +340,11 @@ describe('IgdbController.getGamePricing — individual pricing unchanged (ROK-80
       }),
       getOverviewBatch: jest.fn(),
     };
+    const { ctrl } = await createController(buildMockService(db), itad);
 
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [IgdbController],
-      providers: [
-        { provide: IgdbService, useValue: buildMockService(db) },
-        { provide: ItadPriceService, useValue: mockItad },
-        { provide: ItadService, useValue: {} },
-        { provide: SettingsService, useValue: {} },
-      ],
-    }).compile();
-
-    const ctrl = module.get<IgdbController>(IgdbController);
     await ctrl.getGamePricing(1);
 
-    expect(mockItad.getOverview).toHaveBeenCalled();
-    expect(mockItad.getOverviewBatch).not.toHaveBeenCalled();
+    expect(itad.getOverview).toHaveBeenCalled();
+    expect(itad.getOverviewBatch).not.toHaveBeenCalled();
   });
 });

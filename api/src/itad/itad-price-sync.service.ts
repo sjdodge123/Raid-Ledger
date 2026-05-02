@@ -10,7 +10,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { isNotNull, and, lt, sql } from 'drizzle-orm';
+import { isNotNull, and, lt, sql, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -187,6 +187,38 @@ export class ItadPriceSyncService
 
     const earlyResult = await this.syncEarlyAccess(games);
     if (earlyResult.failed > 0) return { degraded: true };
+  }
+
+  /**
+   * Sync ITAD pricing for a specific list of games (ROK-1047).
+   * Used by the on-demand processor to fetch missing prices triggered
+   * by `/games/pricing/batch` cache misses. Resolves itad IDs from the
+   * games table and runs a single chunked fetch + bulk update.
+   * Caller is responsible for batching to CHUNK_SIZE.
+   */
+  async syncSpecificGames(gameIds: number[]): Promise<void> {
+    if (gameIds.length === 0) return;
+    const rows = await this.queryItadIdsForGames(gameIds);
+    if (rows.length === 0) return;
+    await this.processChunk(rows);
+  }
+
+  /** Look up itad IDs for a specific set of games. */
+  private async queryItadIdsForGames(
+    gameIds: number[],
+  ): Promise<{ id: number; itadGameId: string }[]> {
+    const rows = await this.db
+      .select({ id: schema.games.id, itadGameId: schema.games.itadGameId })
+      .from(schema.games)
+      .where(
+        and(
+          isNotNull(schema.games.itadGameId),
+          inArray(schema.games.id, gameIds),
+        ),
+      );
+    return rows.filter(
+      (r): r is { id: number; itadGameId: string } => r.itadGameId !== null,
+    );
   }
 
   /** Query all games that have an itadGameId. */
