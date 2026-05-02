@@ -12,6 +12,13 @@ type Db = PostgresJsDatabase<typeof schema>;
 /** Per-call timeout for getGameInfo (ROK-1197). */
 export const EARLY_ACCESS_CALL_TIMEOUT_MS = 8_000;
 
+/**
+ * Max in-flight `getGameInfo` calls per chunk. Keeps the burst within ITAD's
+ * rate envelope: `enforceRateLimit` in itad-http.util only spaces sequential
+ * callers, so unbounded concurrency would bypass it and risk 429s.
+ */
+export const EARLY_ACCESS_CONCURRENCY = 5;
+
 /** Telemetry surfaced per chunk for degraded-status aggregation. */
 export interface EarlyAccessChunkResult {
   updated: number;
@@ -49,8 +56,9 @@ function withTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
 /**
  * Fetch earlyAccess for a chunk and bulk-update.
  *
- * Calls run concurrently (`Promise.allSettled`) with a per-call timeout so a
- * single slow upstream response cannot block the whole chunk. Failed or
+ * Calls run with bounded concurrency (`EARLY_ACCESS_CONCURRENCY`) and a per-
+ * call timeout so a single slow upstream response cannot block the chunk and
+ * unbounded parallel callers don't bypass `enforceRateLimit`. Failed or
  * timed-out calls are counted in `failed` for degraded-status telemetry; a
  * successful resolution with a null payload is NOT a failure (the game just
  * isn't in ITAD).
@@ -60,26 +68,31 @@ export async function enrichChunkEarlyAccess(
   itadService: ItadService,
   chunk: { id: number; itadGameId: string }[],
 ): Promise<EarlyAccessChunkResult> {
-  const settled = await Promise.allSettled(
-    chunk.map((game) =>
-      withTimeout(
-        itadService.getGameInfo(game.itadGameId),
-        EARLY_ACCESS_CALL_TIMEOUT_MS,
-      ),
-    ),
-  );
-
   const updates: { id: number; earlyAccess: boolean }[] = [];
   let failed = 0;
-  settled.forEach((res, i) => {
-    if (res.status === 'rejected') {
-      failed++;
-      return;
-    }
-    const info = res.value;
-    if (info)
-      updates.push({ id: chunk[i].id, earlyAccess: info.earlyAccess ?? false });
-  });
+  for (let i = 0; i < chunk.length; i += EARLY_ACCESS_CONCURRENCY) {
+    const slice = chunk.slice(i, i + EARLY_ACCESS_CONCURRENCY);
+    const settled = await Promise.allSettled(
+      slice.map((game) =>
+        withTimeout(
+          itadService.getGameInfo(game.itadGameId),
+          EARLY_ACCESS_CALL_TIMEOUT_MS,
+        ),
+      ),
+    );
+    settled.forEach((res, j) => {
+      if (res.status === 'rejected') {
+        failed++;
+        return;
+      }
+      const info = res.value;
+      if (info)
+        updates.push({
+          id: slice[j].id,
+          earlyAccess: info.earlyAccess ?? false,
+        });
+    });
+  }
 
   if (updates.length > 0) {
     await executeBulkEarlyAccessUpdate(db, updates);
