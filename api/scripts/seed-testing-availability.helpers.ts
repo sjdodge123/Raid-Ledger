@@ -19,106 +19,113 @@ function daysFromNow(baseHour: Date, days: number): Date {
   return new Date(baseHour.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+type AvailabilityStatus = 'available' | 'blocked';
+type AvailabilityEntry = {
+  username: string;
+  startOffsetHours?: number;
+  endOffsetHours?: number;
+  startOffsetDays?: number;
+  endOffsetDays?: number;
+  status: AvailabilityStatus;
+};
+
+// Availability/unavailability seed data for heatmap testing.
+// Offsets are relative to the rounded current hour; entries overlap with
+// seeded events so the heatmap renders something visible during dev.
+const AVAILABILITY_DATA: readonly AvailabilityEntry[] = [
+  // Available slots (will show green on heatmap)
+  {
+    username: 'ShadowMage',
+    startOffsetHours: -2,
+    endOffsetHours: 4,
+    status: 'available',
+  },
+  {
+    username: 'DragonSlayer99',
+    startOffsetHours: -1,
+    endOffsetHours: 6,
+    status: 'available',
+  },
+  {
+    username: 'HealzForDayz',
+    startOffsetHours: 0,
+    endOffsetHours: 3,
+    status: 'available',
+  },
+  {
+    username: 'TankMaster',
+    startOffsetHours: -3,
+    endOffsetHours: 5,
+    status: 'available',
+  },
+  {
+    username: 'ProRaider',
+    startOffsetHours: 1,
+    endOffsetHours: 8,
+    status: 'available',
+  },
+  // Blocked slots (will show gray/locked on heatmap)
+  {
+    username: 'HealzForDayz',
+    startOffsetHours: 3,
+    endOffsetHours: 6,
+    status: 'blocked',
+  },
+  {
+    username: 'CasualCarl',
+    startOffsetHours: -1,
+    endOffsetHours: 2,
+    status: 'blocked',
+  },
+  {
+    username: 'NightOwlGamer',
+    startOffsetHours: 0,
+    endOffsetHours: 4,
+    status: 'blocked',
+  },
+  // Future unavailability
+  {
+    username: 'DragonSlayer99',
+    startOffsetDays: 2,
+    endOffsetDays: 4,
+    status: 'blocked',
+  },
+  {
+    username: 'TankMaster',
+    startOffsetDays: 5,
+    endOffsetDays: 7,
+    status: 'blocked',
+  },
+];
+
+function buildAvailabilityRows(
+  createdUsers: User[],
+  baseHour: Date,
+): schema.NewAvailability[] {
+  return AVAILABILITY_DATA.flatMap((entry) => {
+    const user = createdUsers.find((u) => u.username === entry.username);
+    if (!user) return [];
+    const start =
+      entry.startOffsetDays !== undefined
+        ? daysFromNow(baseHour, entry.startOffsetDays)
+        : hoursFromNow(baseHour, entry.startOffsetHours ?? 0);
+    const end =
+      entry.endOffsetDays !== undefined
+        ? daysFromNow(baseHour, entry.endOffsetDays)
+        : hoursFromNow(baseHour, entry.endOffsetHours ?? 0);
+    return [{ userId: user.id, timeRange: [start, end], status: entry.status }];
+  });
+}
+
 export async function seedAvailability(
   db: Db,
   createdUsers: User[],
 ): Promise<void> {
   console.log('\n⏰ Creating unavailability periods...\n');
-
-  const baseHour = roundToHour(new Date());
-  const h = (hours: number) => hoursFromNow(baseHour, hours);
-  const d = (days: number) => daysFromNow(baseHour, days);
-
-  // Define availability/unavailability for heatmap testing.
-  // Need to overlap with event times for visibility.
-  const availabilityData = [
-    // Available slots (will show green on heatmap)
-    {
-      username: 'ShadowMage',
-      start: h(-2),
-      end: h(4),
-      status: 'available' as const,
-    },
-    {
-      username: 'DragonSlayer99',
-      start: h(-1),
-      end: h(6),
-      status: 'available' as const,
-    },
-    {
-      username: 'HealzForDayz',
-      start: h(0),
-      end: h(3),
-      status: 'available' as const,
-    },
-    {
-      username: 'TankMaster',
-      start: h(-3),
-      end: h(5),
-      status: 'available' as const,
-    },
-    {
-      username: 'ProRaider',
-      start: h(1),
-      end: h(8),
-      status: 'available' as const,
-    },
-
-    // Blocked slots (will show gray/locked on heatmap)
-    {
-      username: 'HealzForDayz',
-      start: h(3),
-      end: h(6),
-      status: 'blocked' as const,
-    },
-    {
-      username: 'CasualCarl',
-      start: h(-1),
-      end: h(2),
-      status: 'blocked' as const,
-    },
-    {
-      username: 'NightOwlGamer',
-      start: h(0),
-      end: h(4),
-      status: 'blocked' as const,
-    },
-
-    // Future unavailability
-    {
-      username: 'DragonSlayer99',
-      start: d(2),
-      end: d(4),
-      status: 'blocked' as const,
-    },
-    {
-      username: 'TankMaster',
-      start: d(5),
-      end: d(7),
-      status: 'blocked' as const,
-    },
-  ];
-
-  for (const avail of availabilityData) {
-    const user = createdUsers.find((u) => u.username === avail.username);
-    if (!user) continue;
-
-    try {
-      await db.insert(schema.availability).values({
-        userId: user.id,
-        timeRange: [avail.start, avail.end],
-        status: avail.status,
-      });
-      const icon = avail.status === 'available' ? '✅' : '❌';
-      console.log(
-        `  ${icon} ${user.username}: ${avail.status} (${avail.start.toLocaleTimeString()} - ${avail.end.toLocaleTimeString()})`,
-      );
-    } catch {
-      console.log(
-        `  ⏭️  Skipped availability for ${user.username} (may exist)`,
-      );
-    }
-  }
+  const rows = buildAvailabilityRows(createdUsers, roundToHour(new Date()));
+  if (rows.length === 0) return;
+  await db.insert(schema.availability).values(rows).onConflictDoNothing();
+  console.log(`  ✅ Seeded ${rows.length} availability rows`);
 }
 
 // dayOfWeek: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
