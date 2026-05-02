@@ -1,6 +1,15 @@
 import { Test } from '@nestjs/testing';
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestService } from './demo-test.service';
+import { SettingsService } from '../settings/settings.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+
+// ROK-1070: helper used by reset-events handler — mock at module level so
+// the controller's direct call is observable in tests.
+jest.mock('./demo-test-rok1070.helpers', () => ({
+  resetEventsForTest: jest.fn().mockResolvedValue({ deletedCount: 2 }),
+}));
+import { resetEventsForTest as resetEventsHelperMock } from './demo-test-rok1070.helpers';
 
 function createMockService() {
   return {
@@ -28,16 +37,33 @@ type GetMockService = () => MockService;
 describe('DemoTestScheduledEventsController', () => {
   let controller: DemoTestScheduledEventsController;
   let mockService: MockService;
+  const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 
   beforeEach(async () => {
     mockService = createMockService();
+    process.env.DEMO_MODE = 'true';
+    (resetEventsHelperMock as jest.Mock)
+      .mockReset()
+      .mockResolvedValue({ deletedCount: 2 });
 
     const module = await Test.createTestingModule({
       controllers: [DemoTestScheduledEventsController],
-      providers: [{ provide: DemoTestService, useValue: mockService }],
+      providers: [
+        { provide: DemoTestService, useValue: mockService },
+        {
+          provide: SettingsService,
+          useValue: { getDemoMode: jest.fn().mockResolvedValue(true) },
+        },
+        { provide: DrizzleAsyncProvider, useValue: {} },
+      ],
     }).compile();
 
     controller = module.get(DemoTestScheduledEventsController);
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+    else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
   });
 
   const getController = () => controller;
@@ -55,6 +81,7 @@ describe('DemoTestScheduledEventsController', () => {
     cleanupScheduledEventsTests(getController, getService));
   describe('setEventTimes (ROK-969)', () =>
     setEventTimesTests(getController, getService));
+  describe('resetEvents (ROK-1070)', () => resetEventsTests(getController));
 });
 
 function triggerScheduledEventCompletionTests(
@@ -154,5 +181,30 @@ function setEventTimesTests(
         endTime: '2026-04-01T02:00:00Z',
       }),
     ).rejects.toThrow(/Validation failed/);
+  });
+}
+
+function resetEventsTests(getController: GetController) {
+  it('delegates to helper with db + titlePrefix', async () => {
+    const result = await getController().resetEventsForTest({
+      titlePrefix: 'smoke-w0-',
+    });
+    expect(result).toMatchObject({ success: true, deletedCount: 2 });
+    expect(resetEventsHelperMock).toHaveBeenCalledWith(
+      expect.anything(),
+      'smoke-w0-',
+    );
+  });
+
+  it('rejects empty titlePrefix', async () => {
+    await expect(
+      getController().resetEventsForTest({ titlePrefix: '' }),
+    ).rejects.toThrow(/Validation failed/);
+  });
+
+  it('rejects missing titlePrefix', async () => {
+    await expect(getController().resetEventsForTest({})).rejects.toThrow(
+      /Validation failed/,
+    );
   });
 }

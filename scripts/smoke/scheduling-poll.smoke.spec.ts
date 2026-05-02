@@ -26,9 +26,18 @@ let lineupTitle: string;
  *
  * `/admin/test/reset-lineups` (DEMO_MODE-only) only archives lineups whose
  * title starts with `workerPrefix`, so sibling workers are unaffected.
+ *
+ * ROK-1070: this file's fixtures live on `decided`/`scheduling` rows (the
+ * scheduling-poll attaches to a decided lineup). The default reset only
+ * touches `building`/`voting` rows, so a stale decided/scheduling lineup
+ * from a prior run survives and the new fixture's poll lands on the wrong
+ * lineup. Pass the broader phases array so all phase rows are archived.
  */
 async function archiveActiveLineup(token: string): Promise<void> {
-    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
+    await apiPost(token, '/admin/test/reset-lineups', {
+        titlePrefix: workerPrefix,
+        phases: ['building', 'voting', 'decided'],
+    });
 }
 
 /** Fetch real game IDs from the admin games endpoint. */

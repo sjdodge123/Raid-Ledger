@@ -80,6 +80,7 @@ describe('DemoTestGamesController', () => {
       expect(result).toEqual({ success: true, archivedCount: 3 });
       expect(mockLineupService.resetLineupsForTest).toHaveBeenCalledWith(
         'smoke-w0-lineup-decided',
+        undefined,
       );
     });
 
@@ -102,7 +103,38 @@ describe('DemoTestGamesController', () => {
       expect(result).toEqual({ success: true, archivedCount: 3 });
       expect(mockLineupService.resetLineupsForTest).toHaveBeenCalledWith(
         "smoke-w0%_'--",
+        undefined,
       );
+    });
+
+    it('forwards optional phases array to the lineup service (ROK-1070)', async () => {
+      const result = await controller.resetLineupsForTest({
+        titlePrefix: 'smoke-w0-scheduling-poll',
+        phases: ['building', 'voting', 'decided'],
+      });
+      expect(result).toEqual({ success: true, archivedCount: 3 });
+      expect(mockLineupService.resetLineupsForTest).toHaveBeenCalledWith(
+        'smoke-w0-scheduling-poll',
+        ['building', 'voting', 'decided'],
+      );
+    });
+
+    it('rejects unknown phase values', async () => {
+      await expect(
+        controller.resetLineupsForTest({
+          titlePrefix: 'smoke-w0-x',
+          phases: ['scheduling' as unknown as 'building'],
+        }),
+      ).rejects.toThrow(/Validation failed/);
+    });
+
+    it('rejects empty phases array', async () => {
+      await expect(
+        controller.resetLineupsForTest({
+          titlePrefix: 'smoke-w0-x',
+          phases: [],
+        }),
+      ).rejects.toThrow(/Validation failed/);
     });
   });
 });

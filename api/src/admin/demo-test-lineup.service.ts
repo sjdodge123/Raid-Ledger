@@ -10,6 +10,7 @@ import {
   archiveLineupForTest,
   archiveActiveLineupForTest,
   resetLineupsForTest,
+  type ResetLineupPhase,
 } from './demo-test-lineup.helpers';
 
 /**
@@ -70,8 +71,9 @@ export class DemoTestLineupService {
 
   async resetLineupsForTest(
     titlePrefix: string,
+    phases?: ResetLineupPhase[],
   ): Promise<{ archivedCount: number }> {
     await this.assertDemoMode();
-    return resetLineupsForTest(this.db, titlePrefix);
+    return resetLineupsForTest(this.db, titlePrefix, phases);
   }
 }

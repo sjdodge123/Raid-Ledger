@@ -1,7 +1,13 @@
 /**
- * Tests for ItadPriceSyncService (ROK-818, ROK-987).
+ * Tests for ItadPriceSyncService (ROK-818, ROK-987, ROK-1197).
  * Verifies cron-based ITAD pricing sync behavior.
  */
+jest.mock('../common/perf-logger', () => ({
+  ...jest.requireActual('../common/perf-logger'),
+  perfLog: jest.fn(),
+  isPerfEnabled: jest.fn(() => true),
+}));
+
 import { Test } from '@nestjs/testing';
 import {
   ItadPriceSyncService,
@@ -12,6 +18,7 @@ import { ItadService } from './itad.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { perfLog } from '../common/perf-logger';
 import type { ItadOverviewGameEntry } from './itad-price.types';
 
 describe('ItadPriceSyncService', () => {
@@ -208,6 +215,137 @@ describe('ItadPriceSyncService', () => {
       // If it's still a Date, this assertion fails.
       const row = { id: 1, ...data };
       expect(typeof row.itadPriceUpdatedAt).toBe('string');
+    });
+  });
+
+  // ─── ROK-1197: earlyAccess phase split + degraded status ────────────────
+  describe('ROK-1197: earlyAccess phase logging + telemetry', () => {
+    /**
+     * Helper to seed two chunks worth of games (75 games → chunks of 50 + 25)
+     * so the per-chunk log assertions have multiple chunks to count.
+     */
+    function seedTwoChunks(): { id: number; itadGameId: string }[] {
+      const games = Array.from({ length: 75 }, (_, i) => ({
+        id: i + 1,
+        itadGameId: `game-uuid-${i + 1}`,
+      }));
+      mockDb.where.mockResolvedValueOnce(games);
+      mockItadPriceService.getOverviewBatch.mockResolvedValue([]);
+      mockDb.returning.mockResolvedValue([]);
+      return games;
+    }
+
+    beforeEach(() => {
+      (perfLog as jest.Mock).mockClear();
+    });
+
+    it('AC #1: emits a per-chunk DEBUG log for each earlyAccess chunk', async () => {
+      seedTwoChunks();
+      // Every getGameInfo succeeds with a valid result so each chunk is processed.
+      mockItadService.getGameInfo.mockResolvedValue({ earlyAccess: false });
+
+      const debugSpy = jest.spyOn(service['logger'], 'debug');
+
+      await service.syncPricing();
+
+      // 75 games / 50 per chunk = 2 earlyAccess chunks → 2 per-chunk debug logs.
+      // Today the service only emits a single post-loop "Updated earlyAccess for N games"
+      // (and pricing-chunk debug logs), so this assertion fails.
+      const earlyChunkLogs = debugSpy.mock.calls.filter((c) =>
+        /Updated earlyAccess for chunk of \d+ games/i.test(String(c[0])),
+      );
+      expect(earlyChunkLogs.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('AC #2: emits a dedicated PERF entry for the earlyAccess phase', async () => {
+      seedTwoChunks();
+      mockItadService.getGameInfo.mockResolvedValue({ earlyAccess: false });
+
+      await service.syncPricing();
+
+      const operations = (perfLog as jest.Mock).mock.calls.map(
+        (c) => c[1] as string,
+      );
+      // Today only the wrapper's single PERF call is emitted (and that goes
+      // through the real perfLog from helpers, NOT through this mocked import).
+      // The service must emit its own perfLog('CRON', '..._earlyAccess', …) for
+      // Phase B. This assertion fails until the service does so.
+      expect(operations).toEqual(
+        expect.arrayContaining(['ItadPriceSyncService_earlyAccess']),
+      );
+    });
+
+    it('AC #3: post-pricing log message says "pricing phase complete", not "pricing sync complete"', async () => {
+      mockDb.where.mockResolvedValueOnce([
+        { id: 1, itadGameId: 'game-uuid-1' },
+      ]);
+      mockItadPriceService.getOverviewBatch.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValue([]);
+      mockItadService.getGameInfo.mockResolvedValue({ earlyAccess: false });
+
+      const logSpy = jest.spyOn(service['logger'], 'log');
+
+      await service.syncPricing();
+
+      const messages = logSpy.mock.calls.map((c) => String(c[0]));
+      // The misleading "pricing sync complete" log must be renamed.
+      expect(
+        messages.some((m) => /pricing phase complete/i.test(m)),
+      ).toBe(true);
+      expect(
+        messages.some((m) => /pricing sync complete/i.test(m)),
+      ).toBe(false);
+    });
+
+    it('AC #5: signals degraded status to the cron wrapper when getGameInfo failures occur', async () => {
+      // Two earlyAccess chunks (50 + 25). Half of the calls reject → at least
+      // one chunk has failures > 0, so the run must be flagged degraded.
+      seedTwoChunks();
+      let call = 0;
+      mockItadService.getGameInfo.mockImplementation(() => {
+        call++;
+        return call % 2 === 0
+          ? Promise.reject(new Error('upstream slow'))
+          : Promise.resolve({ earlyAccess: false });
+      });
+
+      // Capture what syncPricing returns to executeWithTracking. The wrapper's
+      // contract today is Promise<void | boolean>; ROK-1197 extends it so a
+      // degraded run returns { degraded: true } (or equivalent shape that
+      // surfaces a non-completed status to the wrapper).
+      mockCronJobService.executeWithTracking.mockImplementationOnce(
+        async (_name: string, fn: () => Promise<unknown>) => {
+          const result = await fn();
+          // Stash on the mock so the assertion below can read it.
+          (mockCronJobService.executeWithTracking as jest.Mock & {
+            lastResult?: unknown;
+          }).lastResult = result;
+        },
+      );
+
+      await service.scheduledSync();
+
+      const lastResult = (
+        mockCronJobService.executeWithTracking as jest.Mock & {
+          lastResult?: unknown;
+        }
+      ).lastResult;
+
+      // Either: the inner fn returned a degraded marker the wrapper can act on,
+      // OR the service emitted a perfLog with status=degraded directly.
+      const fnSignaledDegraded =
+        typeof lastResult === 'object' &&
+        lastResult !== null &&
+        (lastResult as { degraded?: unknown }).degraded === true;
+
+      const perfLoggedDegraded = (perfLog as jest.Mock).mock.calls.some(
+        (c) => {
+          const meta = c[3] as Record<string, unknown> | undefined;
+          return meta?.status === 'degraded';
+        },
+      );
+
+      expect(fnSignaledDegraded || perfLoggedDegraded).toBe(true);
     });
   });
 });

@@ -11,6 +11,7 @@ function ExecutionStatusBadge({ status }: { status: string }): JSX.Element {
         completed: 'text-green-400',
         failed: 'text-red-400',
         skipped: 'text-yellow-400',
+        degraded: 'text-amber-400',
     };
     return <span className={`text-xs font-medium ${styles[status] || 'text-muted'}`}>{status}</span>;
 }

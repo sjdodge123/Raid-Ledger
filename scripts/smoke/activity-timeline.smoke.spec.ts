@@ -5,7 +5,7 @@
  * then navigates to that event's detail page and verifies the timeline renders.
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken } from './api-helpers';
+import { API_BASE, apiPost, getAdminToken } from './api-helpers';
 
 async function createTestEvent(token: string): Promise<number> {
     const start = new Date(Date.now() + 86400000).toISOString();
@@ -40,6 +40,11 @@ test.describe('Activity Timeline on event detail', () => {
     test.beforeAll(async () => {
         adminToken = await getAdminToken();
         eventId = await createTestEvent(adminToken);
+        // ROK-1070: createSingleFlow does NOT auto-signup the creator, so the
+        // "signed up" timeline assertion below would fail deterministically.
+        // Explicit signup; the activity_log row is committed before the
+        // response returns (signups.service.ts ~line 100).
+        await apiPost(adminToken, `/events/${eventId}/signups`, {});
     });
 
     test.afterAll(async () => {
@@ -76,9 +81,13 @@ test.describe('Activity Timeline on event detail', () => {
             await activityBtn.click();
         }
 
-        // The creator auto-signs up, so we should see both actions
+        // The creator auto-signs up, so we should see both actions.
+        // ROK-1070: scope to .first() — earlier specs (notifications/events/
+        // plan-event/create-event) call reset-to-seed which re-seeds demo
+        // events that already have "created the event" activity rows, so
+        // the page can show 3+ matching elements and break strict mode.
         await expect(
-            page.getByText(/created the event/),
+            page.getByText(/created the event/).first(),
         ).toBeVisible({ timeout: 10_000 });
 
         // "signed up" may be below the maxVisible fold — check it's in the DOM

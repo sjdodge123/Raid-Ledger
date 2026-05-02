@@ -6,7 +6,14 @@
  * and cleans up afterward.
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiPost, apiGet, apiPatch } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiPost,
+    apiGet,
+    apiPatch,
+    createLineupOrRetry,
+} from './api-helpers';
 
 /** Fetch real game IDs from the configured-games endpoint. */
 async function fetchGameIds(token: string, count: number): Promise<number[]> {
@@ -85,16 +92,21 @@ test.beforeAll(async ({}, testInfo) => {
 
     // ROK-1147: reset only THIS worker's lineups so sibling workers'
     // in-flight lineups are untouched.
-    await apiPost(adminToken, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
-
-    const lineup = (await apiPost(adminToken, '/lineups', {
-        title: lineupTitle,
-        targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-        buildingDurationHours: 720,
-        votingDurationHours: 720,
-        decidedDurationHours: 720,
-    })) as { id: number };
-    lineupId = lineup.id;
+    // ROK-1070: switched bare POST /lineups to createLineupOrRetry so a
+    // sibling-worker 409 collision triggers a prefix-scoped reset + retry
+    // rather than silently leaking another worker's lineup into our state.
+    const { id } = await createLineupOrRetry(
+        adminToken,
+        {
+            title: lineupTitle,
+            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
+        },
+        workerPrefix,
+    );
+    lineupId = id;
     createdLineup = true;
 });
 

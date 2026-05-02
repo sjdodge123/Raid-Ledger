@@ -11,9 +11,20 @@
  */
 import { test, expect } from './base';
 import { isMobile } from './helpers';
+import { apiPost, getAdminToken } from './api-helpers';
 
 const WIZARD_URL = '/onboarding?rerun=1';
 const API_BASE = process.env.API_URL || 'http://localhost:3000';
+
+// ROK-1070: clear admin onboardingCompletedAt + gameTimeConfirmedAt before
+// any test runs so the wizard breadcrumb structure (Game Time step etc.) is
+// in its fresh-onboarding shape. Without this, prior runs that saved
+// game-time leak through `?rerun=1` and the Game Time breadcrumb fails to
+// render in the expected structure.
+test.beforeAll(async () => {
+    const token = await getAdminToken();
+    await apiPost(token, '/admin/test/reset-onboarding', {});
+});
 
 /**
  * Check whether the server has Steam configured via the system status API.
