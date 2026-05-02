@@ -36,7 +36,7 @@ let lineupTitle: string;
 async function archiveActiveLineup(token: string): Promise<void> {
     await apiPost(token, '/admin/test/reset-lineups', {
         titlePrefix: workerPrefix,
-        phases: ['building', 'voting', 'decided', 'scheduling'],
+        phases: ['building', 'voting', 'decided'],
     });
 }
 

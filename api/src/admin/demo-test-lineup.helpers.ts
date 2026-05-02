@@ -61,12 +61,15 @@ export async function archiveActiveLineupForTest(db: Db): Promise<void> {
     .where(sql`${schema.communityLineups.status} IN ('building', 'voting')`);
 }
 
-/** Lineup phases that may be archived by the test-only reset helper. */
+/**
+ * Lineup phases that may be archived by the test-only reset helper. Mirrors
+ * `community_lineups.status` enum (`api/src/drizzle/schema/community-lineups.ts`).
+ */
 export type ResetLineupPhase =
   | 'building'
   | 'voting'
   | 'decided'
-  | 'scheduling';
+  | 'archived';
 
 const DEFAULT_RESET_PHASES: ResetLineupPhase[] = ['building', 'voting'];
 
@@ -79,9 +82,9 @@ const DEFAULT_RESET_PHASES: ResetLineupPhase[] = ['building', 'voting'];
  * that would match other workers' titles.
  *
  * `phases` defaults to `['building', 'voting']` for back-compat (ROK-1070).
- * Pass a broader array (e.g. `['building', 'voting', 'decided', 'scheduling']`)
- * when fixtures depend on archiving lineups already past `voting`
- * (e.g. scheduling-poll fixtures live on `decided` rows).
+ * Pass a broader array (e.g. `['building', 'voting', 'decided']`) when
+ * fixtures depend on archiving lineups already past `voting` — for example
+ * scheduling-poll fixtures attach to `decided` lineups.
  *
  * Returns `archivedCount` for visibility/debugging.
  */

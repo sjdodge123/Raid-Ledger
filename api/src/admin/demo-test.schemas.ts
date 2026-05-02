@@ -88,17 +88,20 @@ export const ArchiveLineupSchema = z.object({
 /**
  * Phases archived by `/admin/test/reset-lineups` (ROK-1070).
  *
+ * Mirrors `community_lineups.status` enum (`api/src/drizzle/schema/
+ * community-lineups.ts`): `building`, `voting`, `decided`, `archived`.
+ *
  * Default behaviour (no phases supplied) preserves the original ROK-1147
  * contract — only `building` and `voting` rows are archived. Pass a broader
- * array (e.g. `['building', 'voting', 'decided', 'scheduling']`) when the
- * caller's fixtures depend on archiving lineups already past `voting`
- * (e.g. scheduling-poll fixtures live on `decided` rows).
+ * array (e.g. `['building', 'voting', 'decided']`) when the caller's
+ * fixtures depend on archiving lineups already past `voting` — for example
+ * scheduling-poll fixtures attach to `decided` lineups.
  */
 const VALID_LINEUP_PHASES = [
   'building',
   'voting',
   'decided',
-  'scheduling',
+  'archived',
 ] as const;
 
 export const ResetLineupsSchema = z.object({
