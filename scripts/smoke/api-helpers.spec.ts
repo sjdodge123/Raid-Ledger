@@ -1,17 +1,15 @@
 /**
  * Unit tests for getAdminToken() — ROK-1085.
  *
- * Verifies the planned token-on-disk behavior:
+ * Verifies the token-on-disk behavior shipped in PR #667:
  *   1. When scripts/.auth/admin-token.json exists, getAdminToken() reads it
  *      synchronously and does NOT call POST /auth/local.
  *   2. When the file is missing, it falls back to the existing /auth/local
  *      retry path.
  *   3. The module-level cache prevents repeat reads / fetches on subsequent
  *      calls within the same worker process.
- *
- * These tests intentionally fail against the current implementation in
- * scripts/smoke/api-helpers.ts (which always calls fetch), and will pass once
- * the dev wires the file-read path described in planning-artifacts/specs/ROK-1085.md.
+ *   4. ROK-1149: tokens whose `issued_at` is older than the 50-min TTL are
+ *      treated as missing and fall back to live login.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -65,7 +63,7 @@ describe('getAdminToken (ROK-1085)', () => {
         mockReadFile.mockResolvedValueOnce(
             JSON.stringify({
                 access_token: TOKEN_VALUE,
-                issued_at: '2026-04-27T00:00:00.000Z',
+                issued_at: new Date().toISOString(),
             }),
         );
 
@@ -95,11 +93,25 @@ describe('getAdminToken (ROK-1085)', () => {
         expect(init?.method).toBe('POST');
     });
 
+    it('falls back to POST /auth/local when on-disk token is older than 50 min (ROK-1149)', async () => {
+        const stale = new Date(Date.now() - 51 * 60 * 1000).toISOString();
+        mockReadFile.mockResolvedValueOnce(
+            JSON.stringify({ access_token: TOKEN_VALUE, issued_at: stale }),
+        );
+
+        const { getAdminToken } = await import('./api-helpers');
+        const token = await getAdminToken();
+
+        expect(mockReadFile).toHaveBeenCalledTimes(1);
+        expect(token).toBe(FALLBACK_TOKEN);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('caches the token in-process — second call hits neither fs nor fetch', async () => {
         mockReadFile.mockResolvedValueOnce(
             JSON.stringify({
                 access_token: TOKEN_VALUE,
-                issued_at: '2026-04-27T00:00:00.000Z',
+                issued_at: new Date().toISOString(),
             }),
         );
 
