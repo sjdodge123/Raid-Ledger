@@ -2,10 +2,12 @@
  * Unit tests for blizzard-professions.helpers (ROK-1130).
  *
  * Mirrors the structural template of blizzard-equipment.helpers (parser +
- * single fetch + 404-vs-5xx handling). Architect §3 requires the helper
- * to return a normalized payload for 404 (`{ primary: [], secondary: [], syncedAt }`)
- * and `null` for any other failure (5xx, network) — the orchestrator uses
- * the null signal to leave prior column values alone.
+ * single fetch + null-vs-payload handling). After ROK-1130's fix
+ * (`e23c2730`), the helper returns `null` whenever there is no actionable
+ * data — 404, 5xx, network throw, AND 200 OK with empty primaries/secondaries.
+ * Only a 200 OK with at least one profession entry yields a non-null payload.
+ * The orchestrator uses the null signal to leave prior column values alone,
+ * so automatic sync never clobbers manual entries with empty arrays.
  */
 import { fetchCharacterProfessions } from './blizzard-professions.helpers';
 
@@ -61,7 +63,7 @@ function mockFetchOnce(status: number, body: unknown) {
     ok: status >= 200 && status < 300,
     status,
     json: () => Promise.resolve(body),
-  } as Response) as unknown as typeof fetch;
+  });
 }
 
 describe('fetchCharacterProfessions — happy path', () => {
@@ -154,11 +156,7 @@ describe('fetchCharacterProfessions — graceful handling', () => {
   });
 
   it('returns null when fetch throws (network/timeout)', async () => {
-    global.fetch = jest
-      .fn()
-      .mockRejectedValueOnce(
-        new Error('ECONNRESET'),
-      ) as unknown as typeof fetch;
+    global.fetch = jest.fn().mockRejectedValueOnce(new Error('ECONNRESET'));
 
     const result = await fetchCharacterProfessions(
       'X',
@@ -232,7 +230,7 @@ describe('fetchCharacterProfessions — Classic short-circuit', () => {
     'returns null without making an HTTP request for %s namespace (Blizzard %s API does not expose /professions)',
     async (prefix) => {
       const fetchSpy = jest.fn();
-      global.fetch = fetchSpy as unknown as typeof fetch;
+      global.fetch = fetchSpy;
 
       const result = await fetchCharacterProfessions(
         'Roknua',
