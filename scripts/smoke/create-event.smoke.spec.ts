@@ -3,14 +3,11 @@
  * roster slot type switching, and successful event creation with cleanup.
  */
 import { test, expect } from './base';
-import { getAdminToken, apiDelete, apiPost } from './api-helpers';
+import { getAdminToken, apiDelete } from './api-helpers';
 
-// ROK-1070: reset-to-seed before this file's tests so stale events from
-// prior smoke runs don't interfere with the event-creation-redirect test.
-test.beforeAll(async () => {
-    const token = await getAdminToken();
-    await apiPost(token, '/admin/test/reset-to-seed', {});
-});
+// ROK-1070 Codex review (P2): removed the file-level reset-to-seed
+// beforeAll for the parallel-project race reason documented in
+// events.smoke / plan-event.smoke / notifications.smoke.
 
 // ---------------------------------------------------------------------------
 // Helpers

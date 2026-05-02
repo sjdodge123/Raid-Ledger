@@ -5,13 +5,11 @@ import { test, expect } from './base';
 import { navigateToFirstEvent } from './helpers';
 import { getAdminToken, apiGet, apiPost, apiDelete } from './api-helpers';
 
-// ROK-1070: reset-to-seed before this file's tests so stale events from
-// prior smoke runs don't pollute the events list (e.g., the mobile search
-// test depends on baseline demo events being the only rows present).
-test.beforeAll(async () => {
-    const token = await getAdminToken();
-    await apiPost(token, '/admin/test/reset-to-seed', {});
-});
+// ROK-1070 Codex review (P2): removed the file-level reset-to-seed
+// beforeAll. Playwright runs desktop+mobile projects in parallel and a
+// global truncate races against the other project's fixtures (e.g.
+// activity-timeline.smoke holds an eventId in its own beforeAll). Global
+// setup is sufficient.
 
 // ---------------------------------------------------------------------------
 // Events List

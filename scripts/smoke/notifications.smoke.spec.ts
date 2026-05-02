@@ -2,15 +2,14 @@
  * Notifications smoke tests — bell icon, dropdown, mark all read.
  */
 import { test, expect } from './base';
-import { apiPost, getAdminToken } from './api-helpers';
 
-// ROK-1070: reset-to-seed before this file's tests so stale notifications
-// from prior smoke runs don't leak into the dropdown content assertion.
-// Single-test file with no fixture creation, so the heavier reset is cheap.
-test.beforeAll(async () => {
-    const token = await getAdminToken();
-    await apiPost(token, '/admin/test/reset-to-seed', {});
-});
+// ROK-1070 Codex review (P2): removed the file-level reset-to-seed
+// beforeAll. Playwright runs the desktop and mobile projects in parallel
+// against the same DB, and reset-to-seed truncates global tables. A
+// per-file reset wipes fixtures the OTHER project just created in its own
+// beforeAll. Global setup (scripts/playwright-global-setup.ts) already
+// runs reset-to-seed once at the start of the suite — that is sufficient
+// for this single-test file to see clean baseline data.
 
 test.describe('Notifications', () => {
     test('bell icon is visible in header', async ({ page }) => {
