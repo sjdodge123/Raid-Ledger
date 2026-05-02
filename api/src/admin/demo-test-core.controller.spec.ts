@@ -8,6 +8,13 @@ import { SlowQueriesService } from '../slow-queries/slow-queries.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { DEMO_USERNAMES } from './demo-data.constants';
 
+// ROK-1070: helper used by reset-onboarding handler — mocked at module
+// level so the controller's direct call is observable in tests.
+jest.mock('./demo-test-rok1070.helpers', () => ({
+  resetOnboardingForTest: jest.fn().mockResolvedValue(undefined),
+}));
+import { resetOnboardingForTest as resetOnboardingHelperMock } from './demo-test-rok1070.helpers';
+
 function createMockService() {
   return {
     linkDiscordForTest: jest.fn().mockResolvedValue({ id: 1 }),
@@ -17,8 +24,6 @@ function createMockService() {
     flushEmbedQueueForTest: jest.fn().mockResolvedValue({ success: true }),
     awaitProcessingForTest: jest.fn().mockResolvedValue(undefined),
     clearGameTimeConfirmationForTest: jest.fn().mockResolvedValue(undefined),
-    resetOnboardingForTest: jest.fn().mockResolvedValue(undefined),
-    assertDemoModeForTest: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -173,10 +178,7 @@ describe('DemoTestCoreController', () => {
   });
 
   describe('resetOnboarding (ROK-1070)', () => {
-    resetOnboardingTests(
-      () => controller,
-      () => mockService,
-    );
+    resetOnboardingTests(() => controller);
   });
 });
 
@@ -449,15 +451,12 @@ function seedSlowQueriesLogTests(
 
   it('rejects unknown body fields (Zod strict)', async () => {
     await expect(
-      getController().seedSlowQueriesLogForTest({ entryCount: 5 } as unknown),
+      getController().seedSlowQueriesLogForTest({ entryCount: 5 }),
     ).rejects.toThrow(/Validation failed/);
   });
 }
 
-function resetOnboardingTests(
-  getController: GetController,
-  getMock: GetMockService,
-) {
+function resetOnboardingTests(getController: GetController) {
   it('delegates to service with authenticated user id', async () => {
     const req = {
       user: {
@@ -468,8 +467,14 @@ function resetOnboardingTests(
         impersonatedBy: null,
       },
     };
+    (resetOnboardingHelperMock as jest.Mock)
+      .mockReset()
+      .mockResolvedValue(undefined);
     const result = await getController().resetOnboardingForTest(req);
     expect(result).toEqual({ success: true });
-    expect(getMock().resetOnboardingForTest).toHaveBeenCalledWith(7);
+    expect(resetOnboardingHelperMock).toHaveBeenCalledWith(
+      expect.anything(),
+      7,
+    );
   });
 }

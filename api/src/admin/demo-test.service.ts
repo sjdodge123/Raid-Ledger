@@ -45,18 +45,6 @@ export class DemoTestService {
   ) {}
 
   /**
-   * Public assertion gate for DEMO_MODE — used by test endpoints that
-   * delegate to other services (e.g. `seed-slow-queries-log` calls
-   * `SlowQueriesService.appendDigestToLog` directly without going through
-   * a private `*ForTest` method on this service). Routes that go through
-   * a private helper here already get the gate via the inner
-   * `assertDemoMode()` call (ROK-1070).
-   */
-  async assertDemoModeForTest(): Promise<void> {
-    await this.assertDemoMode();
-  }
-
-  /**
    * Assert that DEMO_MODE is enabled in both process.env and DB settings.
    * Throws ForbiddenException if either check fails.
    */
@@ -358,43 +346,6 @@ export class DemoTestService {
       .update(schema.users)
       .set({ gameTimeConfirmedAt: null })
       .where(eq(schema.users.id, userId));
-  }
-
-  /**
-   * Reset onboarding flags for a user -- DEMO_MODE only (ROK-1070).
-   *
-   * Used by `onboarding.smoke.spec.ts`. Clears `onboardingCompletedAt`
-   * AND `gameTimeConfirmedAt` so the wizard renders from step 1 each run.
-   */
-  async resetOnboardingForTest(userId: number): Promise<void> {
-    await this.assertDemoMode();
-    const now = new Date();
-    await this.db
-      .update(schema.users)
-      .set({
-        onboardingCompletedAt: null,
-        gameTimeConfirmedAt: null,
-        updatedAt: now,
-      })
-      .where(eq(schema.users.id, userId));
-  }
-
-  /**
-   * Hard-delete events whose title begins with `titlePrefix` — DEMO_MODE only
-   * (ROK-1070). Mirrors `resetLineupsForTest` for the events table; cascades
-   * via FK to `event_signups` and other children.
-   */
-  async resetEventsForTest(
-    titlePrefix: string,
-  ): Promise<{ deletedCount: number }> {
-    await this.assertDemoMode();
-    const escapedPrefix = titlePrefix.replace(/[\\%_]/g, (c) => `\\${c}`);
-    const pattern = `${escapedPrefix}%`;
-    const result = await this.db
-      .delete(schema.events)
-      .where(sql`${schema.events.title} LIKE ${pattern}`)
-      .returning({ id: schema.events.id });
-    return { deletedCount: result.length };
   }
 
   /** Cancel all pending BullMQ phase-transition jobs for a lineup — DEMO_MODE only. */

@@ -42,6 +42,7 @@ import {
 } from './demo-test.schemas';
 import { DemoTestService } from './demo-test.service';
 import { parseDemoBody } from './demo-test.utils';
+import { resetOnboardingForTest as resetOnboardingHelper } from './demo-test-rok1070.helpers';
 
 /**
  * Core/utility test endpoints — DEMO_MODE only (smoke tests).
@@ -171,12 +172,9 @@ export class DemoTestCoreController {
   async seedSlowQueriesLogForTest(
     @Body() body: unknown,
   ): Promise<{ success: boolean; logFilePath: string }> {
-    // ROK-1070 Codex review (P1): explicit DEMO_MODE gate. parseDemoBody
-    // only validates the body shape — the production-style guard lives on
-    // DemoTestService.assertDemoMode, which we call here because this
-    // handler delegates to SlowQueriesService directly instead of going
-    // through a private *ForTest method on DemoTestService.
-    await this.demoTestService.assertDemoModeForTest();
+    // ROK-1070 Codex review P1: parseDemoBody only validates body shape;
+    // gate via the controller's own assertDemoMode (env + DB checks).
+    await this.assertDemoMode();
     parseDemoBody(SeedSlowQueriesLogSchema, body ?? {});
     await this.slowQueriesService.appendDigestToLog();
     return {
@@ -195,7 +193,8 @@ export class DemoTestCoreController {
   async resetOnboardingForTest(
     @Request() req: AuthenticatedRequest,
   ): Promise<{ success: boolean }> {
-    await this.demoTestService.resetOnboardingForTest(req.user.id);
+    await this.assertDemoMode();
+    await resetOnboardingHelper(this.db, req.user.id);
     return { success: true };
   }
 
@@ -276,7 +275,7 @@ function makeBatchInsert(db: Db) {
     onConflict?: 'doNothing',
   ) => {
     if (rows.length === 0) return;
-    const q = db.insert(table).values(rows as never);
+    const q = db.insert(table).values(rows);
     await (onConflict === 'doNothing' ? q.onConflictDoNothing() : q);
   };
 }

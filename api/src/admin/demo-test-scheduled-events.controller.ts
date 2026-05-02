@@ -5,16 +5,20 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
+import { SettingsService } from '../settings/settings.service';
 import { DemoTestService } from './demo-test.service';
-import {
-  SetEventTimesSchema,
-  ResetEventsSchema,
-} from './demo-test.schemas';
+import { SetEventTimesSchema, ResetEventsSchema } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
+import { resetEventsForTest as resetEventsHelper } from './demo-test-rok1070.helpers';
 
 /**
  * Discord scheduled-event test endpoints — DEMO_MODE only.
@@ -23,7 +27,22 @@ import { parseDemoBody } from './demo-test.utils';
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class DemoTestScheduledEventsController {
-  constructor(private readonly demoTestService: DemoTestService) {}
+  constructor(
+    private readonly demoTestService: DemoTestService,
+    private readonly settingsService: SettingsService,
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+  ) {}
+
+  /** Gate — throws if DEMO_MODE is off (ROK-1070 Codex review P1). */
+  private async assertDemoMode(): Promise<void> {
+    if (process.env.DEMO_MODE !== 'true') {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+    if (!(await this.settingsService.getDemoMode())) {
+      throw new ForbiddenException('Only available in DEMO_MODE');
+    }
+  }
 
   /** Trigger scheduled event completion cron — DEMO_MODE only (ROK-944). */
   @Post('trigger-scheduled-event-completion')
@@ -87,8 +106,10 @@ export class DemoTestScheduledEventsController {
     success: boolean;
     deletedCount: number;
   }> {
+    await this.assertDemoMode();
     const parsed = parseDemoBody(ResetEventsSchema, body);
-    const { deletedCount } = await this.demoTestService.resetEventsForTest(
+    const { deletedCount } = await resetEventsHelper(
+      this.db,
       parsed.titlePrefix,
     );
     return { success: true, deletedCount };
