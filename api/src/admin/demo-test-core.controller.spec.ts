@@ -18,6 +18,7 @@ function createMockService() {
     awaitProcessingForTest: jest.fn().mockResolvedValue(undefined),
     clearGameTimeConfirmationForTest: jest.fn().mockResolvedValue(undefined),
     resetOnboardingForTest: jest.fn().mockResolvedValue(undefined),
+    assertDemoModeForTest: jest.fn().mockResolvedValue(undefined),
   };
 }
 

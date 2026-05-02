@@ -171,6 +171,12 @@ export class DemoTestCoreController {
   async seedSlowQueriesLogForTest(
     @Body() body: unknown,
   ): Promise<{ success: boolean; logFilePath: string }> {
+    // ROK-1070 Codex review (P1): explicit DEMO_MODE gate. parseDemoBody
+    // only validates the body shape — the production-style guard lives on
+    // DemoTestService.assertDemoMode, which we call here because this
+    // handler delegates to SlowQueriesService directly instead of going
+    // through a private *ForTest method on DemoTestService.
+    await this.demoTestService.assertDemoModeForTest();
     parseDemoBody(SeedSlowQueriesLogSchema, body ?? {});
     await this.slowQueriesService.appendDigestToLog();
     return {

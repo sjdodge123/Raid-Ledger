@@ -45,6 +45,18 @@ export class DemoTestService {
   ) {}
 
   /**
+   * Public assertion gate for DEMO_MODE — used by test endpoints that
+   * delegate to other services (e.g. `seed-slow-queries-log` calls
+   * `SlowQueriesService.appendDigestToLog` directly without going through
+   * a private `*ForTest` method on this service). Routes that go through
+   * a private helper here already get the gate via the inner
+   * `assertDemoMode()` call (ROK-1070).
+   */
+  async assertDemoModeForTest(): Promise<void> {
+    await this.assertDemoMode();
+  }
+
+  /**
    * Assert that DEMO_MODE is enabled in both process.env and DB settings.
    * Throws ForbiddenException if either check fails.
    */
