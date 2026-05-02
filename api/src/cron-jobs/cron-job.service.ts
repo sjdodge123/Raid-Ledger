@@ -30,6 +30,7 @@ import {
   pruneExecutions,
   recordSkipped,
   recordCompleted,
+  recordDegraded,
   recordFailed,
   recordNoOp,
   shouldUpdateLiveness,
@@ -163,7 +164,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   /** Execute a cron handler with tracking. */
   async executeWithTracking(
     jobName: string,
-    fn: () => Promise<void | boolean>,
+    fn: () => Promise<void | boolean | { degraded: true }>,
   ): Promise<void> {
     const job = await this.resolveJob(jobName);
     if (!job) {
@@ -194,7 +195,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   private async runTracked(
     job: CronJobRow,
     jobName: string,
-    fn: () => Promise<void | boolean>,
+    fn: () => Promise<void | boolean | { degraded: true }>,
   ): Promise<void> {
     const startedAt = new Date();
     let didInsertRow = false;
@@ -204,6 +205,13 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       if (result === false) {
         recordNoOp(jobName, startedAt, finishedAt);
         this.queueLivenessIfStale(job);
+      } else if (
+        typeof result === 'object' &&
+        result !== null &&
+        result.degraded === true
+      ) {
+        await recordDegraded(this.db, job, jobName, startedAt, finishedAt);
+        didInsertRow = true;
       } else {
         await recordCompleted(this.db, job, jobName, startedAt, finishedAt);
         didInsertRow = true;

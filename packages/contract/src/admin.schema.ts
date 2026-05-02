@@ -62,7 +62,7 @@ export type CronJobDto = z.infer<typeof CronJobSchema>;
 export const CronJobExecutionSchema = z.object({
   id: z.number(),
   cronJobId: z.number(),
-  status: z.enum(['completed', 'failed', 'skipped', 'no-op']),
+  status: z.enum(['completed', 'failed', 'skipped', 'no-op', 'degraded']),
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
   durationMs: z.number().nullable(),
