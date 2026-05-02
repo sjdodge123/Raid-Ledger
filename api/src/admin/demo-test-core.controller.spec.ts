@@ -4,8 +4,16 @@ import { DemoTestCoreController } from './demo-test-core.controller';
 import { DemoTestService } from './demo-test.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { SettingsService } from '../settings/settings.service';
+import { SlowQueriesService } from '../slow-queries/slow-queries.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { DEMO_USERNAMES } from './demo-data.constants';
+
+// ROK-1070: helper used by reset-onboarding handler — mocked at module
+// level so the controller's direct call is observable in tests.
+jest.mock('./demo-test-rok1070.helpers', () => ({
+  resetOnboardingForTest: jest.fn().mockResolvedValue(undefined),
+}));
+import { resetOnboardingForTest as resetOnboardingHelperMock } from './demo-test-rok1070.helpers';
 
 function createMockService() {
   return {
@@ -19,7 +27,17 @@ function createMockService() {
   };
 }
 
+function createMockSlowQueries() {
+  return {
+    appendDigestToLog: jest.fn().mockResolvedValue(undefined),
+    getLogFilePath: jest
+      .fn()
+      .mockReturnValue('/tmp/raid-ledger-smoke/slow-queries.log'),
+  };
+}
+
 type MockService = ReturnType<typeof createMockService>;
+type MockSlowQueries = ReturnType<typeof createMockSlowQueries>;
 type MockTasteProfileService = {
   aggregateVectors: jest.Mock;
   weeklyIntensityRollup: jest.Mock;
@@ -27,6 +45,7 @@ type MockTasteProfileService = {
 type MockSettingsService = { getDemoMode: jest.Mock };
 type GetController = () => DemoTestCoreController;
 type GetMockService = () => MockService;
+type GetMockSlowQueries = () => MockSlowQueries;
 type GetMockTaste = () => MockTasteProfileService;
 type GetMockSettings = () => MockSettingsService;
 
@@ -56,12 +75,14 @@ function mockDb(rowsByCall: unknown[][]) {
 describe('DemoTestCoreController', () => {
   let controller: DemoTestCoreController;
   let mockService: MockService;
+  let mockSlowQueries: MockSlowQueries;
   let mockTaste: MockTasteProfileService;
   let mockSettings: MockSettingsService;
   const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 
   beforeEach(async () => {
     mockService = createMockService();
+    mockSlowQueries = createMockSlowQueries();
     mockTaste = {
       aggregateVectors: jest.fn().mockResolvedValue(undefined),
       weeklyIntensityRollup: jest.fn().mockResolvedValue(undefined),
@@ -75,6 +96,7 @@ describe('DemoTestCoreController', () => {
         { provide: DemoTestService, useValue: mockService },
         { provide: TasteProfileService, useValue: mockTaste },
         { provide: SettingsService, useValue: mockSettings },
+        { provide: SlowQueriesService, useValue: mockSlowQueries },
         { provide: DrizzleAsyncProvider, useValue: mockDb([]) },
       ],
     }).compile();
@@ -146,6 +168,17 @@ describe('DemoTestCoreController', () => {
 
   describe('reseedTasteProfiles (ROK-1083)', () => {
     reseedTasteProfilesTests(() => mockSettings);
+  });
+
+  describe('seedSlowQueriesLog (ROK-1070)', () => {
+    seedSlowQueriesLogTests(
+      () => controller,
+      () => mockSlowQueries,
+    );
+  });
+
+  describe('resetOnboarding (ROK-1070)', () => {
+    resetOnboardingTests(() => controller);
   });
 });
 
@@ -307,6 +340,7 @@ async function buildController(overrides: {
       { provide: DemoTestService, useValue: createMockService() },
       { provide: TasteProfileService, useValue: taste },
       { provide: SettingsService, useValue: settings },
+      { provide: SlowQueriesService, useValue: createMockSlowQueries() },
       { provide: DrizzleAsyncProvider, useValue: db },
     ],
   }).compile();
@@ -398,5 +432,49 @@ function reseedTasteProfilesTests(getSettings: GetMockSettings) {
     } finally {
       process.env.DEMO_MODE = 'true';
     }
+  });
+}
+
+function seedSlowQueriesLogTests(
+  getController: GetController,
+  getMockSlowQueries: GetMockSlowQueries,
+) {
+  it('delegates to SlowQueriesService.appendDigestToLog', async () => {
+    const result = await getController().seedSlowQueriesLogForTest({});
+    expect(result).toMatchObject({
+      success: true,
+      logFilePath: expect.stringContaining('slow-queries.log'),
+    });
+    expect(getMockSlowQueries().appendDigestToLog).toHaveBeenCalledTimes(1);
+    expect(getMockSlowQueries().getLogFilePath).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects unknown body fields (Zod strict)', async () => {
+    await expect(
+      getController().seedSlowQueriesLogForTest({ entryCount: 5 }),
+    ).rejects.toThrow(/Validation failed/);
+  });
+}
+
+function resetOnboardingTests(getController: GetController) {
+  it('delegates to service with authenticated user id', async () => {
+    const req = {
+      user: {
+        id: 7,
+        username: 'admin',
+        role: 'admin' as const,
+        discordId: null,
+        impersonatedBy: null,
+      },
+    };
+    (resetOnboardingHelperMock as jest.Mock)
+      .mockReset()
+      .mockResolvedValue(undefined);
+    const result = await getController().resetOnboardingForTest(req);
+    expect(result).toEqual({ success: true });
+    expect(resetOnboardingHelperMock).toHaveBeenCalledWith(
+      expect.anything(),
+      7,
+    );
   });
 }

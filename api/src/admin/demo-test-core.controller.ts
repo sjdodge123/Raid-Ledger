@@ -20,6 +20,7 @@ import type { AuthenticatedRequest } from '../auth/types';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
+import { SlowQueriesService } from '../slow-queries/slow-queries.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { DEMO_USERNAMES } from './demo-data.constants';
 import {
@@ -37,9 +38,11 @@ import {
   LinkDiscordSchema,
   EnableNotificationsSchema,
   AwaitProcessingSchema,
+  SeedSlowQueriesLogSchema,
 } from './demo-test.schemas';
 import { DemoTestService } from './demo-test.service';
 import { parseDemoBody } from './demo-test.utils';
+import { resetOnboardingForTest as resetOnboardingHelper } from './demo-test-rok1070.helpers';
 
 /**
  * Core/utility test endpoints — DEMO_MODE only (smoke tests).
@@ -53,6 +56,7 @@ export class DemoTestCoreController {
     private readonly demoTestService: DemoTestService,
     private readonly tasteProfileService: TasteProfileService,
     private readonly settingsService: SettingsService,
+    private readonly slowQueriesService: SlowQueriesService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -156,6 +160,45 @@ export class DemoTestCoreController {
   }
 
   /**
+   * Seed a deterministic slow-query digest entry — DEMO_MODE only (ROK-1070).
+   *
+   * Workaround for the admin-slow-queries-log smoke test on Mac dev where
+   * `LOG_DIR` defaults to `/data/logs/` and is unwritable. Delegates to the
+   * production `SlowQueriesService.appendDigestToLog` which already handles
+   * `mkdir -p` and best-effort error handling.
+   */
+  @Post('seed-slow-queries-log')
+  @HttpCode(HttpStatus.OK)
+  async seedSlowQueriesLogForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; logFilePath: string }> {
+    // ROK-1070 Codex review P1: parseDemoBody only validates body shape;
+    // gate via the controller's own assertDemoMode (env + DB checks).
+    await this.assertDemoMode();
+    parseDemoBody(SeedSlowQueriesLogSchema, body ?? {});
+    await this.slowQueriesService.appendDigestToLog();
+    return {
+      success: true,
+      logFilePath: this.slowQueriesService.getLogFilePath(),
+    };
+  }
+
+  /**
+   * Reset onboarding flags for the authenticated user — DEMO_MODE only
+   * (ROK-1070). Used by `onboarding.smoke.spec.ts` so the wizard renders
+   * fresh on every run.
+   */
+  @Post('reset-onboarding')
+  @HttpCode(HttpStatus.OK)
+  async resetOnboardingForTest(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    await resetOnboardingHelper(this.db, req.user.id);
+    return { success: true };
+  }
+
+  /**
    * Rebuild taste-profile vectors + intensity + archetypes for every user
    * (ROK-1083). Runs aggregate-vectors → weekly-intensity → archetype
    * refresh in the same order the demo installer uses, so existing
@@ -232,7 +275,7 @@ function makeBatchInsert(db: Db) {
     onConflict?: 'doNothing',
   ) => {
     if (rows.length === 0) return;
-    const q = db.insert(table).values(rows as never);
+    const q = db.insert(table).values(rows);
     await (onConflict === 'doNothing' ? q.onConflictDoNothing() : q);
   };
 }

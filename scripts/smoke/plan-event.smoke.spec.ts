@@ -8,6 +8,11 @@
  */
 import { test, expect } from './base';
 
+// ROK-1070 Codex review (P2): removed the file-level reset-to-seed
+// beforeAll for the same reason as notifications.smoke — desktop+mobile
+// projects run in parallel and a global truncate races against the other
+// project's fixtures. Global setup is sufficient.
+
 // ---------------------------------------------------------------------------
 // Plan Event Form — Rendering
 // ---------------------------------------------------------------------------

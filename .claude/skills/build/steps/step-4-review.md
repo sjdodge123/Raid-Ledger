@@ -103,13 +103,23 @@ Reviewer is **Codex CLI**, not a Claude subagent. Different model = different bl
 
 ### Run Codex
 
+`codex review` in v0.121.0 makes `--base <BRANCH>` and `[PROMPT]` mutually exclusive (the older syntax that combined them errors out: "the argument '--base <BRANCH>' cannot be used with '[PROMPT]'"). Run two passes — one for the diff against main, one for the custom-prompt focus — then concatenate. Drop reasoning effort to `medium` to avoid hangs on large diffs (high-effort runs on >1500 lines have stalled past 30 min in the wild; ROK-1070 confirmed).
+
 ```bash
 cd <worktree>
-codex review --base main "Review this Raid-Ledger PR for: (1) security/auth bugs, (2) correctness/regressions, (3) contract integrity (Zod/types/migration consistency), (4) Discord bot listener safety. Skip style nits, naming preferences, doc gaps. For each finding: severity (BLOCKER | HIGH | MEDIUM | LOW), file:line, one-line description, suggested fix. Final line: 'VERDICT: APPROVED' or 'VERDICT: APPROVED WITH FIXES' or 'VERDICT: BLOCKED'." 2>&1 | tee planning-artifacts/review-ROK-XXX.md
+{
+  echo "## Pass 1: default review against main"
+  codex -c model_reasoning_effort=medium review --base main 2>&1
+  echo
+  echo "## Pass 2: scoped focus prompt"
+  codex -c model_reasoning_effort=medium review "Review the staged + uncommitted changes (or the most recent commit) for: (1) security/auth bugs, (2) correctness/regressions, (3) contract integrity (Zod/types/migration consistency), (4) Discord bot listener safety. Skip style nits, naming preferences, doc gaps. For each finding: severity (BLOCKER | HIGH | MEDIUM | LOW), file:line, one-line description, suggested fix. Final line: 'VERDICT: APPROVED' or 'VERDICT: APPROVED WITH FIXES' or 'VERDICT: BLOCKED'." 2>&1
+} | tee planning-artifacts/review-ROK-XXX.md
 cd -
 ```
 
-The custom prompt is critical — without scope, Codex returns broad style feedback. The format string keeps findings actionable and comparable across stories.
+The custom prompt is critical for pass 2 — without scope, Codex returns broad style feedback. The format string keeps findings actionable and comparable across stories. If pass 1's default review already produced a clear verdict and the diff is small (<500 lines), pass 2 is optional.
+
+**Hang watchdog:** If Codex produces only the session-header banner and no further output for >5 minutes, treat as hung — `pkill -f "codex review"` and fall back to the Claude reviewer (see "Verdict handling" below). Hangs correlate with: `model_reasoning_effort = "high"` in `~/.codex/config.toml`, large diffs (>1500 lines), and MCP tool servers configured with `approval_mode = "approve"` (an auto-loaded tool can wait forever for human approval). The `-c model_reasoning_effort=medium` override above protects against the first two; if the third bites, run codex with `-c features.experimental_use_rmcp_client=false` to disable MCP loading for the review pass.
 
 ### Verdict handling
 
@@ -122,7 +132,11 @@ Read the last line of `planning-artifacts/review-ROK-XXX.md`:
 
 ### Why no team / no parallel split
 
-Codex handles diffs of any size in one shot — it doesn't run out of context the way a Claude subagent does, so the size-bucket sizing (small/medium/large/XL) doesn't apply. Single command, single output file, no aggregation work. If the diff is genuinely massive (>10k lines) and Codex's output is shallow, run a second Codex pass scoped to a specific path: `codex review --base main "Focus only on api/src/auth/** for this pass."`
+Codex handles diffs of any size in one shot — it doesn't run out of context the way a Claude subagent does, so the size-bucket sizing (small/medium/large/XL) doesn't apply. Single command, single output file, no aggregation work. If the diff is genuinely massive (>10k lines) and Codex's output is shallow, run a second pass scoped to a specific path: `codex -c model_reasoning_effort=medium review --base main api/src/auth/`. Path scoping uses positional args; combining `--base` with the focus prompt is not supported in v0.121.0.
+
+### Claude reviewer fallback
+
+If Codex hangs / errors / produces no verdict, do NOT spawn a Claude subagent of type `devedup-rl:reviewer` and ask it to write the review file — that subagent has only `Read, Grep, Glob, Bash` and cannot persist findings to disk, so its work disappears at end-of-call. Instead, do the review as Lead with direct grep + read commands against the diff (this catches the constraints that matter: DEMO_MODE gating, `test.skip` count, helper-signature compatibility, production-source diff scope, `sleep()` audit). Record findings inline in `planning-artifacts/review-ROK-XXX.md` and proceed to the verdict line. Lead-driven review is the documented fallback when Codex is unavailable.
 
 ---
 

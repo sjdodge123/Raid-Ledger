@@ -5,6 +5,10 @@
 import { test, expect } from './base';
 import { getAdminToken, apiDelete } from './api-helpers';
 
+// ROK-1070 Codex review (P2): removed the file-level reset-to-seed
+// beforeAll for the parallel-project race reason documented in
+// events.smoke / plan-event.smoke / notifications.smoke.
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

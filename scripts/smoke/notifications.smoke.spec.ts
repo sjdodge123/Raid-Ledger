@@ -3,6 +3,14 @@
  */
 import { test, expect } from './base';
 
+// ROK-1070 Codex review (P2): removed the file-level reset-to-seed
+// beforeAll. Playwright runs the desktop and mobile projects in parallel
+// against the same DB, and reset-to-seed truncates global tables. A
+// per-file reset wipes fixtures the OTHER project just created in its own
+// beforeAll. Global setup (scripts/playwright-global-setup.ts) already
+// runs reset-to-seed once at the start of the suite — that is sufficient
+// for this single-test file to see clean baseline data.
+
 test.describe('Notifications', () => {
     test('bell icon is visible in header', async ({ page }) => {
         await page.goto('/calendar');

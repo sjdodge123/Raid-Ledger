@@ -1,10 +1,11 @@
 /**
- * Admin Slow Queries log file smoke test (ROK-1156).
+ * Admin Slow Queries log file smoke test (ROK-1156, fixture refresh ROK-1070).
  *
- * Verifies the hourly slow-query digest cron writes `slow-queries.log` and
- * that it surfaces in the admin Logs panel as the `slow-queries` service.
- * Triggers the cron synchronously via the admin Cron Jobs API so the test
- * does not depend on the natural hourly cadence.
+ * Verifies that `slow-queries.log` surfaces in the admin Logs panel as the
+ * `slow-queries` service. The fixture seeds a deterministic digest block via
+ * `/admin/test/seed-slow-queries-log` so the panel assertions don't depend on
+ * `pg_stat_statements` or `/data/logs` permissions in local dev. The hourly
+ * cron path itself is exercised by api/src/slow-queries/*.spec.ts.
  *
  * Both desktop + mobile viewports are exercised through Playwright's project
  * matrix — CLAUDE.md mandates `npx playwright test` (no --project flag).
@@ -69,24 +70,20 @@ async function waitForSlowQueryFile(token: string, timeoutMs = 15_000) {
 
 test.describe('Admin Slow Queries log surfacing', () => {
     test.beforeEach(async () => {
-        // Resolve the cron's id and trigger it synchronously so a fresh
-        // slow-queries.log block exists before we assert against the panel.
+        // ROK-1070: Use the deterministic seed-slow-queries-log endpoint
+        // instead of triggering the cron. The cron path depends on
+        // pg_stat_statements + writable LOG_DIR, both of which are flaky in
+        // local dev / mac (LOG_DIR defaults to /data/logs which the nestjs
+        // user can't mkdir). The seed endpoint creates the log dir
+        // recursively and writes a deterministic single-line digest block,
+        // which is sufficient for the panel assertions below. The original
+        // cron path stays exercised by api/src/slow-queries/*.spec.ts.
         const token = await getAdminToken();
-        const crons = (await apiGet(token, '/admin/cron-jobs')) as Array<{
-            id: number;
-            name: string;
-        }> | null;
-        expect(crons, 'GET /admin/cron-jobs returned non-OK').toBeTruthy();
-        const cron = crons!.find((c) => c.name === SLOW_QUERIES_CRON);
-        expect(
-            cron,
-            `${SLOW_QUERIES_CRON} should be registered in CORE_JOB_METADATA`,
-        ).toBeTruthy();
-        const triggered = await apiPost(token, `/admin/cron-jobs/${cron!.id}/run`);
-        expect(triggered, 'POST /admin/cron-jobs/{id}/run returned non-OK').toBeTruthy();
-        // Poll the API until the file is observable — the cron's write is
-        // synchronous from its handler's perspective but the file may not be
-        // listable for a tick or two on slower CI runners.
+        const seeded = await apiPost(token, '/admin/test/seed-slow-queries-log', {});
+        expect(seeded, 'POST /admin/test/seed-slow-queries-log returned non-OK').toBeTruthy();
+        // Poll the API until the file is observable — the file write is
+        // synchronous from the endpoint's perspective but the listing endpoint
+        // may not see it for a tick on slower CI runners.
         await waitForSlowQueryFile(token);
     });
 
