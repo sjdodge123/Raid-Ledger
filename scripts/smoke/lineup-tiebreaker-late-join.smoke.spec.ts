@@ -7,14 +7,19 @@
  * (create lineup → nominate → vote-tied → start tiebreaker), and then
  * exercise the FRESH page-open after start.
  *
- * TDD gate: this test fails until the dev agent implements the
- * "late-join" path on `VetoView` (current spec confirms the form
- * works for the admin operator, but we also assert that the API
- * accepts a veto from a late arrival and the tiebreaker remains
- * active afterwards).
+ * ROK-1227: hardened against sibling-worker collisions and the parent
+ * matching bug (ROK-1225, still in backlog). Per-worker title prefix
+ * scopes /admin/test/reset-lineups; serial mode prevents intra-file
+ * fixture races; force-resolve tolerates the matching 500 because the
+ * tiebreaker.status row is already committed before the matching step
+ * runs (we poll for `resolved` instead of relying on the response).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiPost, apiGet } from './api-helpers';
+import { API_BASE, getAdminToken, apiPost, apiGet, createLineupOrRetry } from './api-helpers';
+
+// ROK-1227: serial mode prevents the two describes in this file from
+// racing each other when a single worker runs them back-to-back.
+test.describe.configure({ mode: 'serial' });
 
 async function apiPatch(
     token: string,
@@ -46,65 +51,36 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
     return body.data.slice(0, count).map((g) => g.id);
 }
 
-async function transitionVotingToDecided(
-    token: string,
-    id: number,
-    entries: { gameId: number }[],
-): Promise<void> {
-    const decidedGameId = entries?.[0]?.gameId;
-    try {
-        await apiPatch(token, `/lineups/${id}/status`, {
-            status: 'decided',
-            ...(decidedGameId ? { decidedGameId } : {}),
-        });
-    } catch {
-        await apiPost(token, `/lineups/${id}/tiebreaker`, {
-            mode: 'bracket',
-            roundDurationHours: 1,
-        }).catch(() => {});
-        await apiPost(token, `/lineups/${id}/tiebreaker/resolve`).catch(() => {});
-        await apiPatch(token, `/lineups/${id}/status`, { status: 'decided' });
+/**
+ * Poll a predicate at a fixed interval until it returns truthy or
+ * timeout elapses. Throws on timeout. Test-infra polling — not a
+ * UI assertion delay.
+ */
+async function pollUntil<T>(
+    fn: () => Promise<T>,
+    predicate: (value: T) => boolean,
+    opts: { timeoutMs?: number; intervalMs?: number; label?: string } = {},
+): Promise<T> {
+    const timeoutMs = opts.timeoutMs ?? 10_000;
+    const intervalMs = opts.intervalMs ?? 500;
+    const deadline = Date.now() + timeoutMs;
+    let last: T | undefined;
+    while (Date.now() < deadline) {
+        last = await fn();
+        if (predicate(last)) return last;
+        await new Promise((r) => setTimeout(r, intervalMs));
     }
+    throw new Error(
+        `pollUntil timed out after ${timeoutMs}ms${opts.label ? ` (${opts.label})` : ''}; last=${JSON.stringify(last)}`,
+    );
 }
 
-async function archiveActiveLineup(token: string): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const banner = await apiGet(token, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') return;
-        await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', {
-            lineupId: banner.id,
-        }).catch(() => {});
-        const detail = await apiGet(token, `/lineups/${banner.id}`);
-        if (!detail) return;
-        const id = banner.id;
-        try {
-            if (detail.status === 'voting') {
-                await transitionVotingToDecided(token, id, detail.entries ?? []);
-                await apiPatch(token, `/lineups/${id}/status`, {
-                    status: 'archived',
-                });
-            } else if (detail.status === 'decided') {
-                await apiPatch(token, `/lineups/${id}/status`, {
-                    status: 'archived',
-                });
-            } else if (detail.status === 'building') {
-                await apiPatch(token, `/lineups/${id}/status`, {
-                    status: 'voting',
-                });
-                await apiPatch(token, `/lineups/${id}/status`, {
-                    status: 'decided',
-                });
-                await apiPatch(token, `/lineups/${id}/status`, {
-                    status: 'archived',
-                });
-            }
-        } catch {
-            /* try again */
-        }
-        const check = await apiGet(token, '/lineups/banner');
-        if (!check || typeof check.id !== 'number') return;
-    }
-}
+// ROK-1227: per-worker title prefix scopes /admin/test/reset-lineups so
+// sibling workers don't archive each other's lineups mid-test. Mirrors
+// the pattern in lineup-tiebreaker.smoke.spec.ts:73-76, 148-152.
+const FILE_PREFIX = 'lineup-tiebreaker-late-join';
+let workerPrefix: string;
+let lineupTitle: string;
 
 /**
  * Build a voting lineup with a tied vote AND an ALREADY-STARTED veto
@@ -113,20 +89,21 @@ async function archiveActiveLineup(token: string): Promise<void> {
 async function startVetoTiebreaker(
     token: string,
 ): Promise<{ lineupId: number; tiebreakerId: number; gameIds: number[] }> {
-    await archiveActiveLineup(token);
+    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 
     const gameIds = await fetchGameIds(token, 4);
 
-    const createRes = (await apiPost(token, '/lineups', {
-        title: 'ROK-1117 Late-Join Smoke',
-        buildingDurationHours: 720,
-        votingDurationHours: 720,
-        decidedDurationHours: 720,
-        matchThreshold: 10,
-    })) as { id?: number };
-    const lineupId =
-        createRes?.id ?? (await apiGet(token, '/lineups/banner'))?.id;
-    if (!lineupId) throw new Error('Failed to create lineup');
+    const { id: lineupId } = await createLineupOrRetry(
+        token,
+        {
+            title: lineupTitle,
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
+            matchThreshold: 10,
+        },
+        workerPrefix,
+    );
 
     for (const gid of gameIds) {
         await apiPost(token, `/lineups/${lineupId}/nominate`, { gameId: gid });
@@ -145,12 +122,21 @@ async function startVetoTiebreaker(
     })) as { id?: number };
     const tiebreakerId = tb?.id ?? 0;
 
+    // Wait for the tiebreaker row to reach 'active' before navigating.
+    await pollUntil(
+        () => apiGet(token, `/lineups/${lineupId}/tiebreaker`),
+        (t) => t != null && t.status === 'active',
+        { label: 'tiebreaker→active' },
+    );
+
     return { lineupId, tiebreakerId, gameIds };
 }
 
 let adminToken: string;
 
-test.beforeAll(async () => {
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
     adminToken = await getAdminToken();
 });
 
@@ -208,6 +194,7 @@ test.describe('Late-join tiebreaker voting (ROK-1117)', () => {
         expect(vetoResponse).toBeTruthy();
 
         const tb = await apiGet(adminToken, `/lineups/${lineupId}/tiebreaker`);
+        expect(tb).not.toBeNull();
         // Late-join AC: round.status still 'active' (or already
         // 'resolved' is acceptable for single-voter auto-resolve, but
         // the late-join veto MUST have been accepted — i.e. either the
@@ -221,9 +208,8 @@ test.describe('Late-join tiebreaker voting (ROK-1117)', () => {
 //
 // When the tiebreaker has resolved or been dismissed, a user who navigates
 // to the lineup URL must see a clear "Vote closed at HH:MM" message instead
-// of the live veto form. This is NEW UI that doesn't exist yet — the test
-// must fail until the dev agent adds the closed state to VetoView /
-// BracketView.
+// of the live veto form. VetoView.tsx:22 surfaces TiebreakerClosedNotice
+// for both 'resolved' and 'dismissed' statuses.
 
 test.describe('Tiebreaker resolved → "Vote closed" UI (ROK-1117)', () => {
     let lineupId: number;
@@ -231,8 +217,22 @@ test.describe('Tiebreaker resolved → "Vote closed" UI (ROK-1117)', () => {
     test.beforeAll(async () => {
         const result = await startVetoTiebreaker(adminToken);
         lineupId = result.lineupId;
-        // Force-resolve so status === 'resolved' before navigation.
+
+        // ROK-1227: force-resolve sets tiebreaker.status='resolved' BEFORE
+        // it calls transitionToDecided→runMatchingAlgorithm. The matching
+        // step currently throws on `source='voted'` inserts (see ROK-1225,
+        // still in backlog), but the resolved row is already committed.
+        // apiPost returns the response JSON regardless of status, so we
+        // discard it and poll the tiebreaker row directly.
         await apiPost(adminToken, `/lineups/${lineupId}/tiebreaker/resolve`);
+
+        await pollUntil(
+            () => apiGet(adminToken, `/lineups/${lineupId}/tiebreaker`),
+            (tb) =>
+                tb != null &&
+                (tb.status === 'resolved' || tb.status === 'dismissed'),
+            { label: 'tiebreaker→resolved' },
+        );
     });
 
     test('shows "Vote closed at HH:MM" when status is resolved', async ({
