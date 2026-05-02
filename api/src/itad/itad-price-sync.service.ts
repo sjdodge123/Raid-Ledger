@@ -19,6 +19,7 @@ import { ItadService } from './itad.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import type { ItadOverviewGameEntry } from './itad-price.types';
 import { enrichChunkEarlyAccess } from './itad-early-access-sync.helpers';
+import { perfLog } from '../common/perf-logger';
 
 /** Number of games to fetch from ITAD per batch request. */
 export const CHUNK_SIZE = 50;
@@ -158,9 +159,10 @@ export class ItadPriceSyncService
   /**
    * Fetch ITAD pricing for all games with an itadGameId and persist to DB.
    * Processes in chunks of 50. Logs errors per chunk and continues.
-   * @returns false if no games need syncing (no-op).
+   * @returns false if no games need syncing (no-op),
+   *          { degraded: true } if any earlyAccess chunk had failures (ROK-1197).
    */
-  async syncPricing(): Promise<void | false> {
+  async syncPricing(): Promise<void | false | { degraded: true }> {
     const games = await this.queryGamesWithItadId();
     if (games.length === 0) {
       this.logger.log('No games with ITAD IDs — skipping pricing sync');
@@ -183,7 +185,8 @@ export class ItadPriceSyncService
     }
     this.logSyncSummary(succeeded, failed, games.length);
 
-    await this.syncEarlyAccess(games);
+    const earlyResult = await this.syncEarlyAccess(games);
+    if (earlyResult.failed > 0) return { degraded: true };
   }
 
   /** Query all games that have an itadGameId. */
@@ -261,13 +264,13 @@ export class ItadPriceSyncService
     return result.length;
   }
 
-  /** Log sync completion summary at appropriate level. */
+  /** Log pricing-phase completion summary at appropriate level (ROK-1197). */
   private logSyncSummary(
     succeeded: number,
     failed: number,
     totalGames: number,
   ): void {
-    const msg = `ITAD pricing sync complete: ${succeeded} chunks succeeded, ${failed} failed, ${totalGames} games total`;
+    const msg = `ITAD pricing phase complete: ${succeeded} chunks succeeded, ${failed} failed, ${totalGames} games total`;
     if (failed > 0) {
       this.logger.warn(msg);
     } else {
@@ -276,19 +279,32 @@ export class ItadPriceSyncService
   }
 
   /**
-   * Enrich games with earlyAccess status from ITAD game info.
-   * Runs after pricing sync. Results are Redis-cached via ItadService.
+   * Enrich games with earlyAccess status from ITAD game info (ROK-1197).
+   * Runs after pricing sync. Per-chunk calls run concurrently with a per-call
+   * timeout so a single hung upstream call cannot block the cron. Emits its
+   * own PERF entry independent of the wrapper's run-total entry.
    */
   private async syncEarlyAccess(
     games: { id: number; itadGameId: string }[],
-  ): Promise<void> {
-    let updated = 0;
+  ): Promise<{ updated: number; failed: number }> {
+    const startedAt = Date.now();
+    const total = { updated: 0, failed: 0 };
     for (const chunk of this.chunkArray(games, CHUNK_SIZE)) {
-      updated += await enrichChunkEarlyAccess(this.db, this.itadService, chunk);
+      const r = await enrichChunkEarlyAccess(this.db, this.itadService, chunk);
+      total.updated += r.updated;
+      total.failed += r.failed;
+      this.logger.debug(
+        `Updated earlyAccess for chunk of ${chunk.length} games (${r.updated} succeeded, ${r.failed} failed)`,
+      );
     }
-    if (updated > 0) {
-      this.logger.log(`Updated earlyAccess for ${updated} games`);
-    }
+    const durationMs = Date.now() - startedAt;
+    perfLog('CRON', 'ItadPriceSyncService_earlyAccess', durationMs, {
+      status: total.failed > 0 ? 'degraded' : 'completed',
+    });
+    const summary = `ITAD earlyAccess phase complete: ${total.updated} updated, ${total.failed} failed, ${games.length} games`;
+    if (total.failed > 0) this.logger.warn(summary);
+    else this.logger.log(summary);
+    return total;
   }
 
   /** Split an array into chunks of the given size. */

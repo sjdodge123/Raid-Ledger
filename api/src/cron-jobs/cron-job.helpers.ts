@@ -156,6 +156,22 @@ export async function recordCompleted(
   await recordExecution(db, job, jobName, 'completed', startedAt, finishedAt);
 }
 
+/**
+ * Record a degraded execution (ROK-1197). The handler ran to completion but
+ * reported partial failure (e.g. some upstream calls timed out). Emits a PERF
+ * line with `status=degraded` and persists an execution row with the same
+ * status — the DB column is a free-form string.
+ */
+export async function recordDegraded(
+  db: Db,
+  job: CronJobRow,
+  jobName: string,
+  startedAt: Date,
+  finishedAt: Date,
+): Promise<void> {
+  await recordExecution(db, job, jobName, 'degraded', startedAt, finishedAt);
+}
+
 /** Record a failed execution and update job timestamps. */
 export async function recordFailed(
   db: Db,

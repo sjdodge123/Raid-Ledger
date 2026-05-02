@@ -1,5 +1,5 @@
 /**
- * Early access sync helpers for the ITAD price sync (ROK-934).
+ * Early access sync helpers for the ITAD price sync (ROK-934, ROK-1197).
  * Enriches games with earlyAccess status from ITAD game info.
  */
 import { sql } from 'drizzle-orm';
@@ -8,6 +8,15 @@ import * as schema from '../drizzle/schema';
 import type { ItadService } from './itad.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+/** Per-call timeout for getGameInfo (ROK-1197). */
+export const EARLY_ACCESS_CALL_TIMEOUT_MS = 8_000;
+
+/** Telemetry surfaced per chunk for degraded-status aggregation. */
+export interface EarlyAccessChunkResult {
+  updated: number;
+  failed: number;
+}
 
 /** Bulk-update earlyAccess for matched games via UPDATE ... FROM VALUES. */
 export async function executeBulkEarlyAccessUpdate(
@@ -23,23 +32,57 @@ export async function executeBulkEarlyAccessUpdate(
   `);
 }
 
-/** Fetch earlyAccess for a chunk and bulk-update. */
+/**
+ * Race a promise against a timeout. Rejects with `Error('timeout')` if the
+ * timeout fires first. Always clears the timer to avoid leaked handles.
+ */
+function withTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+  });
+  return Promise.race([p, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/**
+ * Fetch earlyAccess for a chunk and bulk-update.
+ *
+ * Calls run concurrently (`Promise.allSettled`) with a per-call timeout so a
+ * single slow upstream response cannot block the whole chunk. Failed or
+ * timed-out calls are counted in `failed` for degraded-status telemetry; a
+ * successful resolution with a null payload is NOT a failure (the game just
+ * isn't in ITAD).
+ */
 export async function enrichChunkEarlyAccess(
   db: Db,
   itadService: ItadService,
   chunk: { id: number; itadGameId: string }[],
-): Promise<number> {
+): Promise<EarlyAccessChunkResult> {
+  const settled = await Promise.allSettled(
+    chunk.map((game) =>
+      withTimeout(
+        itadService.getGameInfo(game.itadGameId),
+        EARLY_ACCESS_CALL_TIMEOUT_MS,
+      ),
+    ),
+  );
+
   const updates: { id: number; earlyAccess: boolean }[] = [];
-  for (const game of chunk) {
-    try {
-      const info = await itadService.getGameInfo(game.itadGameId);
-      if (info)
-        updates.push({ id: game.id, earlyAccess: info.earlyAccess ?? false });
-    } catch {
-      /* skip — don't fail the batch for one game */
+  let failed = 0;
+  settled.forEach((res, i) => {
+    if (res.status === 'rejected') {
+      failed++;
+      return;
     }
+    const info = res.value;
+    if (info)
+      updates.push({ id: chunk[i].id, earlyAccess: info.earlyAccess ?? false });
+  });
+
+  if (updates.length > 0) {
+    await executeBulkEarlyAccessUpdate(db, updates);
   }
-  if (updates.length === 0) return 0;
-  await executeBulkEarlyAccessUpdate(db, updates);
-  return updates.length;
+  return { updated: updates.length, failed };
 }
