@@ -6,7 +6,7 @@
  * helpers live in `common-ground-ai-merge.helpers.ts` (split out for
  * ROK-1107 to keep this file below the 300-line soft limit).
  */
-import { type JSX, useRef, useState, useEffect, useCallback } from 'react';
+import { type JSX, type RefObject, useRef, useState, useEffect, useCallback } from 'react';
 import type {
     AiSuggestionDto,
     CommonGroundGameDto,
@@ -80,45 +80,52 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
     );
 }
 
-/** Game card grid — horizontal scroll with arrow navigation. */
-function GameGrid({
-    games,
-    onNominate,
-    nominatingId,
-    atCap,
-    aiSuggestionsByGameId,
-}: {
-    games: CommonGroundGameDto[];
-    onNominate: (id: number) => void;
-    nominatingId: number | null;
-    atCap: boolean;
-    aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
-}): JSX.Element {
-    const scrollRef = useRef<HTMLDivElement>(null);
+/**
+ * Track scroll-arrow state for a horizontally-scrolling list.
+ * `deps` should contain the source array so the arrow visibility re-evaluates
+ * when the list grows/shrinks (losing this dep breaks arrow updates after data loads).
+ */
+function useArrowNav(
+    scrollRef: RefObject<HTMLDivElement | null>,
+    deps: unknown[],
+): { canLeft: boolean; canRight: boolean; scroll: (dir: 'left' | 'right') => void } {
     const [canLeft, setCanLeft] = useState(false);
     const [canRight, setCanRight] = useState(false);
-
     const check = useCallback(() => {
         const el = scrollRef.current;
         if (!el) return;
         setCanLeft(el.scrollLeft > 0);
         setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-    }, []);
-
+    }, [scrollRef]);
     useEffect(() => {
         check();
         const el = scrollRef.current;
         if (!el) return;
         el.addEventListener('scroll', check, { passive: true });
         return () => el.removeEventListener('scroll', check);
-    }, [games, check]);
-
-    const scroll = (dir: 'left' | 'right') => {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [check, ...deps]);
+    const scroll = (dir: 'left' | 'right'): void => {
         const el = scrollRef.current;
         if (!el) return;
         el.scrollBy({ left: dir === 'left' ? -el.clientWidth * 0.8 : el.clientWidth * 0.8, behavior: 'smooth' });
     };
+    return { canLeft, canRight, scroll };
+}
 
+interface GameGridProps {
+    games: CommonGroundGameDto[];
+    onNominate: (id: number) => void;
+    nominatingId: number | null;
+    atCap: boolean;
+    aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
+}
+
+/** Game card grid — horizontal scroll with arrow navigation. */
+function GameGrid(props: GameGridProps): JSX.Element {
+    const { games, onNominate, nominatingId, atCap, aiSuggestionsByGameId } = props;
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const { canLeft, canRight, scroll } = useArrowNav(scrollRef, [games]);
     return (
         <div className="relative group/carousel">
             {canLeft && <ScrollArrow direction="left" onClick={() => scroll('left')} />}

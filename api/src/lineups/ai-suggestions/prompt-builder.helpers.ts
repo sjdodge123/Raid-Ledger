@@ -155,6 +155,51 @@ const OUTPUT_FORMAT = [
   'Each reasoning line must be under 280 chars and mention the comparison (rule 4).',
 ].join(' ');
 
+function composeWinnersBlock(recentWinners: RecentWinner[]): string {
+  if (recentWinners.length === 0) {
+    return 'Recent lineup winners: (none yet — community has no decided lineups)';
+  }
+  return [
+    'Recent lineup winners (do not re-pick these genres if 2+ consecutive):',
+    ...recentWinners.map(describeWinner),
+  ].join('\n');
+}
+
+function composeVotersBlock(voterProfiles: VoterProfile[]): string {
+  if (voterProfiles.length === 0) {
+    return '(voter profiles unavailable — fall back on candidate axis data alone)';
+  }
+  return [
+    `Voter profiles (${voterProfiles.length} individuals — reason about each, not just the group):`,
+    ...voterProfiles.map(describeVoter),
+  ].join('\n');
+}
+
+interface SuggestionPromptParams {
+  strategy: VoterScopeStrategy;
+  voterCount: number;
+  minPlayerCount: number;
+  voterProfiles: VoterProfile[];
+  recentWinners: RecentWinner[];
+  candidates: CandidateContext[];
+}
+
+function composeUserContent(params: SuggestionPromptParams): string {
+  return [
+    scopeClause(params.strategy, params.voterCount),
+    sizingClause(params.voterCount, params.minPlayerCount),
+    '',
+    composeVotersBlock(params.voterProfiles),
+    '',
+    composeWinnersBlock(params.recentWinners),
+    '',
+    'Candidate pool (pre-ranked by vector similarity to voter centroid; you can reject any):',
+    ...params.candidates.map((c) => describeCandidate(c, params.voterCount)),
+    '',
+    'Return JSON only.',
+  ].join('\n');
+}
+
 /**
  * Compose the `LlmChatOptions` for a curator-mode suggestion pass.
  *
@@ -163,51 +208,15 @@ const OUTPUT_FORMAT = [
  *   2. User — voter profiles (individuals) + recent winners +
  *      candidate pool (richly annotated).
  */
-export function buildSuggestionPrompt(params: {
-  strategy: VoterScopeStrategy;
-  voterCount: number;
-  minPlayerCount: number;
-  voterProfiles: VoterProfile[];
-  recentWinners: RecentWinner[];
-  candidates: CandidateContext[];
-}): LlmChatOptions {
+export function buildSuggestionPrompt(
+  params: SuggestionPromptParams,
+): LlmChatOptions {
   const systemPrompt = [CURATOR_ROLE, CURATOR_RULES, OUTPUT_FORMAT].join(
     '\n\n',
   );
-
-  const winnersBlock =
-    params.recentWinners.length > 0
-      ? [
-          'Recent lineup winners (do not re-pick these genres if 2+ consecutive):',
-          ...params.recentWinners.map(describeWinner),
-        ].join('\n')
-      : 'Recent lineup winners: (none yet — community has no decided lineups)';
-
-  const votersBlock =
-    params.voterProfiles.length > 0
-      ? [
-          `Voter profiles (${params.voterProfiles.length} individuals — reason about each, not just the group):`,
-          ...params.voterProfiles.map(describeVoter),
-        ].join('\n')
-      : '(voter profiles unavailable — fall back on candidate axis data alone)';
-
-  const userContent = [
-    scopeClause(params.strategy, params.voterCount),
-    sizingClause(params.voterCount, params.minPlayerCount),
-    '',
-    votersBlock,
-    '',
-    winnersBlock,
-    '',
-    'Candidate pool (pre-ranked by vector similarity to voter centroid; you can reject any):',
-    ...params.candidates.map((c) => describeCandidate(c, params.voterCount)),
-    '',
-    'Return JSON only.',
-  ].join('\n');
-
   const messages: LlmChatMessage[] = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: userContent },
+    { role: 'user', content: composeUserContent(params) },
   ];
   return {
     messages,
