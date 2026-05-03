@@ -422,7 +422,7 @@ test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Regression: ROK-868 — character info on duplicate signup', () => {
-    test('character data appears in event detail after duplicate signup with character', async ({ page }) => {
+    test('character data appears in event detail after duplicate signup with character', async ({ page, world }) => {
         test.skip(test.info().project.name === 'mobile', 'Desktop-only test — attendees panel uses desktop selectors');
 
         const token = await getAdminToken();
@@ -439,7 +439,7 @@ test.describe('Regression: ROK-868 — character info on duplicate signup', () =
         const futureStart = new Date(Date.now() + 86_400_000).toISOString();
         const futureEnd = new Date(Date.now() + 90_000_000).toISOString();
         const event = (await apiPost(token, '/events', {
-            title: 'PW-868 Character Test',
+            title: world.uid('character-test-event'),
             gameId: char.gameId,
             startTime: futureStart,
             endTime: futureEnd,
