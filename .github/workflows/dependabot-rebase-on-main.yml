@@ -50,7 +50,15 @@ jobs:
     steps:
       - name: Update branch on every open Dependabot PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use REBASE_PAT (fine-grained personal access token, contents+PRs
+          # read/write on this repo) instead of GITHUB_TOKEN. The merge commit
+          # update-branch creates is pushed using this token's identity, and
+          # GitHub explicitly does NOT trigger downstream workflows
+          # (e.g. CI's `on: pull_request`) when the push originates from
+          # GITHUB_TOKEN — that's the anti-recursion default. PAT-driven
+          # pushes do trigger downstream workflows, so CI re-runs on the
+          # rebased PR head and auto-merge can fire when it goes green.
+          GH_TOKEN: ${{ secrets.REBASE_PAT }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
