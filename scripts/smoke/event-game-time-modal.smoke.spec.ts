@@ -50,10 +50,10 @@ test.describe('ROK-1040: Event-detail My Game Time modal', () => {
         token = await getAdminToken();
     });
 
-    test.beforeEach(async () => {
+    test.beforeEach(async ({ world }) => {
         createdEvent = await createGameTimeEvent(
             token,
-            `ROK-1040 GameTime ${Date.now()}`,
+            world.uid('gametime-modal'),
         );
     });
 
