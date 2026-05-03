@@ -111,12 +111,6 @@ export const SETTING_KEYS = {
   /** ROK-1118: Minimum nominations per voter required for building→voting auto-advance. */
   LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER:
     'lineup_auto_advance_min_nominations_per_voter',
-  /** ROK-946: Default hours for lineup building phase */
-  LINEUP_DEFAULT_BUILDING_HOURS: 'lineup_default_building_hours',
-  /** ROK-946: Default hours for lineup voting phase */
-  LINEUP_DEFAULT_VOTING_HOURS: 'lineup_default_voting_hours',
-  /** ROK-946: Default hours for lineup decided phase */
-  LINEUP_DEFAULT_DECIDED_HOURS: 'lineup_default_decided_hours',
   /** ROK-950: Common Ground — weight on voter/game taste-vector cosine similarity. */
   COMMON_GROUND_TASTE_WEIGHT: 'common_ground_taste_weight',
   /** ROK-950: Common Ground — weight when a co-play partner owns the game. */

@@ -344,60 +344,6 @@ test.describe('Phase breadcrumb transitions', () => {
     });
 });
 
-// ---------------------------------------------------------------------------
-// Admin settings panel for default lineup durations
-// ---------------------------------------------------------------------------
-
-test.describe('Admin lineup duration settings', () => {
-    test('admin settings panel exists at /admin/settings/general/lineup', async ({ page }) => {
-        await page.goto('/admin/settings/general/lineup');
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        // Should render a heading for lineup duration defaults
-        const heading = page.getByRole('heading', {
-            name: /Lineup|Phase Duration|Community Lineup/i,
-        });
-        await expect(heading).toBeVisible({ timeout: 15_000 });
-    });
-
-    test('admin settings panel shows duration input fields', async ({ page }) => {
-        await page.goto('/admin/settings/general/lineup');
-
-        const heading = page.getByRole('heading', {
-            name: /Lineup|Phase Duration|Community Lineup/i,
-        });
-        await expect(heading).toBeVisible({ timeout: 15_000 });
-
-        // Should have input fields for building, voting, and decided durations
-        const buildingInput = page.locator(
-            'input[name="buildingDurationHours"], [data-testid="default-building-duration"]',
-        );
-        await expect(buildingInput).toBeVisible({ timeout: 5_000 });
-
-        const votingInput = page.locator(
-            'input[name="votingDurationHours"], [data-testid="default-voting-duration"]',
-        );
-        await expect(votingInput).toBeVisible({ timeout: 5_000 });
-
-        const decidedInput = page.locator(
-            'input[name="decidedDurationHours"], [data-testid="default-decided-duration"]',
-        );
-        await expect(decidedInput).toBeVisible({ timeout: 5_000 });
-    });
-
-    test('no error boundary on load', async ({ page }) => {
-        await page.goto('/admin/settings/general/lineup');
-
-        const heading = page.getByRole('heading', {
-            name: /Lineup|Phase Duration|Community Lineup/i,
-        });
-        await expect(heading).toBeVisible({ timeout: 15_000 });
-
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-        );
-    });
-});
+// ROK-1060: removed the "Admin lineup duration settings" describe block —
+// the admin panel and route have been deleted. New negative-assertion
+// coverage lives in scripts/smoke/admin-lineup-defaults-removal.smoke.spec.ts.

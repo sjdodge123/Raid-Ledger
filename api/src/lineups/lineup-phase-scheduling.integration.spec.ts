@@ -6,8 +6,10 @@
  * - GET /lineups/:id includes phaseDeadline
  * - GET /lineups/banner includes phaseDeadline
  * - PATCH /lineups/:id/status (force-advance) updates phaseDeadline
- * - GET /admin/settings/lineup returns default durations
- * - PUT /admin/settings/lineup updates default durations
+ *
+ * ROK-1060: removed coverage for /admin/settings/lineup — the admin panel
+ * and its endpoints have been deleted. The hardcoded `DEFAULT_DURATIONS`
+ * constant is exercised by the "should use admin defaults" case below.
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -72,14 +74,15 @@ function describePhaseScheduling() {
       expect(hoursUntilDeadline).toBeLessThan(25);
     });
 
-    it('should use admin defaults when no durations provided', async () => {
+    it('should use hardcoded DEFAULT_DURATIONS when no durations provided', async () => {
       const res = await testApp.request
         .post('/lineups')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ title: 'Phase Scheduling Default' });
 
       expect(res.status).toBe(201);
-      // Without explicit durations, admin defaults (48h building) are applied
+      // ROK-1060: without overrides, the hardcoded DEFAULT_DURATIONS.building
+      // (48h, see api/src/lineups/queue/lineup-phase.constants.ts) is used.
       expect(res.body).toHaveProperty('phaseDeadline');
       expect(res.body.phaseDeadline).not.toBeNull();
       const deadline = new Date(res.body.phaseDeadline);
@@ -202,83 +205,6 @@ function describePhaseScheduling() {
     'PATCH /lineups/:id/status updates phaseDeadline',
     describePATCHForceAdvance,
   );
-
-  // ── GET /admin/settings/lineup — default durations ─────────
-
-  function describeGETLineupSettings() {
-    it('should return default phase durations', async () => {
-      const res = await testApp.request
-        .get('/admin/settings/lineup')
-        .set('Authorization', `Bearer ${adminToken}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({
-        buildingDurationHours: expect.any(Number),
-        votingDurationHours: expect.any(Number),
-        decidedDurationHours: expect.any(Number),
-      });
-    });
-
-    it('should require authentication', async () => {
-      const res = await testApp.request.get('/admin/settings/lineup');
-      expect(res.status).toBe(401);
-    });
-  }
-  describe('GET /admin/settings/lineup', describeGETLineupSettings);
-
-  // ── PUT /admin/settings/lineup — update defaults ───────────
-
-  function describePUTLineupSettings() {
-    it('should update default phase durations', async () => {
-      const putRes = await testApp.request
-        .put('/admin/settings/lineup')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          buildingDurationHours: 48,
-          votingDurationHours: 72,
-          decidedDurationHours: 12,
-        });
-
-      expect(putRes.status).toBe(200);
-      expect(putRes.body.success).toBe(true);
-
-      // Verify the updated values are returned on GET
-      const getRes = await testApp.request
-        .get('/admin/settings/lineup')
-        .set('Authorization', `Bearer ${adminToken}`);
-
-      expect(getRes.status).toBe(200);
-      expect(getRes.body).toMatchObject({
-        buildingDurationHours: 48,
-        votingDurationHours: 72,
-        decidedDurationHours: 12,
-      });
-    });
-
-    it('should reject invalid duration values', async () => {
-      const res = await testApp.request
-        .put('/admin/settings/lineup')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          buildingDurationHours: -1,
-          votingDurationHours: 48,
-          decidedDurationHours: 24,
-        });
-
-      expect(res.status).toBe(400);
-    });
-
-    it('should require authentication', async () => {
-      const res = await testApp.request.put('/admin/settings/lineup').send({
-        buildingDurationHours: 24,
-        votingDurationHours: 48,
-        decidedDurationHours: 24,
-      });
-
-      expect(res.status).toBe(401);
-    });
-  }
-  describe('PUT /admin/settings/lineup', describePUTLineupSettings);
 
   // ── POST /lineups with matchThreshold ─────────────────────
 

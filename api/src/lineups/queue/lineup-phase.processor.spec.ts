@@ -5,7 +5,6 @@ import {
 } from '../../common/testing/drizzle-mock';
 import { LineupPhaseProcessor } from './lineup-phase.processor';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
-import { SettingsService } from '../../settings/settings.service';
 
 describe('LineupPhaseProcessor', () => {
   let processor: LineupPhaseProcessor;
@@ -19,15 +18,7 @@ describe('LineupPhaseProcessor', () => {
       scheduleTransition: jest.fn(),
     } as unknown as LineupPhaseQueueService;
 
-    const mockSettingsService = {
-      get: jest.fn(),
-    } as unknown as SettingsService;
-
-    processor = new LineupPhaseProcessor(
-      mockDb as never,
-      mockQueueService,
-      mockSettingsService,
-    );
+    processor = new LineupPhaseProcessor(mockDb as never, mockQueueService);
 
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
   });

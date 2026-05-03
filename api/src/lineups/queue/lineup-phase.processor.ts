@@ -12,13 +12,12 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { LineupStatus } from '../../drizzle/schema';
 import {
+  DEFAULT_DURATIONS,
   LINEUP_PHASE_QUEUE,
   NEXT_PHASE,
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
-import { SettingsService } from '../../settings/settings.service';
-import { getLineupDurationDefaults } from './lineup-phase-settings.helpers';
 
 @Processor(LINEUP_PHASE_QUEUE)
 export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
@@ -28,7 +27,6 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly queueService: LineupPhaseQueueService,
-    private readonly settingsService: SettingsService,
   ) {
     super();
   }
@@ -88,7 +86,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     lineup: typeof schema.communityLineups.$inferSelect,
   ): Promise<void> {
     const nextPhase = NEXT_PHASE[targetStatus];
-    const duration = await this.getDurationForPhase(targetStatus, lineup);
+    const duration = this.getDurationForPhase(targetStatus, lineup);
     const phaseDeadline = this.computeDeadline(targetStatus, duration);
 
     await this.updateLineupStatus(
@@ -113,11 +111,11 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     return new Date(Date.now() + durationHours * 3_600_000);
   }
 
-  /** Get duration hours for the target phase from overrides → admin defaults → hardcoded fallback. */
-  private async getDurationForPhase(
+  /** Get duration hours for the target phase from overrides → hardcoded defaults. */
+  private getDurationForPhase(
     targetStatus: string,
     lineup: typeof schema.communityLineups.$inferSelect,
-  ): Promise<number | null> {
+  ): number | null {
     if (targetStatus === 'archived') return null;
     const overrides = lineup.phaseDurationOverride;
     if (overrides && typeof overrides === 'object') {
@@ -125,9 +123,8 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       const val = key !== 'standalone' ? overrides[key] : undefined;
       if (typeof val === 'number') return val;
     }
-    const defaults = await getLineupDurationDefaults(this.settingsService);
-    const key = targetStatus as keyof typeof defaults;
-    return defaults[key] ?? 48;
+    const key = targetStatus as keyof typeof DEFAULT_DURATIONS;
+    return DEFAULT_DURATIONS[key] ?? 48;
   }
 
   /** Update lineup status and phaseDeadline in DB. */
