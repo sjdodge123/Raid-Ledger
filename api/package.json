@@ -13,6 +13,7 @@
     "db:seed:admin": "ts-node scripts/seed-admin.ts",
     "backfill:game-vectors": "ts-node scripts/backfill-game-vectors.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "prettier:check": "prettier --check \"{src,apps,libs,test}/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
