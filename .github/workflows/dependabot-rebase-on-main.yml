@@ -1,48 +1,102 @@
-name: Rebase Dependabot PRs after main update
+name: Rebase open PRs after main update
 
 # When main moves, branch protection's "up to date" requirement causes any open
-# Dependabot PR to become BEHIND and stop auto-merging. The previous version
-# of this workflow posted "@dependabot rebase" comments, but Dependabot
-# rejects @-commands from the github-actions[bot] account ("only users with
-# push access can use that command"). Use the REST update-branch endpoint
-# instead — it runs under the workflow's own contents: write token, so the
-# permission check is satisfied without involving Dependabot's parser.
+# PR to become BEHIND and stop auto-merging. This workflow rebases the oldest
+# BEHIND PR via the REST update-branch endpoint, one per trigger fire (sequential
+# queue — see the rebase job below for rationale).
+#
+# Scope: ALL open PRs, regardless of author. Originally this was Dependabot-only
+# but the operator runs parallel agents that also produce PRs needing the same
+# treatment. The filename is kept (`dependabot-rebase-on-main.yml`) so existing
+# `gh workflow run` invocations continue to work.
+#
+# Triggers:
+#   - push to main: covers normal merges from human/PR contributors.
+#   - pull_request_target closed (merged): covers automation-driven auto-merges
+#     (Dependabot, our own workflows). Pushes resulting from GITHUB_TOKEN-driven
+#     merges do NOT fire `on: push` workflows (GitHub anti-recursion default),
+#     so without this second trigger the first auto-merge in a batch silently
+#     leaves the rest BEHIND.
+#   - workflow_dispatch: manual kickstart from the Actions UI or CLI.
 
 on:
   push:
     branches: [main]
+  pull_request_target:
+    types: [closed]
+  # Manual kickstart: useful when a batch of PRs is already rebased and
+  # waiting on CI, but main has moved (so they're BEHIND again) and no further
+  # merge events are pending to fire the auto-rebase. Run via
+  # `gh workflow run dependabot-rebase-on-main.yml` or the Actions UI.
+  workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: read
+  # pull-requests: write is required by `PUT /repos/{owner}/{repo}/pulls/{n}/update-branch`.
+  # `read` 403's with "Resource not accessible by integration". The previous
+  # version of this file had `read` and silently 403'd inside `|| true`, so
+  # every workflow run reported success while doing nothing.
+  pull-requests: write
 
 jobs:
   rebase:
+    # Run on push-to-main, on a merged PR targeting main, or when manually
+    # dispatched. Skip non-merged closes (PRs closed without merging don't
+    # change main).
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Update branch on every open Dependabot PR
+      - name: Update branch on the oldest BEHIND open PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use REBASE_PAT (fine-grained personal access token, contents+PRs
+          # read/write on this repo) instead of GITHUB_TOKEN. The merge commit
+          # update-branch creates is pushed using this token's identity, and
+          # GitHub explicitly does NOT trigger downstream workflows
+          # (e.g. CI's `on: pull_request`) when the push originates from
+          # GITHUB_TOKEN — that's the anti-recursion default. PAT-driven
+          # pushes do trigger downstream workflows, so CI re-runs on the
+          # rebased PR head and auto-merge can fire when it goes green.
+          GH_TOKEN: ${{ secrets.REBASE_PAT }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          numbers=$(gh pr list \
-            --author "app/dependabot" \
+          # Sequential queue: pick ONE PR per trigger fire, not all of them.
+          #
+          # Why: rebasing every BEHIND PR in parallel means each subsequent
+          # merge invalidates the others' in-flight CI, forcing them to
+          # re-run. With N PRs that's worst-case N×N CI invocations. Picking
+          # one at a time costs exactly N CI runs total (one per merge),
+          # at the cost of slower wall-clock (N × CI duration sequentially
+          # instead of overlapping).
+          #
+          # Selection: smallest PR number among ALL open PRs (not just
+          # Dependabot's) with mergeStateStatus = BEHIND. We deliberately skip:
+          #   - MERGEABLE: already current with main, no rebase needed
+          #   - BLOCKED: failing CI or missing review — needs a human
+          #   - DIRTY: merge conflict — needs a human
+          #
+          # If nothing's BEHIND, exit clean. The next merge event refires
+          # this workflow and the cascade continues.
+          target=$(gh pr list \
             --state open \
-            --json number \
-            --jq '.[].number')
-          if [ -z "$numbers" ]; then
-            echo "No open Dependabot PRs."
+            --json number,mergeStateStatus \
+            --jq '[.[] | select(.mergeStateStatus == "BEHIND") | .number] | sort | .[0] // empty')
+          if [ -z "$target" ]; then
+            echo "No BEHIND open PRs — nothing to rebase."
             exit 0
           fi
-          for n in $numbers; do
-            echo "Updating branch on PR #$n"
-            # update-branch is a no-op when the PR is already current with
-            # the base branch. `expected_head_sha=` skips the optimistic
-            # concurrency check; we tolerate the rare 422 (e.g. PR closed
-            # mid-loop) so one bad PR doesn't fail the whole job.
-            gh api "repos/$GH_REPO/pulls/$n/update-branch" \
-              -X PUT \
-              -f expected_head_sha= \
-              || true
-          done
+          echo "Updating branch on PR #$target (sequential queue)"
+          # Omit expected_head_sha — the API defaults to the PR's current
+          # HEAD. The previous `-f expected_head_sha=` (empty string) form
+          # always 422'd, and `|| true` silently swallowed it, so the
+          # workflow looked successful while doing nothing.
+          #
+          # `|| true` tolerates rare races (e.g. the PR closed between the
+          # list call and the update call) so a transient 4xx doesn't fail
+          # the whole workflow.
+          gh api "repos/$GH_REPO/pulls/$target/update-branch" -X PUT || true
