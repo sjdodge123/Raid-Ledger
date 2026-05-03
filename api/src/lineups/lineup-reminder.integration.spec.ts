@@ -20,7 +20,6 @@
  *   AC #5b — private + decided + 1h (scheduling phase) → invitees ∪ creator minus schedule-voters
  *   AC #10 — running checkVoteReminders twice → only one DM per recipient (dedup)
  */
-import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -347,6 +346,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
           lineupId,
           gameId: gameAId,
           status: 'scheduling',
+          voteCount: 0,
         })
         .returning();
       await testApp.db.insert(schema.communityLineupMatchMembers).values([

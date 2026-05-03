@@ -33,8 +33,8 @@ import { resolveLineupReminderTargets } from './lineup-reminder-target.helpers';
 interface ReminderLineup {
   id: number;
   status: string;
-  phaseDeadline: Date | null;
-  votingDeadline?: Date | null;
+  phaseDeadline: Date | string | null;
+  votingDeadline?: Date | string | null;
 }
 
 interface SchedulingMatchRef {
@@ -43,6 +43,18 @@ interface SchedulingMatchRef {
 }
 
 const MS_PER_HOUR = 3600_000;
+
+/**
+ * `phase_deadline` is `timestamp without time zone`. postgres-js returns
+ * it as a naïve string; `new Date()` would parse in local TZ. We INSERT
+ * JS Dates as UTC, so re-parse with an explicit UTC suffix.
+ */
+function parseTimestampUtc(value: Date | string): Date {
+  if (value instanceof Date) return value;
+  const s = String(value);
+  if (s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
 
 @Injectable()
 export class LineupReminderService {
@@ -291,11 +303,11 @@ export class LineupReminderService {
 
   // ─── Utilities ───────────────────────────────────────────────
 
-  private hoursUntil(deadline: Date): number {
-    return (deadline.getTime() - Date.now()) / MS_PER_HOUR;
+  private hoursUntil(deadline: Date | string): number {
+    return (parseTimestampUtc(deadline).getTime() - Date.now()) / MS_PER_HOUR;
   }
 
-  private classifyWindow(deadline: Date): '24h' | '1h' | null {
+  private classifyWindow(deadline: Date | string): '24h' | '1h' | null {
     const hoursLeft = this.hoursUntil(deadline);
     if (hoursLeft <= 0 || hoursLeft > 24) return null;
     return hoursLeft <= 1 ? '1h' : '24h';
