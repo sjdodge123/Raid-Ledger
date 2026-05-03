@@ -29,7 +29,11 @@ on:
 
 permissions:
   contents: write
-  pull-requests: read
+  # pull-requests: write is required by `PUT /repos/{owner}/{repo}/pulls/{n}/update-branch`.
+  # `read` 403's with "Resource not accessible by integration". The previous
+  # version of this file had `read` and silently 403'd inside `|| true`, so
+  # every workflow run reported success while doing nothing.
+  pull-requests: write
 
 jobs:
   rebase:
