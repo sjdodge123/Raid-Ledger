@@ -7,9 +7,7 @@ import type {
   UpdateLineupStatusDto,
 } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
-import type { SettingsService } from '../settings/settings.service';
-import { getLineupDurationDefaults } from './queue/lineup-phase-settings.helpers';
-import { NEXT_PHASE } from './queue/lineup-phase.constants';
+import { DEFAULT_DURATIONS, NEXT_PHASE } from './queue/lineup-phase.constants';
 
 type Lineup = typeof schema.communityLineups.$inferSelect;
 
@@ -32,21 +30,16 @@ export function buildOverrides(dto: CreateLineupDto) {
 }
 
 /** Compute initial phaseDeadline for building phase. */
-export async function computeInitialDeadline(
-  dto: CreateLineupDto,
-  settings: SettingsService,
-): Promise<Date> {
-  const defaults = await getLineupDurationDefaults(settings);
-  const hours = dto.buildingDurationHours ?? defaults.building;
+export function computeInitialDeadline(dto: CreateLineupDto): Date {
+  const hours = dto.buildingDurationHours ?? DEFAULT_DURATIONS.building;
   return new Date(Date.now() + hours * 3_600_000);
 }
 
 /** Compute phaseDeadline for a status transition. */
-export async function computeTransitionDeadline(
+export function computeTransitionDeadline(
   newStatus: string,
   lineup: Lineup,
-  settings: SettingsService,
-): Promise<Date | null> {
+): Date | null {
   if (newStatus === 'archived') return null;
 
   const overrides = lineup.phaseDurationOverride;
@@ -58,9 +51,8 @@ export async function computeTransitionDeadline(
     }
   }
 
-  const defaults = await getLineupDurationDefaults(settings);
-  const key = newStatus as keyof typeof defaults;
-  const hours = defaults[key] ?? 48;
+  const key = newStatus as keyof typeof DEFAULT_DURATIONS;
+  const hours = DEFAULT_DURATIONS[key] ?? 48;
   return new Date(Date.now() + hours * 3_600_000);
 }
 

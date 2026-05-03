@@ -10,7 +10,6 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
-import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { guardTiebreakerOnTransition } from './tiebreaker/tiebreaker-detect.helpers';
 import type { LineupNotificationService } from './lineup-notification.service';
@@ -33,7 +32,6 @@ type Db = PostgresJsDatabase<typeof schema>;
 export interface TransitionDeps {
   db: Db;
   activityLog: ActivityLogService;
-  settings: SettingsService;
   phaseQueue: LineupPhaseQueueService;
   lineupNotifications: LineupNotificationService;
   lineupsGateway: LineupsGateway;
@@ -57,7 +55,6 @@ export async function runStatusTransition(
   await guardTiebreakerOnTransition(deps.db, id, lineup.status, dto);
   await applyStatusUpdate(
     deps.db,
-    deps.settings,
     deps.phaseQueue,
     id,
     dto,

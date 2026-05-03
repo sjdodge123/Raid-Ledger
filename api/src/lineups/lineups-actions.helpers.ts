@@ -14,7 +14,6 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
-import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import type { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import type { LineupNotificationService } from './lineup-notification.service';
@@ -53,7 +52,6 @@ type ResolveChannelName = (channelId: string) => string | null;
 export interface CreateLineupDeps {
   db: Db;
   activityLog: ActivityLogService;
-  settings: SettingsService;
   phaseQueue: LineupPhaseQueueService;
   steamNudge: LineupSteamNudgeService;
   lineupNotifications: LineupNotificationService;
@@ -73,7 +71,7 @@ export async function runCreateLineup(
   userId: number,
 ): Promise<LineupDetailResponseDto> {
   const overrides = hasDurationParams(dto) ? buildOverrides(dto) : null;
-  const phaseDeadline = await computeInitialDeadline(dto, deps.settings);
+  const phaseDeadline = computeInitialDeadline(dto);
 
   const [row] = await insertLineup(
     deps.db,

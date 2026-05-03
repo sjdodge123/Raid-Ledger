@@ -15,7 +15,6 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
-import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import type { LineupNotificationService } from './lineup-notification.service';
 import type { LineupsGateway } from './lineups.gateway';
@@ -30,7 +29,6 @@ type Db = PostgresJsDatabase<typeof schema>;
 export interface AbortDeps {
   db: Db;
   activityLog: ActivityLogService;
-  settings: SettingsService;
   phaseQueue: LineupPhaseQueueService;
   lineupNotifications: LineupNotificationService;
   lineupsGateway: LineupsGateway;
@@ -116,7 +114,6 @@ export async function runLineupAbort(
   await deps.tiebreaker.reset(id);
   await applyStatusUpdate(
     deps.db,
-    deps.settings,
     deps.phaseQueue,
     id,
     { status: 'archived' },

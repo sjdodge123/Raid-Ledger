@@ -16,7 +16,6 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
-import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { VALID_TRANSITIONS, VALID_REVERSIONS } from './lineups-query.helpers';
 import {
@@ -83,17 +82,12 @@ export function insertLineup(
  */
 export async function applyStatusUpdate(
   db: Db,
-  settings: SettingsService,
   phaseQueue: LineupPhaseQueueService,
   id: number,
   dto: UpdateLineupStatusDto,
   lineup: typeof schema.communityLineups.$inferSelect,
 ) {
-  const phaseDeadline = await computeTransitionDeadline(
-    dto.status,
-    lineup,
-    settings,
-  );
+  const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
   const values = buildTransitionValues(dto, phaseDeadline);
   const expectedPre = lineup.status;
   const updated = await db

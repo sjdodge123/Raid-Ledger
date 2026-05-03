@@ -111,7 +111,6 @@ export class LineupsService {
       {
         db: this.db,
         activityLog: this.activityLog,
-        settings: this.settings,
         phaseQueue: this.phaseQueue,
         steamNudge: this.steamNudge,
         lineupNotifications: this.lineupNotifications,

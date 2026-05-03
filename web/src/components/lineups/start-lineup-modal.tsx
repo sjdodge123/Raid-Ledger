@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/modal';
 import { useCreateLineup } from '../../hooks/use-lineups';
-import { useLineupSettings } from '../../hooks/admin/use-lineup-settings';
 import { toast } from '../../lib/toast';
 import { LineupChannelOverrideSelect } from './lineup-channel-override-select';
 import { VisibilityToggle } from './VisibilityToggle';
@@ -32,19 +31,18 @@ function defaultTitle(): string {
   return `Lineup — ${month} ${now.getFullYear()}`;
 }
 
+const DEFAULT_BUILDING_HOURS = 48;
+const DEFAULT_VOTING_HOURS = 24;
+
 function useDurationState() {
-  const { lineupDefaults } = useLineupSettings();
-  const defaults = lineupDefaults.data;
   const [building, setBuilding] = useState<number | ''>('');
   const [voting, setVoting] = useState<number | ''>('');
   const [matchThreshold, setMatchThreshold] = useState<number>(35);
   const [votesPerPlayer, setVotesPerPlayer] = useState<number>(3);
   const [tiebreakerMode, setTiebreakerMode] =
     useState<'bracket' | 'veto' | null>('bracket');
-  const buildingVal =
-    building === '' ? (defaults?.buildingDurationHours ?? 48) : building;
-  const votingVal =
-    voting === '' ? (defaults?.votingDurationHours ?? 24) : voting;
+  const buildingVal = building === '' ? DEFAULT_BUILDING_HOURS : building;
+  const votingVal = voting === '' ? DEFAULT_VOTING_HOURS : voting;
 
   return {
     building: buildingVal,
@@ -57,7 +55,6 @@ function useDurationState() {
     setMatchThreshold,
     setVotesPerPlayer,
     setTiebreakerMode,
-    isLoading: lineupDefaults.isLoading,
   };
 }
 

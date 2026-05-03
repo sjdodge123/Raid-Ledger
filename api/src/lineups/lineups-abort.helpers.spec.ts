@@ -58,7 +58,6 @@ function makeMocks(): MockSetup {
   const deps = {
     db: {} as AbortDeps['db'],
     activityLog: {} as AbortDeps['activityLog'],
-    settings: {} as AbortDeps['settings'],
     phaseQueue: {
       cancelAllForLineup: cancelAll,
     } as unknown as AbortDeps['phaseQueue'],
