@@ -247,7 +247,10 @@ function describeLineupsService() {
       mockInsert([{ ...mockLineup, id: 1, visibility: 'public' }]);
       mockBuildDetail({ ...mockLineup, visibility: 'public' });
 
-      const result = await service.create({ title: 'Test Lineup' }, 10);
+      const result = await service.create(
+        { title: 'Test Lineup', publicShareEnabled: true },
+        10,
+      );
 
       expect(result.id).toBe(1);
       expect(result.status).toBe('building');
@@ -270,7 +273,7 @@ function describeLineupsService() {
       });
 
       const result = await service.create(
-        { title: 'Test Lineup', targetDate },
+        { title: 'Test Lineup', targetDate, publicShareEnabled: true },
         10,
       );
 

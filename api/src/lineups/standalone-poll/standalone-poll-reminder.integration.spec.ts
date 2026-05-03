@@ -23,6 +23,7 @@
  *      future-of-now has an archive job queued after boot.
  */
 import { eq, sql } from 'drizzle-orm';
+import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -137,6 +138,8 @@ function describeStandalonePollReminders() {
         createdBy: creatorId,
         phaseDeadline,
         phaseDurationOverride: { standalone: true },
+        publicSlug: generatePublicSlug(),
+        publicShareEnabled: false,
       })
       .returning();
 
@@ -366,6 +369,8 @@ function describeStandalonePollReminders() {
           phaseDurationOverride: { standalone: true },
           createdAt,
           updatedAt: createdAt,
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
         })
         .returning();
 

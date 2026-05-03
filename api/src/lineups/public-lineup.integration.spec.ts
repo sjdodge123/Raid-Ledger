@@ -15,11 +15,13 @@
  * do not yet exist on this branch. Every assertion below fails on the
  * unimplemented branch — that is the desired baseline.
  */
+import * as bcrypt from 'bcrypt';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
+import * as schema from '../drizzle/schema';
 
 const EXPECTED_PUBLIC_KEYS = [
   'title',
@@ -130,8 +132,6 @@ function describePublicLineup() {
 
   it('returns 404 when lineup is private (visibility=private)', async () => {
     // Need an invitee so the private-lineup refine passes.
-    const bcrypt = await import('bcrypt');
-    const schema = await import('../drizzle/schema');
     const passwordHash = await bcrypt.hash('Pass1Pass1!', 4);
     const [invitee] = await testApp.db
       .insert(schema.users)

@@ -48,6 +48,7 @@ import {
   runRemoveNomination,
 } from './lineups-actions.helpers';
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
+import { togglePublicShare } from './lineups-public-share.helpers';
 import { LineupsGateway } from './lineups.gateway';
 
 /** Caller identity for authorization checks. */
@@ -340,6 +341,24 @@ export class LineupsService {
     );
     await this.invalidateAiCache(lineupId);
     return result;
+  }
+
+  /** Toggle public-share flag (ROK-1067). Operator-only. */
+  togglePublicShare(
+    lineupId: number,
+    enabled: boolean,
+    actorId: number,
+  ): Promise<LineupDetailResponseDto> {
+    return togglePublicShare(
+      {
+        db: this.db,
+        activityLog: this.activityLog,
+        resolveChannelName: this.resolveChannelName,
+      },
+      lineupId,
+      enabled,
+      actorId,
+    );
   }
 
   /** Remove a single invitee (ROK-1065). */

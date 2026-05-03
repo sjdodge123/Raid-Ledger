@@ -5,6 +5,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { generatePublicSlug } from '../public-lineup-slug.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -72,6 +73,10 @@ export async function insertDecidedLineup(
       /* Mark as standalone so community lineup queries exclude it.
          Uses existing JSONB column — no migration needed. */
       phaseDurationOverride: { standalone: true },
+      // ROK-1067: standalone polls are not user-shareable, but the column is
+      // NOT NULL — generate a slug and disable share so the URL never resolves.
+      publicSlug: generatePublicSlug(),
+      publicShareEnabled: false,
     })
     .returning({ id: schema.communityLineups.id });
   return row;
