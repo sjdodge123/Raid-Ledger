@@ -1,4 +1,5 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { searchGames } from '../lib/api-client';
 import { useDebouncedValue } from './use-debounced-value';
 
@@ -6,7 +7,7 @@ import { useDebouncedValue } from './use-debounced-value';
  * Hook for searching games via IGDB API.
  * Includes built-in debouncing (400ms) to prevent rate limit issues.
  * Requires minimum 2 characters to search.
- * Cancels in-flight requests when a new query arrives (ROK-660).
+ * Cancels in-flight requests when a new query arrives (ROK-660, ROK-1233).
  * Uses keepPreviousData to avoid flickering between queries (ROK-953).
  *
  * @param query - Raw search query (will be debounced internally)
@@ -15,6 +16,20 @@ import { useDebouncedValue } from './use-debounced-value';
 export function useGameSearch(query: string, enabled = true) {
     // Debounce the query to prevent rapid-fire API requests (ROK-161, ROK-953)
     const debouncedQuery = useDebouncedValue(query, 400);
+    const queryClient = useQueryClient();
+
+    // ROK-1233: TanStack Query only fires AbortSignal for re-fetches of the
+    // SAME queryKey. Superseded prefixes (e.g. `q=return` after the user keeps
+    // typing `q=return to moria`) sit in the cache and run to completion —
+    // wasting an IGDB call and creating races where stale results arrive after
+    // newer ones. Cancel any in-flight `/games/search` queries whose term is
+    // not the current debounced term.
+    useEffect(() => {
+        queryClient.cancelQueries({
+            queryKey: ['games', 'search'],
+            predicate: (q) => q.queryKey[2] !== debouncedQuery,
+        });
+    }, [debouncedQuery, queryClient]);
 
     return useQuery({
         queryKey: ['games', 'search', debouncedQuery],

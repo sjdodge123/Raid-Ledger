@@ -6,6 +6,7 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 
 - **Project context:** `project-context.md` — architecture, stack, conventions
 - **Testing guide:** `TESTING.md` — patterns, anti-patterns, coverage thresholds, exemplary files
+- **Tech debt backlog:** `TECH-DEBT-BACKLOG.md` — append reviewer findings here, do NOT auto-file Linear `tech-debt:` stories. Operator triages and files manually. See file header for format.
 
 ## Reference designs before coding (STRICT — applies to ALL agents)
 

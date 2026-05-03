@@ -111,22 +111,21 @@ stories.ROK-XXX:
 
 ---
 
-## 5h. Create Tech Debt Story (if reviewer reported any)
+## 5h. Tech Debt Findings — Append to Backlog (no auto-filed Linear stories)
 
-One consolidated Linear story per batch:
+**Do NOT create Linear `tech-debt:` stories from reviewer findings.** This step previously auto-filed an issue per batch, which produced a self-perpetuating queue: reviewer flags items → Lead files story → next batch picks it up → reviewer flags more items → loop. Findings now land in a working doc; the operator decides what becomes a Linear story.
 
-```
-mcp__linear__save_issue({
-  title: "tech-debt: <summary from ROK-XXX>",
-  team: "Roknua's projects",
-  project: "Raid Ledger",
-  labels: ["Tech Debt"],
-  priority: 4,
-  description: "<numbered list with file paths, descriptions, suggested fixes, PR reference>"
-})
-```
+What to do instead:
 
-Skip if reviewer reported none. Priority 4 (Low) unless an item is high severity.
+1. **Append findings to `TECH-DEBT-BACKLOG.md`** at the repo root. Use the exact format the file's header documents (dated section header → severity-tagged bullets with file path + description). One section per batch, appended below the `<!-- agents append below this line -->` marker.
+2. **Stage and commit** the backlog update with the rest of the batch's changes (`chore(config): append tech-debt findings — ROK-XXX` is fine). It rides along with the PR.
+3. **Mirror the same list** in the PR description under a `## Tech debt observed (not auto-filed)` heading so it's visible on review without opening the file.
+4. **Keep the "Tech Debt Identified" section** in 5g (Final Summary) so the chat output also shows it.
+5. **Do NOT call `mcp__linear__save_issue`** to create new tech-debt issues from this step. Operator triages from the backlog file later.
+
+**Critical / security / blocking issues are NOT tech debt** — those are auto-fixed in Phase 2 of review or sent back to dev. This rule applies to deferred items only.
+
+**Severity convention** (must match the backlog format): `high` / `med` / `low` / `nit`. Never `crit` — anything critical was already addressed.
 
 ---
 

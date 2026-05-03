@@ -3,7 +3,12 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// tools/test-bot/.env carries Discord token + TEST_GUILD_ID (test-bot specific).
 config({ path: resolve(__dirname, '../..', '.env') });
+// Project root .env carries ADMIN_PASSWORD (rotated by `bootstrap-admin.ts
+// --reset-password`). Without this load, smoke tests silently fall back to the
+// legacy 'password' default and 401 against /auth/local after a rotation.
+config({ path: resolve(__dirname, '../../../..', '.env') });
 
 function required(key: string): string {
   const val = process.env[key];
