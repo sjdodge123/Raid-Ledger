@@ -292,18 +292,17 @@ describe('buildNavSections — part 1', () => {
         expect(sections[2].id).toBe('integrations');
     });
 
-    it('General section has 7 items (including Lineup Defaults, Demo Data and Logs)', () => {
+    it('General section has 6 items (including Demo Data and Logs)', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
-        expect(general.children).toHaveLength(7);
+        expect(general.children).toHaveLength(6);
     });
 
-    it('Demo Data item is at index 3 (after Site Settings, User Management, Lineup Defaults)', () => {
+    it('Demo Data item is at index 2 (after Site Settings, User Management)', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
-        expect(general.children[2].label).toBe('Lineup Defaults');
-        expect(general.children[3].label).toBe('Demo Data');
-        expect(general.children[3].to).toBe('/admin/settings/general/data');
+        expect(general.children[2].label).toBe('Demo Data');
+        expect(general.children[2].to).toBe('/admin/settings/general/data');
     });
 
     it('General section includes Site Settings, User Management, Scheduled Jobs, Backups, Logs', () => {
@@ -355,11 +354,11 @@ describe('buildNavSections — part 2', () => {
         expect(bnetIdx).toBeLessThan(pluginsIdx);
     });
 
-    it('General section has ≤7 core nav items', () => {
+    it('General section has ≤6 core nav items', () => {
         const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), []);
         const general = sections.find((s) => s.id === 'general')!;
-        expect(general.children.length).toBeLessThanOrEqual(8);
-        expect(general.children.length).toBe(7);
+        expect(general.children.length).toBeLessThanOrEqual(7);
+        expect(general.children.length).toBe(6);
     });
 
 });

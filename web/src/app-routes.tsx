@@ -21,7 +21,7 @@ import {
   CharactersPanel, WatchedGamesPanel,
   AvatarPanel, IntegrationsPanel, AccountPanel,
   AdminSettingsLayout, AdminSetupWizard,
-  GeneralPanel, RolesPanel, DemoDataPanel, LineupDefaultsPanel,
+  GeneralPanel, RolesPanel, DemoDataPanel,
   IgdbPanel, SteamPanel, ItadPanel, PluginsPanel, PluginIntegrationPanel,
   CronJobsPanel, BackupsPanel, LogsPanel,
   DiscordOverviewPage, DiscordAuthPage,
@@ -59,7 +59,6 @@ function AdminSettingsRoutes() {
     <Route path="/admin/settings" element={<AdminSettingsLayout />}>
       <Route path="general" element={<GeneralPanel />} />
       <Route path="general/roles" element={<RolesPanel />} />
-      <Route path="general/lineup" element={<LineupDefaultsPanel />} />
       <Route path="general/data" element={<DemoDataPanel />} />
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
       <Route path="general/backups" element={<BackupsPanel />} />

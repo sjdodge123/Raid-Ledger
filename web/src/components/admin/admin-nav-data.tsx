@@ -114,7 +114,6 @@ export function buildDiscordNavItems(
 const GENERAL_CHILDREN: NavItem[] = [
     { to: '/admin/settings/general', label: 'Site Settings' },
     { to: '/admin/settings/general/roles', label: 'User Management' },
-    { to: '/admin/settings/general/lineup', label: 'Lineup Defaults' },
     { to: '/admin/settings/general/data', label: 'Demo Data' },
     { to: '/admin/settings/general/cron-jobs', label: 'Scheduled Jobs' },
     { to: '/admin/settings/general/backups', label: 'Backups' },
