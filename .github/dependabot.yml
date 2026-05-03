@@ -27,6 +27,16 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
+      # @vitest/coverage-v8 declares an exact-version peer dep on vitest
+      # (e.g. coverage-v8@4.1.5 requires vitest@4.1.5, not ^4.1.5). Keep
+      # vitest and every @vitest/* package in lockstep so a minor bump of
+      # one always pulls the matching version of the other in the same PR.
+      # Without this, a coverage-v8 bump alone breaks `vitest run --coverage`
+      # in CI (see ROK-1205 / PR #696).
+      vitest-suite:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
       dev-dependencies:
         dependency-type: "development"
         update-types:
