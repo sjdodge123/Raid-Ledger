@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -23,5 +23,12 @@ jobs:
       - name: Enable auto-merge
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use REBASE_PAT (fine-grained PAT) instead of GITHUB_TOKEN. When the
+          # PR eventually auto-merges, the merge commit is attributed to the
+          # token's owner. GITHUB_TOKEN-attributed merges do NOT trigger
+          # downstream workflows (anti-recursion default), so the rebase
+          # workflow's `pull_request_target: closed` trigger never fired and
+          # the cascade stopped after the first dependabot merge in a batch.
+          # PAT-attributed merges trigger downstream workflows normally.
+          GH_TOKEN: ${{ secrets.REBASE_PAT }}
         run: gh pr merge --auto --squash "$PR_URL"

@@ -91,9 +91,7 @@ export class AiSuggestionsService {
   }
 
   private async isFeatureDisabled(): Promise<boolean> {
-    const value = await this.settings.get(
-      AI_SETTING_KEYS.SUGGESTIONS_ENABLED,
-    );
+    const value = await this.settings.get(AI_SETTING_KEYS.SUGGESTIONS_ENABLED);
     return value === 'false';
   }
 
