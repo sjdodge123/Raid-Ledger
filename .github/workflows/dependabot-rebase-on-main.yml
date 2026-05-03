@@ -1,30 +1,33 @@
-name: Rebase Dependabot PRs after main update
+name: Rebase open PRs after main update
 
 # When main moves, branch protection's "up to date" requirement causes any open
-# Dependabot PR to become BEHIND and stop auto-merging. This workflow updates
-# every open Dependabot PR to the latest main via the REST update-branch endpoint.
+# PR to become BEHIND and stop auto-merging. This workflow rebases the oldest
+# BEHIND PR via the REST update-branch endpoint, one per trigger fire (sequential
+# queue — see the rebase job below for rationale).
+#
+# Scope: ALL open PRs, regardless of author. Originally this was Dependabot-only
+# but the operator runs parallel agents that also produce PRs needing the same
+# treatment. The filename is kept (`dependabot-rebase-on-main.yml`) so existing
+# `gh workflow run` invocations continue to work.
 #
 # Triggers:
 #   - push to main: covers normal merges from human/PR contributors.
-#   - pull_request_target closed (merged): covers Dependabot's own auto-merges.
-#     Pushes resulting from GITHUB_TOKEN-driven merges do NOT fire `on: push`
-#     workflows (GitHub anti-recursion default), so without this second trigger
-#     the first Dependabot merge in a batch silently leaves the rest BEHIND.
-#
-# Past bug (fixed here): the previous `-f expected_head_sha=` argument sent an
-# empty string, which the API rejects as 422 ("expected head sha didn't match").
-# Omitting the parameter makes the API default to the PR's current HEAD, which
-# is exactly what we want for an opportunistic update.
+#   - pull_request_target closed (merged): covers automation-driven auto-merges
+#     (Dependabot, our own workflows). Pushes resulting from GITHUB_TOKEN-driven
+#     merges do NOT fire `on: push` workflows (GitHub anti-recursion default),
+#     so without this second trigger the first auto-merge in a batch silently
+#     leaves the rest BEHIND.
+#   - workflow_dispatch: manual kickstart from the Actions UI or CLI.
 
 on:
   push:
     branches: [main]
   pull_request_target:
     types: [closed]
-  # Manual kickstart: useful when a batch of Dependabot PRs is already
-  # rebased and waiting on CI, but main has moved (so they're BEHIND again)
-  # and no further merge events are pending to fire the auto-rebase. Run
-  # via `gh workflow run dependabot-rebase-on-main.yml` or the Actions UI.
+  # Manual kickstart: useful when a batch of PRs is already rebased and
+  # waiting on CI, but main has moved (so they're BEHIND again) and no further
+  # merge events are pending to fire the auto-rebase. Run via
+  # `gh workflow run dependabot-rebase-on-main.yml` or the Actions UI.
   workflow_dispatch:
 
 permissions:
@@ -48,7 +51,7 @@ jobs:
        github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Update branch on the oldest BEHIND dependabot PR
+      - name: Update branch on the oldest BEHIND open PR
         env:
           # Use REBASE_PAT (fine-grained personal access token, contents+PRs
           # read/write on this repo) instead of GITHUB_TOKEN. The merge commit
@@ -71,8 +74,8 @@ jobs:
           # at the cost of slower wall-clock (N × CI duration sequentially
           # instead of overlapping).
           #
-          # Selection: smallest PR number among those with mergeStateStatus
-          # = BEHIND. We deliberately skip:
+          # Selection: smallest PR number among ALL open PRs (not just
+          # Dependabot's) with mergeStateStatus = BEHIND. We deliberately skip:
           #   - MERGEABLE: already current with main, no rebase needed
           #   - BLOCKED: failing CI or missing review — needs a human
           #   - DIRTY: merge conflict — needs a human
@@ -80,12 +83,11 @@ jobs:
           # If nothing's BEHIND, exit clean. The next merge event refires
           # this workflow and the cascade continues.
           target=$(gh pr list \
-            --author "app/dependabot" \
             --state open \
             --json number,mergeStateStatus \
             --jq '[.[] | select(.mergeStateStatus == "BEHIND") | .number] | sort | .[0] // empty')
           if [ -z "$target" ]; then
-            echo "No BEHIND dependabot PRs — nothing to rebase."
+            echo "No BEHIND open PRs — nothing to rebase."
             exit 0
           fi
           echo "Updating branch on PR #$target (sequential queue)"
