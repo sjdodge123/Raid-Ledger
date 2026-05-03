@@ -1,8 +1,14 @@
 /**
- * Cron-driven reminder service for Community Lineup (ROK-932, ROK-1117).
- * Sends vote reminders (24h + 1h before voting deadline), scheduling
- * reminders (24h + 1h before decided phase end), and tiebreaker reminders
- * (24h + 1h before round deadline).
+ * Cron-driven reminder service for Community Lineup
+ * (ROK-932 / ROK-1117 / ROK-1126).
+ *
+ * Sends nomination reminders (24h + 1h before building deadline),
+ * vote reminders (24h + 1h before voting deadline), scheduling
+ * reminders (24h + 1h before decided phase end), and tiebreaker
+ * reminders (24h + 1h before round deadline). Recipient resolution
+ * for nominate / vote / schedule is delegated to
+ * `resolveLineupReminderTargets`, which applies the public/private +
+ * already-participated filter.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -22,8 +28,8 @@ import {
   buildTiebreakerReminderMessage,
   type ActiveTiebreakerRow,
 } from './lineup-tiebreaker-reminder.helpers';
+import { resolveLineupReminderTargets } from './lineup-reminder-target.helpers';
 
-/** Shape of a lineup returned from reminder queries. */
 interface ReminderLineup {
   id: number;
   status: string;
@@ -31,19 +37,8 @@ interface ReminderLineup {
   votingDeadline?: Date | null;
 }
 
-/** Shape of a non-voter returned from reminder queries. */
-interface NonVoter {
-  id: number;
-  userId: number;
-  displayName: string;
-  discordId?: string;
-}
-
-/** Shape of a scheduling non-voter returned from queries. */
-interface SchedulingNonVoter {
-  id: number;
-  userId: number;
-  displayName: string;
+interface SchedulingMatchRef {
+  lineupId: number;
   matchId: number;
 }
 
@@ -62,28 +57,40 @@ export class LineupReminderService {
     private readonly cronJobService: CronJobService,
   ) {}
 
-  /** Check and send vote reminders for active voting lineups. */
+  /** Send vote reminders for active voting lineups (24h + 1h windows). */
+  @Cron(CronExpression.EVERY_5_MINUTES, {
+    name: 'LineupReminderService_checkVoteReminders',
+  })
   async checkVoteReminders(): Promise<void> {
-    const lineups = await this.getVotingLineups();
-    for (const lineup of lineups) {
-      await this.processVoteReminder(lineup);
-    }
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkVoteReminders',
+      () => this.runVoteReminders(),
+    );
   }
 
-  /** Check and send scheduling reminders for active decided lineups. */
+  /** Send scheduling reminders for active decided lineups (24h + 1h windows). */
+  @Cron(CronExpression.EVERY_5_MINUTES, {
+    name: 'LineupReminderService_checkSchedulingReminders',
+  })
   async checkSchedulingReminders(): Promise<void> {
-    const lineups = await this.getDecidedLineups();
-    for (const lineup of lineups) {
-      await this.processSchedulingReminder(lineup);
-    }
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkSchedulingReminders',
+      () => this.runSchedulingReminders(),
+    );
   }
 
-  /**
-   * Check and send tiebreaker reminders for active tiebreakers
-   * approaching their round deadline (ROK-1117). Targets users who
-   * have not yet engaged with this tiebreaker (vetoed or voted on
-   * every active-round matchup).
-   */
+  /** Send nomination reminders for active building lineups (ROK-1126). */
+  @Cron(CronExpression.EVERY_5_MINUTES, {
+    name: 'LineupReminderService_checkNominationReminders',
+  })
+  async checkNominationReminders(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'LineupReminderService_checkNominationReminders',
+      () => this.runNominationReminders(),
+    );
+  }
+
+  /** Send tiebreaker reminders for active tiebreakers approaching round deadline. */
   @Cron(CronExpression.EVERY_5_MINUTES, {
     name: 'LineupReminderService_checkTiebreakerReminders',
   })
@@ -94,7 +101,29 @@ export class LineupReminderService {
     );
   }
 
-  /** Inner body — wrapped by `executeWithTracking` for cron-jobs admin visibility. */
+  // ─── Inner runners (wrapped by executeWithTracking) ──────────
+
+  private async runVoteReminders(): Promise<void> {
+    const lineups = await this.getVotingLineups();
+    for (const lineup of lineups) {
+      await this.processVoteReminder(lineup);
+    }
+  }
+
+  private async runSchedulingReminders(): Promise<void> {
+    const lineups = await this.getDecidedLineups();
+    for (const lineup of lineups) {
+      await this.processSchedulingReminder(lineup);
+    }
+  }
+
+  private async runNominationReminders(): Promise<void> {
+    const lineups = await this.getBuildingLineups();
+    for (const lineup of lineups) {
+      await this.processNominationReminder(lineup);
+    }
+  }
+
   private async runTiebreakerReminders(): Promise<void> {
     const tiebreakers = await findActiveTiebreakersWithDeadline(this.db);
     for (const tb of tiebreakers) {
@@ -109,89 +138,59 @@ export class LineupReminderService {
     }
   }
 
-  // ─── Private: vote reminders ──────────────────────────────
+  // ─── Per-lineup processors ───────────────────────────────────
 
-  /** Process vote reminders for a single lineup. */
   private async processVoteReminder(lineup: ReminderLineup): Promise<void> {
     const deadline = lineup.phaseDeadline ?? lineup.votingDeadline;
     if (!deadline) return;
-
-    const hoursLeft = this.hoursUntil(deadline);
-    if (hoursLeft > 24 || hoursLeft <= 0) return;
-
-    const window = hoursLeft <= 1 ? '1h' : '24h';
-    const nonVoters = await this.getVoteNonVoters(lineup.id);
-
-    for (const voter of nonVoters) {
-      await this.sendVoteReminder(lineup.id, voter, window);
+    const window = this.classifyWindow(deadline);
+    if (!window) return;
+    const userIds = await resolveLineupReminderTargets(
+      this.db,
+      lineup.id,
+      'vote',
+    );
+    for (const userId of userIds) {
+      await this.sendVoteReminder(lineup.id, userId, window);
     }
   }
 
-  /** Send a single vote reminder DM. */
-  private async sendVoteReminder(
-    lineupId: number,
-    voter: NonVoter,
-    window: string,
-  ): Promise<void> {
-    const key = `lineup-reminder-${window}:${lineupId}:${voter.userId}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    const urgency =
-      window === '1h'
-        ? 'Last chance to vote -- voting closes in 1 hour'
-        : "You haven't voted yet -- voting closes in 24 hours";
-
-    await this.notificationService.create({
-      userId: voter.userId,
-      type: 'community_lineup',
-      title: 'Vote Reminder',
-      message: urgency,
-      payload: { subtype: 'lineup_vote_reminder', lineupId },
-    });
-  }
-
-  // ─── Private: scheduling reminders ────────────────────────
-
-  /** Process scheduling reminders for a single lineup. */
   private async processSchedulingReminder(
     lineup: ReminderLineup,
   ): Promise<void> {
     if (!lineup.phaseDeadline) return;
-
-    const hoursLeft = this.hoursUntil(lineup.phaseDeadline);
-    if (hoursLeft > 24 || hoursLeft <= 0) return;
-
-    const window = hoursLeft <= 1 ? '1h' : '24h';
-    const nonVoters = await this.getSchedulingNonVoters(lineup.id);
-
-    for (const voter of nonVoters) {
-      await this.sendSchedulingReminder(voter, window);
+    const window = this.classifyWindow(lineup.phaseDeadline);
+    if (!window) return;
+    const matches = await this.getSchedulingMatches(lineup.id);
+    for (const match of matches) {
+      const userIds = await resolveLineupReminderTargets(
+        this.db,
+        lineup.id,
+        'schedule',
+        match.matchId,
+      );
+      for (const userId of userIds) {
+        await this.sendSchedulingReminder(match.matchId, userId, window);
+      }
     }
   }
 
-  /** Send a single scheduling reminder DM. */
-  private async sendSchedulingReminder(
-    voter: SchedulingNonVoter,
-    window: string,
+  private async processNominationReminder(
+    lineup: ReminderLineup,
   ): Promise<void> {
-    const key = `lineup-sched-remind:${voter.matchId}:${voter.userId}:${window}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
-    await this.notificationService.create({
-      userId: voter.userId,
-      type: 'community_lineup',
-      title: 'Scheduling Reminder',
-      message: 'Your match is waiting -- pick a time!',
-      payload: {
-        subtype: 'lineup_scheduling_reminder',
-        matchId: voter.matchId,
-      },
-    });
+    if (!lineup.phaseDeadline) return;
+    const window = this.classifyWindow(lineup.phaseDeadline);
+    if (!window) return;
+    const userIds = await resolveLineupReminderTargets(
+      this.db,
+      lineup.id,
+      'nominate',
+    );
+    for (const userId of userIds) {
+      await this.sendNominationReminder(lineup.id, userId, window);
+    }
   }
 
-  // ─── Private: tiebreaker reminders (ROK-1117) ─────────────
-
-  /** Process a single active tiebreaker for reminder dispatch. */
   private async processTiebreakerReminder(
     tb: ActiveTiebreakerRow,
   ): Promise<void> {
@@ -203,7 +202,64 @@ export class LineupReminderService {
     }
   }
 
-  /** Send a single tiebreaker reminder DM. */
+  // ─── DM dispatch ─────────────────────────────────────────────
+
+  private async sendVoteReminder(
+    lineupId: number,
+    userId: number,
+    window: '24h' | '1h',
+  ): Promise<void> {
+    const key = `lineup-reminder-${window}:${lineupId}:${userId}`;
+    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+    const message =
+      window === '1h'
+        ? 'Last chance to vote -- voting closes in 1 hour'
+        : "You haven't voted yet -- voting closes in 24 hours";
+    await this.notificationService.create({
+      userId,
+      type: 'community_lineup',
+      title: 'Vote Reminder',
+      message,
+      payload: { subtype: 'lineup_vote_reminder', lineupId },
+    });
+  }
+
+  private async sendSchedulingReminder(
+    matchId: number,
+    userId: number,
+    window: '24h' | '1h',
+  ): Promise<void> {
+    const key = `lineup-sched-remind:${matchId}:${userId}:${window}`;
+    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+    await this.notificationService.create({
+      userId,
+      type: 'community_lineup',
+      title: 'Scheduling Reminder',
+      message: 'Your match is waiting -- pick a time!',
+      payload: { subtype: 'lineup_scheduling_reminder', matchId },
+    });
+  }
+
+  private async sendNominationReminder(
+    lineupId: number,
+    userId: number,
+    window: '24h' | '1h',
+  ): Promise<void> {
+    const key = `lineup-nominate-remind:${lineupId}:${userId}:${window}`;
+    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
+    const message =
+      window === '1h'
+        ? 'Last chance to nominate -- the building phase closes in 1 hour'
+        : 'Nominations are closing in 24 hours -- add your picks before the cut';
+    await this.notificationService.create({
+      userId,
+      type: 'community_lineup',
+      title: 'Nomination Reminder',
+      message,
+      payload: { subtype: 'lineup_nominate_reminder', lineupId },
+    });
+  }
+
   private async sendTiebreakerReminder(
     tb: ActiveTiebreakerRow,
     userId: number,
@@ -233,16 +289,20 @@ export class LineupReminderService {
     });
   }
 
-  // ─── Private: utilities ───────────────────────────────────
+  // ─── Utilities ───────────────────────────────────────────────
 
-  /** Calculate hours remaining until a deadline. */
   private hoursUntil(deadline: Date): number {
     return (deadline.getTime() - Date.now()) / MS_PER_HOUR;
   }
 
-  // ─── Private: DB queries ──────────────────────────────────
+  private classifyWindow(deadline: Date): '24h' | '1h' | null {
+    const hoursLeft = this.hoursUntil(deadline);
+    if (hoursLeft <= 0 || hoursLeft > 24) return null;
+    return hoursLeft <= 1 ? '1h' : '24h';
+  }
 
-  /** Get active lineups in voting status. */
+  // ─── DB queries ──────────────────────────────────────────────
+
   private async getVotingLineups(): Promise<ReminderLineup[]> {
     return (await this.db.execute(sql`
       SELECT id, status, phase_deadline AS "phaseDeadline",
@@ -252,7 +312,6 @@ export class LineupReminderService {
     `)) as unknown as ReminderLineup[];
   }
 
-  /** Get active community lineups in decided status (excludes standalone polls). */
   private async getDecidedLineups(): Promise<ReminderLineup[]> {
     return (await this.db.execute(sql`
       SELECT id, status, phase_deadline AS "phaseDeadline"
@@ -262,41 +321,23 @@ export class LineupReminderService {
     `)) as unknown as ReminderLineup[];
   }
 
-  /** Get users who have not yet voted for a lineup. */
-  private async getVoteNonVoters(lineupId: number): Promise<NonVoter[]> {
+  private async getBuildingLineups(): Promise<ReminderLineup[]> {
     return (await this.db.execute(sql`
-      SELECT u.id, u.id AS "userId",
-             COALESCE(u.display_name, u.username) AS "displayName",
-             u.discord_id AS "discordId"
-      FROM users u
-      WHERE u.discord_id IS NOT NULL
-        AND u.id NOT IN (
-          SELECT user_id FROM community_lineup_votes WHERE lineup_id = ${lineupId}
-        )
-    `)) as unknown as NonVoter[];
+      SELECT id, status, phase_deadline AS "phaseDeadline"
+      FROM community_lineups
+      WHERE status = 'building'
+        AND phase_deadline IS NOT NULL
+    `)) as unknown as ReminderLineup[];
   }
 
-  /** Get match members who have not voted on scheduling slots. */
-  private async getSchedulingNonVoters(
+  private async getSchedulingMatches(
     lineupId: number,
-  ): Promise<SchedulingNonVoter[]> {
+  ): Promise<SchedulingMatchRef[]> {
     return (await this.db.execute(sql`
-      SELECT u.id, u.id AS "userId",
-             COALESCE(u.display_name, u.username) AS "displayName",
-             lmm.match_id AS "matchId"
-      FROM community_lineup_match_members lmm
-      JOIN community_lineup_matches lm ON lm.id = lmm.match_id
-      JOIN users u ON u.id = lmm.user_id
-      WHERE lm.lineup_id = ${lineupId}
-        AND lm.status = 'scheduling'
-        AND NOT EXISTS (
-          SELECT 1
-          FROM community_lineup_schedule_votes csv
-          JOIN community_lineup_schedule_slots css
-            ON css.id = csv.slot_id
-          WHERE css.match_id = lmm.match_id
-            AND csv.user_id = lmm.user_id
-        )
-    `)) as unknown as SchedulingNonVoter[];
+      SELECT lineup_id AS "lineupId", id AS "matchId"
+      FROM community_lineup_matches
+      WHERE lineup_id = ${lineupId}
+        AND status = 'scheduling'
+    `)) as unknown as SchedulingMatchRef[];
   }
 }
