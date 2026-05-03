@@ -29,6 +29,11 @@ import {
   type ActiveTiebreakerRow,
 } from './lineup-tiebreaker-reminder.helpers';
 import { resolveLineupReminderTargets } from './lineup-reminder-target.helpers';
+import {
+  sendVoteReminder,
+  sendSchedulingReminder,
+  sendNominationReminder,
+} from './lineup-reminder-dispatch.helpers';
 
 interface ReminderLineup {
   id: number;
@@ -163,7 +168,7 @@ export class LineupReminderService {
       'vote',
     );
     for (const userId of userIds) {
-      await this.sendVoteReminder(lineup.id, userId, window);
+      await sendVoteReminder(this.deps(), lineup.id, userId, window);
     }
   }
 
@@ -182,7 +187,12 @@ export class LineupReminderService {
         match.matchId,
       );
       for (const userId of userIds) {
-        await this.sendSchedulingReminder(match.matchId, userId, window);
+        await sendSchedulingReminder(
+          this.deps(),
+          match.matchId,
+          userId,
+          window,
+        );
       }
     }
   }
@@ -199,7 +209,7 @@ export class LineupReminderService {
       'nominate',
     );
     for (const userId of userIds) {
-      await this.sendNominationReminder(lineup.id, userId, window);
+      await sendNominationReminder(this.deps(), lineup.id, userId, window);
     }
   }
 
@@ -216,60 +226,11 @@ export class LineupReminderService {
 
   // ─── DM dispatch ─────────────────────────────────────────────
 
-  private async sendVoteReminder(
-    lineupId: number,
-    userId: number,
-    window: '24h' | '1h',
-  ): Promise<void> {
-    const key = `lineup-reminder-${window}:${lineupId}:${userId}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-    const message =
-      window === '1h'
-        ? 'Last chance to vote -- voting closes in 1 hour'
-        : "You haven't voted yet -- voting closes in 24 hours";
-    await this.notificationService.create({
-      userId,
-      type: 'community_lineup',
-      title: 'Vote Reminder',
-      message,
-      payload: { subtype: 'lineup_vote_reminder', lineupId },
-    });
-  }
-
-  private async sendSchedulingReminder(
-    matchId: number,
-    userId: number,
-    window: '24h' | '1h',
-  ): Promise<void> {
-    const key = `lineup-sched-remind:${matchId}:${userId}:${window}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-    await this.notificationService.create({
-      userId,
-      type: 'community_lineup',
-      title: 'Scheduling Reminder',
-      message: 'Your match is waiting -- pick a time!',
-      payload: { subtype: 'lineup_scheduling_reminder', matchId },
-    });
-  }
-
-  private async sendNominationReminder(
-    lineupId: number,
-    userId: number,
-    window: '24h' | '1h',
-  ): Promise<void> {
-    const key = `lineup-nominate-remind:${lineupId}:${userId}:${window}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-    const message =
-      window === '1h'
-        ? 'Last chance to nominate -- the building phase closes in 1 hour'
-        : 'Nominations are closing in 24 hours -- add your picks before the cut';
-    await this.notificationService.create({
-      userId,
-      type: 'community_lineup',
-      title: 'Nomination Reminder',
-      message,
-      payload: { subtype: 'lineup_nominate_reminder', lineupId },
-    });
+  private deps() {
+    return {
+      notificationService: this.notificationService,
+      dedupService: this.dedupService,
+    };
   }
 
   private async sendTiebreakerReminder(
