@@ -27,7 +27,6 @@ export function useGameSearch(query: string, enabled = true) {
     useEffect(() => {
         queryClient.cancelQueries({
             queryKey: ['games', 'search'],
-            exact: false,
             predicate: (q) => q.queryKey[2] !== debouncedQuery,
         });
     }, [debouncedQuery, queryClient]);
