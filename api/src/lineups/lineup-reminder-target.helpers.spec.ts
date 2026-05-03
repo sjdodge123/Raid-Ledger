@@ -70,9 +70,11 @@ describe('resolveLineupReminderTargets', () => {
     it('nominate → invitees + creator minus existing nominators', async () => {
       // 1) load lineup
       db.execute.mockResolvedValueOnce([lineup('private', 100)]);
-      // 2) invitees ∪ {createdBy} (already deduped by helper) — invitees with discord_id
+      // 2) invitees with discord_id
       db.execute.mockResolvedValueOnce([user(21), user(22)]);
-      // 3) participants (already nominated)
+      // 3) creator-with-discord lookup
+      db.execute.mockResolvedValueOnce([{ userId: 100 }]);
+      // 4) participants (already nominated)
       db.execute.mockResolvedValueOnce([{ userId: 21 }]);
 
       const result = await resolveLineupReminderTargets(
@@ -88,6 +90,7 @@ describe('resolveLineupReminderTargets', () => {
     it('vote → invitees + creator minus existing voters', async () => {
       db.execute.mockResolvedValueOnce([lineup('private', 100)]);
       db.execute.mockResolvedValueOnce([user(31), user(32), user(33)]);
+      db.execute.mockResolvedValueOnce([{ userId: 100 }]); // creator has discord
       db.execute.mockResolvedValueOnce([{ userId: 32 }]); // already voted
 
       const result = await resolveLineupReminderTargets(
@@ -99,9 +102,16 @@ describe('resolveLineupReminderTargets', () => {
       expect(new Set(result)).toEqual(new Set([100, 31, 33]));
     });
 
-    it('schedule → invitees + creator minus existing schedule voters (matchId required)', async () => {
+    it('schedule → invitees + creator scoped to match members minus existing schedule voters', async () => {
       db.execute.mockResolvedValueOnce([lineup('private', 100)]);
       db.execute.mockResolvedValueOnce([user(41), user(42)]);
+      db.execute.mockResolvedValueOnce([{ userId: 100 }]); // creator has discord
+      // match members for this matchId — excludes random invitees not in the match
+      db.execute.mockResolvedValueOnce([
+        { userId: 100 },
+        { userId: 41 },
+        { userId: 42 },
+      ]);
       db.execute.mockResolvedValueOnce([{ userId: 41 }]);
 
       const result = await resolveLineupReminderTargets(
@@ -114,9 +124,49 @@ describe('resolveLineupReminderTargets', () => {
       expect(new Set(result)).toEqual(new Set([100, 42]));
     });
 
+    it('schedule → invitee NOT in match members is excluded from the DM', async () => {
+      db.execute.mockResolvedValueOnce([lineup('private', 100)]);
+      // 3 invitees on the lineup, but only 41 is on the scheduling match.
+      db.execute.mockResolvedValueOnce([user(41), user(42), user(43)]);
+      db.execute.mockResolvedValueOnce([{ userId: 100 }]); // creator
+      // Only creator + 41 are match members.
+      db.execute.mockResolvedValueOnce([{ userId: 100 }, { userId: 41 }]);
+      db.execute.mockResolvedValueOnce([]); // nobody has voted on a slot yet
+
+      const result = await resolveLineupReminderTargets(
+        db as unknown as Parameters<typeof resolveLineupReminderTargets>[0],
+        LINEUP_ID,
+        'schedule',
+        MATCH_ID,
+      );
+
+      // 42 and 43 are invitees but not match members → should NOT be reminded.
+      expect(new Set(result)).toEqual(new Set([100, 41]));
+    });
+
+    it('schedule → creator without discord_id is excluded from the DM', async () => {
+      db.execute.mockResolvedValueOnce([lineup('private', 100)]);
+      db.execute.mockResolvedValueOnce([user(41)]);
+      // creator-with-discord lookup returns empty → creator has no discord_id
+      db.execute.mockResolvedValueOnce([]);
+      db.execute.mockResolvedValueOnce([{ userId: 41 }]); // match members
+      db.execute.mockResolvedValueOnce([]); // no participants
+
+      const result = await resolveLineupReminderTargets(
+        db as unknown as Parameters<typeof resolveLineupReminderTargets>[0],
+        LINEUP_ID,
+        'schedule',
+        MATCH_ID,
+      );
+
+      // 100 (creator) excluded — no discord_id.
+      expect(new Set(result)).toEqual(new Set([41]));
+    });
+
     it('returns only the creator when there are no invitees', async () => {
       db.execute.mockResolvedValueOnce([lineup('private', 100)]);
       db.execute.mockResolvedValueOnce([]); // no invitees
+      db.execute.mockResolvedValueOnce([{ userId: 100 }]); // creator has discord
       db.execute.mockResolvedValueOnce([]); // no participants
 
       const result = await resolveLineupReminderTargets(
@@ -131,6 +181,7 @@ describe('resolveLineupReminderTargets', () => {
     it('returns [] when every invitee + creator has already participated', async () => {
       db.execute.mockResolvedValueOnce([lineup('private', 100)]);
       db.execute.mockResolvedValueOnce([user(21), user(22)]);
+      db.execute.mockResolvedValueOnce([{ userId: 100 }]); // creator has discord
       db.execute.mockResolvedValueOnce([
         { userId: 100 },
         { userId: 21 },

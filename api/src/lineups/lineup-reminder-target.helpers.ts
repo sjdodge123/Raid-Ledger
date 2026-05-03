@@ -64,16 +64,32 @@ async function resolvePrivateTargets(
      WHERE i.lineup_id = ${lineup.id}
        AND u.discord_id IS NOT NULL
   `)) as unknown as UserRow[];
+  const pool = new Set<number>(candidates.map((r) => r.userId));
+  // Add the creator only if they have a discord_id (preserves the existing
+  // recipient invariant — every other reminder path filters on discord_id).
+  const [creator] = (await db.execute(sql`
+    SELECT id AS "userId"
+      FROM users
+     WHERE id = ${lineup.createdBy}
+       AND discord_id IS NOT NULL
+     LIMIT 1
+  `)) as unknown as UserRow[];
+  if (creator) pool.add(creator.userId);
+  // Scheduling reminders are per-match: intersect the invitee/creator pool
+  // with `community_lineup_match_members` for this match so unrelated invitees
+  // aren't pinged about polls they're not in (preserves prior behavior).
+  if (action === 'schedule' && matchId !== undefined) {
+    const memberIds = new Set(await loadMatchMembers(db, matchId));
+    for (const id of Array.from(pool)) {
+      if (!memberIds.has(id)) pool.delete(id);
+    }
+  }
   const participated = await loadParticipatedUserIds(
     db,
     lineup.id,
     action,
     matchId,
   );
-  const pool = new Set<number>([
-    lineup.createdBy,
-    ...candidates.map((r) => r.userId),
-  ]);
   for (const id of participated) pool.delete(id);
   return Array.from(pool);
 }
