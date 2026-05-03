@@ -38,44 +38,40 @@ describe('enrichChunkEarlyAccess — per-call timeout (ROK-1197)', () => {
     itadService = buildItadService();
   });
 
-  it(
-    'completes within ~10s even when one getGameInfo call hangs forever',
-    async () => {
-      const chunk = buildChunk(10);
+  it('completes within ~10s even when one getGameInfo call hangs forever', async () => {
+    const chunk = buildChunk(10);
 
-      // First call hangs forever; remaining 9 resolve immediately
-      itadService.getGameInfo.mockImplementation((id: string) => {
-        if (id === 'game-uuid-1') {
-          return new Promise(() => {
-            /* never resolves */
-          });
-        }
-        return Promise.resolve({ earlyAccess: false });
-      });
+    // First call hangs forever; remaining 9 resolve immediately
+    itadService.getGameInfo.mockImplementation((id: string) => {
+      if (id === 'game-uuid-1') {
+        return new Promise(() => {
+          /* never resolves */
+        });
+      }
+      return Promise.resolve({ earlyAccess: false });
+    });
 
-      const startedAt = Date.now();
-      const result = (await enrichChunkEarlyAccess(
-        mockDb as never,
-        itadService as never,
-        chunk,
-      )) as unknown;
-      const elapsedMs = Date.now() - startedAt;
+    const startedAt = Date.now();
+    const result = (await enrichChunkEarlyAccess(
+      mockDb as never,
+      itadService as never,
+      chunk,
+    )) as unknown;
+    const elapsedMs = Date.now() - startedAt;
 
-      // Must return — and must do so well under the Jest test timeout
-      // budget set on this test (12s) so the helper has some margin.
-      expect(elapsedMs).toBeLessThan(11_000);
-      // Helper must surface per-chunk telemetry so the service can flag
-      // degraded runs. Today it returns a bare number, which fails this check.
-      expect(typeof result).toBe('object');
-      expect(result).toMatchObject({
-        updated: expect.any(Number),
-        failed: expect.any(Number),
-      });
-      // The hung call must be counted as a failure, not silently dropped.
-      expect((result as { failed: number }).failed).toBeGreaterThanOrEqual(1);
-    },
-    12_000,
-  );
+    // Must return — and must do so well under the Jest test timeout
+    // budget set on this test (12s) so the helper has some margin.
+    expect(elapsedMs).toBeLessThan(11_000);
+    // Helper must surface per-chunk telemetry so the service can flag
+    // degraded runs. Today it returns a bare number, which fails this check.
+    expect(typeof result).toBe('object');
+    expect(result).toMatchObject({
+      updated: expect.any(Number),
+      failed: expect.any(Number),
+    });
+    // The hung call must be counted as a failure, not silently dropped.
+    expect((result as { failed: number }).failed).toBeGreaterThanOrEqual(1);
+  }, 12_000);
 
   it('counts thrown getGameInfo errors in the failed counter', async () => {
     const chunk = buildChunk(4);

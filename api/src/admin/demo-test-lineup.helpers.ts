@@ -65,11 +65,7 @@ export async function archiveActiveLineupForTest(db: Db): Promise<void> {
  * Lineup phases that may be archived by the test-only reset helper. Mirrors
  * `community_lineups.status` enum (`api/src/drizzle/schema/community-lineups.ts`).
  */
-export type ResetLineupPhase =
-  | 'building'
-  | 'voting'
-  | 'decided'
-  | 'archived';
+export type ResetLineupPhase = 'building' | 'voting' | 'decided' | 'archived';
 
 const DEFAULT_RESET_PHASES: ResetLineupPhase[] = ['building', 'voting'];
 

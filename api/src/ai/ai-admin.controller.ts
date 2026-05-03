@@ -54,9 +54,7 @@ export class AiAdminController {
     const resolution = await this.registry.resolveActive();
     const provider = resolution?.provider;
     const isAvailable = await this.resolveAvailability(provider?.key ?? null);
-    const modelSetting = await this.settings.get(
-      AI_SETTING_KEYS.MODEL,
-    );
+    const modelSetting = await this.settings.get(AI_SETTING_KEYS.MODEL);
     const model = this.resolveDisplayModel(provider?.key, modelSetting);
     return buildStatusResponse(provider, model, isAvailable);
   }
@@ -149,15 +147,11 @@ export class AiAdminController {
     dynamicCategoriesEnabled: boolean;
     aiSuggestionsEnabled: boolean;
   }> {
-    const chat = await this.settings.get(
-      AI_SETTING_KEYS.CHAT_ENABLED,
-    );
+    const chat = await this.settings.get(AI_SETTING_KEYS.CHAT_ENABLED);
     const dynCat = await this.settings.get(
       AI_SETTING_KEYS.DYNAMIC_CATEGORIES_ENABLED,
     );
-    const sugg = await this.settings.get(
-      AI_SETTING_KEYS.SUGGESTIONS_ENABLED,
-    );
+    const sugg = await this.settings.get(AI_SETTING_KEYS.SUGGESTIONS_ENABLED);
     return {
       chatEnabled: chat === 'true',
       dynamicCategoriesEnabled: dynCat === 'true',
@@ -210,9 +204,7 @@ export class AiAdminController {
     if (!isUp) return this.notAvailableResult();
     const resolution = await this.registry.resolveActive();
     const provider = resolution?.provider;
-    const modelSetting = await this.settings.get(
-      AI_SETTING_KEYS.MODEL,
-    );
+    const modelSetting = await this.settings.get(AI_SETTING_KEYS.MODEL);
     const model = this.resolveDisplayModel(provider?.key, modelSetting);
     const start = Date.now();
     this.logger.log(

@@ -37,9 +37,7 @@ export class OllamaProvider implements LlmProvider {
 
   /** Resolve the Ollama base URL from settings or use default. */
   private async getBaseUrl(): Promise<string> {
-    const url = await this.settings.get(
-      AI_SETTING_KEYS.OLLAMA_URL,
-    );
+    const url = await this.settings.get(AI_SETTING_KEYS.OLLAMA_URL);
     return url || AI_DEFAULTS.ollamaUrl;
   }
 

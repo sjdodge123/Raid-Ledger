@@ -289,12 +289,12 @@ describe('ItadPriceSyncService', () => {
 
       const messages = logSpy.mock.calls.map((c) => String(c[0]));
       // The misleading "pricing sync complete" log must be renamed.
-      expect(
-        messages.some((m) => /pricing phase complete/i.test(m)),
-      ).toBe(true);
-      expect(
-        messages.some((m) => /pricing sync complete/i.test(m)),
-      ).toBe(false);
+      expect(messages.some((m) => /pricing phase complete/i.test(m))).toBe(
+        true,
+      );
+      expect(messages.some((m) => /pricing sync complete/i.test(m))).toBe(
+        false,
+      );
     });
 
     it('AC #5: signals degraded status to the cron wrapper when getGameInfo failures occur', async () => {
@@ -317,9 +317,11 @@ describe('ItadPriceSyncService', () => {
         async (_name: string, fn: () => Promise<unknown>) => {
           const result = await fn();
           // Stash on the mock so the assertion below can read it.
-          (mockCronJobService.executeWithTracking as jest.Mock & {
-            lastResult?: unknown;
-          }).lastResult = result;
+          (
+            mockCronJobService.executeWithTracking as jest.Mock & {
+              lastResult?: unknown;
+            }
+          ).lastResult = result;
         },
       );
 
@@ -338,12 +340,10 @@ describe('ItadPriceSyncService', () => {
         lastResult !== null &&
         (lastResult as { degraded?: unknown }).degraded === true;
 
-      const perfLoggedDegraded = (perfLog as jest.Mock).mock.calls.some(
-        (c) => {
-          const meta = c[3] as Record<string, unknown> | undefined;
-          return meta?.status === 'degraded';
-        },
-      );
+      const perfLoggedDegraded = (perfLog as jest.Mock).mock.calls.some((c) => {
+        const meta = c[3] as Record<string, unknown> | undefined;
+        return meta?.status === 'degraded';
+      });
 
       expect(fnSignaledDegraded || perfLoggedDegraded).toBe(true);
     });
