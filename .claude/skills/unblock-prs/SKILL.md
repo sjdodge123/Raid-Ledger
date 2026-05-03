@@ -1,12 +1,14 @@
 ---
 name: unblock-prs
-description: "Loop through open PRs, group into a combined branch where possible, and merge as few PRs as possible to minimize CI runs"
-argument-hint: "[--dry-run] [--no-group]"
+description: "Loop through open PRs, group into a combined branch where possible, merge as few PRs as possible to minimize CI runs, then auto-monitor until everything lands. Walk-away safe — handles BEHIND-main rebases and unrelated CI flakes automatically."
+argument-hint: "[--dry-run] [--no-group] [--no-monitor]"
 ---
 
-# Unblock PRs — Group, Rebase, Merge
+# Unblock PRs — Group, Rebase, Merge, Monitor
 
-**Goal:** Get all open PRs merged with the **fewest CI runs possible**. Default behavior is to combine compatible PRs into a single branch and merge once. Each separate PR triggers its own CI pipeline on push + merge, so grouping saves GitHub Actions minutes.
+**Goal:** Get all open PRs merged with the **fewest CI runs possible** AND keep babysitting them until they actually land. Default behavior is to combine compatible PRs into a single branch and merge once, then auto-monitor every still-open PR through the post-merge tail (rebases, flake reruns) until the operator's queue is empty.
+
+**Walk-away contract:** the operator should be able to invoke `/unblock-prs` and not look at the window again until everything is shipped. If a real blocker appears (main-branch CI red, a non-flaky test failure, a CHANGES_REQUESTED review), surface it and stop monitoring that PR — but otherwise keep grinding.
 
 **Autonomy contract — STRICT:** this skill runs end-to-end without operator gates. Do **not** call `AskUserQuestion`, do **not** print `(y/n)` prompts, do **not** ask "should I proceed?", do **not** wait for "go" or "looks good". Print plans and progress as FYI only; the operator can interrupt with STOP/PAUSE if something looks wrong. The decision rules below cover every branching path so no human-in-the-loop is needed:
 
@@ -15,8 +17,10 @@ argument-hint: "[--dry-run] [--no-group]"
 * **Individual rebase needs >~50 LOC of non-mechanical edits** — abort the rebase, skip the PR, continue (Step 3-alt-d).
 * **Stale branches (PR merged/closed)** — delete automatically (Step 6c).
 * **Dormant branches (no PR, >14 days old)** — leave alone, list them in the final report.
+* **PR is `BEHIND` main during monitoring** — `gh pr update-branch <num>` automatically (Step 8c).
+* **Flaky CI shard fails on a check unrelated to PR diff** — `gh run rerun --failed <run-id>` once per check per loop tick (Step 8d). Investigate FIRST: confirm the failing test path is not touched by the PR's diff. Never re-run hoping; only re-run with evidence the failure is environmental.
 
-Only halt for: a STOP/PAUSE from the operator, main-branch CI failure (Step 4 — that's an actual blocker), or auth/permission errors that no automatic action can resolve.
+Only halt for: a STOP/PAUSE from the operator, main-branch CI failure (Step 4 — that's an actual blocker), a non-flake CI failure that maps to the PR's diff (Step 8e), or auth/permission errors that no automatic action can resolve.
 
 **References:** Read `CLAUDE.md` for project conventions and `TESTING.md` for test failure rules.
 
@@ -373,30 +377,117 @@ git fetch --prune
 
 ---
 
-## Step 7: Report
+## Step 7: Initial Report (then continue to Step 8)
 
 ```
-## Unblock PRs — Complete
+## Unblock PRs — Initial Pass Complete
 
 ### Combined PRs
 | Combined PR | Included PRs | Result |
 |-------------|-------------|--------|
-| #525 combined/unblock-2026-03-26 | #515, #518, #520 | Merged |
+| #525 combined/unblock-2026-03-26 | #515, #518, #520 | Merged or auto-merge enabled |
 
 ### Individual PRs
 | PR | Branch | Result |
 |----|--------|--------|
-| #519 | fix/dockerfile-... | Merged (infrastructure, shipped alone) |
+| #519 | fix/dockerfile-... | Auto-merge enabled (infrastructure, shipped alone) |
 
 CI runs saved: N (grouped M PRs into 1)
 PRs processed: N
-Merged: N
 Skipped: N (reasons listed above)
-Failed: N (reasons listed above)
 
 Branches deleted: N (stale/merged)
 Branches kept: N (active WIP)
 
 main is now at: <sha>
 Main CI: ✓ green / ✗ red (details)
+
+### Auto-monitor armed
+Watching N PRs through CI / merge tail (Step 8). Will surface only on operator-needed blockers.
+```
+
+The initial pass usually leaves PRs with auto-merge enabled but CI still running. Step 8 watches them through to MERGED so the operator can walk away.
+
+---
+
+## Step 8: Auto-Monitor Until Merged (default behavior)
+
+After the initial pass, identify every PR that is still OPEN — these need monitoring. Skip Step 8 only if `--no-monitor` was passed OR if there are zero remaining open PRs in the queue.
+
+**Goal:** walk-away behavior. The operator invoked `/unblock-prs` to ship things, not to keep checking back. Step 8 grinds through the post-push tail — rebases when main moves, reruns when CI flakes — until every PR in the queue is either MERGED or has surfaced a real blocker.
+
+### 8a: Build the monitor list
+
+Open PRs from Steps 3 and 3-alt that:
+- have auto-merge enabled (verify via `gh pr view <num> --json autoMergeRequest`), AND
+- are not in CHANGES_REQUESTED or DRAFT state.
+
+For PRs that lack auto-merge: enable it via `gh pr merge <num> --auto --squash` per CLAUDE.md, then add them to the list.
+
+### 8b: Arm a self-paced loop
+
+Invoke the `/loop` skill (no leading interval — dynamic mode) with a polling prompt that targets the monitor list. Example:
+
+```
+Skill({skill: "loop", args: "Poll PRs #N1, #N2, #N3 until ALL are MERGED. Each tick: gh pr view <num> --json state,mergeStateStatus,headRefOid,statusCheckRollup. Per PR — see Step 8c-e of the unblock-prs skill for decisions. Self-pace 270s while CI moves; stretch to 1200s if every remaining PR is BLOCKED on operator decision."})
+```
+
+The /loop skill runs the prompt now, then ScheduleWakeup at the chosen cadence. It re-enters itself each tick until the loop body returns "stop." Step 8c–e describes the loop body.
+
+### 8c: Per-tick decision tree
+
+For each PR still in the monitor list:
+
+| Observed state | Action |
+|----------------|--------|
+| `state == MERGED` | Drop from monitor list. If list now empty, print final report (Step 8f) and stop the loop. |
+| `state == CLOSED` (not merged) | Drop from monitor list, surface "PR #N closed without merge — needs investigation". |
+| `mergeStateStatus == BEHIND` | `gh pr update-branch <num>` (idempotent). This will rebase the PR onto current main and trigger a fresh CI cycle. Keep monitoring. |
+| `mergeStateStatus == DIRTY` / `BLOCKED` (no failing checks) | Surface and drop — usually means branch protection rule the skill can't satisfy (required review, signed commits, etc.). |
+| `mergeStateStatus == CONFLICTING` | Surface and drop — needs human merge resolution. |
+| `reviewDecision == CHANGES_REQUESTED` | Surface and drop — addressing review feedback is outside skill scope. |
+| Failing checks present | See 8d. |
+| All checks passing AND mergeStateStatus is `CLEAN`/`HAS_HOOKS`/`UNKNOWN` | Auto-merge will fire imminently. Keep monitoring; expect MERGED next tick. |
+| Checks running | Keep monitoring. |
+
+### 8d: Failing-check triage (rerun-once policy)
+
+When a check has `conclusion == FAILURE`:
+
+1. **Identify the failing run + check name** from `statusCheckRollup`.
+2. **Look up `git diff --name-only origin/main..origin/<branch>`** (or for a combined branch, the union diff). Extract the failing test/file path from the CI log via `gh run view <run-id> --log-failed | head -50`.
+3. **Decide flake vs real:**
+   - The failing test/file path **does not appear** in the PR's diff and isn't part of a workspace the diff materially touches → **flake candidate**. Action: `gh run rerun --failed <run-id>` ONCE per check per loop lifetime. Track which (PR, check) pairs you've already rerun in the loop's prompt context — never rerun the same pair twice.
+   - The failing test/file path **does appear** in the PR's diff, OR you've already rerun this check once and it failed again → **real failure**. Surface "PR #N: CI failing on <check name> — <one-line cause from log>", drop from monitor list, do not retry.
+   - Build / typecheck / lint failures → almost always real (config or code-level), surface and drop.
+4. Reruns trigger a fresh check; the loop catches the result on a subsequent tick. Don't poll the same PR more aggressively just because you reran it.
+
+**Important:** never push code from inside the monitor loop. If a fix is needed, the loop's job is to surface it; the operator (or a separate `/build` / `/fix-batch`) handles the fix.
+
+### 8e: Hard stops for the loop
+
+The loop terminates when ANY of:
+
+1. **All monitored PRs have reached MERGED** → final report, stop.
+2. **Monitor list emptied via real failures + drops** → loop has nothing left to watch.
+3. **Operator says STOP/PAUSE** → stop immediately.
+4. **Main-branch CI fails** (Step 4 condition) → stop everything, do not push more PR updates.
+
+Each individual PR stops being monitored (but loop continues for the rest) when it reaches MERGED, CLOSED, CHANGES_REQUESTED, CONFLICTING, or has a non-flake check failure (8d.3).
+
+### 8f: Final report (loop end)
+
+```
+## Unblock PRs — Auto-Monitor Complete
+
+| PR | Outcome | Notes |
+|----|---------|-------|
+| #708 | ✅ Merged at <sha> | One automatic rebase post-#709-merge; one rerun on flaky integration-test-shard |
+| #709 | ✅ Merged at <sha> | One rerun on flaky integration-test-shard |
+| #710 | ⚠️ Surfaced — CI failing on `unit-tests-api`: <test path> is in PR's diff (not flake). Operator must address before merge. | dropped from monitor |
+
+main is now at: <sha>
+PRs merged this run: N
+PRs surfaced needing operator: N
+Total CI reruns triggered: N (all on checks investigated as unrelated to PR diff)
 ```

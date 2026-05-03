@@ -107,6 +107,9 @@ jobs:
       - name: Lint
         run: npm run lint --workspaces
 
+      - name: Prettier check (api)
+        run: npm run prettier:check -w api
+
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:
     runs-on: ubuntu-latest

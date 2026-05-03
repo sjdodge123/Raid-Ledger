@@ -48,10 +48,8 @@ export class LineupPhaseQueueService implements OnModuleInit {
    * doesn't leave decided-state polls without a deadline job.
    */
   async onModuleInit(): Promise<void> {
-    await bestEffortInit(
-      'LineupPhaseQueueService',
-      this.logger,
-      () => this.reconcileArchiveJobs(),
+    await bestEffortInit('LineupPhaseQueueService', this.logger, () =>
+      this.reconcileArchiveJobs(),
     );
   }
 

@@ -115,6 +115,7 @@ run_typecheck() {
 
 run_lint() {
   npm run lint -w api
+  npm run prettier:check -w api
   npm run lint -w web
 }
 
