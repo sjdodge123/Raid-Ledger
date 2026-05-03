@@ -187,6 +187,8 @@ export {
     addLineupInvitees,
     removeLineupInvitee,
     abortLineup,
+    togglePublicShare,
+    getPublicLineup,
 } from './api/lineups-api';
 
 // Activity Log (ROK-930)

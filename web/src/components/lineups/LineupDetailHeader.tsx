@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback, type JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { LineupDetailResponseDto, LineupStatusDto } from '@raid-ledger/contract';
-import { useTransitionLineupStatus } from '../../hooks/use-lineups';
+import {
+  useTransitionLineupStatus,
+  useTogglePublicShare,
+} from '../../hooks/use-lineups';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { LineupStatusBadge } from './LineupStatusBadge';
 import { PhaseCountdown } from './phase-countdown';
@@ -11,6 +14,7 @@ import { UnlinkedSteamCount } from './UnlinkedSteamCount';
 import { MarkdownText } from '../ui/markdown-text';
 import { EditLineupMetadataModal } from './edit-lineup-metadata-modal';
 import { AbortLineupButton } from './AbortLineupButton';
+import { PublicShareToggle } from './PublicShareToggle';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -198,6 +202,45 @@ function useCanEdit(lineup: LineupDetailResponseDto): boolean {
   return user.id === lineup.createdBy.id;
 }
 
+/**
+ * ROK-1067: operator-only public-share row beneath the detail header.
+ * Renders nothing for non-operators or private lineups.
+ */
+function PublicShareRow({
+  lineup,
+}: {
+  lineup: LineupDetailResponseDto;
+}): JSX.Element | null {
+  const { user } = useAuth();
+  const toggle = useTogglePublicShare();
+  if (!user || !isOperatorOrAdmin(user)) return null;
+  if (lineup.visibility === 'private') return null;
+  return (
+    <div className="ml-8 mt-2">
+      <PublicShareToggle
+        enabled={lineup.publicShareEnabled}
+        onChange={(next) =>
+          toggle.mutate(
+            { lineupId: lineup.id, enabled: next },
+            {
+              onSuccess: () =>
+                toast.success(
+                  next ? 'Public link enabled' : 'Public link disabled',
+                ),
+              onError: (err) =>
+                toast.error(
+                  err instanceof Error ? err.message : 'Toggle failed',
+                ),
+            },
+          )
+        }
+        slug={lineup.publicSlug}
+        disabled={toggle.isPending}
+      />
+    </div>
+  );
+}
+
 export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JSX.Element {
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
@@ -258,6 +301,7 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
           <PhaseCountdown phaseDeadline={lineup.phaseDeadline} phaseStartedAt={lineup.updatedAt} status={lineup.status} compact />
         )}
       </div>
+      <PublicShareRow lineup={lineup} />
       {editOpen && (
         <EditLineupMetadataModal
           lineupId={lineup.id}
