@@ -215,7 +215,7 @@ function clearSettingsServiceCache(): void {
   if (!app) return;
   try {
     const settings = app.get(SettingsService, { strict: false });
-    settings?.clearCache();
+    settings?.invalidateCache(true);
   } catch {
     // Service not yet available (very first truncate before app.init()).
   }
