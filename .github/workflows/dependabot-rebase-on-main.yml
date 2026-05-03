@@ -48,7 +48,7 @@ jobs:
        github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Update branch on every open Dependabot PR
+      - name: Update branch on the oldest BEHIND dependabot PR
         env:
           # Use REBASE_PAT (fine-grained personal access token, contents+PRs
           # read/write on this repo) instead of GITHUB_TOKEN. The merge commit
@@ -62,23 +62,39 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          numbers=$(gh pr list \
+          # Sequential queue: pick ONE PR per trigger fire, not all of them.
+          #
+          # Why: rebasing every BEHIND PR in parallel means each subsequent
+          # merge invalidates the others' in-flight CI, forcing them to
+          # re-run. With N PRs that's worst-case N×N CI invocations. Picking
+          # one at a time costs exactly N CI runs total (one per merge),
+          # at the cost of slower wall-clock (N × CI duration sequentially
+          # instead of overlapping).
+          #
+          # Selection: smallest PR number among those with mergeStateStatus
+          # = BEHIND. We deliberately skip:
+          #   - MERGEABLE: already current with main, no rebase needed
+          #   - BLOCKED: failing CI or missing review — needs a human
+          #   - DIRTY: merge conflict — needs a human
+          #
+          # If nothing's BEHIND, exit clean. The next merge event refires
+          # this workflow and the cascade continues.
+          target=$(gh pr list \
             --author "app/dependabot" \
             --state open \
-            --json number \
-            --jq '.[].number')
-          if [ -z "$numbers" ]; then
-            echo "No open Dependabot PRs."
+            --json number,mergeStateStatus \
+            --jq '[.[] | select(.mergeStateStatus == "BEHIND") | .number] | sort | .[0] // empty')
+          if [ -z "$target" ]; then
+            echo "No BEHIND dependabot PRs — nothing to rebase."
             exit 0
           fi
-          for n in $numbers; do
-            echo "Updating branch on PR #$n"
-            # Omit expected_head_sha — the API defaults to the PR's current
-            # HEAD. The previous `-f expected_head_sha=` (empty string) form
-            # always 422'd, and `|| true` silently swallowed it, so the
-            # workflow looked successful while doing nothing.
-            #
-            # `|| true` is still kept to tolerate the rare 422 (e.g. PR closed
-            # mid-loop) so one bad PR doesn't fail the whole job.
-            gh api "repos/$GH_REPO/pulls/$n/update-branch" -X PUT || true
-          done
+          echo "Updating branch on PR #$target (sequential queue)"
+          # Omit expected_head_sha — the API defaults to the PR's current
+          # HEAD. The previous `-f expected_head_sha=` (empty string) form
+          # always 422'd, and `|| true` silently swallowed it, so the
+          # workflow looked successful while doing nothing.
+          #
+          # `|| true` tolerates rare races (e.g. the PR closed between the
+          # list call and the update call) so a transient 4xx doesn't fail
+          # the whole workflow.
+          gh api "repos/$GH_REPO/pulls/$target/update-branch" -X PUT || true
