@@ -169,6 +169,18 @@ export class SettingsService implements OnModuleInit {
     this.cacheLoadedAt = 0;
   }
 
+  /**
+   * Drop the in-memory cache entirely (entries + load timestamp).
+   * Used by integration teardown after `truncateAllTables` deletes
+   * `app_settings` rows so the next spec sees a fresh DB-backed read
+   * instead of values written by a prior spec (ROK-1232).
+   */
+  clearCache(): void {
+    this.cache.clear();
+    this.cacheLoadedAt = 0;
+    this.cacheLoadPromise = null;
+  }
+
   /** Emit cleared events for all integrations. */
   emitAllIntegrationsCleared(): void {
     this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null);
