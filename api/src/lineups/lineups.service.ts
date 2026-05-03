@@ -343,23 +343,9 @@ export class LineupsService {
     return result;
   }
 
-  /** Toggle public-share flag (ROK-1067). Operator-only. */
-  togglePublicShare(
-    lineupId: number,
-    enabled: boolean,
-    actorId: number,
-  ): Promise<LineupDetailResponseDto> {
-    return togglePublicShare(
-      {
-        db: this.db,
-        activityLog: this.activityLog,
-        resolveChannelName: this.resolveChannelName,
-      },
-      lineupId,
-      enabled,
-      actorId,
-    );
-  }
+  // prettier-ignore
+  togglePublicShare = (id: number, enabled: boolean, actorId: number) =>
+    togglePublicShare(this.db, this.activityLog, this.resolveChannelName, id, enabled, actorId);
 
   /** Remove a single invitee (ROK-1065). */
   async removeInvitee(

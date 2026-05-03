@@ -50,6 +50,7 @@ describe('public-lineup-slug.helpers (ROK-1067)', () => {
 
   describe('insertWithSlugRetry', () => {
     it('returns the callback result on first success (no retries)', async () => {
+      // eslint-disable-next-line @typescript-eslint/require-await
       const cb = jest.fn(async (slug: string) => ({ slug, ok: true }));
 
       const result = await insertWithSlugRetry(cb);
@@ -60,6 +61,7 @@ describe('public-lineup-slug.helpers (ROK-1067)', () => {
 
     it('retries up to 3 times on unique_violation, succeeds on retry', async () => {
       let calls = 0;
+      // eslint-disable-next-line @typescript-eslint/require-await
       const cb = jest.fn(async (slug: string) => {
         calls++;
         if (calls < 3) throw new FakeUniqueViolation();
@@ -73,6 +75,7 @@ describe('public-lineup-slug.helpers (ROK-1067)', () => {
     });
 
     it('throws after exhausting retries (default 3 attempts)', async () => {
+      // eslint-disable-next-line @typescript-eslint/require-await
       const cb = jest.fn(async () => {
         throw new FakeUniqueViolation();
       });
@@ -83,6 +86,7 @@ describe('public-lineup-slug.helpers (ROK-1067)', () => {
 
     it('does NOT retry on a non-unique-violation error', async () => {
       const boom = new Error('boom');
+      // eslint-disable-next-line @typescript-eslint/require-await
       const cb = jest.fn(async () => {
         throw boom;
       });
