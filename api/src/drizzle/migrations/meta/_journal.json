@@ -939,6 +939,13 @@
       "when": 1777680000000,
       "tag": "0133_standalone_poll_deadline_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1777766400000,
+      "tag": "0134_drop_lineup_defaults",
+      "breakpoints": true
     }
   ]
 }

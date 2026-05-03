@@ -20,10 +20,6 @@ vi.mock('../../hooks/use-lineups', () => ({
     useCreateLineup: vi.fn(),
 }));
 
-vi.mock('../../hooks/admin/use-lineup-settings', () => ({
-    useLineupSettings: vi.fn(),
-}));
-
 vi.mock('../../hooks/use-postable-discord-channels', () => ({
     usePostableDiscordChannels: vi.fn(),
 }));
@@ -40,7 +36,6 @@ vi.mock('react-router-dom', async () => {
 });
 
 import { useCreateLineup } from '../../hooks/use-lineups';
-import { useLineupSettings } from '../../hooks/admin/use-lineup-settings';
 import { usePostableDiscordChannels } from '../../hooks/use-postable-discord-channels';
 import { getPlayers } from '../../lib/api-client';
 
@@ -74,17 +69,6 @@ beforeEach(() => {
         isError: false,
         error: null,
     } as unknown as ReturnType<typeof useCreateLineup>);
-    vi.mocked(useLineupSettings).mockReturnValue({
-        lineupDefaults: {
-            data: {
-                buildingDurationHours: 48,
-                votingDurationHours: 24,
-                decidedDurationHours: 168,
-            },
-            isLoading: false,
-        },
-        updateDefaults: {},
-    } as unknown as ReturnType<typeof useLineupSettings>);
     mockChannels([
         { id: '100000000000000001', name: 'general' },
         { id: '100000000000000002', name: 'events' },
