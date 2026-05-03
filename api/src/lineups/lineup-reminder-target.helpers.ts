@@ -101,40 +101,50 @@ async function loadPublicCandidates(
   action: ReminderAction,
   matchId?: number,
 ): Promise<number[]> {
-  if (action === 'nominate') {
-    const rows = (await db.execute(sql`
-      SELECT id AS "userId"
-        FROM users
-       WHERE discord_id IS NOT NULL
-    `)) as unknown as UserRow[];
-    return Array.from(new Set(rows.map((r) => r.userId)));
-  }
-  if (action === 'vote') {
-    const rows = (await db.execute(sql`
-      SELECT DISTINCT u.id AS "userId"
-        FROM users u
-       WHERE u.discord_id IS NOT NULL
-         AND (
-           u.id IN (
-             SELECT nominated_by
-               FROM community_lineup_entries
-              WHERE lineup_id = ${lineupId}
-           )
-           OR u.id IN (
-             SELECT user_id
-               FROM community_lineup_votes
-              WHERE lineup_id = ${lineupId}
-           )
+  if (action === 'nominate') return loadAllDiscordLinkedUsers(db);
+  if (action === 'vote') return loadPublicVoteCandidates(db, lineupId);
+  return loadMatchMembers(db, matchId ?? -1);
+}
+
+async function loadAllDiscordLinkedUsers(db: Db): Promise<number[]> {
+  const rows = (await db.execute(sql`
+    SELECT id AS "userId"
+      FROM users
+     WHERE discord_id IS NOT NULL
+  `)) as unknown as UserRow[];
+  return Array.from(new Set(rows.map((r) => r.userId)));
+}
+
+async function loadPublicVoteCandidates(
+  db: Db,
+  lineupId: number,
+): Promise<number[]> {
+  const rows = (await db.execute(sql`
+    SELECT DISTINCT u.id AS "userId"
+      FROM users u
+     WHERE u.discord_id IS NOT NULL
+       AND (
+         u.id IN (
+           SELECT nominated_by
+             FROM community_lineup_entries
+            WHERE lineup_id = ${lineupId}
          )
-    `)) as unknown as UserRow[];
-    return Array.from(new Set(rows.map((r) => r.userId)));
-  }
-  // schedule
+         OR u.id IN (
+           SELECT user_id
+             FROM community_lineup_votes
+            WHERE lineup_id = ${lineupId}
+         )
+       )
+  `)) as unknown as UserRow[];
+  return Array.from(new Set(rows.map((r) => r.userId)));
+}
+
+async function loadMatchMembers(db: Db, matchId: number): Promise<number[]> {
   const rows = (await db.execute(sql`
     SELECT DISTINCT u.id AS "userId"
       FROM community_lineup_match_members lmm
       JOIN users u ON u.id = lmm.user_id
-     WHERE lmm.match_id = ${matchId ?? -1}
+     WHERE lmm.match_id = ${matchId}
        AND u.discord_id IS NOT NULL
   `)) as unknown as UserRow[];
   return Array.from(new Set(rows.map((r) => r.userId)));

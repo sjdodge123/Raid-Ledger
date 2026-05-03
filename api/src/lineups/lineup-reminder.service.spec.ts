@@ -10,7 +10,6 @@
  * `resolveLineupReminderTargets` helper.
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { SchedulerRegistry } from '@nestjs/schedule';
 import { LineupReminderService } from './lineup-reminder.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
@@ -23,8 +22,7 @@ jest.mock('./lineup-reminder-target.helpers', () => ({
   resolveLineupReminderTargets: jest.fn().mockResolvedValue([]),
 }));
 import { resolveLineupReminderTargets } from './lineup-reminder-target.helpers';
-const mockResolveTargets =
-  resolveLineupReminderTargets as unknown as jest.Mock;
+const mockResolveTargets = resolveLineupReminderTargets as unknown as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Shared mocks
@@ -111,14 +109,6 @@ function makeDecidedLineup(hoursUntilDeadline: number) {
     status: 'decided' as const,
     phaseDeadline: deadline,
   };
-}
-
-function makeNonVoter(id: number) {
-  return { id, userId: id, displayName: `Player${id}`, discordId: `d-${id}` };
-}
-
-function makeSchedulingNonVoter(id: number) {
-  return { id, userId: id, displayName: `Player${id}`, matchId: 100 };
 }
 
 // ---------------------------------------------------------------------------

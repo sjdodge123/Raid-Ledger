@@ -83,9 +83,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
     creatorId: number;
     phaseDeadlineHoursAhead: number;
   }): Promise<number> {
-    const deadline = new Date(
-      Date.now() + opts.phaseDeadlineHoursAhead * HOUR,
-    );
+    const deadline = new Date(Date.now() + opts.phaseDeadlineHoursAhead * HOUR);
     const [lineup] = await testApp.db
       .insert(schema.communityLineups)
       .values({
@@ -129,9 +127,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
       .values({ lineupId, gameId, userId });
   }
 
-  async function userIdsWhoReceivedSubtype(
-    subtype: string,
-  ): Promise<number[]> {
+  function userIdsWhoReceivedSubtype(subtype: string): number[] {
     const ids = createSpy.mock.calls
       .map((c) => c[0] as { userId: number; payload?: { subtype?: string } })
       .filter((p) => p.payload?.subtype === subtype)
@@ -141,8 +137,9 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
 
   function dedupKeysSeen(): string[] {
     return (
-      (dedupService.checkAndMarkSent as unknown as jest.Mock | undefined)?.mock
-        ?.calls?.map((c) => String(c[0])) ?? []
+      (
+        dedupService.checkAndMarkSent as unknown as jest.Mock | undefined
+      )?.mock?.calls?.map((c) => String(c[0])) ?? []
     );
   }
 
@@ -176,9 +173,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
 
       await reminderService.checkVoteReminders();
 
-      const recipients = await userIdsWhoReceivedSubtype(
-        'lineup_vote_reminder',
-      );
+      const recipients = userIdsWhoReceivedSubtype('lineup_vote_reminder');
       // Creator + 2 unvoted invitees (B, C). NOT inviteeA (voted), NOT bystander.
       expect(new Set(recipients)).toEqual(
         new Set([creatorId, inviteeB, inviteeC]),
@@ -232,9 +227,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
 
       await reminderService.checkVoteReminders();
 
-      const recipients = await userIdsWhoReceivedSubtype(
-        'lineup_vote_reminder',
-      );
+      const recipients = userIdsWhoReceivedSubtype('lineup_vote_reminder');
       // nomB has nominated but not voted → reminder.
       // nomA already voted → no reminder.
       // voterC already voted → no reminder.
@@ -266,9 +259,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
 
       await reminderService.checkNominationReminders();
 
-      const recipients = await userIdsWhoReceivedSubtype(
-        'lineup_nominate_reminder',
-      );
+      const recipients = userIdsWhoReceivedSubtype('lineup_nominate_reminder');
       // Creator + inviteeB (the only one who hasn't nominated yet).
       expect(new Set(recipients)).toEqual(new Set([creatorId, inviteeB]));
 
@@ -299,7 +290,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
       const userB = await createDiscordUser('u-b-8');
       const userC = await createDiscordUser('u-c-8');
 
-      const lineupId = await createLineup({
+      await createLineup({
         visibility: 'public',
         status: 'building',
         creatorId,
@@ -308,9 +299,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
 
       await reminderService.checkNominationReminders();
 
-      const recipients = await userIdsWhoReceivedSubtype(
-        'lineup_nominate_reminder',
-      );
+      const recipients = userIdsWhoReceivedSubtype('lineup_nominate_reminder');
       // All four discord-linked users should receive a reminder (no nominations yet).
       // Note: the seeded admin user from test-app's baseline also has discord_id
       // set, so we assert SUPERSET of our four users — not exact equality —
@@ -369,12 +358,10 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
 
       await reminderService.checkSchedulingReminders();
 
-      const recipients = await userIdsWhoReceivedSubtype(
+      const recipients = userIdsWhoReceivedSubtype(
         'lineup_scheduling_reminder',
       );
-      expect(new Set(recipients)).toEqual(
-        new Set([creatorId, inviteeB]),
-      );
+      expect(new Set(recipients)).toEqual(new Set([creatorId, inviteeB]));
     });
   });
 
