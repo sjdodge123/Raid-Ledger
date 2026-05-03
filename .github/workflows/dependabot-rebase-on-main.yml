@@ -1,23 +1,51 @@
 name: Rebase Dependabot PRs after main update
 
 # When main moves, branch protection's "up to date" requirement causes any open
-# Dependabot PR to become BEHIND and stop auto-merging. The previous version
-# of this workflow posted "@dependabot rebase" comments, but Dependabot
-# rejects @-commands from the github-actions[bot] account ("only users with
-# push access can use that command"). Use the REST update-branch endpoint
-# instead — it runs under the workflow's own contents: write token, so the
-# permission check is satisfied without involving Dependabot's parser.
+# Dependabot PR to become BEHIND and stop auto-merging. This workflow updates
+# every open Dependabot PR to the latest main via the REST update-branch endpoint.
+#
+# Triggers:
+#   - push to main: covers normal merges from human/PR contributors.
+#   - pull_request_target closed (merged): covers Dependabot's own auto-merges.
+#     Pushes resulting from GITHUB_TOKEN-driven merges do NOT fire `on: push`
+#     workflows (GitHub anti-recursion default), so without this second trigger
+#     the first Dependabot merge in a batch silently leaves the rest BEHIND.
+#
+# Past bug (fixed here): the previous `-f expected_head_sha=` argument sent an
+# empty string, which the API rejects as 422 ("expected head sha didn't match").
+# Omitting the parameter makes the API default to the PR's current HEAD, which
+# is exactly what we want for an opportunistic update.
 
 on:
   push:
     branches: [main]
+  pull_request_target:
+    types: [closed]
+  # Manual kickstart: useful when a batch of Dependabot PRs is already
+  # rebased and waiting on CI, but main has moved (so they're BEHIND again)
+  # and no further merge events are pending to fire the auto-rebase. Run
+  # via `gh workflow run dependabot-rebase-on-main.yml` or the Actions UI.
+  workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: read
+  # pull-requests: write is required by `PUT /repos/{owner}/{repo}/pulls/{n}/update-branch`.
+  # `read` 403's with "Resource not accessible by integration". The previous
+  # version of this file had `read` and silently 403'd inside `|| true`, so
+  # every workflow run reported success while doing nothing.
+  pull-requests: write
 
 jobs:
   rebase:
+    # Run on push-to-main, on a merged PR targeting main, or when manually
+    # dispatched. Skip non-merged closes (PRs closed without merging don't
+    # change main).
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Update branch on every open Dependabot PR
@@ -37,12 +65,12 @@ jobs:
           fi
           for n in $numbers; do
             echo "Updating branch on PR #$n"
-            # update-branch is a no-op when the PR is already current with
-            # the base branch. `expected_head_sha=` skips the optimistic
-            # concurrency check; we tolerate the rare 422 (e.g. PR closed
+            # Omit expected_head_sha — the API defaults to the PR's current
+            # HEAD. The previous `-f expected_head_sha=` (empty string) form
+            # always 422'd, and `|| true` silently swallowed it, so the
+            # workflow looked successful while doing nothing.
+            #
+            # `|| true` is still kept to tolerate the rare 422 (e.g. PR closed
             # mid-loop) so one bad PR doesn't fail the whole job.
-            gh api "repos/$GH_REPO/pulls/$n/update-branch" \
-              -X PUT \
-              -f expected_head_sha= \
-              || true
+            gh api "repos/$GH_REPO/pulls/$n/update-branch" -X PUT || true
           done
