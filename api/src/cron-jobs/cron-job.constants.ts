@@ -185,6 +185,21 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'DMs lineup tiebreaker participants 24h and 1h before round deadline every 5 minutes',
     category: 'Notifications',
   },
+  LineupReminderService_checkVoteReminders: {
+    description:
+      'DMs lineup voters 24h and 1h before voting-phase deadline every 5 minutes',
+    category: 'Notifications',
+  },
+  LineupReminderService_checkSchedulingReminders: {
+    description:
+      'DMs lineup match members 24h and 1h before decided/scheduling-phase deadline every 5 minutes',
+    category: 'Notifications',
+  },
+  LineupReminderService_checkNominationReminders: {
+    description:
+      'DMs lineup nominators 24h and 1h before building-phase deadline every 5 minutes',
+    category: 'Notifications',
+  },
   StandalonePollReminderService_runReminders: {
     description:
       'DMs standalone scheduling poll non-voters 24h and 1h before phase deadline every 5 minutes',
