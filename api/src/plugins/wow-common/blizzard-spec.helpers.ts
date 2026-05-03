@@ -3,7 +3,13 @@
  * Extracted from blizzard.service.ts for file size compliance (ROK-719).
  */
 import type { InferredSpecialization } from './blizzard.constants';
-import { specToRole, inferClassicSpec } from './blizzard-character.helpers';
+import {
+  buildCharacterParams,
+  specToRole,
+  inferClassicSpec,
+} from './blizzard-character.helpers';
+
+type Logger = { debug: (msg: string) => void };
 
 /** No-spec fallback result. */
 export const NO_SPEC: InferredSpecialization = {
@@ -95,4 +101,34 @@ export function buildRetailSpecResult(
     role: specToRole(specName),
     talents: { format: 'retail', specName, classTalents, heroTalents },
   };
+}
+
+/** Fetch character specializations from the Blizzard API. */
+export async function fetchCharacterSpecializations(
+  name: string,
+  realm: string,
+  region: string,
+  characterClass: string,
+  apiNamespacePrefix: string | null,
+  token: string,
+  logger: Logger,
+): Promise<InferredSpecialization> {
+  try {
+    const { realmSlug, charName, namespace, baseUrl } = buildCharacterParams(
+      name,
+      realm,
+      region,
+      apiNamespacePrefix,
+    );
+    const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/specializations?namespace=${namespace}&locale=en_US`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return NO_SPEC;
+    const data = (await res.json()) as Record<string, unknown>;
+    return parseSpecData(data, characterClass);
+  } catch (err) {
+    logger.debug(`Failed to fetch specializations: ${err}`);
+    return NO_SPEC;
+  }
 }

@@ -4,15 +4,22 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
 import { IgdbController } from './igdb.controller';
 import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
 import { ItadService } from '../itad/itad.service';
 import { SettingsService } from '../settings/settings.service';
+import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
 import {
   GameActivityResponseSchema,
   GameNowPlayingResponseSchema,
 } from '@raid-ledger/contract';
+
+const PRICE_SYNC_QUEUE_PROVIDER = {
+  provide: getQueueToken(ITAD_PRICE_SYNC_QUEUE),
+  useValue: { add: jest.fn() },
+};
 
 function describeIgdbControllerActivityEndpoints() {
   const mockTopPlayers = [
@@ -63,6 +70,7 @@ function describeIgdbControllerActivityEndpoints() {
           { provide: ItadPriceService, useValue: {} },
           { provide: ItadService, useValue: {} },
           { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
         ],
       }).compile();
 
@@ -102,6 +110,7 @@ function describeIgdbControllerActivityEndpoints() {
           { provide: ItadPriceService, useValue: {} },
           { provide: ItadService, useValue: {} },
           { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
         ],
       }).compile();
 
@@ -129,6 +138,7 @@ function describeIgdbControllerActivityEndpoints() {
           { provide: ItadPriceService, useValue: {} },
           { provide: ItadService, useValue: {} },
           { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
         ],
       }).compile();
 
@@ -155,6 +165,7 @@ function describeIgdbControllerActivityEndpoints() {
           { provide: ItadPriceService, useValue: {} },
           { provide: ItadService, useValue: {} },
           { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
         ],
       }).compile();
 
@@ -188,6 +199,7 @@ function describeIgdbControllerActivityEndpoints() {
           { provide: ItadPriceService, useValue: {} },
           { provide: ItadService, useValue: {} },
           { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
         ],
       }).compile();
 
@@ -225,6 +237,7 @@ function describeIgdbControllerActivityEndpoints() {
           { provide: ItadPriceService, useValue: {} },
           { provide: ItadService, useValue: {} },
           { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
         ],
       }).compile();
 
@@ -295,6 +308,7 @@ function describeIgdbControllerActivityEndpoints() {
           { provide: ItadPriceService, useValue: {} },
           { provide: ItadService, useValue: {} },
           { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
         ],
       }).compile();
 
@@ -330,6 +344,7 @@ function describeIgdbControllerActivityEndpoints() {
           { provide: ItadPriceService, useValue: {} },
           { provide: ItadService, useValue: {} },
           { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
         ],
       }).compile();
 

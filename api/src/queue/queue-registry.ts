@@ -24,6 +24,7 @@ import { GAME_TASTE_RECOMPUTE_QUEUE } from '../game-taste/game-taste.constants';
 import { BENCH_PROMOTION_QUEUE } from '../events/bench-promotion.service';
 import { EVENT_PLANS_QUEUE } from '../events/event-plans.service';
 import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
+import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
 
 export const ALL_QUEUE_NAMES = [
   LINEUP_PHASE_QUEUE,
@@ -38,6 +39,7 @@ export const ALL_QUEUE_NAMES = [
   BENCH_PROMOTION_QUEUE,
   EVENT_PLANS_QUEUE,
   DISCORD_NOTIFICATION_QUEUE,
+  ITAD_PRICE_SYNC_QUEUE,
 ] as const;
 
 export type RegisteredQueueName = (typeof ALL_QUEUE_NAMES)[number];

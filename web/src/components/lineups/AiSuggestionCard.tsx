@@ -66,49 +66,60 @@ function OwnershipPill({ count, total }: { count: number; total: number }): JSX.
     );
 }
 
-/** Single suggestion card — cover + name + reasoning + ownership + action button. */
-export function AiSuggestionCard({
-    suggestion,
-    lineupId,
-    mode = 'nominate',
-    atCap = false,
+const ACTION_BTN_CLS =
+    'mt-auto px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-500 transition-colors disabled:opacity-50';
+
+function CardActions({
+    mode,
+    atCap,
+    isNominating,
+    onNominate,
     onPick,
-}: AiSuggestionCardProps): JSX.Element {
+}: {
+    mode: AiSuggestionCardMode;
+    atCap: boolean;
+    isNominating: boolean;
+    onNominate: () => void;
+    onPick: () => void;
+}): JSX.Element {
+    if (mode === 'nominate') {
+        return (
+            <button type="button" onClick={onNominate} disabled={atCap || isNominating} className={ACTION_BTN_CLS}>
+                {isNominating ? 'Nominating…' : atCap ? 'At cap' : 'Nominate'}
+            </button>
+        );
+    }
+    return (
+        <button type="button" onClick={onPick} className={ACTION_BTN_CLS}>
+            Pick
+        </button>
+    );
+}
+
+/** Single suggestion card — cover + name + reasoning + ownership + action button. */
+export function AiSuggestionCard(props: AiSuggestionCardProps): JSX.Element {
+    const { suggestion, lineupId, mode = 'nominate', atCap = false, onPick } = props;
     const nominate = useNominateGame();
     const isNominating = nominate.isPending && nominate.variables?.body.gameId === suggestion.gameId;
-
     const handleNominate = (): void => {
         nominate.mutate({ lineupId, body: { gameId: suggestion.gameId } });
     };
-
     const handlePick = (): void => {
         onPick?.(suggestion);
     };
-
     return (
         <div className="min-w-0 rounded-xl bg-panel border border-edge/50 overflow-hidden flex flex-col">
             <Cover src={suggestion.coverUrl} alt={suggestion.name} reasoning={suggestion.reasoning} />
             <div className="p-3 flex flex-col gap-2 flex-1">
                 <h3 className="text-sm font-medium text-foreground line-clamp-1">{suggestion.name}</h3>
                 <OwnershipPill count={suggestion.ownershipCount} total={suggestion.voterTotal} />
-                {mode === 'nominate' ? (
-                    <button
-                        type="button"
-                        onClick={handleNominate}
-                        disabled={atCap || isNominating}
-                        className="mt-auto px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-500 transition-colors disabled:opacity-50"
-                    >
-                        {isNominating ? 'Nominating…' : atCap ? 'At cap' : 'Nominate'}
-                    </button>
-                ) : (
-                    <button
-                        type="button"
-                        onClick={handlePick}
-                        className="mt-auto px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-500 transition-colors"
-                    >
-                        Pick
-                    </button>
-                )}
+                <CardActions
+                    mode={mode}
+                    atCap={atCap}
+                    isNominating={isNominating}
+                    onNominate={handleNominate}
+                    onPick={handlePick}
+                />
             </div>
         </div>
     );

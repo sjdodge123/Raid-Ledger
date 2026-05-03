@@ -850,7 +850,7 @@ function describeProfessionSync() {
     expect(reloaded.professions).toEqual(prior);
   });
 
-  it('persists empty arrays when service returns the 404-graceful payload (AC #2 edge case)', async () => {
+  it('persists empty arrays when adapter returns non-null empty (defensive contract test)', async () => {
     const empty = {
       primary: [],
       secondary: [],

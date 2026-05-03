@@ -5,7 +5,7 @@ import { CharacterCardCompact } from '../../components/characters/character-card
 import { RoleIcon } from '../../components/shared/RoleIcon';
 import { PluginSlot } from '../../plugins';
 import { toast } from '../../lib/toast';
-import type { EventResponseDto, EventRosterDto } from '@raid-ledger/contract';
+import type { EventResponseDto, EventRosterDto, SignupCharacterDto } from '@raid-ledger/contract';
 import { alphabetical } from './event-detail-helpers';
 
 interface SignupItem {
@@ -24,21 +24,7 @@ interface SignupItem {
         customAvatarUrl?: string | null;
         characters?: Array<{ gameId: string | number; name?: string; avatarUrl: string | null }>;
     };
-    character?: {
-        id: string;
-        name: string;
-        avatarUrl: string | null;
-        faction?: string | null;
-        level?: number | null;
-        race?: string | null;
-        class: string | null;
-        spec: string | null;
-        role: string | null;
-        itemLevel: number | null;
-        isMain?: boolean;
-        /** ROK-1130 — for the inline ProfessionBadges meta pills. */
-        professions?: import('@raid-ledger/contract').CharacterProfessionsDto | null;
-    } | null;
+    character?: SignupCharacterDto | null;
 }
 
 interface EventDetailRosterProps {

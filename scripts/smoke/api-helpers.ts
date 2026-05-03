@@ -7,7 +7,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { resolve as resolvePath } from 'node:path';
+import { TOKEN_FILE_PATH } from '../auth-paths';
 
 export const API_BASE = process.env.API_URL || 'http://localhost:3000';
 
@@ -19,7 +19,12 @@ export const API_BASE = process.env.API_URL || 'http://localhost:3000';
 // each Playwright worker can read the cached token instead of hammering
 // /auth/local in parallel (the rate limiter rejected the fan-out and caused
 // flaky smoke runs). Falls back to the live login if the file is absent.
-const TOKEN_FILE_PATH = resolvePath(__dirname, '..', '.auth', 'admin-token.json');
+//
+// ROK-1149: tokens older than ~50 min are treated as missing (JWT default
+// expiry is 1h). In practice this is inert — CI uses a fresh `.auth/` per
+// run and a single Playwright invocation rarely exceeds 12 min — but it
+// guards re-runs that reuse a stale on-disk token in long local sessions.
+const TOKEN_MAX_AGE_MS = 50 * 60 * 1000;
 
 let _cachedToken: string | null = null;
 let _tokenPromise: Promise<string> | null = null;
@@ -27,11 +32,23 @@ let _tokenPromise: Promise<string> | null = null;
 async function readTokenFromDisk(): Promise<string | null> {
     try {
         const raw = await readFile(TOKEN_FILE_PATH, 'utf8');
-        const parsed = JSON.parse(raw) as { access_token?: unknown };
-        if (typeof parsed.access_token === 'string' && parsed.access_token) {
-            return parsed.access_token;
+        const parsed = JSON.parse(raw) as {
+            access_token?: unknown;
+            issued_at?: unknown;
+        };
+        if (typeof parsed.access_token !== 'string' || !parsed.access_token) {
+            return null;
         }
-        return null;
+        if (typeof parsed.issued_at === 'string') {
+            const issuedMs = Date.parse(parsed.issued_at);
+            if (
+                !Number.isNaN(issuedMs) &&
+                Date.now() - issuedMs > TOKEN_MAX_AGE_MS
+            ) {
+                return null;
+            }
+        }
+        return parsed.access_token;
     } catch {
         return null;
     }

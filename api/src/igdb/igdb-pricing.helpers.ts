@@ -1,13 +1,18 @@
 /**
- * ITAD pricing helpers for the IGDB controller (ROK-419).
+ * ITAD pricing helpers for the IGDB controller (ROK-419, ROK-1047).
  * Maps ITAD overview data to the ItadGamePricing contract schema.
+ *
+ * ROK-1047: the batch path no longer blocks on ITAD. Cached rows return
+ * immediately; uncached / stale rows return null and are enqueued for
+ * an out-of-band fetch via the optional `enqueueSync` callback.
  */
-import { eq, inArray, isNotNull, and } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadPriceService } from '../itad/itad-price.service';
 import type { ItadGamePricingDto, DealQuality } from '@raid-ledger/contract';
 import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
+import { PRICING_STALE_MS } from '../itad/itad-price-sync.constants';
 
 /** Thresholds for deal quality classification */
 const GREAT_DEAL_THRESHOLD = 0.1;
@@ -45,31 +50,47 @@ async function lookupItadGameId(
 }
 
 /**
- * Fetch and map pricing data for multiple games in one batch.
- * Uses DB cache for games with synced pricing (ROK-854), falls
- * back to ITAD API for uncached games.
+ * Fetch and map pricing data for multiple games in one batch (ROK-1047).
+ *
+ * Returns cached prices immediately. Uncached or stale rows return
+ * `null` and are enqueued via `enqueueSync` for out-of-band ITAD fetch.
+ * The frontend polls until the cache backfills.
+ *
+ * `itadPriceService` is unused by the batch path now but kept on the
+ * signature so callers don't need to change wiring; prefer the
+ * 4-arg form in new code.
  */
 export async function fetchBatchGamePricing(
   db: PostgresJsDatabase<typeof schema>,
-  itadPriceService: ItadPriceService,
+  _itadPriceService: ItadPriceService | null,
   gameIds: number[],
+  enqueueSync?: (gameId: number) => void,
 ): Promise<Record<string, ItadGamePricingDto | null>> {
   if (gameIds.length === 0) return {};
 
   const idMap = await lookupBatchItadIds(db, gameIds);
   const cached = await lookupCachedPricing(db, gameIds);
-  const cachedIds = new Set(cached.map((r) => r.id));
-  const uncachedIds = gameIds.filter((id) => !cachedIds.has(id));
-  const uncachedItadIds = uncachedIds
-    .map((id) => idMap[id])
-    .filter(Boolean) as string[];
+  const freshCached = cached.filter((r) => !isStale(r.itadPriceUpdatedAt));
+  const freshIds = new Set(freshCached.map((r) => r.id));
 
-  const apiEntries =
-    uncachedItadIds.length > 0
-      ? await itadPriceService.getOverviewBatch(uncachedItadIds)
-      : [];
+  if (enqueueSync) {
+    for (const gid of gameIds) {
+      if (freshIds.has(gid)) continue;
+      if (!idMap[gid]) continue; // no ITAD ID — nothing to fetch
+      enqueueSync(gid);
+    }
+  }
 
-  return mergeBatchResults(gameIds, idMap, cached, apiEntries);
+  return mergeBatchResults(gameIds, freshCached);
+}
+
+/** A cached row is stale if older than PRICING_STALE_MS. */
+function isStale(updatedAt: Date | string | null): boolean {
+  if (!updatedAt) return true;
+  const t =
+    typeof updatedAt === 'string' ? Date.parse(updatedAt) : updatedAt.getTime();
+  if (Number.isNaN(t)) return true;
+  return Date.now() - t > PRICING_STALE_MS;
 }
 
 /** Shape of a cached pricing row from the DB. */
@@ -81,6 +102,7 @@ interface DbPricingRow {
   itadCurrentUrl: string | null;
   itadLowestPrice: string | null;
   itadLowestCut: number | null;
+  itadPriceUpdatedAt: Date | string | null;
 }
 
 /** Look up ITAD game IDs for multiple games in a single query. */
@@ -98,12 +120,15 @@ async function lookupBatchItadIds(
   return map;
 }
 
-/** Query DB for games with cached ITAD pricing data (ROK-854). */
+/**
+ * Query DB for games with cached ITAD pricing data (ROK-854, ROK-1047).
+ * Includes the updated_at timestamp so the caller can detect stale rows.
+ */
 async function lookupCachedPricing(
   db: PostgresJsDatabase<typeof schema>,
   gameIds: number[],
-): Promise<(DbPricingRow & { id: number })[]> {
-  return db
+): Promise<DbPricingRow[]> {
+  const rows = await db
     .select({
       id: schema.games.id,
       itadCurrentPrice: schema.games.itadCurrentPrice,
@@ -112,35 +137,27 @@ async function lookupCachedPricing(
       itadCurrentUrl: schema.games.itadCurrentUrl,
       itadLowestPrice: schema.games.itadLowestPrice,
       itadLowestCut: schema.games.itadLowestCut,
+      itadPriceUpdatedAt: schema.games.itadPriceUpdatedAt,
     })
     .from(schema.games)
-    .where(
-      and(
-        inArray(schema.games.id, gameIds),
-        isNotNull(schema.games.itadPriceUpdatedAt),
-      ),
-    );
+    .where(inArray(schema.games.id, gameIds));
+  return rows.filter((r) => r.itadPriceUpdatedAt != null);
 }
 
-/** Merge cached DB rows and ITAD API entries into a single result. */
+/**
+ * Build the response map from fresh cached DB rows. Uncached or stale
+ * games map to null — frontend treats null as "pending fetch" and polls
+ * (ROK-1047).
+ */
 function mergeBatchResults(
   gameIds: number[],
-  idMap: Record<number, string | null>,
-  cached: (DbPricingRow & { id: number })[],
-  apiEntries: ItadOverviewGameEntry[],
+  cached: DbPricingRow[],
 ): Record<string, ItadGamePricingDto | null> {
   const cacheMap = new Map(cached.map((r) => [r.id, r]));
-  const entryMap = new Map(apiEntries.map((e) => [e.id, e]));
   const result: Record<string, ItadGamePricingDto | null> = {};
   for (const gid of gameIds) {
     const cachedRow = cacheMap.get(gid);
-    if (cachedRow) {
-      result[String(gid)] = mapDbRowToPricing(cachedRow);
-    } else {
-      const itadId = idMap[gid];
-      const entry = itadId ? entryMap.get(itadId) : null;
-      result[String(gid)] = entry ? mapOverviewToPricing(entry) : null;
-    }
+    result[String(gid)] = cachedRow ? mapDbRowToPricing(cachedRow) : null;
   }
   return result;
 }

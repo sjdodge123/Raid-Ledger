@@ -48,6 +48,57 @@ function SectionHeader(): JSX.Element {
     );
 }
 
+interface PersonalSuggestionsState {
+    aiAvailable: boolean;
+    isLoading: boolean;
+    isUnavailable: boolean;
+    isError: boolean;
+    suggestions: AiSuggestionDto[];
+}
+
+function useAiSuggestionsForPersonal(lineupId: number): PersonalSuggestionsState {
+    const aiAvailable = useAiSuggestionsAvailable();
+    const query = useAiSuggestions(lineupId, { personalize: true, enabled: aiAvailable });
+    const result = query.data;
+    const isUnavailable = result?.kind === 'unavailable';
+    const suggestions =
+        result && result.kind !== 'unavailable' ? result.data.suggestions : [];
+    return {
+        aiAvailable,
+        isLoading: query.isLoading,
+        isUnavailable,
+        isError: query.isError,
+        suggestions,
+    };
+}
+
+function SuggestionsGrid({
+    suggestions,
+    lineupId,
+    onPickSuggestion,
+}: {
+    suggestions: AiSuggestionDto[];
+    lineupId: number;
+    onPickSuggestion: (suggestion: AiSuggestionDto) => void;
+}): JSX.Element {
+    return (
+        <div
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-2"
+            data-testid="personal-suggestions-grid"
+        >
+            {suggestions.map((s) => (
+                <AiSuggestionCard
+                    key={s.gameId}
+                    suggestion={s}
+                    lineupId={lineupId}
+                    mode="pick"
+                    onPick={onPickSuggestion}
+                />
+            ))}
+        </div>
+    );
+}
+
 export function PersonalSuggestionsRow({
     lineupId,
     onPickSuggestion,
@@ -56,49 +107,26 @@ export function PersonalSuggestionsRow({
     // disabled the suggestions feature, render nothing — no header, no
     // skeleton, no banner. The query call below is also gated via the
     // shared `enabled` flag inside useAiSuggestions, so it never fires.
-    const aiAvailable = useAiSuggestionsAvailable();
-    const query = useAiSuggestions(lineupId, {
-        personalize: true,
-        enabled: aiAvailable,
-    });
-    const result = query.data;
-    const isUnavailable = result?.kind === 'unavailable';
-    const isError = query.isError;
-    const suggestions =
-        result && result.kind !== 'unavailable' ? result.data.suggestions : [];
+    const { aiAvailable, isLoading, isUnavailable, isError, suggestions } =
+        useAiSuggestionsForPersonal(lineupId);
 
     if (!aiAvailable) return null;
-
     // Suppress the section entirely on empty success — keeps the modal
     // tidy when the LLM had no candidates to recommend.
-    if (!query.isLoading && !isUnavailable && !isError && suggestions.length === 0) {
+    if (!isLoading && !isUnavailable && !isError && suggestions.length === 0) {
         return null;
     }
-
     return (
         <section className="space-y-2 mb-3" aria-label="Suggested for you">
             <SectionHeader />
-            <AiStatusBanner
-                isLoading={query.isLoading}
-                isUnavailable={isUnavailable}
-                isError={isError}
-            />
-            {query.isLoading && <SuggestionSkeletons />}
+            <AiStatusBanner isLoading={isLoading} isUnavailable={isUnavailable} isError={isError} />
+            {isLoading && <SuggestionSkeletons />}
             {suggestions.length > 0 && (
-                <div
-                    className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-2"
-                    data-testid="personal-suggestions-grid"
-                >
-                    {suggestions.map((s) => (
-                        <AiSuggestionCard
-                            key={s.gameId}
-                            suggestion={s}
-                            lineupId={lineupId}
-                            mode="pick"
-                            onPick={onPickSuggestion}
-                        />
-                    ))}
-                </div>
+                <SuggestionsGrid
+                    suggestions={suggestions}
+                    lineupId={lineupId}
+                    onPickSuggestion={onPickSuggestion}
+                />
             )}
         </section>
     );

@@ -1,14 +1,20 @@
 /**
- * Batch pricing hook for the discover page (ROK-800).
- * Fetches ITAD pricing for all visible game IDs, chunking into
- * batches of 100 to respect the backend limit.
+ * Batch pricing hook for the discover page (ROK-800, ROK-1047).
+ *
+ * Fetches ITAD pricing for all visible game IDs in batches of 100.
+ * The backend (ROK-1047) returns cached prices immediately; uncached or
+ * stale games come back as `null` while the backend enqueues a fetch.
+ * When the response contains any nulls, this hook polls every 60s so
+ * the UI fills in as the cache backfills, without requiring a manual
+ * refresh.
  */
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import type { ItadGamePricingDto } from '@raid-ledger/contract';
+import type { ItadGamePricingDto, ItadBatchPricingResponseDto } from '@raid-ledger/contract';
 import { getGamePricingBatch } from '../lib/api-client';
 
 const BATCH_SIZE = 100;
+const POLL_INTERVAL_MS = 60_000;
 
 /**
  * Fetch batch pricing for an array of game IDs.
@@ -27,6 +33,8 @@ export function useGamesPricingBatch(
             queryFn: () => getGamePricingBatch(chunk),
             enabled: chunk.length > 0,
             staleTime: 1000 * 60 * 30,
+            refetchInterval: (query: { state: { data?: ItadBatchPricingResponseDto } }) =>
+                hasPendingPrices(query.state.data) ? POLL_INTERVAL_MS : false,
         })),
     });
 
@@ -40,6 +48,15 @@ export function useGamesPricingBatch(
         }
         return map;
     }, [results]);
+}
+
+/** True if the response contains any null entries (fetch still pending). */
+function hasPendingPrices(data: ItadBatchPricingResponseDto | undefined): boolean {
+    if (!data?.data) return false;
+    for (const value of Object.values(data.data)) {
+        if (value === null) return true;
+    }
+    return false;
 }
 
 /** Deduplicate, filter, and sort IDs for stable query keys. */

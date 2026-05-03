@@ -119,8 +119,8 @@ run_lint() {
 }
 
 run_unit_tests() {
-  npm run test:cov -w api -- --passWithNoTests
-  (cd "$REPO_ROOT/web" && npx vitest run --coverage)
+  npm run test:cov -w api -- --passWithNoTests \
+    && (cd "$REPO_ROOT/web" && npx vitest run --coverage)
 }
 
 check_backup_prereqs() {

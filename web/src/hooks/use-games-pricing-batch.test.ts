@@ -119,4 +119,90 @@ describe('useGamesPricingBatch', () => {
         expect(mockGetBatch).toHaveBeenCalledWith(chunk1);
         expect(mockGetBatch).toHaveBeenCalledWith(chunk2);
     });
+
+    // ─── ROK-1047: refetch when nulls present ────────────────────────────────
+
+    it('refetches every 60s while response contains nulls (ROK-1047)', async () => {
+        vi.useFakeTimers();
+        try {
+            // First fetch returns nulls — should schedule a refetch.
+            mockGetBatch.mockResolvedValueOnce({ data: { '1': null } });
+            // Second fetch (after polling tick) returns real data — should stop.
+            mockGetBatch.mockResolvedValueOnce({
+                data: {
+                    '1': {
+                        currentBest: {
+                            shop: 'Steam',
+                            url: 'https://steam.com',
+                            price: 9.99,
+                            regularPrice: 19.99,
+                            discount: 50,
+                        },
+                        stores: [],
+                        historyLow: null,
+                        dealQuality: 'modest',
+                        currency: 'USD',
+                        itadUrl: null,
+                    },
+                },
+            });
+
+            renderHook(() => useGamesPricingBatch([1]), {
+                wrapper: createWrapper(),
+            });
+
+            // Wait for the first fetch to land.
+            await vi.waitFor(() => {
+                expect(mockGetBatch).toHaveBeenCalledTimes(1);
+            });
+
+            // Advance 60s — refetchInterval fires because data contained a null.
+            await vi.advanceTimersByTimeAsync(60_000);
+
+            await vi.waitFor(() => {
+                expect(mockGetBatch).toHaveBeenCalledTimes(2);
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('does not refetch when all entries are non-null (ROK-1047)', async () => {
+        vi.useFakeTimers();
+        try {
+            mockGetBatch.mockResolvedValueOnce({
+                data: {
+                    '1': {
+                        currentBest: {
+                            shop: 'Steam',
+                            url: 'https://steam.com',
+                            price: 9.99,
+                            regularPrice: 19.99,
+                            discount: 50,
+                        },
+                        stores: [],
+                        historyLow: null,
+                        dealQuality: 'modest',
+                        currency: 'USD',
+                        itadUrl: null,
+                    },
+                },
+            });
+
+            renderHook(() => useGamesPricingBatch([1]), {
+                wrapper: createWrapper(),
+            });
+
+            await vi.waitFor(() => {
+                expect(mockGetBatch).toHaveBeenCalledTimes(1);
+            });
+
+            // Advance 5 minutes — no extra fetches because no nulls.
+            await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+            expect(mockGetBatch).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

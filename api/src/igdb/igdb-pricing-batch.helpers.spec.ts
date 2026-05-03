@@ -1,71 +1,36 @@
 /**
- * Unit tests for fetchBatchGamePricing (ROK-800).
- * Covers batch ITAD ID lookup, batch overview fetch, mapping,
- * and graceful degradation for missing entries.
+ * Unit tests for fetchBatchGamePricing.
+ * ROK-800: original cache + ITAD-fallback semantics.
+ * ROK-1047: ITAD is no longer called synchronously; uncached and stale
+ *   rows return null, and the optional enqueue callback is invoked once
+ *   per uncached game with an ITAD id.
  */
 import {
   fetchBatchGamePricing,
   mapDbRowToPricing,
 } from './igdb-pricing.helpers';
 import type { ItadPriceService } from '../itad/itad-price.service';
-import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
-
-// ─── Fixtures ────────────────────────────────────────────────────────────────
-
-const ENTRY_1: ItadOverviewGameEntry = {
-  id: 'itad-game-1',
-  current: {
-    shop: { id: 61, name: 'Steam' },
-    price: { amount: 29.99, amountInt: 2999, currency: 'USD' },
-    regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-    cut: 50,
-    url: 'https://store.steampowered.com/app/111',
-  },
-  lowest: {
-    shop: { id: 61, name: 'Steam' },
-    price: { amount: 14.99, amountInt: 1499, currency: 'USD' },
-    regular: { amount: 59.99, amountInt: 5999, currency: 'USD' },
-    cut: 75,
-    timestamp: '2024-11-25T00:00:00Z',
-  },
-  bundled: 0,
-  urls: { game: 'https://isthereanydeal.com/game/game1/' },
-};
-
-const ENTRY_2: ItadOverviewGameEntry = {
-  id: 'itad-game-2',
-  current: {
-    shop: { id: 35, name: 'GOG' },
-    price: { amount: 9.99, amountInt: 999, currency: 'USD' },
-    regular: { amount: 19.99, amountInt: 1999, currency: 'USD' },
-    cut: 50,
-    url: 'https://gog.com/game/222',
-  },
-  lowest: null,
-  bundled: 0,
-  urls: { game: 'https://isthereanydeal.com/game/game2/' },
-};
+import { PRICING_STALE_MS } from '../itad/itad-price-sync.constants';
 
 // ─── Mock helpers ────────────────────────────────────────────────────────────
 
 type ItadIdRow = { id: number; itadGameId: string | null };
 
-/**
- * Build a DB mock that returns itad ID rows from batch lookup,
- * then empty cache rows from the second query.
- */
-function buildBatchDb(rows: ItadIdRow[]): Record<string, jest.Mock> {
-  const db: Record<string, jest.Mock> = {};
-  db.select = jest.fn().mockReturnThis();
-  db.from = jest.fn().mockReturnThis();
-  db.where = jest.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce([]); // no cached pricing
-  return db;
+interface CachedPricingRow {
+  id: number;
+  itadCurrentPrice: string | null;
+  itadCurrentCut: number | null;
+  itadCurrentShop: string | null;
+  itadCurrentUrl: string | null;
+  itadLowestPrice: string | null;
+  itadLowestCut: number | null;
+  itadPriceUpdatedAt: Date | string | null;
 }
 
 /** Build a DB mock supporting two sequential select chains. */
-function buildCacheDb(
+function buildDb(
   idRows: ItadIdRow[],
-  cacheRows: CachedPricingRow[],
+  cacheRows: CachedPricingRow[] = [],
 ): Record<string, jest.Mock> {
   const db: Record<string, jest.Mock> = {};
   db.select = jest.fn().mockReturnThis();
@@ -77,152 +42,230 @@ function buildCacheDb(
   return db;
 }
 
-/** Shape of a cached pricing row from the DB. */
-interface CachedPricingRow {
-  id: number;
-  itadCurrentPrice: string | null;
-  itadCurrentCut: number | null;
-  itadCurrentShop: string | null;
-  itadCurrentUrl: string | null;
-  itadLowestPrice: string | null;
-  itadLowestCut: number | null;
-  itadPriceUpdatedAt: Date;
-}
+const itadStub: Pick<ItadPriceService, 'getOverviewBatch'> = {
+  getOverviewBatch: jest.fn().mockResolvedValue([]),
+};
 
-/** Build a price service with getOverviewBatch support. */
-function buildBatchPriceService(
-  entries: ItadOverviewGameEntry[],
-): Pick<ItadPriceService, 'getOverviewBatch'> {
-  return {
-    getOverviewBatch: jest.fn().mockResolvedValue(entries),
-  };
-}
+// ─── fetchBatchGamePricing — ROK-1047 async-fetch behavior ──────────────────
 
-// ─── fetchBatchGamePricing — empty / null paths ─────────────────────────────
+describe('fetchBatchGamePricing — ROK-1047', () => {
+  beforeEach(() => jest.clearAllMocks());
 
-describe('fetchBatchGamePricing — empty/null paths', () => {
   it('returns empty object when gameIds is empty', async () => {
-    const db = buildBatchDb([]);
-    const svc = buildBatchPriceService([]);
+    const db = buildDb([]);
+    const enqueue = jest.fn();
 
-    const result = await fetchBatchGamePricing(db as never, svc as never, []);
+    const result = await fetchBatchGamePricing(
+      db as never,
+      itadStub as never,
+      [],
+      enqueue,
+    );
 
     expect(result).toEqual({});
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
-  it('returns null for games with no ITAD ID', async () => {
-    const db = buildBatchDb([{ id: 10, itadGameId: null }]);
-    const svc = buildBatchPriceService([]);
+  it('does NOT call getOverviewBatch on cache miss', async () => {
+    const db = buildDb([{ id: 1, itadGameId: 'itad-1' }], []);
+    const overviewBatch = jest.fn();
 
-    const result = await fetchBatchGamePricing(db as never, svc as never, [10]);
+    await fetchBatchGamePricing(
+      db as never,
+      { getOverviewBatch: overviewBatch } as never,
+      [1],
+    );
 
-    expect(result['10']).toBeNull();
+    expect(overviewBatch).not.toHaveBeenCalled();
   });
 
-  it('returns null for games not found in DB', async () => {
-    const db = buildBatchDb([]);
-    const svc = buildBatchPriceService([]);
+  it('returns null for uncached games', async () => {
+    const db = buildDb([{ id: 1, itadGameId: 'itad-1' }], []);
 
     const result = await fetchBatchGamePricing(
       db as never,
-      svc as never,
-      [999],
+      itadStub as never,
+      [1],
     );
 
-    expect(result['999']).toBeNull();
+    expect(result['1']).toBeNull();
   });
 
-  it('does not call getOverviewBatch when no ITAD IDs exist', async () => {
-    const db = buildBatchDb([{ id: 10, itadGameId: null }]);
-    const svc = buildBatchPriceService([]);
+  it('calls enqueue once per uncached game with an ITAD id', async () => {
+    const db = buildDb(
+      [
+        { id: 1, itadGameId: 'itad-1' },
+        { id: 2, itadGameId: 'itad-2' },
+      ],
+      [],
+    );
+    const enqueue = jest.fn();
 
-    await fetchBatchGamePricing(db as never, svc as never, [10]);
+    await fetchBatchGamePricing(
+      db as never,
+      itadStub as never,
+      [1, 2],
+      enqueue,
+    );
 
-    expect(svc.getOverviewBatch).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    expect(enqueue).toHaveBeenCalledWith(1);
+    expect(enqueue).toHaveBeenCalledWith(2);
   });
-});
 
-// ─── fetchBatchGamePricing — batch fetch ────────────────────────────────────
+  it('does not enqueue games without ITAD id', async () => {
+    const db = buildDb([{ id: 1, itadGameId: null }], []);
+    const enqueue = jest.fn();
 
-describe('fetchBatchGamePricing — batch fetch', () => {
-  it('returns pricing for games with ITAD IDs', async () => {
-    const db = buildBatchDb([{ id: 1, itadGameId: 'itad-game-1' }]);
-    const svc = buildBatchPriceService([ENTRY_1]);
+    const result = await fetchBatchGamePricing(
+      db as never,
+      itadStub as never,
+      [1],
+      enqueue,
+    );
 
-    const result = await fetchBatchGamePricing(db as never, svc as never, [1]);
+    expect(result['1']).toBeNull();
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('enqueues stale cache rows (older than PRICING_STALE_MS)', async () => {
+    const stale = new Date(Date.now() - PRICING_STALE_MS - 1000);
+    const db = buildDb(
+      [{ id: 1, itadGameId: 'itad-1' }],
+      [
+        {
+          id: 1,
+          itadCurrentPrice: '9.99',
+          itadCurrentCut: 50,
+          itadCurrentShop: 'Steam',
+          itadCurrentUrl: 'https://steam.com',
+          itadLowestPrice: '4.99',
+          itadLowestCut: 75,
+          itadPriceUpdatedAt: stale,
+        },
+      ],
+    );
+    const enqueue = jest.fn();
+
+    const result = await fetchBatchGamePricing(
+      db as never,
+      itadStub as never,
+      [1],
+      enqueue,
+    );
+
+    expect(result['1']).toBeNull();
+    expect(enqueue).toHaveBeenCalledWith(1);
+  });
+
+  it('does not enqueue when row is fresh (within PRICING_STALE_MS)', async () => {
+    const fresh = new Date();
+    const db = buildDb(
+      [{ id: 1, itadGameId: 'itad-1' }],
+      [
+        {
+          id: 1,
+          itadCurrentPrice: '9.99',
+          itadCurrentCut: 50,
+          itadCurrentShop: 'Steam',
+          itadCurrentUrl: 'https://steam.com',
+          itadLowestPrice: null,
+          itadLowestCut: null,
+          itadPriceUpdatedAt: fresh,
+        },
+      ],
+    );
+    const enqueue = jest.fn();
+
+    const result = await fetchBatchGamePricing(
+      db as never,
+      itadStub as never,
+      [1],
+      enqueue,
+    );
 
     expect(result['1']).toMatchObject({
-      currentBest: expect.objectContaining({ shop: 'Steam' }),
-      currency: 'USD',
+      currentBest: expect.objectContaining({ price: 9.99 }),
     });
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
-  it('maps multiple games in a single batch', async () => {
-    const db = buildBatchDb([
-      { id: 1, itadGameId: 'itad-game-1' },
-      { id: 2, itadGameId: 'itad-game-2' },
-    ]);
-    const svc = buildBatchPriceService([ENTRY_1, ENTRY_2]);
+  it('omitting enqueue callback is allowed (no throw)', async () => {
+    const db = buildDb([{ id: 1, itadGameId: 'itad-1' }], []);
 
     const result = await fetchBatchGamePricing(
       db as never,
-      svc as never,
-      [1, 2],
+      itadStub as never,
+      [1],
     );
 
-    expect(result['1']).toBeTruthy();
-    expect(result['2']).toBeTruthy();
-    expect(result['1']!.currentBest!.shop).toBe('Steam');
-    expect(result['2']!.currentBest!.shop).toBe('GOG');
+    expect(result['1']).toBeNull();
   });
 
-  it('passes ITAD game IDs to getOverviewBatch', async () => {
-    const db = buildBatchDb([
-      { id: 1, itadGameId: 'itad-game-1' },
-      { id: 2, itadGameId: 'itad-game-2' },
-    ]);
-    const svc = buildBatchPriceService([ENTRY_1, ENTRY_2]);
-
-    await fetchBatchGamePricing(db as never, svc as never, [1, 2]);
-
-    expect(svc.getOverviewBatch).toHaveBeenCalledWith(
-      expect.arrayContaining(['itad-game-1', 'itad-game-2']),
+  it('handles mixed: cached fresh, uncached, no-itad — only uncached-with-itad enqueues', async () => {
+    const fresh = new Date();
+    const db = buildDb(
+      [
+        { id: 1, itadGameId: 'itad-1' },
+        { id: 2, itadGameId: 'itad-2' },
+        { id: 3, itadGameId: null },
+      ],
+      [
+        {
+          id: 1,
+          itadCurrentPrice: '9.99',
+          itadCurrentCut: 50,
+          itadCurrentShop: 'Steam',
+          itadCurrentUrl: 'https://steam.com',
+          itadLowestPrice: null,
+          itadLowestCut: null,
+          itadPriceUpdatedAt: fresh,
+        },
+      ],
     );
-  });
-
-  it('handles mixed: some games with ITAD IDs, some without', async () => {
-    const db = buildBatchDb([
-      { id: 1, itadGameId: 'itad-game-1' },
-      { id: 2, itadGameId: null },
-    ]);
-    const svc = buildBatchPriceService([ENTRY_1]);
+    const enqueue = jest.fn();
 
     const result = await fetchBatchGamePricing(
       db as never,
-      svc as never,
+      itadStub as never,
       [1, 2, 3],
+      enqueue,
     );
 
     expect(result['1']).toBeTruthy();
     expect(result['2']).toBeNull();
     expect(result['3']).toBeNull();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith(2);
   });
 
-  it('returns null for game whose ITAD ID has no overview data', async () => {
-    const db = buildBatchDb([
-      { id: 1, itadGameId: 'itad-game-1' },
-      { id: 2, itadGameId: 'itad-missing' },
-    ]);
-    const svc = buildBatchPriceService([ENTRY_1]);
+  it('accepts ISO-string itadPriceUpdatedAt as fresh', async () => {
+    const db = buildDb(
+      [{ id: 1, itadGameId: 'itad-1' }],
+      [
+        {
+          id: 1,
+          itadCurrentPrice: '9.99',
+          itadCurrentCut: 50,
+          itadCurrentShop: 'Steam',
+          itadCurrentUrl: 'https://steam.com',
+          itadLowestPrice: null,
+          itadLowestCut: null,
+          itadPriceUpdatedAt: new Date().toISOString(),
+        },
+      ],
+    );
+    const enqueue = jest.fn();
 
     const result = await fetchBatchGamePricing(
       db as never,
-      svc as never,
-      [1, 2],
+      itadStub as never,
+      [1],
+      enqueue,
     );
 
     expect(result['1']).toBeTruthy();
-    expect(result['2']).toBeNull();
+    expect(enqueue).not.toHaveBeenCalled();
   });
 });
 
@@ -391,88 +434,5 @@ describe('mapDbRowToPricing — adversarial edge cases', () => {
     });
 
     expect(result!.currentBest!.discount).toBe(0);
-  });
-});
-
-// ─── fetchBatchGamePricing — DB cache path ──────────────────────────────────
-
-describe('fetchBatchGamePricing — DB cache path', () => {
-  it('reads from DB cache for games with itad_price_updated_at', async () => {
-    const cachedRow: CachedPricingRow = {
-      id: 1,
-      itadCurrentPrice: '9.99',
-      itadCurrentCut: 75,
-      itadCurrentShop: 'Steam',
-      itadCurrentUrl: 'https://steam.com',
-      itadLowestPrice: '4.99',
-      itadLowestCut: 88,
-      itadPriceUpdatedAt: new Date(),
-    };
-    const db = buildCacheDb(
-      [{ id: 1, itadGameId: 'itad-game-1' }],
-      [cachedRow],
-    );
-    const svc = buildBatchPriceService([]);
-
-    const result = await fetchBatchGamePricing(db as never, svc as never, [1]);
-
-    expect(result['1']).toMatchObject({
-      currentBest: expect.objectContaining({ price: 9.99 }),
-    });
-    // Should NOT call ITAD API for cached games
-    expect(svc.getOverviewBatch).not.toHaveBeenCalled();
-  });
-
-  it('falls back to ITAD API for uncached games', async () => {
-    const db = buildCacheDb(
-      [
-        { id: 1, itadGameId: 'itad-game-1' },
-        { id: 2, itadGameId: 'itad-game-2' },
-      ],
-      [], // no cached data
-    );
-    const svc = buildBatchPriceService([ENTRY_1, ENTRY_2]);
-
-    const result = await fetchBatchGamePricing(
-      db as never,
-      svc as never,
-      [1, 2],
-    );
-
-    expect(result['1']!.currentBest!.shop).toBe('Steam');
-    expect(result['2']!.currentBest!.shop).toBe('GOG');
-    expect(svc.getOverviewBatch).toHaveBeenCalled();
-  });
-
-  it('merges cached and API results for mixed games', async () => {
-    const cachedRow: CachedPricingRow = {
-      id: 1,
-      itadCurrentPrice: '9.99',
-      itadCurrentCut: 75,
-      itadCurrentShop: 'Steam',
-      itadCurrentUrl: 'https://steam.com',
-      itadLowestPrice: null,
-      itadLowestCut: null,
-      itadPriceUpdatedAt: new Date(),
-    };
-    const db = buildCacheDb(
-      [
-        { id: 1, itadGameId: 'itad-game-1' },
-        { id: 2, itadGameId: 'itad-game-2' },
-      ],
-      [cachedRow], // only game 1 cached
-    );
-    const svc = buildBatchPriceService([ENTRY_2]);
-
-    const result = await fetchBatchGamePricing(
-      db as never,
-      svc as never,
-      [1, 2],
-    );
-
-    // Game 1 from cache
-    expect(result['1']!.currentBest!.price).toBe(9.99);
-    // Game 2 from API
-    expect(result['2']!.currentBest!.shop).toBe('GOG');
   });
 });

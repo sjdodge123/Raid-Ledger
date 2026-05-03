@@ -38,6 +38,7 @@ scripts/*
 !scripts/setup-branch-protection.sh
 !scripts/smoke/
 !scripts/playwright-global-setup.ts
+!scripts/auth-paths.ts
 !scripts/launch-discord.sh
 !/api/scripts/
 implementation_plan.md

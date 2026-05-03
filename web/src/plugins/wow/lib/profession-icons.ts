@@ -24,6 +24,7 @@ const WOW_PROFESSION_ICONS: Record<string, string> = {
   'dye-crafting': 'https://render.worldofwarcraft.com/us/icons/56/housing-dye-bonewhite.jpg',
   enchanting: 'https://render.worldofwarcraft.com/us/icons/56/ui_profession_enchanting.jpg',
   engineering: 'https://render.worldofwarcraft.com/us/icons/56/ui_profession_engineering.jpg',
+  'first-aid': 'https://render.worldofwarcraft.com/us/icons/56/spell_holy_sealofsacrifice.jpg',
   fishing: 'https://render.worldofwarcraft.com/us/icons/56/ui_profession_fishing.jpg',
   herbalism: 'https://render.worldofwarcraft.com/us/icons/56/ui_profession_herbalism.jpg',
   inscription: 'https://render.worldofwarcraft.com/us/icons/56/ui_profession_inscription.jpg',

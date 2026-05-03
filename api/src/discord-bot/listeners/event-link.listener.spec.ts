@@ -98,13 +98,20 @@ function createMessage(
 }
 
 describe('EventLinkListener', () => {
+  const ORIGINAL_CLIENT_URL = process.env.CLIENT_URL;
+  const ORIGINAL_CORS_ORIGIN = process.env.CORS_ORIGIN;
+
   beforeEach(() => {
+    delete process.env.CORS_ORIGIN;
     setupEventLinkModule();
     mockReply = jest.fn().mockResolvedValue({ id: 'reply-msg-1' });
   });
 
   afterEach(() => {
-    delete process.env.CLIENT_URL;
+    if (ORIGINAL_CLIENT_URL === undefined) delete process.env.CLIENT_URL;
+    else process.env.CLIENT_URL = ORIGINAL_CLIENT_URL;
+    if (ORIGINAL_CORS_ORIGIN === undefined) delete process.env.CORS_ORIGIN;
+    else process.env.CORS_ORIGIN = ORIGINAL_CORS_ORIGIN;
   });
 
   describe('handleBotConnected', () => {

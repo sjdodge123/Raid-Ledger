@@ -17,19 +17,12 @@
  */
 import { chromium, type FullConfig } from '@playwright/test';
 import fs from 'fs';
-import path from 'path';
+import { AUTH_DIR, STORAGE_STATE_PATH, TOKEN_FILE_PATH } from './auth-paths';
 
 const API_BASE = process.env.API_URL || 'http://localhost:3000';
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
 const ADMIN_EMAIL = 'admin@local';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password';
-
-const AUTH_DIR = path.resolve(__dirname, '.auth');
-const STORAGE_STATE_PATH = path.join(AUTH_DIR, 'admin.json');
-// ROK-1085: workers in scripts/smoke read this file via getAdminToken() to
-// avoid each one POSTing /auth/local in parallel (the rate limiter dropped
-// requests and caused did-not-run flakes under full-suite parallel run).
-const TOKEN_FILE_PATH = path.join(AUTH_DIR, 'admin-token.json');
 
 export default async function globalSetup(_config: FullConfig) {
     // Ensure .auth directory exists
