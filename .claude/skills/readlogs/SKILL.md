@@ -1,13 +1,20 @@
 ---
 name: readlogs
-description: "Read recently-downloaded Raid Ledger admin logs from ~/Downloads. Context-aware: cold session → full deep-dive sweep across errors, perf, cadence, traffic shape, and cross-file correlation, then draft Linear stories; mid-task → search logs for clues relevant to the active work."
-argument-hint: "[--triage | --troubleshoot] [--service api|nginx|postgresql|redis|supervisor] [--file <name>] [--since <ISO|relative>] [--query <regex>]"
-allowed-tools: "Bash(ls *), Bash(stat *), Bash(file *), Bash(tar *), Bash(gunzip *), Bash(zcat *), Bash(grep *), Bash(rg *), Bash(awk *), Bash(sort *), Bash(uniq *), Bash(wc *), Bash(head *), Bash(tail *), Bash(cut *), Bash(tr *), Bash(find *), Bash(git status*), Bash(git branch*), Bash(git log*), Bash(git diff*), Read, Grep, Glob, mcp__linear__list_issues, mcp__linear__list_issue_labels, mcp__linear__save_issue"
+description: "Read Raid Ledger admin logs from ~/Downloads AND parse TECH-DEBT-BACKLOG.md at repo root. Context-aware: cold session → full deep-dive sweep across both sources with cross-source reconciliation (a file flagged in BOTH logs and backlog is elevated signal), then draft Linear stories; mid-task → search both sources for clues relevant to the active work."
+argument-hint: "[--triage | --troubleshoot] [--service api|nginx|postgresql|redis|supervisor] [--file <name>] [--since <ISO|relative>] [--query <regex>] [--backlog-only | --no-backlog] [--severity high|med|low|nit]"
+allowed-tools: "Bash(ls *), Bash(stat *), Bash(file *), Bash(tar *), Bash(gunzip *), Bash(zcat *), Bash(grep *), Bash(rg *), Bash(awk *), Bash(sort *), Bash(uniq *), Bash(wc *), Bash(head *), Bash(tail *), Bash(cut *), Bash(tr *), Bash(find *), Bash(git status*), Bash(git branch*), Bash(git log*), Bash(git diff*), Bash(git rev-parse*), Bash(git add*), Bash(git commit*), Read, Edit, Grep, Glob, mcp__linear__list_issues, mcp__linear__list_issue_labels, mcp__linear__save_issue, mcp__linear__save_comment"
 ---
 
-# /readlogs — Read Raid Ledger admin log exports from ~/Downloads
+# /readlogs — Read admin log exports + TECH-DEBT-BACKLOG.md
 
-The Raid Ledger admin panel (`web/src/pages/admin/logs-panel.tsx`) lets the operator download individual rotated log files or a `.tar.gz` bundle. This skill reads whatever was most-recently downloaded and behaves differently depending on whether the conversation is **cold** (just started, no active task → triage mode) or **warm** (mid-task → troubleshoot mode).
+This skill has TWO inputs:
+
+1. **Admin log exports** in `~/Downloads` — produced by the Raid Ledger admin Logs panel (`web/src/pages/admin/logs-panel.tsx`). Either individual rotated `.log` files or a `logs-*.tar.gz` bundle.
+2. **`TECH-DEBT-BACKLOG.md`** at the repo root — appended by `/build` and `/dispatch` reviewer reports during PR shipping. Contains deferred findings that the operator has not yet triaged.
+
+Triage mode reads BOTH sources, reconciles overlapping signals (a file flagged in both logs AND backlog is treated as elevated), and produces a single ranked list of recommended stories for the operator to approve.
+
+The skill behaves differently depending on whether the conversation is **cold** (just started, no active task → triage mode) or **warm** (mid-task → troubleshoot mode).
 
 **Linear Project:** Raid Ledger (`1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (`0728c19f-5268-4e16-aa45-c944349ce386`)
@@ -38,9 +45,35 @@ ls -lat ~/Downloads/ | awk '{print $6,$7,$8,$9}' | grep -iE '(^|\s)(logs-[0-9].*
 - If `--since <ts>` is provided, drop anything older.
 - If a `logs-*.tar.gz` is the freshest artifact, extract it to a temp dir (`mktemp -d`) and treat its contents as the canonical set, ignoring the loose `.log` files.
 
-**If nothing matches:** Tell the operator no recent admin-log downloads were found, suggest they download from the admin Logs panel ("Export .tar.gz" or per-service "Download"), and stop.
+**If nothing matches:** Tell the operator no recent admin-log downloads were found, suggest they download from the admin Logs panel ("Export .tar.gz" or per-service "Download"). Then continue to Step 1b — the backlog may still have entries worth triaging. Only stop entirely if BOTH sources are empty (and `--backlog-only` was not passed).
 
 Print the resolved file list (path + size + mtime) before proceeding.
+
+---
+
+## Step 1b — Locate and parse the tech-debt backlog
+
+Skip this step if `--no-backlog` was passed.
+
+```bash
+BACKLOG="$(git rev-parse --show-toplevel)/TECH-DEBT-BACKLOG.md"
+```
+
+Read everything after the `<!-- agents append below this line -->` marker. Parse using this schema (defined in the file's own "Format for skills that parse this file" section):
+
+- Section header: `### YYYY-MM-DD — <branch> (PR #<num>)` — the PR ref is optional
+- Bullet: `- **[<sev>]** ` followed by an inline-code path (`` `path/to/file.ts:42` ``) and free-text description
+- Optional `Suggested:` line indented two spaces under the bullet
+
+Severities: `high` / `med` / `low` / `nit`.
+
+**Apply the `--severity` filter** (default: `med` — drops `low` and `nit` unless explicitly asked). `--severity nit` includes everything.
+
+**If the file is missing, has no entries below the marker, or all entries are below threshold:** state which (e.g., "backlog absent" / "0 entries above med") and continue without backlog candidates. Do NOT block on an empty backlog.
+
+Print parsed counts before continuing — e.g., `Parsed 7 backlog entries: 1 high, 3 med, 2 low (filtered out), 1 nit (filtered out)`.
+
+If `--backlog-only` was passed, skip the log discovery in Step 1 and treat the backlog as the only input.
 
 ---
 
@@ -124,11 +157,28 @@ Walk the checklist below end to end. If a file is missing (e.g., no postgresql/r
 - Child process `EXITED`, `FATAL`, `crashed`, restart loops
 - Count per program + timestamps
 
-**H. Cross-file correlation**
+**H. Cross-file correlation (within logs)**
 - For every nginx 5xx: timestamp-match against api log for the concurrent exception
 - For every api `[ItadHttp]`-style external-API warning cluster: match against the consuming cron's `status=` line
 - For every cron duration outlier (≥10× baseline): match against concurrent DB query slowdown or external-API errors
 - For every long request (nginx `$request_time` or api HTTP latency): match to the DB queries or external calls it spawned
+
+**I. TECH-DEBT-BACKLOG.md (parsed in Step 1b)**
+- Group entries by file path. **Same path flagged in multiple batches = strong recurring signal**, treat as elevated regardless of original severity.
+- Group by severity: `high` items always promote to candidates, `med` per investigation, `low` only with `--severity low`, `nit` only with `--severity nit`.
+- Note any reviewer suggestion (`Suggested:` line) — that's the on-call engineer's first-pass fix idea, useful for the story body's `## Fix` section.
+
+**J. Cross-source reconciliation (logs ↔ backlog)**
+
+This is the highest-value pass. For every backlog entry, check whether the same file or module surfaces in the log analysis from sections A–H.
+
+- **Direct match:** backlog entry path == file in a log stack trace, slow query path, or perf hot-path → **MERGE into a single elevated candidate**. Severity bumped one level (med → high, low → med). The story body gets BOTH the prod evidence (frequency, timestamps from logs) AND the review evidence (reviewer's date and suggestion from backlog).
+- **Module match:** backlog mentions a NestJS module (e.g., `EventsService`, `NotificationsModule`) that's the noisiest tag in section A → merge similarly.
+- **Symptom match:** backlog mentions `retry`, `timeout`, `null check`, `race`, etc., and the same symptom shows in section A/B → merge.
+- **No log match for backlog entry** → keep as candidate on its own merits, severity per backlog.
+- **No backlog match for log finding** → existing flow (candidate from log only).
+
+A merged candidate is the most defensible kind of story: observed in production AND independently flagged in code review. Surface them at the top of the triage table.
 
 ### 3a.ii — Write up the sweep (REQUIRED — before drafting stories)
 
@@ -164,13 +214,27 @@ Format roughly:
 - ...
 ### supervisor.log — <window or "stale/absent">
 - ...
+
+### TECH-DEBT-BACKLOG.md — <N> entries above threshold (<oldest-section> → <newest-section>)
+- Severity mix: high=<n> med=<n> low=<n filtered> nit=<n filtered>
+- Recurring file paths (flagged in ≥2 batches): `<path>` × <n>, `<path>` × <n>
+- Cross-source matches with logs: <count>; e.g., `<path>` flagged in backlog 2026-04-22 + appears in api errors as <module> noisiest tag
+- Backlog-only candidates (no log overlap): <count>
+- Backlog absent / empty / all below threshold: <state if applicable>
 ```
 
 This write-up is for the operator. Keep it tight but complete.
 
 ### 3a.iii — Candidate enumeration (all findings, not just stories)
 
-List every observation from 3a.ii that has ANY engineering signal as a candidate. Include even borderline ones. Do not filter yet. Typical candidate classes:
+List every observation from 3a.ii that has ANY engineering signal as a candidate. Candidates come from BOTH log findings AND backlog entries — treat each backlog entry as a pre-flagged candidate that still needs the same investigate-before-write step in 3a.iv.
+
+**Source tags** (record on each candidate):
+- `[log]` — derived purely from log analysis
+- `[backlog]` — derived purely from a backlog entry, no log overlap
+- `[merged]` — cross-source match from Section J (elevated severity, strongest signal)
+
+Surface `[merged]` candidates first when presenting in 3a.v. Include even borderline ones. Do not filter yet. Typical candidate classes:
 
 | Pattern | Category | Linear prefix | Area label hint |
 |---|---|---|---|
@@ -212,15 +276,34 @@ Now (and only now) present to the operator. Include:
 4. Any **matched existing stories** where you plan to comment rather than duplicate.
 5. Ask the operator which to create (use `AskUserQuestion` if the list is ≥3 items). Phrase the ask so the operator can approve all, approve a subset, or add a demoted item.
 
-### 3a.vi — Create approved stories
+### 3a.vi — Create approved stories AND prune the backlog
 
 For each approved finding:
 - Title prefix: `fix:` / `perf:` / `tech-debt:` / `chore:`
 - `mcp__linear__save_issue` with: project Raid Ledger, team Roknua's projects, state `Backlog`, priority by severity, **one Area label** (see `area-labels.md` in MEMORY).
-- Body must include: `## What`, `## Evidence` (excerpt + occurrence count + timestamps), `## Root cause` (source file:line + explanation), `## Fix` (concrete approach), `## Acceptance criteria` (bulleted, at least one of the form "no occurrences in fresh log export ≥7 days post-deploy"), and `## Out of scope` if adjacent stories exist.
+- Body must include:
+  - `## What`
+  - `## Evidence` — for `[log]` and `[merged]`: excerpt + occurrence count + timestamps. For `[backlog]` and `[merged]`: backlog section date + reviewer's verbatim entry. **`[merged]` candidates always include both blocks**, clearly labeled.
+  - `## Root cause` — source file:line + explanation
+  - `## Fix` — concrete approach (use the backlog `Suggested:` line as a starting point if present)
+  - `## Acceptance criteria` — bulleted, at least one of the form "no occurrences in fresh log export ≥7 days post-deploy" for `[log]`/`[merged]` candidates
+  - `## Out of scope` if adjacent stories exist
 - For matched-existing stories: `mcp__linear__save_comment` with the new evidence and timestamps.
 
-Print a final summary listing each created `ROK-NNN` (and any comments appended).
+**Prune the backlog file** for every entry that was promoted to a Linear story OR that the operator explicitly dropped:
+
+1. Open `TECH-DEBT-BACKLOG.md` at the repo root.
+2. Delete the corresponding bullet (and any `Suggested:` line beneath it).
+3. If a section header now has no remaining bullets, delete the section header too.
+4. Stage and commit:
+   ```bash
+   git add TECH-DEBT-BACKLOG.md
+   git commit -m "chore(config): prune triaged tech-debt entries (ROK-XXX, ROK-YYY)"
+   ```
+
+Backlog entries that the operator wanted to keep for later (deferred, not dropped) stay in the file. Demoted-to-observation entries that the operator did NOT explicitly keep are pruned — if the same signal recurs in a future batch's review, the reviewer will append it again.
+
+Print a final summary listing each created `ROK-NNN` (with `[log]` / `[backlog]` / `[merged]` source tag), any comments appended, and the count of backlog entries pruned.
 
 ---
 
@@ -237,15 +320,17 @@ Collect anchors from the conversation:
 - Any error message, stack trace, endpoint, or Linear story ID the operator mentioned.
 - If `--query <regex>` was passed, use it verbatim as an extra anchor.
 
-### 3b.ii — Search logs for those anchors
+### 3b.ii — Search logs AND backlog for those anchors
 
-For each anchor, run targeted greps with timestamp context (`grep -nE -C 3`). Prefer:
+For each anchor, run targeted greps with timestamp context (`grep -nE -C 3`) against the log files. Prefer:
 - Exact endpoint / route path matches (`GET /api/...`, `POST /api/...`).
 - Class/function names from stack frames (`UsersService.findById`, `EventsController.cancel`).
 - Linear ID in commit messages or feature flags (e.g., `ROK-1065`).
 - Discord interaction IDs / event IDs / signup IDs the operator named.
 
 Cross-reference api ↔ nginx for request-side correlation (match by timestamp + path), and api ↔ postgresql for query-side correlation (match by timestamp + table).
+
+**Also grep the backlog** — if `TECH-DEBT-BACKLOG.md` mentions any of the anchored file paths, modules, or symptoms, surface those entries inline. A reviewer flagging the same area weeks ago is highly relevant context for whatever the operator is debugging now. Do NOT prune backlog entries in troubleshoot mode; they're informational only.
 
 ### 3b.iii — Report findings inline
 
@@ -269,11 +354,15 @@ Do **not** open Linear stories from troubleshoot mode unless the operator says s
 ## Quick reference
 
 ```text
-/readlogs                      # auto-detect mode, latest file per service
+/readlogs                      # auto-detect mode, both sources (logs + backlog)
 /readlogs --triage             # force triage even mid-task
 /readlogs --troubleshoot       # force troubleshoot even on main
-/readlogs --service api        # only the api log
+/readlogs --service api        # only the api log (still includes backlog unless --no-backlog)
 /readlogs --file "api (30).log"
 /readlogs --since "2026-04-20"
 /readlogs --query "EventsController.cancel"
+/readlogs --backlog-only       # skip log discovery entirely; only triage TECH-DEBT-BACKLOG.md
+/readlogs --no-backlog         # ignore the backlog; behave like the original log-only flow
+/readlogs --severity high      # backlog filter; default is med (drops low + nit)
+/readlogs --severity nit       # include every backlog entry, even style nits
 ```

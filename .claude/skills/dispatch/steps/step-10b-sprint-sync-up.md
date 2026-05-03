@@ -16,9 +16,10 @@ SendMessage(type: "message", recipient: "sprint-planner",
 
 The sprint planner will:
 1. Process all queued comments (implementation summaries, review notes)
-2. Create all tech-debt issues (from reviewer reports)
-3. Update any deferred status changes (e.g., stories moved to "Done")
-4. Report: N comments created, M tech-debt issues created, K status updates
+2. Update any deferred status changes (e.g., stories moved to "Done")
+3. Report: N comments created, K status updates
+
+**Tech-debt issues are NOT auto-created.** Reviewer findings are appended to `TECH-DEBT-BACKLOG.md` at repo root by the Lead during the batch's commits, and mirrored in the PR description + final summary. Operator triages the backlog file and files Linear stories manually. This intentionally breaks the prior auto-feeder loop (reviewer findings → auto-filed stories → next batch picks them up → more findings).
 
 ## Final Sync-Down
 
