@@ -11,7 +11,17 @@
  * surfaces a runtime error in tests + dev. See architect finding #4.
  */
 import { z } from 'zod';
-import { LineupStatusSchema } from './lineup.schema.js';
+
+// Inlined to avoid the circular import chain through lineup.schema.ts
+// (lineup.schema.ts re-exports this module, and re-importing from it
+// during module init left LineupStatusSchema temporarily undefined,
+// crashing the controller's response .parse() at request time).
+const LineupStatusSchema = z.enum([
+    'building',
+    'voting',
+    'decided',
+    'archived',
+]);
 
 /**
  * Slug constraint: URL-safe nanoid. Generation uses 12 chars from a 64-char

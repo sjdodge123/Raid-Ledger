@@ -73,9 +73,11 @@ export const CreateLineupSchema = z
         /**
          * Public-share toggle (ROK-1067). Default ON for public lineups so
          * operators can copy a shareable link immediately. Forced to false
-         * when `visibility === 'private'` (refine below).
+         * when `visibility === 'private'` (the service ignores `true` here
+         * for private lineups; the refine below blocks the EXPLICIT
+         * private + true combo so the operator gets a 400).
          */
-        publicShareEnabled: z.boolean().optional().default(true),
+        publicShareEnabled: z.boolean().optional(),
     })
     .refine(
         (d) =>
