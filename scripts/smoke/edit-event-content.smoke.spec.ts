@@ -52,13 +52,14 @@ const TEST_DUNGEONS = [
 
 /**
  * Create a WoW event with dungeon content instances via the API.
- * Returns the event ID for navigation and cleanup.
+ * Returns the event ID for navigation and cleanup. `title` must be unique
+ * per test (use `world.uid('...')`) — sharing across tests will collide.
  */
-async function createWowEventWithDungeons(token: string, gameId: number): Promise<number> {
+async function createWowEventWithDungeons(token: string, gameId: number, title: string): Promise<number> {
     const futureStart = new Date(Date.now() + 86_400_000).toISOString();
     const futureEnd = new Date(Date.now() + 90_000_000).toISOString();
     const event = (await apiPost(token, '/events', {
-        title: 'ROK-1005 Dungeon Edit Test',
+        title,
         gameId,
         startTime: futureStart,
         endTime: futureEnd,
@@ -94,13 +95,13 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         wowGameId = await findWowGameId(token);
     });
 
-    test.beforeEach(async ({}, testInfo) => {
+    test.beforeEach(async ({ world }, testInfo) => {
         test.skip(testInfo.project.name === 'mobile', 'Desktop-only tests');
         if (!wowGameId) {
             test.skip(true, 'WoW game not in registry — cannot test content browser');
             return;
         }
-        eventId = await createWowEventWithDungeons(token, wowGameId);
+        eventId = await createWowEventWithDungeons(token, wowGameId, world.uid('dungeon-edit'));
     });
 
     test.afterEach(async () => {
@@ -216,13 +217,13 @@ test.describe('ROK-1005: Content browser in edit mode (mobile)', () => {
         wowGameId = await findWowGameId(token);
     });
 
-    test.beforeEach(async ({}, testInfo) => {
+    test.beforeEach(async ({ world }, testInfo) => {
         test.skip(testInfo.project.name === 'desktop', 'Mobile-only tests');
         if (!wowGameId) {
             test.skip(true, 'WoW game not in registry — cannot test content browser');
             return;
         }
-        eventId = await createWowEventWithDungeons(token, wowGameId);
+        eventId = await createWowEventWithDungeons(token, wowGameId, world.uid('dungeon-edit-mobile'));
     });
 
     test.afterEach(async () => {
@@ -278,12 +279,12 @@ test.describe('ROK-1005: Non-WoW event edit has no content browser', () => {
         token = await getAdminToken();
     });
 
-    test.beforeEach(async () => {
+    test.beforeEach(async ({ world }) => {
         // Create a non-WoW event (no gameId, or a non-WoW game)
         const futureStart = new Date(Date.now() + 86_400_000).toISOString();
         const futureEnd = new Date(Date.now() + 90_000_000).toISOString();
         const event = (await apiPost(token, '/events', {
-            title: 'ROK-1005 Non-WoW Test',
+            title: world.uid('non-wow-edit'),
             startTime: futureStart,
             endTime: futureEnd,
             maxAttendees: 10,
