@@ -203,8 +203,13 @@ function useCanEdit(lineup: LineupDetailResponseDto): boolean {
 }
 
 /**
- * ROK-1067: operator-only public-share row beneath the detail header.
- * Renders nothing for non-operators or private lineups.
+ * ROK-1067: public-share row beneath the detail header.
+ *
+ * - Private lineup: renders nothing (link wouldn't resolve).
+ * - Operator: full toggle + copy-link.
+ * - Member, share enabled: copy-link only (no toggle — they can share what
+ *   the operator already opened up).
+ * - Member, share disabled: nothing (no valid link to share).
  */
 function PublicShareRow({
   lineup,
@@ -213,8 +218,17 @@ function PublicShareRow({
 }): JSX.Element | null {
   const { user } = useAuth();
   const toggle = useTogglePublicShare();
-  if (!user || !isOperatorOrAdmin(user)) return null;
+  if (!user) return null;
   if (lineup.visibility === 'private') return null;
+  const isOperator = isOperatorOrAdmin(user);
+  if (!isOperator && !lineup.publicShareEnabled) return null;
+  if (!isOperator) {
+    return (
+      <div className="ml-8 mt-2">
+        <PublicShareCopyOnly slug={lineup.publicSlug} />
+      </div>
+    );
+  }
   return (
     <div className="ml-8 mt-2">
       <PublicShareToggle
@@ -237,6 +251,37 @@ function PublicShareRow({
         slug={lineup.publicSlug}
         disabled={toggle.isPending}
       />
+    </div>
+  );
+}
+
+/** Copy-link only — for members on a public-share-enabled lineup. */
+function PublicShareCopyOnly({ slug }: { slug: string }): JSX.Element {
+  return (
+    <div
+      data-testid="public-share-copy-row"
+      className="flex items-center justify-between gap-3 p-3 rounded border border-edge/40 bg-overlay/30"
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-muted">
+          Public link enabled — share with anyone.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          const url = `${window.location.origin}/p/lineup/${slug}`;
+          void navigator.clipboard
+            .writeText(url)
+            .then(() => toast.success('Public link copied'))
+            .catch(() => toast.error('Failed to copy link'));
+        }}
+        data-testid="public-share-copy"
+        className="px-2.5 py-1.5 text-xs rounded border border-edge/50 hover:bg-overlay/50"
+        aria-label="Copy public link"
+      >
+        Copy link
+      </button>
     </div>
   );
 }
