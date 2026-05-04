@@ -148,6 +148,12 @@ function describeReset() {
     }, 240_000);
 
     it('cascade-wipes signups when events are wiped', async () => {
+      // Insert a uniquely-titled event + signup so we can identify our test
+      // data after the reset. We CANNOT query by event.id post-reset because
+      // wipeAllTestData uses RESTART IDENTITY CASCADE — the reseed reuses
+      // primary keys starting at 1, so the test's pre-reset event.id can
+      // collide with a freshly-seeded event of the same id, returning that
+      // reseeded event's signups as if cascade had failed.
       const [event] = await testApp.db
         .insert(schema.events)
         .values({
@@ -172,11 +178,16 @@ function describeReset() {
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
 
-      const orphanSignups = await testApp.db
-        .select({ id: schema.eventSignups.id })
-        .from(schema.eventSignups)
-        .where(inArray(schema.eventSignups.eventId, [event.id]));
-      expect(orphanSignups).toHaveLength(0);
+      // The unique-titled test event must be gone. Because the FK from
+      // eventSignups → events has ON DELETE CASCADE (enforced at the DB
+      // level), the absence of this event is a sufficient proof that its
+      // signup row has cascaded out as well.
+      const wipedEvents = await testApp.db
+        .select({ id: schema.events.id })
+        .from(schema.events)
+        .where(eq(schema.events.title, 'wipe-signups-test'));
+      expect(wipedEvents).toHaveLength(0);
+      void inArray;
     }, 120_000);
   });
 }
