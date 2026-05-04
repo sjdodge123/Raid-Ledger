@@ -73,13 +73,28 @@ async function createSharedLineup(
 }
 
 /**
- * Force the lineup to `status='decided'` using the existing test-only
- * `/admin/test` endpoints + a status patch fallback. The smoke environment
- * has DEMO_MODE=true so this is permissible.
+ * Force the lineup to `status='decided'` with a winning game so the public
+ * decision block has data to render. The status PATCH requires a
+ * `decidedGameId` (otherwise `decision` resolves to null in the public
+ * service — pattern from `lineup-auto-advance.smoke.spec.ts:52-53`).
  */
 async function forceDecidedStatus(lineupId: number): Promise<void> {
+    const games = await apiGet(adminToken, '/admin/settings/games');
+    const firstGameId = games?.data?.[0]?.id as number | undefined;
+    if (!firstGameId) {
+        throw new Error('Demo data missing — need at least 1 configured game');
+    }
+    await apiPost(adminToken, `/lineups/${lineupId}/nominate`, {
+        gameId: firstGameId,
+    });
+    // Walk the state machine: building → voting → decided. Direct
+    // building → decided is rejected (pattern from auto-advance smoke).
+    await apiPatch(adminToken, `/lineups/${lineupId}/status`, {
+        status: 'voting',
+    });
     await apiPatch(adminToken, `/lineups/${lineupId}/status`, {
         status: 'decided',
+        decidedGameId: firstGameId,
     });
 }
 
