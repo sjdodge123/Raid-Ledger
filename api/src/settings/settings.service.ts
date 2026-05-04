@@ -89,34 +89,8 @@ export class SettingsService implements OnModuleInit {
     await this.cacheLoadPromise;
   }
 
-  /** Loads all settings from DB, decrypts, and replaces the cache. */
-  private async loadCache(): Promise<void> {
-    try {
-      const rows = await this.db.select().from(appSettings);
-      const fresh = new Map<string, string>();
-      for (const row of rows) {
-        try {
-          fresh.set(row.key, decrypt(row.encryptedValue));
-        } catch {
-          this.logger.error(`Failed to decrypt setting ${row.key}`);
-        }
-      }
-      this.cache = fresh;
-      this.cacheLoadedAt = Date.now();
-      this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
-    } catch (err: unknown) {
-      this.logger.error('Background cache refresh failed', err);
-    } finally {
-      this.cacheLoadPromise = null;
-    }
-  }
-
-  /**
-   * Startup-only variant that re-throws on failure.
-   * Used by onModuleInit so a DB outage at boot crashes fast
-   * rather than leaving an empty cache that causes cascading failures.
-   */
-  private async loadCacheOrThrow(): Promise<void> {
+  /** Build a fresh decrypted-settings map from rows, swap into cache. */
+  private async refreshCacheFromDb(): Promise<void> {
     const rows = await this.db.select().from(appSettings);
     const fresh = new Map<string, string>();
     for (const row of rows) {
@@ -129,6 +103,26 @@ export class SettingsService implements OnModuleInit {
     this.cache = fresh;
     this.cacheLoadedAt = Date.now();
     this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
+  }
+
+  /** Loads all settings from DB, decrypts, and replaces the cache. */
+  private async loadCache(): Promise<void> {
+    try {
+      await this.refreshCacheFromDb();
+    } catch (err: unknown) {
+      this.logger.error('Background cache refresh failed', err);
+    } finally {
+      this.cacheLoadPromise = null;
+    }
+  }
+
+  /**
+   * Startup-only variant that re-throws on failure.
+   * Used by onModuleInit so a DB outage at boot crashes fast
+   * rather than leaving an empty cache that causes cascading failures.
+   */
+  private loadCacheOrThrow(): Promise<void> {
+    return this.refreshCacheFromDb();
   }
 
   /** Get a setting value by key (decrypted, from cache). */
@@ -164,9 +158,12 @@ export class SettingsService implements OnModuleInit {
     return this.cache.has(key);
   }
 
-  /** Force-reload cache on next access. */
-  invalidateCache(): void {
+  /** Force cache reload on next access. `full` also drops entries (ROK-1232). */
+  invalidateCache(full = false): void {
     this.cacheLoadedAt = 0;
+    if (!full) return;
+    this.cache = new Map();
+    this.cacheLoadPromise = null;
   }
 
   /** Emit cleared events for all integrations. */
