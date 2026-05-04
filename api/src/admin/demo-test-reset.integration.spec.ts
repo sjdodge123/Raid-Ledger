@@ -6,7 +6,7 @@
  * sessions, preserve admin + non-demo data, and re-run the demo
  * installer so demo users/games/events come back.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -148,10 +148,17 @@ function describeReset() {
     }, 240_000);
 
     it('cascade-wipes signups when events are wiped', async () => {
+      // Identify the test event by title, NOT id — TRUNCATE … RESTART
+      // IDENTITY resets the events sequence, so the demo installer
+      // recreates events whose ids collide with our pre-reset event.id.
+      // Demo signups for those new events would then masquerade as
+      // orphans of our wiped row. Same gotcha noted in the orphan-events
+      // test above.
+      const orphanTitle = 'wipe-signups-test';
       const [event] = await testApp.db
         .insert(schema.events)
         .values({
-          title: 'wipe-signups-test',
+          title: orphanTitle,
           duration: [
             new Date(Date.now() + 60_000),
             new Date(Date.now() + 120_000),
@@ -171,11 +178,21 @@ function describeReset() {
         .post('/admin/test/reset-to-seed')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
+      // Cascade is observable in the wipe counts: at least our one
+      // signup must be reported as deleted.
+      expect(res.body.deleted.signups).toBeGreaterThanOrEqual(1);
 
+      // Cross-check: no signups remain that join back to an event with
+      // our test title. Inner-join survives sequence reuse because the
+      // demo installer never uses this title.
       const orphanSignups = await testApp.db
         .select({ id: schema.eventSignups.id })
         .from(schema.eventSignups)
-        .where(inArray(schema.eventSignups.eventId, [event.id]));
+        .innerJoin(
+          schema.events,
+          eq(schema.events.id, schema.eventSignups.eventId),
+        )
+        .where(eq(schema.events.title, orphanTitle));
       expect(orphanSignups).toHaveLength(0);
     }, 120_000);
   });
