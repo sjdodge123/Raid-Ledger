@@ -1,4 +1,5 @@
 import { type ReactNode, useState, useCallback, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { BottomTabBar } from './bottom-tab-bar';
@@ -13,6 +14,17 @@ import { CurrentUserAvatarSync } from '../shared/CurrentUserAvatarSync';
 import { useThemeSync } from '../../hooks/use-theme-sync';
 import { usePluginHydration } from '../../hooks/use-plugins';
 import { useMediaQuery } from '../../hooks/use-media-query';
+
+/**
+ * ROK-1067: routes under /p/* are public, chrome-less surfaces meant
+ * for sharing with non-members. Skip Header/Footer/TabBar/Drawer/banners
+ * so the page reads like a standalone card, not a teaser of the auth'd
+ * app. Path-prefix match keeps the rule extensible for future /p/*
+ * surfaces.
+ */
+function isChromelessPath(pathname: string): boolean {
+    return pathname.startsWith('/p/');
+}
 
 interface LayoutProps {
     children: ReactNode;
@@ -46,6 +58,16 @@ export function Layout({ children }: LayoutProps) {
     const openMoreDrawer = useCallback(() => setMoreDrawerOpen(true), []);
     const closeMoreDrawer = useCallback(() => setMoreDrawerOpen(false), []);
     const { registerFeedbackOpen, handleFeedbackClick } = useFeedbackRef();
+    const { pathname } = useLocation();
+
+    if (isChromelessPath(pathname)) {
+        return (
+            <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
+                <main id="main-content" className="flex-1">{children}</main>
+                <LiveRegionProvider />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>

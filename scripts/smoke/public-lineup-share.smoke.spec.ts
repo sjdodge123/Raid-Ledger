@@ -142,6 +142,11 @@ test.describe('Public lineup share — un-authed access', () => {
         // Negative: no login form.
         await expect(page.locator('input[type="password"]')).toHaveCount(0);
 
+        // Negative: no main nav, no app chrome (AC: "no layout chrome, no nav").
+        await expect(
+            page.locator('nav[aria-label="Main navigation"]'),
+        ).toHaveCount(0);
+
         await ctx.close();
     });
 });
