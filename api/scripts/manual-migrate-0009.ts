@@ -28,21 +28,21 @@ async function migrate() {
             await client`ALTER TABLE "availability" ADD CONSTRAINT "availability_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;`;
             console.log('Added user FK.');
         } catch (e) {
-            console.log('User FK likely exists or error:', e.message);
+            console.log('User FK likely exists or error:', e instanceof Error ? e.message : e);
         }
 
         try {
             await client`ALTER TABLE "availability" ADD CONSTRAINT "availability_game_id_game_registry_id_fk" FOREIGN KEY ("game_id") REFERENCES "public"."game_registry"("id") ON DELETE no action ON UPDATE no action;`;
             console.log('Added game FK.');
         } catch (e) {
-            console.log('Game FK likely exists or error:', e.message);
+            console.log('Game FK likely exists or error:', e instanceof Error ? e.message : e);
         }
 
         try {
             await client`ALTER TABLE "availability" ADD CONSTRAINT "availability_source_event_id_events_id_fk" FOREIGN KEY ("source_event_id") REFERENCES "public"."events"("id") ON DELETE no action ON UPDATE no action;`;
             console.log('Added event FK.');
         } catch (e) {
-            console.log('Event FK likely exists or error:', e.message);
+            console.log('Event FK likely exists or error:', e instanceof Error ? e.message : e);
         }
 
     } catch (e) {

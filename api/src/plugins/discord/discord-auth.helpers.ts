@@ -146,7 +146,10 @@ export async function exchangeCodeForToken(
   redirectUri: string,
   clientId: string,
   clientSecret: string,
-  discordFetch: typeof fetch,
+  discordFetch: (
+    url: string | URL,
+    init?: RequestInit,
+  ) => Promise<globalThis.Response>,
 ): Promise<{ access_token: string }> {
   const tokenResponse = await discordFetch(
     'https://discord.com/api/oauth2/token',
@@ -171,7 +174,10 @@ export async function exchangeCodeForToken(
 /** Fetch Discord user profile with access token. */
 export async function fetchDiscordProfile(
   accessToken: string,
-  discordFetch: typeof fetch,
+  discordFetch: (
+    url: string | URL,
+    init?: RequestInit,
+  ) => Promise<globalThis.Response>,
 ): Promise<{ id: string; username: string; avatar?: string }> {
   const userResponse = await discordFetch('https://discord.com/api/users/@me', {
     headers: {
