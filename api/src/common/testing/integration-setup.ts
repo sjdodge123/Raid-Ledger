@@ -10,6 +10,12 @@
 // Must be before the test-app import to take effect before modules are evaluated.
 process.env.THROTTLE_DISABLED = 'true';
 process.env.THROTTLE_DEFAULT_LIMIT = '999999';
+// ROK-1232: stop every `@Cron`/plugin-host cron handler from firing inside
+// the test window. `SchedulerRegistry` is still wired (plugins inject it),
+// so individual jobs are stopped after `app.init()` in `getTestApp` rather
+// than skipping `ScheduleModule.forRoot()` outright. Same shape as
+// THROTTLE_DISABLED — explicit, not piggy-backed on NODE_ENV.
+process.env.CRON_DISABLED = 'true';
 
 import { closeTestApp, getTestApp } from './test-app';
 import { truncateAllTables } from './integration-helpers';
