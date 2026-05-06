@@ -26,6 +26,7 @@ import {
   NominateGameSchema,
   CastVoteSchema,
   AddInviteesSchema,
+  TogglePublicShareSchema,
   type LineupDetailResponseDto,
   type LineupBannerResponseDto,
   type LineupSummaryResponseDto,
@@ -271,6 +272,29 @@ export class LineupsController {
     return this.lineupsService.addInvitees(
       id,
       parsed.data.userIds,
+      req.user.id,
+    );
+  }
+
+  /**
+   * PATCH /lineups/:id/public-share — toggle the public-share flag (ROK-1067).
+   * Operator-only. Disabling preserves the slug for re-enabling.
+   */
+  @Patch(':id/public-share')
+  @UseGuards(RolesGuard)
+  @Roles('operator')
+  async togglePublicShare(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<LineupDetailResponseDto> {
+    const parsed = TogglePublicShareSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.lineupsService.togglePublicShare(
+      id,
+      parsed.data.enabled,
       req.user.id,
     );
   }

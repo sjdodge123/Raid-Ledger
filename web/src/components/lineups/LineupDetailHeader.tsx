@@ -11,6 +11,7 @@ import { UnlinkedSteamCount } from './UnlinkedSteamCount';
 import { MarkdownText } from '../ui/markdown-text';
 import { EditLineupMetadataModal } from './edit-lineup-metadata-modal';
 import { AbortLineupButton } from './AbortLineupButton';
+import { PublicShareRow } from './LineupPublicShareRow';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -258,6 +259,7 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
           <PhaseCountdown phaseDeadline={lineup.phaseDeadline} phaseStartedAt={lineup.updatedAt} status={lineup.status} compact />
         )}
       </div>
+      <PublicShareRow lineup={lineup} />
       {editOpen && (
         <EditLineupMetadataModal
           lineupId={lineup.id}

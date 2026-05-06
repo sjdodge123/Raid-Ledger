@@ -8,6 +8,7 @@ import { RootRedirect } from './components/RootRedirect';
 import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
+import { PublicLineupPage } from './pages/public/PublicLineupPage';
 
 import {
   JoinPage, InvitePage,
@@ -106,6 +107,7 @@ export function AppRoutes() {
       <Route path="/auth/success" element={<AuthSuccessPage />} />
       <Route path="/join" element={<JoinPage />} />
       <Route path="/i/:code" element={<InvitePage />} />
+      <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />
 
       <Route element={<AuthGuard />}>
         <Route path="/onboarding" element={<OnboardingWizardPage />} />

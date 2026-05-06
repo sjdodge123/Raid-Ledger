@@ -10,6 +10,7 @@ import { sql, and, like } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { generatePublicSlug } from '../lineups/public-lineup-slug.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -24,6 +25,7 @@ export async function createBuildingLineupForTest(
       title: 'Smoke Test Lineup',
       status: 'building',
       createdBy: createdByUserId,
+      publicSlug: generatePublicSlug(),
     })
     .returning({ id: schema.communityLineups.id });
   return { lineupId: row.id };

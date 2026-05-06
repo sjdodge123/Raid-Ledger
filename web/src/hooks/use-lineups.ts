@@ -9,6 +9,7 @@ import type {
   CommonGroundResponseDto,
   NominateGameDto,
   AbortLineupDto,
+  PublicLineupResponseDto,
 } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../lib/api-client';
 import {
@@ -25,6 +26,8 @@ import {
   addLineupInvitees,
   removeLineupInvitee,
   abortLineup,
+  togglePublicShare,
+  getPublicLineup,
 } from '../lib/api-client';
 import type {
   CreateLineupParams,
@@ -213,6 +216,47 @@ export function useRemoveLineupInvitee() {
   >({
     mutationFn: ({ lineupId, userId }) =>
       removeLineupInvitee(lineupId, userId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+    },
+  });
+}
+
+/**
+ * Public-share fetch error surfaced through TanStack Query so the page
+ * component can branch on `error.status === 404` and render the fallback
+ * UI without a redirect.
+ */
+export interface PublicLineupQueryError {
+  status?: number;
+  message?: string;
+}
+
+/**
+ * Hook for fetching a public lineup by slug (ROK-1067). Un-authed.
+ * Disabled until a slug is available. Never retries on 404 — the page
+ * shows a "no longer available" fallback instead.
+ */
+export function usePublicLineup(slug: string | undefined) {
+  return useQuery<PublicLineupResponseDto, PublicLineupQueryError>({
+    queryKey: ['lineups', 'public', slug],
+    queryFn: () => getPublicLineup(slug!),
+    enabled: !!slug,
+    retry: false,
+    staleTime: 30_000,
+  });
+}
+
+/** Hook for toggling the public-share flag on a lineup (ROK-1067). */
+export function useTogglePublicShare() {
+  const qc = useQueryClient();
+
+  return useMutation<
+    LineupDetailResponseDto,
+    Error,
+    { lineupId: number; enabled: boolean }
+  >({
+    mutationFn: ({ lineupId, enabled }) => togglePublicShare(lineupId, enabled),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
     },

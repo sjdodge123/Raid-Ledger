@@ -946,6 +946,13 @@
       "when": 1777766400000,
       "tag": "0134_drop_lineup_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1777840967518,
+      "tag": "0135_lineup_public_share",
+      "breakpoints": true
     }
   ]
 }

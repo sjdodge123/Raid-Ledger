@@ -39,3 +39,12 @@ A skill's job is typically: parse → group duplicates by file path → propose 
 ---
 
 <!-- agents append below this line -->
+
+### 2026-05-03 — rok-1067-public-shareable-lineup (ROK-1067)
+
+- **[low]** `api/src/drizzle/migrations/0135_lineup_public_share.sql:6-14` — Migration is unsafe under rolling/blue-green deploys: ADD COLUMN nullable → backfill → SET NOT NULL has a window where old app instances can insert NULL slugs and trip the `SET NOT NULL` step. Not applicable to RL's current single-instance Synology Docker topology (Watchtower stops old container before starting new), but worth documenting if we ever move to multi-instance / k8s.
+  Suggested: phased migration (separate PRs for backfill vs `SET NOT NULL`) or DB-side default that the new app code overwrites.
+- **[low]** `nginx/monolith.conf.template:75-84` and `nginx/default.conf:52-61` — The existing ROK-393 `/i/:code` crawler block also lacks `proxy_set_header X-Real-IP` / `X-Forwarded-For`, so the invite-OG endpoint's rate-limit buckets all crawlers under the upstream IP too. Same class of bug as the ROK-1067 finding (fixed for `/p/lineup/:slug` in this PR); the invite block was the precedent and inherited the gap.
+  Suggested: mirror the four `proxy_set_header` lines in the `/i/:code` location block.
+- **[med]** `api/src/discord-bot/utils/push-content.spec.ts:123` — host-TZ-dependent test. Asserts `withoutTz` (no override) renders `Mar 17` for a 22:00 UTC event, which only holds in non-North-American timezones. Passes under CI's `TZ=UTC` default, fails on any host with `TZ=America/Los_Angeles` (PDT) or similar. Latent flake — never bites in CI but hides if a developer's `npm test` is part of a pre-push gate. Identical file on origin/main; broken since ROK-918 (#492).
+  Suggested: explicitly mock the timezone in the test, or always pass an explicit timezone arg to `buildEventPushContent` rather than testing the implicit-TZ branch.

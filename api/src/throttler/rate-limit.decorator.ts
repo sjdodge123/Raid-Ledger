@@ -13,6 +13,8 @@ export const RATE_LIMIT_TIERS = {
   search: { ttl: 60_000, limit: isTestEnv ? 999_999 : 30 },
   admin: { ttl: 60_000, limit: isTestEnv ? 999_999 : 120 },
   export: { ttl: 60_000, limit: isTestEnv ? 999_999 : 5 },
+  // ROK-1067: per-IP throttle for public-share lineup endpoint.
+  public: { ttl: 60_000, limit: isTestEnv ? 999_999 : 60 },
 } as const;
 
 export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;

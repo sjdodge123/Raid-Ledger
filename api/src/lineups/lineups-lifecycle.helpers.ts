@@ -25,6 +25,7 @@ import {
 } from './lineups-phase.helpers';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
 import { addInvitees } from './lineups-invitees.helpers';
+import { insertWithSlugRetry } from './public-lineup-slug.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -42,31 +43,42 @@ export function insertLineup(
   phaseDeadline: Date | null,
   overrides: Record<string, number | undefined> | null,
 ) {
-  return db.transaction(async (tx) => {
-    const rows = await tx
-      .insert(schema.communityLineups)
-      .values({
-        title: dto.title,
-        description: dto.description ?? null,
-        createdBy: userId,
-        targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
-        phaseDeadline,
-        phaseDurationOverride: overrides,
-        matchThreshold: dto.matchThreshold ?? undefined,
-        maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
-        defaultTiebreakerMode: dto.defaultTiebreakerMode ?? undefined,
-        // ROK-1064: per-lineup Discord channel override (nullable).
-        channelOverrideId: dto.channelOverrideId ?? null,
-        // ROK-1065: visibility defaults to 'public' when not provided.
-        visibility: dto.visibility ?? 'public',
-      })
-      .returning();
-    const [row] = rows;
-    if (row && dto.inviteeUserIds && dto.inviteeUserIds.length > 0) {
-      await addInvitees(tx as Db, row.id, dto.inviteeUserIds);
-    }
-    return rows;
-  });
+  // ROK-1067: every lineup gets a unique URL-safe slug at creation. Private
+  // lineups still receive a slug (forced-disabled toggle below) so flipping
+  // visibility later wouldn't require backfilling a slug column.
+  const visibility = dto.visibility ?? 'public';
+  const publicShareEnabled =
+    visibility === 'private' ? false : (dto.publicShareEnabled ?? true);
+  return insertWithSlugRetry((slug) =>
+    db.transaction(async (tx) => {
+      const rows = await tx
+        .insert(schema.communityLineups)
+        .values({
+          title: dto.title,
+          description: dto.description ?? null,
+          createdBy: userId,
+          targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
+          phaseDeadline,
+          phaseDurationOverride: overrides,
+          matchThreshold: dto.matchThreshold ?? undefined,
+          maxVotesPerPlayer: dto.votesPerPlayer ?? undefined,
+          defaultTiebreakerMode: dto.defaultTiebreakerMode ?? undefined,
+          // ROK-1064: per-lineup Discord channel override (nullable).
+          channelOverrideId: dto.channelOverrideId ?? null,
+          // ROK-1065: visibility defaults to 'public' when not provided.
+          visibility,
+          // ROK-1067: public-share defaults true; forced false for private.
+          publicShareEnabled,
+          publicSlug: slug,
+        })
+        .returning();
+      const [row] = rows;
+      if (row && dto.inviteeUserIds && dto.inviteeUserIds.length > 0) {
+        await addInvitees(tx as Db, row.id, dto.inviteeUserIds);
+      }
+      return rows;
+    }),
+  );
 }
 
 /**

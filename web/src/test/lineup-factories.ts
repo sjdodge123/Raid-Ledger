@@ -85,6 +85,9 @@ export function createMockLineupDetail(
         // ROK-1065: visibility + invitees.
         visibility: 'public',
         invitees: [],
+        // ROK-1067: public-share toggle + slug.
+        publicShareEnabled: true,
+        publicSlug: 'aBcDeFgHiJ12',
         ...overrides,
     } as LineupDetailResponseDto;
 }

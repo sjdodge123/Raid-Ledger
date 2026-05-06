@@ -71,5 +71,7 @@ export async function buildActiveLineupSummaries(
     totalVoters: counts.voters.get(r.id) ?? 0,
     createdAt: r.createdAt.toISOString(),
     visibility: r.visibility,
+    publicShareEnabled: r.publicShareEnabled,
+    publicSlug: r.publicSlug,
   }));
 }
