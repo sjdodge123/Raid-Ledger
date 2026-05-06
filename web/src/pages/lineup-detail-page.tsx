@@ -138,7 +138,7 @@ export function LineupDetailPage(): JSX.Element {
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-4">
+    <div className="max-w-4xl mx-auto px-4 pt-4 pb-24 md:pb-4">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <LineupDetailHeader lineup={lineup} onTiebreakerIntercept={() => {
           setPromptDismissed(false);
