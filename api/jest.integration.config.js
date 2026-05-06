@@ -25,7 +25,15 @@ module.exports = {
   testEnvironment: 'node',
   // Integration tests need more time due to container startup
   testTimeout: 120_000,
-  // Run sequentially — tests share a single Testcontainers instance
+  // ROK-1232: kept at 1 for the FIRST PR. The teardown hardening landed
+  // here (SettingsService cache reset, dedup Redis sweep, cron jobs
+  // stopped post-init) closes the three deterministic leak vectors the
+  // TDD repros codified, but a residual `socket hang up` flake matching
+  // ROK-1091 (embed-sync ECONNRESET) still bites at maxWorkers=2 in
+  // ~25% of local runs. The dev brief explicitly defers that cascade
+  // ("recommend the dev verify ROK-1091 still reproduces after the new
+  // reset hook lands; if so, file a follow-up") — once that lands, this
+  // can ratchet up to 2 (and CI sharding stays orthogonal).
   maxWorkers: 1,
   // ROK-1058 AC3: file-order randomization is opt-in via the CLI `--randomize`
   // flag (passed by the CI matrix). Local default stays deterministic so

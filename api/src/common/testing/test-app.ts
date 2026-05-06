@@ -16,6 +16,7 @@
  */
 import { Test } from '@nestjs/testing';
 import { type INestApplication } from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
@@ -147,10 +148,33 @@ async function buildNestApp(
     .compile();
   const app = moduleRef.createNestApplication();
   await app.init();
+  if (process.env.CRON_DISABLED === 'true') {
+    stopAllCronJobs(app);
+  }
   const request = supertest.default(
     app.getHttpServer() as import('http').Server,
   );
   return { app, request };
+}
+
+/**
+ * Stop every cron job registered against the SchedulerRegistry by either
+ * `@Cron` decorators (mounted by `SchedulerOrchestrator.onApplicationBootstrap`)
+ * or the plugin-host `CronManagerService`. Called immediately after
+ * `app.init()` returns so handlers cannot fire inside the test window
+ * (ROK-1223 / ROK-1232). Cron handlers run on real timers and can mutate
+ * DB rows the test loop is also asserting against — e.g.
+ * `StandalonePollReminderService_runReminders` writing `notification_dedup`
+ * mid-spec. The `cron` library's `CronJob.stop()` flips `isActive` to false
+ * and clears the internal interval, so jobs stay in the registry but are
+ * inert for the lifetime of the test app.
+ */
+function stopAllCronJobs(app: INestApplication): void {
+  const scheduler = app.get(SchedulerRegistry, { strict: false });
+  if (!scheduler) return;
+  for (const [, job] of scheduler.getCronJobs()) {
+    job.stop();
+  }
 }
 
 export async function getTestApp(): Promise<TestApp> {
