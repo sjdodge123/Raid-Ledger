@@ -54,3 +54,18 @@ A skill's job is typically: parse → group duplicates by file path → propose 
 
 - **[high]** `api/src/events/events-dashboard.dashboard.integration.spec.ts` (and rotating siblings) — **cross-suite pollution flake re-surfaced post-ROK-1232**. Run 1 of `validate-ci.sh --full --ci` failed two events-dashboard tests with `loginAsAdmin → 401`; run 2 immediately after passed all 77 suites / 855 tests. Isolated single-file run also passes. Failing suite rotates per run — same signature ROK-1058 documented. ROK-1232 (PR #730, merged 2026-05-06) was the canonical hardening story; the fix reduces but does not eliminate the flake. Not introduced by ROK-1155 or ROK-1069 (neither touches integration test infra; ROK-1155 only changes coverage thresholds on `jest.config.js`, ROK-1069 only adds DEMO_MODE-gated `/admin/test/lineup/*` endpoints unused by integration tests).
   Suggested: re-open ROK-1058 / file follow-up to ROK-1232 with the specific 2026-05-05 reproduction (events-dashboard auth-401 in full-suite run, isolated pass). May need queue-state reset between auth-touching suites or shared admin-token cache flush.
+- **[high]** Pre-existing Playwright smoke failures observed during batch validation (full `npx playwright test` on this branch, both projects). Not introduced by ROK-1155 or ROK-1069 — same failures occur with our 2 stories backed out (the stories' new admin/test/lineup controller is unused by these specs, and coverage threshold config is a non-runtime change). 21 failing tests across these areas:
+  - `scripts/smoke/admin-slow-queries-log.smoke.spec.ts` (desktop + mobile)
+  - `scripts/smoke/admin-discord.smoke.spec.ts` (mobile)
+  - `scripts/smoke/admin-general.smoke.spec.ts` (mobile)
+  - `scripts/smoke/admin-operations.smoke.spec.ts` (mobile)
+  - `scripts/smoke/lineup-decided.smoke.spec.ts` (desktop + mobile) — covered by canceled ROK-1226
+  - `scripts/smoke/lineup-tiebreaker.smoke.spec.ts` (desktop) — covered by canceled ROK-1226
+  - `scripts/smoke/lineup-tiebreaker-late-join.smoke.spec.ts` (desktop) — covered by canceled ROK-1227
+  - `scripts/smoke/navigation.smoke.spec.ts` (desktop, 2 tests)
+  - `scripts/smoke/onboarding.smoke.spec.ts` (desktop)
+  - `scripts/smoke/paste-nominate.smoke.spec.ts` (desktop)
+  - `scripts/smoke/scheduling-poll.smoke.spec.ts` (desktop + mobile)
+  - `scripts/smoke/standalone-scheduling-poll.smoke.spec.ts` (desktop, 3 tests)
+  - `scripts/smoke/games.smoke.spec.ts` (mobile, ROK-811 regression spec)
+  Suggested: revisit canceled ROK-1226/ROK-1227 — the cancel reason ("downstream effect of LineupsService matching bug") may have shifted now that rok-1067 (#743) and ROK-1232 (#730) merged. The admin-* failures are likely the staleTime polling pattern documented in operator memory `feedback_smoke_polling_for_async_writes.md` (ROK-1156). ROK-811 mobile regression suggests recent UI restructuring on Games page.
