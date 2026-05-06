@@ -92,6 +92,7 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
         visibility: opts.visibility,
         createdBy: opts.creatorId,
         phaseDeadline: deadline,
+        publicSlug: `r1126${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`.slice(0, 16),
       })
       .returning();
     return lineup.id;

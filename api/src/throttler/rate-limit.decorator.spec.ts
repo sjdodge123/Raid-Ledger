@@ -12,6 +12,10 @@ describe('RATE_LIMIT_TIERS', () => {
   it('should define admin tier as 120/min', () => {
     expect(RATE_LIMIT_TIERS.admin).toEqual({ ttl: 60_000, limit: 120 });
   });
+
+  it('should define public tier as 60/min (ROK-1067)', () => {
+    expect(RATE_LIMIT_TIERS.public).toEqual({ ttl: 60_000, limit: 60 });
+  });
 });
 
 function describeRateLimitDecorator() {

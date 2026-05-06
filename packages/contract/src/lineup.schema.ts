@@ -9,6 +9,9 @@ export * from './lineup-tiebreaker.schema.js';
 // Re-export invitee / visibility schemas (ROK-1065)
 export * from './lineup-invitees.schema.js';
 
+// Re-export public-share schemas (ROK-1067)
+export * from './lineup-public.schema.js';
+
 import { LineupVisibilitySchema, LineupInviteeResponseSchema } from './lineup-invitees.schema.js';
 
 // ============================================================
@@ -67,6 +70,14 @@ export const CreateLineupSchema = z
          * are the only ones who may nominate or vote on the lineup.
          */
         inviteeUserIds: z.array(z.number().int().positive()).optional(),
+        /**
+         * Public-share toggle (ROK-1067). Default ON for public lineups so
+         * operators can copy a shareable link immediately. Forced to false
+         * when `visibility === 'private'` (the service ignores `true` here
+         * for private lineups; the refine below blocks the EXPLICIT
+         * private + true combo so the operator gets a 400).
+         */
+        publicShareEnabled: z.boolean().optional(),
     })
     .refine(
         (d) =>
@@ -75,6 +86,13 @@ export const CreateLineupSchema = z
         {
             message: 'Private lineups require at least one invitee',
             path: ['inviteeUserIds'],
+        },
+    )
+    .refine(
+        (d) => d.visibility !== 'private' || d.publicShareEnabled !== true,
+        {
+            message: 'Private lineups cannot have public share enabled',
+            path: ['publicShareEnabled'],
         },
     );
 
@@ -203,6 +221,10 @@ export const LineupDetailResponseSchema = z.object({
     visibility: LineupVisibilitySchema,
     /** Explicit invitees when visibility === 'private' (ROK-1065). */
     invitees: z.array(LineupInviteeResponseSchema),
+    /** Public-share toggle (ROK-1067) — only applicable to public lineups. */
+    publicShareEnabled: z.boolean(),
+    /** URL-safe slug used for the public share link (ROK-1067). */
+    publicSlug: z.string(),
 });
 
 export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;
@@ -251,6 +273,10 @@ export const LineupSummaryResponseSchema = z.object({
     createdAt: z.string(),
     /** Lineup visibility (ROK-1065). */
     visibility: LineupVisibilitySchema,
+    /** Public-share toggle (ROK-1067). */
+    publicShareEnabled: z.boolean(),
+    /** URL-safe slug used for the public share link (ROK-1067). */
+    publicSlug: z.string(),
 });
 
 export type LineupSummaryResponseDto = z.infer<typeof LineupSummaryResponseSchema>;

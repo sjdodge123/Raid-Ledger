@@ -3,7 +3,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LineupsController } from './lineups.controller';
+import { PublicLineupController } from './public-lineup.controller';
 import { LineupsService } from './lineups.service';
+import { PublicLineupService } from './public-lineup.service';
+import { PublicLineupOgService } from './public-lineup-og.service';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { LineupReminderService } from './lineup-reminder.service';
@@ -42,9 +45,11 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
       inject: [ConfigService],
     }),
   ],
-  controllers: [LineupsController],
+  controllers: [LineupsController, PublicLineupController],
   providers: [
     LineupsService,
+    PublicLineupService,
+    PublicLineupOgService,
     LineupSteamNudgeService,
     LineupNotificationService,
     LineupReminderService,

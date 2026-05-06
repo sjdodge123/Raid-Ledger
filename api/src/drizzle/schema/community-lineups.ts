@@ -8,6 +8,7 @@ import {
   unique,
   jsonb,
   varchar,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { games } from './games';
@@ -80,6 +81,18 @@ export const communityLineups = pgTable('community_lineups', {
    * of the guild-bound default. Null = use default.
    */
   channelOverrideId: text('channel_override_id'),
+  /**
+   * Public-share toggle (ROK-1067). When true and `visibility = 'public'`,
+   * the lineup is reachable un-authed at `/p/lineup/:publicSlug`.
+   * Forced to `false` for private lineups.
+   */
+  publicShareEnabled: boolean('public_share_enabled').notNull().default(true),
+  /**
+   * URL-safe nanoid slug used as the un-authed public lineup identifier
+   * (ROK-1067). Always generated at creation, even when share is disabled,
+   * so a flip of `publicShareEnabled` restores access via the same URL.
+   */
+  publicSlug: varchar('public_slug', { length: 16 }).notNull().unique(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

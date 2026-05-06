@@ -11,6 +11,7 @@ import { toast } from '../../lib/toast';
 import { LineupChannelOverrideSelect } from './lineup-channel-override-select';
 import { VisibilityToggle } from './VisibilityToggle';
 import { InviteeMultiSelect } from './InviteeMultiSelect';
+import { PublicShareToggle } from './PublicShareToggle';
 import {
   DurationSlider,
   VotesPerPlayerSlider,
@@ -68,6 +69,10 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
   // ROK-1065: visibility + invitees.
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [inviteeUserIds, setInviteeUserIds] = useState<number[]>([]);
+  // ROK-1067: public-share toggle. Default ON for public lineups; the
+  // server force-disables the field for private lineups, but we hide it
+  // in the UI so an operator can't toggle into the rejected combo.
+  const [publicShareEnabled, setPublicShareEnabled] = useState<boolean>(true);
 
   const canSubmit =
     title.trim() !== '' &&
@@ -98,6 +103,10 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
         ...(visibility === 'private'
           ? { visibility, inviteeUserIds }
           : {}),
+        // ROK-1067: send the toggle so a public lineup can opt out at create.
+        ...(visibility === 'public'
+          ? { publicShareEnabled }
+          : { publicShareEnabled: false }),
       });
       onClose();
       navigate(`/community-lineup/${result.id}`);
@@ -112,6 +121,12 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
         <TitleField value={title} onChange={setTitle} />
         <DescriptionField value={description} onChange={setDescription} />
         <VisibilityToggle value={visibility} onChange={setVisibility} />
+        {visibility === 'public' && (
+          <PublicShareToggle
+            enabled={publicShareEnabled}
+            onChange={setPublicShareEnabled}
+          />
+        )}
         {visibility === 'private' && (
           <InviteeMultiSelect
             value={inviteeUserIds}

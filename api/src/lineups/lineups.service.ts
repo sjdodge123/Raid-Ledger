@@ -48,6 +48,7 @@ import {
   runRemoveNomination,
 } from './lineups-actions.helpers';
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
+import { togglePublicShare } from './lineups-public-share.helpers';
 import { LineupsGateway } from './lineups.gateway';
 
 /** Caller identity for authorization checks. */
@@ -341,6 +342,10 @@ export class LineupsService {
     await this.invalidateAiCache(lineupId);
     return result;
   }
+
+  // prettier-ignore
+  togglePublicShare = (id: number, enabled: boolean, actorId: number) =>
+    togglePublicShare(this.db, this.activityLog, this.resolveChannelName, id, enabled, actorId);
 
   /** Remove a single invitee (ROK-1065). */
   async removeInvitee(

@@ -23,6 +23,7 @@
  */
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { generatePublicSlug } from './public-lineup-slug.helpers';
 import {
   truncateAllTables,
   loginAsAdmin,
@@ -125,6 +126,7 @@ function describeTiebreakerNotifications() {
         status: 'voting',
         visibility: 'public',
         createdBy: testApp.seed.adminUser.id,
+        publicSlug: generatePublicSlug(),
       })
       .returning();
 
@@ -164,6 +166,8 @@ function describeTiebreakerNotifications() {
         status: 'voting',
         visibility: 'private',
         createdBy: creatorId,
+        publicSlug: generatePublicSlug(),
+        publicShareEnabled: false,
       })
       .returning();
     await testApp.db.insert(schema.communityLineupInvitees).values([
@@ -354,6 +358,7 @@ function describeTiebreakerReminders() {
         status: 'voting',
         visibility: 'public',
         createdBy: testApp.seed.adminUser.id,
+        publicSlug: generatePublicSlug(),
       })
       .returning();
     await testApp.db.insert(schema.communityLineupEntries).values([

@@ -9,8 +9,10 @@ import type {
   CommonGroundResponseDto,
   NominateGameDto,
   AbortLineupDto,
+  PublicLineupResponseDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
+import { API_BASE_URL } from '../config';
 
 /** Query parameters for the Common Ground endpoint. */
 export interface CommonGroundParams {
@@ -97,6 +99,11 @@ export interface CreateLineupParams {
    * Server enforces that private lineups carry at least one invitee.
    */
   inviteeUserIds?: number[];
+  /**
+   * Public-share toggle (ROK-1067). Default true on the server; pass
+   * `false` to opt out. Forced false for private lineups.
+   */
+  publicShareEnabled?: boolean;
 }
 
 /** Create a new lineup with optional duration params. */
@@ -185,4 +192,46 @@ export async function abortLineup(
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * Toggle the public-share flag on a lineup (ROK-1067). Operator-only.
+ * Disabling preserves the slug; re-enabling restores access via the same URL.
+ */
+export async function togglePublicShare(
+  lineupId: number,
+  enabled: boolean,
+): Promise<LineupDetailResponseDto> {
+  return fetchApi(`/lineups/${lineupId}/public-share`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+/** Error surface for `getPublicLineup` so the hook can branch on 404. */
+export interface PublicLineupFetchError extends Error {
+  status: number;
+}
+
+/**
+ * Fetch a public lineup by slug (ROK-1067). Un-authed — does NOT use the
+ * shared `fetchApi` because that wrapper attaches the auth bearer and
+ * `credentials: 'include'`. The public route must be reachable from a
+ * logged-out browser. Throws a `PublicLineupFetchError` with `status` set
+ * so the hook can render the 404 fallback without a login redirect.
+ */
+export async function getPublicLineup(
+  slug: string,
+): Promise<PublicLineupResponseDto> {
+  const res = await fetch(`${API_BASE_URL}/lineups/public/${slug}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const err = new Error(`Public lineup fetch failed: ${res.status}`) as
+      PublicLineupFetchError;
+    err.status = res.status;
+    throw err;
+  }
+  return (await res.json()) as PublicLineupResponseDto;
 }

@@ -15,6 +15,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { generatePublicSlug } from '../lineups/public-lineup-slug.helpers';
 
 function describeDemoData() {
   let testApp: TestApp;
@@ -246,11 +247,19 @@ function describeDemoData() {
       const adminUserId = testApp.seed.adminUser.id;
       const [demoLineup] = await testApp.db
         .insert(schema.communityLineups)
-        .values({ createdBy: seedAdmin.id, title: 'Demo blocker lineup' })
+        .values({
+          createdBy: seedAdmin.id,
+          title: 'Demo blocker lineup',
+          publicSlug: generatePublicSlug(),
+        })
         .returning({ id: schema.communityLineups.id });
       const [adminLineup] = await testApp.db
         .insert(schema.communityLineups)
-        .values({ createdBy: adminUserId, title: 'Real admin lineup' })
+        .values({
+          createdBy: adminUserId,
+          title: 'Real admin lineup',
+          publicSlug: generatePublicSlug(),
+        })
         .returning({ id: schema.communityLineups.id });
 
       const clearRes = await testApp.request

@@ -23,6 +23,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { LineupNotificationService } from './lineup-notification.service';
+import { generatePublicSlug } from './public-lineup-slug.helpers';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 
@@ -89,6 +90,8 @@ function describePrivateNotifications() {
         status: 'building',
         visibility: 'private',
         createdBy: testApp.seed.adminUser.id,
+        publicSlug: generatePublicSlug(),
+        publicShareEnabled: false,
       })
       .returning();
     await testApp.db.insert(schema.communityLineupInvitees).values([

@@ -104,6 +104,9 @@ function mapLineupCore(
     channelOverrideName,
     // ROK-1065: visibility drives DM vs channel embed dispatch.
     visibility: lineup.visibility,
+    // ROK-1067: public-share toggle + URL-safe slug for the share URL.
+    publicShareEnabled: lineup.publicShareEnabled,
+    publicSlug: lineup.publicSlug,
   };
 }
 

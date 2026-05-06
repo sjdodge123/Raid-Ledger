@@ -16,6 +16,10 @@ vi.mock('../../hooks/use-lineups', () => ({
         mutate: vi.fn(),
         isPending: false,
     }),
+    useTogglePublicShare: () => ({
+        mutate: vi.fn(),
+        isPending: false,
+    }),
 }));
 
 vi.mock('../../hooks/use-auth', () => ({
