@@ -5,7 +5,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -59,27 +59,32 @@ export async function insertDecidedLineup(
   linkedEventId: number | undefined,
   phaseDeadline: Date | null,
 ): Promise<{ id: number }> {
-  const [row] = await db
-    .insert(schema.communityLineups)
-    .values({
-      // Synthetic title — this lineup row is only a storage vehicle for a
-      // standalone scheduling poll and is hidden from lineup queries by
-      // `phaseDurationOverride.standalone`. Not surfaced in any UI.
-      title: 'Standalone Scheduling Poll',
-      status: 'decided',
-      createdBy: userId,
-      linkedEventId: linkedEventId ?? null,
-      phaseDeadline,
-      /* Mark as standalone so community lineup queries exclude it.
-         Uses existing JSONB column — no migration needed. */
-      phaseDurationOverride: { standalone: true },
-      // ROK-1067: standalone polls are not user-shareable, but the column is
-      // NOT NULL — generate a slug and disable share so the URL never resolves.
-      publicSlug: generatePublicSlug(),
-      publicShareEnabled: false,
-    })
-    .returning({ id: schema.communityLineups.id });
-  return row;
+  // ROK-1067: standalone polls are not user-shareable, but `public_slug` is
+  // NOT NULL — generate a slug and disable share so the URL never resolves.
+  // Use the retry helper so a 23505 collision against the global UNIQUE
+  // constraint doesn't surface as a 500 to the user (mirrors the main
+  // lineup-creation path in LineupsService).
+  return insertWithSlugRetry(async (slug) => {
+    const [row] = await db
+      .insert(schema.communityLineups)
+      .values({
+        // Synthetic title — this lineup row is only a storage vehicle for a
+        // standalone scheduling poll and is hidden from lineup queries by
+        // `phaseDurationOverride.standalone`. Not surfaced in any UI.
+        title: 'Standalone Scheduling Poll',
+        status: 'decided',
+        createdBy: userId,
+        linkedEventId: linkedEventId ?? null,
+        phaseDeadline,
+        /* Mark as standalone so community lineup queries exclude it.
+           Uses existing JSONB column — no migration needed. */
+        phaseDurationOverride: { standalone: true },
+        publicSlug: slug,
+        publicShareEnabled: false,
+      })
+      .returning({ id: schema.communityLineups.id });
+    return row;
+  });
 }
 
 /** Insert a match in 'scheduling' status with thresholdMet = true. */
