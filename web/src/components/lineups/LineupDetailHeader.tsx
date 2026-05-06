@@ -1,10 +1,7 @@
 import { useState, useEffect, useRef, useCallback, type JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { LineupDetailResponseDto, LineupStatusDto } from '@raid-ledger/contract';
-import {
-  useTransitionLineupStatus,
-  useTogglePublicShare,
-} from '../../hooks/use-lineups';
+import { useTransitionLineupStatus } from '../../hooks/use-lineups';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { LineupStatusBadge } from './LineupStatusBadge';
 import { PhaseCountdown } from './phase-countdown';
@@ -14,7 +11,7 @@ import { UnlinkedSteamCount } from './UnlinkedSteamCount';
 import { MarkdownText } from '../ui/markdown-text';
 import { EditLineupMetadataModal } from './edit-lineup-metadata-modal';
 import { AbortLineupButton } from './AbortLineupButton';
-import { PublicShareToggle } from './PublicShareToggle';
+import { PublicShareRow } from './LineupPublicShareRow';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -200,90 +197,6 @@ function useCanEdit(lineup: LineupDetailResponseDto): boolean {
   if (!user) return false;
   if (isOperatorOrAdmin(user)) return true;
   return user.id === lineup.createdBy.id;
-}
-
-/**
- * ROK-1067: public-share row beneath the detail header.
- *
- * - Private lineup: renders nothing (link wouldn't resolve).
- * - Operator: full toggle + copy-link.
- * - Member, share enabled: copy-link only (no toggle — they can share what
- *   the operator already opened up).
- * - Member, share disabled: nothing (no valid link to share).
- */
-function PublicShareRow({
-  lineup,
-}: {
-  lineup: LineupDetailResponseDto;
-}): JSX.Element | null {
-  const { user } = useAuth();
-  const toggle = useTogglePublicShare();
-  if (!user) return null;
-  if (lineup.visibility === 'private') return null;
-  const isOperator = isOperatorOrAdmin(user);
-  if (!isOperator && !lineup.publicShareEnabled) return null;
-  if (!isOperator) {
-    return (
-      <div className="ml-8 mt-2">
-        <PublicShareCopyOnly slug={lineup.publicSlug} />
-      </div>
-    );
-  }
-  return (
-    <div className="ml-8 mt-2">
-      <PublicShareToggle
-        enabled={lineup.publicShareEnabled}
-        onChange={(next) =>
-          toggle.mutate(
-            { lineupId: lineup.id, enabled: next },
-            {
-              onSuccess: () =>
-                toast.success(
-                  next ? 'Public link enabled' : 'Public link disabled',
-                ),
-              onError: (err) =>
-                toast.error(
-                  err instanceof Error ? err.message : 'Toggle failed',
-                ),
-            },
-          )
-        }
-        slug={lineup.publicSlug}
-        disabled={toggle.isPending}
-      />
-    </div>
-  );
-}
-
-/** Copy-link only — for members on a public-share-enabled lineup. */
-function PublicShareCopyOnly({ slug }: { slug: string }): JSX.Element {
-  return (
-    <div
-      data-testid="public-share-copy-row"
-      className="flex items-center justify-between gap-3 p-3 rounded border border-edge/40 bg-overlay/30"
-    >
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-muted">
-          Public link enabled — share with anyone.
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={() => {
-          const url = `${window.location.origin}/p/lineup/${slug}`;
-          void navigator.clipboard
-            .writeText(url)
-            .then(() => toast.success('Public link copied'))
-            .catch(() => toast.error('Failed to copy link'));
-        }}
-        data-testid="public-share-copy"
-        className="px-2.5 py-1.5 text-xs rounded border border-edge/50 hover:bg-overlay/50"
-        aria-label="Copy public link"
-      >
-        Copy link
-      </button>
-    </div>
-  );
 }
 
 export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JSX.Element {
