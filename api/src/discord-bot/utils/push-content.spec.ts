@@ -109,7 +109,9 @@ describe('buildEventPushContent', () => {
   });
 
   it('should change the displayed DATE when timezone crosses midnight (ROK-918)', () => {
-    // 2026-03-17T05:00:00Z = Mar 17, 1:00 AM UTC, but Mar 16, 10:00 PM Pacific
+    // 2026-03-17T05:00:00Z = Mar 17 in UTC/Tokyo, but Mar 16 in Pacific.
+    // Compare two explicit zones on opposite sides of the cross-midnight
+    // boundary so the assertion is host-TZ-independent (avoids Pacific-host flake).
     const crossMidnightEvent = {
       ...baseEvent,
       startTime: '2026-03-17T05:00:00.000Z',
@@ -118,10 +120,10 @@ describe('buildEventPushContent', () => {
       crossMidnightEvent,
       'America/Los_Angeles',
     );
-    const withoutTz = buildEventPushContent(crossMidnightEvent);
+    const withTokyo = buildEventPushContent(crossMidnightEvent, 'Asia/Tokyo');
     expect(withPacific).toContain('Mar 16');
-    expect(withoutTz).toContain('Mar 17');
-    expect(withPacific).not.toBe(withoutTz);
+    expect(withTokyo).toContain('Mar 17');
+    expect(withPacific).not.toBe(withTokyo);
   });
 
   it('should throw or not silently produce wrong output for invalid timezone', () => {
