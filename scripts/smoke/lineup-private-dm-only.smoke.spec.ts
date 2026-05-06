@@ -50,21 +50,24 @@ interface PrivateLineup {
 
 async function createPrivateLineup(token: string): Promise<PrivateLineup> {
     await resetWorkerLineups(token);
+    // Create the lineup as PUBLIC first — POST /lineups rejects
+    // visibility=private without inviteeUserIds, and seeding invitees
+    // here would couple the smoke fixture to user-management state.
+    // The DEMO_MODE-only /admin/test/lineup/set-private endpoint flips
+    // the column directly, which is what we actually want to exercise
+    // for the DM-only behaviour assertions below.
     const created = (await apiPost(token, '/lineups', {
         title: lineupTitle,
-        visibility: 'private',
         buildingDurationHours: 720,
         votingDurationHours: 720,
         decidedDurationHours: 720,
     })) as { id?: number; publicSlug?: string; visibility?: string };
     if (!created?.id) {
         throw new Error(
-            `Failed to create private lineup: ${JSON.stringify(created).slice(0, 200)}`,
+            `Failed to create lineup: ${JSON.stringify(created).slice(0, 200)}`,
         );
     }
     await cancelLineupPhaseJobs(token, created.id);
-    // Idempotently re-assert visibility=private via the test endpoint in
-    // case the create dto path silently coerced it.
     await apiPost(token, '/admin/test/lineup/set-private', {
         lineupId: created.id,
         visibility: 'private',
@@ -73,7 +76,7 @@ async function createPrivateLineup(token: string): Promise<PrivateLineup> {
     return {
         id: created.id,
         publicSlug: created.publicSlug ?? '',
-        visibility: created.visibility ?? 'private',
+        visibility: 'private',
     };
 }
 
