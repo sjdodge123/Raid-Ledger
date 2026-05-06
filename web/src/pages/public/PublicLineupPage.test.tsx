@@ -136,4 +136,22 @@ describe('PublicLineupPage (ROK-1067)', () => {
             document.querySelector('input[type="password"]'),
         ).toBeNull();
     });
+
+    it('renders an error panel (not the 404 panel) for non-404 transient errors', () => {
+        // Codex review finding: a 500/429/network error should not look
+        // identical to a missing/disabled slug. The 404 panel says "no
+        // longer available" which is wrong when the backend is just hiccuping.
+        mockPublicLineupResult = {
+            data: null,
+            isLoading: false,
+            error: { status: 500, message: 'Internal server error' },
+        };
+        renderPage();
+
+        expect(screen.getByTestId('public-lineup-error')).toBeInTheDocument();
+        expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+        expect(
+            screen.queryByText(/no longer available/i),
+        ).not.toBeInTheDocument();
+    });
 });

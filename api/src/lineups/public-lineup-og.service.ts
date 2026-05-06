@@ -14,12 +14,14 @@
  * still get a usable preview AND the JSON 404 information-hiding policy
  * is preserved (we don't leak slug existence/disablement state).
  */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import { PublicLineupService } from './public-lineup.service';
 
 @Injectable()
 export class PublicLineupOgService {
+    private readonly logger = new Logger(PublicLineupOgService.name);
+
     constructor(
         private readonly publicLineup: PublicLineupService,
         private readonly settings: SettingsService,
@@ -34,7 +36,18 @@ export class PublicLineupOgService {
         const clientUrl = await this.settings.getClientUrl();
         const canonicalUrl = `${clientUrl}/p/lineup/${encodeURIComponent(slug)}`;
 
-        const dto = await this.publicLineup.findBySlug(slug).catch(() => null);
+        // Real backend failures still degrade to the generic preview so the
+        // crawler unfurl never breaks, but they get logged distinctly so an
+        // outage doesn't hide as a stream of "generic" cards.
+        const dto = await this.publicLineup.findBySlug(slug).catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            const stack = err instanceof Error ? err.stack : undefined;
+            this.logger.error(
+                `Public lineup OG lookup failed for slug=${slug}: ${message}`,
+                stack,
+            );
+            return null;
+        });
         if (!dto) {
             return buildOgHtmlPage({
                 title: 'Raid Ledger',

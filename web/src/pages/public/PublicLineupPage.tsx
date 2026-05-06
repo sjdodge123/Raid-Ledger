@@ -102,6 +102,33 @@ function NotFoundPanel() {
     );
 }
 
+function ErrorPanel() {
+    return (
+        <main
+            data-testid="public-lineup-error"
+            className="min-h-screen flex items-center justify-center px-4 bg-bg text-foreground"
+        >
+            <div className="max-w-lg w-full text-center">
+                <h1 className="text-2xl font-display font-bold mb-3">
+                    Something went wrong
+                </h1>
+                <p className="text-muted mb-4">
+                    We couldn't load this lineup right now. Please try again
+                    in a moment.
+                </p>
+                <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="text-emerald-400 hover:text-emerald-300 underline"
+                >
+                    Reload
+                </button>
+                <Footer />
+            </div>
+        </main>
+    );
+}
+
 function LoadingPanel() {
     return (
         <main className="min-h-screen flex items-center justify-center px-4 bg-bg text-foreground">
@@ -115,6 +142,7 @@ export function PublicLineupPage(): JSX.Element {
     const { data, isLoading, error } = usePublicLineup(slug);
 
     if (error?.status === 404) return <NotFoundPanel />;
+    if (error) return <ErrorPanel />;
     if (isLoading) return <LoadingPanel />;
     if (!data) return <NotFoundPanel />;
 
