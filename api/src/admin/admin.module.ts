@@ -8,6 +8,7 @@ import { DemoTestVoiceController } from './demo-test-voice.controller';
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestSignupsController } from './demo-test-signups.controller';
 import { DemoTestGamesController } from './demo-test-games.controller';
+import { DemoTestLineupController } from './demo-test-lineup.controller';
 import { DemoTestResetController } from './demo-test-reset.controller';
 import { DemoTestStandalonePollController } from './demo-test-standalone-poll.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
@@ -52,6 +53,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     DemoTestScheduledEventsController,
     DemoTestSignupsController,
     DemoTestGamesController,
+    DemoTestLineupController,
     DemoTestResetController,
     DemoTestStandalonePollController,
     AiChatTestController,

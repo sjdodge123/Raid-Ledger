@@ -171,3 +171,31 @@ export const AdvanceStandalonePollDeadlineSchema = z.object({
   lineupId: z.number().int().positive(),
   hoursUntilDeadline: z.number().min(-720).max(720),
 });
+
+/** Body for `/admin/test/lineup/advance-with-zero-noms` (ROK-1069). */
+export const AdvanceLineupZeroNomsSchema = z.object({
+  lineupId: z.number().int().positive(),
+});
+
+/** Body for `/admin/test/lineup/seed-single-voter` (ROK-1069). */
+export const SeedSingleVoterSchema = z.object({
+  lineupId: z.number().int().positive(),
+  gameId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
+/** Body for `/admin/test/lineup/set-private` (ROK-1069). */
+export const SetLineupPrivateSchema = z.object({
+  lineupId: z.number().int().positive(),
+  visibility: z.enum(['public', 'private']).optional(),
+});
+
+/** Body for `/admin/test/lineup/revoke-channel-perms` (ROK-1069). */
+export const RevokeChannelPermsSchema = z.object({
+  lineupId: z.number().int().positive(),
+  /** Snowflake to set as override; pass an invalid id to simulate perm loss. */
+  channelOverrideId: z
+    .string()
+    .regex(/^\d{17,20}$/, 'Invalid Discord ID format')
+    .nullable(),
+});
