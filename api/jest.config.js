@@ -34,7 +34,7 @@ module.exports = {
     ],
     coverageDirectory: '../coverage',
     coverageThreshold: {
-        global: { branches: 40, functions: 38, lines: 45, statements: 45 },
+        global: { branches: 50, functions: 52, lines: 61, statements: 60 },
     },
     testEnvironment: 'node',
     testPathIgnorePatterns: ['\\.integration\\.spec\\.ts$'],
