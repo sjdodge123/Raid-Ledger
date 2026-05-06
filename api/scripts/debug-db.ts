@@ -16,7 +16,7 @@ async function check() {
         const migrations = await client`SELECT * FROM "__drizzle_migrations"`;
         migrations.forEach(m => console.log(JSON.stringify(m)));
     } catch (e) {
-        console.log('Migration table error (likely missing):', e.message);
+        console.log('Migration table error (likely missing):', e instanceof Error ? e.message : e);
     }
 
     process.exit(0);

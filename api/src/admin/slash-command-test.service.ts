@@ -19,7 +19,7 @@ import { BindingsCommand } from '../discord-bot/commands/bindings.command';
 import { InviteCommand } from '../discord-bot/commands/invite.command';
 import { PlayingCommand } from '../discord-bot/commands/playing.command';
 
-type HandlerClass = new (...args: unknown[]) => CommandInteractionHandler;
+type HandlerClass = new (...args: any[]) => CommandInteractionHandler;
 
 /** Map command names to their NestJS provider classes. */
 const HANDLER_MAP: Record<string, HandlerClass> = {

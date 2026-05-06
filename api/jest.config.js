@@ -8,11 +8,13 @@ module.exports = {
             'ts-jest',
             {
                 tsconfig: {
+                    rootDir: '.',
                     module: 'commonjs',
                     moduleResolution: 'node16',
                     esModuleInterop: true,
                     allowSyntheticDefaultImports: true,
                     resolvePackageJsonExports: false,
+                    ignoreDeprecations: '6.0',
                 },
             },
         ],
