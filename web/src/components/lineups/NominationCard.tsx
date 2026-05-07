@@ -6,6 +6,7 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
+import { ConfirmationPill } from '../common/ConfirmationPill';
 
 interface NominationCardProps {
     entry: LineupEntryResponseDto;
@@ -72,9 +73,10 @@ function formatPrice(entry: LineupEntryResponseDto): string | null {
 }
 
 /** Card body: nominator + price on one line, optional note below. */
-function CardBody({ entry, canRemove, onRemove }: {
+function CardBody({ entry, canRemove, isMine, onRemove }: {
     entry: LineupEntryResponseDto;
     canRemove: boolean;
+    isMine: boolean;
     onRemove: (id: number) => void;
 }): JSX.Element {
     const priceText = formatPrice(entry);
@@ -88,6 +90,11 @@ function CardBody({ entry, canRemove, onRemove }: {
                     <span className="text-[11px] text-emerald-400">{priceText}</span>
                 )}
             </div>
+            {isMine && (
+                <div className="mt-1.5">
+                    <ConfirmationPill variant="text" size="sm">Your nomination</ConfirmationPill>
+                </div>
+            )}
             {entry.note && (
                 <p className="text-[10px] text-dim italic mt-1 line-clamp-2">&ldquo;{entry.note}&rdquo;</p>
             )}
@@ -103,12 +110,13 @@ function CardBody({ entry, canRemove, onRemove }: {
 /** Single nomination card. */
 export function NominationCard({ entry, onRemove }: NominationCardProps): JSX.Element {
     const { user } = useAuth();
-    const canRemove = user?.id === entry.nominatedBy.id || isOperatorOrAdmin(user);
+    const isMine = !!user && entry.nominatedBy.id === user.id;
+    const canRemove = isMine || isOperatorOrAdmin(user);
 
     return (
         <Link to={`/games/${entry.gameId}`} className="block rounded-xl bg-surface border border-edge overflow-hidden hover:border-emerald-500/50 hover:shadow-lg transition-all">
             <CardCover entry={entry} />
-            <CardBody entry={entry} canRemove={canRemove} onRemove={onRemove} />
+            <CardBody entry={entry} canRemove={canRemove} isMine={isMine} onRemove={onRemove} />
         </Link>
     );
 }
