@@ -7,6 +7,7 @@ import type { TiebreakerDetailDto } from '@raid-ledger/contract';
 import { VetoGameCard } from './VetoGameCard';
 import { TiebreakerClosedNotice } from './TiebreakerClosedNotice';
 import { useCastVeto, useForceResolve } from '../../../hooks/use-tiebreaker';
+import { ConfirmationPill } from '../../common/ConfirmationPill';
 
 interface Props {
     tiebreaker: TiebreakerDetailDto;
@@ -46,6 +47,14 @@ export function VetoView({ tiebreaker, lineupId }: Props): JSX.Element {
                     Force Resolve
                 </button>
             </div>
+
+            {veto.myVetoGameId != null && (
+                <div className="mb-3">
+                    <ConfirmationPill variant="text" tone="danger">
+                        You eliminated a game
+                    </ConfirmationPill>
+                </div>
+            )}
 
             <p className="text-sm text-muted mb-3">
                 {remaining > 0

@@ -32,6 +32,7 @@ export function VetoGameCard({
             data-testid="veto-game-card"
             data-vetoed={isMyVeto ? 'true' : undefined}
             data-eliminated={isEliminated ? 'true' : undefined}
+            aria-label={isMyVeto ? `You eliminated ${gameName}` : undefined}
             className={`relative bg-panel border rounded-lg p-3 transition-colors ${
                 isWinner ? 'border-emerald-500' : isEliminated ? 'border-red-500/40 opacity-60' : 'border-edge'
             }`}

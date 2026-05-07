@@ -8,6 +8,7 @@ import { BracketTree } from './BracketTree';
 import { BracketMatchupCard } from './BracketMatchupCard';
 import { TiebreakerClosedNotice } from './TiebreakerClosedNotice';
 import { useForceResolve } from '../../../hooks/use-tiebreaker';
+import { ConfirmationPill } from '../../common/ConfirmationPill';
 
 interface Props {
     tiebreaker: TiebreakerDetailDto;
@@ -29,6 +30,9 @@ export function BracketView({ tiebreaker, lineupId }: Props): JSX.Element {
         );
     }
 
+    const votedCount = matchups.filter((m) => m.myVote != null).length;
+    const totalMatchups = matchups.length;
+
     return (
         <div data-testid="bracket-view" className="mt-4">
             <div className="flex items-center justify-between mb-3">
@@ -44,6 +48,17 @@ export function BracketView({ tiebreaker, lineupId }: Props): JSX.Element {
                     Force Resolve
                 </button>
             </div>
+
+            {totalMatchups > 0 && (
+                <div className="mb-3">
+                    <ConfirmationPill
+                        variant="count"
+                        count={`${votedCount} of ${totalMatchups} matchups`}
+                    >
+                        Voted in
+                    </ConfirmationPill>
+                </div>
+            )}
 
             <BracketTree matchups={matchups} totalRounds={totalRounds} />
 

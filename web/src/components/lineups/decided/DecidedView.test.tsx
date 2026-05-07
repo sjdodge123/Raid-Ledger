@@ -56,6 +56,7 @@ vi.mock('../../../hooks/use-lineup-matches', () => ({
       ],
       almostThere: [],
       rallyYourCrew: [],
+      carriedForward: [],
     },
     isLoading: false,
   })),

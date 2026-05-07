@@ -11,6 +11,7 @@ import { GameInfoBadges } from '../GameInfoBadges';
 import { MatchProgressRing } from './MatchProgressRing';
 import { useBandwagonJoin, useAdvanceMatch } from '../../../hooks/use-lineup-matches';
 import { useAuth, isOperatorOrAdmin } from '../../../hooks/use-auth';
+import { ConfirmationPill } from '../../common/ConfirmationPill';
 
 interface RallyRowProps {
   match: MatchDetailResponseDto;
@@ -72,11 +73,7 @@ function RallyJoinButton({
   }
 
   if (isMember) {
-    return (
-      <button type="button" disabled className="px-3 py-1 text-xs font-medium text-zinc-400 bg-zinc-700 rounded cursor-not-allowed">
-        Joined
-      </button>
-    );
+    return <ConfirmationPill variant="text" size="sm">You&apos;re in</ConfirmationPill>;
   }
 
   return (
