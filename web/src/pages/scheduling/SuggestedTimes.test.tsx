@@ -171,6 +171,60 @@ describe('SuggestedTimes — conflict warning display', () => {
 });
 
 // ---------------------------------------------------------------------------
+// SuggestedTimes — confirmation pill (ROK-1209 AC-8, AC-9)
+// ---------------------------------------------------------------------------
+
+describe('SuggestedTimes — confirmation pill (ROK-1209 AC-8, AC-9)', () => {
+  it("renders aggregate 'You picked N time slots' pill when user has voted on at least one slot", () => {
+    const poll = buildPollData();
+    render(
+      <SuggestedTimes
+        slots={poll.slots}
+        myVotedSlotIds={[100]}
+        readOnly={false}
+        onToggleVote={vi.fn()}
+        onSuggestSlot={vi.fn()}
+        isSuggesting={false}
+      />,
+    );
+    const pill = screen.getByTestId('confirmation-pill');
+    expect(pill).toHaveTextContent(/1 time slot/i);
+  });
+
+  it('does NOT render the aggregate pill when user has voted on zero slots', () => {
+    const poll = buildPollData();
+    render(
+      <SuggestedTimes
+        slots={poll.slots}
+        myVotedSlotIds={[]}
+        readOnly={false}
+        onToggleVote={vi.fn()}
+        onSuggestSlot={vi.fn()}
+        isSuggesting={false}
+      />,
+    );
+    expect(screen.queryByTestId('confirmation-pill')).not.toBeInTheDocument();
+  });
+
+  it("renders a per-row checkmark indicator when isVoted=true (replacing 'You voted' <p>)", () => {
+    const poll = buildPollData();
+    render(
+      <SuggestedTimes
+        slots={poll.slots}
+        myVotedSlotIds={[100]}
+        readOnly={false}
+        onToggleVote={vi.fn()}
+        onSuggestSlot={vi.fn()}
+        isSuggesting={false}
+      />,
+    );
+    const slot = screen.getAllByTestId('schedule-slot')[0];
+    // Aria-label or visible glyph signals the checkmark for slot 100.
+    expect(slot.querySelector('[aria-label*="You voted" i]')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // VoteStep (in SchedulingWizard) — AC2: buttons disabled during mutation
 // ---------------------------------------------------------------------------
 
