@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLineupDetail } from '../hooks/use-lineups';
@@ -26,6 +26,8 @@ import { useAiSuggestions } from '../hooks/use-ai-suggestions';
 import { useAiSuggestionsAvailable } from '../hooks/use-ai-suggestions-available';
 import { useSteamPasteDetection } from '../hooks/use-steam-paste';
 import { canParticipateInLineup } from '../lib/lineup-eligibility';
+import { HeroNextStep } from '../components/common/HeroNextStep';
+import { useLineupHero } from '../hooks/use-lineup-hero';
 
 /**
  * Render the private-lineup invitee panel (ROK-1065). Creator/operator
@@ -111,6 +113,63 @@ export function LineupDetailPage(): JSX.Element {
   if (isLoading) return <LineupDetailSkeleton />;
   if (error || !lineup) return <LineupNotFound />;
 
+  return (
+    <LineupDetailLoaded
+      lineup={lineup}
+      tiebreaker={tiebreaker ?? null}
+      modalOpen={modalOpen}
+      setModalOpen={setModalOpen}
+      preSelectedGame={preSelectedGame}
+      setPreSelectedGame={setPreSelectedGame}
+      promptDismissed={promptDismissed}
+      setPromptDismissed={setPromptDismissed}
+      tiebreakerPromptOpen={tiebreakerPromptOpen}
+      setTiebreakerPromptOpen={setTiebreakerPromptOpen}
+      isBuilding={isBuilding}
+      canParticipate={canParticipate}
+    />
+  );
+}
+
+interface LoadedProps {
+  lineup: NonNullable<ReturnType<typeof useLineupDetail>['data']>;
+  tiebreaker: ReturnType<typeof useTiebreakerDetail>['data'] | null | undefined;
+  modalOpen: boolean;
+  setModalOpen: (v: boolean) => void;
+  preSelectedGame: SelectedGame | null;
+  setPreSelectedGame: (v: SelectedGame | null) => void;
+  promptDismissed: boolean;
+  setPromptDismissed: (v: boolean) => void;
+  tiebreakerPromptOpen: boolean;
+  setTiebreakerPromptOpen: (v: boolean) => void;
+  isBuilding: boolean;
+  canParticipate: boolean;
+}
+
+function LineupDetailLoaded(props: LoadedProps): JSX.Element {
+  const {
+    lineup, tiebreaker, modalOpen, setModalOpen,
+    preSelectedGame, setPreSelectedGame,
+    promptDismissed, setPromptDismissed,
+    tiebreakerPromptOpen, setTiebreakerPromptOpen,
+    isBuilding, canParticipate,
+  } = props;
+  const { user } = useAuth();
+  const leaderboardRef = useRef<HTMLElement | null>(null);
+  const slotGridRef = useRef<HTMLElement | null>(null);
+  const bracketRef = useRef<HTMLElement | null>(null);
+
+  const heroProps = useLineupHero({
+    lineup,
+    tiebreaker: tiebreaker ?? null,
+    scrollTargets: {
+      leaderboard: leaderboardRef,
+      slotGrid: slotGridRef,
+      bracket: bracketRef,
+    },
+    onOpenNominate: () => setModalOpen(true),
+  });
+
   const hasEntries = lineup.entries.length > 0;
   // ROK-1117: also render when the lineup has already advanced to 'decided'
   // and the tiebreaker is 'resolved' so late-arriving users see the
@@ -137,14 +196,19 @@ export function LineupDetailPage(): JSX.Element {
     (hasTiebreaker && tiebreaker?.status === 'pending') || tiebreakerPromptOpen
   );
 
+  // Operator/admin keep the inline Nominate button so they can both nominate
+  // and advance; for non-organizer invitees the hero CTA carries the action.
+  const showInlineNominate = isBuilding && isOperator;
+
   return (
     <div className="max-w-4xl mx-auto px-4 pt-4 pb-24 md:pb-4">
+      <HeroNextStep {...heroProps} />
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <LineupDetailHeader lineup={lineup} onTiebreakerIntercept={() => {
           setPromptDismissed(false);
           setTiebreakerPromptOpen(true);
         }} />
-        {isBuilding && (
+        {showInlineNominate && (
           <button
             type="button"
             onClick={() => setModalOpen(true)}
