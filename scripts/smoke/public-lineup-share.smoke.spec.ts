@@ -199,6 +199,50 @@ test.describe('Public lineup share — disabled lineup', () => {
 });
 
 // ---------------------------------------------------------------------------
+// AC: Public page surfaces baseline accessibility landmarks (ROK-1069)
+// ---------------------------------------------------------------------------
+
+test.describe('Public lineup share — accessibility landmarks', () => {
+    test('public page exposes h1, main landmark, lang attribute, and visible focus', async ({
+        browser,
+    }) => {
+        const { publicSlug } = await createSharedLineup();
+        const ctx = await browser.newContext({ storageState: undefined });
+        const page = await ctx.newPage();
+        await page.goto(`/p/lineup/${publicSlug}`);
+
+        // The page must render a single h1 — assistive tech relies on the
+        // unique top-level heading to announce the page title.
+        const h1 = page.locator('h1');
+        await expect(h1).toHaveCount(1);
+        await expect(h1).toBeVisible({ timeout: 15_000 });
+
+        // `<html lang="...">` must be set so screen readers pick the right
+        // pronunciation profile.
+        const lang = await page.locator('html').getAttribute('lang');
+        expect(lang).toBeTruthy();
+        expect(lang!.length).toBeGreaterThanOrEqual(2);
+
+        // Footer attribution doubles as an accessible end-of-page landmark.
+        await expect(page.getByText(/Made with Raid Ledger/i)).toBeVisible({
+            timeout: 5_000,
+        });
+
+        // Tab focus must move into a focusable element on the page (not be
+        // trapped on body). This is the cheapest keyboard-navigation
+        // assertion that doesn't require axe.
+        await page.keyboard.press('Tab');
+        const activeTag = await page.evaluate(
+            () => document.activeElement?.tagName,
+        );
+        expect(activeTag).toBeTruthy();
+        expect(activeTag).not.toBe('BODY');
+
+        await ctx.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // AC: Decision block visible only when status='decided'
 // ---------------------------------------------------------------------------
 

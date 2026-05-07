@@ -28,16 +28,28 @@ npx playwright test                    # Auto-starts dev server
 
 ## Coverage Thresholds
 
-Coverage is enforced in CI. Thresholds are set conservatively as a regression floor — they prevent coverage from *dropping*, not mandate a target.
+Coverage is enforced in CI. Thresholds are set as a regression floor — they prevent coverage from *dropping*, not mandate a target. The floor is pinned to **(current coverage − 1%)** at the time of the most recent ratchet, so a small unrelated coverage shift does not break CI but a real regression does.
 
 | Metric     | Backend | Frontend |
 |------------|---------|----------|
-| Statements | 45%     | 34%      |
-| Branches   | 40%     | 33%      |
-| Functions  | 38%     | 27%      |
-| Lines      | 45%     | 35%      |
+| Statements | 60%     | 46%      |
+| Branches   | 50%     | 43%      |
+| Functions  | 52%     | 45%      |
+| Lines      | 61%     | 49%      |
 
-Config locations: `api/jest.config.js` (coverageThreshold) and `web/vitest.config.ts` (coverage.thresholds).
+Config locations: `api/jest.config.js` (`coverageThreshold.global`) and `web/vitest.config.ts` (`coverage.thresholds`).
+
+### Ratchet-up policy
+
+Every quarter (or whenever coverage has clearly grown), bump each threshold up so it sits ~1% below the new actual coverage. Workflow:
+
+1. Run `npm run test:cov -w api` and `cd web && npx vitest run --coverage`, note the `All files` summary.
+2. For each metric, set the new threshold to `floor(current%) − 1`.
+3. Commit as `tech-debt: ratchet coverage thresholds`. Update the table above in the same commit so it reflects the new floor.
+
+Do not lower a threshold without an explicit, documented reason (e.g. a large legacy module being intentionally excluded). Lowering hides regressions.
+
+A separate follow-up may add per-file thresholds for hotspot modules; the global floor is the baseline either way.
 
 ## Backend Patterns
 

@@ -31,6 +31,8 @@ import { lineupTiebreakerOpenTests } from './tests/lineup-tiebreaker-open.test.j
 import { lineupAbortTests } from './tests/lineup-abort.test.js';
 import { standalonePollReminderTests } from './tests/standalone-poll-reminders.test.js';
 import { publicShareLinkTests } from './tests/public-share-link.test.js';
+import { lineupPrivateDmTests } from './tests/lineup-private-dm.test.js';
+import { lineupChannelOverrideTests } from './tests/lineup-channel-override.test.js';
 
 /** Build a TestResult from a test, status, and timing info. */
 function buildResult(
@@ -151,6 +153,8 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...lineupAbortTests,
     ...standalonePollReminderTests,
     ...publicShareLinkTests,
+    ...lineupPrivateDmTests,
+    ...lineupChannelOverrideTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 
