@@ -23,21 +23,12 @@ import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
 import { PugsService } from '../../events/pugs.service';
 import { DISCORD_BOT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
+import {
+  hasRecentlyProcessed,
+  markRecentlyProcessed,
+} from './event-link.dedup';
 
 const MAX_UNFURLS_PER_MESSAGE = 3;
-
-/**
- * Module-scoped dedup set — prevents duplicate unfurls when dev-mode HMR
- * creates multiple EventLinkListener instances pointing at surviving Client objects.
- * Entries auto-expire after 30 seconds.
- */
-const recentlyProcessed = new Map<string, number>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, ts] of recentlyProcessed) {
-    if (now - ts > 30_000) recentlyProcessed.delete(id);
-  }
-}, 30_000).unref();
 
 /**
  * Listener that auto-unfurls Raid Ledger event links posted in Discord channels (ROK-380).
@@ -82,8 +73,8 @@ export class EventLinkListener {
 
   private async handleMessage(message: Message): Promise<void> {
     if (message.author.bot) return;
-    if (recentlyProcessed.has(message.id)) return;
-    recentlyProcessed.set(message.id, Date.now());
+    if (hasRecentlyProcessed(message.id)) return;
+    markRecentlyProcessed(message.id);
     if (!message.guild) return;
     if (!isGuildTextChannel(message.channel.type)) return;
     const clientUrl = resolveClientUrl();

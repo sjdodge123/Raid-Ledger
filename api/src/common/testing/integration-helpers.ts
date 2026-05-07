@@ -16,6 +16,10 @@ import * as schema from '../../drizzle/schema';
 import { clearAuthUserCache } from '../../auth/auth-user-cache';
 import { ALL_QUEUE_NAMES } from '../../queue/queue-registry';
 import { SettingsService } from '../../settings/settings.service';
+import { _resetKeyCache } from '../../settings/encryption.util';
+import { _resetCooldowns } from '../../discord-bot/listeners/signup-interaction.helpers';
+import { _resetRecentlyProcessed } from '../../discord-bot/listeners/event-link.dedup';
+import { _resetInFlightRefreshes } from '../swr-cache';
 import { INSTANCE_KEY, type TestApp } from './test-app';
 
 const obliterateLogger = new Logger('truncateAllTables.obliterate');
@@ -131,6 +135,7 @@ export async function truncateAllTables(
   clearAuthUserCache();
   clearMockRedisByPrefix(MOCK_REDIS_TEARDOWN_PREFIXES);
   clearSettingsServiceCache();
+  resetModuleSingletons();
   await obliterateAllQueues();
 
   // Re-seed baseline data
@@ -198,6 +203,23 @@ function clearMockRedisByPrefix(prefixes: readonly string[]): void {
   for (const key of [...store.keys()]) {
     if (prefixes.some((p) => key.startsWith(p))) store.delete(key);
   }
+}
+
+/**
+ * Reset module-scoped singletons that survive `app.close()` and would
+ * otherwise retain state — including references to the previous file's
+ * NestJS DI container — across spec files within a Jest worker. The SWR
+ * `inFlightRefreshes` tracker is the dominant carrier: pending promises
+ * close over the previous file's service instances via the `fetcher`
+ * closure, blocking GC of the entire prior app graph. The Discord
+ * cooldown / unfurl dedup maps and the encryption key cache are silent
+ * but cheap to reset alongside.
+ */
+function resetModuleSingletons(): void {
+  _resetKeyCache();
+  _resetCooldowns();
+  _resetRecentlyProcessed();
+  _resetInFlightRefreshes();
 }
 
 /**

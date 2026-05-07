@@ -31,6 +31,24 @@ export interface MemoryCacheEntry<T> {
 /** In-flight refresh tracker — prevents duplicate concurrent refreshes per key */
 const inFlightRefreshes = new Map<string, Promise<unknown>>();
 
+/** @internal Exposed for testing only — clears the in-flight refresh tracker. */
+export function _resetInFlightRefreshes(): void {
+  inFlightRefreshes.clear();
+}
+
+/** @internal Exposed for testing only — current in-flight tracker size. */
+export function _inFlightRefreshesSize(): number {
+  return inFlightRefreshes.size;
+}
+
+/** @internal Exposed for testing only — record a fake in-flight entry. */
+export function _setInFlightRefresh(
+  key: string,
+  promise: Promise<unknown>,
+): void {
+  inFlightRefreshes.set(key, promise);
+}
+
 /**
  * Options for in-memory SWR cache get.
  */
