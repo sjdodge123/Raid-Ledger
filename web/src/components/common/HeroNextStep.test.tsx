@@ -39,9 +39,9 @@ class FakeIntersectionObserver implements IntersectionObserver {
     observers.push(handle);
   }
   disconnect = (): void => {};
-  observe = (_target: Element): void => {};
+  observe = (target: Element): void => { void target; };
   takeRecords = (): IntersectionObserverEntry[] => [];
-  unobserve = (_target: Element): void => {};
+  unobserve = (target: Element): void => { void target; };
 }
 
 beforeEach(() => {

@@ -5,10 +5,7 @@
  * phase-specific action. Drives the persona resolution and pill visibility.
  */
 import { describe, expect, it } from 'vitest';
-import type {
-  LineupDetailResponseDto,
-  TiebreakerDetailDto,
-} from '@raid-ledger/contract';
+import type { TiebreakerDetailDto } from '@raid-ledger/contract';
 import { hasUserActedInPhase } from './lineup-acted';
 import { createMockLineupDetail, createMockEntry } from '../test/lineup-factories';
 
