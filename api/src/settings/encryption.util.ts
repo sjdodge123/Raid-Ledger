@@ -68,6 +68,11 @@ export function _resetKeyCache(): void {
   cachedKeySecret = null;
 }
 
+/** @internal Exposed for testing only — true when a key is cached. */
+export function _isKeyCached(): boolean {
+  return cachedKey !== null;
+}
+
 /**
  * Encrypts a string value using AES-256-GCM with a specific key.
  * Returns format: iv:authTag:encryptedData (all hex encoded)

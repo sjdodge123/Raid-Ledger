@@ -42,6 +42,17 @@ export function setCooldown(key: string, ts: number): void {
   interactionCooldowns.set(key, ts);
 }
 
+/** @internal Exposed for testing only — clears the cooldown map. */
+export function _resetCooldowns(): void {
+  interactionCooldowns.clear();
+  lastCleanup = 0;
+}
+
+/** @internal Exposed for testing only — current cooldown map size. */
+export function _cooldownsSize(): number {
+  return interactionCooldowns.size;
+}
+
 /**
  * Check if an error is a Discord API interaction race condition.
  * Code 40060 = already acknowledged, 10062 = expired token.
