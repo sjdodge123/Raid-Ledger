@@ -5,6 +5,11 @@ import * as schema from '../drizzle/schema';
 import { GameDetailDto } from '@raid-ledger/contract';
 import { IGDB_CONFIG, type IgdbApiGame } from './igdb.constants';
 import { mapApiGameToDbRow, mapDbRowToDetail } from './igdb.mappers';
+import {
+  findGameByNormalizedName,
+  findGameIdsByNormalizedName,
+} from './igdb-name-dedup.helpers';
+import { normalizeForDedup } from './igdb-search-dedup.helpers';
 
 const logger = new Logger('IgdbUpsertHelpers');
 
@@ -82,6 +87,7 @@ export async function upsertSingleGameRow(
 ): Promise<void> {
   if (row.steamAppId && (await mergeBysteamAppId(db, row, onGameChanged)))
     return;
+  if (await mergeByNormalizedName(db, row, onGameChanged)) return;
   await db
     .insert(schema.games)
     .values(row)
@@ -90,6 +96,25 @@ export async function upsertSingleGameRow(
       set: buildUpsertSet(row),
     });
   if (onGameChanged) await notifyBySingleIgdbId(db, row.igdbId, onGameChanged);
+}
+
+/**
+ * Merge IGDB data into an existing row whose canonical name matches (ROK-1113).
+ *
+ * Skip if the existing row has a *different* non-null igdbId — IGDB ids are
+ * canonical, so a mismatch signals a sequel/variant we should NOT collapse.
+ */
+async function mergeByNormalizedName(
+  db: PostgresJsDatabase<typeof schema>,
+  row: ReturnType<typeof mapApiGameToDbRow>,
+  onGameChanged?: (gameId: number) => void,
+): Promise<boolean> {
+  const match = await findGameByNormalizedName(db, row.name);
+  if (!match) return false;
+  if (match.igdbId != null && match.igdbId !== row.igdbId) return false;
+  await applyIgdbMergeToRow(db, match.id, row);
+  onGameChanged?.(match.id);
+  return true;
 }
 
 /** Look up the internal id by igdbId and fire the callback. */
@@ -232,6 +257,29 @@ function splitMergeVsInsert(
 }
 
 /**
+ * Move rows that match an existing row's normalized name from `inserts` to
+ * `merges` (ROK-1113). Skips name-matches when the existing row's igdbId
+ * disagrees with the incoming row — IGDB ids are canonical.
+ */
+function applyNameMergeMap(
+  inserts: GameRow[],
+  nameMap: Map<string, { id: number; igdbId: number | null }>,
+  normalize: (name: string) => string,
+): { nameMerges: Array<{ id: number; row: GameRow }>; inserts: GameRow[] } {
+  const nameMerges: Array<{ id: number; row: GameRow }> = [];
+  const remaining: GameRow[] = [];
+  for (const row of inserts) {
+    const match = nameMap.get(normalize(row.name));
+    if (match && (match.igdbId == null || match.igdbId === row.igdbId)) {
+      nameMerges.push({ id: match.id, row });
+    } else {
+      remaining.push(row);
+    }
+  }
+  return { nameMerges, inserts: remaining };
+}
+
+/**
  * Upsert games from IGDB API responses into the local database.
  * Skips games whose igdbId is banned (tombstoned).
  *
@@ -262,12 +310,30 @@ export async function upsertGamesFromApi(
   const mergeMap = await batchMergeBysteamAppId(db, steamAppIds);
   const { merges, inserts } = splitMergeVsInsert(rows, mergeMap);
 
+  // ROK-1113: collapse remaining rows that already exist by canonical name
+  // (e.g., DB has "Slay the Spire II" and IGDB sends "Slay the Spire 2").
+  const nameMap = await findGameIdsByNormalizedName(
+    db,
+    inserts.map((r) => r.name),
+  );
+  const { nameMerges, inserts: insertsAfterName } = applyNameMergeMap(
+    inserts,
+    nameMap,
+    normalizeForDedup,
+  );
+
   for (const { id, row } of merges) {
     await applyIgdbMergeToRow(db, id, row);
   }
+  for (const { id, row } of nameMerges) {
+    await applyIgdbMergeToRow(db, id, row);
+    logger.log(
+      `Merged IGDB ${row.igdbId} into existing game ${id} by normalized name`,
+    );
+  }
 
-  if (inserts.length > 0) {
-    await db.insert(schema.games).values(inserts).onConflictDoUpdate({
+  if (insertsAfterName.length > 0) {
+    await db.insert(schema.games).values(insertsAfterName).onConflictDoUpdate({
       target: schema.games.igdbId,
       set: buildBatchUpsertSet(),
     });
