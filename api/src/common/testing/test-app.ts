@@ -35,6 +35,7 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
+import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
 
 export type { RedisMockHandle } from './redis-mock';
 
@@ -72,6 +73,14 @@ function getInstance(): TestApp | null {
   return (
     (process as unknown as Record<string, TestApp | null>)[INSTANCE_KEY] ?? null
   );
+}
+
+/** Public alias used by `dump-failure-snapshot.ts` to read live app state
+ * (DI container, postgres-js client, redis-mock store) at the moment a
+ * `socket hang up` / ECONNRESET surfaces during the integration suite.
+ * ROK-1249. */
+export function getTestAppInstance(): TestApp | null {
+  return getInstance();
 }
 
 function setInstance(app: TestApp | null): void {
@@ -152,9 +161,13 @@ async function buildNestApp(
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
   }
-  const request = supertest.default(
-    app.getHttpServer() as import('http').Server,
-  );
+  if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
+    instrumentHttpServer(app.getHttpServer() as import('http').Server);
+  }
+  let request = supertest.default(app.getHttpServer() as import('http').Server);
+  if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
+    request = wrapAgentForSnapshot(request);
+  }
   return { app, request };
 }
 
