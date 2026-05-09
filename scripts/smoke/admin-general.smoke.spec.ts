@@ -22,10 +22,10 @@ async function pollUserManagement() {
     await pollForCondition(
         async () => {
             const data = (await apiGet(token, '/users/management?page=1&limit=20')) as
-                | { total?: number }
+                | { meta?: { total?: number } }
                 | null;
             if (!data) return null;
-            return typeof data.total === 'number' ? data : null;
+            return typeof data.meta?.total === 'number' ? data : null;
         },
         { timeoutMs: 15_000, description: '/users/management' },
     );
