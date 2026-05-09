@@ -35,7 +35,7 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
-import { instrumentHttpServer } from './socket-debug';
+import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
 
 export type { RedisMockHandle } from './redis-mock';
 
@@ -164,9 +164,10 @@ async function buildNestApp(
   if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
     instrumentHttpServer(app.getHttpServer() as import('http').Server);
   }
-  const request = supertest.default(
-    app.getHttpServer() as import('http').Server,
-  );
+  let request = supertest.default(app.getHttpServer() as import('http').Server);
+  if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
+    request = wrapAgentForSnapshot(request);
+  }
   return { app, request };
 }
 
