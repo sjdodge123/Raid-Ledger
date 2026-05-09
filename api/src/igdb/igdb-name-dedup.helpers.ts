@@ -154,7 +154,9 @@ async function selectCandidatesByTokenSet(
 ): Promise<NameDedupRow[]> {
   const g = schema.games;
   // Use a single SQL OR chain: lower(name) LIKE '%t1%' OR lower(name) LIKE '%t2%'
-  const escaped = tokens.map((t) => t.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`));
+  const escaped = tokens.map((t) =>
+    t.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`),
+  );
   const pattern = sql.raw(
     escaped.map((t) => `lower(name) LIKE '%${t}%'`).join(' OR '),
   );
@@ -221,9 +223,10 @@ function bucketByNormalized(rows: NameDedupRow[]): Map<string, NameDedupRow[]> {
 }
 
 /** Split bucketed rows into mergeable groups vs admin-review groups. */
-function splitGroups(
-  buckets: Map<string, NameDedupRow[]>,
-): { groups: NameDuplicateGroup[]; skipped: NameDuplicateGroup[] } {
+function splitGroups(buckets: Map<string, NameDedupRow[]>): {
+  groups: NameDuplicateGroup[];
+  skipped: NameDuplicateGroup[];
+} {
   const groups: NameDuplicateGroup[] = [];
   const skipped: NameDuplicateGroup[] = [];
   for (const [key, rows] of buckets) {

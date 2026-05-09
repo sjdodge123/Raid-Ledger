@@ -200,7 +200,7 @@ describe('upsertItadGame', () => {
       // 2. fetchBySlug after update -> return existing row
       const db = buildUpsertDb([[existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.update).toHaveBeenCalled();
       expect(db.insert).not.toHaveBeenCalled();
@@ -232,7 +232,7 @@ describe('upsertItadGame', () => {
       // 2. fetchBySlug after update -> return existing row
       const db = buildUpsertDb([[existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.update).toHaveBeenCalled();
       expect(result).toMatchObject({
@@ -261,7 +261,7 @@ describe('upsertItadGame', () => {
       // 3. fetchBySlug after update -> return row
       const db = buildUpsertDb([[], [existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.update).toHaveBeenCalled();
       expect(result).toMatchObject({ slug: 'game-x-igdb' });
@@ -292,7 +292,7 @@ describe('upsertItadGame', () => {
       // 3. fetchBySlug after insert -> return new row
       const db = buildUpsertDb([[], [], [insertedRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.insert).toHaveBeenCalled();
       expect(result).toMatchObject({
@@ -319,7 +319,7 @@ describe('upsertItadGame', () => {
       // 1. fetchBySlug after insert -> return row
       const db = buildUpsertDb([[insertedRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.insert).toHaveBeenCalled();
       expect(result).toMatchObject({ slug: 'itad-only-game' });
@@ -346,7 +346,7 @@ describe('upsertItadGame', () => {
       // 2. fetchBySlug after update
       const db = buildUpsertDb([[existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.update).toHaveBeenCalled();
       expect(db.limit).toHaveBeenCalledTimes(2);
@@ -371,7 +371,7 @@ describe('upsertItadGame', () => {
 
       const db = buildUpsertDb([[existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       // Verify the result is a properly mapped GameDetailDto
       expect(result).toMatchObject({

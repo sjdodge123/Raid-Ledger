@@ -25,8 +25,19 @@ interface RowFixture {
   itadGameId: string | null;
 }
 
-function row(id: number, name: string, overrides: Partial<RowFixture> = {}): RowFixture {
-  return { id, name, igdbId: null, steamAppId: null, itadGameId: null, ...overrides };
+function row(
+  id: number,
+  name: string,
+  overrides: Partial<RowFixture> = {},
+): RowFixture {
+  return {
+    id,
+    name,
+    igdbId: null,
+    steamAppId: null,
+    itadGameId: null,
+    ...overrides,
+  };
 }
 
 // ─── findGameByNormalizedName ────────────────────────────────────────────
@@ -52,7 +63,9 @@ describe('findGameByNormalizedName', () => {
   });
 
   it('matches a row whose normalized name equals the input', async () => {
-    mockDb.where.mockResolvedValueOnce([row(7, 'Slay the Spire II', { igdbId: 9001 })]);
+    mockDb.where.mockResolvedValueOnce([
+      row(7, 'Slay the Spire II', { igdbId: 9001 }),
+    ]);
     const result = await findGameByNormalizedName(
       mockDb as never,
       'Slay the Spire 2',
@@ -71,7 +84,9 @@ describe('findGameByNormalizedName', () => {
 
   it('returns null for token-count mismatch (Doom vs Doom: Eternal)', async () => {
     // Prefilter returns "Doom: Eternal" because lower(name) LIKE '%doom%'
-    mockDb.where.mockResolvedValueOnce([row(20, 'Doom: Eternal', { igdbId: 555 })]);
+    mockDb.where.mockResolvedValueOnce([
+      row(20, 'Doom: Eternal', { igdbId: 555 }),
+    ]);
     const result = await findGameByNormalizedName(mockDb as never, 'Doom');
     expect(result).toBeNull();
   });
@@ -176,7 +191,9 @@ describe('findDuplicateGroupsByNormalizedName', () => {
       row(1, 'Doom'),
       row(2, 'Doom: Eternal'),
     ]);
-    const { groups } = await findDuplicateGroupsByNormalizedName(mockDb as never);
+    const { groups } = await findDuplicateGroupsByNormalizedName(
+      mockDb as never,
+    );
     expect(groups).toEqual([]);
   });
 
