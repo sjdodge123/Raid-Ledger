@@ -31,6 +31,7 @@ implementation-artifacts/
 scripts/*
 !scripts/deploy_prod.sh
 !scripts/deploy_dev.sh
+!scripts/env-lock.sh
 !scripts/fix-migration-order.sh
 !scripts/reconcile-migrations.mjs
 !scripts/validate-ci.sh

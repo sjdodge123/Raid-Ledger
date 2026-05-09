@@ -2,7 +2,7 @@
 name: opt
 description: Alias for /operator-testing — deploy the current branch to local dev for hands-on testing. Operator-invoked, always overrides whatever is currently deployed.
 disable-model-invocation: true
-allowed-tools: "Bash(./scripts/deploy_dev.sh*), Bash(git*)"
+allowed-tools: "Bash(./scripts/deploy_dev.sh*), Bash(./scripts/env-lock.sh*), Bash(git*)"
 ---
 
 # /opt — alias for /operator-testing

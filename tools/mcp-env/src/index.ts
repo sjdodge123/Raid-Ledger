@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import * as envCheck from './tools/env-check.js';
 import * as envCopy from './tools/env-copy.js';
+import * as envLock from './tools/env-lock.js';
 import * as mcpHealth from './tools/mcp-health.js';
 import * as serviceStatus from './tools/service-status.js';
 import * as storyStatus from './tools/story-status.js';
@@ -68,6 +69,64 @@ server.tool(
   {},
   async () => {
     const result = await mcpHealth.execute();
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
+server.tool(
+  envLock.STATUS_TOOL_NAME,
+  envLock.STATUS_TOOL_DESCRIPTION,
+  {},
+  async () => {
+    const result = await envLock.executeStatus();
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
+server.tool(
+  envLock.ACQUIRE_TOOL_NAME,
+  envLock.ACQUIRE_TOOL_DESCRIPTION,
+  {
+    branch: z.string().optional(),
+    worktree: z.string().optional(),
+    purpose: z.string(),
+    pid: z.number().int().nonnegative().optional(),
+    ttl_minutes: z.number().int().positive().optional(),
+    priority: z.enum(['normal', 'operator']).optional(),
+  },
+  async (params) => {
+    const result = await envLock.executeAcquire(params);
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
+server.tool(
+  envLock.RELEASE_TOOL_NAME,
+  envLock.RELEASE_TOOL_DESCRIPTION,
+  {
+    branch: z.string().optional(),
+    worktree: z.string().optional(),
+  },
+  async (params) => {
+    const result = await envLock.executeRelease(params);
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
+server.tool(
+  envLock.FORCE_RELEASE_TOOL_NAME,
+  envLock.FORCE_RELEASE_TOOL_DESCRIPTION,
+  {},
+  async () => {
+    const result = await envLock.executeForceRelease();
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };

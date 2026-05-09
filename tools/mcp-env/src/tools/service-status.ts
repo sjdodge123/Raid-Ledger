@@ -1,8 +1,9 @@
 import { shell } from '../shell.js';
+import { executeStatus as executeLockStatus } from './env-lock.js';
 
 export const TOOL_NAME = 'env_service_status';
 export const TOOL_DESCRIPTION =
-  'Check Docker containers, ports, and API health for the local dev environment.';
+  'Check Docker containers, ports, API health, AND who holds the env lease (lock + queue) for the local dev environment.';
 
 /** Health check result for an HTTP endpoint. */
 interface HealthCheck {
@@ -22,9 +23,19 @@ interface ServiceStatus {
   details?: string;
 }
 
+/** Lock status as surfaced inline in env_service_status. */
+interface LockSummary {
+  free: boolean;
+  holder_branch: string | null;
+  holder_purpose: string | null;
+  queue_length: number;
+  error?: string;
+}
+
 /** Full response from env_service_status. */
 interface ServiceStatusResult {
   services: ServiceStatus[];
+  lock: LockSummary;
   summary: string;
 }
 
@@ -107,20 +118,64 @@ async function checkWebService(): Promise<ServiceStatus> {
   };
 }
 
-/** Build summary string from service statuses. */
-function buildServiceSummary(services: ServiceStatus[]): string {
+/** Build summary string from service statuses + lock state. */
+function buildServiceSummary(services: ServiceStatus[], lock: LockSummary): string {
   const running = services.filter((s) => s.status === 'running').length;
   const other = services.length - running;
-  return `${services.length} services: ${running} running, ${other} stopped/unknown`;
+  let lockClause: string;
+  if (lock.error) {
+    lockClause = `env lock state UNKNOWN (${lock.error})`;
+  } else if (lock.free) {
+    lockClause = 'env free';
+  } else {
+    lockClause = `env held by ${lock.holder_branch} (${lock.holder_purpose}${
+      lock.queue_length > 0 ? `, ${lock.queue_length} in queue` : ''
+    })`;
+  }
+  return `${services.length} services: ${running} running, ${other} stopped/unknown — ${lockClause}`;
+}
+
+/** Pull the lock state and reduce it to the inline summary shape. */
+async function fetchLockSummary(): Promise<LockSummary> {
+  const lockState = (await executeLockStatus()) as
+    | {
+        holder?: { branch: string; purpose: string } | null;
+        queue?: unknown[];
+        free?: boolean;
+      }
+    | { error: string; raw: string };
+
+  // env-lock.sh failed or returned non-JSON — surface that loudly instead of
+  // silently reporting "free" (which would lie to every agent that calls us).
+  if ('error' in lockState && typeof lockState.error === 'string') {
+    return {
+      free: false,
+      holder_branch: null,
+      holder_purpose: null,
+      queue_length: 0,
+      error: lockState.error,
+    };
+  }
+
+  const queueLength = Array.isArray(lockState.queue) ? lockState.queue.length : 0;
+  return {
+    free: lockState.free ?? lockState.holder == null,
+    holder_branch: lockState.holder?.branch ?? null,
+    holder_purpose: lockState.holder?.purpose ?? null,
+    queue_length: queueLength,
+  };
 }
 
 /** Execute the env_service_status tool. */
 export async function execute(): Promise<ServiceStatusResult> {
-  const services = await Promise.all([
-    checkDockerService('postgres', 'raid-ledger-db', 5432),
-    checkDockerService('redis', 'raid-ledger-redis', 6379),
-    checkApiService(),
-    checkWebService(),
+  const [services, lock] = await Promise.all([
+    Promise.all([
+      checkDockerService('postgres', 'raid-ledger-db', 5432),
+      checkDockerService('redis', 'raid-ledger-redis', 6379),
+      checkApiService(),
+      checkWebService(),
+    ]),
+    fetchLockSummary(),
   ]);
-  return { services, summary: buildServiceSummary(services) };
+  return { services, lock, summary: buildServiceSummary(services, lock) };
 }

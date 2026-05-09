@@ -30,7 +30,11 @@ Three custom MCP servers provide tools for environment management, story trackin
 |------|----------|
 | `mcp__mcp-env__env_check` | Check .env files: existence, missing vars, worktree status. Use BEFORE `deploy_dev.sh` or when builds fail due to missing env vars. |
 | `mcp__mcp-env__env_copy` | Copy .env files from main repo to worktree. Use when setting up worktrees. |
-| `mcp__mcp-env__env_service_status` | Check Docker containers, ports, API health. Use to verify local dev environment is running. |
+| `mcp__mcp-env__env_service_status` | Check Docker containers, ports, API health, AND env-lease state (who holds it, who's queued). Use to verify local dev environment is running. |
+| `mcp__mcp-env__env_lock_status` | Show env-lease holder + queue. Use BEFORE acquiring or any work that needs `:3000`/`:5173`. |
+| `mcp__mcp-env__env_lock_acquire` | Acquire the env lease (or get queued). Pass `purpose`, optional `priority: "operator"` to preempt. Auto-defaults branch + worktree. |
+| `mcp__mcp-env__env_lock_release` | Release the env lease (or remove yourself from the queue). Always call when you're done. |
+| `mcp__mcp-env__env_lock_force_release` | Operator-only override to clear a stuck lease. Ask the operator first. |
 | `mcp__mcp-env__story_status` | Check delivery status of stories (git branches + PRs). Use when resuming in-flight work to reconcile state against origin. |
 
 ### `mcp-discord` — Discord UI Testing (`tools/mcp-discord/`)
@@ -87,6 +91,23 @@ This rule exists because parallel agents kept seeing these commits, assuming "no
 - **Ports:** API on `:3000`, Web on `:5173` (Vite may increment to `:5174` if `:5173` is in use — CORS allows both)
 - **DEMO_MODE=true** in root `.env` enables auth bypass with prefilled credentials
 - **Docker volume gotcha (handled automatically):** The deploy script uses `docker start` by name first, falling back to `docker compose` from the main repo's compose file. This prevents worktrees from creating separate volumes with wrong directory prefixes.
+
+### Env coordination across agents (STRICT)
+
+The local dev env (Docker DB, API `:3000`, Vite `:5173`) is a single shared resource. Multiple agents/worktrees cannot run it simultaneously — `deploy_dev.sh` will refuse to start if another worktree holds the lease.
+
+State lives at `~/.raid-ledger/env-lock.json` (outside any worktree). The lease auto-expires when the holder's PID is dead OR when no heartbeat has arrived within the TTL (default 60min for MCP-acquired, 240min for `deploy_dev.sh`-acquired).
+
+**Before any work that needs the env (smoke tests, browser testing, deploy):**
+
+1. `mcp__mcp-env__env_lock_status` — see who holds it and who's queued. (`env_service_status` also includes lease state in its summary.)
+2. `mcp__mcp-env__env_lock_acquire({ purpose: "<what you'll do>" })` — if `acquired: false`, you've been queued. Either come back later (call `env_lock_acquire` again — it's idempotent), or pick non-env work in the meantime. Auto-defaults `branch` via git and `worktree` to the MCP server's cwd.
+3. Run `./scripts/deploy_dev.sh --ci --rebuild` (or pass `--wait-for-env <minutes>` to block instead of erroring if it's still held). The script re-acquires under your branch+worktree (idempotent if you already hold the lease) and registers its own PID for liveness tracking.
+4. When done, call `mcp__mcp-env__env_lock_release` so the next queued agent can take it. `./scripts/deploy_dev.sh --down` also releases.
+
+**Never bypass:** do not start the API/web manually to "skip the lock." If you find a stale lease (holder PID dead, no progress for >TTL), it auto-clears on the next `acquire`. If something is genuinely stuck, ask the operator before calling `env_lock_force_release`.
+
+**Operator priority (`/opt`):** `/opt` (and `deploy_dev.sh --operator`) always preempts — it cuts the queue, displaces the current holder to the **front** of the queue with `preempted: true`, and takes the env immediately. If you were preempted, you'll see `preempted: true` on your queue entry; you'll get the env back when the operator releases, ahead of any normal-priority waiters. Don't fight it; let the operator test, then resume.
 
 ## Code Size Limits (STRICT — enforced by ESLint)
 

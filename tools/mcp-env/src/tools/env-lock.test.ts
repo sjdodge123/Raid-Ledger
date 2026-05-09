@@ -1,0 +1,300 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock config so PROJECT_DIR / MAIN_REPO are deterministic and the script path
+// resolves predictably.
+vi.mock('../config.js', () => ({
+  PROJECT_DIR: '/fake/project',
+  MAIN_REPO: '/fake/main',
+  IS_WORKTREE: false,
+}));
+
+// Mock the shell() utility — it's the boundary between the TS wrapper and the
+// bash script, so tests verify command shape + JSON parsing without ever
+// running env-lock.sh.
+const mockShell = vi.fn();
+vi.mock('../shell.js', () => ({
+  shell: (...args: unknown[]) => mockShell(...args),
+}));
+
+// Import after mocks are registered.
+import {
+  executeStatus,
+  executeAcquire,
+  executeRelease,
+  executeForceRelease,
+  STATUS_TOOL_NAME,
+  ACQUIRE_TOOL_NAME,
+  RELEASE_TOOL_NAME,
+  FORCE_RELEASE_TOOL_NAME,
+} from './env-lock.js';
+
+beforeEach(() => {
+  mockShell.mockReset();
+});
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Queue a single shell() response with stdout=<JSON of given object>. */
+function queueShellJson(response: object): void {
+  mockShell.mockResolvedValueOnce({
+    stdout: JSON.stringify(response),
+    stderr: '',
+    exitCode: 0,
+  });
+}
+
+/** Queue a plain string as the next shell() stdout (used for `git branch --show-current`). */
+function queueShellRaw(stdout: string): void {
+  mockShell.mockResolvedValueOnce({ stdout, stderr: '', exitCode: 0 });
+}
+
+/** Pull the command string from a recorded shell() call. */
+function lastCommand(): string {
+  const calls = mockShell.mock.calls;
+  return calls[calls.length - 1]?.[0] as string;
+}
+
+// ---------------------------------------------------------------------------
+// Tool name + description constants
+// ---------------------------------------------------------------------------
+
+describe('env-lock tool registration constants', () => {
+  it('exports stable tool names', () => {
+    expect(STATUS_TOOL_NAME).toBe('env_lock_status');
+    expect(ACQUIRE_TOOL_NAME).toBe('env_lock_acquire');
+    expect(RELEASE_TOOL_NAME).toBe('env_lock_release');
+    expect(FORCE_RELEASE_TOOL_NAME).toBe('env_lock_force_release');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// status
+// ---------------------------------------------------------------------------
+
+describe('executeStatus', () => {
+  it('returns the parsed JSON when env is free', async () => {
+    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null });
+
+    const result = await executeStatus();
+
+    expect(result).toEqual({ holder: null, queue: [], free: true, stale_cleared: null });
+    expect(lastCommand()).toMatch(/bash '\/fake\/main\/scripts\/env-lock\.sh' status/);
+  });
+
+  it('returns parsed holder info when env is held', async () => {
+    queueShellJson({
+      holder: { branch: 'rok-1248', purpose: 'smoke', pid: 123, priority: 'normal' },
+      queue: [],
+      free: false,
+      stale_cleared: null,
+    });
+
+    const result = (await executeStatus()) as { holder: { branch: string }; free: boolean };
+
+    expect(result.holder.branch).toBe('rok-1248');
+    expect(result.free).toBe(false);
+  });
+
+  it('returns an error envelope when stdout is not JSON', async () => {
+    mockShell.mockResolvedValueOnce({ stdout: 'oops not json', stderr: '', exitCode: 1 });
+
+    const result = (await executeStatus()) as { error: string; raw: string };
+
+    expect(result.error).toMatch(/non-JSON/);
+    expect(result.raw).toBe('oops not json');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// acquire
+// ---------------------------------------------------------------------------
+
+describe('executeAcquire', () => {
+  it('builds the correct command for an explicit branch + worktree + pid', async () => {
+    queueShellJson({ acquired: true, holder: { branch: 'b' }, queue: [] });
+
+    await executeAcquire({
+      branch: 'b',
+      worktree: '/wt',
+      purpose: 'unit-test',
+      pid: 4321,
+      ttl_minutes: 30,
+      priority: 'normal',
+    });
+
+    const cmd = lastCommand();
+    expect(cmd).toContain("acquire 'b' '/wt' 'unit-test'");
+    expect(cmd).toContain('--pid 4321');
+    expect(cmd).toContain('--ttl-minutes 30');
+    expect(cmd).toContain('--priority normal');
+  });
+
+  it('omits --pid when no pid is provided', async () => {
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+
+    await executeAcquire({ branch: 'b', worktree: '/wt', purpose: 'p' });
+
+    expect(lastCommand()).not.toContain('--pid');
+  });
+
+  it('auto-defaults branch via git and worktree via cwd', async () => {
+    queueShellRaw('detected-branch'); // git branch --show-current
+    queueShellJson({ acquired: true, holder: {}, queue: [] }); // acquire
+
+    await executeAcquire({ purpose: 'auto-detect' });
+
+    const calls = mockShell.mock.calls;
+    expect(calls[0]?.[0]).toMatch(/git -C '.*' branch --show-current/);
+    expect(calls[1]?.[0]).toContain("'detected-branch'");
+    expect(calls[1]?.[0]).toContain(`'${process.cwd()}'`);
+  });
+
+  it('falls back to "unknown" branch when git output is empty', async () => {
+    queueShellRaw(''); // git returns nothing (detached HEAD)
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+
+    await executeAcquire({ purpose: 'detached' });
+
+    expect(mockShell.mock.calls[1]?.[0]).toContain("'unknown'");
+  });
+
+  it('passes --priority operator through to the script', async () => {
+    queueShellJson({
+      acquired: true,
+      holder: { branch: 'opt-runner' },
+      queue: [{ branch: 'displaced', preempted: true }],
+      preempted_holder: { branch: 'displaced' },
+    });
+
+    const result = (await executeAcquire({
+      branch: 'opt-runner',
+      worktree: '/wt',
+      purpose: 'operator-test',
+      priority: 'operator',
+    })) as { acquired: boolean; preempted_holder: { branch: string } };
+
+    expect(lastCommand()).toContain('--priority operator');
+    expect(result.acquired).toBe(true);
+    expect(result.preempted_holder.branch).toBe('displaced');
+  });
+
+  it('returns acquired:false with my_position when env is held', async () => {
+    queueShellJson({
+      acquired: false,
+      holder: { branch: 'someone-else' },
+      queue: [{ branch: 'me' }],
+      my_position: 0,
+    });
+
+    const result = (await executeAcquire({
+      branch: 'me',
+      worktree: '/wt',
+      purpose: 'queued',
+    })) as { acquired: boolean; my_position: number };
+
+    expect(result.acquired).toBe(false);
+    expect(result.my_position).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// release
+// ---------------------------------------------------------------------------
+
+describe('executeRelease', () => {
+  it('passes branch and worktree through, returns parsed JSON', async () => {
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+
+    const result = (await executeRelease({ branch: 'b', worktree: '/wt' })) as {
+      released: boolean;
+      was_holder: boolean;
+    };
+
+    expect(lastCommand()).toContain("release 'b' '/wt'");
+    expect(result.released).toBe(true);
+    expect(result.was_holder).toBe(true);
+  });
+
+  it('reports was_holder:false when caller was only queued', async () => {
+    queueShellJson({ released: true, was_holder: false, holder: { branch: 'other' }, queue: [] });
+
+    const result = (await executeRelease({ branch: 'queued-one', worktree: '/wt' })) as {
+      was_holder: boolean;
+    };
+
+    expect(result.was_holder).toBe(false);
+  });
+
+  it('auto-defaults branch + worktree when omitted', async () => {
+    queueShellRaw('current-branch');
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+
+    await executeRelease({});
+
+    expect(mockShell.mock.calls[1]?.[0]).toContain("'current-branch'");
+    expect(mockShell.mock.calls[1]?.[0]).toContain(`'${process.cwd()}'`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// force-release
+// ---------------------------------------------------------------------------
+
+describe('executeForceRelease', () => {
+  it('shells force-release and returns the cleared holder', async () => {
+    queueShellJson({ cleared_holder: { branch: 'stuck' }, holder: null, queue: [] });
+
+    const result = (await executeForceRelease()) as { cleared_holder: { branch: string } };
+
+    expect(lastCommand()).toMatch(/force-release$/);
+    expect(result.cleared_holder.branch).toBe('stuck');
+  });
+
+  it('handles force-release when env was already free (cleared_holder:null)', async () => {
+    queueShellJson({ cleared_holder: null, holder: null, queue: [] });
+
+    const result = (await executeForceRelease()) as { cleared_holder: null };
+
+    expect(result.cleared_holder).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Quoting / argument safety
+// ---------------------------------------------------------------------------
+
+describe('shell argument quoting', () => {
+  it('escapes single quotes in branch / worktree / purpose', async () => {
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+
+    await executeAcquire({
+      branch: "weird'branch",
+      worktree: "/path/with'quote",
+      purpose: "purpose'with-quote",
+    });
+
+    const cmd = lastCommand();
+    // single quote should be replaced with the standard '\'' shell escape
+    expect(cmd).toContain("'weird'\\''branch'");
+    expect(cmd).toContain("'/path/with'\\''quote'");
+    expect(cmd).toContain("'purpose'\\''with-quote'");
+  });
+
+  it('safely quotes worktree paths in detectBranch (no command substitution)', async () => {
+    // A malicious worktree path with $() must not be expanded by the shell.
+    queueShellRaw('detected-branch'); // git command result
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+
+    await executeAcquire({
+      worktree: '/tmp/$(rm -rf /)evil',
+      purpose: 'inject-test',
+    });
+
+    const gitCmd = mockShell.mock.calls[0]?.[0] as string;
+    // Single-quoted: $(...) is treated as literal text, not a substitution.
+    expect(gitCmd).toContain("git -C '/tmp/$(rm -rf /)evil'");
+    expect(gitCmd).not.toMatch(/git -C "/);
+  });
+});
