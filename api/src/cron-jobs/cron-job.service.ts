@@ -74,6 +74,14 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   ) {}
 
   onApplicationBootstrap() {
+    // Skip bootstrap timers when crons are disabled (integration tests).
+    // Without this gate the 2s setTimeout fires mid-suite and races with
+    // afterEach truncates / in-flight HTTP requests, surfacing as
+    // intermittent log spam ("Failed to sync cron jobs") next to the
+    // socket hang up flake the diagnostic at
+    // planning-artifacts/test-infra-diagnostic-layer-2-2026-05-08.md
+    // calls out (§3d). Production never sets CRON_DISABLED.
+    if (process.env.CRON_DISABLED === 'true') return;
     this.bootstrapTimer = setTimeout(() => {
       this.bootstrapTimer = null;
       this.syncJobs().catch((err) =>

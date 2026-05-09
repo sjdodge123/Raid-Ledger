@@ -31,6 +31,7 @@ import * as path from 'path';
 import * as schema from '../../drizzle/schema';
 import { AppModule } from '../../app.module';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { QueueHealthService } from '../../queue/queue-health.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
@@ -220,6 +221,18 @@ export async function getTestApp(): Promise<TestApp> {
 export async function closeTestApp(): Promise<void> {
   const instance = getInstance();
   if (!instance) return;
+
+  // ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
+  // never has to await an in-flight job whose DB query would race the
+  // _appClient.end({ timeout: 5 }) cap that follows.
+  try {
+    const queueHealth = instance.app.get(QueueHealthService, { strict: false });
+    if (queueHealth) {
+      await queueHealth.awaitDrained(15_000);
+    }
+  } catch {
+    // best-effort — fall through to app.close() regardless
+  }
 
   await instance.app.close();
   if (instance._appClient) {
