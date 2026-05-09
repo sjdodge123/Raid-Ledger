@@ -46,7 +46,13 @@ export function VotingLeaderboard({
     (gameId: number) => {
       toggleVote.mutate(
         { lineupId, gameId },
-        { onError: (err) => toast.error(err instanceof Error ? err.message : 'Vote failed') },
+        {
+          onSuccess: (data) => {
+            const stillVoted = data.myVotes?.includes(gameId) ?? false;
+            toast.success(stillVoted ? 'Vote recorded' : 'Vote removed');
+          },
+          onError: (err) => toast.error(err instanceof Error ? err.message : 'Vote failed'),
+        },
       );
     },
     [lineupId, toggleVote],
