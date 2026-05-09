@@ -23,6 +23,13 @@ MAX_RUNS="${MAX_RUNS:-20}"
 SNAPSHOT_DIR="$REPO_ROOT/planning-artifacts/test-infra-snapshots"
 
 mkdir -p "$LOG_DIR"
+mkdir -p "$SNAPSHOT_DIR"
+
+# Baseline snapshot count — only count NEW snapshots created during this
+# loop as evidence of a hit. Without this, an old snapshot from a prior
+# run would cause the first unrelated non-zero exit to be misclassified
+# as a flake reproduction. Codex review feedback (ROK-1249).
+BASELINE_SNAPSHOTS=$(ls "$SNAPSHOT_DIR" 2>/dev/null | grep -c "^snapshot-")
 
 HIT=0
 HIT_RUN=""
@@ -49,8 +56,9 @@ for i in $(seq 1 "$MAX_RUNS"); do
   fi
 
   if [ "$code" -ne 0 ]; then
-    if ls "$SNAPSHOT_DIR" 2>/dev/null | grep -q "snapshot-"; then
-      echo "FLAKE_DETECTED_VIA_SNAPSHOT run=$i log=$LOG"
+    current_snapshots=$(ls "$SNAPSHOT_DIR" 2>/dev/null | grep -c "^snapshot-")
+    if [ "$current_snapshots" -gt "$BASELINE_SNAPSHOTS" ]; then
+      echo "FLAKE_DETECTED_VIA_SNAPSHOT run=$i log=$LOG (new snapshots: $((current_snapshots - BASELINE_SNAPSHOTS)))"
       HIT=1
       HIT_RUN=$i
       HIT_LOG="$LOG"
