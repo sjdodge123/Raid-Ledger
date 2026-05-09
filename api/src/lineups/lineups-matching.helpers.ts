@@ -62,20 +62,32 @@ async function insertMatch(
     pct >= threshold ? 'scheduling' : 'suggested';
   const fitCategory = await computeFitCategory(db, vc.gameId, vc.voteCount);
 
-  const [match] = await db
-    .insert(schema.communityLineupMatches)
-    .values({
-      lineupId,
-      gameId: vc.gameId,
-      status,
-      thresholdMet: status === 'scheduling',
-      voteCount: vc.voteCount,
-      votePercentage: pct.toFixed(2),
-      fitType: fitCategory,
-    })
-    .returning({ id: schema.communityLineupMatches.id });
-
-  await insertMatchMembers(db, lineupId, match.id, vc.gameId);
+  // ROK-1225: parent + member inserts share one transaction so concurrent
+  // auto-advance callers either both succeed or both roll back. Without this
+  // a racing pair could insert two parents (one rolled back by uq_lineup_match_game)
+  // and orphan member rows pointing at the rolled-back parent id.
+  await db.transaction(async (tx) => {
+    const [match] = await tx
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId,
+        gameId: vc.gameId,
+        status,
+        thresholdMet: status === 'scheduling',
+        voteCount: vc.voteCount,
+        votePercentage: pct.toFixed(2),
+        fitType: fitCategory,
+      })
+      .onConflictDoNothing({
+        target: [
+          schema.communityLineupMatches.lineupId,
+          schema.communityLineupMatches.gameId,
+        ],
+      })
+      .returning({ id: schema.communityLineupMatches.id });
+    if (!match) return;
+    await insertMatchMembers(tx as Db, lineupId, match.id, vc.gameId);
+  });
 }
 
 /** Determine fit category from voter count and game player limits. */
@@ -115,11 +127,23 @@ async function insertMatchMembers(
     );
   if (rows.length === 0) return;
 
-  await db.insert(schema.communityLineupMatchMembers).values(
-    rows.map((r) => ({
-      matchId,
-      userId: r.userId,
-      source: 'voted' as const,
-    })),
-  );
+  // ROK-1225: idempotent against `uq_match_member_user` so a retry/race
+  // can't surface 23505 to the caller. Combined with the migration that
+  // restored the missing FK on match_id, an orphan key collision now
+  // becomes a no-op insert rather than a 500.
+  await db
+    .insert(schema.communityLineupMatchMembers)
+    .values(
+      rows.map((r) => ({
+        matchId,
+        userId: r.userId,
+        source: 'voted' as const,
+      })),
+    )
+    .onConflictDoNothing({
+      target: [
+        schema.communityLineupMatchMembers.matchId,
+        schema.communityLineupMatchMembers.userId,
+      ],
+    });
 }

@@ -118,13 +118,23 @@ export async function insertMatchMembers(
 ): Promise<void> {
   if (userIds.length === 0) return;
   const unique = [...new Set(userIds)];
-  await db.insert(schema.communityLineupMatchMembers).values(
-    unique.map((userId) => ({
-      matchId,
-      userId,
-      source: 'voted' as const,
-    })),
-  );
+  // ROK-1225: idempotent against `uq_match_member_user` so a retry/race
+  // can't surface 23505 to the caller.
+  await db
+    .insert(schema.communityLineupMatchMembers)
+    .values(
+      unique.map((userId) => ({
+        matchId,
+        userId,
+        source: 'voted' as const,
+      })),
+    )
+    .onConflictDoNothing({
+      target: [
+        schema.communityLineupMatchMembers.matchId,
+        schema.communityLineupMatchMembers.userId,
+      ],
+    });
 }
 
 /**
