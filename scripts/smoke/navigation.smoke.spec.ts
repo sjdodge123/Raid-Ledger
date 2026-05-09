@@ -26,22 +26,37 @@ test.describe('Navigation (desktop)', () => {
         const nav = page.locator('header nav[aria-label="Main navigation"]');
         await expect(nav).toBeVisible({ timeout: 15_000 });
 
+        // ROK-1247: gate each nav-click on URL change + networkidle instead
+        // of a heading text match. The previous heading checks raced the nav
+        // link text "Events" / "Calendar" / "Players" (all match the heading
+        // regex) and useQuery's staleTime could keep the page rendering
+        // skeleton chrome with no heading at all. Optional level-1 heading
+        // check after the URL match still verifies the page rendered.
         await nav.getByRole('link', { name: 'Events' }).click();
-        // ROK-1147: scope to the page's <h1> so the locator doesn't race
-        // against the nav link text "Events" (which also matches /Events/i
-        // and renders before the page heading does).
+        await expect(page).toHaveURL(/\/events$/, { timeout: 10_000 });
+        await page.waitForLoadState('networkidle');
         await expect(
             page.getByRole('heading', { level: 1, name: /Events/i }),
         ).toBeVisible({ timeout: 10_000 });
 
         await nav.getByRole('link', { name: 'Games' }).click();
+        await expect(page).toHaveURL(/\/games$/, { timeout: 10_000 });
+        await page.waitForLoadState('networkidle');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         await nav.getByRole('link', { name: 'Players' }).click();
-        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 10_000 });
+        await expect(page).toHaveURL(/\/players$/, { timeout: 10_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: 'Players' }),
+        ).toBeVisible({ timeout: 10_000 });
 
         await nav.getByRole('link', { name: 'Calendar' }).click();
-        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 10_000 });
+        await expect(page).toHaveURL(/\/calendar$/, { timeout: 10_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: 'Calendar' }),
+        ).toBeVisible({ timeout: 10_000 });
     });
 
     test('no critical console errors during navigation', async ({ page }) => {
@@ -52,17 +67,30 @@ test.describe('Navigation (desktop)', () => {
             if (msg.type() === 'error') errors.push(msg.text());
         });
 
+        // ROK-1247: scope each heading check to level: 1 so it doesn't match
+        // the nav link text. networkidle gives useQuery a chance to settle
+        // before the heading visibility assertion fires.
         await page.goto('/calendar');
-        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: 'Calendar' }),
+        ).toBeVisible({ timeout: 15_000 });
 
         await page.goto('/events');
-        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: /Events/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
 
         await page.goto('/games');
+        await page.waitForLoadState('networkidle');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         await page.goto('/players');
-        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 15_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: 'Players' }),
+        ).toBeVisible({ timeout: 15_000 });
 
         const criticalErrors = filterBenignErrors(errors);
         expect(criticalErrors).toHaveLength(0);
@@ -94,21 +122,39 @@ test.describe('Navigation (mobile)', () => {
         const tabBar = page.locator('nav.fixed, nav[aria-label="Main navigation"]').last();
         await expect(tabBar).toBeVisible({ timeout: 15_000 });
 
+        // ROK-1247: assert URL transition + networkidle after each click, then
+        // (where useful) a level-1 heading. This avoids the prior race where
+        // the bottom-tab link text "Events" matched the heading regex before
+        // the page actually mounted. Calendar still uses the mobile-only
+        // "Calendar view switcher" gate (the Calendar h1 is hidden on mobile).
+
         // Use evaluate to click programmatically — bypasses Playwright viewport checks
         const eventsLink = tabBar.getByRole('link', { name: 'Events' });
         await eventsLink.evaluate((el: HTMLElement) => el.click());
-        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 10_000 });
+        await expect(page).toHaveURL(/\/events$/, { timeout: 10_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: /Events/i }).first(),
+        ).toBeVisible({ timeout: 10_000 });
 
         // Navigate to Games
         await tabBar.getByRole('link', { name: 'Games' }).evaluate((el: HTMLElement) => el.click());
+        await expect(page).toHaveURL(/\/games$/, { timeout: 10_000 });
+        await page.waitForLoadState('networkidle');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         // Navigate to Players
         await tabBar.getByRole('link', { name: 'Players' }).evaluate((el: HTMLElement) => el.click());
-        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 10_000 });
+        await expect(page).toHaveURL(/\/players$/, { timeout: 10_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: 'Players' }),
+        ).toBeVisible({ timeout: 10_000 });
 
         // Navigate back to Calendar — heading is hidden (md:block), use mobile toolbar
         await tabBar.getByRole('link', { name: 'Calendar' }).evaluate((el: HTMLElement) => el.click());
+        await expect(page).toHaveURL(/\/calendar$/, { timeout: 10_000 });
+        await page.waitForLoadState('networkidle');
         await expect(page.getByLabel('Calendar view switcher')).toBeVisible({ timeout: 10_000 });
     });
 
@@ -120,18 +166,28 @@ test.describe('Navigation (mobile)', () => {
             if (msg.type() === 'error') errors.push(msg.text());
         });
 
+        // ROK-1247: networkidle + level-1 heading to keep checks deterministic
+        // without depending on useQuery's cache being warm.
         // Calendar heading is hidden on mobile — use the mobile toolbar instead
         await page.goto('/calendar');
+        await page.waitForLoadState('networkidle');
         await expect(page.getByLabel('Calendar view switcher')).toBeVisible({ timeout: 15_000 });
 
         await page.goto('/events');
-        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: /Events/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
 
         await page.goto('/games');
+        await page.waitForLoadState('networkidle');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         await page.goto('/players');
-        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 15_000 });
+        await page.waitForLoadState('networkidle');
+        await expect(
+            page.getByRole('heading', { level: 1, name: 'Players' }),
+        ).toBeVisible({ timeout: 15_000 });
 
         const criticalErrors = filterBenignErrors(errors);
         expect(criticalErrors).toHaveLength(0);
