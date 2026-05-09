@@ -6,6 +6,7 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { useLineupBanner, useLineupDetail, useToggleVote } from '../../hooks/use-lineups';
 import { useTiebreakerDetail } from '../../hooks/use-tiebreaker';
+import { toast } from '../../lib/toast';
 
 interface Props {
   gameId: number;
@@ -103,7 +104,16 @@ function VotingBanner({ lineupId, gameId, gameName }: {
   const isVoting = voteMutation.isPending;
 
   const handleVote = () => {
-    voteMutation.mutate({ lineupId, gameId });
+    voteMutation.mutate(
+      { lineupId, gameId },
+      {
+        onSuccess: (data) => {
+          const stillVoted = data.myVotes?.includes(gameId) ?? false;
+          toast.success(stillVoted ? 'Vote recorded' : 'Vote removed');
+        },
+        onError: (err) => toast.error(err instanceof Error ? err.message : 'Vote failed'),
+      },
+    );
   };
 
   return (
