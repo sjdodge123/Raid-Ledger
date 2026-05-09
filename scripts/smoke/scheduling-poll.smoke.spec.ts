@@ -53,7 +53,7 @@ async function pollSchedulingPollHasSlot(
         },
         {
             timeoutMs: 15_000,
-            description: `/lineups/${'${id}'}/schedule/${'${matchId}'} has slot${opts?.withVote ? '+vote' : ''}`,
+            description: `/lineups/${lineupId}/schedule/${matchId} has slot${opts?.withVote ? '+vote' : ''}`,
         },
     );
 }
