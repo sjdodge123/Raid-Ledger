@@ -40,7 +40,7 @@ Three loops were run during the spike. Only the third produced a captured snapsh
 
 ## 3. Captured Snapshot — Decoded
 
-`planning-artifacts/test-infra-snapshots/snapshot-2026-05-09T18-06-17-432Z.json`
+`docs/spikes/rok-1249-snapshot.json`
 
 ### 3a. Failure context
 
