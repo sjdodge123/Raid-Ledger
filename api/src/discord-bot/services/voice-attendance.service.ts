@@ -71,12 +71,14 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     }, FLUSH_INTERVAL_MS);
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
     if (this.flushTimer) clearInterval(this.flushTimer);
     this.flushTimer = null;
-    this.flushToDb().catch((e) =>
-      this.logger.error(`Final flush failed: ${e}`),
-    );
+    try {
+      await this.flushToDb();
+    } catch (e) {
+      this.logger.error(`Final flush failed: ${e}`);
+    }
   }
 
   handleJoin(
