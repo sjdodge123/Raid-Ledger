@@ -1,11 +1,13 @@
 /**
- * Phase breadcrumb interaction smoke tests (ROK-946).
+ * Phase breadcrumb interaction smoke tests (ROK-946, modal-flow ROK-1123).
  *
  * Tests the interactive phase breadcrumb on the lineup detail page:
  * - Adjacent phases are clickable for operators
- * - First click shows "Advance?" or "Revert?" confirmation
- * - Second click executes the transition
- * - Confirmation resets after 3-second timeout
+ * - Clicking an adjacent phase pill opens a confirm/cancel modal whose
+ *   title names the target phase ("Advance to Voting?", "Revert to
+ *   Nominating?", etc.)
+ * - Clicking the confirm button executes the transition
+ * - Cancelling/closing the modal does not fire the transition
  * - Non-adjacent phases are not clickable
  *
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
@@ -173,23 +175,24 @@ test.describe('Phase breadcrumb — advance', () => {
         adminToken = await getAdminToken();
     });
 
-    test('first click shows "Advance?" confirmation', async ({ page }) => {
+    test('click opens advance modal with target phase title', async ({ page }) => {
         await expect(async () => {
             const lineupId = await ensureActiveLineup(adminToken);
             await gotoLineupDetail(page, lineupId);
-            await page.getByRole('button', { name: 'Voting' }).click();
-            await expect(page.getByRole('button', { name: 'Advance?' })).toBeVisible({ timeout: 3_000 });
+            await page.getByRole('button', { name: 'Voting' }).first().click();
+            await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3_000 });
+            await expect(page.getByRole('heading', { name: /Advance to Voting\?/ })).toBeVisible({ timeout: 3_000 });
         }).toPass({ timeout: 30_000 });
     });
 
-    test('second click executes advance to voting', async ({ page }) => {
+    test('confirm button executes advance to voting', async ({ page }) => {
         await expect(async () => {
             const lineupId = await ensureActiveLineup(adminToken);
             await gotoLineupDetail(page, lineupId);
 
-            await page.getByRole('button', { name: 'Voting' }).click();
-            await expect(page.getByRole('button', { name: 'Advance?' })).toBeVisible({ timeout: 3_000 });
-            await page.getByRole('button', { name: 'Advance?' }).click();
+            await page.getByRole('button', { name: 'Voting' }).first().click();
+            await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3_000 });
+            await page.getByRole('button', { name: /^Advance to Voting$/ }).click();
         }).toPass({ timeout: 30_000 });
 
         // Status should update to Voting
@@ -211,23 +214,24 @@ test.describe('Phase breadcrumb — revert', () => {
         adminToken = await getAdminToken();
     });
 
-    test('first click shows "Revert?" confirmation', async ({ page }) => {
+    test('click opens revert modal with target phase title', async ({ page }) => {
         await expect(async () => {
             const lineupId = await ensureLineupInPhase(adminToken, 'voting');
             await gotoLineupDetail(page, lineupId);
-            await page.getByRole('button', { name: 'Nominating' }).click();
-            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 10_000 });
+            await page.getByRole('button', { name: 'Nominating' }).first().click();
+            await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+            await expect(page.getByRole('heading', { name: /Revert to Nominating\?/ })).toBeVisible({ timeout: 10_000 });
         }).toPass({ timeout: 30_000 });
     });
 
-    test('second click executes revert to building', async ({ page }) => {
+    test('confirm button executes revert to building', async ({ page }) => {
         await expect(async () => {
             const lineupId = await ensureLineupInPhase(adminToken, 'voting');
             await gotoLineupDetail(page, lineupId);
 
-            await page.getByRole('button', { name: 'Nominating' }).click();
-            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 10_000 });
-            await page.getByRole('button', { name: 'Revert?' }).click();
+            await page.getByRole('button', { name: 'Nominating' }).first().click();
+            await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+            await page.getByRole('button', { name: /^Revert to Nominating$/ }).click();
         }).toPass({ timeout: 30_000 });
 
         // Status should revert to Nominating/building
@@ -239,9 +243,9 @@ test.describe('Phase breadcrumb — revert', () => {
             const lineupId = await ensureLineupInPhase(adminToken, 'decided');
             await gotoLineupDetail(page, lineupId);
 
-            await page.getByRole('button', { name: 'Voting' }).click();
-            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 10_000 });
-            await page.getByRole('button', { name: 'Revert?' }).click();
+            await page.getByRole('button', { name: 'Voting' }).first().click();
+            await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+            await page.getByRole('button', { name: /^Revert to Voting$/ }).click();
         }).toPass({ timeout: 30_000 });
 
         await expect(page.locator('span').filter({ hasText: /Voting/ }).first()).toBeVisible({ timeout: 10_000 });
