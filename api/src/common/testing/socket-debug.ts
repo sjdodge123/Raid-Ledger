@@ -35,12 +35,21 @@ function logSocketClose(meta: RequestMeta | undefined): void {
 
 export function instrumentHttpServer(server: Server): void {
   const reqStart = new WeakMap<Socket, RequestMeta>();
+  let reqCount = 0;
   server.on('request', (req) => {
     reqStart.set(req.socket, {
       method: req.method ?? 'UNKNOWN',
       url: req.url ?? '',
       startedAt: Date.now(),
     });
+    // First request per app boot logs once so smoke runs can confirm
+    // the instrumentation is wired without spamming healthy traffic.
+    if (reqCount === 0) {
+      console.error(
+        `[SOCKET] instrumented ${new Date().toISOString()} first request: ${req.method ?? 'UNKNOWN'} ${req.url ?? ''}`,
+      );
+    }
+    reqCount += 1;
   });
   server.on('connection', (socket: Socket) => {
     socket.on('error', (err: NodeJS.ErrnoException) =>
