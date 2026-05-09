@@ -15,7 +15,40 @@
  */
 import { test, expect } from './base';
 import { navigateToFirstEvent, isMobile } from './helpers';
-import { API_BASE, getAdminToken, apiDelete } from './api-helpers';
+import {
+    API_BASE,
+    getAdminToken,
+    apiDelete,
+    apiGet,
+    pollForCondition,
+} from './api-helpers';
+
+/**
+ * ROK-1247: Poll the standalone scheduling poll endpoint until the server
+ * observes the freshly-created poll. The page's useQuery has a 15s
+ * staleTime — without this barrier the cached fetch from a sibling test
+ * can short-circuit the page render and the smoke assertions never see
+ * the standalone poll's UI.
+ */
+async function pollPollPageHasMatch(
+    token: string,
+    lineupId: number,
+    matchId: number,
+): Promise<unknown> {
+    return pollForCondition(
+        async () => {
+            const data = (await apiGet(
+                token,
+                `/lineups/${lineupId}/schedule/${matchId}`,
+            )) as { match?: unknown } | null;
+            return data?.match ? data : null;
+        },
+        {
+            timeoutMs: 15_000,
+            description: 'standalone scheduling poll endpoint',
+        },
+    );
+}
 
 /** Get a valid gameId from seeded data. */
 async function getFirstGameId(token: string): Promise<number> {
@@ -203,6 +236,11 @@ test.describe('Events page poll creation navigates to scheduling poll', () => {
         expect(createRes.status).toBe(201);
         const poll = (await createRes.json()) as { id: number; lineupId: number };
 
+        // ROK-1247: poll the API until the new standalone poll is observable
+        // before navigating, so the page's useQuery doesn't short-circuit
+        // on a cached empty fetch from a sibling test.
+        await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+
         // Navigate to the scheduling poll page
         await page.goto(
             `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
@@ -374,6 +412,12 @@ test.describe('Standalone poll — scheduling poll page', () => {
         };
 
         try {
+            // ROK-1247: poll until the API surfaces the new standalone poll.
+            // Without this, [data-testid="match-context-card"] can fail to
+            // render within the test window because useQuery returns a stale
+            // empty cache for the lineup/match endpoint.
+            await pollPollPageHasMatch(token, poll.lineupId, poll.id);
+
             // Navigate to the scheduling poll page
             await page.goto(
                 `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
