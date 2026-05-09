@@ -5,9 +5,17 @@
  * across building, voting, and decided phases. Both desktop and mobile
  * Playwright projects exercise these tests per CLAUDE.md.
  *
- * Setup: per-worker prefixed lineup created in `beforeAll`; the admin user
- * is the creator (organizer persona). Tests narrow to the invitee-acted /
- * invitee-not-acted persona by switching the in-page action state via API.
+ * Setup: per-worker prefixed lineup created in `beforeAll`. The admin user
+ * is the creator and therefore resolves to the **organizer** persona (per
+ * `getLineupPersona`: `isOperatorOrAdmin && creator → 'organizer'`). These
+ * smoke tests assert organizer-persona hero copy + CTA wiring + the
+ * confirmation pill rendering when the organizer themselves nominates/votes.
+ * Invitee-acted / invitee-not-acted persona variants are covered
+ * exhaustively by the vitest unit suite for `useLineupHero`,
+ * `getLineupPersona`, `hasUserActedInPhase`, and `getLineupHeroCopy` —
+ * smoke does not exercise them because there is no non-admin fixture user
+ * available to the smoke harness today (tracked in TECH-DEBT-BACKLOG.md
+ * 2026-05-09).
  *
  * NOTE: dev-brief and build-state.yaml referenced the path
  * `web/playwright/lineup-confirmation-pills.spec.ts`. The repo's
@@ -75,26 +83,36 @@ test.describe('Building phase — hero + pill', () => {
         await awaitProcessing(adminToken);
     });
 
-    test('hero shows action tone with Nominate CTA when no nominations', async ({ page }) => {
+    test('hero shows action tone with organizer Advance-to-Voting CTA when no nominations', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         const hero = page.getByTestId('hero-next-step');
         await expect(hero).toBeVisible({ timeout: 15_000 });
         await expect(hero).toHaveAttribute('data-tone', 'action');
-        await expect(hero.getByRole('button', { name: /nominate/i })).toBeVisible();
+        // Organizer persona on building → "Advance to Voting" CTA per spec.
+        await expect(hero.getByRole('button', { name: /advance to voting/i })).toBeVisible();
     });
 
-    test('hero CTA opens the Nominate modal', async ({ page }) => {
+    test('hero copy reflects current nomination count for organizer', async ({ page }) => {
+        // Nominate via API so the organizer-flavored "X of Y nominated" copy
+        // includes the count. Validates AC-15 (copy chosen by persona × phase
+        // × current state — count refreshes when state changes).
+        await apiPost(adminToken, `/lineups/${lineupId}/nominate`, {
+            gameId: gameIds[0],
+        });
+        await awaitProcessing(adminToken);
+
         await page.goto(`/community-lineup/${lineupId}`);
         const hero = page.getByTestId('hero-next-step');
         await expect(hero).toBeVisible({ timeout: 15_000 });
-        await hero.getByRole('button', { name: /nominate/i }).click();
-        await expect(page.getByRole('dialog', { name: /nominate a game/i })).toBeVisible({
-            timeout: 5_000,
-        });
+        // Organizer copy: "{N} of {M} nominated. Advance to Voting when ready."
+        await expect(hero).toContainText(/\d+ of \d+ nominated/i);
+        await expect(hero.getByRole('button', { name: /advance to voting/i })).toBeVisible();
     });
 
-    test("after nominating, per-card pill appears and hero flips to waiting tone", async ({ page }) => {
-        // Nominate via API to keep the test deterministic.
+    test("after nominating, per-card pill appears on organizer's nominated card", async ({ page }) => {
+        // Nominate via API to keep the test deterministic. Pill renders
+        // because `entry.nominatedBy.id === user.id` regardless of persona —
+        // organizer who self-nominates still sees their own pill.
         await apiPost(adminToken, `/lineups/${lineupId}/nominate`, {
             gameId: gameIds[0],
         });
@@ -110,8 +128,10 @@ test.describe('Building phase — hero + pill', () => {
         await expect(pill).toBeVisible({ timeout: 10_000 });
         await expect(pill).toContainText(/your nomination/i);
 
+        // Hero stays action-tone for organizer (no waiting flip — that's
+        // the invitee-acted variant, covered by vitest).
         const hero = page.getByTestId('hero-next-step');
-        await expect(hero).toHaveAttribute('data-tone', 'waiting');
+        await expect(hero).toHaveAttribute('data-tone', 'action');
     });
 });
 
@@ -187,8 +207,12 @@ test.describe('Decided phase — hero schedule CTA', () => {
 
         const hero = page.getByTestId('hero-next-step');
         await expect(hero).toBeVisible({ timeout: 15_000 });
-        // The CTA should mention "Schedule" as a verb.
-        await expect(hero.getByRole('button', { name: /schedule/i })).toBeVisible({
+        // Organizer copy is "Open scheduling" (decided phase, hasGame). The
+        // regex must match "schedul" so it works for both the invitee
+        // "Schedule {gameName}" form (covered by vitest) and the organizer
+        // "Open scheduling" form. /schedule/i alone fails because
+        // "scheduling" lacks the literal "schedule" substring.
+        await expect(hero.getByRole('button', { name: /schedul/i })).toBeVisible({
             timeout: 5_000,
         });
     });
