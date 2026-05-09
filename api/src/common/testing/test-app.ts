@@ -35,6 +35,7 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
+import { instrumentHttpServer } from './socket-debug';
 
 export type { RedisMockHandle } from './redis-mock';
 
@@ -159,6 +160,9 @@ async function buildNestApp(
   await app.init();
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
+  }
+  if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
+    instrumentHttpServer(app.getHttpServer() as import('http').Server);
   }
   const request = supertest.default(
     app.getHttpServer() as import('http').Server,

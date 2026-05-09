@@ -28,9 +28,7 @@ const SNAPSHOT_DIR = path.resolve(
 
 function buildFakeApp(): unknown {
   return {
-    get: (_token: unknown, _opts?: unknown) => {
-      return null;
-    },
+    get: () => null,
   };
 }
 
@@ -49,8 +47,7 @@ function buildFakeRedisMock(): unknown {
 function buildFakeAppClient(): unknown {
   return {
     options: { max: 10 },
-    // Probe query handler — returns a count row immediately.
-    unsafe: async () => [{ count: '3' }],
+    unsafe: () => Promise.resolve([{ count: '3' }]),
   };
 }
 
@@ -59,12 +56,14 @@ function readLatestSnapshot(filePath: string): Record<string, unknown> {
   return JSON.parse(raw) as Record<string, unknown>;
 }
 
-describe('dumpFailureSnapshot', () => {
-  beforeEach(() => {
-    TEST_INSTANCE.app = buildFakeApp();
-    TEST_INSTANCE.redisMock = buildFakeRedisMock();
-    TEST_INSTANCE._appClient = buildFakeAppClient();
-  });
+function resetTestInstance(): void {
+  TEST_INSTANCE.app = buildFakeApp();
+  TEST_INSTANCE.redisMock = buildFakeRedisMock();
+  TEST_INSTANCE._appClient = buildFakeAppClient();
+}
+
+describe('dumpFailureSnapshot — payload shape', () => {
+  beforeEach(resetTestInstance);
 
   it('writes a JSON snapshot with all five state buckets', async () => {
     const reason = 'socket hang up';
@@ -73,50 +72,39 @@ describe('dumpFailureSnapshot', () => {
       url: '/admin/test/await-processing',
       elapsedMs: 1234,
     };
-
     const filePath = await dumpFailureSnapshot(reason, context);
-
     expect(filePath).toMatch(/snapshot-.*\.json$/);
     expect(fs.existsSync(filePath)).toBe(true);
-
     const snapshot = readLatestSnapshot(filePath);
-
     expect(snapshot).toHaveProperty('reason', reason);
-    expect(snapshot).toHaveProperty('context');
     expect(snapshot.context).toMatchObject(context);
-
     expect(snapshot).toHaveProperty('postgresPool');
     expect(snapshot).toHaveProperty('bullmqWorkers');
     expect(snapshot).toHaveProperty('activeHandles');
     expect(snapshot).toHaveProperty('cronJobs');
     expect(snapshot).toHaveProperty('redisMockStore');
-
     expect(Array.isArray(snapshot.bullmqWorkers)).toBe(true);
     expect(Array.isArray(snapshot.cronJobs)).toBe(true);
-
-    // Cleanup so repeated runs don't pile up snapshots.
     fs.unlinkSync(filePath);
   });
 
   it('echoes reason without context when none provided', async () => {
     const filePath = await dumpFailureSnapshot('ECONNRESET');
     const snapshot = readLatestSnapshot(filePath);
-
     expect(snapshot.reason).toBe('ECONNRESET');
     expect(snapshot.context ?? null).toBeNull();
-
     fs.unlinkSync(filePath);
   });
+});
+
+describe('dumpFailureSnapshot — filesystem + buckets', () => {
+  beforeEach(resetTestInstance);
 
   it('creates the snapshots directory if it does not exist', async () => {
     if (fs.existsSync(SNAPSHOT_DIR)) {
-      // Only remove if it's empty to avoid trampling captured artifacts.
       const entries = fs.readdirSync(SNAPSHOT_DIR);
-      if (entries.length === 0) {
-        fs.rmdirSync(SNAPSHOT_DIR);
-      }
+      if (entries.length === 0) fs.rmdirSync(SNAPSHOT_DIR);
     }
-
     const filePath = await dumpFailureSnapshot('directory-creation');
     expect(fs.existsSync(SNAPSHOT_DIR)).toBe(true);
     fs.unlinkSync(filePath);
@@ -125,7 +113,6 @@ describe('dumpFailureSnapshot', () => {
   it('groups redis-mock keys by prefix and samples them', async () => {
     const filePath = await dumpFailureSnapshot('redis-prefix-test');
     const snapshot = readLatestSnapshot(filePath);
-
     const redis = snapshot.redisMockStore as Record<string, unknown>;
     expect(redis).toHaveProperty('totalKeys');
     expect(redis).toHaveProperty('prefixes');
@@ -136,7 +123,6 @@ describe('dumpFailureSnapshot', () => {
     expect(prefixes['bull']).toBeDefined();
     expect(prefixes['jwt_block']).toBeDefined();
     expect(prefixes['jwt_block'].count).toBe(3);
-
     fs.unlinkSync(filePath);
   });
 });
