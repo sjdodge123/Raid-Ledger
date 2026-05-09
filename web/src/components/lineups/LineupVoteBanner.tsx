@@ -107,7 +107,10 @@ function VotingBanner({ lineupId, gameId, gameName }: {
     voteMutation.mutate(
       { lineupId, gameId },
       {
-        onSuccess: () => toast.success(hasVoted ? 'Vote removed' : 'Vote recorded'),
+        onSuccess: (data) => {
+          const stillVoted = data.myVotes?.includes(gameId) ?? false;
+          toast.success(stillVoted ? 'Vote recorded' : 'Vote removed');
+        },
         onError: (err) => toast.error(err instanceof Error ? err.message : 'Vote failed'),
       },
     );

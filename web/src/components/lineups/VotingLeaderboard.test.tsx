@@ -201,7 +201,8 @@ describe('VotingLeaderboard — vote feedback (ROK-1119)', () => {
     expect(typeof opts.onSuccess).toBe('function');
 
     // Simulate the server returning success — the component should toast.success
-    opts.onSuccess?.({} as never, { lineupId: 1, gameId: 42 } as never, undefined);
+    // After add: server's myVotes now includes gameId 42
+    opts.onSuccess?.({ myVotes: [42] } as never, { lineupId: 1, gameId: 42 } as never, undefined);
 
     expect(toast.success).toHaveBeenCalledTimes(1);
     expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(/vote recorded/i);
@@ -221,8 +222,8 @@ describe('VotingLeaderboard — vote feedback (ROK-1119)', () => {
     expect(vars).toEqual({ lineupId: 1, gameId: 42 });
     expect(typeof opts.onSuccess).toBe('function');
 
-    // Simulate the toggle-off success — component should toast.success removal
-    opts.onSuccess?.({} as never, vars, undefined);
+    // Simulate the toggle-off success — server's myVotes no longer includes gameId 42
+    opts.onSuccess?.({ myVotes: [] } as never, vars, undefined);
 
     expect(toast.success).toHaveBeenCalledTimes(1);
     expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(/vote removed/i);

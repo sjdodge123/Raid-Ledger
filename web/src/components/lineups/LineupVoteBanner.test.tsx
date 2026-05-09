@@ -98,7 +98,8 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         expect(opts).toBeDefined();
         expect(typeof opts.onSuccess).toBe('function');
 
-        opts.onSuccess?.({} as never, vars, undefined);
+        // Server returns the updated lineup with the vote now recorded
+        opts.onSuccess?.({ myVotes: [GAME_ID] } as never, vars, undefined);
 
         expect(toast.success).toHaveBeenCalledTimes(1);
         expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(/vote recorded/i);
@@ -119,7 +120,8 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         expect(vars).toEqual({ lineupId: LINEUP_ID, gameId: GAME_ID });
         expect(typeof opts.onSuccess).toBe('function');
 
-        opts.onSuccess?.({} as never, vars, undefined);
+        // Server returns the updated lineup with the vote no longer present
+        opts.onSuccess?.({ myVotes: [] } as never, vars, undefined);
 
         expect(toast.success).toHaveBeenCalledTimes(1);
         expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(/vote removed/i);
