@@ -74,6 +74,14 @@ function getInstance(): TestApp | null {
   );
 }
 
+/** Public alias used by `dump-failure-snapshot.ts` to read live app state
+ * (DI container, postgres-js client, redis-mock store) at the moment a
+ * `socket hang up` / ECONNRESET surfaces during the integration suite.
+ * ROK-1249. */
+export function getTestAppInstance(): TestApp | null {
+  return getInstance();
+}
+
 function setInstance(app: TestApp | null): void {
   (process as unknown as Record<string, TestApp | null>)[INSTANCE_KEY] = app;
 }
