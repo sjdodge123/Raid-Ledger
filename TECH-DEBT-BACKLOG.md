@@ -69,3 +69,16 @@ A skill's job is typically: parse → group duplicates by file path → propose 
   - `scripts/smoke/standalone-scheduling-poll.smoke.spec.ts` (desktop, 3 tests)
   - `scripts/smoke/games.smoke.spec.ts` (mobile, ROK-811 regression spec)
   Suggested: revisit canceled ROK-1226/ROK-1227 — the cancel reason ("downstream effect of LineupsService matching bug") may have shifted now that rok-1067 (#743) and ROK-1232 (#730) merged. The admin-* failures are likely the staleTime polling pattern documented in operator memory `feedback_smoke_polling_for_async_writes.md` (ROK-1156). ROK-811 mobile regression suggests recent UI restructuring on Games page.
+
+### 2026-05-09 — rok-1225-stabilize-lineups (PR #751)
+
+- **[low]** `api/src/itad/itad-price-sync.service.ts:25` — keeps `export { extractErrorDetail }` re-export shim because `itad-price-sync.service.adversarial.spec.ts:17` still imports from the old path. CLAUDE.md frowns on re-export shims; two-line fix in a follow-up chore.
+  Suggested: update the spec import to `from '../common/pg-error.helpers'` and delete the re-export.
+- **[low]** `api/src/lineups/lineups-bandwagon.helpers.ts:48` — insert uses pre-check + `ConflictException` for the 409 UX path. Could be replaced with `.onConflictDoNothing().returning({ id })` and treat empty-returning as "already a member" — cleaner but a behavior change for the 409 response.
+  Suggested: spike a follow-up to confirm the UX impact before touching.
+- **[low]** `community_lineup_schedule_slots.match_id` and `community_lineup_schedule_votes.slot_id` FKs declared in 0113 — verify presence on prod via DB probe (this PR fixes only the empirically-missing one on `community_lineup_match_members.match_id`).
+  Suggested: one-off operator psql probe; if missing, file a focused follow-up like ROK-1225.
+- **[med]** Worktree `api/.env` doesn't inherit `DEMO_MODE=true` from root `.env`; smoke tests against a freshly-spun-up worktree API need explicit override. Pre-existing dev-env gap surfaced during this branch (dev had to manually set `DEMO_MODE=true` when starting the API). Affects every worktree-based smoke run.
+  Suggested: have `mcp-env env_copy` propagate `DEMO_MODE` from root `.env` to `api/.env` automatically on worktree setup, or have `deploy_dev.sh --ci` inject it.
+- **[low]** Production DB likely has the same orphan rows on `community_lineup_match_members` — migration's `DELETE FROM ... WHERE NOT EXISTS` will clean them on next deploy (Watchtower 5AM); pre-deploy probe optional but informative.
+  Suggested: operator-run psql `SELECT COUNT(*) FROM community_lineup_match_members m WHERE NOT EXISTS (SELECT 1 FROM community_lineup_matches WHERE id = m.match_id);` against prod before tomorrow's 5AM pull.

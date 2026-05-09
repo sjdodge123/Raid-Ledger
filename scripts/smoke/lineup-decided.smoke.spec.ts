@@ -554,25 +554,29 @@ test.describe('Decided view rendering', () => {
             timeout: 15_000,
         });
 
-        // If no matches exist, empty state message should show
-        const emptyState = page.getByText(
-            /No matches were generated from voting/i,
-        );
-        // We expect matches to exist, so empty state should NOT be visible
-        // But the component must render this when matches are empty
+        // If no matches exist, empty state message should show (testid:
+        // lineup-decided-empty-state). We expect matches to exist, so empty
+        // state should NOT be visible — but the component must render the
+        // testid'd block when matches are empty.
+        const emptyState = page.getByTestId('lineup-decided-empty-state');
         const matchSections = page.locator(
             '[data-testid="match-tier-section"]',
         );
-        // ROK-1070: bumped 10_000 -> 20_000 to match desktop behaviour and
-        // the existing 15s React Query staleTime. Mobile renders run slightly
-        // slower in CI and the tighter timeout produced false-empty hits.
-        const hasSections = await matchSections.first()
-            .isVisible({ timeout: 20_000 })
-            .catch(() => false);
-
-        if (!hasSections) {
-            await expect(emptyState).toBeVisible({ timeout: 5_000 });
-        }
+        // Race the two terminal states (matches loaded vs empty rendered) —
+        // `isVisible()` does NOT auto-wait, so the previous code returned
+        // `hasSections=false` synchronously even though the React Query
+        // fetch hadn't resolved yet. Use `waitFor()` on either branch.
+        const ready = await Promise.race([
+            matchSections.first()
+                .waitFor({ state: 'visible', timeout: 20_000 })
+                .then(() => 'sections' as const)
+                .catch(() => null),
+            emptyState
+                .waitFor({ state: 'visible', timeout: 20_000 })
+                .then(() => 'empty' as const)
+                .catch(() => null),
+        ]);
+        expect(ready).not.toBeNull();
     });
 
     test('champion card has gold gradient border and crown icon', async ({

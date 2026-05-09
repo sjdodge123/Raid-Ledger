@@ -17,6 +17,8 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { buildMatchesForLineup } from './lineups-matching.helpers';
+import { eq, sql } from 'drizzle-orm';
 
 // ── Shared state ──────────────────────────────────────────────
 let testApp: TestApp;
@@ -648,3 +650,248 @@ function describeCarryover() {
   });
 }
 describe('Auto-Carryover on Lineup Creation', describeCarryover);
+
+// ── ROK-1225: buildMatchesForLineup race + idempotency regressions ──
+
+/**
+ * Set up a lineup in 'voting' status with entries and votes ready for the
+ * matching algorithm — but do NOT call `buildMatchesForLineup` yet. Returns
+ * the lineup id and the voter user ids so callers can assert downstream.
+ */
+async function seedLineupReadyForMatching(opts: {
+  voterCount: number;
+  threshold: number;
+  tag: string;
+}): Promise<{ lineupId: number; voterIds: number[]; gameId: number }> {
+  const game = await createGame(`${opts.tag} Game`, `${opts.tag}-game`);
+
+  // Create the lineup through the API so public_slug + defaults are populated
+  // (the POST endpoint runs insertWithSlugRetry internally).
+  const createRes = await testApp.request
+    .post('/lineups')
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ title: `${opts.tag} Lineup`, matchThreshold: opts.threshold });
+  const lineupId = createRes.body.id as number;
+
+  await testApp.db.insert(schema.communityLineupEntries).values({
+    lineupId,
+    gameId: game.id,
+    nominatedBy: testApp.seed.adminUser.id,
+  });
+
+  // Advance to voting through the API so any phase-deadline side effects fire.
+  await testApp.request
+    .patch(`/lineups/${lineupId}/status`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ status: 'voting' });
+
+  const voterIds: number[] = [];
+  for (let i = 0; i < opts.voterCount; i++) {
+    const m = await loginAsMember(`${opts.tag}-voter-${i}`);
+    voterIds.push(m.userId);
+    await testApp.db.insert(schema.communityLineupVotes).values({
+      lineupId,
+      userId: m.userId,
+      gameId: game.id,
+    });
+  }
+
+  return { lineupId, voterIds, gameId: game.id };
+}
+
+function describeMatchingRaceAndIdempotency() {
+  it('single buildMatchesForLineup invocation creates match + voted members', async () => {
+    const { lineupId, voterIds } = await seedLineupReadyForMatching({
+      voterCount: 5,
+      threshold: 35,
+      tag: 'single',
+    });
+
+    await expect(
+      buildMatchesForLineup(testApp.db, lineupId),
+    ).resolves.toBeUndefined();
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches).toHaveLength(1);
+
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers)
+      .where(eq(schema.communityLineupMatchMembers.matchId, matches[0].id));
+    expect(members).toHaveLength(voterIds.length);
+    for (const member of members) {
+      expect(member.source).toBe('voted');
+      expect(voterIds).toContain(member.userId);
+    }
+  });
+
+  it('5x parallel buildMatchesForLineup does not throw uq_match_member_user', async () => {
+    const { lineupId, voterIds } = await seedLineupReadyForMatching({
+      voterCount: 5,
+      threshold: 35,
+      tag: 'race',
+    });
+
+    const results = await Promise.allSettled([
+      buildMatchesForLineup(testApp.db, lineupId),
+      buildMatchesForLineup(testApp.db, lineupId),
+      buildMatchesForLineup(testApp.db, lineupId),
+      buildMatchesForLineup(testApp.db, lineupId),
+      buildMatchesForLineup(testApp.db, lineupId),
+    ]);
+
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    if (rejected.length > 0) {
+      const reasons = rejected
+        .map((r) => r.reason)
+        .map((e) => (e instanceof Error ? e.message : String(e)));
+      throw new Error(
+        `Expected all 5 calls to settle as fulfilled but ${rejected.length} rejected:\n${reasons.join('\n')}`,
+      );
+    }
+    expect(rejected).toHaveLength(0);
+
+    // Exactly one parent match per (lineup, game) regardless of race count;
+    // member rows must equal voter count (no duplicates beyond uq_match_member_user).
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches).toHaveLength(1);
+
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers)
+      .where(eq(schema.communityLineupMatchMembers.matchId, matches[0].id));
+    expect(members).toHaveLength(voterIds.length);
+    const memberUserIds = members.map((m) => m.userId).sort();
+    expect(memberUserIds).toEqual([...voterIds].sort());
+  });
+
+  it('orphan member row at the next match auto-id does not collide on uq_match_member_user', async () => {
+    // Reproduces the production failure mode (ROK-1225). In dev/prod the FK on
+    // community_lineup_match_members.match_id is missing, allowing orphan rows
+    // from prior runs whose match_id collides with the next auto-assigned
+    // match id. We simulate that state in the test DB by:
+    //   1. Dropping the FK at runtime (mimics the broken dev state).
+    //   2. Pre-inserting an orphan (next-match-id, voter-user-id) row.
+    //   3. Calling buildMatchesForLineup, which today raises 23505 on
+    //      uq_match_member_user. Once Commit 3 lands (.onConflictDoNothing()),
+    //      the insert becomes idempotent and this test passes.
+    //   4. Asserting the new match exists AND no orphan rows remain — the
+    //      cleanup migration (Commit 2) must scrub them at setup time.
+    const orphanVoter = await loginAsMember('orphan-victim');
+
+    // Drop ALL FK constraints on match_id so we can plant an orphan row.
+    // 0104 created the FK inline (auto-named *_fkey) and 0113 also declares
+    // the long-named one — the test DB may carry one or both depending on
+    // migration order. Cleanup migration must restore at least one.
+    await testApp.db.execute(sql`
+      DO $$
+      DECLARE
+        c text;
+      BEGIN
+        FOR c IN
+          SELECT conname FROM pg_constraint
+          WHERE conrelid = 'community_lineup_match_members'::regclass
+            AND contype = 'f'
+            AND pg_get_constraintdef(oid) LIKE '%community_lineup_matches%'
+        LOOP
+          EXECUTE format(
+            'ALTER TABLE community_lineup_match_members DROP CONSTRAINT %I',
+            c
+          );
+        END LOOP;
+      END $$
+    `);
+
+    // Predict the next match auto-id by reading the sequence — orphan must
+    // collide with the row buildMatchesForLineup will attempt to insert.
+    const nextIdRows = await testApp.db.execute<{ next_id: number }>(sql`
+      SELECT (last_value + CASE WHEN is_called THEN 1 ELSE 0 END)::int AS next_id
+      FROM community_lineup_matches_id_seq
+    `);
+    const nextMatchId = nextIdRows[0].next_id;
+
+    await testApp.db.insert(schema.communityLineupMatchMembers).values({
+      matchId: nextMatchId,
+      userId: orphanVoter.userId,
+      source: 'voted',
+    });
+
+    // Build a lineup whose first voter is the orphan victim — that vote will
+    // produce an INSERT at (nextMatchId, orphanVoter.userId) and collide on
+    // uq_match_member_user without .onConflictDoNothing().
+    const game = await createGame('Orphan Game', 'orphan-game');
+    const createRes = await testApp.request
+      .post('/lineups')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ title: 'Orphan Lineup', matchThreshold: 35 });
+    const lineupId = createRes.body.id as number;
+    await testApp.db.insert(schema.communityLineupEntries).values({
+      lineupId,
+      gameId: game.id,
+      nominatedBy: testApp.seed.adminUser.id,
+    });
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'voting' });
+
+    // Orphan voter is the first ballot so they end up in the new match.
+    await testApp.db.insert(schema.communityLineupVotes).values({
+      lineupId,
+      userId: orphanVoter.userId,
+      gameId: game.id,
+    });
+    for (let i = 0; i < 4; i++) {
+      const m = await loginAsMember(`orphan-co-voter-${i}`);
+      await testApp.db.insert(schema.communityLineupVotes).values({
+        lineupId,
+        userId: m.userId,
+        gameId: game.id,
+      });
+    }
+
+    // Today this rejects with PostgresError 23505 on uq_match_member_user.
+    // After Commit 3 (.onConflictDoNothing()) it resolves cleanly.
+    await expect(
+      buildMatchesForLineup(testApp.db, lineupId),
+    ).resolves.toBeUndefined();
+
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches).toHaveLength(1);
+
+    // The new match must contain the orphan voter's user_id — that is the
+    // "silent data loss" path the brief warns about.
+    const members = await testApp.db
+      .select()
+      .from(schema.communityLineupMatchMembers)
+      .where(eq(schema.communityLineupMatchMembers.matchId, matches[0].id));
+    expect(members.map((m) => m.userId)).toContain(orphanVoter.userId);
+
+    // The cleanup migration (Commit 2) must have scrubbed all orphan rows
+    // when the test DB was migrated. Today no such migration exists, so
+    // the orphan we planted above persists and this assertion fails.
+    const orphans = await testApp.db.execute<{ count: number }>(sql`
+      SELECT COUNT(*)::int AS count
+      FROM community_lineup_match_members m
+      WHERE NOT EXISTS (
+        SELECT 1 FROM community_lineup_matches WHERE id = m.match_id
+      )
+    `);
+    expect(orphans[0].count).toBe(0);
+  });
+}
+describe(
+  'ROK-1225: buildMatchesForLineup race + idempotency',
+  describeMatchingRaceAndIdempotency,
+);

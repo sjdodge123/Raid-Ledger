@@ -26,6 +26,7 @@ import {
 import { buildMatchesForLineup } from './lineups-matching.helpers';
 import { addInvitees } from './lineups-invitees.helpers';
 import { insertWithSlugRetry } from './public-lineup-slug.helpers';
+import { extractErrorDetail } from '../common/pg-error.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -140,8 +141,9 @@ export async function runMatchingAlgorithm(
   try {
     await buildMatchesForLineup(db, lineupId);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error(`Matching failed for lineup ${lineupId}: ${msg}`);
+    logger.error(
+      `Matching failed for lineup ${lineupId}: ${extractErrorDetail(err)}`,
+    );
   }
 }
 

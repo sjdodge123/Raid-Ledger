@@ -20,6 +20,9 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import type { ItadOverviewGameEntry } from './itad-price.types';
 import { enrichChunkEarlyAccess } from './itad-early-access-sync.helpers';
 import { perfLog } from '../common/perf-logger';
+import { extractErrorDetail } from '../common/pg-error.helpers';
+
+export { extractErrorDetail };
 
 /** Number of games to fetch from ITAD per batch request. */
 export const CHUNK_SIZE = 50;
@@ -89,33 +92,6 @@ export async function executeBulkPricingUpdate(
       AS v(id, current_price, current_cut, current_shop, current_url, lowest_price, lowest_cut, updated_at)
     WHERE g.id = v.id
   `);
-}
-
-/** Shape of postgres.js error properties we want to extract. */
-interface PgErrorLike {
-  message?: string;
-  code?: string;
-  detail?: string;
-  hint?: string;
-  cause?: PgErrorLike;
-}
-
-/**
- * Extract Postgres error details from a Drizzle-wrapped error.
- * Drizzle wraps PG errors so `err.message` is "Failed query: <SQL>".
- * The real PG error is in `.cause` with code, detail, and hint.
- */
-export function extractErrorDetail(err: unknown): string {
-  const raw = err instanceof Error ? err : { message: String(err) };
-  const pgError: PgErrorLike = (raw as PgErrorLike).cause ?? raw;
-  return [
-    pgError.message,
-    pgError.code ? `code=${pgError.code}` : null,
-    pgError.detail ? `detail=${pgError.detail}` : null,
-    pgError.hint ? `hint=${pgError.hint}` : null,
-  ]
-    .filter(Boolean)
-    .join(' | ');
 }
 
 @Injectable()

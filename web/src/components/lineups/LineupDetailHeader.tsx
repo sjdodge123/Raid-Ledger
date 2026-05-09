@@ -136,7 +136,7 @@ function PhaseContextInfo({ lineup }: { lineup: LineupDetailResponseDto }): JSX.
   const participants = (lineup.totalVoters ?? 0) + (lineup.status === 'building' ? lineup.entries.length : 0);
   if (lineup.status === 'building') {
     return (
-      <span className="text-xs text-dim">
+      <span className="text-xs text-dim" data-testid="nomination-count">
         {lineup.entries.length}/20 nominated · {participants} participated
         {lineup.unlinkedSteamCount > 0 && (
           <> · <UnlinkedSteamCount count={lineup.unlinkedSteamCount} /></>
@@ -217,7 +217,11 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h1 className="text-lg font-display font-bold tracking-wide truncate flex-1 min-w-0" title={lineup.title}>
+        <h1
+          className="text-lg font-display font-bold tracking-wide truncate flex-1 min-w-0"
+          title={lineup.title}
+          data-testid="community-lineup-title"
+        >
           {lineup.title}
         </h1>
         <LineupStatusBadge status={lineup.status} />

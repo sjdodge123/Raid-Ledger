@@ -94,7 +94,10 @@ export function ActivityTimeline({
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-panel/50 transition"
       >
-        <span className="flex items-center gap-2 text-sm text-secondary font-medium">
+        <span
+          className="flex items-center gap-2 text-sm text-secondary font-medium"
+          data-testid="activity-section-heading"
+        >
           Activity · {entries.length} event{entries.length !== 1 ? 's' : ''}
         </span>
         <ChevronIcon open={open} />
