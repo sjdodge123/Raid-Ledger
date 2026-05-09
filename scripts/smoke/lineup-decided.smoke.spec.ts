@@ -554,12 +554,11 @@ test.describe('Decided view rendering', () => {
             timeout: 15_000,
         });
 
-        // If no matches exist, empty state message should show
-        const emptyState = page.getByText(
-            /No matches were generated from voting/i,
-        );
-        // We expect matches to exist, so empty state should NOT be visible
-        // But the component must render this when matches are empty
+        // If no matches exist, empty state message should show (testid:
+        // lineup-decided-empty-state). We expect matches to exist, so empty
+        // state should NOT be visible — but the component must render the
+        // testid'd block when matches are empty.
+        const emptyState = page.getByTestId('lineup-decided-empty-state');
         const matchSections = page.locator(
             '[data-testid="match-tier-section"]',
         );

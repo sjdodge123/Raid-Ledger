@@ -149,8 +149,8 @@ test.describe('Community Lineup banner on Games page', () => {
         await page.goto('/games');
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
-        // Subtitle shows "X games nominated"
-        await expect(page.getByText(/games nominated/)).toBeVisible({ timeout: 5_000 });
+        // Subtitle shows "X games nominated" (testid: lineup-banner-subtitle)
+        await expect(page.getByTestId('lineup-banner-subtitle')).toBeVisible({ timeout: 5_000 });
     });
 
     test('Nominate button is visible on the banner', async ({ page }) => {
@@ -235,9 +235,17 @@ test.describe('Nomination modal', () => {
         await page.goto('/games');
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
-        await page.getByRole('button', { name: 'Nominate' }).click();
+        // Wait for the Nominate button to appear before clicking — when the
+        // active lineup is in `decided`/`archived`, the button is "Start
+        // another lineup" instead, so this assertion catches lineup-state
+        // races early with a clear error.
+        const nominateBtn = page.getByRole('button', { name: 'Nominate' });
+        await expect(nominateBtn).toBeVisible({ timeout: 15_000 });
+        await nominateBtn.click();
+
         const modal = page.getByRole('dialog', { name: 'Nominate a Game' });
-        await expect(modal).toBeVisible({ timeout: 5_000 });
+        // Mobile: Radix open animation can take longer than 5s on a cold tab.
+        await expect(modal).toBeVisible({ timeout: 15_000 });
 
         // Close via the close button
         await modal.getByRole('button', { name: /close/i }).click();
@@ -286,8 +294,8 @@ test.describe('Community Lineup detail page', () => {
         // Phase breadcrumb shows "Nominating" in the header
         await expect(page.getByText('Nominating').first()).toBeVisible({ timeout: 5_000 });
 
-        // "X/20 nominated" text in the subheader context info
-        await expect(page.getByText(/\d+\/\d+ nominated/).first()).toBeVisible({ timeout: 5_000 });
+        // "X/20 nominated" text in the subheader context info (testid: nomination-count)
+        await expect(page.getByTestId('nomination-count').first()).toBeVisible({ timeout: 5_000 });
     });
 
     test('activity timeline section is present', async ({ page }) => {
@@ -296,10 +304,10 @@ test.describe('Community Lineup detail page', () => {
             page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
         ).toBeVisible({ timeout: 15_000 });
 
-        // Activity heading -- the timeline may have entries from lineup creation
-        const activityHeading = page.getByText('Activity', { exact: true });
-        // Activity section is optional -- it only renders if there are entries.
-        // A freshly created lineup should have at least a "created" entry.
+        // Activity heading (testid: activity-section-heading) -- timeline may have
+        // entries from lineup creation. Section is optional -- only renders if there
+        // are entries. A freshly created lineup should have at least a "created" entry.
+        const activityHeading = page.getByTestId('activity-section-heading');
         if (await activityHeading.isVisible({ timeout: 5_000 }).catch(() => false)) {
             await expect(activityHeading).toBeVisible();
         }
@@ -331,9 +339,12 @@ test.describe('Community Lineup detail page', () => {
         await viewLink.click();
         await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 10_000 });
 
+        // Title testid waits for the detail-query mount; absorbs the fixture
+        // render race without relying on networkidle (which never fires when
+        // the page has long-poll subscriptions open).
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
-        ).toBeVisible({ timeout: 10_000 });
+            page.getByTestId('community-lineup-title'),
+        ).toBeVisible({ timeout: 15_000 });
 
         // Click back button (aria-label="Go back")
         await page.getByRole('button', { name: 'Go back' }).click();

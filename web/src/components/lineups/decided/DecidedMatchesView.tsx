@@ -36,7 +36,10 @@ function MatchesSkeleton(): JSX.Element {
 /** Empty state when no matches were generated. */
 function MatchesEmpty(): JSX.Element {
   return (
-    <div className="text-center py-8 text-muted text-sm mt-4">
+    <div
+      className="text-center py-8 text-muted text-sm mt-4"
+      data-testid="lineup-decided-empty-state"
+    >
       No matches were generated from voting results.
     </div>
   );

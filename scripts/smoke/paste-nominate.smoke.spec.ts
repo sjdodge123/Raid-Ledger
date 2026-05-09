@@ -18,6 +18,7 @@ import {
     apiGet,
     apiPatch,
     createLineupOrRetry,
+    awaitProcessing,
 } from './api-helpers';
 
 // ROK-1147: ensureBuildingLineup checks /lineups/banner and reuses any
@@ -65,6 +66,11 @@ async function ensureBuildingLineup(token: string): Promise<number> {
         },
         workerPrefix,
     );
+    // Drain BullMQ + buffered async writes (event listeners, embed-sync,
+    // notification dedup) before the test navigates — without this the
+    // first detail-page render can race the lineup row's downstream side
+    // effects and the title bar mounts with stale data.
+    await awaitProcessing(token);
     return id;
 }
 
@@ -185,7 +191,7 @@ test.describe('Unknown game shows toast (AC3)', () => {
     test('toast "Game not found in library" appears for unknown Steam app ID', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByTestId('community-lineup-title'),
         ).toBeVisible({ timeout: 15_000 });
 
         await dispatchPaste(page, UNKNOWN_STEAM_URL);
