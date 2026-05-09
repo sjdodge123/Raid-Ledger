@@ -44,12 +44,16 @@ export function VotingLeaderboard({
 
   const handleToggle = useCallback(
     (gameId: number) => {
+      const wasVoted = votedSet.has(gameId);
       toggleVote.mutate(
         { lineupId, gameId },
-        { onError: (err) => toast.error(err instanceof Error ? err.message : 'Vote failed') },
+        {
+          onSuccess: () => toast.success(wasVoted ? 'Vote removed' : 'Vote recorded'),
+          onError: (err) => toast.error(err instanceof Error ? err.message : 'Vote failed'),
+        },
       );
     },
-    [lineupId, toggleVote],
+    [lineupId, toggleVote, votedSet],
   );
 
   const atLimit = myVotes.length >= maxVotes;
