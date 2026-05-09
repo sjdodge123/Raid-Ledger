@@ -421,3 +421,117 @@ test.describe('Standalone poll — scheduling poll page', () => {
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// Regression: ROK-1217 — standalone poll deadline display
+// F-36: Standalone poll had no phase-level deadline countdown.
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
+    test.describe.configure({ timeout: 120_000 });
+
+    test('renders the deadline banner when the poll has a phaseDeadline', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            isMobile(testInfo),
+            'Desktop-only — banner appearance is layout-equivalent across viewports',
+        );
+
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        // Create poll with a deadline ~48h away — within the "not soon" range.
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId, durationHours: 48 }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+
+            // Skip wizard steps if they appear.
+            await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+            for (let i = 0; i < 5; i++) {
+                const heading = page.locator('h1', { hasText: 'Scheduling Poll' });
+                if (await heading.isVisible({ timeout: 2_000 }).catch(() => false)) break;
+                for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
+                    const btn = page.locator('button', { hasText: label }).first();
+                    if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
+                        await btn.click();
+                        await page.waitForLoadState('domcontentloaded');
+                        break;
+                    }
+                }
+            }
+
+            // The deadline banner must be visible at the top of the page.
+            const banner = page.locator('[data-testid="poll-deadline-banner"]');
+            await expect(banner).toBeVisible({ timeout: 10_000 });
+            await expect(banner).toContainText(/Closes/i);
+            // 48h away is not "soon" — banner should not flag urgency.
+            await expect(banner).toHaveAttribute('data-soon', 'false');
+            await expect(banner).toHaveAttribute('data-expired', 'false');
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+
+    test('flags the deadline as soon when less than 24h remain', async ({
+        page,
+    }, testInfo) => {
+        test.skip(
+            isMobile(testInfo),
+            'Desktop-only — banner appearance is layout-equivalent across viewports',
+        );
+
+        const token = await getAdminToken();
+        const gameId = await getFirstGameId(token);
+
+        // Create poll with a deadline ~6h away — inside the soon-threshold.
+        const createRes = await fetch(`${API_BASE}/scheduling-polls`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ gameId, durationHours: 6 }),
+        });
+        expect(createRes.status).toBe(201);
+        const poll = (await createRes.json()) as { id: number; lineupId: number };
+
+        try {
+            await page.goto(
+                `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
+            );
+
+            await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+            for (let i = 0; i < 5; i++) {
+                const heading = page.locator('h1', { hasText: 'Scheduling Poll' });
+                if (await heading.isVisible({ timeout: 2_000 }).catch(() => false)) break;
+                for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
+                    const btn = page.locator('button', { hasText: label }).first();
+                    if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
+                        await btn.click();
+                        await page.waitForLoadState('domcontentloaded');
+                        break;
+                    }
+                }
+            }
+
+            const banner = page.locator('[data-testid="poll-deadline-banner"]');
+            await expect(banner).toBeVisible({ timeout: 10_000 });
+            await expect(banner).toHaveAttribute('data-soon', 'true');
+        } finally {
+            await apiDelete(token, `/lineups/${poll.lineupId}`).catch(() => {});
+        }
+    });
+});
