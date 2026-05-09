@@ -20,6 +20,15 @@ process.env.CRON_DISABLED = 'true';
 import { closeTestApp, getTestApp } from './test-app';
 import { truncateAllTables } from './integration-helpers';
 import { dumpFailureSnapshot } from './dump-failure-snapshot';
+import { listSocketHandles } from './socket-handle-audit';
+
+// ROK-1250: empirical margin above the steady-state TCP-socket count after
+// closeTestApp(). Set to 5 because the audit filters by `remotePort` set
+// (excludes Jest stdio/IPC wrappers) — anything > 5 in that filtered list
+// is a real leaked TCP connection. The spike snapshot showed 49 leaks
+// pre-fix; ≤ 5 leaves comfortable margin for redis-mock + jest internals
+// without missing genuine regressions.
+const SOCKET_HANDLE_AUDIT_THRESHOLD = 5;
 
 // ROK-1249 AC2: when RL_TEST_SOCKET_DEBUG=true, capture a state-bucket
 // snapshot the moment a `socket hang up` / ECONNRESET surfaces from the
@@ -68,4 +77,20 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeTestApp();
+  // ROK-1250: opt-in audit gate. When `RL_TEST_SOCKET_HANDLE_AUDIT=true`,
+  // throw if more than `SOCKET_HANDLE_AUDIT_THRESHOLD` connected TCP
+  // sockets remain after closeTestApp(). Off by default in CI; flipped on
+  // for the AC2 30-run validation loop to prove the timeout bump + fallback
+  // destroy actually keeps the count low.
+  if (process.env.RL_TEST_SOCKET_HANDLE_AUDIT === 'true') {
+    const sockets = listSocketHandles();
+    if (sockets.length > SOCKET_HANDLE_AUDIT_THRESHOLD) {
+      throw new Error(
+        `[ROK-1250] socket handle audit failed after closeTestApp(): ` +
+          `${sockets.length} > ${SOCKET_HANDLE_AUDIT_THRESHOLD} TCP sockets ` +
+          `still tracked by libuv (filter: constructor.name === 'Socket' && ` +
+          `typeof remotePort === 'number')`,
+      );
+    }
+  }
 });

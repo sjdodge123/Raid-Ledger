@@ -35,6 +35,10 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
+import {
+  destroySocketsOnPort,
+  extractPortFromConnectionString,
+} from './socket-handle-audit';
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
 
 export type { RedisMockHandle } from './redis-mock';
@@ -228,8 +232,12 @@ export async function getTestApp(): Promise<TestApp> {
  * Order matters: app.close() must run first so any in-flight queries drain
  * via DrizzleModule's provider; then end the postgres-js pool (DrizzleModule
  * has no onModuleDestroy, so app.close() does NOT cascade); then stop the
- * Testcontainer. The 5s end timeout caps teardown latency on the last
- * spec — postgres-js default 30s reintroduces ROK-1104 symptoms.
+ * Testcontainer. ROK-1250 bumped the end timeout 5 -> 30 because at the cap
+ * postgres-js calls `socket.end()` (graceful FIN), not `socket.destroy()`,
+ * leaving the kernel-tracked TCP socket on `_getActiveHandles` until the
+ * server FIN-ACKs. With the ROK-1248 drain barrier above, queries are not
+ * in flight here, so the bump only matters when a residual write needs the
+ * round-trip headroom.
  */
 export async function closeTestApp(): Promise<void> {
   const instance = getInstance();
@@ -237,7 +245,7 @@ export async function closeTestApp(): Promise<void> {
 
   // ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
   // never has to await an in-flight job whose DB query would race the
-  // _appClient.end({ timeout: 5 }) cap that follows.
+  // _appClient.end timeout cap.
   try {
     const queueHealth = instance.app.get(QueueHealthService, { strict: false });
     if (queueHealth) {
@@ -247,10 +255,25 @@ export async function closeTestApp(): Promise<void> {
     // best-effort — fall through to app.close() regardless
   }
 
+  // Capture the test container's port BEFORE _appClient.end() / container.stop()
+  // so the fallback destroy can scope itself to ONLY our test-DB sockets.
+  const connStr =
+    instance.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
+  const ourPort = extractPortFromConnectionString(connStr);
+
   await instance.app.close();
   if (instance._appClient) {
-    await instance._appClient.end({ timeout: 5 });
+    await instance._appClient.end({ timeout: 30 });
   }
+
+  // ROK-1250 fallback guard: if anything is still bound to the test
+  // container's port AFTER the graceful end resolved, force-destroy it.
+  // The `remotePort === ourPort` filter cannot collide with redis-mock,
+  // supertest, or BullMQ sockets. On healthy runs this finds 0.
+  if (ourPort !== null) {
+    destroySocketsOnPort(ourPort);
+  }
+
   if (instance.container) {
     await instance.container.stop();
   }

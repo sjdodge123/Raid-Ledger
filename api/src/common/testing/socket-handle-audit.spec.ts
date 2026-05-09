@@ -107,7 +107,16 @@ describe('socket-handle-audit', () => {
       const destroyed = destroySocketsOnPort(port);
       expect(destroyed).toBe(3);
 
-      const after = listSocketHandles().length;
+      // socket.destroy() is async — libuv keeps the handle on
+      // _getActiveHandles for one or two event-loop turns after the call.
+      // Poll until the count drops or we time out, so the post-destroy
+      // delta assertion is deterministic and not racy.
+      const deadline = Date.now() + 500;
+      let after = listSocketHandles().length;
+      while (after >= before && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 10));
+        after = listSocketHandles().length;
+      }
       expect(before - after).toBeGreaterThanOrEqual(3);
     });
 
