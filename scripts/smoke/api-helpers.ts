@@ -274,3 +274,57 @@ export async function cancelLineupPhaseJobs(
         lineupId,
     });
 }
+
+// ---------------------------------------------------------------------------
+// Direct API polling for staleTime/useQuery races (ROK-1247)
+// ---------------------------------------------------------------------------
+
+interface PollForConditionOpts {
+    /** Total deadline before throwing. Default 15_000 ms. */
+    timeoutMs?: number;
+    /** Polling interval. Default 250 ms. */
+    intervalMs?: number;
+    /** Included in the timeout error to identify the failing wait. */
+    description?: string;
+}
+
+/**
+ * Poll an async `check` function until it returns a truthy value or the
+ * timeout elapses. Returns the truthy value on success; throws a descriptive
+ * error on timeout, including the last observed value when available.
+ *
+ * Use this AFTER an API write and BEFORE a UI assertion that depends on
+ * `useQuery`-backed data: React Query's 15s staleTime can serve a cached
+ * empty fetch for the lifetime of the test, so polling the source endpoint
+ * is the only reliable barrier. See `feedback_smoke_polling_for_async_writes.md`
+ * (ROK-1156) and the canonical reference impl in
+ * `admin-slow-queries-log.smoke.spec.ts`.
+ */
+export async function pollForCondition<T>(
+    check: () => Promise<T | null | undefined>,
+    opts: PollForConditionOpts = {},
+): Promise<T> {
+    const timeoutMs = opts.timeoutMs ?? 15_000;
+    const intervalMs = opts.intervalMs ?? 250;
+    const description = opts.description ?? 'pollForCondition';
+    const start = Date.now();
+    let last: T | null | undefined;
+    while (Date.now() - start < timeoutMs) {
+        last = await check();
+        if (last) return last;
+        await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    const lastDesc =
+        last === undefined || last === null
+            ? '(none)'
+            : (() => {
+                  try {
+                      return JSON.stringify(last).slice(0, 200);
+                  } catch {
+                      return String(last);
+                  }
+              })();
+    throw new Error(
+        `[${description}] timed out after ${timeoutMs}ms; last value=${lastDesc}`,
+    );
+}

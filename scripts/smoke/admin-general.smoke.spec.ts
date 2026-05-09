@@ -7,6 +7,40 @@
  */
 import { test, expect } from './base';
 import { isMobile } from './helpers';
+import { apiGet, getAdminToken, pollForCondition } from './api-helpers';
+
+/**
+ * ROK-1247: Pre-warm the admin queries that back each general panel before
+ * navigating. The Roles panel renders `${total} users` only once
+ * `/users/management` resolves with data, and the Demo Data panel's count
+ * badges depend on `/admin/settings/demo/status`. Polling the API directly
+ * sidesteps useQuery's 15s staleTime cache when a sibling test seeded an
+ * empty fetch.
+ */
+async function pollUserManagement() {
+    const token = await getAdminToken();
+    await pollForCondition(
+        async () => {
+            const data = (await apiGet(token, '/users/management?page=1&limit=20')) as
+                | { meta?: { total?: number } }
+                | null;
+            if (!data) return null;
+            return typeof data.meta?.total === 'number' ? data : null;
+        },
+        { timeoutMs: 15_000, description: '/users/management' },
+    );
+}
+
+async function pollDemoStatus() {
+    const token = await getAdminToken();
+    await pollForCondition(
+        async () => {
+            const data = await apiGet(token, '/admin/settings/demo/status');
+            return data ? data : null;
+        },
+        { timeoutMs: 15_000, description: '/admin/settings/demo/status' },
+    );
+}
 
 // ---------------------------------------------------------------------------
 // General panel (/admin/settings/general)
@@ -81,6 +115,7 @@ test.describe('Admin General panel', () => {
 
 test.describe('Admin Roles panel', () => {
     test('renders user management heading and search', async ({ page }) => {
+        await pollUserManagement();
         await page.goto('/admin/settings/general/roles');
 
         await expect(
@@ -93,6 +128,9 @@ test.describe('Admin Roles panel', () => {
     });
 
     test('renders user list with role dropdowns and total count', async ({ page }) => {
+        // ROK-1247: poll /users/management before nav so the `${total} users`
+        // text and the role dropdown row both render within the test window.
+        await pollUserManagement();
         await page.goto('/admin/settings/general/roles');
 
         await expect(
@@ -108,6 +146,7 @@ test.describe('Admin Roles panel', () => {
     });
 
     test('no error boundary on load', async ({ page }) => {
+        await pollUserManagement();
         await page.goto('/admin/settings/general/roles');
         await expect(
             page.getByRole('heading', { name: 'User Management', level: 2 }),
@@ -123,6 +162,8 @@ test.describe('Admin Roles panel', () => {
 
 test.describe('Admin Demo Data panel', () => {
     test('renders demo data heading and status', async ({ page }) => {
+        // ROK-1247: status badge text comes from /admin/settings/demo/status.
+        await pollDemoStatus();
         await page.goto('/admin/settings/general/data');
 
         await expect(
@@ -135,6 +176,7 @@ test.describe('Admin Demo Data panel', () => {
     });
 
     test('renders data count badges when demo data is installed', async ({ page }) => {
+        await pollDemoStatus();
         await page.goto('/admin/settings/general/data');
 
         // Wait for status to settle — badge shows "Installed" or "Empty" once loaded
@@ -167,6 +209,7 @@ test.describe('Admin Demo Data panel', () => {
     });
 
     test('no error boundary on load', async ({ page }) => {
+        await pollDemoStatus();
         await page.goto('/admin/settings/general/data');
         await expect(
             page.getByRole('heading', { name: 'Demo Data', level: 2 }).first(),
@@ -184,6 +227,11 @@ test.describe('Admin sidebar navigation', () => {
     test('sidebar shows General section links and navigates between panels', async ({ page }) => {
         test.skip(isMobile(test.info()), 'Desktop-only — sidebar hidden on mobile');
 
+        // ROK-1247: pre-warm both panel queries so the inline navigation
+        // assertions below (User Management, Demo Data) don't race
+        // useQuery's staleTime when each panel mounts.
+        await pollUserManagement();
+        await pollDemoStatus();
         await page.goto('/admin/settings/general');
 
         const sidebar = page.locator('nav[aria-label="Admin settings navigation"]');
