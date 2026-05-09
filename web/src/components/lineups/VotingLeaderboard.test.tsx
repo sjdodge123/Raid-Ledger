@@ -1,5 +1,5 @@
 /**
- * Tests for VotingLeaderboard component (ROK-936).
+ * Tests for VotingLeaderboard component (ROK-936, ROK-1119).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -13,8 +13,17 @@ vi.mock('../../hooks/use-lineups', () => ({
   useToggleVote: vi.fn(),
 }));
 
+// Mock toast so we can spy on success/error calls (ROK-1119)
+vi.mock('../../lib/toast', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 import { VotingLeaderboard } from './VotingLeaderboard';
 import { useToggleVote } from '../../hooks/use-lineups';
+import { toast } from '../../lib/toast';
 
 const mockMutate = vi.fn();
 const mockUseToggleVote = vi.mocked(useToggleVote);
@@ -157,5 +166,83 @@ describe('VotingLeaderboard — voting', () => {
     await user.click(dButton);
     expect(mockMutate).not.toHaveBeenCalled();
     unmount();
+  });
+});
+
+/**
+ * ROK-1119 — vote feedback toasts.
+ *
+ * After toggling a vote in the leaderboard, the user must get explicit
+ * confirmation: a success toast on add ("Vote recorded"), a success toast
+ * on remove ("Vote removed"), and the existing error toast must keep firing.
+ *
+ * The mutation's `mutate` is mocked, so we drive the result by invoking
+ * the options callbacks (onSuccess / onError) passed to mutate directly.
+ */
+describe('VotingLeaderboard — vote feedback (ROK-1119)', () => {
+  beforeEach(() => {
+    mockMutate.mockReset();
+    vi.mocked(toast.success).mockReset();
+    vi.mocked(toast.error).mockReset();
+    mockUseToggleVote.mockReturnValue({ mutate: mockMutate, isPending: false } as never);
+  });
+
+  it('shows a success toast when a new vote is recorded', async () => {
+    const user = userEvent.setup();
+    renderLeaderboard({ myVotes: [] });
+
+    const toggleButtons = screen.getAllByTestId('vote-toggle');
+    await user.click(toggleButtons[0]);
+
+    // Component should have called mutate with onSuccess option
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    const [, opts] = mockMutate.mock.calls[0];
+    expect(opts).toBeDefined();
+    expect(typeof opts.onSuccess).toBe('function');
+
+    // Simulate the server returning success — the component should toast.success
+    opts.onSuccess?.({} as never, { lineupId: 1, gameId: 42 } as never, undefined);
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(/vote recorded/i);
+  });
+
+  it('shows a success toast when an existing vote is removed', async () => {
+    const user = userEvent.setup();
+    // gameId=42 is already in myVotes, so clicking it removes the vote
+    renderLeaderboard({ myVotes: [42] });
+
+    const toggleButtons = screen.getAllByTestId('vote-toggle');
+    // First row (Lethal Company, gameId=42) is the voted one
+    await user.click(toggleButtons[0]);
+
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    const [vars, opts] = mockMutate.mock.calls[0];
+    expect(vars).toEqual({ lineupId: 1, gameId: 42 });
+    expect(typeof opts.onSuccess).toBe('function');
+
+    // Simulate the toggle-off success — component should toast.success removal
+    opts.onSuccess?.({} as never, vars, undefined);
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(/vote removed/i);
+  });
+
+  it('still fires the existing error toast when the mutation fails (regression)', async () => {
+    const user = userEvent.setup();
+    renderLeaderboard({ myVotes: [] });
+
+    const toggleButtons = screen.getAllByTestId('vote-toggle');
+    await user.click(toggleButtons[0]);
+
+    const [, opts] = mockMutate.mock.calls[0];
+    expect(typeof opts.onError).toBe('function');
+
+    opts.onError?.(new Error('Voting closed'), { lineupId: 1, gameId: 42 } as never, undefined);
+
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(toast.error).mock.calls[0][0]).toBe('Voting closed');
+    // Should NOT also fire success on error
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
