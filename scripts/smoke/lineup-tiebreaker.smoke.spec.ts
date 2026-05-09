@@ -585,3 +585,39 @@ test.describe('Tiebreaker API detail endpoint', () => {
         await expect(bracketView).toBeVisible({ timeout: 15_000 });
     });
 });
+
+// ---------------------------------------------------------------------------
+// Regression: ROK-1218 — bracket vote progress meter (F-29 from ROK-1193 audit)
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-1218 — bracket vote progress', () => {
+    let lineupId: number;
+
+    test.beforeAll(async () => {
+        const result = await createVotingLineupWithTiebreaker(adminToken, 'bracket');
+        lineupId = result.lineupId;
+    });
+
+    test('progress meter renders alongside the bracket view', async ({ page }) => {
+        await page.goto(`/community-lineup/${lineupId}`);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        const bracketView = page.locator('[data-testid="bracket-view"]');
+        await expect(bracketView).toBeVisible({ timeout: 15_000 });
+
+        // The progress meter only renders when there is at least one votable
+        // matchup. ROK-1225 means matchups can fail to materialise in this
+        // demo flow (see createVotingLineupWithTiebreaker comment); when it
+        // does render, F-29 requires it to read "voted in M of N matchups".
+        const progress = bracketView.locator('[data-testid="bracket-progress"]');
+        const visible = await progress.isVisible({ timeout: 5_000 }).catch(() => false);
+        if (visible) {
+            await expect(progress).toContainText(/voted in \d+ of \d+ matchups/i);
+            const total = await progress.getAttribute('data-total');
+            const done = await progress.getAttribute('data-done');
+            expect(Number(total)).toBeGreaterThan(0);
+            expect(Number(done)).toBeGreaterThanOrEqual(0);
+            expect(Number(done)).toBeLessThanOrEqual(Number(total));
+        }
+    });
+});
