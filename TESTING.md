@@ -769,6 +769,24 @@ When a test fails in CI or locally:
 
 This rule is critical for reliability. See the "Smoke Test Authoring Standards" section above for deterministic wait helpers. The `lint:no-sleep` script enforces this automatically.
 
+## Debug Knobs
+
+Environment variables that toggle diagnostic behavior in the test infrastructure. All default OFF — set `=true` to enable.
+
+| Var | Effect | When to use |
+|-----|--------|-------------|
+| `RL_TEST_SOCKET_DEBUG` | Wraps the integration test HTTP server with `connection`/`error`/`close hadError`/`clientError` logging AND wraps the supertest agent so any `socket hang up`/`ECONNRESET` rejection writes a process-state snapshot under `planning-artifacts/test-infra-snapshots/snapshot-<iso>.json` (5 buckets: postgres pool, BullMQ workers, active handles, cron jobs, redis-mock). | Diagnosing rotating-suite `socket hang up` / ECONNRESET flakes. See `docs/spikes/rok-1249-test-infra-layer-3.md` for the wiring + a captured-snapshot example. |
+| `THROTTLE_DISABLED` | Disables rate limiting in the integration NestJS app. Set automatically by `integration-setup.ts`. | Don't set manually — preconfigured. |
+| `CRON_DISABLED` | Stops every `@Cron` / plugin-host cron in `SchedulerRegistry` after `app.init()`. Set automatically by `integration-setup.ts` (ROK-1232). | Don't set manually — preconfigured. |
+
+### Reproducing the rotating-suite flake
+
+`scripts/repro-test-infra-flake.sh` runs the integration suite repeatedly with `RL_TEST_SOCKET_DEBUG=true` until a flake hits or `MAX_RUNS` (default 20) is exhausted. On hit, the snapshot is written automatically and the loop exits with the failing run's log path printed to stdout.
+
+```bash
+MAX_RUNS=30 ./scripts/repro-test-infra-flake.sh
+```
+
 ## Exemplary Reference Files
 
 These files demonstrate best testing practices — use them as templates:

@@ -19,6 +19,35 @@ process.env.CRON_DISABLED = 'true';
 
 import { closeTestApp, getTestApp } from './test-app';
 import { truncateAllTables } from './integration-helpers';
+import { dumpFailureSnapshot } from './dump-failure-snapshot';
+
+// ROK-1249 AC2: when RL_TEST_SOCKET_DEBUG=true, capture a state-bucket
+// snapshot the moment a `socket hang up` / ECONNRESET surfaces from the
+// rotating-suite flake. best-effort, fire-and-forget — the helper itself
+// must not throw and crash the test runner mid-suite.
+//
+// Idempotency: this file is loaded once per Jest spec file. Without
+// guarding, `process.on(...)` accumulates 77 listeners across the suite
+// and `MaxListenersExceededWarning` fires after ~10 files. Pin a flag
+// on the process via Symbol.for so subsequent file loads skip re-registration.
+const SOCKET_DEBUG_INSTALLED = Symbol.for(
+  'raid-ledger.test.socket-debug-installed',
+);
+type ProcessWithFlag = NodeJS.Process & { [SOCKET_DEBUG_INSTALLED]?: boolean };
+if (
+  process.env.RL_TEST_SOCKET_DEBUG === 'true' &&
+  !(process as ProcessWithFlag)[SOCKET_DEBUG_INSTALLED]
+) {
+  const handler = (err: unknown): void => {
+    const msg = String((err as { message?: unknown })?.message ?? err);
+    if (msg.includes('socket hang up') || msg.includes('ECONNRESET')) {
+      void dumpFailureSnapshot(msg).catch(() => {});
+    }
+  };
+  process.on('uncaughtException', handler);
+  process.on('unhandledRejection', handler);
+  (process as ProcessWithFlag)[SOCKET_DEBUG_INSTALLED] = true;
+}
 
 // ConfigModule.forRoot() in AppModule reads api/.env during the import above,
 // setting process.env.DATABASE_URL to the dev DB. Delete it so getTestApp()
