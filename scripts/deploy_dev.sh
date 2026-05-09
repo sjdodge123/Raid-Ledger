@@ -425,6 +425,18 @@ show_status() {
     else
         echo "  No dev processes tracked"
     fi
+    echo ""
+
+    echo -e "${BLUE}Env Lease:${NC}"
+    "$MAIN_REPO/scripts/env-lock.sh" status 2>/dev/null | jq -r '
+        if .holder == null then "  free"
+        else "  held by \(.holder.branch) @ \(.holder.worktree) (\(.holder.purpose), pid \(.holder.pid), priority \(.holder.priority))"
+        end,
+        if (.queue | length) > 0
+        then "  queue: " + ([.queue[] | .branch + (if .preempted then "*" else "" end)] | join(", "))
+        else empty end,
+        if .stale_cleared then "  (stale lease auto-cleared: \(.stale_cleared.reason))" else empty end
+    ' || echo "  (env-lock.sh not available)"
 }
 
 show_logs() {
@@ -446,6 +458,10 @@ stop_dev() {
     print_success "Database and Redis stopped"
 
     rm -rf "$LOG_DIR" "$PID_FILE"
+
+    # Release the cross-worktree env lease so the next agent can take it.
+    # Always non-fatal — if we never held it, this is a no-op.
+    "$MAIN_REPO/scripts/env-lock.sh" release "$(get_current_branch)" "$PROJECT_DIR" >/dev/null 2>&1 || true
 }
 
 reset_password() {
@@ -514,6 +530,35 @@ create_safety_backup() {
 start_dev() {
     local rebuild=$1
     local fresh=$2
+
+    # ---- Cross-worktree lease check (env-lock.sh) ------------------------------
+    # The local dev env is a single shared resource. Acquire a lease before
+    # starting; refuse if another worktree already holds it (or wait, if asked).
+    # `/opt` and operator-driven invocations set --operator (or
+    # RAID_LEDGER_OPERATOR=1) to preempt — see env-lock.sh for details.
+    local lease_branch lease_priority="normal" lease_cmd="acquire"
+    lease_branch=$(get_current_branch)
+    if [ "$ARG_OPERATOR" = "true" ] || [ "${RAID_LEDGER_OPERATOR:-}" = "1" ]; then
+        lease_priority="operator"
+    fi
+    local lease_args=("$lease_branch" "$PROJECT_DIR" "deploy_dev.sh" --pid $$ --ttl-minutes 240 --priority "$lease_priority")
+    if [ -n "$ARG_WAIT_FOR_ENV_MINUTES" ]; then
+        lease_cmd="wait"
+        lease_args+=(--timeout-seconds $((ARG_WAIT_FOR_ENV_MINUTES * 60)))
+    fi
+    local lease_out
+    lease_out=$(mktemp -t deploy-dev-lease.XXXXXX)
+    if ! "$MAIN_REPO/scripts/env-lock.sh" "$lease_cmd" "${lease_args[@]}" >"$lease_out" 2>&1; then
+        print_error "Local dev env is held by another worktree. See lease state below; pass --wait-for-env <min> to block, or --operator to preempt."
+        "$MAIN_REPO/scripts/env-lock.sh" status | jq . >&2 || cat "$lease_out" >&2
+        rm -f "$lease_out"
+        exit 2
+    fi
+    # If we preempted, surface it loudly so the operator sees who got bumped.
+    # `|| true` because this is cosmetic — never abort the deploy on a parse error.
+    jq -r 'if .preempted_holder then "⚡ Preempted \(.preempted_holder.branch) (now at front of queue)" else empty end' \
+        "$lease_out" 2>/dev/null || true
+    rm -f "$lease_out"
 
     # Stop conflicting Docker app containers
     stop_docker_app
@@ -652,6 +697,8 @@ ARG_FRESH=false
 ARG_BRANCH=""
 ARG_ACTION=""
 ARG_AI=false
+ARG_OPERATOR=false
+ARG_WAIT_FOR_ENV_MINUTES=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -697,6 +744,24 @@ while [ $# -gt 0 ]; do
             ARG_AI=true
             shift
             ;;
+        --operator)
+            # Cross-worktree env lease: cut the line, preempt any current holder.
+            # Used by /opt skill and operator-driven workflows.
+            ARG_OPERATOR=true
+            shift
+            ;;
+        --wait-for-env)
+            if [ -z "${2:-}" ]; then
+                print_error "Missing minutes. Usage: $0 --wait-for-env <minutes>"
+                exit 1
+            fi
+            if ! [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
+                print_error "Invalid --wait-for-env value: '$2' (must be a positive integer of minutes)"
+                exit 1
+            fi
+            ARG_WAIT_FOR_ENV_MINUTES="$2"
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -708,8 +773,10 @@ while [ $# -gt 0 ]; do
             echo "  --reset-password  Reset admin password without losing data"
             echo "  --ai              Start Ollama container (--profile ai)"
             echo "  --ci              Non-interactive mode (skip prompts, for agents)"
+            echo "  --operator        Preempt any current env-lease holder (cuts the line; for /opt)"
+            echo "  --wait-for-env M  If env is held, block up to M minutes for it to free instead of erroring"
             echo "  --down            Stop native processes + DB/Redis containers"
-            echo "  --status          Show process/container status"
+            echo "  --status          Show process/container status (incl. env lease)"
             echo "  --logs            Tail API and web logs"
             echo "  --help            Show this help message"
             echo ""
