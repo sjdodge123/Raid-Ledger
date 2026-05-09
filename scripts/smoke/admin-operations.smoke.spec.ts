@@ -5,6 +5,47 @@
  */
 import { test, expect } from './base';
 import { isMobile } from './helpers';
+import { apiGet, getAdminToken, pollForCondition } from './api-helpers';
+
+/**
+ * ROK-1247: Pre-warm the data sources for each operations panel so the
+ * gated UI (job cards, backup table, log table) renders within the test
+ * window even when useQuery's 15s staleTime is holding an empty cache.
+ */
+async function pollCronJobs() {
+    const token = await getAdminToken();
+    await pollForCondition(
+        async () => {
+            const data = (await apiGet(token, '/admin/cron-jobs')) as
+                | unknown[]
+                | null;
+            return Array.isArray(data) && data.length > 0 ? data : null;
+        },
+        { timeoutMs: 15_000, description: '/admin/cron-jobs' },
+    );
+}
+
+async function pollBackups() {
+    const token = await getAdminToken();
+    await pollForCondition(
+        async () => {
+            const data = await apiGet(token, '/admin/backups');
+            return data ? data : null;
+        },
+        { timeoutMs: 15_000, description: '/admin/backups' },
+    );
+}
+
+async function pollLogs() {
+    const token = await getAdminToken();
+    await pollForCondition(
+        async () => {
+            const data = await apiGet(token, '/admin/logs');
+            return data ? data : null;
+        },
+        { timeoutMs: 15_000, description: '/admin/logs' },
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Cron Jobs Panel
@@ -14,6 +55,7 @@ test.describe('Admin — Cron Jobs panel', () => {
     test('renders job list with heading and job cards (desktop)', async ({ page }) => {
         test.skip(isMobile(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
 
+        await pollCronJobs();
         await page.goto('/admin/settings/general/cron-jobs');
 
         await expect(page.getByRole('heading', { name: 'Scheduled Jobs' })).toBeVisible({ timeout: 15_000 });
@@ -35,6 +77,7 @@ test.describe('Admin — Cron Jobs panel', () => {
     test('renders job list with heading and job cards (mobile)', async ({ page }) => {
         test.skip(!isMobile(test.info()), 'Mobile-only — verifies panel renders without sidebar');
 
+        await pollCronJobs();
         await page.goto('/admin/settings/general/cron-jobs');
 
         await expect(page.getByRole('heading', { name: 'Scheduled Jobs' })).toBeVisible({ timeout: 15_000 });
@@ -58,6 +101,7 @@ test.describe('Admin — Backups panel', () => {
     test('renders backup heading and content (desktop)', async ({ page }) => {
         test.skip(isMobile(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
 
+        await pollBackups();
         await page.goto('/admin/settings/general/backups');
 
         await expect(page.getByRole('heading', { name: 'Backups' })).toBeVisible({ timeout: 15_000 });
@@ -81,6 +125,7 @@ test.describe('Admin — Backups panel', () => {
     test('renders backup heading and content (mobile)', async ({ page }) => {
         test.skip(!isMobile(test.info()), 'Mobile-only — verifies panel renders without sidebar');
 
+        await pollBackups();
         await page.goto('/admin/settings/general/backups');
 
         await expect(page.getByRole('heading', { name: 'Backups' })).toBeVisible({ timeout: 15_000 });
@@ -106,6 +151,7 @@ test.describe('Admin — Logs panel', () => {
     test('renders log viewer heading and content (desktop)', async ({ page }) => {
         test.skip(isMobile(test.info()), 'Desktop-only — sidebar navigation not visible on mobile');
 
+        await pollLogs();
         await page.goto('/admin/settings/general/logs');
 
         await expect(page.getByRole('heading', { name: 'Container Logs' })).toBeVisible({ timeout: 15_000 });
@@ -126,6 +172,7 @@ test.describe('Admin — Logs panel', () => {
     test('renders log viewer heading and content (mobile)', async ({ page }) => {
         test.skip(!isMobile(test.info()), 'Mobile-only — verifies panel renders without sidebar');
 
+        await pollLogs();
         await page.goto('/admin/settings/general/logs');
 
         await expect(page.getByRole('heading', { name: 'Container Logs' })).toBeVisible({ timeout: 15_000 });
