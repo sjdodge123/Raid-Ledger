@@ -47,7 +47,16 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
     return data.data.slice(0, count).map((g: { id: number }) => g.id);
 }
 
+// Mobile project parallel-worker contention causes the API serialisation
+// window for `getAdminToken` + `createLineupOrRetry` to exceed Playwright's
+// default 30s hook timeout under full-suite load. Bumping per-hook timeouts
+// to 90s keeps these fixtures robust without weakening the assertions
+// themselves. Same root cause as the rotating mobile-suite flake tracked
+// in TECH-DEBT-BACKLOG.md (2026-05-05 / 2026-05-09 entries).
+const HOOK_TIMEOUT_MS = 90_000;
+
 test.beforeAll(async ({}, testInfo) => {
+    test.setTimeout(HOOK_TIMEOUT_MS);
     workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
     lineupTitle = `${workerPrefix}Smoke Lineup`;
     adminToken = await getAdminToken();
@@ -73,6 +82,7 @@ test.beforeAll(async ({}, testInfo) => {
 
 test.describe('Building phase — hero + pill', () => {
     test.beforeEach(async () => {
+        test.setTimeout(HOOK_TIMEOUT_MS);
         // Ensure no nominations from previous tests linger.
         const detail = await apiGet(adminToken, `/lineups/${lineupId}`);
         for (const e of detail?.entries ?? []) {
@@ -141,6 +151,7 @@ test.describe('Building phase — hero + pill', () => {
 
 test.describe('Voting phase — pill variant transitions', () => {
     test.beforeAll(async () => {
+        test.setTimeout(HOOK_TIMEOUT_MS);
         // Ensure 3 nominations and advance.
         const detail = await apiGet(adminToken, `/lineups/${lineupId}`);
         const existingGameIds = new Set<number>(
@@ -194,6 +205,7 @@ test.describe('Voting phase — pill variant transitions', () => {
 
 test.describe('Decided phase — hero schedule CTA', () => {
     test.beforeAll(async () => {
+        test.setTimeout(HOOK_TIMEOUT_MS);
         // Advance to decided. Use the admin's first vote as the decided game.
         await apiPatch(adminToken, `/lineups/${lineupId}/status`, {
             status: 'decided',
