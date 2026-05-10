@@ -7,6 +7,7 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from '../../components/lineups/decided/MemberAvatarGroup';
+import { ConfirmationPill } from '../../components/common/ConfirmationPill';
 
 interface SuggestedTimesProps {
   slots: ScheduleSlotWithVotesDto[];
@@ -65,7 +66,11 @@ function SlotCard({ slot, isVoted, readOnly, onToggle, hasConflict }: {
           <MemberAvatarGroup members={slot.votes} max={5} />
         </div>
       )}
-      {isVoted && <p className="text-xs text-emerald-400 mt-1">You voted</p>}
+      {isVoted && (
+        <span aria-label="You voted" className="inline-block mt-1 text-emerald-400 text-sm font-bold">
+          ✓
+        </span>
+      )}
       {hasConflict && <p className="text-xs text-amber-400 mt-1">You have a conflicting event</p>}
     </button>
   );
@@ -104,11 +109,17 @@ export function SuggestedTimes({
   isSuggesting, prefillTime, conflictingSlotIds,
 }: SuggestedTimesProps): JSX.Element {
   const conflictSet = new Set(conflictingSlotIds ?? []);
+  const myVoteCount = myVotedSlotIds.length;
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
         Suggested Times
       </h3>
+      {myVoteCount > 0 && (
+        <ConfirmationPill variant="text">
+          You picked {myVoteCount} time {myVoteCount === 1 ? 'slot' : 'slots'}
+        </ConfirmationPill>
+      )}
       {slots.map((slot) => (
         <SlotCard key={slot.id} slot={slot} isVoted={myVotedSlotIds.includes(slot.id)}
           readOnly={readOnly} onToggle={() => onToggleVote(slot.id)}

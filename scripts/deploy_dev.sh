@@ -657,6 +657,19 @@ start_dev() {
     # Wait for API to be healthy (with retries)
     wait_for_api || print_warning "API may still be starting — check logs with --logs"
 
+    # Re-anchor the lease PID from $$ (this script — about to exit) to the
+    # long-lived API server PID. Without this, the lease appears `pid_dead`
+    # to other agents the moment deploy_dev.sh exits, even though the env
+    # (containers, API, Vite) is still up — and any queued agent grabs it
+    # mid-run. See ROK-1209 incident note 2026-05-09.
+    local api_pid
+    api_pid=$(head -1 "$PID_FILE" 2>/dev/null || echo "")
+    if [ -n "$api_pid" ] && ps -p "$api_pid" >/dev/null 2>&1; then
+        "$MAIN_REPO/scripts/env-lock.sh" acquire \
+            "$lease_branch" "$PROJECT_DIR" "deploy_dev.sh (anchored to API PID $api_pid)" \
+            --pid "$api_pid" --ttl-minutes 240 --priority "$lease_priority" >/dev/null 2>&1 || true
+    fi
+
     # Final status
     print_header "Dev Environment Ready"
 

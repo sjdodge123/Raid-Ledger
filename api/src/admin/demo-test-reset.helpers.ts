@@ -131,6 +131,18 @@ function countsFromArray(counts: number[]): WipeCounts {
  * Includes tables a parent CASCADE would silently truncate as well —
  * `availability`, `event_plans`, `lineup_ai_suggestions`,
  * `wow_classic_quest_progress`.
+ *
+ * `activity_log` is included because its rows reference lineups/events
+ * via a polymorphic `(entity_type, entity_id)` pair (no FK), so a
+ * lineup parent TRUNCATE … RESTART IDENTITY CASCADE leaves them
+ * orphaned. Once the sequence rolls back to 1 and a new lineup gets
+ * id=3 (or any low id reused by a prior test), the new lineup
+ * inherits ghost activity-log rows — including `lineup_aborted` events
+ * that flip `useLineupAbortedAt` to truthy and break ROK-1209's hero
+ * detection on otherwise-fresh smoke fixtures. (Found 2026-05-09 when
+ * lineup-confirmation-pills.smoke.spec.ts hero assertions failed
+ * because the freshly-created smoke lineup id=3 had 16 inherited
+ * `lineup_aborted` rows from April–May.)
  */
 async function wipeChildren(db: Db): Promise<void> {
   await db.execute(sql`
@@ -155,7 +167,8 @@ async function wipeChildren(db: Db): Promise<void> {
       availability,
       event_plans,
       wow_classic_quest_progress,
-      notification_dedup
+      notification_dedup,
+      activity_log
     RESTART IDENTITY CASCADE
   `);
 }

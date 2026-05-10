@@ -522,28 +522,45 @@ test.describe('Voting phase', () => {
         await expect(checkmark).toBeVisible({ timeout: 5_000 });
     });
 
-    test('VoteStatusBar shows vote count and voter participation', async ({ page }) => {
+    test('vote-count confirmation pill shows current usage (replaces VoteStatusBar)', async ({ page }) => {
+        // ROK-1209: VoteStatusBar was deleted (AC-20) and consolidated into the
+        // shared <ConfirmationPill /> pattern. The voting leaderboard now
+        // renders a `count` variant pill ("✓ Voted · {used} of {max} votes
+        // used") while the user is below the cap, and flips to `waitingOnN`
+        // ("✓ You've voted · waiting on N others") at the limit. The prior
+        // VoteStatusBar's separate "Y / Z voted" participation indicator is
+        // intentionally absorbed into the waitingOnN copy and only shown
+        // when the user has finished voting — vitest covers both variants
+        // exhaustively (`VotingLeaderboard.test.tsx`).
         await page.goto(`/community-lineup/${votingLineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // VoteStatusBar should display "X of 3 votes" text
-        const voteCountText = page.getByText(/\d+ of 3 votes/i);
-        await expect(voteCountText).toBeVisible({ timeout: 15_000 });
-
-        // VoteStatusBar should display "Y / Z voted" participation text
-        const participationText = page.getByText(/\d+\s*\/\s*\d+\s*voted/i);
-        await expect(participationText).toBeVisible({ timeout: 5_000 });
+        const pill = page.getByTestId('confirmation-pill').first();
+        await expect(pill).toBeVisible({ timeout: 15_000 });
+        // The pill body should reflect either the count variant ("X of 3 votes
+        // used") or, if the user has hit the cap, the waitingOnN variant
+        // ("waiting on N others"). Either form satisfies AC-3 / AC-7.
+        await expect(pill).toContainText(/(\d+ of 3 votes used|waiting on \d+ others)/i, {
+            timeout: 5_000,
+        });
     });
 
     test('match threshold slider is present in StartLineupModal', async ({ page }) => {
         // ROK-1167: open StartLineupModal via test query param — works regardless
         // of whether this worker's voting lineup is still active. Avoids racing
         // on the empty-banner state.
+        //
+        // Hook timeout bumped to 30s — page-load + admin/role hydration + the
+        // ROK-1167 useEffect that flips `startOpen` chains together; under
+        // mobile parallel-worker CI load the original 15s is too tight (PR
+        // #754 CI run 3 caught a flake here). The dialog opening is otherwise
+        // deterministic on this synthetic test path.
+        test.setTimeout(60_000);
         await page.goto('/games?test=open-lineup-modal');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 15_000 });
+        await expect(modal).toBeVisible({ timeout: 30_000 });
 
         // Match threshold slider should be present with correct labels
         const thresholdSlider = modal.locator('[data-testid="match-threshold"]');

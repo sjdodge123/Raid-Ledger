@@ -6,8 +6,8 @@ import { useMemo, useCallback } from 'react';
 import type { JSX } from 'react';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { useToggleVote } from '../../hooks/use-lineups';
-import { VoteStatusBar } from './VoteStatusBar';
 import { LeaderboardRow } from './LeaderboardRow';
+import { ConfirmationPill } from '../common/ConfirmationPill';
 import { toast } from '../../lib/toast';
 
 interface VotingLeaderboardProps {
@@ -60,14 +60,19 @@ export function VotingLeaderboard({
 
   const atLimit = myVotes.length >= maxVotes;
 
+  const waitingOn = Math.max(0, totalMembers - totalVoters);
+
   return (
     <div data-testid="voting-leaderboard">
-      <VoteStatusBar
-        myVoteCount={myVotes.length}
-        maxVotes={maxVotes}
-        totalVoters={totalVoters}
-        totalMembers={totalMembers}
-      />
+      {atLimit ? (
+        <ConfirmationPill variant="waitingOnN" count={waitingOn}>
+          You&apos;ve voted
+        </ConfirmationPill>
+      ) : (
+        <ConfirmationPill variant="count" count={`${myVotes.length} of ${maxVotes} votes used`}>
+          Voted
+        </ConfirmationPill>
+      )}
       {!canParticipate && (
         <p
           data-testid="voting-private-notice"

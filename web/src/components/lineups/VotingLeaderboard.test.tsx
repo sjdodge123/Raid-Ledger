@@ -122,6 +122,36 @@ describe('VotingLeaderboard — rendering', () => {
   });
 });
 
+describe('VotingLeaderboard — confirmation pill (ROK-1209 AC-3, AC-7, AC-20)', () => {
+  beforeEach(() => {
+    mockMutate.mockReset();
+    mockUseToggleVote.mockReturnValue({ mutate: mockMutate, isPending: false } as never);
+  });
+
+  it("renders 'count' pill showing 'used/max votes used' when below the limit", () => {
+    renderLeaderboard({ myVotes: [42], maxVotesPerPlayer: 3 });
+    const pill = screen.getByTestId('confirmation-pill');
+    expect(pill).toHaveTextContent(/1.*3.*votes used/i);
+  });
+
+  it("renders 'waitingOnN' variant with totalMembers - totalVoters when at the vote limit", () => {
+    renderLeaderboard({
+      myVotes: [42, 43, 44],
+      maxVotesPerPlayer: 3,
+      totalVoters: 5,
+      totalMembers: 12,
+    });
+    const pill = screen.getByTestId('confirmation-pill');
+    // 12 - 5 = 7 still voting → waiting on 7 others
+    expect(pill).toHaveTextContent(/waiting on 7/i);
+  });
+
+  it('does NOT render the legacy <VoteStatusBar> data-testid (AC-20: consolidated)', () => {
+    renderLeaderboard({ myVotes: [42] });
+    expect(screen.queryByTestId('vote-status-bar')).not.toBeInTheDocument();
+  });
+});
+
 describe('VotingLeaderboard — voting', () => {
   beforeEach(() => {
     mockMutate.mockReset();

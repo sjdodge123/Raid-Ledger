@@ -91,6 +91,9 @@ export function LeaderboardRow({
     >
       {isVoted && <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />}
       <div className="px-4 py-3 flex items-center gap-3">
+        {isVoted && (
+          <span aria-label="You voted" className="text-emerald-400 text-sm font-bold flex-shrink-0">✓</span>
+        )}
         <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${rankColor(rank)}`}>
           <span className="font-black text-sm">{rank}</span>
         </div>

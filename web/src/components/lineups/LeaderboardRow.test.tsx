@@ -95,6 +95,19 @@ describe('LeaderboardRow — voted state', () => {
   });
 });
 
+describe('LeaderboardRow — voted ✓ marker (ROK-1209 AC-6)', () => {
+  it("renders an inline element with aria-label='You voted' when isVoted=true", () => {
+    renderRow({ isVoted: true });
+    const indicator = screen.getByLabelText(/you voted/i);
+    expect(indicator).toBeInTheDocument();
+  });
+
+  it("does NOT render the 'You voted' aria-label when isVoted=false", () => {
+    renderRow({ isVoted: false });
+    expect(screen.queryByLabelText(/you voted/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('LeaderboardRow — interaction', () => {
   it('calls onToggleVote on click', async () => {
     const user = userEvent.setup();

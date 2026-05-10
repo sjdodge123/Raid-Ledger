@@ -4,10 +4,13 @@
  * Composes match context, suggested times, availability heatmap,
  * event creation, and other polls sections.
  */
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
+import { HeroNextStep } from '../components/common/HeroNextStep';
+import { useLineupHero } from '../hooks/use-lineup-hero';
+import { useLineupDetail } from '../hooks/use-lineups';
 import type { GameTimePreviewBlock } from '../components/features/game-time/game-time-grid.types';
 import {
   useSchedulePoll,
@@ -160,6 +163,40 @@ function PollSections({ lineupId, matchId, poll }: {
   return <ActivePollSections lineupId={lineupId} matchId={matchId} poll={poll} />;
 }
 
+/** Render the standalone-poll hero, given a loaded lineup. */
+function StandalonePollHero({
+  lineup,
+  myVotedSlotCount,
+}: {
+  lineup: NonNullable<ReturnType<typeof useLineupDetail>['data']>;
+  myVotedSlotCount: number;
+}): JSX.Element {
+  const slotGridRef = useRef<HTMLElement | null>(null);
+  const leaderboardRef = useRef<HTMLElement | null>(null);
+  const bracketRef = useRef<HTMLElement | null>(null);
+  const heroProps = useLineupHero({
+    lineup,
+    tiebreaker: null,
+    scrollTargets: { leaderboard: leaderboardRef, slotGrid: slotGridRef, bracket: bracketRef },
+    pageId: 'standalone-poll',
+    myVotedSlotCount,
+  });
+  return <HeroNextStep {...heroProps} />;
+}
+
+/** Wrapper that fetches lineup detail and only renders hero when ready.
+ *  Takes `myVotedSlotCount` from the parent (poll context) so the standalone
+ *  hero copy reflects this poll's vote state, not the lineup's vote state.
+ */
+function StandalonePollHeroOrNothing({
+  lineupId,
+  myVotedSlotCount,
+}: { lineupId: number; myVotedSlotCount: number }): JSX.Element | null {
+  const { data: lineup } = useLineupDetail(lineupId);
+  if (!lineup) return null;
+  return <StandalonePollHero lineup={lineup} myVotedSlotCount={myVotedSlotCount} />;
+}
+
 /** Active poll — hooks live here to avoid conditional hook calls in PollSections. */
 function ActivePollSections({ lineupId, matchId, poll }: {
   lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
@@ -191,6 +228,10 @@ function ActivePollSections({ lineupId, matchId, poll }: {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
+      <StandalonePollHeroOrNothing
+        lineupId={lineupId}
+        myVotedSlotCount={poll.myVotedSlotIds.length}
+      />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
         {canCancel && (

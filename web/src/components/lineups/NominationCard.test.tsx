@@ -89,6 +89,46 @@ describe('NominationCard — note', () => {
     });
 });
 
+describe('NominationCard — confirmation pill (ROK-1209 AC-5)', () => {
+    it("shows 'Your nomination' pill on the user's own card", () => {
+        vi.mocked(useAuth).mockReturnValue({ user: { id: 1, role: 'member' } } as ReturnType<typeof useAuth>);
+        vi.mocked(isOperatorOrAdmin).mockReturnValue(false);
+        renderWithProviders(
+            <NominationCard
+                entry={createMockEntry({ nominatedBy: { id: 1, displayName: 'Me' } })}
+                onRemove={vi.fn()}
+            />,
+        );
+        const pill = screen.getByTestId('confirmation-pill');
+        expect(pill).toBeInTheDocument();
+        expect(pill).toHaveTextContent(/your nomination/i);
+    });
+
+    it("does NOT render the pill on cards nominated by other users", () => {
+        vi.mocked(useAuth).mockReturnValue({ user: { id: 99, role: 'member' } } as ReturnType<typeof useAuth>);
+        vi.mocked(isOperatorOrAdmin).mockReturnValue(false);
+        renderWithProviders(
+            <NominationCard
+                entry={createMockEntry({ nominatedBy: { id: 5, displayName: 'Other' } })}
+                onRemove={vi.fn()}
+            />,
+        );
+        expect(screen.queryByTestId('confirmation-pill')).not.toBeInTheDocument();
+    });
+
+    it("does NOT render the pill when user is anonymous", () => {
+        vi.mocked(useAuth).mockReturnValue({ user: null } as ReturnType<typeof useAuth>);
+        vi.mocked(isOperatorOrAdmin).mockReturnValue(false);
+        renderWithProviders(
+            <NominationCard
+                entry={createMockEntry({ nominatedBy: { id: 5, displayName: 'Other' } })}
+                onRemove={vi.fn()}
+            />,
+        );
+        expect(screen.queryByTestId('confirmation-pill')).not.toBeInTheDocument();
+    });
+});
+
 describe('NominationCard — delete button', () => {
     it('shows delete button when user is the nominator', () => {
         vi.mocked(useAuth).mockReturnValue({ user: { id: 1, role: 'member' } } as ReturnType<typeof useAuth>);

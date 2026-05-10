@@ -59,3 +59,29 @@ describe('NominationGrid', () => {
         expect(screen.getByText('Game B')).toBeInTheDocument();
     });
 });
+
+describe('NominationGrid — per-card confirmation pill (ROK-1209 AC-5)', () => {
+    it("shows the pill ONLY on cards the current user nominated", () => {
+        const entries = [
+            // Mine
+            createMockEntry({ id: 1, gameId: 1, gameName: 'Mine A', nominatedBy: { id: 99, displayName: 'Me' } }),
+            // Theirs
+            createMockEntry({ id: 2, gameId: 2, gameName: 'Theirs', nominatedBy: { id: 5, displayName: 'Other' } }),
+            // Mine again
+            createMockEntry({ id: 3, gameId: 3, gameName: 'Mine B', nominatedBy: { id: 99, displayName: 'Me' } }),
+        ];
+        renderWithProviders(<NominationGrid entries={entries} lineupId={1} />);
+        // Two pills, one per user-owned card.
+        const pills = screen.getAllByTestId('confirmation-pill');
+        expect(pills).toHaveLength(2);
+    });
+
+    it('does not render any pill when the user has no nominations', () => {
+        const entries = [
+            createMockEntry({ id: 1, gameId: 1, gameName: 'Theirs A', nominatedBy: { id: 5, displayName: 'Other' } }),
+            createMockEntry({ id: 2, gameId: 2, gameName: 'Theirs B', nominatedBy: { id: 6, displayName: 'Other2' } }),
+        ];
+        renderWithProviders(<NominationGrid entries={entries} lineupId={1} />);
+        expect(screen.queryByTestId('confirmation-pill')).not.toBeInTheDocument();
+    });
+});

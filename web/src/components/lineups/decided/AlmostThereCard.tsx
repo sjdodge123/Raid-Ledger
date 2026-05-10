@@ -11,6 +11,7 @@ import { MemberAvatarGroup } from './MemberAvatarGroup';
 import { GameInfoBadges } from '../GameInfoBadges';
 import { useBandwagonJoin } from '../../../hooks/use-lineup-matches';
 import { useAuth } from '../../../hooks/use-auth';
+import { ConfirmationPill } from '../../common/ConfirmationPill';
 
 interface AlmostThereCardProps {
   match: MatchDetailResponseDto;
@@ -41,9 +42,9 @@ function JoinButton({
 
   if (isMember) {
     return (
-      <button type="button" disabled className="w-full py-2 text-sm font-medium text-zinc-400 bg-zinc-700 rounded-lg cursor-not-allowed">
-        Joined
-      </button>
+      <div className="w-full flex justify-center">
+        <ConfirmationPill variant="text" size="sm">You&apos;re in</ConfirmationPill>
+      </div>
     );
   }
 
