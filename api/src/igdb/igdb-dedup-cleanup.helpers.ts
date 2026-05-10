@@ -1,9 +1,13 @@
 /**
- * One-time DB cleanup for duplicate game rows (ROK-1008).
- * Finds games sharing the same steamAppId or igdbId and merges them,
- * reassigning FK references to the winner row.
+ * One-time DB cleanup for duplicate game rows.
+ * - ROK-1008: merges rows sharing the same steamAppId / igdbId.
+ * - ROK-1113: merges rows sharing the same normalized canonical name
+ *   (e.g., "Slay the Spire 2" vs "Slay the Spire II").
+ *
+ * Reassigns FK references to the winner row before deleting the losers.
  */
 import { sql, eq } from 'drizzle-orm';
+import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import {
@@ -11,6 +15,13 @@ import {
   reassignLineupFks,
   reassignMiscFks,
 } from './igdb-dedup-fk-reassign.helpers';
+import {
+  findDuplicateGroupsByNormalizedName,
+  pickNameGroupWinner,
+  type NameDuplicateGroup,
+} from './igdb-name-dedup.helpers';
+
+const nameDedupLogger = new Logger('IgdbNameDedupCleanup');
 
 /** A group of duplicate games with a designated winner and losers. */
 export interface DuplicateGroup {
@@ -143,4 +154,112 @@ async function mergeGroup(
       await tx.delete(schema.games).where(eq(schema.games.id, loserId));
     }
   });
+}
+
+// ─── ROK-1113: normalized-name cleanup ──────────────────────────────────────
+
+/** Per-group merge audit entry returned by the admin endpoint. */
+export interface NameMergeReport {
+  normalizedName: string;
+  winnerId: number;
+  loserIds: number[];
+}
+
+/** Result of a name-dedup cleanup run (commit mode). */
+export interface NameDedupCommitResult {
+  merged: number;
+  errors: string[];
+  report: NameMergeReport[];
+  skippedGroups: NameDuplicateGroup[];
+}
+
+/** Result of a name-dedup cleanup run (dry-run mode). */
+export interface NameDedupDryRunResult {
+  totalGroups: number;
+  totalLosers: number;
+  groups: NameMergeReport[];
+  skippedGroups: NameDuplicateGroup[];
+}
+
+/**
+ * Compute a dry-run report: which rows would merge and which groups would be
+ * skipped because of mixed igdbIds. Does not mutate the database.
+ */
+export async function dryRunNameDedup(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<NameDedupDryRunResult> {
+  const { groups, skipped } = await findDuplicateGroupsByNormalizedName(db);
+  const report = groups.map(buildMergeReport);
+  const totalLosers = report.reduce((acc, g) => acc + g.loserIds.length, 0);
+  return {
+    totalGroups: groups.length,
+    totalLosers,
+    groups: report,
+    skippedGroups: skipped,
+  };
+}
+
+/**
+ * Commit-mode cleanup: merges all eligible name-keyed duplicate groups, deleting
+ * losers. Idempotent — a second run on a clean DB returns `{ merged: 0 }`.
+ */
+export async function mergeNameDuplicates(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<NameDedupCommitResult> {
+  const { groups, skipped } = await findDuplicateGroupsByNormalizedName(db);
+  const report: NameMergeReport[] = [];
+  const errors: string[] = [];
+
+  for (const group of groups) {
+    try {
+      const entry = await mergeNameGroup(db, group);
+      report.push(entry);
+    } catch (err) {
+      errors.push(`Group "${group.normalizedName}": ${err}`);
+    }
+  }
+
+  return { merged: report.length, errors, report, skippedGroups: skipped };
+}
+
+/** Merge a single name-keyed group. Picks winner, reassigns FKs, deletes losers. */
+async function mergeNameGroup(
+  db: PostgresJsDatabase<typeof schema>,
+  group: NameDuplicateGroup,
+): Promise<NameMergeReport> {
+  const winner = pickNameGroupWinner(group.rows);
+  const loserIds = group.rows
+    .filter((r) => r.id !== winner.id)
+    .map((r) => r.id);
+
+  await db.transaction(async (tx) => {
+    for (const loserId of loserIds) {
+      await reassignEventFks(tx, loserId, winner.id);
+      await reassignLineupFks(tx, loserId, winner.id);
+      await reassignMiscFks(tx, loserId, winner.id);
+      await tx.delete(schema.games).where(eq(schema.games.id, loserId));
+    }
+  });
+
+  nameDedupLogger.log(
+    `Merged name group "${group.normalizedName}" — winner=${winner.id}, losers=[${loserIds.join(',')}]`,
+  );
+  return {
+    normalizedName: group.normalizedName,
+    winnerId: winner.id,
+    loserIds,
+  };
+}
+
+/** Build a winner/losers report for a name-keyed group (no DB writes). */
+function buildMergeReport(group: NameDuplicateGroup): NameMergeReport {
+  const winner = pickNameGroupWinner(group.rows);
+  const loserIds = group.rows
+    .filter((r) => r.id !== winner.id)
+    .map((r) => r.id);
+  return {
+    normalizedName: group.normalizedName,
+    winnerId: winner.id,
+    loserIds,
+  };
 }

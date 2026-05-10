@@ -13,6 +13,7 @@ import {
   type IgdbEnrichmentData,
 } from './steam-igdb-enrichment.helpers';
 import { checkAdultContent } from './steam-content-filter.helpers';
+import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 
 const logger = new Logger('SteamItadDiscovery');
 
@@ -105,7 +106,35 @@ async function upsertGame(
     return mergeIntoExisting(db, byItad.id, row);
   }
 
+  // ROK-1113: collapse normalized-name duplicates (e.g., "Slay the Spire 2" vs
+  // "Slay the Spire II") into a single row instead of inserting a parallel one.
+  const byNormalized = await findByNormalizedName(db, row);
+  if (byNormalized) {
+    return mergeIntoExisting(db, byNormalized.id, row);
+  }
+
   return insertWithSlugRetry(db, row);
+}
+
+/**
+ * Look up an existing row by normalized name, refusing to merge if both rows
+ * have non-null igdbIds that disagree (sequel/variant signal).
+ */
+async function findByNormalizedName(
+  db: PostgresJsDatabase<typeof schema>,
+  row: GameInsertRow,
+): Promise<{ id: number } | null> {
+  if (!row.name) return null;
+  const match = await findGameByNormalizedName(db, row.name);
+  if (!match) return null;
+  if (
+    row.igdbId != null &&
+    match.igdbId != null &&
+    match.igdbId !== row.igdbId
+  ) {
+    return null;
+  }
+  return { id: match.id };
 }
 
 /** Find a game by its ITAD game ID. */
@@ -170,8 +199,7 @@ async function insertWithSlugRetry(
 function isUniqueViolation(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   if ('code' in err && (err as { code: string }).code === '23505') return true;
-  if ('cause' in err)
-    return isUniqueViolation((err as { cause: unknown }).cause);
+  if ('cause' in err) return isUniqueViolation(err.cause);
   return false;
 }
 

@@ -297,7 +297,8 @@ test.describe('Phase breadcrumb transitions', () => {
         }).toPass({ timeout: 30_000 });
     });
 
-    test('double-click on next phase advances the lineup', async ({ page }) => {
+    test('clicking next phase opens modal and confirming advances the lineup', async ({ page }) => {
+        // ROK-1123: replaced two-click pattern with confirm/cancel modal.
         await expect(async () => {
             lineupId = await ensureActiveLineup(adminToken);
             await page.goto(`/community-lineup/${lineupId}`);
@@ -305,12 +306,14 @@ test.describe('Phase breadcrumb transitions', () => {
                 page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
             ).toBeVisible({ timeout: 5_000 });
 
-            // First click — shows "Advance?"
-            const votingBtn = page.getByRole('button', { name: 'Voting' });
+            // Click pill — opens confirm modal with target phase title
+            const votingBtn = page.getByRole('button', { name: 'Voting' }).first();
             await expect(votingBtn).toBeVisible({ timeout: 3_000 });
             await votingBtn.click();
-            await expect(page.getByRole('button', { name: 'Advance?' })).toBeVisible({ timeout: 3_000 });
-            await page.getByRole('button', { name: 'Advance?' }).click();
+            await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+            await expect(page.getByRole('heading', { name: /Advance to Voting/ })).toBeVisible({ timeout: 5_000 });
+            // Confirm button fires the transition
+            await page.getByRole('button', { name: /^Advance to Voting$/ }).click();
         }).toPass({ timeout: 30_000 });
 
         // Status badge should update to Voting
@@ -318,7 +321,8 @@ test.describe('Phase breadcrumb transitions', () => {
         await expect(votingBadge.first()).toBeVisible({ timeout: 10_000 });
     });
 
-    test('double-click on previous phase reverts the lineup', async ({ page }) => {
+    test('clicking previous phase opens modal and confirming reverts the lineup', async ({ page }) => {
+        // ROK-1123: replaced two-click pattern with confirm/cancel modal.
         // Retry — parallel workers may archive our lineup between setup and navigation
         await expect(async () => {
             // Ensure lineup is in voting phase
@@ -331,11 +335,12 @@ test.describe('Phase breadcrumb transitions', () => {
             ).toBeVisible({ timeout: 5_000 });
 
             // "Nominating" should be a clickable button (previous phase from voting)
-            const nominatingBtn = page.getByRole('button', { name: 'Nominating' });
+            const nominatingBtn = page.getByRole('button', { name: 'Nominating' }).first();
             await expect(nominatingBtn).toBeVisible({ timeout: 3_000 });
             await nominatingBtn.click();
-            await expect(page.getByRole('button', { name: 'Revert?' })).toBeVisible({ timeout: 3_000 });
-            await page.getByRole('button', { name: 'Revert?' }).click();
+            await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+            await expect(page.getByRole('heading', { name: /Revert to Nominating/ })).toBeVisible({ timeout: 5_000 });
+            await page.getByRole('button', { name: /^Revert to Nominating$/ }).click();
         }).toPass({ timeout: 30_000 });
 
         // Status badge should update back to building/Nominating

@@ -24,6 +24,7 @@ import { SuggestedTimes } from './scheduling/SuggestedTimes';
 import { AvailabilityHeatmapSection } from './scheduling/AvailabilityHeatmapSection';
 import { CreateEventSection } from './scheduling/CreateEventSection';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
+import { PollDeadlineBanner } from './scheduling/PollDeadlineBanner';
 import { SchedulingWizard } from './scheduling/SchedulingWizard';
 import { isWizardSkipped } from './scheduling/scheduling-wizard-utils';
 
@@ -203,6 +204,7 @@ function ActivePollSections({ lineupId, matchId, poll }: {
           </button>
         )}
       </div>
+      <PollDeadlineBanner phaseDeadline={poll.phaseDeadline} />
       {readOnly && <ReadOnlyBanner />}
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       <AvailabilityHeatmapSection data={availability} isLoading={availLoading}

@@ -50,6 +50,12 @@ function buildMockDb() {
 
   const findFirst = jest.fn();
 
+  // ROK-1113: select chain used by findGameByNormalizedName.
+  // Default: prefilter returns no candidates → no-op.
+  const selectWhere = jest.fn().mockResolvedValue([]);
+  const selectFrom = jest.fn().mockReturnValue({ where: selectWhere });
+  const select = jest.fn().mockReturnValue({ from: selectFrom });
+
   return {
     insert,
     insertValues,
@@ -57,12 +63,16 @@ function buildMockDb() {
     update,
     updateSet,
     updateWhere,
+    select,
+    selectFrom,
+    selectWhere,
     query: { games: { findFirst } },
     // Helper to get the mock DB object matching DiscoveryDeps shape
     get asDeps() {
       return {
         insert: this.insert,
         update: this.update,
+        select: this.select,
         query: this.query,
       } as unknown as DiscoveryDeps['db'];
     },

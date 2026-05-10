@@ -5,14 +5,15 @@ import * as schema from '../drizzle/schema';
 import { GameDetailDto } from '@raid-ledger/contract';
 import { IGDB_CONFIG, type IgdbApiGame } from './igdb.constants';
 import { mapApiGameToDbRow, mapDbRowToDetail } from './igdb.mappers';
+import {
+  findGameByNormalizedName,
+  findGameIdsByNormalizedName,
+} from './igdb-name-dedup.helpers';
+import { normalizeForDedup } from './igdb-search-dedup.helpers';
 
 const logger = new Logger('IgdbUpsertHelpers');
 
-/**
- * Build the conflict-update set for a single-row game upsert.
- * Uses COALESCE for twitchGameId/steamAppId so IGDB nulls
- * don't overwrite manually-set or seed values.
- */
+/** Single-row upsert SET. COALESCE preserves existing twitch/steam ids when row is null. */
 function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
   return {
     name: row.name,
@@ -37,12 +38,7 @@ function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
   };
 }
 
-/**
- * Build the conflict-update set for a BATCH game upsert (ROK-1024).
- * Each field references `excluded.<column>` — the per-row value from the
- * INSERT. For twitchGameId/steamAppId, COALESCE preserves the existing
- * value when the incoming row has null, mirroring the single-row semantics.
- */
+/** Batch upsert SET (ROK-1024). Mirrors `buildUpsertSet` using `excluded.<column>` per row. */
 function buildBatchUpsertSet() {
   return {
     name: sql`excluded.name`,
@@ -68,12 +64,9 @@ function buildBatchUpsertSet() {
 }
 
 /**
- * Upsert a single game row into the database.
- * If a game with the same steamAppId already exists (e.g., from ITAD)
- * but has no igdbId, merge IGDB data into that row instead of inserting
- * a duplicate (ROK-986).
- * @param onGameChanged - ROK-1082: fired after commit with the internal game id
- *                        so the caller can enqueue a taste-vector recompute.
+ * Upsert a single game row. Merges into existing rows by steamAppId (ROK-986)
+ * or normalized canonical name (ROK-1113) before inserting. `onGameChanged`
+ * (ROK-1082) fires after commit so callers can enqueue a taste-vector recompute.
  */
 export async function upsertSingleGameRow(
   db: PostgresJsDatabase<typeof schema>,
@@ -82,6 +75,7 @@ export async function upsertSingleGameRow(
 ): Promise<void> {
   if (row.steamAppId && (await mergeBysteamAppId(db, row, onGameChanged)))
     return;
+  if (await mergeByNormalizedName(db, row, onGameChanged)) return;
   await db
     .insert(schema.games)
     .values(row)
@@ -90,6 +84,25 @@ export async function upsertSingleGameRow(
       set: buildUpsertSet(row),
     });
   if (onGameChanged) await notifyBySingleIgdbId(db, row.igdbId, onGameChanged);
+}
+
+/**
+ * Merge IGDB data into an existing row whose canonical name matches (ROK-1113).
+ *
+ * Skip if the existing row has a *different* non-null igdbId — IGDB ids are
+ * canonical, so a mismatch signals a sequel/variant we should NOT collapse.
+ */
+async function mergeByNormalizedName(
+  db: PostgresJsDatabase<typeof schema>,
+  row: ReturnType<typeof mapApiGameToDbRow>,
+  onGameChanged?: (gameId: number) => void,
+): Promise<boolean> {
+  const match = await findGameByNormalizedName(db, row.name);
+  if (!match) return false;
+  if (match.igdbId != null && match.igdbId !== row.igdbId) return false;
+  await applyIgdbMergeToRow(db, match.id, row);
+  onGameChanged?.(match.id);
+  return true;
 }
 
 /** Look up the internal id by igdbId and fire the callback. */
@@ -123,18 +136,7 @@ async function mergeBysteamAppId(
     )
     .limit(1);
   if (!existing) return false;
-  await db
-    .update(schema.games)
-    .set({
-      ...buildUpsertSet(row),
-      igdbId: row.igdbId,
-      igdbEnrichmentStatus: 'enriched',
-      igdbEnrichmentRetryCount: 0,
-    })
-    .where(eq(schema.games.id, existing.id));
-  logger.log(
-    `Merged IGDB ${row.igdbId} into existing game ${existing.id} by steamAppId`,
-  );
+  await applyIgdbMergeToRow(db, existing.id, row);
   onGameChanged?.(existing.id);
   return true;
 }
@@ -232,18 +234,33 @@ function splitMergeVsInsert(
 }
 
 /**
- * Upsert games from IGDB API responses into the local database.
- * Skips games whose igdbId is banned (tombstoned).
- *
- * Performance (ROK-1024): uses ONE batched SELECT for the steamAppId merge
- * pre-check and ONE batched INSERT ... ON CONFLICT DO UPDATE for the
- * remaining rows, instead of per-row queries.
- *
- * @param db - Database connection
- * @param apiGames - Raw IGDB API game objects
- * @param onGameChanged - ROK-1082: fired per touched row after commit so the
- *                        caller can enqueue a taste-vector recompute.
- * @returns Inserted/existing game rows as detail DTOs
+ * Move rows that match an existing row's normalized name from `inserts` to
+ * `merges` (ROK-1113). Skips name-matches when the existing row's igdbId
+ * disagrees with the incoming row — IGDB ids are canonical.
+ */
+function applyNameMergeMap(
+  inserts: GameRow[],
+  nameMap: Map<string, { id: number; igdbId: number | null }>,
+  normalize: (name: string) => string,
+): { nameMerges: Array<{ id: number; row: GameRow }>; inserts: GameRow[] } {
+  const nameMerges: Array<{ id: number; row: GameRow }> = [];
+  const remaining: GameRow[] = [];
+  for (const row of inserts) {
+    const match = nameMap.get(normalize(row.name));
+    if (match && (match.igdbId == null || match.igdbId === row.igdbId)) {
+      nameMerges.push({ id: match.id, row });
+    } else {
+      remaining.push(row);
+    }
+  }
+  return { nameMerges, inserts: remaining };
+}
+
+/**
+ * Upsert games from IGDB API responses. Merges into existing rows by steamAppId
+ * (ROK-1024) and normalized canonical name (ROK-1113), then runs ONE batched
+ * INSERT ... ON CONFLICT DO UPDATE for the remainder. `onGameChanged` (ROK-1082)
+ * fires per touched row so callers can enqueue a taste-vector recompute.
  */
 export async function upsertGamesFromApi(
   db: PostgresJsDatabase<typeof schema>,
@@ -251,23 +268,13 @@ export async function upsertGamesFromApi(
   onGameChanged?: (gameId: number) => void,
 ): Promise<GameDetailDto[]> {
   if (apiGames.length === 0) return [];
-
   const filteredGames = await filterBannedGames(db, apiGames);
   if (filteredGames.length === 0) return [];
 
   const rows = filteredGames.map((g) => mapApiGameToDbRow(g));
-  const steamAppIds = rows
-    .map((r) => r.steamAppId)
-    .filter((id): id is number => id != null);
-  const mergeMap = await batchMergeBysteamAppId(db, steamAppIds);
-  const { merges, inserts } = splitMergeVsInsert(rows, mergeMap);
-
-  for (const { id, row } of merges) {
-    await applyIgdbMergeToRow(db, id, row);
-  }
-
-  if (inserts.length > 0) {
-    await db.insert(schema.games).values(inserts).onConflictDoUpdate({
+  const insertsAfter = await mergeExistingRows(db, rows);
+  if (insertsAfter.length > 0) {
+    await db.insert(schema.games).values(insertsAfter).onConflictDoUpdate({
       target: schema.games.igdbId,
       set: buildBatchUpsertSet(),
     });
@@ -278,10 +285,42 @@ export async function upsertGamesFromApi(
     .select()
     .from(schema.games)
     .where(inArray(schema.games.igdbId, igdbIds));
-  if (onGameChanged) {
-    for (const r of results) onGameChanged(r.id);
-  }
+  if (onGameChanged) for (const r of results) onGameChanged(r.id);
   return results.map((g) => mapDbRowToDetail(g));
+}
+
+/**
+ * Apply steamAppId + normalized-name merges and return rows that should proceed
+ * to the batch INSERT.
+ */
+async function mergeExistingRows(
+  db: PostgresJsDatabase<typeof schema>,
+  rows: GameRow[],
+): Promise<GameRow[]> {
+  const steamAppIds = rows
+    .map((r) => r.steamAppId)
+    .filter((id): id is number => id != null);
+  const mergeMap = await batchMergeBysteamAppId(db, steamAppIds);
+  const { merges, inserts } = splitMergeVsInsert(rows, mergeMap);
+
+  const nameMap = await findGameIdsByNormalizedName(
+    db,
+    inserts.map((r) => r.name),
+  );
+  const { nameMerges, inserts: insertsAfterName } = applyNameMergeMap(
+    inserts,
+    nameMap,
+    normalizeForDedup,
+  );
+
+  for (const { id, row } of merges) await applyIgdbMergeToRow(db, id, row);
+  for (const { id, row } of nameMerges) {
+    await applyIgdbMergeToRow(db, id, row);
+    logger.log(
+      `Merged IGDB ${row.igdbId} into existing game ${id} by normalized name`,
+    );
+  }
+  return insertsAfterName;
 }
 
 /** Fetch games with missing cover art from the database. */

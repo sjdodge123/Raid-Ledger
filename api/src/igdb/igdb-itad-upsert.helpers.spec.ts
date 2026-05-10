@@ -97,10 +97,17 @@ function makeDbRow(overrides: Record<string, unknown> = {}) {
  *  - SELECT queries: select().from().where().limit() (limit terminates)
  *  - UPDATE queries: update().set().where() (where terminates)
  *  - INSERT queries: insert().values().onConflictDoUpdate() (terminates)
+ *  - Normalized-name SELECT (ROK-1113): select().from().where() (where terminates as Promise<rows[]>)
  *
  * @param limitResults - Sequential results for .limit() calls
+ * @param whereSelectResults - Sequential results for terminal where() calls used by
+ *   the normalized-name dedup helper. Defaults to `[[]]` (one empty result), so
+ *   existing tests continue to work without the helper finding anything.
  */
-function buildUpsertDb(limitResults: unknown[][]) {
+function buildUpsertDb(
+  limitResults: unknown[][],
+  whereSelectResults: unknown[][] = [[]],
+) {
   const db: Record<string, jest.Mock> = {};
   const chainMethods = [
     'select',
@@ -131,11 +138,13 @@ function buildUpsertDb(limitResults: unknown[][]) {
     return Promise.resolve(result);
   });
 
-  // where() serves two roles:
-  // - Chain step in SELECT (returns db for further chaining)
-  // - Terminal in UPDATE (returns resolved Promise)
-  // We detect which by checking if update() was called before where()
+  // where() serves three roles:
+  // - Chain step in SELECT followed by .limit() (returns db for further chaining)
+  // - Terminal in UPDATE (returns resolved Promise<undefined>)
+  // - Terminal in SELECT (ROK-1113 name-dedup: returns Promise<rows[]>) when
+  //   no .limit() follows. We dispatch on whether update() was called recently.
   let inUpdate = false;
+  let whereSelectIdx = 0;
   const origUpdate = db.update;
   db.update = jest.fn().mockImplementation((...args: unknown[]) => {
     inUpdate = true;
@@ -147,7 +156,16 @@ function buildUpsertDb(limitResults: unknown[][]) {
       inUpdate = false;
       return Promise.resolve(undefined);
     }
-    return db;
+    // For SELECTs, return a thenable that resolves to a rows array if awaited
+    // (used by the normalized-name dedup helper), and that ALSO chains as `db`
+    // when followed by .limit() — Drizzle's awaitable chain.
+    const result = whereSelectResults[whereSelectIdx] ?? [];
+    whereSelectIdx++;
+    const chainable = Object.assign(Object.create(db), {
+      then: (onFulfilled: (value: unknown) => unknown) =>
+        Promise.resolve(result).then(onFulfilled),
+    });
+    return chainable;
   });
 
   db.transaction = jest
@@ -182,7 +200,7 @@ describe('upsertItadGame', () => {
       // 2. fetchBySlug after update -> return existing row
       const db = buildUpsertDb([[existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.update).toHaveBeenCalled();
       expect(db.insert).not.toHaveBeenCalled();
@@ -214,7 +232,7 @@ describe('upsertItadGame', () => {
       // 2. fetchBySlug after update -> return existing row
       const db = buildUpsertDb([[existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.update).toHaveBeenCalled();
       expect(result).toMatchObject({
@@ -243,7 +261,7 @@ describe('upsertItadGame', () => {
       // 3. fetchBySlug after update -> return row
       const db = buildUpsertDb([[], [existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.update).toHaveBeenCalled();
       expect(result).toMatchObject({ slug: 'game-x-igdb' });
@@ -274,7 +292,7 @@ describe('upsertItadGame', () => {
       // 3. fetchBySlug after insert -> return new row
       const db = buildUpsertDb([[], [], [insertedRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.insert).toHaveBeenCalled();
       expect(result).toMatchObject({
@@ -301,7 +319,7 @@ describe('upsertItadGame', () => {
       // 1. fetchBySlug after insert -> return row
       const db = buildUpsertDb([[insertedRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.insert).toHaveBeenCalled();
       expect(result).toMatchObject({ slug: 'itad-only-game' });
@@ -328,7 +346,7 @@ describe('upsertItadGame', () => {
       // 2. fetchBySlug after update
       const db = buildUpsertDb([[existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       expect(db.update).toHaveBeenCalled();
       expect(db.limit).toHaveBeenCalledTimes(2);
@@ -353,7 +371,7 @@ describe('upsertItadGame', () => {
 
       const db = buildUpsertDb([[existingRow], [existingRow]]);
 
-      const result = await upsertItadGame(db as never, game as never);
+      const result = await upsertItadGame(db as never, game);
 
       // Verify the result is a properly mapped GameDetailDto
       expect(result).toMatchObject({
