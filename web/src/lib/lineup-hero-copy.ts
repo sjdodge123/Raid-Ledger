@@ -113,7 +113,14 @@ function buildingCopy(ctx: HeroCopyContext): HeroCopy {
         return {
             tone: 'action',
             headline: `${lineup.entries.length} of ${lineup.totalMembers} nominated. Advance to Voting when ready.`,
-            cta: { text: 'Advance to Voting' },
+            // ariaLabel: keep the hero CTA's accessible name distinct from
+            // the phase-breadcrumb's "Voting" button. Multiple smoke specs
+            // (lineup-phase-breadcrumb, lineup-creation) select the
+            // breadcrumb via `getByRole('button', { name: 'Voting' })` at
+            // page level — substring match would otherwise pull both this
+            // hero CTA and the breadcrumb, tripping strict mode. Caught on
+            // PR #754 first CI run.
+            cta: { text: 'Advance to Voting', ariaLabel: 'Move lineup phase forward' },
         };
     }
     return privacyHero('nominate');
@@ -145,7 +152,10 @@ function votingCopy(ctx: HeroCopyContext): HeroCopy {
         return {
             tone: 'action',
             headline: `Quorum reached — ${lineup.totalVoters} of ${lineup.totalMembers} voted. Advance when stable.`,
-            cta: { text: 'Advance to Decided' },
+            // ariaLabel mirrors building-phase rationale (PR #754 fix) — a
+            // generic "Advance lineup phase" keeps this CTA's accessible
+            // name from colliding with breadcrumb-targeted page selectors.
+            cta: { text: 'Advance to Decided', ariaLabel: 'Move lineup phase forward' },
         };
     }
     return privacyHero('vote');
@@ -235,7 +245,11 @@ function tiebreakerCopy(ctx: HeroCopyContext): HeroCopy {
             tone: 'action',
             headline: 'Force the tiebreaker to resolve when you decide.',
             detail: 'Use this only if the bracket stalls past deadline.',
-            cta: { text: 'Force-resolve now' },
+            // ariaLabel keeps this distinct from the existing "Force Resolve"
+            // button that lineup-tiebreaker smoke tests select via
+            // `getByRole('button', { name: 'Force Resolve' })` (collision
+            // caught on PR #754 first CI run).
+            cta: { text: 'Force-resolve now', ariaLabel: 'Force tiebreaker resolution' },
         };
     }
     return privacyHero('participate in the tiebreaker');
@@ -262,7 +276,11 @@ function standalonePollCopy(ctx: HeroCopyContext): HeroCopy {
         return {
             tone: 'action',
             headline: 'Quorum forming — create the event when ready.',
-            cta: { text: 'Create event' },
+            // ariaLabel disambiguates from the page-level "Create Event"
+            // button that scheduling-poll smoke tests select via
+            // `getByRole('button', { name: 'Create Event' })` (collision
+            // caught on PR #754 first CI run).
+            cta: { text: 'Create event', ariaLabel: 'Open events page from hero' },
         };
     }
     return privacyHero('vote on a slot');

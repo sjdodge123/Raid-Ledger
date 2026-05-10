@@ -99,7 +99,13 @@ test.describe('Building phase — hero + pill', () => {
         await expect(hero).toBeVisible({ timeout: 15_000 });
         await expect(hero).toHaveAttribute('data-tone', 'action');
         // Organizer persona on building → "Advance to Voting" CTA per spec.
-        await expect(hero.getByRole('button', { name: /advance to voting/i })).toBeVisible();
+        // The CTA's visible text says "Advance to Voting" but its
+        // accessible name is the generic "Advance lineup phase" — keeps
+        // it from colliding with the phase-breadcrumb's "Voting" button at
+        // page-level selectors. Match by aria-label here, plus assert the
+        // visible text via toContainText.
+        await expect(hero.getByRole('button', { name: /move lineup phase forward/i })).toBeVisible();
+        await expect(hero).toContainText(/advance to voting/i);
     });
 
     test('hero copy reflects current nomination count for organizer', async ({ page }) => {
@@ -116,7 +122,13 @@ test.describe('Building phase — hero + pill', () => {
         await expect(hero).toBeVisible({ timeout: 15_000 });
         // Organizer copy: "{N} of {M} nominated. Advance to Voting when ready."
         await expect(hero).toContainText(/\d+ of \d+ nominated/i);
-        await expect(hero.getByRole('button', { name: /advance to voting/i })).toBeVisible();
+        // The CTA's visible text says "Advance to Voting" but its
+        // accessible name is the generic "Advance lineup phase" — keeps
+        // it from colliding with the phase-breadcrumb's "Voting" button at
+        // page-level selectors. Match by aria-label here, plus assert the
+        // visible text via toContainText.
+        await expect(hero.getByRole('button', { name: /move lineup phase forward/i })).toBeVisible();
+        await expect(hero).toContainText(/advance to voting/i);
     });
 
     test("after nominating, per-card pill appears on organizer's nominated card", async ({ page }) => {
