@@ -549,11 +549,18 @@ test.describe('Voting phase', () => {
         // ROK-1167: open StartLineupModal via test query param — works regardless
         // of whether this worker's voting lineup is still active. Avoids racing
         // on the empty-banner state.
+        //
+        // Hook timeout bumped to 30s — page-load + admin/role hydration + the
+        // ROK-1167 useEffect that flips `startOpen` chains together; under
+        // mobile parallel-worker CI load the original 15s is too tight (PR
+        // #754 CI run 3 caught a flake here). The dialog opening is otherwise
+        // deterministic on this synthetic test path.
+        test.setTimeout(60_000);
         await page.goto('/games?test=open-lineup-modal');
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 15_000 });
+        await expect(modal).toBeVisible({ timeout: 30_000 });
 
         // Match threshold slider should be present with correct labels
         const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
