@@ -484,6 +484,35 @@ npx playwright test --ui                           # Interactive UI mode
 BASE_URL=http://localhost:80 npx playwright test   # Against Docker
 ```
 
+### When to poll the API instead of the UI
+
+If a Playwright assertion depends on a `useQuery`-backed value, **poll the source `/admin/...` endpoint before the UI assertion**. React Query keeps fetched data fresh for 15 seconds (`staleTime`). If the cache holds an empty fetch from a sibling test or a too-early load, the panel will keep rendering empty data for the lifetime of the test — no amount of `expect(...).toBeVisible({ timeout: ... })` rescues this, because the UI never updates.
+
+The fix is mechanical: wait until the API has the post-write state, *then* navigate / assert the UI.
+
+```ts
+// Bad — races useQuery's staleTime cache
+await apiPost(token, '/admin/test/seed-foo', {});
+await page.goto('/admin/foo');
+await expect(page.getByText(/seeded row/)).toBeVisible({ timeout: 15_000 });
+
+// Good — poll the source endpoint first; the UI assertion still runs
+await apiPost(token, '/admin/test/seed-foo', {});
+await pollForCondition(
+    async () => {
+        const data = await apiGet(token, '/admin/foo');
+        return data?.items?.length ? data : null;
+    },
+    { timeoutMs: 15_000, description: '/admin/foo has rows' },
+);
+await page.goto('/admin/foo');
+await expect(page.getByText(/seeded row/)).toBeVisible({ timeout: 15_000 });
+```
+
+`pollForCondition` is exported from `scripts/smoke/api-helpers.ts`. The canonical pattern in the wild is `scripts/smoke/admin-slow-queries-log.smoke.spec.ts:48` — `waitForSlowQueryFile` polls `/admin/logs` directly and includes a cron `lastStatus`/`lastError` diagnostic on timeout. Use the shared helper unless you need richer diagnostics.
+
+Background: `feedback_smoke_polling_for_async_writes.md` (ROK-1156, the original incident). Default to API polling for any smoke assertion that depends on a `useQuery`-backed value.
+
 ## Smoke Test Authoring Standards (Discord Companion Bot)
 
 Discord smoke tests live in `tools/test-bot/src/smoke/tests/`. These rules ensure reliability and eliminate flaky timing issues.

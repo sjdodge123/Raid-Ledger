@@ -11,6 +11,45 @@
  */
 import { test, expect } from './base';
 import { isMobile } from './helpers';
+import { apiGet, getAdminToken, pollForCondition } from './api-helpers';
+
+/**
+ * ROK-1247: Pre-warm Discord admin queries before asserting on the panels.
+ *
+ * Each panel renders content gated on `useQuery`-backed data
+ * (`/admin/settings/discord-bot`, `/admin/settings/discord-bot/setup-status`,
+ *  `/admin/settings/discord-bot/channel`, etc.). When useQuery's 15s
+ * staleTime serves a cached empty fetch, the gated content never renders
+ * within the test window. Polling the API directly ensures the server-side
+ * state is observable before we navigate.
+ */
+async function pollDiscordBotStatus() {
+    const token = await getAdminToken();
+    await pollForCondition(
+        async () => {
+            const data = await apiGet(token, '/admin/settings/discord-bot');
+            return data ? data : null;
+        },
+        { timeoutMs: 15_000, description: '/admin/settings/discord-bot' },
+    );
+}
+
+async function pollDiscordSetupStatus() {
+    const token = await getAdminToken();
+    await pollForCondition(
+        async () => {
+            const data = await apiGet(
+                token,
+                '/admin/settings/discord-bot/setup-status',
+            );
+            return data ? data : null;
+        },
+        {
+            timeoutMs: 15_000,
+            description: '/admin/settings/discord-bot/setup-status',
+        },
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Overview panel
@@ -18,6 +57,12 @@ import { isMobile } from './helpers';
 
 test.describe('Admin Discord — Overview', () => {
     test('renders setup progress and bot status', async ({ page }) => {
+        // ROK-1247: poll the API before page.goto so the gated "X/Y complete"
+        // text (depends on setupStatus.data) renders within the test window
+        // even when useQuery's 15s staleTime is holding an empty cache.
+        await pollDiscordSetupStatus();
+        await pollDiscordBotStatus();
+
         await page.goto('/admin/settings/discord');
         await expect(page.getByRole('heading', { name: 'Discord Overview' })).toBeVisible({ timeout: 15_000 });
 
@@ -30,6 +75,7 @@ test.describe('Admin Discord — Overview', () => {
     });
 
     test('renders quick action buttons', async ({ page }) => {
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord');
         await expect(page.getByRole('heading', { name: 'Quick Actions' })).toBeVisible({ timeout: 15_000 });
         await expect(page.getByRole('button', { name: 'Reconnect Bot' })).toBeVisible();
@@ -49,6 +95,7 @@ test.describe('Admin Discord — Overview', () => {
 
 test.describe('Admin Discord — Auth', () => {
     test('renders OAuth config form', async ({ page }) => {
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord/auth');
         await expect(page.getByRole('heading', { name: 'Discord Authentication' })).toBeVisible({ timeout: 15_000 });
 
@@ -61,6 +108,7 @@ test.describe('Admin Discord — Auth', () => {
     });
 
     test('renders save button (test button only when configured)', async ({ page }) => {
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord/auth');
         await expect(page.getByRole('heading', { name: 'Discord Authentication' })).toBeVisible({ timeout: 15_000 });
         await expect(page.getByRole('button', { name: 'Save Configuration' })).toBeVisible();
@@ -86,6 +134,7 @@ test.describe('Admin Discord — Auth', () => {
 
 test.describe('Admin Discord — Connection', () => {
     test('renders bot token field and enable switch (when Discord is linked)', async ({ page }) => {
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord/connection');
         await expect(page.getByRole('heading', { name: 'Discord Bot', exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
@@ -103,6 +152,7 @@ test.describe('Admin Discord — Connection', () => {
     });
 
     test('renders bot invite link info (when OAuth is configured)', async ({ page }) => {
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord/connection');
         await expect(page.getByRole('heading', { name: 'Discord Bot', exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
@@ -127,6 +177,7 @@ test.describe('Admin Discord — Connection', () => {
 
 test.describe('Admin Discord — Channels', () => {
     test('renders channel selectors and routing info', async ({ page }) => {
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord/channels');
         await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
 
@@ -147,6 +198,7 @@ test.describe('Admin Discord — Channels', () => {
     });
 
     test('renders channel binding list or empty state', async ({ page }) => {
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord/channels');
         await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
 
@@ -167,6 +219,7 @@ test.describe('Admin Discord — Channels', () => {
 
 test.describe('Admin Discord — Features', () => {
     test('renders feature toggles and info sections', async ({ page }) => {
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord/features');
         await expect(page.getByRole('heading', { name: 'Discord Features' })).toBeVisible({ timeout: 15_000 });
 
@@ -196,6 +249,7 @@ test.describe('Admin Discord — Panel navigation', () => {
     test('sidebar nav links navigate between panels', async ({ page }) => {
         test.skip(isMobile(test.info()), 'Desktop-only — sidebar nav hidden on mobile');
 
+        await pollDiscordBotStatus();
         await page.goto('/admin/settings/discord');
         const nav = page.getByRole('navigation', { name: 'Admin settings navigation' });
         if (!(await nav.isVisible({ timeout: 15_000 }).catch(() => false))) {

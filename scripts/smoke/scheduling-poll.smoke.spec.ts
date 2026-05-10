@@ -9,7 +9,54 @@
  *   Step 3: Full poll view — suggest times, heatmap, create event
  */
 import { test, expect } from './base';
-import { getAdminToken, apiPost, apiGet, apiPatch, apiPut } from './api-helpers';
+import {
+    getAdminToken,
+    apiPost,
+    apiGet,
+    apiPatch,
+    apiPut,
+    pollForCondition,
+} from './api-helpers';
+
+interface SchedulingPollResponse {
+    slots?: { id: number; votes?: unknown[] }[];
+    match?: { status?: string };
+}
+
+/**
+ * ROK-1247: Poll the scheduling-poll API endpoint until a slot exists (and,
+ * optionally, until a slot has at least one vote). The page renders slot
+ * cards from a `useQuery` against this endpoint with a 15s staleTime —
+ * if the test navigates before the API observes the API-seeded suggest/vote
+ * writes, an empty cache can be served for the lifetime of the test.
+ */
+async function pollSchedulingPollHasSlot(
+    token: string,
+    lineupId: number,
+    matchId: number,
+    opts?: { withVote?: boolean },
+): Promise<SchedulingPollResponse> {
+    return pollForCondition<SchedulingPollResponse>(
+        async () => {
+            const data = (await apiGet(
+                token,
+                `/lineups/${lineupId}/schedule/${matchId}`,
+            )) as SchedulingPollResponse | null;
+            if (!data?.slots?.length) return null;
+            if (opts?.withVote) {
+                const hasVote = data.slots.some(
+                    (s) => Array.isArray(s.votes) && s.votes.length > 0,
+                );
+                return hasVote ? data : null;
+            }
+            return data;
+        },
+        {
+            timeoutMs: 15_000,
+            description: `/lineups/${lineupId}/schedule/${matchId} has slot${opts?.withVote ? '+vote' : ''}`,
+        },
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Setup helpers
@@ -377,6 +424,8 @@ test.describe('Scheduling poll match context card', () => {
     test('displays game thumbnail, name, member count, and member avatars', async ({
         page,
     }) => {
+        // ROK-1247: ensure server reflects the seeded slot before nav.
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
         // AC2: Match context card shows game details
@@ -417,6 +466,7 @@ test.describe('Scheduling poll match context card', () => {
 
 test.describe('Scheduling poll suggest time slot', () => {
     test('suggest slot UI exists and is interactive', async ({ page }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
         // AC3: Date/time picker is always visible for suggesting slots
@@ -437,6 +487,9 @@ test.describe('Scheduling poll suggest time slot', () => {
 
 test.describe('Scheduling poll vote toggling', () => {
     test('clicking a time slot toggles the vote', async ({ page }) => {
+        // ROK-1247: poll for slot existence before nav so [data-testid="schedule-slot"]
+        // renders within the test window.
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
         // AC4: Time slot cards/rows are visible and clickable
@@ -488,6 +541,7 @@ test.describe('Scheduling poll "You voted" indicator', () => {
     test('"You voted" indicator appears on voted slots', async ({
         page,
     }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
         // Wait for slot cards to render
@@ -525,6 +579,7 @@ test.describe('Scheduling poll heatmap', () => {
     test('HeatmapGrid renders with match members availability data', async ({
         page,
     }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
         // AC6: The existing HeatmapGrid component renders with availability data
@@ -557,6 +612,7 @@ test.describe('Scheduling poll Create Event button', () => {
     test('"Create Event" button exists and is enabled only for users who have voted', async ({
         page,
     }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
         // AC7: "Create Event" button should be present
@@ -635,6 +691,24 @@ test.describe('Scheduling poll event creation and post-creation status', () => {
         if (!eventCreated) {
             const matchRes = await apiGet(adminToken, `/lineups/${lineupId}/schedule/${matchId}`);
             eventCreated = matchRes?.match?.status === 'scheduled';
+        }
+
+        // ROK-1247: when an event was created, poll until the API observes the
+        // status flip so the page renders the "Poll Complete"/"Scheduled" badge.
+        if (eventCreated) {
+            await pollForCondition<SchedulingPollResponse>(
+                async () => {
+                    const data = (await apiGet(
+                        adminToken,
+                        `/lineups/${lineupId}/schedule/${matchId}`,
+                    )) as SchedulingPollResponse | null;
+                    return data?.match?.status === 'scheduled' ? data : null;
+                },
+                {
+                    timeoutMs: 15_000,
+                    description: 'scheduling poll match status=scheduled',
+                },
+            );
         }
 
         await goToPoll(page, lineupId, matchId);
@@ -853,6 +927,12 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
             }
         }
 
+        // ROK-1247: poll until the API observes the vote. Without this, the
+        // page's useQuery can serve a cached "no votes" payload and the
+        // [data-voted="true"] slot never renders within the test window.
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId, {
+            withVote: true,
+        });
         await goToPoll(page, lineupId, matchId);
 
         const votedSlot = page.locator('[data-testid="schedule-slot"][data-voted="true"]').first();
