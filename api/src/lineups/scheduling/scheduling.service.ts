@@ -80,6 +80,7 @@ export class SchedulingService {
         .select({
           status: schema.communityLineups.status,
           createdBy: schema.communityLineups.createdBy,
+          phaseDeadline: schema.communityLineups.phaseDeadline,
         })
         .from(schema.communityLineups)
         .where(eq(schema.communityLineups.id, match.lineupId))
@@ -104,6 +105,9 @@ export class SchedulingService {
       ),
       uniqueVoterCount: voterCount,
       conflictingSlotIds,
+      phaseDeadline: lineup?.phaseDeadline
+        ? lineup.phaseDeadline.toISOString()
+        : null,
     };
   }
 

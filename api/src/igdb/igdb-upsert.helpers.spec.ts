@@ -15,7 +15,23 @@ function createUpsertMockDb() {
   const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
   const update = jest.fn().mockReturnValue({ set: updateSet });
 
-  return { insert, values, onConflictDoUpdate, update, updateSet, updateWhere };
+  // ROK-1113: select() chain used by mergeByNormalizedName.
+  // Default: prefilter returns no candidates → no-op.
+  const where = jest.fn().mockResolvedValue([]);
+  const from = jest.fn().mockReturnValue({ where });
+  const select = jest.fn().mockReturnValue({ from });
+
+  return {
+    insert,
+    values,
+    onConflictDoUpdate,
+    update,
+    updateSet,
+    updateWhere,
+    select,
+    from,
+    where,
+  };
 }
 
 describe('upsertSingleGameRow', () => {
@@ -60,7 +76,7 @@ describe('upsertSingleGameRow', () => {
 // ============================================================================
 
 interface SelectCall {
-  type: 'banned' | 'steamMerge' | 'finalFetch';
+  type: 'banned' | 'steamMerge' | 'nameMerge' | 'finalFetch';
   result: unknown[];
 }
 
@@ -148,7 +164,8 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
   it('issues ONE INSERT for many games (not N inserts)', async () => {
     const { db, calls, valuesMock } = createBatchUpsertMockDb([
       { type: 'banned', result: [] }, // no banned games
-      { type: 'steamMerge', result: [] }, // no existing steam merges (but called only if any steamAppIds)
+      // no steamMerge SELECT — none of these rows have steamAppId
+      { type: 'nameMerge', result: [] }, // ROK-1113 normalized-name pre-check
       { type: 'finalFetch', result: [] },
     ]);
     const apiGames = [
@@ -194,13 +211,14 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     const { db, calls } = createBatchUpsertMockDb([
       { type: 'banned', result: [] },
       { type: 'steamMerge', result: [] }, // single batched steam merge pre-check
+      { type: 'nameMerge', result: [] }, // ROK-1113 normalized-name pre-check
       { type: 'finalFetch', result: [] },
     ]);
 
     await upsertGamesFromApi(db as never, apiGamesWithSteam);
 
-    // banned-check (1) + steam-merge-check (1) + final fetch (1) = 3 total
-    expect(calls.selectCount).toBe(3);
+    // banned (1) + steam-merge (1) + name-merge (1) + final-fetch (1) = 4
+    expect(calls.selectCount).toBe(4);
   });
 
   it('skips the steam merge SELECT entirely when no rows have steamAppId', async () => {
@@ -210,13 +228,14 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     ];
     const { db, calls } = createBatchUpsertMockDb([
       { type: 'banned', result: [] },
+      { type: 'nameMerge', result: [] }, // ROK-1113 normalized-name pre-check
       { type: 'finalFetch', result: [] },
     ]);
 
     await upsertGamesFromApi(db as never, apiGames);
 
-    // banned-check (1) + final fetch (1) = 2 (no steam merge SELECT)
-    expect(calls.selectCount).toBe(2);
+    // banned (1) + name-merge (1) + final-fetch (1) = 3 (no steam merge SELECT)
+    expect(calls.selectCount).toBe(3);
   });
 
   it('handles mixed new and existing (via steamAppId) games — merges existing, inserts new', async () => {
@@ -241,6 +260,7 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     const { db, calls } = createBatchUpsertMockDb([
       { type: 'banned', result: [] },
       { type: 'steamMerge', result: [{ id: 77, steamAppId: 2000 }] },
+      { type: 'nameMerge', result: [] }, // ROK-1113 — no name matches
       { type: 'finalFetch', result: [] },
     ]);
 
@@ -259,6 +279,7 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     ];
     const { db, calls, valuesMock } = createBatchUpsertMockDb([
       { type: 'banned', result: [{ igdbId: 50 }] }, // igdb=50 is banned
+      { type: 'nameMerge', result: [] }, // ROK-1113
       { type: 'finalFetch', result: [] },
     ]);
 
@@ -295,6 +316,7 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     ];
     const { db, onConflictMock } = createBatchUpsertMockDb([
       { type: 'banned', result: [] },
+      { type: 'nameMerge', result: [] }, // ROK-1113
       { type: 'finalFetch', result: [] },
     ]);
 

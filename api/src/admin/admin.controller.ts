@@ -7,6 +7,7 @@ import {
   UseGuards,
   Req,
   Inject,
+  Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -22,6 +23,10 @@ import type { AuthenticatedExpressRequest } from '../auth/types';
 import {
   findDuplicateGames,
   mergeAndDeleteDuplicates,
+  dryRunNameDedup,
+  mergeNameDuplicates,
+  type NameDedupCommitResult,
+  type NameDedupDryRunResult,
 } from '../igdb/igdb-dedup-cleanup.helpers';
 
 @RateLimit('admin')
@@ -54,5 +59,20 @@ export class AdminController {
   async dedupCleanup(): Promise<{ merged: number; errors: string[] }> {
     const groups = await findDuplicateGames(this.db);
     return mergeAndDeleteDuplicates(this.db, groups);
+  }
+
+  /**
+   * Admin tool (ROK-1113): merge game rows whose canonical names normalize to the
+   * same value (e.g., "Slay the Spire 2" vs "Slay the Spire II"). Defaults to
+   * dry-run; pass `?dryRun=false` to commit.
+   */
+  @Post('games/dedup-cleanup-by-name')
+  @HttpCode(HttpStatus.OK)
+  async dedupCleanupByName(
+    @Query('dryRun') dryRunParam?: string,
+  ): Promise<NameDedupDryRunResult | NameDedupCommitResult> {
+    const dryRun = dryRunParam !== 'false';
+    if (dryRun) return dryRunNameDedup(this.db);
+    return mergeNameDuplicates(this.db);
   }
 }

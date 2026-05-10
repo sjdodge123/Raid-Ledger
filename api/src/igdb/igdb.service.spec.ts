@@ -409,8 +409,9 @@ describe('IgdbService', () => {
         from: jest.fn().mockImplementation(() => ({
           where: jest.fn().mockImplementation(() => {
             callCount++;
-            // call 1: search cache miss, call 2: banned-games check (none banned)
-            const data = callCount <= 2 ? [] : mockGames;
+            // call 1: search cache miss, call 2: banned-games check (none banned),
+            // call 3: ROK-1113 normalized-name dedup batch lookup (no matches)
+            const data = callCount <= 3 ? [] : mockGames;
             return thenableResult(data);
           }),
         })),

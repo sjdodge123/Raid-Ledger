@@ -6,6 +6,7 @@ import type { JSX } from 'react';
 import type { TiebreakerDetailDto } from '@raid-ledger/contract';
 import { BracketTree } from './BracketTree';
 import { BracketMatchupCard } from './BracketMatchupCard';
+import { BracketProgress } from './BracketProgress';
 import { TiebreakerClosedNotice } from './TiebreakerClosedNotice';
 import { useForceResolve } from '../../../hooks/use-tiebreaker';
 import { ConfirmationPill } from '../../common/ConfirmationPill';
@@ -61,17 +62,15 @@ export function BracketView({ tiebreaker, lineupId }: Props): JSX.Element {
             )}
 
             <BracketTree matchups={matchups} totalRounds={totalRounds} />
-
-            <div className="mt-4 space-y-2">
-                {matchups
-                    .sort((a, b) => a.round - b.round || a.position - b.position)
-                    .map((m) => (
-                        <BracketMatchupCard
-                            key={m.id}
-                            matchup={m}
-                            lineupId={lineupId}
-                        />
-                    ))}
+            <div className="mt-4">
+                <BracketProgress matchups={matchups} />
+                <div className="mt-2 space-y-2">
+                    {matchups
+                        .sort((a, b) => a.round - b.round || a.position - b.position)
+                        .map((m) => (
+                            <BracketMatchupCard key={m.id} matchup={m} lineupId={lineupId} />
+                        ))}
+                </div>
             </div>
         </div>
     );

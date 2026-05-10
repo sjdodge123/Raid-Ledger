@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { LineupDetailResponseDto, LineupStatusDto } from '@raid-ledger/contract';
 import { useTransitionLineupStatus } from '../../hooks/use-lineups';
@@ -12,6 +12,7 @@ import { MarkdownText } from '../ui/markdown-text';
 import { EditLineupMetadataModal } from './edit-lineup-metadata-modal';
 import { AbortLineupButton } from './AbortLineupButton';
 import { PublicShareRow } from './LineupPublicShareRow';
+import { PhaseTransitionModal } from './phase-transition-modal';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -38,8 +39,6 @@ function PhaseCircle({ status }: { status: string }): JSX.Element {
   );
 }
 
-const CONFIRM_TIMEOUT = 3_000;
-
 function PhaseBreadcrumb({ lineup, onTiebreakerIntercept }: {
   lineup: LineupDetailResponseDto; onTiebreakerIntercept?: () => void;
 }): JSX.Element {
@@ -47,59 +46,13 @@ function PhaseBreadcrumb({ lineup, onTiebreakerIntercept }: {
   const transition = useTransitionLineupStatus();
   const canOperate = isOperatorOrAdmin(user);
   const currentIdx = PHASES.indexOf(lineup.status as LineupStatusDto);
-  const [pendingIdx, setPendingIdx] = useState<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const clearPending = useCallback(() => {
-    setPendingIdx(null);
-    clearTimeout(timerRef.current);
-  }, []);
-
-  useEffect(() => () => clearTimeout(timerRef.current), []);
-
-  function handleClick(targetIdx: number) {
-    if (!canOperate || transition.isPending) return;
-    const diff = targetIdx - currentIdx;
-    if (diff !== 1 && diff !== -1) return; // only adjacent phases
-
-    if (pendingIdx === targetIdx) {
-      // Second click — execute
-      clearPending();
-      const targetStatus = PHASES[targetIdx];
-
-      const body: { status: string; decidedGameId?: number | null } = { status: targetStatus };
-      transition.mutate(
-        { lineupId: lineup.id, body },
-        {
-          onSuccess: () => toast.success(`Moved to ${PHASE_LABELS[PHASES[targetIdx]]}`),
-          onError: (err) => {
-            const msg = err instanceof Error ? err.message : '';
-            if (msg.includes('TIEBREAKER_REQUIRED') && onTiebreakerIntercept) {
-              onTiebreakerIntercept();
-            } else {
-              toast.error(msg || 'Transition failed');
-            }
-          },
-        },
-      );
-    } else {
-      // First click — show confirmation
-      setPendingIdx(targetIdx);
-      clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(clearPending, CONFIRM_TIMEOUT);
-    }
-  }
+  const [targetIdx, setTargetIdx] = useState<number | null>(null);
 
   return (
     <div className="flex items-center flex-wrap gap-x-1 gap-y-0.5 text-sm">
       {PHASES.map((p, i) => {
         const isCurrent = i === currentIdx;
         const isClickable = canOperate && (i === currentIdx + 1 || i === currentIdx - 1);
-        const isPending = pendingIdx === i;
-        const isAdvance = i > currentIdx;
-
-        let label = PHASE_LABELS[p];
-        if (isPending) label = isAdvance ? 'Advance?' : 'Revert?';
 
         return (
           <span key={p} className="inline-flex items-center">
@@ -107,26 +60,49 @@ function PhaseBreadcrumb({ lineup, onTiebreakerIntercept }: {
             {isClickable ? (
               <button
                 type="button"
-                onClick={() => handleClick(i)}
+                onClick={() => setTargetIdx(i)}
                 disabled={transition.isPending}
-                className={`px-1.5 py-0.5 rounded transition-colors ${
-                  isPending
-                    ? isAdvance
-                      ? 'text-emerald-300 bg-emerald-500/20 font-medium'
-                      : 'text-amber-300 bg-amber-500/20 font-medium'
-                    : 'text-dim hover:text-foreground hover:bg-overlay/50'
-                } disabled:opacity-50`}
+                className="px-1.5 py-0.5 rounded transition-colors text-dim hover:text-foreground hover:bg-overlay/50 disabled:opacity-50"
               >
-                {label}
+                {PHASE_LABELS[p]}
               </button>
             ) : (
               <span className={`px-1.5 py-0.5 ${isCurrent ? 'text-emerald-400 font-medium' : 'text-dim'}`}>
-                {label}
+                {PHASE_LABELS[p]}
               </span>
             )}
           </span>
         );
       })}
+      {targetIdx !== null && (
+        <PhaseTransitionModal
+          fromStatus={lineup.status as LineupStatusDto}
+          toStatus={PHASES[targetIdx]}
+          isPending={transition.isPending}
+          onCancel={() => setTargetIdx(null)}
+          onConfirm={() => {
+            const targetStatus = PHASES[targetIdx];
+            transition.mutate(
+              { lineupId: lineup.id, body: { status: targetStatus } },
+              {
+                onSuccess: () => {
+                  toast.success(`Moved to ${PHASE_LABELS[targetStatus]}`);
+                  setTargetIdx(null);
+                },
+                onError: (err) => {
+                  const msg = err instanceof Error ? err.message : '';
+                  if (msg.includes('TIEBREAKER_REQUIRED') && onTiebreakerIntercept) {
+                    onTiebreakerIntercept();
+                    setTargetIdx(null);
+                  } else {
+                    toast.error(msg || 'Transition failed');
+                  }
+                },
+              },
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

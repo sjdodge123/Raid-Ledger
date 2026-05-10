@@ -8,6 +8,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GameDetailDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { mapDbRowToDetail } from './igdb.mappers';
+import { findGameByNormalizedName } from './igdb-name-dedup.helpers';
 
 /**
  * Upsert a single ITAD game to the database.
@@ -35,7 +36,7 @@ export async function upsertItadGame(
   return fetchBySlug(db, game.slug);
 }
 
-/** Find an existing game row by steamAppId or igdbId with a different slug. */
+/** Find an existing game row by steamAppId, igdbId, or normalized name. */
 async function findExistingByAltKey(
   db: PostgresJsDatabase<typeof schema>,
   game: GameDetailDto,
@@ -60,7 +61,36 @@ async function findExistingByAltKey(
       .limit(1);
     if (rows.length > 0) return rows[0];
   }
-  return null;
+  return findExistingByName(db, game);
+}
+
+/**
+ * Normalized-name fallback (ROK-1113). If a row already exists with the same
+ * canonical name (e.g., "Slay the Spire II" vs "Slay the Spire 2"), enrich it
+ * instead of inserting a new slug-keyed row.
+ *
+ * If incoming and existing both have non-null igdbIds that disagree, do NOT
+ * merge — IGDB ids are canonical and disagreement signals a sequel/variant.
+ */
+async function findExistingByName(
+  db: PostgresJsDatabase<typeof schema>,
+  game: GameDetailDto,
+): Promise<typeof schema.games.$inferSelect | null> {
+  const match = await findGameByNormalizedName(db, game.name);
+  if (!match) return null;
+  if (
+    game.igdbId != null &&
+    match.igdbId != null &&
+    match.igdbId !== game.igdbId
+  ) {
+    return null;
+  }
+  const rows = await db
+    .select()
+    .from(schema.games)
+    .where(eq(schema.games.id, match.id))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /** Update an existing row (found by alt key) with ITAD data. */
