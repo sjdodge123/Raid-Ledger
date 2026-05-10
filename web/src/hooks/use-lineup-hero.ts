@@ -34,6 +34,11 @@ export interface UseLineupHeroOptions {
     scrollTargets: LineupHeroScrollTargets;
     onOpenNominate?: () => void;
     pageId?: PageId;
+    /** Standalone-poll callers pass the user's poll-vote count so the hero
+     *  copy can render "You picked N time slots". Lineup-detail callers
+     *  may omit (defaults to 0; phase copy doesn't read it).
+     */
+    myVotedSlotCount?: number;
 }
 
 function pageIdForLineup(lineup: LineupDetailResponseDto): PageId {
@@ -100,9 +105,9 @@ export function useLineupHero(
             tiebreaker,
             myNominatedGameNames: nominatedGameNamesFor(lineup, user?.id),
             myMatchCount: myMatchCountFor(lineup, user?.id),
-            myVotedSlotCount: 0,
+            myVotedSlotCount: opts.myVotedSlotCount ?? 0,
         });
-    }, [pageId, lineup, tiebreaker, persona, phaseState, user?.id]);
+    }, [pageId, lineup, tiebreaker, persona, phaseState, user?.id, opts.myVotedSlotCount]);
 
     const wireCta = useCallback((): (() => void) | undefined => {
         const text = copy.cta?.text ?? '';
@@ -113,11 +118,31 @@ export function useLineupHero(
         if (/^vote in bracket|^finish bracket/i.test(text)) {
             return () => scrollTo(scrollTargets.bracket);
         }
+        // "Schedule {gameName}" (invitee, decided phase) — direct nav.
         if (/^schedule /i.test(text) && lineup.decidedGameId != null) {
             return () => navigate(
                 `/community-lineup/${lineup.id}/schedule/${lineup.decidedGameId}`,
             );
         }
+        // "Open scheduling" (organizer/admin, decided phase) — same target,
+        // surface the matched scheduling poll for the decided game.
+        if (/^open scheduling/i.test(text) && lineup.decidedGameId != null) {
+            return () => navigate(
+                `/community-lineup/${lineup.id}/schedule/${lineup.decidedGameId}`,
+            );
+        }
+        // "Join {gameName}" (invitee-not-acted, decided + hasGame) — same
+        // scheduling target so the hero CTA leads them into the join flow
+        // rendered on the per-match page (AlmostThereCard / RallyRow).
+        if (/^join /i.test(text) && lineup.decidedGameId != null) {
+            return () => navigate(
+                `/community-lineup/${lineup.id}/schedule/${lineup.decidedGameId}`,
+            );
+        }
+        // "Create event" (organizer/admin, standalone-poll quorum-forming).
+        // The page's create-event flow lives at /events; without a slot
+        // pre-fill at hero level we can only deep-link the operator there.
+        if (/^create event/i.test(text)) return () => navigate('/events');
         if (/^force.?resolve/i.test(text)) return () => forceResolve.mutate(lineup.id);
         if (/^advance to/i.test(text)) return undefined;
         return undefined;
@@ -125,6 +150,12 @@ export function useLineupHero(
 
     const heroProps = useMemo<HeroNextStepProps>(() => {
         const onClick = wireCta();
+        // Auto-disable any CTA whose copy didn't get wired by `wireCta` —
+        // prevents the "enabled-but-no-op button" anti-pattern Codex flagged
+        // (ROK-1209 review). Explicit `disabled: true` from the copy
+        // registry (privacy-persona) wins; otherwise we infer.
+        const inferredDisabled =
+            copy.cta != null && copy.cta.disabled == null && onClick == null;
         return {
             tone: copy.tone,
             label: copy.label,
@@ -134,7 +165,7 @@ export function useLineupHero(
                 ? {
                     text: copy.cta.text,
                     ariaLabel: copy.cta.ariaLabel,
-                    disabled: copy.cta.disabled,
+                    disabled: copy.cta.disabled ?? inferredDisabled,
                     tooltip: copy.cta.tooltip,
                     onClick: onClick ?? (() => undefined),
                 }

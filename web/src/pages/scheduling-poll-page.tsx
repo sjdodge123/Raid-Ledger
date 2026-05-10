@@ -165,7 +165,11 @@ function PollSections({ lineupId, matchId, poll }: {
 /** Render the standalone-poll hero, given a loaded lineup. */
 function StandalonePollHero({
   lineup,
-}: { lineup: NonNullable<ReturnType<typeof useLineupDetail>['data']> }): JSX.Element {
+  myVotedSlotCount,
+}: {
+  lineup: NonNullable<ReturnType<typeof useLineupDetail>['data']>;
+  myVotedSlotCount: number;
+}): JSX.Element {
   const slotGridRef = useRef<HTMLElement | null>(null);
   const leaderboardRef = useRef<HTMLElement | null>(null);
   const bracketRef = useRef<HTMLElement | null>(null);
@@ -174,15 +178,22 @@ function StandalonePollHero({
     tiebreaker: null,
     scrollTargets: { leaderboard: leaderboardRef, slotGrid: slotGridRef, bracket: bracketRef },
     pageId: 'standalone-poll',
+    myVotedSlotCount,
   });
   return <HeroNextStep {...heroProps} />;
 }
 
-/** Wrapper that fetches lineup detail and only renders hero when ready. */
-function StandalonePollHeroOrNothing({ lineupId }: { lineupId: number }): JSX.Element | null {
+/** Wrapper that fetches lineup detail and only renders hero when ready.
+ *  Takes `myVotedSlotCount` from the parent (poll context) so the standalone
+ *  hero copy reflects this poll's vote state, not the lineup's vote state.
+ */
+function StandalonePollHeroOrNothing({
+  lineupId,
+  myVotedSlotCount,
+}: { lineupId: number; myVotedSlotCount: number }): JSX.Element | null {
   const { data: lineup } = useLineupDetail(lineupId);
   if (!lineup) return null;
-  return <StandalonePollHero lineup={lineup} />;
+  return <StandalonePollHero lineup={lineup} myVotedSlotCount={myVotedSlotCount} />;
 }
 
 /** Active poll — hooks live here to avoid conditional hook calls in PollSections. */
@@ -216,7 +227,10 @@ function ActivePollSections({ lineupId, matchId, poll }: {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
-      <StandalonePollHeroOrNothing lineupId={lineupId} />
+      <StandalonePollHeroOrNothing
+        lineupId={lineupId}
+        myVotedSlotCount={poll.myVotedSlotIds.length}
+      />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
         {canCancel && (
