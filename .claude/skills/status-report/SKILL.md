@@ -1,13 +1,24 @@
 ---
 name: status-report
-description: "Print a consistent, scannable status report for the current agent's work — story ID, phase, what's done, what's next, blockers. Use when the operator asks for a status update across multiple parallel agent windows ('status', 'where are we', 'what's the state', 'update'). When invoked during Reviewing, also drives the work forward without asking: if any AC is undelivered → implements it; if ACs are delivered but e2e wasn't run → runs the appropriate suite. Goal: maximize what's verified before the operator looks at the window."
+description: "Print a consistent, scannable status report. On a story branch (matches `rok-\\d+`): per-agent snapshot — story ID, phase, what's done, what's next, blockers; during Reviewing also drives the work forward (implements undelivered ACs, runs missing e2e). On `main` (no story branch): global mode — reconciles the 'Raid Ledger — Active State' Linear doc by re-deriving env lock, in-flight stories, recently shipped, open follow-ups, and known stale state. Use when the operator asks for a status update ('status', 'where are we', 'what's the state', 'update', 'sync state')."
 ---
 
-# Status Report — Per-Agent State Snapshot
+# Status Report — Per-Agent Snapshot or Global State Sync
 
-**Goal:** The operator runs 10+ agent windows in parallel and forgets which window is which. This skill produces a 10-second-readable snapshot of THIS agent's work so they can identify the window and decide whether to interact.
+**Two modes**, dispatched by branch:
 
-Output **MUST** match the template exactly — same fields, same order, same labels — every invocation. Consistency is the entire point. If a field has no content, write `none`. Never substitute "no progress yet" or other prose for missing fields.
+1. **Story-branch mode** (`rok-\d+` in branch name) — per-agent snapshot. The operator runs 10+ agent windows in parallel and forgets which window is which; this skill produces a 10-second-readable snapshot of THIS agent's work so they can identify the window and decide whether to interact. Output MUST match the template exactly — same fields, same order, same labels — every invocation. Consistency is the entire point. If a field has no content, write `none`. Never substitute "no progress yet" or other prose for missing fields.
+
+2. **Global mode** (`main` or any branch with no `rok-\d+`) — reconcile the cross-session "Active State" Linear doc. Reads current doc, re-derives env lock + in-flight + recently shipped + open follow-ups + known stale state from authoritative sources, overwrites the Derived section, preserves Strategic and Conventions sections verbatim, prints a brief 3-line summary.
+
+---
+
+## Step 0: Branch-mode dispatch (run first)
+
+Run `git branch --show-current`. Pick the path:
+
+- Branch matches `rok-\d+` → **Story-branch mode**: continue with Steps 1–4 below.
+- Branch is `main` (or any branch with no `rok-\d+`) → **Global mode**: jump to the "Global mode" section near the end of this file. Do **not** run Steps 1–4.
 
 ---
 
@@ -243,5 +254,105 @@ No driving today. Do not invent it.
 ### Halts that override every phase
 
 - Operator has explicitly asked in *this conversation* for a passive snapshot ("just give me the status, don't do anything") → skip Step 4 entirely.
-- Branch is `main` or a release branch (no `rok-\d+` in branch name) → skip; the skill is meant for in-flight story branches.
 - No story is associated (`Story: no story — ...`) → skip; without ACs, "drive forward" has no target.
+
+(Note: `main` no longer halts — Step 0 routes main-branch invocations to Global mode below.)
+
+---
+
+## Global mode — reconcile the Active State Linear doc
+
+Trigger: Step 0 routed here because branch is `main` (or any branch with no `rok-\d+`).
+
+**Goal:** keep the cross-session "Raid Ledger — Active State" Linear doc current by re-deriving the auto-managed sections from authoritative sources, while preserving operator/agent-authored strategic context untouched.
+
+**Doc reference (stable):** see memory `reference_active_state_doc.md`.
+- URL: `https://linear.app/roknua-projects/document/raid-ledger-active-state-7a4ddc5652c9`
+- Doc ID for `mcp__linear__save_document`: `bbacd5ae-0c99-4eaf-bbd7-24e7eb90ffce`
+- Slug: `7a4ddc5652c9`
+
+### Step G1: Read the current doc
+
+`mcp__linear__get_document` with the slug above. Capture the full content. **Identify three section anchors** by markdown heading:
+- `## Derived (auto-overwritten by ...)` — to be replaced
+- `## Strategic (operator + agent updates ...)` — preserve verbatim
+- `## Conventions` — preserve verbatim
+
+If any anchor is missing or out of order, **stop and surface a BLOCKER** (`active state doc structure broken: <which anchor>`). Do not write a malformed doc.
+
+### Step G2: Re-derive each Derived bucket
+
+Run these in parallel where possible. Each bucket maps to a labelled subsection in the new Derived block.
+
+| Bucket | Source command(s) | Notes |
+|---|---|---|
+| **Env lock** | `cat ~/.raid-ledger/env-lock.json` | If `holder: null` and queue empty, write "Holder: `null` / Queue: empty". Otherwise list holder branch + purpose + acquired_at, then queued branches in order. |
+| **In flight** | `gh pr list --state open --json number,title,headRefName,createdAt` AND `mcp__linear__list_issues` for statuses `In Progress`, `Code Review` AND `git worktree list` | Cross-reference: a worktree on a non-main commit + an active Linear story = "in flight." Include architectural verdict if it's been recorded in Strategic (helpful for resumption). |
+| **Recently shipped** | `git log --oneline --since="7 days ago" origin/main` AND `gh pr list --state merged --search "merged:>=$(date -u -v-7d +%Y-%m-%d)" --json number,title,headRefName` | Match commits to PRs to story IDs. Newest first. Cap at ~10 entries. |
+| **Open follow-ups (last 7 days)** | `mcp__linear__list_issues --createdAt -P7D` filtered to states `Backlog`, `Todo` | Skip stories already in flight (covered above). Brief why-it-matters one-liner per entry. |
+| **Known stale state** | Cross-reference `git worktree list` against `git log --oneline origin/main` | Worktrees on commits that aren't on main AND whose corresponding story is shipped → flag as cleanable. Worktrees on commits that aren't on main AND whose story is in flight → not stale, skip. |
+
+If any source command fails (network, auth, missing file), surface the failure as a BLOCKER in the print summary AND skip that bucket (write the literal text `(unavailable — <one-line reason>)`). Do not invent values.
+
+### Step G3: Construct the new Derived section
+
+Use this exact layout:
+
+```markdown
+## Derived (auto-overwritten by `/status-report` on `main`)
+
+### Env lock
+- Holder: <holder block or `null`>
+- Queue: <queue block or `empty`>
+
+### In flight
+- **<ROK-XXXX>** — <title>. Status: <Linear status>. Branch <branch> in worktree <worktree>. <PR or "No PR yet">. <one-line architectural note if relevant>.
+
+### Recently shipped (last 7 days, newest first)
+- `<sha>` PR #<n> — <ROK-XXXX> <title>
+
+### Open follow-ups filed last 7 days
+- **<ROK-XXXX>** (<status> / <priority>) — <one-line why-it-matters>
+
+### Known stale state
+- <description, OR "none">
+```
+
+If a subsection has no content, write `- none` rather than omitting the subsection — readers should see the structure even when the bucket is empty.
+
+### Step G4: Write back
+
+Reassemble the full doc:
+
+```
+<header up to and including the two intro blockquotes>
+---
+<new ## Derived section from Step G3>
+---
+<preserved ## Strategic section from Step G1, byte-for-byte>
+---
+<preserved ## Conventions section from Step G1, byte-for-byte>
+```
+
+The horizontal rules (`---`) between sections are part of the layout; preserve them. Update the `**Last derived update:**` date at the top to today's ISO-8601 date (UTC).
+
+Call `mcp__linear__save_document` with `id: bbacd5ae-0c99-4eaf-bbd7-24e7eb90ffce` and the reassembled content.
+
+### Step G5: Print a 3-line summary
+
+Output **exactly** this format (no template, no addenda — global mode has its own minimal output):
+
+```
+═══ ACTIVE STATE SYNCED ═══
+Doc:      https://linear.app/roknua-projects/document/raid-ledger-active-state-7a4ddc5652c9
+Derived:  <N> in-flight | <M> shipped 7d | <K> follow-ups | <S> stale items
+Note:     <one-line — anything that warranted attention, or "no anomalies">
+```
+
+The `Note:` line is for things the operator should see at a glance — e.g. "ROK-1250 in flight 24h+ without PR", "env lock held by ROK-XXXX since <time>", "stale --rok-XXXX worktree can be removed". One sentence max. If nothing is notable, write `no anomalies`.
+
+### Halts specific to Global mode
+
+- Doc structure broken (Step G1 anchor check failed) → print BLOCKER and stop without writing.
+- `mcp__linear__save_document` returns an error → print BLOCKER `doc save failed: <error>`. The next invocation will re-derive and retry.
+- Operator explicitly says "don't update the doc" in this conversation → run Steps G1–G3, print Step G5's summary with `Note: doc-write skipped per operator request`, but skip Step G4 entirely.
