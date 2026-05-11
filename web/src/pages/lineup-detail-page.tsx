@@ -28,6 +28,7 @@ import { useSteamPasteDetection } from '../hooks/use-steam-paste';
 import { canParticipateInLineup } from '../lib/lineup-eligibility';
 import { HeroNextStep } from '../components/common/HeroNextStep';
 import { useLineupHero } from '../hooks/use-lineup-hero';
+import { GraceCountdownBanner } from '../components/lineups/grace-countdown-banner';
 
 /**
  * Render the private-lineup invitee panel (ROK-1065). Creator/operator
@@ -202,6 +203,10 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
 
   return (
     <div className="max-w-4xl mx-auto px-4 pt-4 pb-24 md:pb-4">
+      <GraceCountdownBanner
+        pendingAdvanceAt={lineup.pendingAdvanceAt}
+        status={lineup.status}
+      />
       <HeroNextStep {...heroProps} />
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <LineupDetailHeader lineup={lineup} onTiebreakerIntercept={() => {
