@@ -66,7 +66,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     job: Job<LineupPhaseJobData | LineupGraceAdvanceJobData>,
   ): Promise<void> {
     if (job.name === LINEUP_GRACE_ADVANCE) {
-      const { lineupId } = job.data as LineupGraceAdvanceJobData;
+      const { lineupId } = job.data;
       this.logger.debug(`Processing grace-advance for lineup ${lineupId}`);
       await this.processGraceAdvance(lineupId);
       return;
@@ -139,9 +139,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       )
       .returning({ id: schema.communityLineups.id });
     if (result.length === 0) return;
-    this.logger.log(
-      `Lineup ${lineupId} grace-advanced to '${targetStatus}'`,
-    );
+    this.logger.log(`Lineup ${lineupId} grace-advanced to '${targetStatus}'`);
     // ROK-1253: push the status flip to subscribed clients immediately.
     // Mirrors the emit `runStatusTransition` does for synchronous flips.
     this.lineupsGateway.emitStatusChange(lineupId, targetStatus, new Date());
