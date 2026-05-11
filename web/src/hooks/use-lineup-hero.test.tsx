@@ -130,13 +130,17 @@ describe('useLineupHero — happy paths per phase × persona', () => {
     expect(result.current.headline).toMatch(/Hollowforge/);
   });
 
-  it('voting / organizer returns action tone with advance CTA', () => {
+  it('voting / organizer who has voted returns action tone with advance CTA', () => {
     mockUseAuth.mockReturnValue({
       user: { id: 1, role: 'operator' },
     } as ReturnType<typeof useAuth>);
+    // ROK-1253: organizer who hasn't voted now gets 'Open voting' (the
+    // participation prompt). Add a personal vote so this test still
+    // exercises the operator-advance path.
     const lineup = createMockLineupDetail({
       status: 'voting',
       createdBy: { id: 1, displayName: 'Op' },
+      myVotes: [42],
     });
     const { result } = renderHero(lineup);
     expect(result.current.cta?.text).toMatch(/advance/i);

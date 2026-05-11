@@ -18,7 +18,21 @@ describe('LineupPhaseProcessor', () => {
       scheduleTransition: jest.fn(),
     } as unknown as LineupPhaseQueueService;
 
-    processor = new LineupPhaseProcessor(mockDb as never, mockQueueService);
+    // ROK-1253: settings + gateway + activityLog + lineupNotifications are
+    // injected for the grace-advance path (rework routes through
+    // runStatusTransition); the rehydration tests below don't exercise them.
+    const mockSettings = { get: jest.fn() } as never;
+    const mockGateway = { emitStatusChange: jest.fn() } as never;
+    const mockActivityLog = { log: jest.fn() } as never;
+    const mockLineupNotifications = {} as never;
+    processor = new LineupPhaseProcessor(
+      mockDb as never,
+      mockQueueService,
+      mockSettings,
+      mockGateway,
+      mockActivityLog,
+      mockLineupNotifications,
+    );
 
     errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
   });

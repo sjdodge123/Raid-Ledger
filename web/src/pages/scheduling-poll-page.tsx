@@ -201,6 +201,7 @@ function StandalonePollHeroOrNothing({
 function ActivePollSections({ lineupId, matchId, poll }: {
   lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
 }): JSX.Element {
+  const slotGridRef = useRef<HTMLElement | null>(null);
   const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
   const { toggleVote, suggest, isSuggesting } = usePollMutations(lineupId, matchId);
@@ -259,10 +260,14 @@ function ActivePollSections({ lineupId, matchId, poll }: {
           setPrefillTime(toDatetimeLocal(day, hour, weekStart));
           setPreviewBlock({ dayOfWeek: day, startHour: hour, endHour: hour + 2, label: 'Suggested Time', title: 'Suggested Time', variant: 'selected' });
         }} />
-      <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
-        readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
-        isSuggesting={isSuggesting} prefillTime={prefillTime}
-        conflictingSlotIds={poll.conflictingSlotIds} />
+      {/* ROK-1253 fix: wire slotGridRef so the hero's "Pick a slot" CTA
+          scrolls here. ROK-1209 created the ref but never attached it. */}
+      <section ref={slotGridRef}>
+        <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
+          readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
+          isSuggesting={isSuggesting} prefillTime={prefillTime}
+          conflictingSlotIds={poll.conflictingSlotIds} />
+      </section>
       <CreateEventSection slots={poll.slots} match={poll.match} matchId={matchId}
         hasVoted={hasVoted} readOnly={readOnly}
         createdEventId={createdEventId} linkedEventId={poll.match.linkedEventId ?? null}

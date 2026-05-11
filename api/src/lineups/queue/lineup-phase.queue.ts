@@ -11,7 +11,10 @@ import { bestEffortInit } from '../../common/lifecycle.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import {
+  LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_QUEUE,
+  LINEUP_PHASE_TRANSITION,
+  type LineupGraceAdvanceJobData,
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
 
@@ -97,7 +100,15 @@ export class LineupPhaseQueueService implements OnModuleInit {
     const jobId = `lineup-phase-${lineupId}-${targetStatus}`;
     try {
       await this.removeExisting(jobId);
-      await this.addJob(jobId, lineupId, targetStatus, delayMs);
+      await this.enqueue(
+        jobId,
+        LINEUP_PHASE_TRANSITION,
+        { lineupId, targetStatus } satisfies LineupPhaseJobData,
+        delayMs,
+      );
+      this.logger.debug(
+        `Scheduled ${targetStatus} for lineup ${lineupId} in ${Math.round(delayMs / 60_000)}m`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to schedule transition for lineup ${lineupId}: ${error instanceof Error ? error.message : 'Unknown'}`,
@@ -106,23 +117,65 @@ export class LineupPhaseQueueService implements OnModuleInit {
   }
 
   /**
+   * ROK-1253: Schedule a delayed grace re-evaluation. After `delayMs` the
+   * processor's grace branch loads the lineup, re-runs the quorum check and
+   * either advances or clears `pending_advance_at`. Distinct job name and
+   * jobId namespace from `phase-transition` so a stale-status no-op never
+   * fires unintentionally.
+   */
+  async scheduleGraceAdvance(lineupId: number, delayMs: number): Promise<void> {
+    const jobId = `lineup-grace-${lineupId}`;
+    try {
+      await this.removeExisting(jobId);
+      await this.enqueue(
+        jobId,
+        LINEUP_GRACE_ADVANCE,
+        { lineupId } satisfies LineupGraceAdvanceJobData,
+        delayMs,
+      );
+      this.logger.debug(
+        `Scheduled grace-advance for lineup ${lineupId} in ${delayMs}ms`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to schedule grace-advance for lineup ${lineupId}: ${error instanceof Error ? error.message : 'Unknown'}`,
+      );
+    }
+  }
+
+  /**
+   * ROK-1253: Remove a pending grace-advance job. Idempotent; safe to call
+   * when no job exists. Called by `applyStatusUpdate` on any operator-driven
+   * transition so the row's new state (forward or backward) is authoritative.
+   */
+  async cancelGraceAdvance(lineupId: number): Promise<void> {
+    const jobId = `lineup-grace-${lineupId}`;
+    try {
+      await this.removeExisting(jobId);
+    } catch (error) {
+      this.logger.debug(
+        `cancelGraceAdvance(${lineupId}) ignored: ${error instanceof Error ? error.message : 'Unknown'}`,
+      );
+    }
+  }
+
+  /**
    * Cancel all pending phase-transition jobs for a lineup.
-   * Removes delayed/waiting jobs for all four target statuses.
-   * Used by smoke tests to prevent stale jobs from advancing lineups.
+   * Removes delayed/waiting jobs for all four target statuses AND the
+   * ROK-1253 grace job. Used by smoke tests to prevent stale jobs from
+   * advancing lineups.
    */
   async cancelAllForLineup(lineupId: number): Promise<number> {
     const targets = ['voting', 'decided', 'scheduling', 'archived'];
     let removed = 0;
     for (const target of targets) {
       const jobId = `lineup-phase-${lineupId}-${target}`;
-      const job = await this.queue.getJob(jobId);
-      if (!job) continue;
-      const state = await job.getState();
-      if (state === 'delayed' || state === 'waiting') {
-        await job.remove();
-        removed++;
-      }
+      removed += (await this.removeIfPending(jobId)) ? 1 : 0;
     }
+    // ROK-1253: also drop any pending grace-advance job.
+    removed += (await this.removeIfPending(`lineup-grace-${lineupId}`))
+      ? 1
+      : 0;
     if (removed > 0) {
       this.logger.debug(
         `Cancelled ${removed} phase job(s) for lineup ${lineupId}`,
@@ -142,27 +195,32 @@ export class LineupPhaseQueueService implements OnModuleInit {
     }
   }
 
-  /** Add the delayed job to the queue. */
-  private async addJob(
+  /** Remove a delayed/waiting job and report whether anything was removed. */
+  private async removeIfPending(jobId: string): Promise<boolean> {
+    const job = await this.queue.getJob(jobId);
+    if (!job) return false;
+    const state = await job.getState();
+    if (state === 'delayed' || state === 'waiting') {
+      await job.remove();
+      return true;
+    }
+    return false;
+  }
+
+  /** Shared add-with-options used by both phase and grace job scheduling. */
+  private async enqueue(
     jobId: string,
-    lineupId: number,
-    targetStatus: string,
+    jobName: string,
+    payload: LineupPhaseJobData | LineupGraceAdvanceJobData,
     delayMs: number,
   ): Promise<void> {
-    await this.queue.add(
-      'phase-transition',
-      { lineupId, targetStatus } satisfies LineupPhaseJobData,
-      {
-        jobId,
-        delay: Math.max(0, delayMs),
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5_000 },
-        removeOnComplete: true,
-        removeOnFail: 50,
-      },
-    );
-    this.logger.debug(
-      `Scheduled ${targetStatus} for lineup ${lineupId} in ${Math.round(delayMs / 60_000)}m`,
-    );
+    await this.queue.add(jobName, payload, {
+      jobId,
+      delay: Math.max(0, delayMs),
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5_000 },
+      removeOnComplete: true,
+      removeOnFail: 50,
+    });
   }
 }

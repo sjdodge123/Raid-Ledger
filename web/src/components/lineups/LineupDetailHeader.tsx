@@ -8,6 +8,10 @@ import { PhaseCountdown } from './phase-countdown';
 import { PHASES, PHASE_LABELS } from './lineup-phases';
 import { toast } from '../../lib/toast';
 import { UnlinkedSteamCount } from './UnlinkedSteamCount';
+import {
+  getDistinctNominatorCount,
+  getExpectedVoterCount,
+} from '../../lib/lineup-quorum-counts';
 import { MarkdownText } from '../ui/markdown-text';
 import { EditLineupMetadataModal } from './edit-lineup-metadata-modal';
 import { AbortLineupButton } from './AbortLineupButton';
@@ -108,12 +112,15 @@ function PhaseBreadcrumb({ lineup, onTiebreakerIntercept }: {
 }
 
 function PhaseContextInfo({ lineup }: { lineup: LineupDetailResponseDto }): JSX.Element | null {
-  // Total participants = nominators + voters (unique count provided by API)
-  const participants = (lineup.totalVoters ?? 0) + (lineup.status === 'building' ? lineup.entries.length : 0);
   if (lineup.status === 'building') {
+    // ROK-1253: voter-coverage framing replaces the prior `/20` magic
+    // number. For private lineups the denominator is creator + invitees;
+    // for public it's community membership.
+    const expected = getExpectedVoterCount(lineup);
+    const nominators = getDistinctNominatorCount(lineup);
     return (
       <span className="text-xs text-dim" data-testid="nomination-count">
-        {lineup.entries.length}/20 nominated · {participants} participated
+        {lineup.entries.length} games · {nominators} of {expected} voters nominated
         {lineup.unlinkedSteamCount > 0 && (
           <> · <UnlinkedSteamCount count={lineup.unlinkedSteamCount} /></>
         )}

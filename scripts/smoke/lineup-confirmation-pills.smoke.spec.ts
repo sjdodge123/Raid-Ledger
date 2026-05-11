@@ -93,19 +93,19 @@ test.describe('Building phase — hero + pill', () => {
         await awaitProcessing(adminToken);
     });
 
-    test('hero shows action tone with organizer Advance-to-Voting CTA when no nominations', async ({ page }) => {
+    test('hero shows action tone with Nominate CTA when organizer has not nominated', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         const hero = page.getByTestId('hero-next-step');
         await expect(hero).toBeVisible({ timeout: 15_000 });
         await expect(hero).toHaveAttribute('data-tone', 'action');
-        // Organizer persona on building → "Advance to Voting" CTA per spec.
-        // The CTA's visible text says "Advance to Voting" but its
-        // accessible name is the generic "Advance lineup phase" — keeps
-        // it from colliding with the phase-breadcrumb's "Voting" button at
-        // page-level selectors. Match by aria-label here, plus assert the
-        // visible text via toContainText.
-        await expect(hero.getByRole('button', { name: /move lineup phase forward/i })).toBeVisible();
-        await expect(hero).toContainText(/advance to voting/i);
+        // ROK-1253 (PR #770): an organizer who hasn't nominated themselves
+        // sees the same nominate prompt as an invitee — they're part of
+        // the expected-voter set, so leading with "Advance to Voting"
+        // would be skipping their own participation. Once they nominate,
+        // the next test ('hero copy reflects current nomination count for
+        // organizer') asserts the flip to the advance CTA.
+        await expect(hero.getByRole('button', { name: /nominate a game/i })).toBeVisible();
+        await expect(hero).toContainText(/nominate the games you want to play/i);
     });
 
     test('hero copy reflects current nomination count for organizer', async ({ page }) => {

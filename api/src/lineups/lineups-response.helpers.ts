@@ -94,6 +94,9 @@ function mapLineupCore(
     createdBy: creator[0] ?? { id: lineup.createdBy, displayName: 'Unknown' },
     votingDeadline: lineup.votingDeadline?.toISOString() ?? null,
     phaseDeadline: lineup.phaseDeadline?.toISOString() ?? null,
+    // ROK-1253: grace window and revert-pause stamps surfaced to clients.
+    pendingAdvanceAt: lineup.pendingAdvanceAt?.toISOString() ?? null,
+    autoAdvancePausedAt: lineup.autoAdvancePausedAt?.toISOString() ?? null,
     matchThreshold: lineup.matchThreshold ?? 35,
     maxVotesPerPlayer: lineup.maxVotesPerPlayer ?? 3,
     defaultTiebreakerMode: lineup.defaultTiebreakerMode ?? null,

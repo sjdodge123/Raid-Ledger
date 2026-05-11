@@ -59,12 +59,17 @@ export function useLineupRealtime(lineupId: number | undefined): void {
       });
     };
 
+    // ROK-1253 rework: re-use `handleStatus` semantics — both events demand
+    // the same detail invalidation so the banner appears (graceScheduled) or
+    // disappears (status flip).
     socket.on(LineupRealtimeEventNames.Status, handleStatus);
+    socket.on(LineupRealtimeEventNames.GraceScheduled, handleStatus);
     socket.on(LineupRealtimeEventNames.TiebreakerOpen, handleTiebreakerOpen);
 
     return () => {
       socket.emit(LineupRealtimeEventNames.Unsubscribe, { lineupId });
       socket.off(LineupRealtimeEventNames.Status, handleStatus);
+      socket.off(LineupRealtimeEventNames.GraceScheduled, handleStatus);
       socket.off(LineupRealtimeEventNames.TiebreakerOpen, handleTiebreakerOpen);
       socket.disconnect();
     };

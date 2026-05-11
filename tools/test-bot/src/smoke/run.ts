@@ -33,6 +33,7 @@ import { standalonePollReminderTests } from './tests/standalone-poll-reminders.t
 import { publicShareLinkTests } from './tests/public-share-link.test.js';
 import { lineupPrivateDmTests } from './tests/lineup-private-dm.test.js';
 import { lineupChannelOverrideTests } from './tests/lineup-channel-override.test.js';
+import { lineupGraceCountdownTests } from './tests/lineup-grace-countdown.test.js';
 
 /** Build a TestResult from a test, status, and timing info. */
 function buildResult(
@@ -155,6 +156,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...publicShareLinkTests,
     ...lineupPrivateDmTests,
     ...lineupChannelOverrideTests,
+    ...lineupGraceCountdownTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 

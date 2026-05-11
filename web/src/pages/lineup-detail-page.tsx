@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useLineupDetail } from '../hooks/use-lineups';
+import { useLineupDetail, useTransitionLineupStatus } from '../hooks/use-lineups';
+import { toast } from '../lib/toast';
 import { useLineupRealtime } from '../hooks/use-lineup-realtime';
 import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
@@ -28,6 +29,7 @@ import { useSteamPasteDetection } from '../hooks/use-steam-paste';
 import { canParticipateInLineup } from '../lib/lineup-eligibility';
 import { HeroNextStep } from '../components/common/HeroNextStep';
 import { useLineupHero } from '../hooks/use-lineup-hero';
+import { GraceCountdownBanner } from '../components/lineups/grace-countdown-banner';
 
 /**
  * Render the private-lineup invitee panel (ROK-1065). Creator/operator
@@ -158,6 +160,31 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
   const leaderboardRef = useRef<HTMLElement | null>(null);
   const slotGridRef = useRef<HTMLElement | null>(null);
   const bracketRef = useRef<HTMLElement | null>(null);
+  // ROK-1253: shared advance handler — wires the hero's
+  // "Advance to {phase}" CTA to the same `useTransitionLineupStatus`
+  // mutation the breadcrumb pill uses, including the TIEBREAKER_REQUIRED
+  // intercept that opens the tiebreaker prompt instead of toasting.
+  const transition = useTransitionLineupStatus();
+  const onAdvance = useCallback(
+    (targetStatus: 'voting' | 'decided') => {
+      transition.mutate(
+        { lineupId: lineup.id, body: { status: targetStatus } },
+        {
+          onSuccess: () => toast.success(`Moved to ${targetStatus}`),
+          onError: (err) => {
+            const msg = err instanceof Error ? err.message : '';
+            if (msg.includes('TIEBREAKER_REQUIRED')) {
+              setPromptDismissed(false);
+              setTiebreakerPromptOpen(true);
+            } else {
+              toast.error(msg || 'Transition failed');
+            }
+          },
+        },
+      );
+    },
+    [transition, lineup.id, setPromptDismissed, setTiebreakerPromptOpen],
+  );
 
   const heroProps = useLineupHero({
     lineup,
@@ -168,6 +195,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
       bracket: bracketRef,
     },
     onOpenNominate: () => setModalOpen(true),
+    onAdvance,
   });
 
   const hasEntries = lineup.entries.length > 0;
@@ -202,6 +230,10 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
 
   return (
     <div className="max-w-4xl mx-auto px-4 pt-4 pb-24 md:pb-4">
+      <GraceCountdownBanner
+        pendingAdvanceAt={lineup.pendingAdvanceAt}
+        status={lineup.status}
+      />
       <HeroNextStep {...heroProps} />
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <LineupDetailHeader lineup={lineup} onTiebreakerIntercept={() => {
@@ -259,7 +291,12 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
       )}
 
       {hasTiebreaker && (tiebreaker?.status === 'active' || tiebreaker?.status === 'resolved') ? (
-        <TiebreakerView tiebreaker={tiebreaker} lineupId={lineup.id} />
+        // ROK-1253 fix: wire bracketRef so the hero's "Finish bracket" /
+        // "Vote in bracket" CTAs scroll here. ROK-1209 created the ref +
+        // scroll target but never attached it to a DOM node.
+        <section ref={bracketRef}>
+          <TiebreakerView tiebreaker={tiebreaker} lineupId={lineup.id} />
+        </section>
       ) : lineup.status === 'decided' ? (
         <>
           {showDecidedTiebreakerNotice && tiebreaker && (
@@ -271,15 +308,21 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           <DecidedView lineup={lineup} />
         </>
       ) : lineup.status === 'voting' && hasEntries ? (
-        <VotingLeaderboard
-          entries={lineup.entries}
-          lineupId={lineup.id}
-          myVotes={lineup.myVotes ?? []}
-          totalVoters={lineup.totalVoters}
-          totalMembers={lineup.totalMembers}
-          maxVotesPerPlayer={lineup.maxVotesPerPlayer}
-          canParticipate={canParticipate}
-        />
+        // ROK-1253 fix: attach leaderboardRef so the hero's
+        // "Open voting" CTA can `scrollIntoView` to this section.
+        // ROK-1209 created the ref + scroll target but never wired it
+        // to a DOM element — the CTA was a silent no-op.
+        <section ref={leaderboardRef}>
+          <VotingLeaderboard
+            entries={lineup.entries}
+            lineupId={lineup.id}
+            myVotes={lineup.myVotes ?? []}
+            totalVoters={lineup.totalVoters}
+            totalMembers={lineup.totalMembers}
+            maxVotesPerPlayer={lineup.maxVotesPerPlayer}
+            canParticipate={canParticipate}
+          />
+        </section>
       ) : hasEntries ? (
         <NominationGrid entries={lineup.entries} lineupId={lineup.id} />
       ) : (

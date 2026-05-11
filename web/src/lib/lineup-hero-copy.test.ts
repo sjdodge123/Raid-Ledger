@@ -87,11 +87,30 @@ describe('getLineupHeroCopy — building phase', () => {
     expect(copy.headline).toMatch(/2 games/);
   });
 
-  it("organizer gets 'Advance to Voting' CTA", () => {
+  it("organizer who has nominated gets 'Advance to Voting' CTA", () => {
     const copy = getLineupHeroCopy(
-      buildCtx({ pageId: 'building', persona: 'organizer' }),
+      buildCtx({
+        pageId: 'building',
+        persona: 'organizer',
+        myNominatedGameNames: ['Hollowforge'],
+      }),
     );
     expect(copy.cta?.text).toMatch(/advance to voting/i);
+  });
+
+  // ROK-1253: organizer who hasn't nominated themselves is still an
+  // expected voter; show the participation prompt before the advance CTA.
+  it("organizer who hasn't nominated gets 'Nominate a game' CTA", () => {
+    const copy = getLineupHeroCopy(
+      buildCtx({
+        pageId: 'building',
+        persona: 'organizer',
+        myNominatedGameNames: [],
+      }),
+    );
+    expect(copy.tone).toBe('action');
+    expect(copy.cta?.text).toMatch(/nominate a game/i);
+    expect(copy.headline).toMatch(/nominate the games/i);
   });
 
   it('uninvited gets amber privacy tone with disabled-feeling CTA text', () => {
@@ -131,6 +150,87 @@ describe('getLineupHeroCopy — voting phase', () => {
     // Either the headline or detail must reference 7 (12 - 5) waiters
     const haystack = `${copy.headline} ${copy.detail ?? ''}`;
     expect(haystack).toMatch(/7/);
+  });
+
+  // ROK-1253: organizer who has voted gets the operator-advance CTA only
+  // when quorum is genuinely reached.
+  it("organizer who hasn't voted gets 'Open voting' CTA (not 'Advance')", () => {
+    const lineup = createMockLineupDetail({
+      status: 'voting',
+      maxVotesPerPlayer: 3,
+      totalMembers: 3,
+      totalVoters: 0,
+      myVotes: [],
+    });
+    const copy = getLineupHeroCopy(
+      buildCtx({ pageId: 'voting', persona: 'organizer', lineup }),
+    );
+    expect(copy.tone).toBe('action');
+    expect(copy.cta?.text).toMatch(/open voting/i);
+    expect(copy.headline).toMatch(/cast your votes/i);
+  });
+
+  it('organizer who voted partially (below max) sees Sit-tight acknowledgment', () => {
+    const lineup = createMockLineupDetail({
+      status: 'voting',
+      maxVotesPerPlayer: 3,
+      totalMembers: 3,
+      totalVoters: 1,
+      myVotes: [42],
+    });
+    const copy = getLineupHeroCopy(
+      buildCtx({ pageId: 'voting', persona: 'organizer', lineup, myNominatedGameNames: ['Hollowforge'] }),
+    );
+    expect(copy.cta?.text).toMatch(/advance to decided/i);
+    expect(copy.headline).not.toMatch(/quorum reached/i);
+    expect(copy.headline).toMatch(/You voted for 1 game/);
+    expect(copy.headline).toMatch(/Sit tight/);
+    expect(copy.headline).toMatch(/2 of 3 still voting/);
+  });
+
+  it("organizer who maxed their votes sees 'You're all done' framing", () => {
+    const lineup = createMockLineupDetail({
+      status: 'voting',
+      maxVotesPerPlayer: 3,
+      totalMembers: 3,
+      totalVoters: 1,
+      myVotes: [42, 43, 44],
+    });
+    const copy = getLineupHeroCopy(
+      buildCtx({ pageId: 'voting', persona: 'organizer', lineup }),
+    );
+    expect(copy.cta?.text).toMatch(/advance to decided/i);
+    expect(copy.headline).toMatch(/You're all done/);
+    expect(copy.headline).toMatch(/2 of 3 still voting/);
+  });
+
+  it('organizer with 2 personal votes (below max) pluralizes correctly', () => {
+    const lineup = createMockLineupDetail({
+      status: 'voting',
+      maxVotesPerPlayer: 3,
+      totalMembers: 3,
+      totalVoters: 1,
+      myVotes: [42, 43],
+    });
+    const copy = getLineupHeroCopy(
+      buildCtx({ pageId: 'voting', persona: 'organizer', lineup }),
+    );
+    expect(copy.headline).toMatch(/You voted for 2 games/);
+  });
+
+  it("organizer with quorum met sees 'Quorum reached' headline", () => {
+    const lineup = createMockLineupDetail({
+      status: 'voting',
+      maxVotesPerPlayer: 3,
+      totalMembers: 3,
+      totalVoters: 3,
+      myVotes: [42, 43, 44],
+    });
+    const copy = getLineupHeroCopy(
+      buildCtx({ pageId: 'voting', persona: 'organizer', lineup }),
+    );
+    expect(copy.headline).toMatch(/quorum reached/i);
+    expect(copy.cta?.text).toMatch(/advance to decided/i);
   });
 });
 

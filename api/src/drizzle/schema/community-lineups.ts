@@ -55,6 +55,21 @@ export const communityLineups = pgTable('community_lineups', {
     .notNull(),
   votingDeadline: timestamp('voting_deadline'),
   phaseDeadline: timestamp('phase_deadline'),
+  /**
+   * ROK-1253: Set when an operator reverts a lineup backwards (voting→building
+   * or decided→voting). Auto-advance evaluation early-returns while the stamp
+   * is fresh (< LINEUP_AUTO_ADVANCE_PAUSE_TTL_MS) so the lineup doesn't
+   * immediately re-advance through quorum. Cleared lazily on next mutation
+   * once TTL elapses, or eagerly on any forward transition.
+   */
+  autoAdvancePausedAt: timestamp('auto_advance_paused_at'),
+  /**
+   * ROK-1253: Set when quorum first goes ready; the value is the wall-clock
+   * time the BullMQ grace-advance job will re-evaluate quorum and either flip
+   * the row to the next phase or null this column. Always paired with a
+   * `lineup-grace-<id>` job in the lineup-phase queue.
+   */
+  pendingAdvanceAt: timestamp('pending_advance_at'),
   phaseDurationOverride: jsonb('phase_duration_override').$type<{
     building?: number;
     voting?: number;

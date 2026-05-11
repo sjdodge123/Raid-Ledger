@@ -22,6 +22,7 @@ import {
   computeTransitionDeadline,
   getNextPhase,
   buildTransitionValues,
+  buildAdvanceStateUpdate,
 } from './lineups-phase.helpers';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
 import { addInvitees } from './lineups-invitees.helpers';
@@ -101,7 +102,12 @@ export async function applyStatusUpdate(
   lineup: typeof schema.communityLineups.$inferSelect,
 ) {
   const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
-  const values = buildTransitionValues(dto, phaseDeadline);
+  const values = {
+    ...buildTransitionValues(dto, phaseDeadline),
+    // ROK-1253: merge advance-state column changes into the same atomic UPDATE
+    // so any racing grace job or quorum re-eval sees a consistent row.
+    ...buildAdvanceStateUpdate(lineup.status, dto.status),
+  };
   const expectedPre = lineup.status;
   const updated = await db
     .update(schema.communityLineups)
@@ -127,6 +133,11 @@ export async function applyStatusUpdate(
       phaseDeadline.getTime() - Date.now(),
     );
   }
+  // ROK-1253: any operator-driven transition supersedes a pending grace
+  // window — eagerly remove the BullMQ job so it cannot fire stale.
+  // Best-effort: the processor branch also re-checks the row's status
+  // and `auto_advance_paused_at`, so a lost race is safe.
+  await phaseQueue.cancelGraceAdvance(id);
   if (dto.status === 'archived') {
     await clearLinkedEventsByLineup(db, id);
   }

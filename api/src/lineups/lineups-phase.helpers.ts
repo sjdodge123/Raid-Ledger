@@ -79,3 +79,34 @@ export function buildTransitionValues(
   }
   return values;
 }
+
+/**
+ * ROK-1253: Determine how a transition mutates the advance-state columns.
+ * Merged into the atomic conditional UPDATE in `applyStatusUpdate` so the
+ * status flip and the grace/pause columns are written together.
+ *
+ *  - Forward  (building→voting, voting→decided, decided→archived): clear both.
+ *  - Backward (voting→building, decided→voting, archived→decided):
+ *      stamp `autoAdvancePausedAt = now()`, clear `pendingAdvanceAt`.
+ *  - Lateral / no-op: empty object (no advance-state change).
+ */
+export function buildAdvanceStateUpdate(
+  currentStatus: string,
+  newStatus: string,
+): Partial<typeof schema.communityLineups.$inferInsert> {
+  const forward =
+    (currentStatus === 'building' && newStatus === 'voting') ||
+    (currentStatus === 'voting' && newStatus === 'decided') ||
+    (currentStatus === 'decided' && newStatus === 'archived');
+  if (forward) {
+    return { autoAdvancePausedAt: null, pendingAdvanceAt: null };
+  }
+  const backward =
+    (currentStatus === 'voting' && newStatus === 'building') ||
+    (currentStatus === 'decided' && newStatus === 'voting') ||
+    (currentStatus === 'archived' && newStatus === 'decided');
+  if (backward) {
+    return { autoAdvancePausedAt: new Date(), pendingAdvanceAt: null };
+  }
+  return {};
+}

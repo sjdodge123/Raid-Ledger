@@ -16,6 +16,7 @@ export const ActivityActionSchema = z.enum([
     'lineup_decided',
     'lineup_aborted',
     'lineup_public_share_toggled',
+    'lineup_auto_advance_paused',
     'event_linked',
     // Event actions
     'event_created',

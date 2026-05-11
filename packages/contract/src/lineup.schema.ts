@@ -191,6 +191,17 @@ export const LineupDetailResponseSchema = z.object({
     createdBy: LineupUserSchema,
     votingDeadline: z.string().nullable(),
     phaseDeadline: z.string().nullable(),
+    /**
+     * ROK-1253: When set, quorum has gone ready and the lineup will auto-advance
+     * at this wall-clock time unless quorum breaks first. ISO 8601 UTC.
+     */
+    pendingAdvanceAt: z.string().nullable(),
+    /**
+     * ROK-1253: Operator reverted the lineup at this timestamp; auto-advance
+     * is suppressed until the pause TTL elapses. ISO 8601 UTC. Operator-only
+     * visibility (clients render appropriate copy when set).
+     */
+    autoAdvancePausedAt: z.string().nullable(),
     matchThreshold: z.number().nullable(),
     /** Max votes each player can cast during voting (ROK-976). */
     maxVotesPerPlayer: z.number(),
@@ -248,6 +259,8 @@ export const LineupBannerResponseSchema = z.object({
     status: LineupStatusSchema,
     targetDate: z.string().nullable(),
     phaseDeadline: z.string().nullable(),
+    /** ROK-1253: When set, lineup will auto-advance at this wall-clock time. ISO 8601 UTC. */
+    pendingAdvanceAt: z.string().nullable(),
     entryCount: z.number(),
     totalVoters: z.number(),
     totalMembers: z.number(),

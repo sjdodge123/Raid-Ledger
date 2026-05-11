@@ -39,6 +39,12 @@ export interface UseLineupHeroOptions {
      *  may omit (defaults to 0; phase copy doesn't read it).
      */
     myVotedSlotCount?: number;
+    /** ROK-1253: wire the "Advance to {phase}" hero CTA to an actual
+     *  transition. Without this, the CTA was rendered disabled because
+     *  wireCta returned undefined — operators had to find the breadcrumb
+     *  pill to advance.
+     */
+    onAdvance?: (targetStatus: 'voting' | 'decided') => void;
 }
 
 function pageIdForLineup(lineup: LineupDetailResponseDto): PageId {
@@ -75,7 +81,7 @@ function scrollTo(ref: RefObject<HTMLElement | null>): void {
 export function useLineupHero(
     opts: UseLineupHeroOptions,
 ): HeroNextStepProps {
-    const { lineup, tiebreaker, scrollTargets, onOpenNominate, pageId } = opts;
+    const { lineup, tiebreaker, scrollTargets, onOpenNominate, pageId, onAdvance } = opts;
     const { user } = useAuth();
     const navigate = useNavigate();
     const { abortedAt } = useLineupAbortedAt(lineup.id);
@@ -144,9 +150,13 @@ export function useLineupHero(
         // pre-fill at hero level we can only deep-link the operator there.
         if (/^create event/i.test(text)) return () => navigate('/events');
         if (/^force.?resolve/i.test(text)) return () => forceResolve.mutate(lineup.id);
-        if (/^advance to/i.test(text)) return undefined;
+        // ROK-1253: wire the advance CTA so it's no longer auto-disabled.
+        // Caller (the page) implements `onAdvance` via
+        // `useTransitionLineupStatus` + handles the tiebreaker intercept.
+        if (/^advance to voting/i.test(text) && onAdvance) return () => onAdvance('voting');
+        if (/^advance to decided/i.test(text) && onAdvance) return () => onAdvance('decided');
         return undefined;
-    }, [copy, lineup.id, lineup.decidedGameId, navigate, onOpenNominate, scrollTargets, forceResolve]);
+    }, [copy, lineup.id, lineup.decidedGameId, navigate, onOpenNominate, onAdvance, scrollTargets, forceResolve]);
 
     const heroProps = useMemo<HeroNextStepProps>(() => {
         const onClick = wireCta();

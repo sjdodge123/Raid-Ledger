@@ -181,12 +181,17 @@ export class LineupsController {
   async transitionStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: unknown,
+    @Req() req: AuthRequest,
   ): Promise<LineupDetailResponseDto> {
     const parsed = UpdateLineupStatusSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.lineupsService.transitionStatus(id, parsed.data);
+    return this.lineupsService.transitionStatus(
+      id,
+      parsed.data,
+      req.user.id,
+    );
   }
 
   /**
