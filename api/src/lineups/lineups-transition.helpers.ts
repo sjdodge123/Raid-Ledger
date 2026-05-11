@@ -14,6 +14,7 @@ import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { guardTiebreakerOnTransition } from './tiebreaker/tiebreaker-detect.helpers';
 import type { LineupNotificationService } from './lineup-notification.service';
 import { findLineupById, validateDecidedGame } from './lineups-query.helpers';
+import type { LineupStatus } from '../drizzle/schema';
 import {
   applyStatusUpdate,
   runMatchingAlgorithm,
@@ -21,6 +22,7 @@ import {
 } from './lineups-lifecycle.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { logTransition } from './lineups-activity.helpers';
+import { applyRevertSideEffects } from './lineups-revert.helpers';
 import {
   fireVotingOpen,
   fireDecidedNotifications,
@@ -38,11 +40,19 @@ export interface TransitionDeps {
   logger: Logger;
 }
 
-/** Orchestrate a lineup status transition with validation, update, and hooks. */
+/**
+ * Orchestrate a lineup status transition with validation, update, and hooks.
+ *
+ * ROK-1253: `actorId` is forwarded to the revert side-effect helper so
+ * `lineup_auto_advance_paused` activity entries credit the operator. Auto-
+ * advance callers (no human actor) pass null; we still log the pause but
+ * without an actor — matching `logTransition`'s null-actor pattern.
+ */
 export async function runStatusTransition(
   deps: TransitionDeps,
   id: number,
   dto: UpdateLineupStatusDto,
+  actorId: number | null = null,
 ): Promise<LineupDetailResponseDto> {
   const [lineup] = await findLineupById(deps.db, id);
   if (!lineup) throw new NotFoundException('Lineup not found');
@@ -68,6 +78,16 @@ export async function runStatusTransition(
     await runMatchingAlgorithm(deps.db, id, deps.logger);
   }
   await logTransition(deps.db, deps.activityLog, id, dto);
+  // ROK-1253: cancel any pending grace job and emit the pause activity
+  // entry when this transition is a reversion. The pause-stamp itself was
+  // already written atomically inside applyStatusUpdate.
+  await applyRevertSideEffects(
+    { activityLog: deps.activityLog, phaseQueue: deps.phaseQueue },
+    id,
+    lineup.status as LineupStatus,
+    dto.status,
+    actorId ?? lineup.createdBy,
+  );
 
   if (dto.status === 'voting') {
     fireVotingOpen(

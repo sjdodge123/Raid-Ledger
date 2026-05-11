@@ -1,8 +1,11 @@
 /**
- * Unit tests for maybeAutoAdvance (ROK-1118).
+ * Unit tests for maybeAutoAdvance (ROK-1118 / ROK-1253).
+ *
+ * ROK-1253 reshaped the helper from "transition immediately" to
+ * "schedule grace, transition only when graceMs=0 (escape hatch)".
+ * The cases here exercise the branch points without spinning up a real DB.
  */
 import type { Logger } from '@nestjs/common';
-import { ConflictException } from '@nestjs/common';
 
 jest.mock('./lineups-query.helpers', () => ({
   findLineupById: jest.fn(),
@@ -35,23 +38,68 @@ function makeLogger(): Logger {
   } as unknown as Logger;
 }
 
-function makeDeps(logger: Logger = makeLogger()) {
+function makeSettings(graceMs: string | null = null): {
+  get: jest.Mock;
+} {
   return {
-    db: {} as never,
-    activityLog: {} as never,
-    settings: {} as never,
-    phaseQueue: {} as never,
-    lineupNotifications: {} as never,
-    lineupsGateway: {} as never,
-    logger,
+    get: jest.fn().mockImplementation((key: string) => {
+      if (key === 'lineup_auto_advance_grace_ms') return graceMs;
+      return null;
+    }),
   };
 }
 
-function setLineup(status: string | null) {
+function makeDeps(opts: {
+  logger?: Logger;
+  graceMs?: string | null;
+  updateReturning?: Array<{ id: number }>;
+} = {}) {
+  const logger = opts.logger ?? makeLogger();
+  const settings = makeSettings(opts.graceMs ?? null);
+  // Drizzle update chain: db.update().set().where().returning()
+  const returning = jest
+    .fn()
+    .mockResolvedValue(opts.updateReturning ?? [{ id: 7 }]);
+  const where = jest.fn().mockReturnValue({ returning });
+  const set = jest.fn().mockReturnValue({
+    where: jest.fn().mockResolvedValue(undefined),
+  });
+  const update = jest.fn().mockReturnValue({ set });
+  // For claimGraceWindow we need a different shape: set().where().returning()
+  set.mockReturnValue({ where });
+  const phaseQueue = {
+    scheduleGraceAdvance: jest.fn().mockResolvedValue(undefined),
+    cancelGraceAdvance: jest.fn().mockResolvedValue(undefined),
+  };
+  return {
+    db: { update } as never,
+    activityLog: {} as never,
+    settings: settings as never,
+    phaseQueue: phaseQueue as never,
+    lineupNotifications: {} as never,
+    lineupsGateway: {} as never,
+    logger,
+    _phaseQueue: phaseQueue,
+    _settings: settings,
+  };
+}
+
+function setLineup(
+  status: string | null,
+  overrides: Record<string, unknown> = {},
+) {
   if (status === null) {
     (findLineupById as jest.Mock).mockResolvedValue([]);
   } else {
-    (findLineupById as jest.Mock).mockResolvedValue([{ id: 7, status }]);
+    (findLineupById as jest.Mock).mockResolvedValue([
+      {
+        id: 7,
+        status,
+        autoAdvancePausedAt: null,
+        pendingAdvanceAt: null,
+        ...overrides,
+      },
+    ]);
   }
 }
 
@@ -60,75 +108,86 @@ describe('maybeAutoAdvance', () => {
 
   it('returns silently when the lineup does not exist', async () => {
     setLineup(null);
-    await maybeAutoAdvance(makeDeps(), 7);
+    const deps = makeDeps();
+    await maybeAutoAdvance(deps, 7);
     expect(runStatusTransition).not.toHaveBeenCalled();
+    expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
   });
 
   it('no-ops on terminal status (decided)', async () => {
     setLineup('decided');
-    await maybeAutoAdvance(makeDeps(), 7);
+    const deps = makeDeps();
+    await maybeAutoAdvance(deps, 7);
     expect(checkBuildingQuorum).not.toHaveBeenCalled();
     expect(checkVotingQuorum).not.toHaveBeenCalled();
     expect(runStatusTransition).not.toHaveBeenCalled();
+    expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
   });
 
-  it('does not transition when building quorum is not ready', async () => {
+  it('does not schedule when building quorum is not ready', async () => {
     setLineup('building');
     (checkBuildingQuorum as jest.Mock).mockResolvedValue({
       ready: false,
       reason: 'floor',
     });
-    await maybeAutoAdvance(makeDeps(), 7);
+    const deps = makeDeps();
+    await maybeAutoAdvance(deps, 7);
     expect(runStatusTransition).not.toHaveBeenCalled();
+    expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
   });
 
-  it('transitions building → voting when quorum is ready', async () => {
+  it('schedules grace job when building quorum is ready', async () => {
+    setLineup('building');
+    (checkBuildingQuorum as jest.Mock).mockResolvedValue({ ready: true });
+    const deps = makeDeps();
+    await maybeAutoAdvance(deps, 7);
+    expect(runStatusTransition).not.toHaveBeenCalled();
+    expect(deps._phaseQueue.scheduleGraceAdvance).toHaveBeenCalledWith(
+      7,
+      expect.any(Number),
+    );
+  });
+
+  it('schedules grace job when voting quorum is ready', async () => {
+    setLineup('voting');
+    (checkVotingQuorum as jest.Mock).mockResolvedValue({ ready: true });
+    const deps = makeDeps();
+    await maybeAutoAdvance(deps, 7);
+    expect(runStatusTransition).not.toHaveBeenCalled();
+    expect(deps._phaseQueue.scheduleGraceAdvance).toHaveBeenCalledWith(
+      7,
+      expect.any(Number),
+    );
+  });
+
+  it('escape hatch: graceMs=0 advances immediately', async () => {
     setLineup('building');
     (checkBuildingQuorum as jest.Mock).mockResolvedValue({ ready: true });
     (runStatusTransition as jest.Mock).mockResolvedValue(undefined);
-
-    await maybeAutoAdvance(makeDeps(), 7);
-
-    expect(runStatusTransition).toHaveBeenCalledWith(expect.any(Object), 7, {
-      status: 'voting',
-    });
+    const deps = makeDeps({ graceMs: '0' });
+    await maybeAutoAdvance(deps, 7);
+    expect(runStatusTransition).toHaveBeenCalledWith(
+      expect.any(Object),
+      7,
+      { status: 'voting' },
+    );
+    expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
   });
 
-  it('transitions voting → decided when quorum is ready', async () => {
-    setLineup('voting');
+  it('does not re-schedule when pendingAdvanceAt already set', async () => {
+    setLineup('voting', { pendingAdvanceAt: new Date() });
     (checkVotingQuorum as jest.Mock).mockResolvedValue({ ready: true });
-    (runStatusTransition as jest.Mock).mockResolvedValue(undefined);
-
-    await maybeAutoAdvance(makeDeps(), 7);
-
-    expect(runStatusTransition).toHaveBeenCalledWith(expect.any(Object), 7, {
-      status: 'decided',
-    });
-  });
-
-  it('swallows ConflictException from a concurrent caller', async () => {
-    setLineup('voting');
-    (checkVotingQuorum as jest.Mock).mockResolvedValue({ ready: true });
-    (runStatusTransition as jest.Mock).mockRejectedValue(
-      new ConflictException('raced'),
-    );
-    const logger = makeLogger();
-
-    await expect(
-      maybeAutoAdvance(makeDeps(logger), 7),
-    ).resolves.toBeUndefined();
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('maybeAutoAdvance(7)'),
-    );
+    const deps = makeDeps();
+    await maybeAutoAdvance(deps, 7);
+    expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
   });
 
   it('swallows arbitrary errors from the quorum check', async () => {
     setLineup('voting');
     (checkVotingQuorum as jest.Mock).mockRejectedValue(new Error('boom'));
     const logger = makeLogger();
-
     await expect(
-      maybeAutoAdvance(makeDeps(logger), 7),
+      maybeAutoAdvance(makeDeps({ logger }), 7),
     ).resolves.toBeUndefined();
     expect(logger.warn).toHaveBeenCalled();
   });

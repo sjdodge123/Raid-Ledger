@@ -38,6 +38,8 @@ interface BannerLineup {
   status: string;
   targetDate: Date | null;
   phaseDeadline?: Date | null;
+  /** ROK-1253: when set, lineup will auto-advance at this wall-clock time. */
+  pendingAdvanceAt?: Date | null;
   decidedGameId: number | null;
   decidedGameName: string | null;
   visibility: 'public' | 'private';
@@ -122,6 +124,9 @@ export function buildBannerResponse(
     status: lineup.status as LineupBannerResponseDto['status'],
     targetDate: lineup.targetDate?.toISOString?.() ?? null,
     phaseDeadline: lineup.phaseDeadline?.toISOString?.() ?? null,
+    // ROK-1253: banner countdown opts in to the grace stamp only (no
+    // pause exposure for the lightweight Games-page hero).
+    pendingAdvanceAt: lineup.pendingAdvanceAt?.toISOString?.() ?? null,
     entryCount: entries.length,
     totalVoters,
     totalMembers,

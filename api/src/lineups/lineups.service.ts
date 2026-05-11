@@ -165,8 +165,14 @@ export class LineupsService {
     return result;
   }
 
-  /** Build deps for the auto-advance helper (ROK-1118). */
-  private autoAdvanceDeps() {
+  /**
+   * Build deps for the auto-advance helper (ROK-1118).
+   *
+   * ROK-1253: marked `public` so the lineups-auto-advance integration spec
+   * can drive `maybeAutoAdvance` directly to exercise the race-safe schedule
+   * guard without going through the toggle endpoint twice.
+   */
+  public autoAdvanceDeps() {
     return {
       db: this.db,
       activityLog: this.activityLog,
@@ -182,8 +188,9 @@ export class LineupsService {
   transitionStatus(
     id: number,
     dto: UpdateLineupStatusDto,
+    actorId: number | null = null,
   ): Promise<LineupDetailResponseDto> {
-    return runStatusTransition(this.autoAdvanceDeps(), id, dto);
+    return runStatusTransition(this.autoAdvanceDeps(), id, dto, actorId);
   }
 
   /** ROK-1062: Force-archive a lineup with optional reason (admin/operator). */
