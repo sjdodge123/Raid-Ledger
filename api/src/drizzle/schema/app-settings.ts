@@ -111,6 +111,10 @@ export const SETTING_KEYS = {
   /** ROK-1118: Minimum nominations per voter required for building→voting auto-advance. */
   LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER:
     'lineup_auto_advance_min_nominations_per_voter',
+  /** ROK-1253: Pre-advance grace window (ms) — defaults 300000 (5 min). 0 = advance immediately. */
+  LINEUP_AUTO_ADVANCE_GRACE_MS: 'lineup_auto_advance_grace_ms',
+  /** ROK-1253: Pause TTL after manual phase revert (ms) — defaults 86400000 (24 h). */
+  LINEUP_AUTO_ADVANCE_PAUSE_TTL_MS: 'lineup_auto_advance_pause_ttl_ms',
   /** ROK-950: Common Ground — weight on voter/game taste-vector cosine similarity. */
   COMMON_GROUND_TASTE_WEIGHT: 'common_ground_taste_weight',
   /** ROK-950: Common Ground — weight when a co-play partner owns the game. */
