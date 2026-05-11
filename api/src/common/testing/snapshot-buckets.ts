@@ -161,6 +161,17 @@ function summarizeHandle(h: unknown): {
   let summary = '';
   const obj = h as Record<string, unknown>;
   if (typeof obj?.fd === 'number') summary += `fd=${obj.fd} `;
+  // ROK-1250 deeper debug: capture socket peer + local addresses so we can
+  // distinguish postgres-js sockets (remotePort=container port) from ioredis
+  // sockets (remotePort=6379) from supertest sockets (remotePort=in-process
+  // server port). The original `address()` call returns LOCAL bind only;
+  // `remote*` fields are set on connected client sockets.
+  if (typeof obj?.remoteAddress === 'string') {
+    summary += `remote=${obj.remoteAddress as string}:${obj.remotePort as number} `;
+  }
+  if (typeof obj?.localAddress === 'string') {
+    summary += `local=${obj.localAddress as string}:${obj.localPort as number} `;
+  }
   const addr = obj?.address;
   if (typeof addr === 'function') {
     try {

@@ -274,6 +274,21 @@ export async function closeTestApp(): Promise<void> {
     destroySocketsOnPort(ourPort);
   }
 
+  // ROK-1250 layer 2 (post-empirical-debug): also force-destroy ioredis
+  // sockets to the local BullMQ Redis container on port 6379. Even though
+  // `app.close()` triggers Nest lifecycle hooks that should close BullMQ
+  // workers, captured snapshot 2026-05-10T17-30-40-570Z showed 40 of 47
+  // active sockets at flake time were still ::1:6379 ioredis connections.
+  // The drain barrier above ensures no jobs are in-flight, so destroying
+  // these sockets is a no-op for application correctness — it just frees
+  // the kernel-side resources before the next spec file boots its own
+  // 13×3 BullMQ worker connections. Skip this if REDIS_URL is set to a
+  // non-default port (e.g. CI uses a sidecar container on a different port).
+  const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  if (redisUrl.includes(':6379') || redisUrl.endsWith('/6379')) {
+    destroySocketsOnPort(6379);
+  }
+
   if (instance.container) {
     await instance.container.stop();
   }
