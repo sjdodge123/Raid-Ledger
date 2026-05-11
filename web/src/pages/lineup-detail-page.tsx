@@ -264,7 +264,12 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
       )}
 
       {hasTiebreaker && (tiebreaker?.status === 'active' || tiebreaker?.status === 'resolved') ? (
-        <TiebreakerView tiebreaker={tiebreaker} lineupId={lineup.id} />
+        // ROK-1253 fix: wire bracketRef so the hero's "Finish bracket" /
+        // "Vote in bracket" CTAs scroll here. ROK-1209 created the ref +
+        // scroll target but never attached it to a DOM node.
+        <section ref={bracketRef}>
+          <TiebreakerView tiebreaker={tiebreaker} lineupId={lineup.id} />
+        </section>
       ) : lineup.status === 'decided' ? (
         <>
           {showDecidedTiebreakerNotice && tiebreaker && (
