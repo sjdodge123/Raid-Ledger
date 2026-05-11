@@ -6,6 +6,7 @@ import type {
   UserEventSignupsResponseDto,
   ActivityPeriod,
   UserActivityResponseDto,
+  UserManagementDto,
   UserManagementListResponseDto,
   UserRole,
   TasteProfileResponseDto,
@@ -129,6 +130,17 @@ export async function deleteMyAccount(confirmName: string): Promise<void> {
 /** Admin-remove a user (ROK-405) */
 export async function adminRemoveUser(userId: number): Promise<void> {
   return fetchApi(`/users/${userId}`, { method: "DELETE" });
+}
+
+/** Reactivate a deactivated user (admin-only, ROK-1260) */
+export async function adminReactivateUser(
+  userId: number,
+): Promise<UserManagementDto> {
+  const res = await fetchApi<{ data: UserManagementDto }>(
+    `/users/${userId}/reactivate`,
+    { method: "POST" },
+  );
+  return res.data;
 }
 
 /** Unlink Discord from current user's account (ROK-195) */

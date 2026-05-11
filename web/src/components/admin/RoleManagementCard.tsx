@@ -35,10 +35,21 @@ function UserAvatar({ username, avatarUrl }: { username: string; avatarUrl: stri
     );
 }
 
-function UserRowActions({ user, isCurrentUser, isAdmin, isDisabled, onRoleChange, onRemove, isRemoving }: {
+function DeactivatedBadge() {
+    return (
+        <span className="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/30">
+            Deactivated
+        </span>
+    );
+}
+
+function UserRowActions({ user, isCurrentUser, isAdmin, isDeactivated, isDisabled, onRoleChange, onRemove, onReactivate, isRemoving, isReactivating }: {
     user: { id: number; username: string; role: string }; isCurrentUser: boolean; isAdmin: boolean;
+    isDeactivated: boolean;
     isDisabled: boolean; onRoleChange: (id: number, name: string, role: Exclude<UserRole, 'admin'>) => void;
-    onRemove: (u: { id: number; username: string }) => void; isRemoving: boolean;
+    onRemove: (u: { id: number; username: string }) => void;
+    onReactivate: (u: { id: number; username: string }) => void;
+    isRemoving: boolean; isReactivating: boolean;
 }) {
     if (isAdmin) return <span className="text-xs text-dim px-3 py-1.5">Protected</span>;
     return (
@@ -49,23 +60,34 @@ function UserRowActions({ user, isCurrentUser, isAdmin, isDisabled, onRoleChange
                 <option value="member">Member</option>
                 <option value="operator">Operator</option>
             </select>
-            {!isCurrentUser && (
-                <button onClick={() => onRemove({ id: user.id, username: user.username })} disabled={isRemoving}
-                    className="p-1.5 text-dim hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10" title="Remove user">
-                    {TrashIcon}
+            {isDeactivated ? (
+                <button onClick={() => onReactivate({ id: user.id, username: user.username })} disabled={isReactivating}
+                    className="px-2 py-1 text-xs bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 rounded transition-colors disabled:opacity-50"
+                    title="Reactivate user">
+                    {isReactivating ? 'Reactivating...' : 'Reactivate'}
                 </button>
+            ) : (
+                !isCurrentUser && (
+                    <button onClick={() => onRemove({ id: user.id, username: user.username })} disabled={isRemoving}
+                        className="p-1.5 text-dim hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10" title="Remove user">
+                        {TrashIcon}
+                    </button>
+                )
             )}
         </>
     );
 }
 
-function UserRow({ user, currentUserId, onRoleChange, onRemove, isUpdating, isRemoving }: {
+function UserRow({ user, currentUserId, onRoleChange, onRemove, onReactivate, isUpdating, isRemoving, isReactivating }: {
     user: UserManagementDto;
     currentUserId: number | undefined; onRoleChange: (id: number, name: string, role: Exclude<UserRole, 'admin'>) => void;
-    onRemove: (u: { id: number; username: string }) => void; isUpdating: boolean; isRemoving: boolean;
+    onRemove: (u: { id: number; username: string }) => void;
+    onReactivate: (u: { id: number; username: string }) => void;
+    isUpdating: boolean; isRemoving: boolean; isReactivating: boolean;
 }) {
     const isCurrentUser = user.id === currentUserId;
     const isAdmin = user.role === 'admin';
+    const isDeactivated = user.deactivatedAt !== null;
     const av = resolveAvatar(toAvatarUser(user));
 
     return (
@@ -74,12 +96,15 @@ function UserRow({ user, currentUserId, onRoleChange, onRemove, isUpdating, isRe
             <div className="flex items-center gap-2 min-w-0">
                 <span className="text-sm text-foreground truncate">{user.username}</span>
                 <RoleBadge role={user.role} />
+                {isDeactivated && <DeactivatedBadge />}
                 {isCurrentUser && <span className="text-xs text-dim">(you)</span>}
             </div>
             <div className="ml-auto flex-shrink-0 flex items-center gap-2">
                 <UserRowActions user={user} isCurrentUser={isCurrentUser} isAdmin={isAdmin}
+                    isDeactivated={isDeactivated}
                     isDisabled={isCurrentUser || isAdmin || isUpdating}
-                    onRoleChange={onRoleChange} onRemove={onRemove} isRemoving={isRemoving} />
+                    onRoleChange={onRoleChange} onRemove={onRemove} onReactivate={onReactivate}
+                    isRemoving={isRemoving} isReactivating={isReactivating} />
             </div>
         </div>
     );
@@ -134,7 +159,7 @@ function useRoleManagement() {
     const [search, setSearch] = useState('');
     const debouncedSearch = useDebouncedValue(search, 300);
     const [removeTarget, setRemoveTarget] = useState<{ id: number; username: string } | null>(null);
-    const { users, updateRole, removeUser } = useUserManagement({ search: debouncedSearch || undefined });
+    const { users, updateRole, removeUser, reactivateUser } = useUserManagement({ search: debouncedSearch || undefined });
 
     const handleRoleChange = async (userId: number, username: string, newRole: Exclude<UserRole, 'admin'>) => {
         try { await updateRole.mutateAsync({ userId, role: newRole }); toast.success(`${username} is now ${newRole === 'operator' ? 'an operator' : 'a member'}`); }
@@ -147,8 +172,13 @@ function useRoleManagement() {
         catch (err) { toast.error(err instanceof Error ? err.message : 'Failed to remove user'); }
     };
 
+    const handleReactivate = async (target: { id: number; username: string }) => {
+        try { await reactivateUser.mutateAsync(target.id); toast.success(`${target.username} reactivated`); }
+        catch (err) { toast.error(err instanceof Error ? err.message : 'Failed to reactivate user'); }
+    };
+
     return { currentUser, search, setSearch, debouncedSearch, removeTarget, setRemoveTarget,
-        users, updateRole, removeUser, handleRoleChange, handleRemoveConfirm };
+        users, updateRole, removeUser, reactivateUser, handleRoleChange, handleRemoveConfirm, handleReactivate };
 }
 
 function UserListSection({ h }: { h: ReturnType<typeof useRoleManagement> }) {
@@ -160,7 +190,9 @@ function UserListSection({ h }: { h: ReturnType<typeof useRoleManagement> }) {
                 <div className="divide-y divide-edge/30">
                     {items.map((u) => (
                         <UserRow key={u.id} user={u} currentUserId={h.currentUser?.id} onRoleChange={h.handleRoleChange}
-                            onRemove={h.setRemoveTarget} isUpdating={h.updateRole.isPending} isRemoving={h.removeUser.isPending} />
+                            onRemove={h.setRemoveTarget} onReactivate={h.handleReactivate}
+                            isUpdating={h.updateRole.isPending} isRemoving={h.removeUser.isPending}
+                            isReactivating={h.reactivateUser.isPending} />
                     ))}
                 </div>
             ) : (
