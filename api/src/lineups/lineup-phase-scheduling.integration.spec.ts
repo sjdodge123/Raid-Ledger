@@ -48,6 +48,31 @@ function describePhaseScheduling() {
       .send({ title: 'Phase Scheduling Test', ...durations });
   }
 
+  /**
+   * Create a lineup and assert POST succeeded with a real row id. Use this
+   * for any test whose subsequent assertions depend on the lineup existing.
+   *
+   * Background: a flake reported during the ROK-1250 stability loop showed
+   * `GET /lineups/banner` returning 200 with body `{}` — supertest's empty-
+   * body fallback (`superagent/lib/node/response.js:60`). The 4 banner-style
+   * tests below previously fired POST without checking the result, so an
+   * upstream POST failure (auth glitch / contention) surfaced as a
+   * misleading "phaseDeadline missing" assertion. Asserting POST here
+   * surfaces the real cause on the next reproduction.
+   */
+  async function createLineupOrFail(
+    token: string,
+    durations: Parameters<typeof createLineupWithDurations>[1] = {},
+  ): Promise<{ id: number; phaseDeadline: string | null }> {
+    const res = await createLineupWithDurations(token, durations);
+    if (res.status !== 201 || typeof res.body?.id !== 'number') {
+      throw new Error(
+        `createLineupOrFail: expected 201 with body.id, got status=${res.status} body=${JSON.stringify(res.body)}`,
+      );
+    }
+    return { id: res.body.id, phaseDeadline: res.body.phaseDeadline ?? null };
+  }
+
   // ── POST /lineups with duration params ──────────────────────
 
   function describePOSTWithDurations() {
@@ -98,10 +123,9 @@ function describePhaseScheduling() {
 
   function describeGETByIdPhaseDeadline() {
     it('should include phaseDeadline in lineup detail', async () => {
-      const createRes = await createLineupWithDurations(adminToken, {
+      const { id: lineupId } = await createLineupOrFail(adminToken, {
         buildingDurationHours: 24,
       });
-      const lineupId = createRes.body.id as number;
 
       const res = await testApp.request
         .get(`/lineups/${lineupId}`)
@@ -125,7 +149,7 @@ function describePhaseScheduling() {
 
   function describeGETBannerPhaseDeadline() {
     it('should include phaseDeadline in banner response', async () => {
-      await createLineupWithDurations(adminToken, {
+      await createLineupOrFail(adminToken, {
         buildingDurationHours: 24,
       });
 
@@ -147,13 +171,12 @@ function describePhaseScheduling() {
 
   function describePATCHForceAdvance() {
     it('should update phaseDeadline when force-advancing building to voting', async () => {
-      const createRes = await createLineupWithDurations(adminToken, {
-        buildingDurationHours: 24,
-        votingDurationHours: 48,
-        decidedDurationHours: 24,
-      });
-      const lineupId = createRes.body.id as number;
-      const originalDeadline = createRes.body.phaseDeadline;
+      const { id: lineupId, phaseDeadline: originalDeadline } =
+        await createLineupOrFail(adminToken, {
+          buildingDurationHours: 24,
+          votingDurationHours: 48,
+          decidedDurationHours: 24,
+        });
 
       // Force-advance to voting
       const res = await testApp.request
@@ -175,12 +198,11 @@ function describePhaseScheduling() {
     });
 
     it('should clear phaseDeadline when transitioning to archived', async () => {
-      const createRes = await createLineupWithDurations(adminToken, {
+      const { id: lineupId } = await createLineupOrFail(adminToken, {
         buildingDurationHours: 24,
         votingDurationHours: 48,
         decidedDurationHours: 24,
       });
-      const lineupId = createRes.body.id as number;
 
       // Walk through all transitions to archived
       await testApp.request
@@ -252,10 +274,9 @@ function describePhaseScheduling() {
 
   function describeReverseTransitions() {
     it('should allow reverting voting back to building', async () => {
-      const createRes = await createLineupWithDurations(adminToken, {
+      const { id: lineupId } = await createLineupOrFail(adminToken, {
         buildingDurationHours: 24,
       });
-      const lineupId = createRes.body.id as number;
 
       // Advance to voting
       await testApp.request
@@ -275,12 +296,11 @@ function describePhaseScheduling() {
     });
 
     it('should allow reverting archived back to decided', async () => {
-      const createRes = await createLineupWithDurations(adminToken, {
+      const { id: lineupId } = await createLineupOrFail(adminToken, {
         buildingDurationHours: 24,
         votingDurationHours: 48,
         decidedDurationHours: 24,
       });
-      const lineupId = createRes.body.id as number;
 
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)
@@ -306,10 +326,9 @@ function describePhaseScheduling() {
     });
 
     it('should reject skipping phases (building to decided)', async () => {
-      const createRes = await createLineupWithDurations(adminToken, {
+      const { id: lineupId } = await createLineupOrFail(adminToken, {
         buildingDurationHours: 24,
       });
-      const lineupId = createRes.body.id as number;
 
       const res = await testApp.request
         .patch(`/lineups/${lineupId}/status`)
