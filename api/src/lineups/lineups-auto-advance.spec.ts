@@ -49,11 +49,13 @@ function makeSettings(graceMs: string | null = null): {
   };
 }
 
-function makeDeps(opts: {
-  logger?: Logger;
-  graceMs?: string | null;
-  updateReturning?: Array<{ id: number }>;
-} = {}) {
+function makeDeps(
+  opts: {
+    logger?: Logger;
+    graceMs?: string | null;
+    updateReturning?: Array<{ id: number }>;
+  } = {},
+) {
   const logger = opts.logger ?? makeLogger();
   const settings = makeSettings(opts.graceMs ?? null);
   // Drizzle update chain: db.update().set().where().returning()
@@ -71,16 +73,24 @@ function makeDeps(opts: {
     scheduleGraceAdvance: jest.fn().mockResolvedValue(undefined),
     cancelGraceAdvance: jest.fn().mockResolvedValue(undefined),
   };
+  // ROK-1253 rework: `scheduleOrAdvance` now emits via the gateway on a
+  // successful grace claim. Provide a stub so the unit cases that exercise
+  // that path don't trip on `undefined.emitGraceScheduled`.
+  const lineupsGateway = {
+    emitGraceScheduled: jest.fn(),
+    emitStatusChange: jest.fn(),
+  };
   return {
     db: { update } as never,
     activityLog: {} as never,
     settings: settings as never,
     phaseQueue: phaseQueue as never,
     lineupNotifications: {} as never,
-    lineupsGateway: {} as never,
+    lineupsGateway: lineupsGateway as never,
     logger,
     _phaseQueue: phaseQueue,
     _settings: settings,
+    _lineupsGateway: lineupsGateway,
   };
 }
 
@@ -166,11 +176,9 @@ describe('maybeAutoAdvance', () => {
     (runStatusTransition as jest.Mock).mockResolvedValue(undefined);
     const deps = makeDeps({ graceMs: '0' });
     await maybeAutoAdvance(deps, 7);
-    expect(runStatusTransition).toHaveBeenCalledWith(
-      expect.any(Object),
-      7,
-      { status: 'voting' },
-    );
+    expect(runStatusTransition).toHaveBeenCalledWith(expect.any(Object), 7, {
+      status: 'voting',
+    });
     expect(deps._phaseQueue.scheduleGraceAdvance).not.toHaveBeenCalled();
   });
 

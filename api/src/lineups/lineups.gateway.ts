@@ -11,6 +11,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import {
+  LineupGraceScheduledEventSchema,
   LineupRealtimeEventNames,
   LineupStatusEventSchema,
   LineupTiebreakerOpenEventSchema,
@@ -116,6 +117,29 @@ export class LineupsGateway
       lineupId,
       status,
     });
+  }
+
+  /**
+   * Emit a grace-window scheduled event to clients watching the lineup
+   * (ROK-1253). Pairs with the `emitStatusChange` that fires when the
+   * grace job completes — together they let the banner appear AND
+   * disappear without waiting for the lineup detail poll.
+   */
+  emitGraceScheduled(lineupId: number, pendingAdvanceAt: Date): void {
+    const start = performance.now();
+    const payload = LineupGraceScheduledEventSchema.parse({
+      lineupId,
+      pendingAdvanceAt: pendingAdvanceAt.toISOString(),
+    });
+    this.server
+      .to(`lineup:${lineupId}`)
+      .emit(LineupRealtimeEventNames.GraceScheduled, payload);
+    perfLog(
+      'WS',
+      LineupRealtimeEventNames.GraceScheduled,
+      performance.now() - start,
+      { lineupId },
+    );
   }
 
   /**

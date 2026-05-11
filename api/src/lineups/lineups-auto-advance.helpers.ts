@@ -20,10 +20,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
-import {
-  SETTING_KEYS,
-  type SettingKey,
-} from '../drizzle/schema/app-settings';
+import { SETTING_KEYS, type SettingKey } from '../drizzle/schema/app-settings';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
 import type { SettingsService } from '../settings/settings.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
@@ -100,16 +97,18 @@ async function clearPendingAdvance(
 }
 
 /**
- * Race-safe claim of the grace window. Returns true if THIS caller won the
- * write; false if another caller already set `pending_advance_at`. Pattern
- * mirrors `applyStatusUpdate`'s conditional UPDATE (architect correction #2).
+ * Race-safe claim of the grace window. Returns the deadline this caller
+ * wrote if THIS caller won the write; null if another caller already set
+ * `pending_advance_at`. Pattern mirrors `applyStatusUpdate`'s conditional
+ * UPDATE (architect correction #2). ROK-1253 rework: return the deadline
+ * so the caller can broadcast it via the gateway.
  */
 async function claimGraceWindow(
   db: Db,
   lineupId: number,
   fromStatus: LineupStatus,
   graceMs: number,
-): Promise<boolean> {
+): Promise<Date | null> {
   const deadline = new Date(Date.now() + graceMs);
   const result = await db
     .update(schema.communityLineups)
@@ -122,7 +121,7 @@ async function claimGraceWindow(
       ),
     )
     .returning({ id: schema.communityLineups.id });
-  return result.length > 0;
+  return result.length > 0 ? deadline : null;
 }
 
 /** Try to auto-advance a lineup to its next phase if quorum is met. */
@@ -133,7 +132,7 @@ export async function maybeAutoAdvance(
   try {
     const [lineup] = await findLineupById(deps.db, lineupId);
     if (!lineup) return;
-    const status = lineup.status as LineupStatus;
+    const status = lineup.status;
     if (!NEXT_STATUS[status]) return;
     if (await isPauseActive(deps.db, deps.settings, lineup)) return;
 
@@ -168,19 +167,24 @@ async function scheduleOrAdvance(
     SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS,
     DEFAULT_GRACE_MS,
   );
-  const nextStatus = NEXT_STATUS[lineup.status as LineupStatus]!;
+  const nextStatus = NEXT_STATUS[lineup.status]!;
   if (graceMs === 0) {
     await runStatusTransition(deps, lineup.id, { status: nextStatus });
     return;
   }
-  const claimed = await claimGraceWindow(
+  const pendingAdvanceAt = await claimGraceWindow(
     deps.db,
     lineup.id,
-    lineup.status as LineupStatus,
+    lineup.status,
     graceMs,
   );
-  if (!claimed) return;
+  if (!pendingAdvanceAt) return;
   await deps.phaseQueue.scheduleGraceAdvance(lineup.id, graceMs);
+  // ROK-1253 rework: broadcast grace-scheduled so subscribed clients render
+  // the GraceCountdownBanner immediately instead of waiting for the React
+  // Query 15s poll. Mirrors the emitStatusChange that fires when the grace
+  // window completes (lineup-phase.processor.ts).
+  deps.lineupsGateway.emitGraceScheduled(lineup.id, pendingAdvanceAt);
 }
 
 /** Read a non-negative integer setting (ms), falling back on missing/invalid. */
