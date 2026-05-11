@@ -177,6 +177,105 @@ function describeSentryInstrumentTs() {
         const event: SentryEvent = {};
         expect(getBeforeSend()(event)).toBe(event);
       });
+
+      // ── ROK-1260: defense-in-depth drop for DiscordAPIError noise ──
+      //
+      // The primary fix is the processor's classifier (AC-1), which catches
+      // 50278/50007 BEFORE the BullMQ auto-instrumentation captures them.
+      // This `beforeSend` branch is the second line of defense — if anything
+      // ever re-throws these errors (manual capture, third-party middleware,
+      // future refactor), Sentry MUST still drop them so the noise can't come
+      // back.
+      describe('ROK-1260: DiscordAPIError 50278/50007 drop', () => {
+        it('drops DiscordAPIError events with code 50278 in the message', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value:
+                    'Cannot send messages to this user due to having no mutual guilds with the recipient (code 50278)',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops DiscordAPIError events with code 50007 in the message', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Cannot send messages to this user (code 50007)',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops DiscordAPIError events whose value mentions "no mutual guilds" (defense-in-depth)', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  // Message variant without the bracketed code — must still drop.
+                  value: 'Recipient has no mutual guilds with the bot',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops DiscordAPIError events whose value mentions "Cannot send messages to this user" (defense-in-depth)', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Cannot send messages to this user',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('does NOT drop unrelated DiscordAPIError events', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Unknown Channel (code 10003)',
+                },
+              ],
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
+
+        it('does NOT drop events with the 50278 code but a different exception type', () => {
+          // A wrapper error or unrelated exception type that happens to
+          // contain "code 50278" in its message should still report — only
+          // DiscordAPIError-typed events are suppressed.
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'TypeError',
+                  value: 'Saw stray reference to code 50278 in a stack trace',
+                },
+              ],
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
+      });
     });
   });
 
