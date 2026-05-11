@@ -15,6 +15,7 @@ import {
   loadGameMetadata,
   loadSignalHashComponents,
 } from './aggregate-vectors-loaders';
+import { activeUsersFilter } from '../../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -49,7 +50,10 @@ type IntensityMetrics = {
  * drizzle-orm's onConflictDoUpdate is single-row.
  */
 export async function runAggregateVectors(db: Db): Promise<void> {
-  const users = await db.select({ id: schema.users.id }).from(schema.users);
+  const users = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(activeUsersFilter());
   const batch = await loadBatch(db);
   const axisIdf = computeAxisIdf(batch.gameMap);
 

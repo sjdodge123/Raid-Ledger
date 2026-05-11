@@ -7,6 +7,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { LineupInviteeResponseDto } from '@raid-ledger/contract';
+import { activeUsersFilter } from '../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -25,7 +26,7 @@ export async function addInvitees(
   const found = await db
     .select({ id: schema.users.id })
     .from(schema.users)
-    .where(inArray(schema.users.id, unique));
+    .where(and(inArray(schema.users.id, unique), activeUsersFilter()));
   const foundIds = new Set(found.map((r) => r.id));
   const missing = unique.filter((id) => !foundIds.has(id));
   if (missing.length > 0) {
@@ -80,7 +81,12 @@ export async function listInviteesWithProfile(
       schema.users,
       eq(schema.communityLineupInvitees.userId, schema.users.id),
     )
-    .where(eq(schema.communityLineupInvitees.lineupId, lineupId));
+    .where(
+      and(
+        eq(schema.communityLineupInvitees.lineupId, lineupId),
+        activeUsersFilter(),
+      ),
+    );
   return rows.map((r) => ({
     id: r.id,
     displayName: r.displayName,

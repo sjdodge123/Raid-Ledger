@@ -6,6 +6,7 @@ import {
   type CommunityStats,
   type WeeklySnapshotInput,
 } from '../intensity-rollup.helpers';
+import { activeUsersFilter } from '../../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -111,7 +112,10 @@ async function communityDistributions(
 export async function runWeeklyIntensityRollup(db: Db): Promise<void> {
   const weekStart = currentWeekStart();
   const fourWkStart = fourWeekStart(new Date());
-  const users = await db.select({ id: schema.users.id }).from(schema.users);
+  const users = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(activeUsersFilter());
 
   const dists = await communityDistributions(db, weekStart, fourWkStart);
   const community: CommunityStats = {

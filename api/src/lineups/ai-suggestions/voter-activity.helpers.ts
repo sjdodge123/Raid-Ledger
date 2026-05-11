@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, inArray, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { activeUsersFilter } from '../../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -125,7 +126,7 @@ async function loadCoPlayPartners(
     const usernames = await db
       .select({ id: schema.users.id, username: schema.users.username })
       .from(schema.users)
-      .where(inArray(schema.users.id, partnerIds));
+      .where(and(inArray(schema.users.id, partnerIds), activeUsersFilter()));
     for (const u of usernames) partnerUsernames.set(u.id, u.username);
   }
   const byVoter = new Map<

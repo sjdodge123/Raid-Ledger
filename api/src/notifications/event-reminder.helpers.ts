@@ -5,6 +5,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { activeUsersFilter } from '../users/users-active.helpers';
 
 /** Character info for a user. */
 export interface UserCharacter {
@@ -43,7 +44,7 @@ export async function fetchUserMap(
   const users = await db
     .select({ id: schema.users.id, discordId: schema.users.discordId })
     .from(schema.users)
-    .where(inArray(schema.users.id, userIds));
+    .where(and(inArray(schema.users.id, userIds), activeUsersFilter()));
   return new Map(users.map((u) => [u.id, u]));
 }
 

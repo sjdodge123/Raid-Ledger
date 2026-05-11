@@ -6,6 +6,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
+import { activeUsersFilter } from '../../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -45,7 +46,7 @@ export async function filterValidUserIds(
   const rows = await db
     .select({ id: schema.users.id })
     .from(schema.users)
-    .where(inArray(schema.users.id, userIds));
+    .where(and(inArray(schema.users.id, userIds), activeUsersFilter()));
   return rows.map((r) => r.id);
 }
 
