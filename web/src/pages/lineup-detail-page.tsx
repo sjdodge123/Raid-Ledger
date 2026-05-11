@@ -276,15 +276,21 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           <DecidedView lineup={lineup} />
         </>
       ) : lineup.status === 'voting' && hasEntries ? (
-        <VotingLeaderboard
-          entries={lineup.entries}
-          lineupId={lineup.id}
-          myVotes={lineup.myVotes ?? []}
-          totalVoters={lineup.totalVoters}
-          totalMembers={lineup.totalMembers}
-          maxVotesPerPlayer={lineup.maxVotesPerPlayer}
-          canParticipate={canParticipate}
-        />
+        // ROK-1253 fix: attach leaderboardRef so the hero's
+        // "Open voting" CTA can `scrollIntoView` to this section.
+        // ROK-1209 created the ref + scroll target but never wired it
+        // to a DOM element — the CTA was a silent no-op.
+        <section ref={leaderboardRef}>
+          <VotingLeaderboard
+            entries={lineup.entries}
+            lineupId={lineup.id}
+            myVotes={lineup.myVotes ?? []}
+            totalVoters={lineup.totalVoters}
+            totalMembers={lineup.totalMembers}
+            maxVotesPerPlayer={lineup.maxVotesPerPlayer}
+            canParticipate={canParticipate}
+          />
+        </section>
       ) : hasEntries ? (
         <NominationGrid entries={lineup.entries} lineupId={lineup.id} />
       ) : (
