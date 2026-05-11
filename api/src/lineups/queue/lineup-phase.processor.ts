@@ -164,8 +164,16 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       // and the lineup deadlocks behind the stuck banner. Clear the claim
       // so the next mutation (or operator tiebreaker resolution) can
       // re-trigger cleanly. Same hygiene for any other failure mode.
-      await this.clearPendingAdvance(lineupId);
+      //
+      // Codex round 3 P2: cancel BEFORE clearing. Once `pendingAdvanceAt`
+      // is null, `scheduleOrAdvance` can race ahead and claim a fresh
+      // window + enqueue a new `lineup-grace-<id>` job. If we cancelled
+      // after the clear, we'd delete that NEW job by ID and leave the
+      // row in the same deadlock we're trying to prevent. The consumed
+      // job is removed first so the same-ID cancel is a no-op by the
+      // time a new one is enqueued.
       await this.queueService.cancelGraceAdvance(lineupId);
+      await this.clearPendingAdvance(lineupId);
     }
   }
 

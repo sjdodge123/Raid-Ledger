@@ -948,9 +948,17 @@ function describeGrace() {
       }
     ).rehydratePendingJobs();
 
-    // The overdue grace must be re-enqueued at delay=0 (fires immediately).
-    const rehydrated = await getGraceJob(lineupId);
-    expect(rehydrated).toBeTruthy();
+    // Codex round 3 P3: don't assert on the queued job — overdue work
+    // fires at delay=0 with removeOnComplete:true, so a healthy worker
+    // can consume it before we sample. Assert on the durable outcome:
+    // processGraceAdvance must have run and (with no quorum) cleared
+    // `pending_advance_at`. This proves the rehydration path actually
+    // re-engaged the worker, surviving worker-already-ran races.
+    const cleared = await pollForCondition(async () => {
+      const state = await readAdvanceState(lineupId);
+      return state.pendingAdvanceAt === null ? true : null;
+    }, 5_000);
+    expect(cleared).toBe(true);
   });
 }
 
