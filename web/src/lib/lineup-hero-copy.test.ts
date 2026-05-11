@@ -170,7 +170,7 @@ describe('getLineupHeroCopy — voting phase', () => {
     expect(copy.headline).toMatch(/cast your votes/i);
   });
 
-  it("organizer with votes but quorum NOT met sees honest headline (no 'Quorum reached')", () => {
+  it('organizer who voted but quorum NOT met sees personal acknowledgment headline', () => {
     const lineup = createMockLineupDetail({
       status: 'voting',
       maxVotesPerPlayer: 3,
@@ -181,9 +181,26 @@ describe('getLineupHeroCopy — voting phase', () => {
     const copy = getLineupHeroCopy(
       buildCtx({ pageId: 'voting', persona: 'organizer', lineup, myNominatedGameNames: ['Hollowforge'] }),
     );
+    // CTA still available for early advance
     expect(copy.cta?.text).toMatch(/advance to decided/i);
     expect(copy.headline).not.toMatch(/quorum reached/i);
-    expect(copy.headline).toMatch(/1 of 3 voted/);
+    // Headline acknowledges personal vote + waiting state
+    expect(copy.headline).toMatch(/You voted for 1 game/);
+    expect(copy.headline).toMatch(/2 of 3 still voting/);
+  });
+
+  it('organizer with 2 personal votes pluralizes correctly', () => {
+    const lineup = createMockLineupDetail({
+      status: 'voting',
+      maxVotesPerPlayer: 3,
+      totalMembers: 3,
+      totalVoters: 1,
+      myVotes: [42, 43],
+    });
+    const copy = getLineupHeroCopy(
+      buildCtx({ pageId: 'voting', persona: 'organizer', lineup }),
+    );
+    expect(copy.headline).toMatch(/You voted for 2 games/);
   });
 
   it("organizer with quorum met sees 'Quorum reached' headline", () => {

@@ -171,13 +171,19 @@ function votingCopy(ctx: HeroCopyContext): HeroCopy {
         };
     }
     if (persona === 'organizer' || persona === 'admin') {
-        // ROK-1253: only claim "Quorum reached" when every expected voter
-        // has actually cast a vote. Operator can still advance early — the
-        // CTA stays available — but the headline shouldn't lie.
+        // ROK-1253: choose the headline based on (quorum-met, has-voted)
+        // so an organizer who voted but is waiting on others sees an
+        // acknowledgment instead of a "X of Y voted, advance now" blob.
+        // CTA stays available across all branches — they can always advance.
         const quorumMet = expected > 0 && lineup.totalVoters >= expected;
-        const headline = quorumMet
-            ? `Quorum reached — ${lineup.totalVoters} of ${expected} voted. Advance when stable.`
-            : `${lineup.totalVoters} of ${expected} voted. Advance when ready.`;
+        let headline: string;
+        if (quorumMet) {
+            headline = `Quorum reached — ${lineup.totalVoters} of ${expected} voted. Advance when stable.`;
+        } else if (usedCount > 0) {
+            headline = `You voted for ${usedCount} ${usedCount === 1 ? 'game' : 'games'}. ${stillVoting} of ${expected} still voting.`;
+        } else {
+            headline = `${lineup.totalVoters} of ${expected} voted. Advance when ready.`;
+        }
         return {
             tone: 'action',
             headline,
