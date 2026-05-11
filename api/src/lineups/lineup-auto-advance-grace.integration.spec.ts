@@ -31,7 +31,7 @@
  */
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -42,8 +42,10 @@ import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
+import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 import { LineupsService } from './lineups.service';
+import { LineupsGateway } from './lineups.gateway';
 
 // The two SETTING_KEYS the implementation must add. We resolve them
 // at runtime so the spec FILE still compiles before the implementation
@@ -66,6 +68,8 @@ function describeGrace() {
   let phaseQueue: LineupPhaseQueueService;
   let rawQueue: Queue;
   let lineupsService: LineupsService;
+  let lineupsGateway: LineupsGateway;
+  let phaseProcessor: LineupPhaseProcessor;
 
   beforeAll(async () => {
     testApp = await getTestApp();
@@ -74,6 +78,8 @@ function describeGrace() {
     phaseQueue = testApp.app.get(LineupPhaseQueueService);
     rawQueue = testApp.app.get<Queue>(getQueueToken(LINEUP_PHASE_QUEUE));
     lineupsService = testApp.app.get(LineupsService);
+    lineupsGateway = testApp.app.get(LineupsGateway);
+    phaseProcessor = testApp.app.get(LineupPhaseProcessor);
   });
 
   afterEach(async () => {
@@ -266,6 +272,25 @@ function describeGrace() {
     );
   }
 
+  /**
+   * Poll a predicate until it returns a truthy value or the timeout elapses.
+   * Returns the truthy value (or null on timeout). Used to wait for async
+   * write side-effects that run AFTER the observable state change we
+   * already gated on (e.g. activity log entries written after status flip).
+   */
+  async function pollForCondition<T>(
+    fn: () => Promise<T | null>,
+    timeoutMs: number,
+  ): Promise<T | null> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const result = await fn();
+      if (result) return result;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return null;
+  }
+
   // ── AC-T1: grace scheduled + elapses + advance fires ──────────
 
   it('AC-T1: schedules pending_advance_at on quorum + fires advance after grace elapses', async () => {
@@ -308,8 +333,9 @@ function describeGrace() {
       .get(`/lineups/${lineupId}`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(detail.status).toBe(200);
-    expect((detail.body as { pendingAdvanceAt: unknown }).pendingAdvanceAt)
-      .toEqual(expect.any(String));
+    expect(
+      (detail.body as { pendingAdvanceAt: unknown }).pendingAdvanceAt,
+    ).toEqual(expect.any(String));
 
     // After the 500ms grace elapses the BullMQ job processes and flips
     // the row to 'decided'. We give it a generous window because BullMQ
@@ -467,7 +493,9 @@ function describeGrace() {
     await vote(v2.token, lineupId, games[0].id);
 
     await revertToBuilding(lineupId, adminToken);
-    expect((await readAdvanceState(lineupId)).autoAdvancePausedAt).not.toBeNull();
+    expect(
+      (await readAdvanceState(lineupId)).autoAdvancePausedAt,
+    ).not.toBeNull();
 
     // Wait past the 50ms TTL.
     await new Promise((r) => setTimeout(r, 200));
@@ -676,6 +704,163 @@ function describeGrace() {
     const state = await readAdvanceState(lineupId);
     expect(state.pendingAdvanceAt).not.toBeNull();
   });
+
+  // ── REWORK-1: grace transition routes through runStatusTransition ──
+
+  it('REWORK-1: grace voting→decided runs full transition (auto-picks decidedGameId + writes activity log)', async () => {
+    await settings.set(graceKey, '500');
+
+    const v1 = await createMember('rwk1-v1');
+    const v2 = await createMember('rwk1-v2');
+
+    const createRes = await createPrivateLineup(
+      adminToken,
+      [v1.userId, v2.userId],
+      1,
+    );
+    const lineupId = createRes.body.id as number;
+    const games = await createGames(2);
+    await nominate(adminToken, lineupId, games[0].id);
+    await nominate(v1.token, lineupId, games[1].id);
+    await advanceToVoting(lineupId, adminToken);
+    expect(await readStatus(lineupId)).toBe('voting');
+
+    // All 3 voters back games[0] — unique top, no tie.
+    await vote(adminToken, lineupId, games[0].id);
+    await vote(v1.token, lineupId, games[0].id);
+    await vote(v2.token, lineupId, games[0].id);
+
+    // Wait for grace to elapse and the BullMQ worker to process.
+    await waitForStatus(lineupId, 'decided', 10_000);
+
+    // ROK-1263 / ROK-1253-rework: the grace path must have routed through
+    // `runStatusTransition` → `deriveTopVotedGame`, leaving decided_game_id
+    // set instead of NULL. Previously the direct UPDATE in the processor
+    // would land the row in `decided` with no winner picked.
+    const [decidedRow] = await testApp.db
+      .select({ decidedGameId: schema.communityLineups.decidedGameId })
+      .from(schema.communityLineups)
+      .where(eq(schema.communityLineups.id, lineupId));
+    expect(decidedRow.decidedGameId).toBe(games[0].id);
+
+    // `logTransition` must have written a `lineup_decided` activity entry —
+    // the bypassing UPDATE in the previous implementation never reached it.
+    // `runStatusTransition` writes the activity log AFTER applyStatusUpdate
+    // succeeds, so the row's status may flip slightly before the log lands;
+    // poll briefly.
+    const decidedActivity = await pollForCondition(async () => {
+      const [row] = await testApp.db
+        .select()
+        .from(schema.activityLog)
+        .where(
+          and(
+            eq(schema.activityLog.entityType, 'lineup'),
+            eq(schema.activityLog.entityId, lineupId),
+            eq(schema.activityLog.action, 'lineup_decided'),
+          ),
+        )
+        .orderBy(desc(schema.activityLog.createdAt))
+        .limit(1);
+      return row ?? null;
+    }, 5_000);
+    expect(decidedActivity).toBeTruthy();
+  });
+
+  // ── REWORK-2: rehydrate pending grace jobs after API restart ──
+
+  it('REWORK-2: rehydratePendingJobs re-enqueues a grace job for a lineup whose pending_advance_at is in the future', async () => {
+    await settings.set(graceKey, '300000');
+
+    const v1 = await createMember('rwk2-v1');
+    const createRes = await createPrivateLineup(adminToken, [v1.userId], 1);
+    const lineupId = createRes.body.id as number;
+
+    // Stamp a future pending_advance_at directly — simulates a row left
+    // behind when the API restarted between scheduleGraceAdvance and the
+    // job firing. Force-flip status to 'voting' so the processor's grace
+    // branch (which checks `status in {building, voting}`) would accept it.
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ status: 'voting' })
+      .where(eq(schema.communityLineups.id, lineupId));
+    const futureDeadline = new Date(Date.now() + 120_000);
+    await writeAdvanceState(lineupId, 'pending_advance_at', futureDeadline);
+
+    // Pre-condition: no grace job exists for this lineup.
+    const baseline = await getGraceJob(lineupId);
+    if (baseline) await baseline.remove();
+    expect(await getGraceJob(lineupId)).toBeFalsy();
+
+    // Drive the rehydration directly — same path bestEffortInit runs at boot.
+    await (
+      phaseProcessor as unknown as {
+        rehydratePendingJobs(): Promise<void>;
+      }
+    ).rehydratePendingJobs();
+
+    // The job must now exist as a delayed BullMQ entry.
+    const rehydrated = await getGraceJob(lineupId);
+    expect(rehydrated).toBeTruthy();
+    if (rehydrated) {
+      const state = await rehydrated.getState();
+      expect(['delayed', 'waiting']).toContain(state);
+    }
+  });
+
+  // ── REWORK-3: gateway emits lineup:graceScheduled when grace BEGINS ──
+
+  it('REWORK-3: scheduleOrAdvance broadcasts lineup:graceScheduled on grace claim', async () => {
+    await settings.set(graceKey, '300000');
+
+    const v1 = await createMember('rwk3-v1');
+    const v2 = await createMember('rwk3-v2');
+    const createRes = await createPrivateLineup(
+      adminToken,
+      [v1.userId, v2.userId],
+      1,
+    );
+    const lineupId = createRes.body.id as number;
+    const games = await createGames(2);
+    await nominate(adminToken, lineupId, games[0].id);
+    await nominate(v1.token, lineupId, games[1].id);
+    await advanceToVoting(lineupId, adminToken);
+
+    // Cast 2 of 3 votes — quorum not yet ready.
+    await vote(adminToken, lineupId, games[0].id);
+    await vote(v1.token, lineupId, games[0].id);
+
+    // Spy on the gateway BEFORE the quorum-closing vote so the emit is
+    // captured. Use jest.spyOn so we don't clobber the real socket.io server.
+    const spy = jest
+      .spyOn(lineupsGateway, 'emitGraceScheduled')
+      .mockImplementation(() => undefined);
+
+    try {
+      // v2's vote closes quorum → maybeAutoAdvance → scheduleOrAdvance.
+      await vote(v2.token, lineupId, games[0].id);
+
+      // The fire-and-forget call inside the toggle handler races the HTTP
+      // response; give it a brief window to flush.
+      await new Promise((r) => setTimeout(r, 200));
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const [emittedId, emittedAt] = spy.mock.calls[0];
+      expect(emittedId).toBe(lineupId);
+      expect(emittedAt).toBeInstanceOf(Date);
+      const state = await readAdvanceState(lineupId);
+      expect(state.pendingAdvanceAt).not.toBeNull();
+      // Emitted timestamp matches the row's pending_advance_at (within ms).
+      const diff = Math.abs(
+        emittedAt.getTime() - state.pendingAdvanceAt!.getTime(),
+      );
+      expect(diff).toBeLessThan(2000);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 }
 
-describe('Lineup auto-advance grace window (ROK-1253, integration)', describeGrace);
+describe(
+  'Lineup auto-advance grace window (ROK-1253, integration)',
+  describeGrace,
+);
