@@ -858,6 +858,100 @@ function describeGrace() {
       spy.mockRestore();
     }
   });
+
+  // ── REWORK v2 (Codex round 2): clear claim on failed grace transition ──
+
+  it('REWORK-4: grace failure clears pendingAdvanceAt + cancels job (no deadlock on TIEBREAKER_REQUIRED)', async () => {
+    await settings.set(graceKey, '300');
+
+    const v1 = await createMember('rwk4-v1');
+    const v2 = await createMember('rwk4-v2');
+    const createRes = await createPrivateLineup(
+      adminToken,
+      [v1.userId, v2.userId],
+      1,
+    );
+    const lineupId = createRes.body.id as number;
+    const games = await createGames(2);
+    await nominate(adminToken, lineupId, games[0].id);
+    await nominate(v1.token, lineupId, games[1].id);
+    await advanceToVoting(lineupId, adminToken);
+
+    // Cast all 3 votes so the quorum predicate inside processGraceAdvance
+    // returns ready: true → reaches runGraceTransition where the stub
+    // throws. Without this the grace branch short-circuits to
+    // clearPendingAdvance and we never exercise the catch path.
+    await vote(adminToken, lineupId, games[0].id);
+    await vote(v1.token, lineupId, games[0].id);
+    await vote(v2.token, lineupId, games[0].id);
+
+    // The three votes already triggered the real grace pipeline. Cancel
+    // any in-flight grace job + reset claim so we drive the processor by
+    // hand under the stub.
+    await phaseQueue.cancelGraceAdvance(lineupId);
+    const futureDeadline = new Date(Date.now() + 60_000);
+    await writeAdvanceState(lineupId, 'pending_advance_at', futureDeadline);
+    await phaseQueue.scheduleGraceAdvance(lineupId, 60_000);
+    expect(await getGraceJob(lineupId)).toBeTruthy();
+
+    // Stub runStatusTransition via the processor's deps surface. The
+    // processor builds its own TransitionDeps locally so we hijack by
+    // mocking the helper module's exported function.
+    const transitionMod = await import('./lineups-transition.helpers');
+    const stub = jest
+      .spyOn(transitionMod, 'runStatusTransition')
+      .mockRejectedValue(new Error('TIEBREAKER_REQUIRED'));
+
+    try {
+      await (
+        phaseProcessor as unknown as {
+          processGraceAdvance(id: number): Promise<void>;
+        }
+      ).processGraceAdvance(lineupId);
+
+      // Post-failure: pendingAdvanceAt cleared, grace job removed.
+      const state = await readAdvanceState(lineupId);
+      expect(state.pendingAdvanceAt).toBeNull();
+      const job = await getGraceJob(lineupId);
+      expect(job).toBeFalsy();
+    } finally {
+      stub.mockRestore();
+    }
+  });
+
+  // ── REWORK v2 (Codex round 2): rehydrate overdue grace too ──
+
+  it('REWORK-5: rehydratePendingJobs re-enqueues an OVERDUE grace job (downtime case)', async () => {
+    await settings.set(graceKey, '300000');
+
+    const v1 = await createMember('rwk5-v1');
+    const createRes = await createPrivateLineup(adminToken, [v1.userId], 1);
+    const lineupId = createRes.body.id as number;
+
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ status: 'voting' })
+      .where(eq(schema.communityLineups.id, lineupId));
+
+    // Stamp a deadline in the PAST — simulates API down past the grace
+    // window. Pre-fix the rehydration filtered `> now` and dropped this.
+    const overdueDeadline = new Date(Date.now() - 30_000);
+    await writeAdvanceState(lineupId, 'pending_advance_at', overdueDeadline);
+
+    const baseline = await getGraceJob(lineupId);
+    if (baseline) await baseline.remove();
+    expect(await getGraceJob(lineupId)).toBeFalsy();
+
+    await (
+      phaseProcessor as unknown as {
+        rehydratePendingJobs(): Promise<void>;
+      }
+    ).rehydratePendingJobs();
+
+    // The overdue grace must be re-enqueued at delay=0 (fires immediately).
+    const rehydrated = await getGraceJob(lineupId);
+    expect(rehydrated).toBeTruthy();
+  });
 }
 
 describe(

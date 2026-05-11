@@ -158,6 +158,14 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       this.logger.warn(
         `Grace transition for lineup ${lineupId} → '${targetStatus}' failed: ${msg}`,
       );
+      // ROK-1253 rework v2 (Codex round 2 P1): when grace hits
+      // TIEBREAKER_REQUIRED the BullMQ job is already consumed; if we leave
+      // `pendingAdvanceAt` set, `scheduleOrAdvance` refuses to re-schedule
+      // and the lineup deadlocks behind the stuck banner. Clear the claim
+      // so the next mutation (or operator tiebreaker resolution) can
+      // re-trigger cleanly. Same hygiene for any other failure mode.
+      await this.clearPendingAdvance(lineupId);
+      await this.queueService.cancelGraceAdvance(lineupId);
     }
   }
 
@@ -284,10 +292,13 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       .where(inArray(schema.communityLineups.status, activeStatuses));
 
     const withDeadline = lineups.filter((l) => l.phaseDeadline !== null);
-    const now = Date.now();
-    const withPendingGrace = lineups.filter(
-      (l) => l.pendingAdvanceAt !== null && l.pendingAdvanceAt.getTime() > now,
-    );
+    // ROK-1253 rework v2 (Codex round 2 P1): include EVERY non-null
+    // pendingAdvanceAt row — not just future ones. `rehydrateGraceJob`
+    // already clamps overdue deadlines to delay=0 via `Math.max(0, ...)`,
+    // so an overdue grace just fires immediately on restart. Filtering by
+    // `> now` would silently drop lineups that expired during downtime
+    // and leave them stuck.
+    const withPendingGrace = lineups.filter((l) => l.pendingAdvanceAt !== null);
 
     if (withDeadline.length === 0 && withPendingGrace.length === 0) return;
 
