@@ -121,15 +121,21 @@ const graceCountdown: SmokeTest = {
 
     try {
       // Each participant nominates a game so building quorum can be
-      // bypassed by force-advancing. We use whatever games the test
-      // context provides; assume at least two are seeded.
-      if (ctx.games.length < 2) {
+      // bypassed by force-advancing. The shared smoke fixture only
+      // surfaces the MMO game in `ctx.games`, so fetch 2 distinct games
+      // from the admin games endpoint directly. CI demo seed always has
+      // enough — operator tested with the same endpoint.
+      const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+        '/admin/settings/games?limit=2',
+      );
+      const games = gamesRes?.data ?? [];
+      if (games.length < 2) {
         throw new Error(
-          'Smoke fixture requires at least 2 seeded games for the grace lineup',
+          `Smoke needs ≥2 seeded games; /admin/settings/games returned ${games.length}`,
         );
       }
-      const gameA = ctx.games[0].id;
-      const gameB = ctx.games[1].id;
+      const gameA = games[0].id;
+      const gameB = games[1].id;
 
       // Admin and the two invitees each nominate a game. We use the
       // admin/test/nominate-game shortcut so we don't need separate

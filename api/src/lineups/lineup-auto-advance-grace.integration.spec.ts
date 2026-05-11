@@ -46,6 +46,7 @@ import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 import { LineupsService } from './lineups.service';
 import { LineupsGateway } from './lineups.gateway';
+import * as transitionMod from './lineups-transition.helpers';
 
 // The two SETTING_KEYS the implementation must add. We resolve them
 // at runtime so the spec FILE still compiles before the implementation
@@ -897,7 +898,6 @@ function describeGrace() {
     // Stub runStatusTransition via the processor's deps surface. The
     // processor builds its own TransitionDeps locally so we hijack by
     // mocking the helper module's exported function.
-    const transitionMod = await import('./lineups-transition.helpers');
     const stub = jest
       .spyOn(transitionMod, 'runStatusTransition')
       .mockRejectedValue(new Error('TIEBREAKER_REQUIRED'));

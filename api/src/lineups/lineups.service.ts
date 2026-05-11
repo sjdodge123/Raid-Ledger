@@ -165,13 +165,8 @@ export class LineupsService {
     return result;
   }
 
-  /**
-   * Build deps for the auto-advance helper (ROK-1118).
-   *
-   * ROK-1253: marked `public` so the lineups-auto-advance integration spec
-   * can drive `maybeAutoAdvance` directly to exercise the race-safe schedule
-   * guard without going through the toggle endpoint twice.
-   */
+  /** Build deps for the auto-advance helper (ROK-1118). Public so the
+   *  ROK-1253 grace integration spec can drive `maybeAutoAdvance` directly. */
   public autoAdvanceDeps() {
     return {
       db: this.db,
@@ -184,12 +179,8 @@ export class LineupsService {
     };
   }
 
-  /** Transition a lineup to a new status. */
-  transitionStatus(
-    id: number,
-    dto: UpdateLineupStatusDto,
-    actorId: number | null = null,
-  ): Promise<LineupDetailResponseDto> {
+  /** Transition a lineup to a new status. ROK-1253: `actorId` for revert audit. */
+  transitionStatus(id: number, dto: UpdateLineupStatusDto, actorId?: number) {
     return runStatusTransition(this.autoAdvanceDeps(), id, dto, actorId);
   }
 
