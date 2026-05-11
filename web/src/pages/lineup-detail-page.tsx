@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useLineupDetail } from '../hooks/use-lineups';
+import { useLineupDetail, useTransitionLineupStatus } from '../hooks/use-lineups';
+import { toast } from '../lib/toast';
 import { useLineupRealtime } from '../hooks/use-lineup-realtime';
 import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
@@ -159,6 +160,31 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
   const leaderboardRef = useRef<HTMLElement | null>(null);
   const slotGridRef = useRef<HTMLElement | null>(null);
   const bracketRef = useRef<HTMLElement | null>(null);
+  // ROK-1253: shared advance handler — wires the hero's
+  // "Advance to {phase}" CTA to the same `useTransitionLineupStatus`
+  // mutation the breadcrumb pill uses, including the TIEBREAKER_REQUIRED
+  // intercept that opens the tiebreaker prompt instead of toasting.
+  const transition = useTransitionLineupStatus();
+  const onAdvance = useCallback(
+    (targetStatus: 'voting' | 'decided') => {
+      transition.mutate(
+        { lineupId: lineup.id, body: { status: targetStatus } },
+        {
+          onSuccess: () => toast.success(`Moved to ${targetStatus}`),
+          onError: (err) => {
+            const msg = err instanceof Error ? err.message : '';
+            if (msg.includes('TIEBREAKER_REQUIRED')) {
+              setPromptDismissed(false);
+              setTiebreakerPromptOpen(true);
+            } else {
+              toast.error(msg || 'Transition failed');
+            }
+          },
+        },
+      );
+    },
+    [transition, lineup.id, setPromptDismissed, setTiebreakerPromptOpen],
+  );
 
   const heroProps = useLineupHero({
     lineup,
@@ -169,6 +195,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
       bracket: bracketRef,
     },
     onOpenNominate: () => setModalOpen(true),
+    onAdvance,
   });
 
   const hasEntries = lineup.entries.length > 0;
