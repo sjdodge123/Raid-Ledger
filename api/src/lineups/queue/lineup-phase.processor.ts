@@ -26,6 +26,7 @@ import {
 } from './lineup-phase.constants';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
 import { SettingsService } from '../../settings/settings.service';
+import { LineupsGateway } from '../lineups.gateway';
 import { isPauseActive } from '../lineups-auto-advance.helpers';
 import {
   checkBuildingQuorum,
@@ -42,6 +43,11 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     private readonly queueService: LineupPhaseQueueService,
     /** ROK-1253: injected for the grace-advance re-quorum-check path. */
     private readonly settings: SettingsService,
+    /** ROK-1253: emit on grace-driven status flip so subscribed clients
+     *  invalidate the lineup query immediately instead of waiting for
+     *  their poll interval — without this the GraceCountdownBanner
+     *  stays stuck on "Transitioning..." until the next refetch. */
+    private readonly lineupsGateway: LineupsGateway,
   ) {
     super();
   }
@@ -136,6 +142,9 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     this.logger.log(
       `Lineup ${lineupId} grace-advanced to '${targetStatus}'`,
     );
+    // ROK-1253: push the status flip to subscribed clients immediately.
+    // Mirrors the emit `runStatusTransition` does for synchronous flips.
+    this.lineupsGateway.emitStatusChange(lineupId, targetStatus, new Date());
     const nextPhase = NEXT_PHASE[targetStatus];
     if (nextPhase && phaseDeadline) {
       const delayMs = phaseDeadline.getTime() - Date.now();
