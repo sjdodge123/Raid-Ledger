@@ -284,8 +284,17 @@ export async function closeTestApp(): Promise<void> {
   // the kernel-side resources before the next spec file boots its own
   // 13×3 BullMQ worker connections. Skip this if REDIS_URL is set to a
   // non-default port (e.g. CI uses a sidecar container on a different port).
+  // Match `queue.module.ts` semantics: `Number(parsed.port) || 6379` —
+  // an empty `parsed.port` (URL with no explicit port) resolves to 6379.
   const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
-  if (redisUrl.includes(':6379') || redisUrl.endsWith('/6379')) {
+  let redisPort: number | null = null;
+  try {
+    const parsed = new URL(redisUrl);
+    redisPort = Number(parsed.port) || 6379;
+  } catch {
+    // Malformed URL — fall through with null; layer-2 cleanup skipped.
+  }
+  if (redisPort === 6379) {
     destroySocketsOnPort(6379);
   }
 

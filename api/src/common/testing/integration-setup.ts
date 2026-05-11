@@ -83,13 +83,26 @@ afterAll(async () => {
   // for the AC2 30-run validation loop to prove the timeout bump + fallback
   // destroy actually keeps the count low.
   if (process.env.RL_TEST_SOCKET_HANDLE_AUDIT === 'true') {
-    const sockets = listSocketHandles();
+    // `socket.destroy()` in closeTestApp is async — the kernel-side close
+    // settles on the next libuv tick, so a one-shot read of `_getActiveHandles`
+    // can briefly see sockets that are queued for cleanup. Mirror the
+    // 500ms deadline-bounded poll used by the audit unit-test before
+    // failing the suite.
+    const deadline = Date.now() + 500;
+    let sockets = listSocketHandles();
+    while (
+      sockets.length > SOCKET_HANDLE_AUDIT_THRESHOLD &&
+      Date.now() < deadline
+    ) {
+      await new Promise<void>((r) => setTimeout(r, 25));
+      sockets = listSocketHandles();
+    }
     if (sockets.length > SOCKET_HANDLE_AUDIT_THRESHOLD) {
       throw new Error(
         `[ROK-1250] socket handle audit failed after closeTestApp(): ` +
           `${sockets.length} > ${SOCKET_HANDLE_AUDIT_THRESHOLD} TCP sockets ` +
-          `still tracked by libuv (filter: constructor.name === 'Socket' && ` +
-          `typeof remotePort === 'number')`,
+          `still tracked by libuv after 500ms drain wait ` +
+          `(filter: constructor.name === 'Socket' && typeof remotePort === 'number')`,
       );
     }
   }
