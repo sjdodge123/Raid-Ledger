@@ -11,6 +11,10 @@ import type {
 } from '@raid-ledger/contract';
 import type { Persona } from './lineup-persona';
 import type { PhaseState } from './lineup-phase-state';
+import {
+    getDistinctNominatorCount,
+    getExpectedVoterCount,
+} from './lineup-quorum-counts';
 
 export type HeroTone = 'action' | 'waiting' | 'aborted' | 'privacy';
 
@@ -84,13 +88,14 @@ function privacyHero(verb = 'view this lineup'): HeroCopy {
 
 function buildingActed(ctx: HeroCopyContext): HeroCopy {
     const names = ctx.myNominatedGameNames;
-    const stillToGo = Math.max(
-        0,
-        ctx.lineup.totalMembers - ctx.lineup.totalVoters,
-    );
+    // ROK-1253: voter-coverage framing — for private lineups the
+    // denominator is the invitee set, not community-wide membership.
+    const expected = getExpectedVoterCount(ctx.lineup);
+    const nominators = getDistinctNominatorCount(ctx.lineup);
+    const stillToGo = Math.max(0, expected - nominators);
     const headline = names.length === 1
-        ? `You nominated ${names[0]}. Sit tight — ${stillToGo} of ${ctx.lineup.totalMembers} still to go.`
-        : `You nominated ${names.length} games. Sit tight — ${stillToGo} of ${ctx.lineup.totalMembers} still to go.`;
+        ? `You nominated ${names[0]}. Sit tight — ${stillToGo} of ${expected} still to go.`
+        : `You nominated ${names.length} games. Sit tight — ${stillToGo} of ${expected} still to go.`;
     return {
         tone: 'waiting',
         headline,
@@ -110,9 +115,12 @@ function buildingCopy(ctx: HeroCopyContext): HeroCopy {
     }
     if (persona === 'invitee-acted') return buildingActed(ctx);
     if (persona === 'organizer' || persona === 'admin') {
+        // ROK-1253: voter coverage (nominators / expected), not games / totalMembers.
+        const expected = getExpectedVoterCount(lineup);
+        const nominators = getDistinctNominatorCount(lineup);
         return {
             tone: 'action',
-            headline: `${lineup.entries.length} of ${lineup.totalMembers} nominated. Advance to Voting when ready.`,
+            headline: `${nominators} of ${expected} nominated. Advance to Voting when ready.`,
             // ariaLabel: keep the hero CTA's accessible name distinct from
             // the phase-breadcrumb's "Voting" button. Multiple smoke specs
             // (lineup-phase-breadcrumb, lineup-creation) select the
@@ -130,7 +138,10 @@ function votingCopy(ctx: HeroCopyContext): HeroCopy {
     const { persona, lineup } = ctx;
     const max = lineup.maxVotesPerPlayer ?? 3;
     const usedCount = (lineup.myVotes ?? []).length;
-    const stillVoting = Math.max(0, lineup.totalMembers - lineup.totalVoters);
+    // ROK-1253: expected-voter denominator (private = invitees+creator,
+    // public = totalMembers) replaces the prior `totalMembers`-everywhere.
+    const expected = getExpectedVoterCount(lineup);
+    const stillVoting = Math.max(0, expected - lineup.totalVoters);
 
     if (persona === 'invitee-not-acted') {
         return {
@@ -143,7 +154,7 @@ function votingCopy(ctx: HeroCopyContext): HeroCopy {
     if (persona === 'invitee-acted') {
         return {
             tone: 'waiting',
-            headline: `You voted for ${usedCount} games. Sit tight — ${stillVoting} of ${lineup.totalMembers} still voting.`,
+            headline: `You voted for ${usedCount} games. Sit tight — ${stillVoting} of ${expected} still voting.`,
             detail: "We'll notify you when voting closes.",
             secondary: { text: 'Change my votes' },
         };
@@ -151,7 +162,7 @@ function votingCopy(ctx: HeroCopyContext): HeroCopy {
     if (persona === 'organizer' || persona === 'admin') {
         return {
             tone: 'action',
-            headline: `Quorum reached — ${lineup.totalVoters} of ${lineup.totalMembers} voted. Advance when stable.`,
+            headline: `Quorum reached — ${lineup.totalVoters} of ${expected} voted. Advance when stable.`,
             // ariaLabel mirrors building-phase rationale (PR #754 fix) — a
             // generic "Advance lineup phase" keeps this CTA's accessible
             // name from colliding with breadcrumb-targeted page selectors.
