@@ -125,4 +125,27 @@ describe('dumpFailureSnapshot — filesystem + buckets', () => {
     expect(prefixes['jwt_block'].count).toBe(3);
     fs.unlinkSync(filePath);
   });
+
+  // ROK-1264 layer-4 buckets — TIME_WAIT counts, peer-port histogram,
+  // and supertest server port. Each must be present and shape-correct.
+  it('captures the three ROK-1264 layer-4 buckets', async () => {
+    const filePath = await dumpFailureSnapshot('rok-1264-layer-4');
+    const snapshot = readLatestSnapshot(filePath);
+    expect(snapshot).toHaveProperty('netstatTimeWait');
+    expect(snapshot).toHaveProperty('peerPortHistogram');
+    expect(snapshot).toHaveProperty('testServerPort');
+    const histogram = snapshot.peerPortHistogram as {
+      status: string;
+      total: number;
+      byPeerPort: unknown[];
+    };
+    expect(histogram.status).toBe('ok');
+    expect(typeof histogram.total).toBe('number');
+    expect(Array.isArray(histogram.byPeerPort)).toBe(true);
+    const tsPort = snapshot.testServerPort as { status: string };
+    // Fake app lacks `getHttpServer`, so readTestServerPort should fall
+    // through the defensive checks and report `no-server` (not throw).
+    expect(tsPort.status).toBe('no-server');
+    fs.unlinkSync(filePath);
+  });
 });

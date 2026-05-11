@@ -19,6 +19,11 @@ import {
   readCronJobs,
   readRedisMockStore,
 } from './snapshot-buckets';
+import {
+  readNetstatTimeWaitBuckets,
+  readPeerPortHistogram,
+  readTestServerPort,
+} from './snapshot-buckets-tcp';
 
 const SNAPSHOT_DIR = path.resolve(
   __dirname,
@@ -49,6 +54,11 @@ export async function dumpFailureSnapshot(
       readCronJobs(instance),
       readRedisMockStore(instance),
     ]);
+  // ROK-1264: TIME_WAIT bucket + peer-port histogram + supertest port.
+  // Synchronous — net/spawnSync calls return immediately; no await needed.
+  const netstatTimeWait = readNetstatTimeWaitBuckets();
+  const peerPortHistogram = readPeerPortHistogram();
+  const testServerPort = readTestServerPort(instance);
   const snapshot = {
     capturedAt: new Date().toISOString(),
     reason,
@@ -59,6 +69,9 @@ export async function dumpFailureSnapshot(
     activeHandles,
     cronJobs,
     redisMockStore,
+    netstatTimeWait,
+    peerPortHistogram,
+    testServerPort,
   };
   fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
   const filePath = buildSnapshotFilePath();
