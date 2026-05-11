@@ -24,6 +24,8 @@ export const users = pgTable(
     onboardingCompletedAt: timestamp('onboarding_completed_at'),
     /** Timestamp of last game time template confirmation (ROK-999). Null = never confirmed. */
     gameTimeConfirmedAt: timestamp('game_time_confirmed_at'),
+    /** Timestamp when the user left the Discord guild and was auto-deactivated (ROK-1260). Null = active. */
+    deactivatedAt: timestamp('deactivated_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
