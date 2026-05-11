@@ -54,3 +54,24 @@ export async function logAborted(
     reason,
   });
 }
+
+/**
+ * ROK-1253: Log an operator-driven backward revert that arms the
+ * auto-advance pause. Captures the from/to statuses so the timeline reads
+ * naturally ("voting → building").
+ */
+export async function logAutoAdvancePaused(
+  activityLog: ActivityLogService,
+  lineupId: number,
+  actorId: number,
+  fromStatus: string,
+  toStatus: string,
+): Promise<void> {
+  await activityLog.log(
+    'lineup',
+    lineupId,
+    'lineup_auto_advance_paused',
+    actorId,
+    { fromStatus, toStatus },
+  );
+}

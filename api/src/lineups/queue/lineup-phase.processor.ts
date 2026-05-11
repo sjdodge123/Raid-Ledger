@@ -1,11 +1,15 @@
 /**
  * BullMQ processor for lineup phase transitions (ROK-946).
  * Handles automatic phase advancement and rehydration on startup.
+ *
+ * ROK-1253 — the same queue now carries two job names: `phase-transition`
+ * (deadline-driven) and `grace-advance` (re-evaluate quorum after grace
+ * window). The processor branches on `job.name`.
  */
 import { Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { Job } from 'bullmq';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -13,11 +17,20 @@ import * as schema from '../../drizzle/schema';
 import type { LineupStatus } from '../../drizzle/schema';
 import {
   DEFAULT_DURATIONS,
+  LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_QUEUE,
+  LINEUP_PHASE_TRANSITION,
   NEXT_PHASE,
+  type LineupGraceAdvanceJobData,
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
+import { SettingsService } from '../../settings/settings.service';
+import { isPauseActive } from '../lineups-auto-advance.helpers';
+import {
+  checkBuildingQuorum,
+  checkVotingQuorum,
+} from '../quorum/quorum-check.helpers';
 
 @Processor(LINEUP_PHASE_QUEUE)
 export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
@@ -27,6 +40,8 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly queueService: LineupPhaseQueueService,
+    /** ROK-1253: injected for the grace-advance re-quorum-check path. */
+    private readonly settings: SettingsService,
   ) {
     super();
   }
@@ -40,13 +55,100 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     );
   }
 
-  /** Process a phase transition job. */
-  async process(job: Job<LineupPhaseJobData>): Promise<void> {
-    const { lineupId, targetStatus } = job.data;
-    this.logger.debug(
-      `Processing phase transition for lineup ${lineupId} → ${targetStatus}`,
+  /** Process a phase or grace-advance job (branches on `job.name`). */
+  async process(
+    job: Job<LineupPhaseJobData | LineupGraceAdvanceJobData>,
+  ): Promise<void> {
+    if (job.name === LINEUP_GRACE_ADVANCE) {
+      const { lineupId } = job.data as LineupGraceAdvanceJobData;
+      this.logger.debug(`Processing grace-advance for lineup ${lineupId}`);
+      await this.processGraceAdvance(lineupId);
+      return;
+    }
+    if (job.name === LINEUP_PHASE_TRANSITION) {
+      const { lineupId, targetStatus } = job.data as LineupPhaseJobData;
+      this.logger.debug(
+        `Processing phase transition for lineup ${lineupId} → ${targetStatus}`,
+      );
+      await this.executeTransition(lineupId, targetStatus);
+      return;
+    }
+    this.logger.warn(`Unknown lineup-phase job name: ${job.name}`);
+  }
+
+  /**
+   * ROK-1253: Re-evaluate quorum after the grace window has elapsed.
+   * Bails out as no-op for stale rows: status moved on, pause armed during
+   * the wait, or the timestamp was cleared by a mutation that broke quorum.
+   */
+  private async processGraceAdvance(lineupId: number): Promise<void> {
+    const [lineup] = await this.findLineup(lineupId);
+    if (!lineup) return;
+    if (lineup.status !== 'building' && lineup.status !== 'voting') return;
+    // Architect correction #3: belt-and-suspenders pause check; the
+    // backwards-revert side-effect already cancels the job, but cancel
+    // can race with the worker pulling the job off the queue.
+    if (await isPauseActive(this.db, this.settings, lineup)) return;
+    if (lineup.pendingAdvanceAt === null) return;
+    const ready =
+      lineup.status === 'building'
+        ? (await checkBuildingQuorum(this.db, this.settings, lineup)).ready
+        : (await checkVotingQuorum(this.db, lineup)).ready;
+    if (!ready) {
+      await this.clearPendingAdvance(lineupId);
+      return;
+    }
+    await this.runGraceTransition(lineupId, lineup);
+  }
+
+  /**
+   * Apply the status flip and clear the grace columns atomically. We don't
+   * fire downstream notifications here; mirroring `applyTransition` keeps
+   * the queue path simple. The lineup row's `updatedAt` change is enough
+   * for clients to poll and re-render.
+   */
+  private async runGraceTransition(
+    lineupId: number,
+    lineup: typeof schema.communityLineups.$inferSelect,
+  ): Promise<void> {
+    const targetStatus: LineupStatus =
+      lineup.status === 'building' ? 'voting' : 'decided';
+    const duration = this.getDurationForPhase(targetStatus, lineup);
+    const phaseDeadline = this.computeDeadline(targetStatus, duration);
+    const result = await this.db
+      .update(schema.communityLineups)
+      .set({
+        status: targetStatus,
+        phaseDeadline,
+        pendingAdvanceAt: null,
+        autoAdvancePausedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.communityLineups.id, lineupId),
+          eq(schema.communityLineups.status, lineup.status),
+          isNotNull(schema.communityLineups.pendingAdvanceAt),
+        ),
+      )
+      .returning({ id: schema.communityLineups.id });
+    if (result.length === 0) return;
+    this.logger.log(
+      `Lineup ${lineupId} grace-advanced to '${targetStatus}'`,
     );
-    await this.executeTransition(lineupId, targetStatus);
+    const nextPhase = NEXT_PHASE[targetStatus];
+    if (nextPhase && phaseDeadline) {
+      const delayMs = phaseDeadline.getTime() - Date.now();
+      await this.queueService.scheduleTransition(lineupId, nextPhase, delayMs);
+    }
+  }
+
+  /** ROK-1253: Null `pending_advance_at` when grace re-check sees quorum is gone. */
+  private async clearPendingAdvance(lineupId: number): Promise<void> {
+    await this.db
+      .update(schema.communityLineups)
+      .set({ pendingAdvanceAt: null, updatedAt: new Date() })
+      .where(eq(schema.communityLineups.id, lineupId));
   }
 
   /** Execute transition if lineup is in the expected pre-phase. */
