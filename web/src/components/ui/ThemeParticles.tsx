@@ -14,13 +14,27 @@ import { CONFIGS } from './theme-particles.config';
 import { spawnParticle, placePanelEdgeParticle, queryPanelElements } from './theme-particles.helpers';
 import { tick, createTickState } from './theme-particles.tick';
 
+/**
+ * Effective drawable height: capped at the document's content height so
+ * particles never render in empty space below the footer when content is
+ * shorter than the viewport (ROK-1261). Falls back to viewport height when
+ * the document is taller (long-content pages) so particles still cover the
+ * visible viewport on first paint before scroll.
+ */
+function computeCanvasHeight() {
+    const docH = document.documentElement.scrollHeight;
+    const viewH = window.innerHeight;
+    return docH > 0 ? Math.min(viewH, docH) : viewH;
+}
+
 function setupCanvas(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     const w = window.innerWidth;
-    const h = window.innerHeight;
+    const h = computeCanvasHeight();
     canvas.width = w;
     canvas.height = h;
+    canvas.style.height = `${h}px`;
     return { ctx, w, h };
 }
 
@@ -39,6 +53,16 @@ function startAnimation(
     rafRef.current = requestAnimationFrame(loop);
 }
 
+function bindResizeListeners(handler: () => void) {
+    window.addEventListener('resize', handler);
+    // Document grows/shrinks on route changes, lazy images, dynamic content —
+    // re-measure so the canvas keeps tracking the footer's bottom edge.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(handler) : null;
+    ro?.observe(document.documentElement);
+    ro?.observe(document.body);
+    return () => { window.removeEventListener('resize', handler); ro?.disconnect(); };
+}
+
 function useParticleAnimation(
     themeId: string,
     canvasRef: React.RefObject<HTMLCanvasElement | null>,
@@ -53,20 +77,16 @@ function useParticleAnimation(
         const canvas = canvasRef.current;
         let { w, h } = setup;
         const { ctx } = setup;
-
         const state = createTickState();
         if (cfg.behavior === 'panel-edge') state.panelElements = queryPanelElements();
-
-        const handleResize = () => {
-            w = window.innerWidth; h = window.innerHeight;
+        const unbind = bindResizeListeners(() => {
+            w = window.innerWidth; h = computeCanvasHeight();
             canvas.width = w; canvas.height = h;
+            canvas.style.height = `${h}px`;
             if (cfg.behavior === 'panel-edge') state.panelElements = queryPanelElements();
-        };
-        window.addEventListener('resize', handleResize);
-
+        });
         startAnimation(canvas, ctx, cfg, w, h, state, themeId, rafRef);
-
-        return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', handleResize); ctx.clearRect(0, 0, w, h); };
+        return () => { cancelAnimationFrame(rafRef.current); unbind(); ctx.clearRect(0, 0, w, h); };
     }, [themeId, canvasRef, rafRef]);
 }
 
@@ -91,7 +111,7 @@ export function ThemeParticles() {
         <canvas
             ref={canvasRef}
             aria-hidden="true"
-            style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, pointerEvents: 'none', zIndex: 0 }}
         />
     );
 }
