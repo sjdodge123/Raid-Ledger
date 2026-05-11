@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { NotificationItem } from './NotificationItem';
@@ -65,86 +66,95 @@ describe('NotificationItem — lineup-only fallback (ROK-1259)', () => {
         'lineup_nomination_milestone',
     ];
 
-    it.each(lineupSubtypes)('navigates to /community-lineup/:id for %s', (type) => {
+    it.each(lineupSubtypes)('navigates to /community-lineup/:id for %s', async (type) => {
+        const user = userEvent.setup();
         const { onClose } = renderItem(
             makeNotification({ type, payload: { lineupId: 42 } }),
         );
-        fireEvent.click(screen.getByRole('button'));
+        await user.click(screen.getByRole('button'));
         expect(mockNavigate).toHaveBeenCalledWith('/community-lineup/42');
         expect(onClose).toHaveBeenCalledOnce();
     });
 
-    it('navigates to lineup detail (not tiebreaker deep link) when tiebreakerId is also present', () => {
+    it('navigates to lineup detail (not tiebreaker deep link) when tiebreakerId is also present', async () => {
+        const user = userEvent.setup();
         renderItem(
             makeNotification({
                 type: 'lineup_tiebreaker_open',
                 payload: { lineupId: 99, tiebreakerId: 7 },
             }),
         );
-        fireEvent.click(screen.getByRole('button'));
+        await user.click(screen.getByRole('button'));
         expect(mockNavigate).toHaveBeenCalledWith('/community-lineup/99');
     });
 
-    it('marks unread notifications as read on click', () => {
+    it('marks unread notifications as read on click', async () => {
+        const user = userEvent.setup();
         renderItem(
             makeNotification({
                 type: 'lineup_vote_reminder',
                 payload: { lineupId: 42 },
             }),
         );
-        fireEvent.click(screen.getByRole('button'));
+        await user.click(screen.getByRole('button'));
         expect(mockMarkRead).toHaveBeenCalledWith('n1');
     });
 });
 
 describe('NotificationItem — existing navigation paths (regression guards)', () => {
-    it('navigates via eventId path for lineup_event_created', () => {
+    it('navigates via eventId path for lineup_event_created', async () => {
+        const user = userEvent.setup();
         renderItem(
             makeNotification({
                 type: 'lineup_event_created',
                 payload: { eventId: 555, lineupId: 42 },
             }),
         );
-        fireEvent.click(screen.getByRole('button'));
+        await user.click(screen.getByRole('button'));
         expect(mockNavigate).toHaveBeenCalledWith('/events/555');
     });
 
-    it('navigates to schedule page for lineup_scheduling_open (matchId + lineupId wins over lineupId alone)', () => {
+    it('navigates to schedule page for lineup_scheduling_open (matchId + lineupId wins over lineupId alone)', async () => {
+        const user = userEvent.setup();
         renderItem(
             makeNotification({
                 type: 'lineup_scheduling_open',
                 payload: { matchId: 12, lineupId: 42 },
             }),
         );
-        fireEvent.click(screen.getByRole('button'));
+        await user.click(screen.getByRole('button'));
         expect(mockNavigate).toHaveBeenCalledWith('/community-lineup/42/schedule/12');
     });
 
-    it('navigates to schedule page for lineup_scheduling_reminder', () => {
+    it('navigates to schedule page for lineup_scheduling_reminder', async () => {
+        const user = userEvent.setup();
         renderItem(
             makeNotification({
                 type: 'lineup_scheduling_reminder',
                 payload: { matchId: 13, lineupId: 43 },
             }),
         );
-        fireEvent.click(screen.getByRole('button'));
+        await user.click(screen.getByRole('button'));
         expect(mockNavigate).toHaveBeenCalledWith('/community-lineup/43/schedule/13');
     });
 
-    it('navigates via explicit link when only link is present', () => {
+    it('navigates via explicit link when only link is present', async () => {
+        const user = userEvent.setup();
         renderItem(
             makeNotification({
                 type: 'system',
                 payload: { link: '/somewhere' },
             }),
         );
-        fireEvent.click(screen.getByRole('button'));
+        await user.click(screen.getByRole('button'));
         expect(mockNavigate).toHaveBeenCalledWith('/somewhere');
     });
 
-    it('does not navigate when payload has no actionable fields', () => {
-        renderItem(makeNotification({ type: 'system', payload: {} }));
-        fireEvent.click(screen.getByRole('button'));
+    it('does not navigate and does not close when payload has no actionable fields', async () => {
+        const user = userEvent.setup();
+        const { onClose } = renderItem(makeNotification({ type: 'system', payload: {} }));
+        await user.click(screen.getByRole('button'));
         expect(mockNavigate).not.toHaveBeenCalled();
+        expect(onClose).not.toHaveBeenCalled();
     });
 });
