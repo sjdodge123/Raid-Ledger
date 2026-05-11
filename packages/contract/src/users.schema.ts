@@ -142,9 +142,16 @@ export const UserManagementSchema = z.object({
     customAvatarUrl: z.string().nullable().optional(),
     role: UserRoleSchema,
     createdAt: z.string().datetime(),
+    deactivatedAt: z.string().datetime().nullable(),
 });
 
 export type UserManagementDto = z.infer<typeof UserManagementSchema>;
+
+export const ReactivateUserResponseSchema = z.object({
+    data: UserManagementSchema,
+});
+
+export type ReactivateUserResponseDto = z.infer<typeof ReactivateUserResponseSchema>;
 
 export const UserManagementListResponseSchema = z.object({
     data: z.array(UserManagementSchema),
