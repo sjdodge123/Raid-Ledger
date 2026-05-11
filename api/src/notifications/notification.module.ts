@@ -20,6 +20,7 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
 import { EventsModule } from '../events/events.module';
 import { SettingsModule } from '../settings/settings.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { SettingsModule } from '../settings/settings.module';
     CronJobModule,
     forwardRef(() => DiscordBotModule),
     forwardRef(() => EventsModule),
+    forwardRef(() => UsersModule),
     SettingsModule,
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],

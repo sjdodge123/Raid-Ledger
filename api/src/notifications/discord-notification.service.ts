@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  forwardRef,
+  Optional,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
@@ -12,6 +18,10 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
+import { UsersService } from '../users/users.service';
+import { SignupsRosterService } from '../events/signups-roster.service';
+import { NotificationService } from './notification.service';
+import { deactivateUserOrchestrated } from './discord-notification-deactivate.helpers';
 import {
   DISCORD_NOTIFICATION_QUEUE,
   RATE_LIMIT_WINDOW_MS,
@@ -48,6 +58,13 @@ export class DiscordNotificationService {
     private readonly settingsService: SettingsService,
     @Inject(REDIS_CLIENT)
     private redis: Redis,
+    @Optional() private readonly usersService?: UsersService,
+    @Optional()
+    @Inject(forwardRef(() => SignupsRosterService))
+    private readonly rosterService?: SignupsRosterService,
+    @Optional()
+    @Inject(forwardRef(() => NotificationService))
+    private readonly notificationService?: NotificationService,
   ) {}
 
   /**
@@ -95,16 +112,29 @@ export class DiscordNotificationService {
     );
   }
 
-  /** Resolve user's Discord ID, returning null if not linked. */
+  /**
+   * Resolve user's Discord ID, returning null if not linked OR if the
+   * user is deactivated (ROK-1260 AC-8 — deactivated users are skipped
+   * from every notification target query).
+   */
   private async resolveDiscordId(userId: number): Promise<string | null> {
     const [user] = await this.db
-      .select({ discordId: schema.users.discordId })
+      .select({
+        discordId: schema.users.discordId,
+        deactivatedAt: schema.users.deactivatedAt,
+      })
       .from(schema.users)
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (!user?.discordId) {
       this.logger.debug(
         `User ${userId}: no Discord linked, skipping Discord notification`,
+      );
+      return null;
+    }
+    if (user.deactivatedAt !== null) {
+      this.logger.debug(
+        `User ${userId}: deactivated, skipping Discord notification (ROK-1260)`,
       );
       return null;
     }
@@ -115,6 +145,30 @@ export class DiscordNotificationService {
       return null;
     }
     return user.discordId;
+  }
+
+  /**
+   * Deactivate a user (ROK-1260): flip `deactivated_at` to NOW(),
+   * cancel every upcoming-event signup, write admin notification.
+   * Idempotent — safe to call multiple times for the same user.
+   */
+  async deactivateUser(userId: number): Promise<void> {
+    if (!this.usersService || !this.rosterService || !this.notificationService) {
+      this.logger.warn(
+        `ROK-1260: deactivateUser(${userId}) — orchestration deps not wired, skipping`,
+      );
+      return;
+    }
+    await deactivateUserOrchestrated(
+      {
+        db: this.db,
+        usersService: this.usersService,
+        notificationService: this.notificationService,
+        rosterService: this.rosterService,
+        logger: this.logger,
+      },
+      userId,
+    );
   }
 
   /** Check if Discord channel is disabled for this notification type. */

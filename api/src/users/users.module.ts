@@ -15,7 +15,7 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
 @Module({
   imports: [
     forwardRef(() => CharactersModule),
-    EventsModule,
+    forwardRef(() => EventsModule),
     forwardRef(() => DiscordBotModule),
     MulterModule.register({ storage: multer.memoryStorage() }),
   ],

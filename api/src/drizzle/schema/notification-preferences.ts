@@ -22,6 +22,8 @@ export const NOTIFICATION_TYPES = [
   'role_gap_alert',
   'lineup_steam_nudge',
   'community_lineup',
+  'user_deactivated_discord',
+  'user_reactivated_discord',
   'system',
 ] as const;
 
@@ -58,6 +60,8 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   role_gap_alert: { inApp: true, push: true, discord: true },
   lineup_steam_nudge: { inApp: true, push: false, discord: true },
   community_lineup: { inApp: true, push: true, discord: true },
+  user_deactivated_discord: { inApp: true, push: false, discord: false },
+  user_reactivated_discord: { inApp: true, push: false, discord: false },
   system: { inApp: true, push: false, discord: false },
 };
 
