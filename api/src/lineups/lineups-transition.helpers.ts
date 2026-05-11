@@ -13,8 +13,11 @@ import type { ActivityLogService } from '../activity-log/activity-log.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { guardTiebreakerOnTransition } from './tiebreaker/tiebreaker-detect.helpers';
 import type { LineupNotificationService } from './lineup-notification.service';
-import { findLineupById, validateDecidedGame } from './lineups-query.helpers';
-import type { LineupStatus } from '../drizzle/schema';
+import {
+  countVotesPerGame,
+  findLineupById,
+  validateDecidedGame,
+} from './lineups-query.helpers';
 import {
   applyStatusUpdate,
   runMatchingAlgorithm,
@@ -63,13 +66,8 @@ export async function runStatusTransition(
   }
 
   await guardTiebreakerOnTransition(deps.db, id, lineup.status, dto);
-  await applyStatusUpdate(
-    deps.db,
-    deps.phaseQueue,
-    id,
-    dto,
-    lineup,
-  );
+  await autoPickDecidedGameId(deps.db, id, dto);
+  await applyStatusUpdate(deps.db, deps.phaseQueue, id, dto, lineup);
   // ROK-1118: emit immediately after the conditional UPDATE succeeds so
   // subscribed clients see the phase flip without polling. The timestamp
   // matches the row's `updatedAt` we just wrote (within milliseconds).
@@ -84,7 +82,7 @@ export async function runStatusTransition(
   await applyRevertSideEffects(
     { activityLog: deps.activityLog, phaseQueue: deps.phaseQueue },
     id,
-    lineup.status as LineupStatus,
+    lineup.status,
     dto.status,
     actorId ?? lineup.createdBy,
   );
@@ -107,4 +105,51 @@ export async function runStatusTransition(
     );
   }
   return buildDetailResponse(deps.db, id);
+}
+
+/**
+ * ROK-1263 / ROK-1253 rework: if the operator (or grace job) requested
+ * `decided` without naming a winner, derive it from the vote leaderboard.
+ * `guardTiebreakerOnTransition` already covers two cases (operator-chosen,
+ * resolved-tiebreaker) and throws TIEBREAKER_REQUIRED on ties. The only
+ * remaining case is "unique top vote-getter, no tiebreaker run" — auto-pick
+ * it here so the row never lands in `decided` with `decided_game_id = NULL`.
+ *
+ * Defensive: re-runs `validateDecidedGame` because votes reference
+ * `games.id` directly, so a removed nomination with stale votes is
+ * theoretically possible — bail to existing behaviour rather than land a
+ * foreign-mismatch winner.
+ */
+async function autoPickDecidedGameId(
+  db: TransitionDeps['db'],
+  lineupId: number,
+  dto: UpdateLineupStatusDto,
+): Promise<void> {
+  if (dto.status !== 'decided' || dto.decidedGameId) return;
+  const derived = await deriveTopVotedGame(db, lineupId);
+  if (derived === null) return;
+  await validateDecidedGame(db, lineupId, derived);
+  dto.decidedGameId = derived;
+}
+
+/**
+ * Pick the unique top vote-getter for a lineup. Returns null when there
+ * are zero votes (caller leaves `decidedGameId` undefined — matches the
+ * previous behaviour and keeps the surface area minimal). Tied tops are
+ * handled by `guardTiebreakerOnTransition` BEFORE we get here, so by the
+ * time this function is called any tie has either been resolved (winner
+ * inlined onto `dto`) or rejected (TIEBREAKER_REQUIRED). The ORDER BY uses
+ * gameId ASC as the deterministic tiebreaker for the rare race where the
+ * tie-detection snapshot disagrees with this query's snapshot.
+ */
+async function deriveTopVotedGame(
+  db: TransitionDeps['db'],
+  lineupId: number,
+): Promise<number | null> {
+  const counts = await countVotesPerGame(db, lineupId);
+  if (counts.length === 0) return null;
+  const sorted = [...counts].sort(
+    (a, b) => b.voteCount - a.voteCount || a.gameId - b.gameId,
+  );
+  return sorted[0].gameId;
 }

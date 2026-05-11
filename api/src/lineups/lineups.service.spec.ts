@@ -438,6 +438,12 @@ function describeLineupsService() {
       mockSelects(
         makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 1 }] }),
       );
+      // ROK-1263 / ROK-1253-rework: deriveTopVotedGame → countVotesPerGame
+      mockSelects(
+        makeSelectChain({ groupByResult: [{ gameId: 5, voteCount: 1 }] }),
+      );
+      // ROK-1263: validateDecidedGame → findEntries returns the derived game
+      mockSelects(makeSelectChain({ whereResult: [{ gameId: 5 }] }));
       // applyStatusUpdate (conditional update)
       mockDb.update.mockReturnValue({
         set: jest.fn().mockReturnValue({
@@ -446,6 +452,9 @@ function describeLineupsService() {
           }),
         }),
       });
+      // ROK-1263: with decidedGameId now derived, logTransition runs the
+      // lineup_decided branch which calls findGameName(db, decidedGameId).
+      mockSelects(makeSelectChain({ limitResult: [{ name: 'Derived Game' }] }));
       // buildDetailResponse chain (findLineupById + enrichment queries)
       mockSelects(
         makeSelectChain({
@@ -472,6 +481,12 @@ function describeLineupsService() {
     it('should allow reversion archived → decided', async () => {
       const archivedLineup = { ...mockLineup, status: 'archived' };
       mockSelects(makeSelectChain({ limitResult: [archivedLineup] }));
+      // ROK-1263 / ROK-1253-rework: deriveTopVotedGame runs for any
+      // transition into `decided`. Archived → decided is a reversion so
+      // there are no fresh votes — empty vote-counts → derivation no-ops
+      // (leaves dto.decidedGameId undefined, no validateDecidedGame call).
+      // guardTiebreakerOnTransition no-ops because currentStatus !== 'voting'.
+      mockSelects(makeSelectChain({ groupByResult: [] }));
       mockUpdate();
       mockBuildDetail({ ...archivedLineup, status: 'decided' });
 

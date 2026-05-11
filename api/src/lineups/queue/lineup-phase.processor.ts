@@ -9,7 +9,7 @@
 import { Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { and, eq, inArray, isNotNull } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { Job } from 'bullmq';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -27,7 +27,10 @@ import {
 import { LineupPhaseQueueService } from './lineup-phase.queue';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupsGateway } from '../lineups.gateway';
+import { ActivityLogService } from '../../activity-log/activity-log.service';
+import { LineupNotificationService } from '../lineup-notification.service';
 import { isPauseActive } from '../lineups-auto-advance.helpers';
+import { runStatusTransition } from '../lineups-transition.helpers';
 import {
   checkBuildingQuorum,
   checkVotingQuorum,
@@ -43,11 +46,19 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     private readonly queueService: LineupPhaseQueueService,
     /** ROK-1253: injected for the grace-advance re-quorum-check path. */
     private readonly settings: SettingsService,
-    /** ROK-1253: emit on grace-driven status flip so subscribed clients
-     *  invalidate the lineup query immediately instead of waiting for
-     *  their poll interval — without this the GraceCountdownBanner
-     *  stays stuck on "Transitioning..." until the next refetch. */
+    /** ROK-1253: gateway emit on grace-driven status flip flows through
+     *  `runStatusTransition`; kept here to bundle into TransitionDeps and
+     *  for any future direct broadcast needs from this processor. */
     private readonly lineupsGateway: LineupsGateway,
+    /**
+     * ROK-1253 rework: grace-driven `voting → decided` (and `building →
+     * voting`) now routes through `runStatusTransition` so it triggers
+     * tiebreaker detection, matching, activity logging, voting-open /
+     * decided notifications, and the gateway emit. The bypassing UPDATE
+     * silently skipped all of those side-effects.
+     */
+    private readonly activityLog: ActivityLogService,
+    private readonly lineupNotifications: LineupNotificationService,
   ) {
     super();
   }
@@ -108,10 +119,19 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   }
 
   /**
-   * Apply the status flip and clear the grace columns atomically. We don't
-   * fire downstream notifications here; mirroring `applyTransition` keeps
-   * the queue path simple. The lineup row's `updatedAt` change is enough
-   * for clients to poll and re-render.
+   * Route the grace flip through `runStatusTransition` (ROK-1253 rework
+   * for Codex finding #1). Doing so preserves:
+   *  - tiebreaker detection on `voting → decided`
+   *  - matching algorithm + decided notifications
+   *  - activity log entries (transition + auto-advance metadata)
+   *  - voting-open notifications on `building → voting`
+   *  - gateway `lineup:status` emit
+   *
+   * The previous direct UPDATE bypassed every one of those. A `ConflictException`
+   * from `applyStatusUpdate` (status changed mid-grace) is swallowed — same
+   * shape as `maybeAutoAdvance`'s try/catch. A `TIEBREAKER_REQUIRED` 400
+   * indicates the operator needs to pick a winner; we leave `pendingAdvanceAt`
+   * alone so the banner stays up and the next vote will re-trigger.
    */
   private async runGraceTransition(
     lineupId: number,
@@ -119,34 +139,25 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
   ): Promise<void> {
     const targetStatus: LineupStatus =
       lineup.status === 'building' ? 'voting' : 'decided';
-    const duration = this.getDurationForPhase(targetStatus, lineup);
-    const phaseDeadline = this.computeDeadline(targetStatus, duration);
-    const result = await this.db
-      .update(schema.communityLineups)
-      .set({
-        status: targetStatus,
-        phaseDeadline,
-        pendingAdvanceAt: null,
-        autoAdvancePausedAt: null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(schema.communityLineups.id, lineupId),
-          eq(schema.communityLineups.status, lineup.status),
-          isNotNull(schema.communityLineups.pendingAdvanceAt),
-        ),
-      )
-      .returning({ id: schema.communityLineups.id });
-    if (result.length === 0) return;
-    this.logger.log(`Lineup ${lineupId} grace-advanced to '${targetStatus}'`);
-    // ROK-1253: push the status flip to subscribed clients immediately.
-    // Mirrors the emit `runStatusTransition` does for synchronous flips.
-    this.lineupsGateway.emitStatusChange(lineupId, targetStatus, new Date());
-    const nextPhase = NEXT_PHASE[targetStatus];
-    if (nextPhase && phaseDeadline) {
-      const delayMs = phaseDeadline.getTime() - Date.now();
-      await this.queueService.scheduleTransition(lineupId, nextPhase, delayMs);
+    try {
+      await runStatusTransition(
+        {
+          db: this.db,
+          activityLog: this.activityLog,
+          phaseQueue: this.queueService,
+          lineupNotifications: this.lineupNotifications,
+          lineupsGateway: this.lineupsGateway,
+          logger: this.logger,
+        },
+        lineupId,
+        { status: targetStatus },
+      );
+      this.logger.log(`Lineup ${lineupId} grace-advanced to '${targetStatus}'`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Grace transition for lineup ${lineupId} → '${targetStatus}' failed: ${msg}`,
+      );
     }
   }
 
@@ -257,7 +268,14 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       .limit(1);
   }
 
-  /** Rehydrate pending jobs on startup for active lineups. */
+  /**
+   * Rehydrate pending jobs on startup for active lineups (phase deadlines
+   * AND grace windows). ROK-1253 rework: a restart between
+   * `scheduleGraceAdvance` and the job firing would otherwise leave the
+   * lineup with `pending_advance_at` set but no scheduled work — the row
+   * sits stuck until the next mutation or the much later `phaseDeadline`
+   * job fires.
+   */
   private async rehydratePendingJobs(): Promise<void> {
     const activeStatuses: LineupStatus[] = ['building', 'voting', 'decided'];
     const lineups = await this.db
@@ -266,12 +284,22 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       .where(inArray(schema.communityLineups.status, activeStatuses));
 
     const withDeadline = lineups.filter((l) => l.phaseDeadline !== null);
-    if (withDeadline.length === 0) return;
+    const now = Date.now();
+    const withPendingGrace = lineups.filter(
+      (l) => l.pendingAdvanceAt !== null && l.pendingAdvanceAt.getTime() > now,
+    );
 
-    this.logger.log(`Rehydrating ${withDeadline.length} lineup phase jobs`);
+    if (withDeadline.length === 0 && withPendingGrace.length === 0) return;
+
+    this.logger.log(
+      `Rehydrating ${withDeadline.length} phase + ${withPendingGrace.length} grace job(s)`,
+    );
 
     for (const lineup of withDeadline) {
       await this.rehydrateOneLineup(lineup);
+    }
+    for (const lineup of withPendingGrace) {
+      await this.rehydrateGraceJob(lineup);
     }
   }
 
@@ -284,5 +312,18 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
 
     const delayMs = Math.max(0, lineup.phaseDeadline.getTime() - Date.now());
     await this.queueService.scheduleTransition(lineup.id, next, delayMs);
+  }
+
+  /**
+   * ROK-1253 rework: re-enqueue a delayed grace-advance job for any lineup
+   * whose `pending_advance_at` is still in the future. `scheduleGraceAdvance`
+   * is idempotent — it removes any stale job before re-adding.
+   */
+  private async rehydrateGraceJob(
+    lineup: typeof schema.communityLineups.$inferSelect,
+  ): Promise<void> {
+    if (!lineup.pendingAdvanceAt) return;
+    const delayMs = Math.max(0, lineup.pendingAdvanceAt.getTime() - Date.now());
+    await this.queueService.scheduleGraceAdvance(lineup.id, delayMs);
   }
 }
