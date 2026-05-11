@@ -22,19 +22,34 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { SettingsService } from '../settings/settings.service';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 
 function describeAutoAdvance() {
   let testApp: TestApp;
   let adminToken: string;
+  let settings: SettingsService;
 
   beforeAll(async () => {
     testApp = await getTestApp();
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+    settings = testApp.app.get(SettingsService);
+    // ROK-1253: these legacy AC cases assert immediate auto-advance. The
+    // post-ROK-1253 helper schedules a 5min grace window by default; we
+    // opt into the documented `graceMs=0` escape hatch so the existing
+    // assertions still hold without flakily polling for the BullMQ worker.
+    await settings.set(SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS, '0');
+  });
+
+  afterAll(async () => {
+    await settings.delete(SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS);
   });
 
   afterEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+    // Re-apply the escape hatch after truncate clears `app_settings`.
+    await settings.set(SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS, '0');
   });
 
   // -- Helpers ---------------------------------------------------------------

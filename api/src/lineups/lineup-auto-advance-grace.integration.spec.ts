@@ -222,16 +222,19 @@ function describeGrace() {
     column: 'pending_advance_at' | 'auto_advance_paused_at',
     value: Date | null,
   ): Promise<void> {
+    // postgres-js cannot bind a JS Date through Drizzle's `sql` template,
+    // so we serialise to ISO and let Postgres coerce to timestamp.
+    const literal = value === null ? null : value.toISOString();
     if (column === 'pending_advance_at') {
       await testApp.db.execute(sql`
         UPDATE community_lineups
-        SET pending_advance_at = ${value}
+        SET pending_advance_at = ${literal}::timestamp
         WHERE id = ${lineupId}
       `);
     } else {
       await testApp.db.execute(sql`
         UPDATE community_lineups
-        SET auto_advance_paused_at = ${value}
+        SET auto_advance_paused_at = ${literal}::timestamp
         WHERE id = ${lineupId}
       `);
     }

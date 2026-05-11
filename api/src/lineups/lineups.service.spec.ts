@@ -193,7 +193,12 @@ function describeLineupsService() {
         },
         {
           provide: LineupPhaseQueueService,
-          useValue: { scheduleTransition: jest.fn() },
+          useValue: {
+            scheduleTransition: jest.fn(),
+            // ROK-1253: forward + backward transitions both call this.
+            cancelGraceAdvance: jest.fn().mockResolvedValue(undefined),
+            scheduleGraceAdvance: jest.fn().mockResolvedValue(undefined),
+          },
         },
         {
           provide: LineupSteamNudgeService,

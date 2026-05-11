@@ -41,20 +41,19 @@ function ActionVerb({ status }: { status: string }): string {
 
 export function GraceCountdownBanner(props: Props): JSX.Element | null {
   const { pendingAdvanceAt, status } = props;
-  const [remaining, setRemaining] = useState(() =>
-    pendingAdvanceAt ? computeRemaining(pendingAdvanceAt) : 0,
-  );
+  // Mirrors PhaseCountdown's pattern: derive remaining from a tick counter
+  // bumped every second. The remaining value is computed each render, so we
+  // don't need to setState synchronously inside the effect.
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!pendingAdvanceAt) return;
-    setRemaining(computeRemaining(pendingAdvanceAt));
-    const id = setInterval(() => {
-      setRemaining(computeRemaining(pendingAdvanceAt));
-    }, 1_000);
+    const id = setInterval(() => setTick((n) => n + 1), 1_000);
     return () => clearInterval(id);
   }, [pendingAdvanceAt]);
 
   if (!pendingAdvanceAt) return null;
+  const remaining = computeRemaining(pendingAdvanceAt);
   if (remaining <= 0) return null;
 
   return (
