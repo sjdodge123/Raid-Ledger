@@ -171,16 +171,20 @@ function votingCopy(ctx: HeroCopyContext): HeroCopy {
         };
     }
     if (persona === 'organizer' || persona === 'admin') {
-        // ROK-1253: choose the headline based on (quorum-met, has-voted)
-        // so an organizer who voted but is waiting on others sees an
-        // acknowledgment instead of a "X of Y voted, advance now" blob.
-        // CTA stays available across all branches — they can always advance.
+        // ROK-1253: choose the headline based on (quorum-met, has-voted,
+        // used-all-votes) so an organizer who voted but is waiting on
+        // others sees an acknowledgment instead of a "X of Y voted,
+        // advance now" blob. CTA stays available across all branches —
+        // they can always advance early.
         const quorumMet = expected > 0 && lineup.totalVoters >= expected;
+        const usedAll = usedCount > 0 && usedCount >= max;
         let headline: string;
         if (quorumMet) {
             headline = `Quorum reached — ${lineup.totalVoters} of ${expected} voted. Advance when stable.`;
+        } else if (usedAll) {
+            headline = `You're all done — sit tight. ${stillVoting} of ${expected} still voting.`;
         } else if (usedCount > 0) {
-            headline = `You voted for ${usedCount} ${usedCount === 1 ? 'game' : 'games'}. ${stillVoting} of ${expected} still voting.`;
+            headline = `You voted for ${usedCount} ${usedCount === 1 ? 'game' : 'games'}. Sit tight — ${stillVoting} of ${expected} still voting.`;
         } else {
             headline = `${lineup.totalVoters} of ${expected} voted. Advance when ready.`;
         }
