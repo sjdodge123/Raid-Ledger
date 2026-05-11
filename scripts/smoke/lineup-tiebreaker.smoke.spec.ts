@@ -504,6 +504,59 @@ test.describe('Dismiss tiebreaker', () => {
         await expect(page.locator('[data-testid="bracket-view"]')).not.toBeVisible();
         await expect(page.locator('[data-testid="veto-view"]')).not.toBeVisible();
     });
+
+    test('dismisses with no tiebreaker row via UI (ROK-1262 regression)', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Breadcrumb overflows on mobile viewport');
+
+        // Regression: the TiebreakerPromptModal opens when ties are detected
+        // BEFORE any tiebreaker row exists. Clicking Dismiss must transition
+        // the lineup to decided (previously it was a silent 404).
+        await archiveActiveLineup(adminToken);
+
+        const gameIds = await fetchGameIds(adminToken, 4);
+        const { id: noRowLineupId } = await createLineupOrRetry(
+            adminToken,
+            {
+                title: lineupTitle,
+                buildingDurationHours: 720,
+                votingDurationHours: 720,
+                decidedDurationHours: 720,
+                matchThreshold: 10,
+            },
+            workerPrefix,
+        );
+
+        for (const gid of gameIds) {
+            await apiPost(adminToken, `/lineups/${noRowLineupId}/nominate`, { gameId: gid });
+        }
+        await apiPatch(adminToken, `/lineups/${noRowLineupId}/status`, { status: 'voting' });
+        // Equal votes on two games → ties, no tiebreaker row started.
+        await apiPost(adminToken, `/lineups/${noRowLineupId}/vote`, { gameId: gameIds[0] });
+        await apiPost(adminToken, `/lineups/${noRowLineupId}/vote`, { gameId: gameIds[1] });
+        await awaitProcessing(adminToken);
+
+        await page.goto(`/community-lineup/${noRowLineupId}`);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // Trigger TIEBREAKER_REQUIRED → prompt modal via the breadcrumb advance.
+        const advanceBtn = page.getByRole('button', { name: 'Scheduling' });
+        await expect(advanceBtn).toBeVisible({ timeout: 10_000 });
+        await advanceBtn.click();
+        const confirmBtn = page.getByRole('button', { name: /advance/i });
+        await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+        await confirmBtn.click();
+
+        const modal = page.locator('[data-testid="tiebreaker-prompt-modal"]');
+        await expect(modal).toBeVisible({ timeout: 15_000 });
+
+        // Click Dismiss inside the modal — this used to silently 404.
+        const dismissBtn = modal.getByRole('button', { name: /dismiss|proceed without/i });
+        await dismissBtn.click();
+
+        // Modal closes and the page re-renders into the decided view.
+        await expect(modal).not.toBeVisible({ timeout: 10_000 });
+        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({ timeout: 15_000 });
+    });
 });
 
 // ---------------------------------------------------------------------------
