@@ -35,6 +35,10 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
+import {
+  destroySocketsOnPort,
+  extractPortFromConnectionString,
+} from './socket-handle-audit';
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
 
 export type { RedisMockHandle } from './redis-mock';
@@ -228,8 +232,12 @@ export async function getTestApp(): Promise<TestApp> {
  * Order matters: app.close() must run first so any in-flight queries drain
  * via DrizzleModule's provider; then end the postgres-js pool (DrizzleModule
  * has no onModuleDestroy, so app.close() does NOT cascade); then stop the
- * Testcontainer. The 5s end timeout caps teardown latency on the last
- * spec — postgres-js default 30s reintroduces ROK-1104 symptoms.
+ * Testcontainer. ROK-1250 bumped the end timeout 5 -> 30 because at the cap
+ * postgres-js calls `socket.end()` (graceful FIN), not `socket.destroy()`,
+ * leaving the kernel-tracked TCP socket on `_getActiveHandles` until the
+ * server FIN-ACKs. With the ROK-1248 drain barrier above, queries are not
+ * in flight here, so the bump only matters when a residual write needs the
+ * round-trip headroom.
  */
 export async function closeTestApp(): Promise<void> {
   const instance = getInstance();
@@ -237,7 +245,7 @@ export async function closeTestApp(): Promise<void> {
 
   // ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
   // never has to await an in-flight job whose DB query would race the
-  // _appClient.end({ timeout: 5 }) cap that follows.
+  // _appClient.end timeout cap.
   try {
     const queueHealth = instance.app.get(QueueHealthService, { strict: false });
     if (queueHealth) {
@@ -247,10 +255,49 @@ export async function closeTestApp(): Promise<void> {
     // best-effort — fall through to app.close() regardless
   }
 
+  // Capture the test container's port BEFORE _appClient.end() / container.stop()
+  // so the fallback destroy can scope itself to ONLY our test-DB sockets.
+  const connStr =
+    instance.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
+  const ourPort = extractPortFromConnectionString(connStr);
+
   await instance.app.close();
   if (instance._appClient) {
-    await instance._appClient.end({ timeout: 5 });
+    await instance._appClient.end({ timeout: 30 });
   }
+
+  // ROK-1250 fallback guard: if anything is still bound to the test
+  // container's port AFTER the graceful end resolved, force-destroy it.
+  // The `remotePort === ourPort` filter cannot collide with redis-mock,
+  // supertest, or BullMQ sockets. On healthy runs this finds 0.
+  if (ourPort !== null) {
+    destroySocketsOnPort(ourPort);
+  }
+
+  // ROK-1250 layer 2 (post-empirical-debug): also force-destroy ioredis
+  // sockets to the local BullMQ Redis container on port 6379. Even though
+  // `app.close()` triggers Nest lifecycle hooks that should close BullMQ
+  // workers, captured snapshot 2026-05-10T17-30-40-570Z showed 40 of 47
+  // active sockets at flake time were still ::1:6379 ioredis connections.
+  // The drain barrier above ensures no jobs are in-flight, so destroying
+  // these sockets is a no-op for application correctness — it just frees
+  // the kernel-side resources before the next spec file boots its own
+  // 13×3 BullMQ worker connections. Skip this if REDIS_URL is set to a
+  // non-default port (e.g. CI uses a sidecar container on a different port).
+  // Match `queue.module.ts` semantics: `Number(parsed.port) || 6379` —
+  // an empty `parsed.port` (URL with no explicit port) resolves to 6379.
+  const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  let redisPort: number | null = null;
+  try {
+    const parsed = new URL(redisUrl);
+    redisPort = Number(parsed.port) || 6379;
+  } catch {
+    // Malformed URL — fall through with null; layer-2 cleanup skipped.
+  }
+  if (redisPort === 6379) {
+    destroySocketsOnPort(6379);
+  }
+
   if (instance.container) {
     await instance.container.stop();
   }
