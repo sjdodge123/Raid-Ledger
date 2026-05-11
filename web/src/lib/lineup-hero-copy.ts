@@ -150,7 +150,11 @@ function votingCopy(ctx: HeroCopyContext): HeroCopy {
     const expected = getExpectedVoterCount(lineup);
     const stillVoting = Math.max(0, expected - lineup.totalVoters);
 
-    if (persona === 'invitee-not-acted') {
+    // ROK-1253: mirror buildingCopy — organizer (creator) is also a voter.
+    // When they haven't cast any votes yet, prefer the participation
+    // prompt over the advance CTA.
+    const creatorNotActed = persona === 'organizer' && usedCount === 0;
+    if (persona === 'invitee-not-acted' || creatorNotActed) {
         return {
             tone: 'action',
             headline: `Cast your votes for up to ${max} games.`,
@@ -167,9 +171,16 @@ function votingCopy(ctx: HeroCopyContext): HeroCopy {
         };
     }
     if (persona === 'organizer' || persona === 'admin') {
+        // ROK-1253: only claim "Quorum reached" when every expected voter
+        // has actually cast a vote. Operator can still advance early — the
+        // CTA stays available — but the headline shouldn't lie.
+        const quorumMet = expected > 0 && lineup.totalVoters >= expected;
+        const headline = quorumMet
+            ? `Quorum reached — ${lineup.totalVoters} of ${expected} voted. Advance when stable.`
+            : `${lineup.totalVoters} of ${expected} voted. Advance when ready.`;
         return {
             tone: 'action',
-            headline: `Quorum reached — ${lineup.totalVoters} of ${expected} voted. Advance when stable.`,
+            headline,
             // ariaLabel mirrors building-phase rationale (PR #754 fix) — a
             // generic "Advance lineup phase" keeps this CTA's accessible
             // name from colliding with breadcrumb-targeted page selectors.
