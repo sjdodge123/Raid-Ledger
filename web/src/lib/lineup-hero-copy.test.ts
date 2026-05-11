@@ -87,11 +87,30 @@ describe('getLineupHeroCopy — building phase', () => {
     expect(copy.headline).toMatch(/2 games/);
   });
 
-  it("organizer gets 'Advance to Voting' CTA", () => {
+  it("organizer who has nominated gets 'Advance to Voting' CTA", () => {
     const copy = getLineupHeroCopy(
-      buildCtx({ pageId: 'building', persona: 'organizer' }),
+      buildCtx({
+        pageId: 'building',
+        persona: 'organizer',
+        myNominatedGameNames: ['Hollowforge'],
+      }),
     );
     expect(copy.cta?.text).toMatch(/advance to voting/i);
+  });
+
+  // ROK-1253: organizer who hasn't nominated themselves is still an
+  // expected voter; show the participation prompt before the advance CTA.
+  it("organizer who hasn't nominated gets 'Nominate a game' CTA", () => {
+    const copy = getLineupHeroCopy(
+      buildCtx({
+        pageId: 'building',
+        persona: 'organizer',
+        myNominatedGameNames: [],
+      }),
+    );
+    expect(copy.tone).toBe('action');
+    expect(copy.cta?.text).toMatch(/nominate a game/i);
+    expect(copy.headline).toMatch(/nominate the games/i);
   });
 
   it('uninvited gets amber privacy tone with disabled-feeling CTA text', () => {

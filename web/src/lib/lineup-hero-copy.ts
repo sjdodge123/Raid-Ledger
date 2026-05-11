@@ -105,7 +105,14 @@ function buildingActed(ctx: HeroCopyContext): HeroCopy {
 
 function buildingCopy(ctx: HeroCopyContext): HeroCopy {
     const { persona, lineup } = ctx;
-    if (persona === 'invitee-not-acted') {
+    // ROK-1253 UX: organizer (= operator/admin who created this lineup) is
+    // also part of the expected-voter set. When they haven't nominated
+    // themselves, the "Advance to Voting" hero is misleading. Prefer the
+    // participation prompt — they can still advance via the breadcrumb.
+    // ROK-1209 resolved persona before participation, hiding this case.
+    const creatorNotActed =
+        persona === 'organizer' && ctx.myNominatedGameNames.length === 0;
+    if (persona === 'invitee-not-acted' || creatorNotActed) {
         return {
             tone: 'action',
             headline: 'Nominate the games you want to play.',
