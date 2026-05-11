@@ -1,32 +1,25 @@
 /**
- * Controller for public and admin user endpoints (ROK-181).
+ * Controller for public user endpoints (ROK-181).
  * /users/me/* routes are in users-me.controller.ts.
+ * Admin-only management endpoints are in users-management.controller.ts.
  */
 import {
   Controller,
   Get,
-  Patch,
-  Delete,
-  Body,
   Param,
   Query,
   ParseIntPipe,
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
   UseGuards,
   Request,
-  HttpCode,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { UsersService } from './users.service';
-import { AvatarService } from './avatar.service';
 import { CharactersService } from '../characters/characters.service';
 import { EventsService } from '../events/events.service';
 import type {
   PlayersListResponseDto,
   RecentPlayersResponseDto,
-  UserManagementListResponseDto,
   UserProfileDto,
   UserEventSignupsResponseDto,
   UserActivityResponseDto,
@@ -34,12 +27,7 @@ import type {
   SteamLibraryResponseDto,
   SteamWishlistResponseDto,
 } from '@raid-ledger/contract';
-import {
-  UpdateUserRoleSchema,
-  ActivityPeriodSchema,
-} from '@raid-ledger/contract';
-import { AdminGuard } from '../auth/admin.guard';
-import { OperatorGuard } from '../auth/operator.guard';
+import { ActivityPeriodSchema } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import {
   parsePagination,
@@ -48,17 +36,33 @@ import {
   resolveSources,
   buildPaginatedMeta,
 } from './users-controller.helpers';
-import type { AuthenticatedRequest } from '../auth/types';
 
-/** Controller for public and admin user endpoints. */
+type RequestWithMaybeUser = { user?: { id: number; role?: string } };
+
+/** Controller for public user endpoints. */
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly avatarService: AvatarService,
     private readonly charactersService: CharactersService,
     private readonly eventsService: EventsService,
   ) {}
+
+  /**
+   * Verify target user is visible to the requester (ROK-1260).
+   * Throws 404 when target is deactivated AND requester is not admin.
+   */
+  private async assertUserVisible(
+    targetUserId: number,
+    req?: RequestWithMaybeUser,
+  ): Promise<NonNullable<Awaited<ReturnType<UsersService['findById']>>>> {
+    const user = await this.usersService.findById(targetUserId);
+    if (!user) throw new NotFoundException('User not found');
+    if (user.deactivatedAt !== null && req?.user?.role !== 'admin') {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  }
 
   /** List all registered players (paginated, with optional search and filters). */
   @Get()
@@ -112,11 +116,12 @@ export class UsersController {
 
   /** Get a user's public profile by ID. */
   @Get(':id/profile')
+  @UseGuards(OptionalJwtGuard)
   async getProfile(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req?: RequestWithMaybeUser,
   ): Promise<{ data: UserProfileDto }> {
-    const user = await this.usersService.findById(id);
-    if (!user) throw new NotFoundException('User not found');
+    const user = await this.assertUserVisible(id, req);
     const charactersResult = await this.charactersService.findAllForUser(id);
     return {
       data: {
@@ -133,12 +138,13 @@ export class UsersController {
 
   /** Get a user's characters, optionally filtered by game (ROK-461). */
   @Get(':id/characters')
+  @UseGuards(OptionalJwtGuard)
   async getUserCharacters(
     @Param('id', ParseIntPipe) id: number,
     @Query('gameId') gameId?: string,
+    @Request() req?: RequestWithMaybeUser,
   ): Promise<{ data: import('@raid-ledger/contract').CharacterDto[] }> {
-    const user = await this.usersService.findById(id);
-    if (!user) throw new NotFoundException('User not found');
+    await this.assertUserVisible(id, req);
     const parsedGameId = gameId ? parseInt(gameId, 10) : undefined;
     const result = await this.charactersService.findAllForUser(
       id,
@@ -149,13 +155,14 @@ export class UsersController {
 
   /** Get games a user has hearted (ROK-282, ROK-754: paginated + steam filtered). */
   @Get(':id/hearted-games')
+  @UseGuards(OptionalJwtGuard)
   async getHeartedGames(
     @Param('id', ParseIntPipe) id: number,
     @Query('page') pageStr?: string,
     @Query('limit') limitStr?: string,
+    @Request() req?: RequestWithMaybeUser,
   ): Promise<UserHeartedGamesResponseDto> {
-    const user = await this.usersService.findById(id);
-    if (!user) throw new NotFoundException('User not found');
+    await this.assertUserVisible(id, req);
     const { page, limit } = parsePagination(pageStr, limitStr);
     const result = await this.usersService.getHeartedGames(id, page, limit);
     return {
@@ -166,13 +173,14 @@ export class UsersController {
 
   /** Get a user's Steam library (ROK-754). */
   @Get(':id/steam-library')
+  @UseGuards(OptionalJwtGuard)
   async getSteamLibrary(
     @Param('id', ParseIntPipe) id: number,
     @Query('page') pageStr?: string,
     @Query('limit') limitStr?: string,
+    @Request() req?: RequestWithMaybeUser,
   ): Promise<SteamLibraryResponseDto> {
-    const user = await this.usersService.findById(id);
-    if (!user) throw new NotFoundException('User not found');
+    await this.assertUserVisible(id, req);
     const { page, limit } = parsePagination(pageStr, limitStr);
     const result = await this.usersService.getSteamLibrary(id, page, limit);
     return {
@@ -183,13 +191,14 @@ export class UsersController {
 
   /** Get a user's Steam wishlist (ROK-418). */
   @Get(':id/steam-wishlist')
+  @UseGuards(OptionalJwtGuard)
   async getSteamWishlist(
     @Param('id', ParseIntPipe) id: number,
     @Query('page') pageStr?: string,
     @Query('limit') limitStr?: string,
+    @Request() req?: RequestWithMaybeUser,
   ): Promise<SteamWishlistResponseDto> {
-    const user = await this.usersService.findById(id);
-    if (!user) throw new NotFoundException('User not found');
+    await this.assertUserVisible(id, req);
     const { page, limit } = parsePagination(pageStr, limitStr);
     const result = await this.usersService.getSteamWishlist(id, page, limit);
     return {
@@ -204,15 +213,14 @@ export class UsersController {
   async getUserActivity(
     @Param('id', ParseIntPipe) id: number,
     @Query('period') periodParam?: string,
-    @Request() req?: { user?: { id: number } },
+    @Request() req?: RequestWithMaybeUser,
   ): Promise<UserActivityResponseDto> {
     const period = ActivityPeriodSchema.safeParse(periodParam ?? 'week');
     if (!period.success)
       throw new BadRequestException(
         'Invalid period. Must be week, month, or all.',
       );
-    const user = await this.usersService.findById(id);
-    if (!user) throw new NotFoundException('User not found');
+    await this.assertUserVisible(id, req);
     const data = await this.usersService.getUserActivity(
       id,
       period.data,
@@ -223,90 +231,12 @@ export class UsersController {
 
   /** Get upcoming events a user has signed up for (ROK-299). */
   @Get(':id/events/signups')
+  @UseGuards(OptionalJwtGuard)
   async getUserEventSignups(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req?: RequestWithMaybeUser,
   ): Promise<UserEventSignupsResponseDto> {
-    const user = await this.usersService.findById(id);
-    if (!user) throw new NotFoundException('User not found');
+    await this.assertUserVisible(id, req);
     return this.eventsService.findUpcomingByUser(id);
-  }
-
-  /** List all users with role information (admin-only, ROK-272). */
-  @Get('management')
-  @UseGuards(AuthGuard('jwt'), AdminGuard)
-  async listUsersForManagement(
-    @Query('page') pageStr?: string,
-    @Query('limit') limitStr?: string,
-    @Query('search') search?: string,
-  ): Promise<UserManagementListResponseDto> {
-    const { page, limit } = parsePagination(pageStr, limitStr);
-    const result = await this.usersService.findAllWithRoles(
-      page,
-      limit,
-      search || undefined,
-    );
-    return {
-      data: result.data.map((u) => ({
-        ...u,
-        createdAt: u.createdAt.toISOString(),
-      })),
-      meta: buildPaginatedMeta(result.total, page, limit),
-    };
-  }
-
-  /** Update a user's role (admin-only, ROK-272). */
-  @Patch(':id/role')
-  @UseGuards(AuthGuard('jwt'), AdminGuard)
-  async updateUserRole(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ) {
-    const dto = UpdateUserRoleSchema.parse(body);
-    if (id === req.user.id)
-      throw new ForbiddenException('Cannot change your own role');
-    const targetUser = await this.usersService.findById(id);
-    if (!targetUser) throw new NotFoundException('User not found');
-    if (targetUser.role === 'admin')
-      throw new ForbiddenException('Cannot modify admin role via API');
-    const updated = await this.usersService.setRole(id, dto.role);
-    return {
-      data: { id: updated.id, username: updated.username, role: updated.role },
-    };
-  }
-
-  /** Admin-remove a user (ROK-405). */
-  @Delete(':id')
-  @UseGuards(AuthGuard('jwt'), AdminGuard)
-  @HttpCode(204)
-  async adminRemoveUser(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    if (id === req.user.id)
-      throw new BadRequestException('Cannot delete yourself');
-    const targetUser = await this.usersService.findById(id);
-    if (!targetUser) throw new NotFoundException('User not found');
-    if (targetUser.role === 'admin')
-      throw new ForbiddenException('Cannot delete another admin');
-    if (targetUser.customAvatarUrl)
-      await this.avatarService.delete(targetUser.customAvatarUrl);
-    await this.usersService.deleteUser(id, req.user.id);
-  }
-
-  /** Operator+: remove any user's custom avatar (ROK-220 content moderation). */
-  @Delete(':id/avatar')
-  @UseGuards(AuthGuard('jwt'), OperatorGuard)
-  @HttpCode(204)
-  async adminDeleteAvatar(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    const user = await this.usersService.findById(id);
-    if (!user) throw new NotFoundException('User not found');
-    if (user.customAvatarUrl) {
-      await this.avatarService.delete(user.customAvatarUrl);
-      await this.usersService.setCustomAvatar(id, null);
-    }
   }
 }

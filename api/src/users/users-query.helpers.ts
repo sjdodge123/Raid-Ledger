@@ -16,6 +16,7 @@ import {
   querySteamPlaytime,
 } from './users-steam-query.helpers';
 import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
+import { activeUsersFilter } from './users-active.helpers';
 
 /** Basic user columns selected for list endpoints. */
 const USER_LIST_COLUMNS = {
@@ -58,7 +59,7 @@ function buildGameInterestConditions(
   playHistory?: string,
   role?: string,
 ) {
-  const conditions = [eq(schema.gameInterests.gameId, gameId)];
+  const conditions = [eq(schema.gameInterests.gameId, gameId), activeUsersFilter()];
   if (sources && sources.length > 0) {
     conditions.push(inArray(schema.gameInterests.source, sources));
   } else {
@@ -129,12 +130,14 @@ async function queryGameInterestResults(
   return { data: rows, total: Number(countResult.count) };
 }
 
-/** Build combined search + role WHERE condition (ROK-821). */
+/** Build combined search + role WHERE condition (ROK-821). Always filters deactivated (ROK-1260). */
 function buildUserListConditions(search?: string, role?: string) {
   const searchCond = buildSearchCondition(search);
   const roleCond = role ? eq(schema.users.role, role as UserRole) : undefined;
-  if (searchCond && roleCond) return and(searchCond, roleCond);
-  return searchCond ?? roleCond;
+  const conds = [activeUsersFilter()];
+  if (searchCond) conds.push(searchCond);
+  if (roleCond) conds.push(roleCond);
+  return and(...conds);
 }
 
 /** Find all users (no game filter, ROK-821: optional role filter). */
@@ -179,6 +182,7 @@ export async function findAllWithRolesQuery(
       ...USER_LIST_COLUMNS,
       role: schema.users.role,
       createdAt: schema.users.createdAt,
+      deactivatedAt: schema.users.deactivatedAt,
     })
     .from(schema.users)
     .where(conditions)

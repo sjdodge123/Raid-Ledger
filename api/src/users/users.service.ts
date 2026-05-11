@@ -346,4 +346,20 @@ export class UsersService {
   async findAdmin(): Promise<{ id: number } | undefined> {
     return findAdminUser(this.db);
   }
+
+  /**
+   * Reactivate a deactivated user (ROK-1260, admin-triggered).
+   * Does NOT emit the admin reactivation notification — only the
+   * Discord `guildMemberAdd` listener does that.
+   */
+  async reactivateUser(userId: number) {
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ deactivatedAt: null, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
+    invalidateAuthUser(userId);
+    this.logger.log(`Admin reactivated user ${userId}`);
+    return updated;
+  }
 }

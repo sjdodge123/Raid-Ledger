@@ -7,6 +7,7 @@ import { PreferencesService } from './preferences.service';
 import { GameTimeService } from './game-time.service';
 import { UsersController } from './users.controller';
 import { UsersMeController } from './users-me.controller';
+import { UsersManagementController } from './users-management.controller';
 import { CharactersModule } from '../characters/characters.module';
 import { EventsModule } from '../events/events.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
@@ -19,7 +20,7 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
     forwardRef(() => DiscordBotModule),
     MulterModule.register({ storage: multer.memoryStorage() }),
   ],
-  controllers: [UsersMeController, UsersController],
+  controllers: [UsersMeController, UsersManagementController, UsersController],
   providers: [
     UsersService,
     AvatarService,
