@@ -99,6 +99,7 @@ These rules cut tokens without cutting quality. They DO NOT trade quality for co
 - **Lead does not capture stdout into context.** Long-running command output (`validate-ci.sh`, `npx playwright test`, `deploy_dev.sh`) is read via `tail -20` or a one-line summary line — never the full log. If the command exits 0, accept it. If it exits non-zero, read only the failing block.
 - **Architect for `standard`:** allowed when the story has genuine architectural ambiguity — ≥2 viable implementation paths, or AC bar high enough that picking the wrong path means redo. Lead's call. Default is still no architect for standard, but don't ration it when it would prevent rework.
 - **Reviewer is the default, not the exception.** Reviewer runs for `standard` and `full`. Skip ONLY when the diff is genuinely trivial: single-file, <100 lines, pure copy/config/dep-bump with no logic change. Operator approval is NOT a substitute for reviewer on anything with logic — past skipped reviews caused the rework this section exists to prevent.
+- **Reproduce flakes BEFORE designing fixes** (STRICT — full protocol in `CLAUDE.md` "Flake-investigation protocol"). For any change framed as a fix for a flaky integration test: run `./scripts/spec-loop.sh <spec> 50` FIRST to establish baseline rate, design fix AFTER measurable signal, validate post-fix at the same per-spec scale, then run full suite. Skipping step 1 means the fix has no falsifiable baseline — ROK-1264's H2 cycle burned ~6 hours on this anti-pattern; the rule exists to prevent recurrence.
 
 ---
 
