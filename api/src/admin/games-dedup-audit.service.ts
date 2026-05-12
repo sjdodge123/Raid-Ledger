@@ -163,9 +163,7 @@ export class GamesDedupAuditService {
     );
 
     await this.db.transaction(async (tx) => {
-      await tx.execute(
-        sql`TRUNCATE TABLE games_dedup_audit RESTART IDENTITY`,
-      );
+      await tx.execute(sql`TRUNCATE TABLE games_dedup_audit RESTART IDENTITY`);
       if (rows.length > 0) {
         await tx.insert(schema.gamesDedupAudit).values(rows);
       }
@@ -236,9 +234,7 @@ function compareBlastRadius(a: BlastRadiusRow, b: BlastRadiusRow): number {
 }
 
 /** Sum each FK key across a group's dup-id blast-radius rows (zero-fill missing). */
-function sumBlastRadius(
-  rows: Array<BlastRadiusRow | null>,
-): BlastRadiusCounts {
+function sumBlastRadius(rows: Array<BlastRadiusRow | null>): BlastRadiusCounts {
   const acc: BlastRadiusCounts = { ...ZERO_BLAST_RADIUS };
   for (const row of rows) {
     if (!row) continue;

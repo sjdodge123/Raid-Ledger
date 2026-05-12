@@ -64,7 +64,7 @@ const EMPTY: UniqueConflictCounts = {
   tasteVectors: 0,
 };
 
-async function takeInt(rows: { c: number }[]): Promise<number> {
+function takeInt(rows: { c: number }[]): number {
   return Number(rows[0]?.c ?? 0);
 }
 
@@ -140,8 +140,18 @@ export async function computeUniqueConflicts(
       ['user_id', 'name', 'realm'],
       input,
     ),
-    countCompositeConflicts(db, 'community_lineup_entries', ['lineup_id'], input),
-    countCompositeConflicts(db, 'community_lineup_matches', ['lineup_id'], input),
+    countCompositeConflicts(
+      db,
+      'community_lineup_entries',
+      ['lineup_id'],
+      input,
+    ),
+    countCompositeConflicts(
+      db,
+      'community_lineup_matches',
+      ['lineup_id'],
+      input,
+    ),
     countCompositeConflicts(
       db,
       'community_lineup_votes',
@@ -155,12 +165,7 @@ export async function computeUniqueConflicts(
       ['user_id', 'period', 'period_start'],
       input,
     ),
-    countCompositeConflicts(
-      db,
-      'game_interests',
-      ['user_id', 'source'],
-      input,
-    ),
+    countCompositeConflicts(db, 'game_interests', ['user_id', 'source'], input),
     countCompositeConflicts(
       db,
       'game_interest_suppressions',
