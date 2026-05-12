@@ -102,7 +102,7 @@ const deactivatesAndCompletesJobOn50278: SmokeTest = {
     // DiscordAPIError[50278] on the worker.
     const dispatched = await ctx.api.post<DispatchResponse>(
       '/admin/test/dispatch-discord-notification',
-      { userId: seed.userId },
+      { userId: seed.userId, simulate: 50278 },
     );
 
     // Drain BullMQ so the worker has finished retrying / running.
@@ -164,7 +164,7 @@ const deactivationCancelsUpcomingSignups: SmokeTest = {
       // Provoke deactivation.
       await ctx.api.post<DispatchResponse>(
         '/admin/test/dispatch-discord-notification',
-        { userId: seed.userId },
+        { userId: seed.userId, simulate: 50278 },
       );
       await awaitProcessing(ctx.api);
 

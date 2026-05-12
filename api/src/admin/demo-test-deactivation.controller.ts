@@ -89,7 +89,12 @@ export class DemoTestDeactivationController {
   @Post('dispatch-discord-notification')
   @HttpCode(HttpStatus.OK)
   async dispatchDiscordNotification(
-    @Body() body: { userId: number; type?: string },
+    @Body()
+    body: {
+      userId: number;
+      type?: string;
+      simulate?: 50278 | 50007 | 10013;
+    },
   ): Promise<{ enqueued: boolean; notificationId: string }> {
     await this.assertDemoMode();
     const userId = Number(body?.userId);
@@ -117,6 +122,7 @@ export class DemoTestDeactivationController {
         type: (body?.type as DiscordNotificationJobData['type']) ?? 'system',
         title: 'ROK-1260 smoke test',
         message: 'This DM is part of the ROK-1260 deactivation smoke test.',
+        __simulateError: body?.simulate,
       },
       {
         attempts: 1,

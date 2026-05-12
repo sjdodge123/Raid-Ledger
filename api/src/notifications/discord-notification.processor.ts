@@ -34,6 +34,26 @@ function classifyDiscordError(error: unknown): ErrorClass {
 }
 
 /**
+ * DEMO_MODE-only test hook (ROK-1260): when a job carries `__simulateError`
+ * and DEMO_MODE is on, throw a synthetic `DiscordAPIError` so the smoke
+ * test can deterministically exercise the 50278 classifier branch without
+ * a real ex-guild Discord user. No-op in production.
+ */
+function maybeThrowSimulatedError(data: DiscordNotificationJobData): void {
+  if (process.env.DEMO_MODE !== 'true') return;
+  if (!data.__simulateError) return;
+  const messages: Record<number, string> = {
+    50278: 'Cannot send messages to this user due to having no mutual guilds',
+    50007: 'Cannot send messages to this user',
+    10013: 'Unknown User',
+  };
+  const err = new Error(messages[data.__simulateError] ?? 'Simulated error');
+  err.name = 'DiscordAPIError';
+  (err as Error & { code: number }).code = data.__simulateError;
+  throw err;
+}
+
+/**
  * Bull queue processor for Discord DM delivery (ROK-180 AC-5).
  * Processes jobs from the discord-notification queue.
  * Retries up to 3 times with exponential backoff.
@@ -73,6 +93,7 @@ export class DiscordNotificationProcessor
     }
     Sentry.setUser({ id: userId.toString(), username: discordId });
     try {
+      maybeThrowSimulatedError(job.data);
       await this.buildAndSendDM(job.data, discordId);
       await this.discordNotificationService.resetFailures(userId);
       this.logger.log(
