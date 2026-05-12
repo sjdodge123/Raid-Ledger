@@ -19,12 +19,15 @@ export async function reactivateUserById(
   db: PostgresJsDatabase<typeof schema>,
   userId: number,
   logger: Logger,
-): Promise<typeof schema.users.$inferSelect | undefined> {
+): Promise<typeof schema.users.$inferSelect> {
   const [updated] = await db
     .update(schema.users)
     .set({ deactivatedAt: null, updatedAt: new Date() })
     .where(eq(schema.users.id, userId))
     .returning();
+  if (!updated) {
+    throw new Error(`reactivateUserById: user ${userId} not found`);
+  }
   invalidateAuthUser(userId);
   logger.log(`Admin reactivated user ${userId}`);
   return updated;
