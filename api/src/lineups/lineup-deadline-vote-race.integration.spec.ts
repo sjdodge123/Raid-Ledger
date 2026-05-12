@@ -51,7 +51,6 @@ import {
 import * as schema from '../drizzle/schema';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { SettingsService } from '../settings/settings.service';
-import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 
@@ -63,7 +62,6 @@ function describeDeadlineVoteRace() {
   let testApp: TestApp;
   let adminToken: string;
   let settings: SettingsService;
-  let phaseQueue: LineupPhaseQueueService;
   let rawQueue: Queue;
   let phaseProcessor: LineupPhaseProcessor;
 
@@ -71,7 +69,6 @@ function describeDeadlineVoteRace() {
     testApp = await getTestApp();
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
     settings = testApp.app.get(SettingsService);
-    phaseQueue = testApp.app.get(LineupPhaseQueueService);
     rawQueue = testApp.app.get<Queue>(getQueueToken(LINEUP_PHASE_QUEUE));
     phaseProcessor = testApp.app.get(LineupPhaseProcessor);
   });
@@ -186,7 +183,6 @@ function describeDeadlineVoteRace() {
    */
   async function fireGraceProcessor(lineupId: number): Promise<void> {
     await testApp.db.execute(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (await import('drizzle-orm')).sql`
         UPDATE community_lineups
         SET pending_advance_at = NOW() - INTERVAL '1 second'
@@ -194,10 +190,13 @@ function describeDeadlineVoteRace() {
       `,
     );
     // The processor's process() method dispatches by job.name. We invoke
-    // the internal helper directly via the typed cast — it's part of
-    // the class's public surface in the spec only.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (phaseProcessor as any).processGraceAdvance(lineupId);
+    // the internal helper directly via a narrow private-method typed
+    // shape so we keep ESLint's no-explicit-any happy without weakening
+    // the call surface.
+    const privateProcessor = phaseProcessor as unknown as {
+      processGraceAdvance(lineupId: number): Promise<void>;
+    };
+    await privateProcessor.processGraceAdvance(lineupId);
   }
 
   // ── CASE-A: vote BEFORE processor ─────────────────────────────
@@ -340,9 +339,11 @@ function describeDeadlineVoteRace() {
     // After force-fire, any leftover grace job should be a no-op when
     // re-processed (idempotent). Calling processGraceAdvance again must
     // not throw even when pending_advance_at is now null.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const privateProcessor = phaseProcessor as unknown as {
+      processGraceAdvance(lineupId: number): Promise<void>;
+    };
     await expect(
-      (phaseProcessor as any).processGraceAdvance(lineupId),
+      privateProcessor.processGraceAdvance(lineupId),
     ).resolves.not.toThrow();
 
     // BullMQ queue still healthy (no orphaned jobs blocking the worker).
@@ -351,4 +352,7 @@ function describeDeadlineVoteRace() {
   });
 }
 
-describe('Lineup deadline vs vote race (ROK-1068 Phase F — AC F2)', describeDeadlineVoteRace);
+describe(
+  'Lineup deadline vs vote race (ROK-1068 Phase F — AC F2)',
+  describeDeadlineVoteRace,
+);
