@@ -9,6 +9,7 @@ import { count, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { normalizeForDedup } from '../igdb/igdb-search-dedup.helpers';
+import { buildExtraCountQueries } from './games-dedup-extra-counts.helpers';
 
 /** Minimal game-row projection used by the audit pipeline. */
 export interface GameRow {
@@ -69,7 +70,7 @@ export function pickCanonicalId(rows: GameRow[]): number {
   return Math.min(...rows.map((r) => r.id));
 }
 
-/** Per-game downstream-row counts across the 17 FK tables. */
+/** Per-game downstream-row counts across the 23 FK tables (17 + 6 from ROK-1270). */
 export interface BlastRadiusCounts {
   events: number;
   eventPlans: number;
@@ -88,6 +89,12 @@ export interface BlastRadiusCounts {
   discordMappings: number;
   eventTypes: number;
   interestSuppressions: number;
+  tiebreakerBracketGameA: number;
+  tiebreakerBracketGameB: number;
+  tiebreakerBracketWinner: number;
+  tiebreakerBracketVotes: number;
+  tiebreakerVetoes: number;
+  playerIntensitySnapshots: number;
 }
 
 export interface BlastRadiusRow extends BlastRadiusCounts {
@@ -100,9 +107,15 @@ function takeCount(rows: { c: number }[]): number {
   return Number(rows[0]?.c ?? 0);
 }
 
-/** 16 of the 17 FK tables expose a direct `gameId` (or `decidedGameId`/`winnerGameId`)
- * column — these all share a single SELECT shape. The 17th table
- * (`community_lineup_match_members`) needs a JOIN, handled separately. */
+/** 22 of the 23 FK tables (ROK-1271's 16 + ROK-1270's 6) expose a direct
+ * `gameId` (or `decidedGameId` / `winnerGameId` / `gameAId` / `gameBId` /
+ * `longestSessionGameId`) column — these all share a single SELECT shape.
+ * The 23rd table (`community_lineup_match_members`) needs a JOIN, handled
+ * separately by `countLineupMatchMembers`.
+ *
+ * The 16 ROK-1271 direct counts are emitted here; the 6 ROK-1270 direct
+ * counts are spread in from `buildExtraCountQueries` (same lockstep order
+ * contract — destructure below must match). */
 function buildDirectCountQueries(db: Db, id: number): Promise<number>[] {
   const c = () => count();
   return [
@@ -186,6 +199,7 @@ function buildDirectCountQueries(db: Db, id: number): Promise<number>[] {
       .from(schema.gameInterestSuppressions)
       .where(eq(schema.gameInterestSuppressions.gameId, id))
       .then(takeCount),
+    ...buildExtraCountQueries(db, id),
   ];
 }
 
@@ -234,6 +248,12 @@ export async function computeBlastRadiusForId(
     discordMappings,
     eventTypes,
     interestSuppressions,
+    tiebreakerBracketGameA,
+    tiebreakerBracketGameB,
+    tiebreakerBracketWinner,
+    tiebreakerBracketVotes,
+    tiebreakerVetoes,
+    playerIntensitySnapshots,
     lineupMatchMembers,
   ] = await Promise.all([
     ...buildDirectCountQueries(db, id),
@@ -258,6 +278,12 @@ export async function computeBlastRadiusForId(
     discordMappings,
     eventTypes,
     interestSuppressions,
+    tiebreakerBracketGameA,
+    tiebreakerBracketGameB,
+    tiebreakerBracketWinner,
+    tiebreakerBracketVotes,
+    tiebreakerVetoes,
+    playerIntensitySnapshots,
   };
 }
 
@@ -280,6 +306,12 @@ export function totalBlastRadius(row: BlastRadiusCounts): number {
     row.channelBindings +
     row.discordMappings +
     row.eventTypes +
-    row.interestSuppressions
+    row.interestSuppressions +
+    row.tiebreakerBracketGameA +
+    row.tiebreakerBracketGameB +
+    row.tiebreakerBracketWinner +
+    row.tiebreakerBracketVotes +
+    row.tiebreakerVetoes +
+    row.playerIntensitySnapshots
   );
 }
