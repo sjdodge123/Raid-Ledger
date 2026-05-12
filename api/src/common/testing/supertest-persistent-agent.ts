@@ -69,9 +69,7 @@ export function wrapWithPersistentAgent(
 }
 
 /** Destroy the persistent agent's pooled socket; safe if never wrapped. */
-export function destroyPersistentAgent(
-  agent: TestAgent<supertest.Test>,
-): void {
+export function destroyPersistentAgent(agent: TestAgent<supertest.Test>): void {
   const holder = agent as unknown as AgentHolder;
   const persistent = holder[PERSISTENT_AGENT_KEY];
   if (persistent) {

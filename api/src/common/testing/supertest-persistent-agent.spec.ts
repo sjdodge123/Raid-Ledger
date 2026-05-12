@@ -90,9 +90,10 @@ describe('wrapWithPersistentAgent (ROK-1264)', () => {
   it('destroyPersistentAgent on an unwrapped TestAgent is a safe no-op', async () => {
     await withServer(
       () => undefined,
-      async (server) => {
+      (server) => {
         const request = supertest.default(server);
         expect(() => destroyPersistentAgent(request)).not.toThrow();
+        return Promise.resolve();
       },
     );
   });
