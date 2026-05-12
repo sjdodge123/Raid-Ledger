@@ -25,6 +25,7 @@ export const ActivityActionSchema = z.enum([
     'roster_allocated',
     'event_cancelled',
     'event_rescheduled',
+    'signup_reconfirmed',
 ]);
 
 export type ActivityActionDto = z.infer<typeof ActivityActionSchema>;

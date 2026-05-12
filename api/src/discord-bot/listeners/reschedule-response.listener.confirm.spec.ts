@@ -8,6 +8,7 @@ import { MessageFlags } from 'discord.js';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { ActivityLogService } from '../../activity-log/activity-log.service';
 import {
   createDrizzleMock,
   type MockDb,
@@ -144,6 +145,10 @@ function buildRescheduleProviders() {
     { provide: CharactersService, useValue: mockCharactersService },
     { provide: EmbedSyncQueueService, useValue: mockEmbedSyncQueue },
     { provide: DiscordEmojiService, useValue: mockEmojiService },
+    {
+      provide: ActivityLogService,
+      useValue: { log: jest.fn().mockResolvedValue(undefined) },
+    },
   ];
 }
 

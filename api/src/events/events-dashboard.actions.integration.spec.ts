@@ -8,7 +8,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { EventsService } from './events.service';
 
 async function createMemberAndLogin(
@@ -303,6 +303,168 @@ async function testRescheduleDoesNotResetDeclined() {
   expect(signup.status).toBe('declined');
 }
 
+// ─── ROK-1269: rescheduler stays confirmed + activity log ───────────────────
+
+/** Ensures the admin's auto-created signup is in signed_up + confirmed. */
+async function signupAdmin(eventId: number) {
+  await testApp.db
+    .update(schema.eventSignups)
+    .set({ status: 'signed_up', confirmationStatus: 'confirmed' })
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.userId, testApp.seed.adminUser.id),
+      ),
+    );
+}
+
+async function testRescheduleStaysConfirmedForRescheduler() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Rescheduler Confirmed Raid',
+  });
+  await signupAdmin(eventId);
+  const others = await Promise.all(
+    [0, 1, 2].map((i) =>
+      createMemberAndLogin(
+        testApp,
+        `rok1269_other_${i}`,
+        `rok1269_other_${i}@test.local`,
+      ),
+    ),
+  );
+  await testApp.db.insert(schema.eventSignups).values(
+    others.map((o) => ({
+      eventId,
+      userId: o.userId,
+      status: 'signed_up' as const,
+      confirmationStatus: 'confirmed' as const,
+    })),
+  );
+  const newStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
+  await testApp.request
+    .patch(`/events/${eventId}/reschedule`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+  const signups = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.eventId, eventId));
+  const adminSignup = signups.find(
+    (s) => s.userId === testApp.seed.adminUser.id,
+  )!;
+  expect(adminSignup.confirmationStatus).toBe('confirmed');
+  expect(adminSignup.status).toBe('signed_up');
+  for (const o of others) {
+    const otherSignup = signups.find((s) => s.userId === o.userId)!;
+    expect(otherSignup.confirmationStatus).toBe('pending');
+    expect(otherSignup.status).toBe('signed_up');
+  }
+}
+
+async function testRescheduleSkipsNotificationForRescheduler() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'No Self-DM Raid',
+  });
+  await signupAdmin(eventId);
+  const newStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
+  await testApp.request
+    .patch(`/events/${eventId}/reschedule`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+  const reschedNotifs = await testApp.db
+    .select()
+    .from(schema.notifications)
+    .where(eq(schema.notifications.userId, testApp.seed.adminUser.id));
+  expect(
+    reschedNotifs.find((n) => n.type === 'event_rescheduled'),
+  ).toBeUndefined();
+}
+
+async function testRescheduleTentativeReschedulerStaysTentative() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Tentative Rescheduler Raid',
+  });
+  await testApp.db
+    .update(schema.eventSignups)
+    .set({ status: 'tentative', confirmationStatus: 'confirmed' })
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.userId, testApp.seed.adminUser.id),
+      ),
+    );
+  const newStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
+  await testApp.request
+    .patch(`/events/${eventId}/reschedule`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
+  const [signup] = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, testApp.seed.adminUser.id));
+  // tentative + confirmed preserved (UPDATE skipped because user excluded)
+  expect(signup.status).toBe('tentative');
+  expect(signup.confirmationStatus).toBe('confirmed');
+}
+
+async function testRosterUpdateLogsSignupReconfirmed() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Roster Reconfirm Activity Raid',
+  });
+  const { userId: memberId } = await createMemberAndLogin(
+    testApp,
+    'rok1269_member',
+    'rok1269_member@test.local',
+  );
+  // Member signs up; reschedule resets them to pending; admin then assigns
+  // them via roster update which flips back to confirmed.
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId,
+    userId: memberId,
+    status: 'signed_up',
+    confirmationStatus: 'pending',
+  });
+  const [signup] = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, memberId));
+  const rosterRes = await testApp.request
+    .patch(`/events/${eventId}/roster`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({
+      assignments: [
+        {
+          userId: memberId,
+          signupId: signup.id,
+          slot: 'player',
+          position: 1,
+        },
+      ],
+    });
+  expect(rosterRes.status).toBe(200);
+  const [flipped] = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, memberId));
+  expect(flipped.confirmationStatus).toBe('confirmed');
+  const activity = await testApp.request.get(`/events/${eventId}/activity`);
+  expect(activity.status).toBe(200);
+  type ActivityRow = {
+    action: string;
+    actor: { id: number } | null;
+    metadata: Record<string, unknown> | null;
+  };
+  const reconfirms = (activity.body.data as ActivityRow[]).filter(
+    (e) => e.action === 'signup_reconfirmed',
+  );
+  expect(reconfirms).toHaveLength(1);
+  expect(reconfirms[0].actor?.id).toBe(memberId);
+  expect(reconfirms[0].metadata?.reason).toBe('roster-update');
+}
+
 // ─── invite member tests ────────────────────────────────────────────────────
 
 async function testInviteByDiscordId() {
@@ -479,6 +641,14 @@ describe('Events — reschedule', () => {
     testRescheduleDoesNotResetDeclined());
   it('reschedule with 12 signups completes under 200ms (ROK-1043)', () =>
     testReschedulePerfBatch());
+  it("ROK-1269: rescheduler's signup stays confirmed; others flip to pending", () =>
+    testRescheduleStaysConfirmedForRescheduler());
+  it('ROK-1269: rescheduler does not receive their own reschedule DM', () =>
+    testRescheduleSkipsNotificationForRescheduler());
+  it('ROK-1269: tentative rescheduler stays tentative + confirmed', () =>
+    testRescheduleTentativeReschedulerStaysTentative());
+  it('ROK-1269: roster update logs signup_reconfirmed per flipped attendee', () =>
+    testRosterUpdateLogsSignupReconfirmed());
 });
 
 describe('Events — invite member', () => {

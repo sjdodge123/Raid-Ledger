@@ -24,6 +24,7 @@ import {
   buildSignupSummary,
   buildDiscordUrl,
   isWithinGracePeriod,
+  formatRelativeTimeLabel,
 } from './recruitment-reminder.helpers';
 
 /** TTL for recruitment-reminder dedup keys: 48 hours in seconds */
@@ -254,8 +255,15 @@ export class RecruitmentReminderService {
   private async postChannelBump(event: EligibleEvent): Promise<void> {
     if (this.shouldSkipBump(event)) return;
     try {
-      const clientUrl = await this.settingsService.getClientUrl();
-      const { embed, row } = this.buildBumpEmbed(event, clientUrl);
+      const [clientUrl, defaultTimezone] = await Promise.all([
+        this.settingsService.getClientUrl(),
+        this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
+      ]);
+      const { embed, row } = this.buildBumpEmbed(
+        event,
+        clientUrl,
+        defaultTimezone,
+      );
       const message = await this.discordBotClient.sendEmbed(
         event.channelId,
         embed,
@@ -292,13 +300,16 @@ export class RecruitmentReminderService {
   private buildBumpEmbed(
     event: EligibleEvent,
     clientUrl: string,
+    defaultTimezone: string,
   ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
     const signupSummary = buildSignupSummary(event);
-    const embedUrl = buildDiscordUrl(event);
-    const hoursUntil = Math.round(
-      (new Date(event.startTime).getTime() - Date.now()) / (1000 * 60 * 60),
+    // ROK-1240: TZ-aware "today"/"tomorrow"/"in Xh" label — fixes
+    // same-day events being labeled "tomorrow".
+    const timeLabel = formatRelativeTimeLabel(
+      event.startTime,
+      Date.now(),
+      defaultTimezone,
     );
-    const timeLabel = hoursUntil <= 24 ? 'tomorrow' : `in ${hoursUntil}h`;
 
     const embed = new EmbedBuilder()
       .setTitle(`\uD83D\uDCE2 Spots still available — event ${timeLabel}!`)
@@ -308,7 +319,15 @@ export class RecruitmentReminderService {
       .setColor(EMBED_COLORS.ANNOUNCEMENT)
       .setTimestamp(new Date(event.startTime));
 
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    return { embed, row: this.buildBumpRow(event, clientUrl) };
+  }
+
+  /** Build the action row (View Event + View in Discord buttons). */
+  private buildBumpRow(
+    event: EligibleEvent,
+    clientUrl: string,
+  ): ActionRowBuilder<ButtonBuilder> {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setLabel('View Event')
         .setStyle(ButtonStyle.Link)
@@ -316,8 +335,7 @@ export class RecruitmentReminderService {
       new ButtonBuilder()
         .setLabel('View in Discord')
         .setStyle(ButtonStyle.Link)
-        .setURL(embedUrl),
+        .setURL(buildDiscordUrl(event)),
     );
-    return { embed, row };
   }
 }

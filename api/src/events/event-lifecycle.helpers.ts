@@ -127,24 +127,33 @@ export async function cancelEvent(
   );
 }
 
-/** Resets confirmation status for active signups after reschedule. */
+/**
+ * Resets confirmation status for active signups after reschedule.
+ *
+ * The rescheduler is excluded from the reset (ROK-1269) — they chose the
+ * new time so they're implicitly committed. If `reschedulerId` is null
+ * (e.g. series-bulk reschedule with no acting user), no exclusion applies.
+ */
 export async function resetSignupConfirmations(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
+  reschedulerId: number | null = null,
 ): Promise<void> {
   await db
     .delete(schema.eventRemindersSent)
     .where(eq(schema.eventRemindersSent.eventId, eventId));
+  const conditions = [
+    eq(schema.eventSignups.eventId, eventId),
+    ne(schema.eventSignups.status, 'declined'),
+    ne(schema.eventSignups.status, 'departed'),
+  ];
+  if (reschedulerId !== null) {
+    conditions.push(ne(schema.eventSignups.userId, reschedulerId));
+  }
   await db
     .update(schema.eventSignups)
     .set({ confirmationStatus: 'pending', status: 'signed_up' })
-    .where(
-      and(
-        eq(schema.eventSignups.eventId, eventId),
-        ne(schema.eventSignups.status, 'declined'),
-        ne(schema.eventSignups.status, 'departed'),
-      ),
-    );
+    .where(and(...conditions));
 }
 
 /** Formats a date for Discord notification display using native timestamps. */
@@ -263,7 +272,7 @@ export async function rescheduleEvent(
     .update(schema.events)
     .set({ duration: [newStart, new Date(dto.endTime)], updatedAt: new Date() })
     .where(eq(schema.events.id, eventId));
-  await resetSignupConfirmations(db, eventId);
+  await resetSignupConfirmations(db, eventId, userId);
   await notifyReschedule(
     db,
     notificationService,

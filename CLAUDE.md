@@ -111,7 +111,7 @@ State lives at `~/.raid-ledger/env-lock.json` (outside any worktree). The lease 
 
 ## Code Size Limits (STRICT — enforced by ESLint)
 
-- **Max 300 lines per file** (`max-lines: warn`, skipBlankLines + skipComments) — will be upgraded to `error` once existing violations are resolved
+- **Max 300 lines per file** (`max-lines: error`, skipBlankLines + skipComments) — CI lint fails on violations. Run `npm run lint -w api` AND `npm run lint -w web` locally before pushing; `./scripts/validate-ci.sh --full` runs both. Note: line counts are after stripping blanks + comments, so the raw file may exceed 300 (e.g. `wc -l` 360 → counted 295 is fine).
 - **Max 30 lines per function** (`max-lines-per-function: warn`, skipBlankLines + skipComments) — will be upgraded to `error` once existing violations are resolved
 - **Design small from the start** — do not write large files and refactor after. Plan focused modules, extract helpers/sub-services/child components proactively.
 - Test files (`*.spec.ts`, `*.test.tsx`) have a relaxed **750-line** file limit (not 300).

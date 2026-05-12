@@ -13,6 +13,7 @@ import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 
 const STATE_LABELS: Record<string, string> = {
@@ -37,6 +38,7 @@ export interface RescheduleDeps {
   charactersService: CharactersService;
   embedSyncQueue: EmbedSyncQueueService;
   emojiService: DiscordEmojiService;
+  activityLog: ActivityLogService;
   logger: Logger;
 }
 
@@ -226,4 +228,29 @@ export async function safeEditReply(
     if (isDiscordInteractionError(error)) return;
     throw error;
   }
+}
+
+/**
+ * ROK-1269: log signup_reconfirmed when a user flips from pending → confirmed
+ * via the Discord reschedule DM. Skipped on no-op repeat clicks. Used by
+ * both linked and unlinked (anonymous) ack paths.
+ */
+export async function logDiscordAck(
+  deps: RescheduleDeps,
+  eventId: number,
+  wasPending: boolean,
+  updateSet: Record<string, unknown>,
+  actor: { userId: number } | { discordUserId: string },
+): Promise<void> {
+  if (!wasPending || updateSet.confirmationStatus !== 'confirmed') return;
+  const isLinked = 'userId' in actor;
+  const metadata: Record<string, unknown> = { reason: 'discord-ack' };
+  if (!isLinked) metadata.discordUserId = actor.discordUserId;
+  await deps.activityLog.log(
+    'event',
+    eventId,
+    'signup_reconfirmed',
+    isLinked ? actor.userId : null,
+    metadata,
+  );
 }
