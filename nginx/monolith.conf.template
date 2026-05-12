@@ -41,6 +41,18 @@ server {
     # Allow larger request bodies (screenshots in feedback, avatar uploads)
     client_max_body_size 10m;
 
+    # ROK-1158: NestJS uses helmet, which sets its own CSP / X-Frame-Options /
+    # Referrer-Policy / X-XSS-Protection. Without hiding them, browsers see
+    # duplicate or conflicting headers (e.g. two CSP values, both XFO=SAMEORIGIN
+    # AND DENY). nginx owns the authoritative public-surface header set.
+    proxy_hide_header Content-Security-Policy;
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Permissions-Policy;
+    proxy_hide_header X-XSS-Protection;
+
     # API reverse proxy (localhost for monolith container)
     location /api/ {
         proxy_pass http://127.0.0.1:3000/;
