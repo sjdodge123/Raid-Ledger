@@ -24,7 +24,7 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 export class GuildMemberAddListener {
   private readonly logger = new Logger(GuildMemberAddListener.name);
   private registered = false;
-  private boundHandler: ((member: GuildMember) => void) | null = null;
+  private boundHandler: ((member: GuildMember) => Promise<void>) | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -40,13 +40,15 @@ export class GuildMemberAddListener {
     const client = this.clientService.getClient();
     if (!client) return;
     if (this.registered) return;
-    this.boundHandler = (member: GuildMember) => {
-      this.handleGuildMemberAdd(member).catch((err: unknown) => {
+    this.boundHandler = async (member: GuildMember): Promise<void> => {
+      try {
+        await this.handleGuildMemberAdd(member);
+      } catch (err: unknown) {
         this.logger.error(
           `ROK-1260: handleGuildMemberAdd failed for ${member.user.username}:`,
           err,
         );
-      });
+      }
     };
     client.on(Events.GuildMemberAdd, this.boundHandler);
     this.registered = true;

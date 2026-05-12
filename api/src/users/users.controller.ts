@@ -58,7 +58,7 @@ export class UsersController {
   ): Promise<NonNullable<Awaited<ReturnType<UsersService['findById']>>>> {
     const user = await this.usersService.findById(targetUserId);
     if (!user) throw new NotFoundException('User not found');
-    if (user.deactivatedAt !== null && req?.user?.role !== 'admin') {
+    if (user.deactivatedAt != null && req?.user?.role !== 'admin') {
       throw new NotFoundException('User not found');
     }
     return user;

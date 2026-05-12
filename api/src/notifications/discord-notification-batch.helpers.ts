@@ -39,7 +39,7 @@ async function loadDiscordIds(
     .where(inArray(schema.users.id, userIds));
   const out = new Map<number, string>();
   for (const row of rows) {
-    if (row.deactivatedAt !== null) continue;
+    if (row.deactivatedAt != null) continue;
     if (row.discordId && isDiscordSnowflake(row.discordId))
       out.set(row.id, row.discordId);
   }

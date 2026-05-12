@@ -106,15 +106,16 @@ async function countAdminDeactivationNotifications(
 }
 
 async function getDeactivatedAt(userId: number): Promise<Date | null> {
-  // `deactivated_at` does not exist yet — this select is intentionally
-  // shaped to break loudly until the dev adds the column. We cast through
-  // `unknown` to bypass the typed-schema check, so the integration test
-  // file compiles today and the actual SELECT fails at runtime against
-  // the live DB.
-  const rows = await testApp.db.execute<{ deactivated_at: Date | null }>(
+  // postgres-js's `unsafe` simple-query path (used by `db.execute(sql\`...\`)`)
+  // returns TIMESTAMP columns as plain strings. Parse to Date so the
+  // `toBeInstanceOf(Date)` assertions below match.
+  const rows = await testApp.db.execute<{ deactivated_at: Date | string | null }>(
     /* sql */ `SELECT deactivated_at FROM users WHERE id = ${userId}`,
   );
-  return rows[0]?.deactivated_at ?? null;
+  const raw = rows[0]?.deactivated_at ?? null;
+  if (raw === null) return null;
+  if (raw instanceof Date) return raw;
+  return new Date(typeof raw === 'string' ? raw.replace(' ', 'T') + 'Z' : raw);
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
