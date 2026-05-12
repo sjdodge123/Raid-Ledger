@@ -12,6 +12,7 @@ import type {
   RescheduleDeps,
   ReconfirmOptions,
 } from './reschedule-response.helpers';
+import { logDiscordAck } from './reschedule-response.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
 
 export type { RescheduleDeps, ReconfirmOptions };
@@ -158,6 +159,7 @@ async function updateLinkedSignup(
     .where(where)
     .limit(1);
   if (!signup) return undefined;
+  const wasPending = signup.confirmationStatus === 'pending';
   await deps.db
     .update(schema.eventSignups)
     .set(updateSet)
@@ -167,6 +169,7 @@ async function updateLinkedSignup(
       characterId: options.characterId,
     });
   }
+  await logDiscordAck(deps, event.id, wasPending, updateSet, { userId });
   return signup.id;
 }
 
@@ -186,10 +189,14 @@ async function updateUnlinkedSignup(
     .where(where)
     .limit(1);
   if (!signup) return undefined;
+  const wasPending = signup.confirmationStatus === 'pending';
   await deps.db
     .update(schema.eventSignups)
     .set(updateSet)
     .where(eq(schema.eventSignups.id, signup.id));
+  await logDiscordAck(deps, event.id, wasPending, updateSet, {
+    discordUserId: interaction.user.id,
+  });
   return signup.id;
 }
 
