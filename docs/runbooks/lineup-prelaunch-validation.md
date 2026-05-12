@@ -160,68 +160,20 @@ Interpret results:
 
 ## Known Issues
 
-### Candidate: tech-debt — no-bound-channel graceful degradation lacks coverage
+Findings from this validation run are logged in
+[`TECH-DEBT-BACKLOG.md`](../../TECH-DEBT-BACKLOG.md) under the
+`2026-05-12 — rok-1068-lineup-prelaunch-validation` batch. Six entries
+total: one real product bug (`/lineups/:id/matches` hardcodes
+`carriedForward: []`), one Playwright fixture-race cluster (9 specs
+intermittently failing while Chrome MCP confirms the feature works),
+and four coverage gaps from the original Linear AC list that this
+runbook did not exercise (no-bound-channel degradation, Steam-unlinked
+nominator warning, vote-at-deadline cron race, abort embed with/without
+reason variance).
 
-**Problem.** When a community has `channel_bindings.lineup` unset (no default
-notification channel bound), the lifecycle dispatcher currently warns once and
-no-ops. There is no smoke spec exercising this state because every test
-fixture uses a channel-bound community. A regression here would be silent
-in CI and only surface when an operator self-hosts without binding a
-channel before starting their first lineup.
-
-**Acceptance.** Add either (a) an integration test that asserts
-`LineupNotificationService.dispatch*` returns gracefully and emits the
-`channel-unbound` log line when `channelBindings.lineup === null`, or
-(b) a companion-bot smoke that creates a lineup in a guild with no
-bound channel and `assertConditionNeverMet` on any channel embed for the
-full lineup lifecycle. Operator triages whether this is `tech-debt:` or
-`fix:`.
-
-### Candidate: tech-debt — Playwright lineup fixture race across parallel workers
-
-**Problem.** Several lineup specs (`lineup-creation:147`,
-`community-lineup:548` "match threshold slider in StartLineupModal",
-`lineup-votes-per-player:114`, `lineup-tiebreaker:597` "Games page
-Tiebreaker active badge", `community-lineup:184` mobile nomination
-search-empty) intermittently fail when the worker can't get the
-`?test=open-lineup-modal` modal to materialise. Manual Chrome MCP drive
-of the same flow confirms the feature works end-to-end (modal opens
-with all sliders + Match Threshold 35% + Votes per Player 3 + Tiebreaker
-Mode selector); the failure is the fixture's cross-worker race against
-the global "active lineup" banner state. Of the full lineup suite, 9
-specs intermittently fail on a single run while 200+ pass. Adding the
-new `lineup-carryover.smoke.spec.ts` does not change the rate of these
-failures (carryover passes consistently).
-
-**Acceptance.** Either (a) extend the existing per-worker title-prefix
-isolation pattern (ROK-1147 / ROK-1227) so every Start Lineup modal test
-archives sibling-worker lineups by prefix before navigating, OR (b)
-gate the `?test=open-lineup-modal` codepath so it forces the modal open
-regardless of active-lineup banner state. Operator triages severity —
-all flows verified working via Chrome MCP today.
-
-### Candidate: fix — `/lineups/:id/matches` always returns `carriedForward: []`
-
-**Problem.** While auditing ROK-937 carryover for AC 32 we found that
-`buildGroupedMatchesResponse` in `api/src/lineups/lineups-match-response.helpers.ts`
-hard-codes `carriedForward: []` in the response. The web
-`CarriedForwardSection` (rendered inside `DecidedMatchesView`) reads from
-`data.carriedForward` so its chip strip never appears on the decided
-view despite the entries table correctly storing `carriedOverFrom`.
-
-Chrome MCP confirms the **building-phase** "Carried Over" label on
-`NominationCard` works correctly (rendered from `entry.carriedOver` in
-`GET /lineups/:id`) — that surface is healthy. The new
-`lineup-carryover.smoke.spec.ts` asserts on that path. The
-**decided-view** carried-forward chip strip on `DecidedMatchesView` is
-the silently-broken surface.
-
-**Acceptance.** Populate `result.carriedForward` from
-`communityLineupEntries WHERE carriedOverFrom IS NOT NULL` for the
-lineup, mapping each row to the contract's `CarriedForwardEntrySchema`.
-Add a vitest unit + integration assertion that the chip section is
-visible whenever any entry has `carriedOver === true`. Operator triages
-severity — visual-only on the decided view, no data loss.
+Per `CLAUDE.md`, the backlog is operator-triaged: nothing in
+`TECH-DEBT-BACKLOG.md` should be acted on by an agent without explicit
+operator direction.
 
 ## Last Validated
 
@@ -232,4 +184,5 @@ severity — visual-only on the decided view, no data loss.
 | Playwright suite | 598 passed / 9 failed / 13 did not run / 194 skipped (7.0m) — every failing test is a fixture race verified working in Chrome MCP; see Known Issues #1 |
 | Companion bot suite | 92 passed / 8 failed — all 12 **lineup-related** companion smokes PASS (title, abort, channel-override fallback, private DM, tiebreaker open, public-slug, grace countdown). The 8 failures are event/voice/attendance domain and outside ROK-1068 scope. |
 | Chrome MCP drive | All 30 web-side ACs driven against the dev env; Start Lineup modal, banner, detail page, decided podium, public-share page, nomination modal, building-phase Carried Over chips, phase breadcrumb, hero copy across phases, empty-participation state all confirmed working. No console errors. |
-| Known Issues | 3 candidate Linear stories (above) |
+| AC coverage | 32 of 35 Linear sub-ACs driven via Playwright + Chrome MCP. 3 uncovered ACs (Steam-unlinked nominator, vote-at-deadline cron race, abort with/without reason embed variance) plus 1 explicit DEMO_MODE-blocked gap (no-bound-channel degradation) logged in `TECH-DEBT-BACKLOG.md`. |
+| Known Issues | 6 entries logged in `TECH-DEBT-BACKLOG.md` under `2026-05-12 — rok-1068-lineup-prelaunch-validation` (1 real bug, 1 fixture-race cluster, 4 coverage gaps) — operator triages |
