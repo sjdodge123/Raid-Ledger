@@ -131,6 +131,9 @@ COPY --from=builder /app/web/dist /usr/share/nginx/html
 # Nginx config template (port resolved at runtime via envsubst)
 COPY nginx/monolith.conf.template /etc/nginx/http.d/default.conf.template
 
+# ROK-1158: security-headers snippet (re-included from static-asset block too).
+COPY nginx/snippets/security-headers.conf /etc/nginx/snippets/security-headers.conf
+
 # ==================
 # Log Rotation Setup
 # ==================

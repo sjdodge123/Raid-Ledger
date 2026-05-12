@@ -35,13 +35,23 @@ server {
     gzip_types text/plain text/css text/xml text/javascript application/javascript application/json application/xml;
     gzip_comp_level 6;
 
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
+    # Security headers (ROK-1158): full 6-header set lives in the snippet.
+    include /etc/nginx/snippets/security-headers.conf;
 
     # Allow larger request bodies (screenshots in feedback, avatar uploads)
     client_max_body_size 10m;
+
+    # ROK-1158: NestJS uses helmet, which sets its own CSP / X-Frame-Options /
+    # Referrer-Policy / X-XSS-Protection. Without hiding them, browsers see
+    # duplicate or conflicting headers (e.g. two CSP values, both XFO=SAMEORIGIN
+    # AND DENY). nginx owns the authoritative public-surface header set.
+    proxy_hide_header Content-Security-Policy;
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Permissions-Policy;
+    proxy_hide_header X-XSS-Protection;
 
     # API reverse proxy (localhost for monolith container)
     location /api/ {
@@ -110,7 +120,10 @@ server {
     # Static assets with caching
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
-        add_header Cache-Control "public, immutable";
+        # Why re-include: this block defines `add_header Cache-Control`, which kills
+        # inheritance of every server-scope `add_header` (architect-ROK-1158.md §2).
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, immutable" always;
         try_files $uri =404;
     }
 
@@ -122,7 +135,7 @@ server {
     # Health check endpoint for nginx itself
     location /nginx-health {
         access_log off;
+        default_type text/plain;
         return 200 "healthy\n";
-        add_header Content-Type text/plain;
     }
 }

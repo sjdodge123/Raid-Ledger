@@ -47,6 +47,7 @@ import { GameTasteModule } from './game-taste/game-taste.module';
 import { DiscoveryCategoriesModule } from './discovery-categories/discovery-categories.module';
 import { CommunityInsightsModule } from './community-insights/community-insights.module';
 import { SlowQueriesModule } from './slow-queries/slow-queries.module';
+import { CspReportModule } from './csp-report/csp-report.module';
 
 @Module({
   imports: [
@@ -95,6 +96,7 @@ import { SlowQueriesModule } from './slow-queries/slow-queries.module';
     DiscoveryCategoriesModule,
     CommunityInsightsModule,
     SlowQueriesModule,
+    CspReportModule,
   ],
   controllers: [AppController],
   providers: [

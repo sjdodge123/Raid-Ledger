@@ -7,6 +7,7 @@ import { Logger } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import compression from 'compression';
 import helmet from 'helmet';
+import * as bodyParser from 'body-parser';
 import * as path from 'path';
 import { AppModule } from './app.module';
 import { SentryExceptionFilter } from './sentry/sentry-exception.filter';
@@ -73,6 +74,17 @@ async function bootstrap() {
     }),
     rawBody: false,
   });
+  // Why before app.useBodyParser: Nest's `useBodyParser('json')` only matches
+  // `application/json`. Browsers POST CSP violation reports with content-type
+  // `application/csp-report` (legacy) or `application/reports+json` (Reporting
+  // API). Registering an express body-parser for those MIME types first means
+  // `@Body()` resolves to the parsed payload instead of `{}`. ROK-1158.
+  app.use(
+    bodyParser.json({
+      type: ['application/csp-report', 'application/reports+json'],
+      limit: '64kb',
+    }),
+  );
   app.useBodyParser('json', { limit: '2mb' });
   app.use(helmet(buildHelmetOptions()));
   app.use(compression({ threshold: 1024 }));
