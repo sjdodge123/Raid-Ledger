@@ -1,6 +1,30 @@
 /**
  * ROK-1264 — pin every supertest call to a single keep-alive pooled socket.
  *
+ * **STATUS (2026-05-12): available but NOT wired in `test-app.ts`.** Applying
+ * this wrapper globally with `maxSockets: 1` provably eliminates the H4
+ * loopback-bleed carrier in `lineups-voting.integration.spec.ts` (0/50 hits
+ * post-fix vs 1/20 pre-fix), BUT deterministically breaks any spec that
+ * fans out parallel HTTP requests via `Promise.all`. Specifically
+ * `events.integration.spec.ts › GET /events/:id/detail (ROK-1046) ›
+ * shape parity per slice vs legacy endpoints` failed 10/10 in isolation
+ * because `fetchLegacySlices` queues 5 parallel requests through one socket,
+ * one of which (`/voice-channel`) does a DB+Discord lookup that exceeds
+ * supertest's default response timeout when serialized.
+ *
+ * Intermediate `maxSockets` values were tested: `:1` (events.spec 10/10 fail),
+ * `:2` (events.spec 3/3 fail, ~5× wallclock blowup), `:5` (events.spec passes
+ * 3/3, but lineups-voting carrier returns to ~4% — statistically equivalent
+ * to the 5% pre-fix baseline). No single `maxSockets` value satisfies both
+ * hard-serialization (needed for H4) AND parallel-friendly (needed for
+ * `fetchLegacySlices`). See `docs/spikes/rok-1250-residual-layer-5.md`.
+ *
+ * The helper + spec are retained so any future opt-in deployment (per-file
+ * annotation, per-test-scope reset, etc.) has ready-to-use machinery and a
+ * deterministic regression gate. Do NOT wire globally without re-validating
+ * against the full integration suite.
+ *
+ *
  * Mechanism (architecture-v2 §3 H4 + Tier-1 probe-1 reproducer 2026-05-12):
  *   The 'Parse Error: Expected HTTP/, RTSP/ or ICE/' (and 'socket hang up')
  *   class fires CLIENT-SIDE inside superagent's llhttp parser when sequential

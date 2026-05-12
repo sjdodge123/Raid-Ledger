@@ -40,10 +40,12 @@ import {
   extractPortFromConnectionString,
 } from './socket-handle-audit';
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
-import {
-  destroyPersistentAgent,
-  wrapWithPersistentAgent,
-} from './supertest-persistent-agent';
+// ROK-1264: `supertest-persistent-agent` is intentionally NOT wired here.
+// The helper + spec exist as ready-to-deploy machinery if a future targeted
+// investigation needs single-socket pinning, but applying it globally
+// deterministically breaks tests that use Promise.all to fan out parallel
+// supertest calls (e.g. `events.integration.spec.ts › shape parity per slice`
+// failed 10/10 with maxSockets:1). See `docs/spikes/rok-1250-residual-layer-5.md`.
 
 export type { RedisMockHandle } from './redis-mock';
 
@@ -169,14 +171,20 @@ async function buildNestApp(
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
   }
+  const httpServer = app.getHttpServer() as import('http').Server;
+  // ROK-1264: bump server-side keepAliveTimeout WAY above any inter-test gap
+  // so any future keep-alive pool (or supertest default if upgraded) does not
+  // race the server's 5 s socket reaper. truncateAllTables + bcrypt + setup
+  // helpers easily exceed 5 s between adjacent `it()`s. The patch is benign
+  // because Jest force-exits the worker and `closeTestApp` destroys server
+  // handles; never reaches the 10-minute lifetime in practice.
+  // headersTimeout must be >= keepAliveTimeout (Node http docs).
+  httpServer.keepAliveTimeout = 600_000;
+  httpServer.headersTimeout = 610_000;
   if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
-    instrumentHttpServer(app.getHttpServer() as import('http').Server);
+    instrumentHttpServer(httpServer);
   }
-  let request = supertest.default(app.getHttpServer() as import('http').Server);
-  // ROK-1264: pin all sequential supertest calls to one keep-alive socket so
-  // the loopback driver cannot bleed prior-response bytes onto the next
-  // request's fresh socket. See supertest-persistent-agent.ts header.
-  request = wrapWithPersistentAgent(request);
+  let request = supertest.default(httpServer);
   if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
     request = wrapAgentForSnapshot(request);
   }
@@ -262,11 +270,6 @@ export async function closeTestApp(): Promise<void> {
   } catch {
     // best-effort — fall through to app.close() regardless
   }
-
-  // ROK-1264: destroy the persistent supertest agent's pooled socket BEFORE
-  // app.close() so the server sees a clean client FIN, not RST. No-op if the
-  // wrap was never applied (e.g. tests using a non-shared TestAgent).
-  destroyPersistentAgent(instance.request);
 
   // Capture the test container's port BEFORE _appClient.end() / container.stop()
   // so the fallback destroy can scope itself to ONLY our test-DB sockets.

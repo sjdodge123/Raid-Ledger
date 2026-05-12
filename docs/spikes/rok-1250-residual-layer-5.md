@@ -129,11 +129,51 @@ ROK-1268 (`tech-debt: residual integration-suite socket-leak flake post-ROK-1250
 
 ## 7. What this branch ships
 
-7 prior commits (snapshot-buckets-tcp + loop-integration single-run mode + flake-detector extensions + H2 falsification unit test + H2 fix revert + spike-doc SUPERSEDED banner) + 1 new commit (`bddc3e4a` — the H4 fix). Net behavior change of the branch:
+7 prior commits (snapshot-buckets-tcp + loop-integration single-run mode + flake-detector extensions + H2 falsification unit test + H2 fix revert + spike-doc SUPERSEDED banner) + 1 new commit (`bddc3e4a` — the H4 wrap).
 
-- Test infrastructure: deeper snapshot data, deterministic regression gates against supertest behavior pinning.
-- Carrier elimination: `Parse Error` and `socket hang up` class fixed via persistent-agent wrap.
-- No production code changed.
+---
+
+## 8. Post-validation finding (2026-05-12 — REVERTED IN COMMIT TBD)
+
+After the H4 wrap landed in `bddc3e4a` and probe-1 confirmed 0/50 carrier hits in isolation, the full integration suite was re-run end-to-end. **The wrap deterministically broke `events.integration.spec.ts › GET /events/:id/detail (ROK-1046) › shape parity per slice vs legacy endpoints`** (10/10 failures in isolated repeats with `socket hang up`).
+
+### Mechanism
+
+`fetchLegacySlices` (events.integration.spec.ts:332-345) fans out 5 parallel supertest requests via `Promise.all`. With `maxSockets: 1` they serialize through one socket. One of them (`/voice-channel`) does a DB lookup + Discord client mock resolution and is the slowest. **Serialized through one socket, the 5th request waits long enough that something in the chain (likely supertest's default response timeout or Nest's request lifecycle) errors out and the socket is destroyed.** The 100×`Promise.all([5×GET])` unit test does NOT reproduce this — it uses an in-process echo handler with no backend latency.
+
+### maxSockets sweep
+
+Intermediate values were tested:
+
+| `maxSockets` | events.spec | lineups-voting carrier | wallclock |
+|---|---|---|---|
+| 1 | 10/10 FAIL | 0/50 ✓ | 12 s |
+| 2 | 3/3 FAIL | not run | ~50 s (5× regression) |
+| 5 | 3/3 PASS | 2/50 (~4%) | 17 s |
+| (no wrap baseline) | passes | 1/20 (~5%) | 7-10 s |
+
+`maxSockets: 5` only marginally improves over baseline (4% vs 5%) and the difference is inside the 95% CI for N=50. **Hard serialization (needed for the H4 fix) and Promise.all parallelism (needed for `fetchLegacySlices`) are mutually exclusive at the agent level.**
+
+### Disposition
+
+**The wrap call is reverted in `test-app.ts`** (`wrapWithPersistentAgent` no longer applied). The helper file (`supertest-persistent-agent.ts`) and its regression spec (`supertest-persistent-agent.spec.ts`) are RETAINED on disk as:
+
+- Ready-to-deploy machinery if a future targeted fix (per-spec-file annotation, per-test agent reset, retry-on-ECONNRESET middleware, etc.) wants single-socket pinning.
+- Deterministic regression gate proving the propagation contract (4 tests, 3.5 s).
+
+The server-side `keepAliveTimeout = 600_000` patch in `test-app.ts:buildNestApp` IS retained because it independently fixed the `feedback.integration.spec.ts` `socket hang up` (RUN 1 → RUN 2 of full-suite validation) and is benign without the wrap — it only matters if a future supertest upgrade switches to pooled defaults.
+
+### What ROK-1268 inherits
+
+ROK-1268 stays OPEN with a strictly improved diagnostic posture:
+
+- Falsified H2 hypothesis (with deterministic unit test that re-falsifies any future regression).
+- Confirmed H4 carrier mechanism for lineups-voting class (intra-file fresh-socket loopback bleed).
+- Confirmed: full-pin (`maxSockets:1`) breaks `fetchLegacySlices` deterministically.
+- Confirmed: looser pin (`maxSockets:5`) is statistically indistinguishable from no-pin.
+- Snapshot instrumentation extensions, single-run loop harness, and an end-to-end carrier reproducer (`lineups-voting` in isolation, ~5% per-run).
+
+Next likely fix path (not pursued here): per-spec-file annotation that opts INTO the wrap, applied only to files with sequential awaited supertest calls and no `Promise.all` patterns. Or: a retry-on-flake-class middleware in `wrapAgentForSnapshot` that swallows the first RST and reissues. Both require their own spike.
 
 ---
 
