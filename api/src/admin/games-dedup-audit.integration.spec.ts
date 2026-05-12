@@ -246,6 +246,7 @@ interface PersistedAuditRow {
   downstream_counts: Record<string, number>;
   unique_conflicts: Record<string, number>;
   snapshot_at: string;
+  [key: string]: unknown;
 }
 
 /** Spec response shape for the POST endpoint (matches spec §E). */
