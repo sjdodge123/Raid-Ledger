@@ -12,9 +12,7 @@ import * as readline from 'node:readline';
 import { createGzip } from 'node:zlib';
 import { Readable, PassThrough, Transform } from 'node:stream';
 import type { LogFileDto, LogService } from '@raid-ledger/contract';
-
-/** Hardcoded production log directory — Docker volume-mounted, survives container recreation. */
-const DEFAULT_LOG_DIR = '/data/logs';
+import { resolveLogDir } from '../common/log-dir';
 
 /** Maximum total archive size in bytes (~100 MB). */
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
@@ -45,7 +43,7 @@ export class LogsService {
   private readonly logDir: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.logDir = this.configService.get<string>('LOG_DIR') || DEFAULT_LOG_DIR;
+    this.logDir = resolveLogDir(this.configService);
   }
 
   /**

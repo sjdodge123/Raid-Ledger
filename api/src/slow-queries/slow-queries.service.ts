@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { resolveLogDir } from '../common/log-dir';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import {
@@ -14,7 +15,6 @@ import {
   type SlowQueryEntryRecord,
 } from './slow-queries.helpers';
 
-const DEFAULT_LOG_DIR = '/data/logs';
 const SLOW_QUERY_LOG_FILENAME = 'slow-queries.log';
 
 /**
@@ -35,16 +35,18 @@ export class SlowQueriesService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly configService: ConfigService,
   ) {
-    const logDir = this.configService.get<string>('LOG_DIR') || DEFAULT_LOG_DIR;
+    const logDir = resolveLogDir(this.configService);
     this.logFilePath = path.join(logDir, SLOW_QUERY_LOG_FILENAME);
   }
 
   /**
    * Read top-N from `pg_stat_statements`, format a digest block, and append
    * to the slow-query log file. Idempotent and best-effort: missing extension
-   * or unwritable log dir are warnings, not errors.
+   * or unwritable log dir are warnings, not errors. Returns true when the
+   * block was actually appended; callers that need to surface failure (e.g.
+   * the DEMO_MODE seed endpoint) should check the return and act accordingly.
    */
-  async appendDigestToLog(): Promise<void> {
+  async appendDigestToLog(): Promise<boolean> {
     const entries = await this.readPgStatStatements();
     const block = formatDigestBlock(entries);
     const written = await this.appendBlock(block);
@@ -53,6 +55,7 @@ export class SlowQueriesService {
         `Appended slow-query digest entries=${entries.length} → ${this.logFilePath}`,
       );
     }
+    return written;
   }
 
   /** Returns the absolute path to the slow-query log file. */

@@ -11,6 +11,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Inject,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -162,10 +163,14 @@ export class DemoTestCoreController {
   /**
    * Seed a deterministic slow-query digest entry — DEMO_MODE only (ROK-1070).
    *
-   * Workaround for the admin-slow-queries-log smoke test on Mac dev where
-   * `LOG_DIR` defaults to `/data/logs/` and is unwritable. Delegates to the
-   * production `SlowQueriesService.appendDigestToLog` which already handles
-   * `mkdir -p` and best-effort error handling.
+   * Delegates to the production `SlowQueriesService.appendDigestToLog`,
+   * which performs `mkdir -p` then `appendFile` against the shared LOG_DIR
+   * resolved by `common/log-dir.ts` (writable temp dir in dev, `/data/logs`
+   * volume in prod). ROK-1266: the writer used to swallow IO errors and the
+   * endpoint reported `success: true` even when the file was never written —
+   * the listing endpoint then returned `{ files: [], total: 0 }` because no
+   * file existed at all. We now propagate the failure as a 500 so the smoke
+   * test (and any human curl) sees the real reason.
    */
   @Post('seed-slow-queries-log')
   @HttpCode(HttpStatus.OK)
@@ -176,11 +181,15 @@ export class DemoTestCoreController {
     // gate via the controller's own assertDemoMode (env + DB checks).
     await this.assertDemoMode();
     parseDemoBody(SeedSlowQueriesLogSchema, body ?? {});
-    await this.slowQueriesService.appendDigestToLog();
-    return {
-      success: true,
-      logFilePath: this.slowQueriesService.getLogFilePath(),
-    };
+    const written = await this.slowQueriesService.appendDigestToLog();
+    const logFilePath = this.slowQueriesService.getLogFilePath();
+    if (!written) {
+      throw new InternalServerErrorException(
+        `Failed to write slow-query digest to ${logFilePath}; ` +
+          `check LOG_DIR is writable by the API process`,
+      );
+    }
+    return { success: true, logFilePath };
   }
 
   /**
