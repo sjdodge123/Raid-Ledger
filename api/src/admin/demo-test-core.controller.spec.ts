@@ -29,7 +29,10 @@ function createMockService() {
 
 function createMockSlowQueries() {
   return {
-    appendDigestToLog: jest.fn().mockResolvedValue(undefined),
+    // ROK-1266: appendDigestToLog now returns boolean — true means file was
+    // actually written. The seed endpoint surfaces `false` as a 500 so smoke
+    // tests catch silent IO failures instead of seeing { files: [], total: 0 }.
+    appendDigestToLog: jest.fn().mockResolvedValue(true),
     getLogFilePath: jest
       .fn()
       .mockReturnValue('/tmp/raid-ledger-smoke/slow-queries.log'),
@@ -453,6 +456,18 @@ function seedSlowQueriesLogTests(
     await expect(
       getController().seedSlowQueriesLogForTest({ entryCount: 5 }),
     ).rejects.toThrow(/Validation failed/);
+  });
+
+  // ROK-1266 regression: previously the endpoint returned `{ success: true }`
+  // even when `appendDigestToLog` failed to write the file (LOG_DIR not
+  // writable). The smoke test then saw `success` from the seed but the
+  // listing endpoint returned `{ files: [], total: 0 }` — the file never
+  // existed. Now an IO failure surfaces as a 500.
+  it('throws InternalServerError when appendDigestToLog reports failure (ROK-1266)', async () => {
+    getMockSlowQueries().appendDigestToLog.mockResolvedValueOnce(false);
+    await expect(getController().seedSlowQueriesLogForTest({})).rejects.toThrow(
+      /Failed to write slow-query digest/,
+    );
   });
 }
 
