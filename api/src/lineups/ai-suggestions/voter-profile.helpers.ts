@@ -108,10 +108,7 @@ export async function loadVoterProfiles(
       username: r.username,
       archetypeLabels,
       intensityTier,
-      topAxes: pickTopAxes(
-        r.dimensions as unknown as Record<string, number> | null,
-        PROFILE_AXIS_COUNT,
-      ),
+      topAxes: pickTopAxes(r.dimensions, PROFILE_AXIS_COUNT),
       recentlyPlayed: activity?.recentlyPlayed ?? [],
       coPlayPartners: activity?.coPlayPartners ?? [],
       recentEventGames: activity?.recentEventGames ?? [],

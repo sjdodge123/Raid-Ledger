@@ -136,9 +136,7 @@ export class OllamaSetupService implements OnModuleInit {
         success: true,
       };
     }
-    await this.settings.delete(
-      AI_SETTING_KEYS.OLLAMA_SETUP_ERROR as SettingKey,
-    );
+    await this.settings.delete(AI_SETTING_KEYS.OLLAMA_SETUP_ERROR);
     const firstStep = dockerOk ? 'pulling_image' : 'downloading_binary';
     await this.setStep(firstStep);
     this.fireAndForgetSetup();
@@ -188,12 +186,9 @@ export class OllamaSetupService implements OnModuleInit {
     const url = this.native.isAllinoneMode()
       ? this.native.getOllamaUrl()
       : this.docker.getContainerUrl(await this.docker.getApiNetwork());
-    await this.settings.set(AI_SETTING_KEYS.OLLAMA_URL as SettingKey, url);
-    await this.settings.set(
-      AI_SETTING_KEYS.MODEL as SettingKey,
-      AI_DEFAULTS.model,
-    );
-    await this.settings.set(AI_SETTING_KEYS.PROVIDER as SettingKey, 'ollama');
+    await this.settings.set(AI_SETTING_KEYS.OLLAMA_URL, url);
+    await this.settings.set(AI_SETTING_KEYS.MODEL, AI_DEFAULTS.model);
+    await this.settings.set(AI_SETTING_KEYS.PROVIDER, 'ollama');
   }
 
   /**
@@ -223,7 +218,7 @@ export class OllamaSetupService implements OnModuleInit {
     this.logger.error('Ollama health check exhausted all retries');
     await this.setStep('error');
     await this.settings.set(
-      AI_SETTING_KEYS.OLLAMA_SETUP_ERROR as SettingKey,
+      AI_SETTING_KEYS.OLLAMA_SETUP_ERROR,
       'Health check timed out',
     );
   }
@@ -233,18 +228,12 @@ export class OllamaSetupService implements OnModuleInit {
     const msg = e instanceof Error ? e.message : String(e);
     this.logger.error(`Ollama setup failed: ${msg}`);
     await this.setStep('error');
-    await this.settings.set(
-      AI_SETTING_KEYS.OLLAMA_SETUP_ERROR as SettingKey,
-      msg,
-    );
+    await this.settings.set(AI_SETTING_KEYS.OLLAMA_SETUP_ERROR, msg);
   }
 
   /** Persist a setup step to settings. */
   private async setStep(step: string): Promise<void> {
-    await this.settings.set(
-      AI_SETTING_KEYS.OLLAMA_SETUP_STEP as SettingKey,
-      step,
-    );
+    await this.settings.set(AI_SETTING_KEYS.OLLAMA_SETUP_STEP, step);
   }
 
   /** Get a setting value by AI setting key. */

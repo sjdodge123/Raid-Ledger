@@ -25,7 +25,7 @@ type EventRow = typeof schema.events.$inferSelect;
 function toEnricherInput(
   row: CharacterRow | EventRow,
 ): Record<string, unknown> {
-  return row as Record<string, unknown>;
+  return row;
 }
 
 @Injectable()

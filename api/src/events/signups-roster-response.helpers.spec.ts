@@ -34,7 +34,7 @@ const baseUser = {
 describe('buildSignupResponseDto — assignedSlot (ROK-626)', () => {
   it('should include assignedSlot when provided', () => {
     const result = buildSignupResponseDto(
-      baseSignup as Parameters<typeof buildSignupResponseDto>[0],
+      baseSignup,
       baseUser as Parameters<typeof buildSignupResponseDto>[1],
       null,
       'bench',
@@ -44,7 +44,7 @@ describe('buildSignupResponseDto — assignedSlot (ROK-626)', () => {
 
   it('should not include assignedSlot when not provided', () => {
     const result = buildSignupResponseDto(
-      baseSignup as Parameters<typeof buildSignupResponseDto>[0],
+      baseSignup,
       baseUser as Parameters<typeof buildSignupResponseDto>[1],
       null,
     );
@@ -62,17 +62,12 @@ describe('buildAnonymousSignupResponseDto — assignedSlot (ROK-626)', () => {
   };
 
   it('should include assignedSlot when provided', () => {
-    const result = buildAnonymousSignupResponseDto(
-      anonSignup as Parameters<typeof buildAnonymousSignupResponseDto>[0],
-      'bench',
-    );
+    const result = buildAnonymousSignupResponseDto(anonSignup, 'bench');
     expect(result.assignedSlot).toBe('bench');
   });
 
   it('should not include assignedSlot when not provided', () => {
-    const result = buildAnonymousSignupResponseDto(
-      anonSignup as Parameters<typeof buildAnonymousSignupResponseDto>[0],
-    );
+    const result = buildAnonymousSignupResponseDto(anonSignup);
     expect(result.assignedSlot).toBeUndefined();
   });
 });

@@ -105,7 +105,7 @@ async function setupRoachOutModule() {
     where: jest.fn().mockReturnThis(),
     limit: jest.fn().mockResolvedValue([]),
   };
-  mockDb = mockChain as typeof mockDb;
+  mockDb = mockChain;
 
   testModule = await Test.createTestingModule({
     providers: [

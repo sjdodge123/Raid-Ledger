@@ -354,14 +354,11 @@ describe('checkVotingQuorum', () => {
       { userId: 2, count: 5 },
     ]);
 
-    const result = await checkVotingQuorum(
-      db as never,
-      {
-        ...baseLineup,
-        status: 'voting',
-        maxVotesPerPlayer: 5,
-      } as LineupRow,
-    );
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      maxVotesPerPlayer: 5,
+    });
 
     expect(result.ready).toBe(true);
   });

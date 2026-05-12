@@ -16,7 +16,7 @@ function getErrorStatus(err: unknown): number {
     err != null &&
     typeof err === 'object' &&
     'getStatus' in err &&
-    typeof (err as { getStatus: unknown }).getStatus === 'function'
+    typeof err.getStatus === 'function'
   ) {
     return (err as { getStatus: () => number }).getStatus();
   }

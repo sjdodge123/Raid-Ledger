@@ -179,7 +179,7 @@ function describeCommonGroundTaste() {
     const archetype: ArchetypeDto = {
       ...DEFAULT_TEST_ARCHETYPE,
       ...(opts.archetype ?? {}),
-    } as ArchetypeDto;
+    };
     await testApp.db.insert(schema.playerTasteVectors).values({
       userId,
       vector,

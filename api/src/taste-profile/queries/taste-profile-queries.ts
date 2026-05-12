@@ -186,7 +186,7 @@ async function topCoPlayPartners(
 function zeroedDimensions(): TasteProfileDimensionsDto {
   const dims = {} as Record<TasteProfilePoolAxis, number>;
   for (const axis of TASTE_PROFILE_AXIS_POOL) dims[axis] = 0;
-  return dims as TasteProfileDimensionsDto;
+  return dims;
 }
 
 /** Lightweight vector record for Common Ground scoring (ROK-950). */

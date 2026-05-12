@@ -633,7 +633,7 @@ describe('SignupsService — roster', () => {
           {
             userId: 1,
             signupId: 1,
-            slot: 'player' as never,
+            slot: 'player',
             position: 1,
             isOverride: false,
           },

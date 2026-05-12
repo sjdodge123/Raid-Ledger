@@ -64,9 +64,7 @@ function makeSettings(): jest.Mocked<
   return {
     get: jest.fn().mockResolvedValue(null),
     getDiscordBotDefaultChannel: jest.fn().mockResolvedValue(BOUND_ID),
-  } as unknown as jest.Mocked<
-    Pick<SettingsService, 'get' | 'getDiscordBotDefaultChannel'>
-  >;
+  };
 }
 
 function makeDedup(): jest.Mocked<
@@ -74,9 +72,7 @@ function makeDedup(): jest.Mocked<
 > {
   return {
     checkAndMarkSent: jest.fn().mockResolvedValue(false),
-  } as unknown as jest.Mocked<
-    Pick<NotificationDedupService, 'checkAndMarkSent'>
-  >;
+  };
 }
 
 function makeBotClient(
@@ -84,7 +80,7 @@ function makeBotClient(
 ): jest.Mocked<Pick<DiscordBotClientService, 'getGuild'>> {
   return {
     getGuild: jest.fn().mockReturnValue(guild),
-  } as unknown as jest.Mocked<Pick<DiscordBotClientService, 'getGuild'>>;
+  };
 }
 
 describe('resolveLineupChannel (ROK-1064)', () => {

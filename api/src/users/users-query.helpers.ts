@@ -135,12 +135,8 @@ async function queryGameInterestResults(
 
 /** Build combined search + role WHERE condition (ROK-821). Always filters deactivated (ROK-1260). */
 function buildUserListConditions(search?: string, role?: string) {
-  const searchCond = buildSearchCondition(search);
   const roleCond = role ? eq(schema.users.role, role as UserRole) : undefined;
-  const conds = [activeUsersFilter()];
-  if (searchCond) conds.push(searchCond);
-  if (roleCond) conds.push(roleCond);
-  return and(...conds);
+  return and(activeUsersFilter(), buildSearchCondition(search), roleCond);
 }
 
 /** Find all users (no game filter, ROK-821: optional role filter). */

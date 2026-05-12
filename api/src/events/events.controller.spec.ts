@@ -515,16 +515,16 @@ describe('EventsController', () => {
 
   describe('getVoiceSessions ACL (ROK-490)', () => {
     const creatorReq = {
-      user: { id: 1, role: 'member' as UserRole },
+      user: { id: 1, role: 'member' },
     } as AuthenticatedRequest;
     const nonCreatorReq = {
-      user: { id: 99, role: 'member' as UserRole },
+      user: { id: 99, role: 'member' },
     } as AuthenticatedRequest;
     const operatorReq = {
-      user: { id: 99, role: 'operator' as UserRole },
+      user: { id: 99, role: 'operator' },
     } as AuthenticatedRequest;
     const adminReq = {
-      user: { id: 99, role: 'admin' as UserRole },
+      user: { id: 99, role: 'admin' },
     } as AuthenticatedRequest;
 
     it('should allow event creator to view voice sessions', async () => {
@@ -554,16 +554,16 @@ describe('EventsController', () => {
 
   describe('getVoiceAttendance ACL (ROK-490)', () => {
     const creatorReq = {
-      user: { id: 1, role: 'member' as UserRole },
+      user: { id: 1, role: 'member' },
     } as AuthenticatedRequest;
     const nonCreatorReq = {
-      user: { id: 99, role: 'member' as UserRole },
+      user: { id: 99, role: 'member' },
     } as AuthenticatedRequest;
     const operatorReq = {
-      user: { id: 99, role: 'operator' as UserRole },
+      user: { id: 99, role: 'operator' },
     } as AuthenticatedRequest;
     const adminReq = {
-      user: { id: 99, role: 'admin' as UserRole },
+      user: { id: 99, role: 'admin' },
     } as AuthenticatedRequest;
 
     it('should allow event creator to view voice attendance', async () => {

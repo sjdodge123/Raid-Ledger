@@ -103,9 +103,7 @@ function hasPostPermissions(
     return perms.has([...REQUIRED_FLAGS]);
   }
   if (typeof me.permissionsIn === 'function') {
-    const perms = me.permissionsIn(
-      channel as unknown as Parameters<typeof me.permissionsIn>[0],
-    );
+    const perms = me.permissionsIn(channel);
     if (!perms) return false;
     return perms.has([...REQUIRED_FLAGS]);
   }

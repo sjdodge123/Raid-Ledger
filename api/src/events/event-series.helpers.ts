@@ -100,7 +100,7 @@ export async function updateSeriesEvents(
         .set(updateData)
         .where(eq(schema.events.id, evt.id));
       if (timeDelta) {
-        await resetSignupConfirmations(tx as never, evt.id);
+        await resetSignupConfirmations(tx, evt.id);
       }
     }
   });

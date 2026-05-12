@@ -182,7 +182,7 @@ function getComputedState(): string {
   const embedFactory = processor[
     'embedFactory'
   ] as jest.Mocked<DiscordEmbedFactory>;
-  return embedFactory.buildEventUpdate.mock.calls[0][2] as string;
+  return embedFactory.buildEventUpdate.mock.calls[0][2];
 }
 
 // ─── Core LIVE-during-extension behavior ───────────────────────────────────

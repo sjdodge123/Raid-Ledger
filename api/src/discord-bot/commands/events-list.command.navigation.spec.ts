@@ -99,7 +99,7 @@ async function triggerEventSelectAndGetUpdate(
   eventsService.findAll.mockResolvedValue(makeFindAllResult(cachedEvents));
   await command.handleInteraction(interaction as unknown as HandleParam);
   const selectI = makeSelectInteraction(selectedEventId, updateMock);
-  getCollectHandler()!(selectI as unknown as Record<string, unknown>);
+  getCollectHandler()!(selectI);
   await new Promise((resolve) => setTimeout(resolve, 0));
   return { updateMock };
 }
@@ -281,12 +281,7 @@ describe('EventsListCommand — back: re-fetch success', () => {
       cachedEvents,
     );
     eventsService.findAll.mockResolvedValueOnce(makeFindAllResult(freshEvents));
-    collectHandler(
-      makeBackInteraction('user-back-1', updateMock) as unknown as Record<
-        string,
-        unknown
-      >,
-    );
+    collectHandler(makeBackInteraction('user-back-1', updateMock));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(eventsService.findAll).toHaveBeenCalledTimes(2);
     expect(updateMock).toHaveBeenCalledWith(
@@ -325,12 +320,7 @@ describe('EventsListCommand — back: empty & fallback', () => {
       cachedEvents,
     );
     eventsService.findAll.mockResolvedValueOnce(makeFindAllResult([]));
-    collectHandler(
-      makeBackInteraction('user-back-2', updateMock) as unknown as Record<
-        string,
-        unknown
-      >,
-    );
+    collectHandler(makeBackInteraction('user-back-2', updateMock));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -350,12 +340,7 @@ describe('EventsListCommand — back: empty & fallback', () => {
       cachedEvents,
     );
     eventsService.findAll.mockRejectedValueOnce(new Error('Network error'));
-    collectHandler(
-      makeBackInteraction('user-back-3', updateMock) as unknown as Record<
-        string,
-        unknown
-      >,
-    );
+    collectHandler(makeBackInteraction('user-back-3', updateMock));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -395,12 +380,7 @@ describe('EventsListCommand — back: content reset', () => {
     eventsService.findAll.mockResolvedValueOnce(
       makeFindAllResult(cachedEvents),
     );
-    collectHandler(
-      makeBackInteraction('user-back-4', updateMock) as unknown as Record<
-        string,
-        unknown
-      >,
-    );
+    collectHandler(makeBackInteraction('user-back-4', updateMock));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({ content: '' }),

@@ -89,7 +89,7 @@ async function processGame(
     metadata,
     signals,
     batch.corpusStats,
-    batch.axisIdf as Parameters<typeof computeGameVector>[3],
+    batch.axisIdf,
   );
   await upsertVector(db, gameId, {
     vector,

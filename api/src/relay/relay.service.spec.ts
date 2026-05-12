@@ -7,7 +7,7 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 
 // Mock global fetch
 const mockFetch = jest.fn();
-global.fetch = mockFetch as unknown as typeof fetch;
+global.fetch = mockFetch;
 
 function describeRelayService() {
   let service: RelayService;

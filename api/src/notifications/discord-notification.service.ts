@@ -13,10 +13,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
-import type { UsersService } from '../users/users.service';
-import type { SignupsRosterService } from '../events/signups-roster.service';
-import type { NotificationService } from './notification.service';
-import { deactivateUserOrchestrated } from './discord-notification-deactivate.helpers';
+import { deactivateUserViaModuleRef } from './discord-notification-deactivate.helpers';
 import {
   DISCORD_NOTIFICATION_QUEUE,
   RATE_LIMIT_WINDOW_MS,
@@ -145,52 +142,10 @@ export class DiscordNotificationService {
    * a 3-way Notification↔Users↔Events circular DI graph at boot.
    */
   async deactivateUser(userId: number): Promise<void> {
-    if (!this.moduleRef) {
-      this.logger.warn(
-        `ROK-1260: deactivateUser(${userId}) — moduleRef not wired, skipping`,
-      );
-      return;
-    }
-    // Resolve via require() to avoid ESM/TS module resolution issues with
-    // dynamic import() under the api workspace's CommonJS jest+ts-jest.
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const usersModule = require('../users/users.service') as {
-      UsersService: new (...args: unknown[]) => UsersService;
-    };
-    const rosterModule = require('../events/signups-roster.service') as {
-      SignupsRosterService: new (...args: unknown[]) => SignupsRosterService;
-    };
-    const notifModule = require('./notification.service') as {
-      NotificationService: new (...args: unknown[]) => NotificationService;
-    };
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    const usersService = this.moduleRef.get(usersModule.UsersService, {
-      strict: false,
-    });
-    const rosterService = this.moduleRef.get(
-      rosterModule.SignupsRosterService,
-      {
-        strict: false,
-      },
-    );
-    const notificationService = this.moduleRef.get(
-      notifModule.NotificationService,
-      { strict: false },
-    );
-    if (!usersService || !rosterService || !notificationService) {
-      this.logger.warn(
-        `ROK-1260: deactivateUser(${userId}) — orchestration deps not wired, skipping`,
-      );
-      return;
-    }
-    await deactivateUserOrchestrated(
-      {
-        db: this.db,
-        usersService,
-        notificationService,
-        rosterService,
-        logger: this.logger,
-      },
+    await deactivateUserViaModuleRef(
+      this.db,
+      this.logger,
+      this.moduleRef,
       userId,
     );
   }

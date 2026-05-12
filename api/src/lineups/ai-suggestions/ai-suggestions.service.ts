@@ -233,12 +233,11 @@ export class AiSuggestionsService {
     model: string;
   }> {
     const provider =
-      (await this.settings.get(AI_SETTING_KEYS.PROVIDER as never)) ??
+      (await this.settings.get(AI_SETTING_KEYS.PROVIDER)) ??
       (await this.llmService.getActiveProviderKey()) ??
       'unknown';
     const model =
-      (await this.settings.get(AI_SETTING_KEYS.MODEL as never)) ??
-      AI_DEFAULTS.model;
+      (await this.settings.get(AI_SETTING_KEYS.MODEL)) ?? AI_DEFAULTS.model;
     return { provider, model };
   }
 }

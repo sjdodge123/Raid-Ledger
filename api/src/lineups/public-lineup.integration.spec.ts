@@ -202,4 +202,7 @@ function describePublicLineup() {
   });
 }
 
-describe('Lineups — public share link (integration, ROK-1067)', describePublicLineup);
+describe(
+  'Lineups — public share link (integration, ROK-1067)',
+  describePublicLineup,
+);

@@ -20,6 +20,7 @@ import {
 import { fetchSteamLibrary } from './users-steam-query.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import { reactivateUserById } from './users-reactivate.helpers';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
 
@@ -347,19 +348,8 @@ export class UsersService {
     return findAdminUser(this.db);
   }
 
-  /**
-   * Reactivate a deactivated user (ROK-1260, admin-triggered).
-   * Does NOT emit the admin reactivation notification — only the
-   * Discord `guildMemberAdd` listener does that.
-   */
+  /** Admin-triggered reactivation (ROK-1260 AC-9). Delegates to helper. */
   async reactivateUser(userId: number) {
-    const [updated] = await this.db
-      .update(schema.users)
-      .set({ deactivatedAt: null, updatedAt: new Date() })
-      .where(eq(schema.users.id, userId))
-      .returning();
-    invalidateAuthUser(userId);
-    this.logger.log(`Admin reactivated user ${userId}`);
-    return updated;
+    return reactivateUserById(this.db, userId, this.logger);
   }
 }

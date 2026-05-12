@@ -48,6 +48,6 @@ export async function loadRecentWinners(db: Db): Promise<RecentWinner[]> {
   return rows.map((r) => ({
     gameId: r.gameId,
     name: r.name,
-    tags: (r.tags as unknown as string[] | null) ?? [],
+    tags: r.tags ?? [],
   }));
 }

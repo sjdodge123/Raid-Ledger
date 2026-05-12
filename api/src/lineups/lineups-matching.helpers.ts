@@ -86,7 +86,7 @@ async function insertMatch(
       })
       .returning({ id: schema.communityLineupMatches.id });
     if (!match) return;
-    await insertMatchMembers(tx as Db, lineupId, match.id, vc.gameId);
+    await insertMatchMembers(tx, lineupId, match.id, vc.gameId);
   });
 }
 

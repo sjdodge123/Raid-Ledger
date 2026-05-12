@@ -14,7 +14,7 @@ export function makeBatchInsert(db: Db) {
   ): Promise<void> {
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
-      const q = db.insert(table).values(batch as never);
+      const q = db.insert(table).values(batch);
       if (onConflict === 'doNothing') {
         await q.onConflictDoNothing();
       } else {

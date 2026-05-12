@@ -257,10 +257,7 @@ describe('EventLifecycleProcessor — skip conditions', () => {
 
   it('skips game affinity when game name is missing', async () => {
     const payload = makePayload();
-    payload.event.game = undefined as unknown as {
-      name: string;
-      coverUrl: string | null;
-    };
+    payload.event.game = undefined;
     await processor.process(makeJob(payload));
 
     expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();

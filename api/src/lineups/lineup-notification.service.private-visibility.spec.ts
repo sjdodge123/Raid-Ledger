@@ -105,35 +105,25 @@ function callMilestone(
   service: LineupNotificationService,
   ...args: AnyArgs
 ): Promise<void> {
-  return (
-    service.notifyNominationMilestone as unknown as (
-      ...a: AnyArgs
-    ) => Promise<void>
-  )(...args);
+  return service.notifyNominationMilestone(...args);
 }
 function callMatchesFound(
   service: LineupNotificationService,
   ...args: AnyArgs
 ): Promise<void> {
-  return (
-    service.notifyMatchesFound as unknown as (...a: AnyArgs) => Promise<void>
-  )(...args);
+  return service.notifyMatchesFound(...args);
 }
 function callSchedulingOpen(
   service: LineupNotificationService,
   ...args: AnyArgs
 ): Promise<void> {
-  return (
-    service.notifySchedulingOpen as unknown as (...a: AnyArgs) => Promise<void>
-  )(...args);
+  return service.notifySchedulingOpen(...args);
 }
 function callEventCreated(
   service: LineupNotificationService,
   ...args: AnyArgs
 ): Promise<void> {
-  return (
-    service.notifyEventCreated as unknown as (...a: AnyArgs) => Promise<void>
-  )(...args);
+  return service.notifyEventCreated(...args);
 }
 
 // ── Fixtures ───────────────────────────────────────────────────────────────

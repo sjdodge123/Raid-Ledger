@@ -222,6 +222,10 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
       const handler = triggerRegister(listener);
 
       await handler(makeMockMember('123456789012345678'));
+      // Handler is fire-and-forget (void return for discord.js
+      // Events.GuildMemberAdd signature compliance); flush microtasks so
+      // the inner promise chain settles before assertions.
+      await new Promise((resolve) => setImmediate(resolve));
 
       // The dev's UPDATE call should mutate the users table (we don't
       // assert on the exact set values — just that update() was used).

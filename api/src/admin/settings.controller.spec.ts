@@ -69,7 +69,7 @@ function createMockSettingsService(): Partial<SettingsService> {
     isIgdbConfigured: jest.fn().mockResolvedValue(false),
     getDiscordOAuthConfig: jest.fn().mockResolvedValue(null),
     isBlizzardConfigured: jest.fn().mockResolvedValue(false),
-  } as any;
+  };
 }
 
 describe('AdminGamesController — ROK-231: game hide/ban and adult filter', () => {

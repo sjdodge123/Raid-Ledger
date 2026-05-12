@@ -219,7 +219,7 @@ export function computeGameVector(
   );
 
   return {
-    dimensions: dimensions as TasteProfileDimensionsDto,
+    dimensions: dimensions,
     vector,
     confidence,
     derivation,

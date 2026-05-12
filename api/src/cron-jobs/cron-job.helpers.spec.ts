@@ -50,7 +50,7 @@ describe('recordCompleted', () => {
 
     await recordCompleted(
       mockDb as any,
-      job as any,
+      job,
       'test-job',
       startedAt,
       finishedAt,
@@ -84,7 +84,7 @@ describe('recordFailed', () => {
 
     await recordFailed(
       mockDb as any,
-      job as any,
+      job,
       'test-job',
       startedAt,
       finishedAt,

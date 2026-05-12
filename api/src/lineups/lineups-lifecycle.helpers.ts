@@ -76,7 +76,7 @@ export function insertLineup(
         .returning();
       const [row] = rows;
       if (row && dto.inviteeUserIds && dto.inviteeUserIds.length > 0) {
-        await addInvitees(tx as Db, row.id, dto.inviteeUserIds);
+        await addInvitees(tx, row.id, dto.inviteeUserIds);
       }
       return rows;
     }),

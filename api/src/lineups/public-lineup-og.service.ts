@@ -20,102 +20,104 @@ import { PublicLineupService } from './public-lineup.service';
 
 @Injectable()
 export class PublicLineupOgService {
-    private readonly logger = new Logger(PublicLineupOgService.name);
+  private readonly logger = new Logger(PublicLineupOgService.name);
 
-    constructor(
-        private readonly publicLineup: PublicLineupService,
-        private readonly settings: SettingsService,
-    ) {}
+  constructor(
+    private readonly publicLineup: PublicLineupService,
+    private readonly settings: SettingsService,
+  ) {}
 
-    /**
-     * Render an OG-tagged HTML page for the given slug. Unknown / disabled /
-     * private slugs return a generic Raid Ledger preview to avoid leaking
-     * existence state to crawlers.
-     */
-    async renderLineupOgHtml(slug: string): Promise<string> {
-        const clientUrl = await this.settings.getClientUrl();
-        const canonicalUrl = `${clientUrl}/p/lineup/${encodeURIComponent(slug)}`;
+  /**
+   * Render an OG-tagged HTML page for the given slug. Unknown / disabled /
+   * private slugs return a generic Raid Ledger preview to avoid leaking
+   * existence state to crawlers.
+   */
+  async renderLineupOgHtml(slug: string): Promise<string> {
+    const clientUrl = await this.settings.getClientUrl();
+    const canonicalUrl = `${clientUrl}/p/lineup/${encodeURIComponent(slug)}`;
 
-        // Real backend failures still degrade to the generic preview so the
-        // crawler unfurl never breaks, but they get logged distinctly so an
-        // outage doesn't hide as a stream of "generic" cards.
-        const dto = await this.publicLineup.findBySlug(slug).catch((err: unknown) => {
-            const message = err instanceof Error ? err.message : String(err);
-            const stack = err instanceof Error ? err.stack : undefined;
-            this.logger.error(
-                `Public lineup OG lookup failed for slug=${slug}: ${message}`,
-                stack,
-            );
-            return null;
-        });
-        if (!dto) {
-            return buildOgHtmlPage({
-                title: 'Raid Ledger',
-                description:
-                    'A community lineup link. Sign in to nominate, vote, or share your own.',
-                url: canonicalUrl,
-                imageUrl: null,
-            });
-        }
-
-        const title = `${dto.title} — ${dto.communityName}`;
-        const description = buildDescription(dto);
-        const imageUrl = dto.decision?.coverUrl ?? null;
-        return buildOgHtmlPage({ title, description, url: canonicalUrl, imageUrl });
+    // Real backend failures still degrade to the generic preview so the
+    // crawler unfurl never breaks, but they get logged distinctly so an
+    // outage doesn't hide as a stream of "generic" cards.
+    const dto = await this.publicLineup
+      .findBySlug(slug)
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        this.logger.error(
+          `Public lineup OG lookup failed for slug=${slug}: ${message}`,
+          stack,
+        );
+        return null;
+      });
+    if (!dto) {
+      return buildOgHtmlPage({
+        title: 'Raid Ledger',
+        description:
+          'A community lineup link. Sign in to nominate, vote, or share your own.',
+        url: canonicalUrl,
+        imageUrl: null,
+      });
     }
+
+    const title = `${dto.title} — ${dto.communityName}`;
+    const description = buildDescription(dto);
+    const imageUrl = dto.decision?.coverUrl ?? null;
+    return buildOgHtmlPage({ title, description, url: canonicalUrl, imageUrl });
+  }
 }
 
 interface PublicLineupLike {
-    title: string;
-    description: string | null;
-    status: 'building' | 'voting' | 'decided' | 'archived';
-    decision: { gameName: string; coverUrl: string | null } | null;
-    communityName: string;
+  title: string;
+  description: string | null;
+  status: 'building' | 'voting' | 'decided' | 'archived';
+  decision: { gameName: string; coverUrl: string | null } | null;
+  communityName: string;
 }
 
 const STATUS_COPY: Record<PublicLineupLike['status'], string> = {
-    building: 'Nominations open — community lineup is forming.',
-    voting: 'Voting is open — see what the community is choosing.',
-    decided: 'A winner has been chosen!',
-    archived: 'Lineup complete.',
+  building: 'Nominations open — community lineup is forming.',
+  voting: 'Voting is open — see what the community is choosing.',
+  decided: 'A winner has been chosen!',
+  archived: 'Lineup complete.',
 };
 
 function buildDescription(dto: PublicLineupLike): string {
-    if (dto.description && dto.description.trim() !== '') {
-        return dto.description.length > 200
-            ? `${dto.description.slice(0, 197)}…`
-            : dto.description;
-    }
-    if (dto.status === 'decided' && dto.decision) {
-        return `Winner: ${dto.decision.gameName}. ${STATUS_COPY.decided}`;
-    }
-    return STATUS_COPY[dto.status];
+  if (dto.description && dto.description.trim() !== '') {
+    return dto.description.length > 200
+      ? `${dto.description.slice(0, 197)}…`
+      : dto.description;
+  }
+  if (dto.status === 'decided' && dto.decision) {
+    return `Winner: ${dto.decision.gameName}. ${STATUS_COPY.decided}`;
+  }
+  return STATUS_COPY[dto.status];
 }
 
 interface OgMeta {
-    title: string;
-    description: string;
-    url: string;
-    imageUrl: string | null;
+  title: string;
+  description: string;
+  url: string;
+  imageUrl: string | null;
 }
 
 /** Escape HTML special characters to prevent injection in rendered tags. */
 export function escapeHtml(str: string): string {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export function buildOgHtmlPage(meta: OgMeta): string {
-    const t = escapeHtml(meta.title);
-    const d = escapeHtml(meta.description);
-    const u = escapeHtml(meta.url);
-    const headTags = buildOgHeadTags(t, d, u, meta.imageUrl);
+  const t = escapeHtml(meta.title);
+  const d = escapeHtml(meta.description);
+  const u = escapeHtml(meta.url);
+  const headTags = buildOgHeadTags(t, d, u, meta.imageUrl);
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
   <head>${headTags}
   </head>
@@ -126,16 +128,16 @@ export function buildOgHtmlPage(meta: OgMeta): string {
 }
 
 function buildOgHeadTags(
-    t: string,
-    d: string,
-    u: string,
-    imageUrl: string | null,
+  t: string,
+  d: string,
+  u: string,
+  imageUrl: string | null,
 ): string {
-    const imageTag = imageUrl
-        ? `\n    <meta property="og:image" content="${escapeHtml(imageUrl)}" />\n    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`
-        : '';
+  const imageTag = imageUrl
+    ? `\n    <meta property="og:image" content="${escapeHtml(imageUrl)}" />\n    <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`
+    : '';
 
-    return `
+  return `
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${t}</title>

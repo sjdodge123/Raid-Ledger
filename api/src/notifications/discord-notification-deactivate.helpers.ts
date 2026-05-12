@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import type { ModuleRef } from '@nestjs/core';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -6,6 +7,55 @@ import { UsersService } from '../users/users.service';
 import { NotificationService } from './notification.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
+
+/**
+ * ModuleRef-aware entry point — resolves cross-module deps lazily to
+ * avoid a 3-way Notification↔Users↔Events circular DI graph at boot,
+ * then delegates to `deactivateUserOrchestrated`. Called by the
+ * notification service so the service itself stays under the 300-line
+ * STRICT limit (ROK-1260 file-size enforcement, ESLint max-lines).
+ */
+export async function deactivateUserViaModuleRef(
+  db: PostgresJsDatabase<typeof schema>,
+  logger: Logger,
+  moduleRef: ModuleRef | undefined,
+  userId: number,
+): Promise<void> {
+  if (!moduleRef) {
+    logger.warn(`ROK-1260: deactivateUser(${userId}) — no moduleRef, skipping`);
+    return;
+  }
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const usersModule = require('../users/users.service') as {
+    UsersService: new (...args: unknown[]) => UsersService;
+  };
+  const rosterModule = require('../events/signups-roster.service') as {
+    SignupsRosterService: new (...args: unknown[]) => SignupsRosterService;
+  };
+  const notifModule = require('./notification.service') as {
+    NotificationService: new (...args: unknown[]) => NotificationService;
+  };
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  const usersService = moduleRef.get(usersModule.UsersService, {
+    strict: false,
+  });
+  const rosterService = moduleRef.get(rosterModule.SignupsRosterService, {
+    strict: false,
+  });
+  const notificationService = moduleRef.get(notifModule.NotificationService, {
+    strict: false,
+  });
+  if (!usersService || !rosterService || !notificationService) {
+    logger.warn(
+      `ROK-1260: deactivateUser(${userId}) — deps not wired, skipping`,
+    );
+    return;
+  }
+  await deactivateUserOrchestrated(
+    { db, usersService, notificationService, rosterService, logger },
+    userId,
+  );
+}
 
 /**
  * Orchestrates user deactivation after a Discord 50278 (ROK-1260).

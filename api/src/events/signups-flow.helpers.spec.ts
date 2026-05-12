@@ -98,7 +98,7 @@ function createSignupRow(
     attendanceRecordedAt: null,
     roachedOutAt: null,
     ...overrides,
-  } as unknown as typeof schema.eventSignups.$inferSelect;
+  };
 }
 
 /** Build mock FlowDeps with tracking for autoAllocateSignup calls. */

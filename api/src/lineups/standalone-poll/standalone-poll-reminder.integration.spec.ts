@@ -416,7 +416,7 @@ function describeStandalonePollReminders() {
 
       const scheduleSpy = jest
         .spyOn(phaseQueue, 'scheduleTransition')
-        .mockResolvedValue(undefined as never);
+        .mockResolvedValue(undefined);
 
       // The reconciler is a method on the service that owns the queue;
       // by spec it is invoked via `OnModuleInit` at boot but exposed as
