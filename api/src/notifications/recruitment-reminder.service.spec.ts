@@ -174,6 +174,14 @@ describe('RecruitmentReminderService', () => {
   });
 
   describe('checkAndSendReminders — DM notification payload', () => {
+    // Use a startTime threaded through closures so individual tests can
+    // assert on the literal value. Pin to a future timestamp far enough
+    // out that short-notice suppression (ROK-1240) does NOT fire for
+    // the default event row's createdAt (3 days ago).
+    const fixedStartTime = new Date(
+      Date.now() + 23 * 60 * 60 * 1000,
+    ).toISOString();
+
     beforeEach(() => {
       // Default: one event, two recipients, no absences
       const event = makeEventRow({
@@ -182,7 +190,7 @@ describe('RecruitmentReminderService', () => {
         game_id: 7,
         game_name: 'World of Warcraft',
         creator_id: 1,
-        start_time: '2026-03-04T20:00:00.000Z',
+        start_time: fixedStartTime,
         max_attendees: 20,
         signup_count: '10',
         channel_id: 'channel-abc',
@@ -266,7 +274,7 @@ describe('RecruitmentReminderService', () => {
       expect(mocks.mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
-            startTime: '2026-03-04T20:00:00.000Z',
+            startTime: fixedStartTime,
           }),
         }),
       );
@@ -521,39 +529,75 @@ describe('RecruitmentReminderService', () => {
       expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
     });
 
-    it('should use "tomorrow" in embed title when event is <= 24h away', async () => {
-      const event = makeEventRow({
-        start_time: new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString(),
+    // ROK-1240: deterministic fake-timer block so the calendar-day branch
+    // of formatRelativeTimeLabel is reproducible regardless of when the
+    // test runs.
+    describe('time-label rendering (ROK-1240)', () => {
+      beforeEach(() => {
+        jest.useFakeTimers();
       });
-      mocks.mockDb.execute
-        .mockResolvedValueOnce([event])
-        .mockResolvedValueOnce([]);
-
-      await service.checkAndSendReminders();
-
-      const [, embed] = mocks.mockDiscordBotClient.sendEmbed.mock.calls[0] as [
-        string,
-        { toJSON: () => { title: string } },
-      ];
-      expect(embed.toJSON().title).toContain('tomorrow');
-    });
-
-    it('should use "in Xh" in embed title when event is > 24h away', async () => {
-      const event = makeEventRow({
-        start_time: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
+      afterEach(() => {
+        jest.useRealTimers();
       });
-      mocks.mockDb.execute
-        .mockResolvedValueOnce([event])
-        .mockResolvedValueOnce([]);
 
-      await service.checkAndSendReminders();
+      it('should use "today" in embed title for same-calendar-day same-day events', async () => {
+        // now = 2026-05-12 09:00 UTC, start = 2026-05-12 21:00 UTC (12h ahead, same day)
+        // Threshold for short-notice = 12h. start - created must be >= 12h
+        // to NOT be suppressed. createdAt 5 days earlier → safe.
+        jest.setSystemTime(new Date('2026-05-12T09:00:00Z'));
+        const event = makeEventRow({
+          start_time: '2026-05-12T21:00:00Z',
+          created_at: '2026-05-07T09:00:00Z',
+        });
+        mocks.mockDb.execute
+          .mockResolvedValueOnce([event])
+          .mockResolvedValueOnce([]);
 
-      const [, embed] = mocks.mockDiscordBotClient.sendEmbed.mock.calls[0] as [
-        string,
-        { toJSON: () => { title: string } },
-      ];
-      expect(embed.toJSON().title).toMatch(/in \d+h/);
-      expect(embed.toJSON().title).not.toContain('tomorrow');
+        await service.checkAndSendReminders();
+
+        const [, embed] = mocks.mockDiscordBotClient.sendEmbed.mock
+          .calls[0] as [string, { toJSON: () => { title: string } }];
+        const title = embed.toJSON().title;
+        expect(title).toContain('today');
+        expect(title).not.toContain('tomorrow');
+      });
+
+      it('should use "tomorrow" in embed title when event is on next calendar day, <= 24h away', async () => {
+        // now = 2026-05-12 22:00 UTC, start = 2026-05-13 18:00 UTC (20h ahead, next day)
+        jest.setSystemTime(new Date('2026-05-12T22:00:00Z'));
+        const event = makeEventRow({
+          start_time: '2026-05-13T18:00:00Z',
+          created_at: '2026-05-07T09:00:00Z',
+        });
+        mocks.mockDb.execute
+          .mockResolvedValueOnce([event])
+          .mockResolvedValueOnce([]);
+
+        await service.checkAndSendReminders();
+
+        const [, embed] = mocks.mockDiscordBotClient.sendEmbed.mock
+          .calls[0] as [string, { toJSON: () => { title: string } }];
+        expect(embed.toJSON().title).toContain('tomorrow');
+      });
+
+      it('should use "in Xh" in embed title when event is > 24h away', async () => {
+        jest.setSystemTime(new Date('2026-05-12T10:00:00Z'));
+        const event = makeEventRow({
+          start_time: '2026-05-13T22:00:00Z', // 36h ahead
+          created_at: '2026-05-07T09:00:00Z',
+        });
+        mocks.mockDb.execute
+          .mockResolvedValueOnce([event])
+          .mockResolvedValueOnce([]);
+
+        await service.checkAndSendReminders();
+
+        const [, embed] = mocks.mockDiscordBotClient.sendEmbed.mock
+          .calls[0] as [string, { toJSON: () => { title: string } }];
+        expect(embed.toJSON().title).toMatch(/in \d+h/);
+        expect(embed.toJSON().title).not.toContain('tomorrow');
+        expect(embed.toJSON().title).not.toContain('today');
+      });
     });
 
     it('should embed description contain event title, gameName, and signupSummary', async () => {
