@@ -496,42 +496,29 @@ describe('POST /admin/games/dedup-audit/run', () => {
   // Existing GET test only exercises "lowest id wins" because all seeded dups
   // have NULL itad_game_id and NULL igdb_id. This test fills that gap.
   //
-  // The DB has UNIQUE(igdb_id) and UNIQUE(itad_game_id), so a 3-row group
-  // sharing the SAME igdb_id is impossible. We instead build a 3-row name-key
-  // group (same normalized name) and vary itad/igdb across the rows:
-  //   row A: itad_game_id=null, igdb_id=null         -> normalized_name match
-  //   row B: itad_game_id=null, igdb_id=70001         -> normalized_name match,
-  //                                                       but row B is in
-  //                                                       precedence bucket
-  //                                                       `igdb:70001`, NOT
-  //                                                       in the name bucket.
+  // Setup constraint: precedence bucketing (igdb → steam → name) means a row
+  // with `igdb_id` set lands in its OWN igdb bucket — NOT the shared steam
+  // bucket. To get 3 rows in the same bucket and vary on `itad_game_id`, we
+  // seed 3 rows sharing the SAME steam_app_id, all with `igdb_id = null`,
+  // and vary `itad_game_id` on one row. This validates tier 1 (itad wins
+  // over min-id). Tier 2 (igdb) and tier 3 (min id) are exercised by other
+  // tests in this file + the unit spec.
   //
-  // Because the helper buckets by PRECEDENCE (igdb → steam → name), a row
-  // with an igdb_id never lands in a name bucket. To exercise the tiebreaker
-  // priority chain (`itad > igdb > min id`) we need a group whose ROWS ALL
-  // SHARE THE SAME BUCKET KEY but differ on itad/igdb columns. The only way
-  // is a steam-key bucket (since steam_app_id is NOT unique).
-  //
-  // Seed: 3 rows with the SAME steam_app_id. Vary itad_game_id and igdb_id.
-  //   row 1: itad=null,  igdb=null     -> ineligible for tier 1 or 2
-  //   row 2: itad=null,  igdb=80002    -> tier 2 candidate
-  //   row 3: itad='X',   igdb=null     -> tier 1 winner (itad takes priority)
-  // Expected canonical = row 3's id (regardless of insertion order).
+  // Seed: 3 rows with the SAME steam_app_id. Only row C has itad_game_id.
+  //   row A: itad=null   -> not the tier-1 winner; lowest id but loses
+  //   row B: itad=null   -> not the tier-1 winner
+  //   row C: itad='X'    -> tier-1 winner (itad beats every lower id)
+  // Expected canonical = row C's id even though rows A and B have lower ids.
   // -------------------------------------------------------------------------
   it('breaks ties by itad_game_id > igdb_id > min id (mixed-tiebreak group)', async () => {
     const inserted = await testApp.db
       .insert(schema.games)
       .values([
-        // Row 1: lowest id usually, but neither itad nor igdb set.
+        // Row A: lowest id usually, but no itad — should NOT win.
         { name: 'Tier1 Game A', slug: 'tier1-a', steamAppId: 90001 },
-        // Row 2: tier-2 candidate (igdb set, no itad).
-        {
-          name: 'Tier1 Game B',
-          slug: 'tier1-b',
-          steamAppId: 90001,
-          igdbId: 80002,
-        },
-        // Row 3: tier-1 winner (itad set). Inserted LAST so its id is highest
+        // Row B: second lowest id, no itad — should NOT win.
+        { name: 'Tier1 Game B', slug: 'tier1-b', steamAppId: 90001 },
+        // Row C: tier-1 winner (itad set). Inserted LAST so its id is highest
         // — the test proves min-id is NOT used here, the itad winner is.
         {
           name: 'Tier1 Game C',
