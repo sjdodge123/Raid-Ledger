@@ -13,6 +13,7 @@ import {
   pickCanonicalId,
   type GameRow,
 } from './games-dedup-audit.helpers';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 function zeros(n: number): number[] {
   return Array.from<number>({ length: n }).fill(0);
@@ -249,29 +250,34 @@ describe('GamesDedupAuditService.runAudit', () => {
 
   it('emits blast-radius counts populated from drizzle responses (per-table mapping)', async () => {
     // Two rows share igdbId=20. Canonical: id=1 (lower id). Loser: id=2.
-    // Snapshot is the 17 counts returned for id=2 in helper-call order:
-    // 16 direct counts via buildDirectCountQueries, then 1 JOIN count via
-    // countLineupMatchMembers (execute() raw SQL path).
-    // Unique non-zero counts per slot so a destructure swap (e.g. events↔eventPlans)
-    // would fail the test. Each value is distinct in the range [1..17].
+    // ROK-1270 extends to 23 counts: 22 direct counts via buildDirectCountQueries
+    // (16 ROK-1271 + 6 ROK-1270) then 1 JOIN count via countLineupMatchMembers.
+    // Distinct non-zero values per slot — a destructure swap (e.g. events↔eventPlans
+    // or tiebreakerBracketGameA↔tiebreakerBracketGameB) fails this test.
     const counts = [
-      3, // events                  [direct 1]
-      1, // eventPlans              [direct 2]
-      8, // lineupsDecided          [direct 3]
-      2, // lineupEntries           [direct 4]
-      4, // lineupMatches           [direct 5]
-      9, // tiebreakers             [direct 6]
-      7, // characters              [direct 7]
-      10, // tasteVectors            [direct 8]
-      6, // interests               [direct 9]
-      11, // activityRollups         [direct 10]
-      12, // activitySessions        [direct 11]
-      13, // availability            [direct 12]
-      14, // channelBindings         [direct 13]
-      15, // discordMappings         [direct 14]
-      16, // eventTypes              [direct 15]
-      17, // interestSuppressions    [direct 16]
-      5, // lineupMatchMembers      [JOIN via execute()]
+      3, // events                       [direct 1]
+      1, // eventPlans                   [direct 2]
+      8, // lineupsDecided               [direct 3]
+      2, // lineupEntries                [direct 4]
+      4, // lineupMatches                [direct 5]
+      9, // tiebreakers                  [direct 6]
+      7, // characters                   [direct 7]
+      10, // tasteVectors                 [direct 8]
+      6, // interests                    [direct 9]
+      11, // activityRollups              [direct 10]
+      12, // activitySessions             [direct 11]
+      13, // availability                 [direct 12]
+      14, // channelBindings              [direct 13]
+      15, // discordMappings              [direct 14]
+      16, // eventTypes                   [direct 15]
+      17, // interestSuppressions         [direct 16]
+      18, // tiebreakerBracketGameA       [direct 17 — ROK-1270]
+      19, // tiebreakerBracketGameB       [direct 18 — ROK-1270]
+      20, // tiebreakerBracketWinner      [direct 19 — ROK-1270]
+      21, // tiebreakerBracketVotes       [direct 20 — ROK-1270]
+      22, // tiebreakerVetoes             [direct 21 — ROK-1270]
+      23, // playerIntensitySnapshots     [direct 22 — ROK-1270]
+      5, // lineupMatchMembers           [JOIN via execute()]
     ];
     const { svc } = await buildService(
       () => [
@@ -300,6 +306,12 @@ describe('GamesDedupAuditService.runAudit', () => {
     expect(br.discordMappings).toBe(15);
     expect(br.eventTypes).toBe(16);
     expect(br.interestSuppressions).toBe(17);
+    expect(br.tiebreakerBracketGameA).toBe(18);
+    expect(br.tiebreakerBracketGameB).toBe(19);
+    expect(br.tiebreakerBracketWinner).toBe(20);
+    expect(br.tiebreakerBracketVotes).toBe(21);
+    expect(br.tiebreakerVetoes).toBe(22);
+    expect(br.playerIntensitySnapshots).toBe(23);
     expect(br.lineupMatchMembers).toBe(5);
   });
 
@@ -317,12 +329,108 @@ describe('GamesDedupAuditService.runAudit', () => {
       row({ id: 8, name: 'C2', igdbId: 300 }),
       row({ id: 9, name: 'C3', igdbId: 300 }),
     ];
-    // 3 + 1 + 2 = 6 losers; 6 * 17 = 102 zero counts.
-    const { svc } = await buildService(() => rows, zeros(102));
+    // 3 + 1 + 2 = 6 losers; 6 * 23 = 138 zero counts (22 direct + 1 JOIN per id).
+    const { svc } = await buildService(() => rows, zeros(138));
     const result = await svc.runAudit();
     expect(result.groups).toHaveLength(3);
     expect(result.groups[0].matchKey).toBe('100'); // A
     expect(result.groups[1].matchKey).toBe('300'); // C
     expect(result.groups[2].matchKey).toBe('200'); // B
+  });
+});
+
+// ============================================================================
+// ROK-1270 — persistSnapshot() — focused mock test that TRUNCATE precedes
+// INSERT inside a single db.transaction call. The full integration coverage
+// lives in games-dedup-audit.integration.spec.ts (real Postgres); this test
+// only asserts the call-order invariant of the transaction body.
+// ============================================================================
+describe('GamesDedupAuditService.persistSnapshot', () => {
+  it('issues TRUNCATE before INSERT inside a single transaction', async () => {
+    const operations: string[] = [];
+
+    // Loader returns one igdb-key dup pair. We exercise persistSnapshot, but
+    // we want to capture the ORDER of writes inside the tx callback — not
+    // the read-side mechanics, which the runAudit suite above already covers.
+    const gameRows: GameRow[] = [
+      {
+        id: 1,
+        name: 'A',
+        slug: 'a',
+        igdbId: 99,
+        itadGameId: null,
+        steamAppId: null,
+        cachedAt: new Date('2026-01-01T00:00:00Z'),
+      },
+      {
+        id: 2,
+        name: 'B',
+        slug: 'b',
+        igdbId: 99,
+        itadGameId: null,
+        steamAppId: null,
+        cachedAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    ];
+
+    // 23 zero counts (22 direct + 1 JOIN) for the single loser id=2,
+    // plus 9 zero unique-conflict counts (composite ×8 + single-column ×1).
+    let executeIdx = 0;
+    const readCounts = Array.from<number>({ length: 23 }).fill(0);
+    const readUniqueConflicts = Array.from<number>({ length: 9 }).fill(0);
+
+    const tx = {
+      execute: jest.fn((..._args: unknown[]) => {
+        operations.push('truncate');
+        return Promise.resolve([{ c: 0 }]);
+      }),
+      insert: jest.fn(() => ({
+        values: jest.fn(() => {
+          operations.push('insert');
+          return Promise.resolve(undefined);
+        }),
+      })),
+    };
+
+    const db = {
+      select: jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => {
+            const v = readCounts[executeIdx] ?? 0;
+            executeIdx += 1;
+            return Promise.resolve([{ c: v }]);
+          }),
+          then: (resolve: (v: GameRow[]) => unknown) =>
+            Promise.resolve(gameRows).then(resolve),
+        })),
+      })),
+      execute: jest.fn(() => {
+        const v = readUniqueConflicts.shift() ?? 0;
+        return Promise.resolve([{ c: v }]);
+      }),
+      transaction: jest.fn(
+        async (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx),
+      ),
+    };
+
+    const module = await Test.createTestingModule({
+      providers: [
+        GamesDedupAuditService,
+        {
+          provide: DrizzleAsyncProvider,
+          useValue: db as unknown as PostgresJsDatabase<Record<string, unknown>>,
+        },
+      ],
+    }).compile();
+    const svc = module.get(GamesDedupAuditService);
+
+    const summary = await svc.persistSnapshot();
+
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(operations).toEqual(['truncate', 'insert']);
+    expect(summary.totalGroups).toBe(1);
+    expect(summary.totalDupRows).toBe(1);
+    expect(summary.byStrategy).toEqual({ igdb: 1, steam: 0, name: 0 });
+    expect(typeof summary.snapshotAt).toBe('string');
   });
 });
