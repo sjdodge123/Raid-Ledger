@@ -8,6 +8,8 @@
 >
 > **Updated diagnosis lives at `planning-artifacts/specs/ROK-1264-architecture-v2.md`.** Top candidates after the falsification: H4 (supertest client-read stream-close race) and H5 (IPv4/IPv6 dual-stack loopback mismatch). H1 (TIME_WAIT) and H3 (FIN storm) remain demoted by the snapshot evidence.
 >
+> **Resolution (2026-05-12 — Tier-1 Lead):** H4 confirmed by single-file isolation reproducer (`lineups-voting`, 1 hit / 20 runs = ~5%). Fix landed in commit `bddc3e4a` — pin every supertest call to one keep-alive socket. Post-fix isolation: 0 carrier hits / 50 runs. See `docs/spikes/rok-1250-residual-layer-5.md` for the carrier-confirmation + fix writeup.
+>
 > **What's still useful in this doc:** §3 run-by-run summary, §4 confounders (Docker orphan compounding, host resource pressure, Bash harness 10-min reap, loop hit-detection regex too narrow). Those remain valid.
 >
 > **Original "H2 confirmed" verdict preserved verbatim below for audit-trail continuity.**
