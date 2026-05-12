@@ -37,6 +37,26 @@ export function EventDetailError({ message, onBack }: { message: string; onBack:
     );
 }
 
+/**
+ * ROK-1237: shown when the event detail payload fails schema validation
+ * (e.g. enum drift between server and contract). Never leaks the raw Zod
+ * issue array — the issues are sent to Sentry by the fetch boundary.
+ */
+export function EventDetailSoftError({ onRetry, onBack }: { onRetry: () => void; onBack: () => void }) {
+    return (
+        <div className="event-detail-page event-detail-page--error">
+            <div className="event-detail-error">
+                <h2>Something went wrong loading this event</h2>
+                <p>We've reported this to the team. Try refreshing — if it keeps happening, head back to the calendar and let us know.</p>
+                <div className="flex gap-2 mt-2">
+                    <button onClick={onRetry} className="btn btn-primary">Refresh</button>
+                    <button onClick={onBack} className="btn btn-secondary">Back to Calendar</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function EventDetailFallbackSignup({ rosterAssignments, isAuthenticated, isSignedUp, isCancelled, onSignup, isPending }: {
     rosterAssignments: unknown; isAuthenticated: boolean; isSignedUp: boolean; isCancelled: boolean; onSignup: () => void; isPending: boolean;
 }) {

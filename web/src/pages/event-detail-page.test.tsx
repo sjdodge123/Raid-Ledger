@@ -310,3 +310,70 @@ describe('EventDetailPage — composite endpoint consumer (ROK-1046)', () => {
         );
     });
 });
+
+// ============================================================
+// ROK-1237: payload schema validation failures must render a soft
+// error state — NEVER a 404, and NEVER the raw Zod issue array.
+// ============================================================
+
+function renderEventDetailPageWithMalformedPayload() {
+    server.use(
+        http.get(`${API_BASE}/events/:id/detail`, () =>
+            HttpResponse.json({
+                event: { id: EVENT_ID, title: FIXTURE_TITLE },
+                // Missing required fields — schema parse will fail.
+            }),
+        ),
+        http.get(`${API_BASE}/events/:id/activity`, () =>
+            HttpResponse.json({ entries: [] }),
+        ),
+    );
+    const queryClient = createTestQueryClient();
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={[`/events/${EVENT_ID}`]}>
+                <Routes>
+                    <Route path="/events/:id" element={<EventDetailPage />} />
+                </Routes>
+            </MemoryRouter>
+        </QueryClientProvider>,
+    );
+}
+
+describe('EventDetailPage — schema validation soft error (ROK-1237)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('renders the soft error UI when the payload fails schema validation', async () => {
+        renderEventDetailPageWithMalformedPayload();
+        await waitFor(
+            () => {
+                expect(
+                    screen.getByText(/something went wrong loading this event/i),
+                ).toBeInTheDocument();
+            },
+            { timeout: 4000 },
+        );
+        // Must NOT render the 404 "Event not found" header.
+        expect(screen.queryByText(/event not found/i)).toBeNull();
+    });
+
+    it('does not leak the raw Zod issue array into the rendered DOM', async () => {
+        const { container } = renderEventDetailPageWithMalformedPayload();
+        await waitFor(
+            () => {
+                expect(
+                    screen.getByText(/something went wrong loading this event/i),
+                ).toBeInTheDocument();
+            },
+            { timeout: 4000 },
+        );
+        // The Zod issue shape (`{ code: "invalid_type", path: [...] }`) must
+        // never appear in the DOM. Same for stringified issue arrays.
+        const text = container.textContent ?? '';
+        expect(text).not.toMatch(/"code":\s*"invalid_enum_value"/);
+        expect(text).not.toMatch(/"code":\s*"invalid_type"/);
+        expect(text).not.toMatch(/Required/);
+    });
+});

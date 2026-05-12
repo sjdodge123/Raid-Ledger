@@ -28,11 +28,15 @@ Tech debt, chores, perf improvements — light or standard scope only. If a stor
 ```
 Step 1: Gather    → Linear search by label, profile, operator approves
 Step 2: Implement → Batch branch, worktrees, Agent Team with shared task list, dev teammates self-claim → per-story reviewer teammates (parallel, message devs directly for auto-fix) → merge
-Step 3: Validate  → Test gaps, build + typecheck + lint + unit + integration + smoke, inline push
+Step 3: Validate  → Test gaps, build + typecheck + lint + unit + integration + Playwright → Chrome MCP e2e gate → push + PR
 Step 4: Ship      → Auto-merge, Linear → Done, team + worktree cleanup
 ```
 
-**Gates:** per-story (dev, reviewer) + batch-level (test_gaps, ci, integration, smoke). Per-story reviewer teammates run in parallel with still-active devs, before merge — catches attribution cleanly, and reviewers can message devs directly to request fixes without involving the Lead.
+**Gates:** per-story (dev, reviewer) + batch-level (test_gaps, ci, integration, smoke, **chrome_mcp_e2e**). Per-story reviewer teammates run in parallel with still-active devs, before merge — catches attribution cleanly, and reviewers can message devs directly to request fixes without involving the Lead.
+
+**Chrome MCP e2e gate (Lead-driven, mandatory before push + PR):** after Playwright passes on the merged batch branch, Lead drives the changed user flows via `mcp__claude-in-chrome__*` — captures screenshots / GIFs, audits console + network, produces an operator-facing summary linked from the PR body. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. Source-of-truth memory: `feedback_chrome_mcp_e2e_before_review.md`.
+
+**Env-lock discipline:** Step 2b acquires the lock for the deploy. Hold through Playwright (3g) + Chrome MCP (3g.5). Release immediately after the Chrome MCP summary is written — push, PR creation, and auto-merge do NOT need the env. Re-acquire ONLY if a post-review fix requires re-verifying against the deployed app.
 
 ---
 
@@ -99,7 +103,7 @@ Touches `packages/contract`, adds migration, or touches 3+ modules → full → 
 |------|------|-------------|
 | 1 | `steps/step-1-gather.md` | Cleanup, fetch by label, profile, present batch, init state |
 | 2 | `steps/step-2-implement.md` | Batch branch, worktrees, Agent Team + shared task list, dev + reviewer teammates, merge |
-| 3 | `steps/step-3-validate.md` | Review, test gaps, build/type/lint/unit/integration/smoke |
+| 3 | `steps/step-3-validate.md` | Test gaps, build/type/lint/unit/integration/Playwright → Chrome MCP e2e (operator-facing, env-lock-released after) → push + PR |
 | 4 | `steps/step-4-ship.md` | PR, auto-merge, Linear → Done, team + worktree cleanup, wiki sync |
 
 ---

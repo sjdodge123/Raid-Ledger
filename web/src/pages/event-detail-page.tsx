@@ -26,6 +26,7 @@ import {
 import { useEventDetailHandlers } from './event-detail/use-event-detail-handlers';
 import {
     EventDetailError,
+    EventDetailSoftError,
     EventDetailFallbackSignup,
     EventDetailGameTimeWidget,
     EventDetailVoiceSection,
@@ -34,6 +35,7 @@ import {
     PostEventSections,
     MobileQuickInfo,
 } from './event-detail/EventDetailSubComponents';
+import { SchemaValidationError } from '../lib/api/fetch-api';
 import { RosterSlotSection } from './event-detail/EventDetailRosterSlot';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import './event-detail-page.css';
@@ -91,14 +93,14 @@ function useEventDetailPageState() {
     const hasHistory = location.key !== 'default';
 
     const { user, isAuthenticated } = useAuth();
-    const { data: detail, isLoading: detailLoading, error: detailError } = useEventDetail(eventId);
+    const { data: detail, isLoading: detailLoading, error: detailError, refetch: detailRefetch } = useEventDetail(eventId);
     const event = detail?.event;
     const roster = detail?.roster;
     const rosterAssignments = detail?.rosterAssignments;
     const pugs = detail?.pugs ?? [];
     const voiceChannelData = detail?.voiceChannel ?? null;
 
-    return { eventId, navigate, navState, fromCalendar, hasHistory, user, isAuthenticated, event, detailLoading, detailError, roster, rosterAssignments, pugs, voiceChannelData };
+    return { eventId, navigate, navState, fromCalendar, hasHistory, user, isAuthenticated, event, detailLoading, detailError, detailRefetch, roster, rosterAssignments, pugs, voiceChannelData };
 }
 
 function useEventDetailVoice(event: EventResponseDto | undefined, eventId: number, voiceChannelData: VoiceChannelResponseDto | null) {
@@ -224,7 +226,12 @@ export function EventDetailPage(): JSX.Element | null {
     const modals = useModalState();
     const handlers = useEventDetailHandlers(page.eventId, { canManageRoster: derived.canManageRoster, isAuthenticated: page.isAuthenticated, shouldShowCharacterModal: derived.shouldShowCharacterModal, pugs: page.pugs });
 
-    if (page.detailError) return <EventDetailError message={page.detailError.message} onBack={() => page.navigate('/calendar')} />;
+    if (page.detailError) {
+        if (page.detailError instanceof SchemaValidationError || page.detailError.name === 'SchemaValidationError') {
+            return <EventDetailSoftError onRetry={() => page.detailRefetch()} onBack={() => page.navigate('/calendar')} />;
+        }
+        return <EventDetailError message={page.detailError.message} onBack={() => page.navigate('/calendar')} />;
+    }
     if (page.detailLoading) return <div className="event-detail-page"><EventDetailSkeleton /></div>;
     if (!page.event) return null;
 

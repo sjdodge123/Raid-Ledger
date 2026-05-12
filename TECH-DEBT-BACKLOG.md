@@ -125,3 +125,14 @@ Findings from pre-launch validation of the Community Lineup feature (33 runbook 
 - AC 34 (Steam-unlinked-nominator warning) — Chrome MCP drive of `SteamNudgeBanner` against the live env (existing vitest `SteamNudgeBanner.test.tsx` covers copy + visibility logic).
 - AC 35 (vote-at-deadline race) — `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts`.
 - AC 36 (abort-with/without-reason variance) — `abortReasonVarianceWalkthrough` test in `tools/test-bot/src/smoke/tests/lineup-abort.test.ts`.
+
+### 2026-05-12 — fix/batch-2026-05-12b (ROK-1237 + ROK-1271 + ROK-1267 review)
+
+- **[low]** `web/src/lib/api/fetch-api.ts:50` — inline structural type for `schema` parameter (`{ safeParse: ... }`) duplicates Zod's interface and types `result.error.issues` as `unknown[]`. Consider importing `ZodType<T>` from `zod` so the generic narrows automatically and Sentry's `issues` extra carries proper Zod issue typing for future debugging.
+  Suggested: change to `schema?: ZodType<T>` and let TypeScript infer. Two-line change. Defer until the next API-layer touch.
+- **[low]** `api/src/admin/games-dedup-audit.helpers.ts:106-189` — `buildDirectCountQueries` is 84 lines (function-length `warn` rule is 30). It's a flat list of 16 count queries; a small `countDirect(table, col)` helper would cut it to ~20 lines and remove the brittle "order must match destructure" coupling at `computeBlastRadiusForId:220-241`. Mediated by the new unit-spec assertion on all 17 fields (committed in `fa16e2a1`) — destructure swap is now test-detectable.
+  Suggested: refactor in a follow-up when ROK-1270 Phase 1 extends `BlastRadiusRow` (the merge migration will likely add more counts).
+- **[low]** `api/src/admin/games-dedup-audit.service.ts:99-101` — outer `Promise.all(dupIds.map(...))` × inner `Promise.all([...17 queries])` = up to 17N concurrent DB queries. Fine for Phase 0 (operator-only, prod has <100K games), but if a large guild ends up with N > 20 dup ids the endpoint could spike Postgres `max_connections`.
+  Suggested: wrap the outer `Promise.all` with `pLimit(8)` (or similar) if telemetry shows N > 20 on prod. Currently no metrics; defer.
+- **[low]** `packages/contract/src/roster.schema.ts:66` — `signupStatus` is now `.optional()` after referencing canonical `SignupStatusSchema`. Widening the contract to accept `undefined` from the server. Acceptable for forward-compat, but call sites (`RosterSlot.tsx:73-78`, `EventDetailRoster`) compare `===` against literals, so undefined falls through to default treatment. Confirm this is the intended fallback for legacy/missing payloads, or tighten back to non-optional.
+  Suggested: review the read-side query helpers — if signupStatus is always present in practice, drop `.optional()`. Spike before next contract refactor.

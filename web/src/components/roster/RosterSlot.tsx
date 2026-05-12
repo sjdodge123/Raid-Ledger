@@ -28,6 +28,9 @@ interface RosterSlotProps {
 
 function slotBorderClass(item: RosterAssignmentResponse | undefined, isCurrentUser: boolean, isClickable: boolean) {
     if (!item) return isClickable ? 'border-dashed border-edge-strong bg-panel/20 hover:border-indigo-400 hover:bg-indigo-500/10' : 'border-dashed border-edge bg-panel/20';
+    // ROK-1237: mirror the EventDetailRoster.tsx departed treatment so the
+    // assignment grid and the attendee list agree on visual state.
+    if (item.signupStatus === 'departed') return 'border-dashed border-red-500/40 bg-red-900/10 opacity-60';
     if (item.signupStatus === 'tentative') return 'border-dashed border-amber-500/60 bg-amber-900/10';
     if (isCurrentUser) return 'border-emerald-400/50 bg-emerald-900/20';
     return 'border-edge bg-panel/80';
@@ -68,15 +71,18 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
 
     const isClickable = !!onAdminClick || (!item && !!onJoinClick);
     const isTentative = item?.signupStatus === 'tentative';
-    const glowClass = isCurrentUser ? 'ring-2 ring-emerald-400/60 shadow-[0_0_15px_rgba(52,211,153,0.4)] animate-pulse-subtle' : '';
+    const isDeparted = item?.signupStatus === 'departed';
+    const glowClass = isCurrentUser && !isDeparted ? 'ring-2 ring-emerald-400/60 shadow-[0_0_15px_rgba(52,211,153,0.4)] animate-pulse-subtle' : '';
     const focusClass = isClickable ? 'focus-visible:ring-2 focus-visible:ring-emerald-500' : '';
+    const badgeBg = isDeparted ? 'bg-red-600' : isTentative ? 'bg-amber-600' : color;
+    const badgeContent = isDeparted ? `\u{1F6AA} ${position}` : isTentative ? `\u23F3 ${position}` : position;
 
     return (
         <div onClick={handleClick}
             {...(isClickable ? { role: 'button', tabIndex: 0, onKeyDown: handleKeyDown } : {})}
             className={`relative min-h-[60px] rounded-lg border transition-all ${isClickable ? 'cursor-pointer' : ''} ${focusClass} ${glowClass} ${slotBorderClass(item, isCurrentUser, isClickable)}`}>
-            <span className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${isTentative ? 'bg-amber-600' : color} text-foreground`}>
-                {isTentative ? `\u23F3 ${position}` : position}
+            <span className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${badgeBg} text-foreground`}>
+                {badgeContent}
             </span>
             {item ? (
                 <div className="p-1"><RosterCard item={item} onRemove={resolveRemoveFn(item, onRemove, isCurrentUser, onSelfRemove)} /></div>

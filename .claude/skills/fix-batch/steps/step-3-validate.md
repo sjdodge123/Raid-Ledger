@@ -1,8 +1,8 @@
-# Step 3: Review & Validate — Code Review, Test Gaps, Build, Tests, Smoke
+# Step 3: Review & Validate — CI, Chrome MCP, Reviewer, Push
 
-**Lead runs validation directly on the batch branch. Reviewer agent spawned for code review.**
+**Lead runs validation directly on the batch branch.**
 
-All validation runs in the main worktree on the `fix/batch-YYYY-MM-DD` branch.
+Order matters: cheap static gates first → deploy + Playwright + **Chrome MCP e2e** (operator-facing browser validation) → reviewer agent → push. The Chrome MCP gate must complete BEFORE the reviewer agent spawns, BEFORE the PR is created, and BEFORE auto-merge is enabled. See `~/.claude/projects/-Users-sdodge-Documents-Projects-Raid-Ledger/memory/feedback_chrome_mcp_e2e_before_review.md` for the rationale.
 
 ```bash
 # Ensure you're on the batch branch
@@ -11,75 +11,7 @@ git checkout fix/batch-YYYY-MM-DD
 
 ---
 
-## 3a. Code Review (Reviewer Agent)
-
-Spawn a reviewer agent (sonnet) to review the full batch diff against `origin/main`. The reviewer checks correctness, security, performance, and contract integrity.
-
-```
-Agent(subagent_type: "devedup-rl:reviewer", model: "sonnet",
-      description: "Review batch diff",
-      prompt: """
-      Review the changes on branch fix/batch-YYYY-MM-DD compared to origin/main.
-
-      This is a fix-batch containing the following stories:
-      <list each ROK-### with title and label>
-
-      Run your full review checklist:
-      1. Correctness — logic bugs, edge cases, error handling
-      2. Security — injection, auth bypass, data exposure
-      3. Performance — N+1 queries, unnecessary allocations, missing indexes
-      4. Contract integrity — if any shared types changed, are consumers updated?
-      5. Standards — ESLint compliance, file/function size limits, naming conventions
-
-      For each finding, classify severity: [critical], [high], [medium], [low].
-      Critical/high findings MUST be fixed before shipping.
-      """)
-```
-
-When the reviewer completes:
-
-1. **Critical/high findings:** Lead fixes directly on the batch branch, or re-spawns a dev if the fix is non-trivial.
-2. **Medium/low findings:** Log them but proceed — create Linear tech-debt stories for medium findings if they warrant follow-up.
-3. **Update state:** `gates.review: PASS` (or `FAIL` if critical/high findings remain unfixed)
-
----
-
-## 3b. Test Gap Analysis
-
-After the reviewer completes, analyze the batch diff for **untested changes** — code paths added or modified by the batch that lack corresponding test coverage.
-
-For each changed source file, check:
-1. **Does a corresponding test file exist?** (e.g., `foo.service.ts` → `foo.service.spec.ts`)
-2. **Did the test file get updated in this batch?** If the source changed but the test didn't, investigate whether existing tests cover the new/changed behavior.
-3. **Are new functions/methods tested?** Check that any new exports have test coverage.
-
-**Actions:**
-- If gaps are found: Lead writes the missing tests directly on the batch branch, or spawns a test-writing agent for larger gaps.
-- If no gaps: Proceed.
-
-Update state: `gates.test_gaps: PASS` (or `FAIL` if gaps remain)
-
----
-
-## 3c. Verify Regression Tests (Bug stories only)
-
-Before running the test suites, confirm each Bug-labeled story in the batch includes a regression test:
-
-```bash
-# Check for Playwright regression tests
-grep -n "Regression: ROK-" scripts/verify-ui.spec.ts
-
-# Check for unit/integration regression tests
-grep -rn "Regression: ROK-" api/src/ web/src/
-```
-
-For each Bug story, verify a matching `Regression: ROK-<num>` test block exists in either the Playwright smoke file or a unit/integration test file. If a Bug story is missing its regression test, flag it — do not proceed until every Bug fix has a corresponding regression test.
-
-Update state: `gates.regression: PASS` (or `FAIL`)
-
----
-
-## 3d. Build
+## 3a. Build
 
 ```bash
 npm run build -w packages/contract
@@ -91,7 +23,7 @@ If build fails: diagnose which story caused it. Fix directly, commit as `fix: re
 
 ---
 
-## 3e. TypeScript
+## 3b. TypeScript
 
 ```bash
 npx tsc --noEmit -p api/tsconfig.json
@@ -102,7 +34,7 @@ If type errors: fix directly, commit as `fix: resolve type errors`.
 
 ---
 
-## 3f. Lint
+## 3c. Lint
 
 ```bash
 npm run lint -w api
@@ -113,7 +45,7 @@ If lint errors: fix directly, commit as `fix: resolve lint issues`.
 
 ---
 
-## 3g. Unit Tests
+## 3d. Unit Tests
 
 ```bash
 npm run test -w api
@@ -130,7 +62,7 @@ Update state: `gates.ci: PASS` (or `FAIL`)
 
 ---
 
-## 3h. Integration Tests
+## 3e. Integration Tests
 
 ```bash
 npm run test:integration -w api
@@ -144,36 +76,143 @@ Update state: `gates.integration: PASS` (or `FAIL`)
 
 ---
 
-## 3i. Playwright Smoke Tests (MANDATORY)
+## 3f. Acquire Env Lock + Deploy Locally
 
-Run the Playwright smoke suite against the deployed app. This is required for every batch — not just UI changes — because backend changes can break UI flows.
+**Env-lock discipline (STRICT):** hold the lock for the minimum span needed — just deploy (3f) → Playwright (3g) → Chrome MCP (3h). Release immediately after 3h. The reviewer, push, PR, and auto-merge do NOT need the env.
 
-1. Deploy locally:
-   ```bash
-   ./scripts/deploy_dev.sh
-   ```
+```
+mcp__mcp-env__env_lock_status                                                # see who holds it
+mcp__mcp-env__env_lock_acquire({ purpose: "fix-batch <id> validation" })     # acquire or queue
+```
 
-2. Verify health:
-   ```bash
-   curl -s http://localhost:3000/system/status | head -20
-   ```
+If queued, do non-env work (PR body draft, spec tidy) until the lock returns. Don't bypass.
 
-3. Run smoke tests:
-   ```bash
-   npx playwright test
-   ```
+```bash
+./scripts/deploy_dev.sh --ci --rebuild
+curl -s http://localhost:3000/system/status | head -20
+```
+
+If deploy fails: stop. Debug the deploy before continuing — there is no point running Playwright or Chrome MCP against a broken env. If the fix is purely code (no env state), release the lock while you fix and re-acquire.
+
+---
+
+## 3g. Playwright Smoke (regression sweep)
+
+Automated regression check across all flows. Runs BOTH desktop and mobile projects (CI runs both — local must match).
+
+```bash
+npx playwright test
+```
 
 If Playwright fails:
-- **Selector/flake failures:** Fix the test or the UI, commit as `fix: resolve Playwright issues`
-- **Real regressions:** Diagnose which story broke the flow, fix or re-spawn dev.
+- **Selector/flake failures:** fix the test or the UI, commit `fix: resolve Playwright issues`
+- **Real regressions:** diagnose which story broke the flow, fix or re-spawn dev
+
+Never re-run hoping it passes. Never weaken or skip tests to make CI green.
 
 Update state: `gates.playwright: PASS` (or `FAIL`)
 
 ---
 
-## 3j. Push Batch Branch
+## 3h. Chrome MCP e2e Gate (MANDATORY — operator-facing browser validation)
 
-**Use the `/push` skill** — NEVER use raw `git push`. The skill runs full local CI before pushing.
+This is the new pre-review gate. Drives the *changed user flows* via `mcp__claude-in-chrome__*` on the deployed batch branch, captures screenshots / GIFs, audits console + network, and produces an operator-facing summary. **Must complete BEFORE the reviewer agent runs (3i) and BEFORE the branch is pushed (3j).**
+
+Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
+
+**What Lead must do here:**
+
+1. Derive the changed-flow list from `git diff origin/main..fix/batch-YYYY-MM-DD --name-only` + each story's ACs.
+2. Pass that list + the batch story IDs as inputs to the shared playbook.
+3. Execute the playbook step-by-step. Do NOT skim it; the anti-pattern section catches the failure modes that triggered this gate's creation (ROK-1237).
+4. Write the summary to `planning-artifacts/chrome-mcp-summary-fix-batch-YYYY-MM-DD.md`. Save captures under `planning-artifacts/chrome-mcp-screenshots/fix-batch-YYYY-MM-DD/`.
+5. **Release the env lock IMMEDIATELY after the summary is written** — `mcp__mcp-env__env_lock_release`. Reviewer (3i), test gap (3j), regression check (3k), push (3l), and Step 4 (PR + auto-merge) do NOT need the env. Re-acquire ONLY if a reviewer finding requires a fix + re-verify against the deployed app.
+
+**Gate outcomes:**
+
+- `VERDICT: PASS` → `gates.chrome_mcp_e2e: PASS`. Continue to 3i (reviewer).
+- `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Append medium/low findings to **`TECH-DEBT-BACKLOG.md`** at the repo root (single canonical location — `/readlogs` parses it; see playbook "Where candidate tech-debt goes"). Use the dated-section + `- **[sev]**` bullet format. Do NOT auto-file Linear tech-debt stories; do NOT invent runbook "Known Issues" sections. Mirror the appended block in the PR body under `## Tech debt observed (not auto-filed)`. Continue to 3i.
+- `VERDICT: FAIL` → `gates.chrome_mcp_e2e: FAIL`. Do NOT spawn the reviewer. Lead either fixes inline (1-3 lines per fix, `fix: resolve Chrome MCP finding`) or respawns the originating dev with the finding. Re-run the gate after the fix.
+
+**N/A path (rare):** If — and only if — the batch is purely API-internal with no in-app surface (no admin page, no settings panel, no Discord embed consumes it), record `gates.chrome_mcp_e2e: "N/A — api-internal-only"` with a one-line justification. Default is to run the gate.
+
+---
+
+## 3i. Code Review (Reviewer Agent)
+
+Only after Chrome MCP e2e is `PASS` (or `N/A`). Spawn a reviewer agent (sonnet) to review the full batch diff against `origin/main`. The reviewer checks correctness, security, performance, and contract integrity.
+
+```
+Agent(subagent_type: "devedup-rl:reviewer", model: "sonnet",
+      description: "Review batch diff",
+      prompt: """
+      Review the changes on branch fix/batch-YYYY-MM-DD compared to origin/main.
+
+      This is a fix-batch containing the following stories:
+      <list each ROK-### with title and label>
+
+      Browser validation already complete — see planning-artifacts/chrome-mcp-summary-fix-batch-YYYY-MM-DD.md
+      for the changed-flow walkthrough, screenshots, console + network audit, and verdict. Do not duplicate
+      that work; focus your review on code-level correctness.
+
+      Run your full review checklist:
+      1. Correctness — logic bugs, edge cases, error handling
+      2. Security — injection, auth bypass, data exposure
+      3. Performance — N+1 queries, unnecessary allocations, missing indexes
+      4. Contract integrity — if any shared types changed, are consumers updated?
+      5. Standards — ESLint compliance, file/function size limits, naming conventions
+
+      For each finding, classify severity: [critical], [high], [medium], [low].
+      Critical/high findings MUST be fixed before shipping.
+      """)
+```
+
+When the reviewer completes:
+
+1. **Critical/high findings:** Lead fixes directly on the batch branch, or re-spawns a dev if the fix is non-trivial. If a fix touches a changed UI flow, re-run 3h Chrome MCP scoped to that flow.
+2. **Medium/low findings:** append to **`TECH-DEBT-BACKLOG.md`** at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Do NOT auto-file Linear tech-debt; the operator triages the file.
+3. **Update state:** `gates.review: PASS` (or `FAIL` if critical/high findings remain unfixed)
+
+---
+
+## 3j. Test Gap Analysis
+
+After the reviewer completes, analyze the batch diff for **untested changes** — code paths added or modified by the batch that lack corresponding test coverage.
+
+For each changed source file, check:
+1. **Does a corresponding test file exist?** (e.g., `foo.service.ts` → `foo.service.spec.ts`)
+2. **Did the test file get updated in this batch?** If the source changed but the test didn't, investigate whether existing tests cover the new/changed behavior.
+3. **Are new functions/methods tested?** Check that any new exports have test coverage.
+
+**Actions:**
+- If gaps are found: Lead writes the missing tests directly on the batch branch, or spawns a test-writing agent for larger gaps.
+- If no gaps: Proceed.
+
+Update state: `gates.test_gaps: PASS` (or `FAIL` if gaps remain)
+
+---
+
+## 3k. Verify Regression Tests (Bug stories only)
+
+Confirm each Bug-labeled story in the batch includes a regression test:
+
+```bash
+# Check for Playwright regression tests
+grep -n "Regression: ROK-" scripts/verify-ui.spec.ts
+
+# Check for unit/integration regression tests
+grep -rn "Regression: ROK-" api/src/ web/src/
+```
+
+For each Bug story, verify a matching `Regression: ROK-<num>` test block exists in either the Playwright smoke file or a unit/integration test file. If a Bug story is missing its regression test, flag it — do not proceed until every Bug fix has a corresponding regression test.
+
+Update state: `gates.regression: PASS` (or `FAIL`)
+
+---
+
+## 3l. Push Batch Branch
+
+**Only after every prior gate is PASS.** Use the `/push` skill — NEVER use raw `git push`. The skill runs full local CI before pushing.
 
 ```
 /push --skip-pr
@@ -183,7 +222,7 @@ The `--skip-pr` flag skips PR creation — the PR is created in Step 4.
 
 ---
 
-## 3k. Update State
+## 3m. Update State
 
 ```yaml
 pipeline:
@@ -192,12 +231,13 @@ pipeline:
     All validation passed on batch branch. Read steps/step-4-ship.md.
     Create PR, enable auto-merge, sync Linear, cleanup.
   gates:
-    review: PASS
-    test_gaps: PASS
-    regression: PASS
     ci: PASS
     integration: PASS
     playwright: PASS
+    chrome_mcp_e2e: PASS
+    review: PASS
+    test_gaps: PASS
+    regression: PASS
     pr: PENDING
 ```
 

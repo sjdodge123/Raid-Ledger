@@ -41,6 +41,14 @@ State: `gates.ci: PASS`, `gates.integration: PASS` (or FAIL).
 
 Backend changes can break UI flows — always run.
 
+**Env-lock check.** The env (Docker, API :3000, web :5173) is shared. Step 2b deployed locally and should still hold the lock under this batch's worktree — confirm:
+
+```
+mcp__mcp-env__env_lock_status        # confirm this batch's worktree still holds it
+```
+
+If the lock is gone (released by another agent or expired), re-acquire and re-run `deploy_dev.sh --ci --rebuild` from the batch worktree before Playwright. Don't run Playwright against a stale or absent env.
+
 ```bash
 # Docker/API/web already up from Step 2b. Just verify.
 curl -s http://localhost:3000/system/status | head -20
@@ -52,6 +60,32 @@ On failure:
 - Regression → diagnose which story, fix or respawn dev.
 
 State: `gates.smoke: PASS` (or `FAIL`).
+
+---
+
+## 3g.5. Chrome MCP e2e Gate (MANDATORY before push + PR)
+
+The new operator-facing pre-ship gate. Lead drives the *changed user flows* on the merged batch branch via `mcp__claude-in-chrome__*` — captures screenshots / GIFs, audits console + network, and produces a summary the operator can scan when reviewing the PR. **Must complete BEFORE the batch is pushed (3h), BEFORE the PR is created, and BEFORE auto-merge is enabled in Step 4.**
+
+Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
+
+**What Lead does here:**
+
+1. Derive the changed-flow list from `git diff origin/main..batch/YYYY-MM-DD --name-only` + each story's ACs.
+2. Pass that list + the batch story IDs as inputs to the shared playbook.
+3. Execute it. Do NOT skim it — the anti-pattern section catches the failure modes that triggered this gate's creation (ROK-1237).
+4. Write the summary to `planning-artifacts/chrome-mcp-summary-batch-YYYY-MM-DD.md`. Save captures under `planning-artifacts/chrome-mcp-screenshots/batch-YYYY-MM-DD/`.
+5. **Release the env lock IMMEDIATELY after the summary is written.** Push (3h), PR creation, and auto-merge do NOT need the env. Re-acquire ONLY if a post-review fix requires re-verifying against a fresh deploy.
+
+**Gate outcomes:**
+
+- `VERDICT: PASS` → `gates.chrome_mcp_e2e: PASS`. Continue to 3h.
+- `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Append medium/low findings to **`TECH-DEBT-BACKLOG.md`** at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Mirror the appended block in the PR body under `## Tech debt observed (not auto-filed)`. Do NOT auto-file Linear tech-debt; do NOT invent runbook "Known Issues" sections.
+- `VERDICT: FAIL` → `gates.chrome_mcp_e2e: FAIL`. Do NOT push. Lead either fixes inline (1-3 lines, `fix: resolve Chrome MCP finding`) or respawns the originating dev. Re-run the gate after the fix.
+
+**N/A path (rare):** if the entire batch is API-internal with no in-app surface (no admin page, no settings panel, no Discord embed consumes the changes), record `gates.chrome_mcp_e2e: "N/A — api-internal-only"` with a one-line justification. Default is to run.
+
+State: `gates.chrome_mcp_e2e: PASS` (or `FAIL`, or `N/A — ...`).
 
 ---
 
@@ -80,7 +114,8 @@ Batch of <N> stories: <list ROK-### with labels>.
 - Build / TypeScript / Lint: PASS
 - Unit tests: PASS
 - Integration tests: PASS
-- Playwright smoke: PASS
+- Playwright smoke (desktop + mobile): PASS
+- Chrome MCP e2e: PASS — see `planning-artifacts/chrome-mcp-summary-batch-YYYY-MM-DD.md`
 
 ## Stories
 | Story | Label | Reviewer |
@@ -103,6 +138,7 @@ pipeline:
     ci: PASS
     integration: PASS
     smoke: PASS
+    chrome_mcp_e2e: PASS   # or "N/A — api-internal-only"
     pr: PENDING
 ```
 

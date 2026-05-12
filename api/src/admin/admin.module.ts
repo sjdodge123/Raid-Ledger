@@ -36,6 +36,8 @@ import { TasteProfileModule } from '../taste-profile/taste-profile.module';
 import { CommunityInsightsModule } from '../community-insights/community-insights.module';
 import { SlowQueriesModule } from '../slow-queries/slow-queries.module';
 import { AiChatTestController } from './ai-chat-test.controller';
+import { GamesDedupAuditController } from './games-dedup-audit.controller';
+import { GamesDedupAuditService } from './games-dedup-audit.service';
 
 @Module({
   imports: [
@@ -72,6 +74,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     ItadSettingsController,
     CommunityInsightsSettingsController,
     OnboardingController,
+    GamesDedupAuditController,
   ],
   providers: [
     DemoDataService,
@@ -79,6 +82,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     DemoTestResetService,
     DemoTestLineupService,
     SlashCommandTestService,
+    GamesDedupAuditService,
   ],
 })
 export class AdminModule {}

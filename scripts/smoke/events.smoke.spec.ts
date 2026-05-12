@@ -3,7 +3,7 @@
  */
 import { test, expect } from './base';
 import { navigateToFirstEvent } from './helpers';
-import { getAdminToken, apiGet, apiPost, apiDelete } from './api-helpers';
+import { getAdminToken, apiGet, apiPost, apiPatch, apiDelete } from './api-helpers';
 
 // ROK-1070 Codex review (P2): removed the file-level reset-to-seed
 // beforeAll. Playwright runs desktop+mobile projects in parallel and a
@@ -462,6 +462,62 @@ test.describe('Regression: ROK-868 — character info on duplicate signup', () =
 
             // FlexibilityBadges renders a span with title="Prefers: Dps" containing role icons
             await expect(page.locator('[title="Prefers: Dps"]').first()).toBeVisible({ timeout: 5_000 });
+        } finally {
+            await apiDelete(token, `/events/${event.id}`);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: ROK-1237 — event detail tolerates departed roster rows
+// ---------------------------------------------------------------------------
+
+test.describe('Regression: ROK-1237 — departed roster row', () => {
+    test('event detail renders when a roster slot is filled by a departed signup', async ({ page, world }) => {
+        const token = await getAdminToken();
+        const me = (await apiGet(token, '/auth/me')) as { id: number };
+
+        // MMO slot config so we can PATCH the admin into a tank slot.
+        const futureStart = new Date(Date.now() + 86_400_000).toISOString();
+        const futureEnd = new Date(Date.now() + 90_000_000).toISOString();
+        const event = (await apiPost(token, '/events', {
+            title: world.uid('rok-1237-departed'),
+            startTime: futureStart,
+            endTime: futureEnd,
+            maxAttendees: 10,
+            slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 0 },
+        })) as { id: number };
+
+        try {
+            // Admin is auto-signed-up when the event was created — assign to tank-1.
+            await apiPatch(token, `/events/${event.id}/roster`, {
+                assignments: [
+                    { userId: me.id, slot: 'tank', position: 1, isOverride: false },
+                ],
+            });
+
+            // Flip the existing signup's status to 'departed'. The test-only
+            // /admin/test/signup endpoint resolves to the existing signup
+            // (svc.signup is idempotent for duplicates) and then overrides the
+            // status row. This reproduces the production state that bricked
+            // the event detail page before the contract fix.
+            await apiPost(token, '/admin/test/signup', {
+                eventId: event.id,
+                userId: me.id,
+                status: 'departed',
+            });
+
+            await page.goto(`/events/${event.id}`);
+
+            // The bug rendered an "Event not found" header here. Assert that
+            // header is NOT present and that the roster section IS visible.
+            await expect(page.getByRole('heading', { name: /Event not found/i })).toHaveCount(0, { timeout: 10_000 });
+            await expect(page.getByRole('heading', { name: /Something went wrong loading this event/i })).toHaveCount(0, { timeout: 5_000 });
+            await expect(page.getByRole('heading', { name: /Roster Slots/i })).toBeVisible({ timeout: 10_000 });
+
+            // The DOM must NEVER contain the raw Zod issue payload (the
+            // visible bug that operators saw in production).
+            await expect(page.locator('body')).not.toHaveText(/"code":\s*"invalid_enum_value"/, { timeout: 1_000 });
         } finally {
             await apiDelete(token, `/events/${event.id}`);
         }
