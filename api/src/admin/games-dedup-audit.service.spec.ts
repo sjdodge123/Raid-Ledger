@@ -252,23 +252,25 @@ describe('GamesDedupAuditService.runAudit', () => {
     // Snapshot is the 17 counts returned for id=2 in helper-call order:
     // 16 direct counts via buildDirectCountQueries, then 1 JOIN count via
     // countLineupMatchMembers (execute() raw SQL path).
+    // Unique non-zero counts per slot so a destructure swap (e.g. events↔eventPlans)
+    // would fail the test. Each value is distinct in the range [1..17].
     const counts = [
       3, // events                  [direct 1]
       1, // eventPlans              [direct 2]
-      0, // lineupsDecided          [direct 3]
+      8, // lineupsDecided          [direct 3]
       2, // lineupEntries           [direct 4]
       4, // lineupMatches           [direct 5]
-      0, // tiebreakers             [direct 6]
+      9, // tiebreakers             [direct 6]
       7, // characters              [direct 7]
-      0, // tasteVectors            [direct 8]
+      10, // tasteVectors            [direct 8]
       6, // interests               [direct 9]
-      0, // activityRollups         [direct 10]
-      0, // activitySessions        [direct 11]
-      0, // availability            [direct 12]
-      0, // channelBindings         [direct 13]
-      0, // discordMappings         [direct 14]
-      0, // eventTypes              [direct 15]
-      0, // interestSuppressions    [direct 16]
+      11, // activityRollups         [direct 10]
+      12, // activitySessions        [direct 11]
+      13, // availability            [direct 12]
+      14, // channelBindings         [direct 13]
+      15, // discordMappings         [direct 14]
+      16, // eventTypes              [direct 15]
+      17, // interestSuppressions    [direct 16]
       5, // lineupMatchMembers      [JOIN via execute()]
     ];
     const { svc } = await buildService(
@@ -284,11 +286,21 @@ describe('GamesDedupAuditService.runAudit', () => {
     expect(br.gameId).toBe(2);
     expect(br.events).toBe(3);
     expect(br.eventPlans).toBe(1);
+    expect(br.lineupsDecided).toBe(8);
     expect(br.lineupEntries).toBe(2);
     expect(br.lineupMatches).toBe(4);
-    expect(br.lineupMatchMembers).toBe(5);
+    expect(br.tiebreakers).toBe(9);
     expect(br.characters).toBe(7);
+    expect(br.tasteVectors).toBe(10);
     expect(br.interests).toBe(6);
+    expect(br.activityRollups).toBe(11);
+    expect(br.activitySessions).toBe(12);
+    expect(br.availability).toBe(13);
+    expect(br.channelBindings).toBe(14);
+    expect(br.discordMappings).toBe(15);
+    expect(br.eventTypes).toBe(16);
+    expect(br.interestSuppressions).toBe(17);
+    expect(br.lineupMatchMembers).toBe(5);
   });
 
   it('sorts groups by totalDupRows DESC then by group size DESC', async () => {

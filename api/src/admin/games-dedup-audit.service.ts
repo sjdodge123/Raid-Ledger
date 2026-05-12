@@ -132,7 +132,7 @@ function compareGroups(a: DedupGroup, b: DedupGroup): number {
   const aDups = a.dupIds.length;
   const bDups = b.dupIds.length;
   if (aDups !== bDups) return bDups - aDups;
-  return b.dupIds.length + 1 - (a.dupIds.length + 1);
+  return a.canonicalId - b.canonicalId;
 }
 
 function compareBlastRadius(a: BlastRadiusRow, b: BlastRadiusRow): number {

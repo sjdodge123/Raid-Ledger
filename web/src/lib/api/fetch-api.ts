@@ -35,6 +35,7 @@ export class SchemaValidationError extends Error {
     readonly endpoint: string;
     constructor(endpoint: string) {
         super('We received an unexpected response from the server.');
+        Object.setPrototypeOf(this, SchemaValidationError.prototype);
         this.name = 'SchemaValidationError';
         this.endpoint = endpoint;
     }
