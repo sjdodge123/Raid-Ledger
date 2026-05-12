@@ -136,3 +136,12 @@ Findings from pre-launch validation of the Community Lineup feature (33 runbook 
   Suggested: wrap the outer `Promise.all` with `pLimit(8)` (or similar) if telemetry shows N > 20 on prod. Currently no metrics; defer.
 - **[low]** `packages/contract/src/roster.schema.ts:66` — `signupStatus` is now `.optional()` after referencing canonical `SignupStatusSchema`. Widening the contract to accept `undefined` from the server. Acceptable for forward-compat, but call sites (`RosterSlot.tsx:73-78`, `EventDetailRoster`) compare `===` against literals, so undefined falls through to default treatment. Confirm this is the intended fallback for legacy/missing payloads, or tighten back to non-optional.
   Suggested: review the read-side query helpers — if signupStatus is always present in practice, drop `.optional()`. Spike before next contract refactor.
+
+### 2026-05-12 — rok-1270-games-dedup-audit (ROK-1270 Phase 1)
+
+- **[low]** `api/src/admin/games-dedup-unique-conflicts.helpers.ts:79-118` — `countCompositeConflicts` and `countSingleColumnConflict` use `sql.raw` with template-literal interpolation of `tableName`, `otherCols`, `input.canonicalId`, and `input.dupIds.join(',')`. Safe today: all interpolations are compile-time string literals or typed `number` / `number[]` values from `games.id` (typed FK column). The pattern is fragile — if `UniqueConflictInput` ever accepted external/user input (helper reused outside the admin surface, or a future bulk-import flow), the SQL-injection guarantee silently regresses.
+  Suggested: refactor to drizzle `sql` template with `${}` placeholders for the dynamic-arity case, OR add a runtime assertion at the helper entry: `Number.isInteger(input.canonicalId) && input.dupIds.every(Number.isInteger)`.
+- **[nit]** `api/src/admin/games-dedup-extra-counts.helpers.ts:21` — doc comment references `extendedBlastRadiusKeys` which doesn't exist as an export in this file. The lockstep contract is actually documented via inline comments on each Promise in the array. Minor doc drift from an earlier draft.
+  Suggested: edit the comment to drop the dangling reference.
+- **[nit]** `api/src/drizzle/schema/games-dedup-audit.ts:35-37` — `uniqueConflicts` is typed `jsonb.$type<Record<string, number>>()`. Importing `UniqueConflictCounts` from `games-dedup-unique-conflicts.helpers.ts` would tighten the schema-level type to match the helper's output shape. No functional bug; consumers cast at read time today.
+  Suggested: tighten on the next touch to either file.
