@@ -13,6 +13,7 @@ import { RosterNotificationBufferService } from '../notifications/roster-notific
 import { BenchPromotionService } from './bench-promotion.service';
 import { SignupsAllocationService } from './signups-allocation.service';
 import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 describe('SignupsRosterService — emit timing (ROK-824)', () => {
   let service: SignupsRosterService;
@@ -98,6 +99,10 @@ describe('SignupsRosterService — emit timing (ROK-824)', () => {
           },
         },
         { provide: EventEmitter2, useValue: mockEventEmitter },
+        {
+          provide: ActivityLogService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 

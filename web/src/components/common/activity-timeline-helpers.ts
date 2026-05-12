@@ -133,6 +133,13 @@ const ACTION_MAP: Record<string, ActionDisplay> = {
     borderColor: 'border-amber-500/40',
     label: (actor) => `${actor ?? 'System'} rescheduled the event`,
   },
+  signup_reconfirmed: {
+    color: 'text-blue-400',
+    dotColor: 'bg-blue-400',
+    bgColor: 'bg-blue-500/20',
+    borderColor: 'border-blue-500/40',
+    label: (actor) => `${actor ?? 'Someone'} re-confirmed for the reschedule`,
+  },
 };
 
 const FALLBACK: ActionDisplay = {

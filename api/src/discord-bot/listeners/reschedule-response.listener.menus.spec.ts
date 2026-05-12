@@ -7,6 +7,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import { ActivityLogService } from '../../activity-log/activity-log.service';
 import {
   createDrizzleMock,
   type MockDb,
@@ -170,6 +171,10 @@ async function setupMenusModule() {
           getClassEmojiComponent: jest.fn().mockReturnValue(undefined),
           getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
         },
+      },
+      {
+        provide: ActivityLogService,
+        useValue: { log: jest.fn().mockResolvedValue(undefined) },
       },
     ],
   }).compile();

@@ -100,7 +100,8 @@ export async function updateSeriesEvents(
         .set(updateData)
         .where(eq(schema.events.id, evt.id));
       if (timeDelta) {
-        await resetSignupConfirmations(tx, evt.id);
+        // ROK-1269: pass acting userId so the series editor stays confirmed.
+        await resetSignupConfirmations(tx, evt.id, userId);
       }
     }
   });

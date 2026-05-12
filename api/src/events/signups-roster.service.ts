@@ -21,6 +21,7 @@ import type {
 import * as cancelH from './signups-cancel.helpers';
 import * as notifH from './signups-notification.helpers';
 import * as rosterOpsH from './signups-roster-ops.helpers';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 @Injectable()
 export class SignupsRosterService {
@@ -33,6 +34,7 @@ export class SignupsRosterService {
     private benchPromotionService: BenchPromotionService,
     private allocationService: SignupsAllocationService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   async cancel(eventId: number, userId: number): Promise<void> {
@@ -168,7 +170,7 @@ export class SignupsRosterService {
       eventId: number,
     ) => Promise<RosterWithAssignments>,
   ): Promise<RosterWithAssignments> {
-    const { event, signupByUserId, oldRoleBySignupId } =
+    const { event, signupByUserId, oldRoleBySignupId, reconfirmedUserIds } =
       await this.executeRosterUpdate(eventId, userId, isAdmin, dto);
     this.emit(SIGNUP_EVENTS.UPDATED, { eventId, action: 'roster_updated' });
     rosterOpsH.fireRosterNotifications(
@@ -181,7 +183,12 @@ export class SignupsRosterService {
       (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
       this.logger,
     );
-    return getRosterWithAssignments(eventId);
+    return getRosterWithAssignments(eventId).then(async (roster) => {
+      // ROK-1269: emit signup_reconfirmed per attendee whose pending status
+      // got flipped to confirmed by this roster update. Done after tx commit.
+      await this.logReconfirms(eventId, reconfirmedUserIds);
+      return roster;
+    });
   }
 
   /** Run roster replacement inside a transaction for atomicity (ROK-824). */
@@ -205,7 +212,7 @@ export class SignupsRosterService {
         dto.assignments,
       );
       const oldRoleBySignupId = await notifH.captureOldAssignments(tx, eventId);
-      await notifH.replaceRosterAssignments(
+      const reconfirmedUserIds = await notifH.replaceRosterAssignments(
         tx,
         eventId,
         dto.assignments,
@@ -215,7 +222,7 @@ export class SignupsRosterService {
       this.logger.log(
         `Roster updated for event ${eventId}: ${dto.assignments.length} assignments`,
       );
-      return { event, signupByUserId, oldRoleBySignupId };
+      return { event, signupByUserId, oldRoleBySignupId, reconfirmedUserIds };
     });
   }
 
@@ -269,5 +276,22 @@ export class SignupsRosterService {
 
   private emit(eventName: string, payload: SignupEventPayload): void {
     this.eventEmitter.emit(eventName, payload);
+  }
+
+  /**
+   * ROK-1269: log a signup_reconfirmed activity entry per attendee whose
+   * pending status flipped to confirmed via this roster update. Actor is
+   * the attendee themselves; metadata.reason='roster-update' discriminates
+   * from the discord-ack path.
+   */
+  private async logReconfirms(
+    eventId: number,
+    userIds: number[],
+  ): Promise<void> {
+    for (const uid of userIds) {
+      await this.activityLog.log('event', eventId, 'signup_reconfirmed', uid, {
+        reason: 'roster-update',
+      });
+    }
   }
 }
