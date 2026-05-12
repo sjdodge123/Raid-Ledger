@@ -8,7 +8,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { EventsService } from './events.service';
 
 async function createMemberAndLogin(
@@ -305,14 +305,17 @@ async function testRescheduleDoesNotResetDeclined() {
 
 // ─── ROK-1269: rescheduler stays confirmed + activity log ───────────────────
 
-/** Signs the admin (rescheduler) up for their own event before rescheduling. */
+/** Ensures the admin's auto-created signup is in signed_up + confirmed. */
 async function signupAdmin(eventId: number) {
-  await testApp.db.insert(schema.eventSignups).values({
-    eventId,
-    userId: testApp.seed.adminUser.id,
-    status: 'signed_up',
-    confirmationStatus: 'confirmed',
-  });
+  await testApp.db
+    .update(schema.eventSignups)
+    .set({ status: 'signed_up', confirmationStatus: 'confirmed' })
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.userId, testApp.seed.adminUser.id),
+      ),
+    );
 }
 
 async function testRescheduleStaysConfirmedForRescheduler() {
@@ -383,12 +386,15 @@ async function testRescheduleTentativeReschedulerStaysTentative() {
   const eventId = await createFutureEvent(testApp, adminToken, {
     title: 'Tentative Rescheduler Raid',
   });
-  await testApp.db.insert(schema.eventSignups).values({
-    eventId,
-    userId: testApp.seed.adminUser.id,
-    status: 'tentative',
-    confirmationStatus: 'confirmed',
-  });
+  await testApp.db
+    .update(schema.eventSignups)
+    .set({ status: 'tentative', confirmationStatus: 'confirmed' })
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.userId, testApp.seed.adminUser.id),
+      ),
+    );
   const newStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
   const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
   await testApp.request
