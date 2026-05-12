@@ -131,3 +131,36 @@ describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
         expect(slot?.className).toContain('focus-visible:ring-2');
     });
 });
+
+describe('RosterSlot — departed signup treatment (ROK-1237)', () => {
+    it('renders departed assignments with the dimmed red border and door glyph', () => {
+        const { container } = render(
+            <RosterSlot
+                role="tank"
+                position={1}
+                color="bg-blue-500"
+                item={createAssignment({ signupStatus: 'departed' })}
+            />,
+        );
+        const slot = container.querySelector('.rounded-lg');
+        expect(slot?.className).toContain('border-red-500/40');
+        expect(slot?.className).toContain('opacity-60');
+        // Door glyph (U+1F6AA) replaces the bare position number so the row
+        // visually parallels the EventDetailRoster departed group.
+        expect(container.textContent).toContain('\u{1F6AA}');
+    });
+
+    it('does not apply the current-user pulse glow when the slot is departed', () => {
+        const { container } = render(
+            <RosterSlot
+                role="tank"
+                position={1}
+                color="bg-blue-500"
+                item={createAssignment({ signupStatus: 'departed' })}
+                isCurrentUser
+            />,
+        );
+        const slot = container.querySelector('.rounded-lg');
+        expect(slot?.className ?? '').not.toContain('animate-pulse-subtle');
+    });
+});
