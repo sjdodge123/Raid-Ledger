@@ -134,7 +134,7 @@ The custom prompt is critical for pass 2 — without scope, Codex returns broad 
 Read the last line of `planning-artifacts/review-ROK-XXX.md`:
 
 - **`VERDICT: APPROVED`** → `gates.reviewer: PASS`. Proceed.
-- **`VERDICT: APPROVED WITH FIXES`** → Lead reads findings, applies trivial fixes inline (1-3 lines per fix), commits `fix: address Codex review (ROK-XXX)`. `gates.reviewer: PASS`. For non-trivial fixes, respawn the dev with the findings file as context.
+- **`VERDICT: APPROVED WITH FIXES`** → Lead reads findings. BLOCKER / HIGH fixes apply inline (1-3 lines per fix) and commit `fix: address Codex review (ROK-XXX)` — non-trivial ones respawn the dev with the findings file as context. **MEDIUM / LOW findings DO NOT get fixed inline** — append them to `TECH-DEBT-BACKLOG.md` at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Mirror the appended block in the PR body under `## Tech debt observed (not auto-filed)`. Do NOT auto-file Linear tech-debt; do NOT invent runbook "Known Issues" sections. `gates.reviewer: PASS`.
 - **`VERDICT: BLOCKED`** → present blockers to operator. May need dev respawn or scope discussion.
 - **No clear verdict / Codex errored / output garbled** → fall back to a single `devedup-rl:reviewer` Claude subagent run with the same prompt focus. Don't bypass the reviewer gate just because Codex misbehaved.
 

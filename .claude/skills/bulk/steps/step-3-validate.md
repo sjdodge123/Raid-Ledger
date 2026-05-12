@@ -80,7 +80,7 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 **Gate outcomes:**
 
 - `VERDICT: PASS` → `gates.chrome_mcp_e2e: PASS`. Continue to 3h.
-- `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Include notes in the PR body so operator can scan them post-merge; operator triages tech-debt manually (do NOT auto-file).
+- `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Append medium/low findings to **`TECH-DEBT-BACKLOG.md`** at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Mirror the appended block in the PR body under `## Tech debt observed (not auto-filed)`. Do NOT auto-file Linear tech-debt; do NOT invent runbook "Known Issues" sections.
 - `VERDICT: FAIL` → `gates.chrome_mcp_e2e: FAIL`. Do NOT push. Lead either fixes inline (1-3 lines, `fix: resolve Chrome MCP finding`) or respawns the originating dev. Re-run the gate after the fix.
 
 **N/A path (rare):** if the entire batch is API-internal with no in-app surface (no admin page, no settings panel, no Discord embed consumes the changes), record `gates.chrome_mcp_e2e: "N/A — api-internal-only"` with a one-line justification. Default is to run.

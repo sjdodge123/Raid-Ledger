@@ -131,7 +131,7 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 **Gate outcomes:**
 
 - `VERDICT: PASS` → `gates.chrome_mcp_e2e: PASS`. Continue to 3i (reviewer).
-- `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Log medium/low findings inline in the batch summary; operator decides what becomes a Linear story (do NOT auto-file tech-debt). Continue to 3i.
+- `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Append medium/low findings to **`TECH-DEBT-BACKLOG.md`** at the repo root (single canonical location — `/readlogs` parses it; see playbook "Where candidate tech-debt goes"). Use the dated-section + `- **[sev]**` bullet format. Do NOT auto-file Linear tech-debt stories; do NOT invent runbook "Known Issues" sections. Mirror the appended block in the PR body under `## Tech debt observed (not auto-filed)`. Continue to 3i.
 - `VERDICT: FAIL` → `gates.chrome_mcp_e2e: FAIL`. Do NOT spawn the reviewer. Lead either fixes inline (1-3 lines per fix, `fix: resolve Chrome MCP finding`) or respawns the originating dev with the finding. Re-run the gate after the fix.
 
 **N/A path (rare):** If — and only if — the batch is purely API-internal with no in-app surface (no admin page, no settings panel, no Discord embed consumes it), record `gates.chrome_mcp_e2e: "N/A — api-internal-only"` with a one-line justification. Default is to run the gate.
@@ -170,7 +170,7 @@ Agent(subagent_type: "devedup-rl:reviewer", model: "sonnet",
 When the reviewer completes:
 
 1. **Critical/high findings:** Lead fixes directly on the batch branch, or re-spawns a dev if the fix is non-trivial. If a fix touches a changed UI flow, re-run 3h Chrome MCP scoped to that flow.
-2. **Medium/low findings:** log them but proceed — operator triages whether to file a Linear tech-debt story (do not auto-file).
+2. **Medium/low findings:** append to **`TECH-DEBT-BACKLOG.md`** at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Do NOT auto-file Linear tech-debt; the operator triages the file.
 3. **Update state:** `gates.review: PASS` (or `FAIL` if critical/high findings remain unfixed)
 
 ---

@@ -159,7 +159,7 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 **Gate outcomes:**
 
 - `VERDICT: PASS` → `stories.ROK-XXX.gates.chrome_mcp_e2e: PASS`. Continue to 3d.
-- `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Include the notes in the operator-presentation block at 3e so the operator knows what to look at. Continue to 3d.
+- `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Include the notes in the operator-presentation block at 3e so the operator knows what to look at. Append medium/low findings to **`TECH-DEBT-BACKLOG.md`** at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Do NOT auto-file Linear tech-debt; do NOT invent runbook "Known Issues" sections. Mirror the appended block in the PR body under `## Tech debt observed (not auto-filed)`. Continue to 3d.
 - `VERDICT: FAIL` → `gates.chrome_mcp_e2e: FAIL`. Do NOT flip Linear to "In Review"; do NOT spawn Codex. Lead either fixes inline (1-3 lines, `fix: resolve Chrome MCP finding (ROK-XXX)`) or respawns the dev with the finding. Re-run the gate after the fix.
 
 **Light scope (`scope: light`):** Chrome MCP gate is SKIPPED — there is no worktree deploy and the operator reviews the diff directly. Record `gates.chrome_mcp_e2e: "N/A — light scope"`.

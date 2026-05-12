@@ -154,8 +154,34 @@ If a later finding requires a fix + re-verify, re-acquire then. Pre-emptive hold
 ## Pass / Fail criteria
 
 - **PASS:** every flow executed, every AC exercised, no BLOCKER/HIGH findings, console + network clean (or known-pre-existing noise documented).
-- **PASS WITH NOTES:** medium / low findings logged for follow-up — operator decides what becomes a story. Proceed to reviewer.
+- **PASS WITH NOTES:** medium / low findings logged for follow-up — see "Where candidate tech-debt goes" below. Proceed to reviewer.
 - **FAIL:** any BLOCKER or HIGH finding (functional regression, security gap, console TypeError, 5xx on AC path). Do NOT spawn the reviewer; do NOT push. Lead either fixes inline (1-3 lines) or respawns dev with the finding. Re-run the gate after the fix.
+
+---
+
+## Where candidate tech-debt goes (STRICT — single canonical location)
+
+Medium / low findings surfaced by this gate are **candidate tech-debt**, not Linear stories. **Append them to `TECH-DEBT-BACKLOG.md` at the repo root.** This is the single canonical location:
+
+- `/readlogs` parses it (`<!-- agents append below this line -->` marker, dated sections).
+- `/build`, `/dispatch`, `/fix-batch`, `/bulk` all append here.
+- The operator triages this file and decides what becomes a Linear story — agents **never** auto-file `tech-debt:` Linear issues. See `feedback_no_auto_tech_debt.md`.
+
+**Do NOT** invent ad-hoc landing zones — no "Known Issues" sections in runbooks, no scratch files in `planning-artifacts/`, no separate `chrome-mcp-findings.md`. ROK-1068 dropped candidates into a runbook's "Known Issues" section instead of `TECH-DEBT-BACKLOG.md` and the next /build agent couldn't find them. The gate's own summary file (`chrome-mcp-summary-<batch-id>.md`) is for the operator to glance at during the immediate review — it's NOT a backlog.
+
+**Append format** (matches the file's own "Format for skills that parse this file" section):
+
+```markdown
+### YYYY-MM-DD — <branch-name> (PR #<num if known, else "pending">)
+
+- **[med]** `path/to/file.ts:LN` — short description.
+  Suggested: one-line fix idea (optional).
+- **[low]** `path/to/other.tsx:LN` — description.
+```
+
+Severities are `high` / `med` / `low` / `nit`. Critical/BLOCKER findings never land in the backlog — they're fixed during the gate or sent back to the dev.
+
+Commit the backlog append as part of the batch's commits with the `chore(config):` prefix (per `feedback_operator_config_rides_along`). The PR description should mirror the appended block under a `## Tech debt observed (not auto-filed)` section so the operator sees it without opening the file.
 
 ---
 
