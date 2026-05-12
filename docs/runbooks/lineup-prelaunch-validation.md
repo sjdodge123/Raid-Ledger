@@ -227,9 +227,9 @@ severity — visual-only on the decided view, no data loss.
 
 | Field | Value |
 |---|---|
-| Timestamp | 2026-05-12 (ROK-1068 build) |
-| Git SHA | `<populated post-validation>` |
-| Playwright suite | _(filled by Phase D)_ |
-| Companion bot suite | _(filled by Phase D)_ |
-| Chrome MCP drive | _(filled by Phase D)_ |
-| Known Issues | 2 candidate Linear stories (above) |
+| Timestamp | 2026-05-12T17:48Z |
+| Git SHA | `22c5e2da` (carryover smoke) → `b00dc8fc` (runbook Phase D pass) |
+| Playwright suite | 598 passed / 9 failed / 13 did not run / 194 skipped (7.0m) — every failing test is a fixture race verified working in Chrome MCP; see Known Issues #1 |
+| Companion bot suite | 92 passed / 8 failed — all 12 **lineup-related** companion smokes PASS (title, abort, channel-override fallback, private DM, tiebreaker open, public-slug, grace countdown). The 8 failures are event/voice/attendance domain and outside ROK-1068 scope. |
+| Chrome MCP drive | All 30 web-side ACs driven against the dev env; Start Lineup modal, banner, detail page, decided podium, public-share page, nomination modal, building-phase Carried Over chips, phase breadcrumb, hero copy across phases, empty-participation state all confirmed working. No console errors. |
+| Known Issues | 3 candidate Linear stories (above) |
