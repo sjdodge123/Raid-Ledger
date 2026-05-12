@@ -85,8 +85,23 @@ const HTTP_METHODS = [
 type HttpMethod = (typeof HTTP_METHODS)[number];
 
 function isFlakeError(err: unknown): boolean {
-  const msg = String((err as { message?: string })?.message ?? err);
-  return msg.includes('socket hang up') || msg.includes('ECONNRESET');
+  const e = err as { message?: string; code?: string };
+  const msg = String(e?.message ?? err);
+  const code = String(e?.code ?? '');
+  // Original ROK-1249/1250 trigger class: canonical socket-level RST.
+  if (msg.includes('socket hang up') || msg.includes('ECONNRESET')) {
+    return true;
+  }
+  // ROK-1264: HTTP-parser-level errors fire when a client reads non-HTTP
+  // bytes from what should be a fresh response. Same root-cause class as
+  // socket-RST (stale socket reuse from keep-alive pool, or half-closed
+  // peer state) but surfaces with a different error code. Node's llhttp
+  // uses the HPE_* prefix for all parser errors; the most common message
+  // form is "Parse Error: Expected HTTP/, RTSP/ or ICE/".
+  if (msg.includes('Parse Error') || code.startsWith('HPE_')) {
+    return true;
+  }
+  return false;
 }
 
 function wrapMethod(

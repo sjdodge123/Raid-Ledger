@@ -40,6 +40,12 @@ import {
   extractPortFromConnectionString,
 } from './socket-handle-audit';
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
+// ROK-1264: `supertest-persistent-agent` is intentionally NOT wired here.
+// The helper + spec exist as ready-to-deploy machinery if a future targeted
+// investigation needs single-socket pinning, but applying it globally
+// deterministically breaks tests that use Promise.all to fan out parallel
+// supertest calls (e.g. `events.integration.spec.ts › shape parity per slice`
+// failed 10/10 with maxSockets:1). See `docs/spikes/rok-1250-residual-layer-5.md`.
 
 export type { RedisMockHandle } from './redis-mock';
 
@@ -165,10 +171,20 @@ async function buildNestApp(
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
   }
+  const httpServer = app.getHttpServer() as import('http').Server;
+  // ROK-1264: bump server-side keepAliveTimeout WAY above any inter-test gap
+  // so any future keep-alive pool (or supertest default if upgraded) does not
+  // race the server's 5 s socket reaper. truncateAllTables + bcrypt + setup
+  // helpers easily exceed 5 s between adjacent `it()`s. The patch is benign
+  // because Jest force-exits the worker and `closeTestApp` destroys server
+  // handles; never reaches the 10-minute lifetime in practice.
+  // headersTimeout must be >= keepAliveTimeout (Node http docs).
+  httpServer.keepAliveTimeout = 600_000;
+  httpServer.headersTimeout = 610_000;
   if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
-    instrumentHttpServer(app.getHttpServer() as import('http').Server);
+    instrumentHttpServer(httpServer);
   }
-  let request = supertest.default(app.getHttpServer() as import('http').Server);
+  let request = supertest.default(httpServer);
   if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
     request = wrapAgentForSnapshot(request);
   }
@@ -274,18 +290,27 @@ export async function closeTestApp(): Promise<void> {
     destroySocketsOnPort(ourPort);
   }
 
-  // ROK-1250 layer 2 (post-empirical-debug): also force-destroy ioredis
-  // sockets to the local BullMQ Redis container on port 6379. Even though
-  // `app.close()` triggers Nest lifecycle hooks that should close BullMQ
-  // workers, captured snapshot 2026-05-10T17-30-40-570Z showed 40 of 47
-  // active sockets at flake time were still ::1:6379 ioredis connections.
-  // The drain barrier above ensures no jobs are in-flight, so destroying
-  // these sockets is a no-op for application correctness — it just frees
-  // the kernel-side resources before the next spec file boots its own
-  // 13×3 BullMQ worker connections. Skip this if REDIS_URL is set to a
-  // non-default port (e.g. CI uses a sidecar container on a different port).
-  // Match `queue.module.ts` semantics: `Number(parsed.port) || 6379` —
-  // an empty `parsed.port` (URL with no explicit port) resolves to 6379.
+  destroyBullmqRedisSocketsIfDefault();
+
+  if (instance.container) {
+    await instance.container.stop();
+  }
+  setInstance(null);
+}
+
+/**
+ * ROK-1250 layer 2 (post-empirical-debug): force-destroy ioredis sockets to
+ * the local BullMQ Redis container on port 6379. Captured snapshot
+ * 2026-05-10T17-30-40-570Z showed 40 of 47 active sockets at flake time were
+ * ::1:6379 ioredis connections that survived `app.close()`'s Nest lifecycle
+ * hooks. The drain barrier in `closeTestApp` ensures no jobs are in-flight,
+ * so destroying these sockets is a no-op for application correctness — it
+ * just frees the kernel-side resources before the next spec file boots its
+ * own 13×3 BullMQ worker connections. Skip if REDIS_URL targets a non-default
+ * port (e.g. CI sidecar container). Match `queue.module.ts` semantics:
+ * `Number(parsed.port) || 6379` — empty `parsed.port` resolves to 6379.
+ */
+function destroyBullmqRedisSocketsIfDefault(): void {
   const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
   let redisPort: number | null = null;
   try {
@@ -297,9 +322,4 @@ export async function closeTestApp(): Promise<void> {
   if (redisPort === 6379) {
     destroySocketsOnPort(6379);
   }
-
-  if (instance.container) {
-    await instance.container.stop();
-  }
-  setInstance(null);
 }

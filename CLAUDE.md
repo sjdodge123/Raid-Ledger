@@ -159,6 +159,48 @@ Backups exclude the `drizzle` schema (migration metadata is code, not data) to p
 - **Read `TESTING.md` before writing or modifying any test file.**
 - Shared test infra: `api/src/common/testing/` (drizzle-mock, factories), `web/src/test/` (MSW handlers, render helpers, factories)
 
+### Cheap validation harness — `scripts/spec-loop.sh` (STRICT — cheap experiments first)
+
+Per memory `feedback_cheap_experiments_first.md`: falsify hypotheses with N=1 deterministic experiments BEFORE paying for N=30 instrumented loops.
+
+`./scripts/spec-loop.sh <spec-pattern> [N] [STOP_ON_FIRST=true|false]` loops a single Jest integration spec N times (default 50) and tabulates results. Single-file isolation is **7-15 s per run vs ~7 min** for the full suite. The script greps each run for flake-class patterns (`socket hang up`, `ECONNRESET`, `Parse Error`, `HPE_*`) — same set the runtime `socket-debug.ts::isFlakeError` matches.
+
+**When to use:**
+- **Pre-fix repro:** confirm a flake exists at a measurable rate before designing a fix. Saves rework on phantom bugs.
+- **Post-fix validation:** 0/50 on the carrier spec is a strong signal the fix works at the per-file level. Pair with a full-suite run before shipping.
+- **Mechanism discrimination:** intra-file (reproduces in isolation) vs cross-file (only on full suite) → narrows the search space cheaply.
+- **Config A/B sweeps:** 3-5 runs each for several config values (e.g. `maxSockets: 1 / 2 / 5`) → discriminate trade-offs in minutes.
+- **Hypothesis falsification:** if you suspect mechanism X, write a focused micro-test, run it 100× in seconds, and either confirm or eliminate the path.
+
+**Output:** `/tmp/spec-loop-<pattern>-<ts>/summary.tsv` (run / exit / wallclock_s / flake_count / excerpt) plus per-run logs. Exit 0 = all clean; 1 = at least one flake hit or non-zero exit.
+
+**Provenance:** the pattern emerged from ROK-1264's Tier-1 investigation. The history is captured in `docs/spikes/rok-1250-residual-layer-5.md` §2 (the original ad-hoc loops that produced the H4 identification + 0/50 post-fix validation + maxSockets sweep).
+
+#### Flake-investigation protocol (STRICT — reproduce BEFORE designing a fix)
+
+For ANY change presented as a fix for a flaky, intermittent, or non-deterministic integration test failure, an agent **MUST** establish empirical baseline rates BEFORE designing the fix. Skipping this step has cost the project multiple multi-hour spike cycles (ROK-1249, ROK-1250, ROK-1264 H2 false-positive — see `docs/spikes/rok-1250-residual-layer-5.md`).
+
+**Required order:**
+
+1. **Reproduce in isolation first** — `./scripts/spec-loop.sh <suspected-carrier-spec> [N]`. Default N=50. Two outcomes:
+   - **Reproduces** (≥1 hit in 50 runs) → intra-file mechanism. Cheap iterative fix-validation is now unlocked.
+   - **Does NOT reproduce** in 50+ runs → cross-file, environmental, or wrong carrier suspect. STOP and re-examine. Do not jump to a global fix on an unreproduced hypothesis.
+2. **Design the fix** only AFTER step 1 gives you measurable signal.
+3. **Validate the fix at the same per-spec scale** — `./scripts/spec-loop.sh <same-spec> 50`. Bar: **0 hits in 50 runs**. If the rate dropped but isn't zero, the fix is incomplete OR the wrong shape.
+4. **Run the full integration suite** AFTER per-spec validation passes. This is where global-config changes (shared agents, server timeouts, env-level patches) reveal incompatibility with OTHER specs — the failure mode that bit ROK-1264's `maxSockets:1` wrap.
+
+**Skipping any step:**
+- Skip step 1 → no falsifiable baseline. Fix may address a phantom bug or the wrong mechanism. Operator and reviewer have no way to validate the diagnosis.
+- Skip step 3 → no per-spec proof the fix actually does what's claimed.
+- Skip step 4 → ship a regression to unrelated specs (the events.spec failure pattern this rule exists to prevent).
+
+**When the protocol doesn't apply:**
+- Pure unit tests (deterministic by design — they're either passing or buggy)
+- Environmental flakes only reproducible on Render/CI (record this explicitly; spec-loop is local)
+- Discord-bot or browser-UI flakes (use the companion bot or Playwright loops instead)
+
+In ambiguous cases: run the protocol anyway. The cost is 7 minutes; the rework cost when skipped is days.
+
 ### Local CI
 
 Run `./scripts/validate-ci.sh --full` before pushing any branch. This replaces manual per-step checks.
