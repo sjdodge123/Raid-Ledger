@@ -41,6 +41,9 @@ FROM nginx:alpine AS production
 # Copy custom nginx config
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
+# ROK-1158: security-headers snippet (re-included from static-asset block too).
+COPY nginx/snippets/security-headers.conf /etc/nginx/snippets/security-headers.conf
+
 # Copy built static files
 COPY --from=builder /app/web/dist /usr/share/nginx/html
 
