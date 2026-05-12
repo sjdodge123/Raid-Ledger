@@ -117,7 +117,10 @@ for i in $(seq "$START_RUN" "$END_RUN"); do
 
   hit=0
   inconclusive=0
-  if grep -qE "(socket hang up|ECONNRESET)" "$LOG"; then
+  # ROK-1264: extended FLAKE detection — Parse Error / HPE_* errors are
+  # in the same TCP-RST class (HTTP parser reading non-HTTP bytes from a
+  # stale/half-closed socket). Matches the architect's H2 mechanism.
+  if grep -qE "(socket hang up|ECONNRESET|Parse Error: Expected HTTP|HPE_INVALID)" "$LOG"; then
     hit=1
   elif grep -qE "PostgreSqlContainer.start.*Timed out|Timed out after .* while waiting for container ports" "$LOG"; then
     inconclusive=1
