@@ -24,7 +24,6 @@ import {
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as http from 'http';
 import * as supertest from 'supertest';
 import type TestAgent from 'supertest/lib/agent';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -61,16 +60,6 @@ export interface TestApp {
    * Postgres `max_connections` budget without explicit teardown. ROK-1104.
    */
   _appClient: ReturnType<typeof postgres>;
-  /**
-   * ROK-1264: supertest's superagent globalAgent is keep-alive by default,
-   * causing rotating-suite TCP-RST when the pool hands out a half-FIN'd
-   * socket on a new request. The architect's H2 fix (confirmed by AC1
-   * snapshot evidence — see docs/spikes/rok-1250-residual-layer-4.md) is
-   * to use a `keepAlive: false` agent so every request opens a fresh
-   * connection and every response closes cleanly. Stored on TestApp so
-   * `closeTestApp` can `.destroy()` it as belt-and-suspenders cleanup.
-   */
-  _keepAliveOffAgent: http.Agent;
 }
 
 /**
@@ -161,45 +150,10 @@ function setTestEnvVars(connectionString: string): void {
   }
 }
 
-/**
- * ROK-1264 H2 fix: build a supertest agent that disables keep-alive on its
- * underlying http.Agent. Every request opens a FRESH TCP connection and
- * every response triggers a kernel-side FIN. Prevents stale-socket reuse
- * from the pool (the carrier confirmed in docs/spikes/rok-1250-residual-layer-4.md).
- * `maxSockets: Infinity` keeps concurrency unrestricted; we're disabling
- * pool reuse, not throttling. Architect §8 H2 code block.
- */
-function buildKeepAliveOffSupertest(server: http.Server): {
-  request: TestAgent<supertest.Test>;
-  keepAliveOffAgent: http.Agent;
-} {
-  const keepAliveOffAgent = new http.Agent({
-    keepAlive: false,
-    maxSockets: Infinity,
-  });
-  const request = supertest.default(server);
-  // supertest exposes the underlying superagent options via `_options`.
-  // Assigning `agent` here makes every per-`Test` request inherit the
-  // keep-alive-off agent. Cast via unknown — _options is not in supertest's
-  // public typings.
-  const requestWithOptions = request as unknown as {
-    _options?: { agent?: unknown };
-  };
-  requestWithOptions._options = {
-    ...(requestWithOptions._options ?? {}),
-    agent: keepAliveOffAgent,
-  };
-  return { request, keepAliveOffAgent };
-}
-
 async function buildNestApp(
   db: PostgresJsDatabase<typeof schema>,
   redisMock: RedisMockHandle,
-): Promise<{
-  app: INestApplication;
-  request: TestAgent<supertest.Test>;
-  keepAliveOffAgent: http.Agent;
-}> {
+): Promise<{ app: INestApplication; request: TestAgent<supertest.Test> }> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DrizzleAsyncProvider)
     .useValue(db)
@@ -211,17 +165,14 @@ async function buildNestApp(
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
   }
-  const httpServer = app.getHttpServer() as http.Server;
   if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
-    instrumentHttpServer(httpServer);
+    instrumentHttpServer(app.getHttpServer() as import('http').Server);
   }
-  const { keepAliveOffAgent, request: baseRequest } =
-    buildKeepAliveOffSupertest(httpServer);
-  const request =
-    process.env.RL_TEST_SOCKET_DEBUG === 'true'
-      ? wrapAgentForSnapshot(baseRequest)
-      : baseRequest;
-  return { app, request, keepAliveOffAgent };
+  let request = supertest.default(app.getHttpServer() as import('http').Server);
+  if (process.env.RL_TEST_SOCKET_DEBUG === 'true') {
+    request = wrapAgentForSnapshot(request);
+  }
+  return { app, request };
 }
 
 /**
@@ -260,7 +211,7 @@ export async function getTestApp(): Promise<TestApp> {
   setInstance(preInstance as TestApp);
   const seed = await truncateAllTables(db);
   setTestEnvVars(connectionString);
-  const { app, request, keepAliveOffAgent } = await buildNestApp(db, redisMock);
+  const { app, request } = await buildNestApp(db, redisMock);
   const testApp: TestApp = {
     app,
     request,
@@ -269,7 +220,6 @@ export async function getTestApp(): Promise<TestApp> {
     container,
     redisMock,
     _appClient: appClient,
-    _keepAliveOffAgent: keepAliveOffAgent,
   };
   setInstance(testApp);
   return testApp;
@@ -314,16 +264,6 @@ export async function closeTestApp(): Promise<void> {
   await instance.app.close();
   if (instance._appClient) {
     await instance._appClient.end({ timeout: 30 });
-  }
-
-  // ROK-1264 H2 fix cleanup: destroy any residual sockets in the supertest
-  // http.Agent. With `keepAlive: false` the pool should already be empty
-  // (each request opens fresh + closes on response), so this is belt-and-
-  // suspenders — guards against the rare case where the kernel-side close
-  // races the JS-side Promise resolution and a socket lingers as a half-
-  // closed handle.
-  if (instance._keepAliveOffAgent) {
-    instance._keepAliveOffAgent.destroy();
   }
 
   // ROK-1250 fallback guard: if anything is still bound to the test
