@@ -11,6 +11,7 @@ import {
     castVeto,
     forceResolveTiebreaker,
 } from '../lib/api/tiebreaker-api';
+import { toast } from '../lib/toast';
 
 export const TIEBREAKER_KEY = ['tiebreaker'] as const;
 const LINEUPS_PREFIX = ['lineups'] as const;
@@ -46,6 +47,11 @@ export function useDismissTiebreaker() {
         onSuccess: () => {
             void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
             void qc.invalidateQueries({ queryKey: [...TIEBREAKER_KEY] });
+        },
+        // ROK-1262: surface errors so dismiss isn't a silent no-op when the
+        // backend rejects (e.g. no ties remain, lineup not in voting).
+        onError: (err: Error) => {
+            toast.error(err.message || 'Failed to dismiss tiebreaker');
         },
     });
 }

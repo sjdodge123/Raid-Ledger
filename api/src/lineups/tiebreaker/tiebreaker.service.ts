@@ -24,6 +24,7 @@ import { LineupNotificationService } from '../lineup-notification.service';
 import { LineupsGateway } from '../lineups.gateway';
 import { dispatchTiebreakerOpen } from './tiebreaker-dispatch.helpers';
 import { detectTies } from './tiebreaker-detect.helpers';
+import { pickDismissWinner } from './tiebreaker-dismiss.helpers';
 import { runMatchingAlgorithm } from '../lineups-lifecycle.helpers';
 import {
   findPendingOrActiveTiebreaker,
@@ -123,14 +124,18 @@ export class TiebreakerService {
     );
   }
 
-  /** Dismiss tiebreaker — proceed to decided without resolution. */
+  /**
+   * Dismiss tiebreaker — proceed to decided. Idempotent (ROK-1262): when
+   * the modal is shown but no tiebreaker row exists yet, fall back to the
+   * lowest-gameId tied entry — see `pickDismissWinner`.
+   */
   async dismiss(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
-    if (!tb) throw new NotFoundException('No tiebreaker found');
-
-    await this.updateTiebreakerStatus(tb.id, 'dismissed');
+    if (tb) await this.updateTiebreakerStatus(tb.id, 'dismissed');
     await this.clearActiveTiebreaker(lineupId);
-    await this.transitionToDecided(lineupId);
+    if (tb) return this.transitionToDecided(lineupId);
+    const winnerId = await pickDismissWinner(this.db, lineupId);
+    await this.transitionToDecided(lineupId, winnerId);
   }
 
   /** Reset/clear any active tiebreaker without changing lineup phase. */

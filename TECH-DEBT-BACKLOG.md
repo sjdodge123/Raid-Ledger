@@ -46,29 +46,6 @@ A skill's job is typically: parse → group duplicates by file path → propose 
   Suggested: phased migration (separate PRs for backfill vs `SET NOT NULL`) or DB-side default that the new app code overwrites.
 - **[low]** `nginx/monolith.conf.template:75-84` and `nginx/default.conf:52-61` — The existing ROK-393 `/i/:code` crawler block also lacks `proxy_set_header X-Real-IP` / `X-Forwarded-For`, so the invite-OG endpoint's rate-limit buckets all crawlers under the upstream IP too. Same class of bug as the ROK-1067 finding (fixed for `/p/lineup/:slug` in this PR); the invite block was the precedent and inherited the gap.
   Suggested: mirror the four `proxy_set_header` lines in the `/i/:code` location block.
-- **[med]** `api/src/discord-bot/utils/push-content.spec.ts:123` — host-TZ-dependent test. Asserts `withoutTz` (no override) renders `Mar 17` for a 22:00 UTC event, which only holds in non-North-American timezones. Passes under CI's `TZ=UTC` default, fails on any host with `TZ=America/Los_Angeles` (PDT) or similar. Latent flake — never bites in CI but hides if a developer's `npm test` is part of a pre-push gate. Identical file on origin/main; broken since ROK-918 (#492).
-  Suggested: explicitly mock the timezone in the test, or always pass an explicit timezone arg to `buildEventPushContent` rather than testing the implicit-TZ branch.
-  **[FIXED IN BATCH 2026-05-05](#2026-05-05--batch20260505-pr-pending)** — commit bc08ef02 patched the test to use Pacific vs Tokyo (both explicit) instead of relying on default TZ.
-
-### 2026-05-05 — batch/2026-05-05 (PR pending — ROK-1155 + ROK-1069)
-
-- **[high]** `api/src/events/events-dashboard.dashboard.integration.spec.ts` (and rotating siblings) — **cross-suite pollution flake re-surfaced post-ROK-1232**. Run 1 of `validate-ci.sh --full --ci` failed two events-dashboard tests with `loginAsAdmin → 401`; run 2 immediately after passed all 77 suites / 855 tests. Isolated single-file run also passes. Failing suite rotates per run — same signature ROK-1058 documented. ROK-1232 (PR #730, merged 2026-05-06) was the canonical hardening story; the fix reduces but does not eliminate the flake. Not introduced by ROK-1155 or ROK-1069 (neither touches integration test infra; ROK-1155 only changes coverage thresholds on `jest.config.js`, ROK-1069 only adds DEMO_MODE-gated `/admin/test/lineup/*` endpoints unused by integration tests).
-  Suggested: re-open ROK-1058 / file follow-up to ROK-1232 with the specific 2026-05-05 reproduction (events-dashboard auth-401 in full-suite run, isolated pass). May need queue-state reset between auth-touching suites or shared admin-token cache flush.
-- **[high]** Pre-existing Playwright smoke failures observed during batch validation (full `npx playwright test` on this branch, both projects). Not introduced by ROK-1155 or ROK-1069 — same failures occur with our 2 stories backed out (the stories' new admin/test/lineup controller is unused by these specs, and coverage threshold config is a non-runtime change). 21 failing tests across these areas:
-  - `scripts/smoke/admin-slow-queries-log.smoke.spec.ts` (desktop + mobile)
-  - `scripts/smoke/admin-discord.smoke.spec.ts` (mobile)
-  - `scripts/smoke/admin-general.smoke.spec.ts` (mobile)
-  - `scripts/smoke/admin-operations.smoke.spec.ts` (mobile)
-  - `scripts/smoke/lineup-decided.smoke.spec.ts` (desktop + mobile) — covered by canceled ROK-1226
-  - `scripts/smoke/lineup-tiebreaker.smoke.spec.ts` (desktop) — covered by canceled ROK-1226
-  - `scripts/smoke/lineup-tiebreaker-late-join.smoke.spec.ts` (desktop) — covered by canceled ROK-1227
-  - `scripts/smoke/navigation.smoke.spec.ts` (desktop, 2 tests)
-  - `scripts/smoke/onboarding.smoke.spec.ts` (desktop)
-  - `scripts/smoke/paste-nominate.smoke.spec.ts` (desktop)
-  - `scripts/smoke/scheduling-poll.smoke.spec.ts` (desktop + mobile)
-  - `scripts/smoke/standalone-scheduling-poll.smoke.spec.ts` (desktop, 3 tests)
-  - `scripts/smoke/games.smoke.spec.ts` (mobile, ROK-811 regression spec)
-  Suggested: revisit canceled ROK-1226/ROK-1227 — the cancel reason ("downstream effect of LineupsService matching bug") may have shifted now that rok-1067 (#743) and ROK-1232 (#730) merged. The admin-* failures are likely the staleTime polling pattern documented in operator memory `feedback_smoke_polling_for_async_writes.md` (ROK-1156). ROK-811 mobile regression suggests recent UI restructuring on Games page.
 
 ### 2026-05-09 — rok-1225-stabilize-lineups (PR #751)
 
@@ -78,15 +55,11 @@ A skill's job is typically: parse → group duplicates by file path → propose 
   Suggested: spike a follow-up to confirm the UX impact before touching.
 - **[low]** `community_lineup_schedule_slots.match_id` and `community_lineup_schedule_votes.slot_id` FKs declared in 0113 — verify presence on prod via DB probe (this PR fixes only the empirically-missing one on `community_lineup_match_members.match_id`).
   Suggested: one-off operator psql probe; if missing, file a focused follow-up like ROK-1225.
-- **[med]** Worktree `api/.env` doesn't inherit `DEMO_MODE=true` from root `.env`; smoke tests against a freshly-spun-up worktree API need explicit override. Pre-existing dev-env gap surfaced during this branch (dev had to manually set `DEMO_MODE=true` when starting the API). Affects every worktree-based smoke run.
-  Suggested: have `mcp-env env_copy` propagate `DEMO_MODE` from root `.env` to `api/.env` automatically on worktree setup, or have `deploy_dev.sh --ci` inject it.
 - **[low]** Production DB likely has the same orphan rows on `community_lineup_match_members` — migration's `DELETE FROM ... WHERE NOT EXISTS` will clean them on next deploy (Watchtower 5AM); pre-deploy probe optional but informative.
   Suggested: operator-run psql `SELECT COUNT(*) FROM community_lineup_match_members m WHERE NOT EXISTS (SELECT 1 FROM community_lineup_matches WHERE id = m.match_id);` against prod before tomorrow's 5AM pull.
 
 ### 2026-05-09 — rok-1247-smoke-api-polling
 
-- **[high]** `scripts/smoke/admin-slow-queries-log.smoke.spec.ts` × 4 tests (D + M, both `:90` and `:118`) — bucket-c app bug, NOT a staleTime poll issue. `POST /admin/test/seed-slow-queries-log` returns `{success:true, logFilePath:"/data/logs/slow-queries.log"}` but immediately `GET /admin/logs` returns `{files:[], total:0}`. Confirmed via direct curl in worktree env. Likely permissions on `/data/logs/` (LOG_DIR not writable by API user) or path mismatch between seed and listing endpoints. Spec ROK-1247 misclassified this file as "canonical, no migration needed."
-  Suggested: file a focused bug story — investigate `LOG_DIR` resolution in seed vs listing endpoints, verify writeability, check `.dockerignore` for `/data/logs`.
 - **[med]** `scripts/smoke/scheduling-poll.smoke.spec.ts:904` voter-avatars (D, 1 test) — migration's `pollSchedulingPollHasSlot({ withVote: true })` resolves on **any** slot vote, but the test asserts `[data-testid="schedule-slot"][data-voted="true"]` which is current-user-scoped. Vote-toggle flow may end with admin's vote toggled off; pre-existing flakiness uncovered by the migration.
   Suggested: redesign the test — either tighten the poll to current-user vote (poll for `data.slots.some(s => s.votes?.some(v => v.userId === adminUserId))`), or assert on the lower-bound `[data-testid="schedule-slot"]` having ANY avatar group.
 - **[med]** `scripts/smoke/standalone-scheduling-poll.smoke.spec.ts:217` AC9 (D, 1 test) — migration's `pollPollPageHasMatch` resolves but post-navigation the `<h1>Scheduling Poll</h1>` never renders. Page snapshot shows layout chrome + Discord join banner only. Possible navigation race or the page chrome renders before the match query resolves.
@@ -100,8 +73,6 @@ A skill's job is typically: parse → group duplicates by file path → propose 
 
 ### 2026-05-09 — rok-1209-confirmation-pattern (PR pending)
 
-- **[high]** `api/src/cron-jobs/cron-job.integration.spec.ts:404` — **same rotating-suite cross-pollution flake** documented above (2026-05-05 entry). Run 1 of `validate-ci.sh --full` against the post-rebase ROK-1209 branch failed two tests (`pause and resume › should resume a paused cron job via admin API`, `schedule update › should update cron expression and persist`) with `Expected: 200, Received: 401`. Isolated single-file run passes 19/19 in 6s. Failing suite rotated from events-dashboard (2026-05-05) → cron-jobs (today) — same signature, same root cause, ROK-1058 / ROK-1232-follow-up territory. Not caused by ROK-1209 (web-only, no api/auth changes in the diff).
-  Suggested: bundle into the existing ROK-1058 reopen / ROK-1232 follow-up story rather than a new ticket. Today's data point reinforces "rotates per run" pattern — a fix needs to address the cross-suite admin-auth state pollution, not whichever suite happens to land first in run order.
 - **[med]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts` — smoke harness has no non-admin fixture user, so all four ROK-1209 smoke tests run with admin-as-creator → `organizer` persona. This means invitee-not-acted, invitee-acted (waiting-tone hero flip), and the per-row ✓ on `LeaderboardRow` for someone-other-than-you cases are NOT exercised at the browser level. Vitest unit tests for `useLineupHero`, `getLineupPersona`, `hasUserActedInPhase`, `getLineupHeroCopy`, and each phase component cover the invitee personas exhaustively, so AC coverage is maintained — but a real persona × phase × phaseState matrix run in a real browser would catch any DOM-level regression vitest's jsdom misses (e.g., IntersectionObserver-driven mobile compact, real CSS sticky behavior under invitee data).
   Suggested: add a smoke-fixture endpoint (e.g., `POST /admin/test/seed-fixture-user` returning `{ userId, jwt }`) plus a `getInviteeToken()` helper in `scripts/smoke/api-helpers.ts`, then add a separate `lineup-confirmation-pills-invitee.smoke.spec.ts` that runs the same matrix from the invitee side. Sized as a small follow-up; not blocking ROK-1209 ship.
 
