@@ -10,6 +10,14 @@ The branch remains **local-only** through this step. Do NOT invoke `git push`, `
 
 When operator signals ready, poll each story: `mcp__linear__get_issue({ issueId: "<linear_id>" })`.
 
+**Env-lock release point (STRICT).** As soon as the operator gives any verdict (approve OR rework), release the env lock — the rest of Step 4 (Codex 4b, architect 4c, Lead smoke 4d) does not need the env in most cases:
+
+```
+mcp__mcp-env__env_lock_release
+```
+
+Exception: if rework is `material` and re-running the deploy + Playwright on the worktree is needed before push, re-acquire then. If Lead smoke in 4d needs to run `npx playwright test` (UI changes), re-acquire just for that pass and release after. The default is **release-as-soon-as-possible**; re-acquire on demand. Don't pre-emptively hold.
+
 ### Changes Requested → Rework Loop
 
 1. Read operator's feedback (Linear comments or direct message).
@@ -112,7 +120,7 @@ cd <worktree>
   codex -c model_reasoning_effort=medium review --base main 2>&1
   echo
   echo "## Pass 2: scoped focus prompt"
-  codex -c model_reasoning_effort=medium review "Review the staged + uncommitted changes (or the most recent commit) for: (1) security/auth bugs, (2) correctness/regressions, (3) contract integrity (Zod/types/migration consistency), (4) Discord bot listener safety. Skip style nits, naming preferences, doc gaps. For each finding: severity (BLOCKER | HIGH | MEDIUM | LOW), file:line, one-line description, suggested fix. Final line: 'VERDICT: APPROVED' or 'VERDICT: APPROVED WITH FIXES' or 'VERDICT: BLOCKED'." 2>&1
+  codex -c model_reasoning_effort=medium review "Review the staged + uncommitted changes (or the most recent commit) for: (1) security/auth bugs, (2) correctness/regressions, (3) contract integrity (Zod/types/migration consistency), (4) Discord bot listener safety. Skip style nits, naming preferences, doc gaps. Browser-level validation (changed user flows, console, network, screenshots) is already covered by the Chrome MCP e2e gate at planning-artifacts/chrome-mcp-summary-ROK-XXX.md — do not re-cover that ground; focus on code-level findings. For each finding: severity (BLOCKER | HIGH | MEDIUM | LOW), file:line, one-line description, suggested fix. Final line: 'VERDICT: APPROVED' or 'VERDICT: APPROVED WITH FIXES' or 'VERDICT: BLOCKED'." 2>&1
 } | tee planning-artifacts/review-ROK-XXX.md
 cd -
 ```
@@ -159,7 +167,7 @@ npm run test -w api && npm run test -w web
 npx tsc --noEmit -p api/tsconfig.json && npx tsc --noEmit -p web/tsconfig.json
 ```
 
-If UI changes: `npx playwright test`.
+If UI changes: re-acquire the env lock (`mcp__mcp-env__env_lock_acquire`), run `npx playwright test`, then `mcp__mcp-env__env_lock_release` immediately after. Don't hold the lock through 4e or Step 5 — push and PR creation don't need the env.
 
 Gate: `gates.smoke_test: PASS` or `FAIL`. On failure: diagnose (timing? `sleep()`?). Regression → fix or respawn dev. Test infra issue (flaky, missing wait) → fix the test, don't skip. **Never dismiss as "pre-existing"** — investigate and fix, or create a Linear story with root cause.
 

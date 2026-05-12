@@ -28,7 +28,9 @@ Batch of small fixes shipped via fix-batch pipeline.
 - [x] Lint clean
 - [x] Unit tests pass (api + web)
 - [x] Integration tests pass
-- [x] Smoke tests pass / skipped (no UI changes)
+- [x] Playwright smoke (desktop + mobile) pass
+- [x] Chrome MCP e2e — changed flows exercised, console + network clean (summary: `planning-artifacts/chrome-mcp-summary-fix-batch-YYYY-MM-DD.md`)
+- [x] Reviewer agent: APPROVED
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
@@ -114,10 +116,13 @@ Present to the operator:
 - Lint: PASS
 - Unit tests: PASS
 - Integration tests: PASS
-- Smoke tests: PASS / SKIP
+- Playwright smoke (desktop + mobile): PASS
+- **Chrome MCP e2e:** PASS — `planning-artifacts/chrome-mcp-summary-fix-batch-YYYY-MM-DD.md` (N flows exercised, M screenshots)
+- Reviewer (sonnet): APPROVED
 
 ### Agent Usage
 - Dev agents: <count> (opus)
+- Reviewer: 1 (sonnet)
 ```
 
 ---

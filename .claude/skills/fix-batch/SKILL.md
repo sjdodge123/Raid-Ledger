@@ -33,17 +33,21 @@ Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linea
 ```
 Step 1: Gather    → Linear search by label, profile (incl. root cause + planner assessment), present, operator approves
 Step 2: Implement → Batch branch, worktrees, spike unknown bugs, plan complex stories, parallel devs, merge into batch branch
-Step 3: Review & Validate → Code review, test gap analysis, build + typecheck + lint + unit tests + integration tests + smoke
+Step 3: Validate  → CI (build/ts/lint/unit/integration) → deploy + Playwright → Chrome MCP e2e gate → reviewer → test gaps → regression
 Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 ```
 
-**Six gates before PR:**
-1. **Code review** — reviewer agent checks correctness, security, performance, and contract integrity
-2. **Test gap analysis** — reviewer identifies untested changes; lead adds missing tests before proceeding
-3. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
-4. **Unit tests** — all workspaces pass
-5. **Integration tests** — `npm run test:integration -w api`
-6. **CI** — build + type check + lint (validated as part of gate 3-4 process)
+**Eight gates before PR (run in this order — Chrome MCP MUST land before reviewer):**
+1. **CI** — build + type check + lint
+2. **Unit tests** — all workspaces pass
+3. **Integration tests** — `npm run test:integration -w api`
+4. **Playwright smoke** — desktop + mobile, automated regression sweep
+5. **Chrome MCP e2e** — Lead drives the *changed user flows* on the deployed batch branch via `mcp__claude-in-chrome__*`; captures screenshots / GIFs / console / network and produces an operator-facing summary. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. **Must complete before the reviewer agent runs.**
+6. **Code review** — reviewer agent (sonnet) checks correctness, security, performance, contract integrity
+7. **Test gap analysis** — reviewer identifies untested changes; lead adds missing tests before proceeding
+8. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
+
+**Env-lock rule:** the env lock (`mcp__mcp-env__env_lock_acquire`) is held only for gates 4 + 5 (Playwright + Chrome MCP). Lead releases the lock immediately after the Chrome MCP summary is written. Reviewer, push, PR creation, and auto-merge do NOT need the env.
 
 ---
 
@@ -157,7 +161,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 |------|------|-------------|
 | 1 | `steps/step-1-gather.md` | Cleanup, fetch stories by label, profile, present batch, init state |
 | 2 | `steps/step-2-implement.md` | Batch branch, worktrees, spawn devs, merge into batch branch |
-| 3 | `steps/step-3-validate.md` | Code review, test gap analysis, build + typecheck + lint + unit tests + integration tests + smoke |
+| 3 | `steps/step-3-validate.md` | CI (build/ts/lint/unit/integration) → deploy + Playwright → Chrome MCP e2e (operator-facing) → reviewer → test gaps → regression → push |
 | 4 | `steps/step-4-ship.md` | Single PR, auto-merge, Linear "Done", cleanup, summary, wiki sync (4f) |
 
 ---
