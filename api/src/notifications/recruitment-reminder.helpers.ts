@@ -136,6 +136,76 @@ export function buildDiscordUrl(event: EligibleEvent): string {
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
+ * Default short-notice threshold (hours). Events whose
+ * `start_time - created_at` gap is below this value are SUPPRESSED entirely
+ * — neither channel bumps nor recruitment DMs fire. Override via the
+ * `RECRUITMENT_SHORT_NOTICE_HOURS` env var. ROK-1240.
+ */
+export const DEFAULT_SHORT_NOTICE_THRESHOLD_HOURS = 12;
+
+/**
+ * Read the short-notice suppression threshold (hours) from env, falling
+ * back to {@link DEFAULT_SHORT_NOTICE_THRESHOLD_HOURS}. Invalid /
+ * non-positive values are ignored.
+ */
+export function getShortNoticeThresholdHours(): number {
+  const raw = process.env.RECRUITMENT_SHORT_NOTICE_HOURS;
+  if (!raw) return DEFAULT_SHORT_NOTICE_THRESHOLD_HOURS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_SHORT_NOTICE_THRESHOLD_HOURS;
+}
+
+/**
+ * Compare two timestamps for same calendar day in the supplied timezone.
+ * Uses {@link Intl.DateTimeFormat} (not UTC string slicing) so the
+ * result reflects the community's wall-clock day. ROK-1240.
+ */
+export function isSameCalendarDay(
+  a: number | Date,
+  b: number | Date,
+  timezone: string,
+): boolean {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return fmt.format(new Date(a)) === fmt.format(new Date(b));
+}
+
+/**
+ * Render a short relative time label for a future event start time.
+ *
+ * Returns one of:
+ *  - `"now"`        — start is in the past or within the current rounded hour
+ *  - `"today"`      — start is on the same calendar day as `now` (TZ-aware)
+ *  - `"tomorrow"`   — start is within ~24h but on a different calendar day
+ *  - `"in Xh"`      — start is more than 24h out
+ *
+ * Replaces an inline ternary that produced `"tomorrow"` for same-day
+ * events (ROK-1240). Always pass the community default timezone so the
+ * "today" boundary respects the operator's wall clock.
+ */
+export function formatRelativeTimeLabel(
+  startTime: string | Date,
+  now: number,
+  timezone: string,
+): string {
+  const start = new Date(startTime).getTime();
+  const msUntil = start - now;
+  const hoursUntil = Math.round(msUntil / HOUR_MS);
+  if (hoursUntil <= 0) return 'now';
+  if (hoursUntil < 24 && isSameCalendarDay(start, now, timezone)) {
+    return 'today';
+  }
+  if (hoursUntil <= 24) return 'tomorrow';
+  return `in ${hoursUntil}h`;
+}
+
+/**
  * Calculate the grace period in milliseconds for a newly created event.
  * Events created far in advance (>= 72h) get no grace period.
  * Events created closer to start time get a shorter grace to prevent
@@ -155,9 +225,32 @@ export function calculateGracePeriodMs(
 }
 
 /**
- * Check whether an event is still within its creation grace period.
- * Returns true if the event should be skipped (grace period active),
- * false if it should be processed (grace period elapsed or none).
+ * Returns true when the event should be SUPPRESSED outright because the
+ * gap between creation and start is below the short-notice threshold —
+ * i.e. the event was scheduled too close to start time for a recruitment
+ * nag to be useful. Suppression covers BOTH the channel bump and the
+ * recipient DMs (they share a single gating call).
+ *
+ * Defensive: `start <= created` (clock skew, data anomaly) is treated as
+ * suppressed. ROK-1240.
+ */
+export function isShortNoticeEvent(
+  event: Pick<EligibleEvent, 'createdAt' | 'startTime'>,
+  thresholdHours: number = getShortNoticeThresholdHours(),
+): boolean {
+  const timeUntilEvent =
+    new Date(event.startTime).getTime() -
+    new Date(event.createdAt).getTime();
+  if (timeUntilEvent <= 0) return true;
+  return timeUntilEvent < thresholdHours * HOUR_MS;
+}
+
+/**
+ * Check whether an event is still within its creation grace period OR is
+ * a short-notice event that should be suppressed entirely.
+ *
+ * Returns true if the event should be skipped (grace active OR
+ * short-notice), false if it should be processed.
  * @param event - The eligible event to check
  * @param now - Optional timestamp (ms) to use instead of Date.now()
  */
@@ -165,6 +258,11 @@ export function isWithinGracePeriod(
   event: EligibleEvent,
   now?: number,
 ): boolean {
+  // Short-notice events are suppressed regardless of how much time has
+  // elapsed since creation — their start_time is just too close to now
+  // for a recruitment nag to be useful. ROK-1240.
+  if (isShortNoticeEvent(event)) return true;
+
   const gracePeriodMs = calculateGracePeriodMs(
     event.createdAt,
     event.startTime,
