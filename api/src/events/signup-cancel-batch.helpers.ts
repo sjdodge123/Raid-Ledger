@@ -26,10 +26,7 @@ export async function cancelAllUpcomingSignupsForUser(
   const upcoming = await db
     .select({ eventId: schema.eventSignups.eventId })
     .from(schema.eventSignups)
-    .innerJoin(
-      schema.events,
-      eq(schema.events.id, schema.eventSignups.eventId),
-    )
+    .innerJoin(schema.events, eq(schema.events.id, schema.eventSignups.eventId))
     .where(
       and(
         eq(schema.eventSignups.userId, userId),

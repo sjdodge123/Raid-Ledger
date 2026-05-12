@@ -167,9 +167,12 @@ export class DiscordNotificationService {
     const usersService = this.moduleRef.get(usersModule.UsersService, {
       strict: false,
     });
-    const rosterService = this.moduleRef.get(rosterModule.SignupsRosterService, {
-      strict: false,
-    });
+    const rosterService = this.moduleRef.get(
+      rosterModule.SignupsRosterService,
+      {
+        strict: false,
+      },
+    );
     const notificationService = this.moduleRef.get(
       notifModule.NotificationService,
       { strict: false },

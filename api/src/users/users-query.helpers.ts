@@ -59,7 +59,10 @@ function buildGameInterestConditions(
   playHistory?: string,
   role?: string,
 ) {
-  const conditions = [eq(schema.gameInterests.gameId, gameId), activeUsersFilter()];
+  const conditions = [
+    eq(schema.gameInterests.gameId, gameId),
+    activeUsersFilter(),
+  ];
   if (sources && sources.length > 0) {
     conditions.push(inArray(schema.gameInterests.source, sources));
   } else {

@@ -212,7 +212,7 @@ export async function completeStandalonePoll(
       .set({ status: 'archived' })
       .where(eq(schema.communityLineups.id, match.lineupId));
     if (match.linkedEventId) {
-      await cancelLinkedEvent(tx as unknown as Db, match.linkedEventId);
+      await cancelLinkedEvent(tx, match.linkedEventId);
     }
   });
   return { ok: true, linkedEventId: match.linkedEventId ?? undefined };

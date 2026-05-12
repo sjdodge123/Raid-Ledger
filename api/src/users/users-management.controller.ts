@@ -123,9 +123,7 @@ export class UsersManagementController {
   @Delete(':id/avatar')
   @UseGuards(AuthGuard('jwt'), OperatorGuard)
   @HttpCode(204)
-  async adminDeleteAvatar(
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  async adminDeleteAvatar(@Param('id', ParseIntPipe) id: number) {
     const user = await this.usersService.findById(id);
     if (!user) throw new NotFoundException('User not found');
     if (user.customAvatarUrl) {
@@ -134,4 +132,3 @@ export class UsersManagementController {
     }
   }
 }
-

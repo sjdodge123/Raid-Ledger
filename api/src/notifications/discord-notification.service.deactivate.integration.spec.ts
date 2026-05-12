@@ -109,9 +109,9 @@ async function getDeactivatedAt(userId: number): Promise<Date | null> {
   // postgres-js's `unsafe` simple-query path (used by `db.execute(sql\`...\`)`)
   // returns TIMESTAMP columns as plain strings. Parse to Date so the
   // `toBeInstanceOf(Date)` assertions below match.
-  const rows = await testApp.db.execute<{ deactivated_at: Date | string | null }>(
-    /* sql */ `SELECT deactivated_at FROM users WHERE id = ${userId}`,
-  );
+  const rows = await testApp.db.execute<{
+    deactivated_at: Date | string | null;
+  }>(/* sql */ `SELECT deactivated_at FROM users WHERE id = ${userId}`);
   const raw = rows[0]?.deactivated_at ?? null;
   if (raw === null) return null;
   if (raw instanceof Date) return raw;

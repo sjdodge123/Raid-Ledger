@@ -24,9 +24,12 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 // This import WILL FAIL today — `guild-member-add.listener.ts` doesn't
 // exist on disk yet. The dev creates it in Phase C. Once created, the
 // imports below resolve and the assertions become the failure surface.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 import { GuildMemberAddListener } from './guild-member-add.listener';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 
 // ── Test fixtures ───────────────────────────────────────────────────────────
 
@@ -64,9 +67,7 @@ function makeMockNotificationService() {
 function makeMockMember(discordId: string, username = 'returner') {
   return {
     user: { id: discordId, username, avatar: null },
-  } as unknown as Parameters<
-    Parameters<MockClient['on']>[1]
-  >[0];
+  } as unknown;
 }
 
 // ── Listener factory ────────────────────────────────────────────────────────
@@ -91,7 +92,6 @@ function buildListener(deps: {
   usersService: ReturnType<typeof makeMockUsersService>;
   notificationService: ReturnType<typeof makeMockNotificationService>;
 }): InstanceType<typeof GuildMemberAddListener> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Ctor = GuildMemberAddListener as unknown as new (...args: any[]) => any;
   return new Ctor(
     deps.db,
@@ -189,8 +189,7 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
       const onConnect =
         (listener as unknown as { handleBotConnected?: () => void })
           .handleBotConnected ??
-        (listener as unknown as { onBotConnected?: () => void })
-          .onBotConnected;
+        (listener as unknown as { onBotConnected?: () => void }).onBotConnected;
       if (!onConnect) {
         throw new Error(
           'Listener missing handleBotConnected — register pattern not implemented',
@@ -203,7 +202,9 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
       if (!call) {
         throw new Error('Listener did not subscribe to Events.GuildMemberAdd');
       }
-      return call[1] as (member: ReturnType<typeof makeMockMember>) => Promise<void> | void;
+      return call[1] as (
+        member: ReturnType<typeof makeMockMember>,
+      ) => Promise<void> | void;
     }
 
     it('clears deactivated_at and writes the admin reactivation notification for a deactivated returner', async () => {

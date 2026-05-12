@@ -166,7 +166,13 @@ export class DemoTestDeactivationController {
   /** Read BullMQ job state for a Discord notification by stable jobId/notificationId. */
   @Get('job-state')
   async jobState(@Query('notificationId') notificationId?: string): Promise<{
-    state: 'waiting' | 'active' | 'completed' | 'failed' | 'unknown' | 'delayed';
+    state:
+      | 'waiting'
+      | 'active'
+      | 'completed'
+      | 'failed'
+      | 'unknown'
+      | 'delayed';
   }> {
     await this.assertDemoMode();
     if (!notificationId)
@@ -181,5 +187,4 @@ export class DemoTestDeactivationController {
       | 'delayed';
     return { state };
   }
-
 }

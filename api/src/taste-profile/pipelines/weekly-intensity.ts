@@ -103,8 +103,8 @@ async function communityDistributions(
 
   return {
     week: currentWeek.totals,
-    last4w: totalsMap(last4wRows as unknown as RawTotalsRow[]),
-    allTime: totalsMap(allTimeRows as unknown as RawTotalsRow[]),
+    last4w: totalsMap(last4wRows),
+    allTime: totalsMap(allTimeRows),
     maxUniqueGames: currentWeek.maxUniqueGames,
   };
 }

@@ -35,9 +35,7 @@ export async function deactivateUserOrchestrated(
   const [row] = await deps.db
     .update(schema.users)
     .set({ deactivatedAt: sql`NOW()` })
-    .where(
-      and(eq(schema.users.id, userId), isNull(schema.users.deactivatedAt)),
-    )
+    .where(and(eq(schema.users.id, userId), isNull(schema.users.deactivatedAt)))
     .returning({ id: schema.users.id, username: schema.users.username });
   if (!row) {
     deps.logger.debug(
@@ -53,7 +51,11 @@ export async function deactivateUserOrchestrated(
 }
 
 async function runCascade(
-  deps: { db: PostgresJsDatabase<typeof schema>; rosterService: SignupsRosterService; logger: Logger },
+  deps: {
+    db: PostgresJsDatabase<typeof schema>;
+    rosterService: SignupsRosterService;
+    logger: Logger;
+  },
   userId: number,
 ): Promise<void> {
   try {
@@ -73,7 +75,11 @@ async function runCascade(
 }
 
 async function writeAdminNotification(
-  deps: { usersService: UsersService; notificationService: NotificationService; logger: Logger },
+  deps: {
+    usersService: UsersService;
+    notificationService: NotificationService;
+    logger: Logger;
+  },
   user: { id: number; username: string },
 ): Promise<void> {
   try {
