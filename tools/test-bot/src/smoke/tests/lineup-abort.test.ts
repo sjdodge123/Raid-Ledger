@@ -8,6 +8,12 @@
  *      and "Test abort".
  *   2. Admin aborts without a reason → an embed is posted whose
  *      description contains "aborted by" but NO reason line.
+ *   3. ROK-1068 Phase F (AC F3): the two embed descriptions differ
+ *      correctly — same "aborted by" line; reason variant has a
+ *      blank-line separator + reason text appended; no-reason variant
+ *      stops at the "aborted by" sentence with no trailing block.
+ *      Builder: `api/src/lineups/lineup-notification-aborted-embed.helpers.ts:37-46`
+ *      `const reasonBlock = trimmedReason ? '\n\n${trimmedReason}' : '';`
  *
  * TDD gate: the `POST /lineups/:id/abort` route and the
  * `buildAbortedEmbed` builder do not yet exist, so these tests must
@@ -183,7 +189,148 @@ const abortWithoutReasonOmitsReasonLine: SmokeTest = {
   },
 };
 
+// ── AC F3: explicit reason vs no-reason variance walk-through ──────────────
+//
+// ROK-1068 Phase F adds an explicit comparison test that aborts two
+// lineups back-to-back — one with a reason, one without — and asserts
+// the descriptions follow the documented variance contract:
+//
+//   reasonBlock = trimmedReason ? `\n\n${trimmedReason}` : '';
+//   description = `This lineup was aborted by **${actor}**.` + reasonBlock;
+//
+// Both descriptions must contain the "aborted by" sentence. Only the
+// reason variant has the blank-line separator + reason text. The
+// no-reason variant must NOT contain `\n\n`.
+
+const abortReasonVarianceWalkthrough: SmokeTest = {
+  name: 'Abort embed: reason vs no-reason descriptions follow documented variance (ROK-1068 F3)',
+  category: 'embed',
+  async run(ctx: TestContext) {
+    await archiveAllLineups(ctx.api);
+
+    // ── Lineup A: aborted WITH reason ──────────────────────────────
+    const reasonTitle = `Variance With ${Date.now()}`;
+    const reasonText = 'Scope creep — restarting next week';
+    const reasonLineup = await createLineup(ctx.api, reasonTitle);
+    let withReasonDesc = '';
+
+    try {
+      await ctx.api.post(`/lineups/${reasonLineup.id}/abort`, {
+        reason: reasonText,
+      });
+      await awaitProcessing(ctx.api);
+      await flushEmbedQueue(ctx.api);
+
+      const msg = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) =>
+          m.embeds.some(
+            (e) =>
+              /aborted/i.test(e.title ?? '') &&
+              [
+                e.title ?? '',
+                e.description ?? '',
+                e.footer ?? '',
+                ...e.fields.map((f) => `${f.name} ${f.value}`),
+              ]
+                .join(' ')
+                .includes(reasonTitle),
+          ),
+        ctx.config.timeoutMs,
+      );
+      const withReasonEmbed = msg.embeds.find((e) =>
+        /aborted/i.test(e.title ?? ''),
+      );
+      withReasonDesc = withReasonEmbed?.description ?? '';
+    } finally {
+      await deleteLineup(ctx.api, reasonLineup.id);
+    }
+
+    // ── Lineup B: aborted WITHOUT reason ───────────────────────────
+    const noReasonTitle = `Variance Without ${Date.now()}`;
+    const noReasonLineup = await createLineup(ctx.api, noReasonTitle);
+    let withoutReasonDesc = '';
+
+    try {
+      await ctx.api.post(`/lineups/${noReasonLineup.id}/abort`, {});
+      await awaitProcessing(ctx.api);
+      await flushEmbedQueue(ctx.api);
+
+      const msg = await pollForEmbed(
+        ctx.defaultChannelId,
+        (m) =>
+          m.embeds.some(
+            (e) =>
+              /aborted/i.test(e.title ?? '') &&
+              [
+                e.title ?? '',
+                e.description ?? '',
+                e.footer ?? '',
+                ...e.fields.map((f) => `${f.name} ${f.value}`),
+              ]
+                .join(' ')
+                .includes(noReasonTitle),
+          ),
+        ctx.config.timeoutMs,
+      );
+      const withoutReasonEmbed = msg.embeds.find((e) =>
+        /aborted/i.test(e.title ?? ''),
+      );
+      withoutReasonDesc = withoutReasonEmbed?.description ?? '';
+    } finally {
+      await deleteLineup(ctx.api, noReasonLineup.id);
+    }
+
+    // ── Variance assertions ────────────────────────────────────────
+    // Both descriptions must contain the actor-line.
+    if (!/aborted by/i.test(withReasonDesc)) {
+      throw new Error(
+        `With-reason description missing "aborted by": ${withReasonDesc}`,
+      );
+    }
+    if (!/aborted by/i.test(withoutReasonDesc)) {
+      throw new Error(
+        `No-reason description missing "aborted by": ${withoutReasonDesc}`,
+      );
+    }
+
+    // Reason variant must contain a blank-line separator + the reason
+    // text (per `reasonBlock = '\n\n${trimmedReason}'`).
+    if (!withReasonDesc.includes('\n\n')) {
+      throw new Error(
+        `With-reason description missing blank-line separator before reason: ${JSON.stringify(withReasonDesc)}`,
+      );
+    }
+    if (!withReasonDesc.includes(reasonText)) {
+      throw new Error(
+        `With-reason description missing reason text "${reasonText}": ${withReasonDesc}`,
+      );
+    }
+
+    // No-reason variant must NOT contain the blank-line separator (the
+    // sentence terminates with the period after the actor name).
+    if (withoutReasonDesc.includes('\n\n')) {
+      throw new Error(
+        `No-reason description unexpectedly contained blank-line separator (suggests an empty reason block leaked): ${JSON.stringify(withoutReasonDesc)}`,
+      );
+    }
+
+    // The two descriptions must differ — same prefix, divergent suffix.
+    if (withReasonDesc === withoutReasonDesc) {
+      throw new Error(
+        'With-reason and no-reason embed descriptions are identical — variance contract violated',
+      );
+    }
+    if (withReasonDesc.length <= withoutReasonDesc.length) {
+      throw new Error(
+        `With-reason description should be longer than no-reason variant. with=${withReasonDesc.length} (${JSON.stringify(withReasonDesc)}) without=${withoutReasonDesc.length} (${JSON.stringify(withoutReasonDesc)})`,
+      );
+    }
+  },
+};
+
 export const lineupAbortTests: SmokeTest[] = [
   abortWithReasonPostsEmbed,
   abortWithoutReasonOmitsReasonLine,
+  abortReasonVarianceWalkthrough,
 ];
