@@ -1,5 +1,19 @@
 # ROK-1264 — Layer-4 Spike: Residual Carrier Diagnosis
 
+> ⚠️ **SUPERSEDED (2026-05-12 evening — Lead).** The "H2 confirmed" verdict below was based on a misread of the snapshot evidence: 3 active sockets to the test server port was interpreted as keep-alive pool depth, but supertest defaults to non-pooled (`agent: false`) — there is no pool to reuse from. The unit test in `api/src/common/testing/supertest-keepalive.spec.ts` (commit `b91b418a`) deterministically falsifies the H2 mechanism (2 sequential supertest requests open 2 distinct sockets WITHOUT any agent override).
+>
+> The "3 sockets" was actually 3 recent un-GC'd handles in various close states — fresh-socket-per-request behavior, not pool reuse.
+>
+> The H2 fix from this spike (commit `6a69cb4a`) was reverted in commit `48eb1c4d`.
+>
+> **Updated diagnosis lives at `planning-artifacts/specs/ROK-1264-architecture-v2.md`.** Top candidates after the falsification: H4 (supertest client-read stream-close race) and H5 (IPv4/IPv6 dual-stack loopback mismatch). H1 (TIME_WAIT) and H3 (FIN storm) remain demoted by the snapshot evidence.
+>
+> **What's still useful in this doc:** §3 run-by-run summary, §4 confounders (Docker orphan compounding, host resource pressure, Bash harness 10-min reap, loop hit-detection regex too narrow). Those remain valid.
+>
+> **Original "H2 confirmed" verdict preserved verbatim below for audit-trail continuity.**
+
+---
+
 **Date captured:** 2026-05-12
 **Snapshot:** `planning-artifacts/test-infra-snapshots/snapshot-2026-05-12T03-54-02-146Z.json`
 **Failure:** `socket hang up` on `GET /events?page=1&limit=2`, elapsed 1ms, in `events-dashboard.dashboard.integration.spec.ts` › `Events Dashboard — findAll › should paginate correctly`
@@ -7,7 +21,7 @@
 
 ---
 
-## Verdict
+## Verdict (SUPERSEDED — see notice above)
 
 **H2 confirmed: HTTP keep-alive socket reuse via supertest's superagent globalAgent.**
 
