@@ -1,23 +1,27 @@
 /**
  * Security headers smoke test (ROK-1158).
  *
- * Asserts all 6 required security headers are present and valued correctly on:
- *   - `/` (SPA index.html)
- *   - `/api/health` (proxied API endpoint)
- *   - `/assets/<bundle>.js` (proves the static-asset location block doesn't
- *     drop headers via the nginx `add_header` inheritance trap — see
- *     architect-ROK-1158.md §2)
- *
  * Target env: nginx-fronted deploy (allinone container at :8080).
  *   BASE_URL=http://localhost:8080 npx playwright test scripts/smoke/security-headers.smoke.spec.ts
  *
- * On Vite dev (:5173, the default BASE_URL) the headers do not exist, so
- * this spec FAILS by design until the nginx + controller work for ROK-1158
- * lands and the test is run against the allinone container.
+ * Auto-skips when run against Vite dev (:5173) since Vite serves no nginx
+ * and no CSP headers. The CI gate for security headers is the curl-based
+ * `_check_container_security_headers` step inside `scripts/validate-ci.sh`,
+ * which runs against the allinone container in CI's container-startup job.
  */
 import { test, expect } from './base';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
+
+// Only run when BASE_URL points to the allinone container (or any nginx-fronted
+// deploy). Vite dev at :5173 has no nginx → no CSP → all assertions would fail.
+// The CI gate for headers is the curl-based _check_container_security_headers
+// step in scripts/validate-ci.sh (container-startup job).
+const RUNS_AGAINST_NGINX = BASE_URL !== 'http://localhost:5173';
+test.skip(
+    !RUNS_AGAINST_NGINX,
+    `Skipped: ${BASE_URL} is not an nginx-fronted deploy. Run with BASE_URL=http://localhost:8080.`,
+);
 
 const CSP_REQUIRED_SUBSTRINGS = [
     "default-src 'self'",
