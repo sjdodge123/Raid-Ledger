@@ -159,6 +159,23 @@ Backups exclude the `drizzle` schema (migration metadata is code, not data) to p
 - **Read `TESTING.md` before writing or modifying any test file.**
 - Shared test infra: `api/src/common/testing/` (drizzle-mock, factories), `web/src/test/` (MSW handlers, render helpers, factories)
 
+### Cheap validation harness — `scripts/spec-loop.sh` (STRICT — cheap experiments first)
+
+Per memory `feedback_cheap_experiments_first.md`: falsify hypotheses with N=1 deterministic experiments BEFORE paying for N=30 instrumented loops.
+
+`./scripts/spec-loop.sh <spec-pattern> [N] [STOP_ON_FIRST=true|false]` loops a single Jest integration spec N times (default 50) and tabulates results. Single-file isolation is **7-15 s per run vs ~7 min** for the full suite. The script greps each run for flake-class patterns (`socket hang up`, `ECONNRESET`, `Parse Error`, `HPE_*`) — same set the runtime `socket-debug.ts::isFlakeError` matches.
+
+**When to use:**
+- **Pre-fix repro:** confirm a flake exists at a measurable rate before designing a fix. Saves rework on phantom bugs.
+- **Post-fix validation:** 0/50 on the carrier spec is a strong signal the fix works at the per-file level. Pair with a full-suite run before shipping.
+- **Mechanism discrimination:** intra-file (reproduces in isolation) vs cross-file (only on full suite) → narrows the search space cheaply.
+- **Config A/B sweeps:** 3-5 runs each for several config values (e.g. `maxSockets: 1 / 2 / 5`) → discriminate trade-offs in minutes.
+- **Hypothesis falsification:** if you suspect mechanism X, write a focused micro-test, run it 100× in seconds, and either confirm or eliminate the path.
+
+**Output:** `/tmp/spec-loop-<pattern>-<ts>/summary.tsv` (run / exit / wallclock_s / flake_count / excerpt) plus per-run logs. Exit 0 = all clean; 1 = at least one flake hit or non-zero exit.
+
+**Provenance:** the pattern emerged from ROK-1264's Tier-1 investigation. The history is captured in `docs/spikes/rok-1250-residual-layer-5.md` §2 (the original ad-hoc loops that produced the H4 identification + 0/50 post-fix validation + maxSockets sweep).
+
 ### Local CI
 
 Run `./scripts/validate-ci.sh --full` before pushing any branch. This replaces manual per-step checks.

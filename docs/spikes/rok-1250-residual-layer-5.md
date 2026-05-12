@@ -161,6 +161,23 @@ Intermediate values were tested:
 - Ready-to-deploy machinery if a future targeted fix (per-spec-file annotation, per-test agent reset, retry-on-ECONNRESET middleware, etc.) wants single-socket pinning.
 - Deterministic regression gate proving the propagation contract (4 tests, 3.5 s).
 
+### No-go files for global wrap deployment
+
+If a future agent considers re-wiring `wrapWithPersistentAgent` globally, these spec files use HTTP `Promise.all` patterns that deterministically break with `maxSockets: 1`:
+
+- `api/src/events/events.integration.spec.ts:332-345` — `fetchLegacySlices` fans out 5 parallel GETs (event, roster, assignments, pugs, voice-channel). 10/10 fail in isolation when wrapped.
+- `api/src/events/events-dashboard.actions.integration.spec.ts:326` — `Promise.all([3 × createMemberAndLogin])`, each a `POST /auth/local`. Same class of failure (untested under wrap; flagged by completeness audit, not empirically reproduced).
+
+These are not bugs in the tests — they're legitimate parallel-request patterns that any global serializing wrap will starve. Targeted opt-in deployment must exclude them.
+
+### Cheap-experiments-first harness (shipped this branch)
+
+The investigation produced a reusable pattern, now committed as `scripts/spec-loop.sh`. Single-file isolation (7-15 s per run) reproduces flakes with strong statistical signal in minutes rather than hours.
+
+Usage: `./scripts/spec-loop.sh <spec-pattern> [N] [STOP_ON_FIRST=true|false]`.
+
+See CLAUDE.md "Cheap validation harness" section for the agent-facing operator guide. The ad-hoc loops that produced this story's evidence (probe-1 pre-fix 1/20, post-fix 0/50, maxSockets sweep, Promise.all unit-test falsification) are exactly what this script formalizes.
+
 The server-side `keepAliveTimeout = 600_000` patch in `test-app.ts:buildNestApp` IS retained because it independently fixed the `feedback.integration.spec.ts` `socket hang up` (RUN 1 → RUN 2 of full-suite validation) and is benign without the wrap — it only matters if a future supertest upgrade switches to pooled defaults.
 
 ### What ROK-1268 inherits

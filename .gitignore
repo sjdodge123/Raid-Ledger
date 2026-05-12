@@ -43,6 +43,7 @@ scripts/*
 !scripts/launch-discord.sh
 !scripts/repro-test-infra-flake.sh
 !scripts/loop-integration.sh
+!scripts/spec-loop.sh
 !/api/scripts/
 implementation_plan.md
 walkthrough.md
