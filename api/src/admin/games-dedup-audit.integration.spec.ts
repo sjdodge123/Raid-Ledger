@@ -9,7 +9,7 @@
  * NOT DEMO_MODE gated — the endpoint is admin-only via JWT + RolesGuard
  * and runs in any environment.
  */
-import { count, sql } from 'drizzle-orm';
+import { count, eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -336,6 +336,47 @@ describe('POST /admin/games/dedup-audit/run', () => {
   });
 
   // -------------------------------------------------------------------------
+  // AC (a.2) — 403 on authenticated non-admin POST.
+  // The controller is class-level gated by @Roles('admin'); a valid JWT for a
+  // user with role='user' must be rejected by RolesGuard with 403.
+  // -------------------------------------------------------------------------
+  it('rejects authenticated non-admin POSTs with 403', async () => {
+    // Re-use admin's password hash so the non-admin can log in with the same
+    // known password from the test seed.
+    const [{ passwordHash }] = await testApp.db
+      .select({ passwordHash: schema.localCredentials.passwordHash })
+      .from(schema.localCredentials)
+      .where(eq(schema.localCredentials.userId, testApp.seed.adminUser.id));
+
+    const [nonAdmin] = await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:nonadmin@test.local',
+        username: 'nonadmin',
+        role: 'user',
+      })
+      .returning();
+    await testApp.db.insert(schema.localCredentials).values({
+      email: 'nonadmin@test.local',
+      passwordHash,
+      userId: nonAdmin.id,
+    });
+
+    const loginRes = await testApp.request.post('/auth/local').send({
+      email: 'nonadmin@test.local',
+      password: testApp.seed.adminPassword,
+    });
+    expect(loginRes.status).toBe(200);
+    const nonAdminToken = (loginRes.body as { access_token: string })
+      .access_token;
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-audit/run')
+      .set('Authorization', `Bearer ${nonAdminToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  // -------------------------------------------------------------------------
   // AC (b) — 200 + PersistSummary on admin POST.
   // -------------------------------------------------------------------------
   it('returns 200 + PersistSummary for an admin caller', async () => {
@@ -501,8 +542,17 @@ describe('POST /admin/games/dedup-audit/run', () => {
   // bucket. To get 3 rows in the same bucket and vary on `itad_game_id`, we
   // seed 3 rows sharing the SAME steam_app_id, all with `igdb_id = null`,
   // and vary `itad_game_id` on one row. This validates tier 1 (itad wins
-  // over min-id). Tier 2 (igdb) and tier 3 (min id) are exercised by other
-  // tests in this file + the unit spec.
+  // over min-id).
+  //
+  // Tier 2 (igdb beats min-id) is STRUCTURALLY UNTESTABLE at the integration
+  // layer: `games.igdb_id` has a DB-level UNIQUE constraint (games.ts:23),
+  // and bucketing precedence routes any row with `igdb_id` set into the
+  // `igdb:` bucket. The combination means a multi-row bucket containing any
+  // row with `igdb_id` set cannot exist at runtime — so tier 2 has no
+  // observable behavior here. Tier 2 is covered by the unit spec at
+  // games-dedup-audit.service.spec.ts via hand-crafted GameRow objects
+  // that bypass DB constraints. Tier 3 (min id) is covered by the existing
+  // GET test (line 135) where all seeded dups have null itad + null igdb.
   //
   // Seed: 3 rows with the SAME steam_app_id. Only row C has itad_game_id.
   //   row A: itad=null   -> not the tier-1 winner; lowest id but loses
