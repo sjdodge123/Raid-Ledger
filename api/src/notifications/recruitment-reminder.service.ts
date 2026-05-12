@@ -303,7 +303,6 @@ export class RecruitmentReminderService {
     defaultTimezone: string,
   ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
     const signupSummary = buildSignupSummary(event);
-    const embedUrl = buildDiscordUrl(event);
     // ROK-1240: TZ-aware "today"/"tomorrow"/"in Xh" label — fixes
     // same-day events being labeled "tomorrow".
     const timeLabel = formatRelativeTimeLabel(
@@ -320,7 +319,15 @@ export class RecruitmentReminderService {
       .setColor(EMBED_COLORS.ANNOUNCEMENT)
       .setTimestamp(new Date(event.startTime));
 
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    return { embed, row: this.buildBumpRow(event, clientUrl) };
+  }
+
+  /** Build the action row (View Event + View in Discord buttons). */
+  private buildBumpRow(
+    event: EligibleEvent,
+    clientUrl: string,
+  ): ActionRowBuilder<ButtonBuilder> {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setLabel('View Event')
         .setStyle(ButtonStyle.Link)
@@ -328,8 +335,7 @@ export class RecruitmentReminderService {
       new ButtonBuilder()
         .setLabel('View in Discord')
         .setStyle(ButtonStyle.Link)
-        .setURL(embedUrl),
+        .setURL(buildDiscordUrl(event)),
     );
-    return { embed, row };
   }
 }

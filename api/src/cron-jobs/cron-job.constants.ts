@@ -125,7 +125,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   RecruitmentReminderService_checkAndSendReminders: {
     description:
-      'DMs unsigned game followers about upcoming events every 15 minutes',
+      'DMs unsigned game followers and posts channel "spots still available" bumps every 15 minutes. Suppresses both paths for short-notice events (start - created < RECRUITMENT_SHORT_NOTICE_HOURS, default 12) — ROK-1240.',
     category: 'Notifications',
   },
   SteamSyncProcessor_scheduledSync: {

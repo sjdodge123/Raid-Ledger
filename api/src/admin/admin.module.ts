@@ -16,6 +16,7 @@ import { DemoTestLineupController } from './demo-test-lineup.controller';
 import { DemoTestGraceController } from './demo-test-grace.controller';
 import { DemoTestResetController } from './demo-test-reset.controller';
 import { DemoTestStandalonePollController } from './demo-test-standalone-poll.controller';
+import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
@@ -65,6 +66,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     DemoTestGraceController,
     DemoTestResetController,
     DemoTestStandalonePollController,
+    DemoTestRecruitmentController,
     AiChatTestController,
     SlashCommandTestController,
     ItadSettingsController,

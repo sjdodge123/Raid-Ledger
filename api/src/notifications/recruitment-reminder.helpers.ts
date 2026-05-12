@@ -239,8 +239,7 @@ export function isShortNoticeEvent(
   thresholdHours: number = getShortNoticeThresholdHours(),
 ): boolean {
   const timeUntilEvent =
-    new Date(event.startTime).getTime() -
-    new Date(event.createdAt).getTime();
+    new Date(event.startTime).getTime() - new Date(event.createdAt).getTime();
   if (timeUntilEvent <= 0) return true;
   return timeUntilEvent < thresholdHours * HOUR_MS;
 }

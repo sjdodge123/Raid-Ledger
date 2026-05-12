@@ -524,7 +524,7 @@ describe('formatRelativeTimeLabel (ROK-1240)', () => {
 
   it('returns "now" when start is exactly equal to now', () => {
     const now = new Date('2026-03-10T12:00:00Z').getTime();
-    expect(formatRelativeTimeLabel(now, now, 'UTC')).toBe('now');
+    expect(formatRelativeTimeLabel(new Date(now), now, 'UTC')).toBe('now');
   });
 
   it('returns "in Xh" when start is more than 24h out', () => {
