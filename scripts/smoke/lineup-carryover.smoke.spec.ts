@@ -152,6 +152,8 @@ test.describe('Lineup carryover edge case', () => {
     let adminToken: string;
     let priorLineupId: number;
     let priorGameIds: [number, number];
+    let newLineupId: number;
+    let carriedGameIds: number[];
 
     test.beforeAll(async () => {
         adminToken = await getAdminToken();
@@ -172,7 +174,7 @@ test.describe('Lineup carryover edge case', () => {
                 `Failed to create new lineup for carryover assertion: ${JSON.stringify(created).slice(0, 200)}`,
             );
         }
-        const newLineupId = created.id;
+        newLineupId = created.id;
         await awaitProcessing(adminToken);
 
         const detail = await apiGet(adminToken, `/lineups/${newLineupId}`);
@@ -187,19 +189,83 @@ test.describe('Lineup carryover edge case', () => {
         }>).filter((e) => e.carriedOver === true);
 
         expect(carriedEntries.length).toBeGreaterThanOrEqual(1);
+        carriedGameIds = carriedEntries.map((e) => e.gameId);
 
         // Sanity: the carried entry references one of the games the prior
         // lineup actually had. (Either game qualifies — both ended at
         // 50% under threshold=60.)
-        const carriedGameIds = new Set(carriedEntries.map((e) => e.gameId));
         const eitherPriorGameCarried =
-            carriedGameIds.has(priorGameIds[0]) ||
-            carriedGameIds.has(priorGameIds[1]);
+            carriedGameIds.includes(priorGameIds[0]) ||
+            carriedGameIds.includes(priorGameIds[1]);
         expect(eitherPriorGameCarried).toBe(true);
 
         // Hygiene: the prior lineup itself remains addressable for the
         // assertion message to be meaningful.
         const prior = await apiGet(adminToken, `/lineups/${priorLineupId}`);
         expect(prior?.status).toBe('archived');
+    });
+
+    /**
+     * ROK-1274: drive the new lineup through voting → decided and verify
+     * the decided-view chip strip actually renders. The bug fixed by 1274
+     * was that `GroupedMatchesResponseDto.carriedForward` came back empty
+     * even when entries existed, so `<CarriedForwardSection>` returned null.
+     */
+    test('decided-view renders the Carried Forward chip strip for the new lineup', async ({
+        page,
+    }) => {
+        expect(newLineupId, 'prior test must have populated newLineupId').toBeTruthy();
+
+        // Walk the new lineup voting → decided. The carryover helper has
+        // already populated entries; bypass the "min noms" guard, seed a
+        // single vote on one carried game so the lineup has a decidedGame
+        // option, then advance.
+        await cancelLineupPhaseJobs(adminToken, newLineupId);
+        await apiPost(adminToken, '/admin/test/lineup/advance-with-zero-noms', {
+            lineupId: newLineupId,
+        });
+
+        const [voterA] = await fetchTwoUserIds(adminToken);
+        const decidedGameId = carriedGameIds[0];
+        await apiPost(adminToken, '/admin/test/lineup/seed-single-voter', {
+            lineupId: newLineupId,
+            gameId: decidedGameId,
+            userId: voterA,
+        });
+
+        await apiPatch(adminToken, `/lineups/${newLineupId}/status`, {
+            status: 'decided',
+            decidedGameId,
+        });
+        await awaitProcessing(adminToken);
+
+        // API-level falsification: the chip-strip payload must be non-empty.
+        const matches = await apiGet(
+            adminToken,
+            `/lineups/${newLineupId}/matches`,
+        );
+        expect(Array.isArray(matches?.carriedForward)).toBe(true);
+        expect(matches.carriedForward.length).toBeGreaterThanOrEqual(1);
+
+        // Browser-level: the chip strip + at least one chip must render.
+        await page.goto(`/community-lineup/${newLineupId}`);
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
+        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
+            timeout: 15_000,
+        });
+
+        const carriedSection = page.locator(
+            '[data-testid="carried-forward-section"]',
+        );
+        await expect(carriedSection).toBeVisible({ timeout: 15_000 });
+
+        const chips = carriedSection.locator(
+            '[data-testid="carried-forward-chip"]',
+        );
+        const chipCount = await chips.count();
+        expect(chipCount).toBeGreaterThanOrEqual(1);
     });
 });
