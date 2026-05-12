@@ -30,6 +30,7 @@ describe('DiscordNotificationProcessor', () => {
     resetFailures: jest.fn().mockResolvedValue(undefined),
     recordFailure: jest.fn().mockResolvedValue(undefined),
     deactivateUser: jest.fn().mockResolvedValue(undefined),
+    isUserDeactivated: jest.fn().mockResolvedValue(false),
   };
 
   const mockSettingsService = {

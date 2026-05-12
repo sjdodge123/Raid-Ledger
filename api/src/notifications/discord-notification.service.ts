@@ -343,6 +343,21 @@ export class DiscordNotificationService {
   }
 
   /**
+   * Check whether a user has been deactivated (ROK-1260, Codex P2).
+   * Used by the processor to skip already-queued jobs after the first
+   * 50278 in a burst marks the user deactivated — prevents wasted
+   * Discord API calls for the remaining backlog.
+   */
+  async isUserDeactivated(userId: number): Promise<boolean> {
+    const [row] = await this.db
+      .select({ deactivatedAt: schema.users.deactivatedAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return row?.deactivatedAt != null;
+  }
+
+  /**
    * Auto-disable Discord notifications for a user and send in-app notification (AC-6).
    */
   private async autoDisableDiscord(userId: number): Promise<void> {

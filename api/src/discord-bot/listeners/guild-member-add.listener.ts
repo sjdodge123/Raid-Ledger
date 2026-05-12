@@ -55,9 +55,13 @@ export class GuildMemberAddListener {
     this.logger.log('Registered guildMemberAdd reactivation listener');
   }
 
-  /** When bot disconnects, reset registration so reconnect re-registers. */
+  /** When bot disconnects, remove the handler and reset so reconnect re-registers cleanly. */
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   handleBotDisconnected(): void {
+    const client = this.clientService.getClient();
+    if (client && this.boundHandler) {
+      client.off(Events.GuildMemberAdd, this.boundHandler);
+    }
     this.registered = false;
     this.boundHandler = null;
   }

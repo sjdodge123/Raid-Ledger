@@ -87,6 +87,12 @@ export class DiscordNotificationProcessor
     this.logger.debug(
       `Processing Discord notification job ${job.id} for user ${userId} (${type})`,
     );
+    if (await this.discordNotificationService.isUserDeactivated(userId)) {
+      this.logger.debug(
+        `ROK-1260: skipping queued job ${job.id} — user ${userId} is deactivated`,
+      );
+      return;
+    }
     if (!this.clientService.isConnected()) {
       this.logger.warn('Discord bot not connected, failing job for retry');
       throw new Error('Discord bot not connected');
