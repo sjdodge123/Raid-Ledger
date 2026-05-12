@@ -97,4 +97,41 @@ describe('wrapWithPersistentAgent (ROK-1264)', () => {
       },
     );
   });
+
+  // ROK-1264 follow-up: discriminate whether the residual full-suite ECONNRESET
+  // observed in `events.integration.spec.ts › shape parity per slice` is caused
+  // by Promise.all'd parallel requests queueing through the maxSockets:1 agent.
+  // The server adds a small delay so head-of-line waits are realistic.
+  it('survives 100× Promise.all([5 parallel GETs]) on the pinned socket without RST', async () => {
+    let connections = 0;
+    const handler: http.RequestListener = (_req, res) => {
+      setTimeout(() => {
+        res.writeHead(200);
+        res.end('ok');
+      }, 5);
+    };
+    await withServer(handler, async (server) => {
+      server.on('connection', () => {
+        connections += 1;
+      });
+      const request = wrapWithPersistentAgent(supertest.default(server));
+      try {
+        for (let i = 0; i < 100; i++) {
+          const responses = await Promise.all([
+            request.get('/'),
+            request.get('/'),
+            request.get('/'),
+            request.get('/'),
+            request.get('/'),
+          ]);
+          for (const r of responses) expect(r.status).toBe(200);
+        }
+        // 100 iterations × 5 parallel requests through maxSockets:1 should
+        // still use exactly one socket (queueing, not new sockets per call).
+        expect(connections).toBe(1);
+      } finally {
+        destroyPersistentAgent(request);
+      }
+    });
+  }, 15_000);
 });
