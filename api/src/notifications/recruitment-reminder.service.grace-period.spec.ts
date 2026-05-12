@@ -128,7 +128,7 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
     expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
   });
 
-  it('should skip event created 10h before start when cron runs 30min after creation (needs 1h grace)', async () => {
+  it('should skip event created 10h before start when cron runs 30min after creation (short-notice ROK-1240)', async () => {
     const createdAt = new Date('2026-03-15T10:00:00Z');
     const startTime = new Date('2026-03-15T20:00:00Z'); // 10h after creation
     const cronTime = new Date('2026-03-15T10:30:00Z'); // 30min after creation
@@ -147,7 +147,10 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
     expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
   });
 
-  it('should process event created 10h before start when cron runs 2h after creation (1h grace elapsed)', async () => {
+  it('should ALSO skip event created 10h before start even when cron runs 2h later (short-notice suppression is permanent ROK-1240)', async () => {
+    // Pre-ROK-1240 this test used to expect the event to fire after the
+    // 1h grace elapsed. The new policy: events with start - created < 12h
+    // are suppressed entirely, regardless of how much time has passed.
     const createdAt = new Date('2026-03-15T10:00:00Z');
     const startTime = new Date('2026-03-15T20:00:00Z'); // 10h after creation
     const cronTime = new Date('2026-03-15T12:00:00Z'); // 2h after creation
@@ -158,14 +161,14 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
       created_at: createdAt.toISOString(),
       start_time: startTime.toISOString(),
     });
-    mocks.mockDb.execute
-      .mockResolvedValueOnce([event])
-      .mockResolvedValueOnce([{ id: 5 }])
-      .mockResolvedValueOnce([]);
+    mocks.mockDb.execute.mockResolvedValueOnce([event]);
 
-    await service.checkAndSendReminders();
+    const result = await service.checkAndSendReminders();
 
-    expect(mocks.mockNotificationService.create).toHaveBeenCalledTimes(1);
+    expect(result).toBe(false);
+    expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
+    expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+    expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
   });
 
   it('should NOT set Redis bump key for events still within grace period', async () => {
@@ -289,5 +292,154 @@ describe('RecruitmentReminderService — grace period (ROK-826)', () => {
 
     expect(result).toBe(false);
     expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
+  });
+
+  // ROK-1240 — short-notice cadence suppression
+  describe('short-notice suppression (ROK-1240)', () => {
+    it('should suppress an 8h-out event with same-day createdAt (no embed, no DM, no dedup write)', async () => {
+      const now = new Date('2026-04-20T13:00:00Z');
+      jest.setSystemTime(now);
+
+      const createdAt = new Date('2026-04-20T10:00:00Z'); // 3h ago
+      const startTime = new Date('2026-04-20T18:00:00Z'); // 5h from now → 8h gap
+      const event = makeEventRow({
+        id: 555,
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mocks.mockDb.execute.mockResolvedValueOnce([event]);
+
+      const result = await service.checkAndSendReminders();
+
+      expect(result).toBe(false);
+      expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
+      expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
+    });
+
+    it('should NOT suppress when start - created exceeds threshold (12h gap fires normally)', async () => {
+      // 8h-out event scheduled 30h before start → not short-notice. Cron
+      // runs 22h after creation, past any tier grace.
+      const createdAt = new Date('2026-04-20T00:00:00Z');
+      const startTime = new Date('2026-04-21T06:00:00Z'); // 30h gap
+      const cronTime = new Date('2026-04-20T22:00:00Z'); // 22h after creation
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        id: 556,
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([{ id: 5 }])
+        .mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should suppress at boundary minus 1ms (start - created = 12h - 1ms)', async () => {
+      const createdAt = new Date('2026-04-20T10:00:00Z');
+      const startTime = new Date(createdAt.getTime() + 12 * 60 * 60 * 1000 - 1);
+      const cronTime = new Date(createdAt.getTime() + 11 * 60 * 60 * 1000);
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        id: 557,
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mocks.mockDb.execute.mockResolvedValueOnce([event]);
+
+      const result = await service.checkAndSendReminders();
+
+      expect(result).toBe(false);
+      expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
+    });
+
+    it('should NOT suppress at exactly threshold (start - created = 12h)', async () => {
+      // start - created = exactly 12h → threshold means suppress when < 12h,
+      // so this should NOT be suppressed (falls into 12-24h tier with 3h grace).
+      // Cron runs 5h after creation (past 3h grace).
+      const createdAt = new Date('2026-04-20T10:00:00Z');
+      const startTime = new Date(createdAt.getTime() + 12 * 60 * 60 * 1000);
+      const cronTime = new Date(createdAt.getTime() + 5 * 60 * 60 * 1000);
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        id: 558,
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([{ id: 5 }])
+        .mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      expect(mocks.mockNotificationService.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should suppress both channel bump AND DM dispatch in a single gating call', async () => {
+      // Recurrence regression — Gamer Saloon 2026-05-10: event scheduled
+      // same-day, created 6h before start. Both paths must stay silent.
+      const createdAt = new Date('2026-05-10T15:00:00Z');
+      const startTime = new Date('2026-05-10T21:00:00Z'); // 6h gap
+      const cronTime = new Date('2026-05-10T17:00:00Z'); // 4h to start
+      jest.setSystemTime(cronTime);
+
+      const event = makeEventRow({
+        id: 559,
+        created_at: createdAt.toISOString(),
+        start_time: startTime.toISOString(),
+      });
+      mocks.mockDb.execute.mockResolvedValueOnce([event]);
+
+      await service.checkAndSendReminders();
+
+      // Channel embed not posted
+      expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+      // DM not created
+      expect(mocks.mockNotificationService.create).not.toHaveBeenCalled();
+      // Dedup keys NOT marked — re-runs of the cron must remain idempotent
+      // and not "burn" the key for an event we never actually notified on
+      expect(mocks.mockDedupService.checkAndMarkSent).not.toHaveBeenCalled();
+    });
+
+    it('should honour RECRUITMENT_SHORT_NOTICE_HOURS env override (raise threshold to 24h)', async () => {
+      const original = process.env.RECRUITMENT_SHORT_NOTICE_HOURS;
+      process.env.RECRUITMENT_SHORT_NOTICE_HOURS = '24';
+      try {
+        // 18h-gap event would normally NOT be short-notice (< 12h default)
+        // but with threshold raised to 24h it becomes one.
+        const createdAt = new Date('2026-04-20T10:00:00Z');
+        const startTime = new Date('2026-04-21T04:00:00Z'); // 18h gap
+        const cronTime = new Date('2026-04-20T15:00:00Z'); // 5h after creation, past 3h grace
+        jest.setSystemTime(cronTime);
+
+        const event = makeEventRow({
+          id: 560,
+          created_at: createdAt.toISOString(),
+          start_time: startTime.toISOString(),
+        });
+        mocks.mockDb.execute.mockResolvedValueOnce([event]);
+
+        const result = await service.checkAndSendReminders();
+
+        expect(result).toBe(false);
+        expect(mocks.mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+      } finally {
+        if (original === undefined) {
+          delete process.env.RECRUITMENT_SHORT_NOTICE_HOURS;
+        } else {
+          process.env.RECRUITMENT_SHORT_NOTICE_HOURS = original;
+        }
+      }
+    });
   });
 });
