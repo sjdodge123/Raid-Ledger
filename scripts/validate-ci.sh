@@ -240,6 +240,60 @@ _wait_for_container_health() {
     return 1
   fi
   echo -e "${GREEN}pg_stat_statements: loaded${NC}"
+
+  _check_container_security_headers || return 1
+}
+
+# ROK-1158: verify the 6 security headers are present on every response surface
+# (SPA index, /api proxy, AND a static bundle). The bundle URL specifically
+# guards against the nginx `add_header` inheritance trap — the static-asset
+# location block defines its own `add_header Cache-Control`, which kills
+# parent-scope inheritance, so the snippet must be `include`d there too.
+_check_container_security_headers() {
+  local headers index_url='http://127.0.0.1:8080/' health_url='http://127.0.0.1:8080/api/health'
+
+  for url in "$index_url" "$health_url"; do
+    headers=$(curl -sI "$url")
+    _assert_security_headers "$headers" "$url" || return 1
+  done
+
+  local html bundle_path bundle_url
+  html=$(curl -s "$index_url")
+  bundle_path=$(echo "$html" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | head -1)
+  if [ -z "$bundle_path" ]; then
+    echo -e "${RED}Could not locate /assets/*.js bundle URL in index.html${NC}"
+    return 1
+  fi
+  bundle_url="http://127.0.0.1:8080${bundle_path}"
+  headers=$(curl -sI "$bundle_url")
+  _assert_security_headers "$headers" "$bundle_url" || return 1
+
+  if echo "$headers" | grep -qi '^x-xss-protection:'; then
+    echo -e "${RED}X-XSS-Protection must not be present (deprecated)${NC}"
+    return 1
+  fi
+
+  echo -e "${GREEN}Security headers: all 6 present on /, /api/health, and ${bundle_path}${NC}"
+}
+
+_assert_security_headers() {
+  local headers="$1" target="$2"
+  local h
+  for h in 'Content-Security-Policy' 'Strict-Transport-Security' 'X-Content-Type-Options' 'X-Frame-Options' 'Referrer-Policy' 'Permissions-Policy'; do
+    if ! echo "$headers" | grep -qi "^${h}:"; then
+      echo -e "${RED}Missing header ${h} on ${target}${NC}"
+      echo "$headers"
+      return 1
+    fi
+  done
+  if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*report-uri /api/csp-report"; then
+    echo -e "${RED}CSP missing report-uri on ${target}${NC}"
+    return 1
+  fi
+  if ! echo "$headers" | grep -qi "^Content-Security-Policy:.*frame-ancestors 'none'"; then
+    echo -e "${RED}CSP missing frame-ancestors 'none' on ${target}${NC}"
+    return 1
+  fi
 }
 
 # ---------------------------------------------------------------------------
