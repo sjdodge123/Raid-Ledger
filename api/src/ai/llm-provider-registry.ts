@@ -49,9 +49,7 @@ export class LlmProviderRegistry {
    * 3. If neither path yields a provider, return `undefined`.
    */
   async resolveActive(): Promise<ActiveProviderResolution | undefined> {
-    const configured = await this.settings.get(
-      AI_SETTING_KEYS.PROVIDER as SettingKey,
-    );
+    const configured = await this.settings.get(AI_SETTING_KEYS.PROVIDER);
     if (configured) {
       const provider = this.providers.get(configured);
       if (provider) return { provider, source: 'setting' };

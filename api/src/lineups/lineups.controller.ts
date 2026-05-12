@@ -187,11 +187,7 @@ export class LineupsController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.lineupsService.transitionStatus(
-      id,
-      parsed.data,
-      req.user.id,
-    );
+    return this.lineupsService.transitionStatus(id, parsed.data, req.user.id);
   }
 
   /**

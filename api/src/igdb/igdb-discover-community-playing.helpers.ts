@@ -128,7 +128,7 @@ async function queryCommunityPlayingRows(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<CommunityPlayingRow[]> {
   const result = await db.execute<CommunityPlayingRow>(COMMUNITY_PLAYING_QUERY);
-  return result as unknown as CommunityPlayingRow[];
+  return result;
 }
 
 /** Hydrate game details for the ranked ids, preserving rank order. */

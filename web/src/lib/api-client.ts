@@ -88,6 +88,7 @@ export {
     updateUserRole,
     deleteMyAccount,
     adminRemoveUser,
+    adminReactivateUser,
     unlinkDiscord,
     getTasteProfile,
 } from './api/users-api';

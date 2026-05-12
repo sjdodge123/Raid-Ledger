@@ -214,7 +214,7 @@ export function computeTasteVector(
   );
 
   return {
-    dimensions: dimensions as TasteProfileDimensionsDto,
+    dimensions: dimensions,
     vector,
   };
 }

@@ -39,7 +39,7 @@ function makeMockLlmService(responses: (LlmChatResponse | Error)[]): {
     if (r instanceof Error) chat.mockRejectedValueOnce(r);
     else chat.mockResolvedValueOnce(r);
   }
-  return { service: { chat } as MockLlmService, chat };
+  return { service: { chat }, chat };
 }
 
 const VALID_PAYLOAD = JSON.stringify({

@@ -24,17 +24,22 @@ export interface DispatchManyInput {
   payload?: Record<string, unknown>;
 }
 
-/** Load Discord IDs for a set of users in one query. */
+/** Load Discord IDs for a set of users in one query, skipping deactivated (ROK-1260). */
 async function loadDiscordIds(
   db: PostgresJsDatabase<typeof schema>,
   userIds: number[],
 ): Promise<Map<number, string>> {
   const rows = await db
-    .select({ id: schema.users.id, discordId: schema.users.discordId })
+    .select({
+      id: schema.users.id,
+      discordId: schema.users.discordId,
+      deactivatedAt: schema.users.deactivatedAt,
+    })
     .from(schema.users)
     .where(inArray(schema.users.id, userIds));
   const out = new Map<number, string>();
   for (const row of rows) {
+    if (row.deactivatedAt != null) continue;
     if (row.discordId && isDiscordSnowflake(row.discordId))
       out.set(row.id, row.discordId);
   }

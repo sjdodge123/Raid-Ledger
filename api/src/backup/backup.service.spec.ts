@@ -24,7 +24,7 @@ function describeBackupService() {
     };
 
     // Reset mocks
-    mockFs.mkdirSync.mockReturnValue(undefined as unknown as string);
+    mockFs.mkdirSync.mockReturnValue(undefined);
     (mockFs.readdirSync as jest.Mock).mockReturnValue([]);
     (mockFs.statSync as jest.Mock).mockReturnValue({
       size: 1024,

@@ -6,6 +6,7 @@ import type {
   ChurnDetectionService,
   ChurnInputRow,
 } from '../churn-detection.service';
+import { activeUsersFilter } from '../../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -40,6 +41,7 @@ async function loadChurnInputs(db: Db): Promise<ChurnInputRow[]> {
       schema.users,
       eq(schema.users.id, schema.playerIntensitySnapshots.userId),
     )
+    .where(activeUsersFilter())
     .orderBy(asc(schema.playerIntensitySnapshots.weekStart));
   return groupByUser(rows);
 }

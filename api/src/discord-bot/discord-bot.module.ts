@@ -34,6 +34,7 @@ import { RescheduleResponseListener } from './listeners/reschedule-response.list
 import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
 import { DeparturePromoteListener } from './listeners/departure-promote.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
+import { GuildMemberAddListener } from './listeners/guild-member-add.listener';
 import { ActivityListener } from './listeners/activity.listener';
 import { VoiceStateListener } from './listeners/voice-state.listener';
 import {
@@ -132,6 +133,7 @@ import { PlayingCommand } from './commands/playing.command';
     RoachOutInteractionListener,
     DeparturePromoteListener,
     PugInviteListener,
+    GuildMemberAddListener,
     ActivityListener,
     VoiceStateListener,
     GameActivityService,

@@ -65,7 +65,7 @@ function buildPollDetails(
     gameName,
     gameCoverUrl,
     durationMinutes: plan.durationMinutes,
-    slotConfig: plan.slotConfig as Record<string, unknown> | null,
+    slotConfig: plan.slotConfig,
     pollMode: plan.pollMode,
   };
 }
@@ -73,9 +73,7 @@ function buildPollDetails(
 /** Validates that a plan can be restarted, returns prepared data. */
 async function prepareRestart(deps: PlanOpsDeps, plan: PlanRow) {
   const { gameName, gameCoverUrl } = await lookupGameInfo(deps.db, plan.gameId);
-  const pollOptions = regenerateLabels(
-    plan.pollOptions as Array<{ date: string; label: string }>,
-  );
+  const pollOptions = regenerateLabels(plan.pollOptions);
   const newRound = plan.status === 'draft' ? 1 : (plan.pollRound ?? 1) + 1;
   const channelId =
     plan.pollChannelId ??

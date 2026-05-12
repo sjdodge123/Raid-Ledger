@@ -11,6 +11,14 @@ export interface DiscordNotificationJobData {
   title: string;
   message: string;
   payload?: Record<string, unknown>;
+  /**
+   * DEMO_MODE-only test hook (ROK-1260): when set, the processor throws
+   * a synthetic `DiscordAPIError` with the named code BEFORE calling
+   * Discord. Lets the smoke test exercise the 50278 classifier branch
+   * deterministically without a real ex-guild Discord user. Ignored when
+   * `process.env.DEMO_MODE !== 'true'`.
+   */
+  __simulateError?: 50278 | 50007 | 10013;
 }
 
 /**

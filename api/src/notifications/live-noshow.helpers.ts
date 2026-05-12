@@ -7,6 +7,7 @@ import { eq, and, sql, inArray, notInArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { resolveEventCapacity } from '../events/signups-signup.helpers';
 import { resolveDisplayName } from '../users/display-name.helpers';
+import { activeUsersFilter } from '../users/users-active.helpers';
 
 /** Minimum voice presence (seconds) to count as "showed up". */
 export const PRESENCE_THRESHOLD_SEC = 120;
@@ -147,7 +148,7 @@ async function batchResolveDiscordIds(
   const users = await db
     .select({ id: schema.users.id, discordId: schema.users.discordId })
     .from(schema.users)
-    .where(inArray(schema.users.id, userIds));
+    .where(and(inArray(schema.users.id, userIds), activeUsersFilter()));
   return new Map(
     users.filter((u) => u.discordId !== null).map((u) => [u.id, u.discordId!]),
   );
@@ -292,7 +293,7 @@ export async function fetchPhase2Data(
     db
       .select({ id: schema.users.id, discordId: schema.users.discordId })
       .from(schema.users)
-      .where(inArray(schema.users.id, userIds)),
+      .where(and(inArray(schema.users.id, userIds), activeUsersFilter())),
     db
       .select({
         discordUserId: schema.eventVoiceSessions.discordUserId,

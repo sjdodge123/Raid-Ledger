@@ -107,7 +107,7 @@ async function triggerEventSelect(
     discordUserId,
     updateMock,
   );
-  getCollectHandler()!(selectInteraction as unknown as Record<string, unknown>);
+  getCollectHandler()!(selectInteraction);
   await new Promise((resolve) => setTimeout(resolve, 0));
   return { updateMock };
 }

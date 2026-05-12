@@ -46,7 +46,7 @@ describe('buildSignupResponseDto — assignedSlot edge cases', () => {
     'includes assignedSlot when value is %s',
     (slot) => {
       const result = buildSignupResponseDto(
-        baseSignup as Parameters<typeof buildSignupResponseDto>[0],
+        baseSignup,
         baseUser as Parameters<typeof buildSignupResponseDto>[1],
         null,
         slot,
@@ -57,7 +57,7 @@ describe('buildSignupResponseDto — assignedSlot edge cases', () => {
 
   it('omits assignedSlot when not provided', () => {
     const result = buildSignupResponseDto(
-      baseSignup as Parameters<typeof buildSignupResponseDto>[0],
+      baseSignup,
       baseUser as Parameters<typeof buildSignupResponseDto>[1],
       null,
     );
@@ -66,7 +66,7 @@ describe('buildSignupResponseDto — assignedSlot edge cases', () => {
 
   it('omits assignedSlot when undefined is passed', () => {
     const result = buildSignupResponseDto(
-      baseSignup as Parameters<typeof buildSignupResponseDto>[0],
+      baseSignup,
       baseUser as Parameters<typeof buildSignupResponseDto>[1],
       null,
       undefined,
@@ -76,7 +76,7 @@ describe('buildSignupResponseDto — assignedSlot edge cases', () => {
 
   it('omits assignedSlot when empty string is passed', () => {
     const result = buildSignupResponseDto(
-      baseSignup as Parameters<typeof buildSignupResponseDto>[0],
+      baseSignup,
       baseUser as Parameters<typeof buildSignupResponseDto>[1],
       null,
       '',
@@ -87,7 +87,7 @@ describe('buildSignupResponseDto — assignedSlot edge cases', () => {
 
   it('preserves all other fields when assignedSlot is set', () => {
     const result = buildSignupResponseDto(
-      baseSignup as Parameters<typeof buildSignupResponseDto>[0],
+      baseSignup,
       baseUser as Parameters<typeof buildSignupResponseDto>[1],
       null,
       'bench',
@@ -102,12 +102,7 @@ describe('buildSignupResponseDto — assignedSlot edge cases', () => {
   });
 
   it('handles missing user gracefully', () => {
-    const result = buildSignupResponseDto(
-      baseSignup as Parameters<typeof buildSignupResponseDto>[0],
-      undefined,
-      null,
-      'dps',
-    );
+    const result = buildSignupResponseDto(baseSignup, undefined, null, 'dps');
     expect(result.user.id).toBe(0);
     expect(result.user.username).toBe('Unknown');
     expect(result.assignedSlot).toBe('dps');
@@ -118,26 +113,18 @@ describe('buildAnonymousSignupResponseDto — assignedSlot edge cases', () => {
   it.each(['tank', 'healer', 'dps', 'flex', 'player', 'bench'])(
     'includes assignedSlot when value is %s',
     (slot) => {
-      const result = buildAnonymousSignupResponseDto(
-        anonSignup as Parameters<typeof buildAnonymousSignupResponseDto>[0],
-        slot,
-      );
+      const result = buildAnonymousSignupResponseDto(anonSignup, slot);
       expect(result.assignedSlot).toBe(slot);
     },
   );
 
   it('omits assignedSlot when not provided', () => {
-    const result = buildAnonymousSignupResponseDto(
-      anonSignup as Parameters<typeof buildAnonymousSignupResponseDto>[0],
-    );
+    const result = buildAnonymousSignupResponseDto(anonSignup);
     expect(result).not.toHaveProperty('assignedSlot');
   });
 
   it('sets isAnonymous flag', () => {
-    const result = buildAnonymousSignupResponseDto(
-      anonSignup as Parameters<typeof buildAnonymousSignupResponseDto>[0],
-      'bench',
-    );
+    const result = buildAnonymousSignupResponseDto(anonSignup, 'bench');
     expect(result.isAnonymous).toBe(true);
     expect(result.discordUserId).toBe('discord-anon-1');
     expect(result.discordUsername).toBe('AnonWarrior');

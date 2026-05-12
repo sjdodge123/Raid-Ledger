@@ -152,7 +152,7 @@ export function mapDbRowToDetail(
     firstReleaseDate: g.firstReleaseDate
       ? g.firstReleaseDate.toISOString()
       : null,
-    playerCount: g.playerCount as { min: number; max: number } | null,
+    playerCount: g.playerCount,
     twitchGameId: g.twitchGameId,
     crossplay: g.crossplay ?? null,
     earlyAccess: g.earlyAccess ?? false,

@@ -39,6 +39,19 @@ if (!telemetryDisabled && isProduction) {
       ) {
         return null;
       }
+      // ROK-1260: defense-in-depth — drop DiscordAPIError 50278/50007
+      // events. The primary fix is in the processor (it catches these
+      // before Sentry's auto-instrumentation), but if anything ever
+      // re-throws them this filter ensures the noise can't come back.
+      if (
+        exceptionType === 'DiscordAPIError' &&
+        typeof exceptionValue === 'string' &&
+        /code 50278|code 50007|no mutual guilds|Cannot send messages to this user/.test(
+          exceptionValue,
+        )
+      ) {
+        return null;
+      }
       return event;
     },
     // Filter out pg_catalog type introspection queries from the Postgres driver.

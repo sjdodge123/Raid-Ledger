@@ -78,7 +78,7 @@ export class AiProvidersController {
     @Param('key') key: string,
   ): Promise<{ success: boolean }> {
     this.requireKnownProvider(key);
-    await this.settings.set(AI_SETTING_KEYS.PROVIDER as SettingKey, key);
+    await this.settings.set(AI_SETTING_KEYS.PROVIDER, key);
     return { success: true };
   }
 
@@ -106,9 +106,7 @@ export class AiProvidersController {
    * the per-provider "active" badge stays unset.
    */
   private async getActiveProviderKey(): Promise<string> {
-    const explicit = await this.settings.get(
-      AI_SETTING_KEYS.PROVIDER as SettingKey,
-    );
+    const explicit = await this.settings.get(AI_SETTING_KEYS.PROVIDER);
     if (explicit) return explicit;
     const resolution = await this.registry.resolveActive();
     return resolution?.provider.key ?? '';
@@ -244,13 +242,10 @@ export class AiProvidersController {
       }
     }
     if (body.url && key === 'ollama') {
-      await this.settings.set(
-        AI_SETTING_KEYS.OLLAMA_URL as SettingKey,
-        body.url,
-      );
+      await this.settings.set(AI_SETTING_KEYS.OLLAMA_URL, body.url);
     }
     if (body.model) {
-      await this.settings.set(AI_SETTING_KEYS.MODEL as SettingKey, body.model);
+      await this.settings.set(AI_SETTING_KEYS.MODEL, body.model);
     }
   }
 

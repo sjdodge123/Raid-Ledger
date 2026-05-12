@@ -28,7 +28,7 @@ function buildConvertedPollDetails(
     gameName: event.game?.name ?? null,
     gameCoverUrl: event.game?.coverUrl ?? null,
     durationMinutes,
-    slotConfig: event.slotConfig as Record<string, unknown> | null,
+    slotConfig: event.slotConfig,
     pollMode: 'standard',
   };
 }

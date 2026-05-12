@@ -34,7 +34,7 @@ export async function enqueueReenrichJob(
 ): Promise<void> {
   await queue.add(
     'sync',
-    { trigger: 'reenrich-game', gameId } as IgdbSyncJobData,
+    { trigger: 'reenrich-game', gameId },
     {
       jobId: `reenrich-${gameId}`,
       delay: REENRICH_DELAY_MS,

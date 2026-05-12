@@ -62,7 +62,7 @@ export async function resolveCancelStatus(db: Tx, eventId: number) {
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
     .limit(1);
-  return determineCancelStatus(event?.duration as [Date, Date] | null);
+  return determineCancelStatus(event?.duration);
 }
 
 export async function findAssignmentForSignup(db: Tx, signupId: number) {

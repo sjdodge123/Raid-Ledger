@@ -113,12 +113,12 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
         id: 9000001,
         name: 'Trigger Test Game A',
         slug: 'trigger-test-game-a',
-      } as IgdbApiGame,
+      },
       {
         id: 9000002,
         name: 'Trigger Test Game B',
         slug: 'trigger-test-game-b',
-      } as IgdbApiGame,
+      },
     ];
 
     const igdbService = testApp.app.get(IgdbService);
@@ -195,7 +195,7 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
         id: 9100001,
         name: 'Helper Upsert Game',
         slug: 'helper-upsert-game',
-      } as IgdbApiGame,
+      },
     ];
     const received: number[] = [];
     await upsertGamesFromApi(testApp.db, apiGames, (gameId) =>
@@ -349,12 +349,12 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
           id: 8100001,
           name: 'Refresh A',
           slug: 'refresh-a',
-        } as IgdbApiGame,
+        },
         {
           id: 8100002,
           name: 'Refresh B',
           slug: 'refresh-b',
-        } as IgdbApiGame,
+        },
       ]);
 
     const received: number[] = [];
@@ -380,12 +380,12 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
           id: 8200001,
           name: 'Discover A',
           slug: 'discover-a',
-        } as IgdbApiGame,
+        },
         {
           id: 8200002,
           name: 'Discover B',
           slug: 'discover-b',
-        } as IgdbApiGame,
+        },
       ]);
 
     const received: number[] = [];

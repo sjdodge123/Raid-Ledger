@@ -6,6 +6,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { DiscordMember } from './lineup-notification-dm.helpers';
+import { activeUsersFilter } from '../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -19,6 +20,7 @@ export async function findDiscordLinkedMembers(
            u.discord_id AS "discordId"
     FROM users u
     WHERE u.discord_id IS NOT NULL
+      AND u.deactivated_at IS NULL
   `)) as unknown as DiscordMember[];
 }
 
@@ -37,6 +39,7 @@ export async function findInviteeDiscordMembers(
            u.discord_id AS "discordId"
     FROM users u
     WHERE u.discord_id IS NOT NULL
+      AND u.deactivated_at IS NULL
       AND (
         u.id IN (
           SELECT user_id FROM community_lineup_invitees WHERE lineup_id = ${lineupId}
@@ -74,6 +77,7 @@ export async function findMatchMemberUsers(
     JOIN users u ON u.id = lmm.user_id
     WHERE lmm.match_id = ${matchId}
       AND u.discord_id IS NOT NULL
+      AND u.deactivated_at IS NULL
   `)) as unknown as DiscordMember[];
 }
 
@@ -101,6 +105,7 @@ export async function findDiscordMembersByUserIds(
       and(
         isNotNull(schema.users.discordId),
         inArray(schema.users.id, [...userIds]),
+        activeUsersFilter(),
       ),
     );
   return rows as DiscordMember[];

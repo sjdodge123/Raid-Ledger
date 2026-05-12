@@ -140,7 +140,7 @@ type LineupsGatewayWithTiebreaker = LineupsGateway & {
 };
 
 function tbGateway(): LineupsGatewayWithTiebreaker {
-  return gateway as LineupsGatewayWithTiebreaker;
+  return gateway;
 }
 
 function testEmitTiebreakerOpenBracket() {

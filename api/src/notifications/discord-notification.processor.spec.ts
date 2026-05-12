@@ -29,6 +29,8 @@ describe('DiscordNotificationProcessor', () => {
   const mockDiscordNotificationService = {
     resetFailures: jest.fn().mockResolvedValue(undefined),
     recordFailure: jest.fn().mockResolvedValue(undefined),
+    deactivateUser: jest.fn().mockResolvedValue(undefined),
+    isUserDeactivated: jest.fn().mockResolvedValue(false),
   };
 
   const mockSettingsService = {
@@ -303,6 +305,200 @@ describe('DiscordNotificationProcessor', () => {
       ];
       // 4th argument should be mockRows
       expect(sendEmbedDMCall[3]).toBe(mockRows);
+    });
+  });
+
+  // ── ROK-1260: terminal classification for DiscordAPIError codes ──
+  //
+  // When buildAndSendDM throws a DiscordAPIError:
+  //   - code 50278 ("no mutual guilds") → user has left the guild;
+  //     classify as `permanent-deactivate`. Processor MUST call
+  //     `deactivateUser(userId)` and MUST NOT call `recordFailure` or
+  //     re-throw — so BullMQ marks the job `completed` and Sentry's
+  //     auto-instrumentation does not capture the error.
+  //   - code 50007 ("Cannot send messages to this user") → DMs are
+  //     blocked but the user is still in the guild; classify as
+  //     `permanent-prefs-only`. Processor MUST call `recordFailure`
+  //     (so the existing 3-strike auto-disable kicks in) and MUST NOT
+  //     re-throw or call `deactivateUser`.
+  //   - any other error → existing transient retry path preserved:
+  //     handleProcessError is still invoked AND the error rethrows.
+  describe('ROK-1260: terminal DiscordAPIError classification', () => {
+    // Synthesizes a discord.js DiscordAPIError-shaped error so the
+    // processor's classifier can detect the code AND the constructor
+    // name (`DiscordAPIError`) — both checks must pass for the
+    // terminal branch to fire.
+    function makeDiscordApiError(
+      code: number,
+      message: string,
+    ): Error & { code: number } {
+      class DiscordAPIError extends Error {
+        public code: number;
+        constructor(c: number, m: string) {
+          super(m);
+          this.code = c;
+          this.name = 'DiscordAPIError';
+        }
+      }
+      return new DiscordAPIError(code, message);
+    }
+
+    describe('DiscordAPIError[50278] — user left the guild', () => {
+      it('resolves cleanly (does NOT rethrow)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(
+            50278,
+            'Cannot send messages to this user due to having no mutual guilds with the recipient (code 50278)',
+          ),
+        );
+        const job = buildJob({}, { attemptsMade: 0, opts: { attempts: 3 } });
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+      });
+
+      it('calls deactivateUser(userId) exactly once', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(
+            50278,
+            'Cannot send messages to this user due to having no mutual guilds with the recipient (code 50278)',
+          ),
+        );
+        const job = buildJob();
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledTimes(1);
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledWith(1);
+      });
+
+      it('does NOT call recordFailure (counter is irrelevant — user is gone)', async () => {
+        // Even on the FINAL attempt, recordFailure must not fire for
+        // 50278 — the channel-pref counter exists for the prefs-only
+        // case (DMs blocked but user in guild), not for users who have
+        // left. Calling recordFailure here just produces noise as the
+        // 3-strike auto-disable runs against an already-deactivated user.
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(
+            50278,
+            'Cannot send messages to this user due to having no mutual guilds with the recipient (code 50278)',
+          ),
+        );
+        const job = buildJob({}, { attemptsMade: 2, opts: { attempts: 3 } });
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('does NOT reset failures (success path only)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(50278, 'no mutual guilds (code 50278)'),
+        );
+        const job = buildJob();
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.resetFailures,
+        ).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('DiscordAPIError[50007] — Cannot send messages to this user', () => {
+      it('resolves cleanly (does NOT rethrow)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(
+            50007,
+            'Cannot send messages to this user (code 50007)',
+          ),
+        );
+        const job = buildJob({}, { attemptsMade: 0, opts: { attempts: 3 } });
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+      });
+
+      it('calls recordFailure(userId) exactly once', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(
+            50007,
+            'Cannot send messages to this user (code 50007)',
+          ),
+        );
+        const job = buildJob();
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).toHaveBeenCalledTimes(1);
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).toHaveBeenCalledWith(1);
+      });
+
+      it('does NOT call deactivateUser (user is still in the guild)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(
+            50007,
+            'Cannot send messages to this user (code 50007)',
+          ),
+        );
+        const job = buildJob();
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('generic / transient errors — existing path preserved', () => {
+      it('still rethrows non-Discord errors', async () => {
+        const transientError = new Error('Discord API: 500 Internal Error');
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(transientError);
+        const job = buildJob();
+
+        await expect(processor.process(job)).rejects.toThrow(
+          'Discord API: 500 Internal Error',
+        );
+      });
+
+      it('still records failure on FINAL attempt for transient errors', async () => {
+        const transientError = new Error('Discord API: 500 Internal Error');
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(transientError);
+        // attemptsMade = 2, attempts = 3 → final attempt
+        const job = buildJob({}, { attemptsMade: 2, opts: { attempts: 3 } });
+
+        await expect(processor.process(job)).rejects.toThrow();
+
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).toHaveBeenCalledWith(1);
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('does NOT call deactivateUser for unrelated DiscordAPIError codes', async () => {
+        // Code 10003 = Unknown Channel — not a terminal-deactivate signal.
+        // Must follow the transient path (rethrow, no deactivate).
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10003, 'Unknown Channel (code 10003)'),
+        );
+        const job = buildJob();
+
+        await expect(processor.process(job)).rejects.toThrow();
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).not.toHaveBeenCalled();
+      });
     });
   });
 

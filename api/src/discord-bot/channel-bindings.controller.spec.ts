@@ -5,20 +5,21 @@ import { ChannelBindingsService } from './services/channel-bindings.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import type { BindingRecord } from './services/channel-bindings.service';
 
-const makeBinding = (overrides: Partial<BindingRecord> = {}): BindingRecord =>
-  ({
-    id: 'binding-uuid-1',
-    guildId: 'guild-123',
-    channelId: 'channel-456',
-    channelType: 'text',
-    bindingPurpose: 'game-announcements',
-    gameId: null,
-    recurrenceGroupId: null,
-    config: null,
-    createdAt: new Date('2025-01-01T00:00:00Z'),
-    updatedAt: new Date('2025-01-01T00:00:00Z'),
-    ...overrides,
-  }) as BindingRecord;
+const makeBinding = (
+  overrides: Partial<BindingRecord> = {},
+): BindingRecord => ({
+  id: 'binding-uuid-1',
+  guildId: 'guild-123',
+  channelId: 'channel-456',
+  channelType: 'text',
+  bindingPurpose: 'game-announcements',
+  gameId: null,
+  recurrenceGroupId: null,
+  config: null,
+  createdAt: new Date('2025-01-01T00:00:00Z'),
+  updatedAt: new Date('2025-01-01T00:00:00Z'),
+  ...overrides,
+});
 
 let controller: ChannelBindingsController;
 let bindingsService: jest.Mocked<ChannelBindingsService>;

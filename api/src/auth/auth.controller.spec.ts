@@ -274,7 +274,7 @@ function describeAuthControllerRedeemIntent() {
           mockRequest as unknown as Parameters<
             typeof controller.redeemIntent
           >[0],
-          {} as { token: string }, // invalid body — missing token
+          {}, // invalid body — missing token
         ),
       ).rejects.toThrow();
     });

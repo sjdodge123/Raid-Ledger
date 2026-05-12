@@ -520,7 +520,7 @@ describe('EventsController — voice endpoint authorization', () => {
       const result = await controller.getVoiceSessions(10, {
         user: {
           id: creatorId,
-          role: 'member' as UserRole,
+          role: 'member',
           username: 'creator',
           discordId: null,
           impersonatedBy: null,
@@ -567,7 +567,7 @@ describe('EventsController — voice endpoint authorization', () => {
       const result = await controller.getVoiceAttendance(10, {
         user: {
           id: creatorId,
-          role: 'member' as UserRole,
+          role: 'member',
           username: 'creator',
           discordId: null,
           impersonatedBy: null,
@@ -626,7 +626,7 @@ describe('EventsController — voice endpoint authorization', () => {
       const result = await controller.getVoiceAttendance(10, {
         user: {
           id: creatorId,
-          role: 'member' as UserRole,
+          role: 'member',
           username: 'creator',
           discordId: null,
           impersonatedBy: null,
@@ -657,7 +657,7 @@ describe('EventsController — voice endpoint authorization', () => {
       const result = await controller.getEventMetrics(10, {
         user: {
           id: creatorId,
-          role: 'member' as UserRole,
+          role: 'member',
           username: 'creator',
           discordId: null,
           impersonatedBy: null,

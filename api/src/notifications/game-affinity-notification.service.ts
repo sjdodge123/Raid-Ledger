@@ -151,6 +151,7 @@ export class GameAffinityNotificationService {
     const rows = await this.db.execute<{ id: number }>(sql`
       SELECT DISTINCT u.id FROM users u
       WHERE u.id != ${creatorId}
+        AND u.deactivated_at IS NULL
         AND (
           u.id IN (
             SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId}

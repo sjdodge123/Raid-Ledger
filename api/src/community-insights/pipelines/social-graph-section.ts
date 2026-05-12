@@ -9,6 +9,7 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { CliqueDetectionService } from '../clique-detection.service';
+import { activeUsersFilter } from '../../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -57,7 +58,8 @@ async function loadNodes(db: Db): Promise<SocialGraphNodeDto[]> {
     .innerJoin(
       schema.users,
       eq(schema.users.id, schema.playerTasteVectors.userId),
-    );
+    )
+    .where(activeUsersFilter());
   return rows.map((r) => ({
     userId: r.userId,
     username: r.username,

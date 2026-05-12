@@ -92,6 +92,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
   exports: [
     EventsService,
     SignupsService,
+    SignupsRosterService,
     AttendanceService,
     PugsService,
     InviteService,

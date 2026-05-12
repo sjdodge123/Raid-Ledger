@@ -173,9 +173,7 @@ export class LineupPhaseQueueService implements OnModuleInit {
       removed += (await this.removeIfPending(jobId)) ? 1 : 0;
     }
     // ROK-1253: also drop any pending grace-advance job.
-    removed += (await this.removeIfPending(`lineup-grace-${lineupId}`))
-      ? 1
-      : 0;
+    removed += (await this.removeIfPending(`lineup-grace-${lineupId}`)) ? 1 : 0;
     if (removed > 0) {
       this.logger.debug(
         `Cancelled ${removed} phase job(s) for lineup ${lineupId}`,

@@ -57,9 +57,7 @@ describe('LineupChannelSettingsController', () => {
     });
 
     it('validates channelId is provided', async () => {
-      await expect(
-        controller.setLineupChannel({} as { channelId: string }),
-      ).rejects.toThrow();
+      await expect(controller.setLineupChannel({})).rejects.toThrow();
     });
   });
 });

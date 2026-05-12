@@ -1,6 +1,7 @@
 import { Logger, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
+import * as Sentry from '@sentry/nestjs';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { isPerfEnabled, perfLog } from '../common/perf-logger';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
@@ -13,6 +14,44 @@ import {
 } from './discord-notification.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { buildPlaintextContent } from './format-helpers';
+
+type ErrorClass = 'permanent-deactivate' | 'permanent-prefs-only' | 'transient';
+
+/**
+ * Classify a DM-send error to decide the catch branch (ROK-1260).
+ * - 50278 ("no mutual guilds") → user left guild → permanent-deactivate
+ * - 50007 ("Cannot send messages to this user") → DMs blocked but user
+ *   still in guild → permanent-prefs-only (existing 3-strike disable)
+ * - everything else → transient (existing rethrow path)
+ */
+function classifyDiscordError(error: unknown): ErrorClass {
+  if (!error || typeof error !== 'object') return 'transient';
+  const err = error as { code?: unknown; name?: unknown; message?: unknown };
+  if (err.name !== 'DiscordAPIError') return 'transient';
+  if (err.code === 50278) return 'permanent-deactivate';
+  if (err.code === 50007) return 'permanent-prefs-only';
+  return 'transient';
+}
+
+/**
+ * DEMO_MODE-only test hook (ROK-1260): when a job carries `__simulateError`
+ * and DEMO_MODE is on, throw a synthetic `DiscordAPIError` so the smoke
+ * test can deterministically exercise the 50278 classifier branch without
+ * a real ex-guild Discord user. No-op in production.
+ */
+function maybeThrowSimulatedError(data: DiscordNotificationJobData): void {
+  if (process.env.DEMO_MODE !== 'true') return;
+  if (!data.__simulateError) return;
+  const messages: Record<number, string> = {
+    50278: 'Cannot send messages to this user due to having no mutual guilds',
+    50007: 'Cannot send messages to this user',
+    10013: 'Unknown User',
+  };
+  const err = new Error(messages[data.__simulateError] ?? 'Simulated error');
+  err.name = 'DiscordAPIError';
+  (err as Error & { code: number }).code = data.__simulateError;
+  throw err;
+}
 
 /**
  * Bull queue processor for Discord DM delivery (ROK-180 AC-5).
@@ -48,11 +87,19 @@ export class DiscordNotificationProcessor
     this.logger.debug(
       `Processing Discord notification job ${job.id} for user ${userId} (${type})`,
     );
+    if (await this.discordNotificationService.isUserDeactivated(userId)) {
+      this.logger.debug(
+        `ROK-1260: skipping queued job ${job.id} — user ${userId} is deactivated`,
+      );
+      return;
+    }
     if (!this.clientService.isConnected()) {
       this.logger.warn('Discord bot not connected, failing job for retry');
       throw new Error('Discord bot not connected');
     }
+    Sentry.setUser({ id: userId.toString(), username: discordId });
     try {
+      maybeThrowSimulatedError(job.data);
       await this.buildAndSendDM(job.data, discordId);
       await this.discordNotificationService.resetFailures(userId);
       this.logger.log(
@@ -64,6 +111,23 @@ export class DiscordNotificationProcessor
           userId,
         });
     } catch (error) {
+      const kind = classifyDiscordError(error);
+      if (kind === 'permanent-deactivate') {
+        this.logger.warn(
+          `ROK-1260: 50278 for user ${userId} — deactivating, swallowing error`,
+        );
+        await this.discordNotificationService.deactivateUser(userId);
+        return;
+      }
+      if (kind === 'permanent-prefs-only') {
+        this.logger.warn(
+          `ROK-1260: 50007 for user ${userId} — recording failure, swallowing error`,
+        );
+        await this.discordNotificationService
+          .recordFailure(userId)
+          .catch(() => {});
+        return;
+      }
       this.handleProcessError(job, userId, error);
       throw error;
     }

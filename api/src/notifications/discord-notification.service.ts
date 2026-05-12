@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
@@ -12,6 +13,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
+import { deactivateUserViaModuleRef } from './discord-notification-deactivate.helpers';
 import {
   DISCORD_NOTIFICATION_QUEUE,
   RATE_LIMIT_WINDOW_MS,
@@ -48,6 +50,7 @@ export class DiscordNotificationService {
     private readonly settingsService: SettingsService,
     @Inject(REDIS_CLIENT)
     private redis: Redis,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -95,16 +98,29 @@ export class DiscordNotificationService {
     );
   }
 
-  /** Resolve user's Discord ID, returning null if not linked. */
+  /**
+   * Resolve user's Discord ID, returning null if not linked OR if the
+   * user is deactivated (ROK-1260 AC-8 — deactivated users are skipped
+   * from every notification target query).
+   */
   private async resolveDiscordId(userId: number): Promise<string | null> {
     const [user] = await this.db
-      .select({ discordId: schema.users.discordId })
+      .select({
+        discordId: schema.users.discordId,
+        deactivatedAt: schema.users.deactivatedAt,
+      })
       .from(schema.users)
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (!user?.discordId) {
       this.logger.debug(
         `User ${userId}: no Discord linked, skipping Discord notification`,
+      );
+      return null;
+    }
+    if (user.deactivatedAt != null) {
+      this.logger.debug(
+        `User ${userId}: deactivated, skipping Discord notification (ROK-1260)`,
       );
       return null;
     }
@@ -115,6 +131,23 @@ export class DiscordNotificationService {
       return null;
     }
     return user.discordId;
+  }
+
+  /**
+   * Deactivate a user (ROK-1260): flip `deactivated_at` to NOW(),
+   * cancel every upcoming-event signup, write admin notification.
+   * Idempotent — safe to call multiple times for the same user.
+   *
+   * Cross-module deps are resolved via ModuleRef at call time to avoid
+   * a 3-way Notification↔Users↔Events circular DI graph at boot.
+   */
+  async deactivateUser(userId: number): Promise<void> {
+    await deactivateUserViaModuleRef(
+      this.db,
+      this.logger,
+      this.moduleRef,
+      userId,
+    );
   }
 
   /** Check if Discord channel is disabled for this notification type. */
@@ -262,6 +295,21 @@ export class DiscordNotificationService {
    */
   async resetFailures(userId: number): Promise<void> {
     await this.redis.del(`discord-notif:failures:${userId}`);
+  }
+
+  /**
+   * Check whether a user has been deactivated (ROK-1260, Codex P2).
+   * Used by the processor to skip already-queued jobs after the first
+   * 50278 in a burst marks the user deactivated — prevents wasted
+   * Discord API calls for the remaining backlog.
+   */
+  async isUserDeactivated(userId: number): Promise<boolean> {
+    const [row] = await this.db
+      .select({ deactivatedAt: schema.users.deactivatedAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return row?.deactivatedAt != null;
   }
 
   /**

@@ -79,7 +79,7 @@ function buildProfile(overrides: {
     dimensions: {
       ...zeroDims,
       ...(overrides.dimensions ?? {}),
-    } as TasteProfileResult['dimensions'],
+    },
     intensityMetrics: overrides.intensityMetrics ?? {
       intensity: 60,
       focus: 40,

@@ -196,7 +196,7 @@ export function buildPlayerCountMap(
 ): Map<string, number> {
   const map = new Map<string, number>();
   for (const g of allGames) {
-    const pc = g.playerCount as { min: number; max: number } | null;
+    const pc = g.playerCount;
     if (pc?.max) map.set(String(g.igdbId), pc.max);
   }
   return map;

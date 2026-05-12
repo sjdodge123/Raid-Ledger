@@ -6,6 +6,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
+import { activeUsersFilter } from '../../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -45,7 +46,7 @@ export async function filterValidUserIds(
   const rows = await db
     .select({ id: schema.users.id })
     .from(schema.users)
-    .where(inArray(schema.users.id, userIds));
+    .where(and(inArray(schema.users.id, userIds), activeUsersFilter()));
   return rows.map((r) => r.id);
 }
 
@@ -211,7 +212,7 @@ export async function completeStandalonePoll(
       .set({ status: 'archived' })
       .where(eq(schema.communityLineups.id, match.lineupId));
     if (match.linkedEventId) {
-      await cancelLinkedEvent(tx as unknown as Db, match.linkedEventId);
+      await cancelLinkedEvent(tx, match.linkedEventId);
     }
   });
   return { ok: true, linkedEventId: match.linkedEventId ?? undefined };

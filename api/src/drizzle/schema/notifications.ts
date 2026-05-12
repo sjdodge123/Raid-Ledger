@@ -40,6 +40,8 @@ export const notifications = pgTable(
         'role_gap_alert',
         'lineup_steam_nudge',
         'community_lineup',
+        'user_deactivated_discord',
+        'user_reactivated_discord',
         'system',
       ],
     }).notNull(),

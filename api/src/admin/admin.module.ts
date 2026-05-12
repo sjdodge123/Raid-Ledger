@@ -1,9 +1,13 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { AdminController } from './admin.controller';
 import { AdminSettingsController } from './settings.controller';
 import { AdminGamesController } from './settings-games.controller';
 import { BrandingController } from './branding.controller';
 import { DemoTestCoreController } from './demo-test-core.controller';
+import { DemoTestDeactivationController } from './demo-test-deactivation.controller';
+import { NotificationModule } from '../notifications/notification.module';
+import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
 import { DemoTestVoiceController } from './demo-test-voice.controller';
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestSignupsController } from './demo-test-signups.controller';
@@ -43,6 +47,8 @@ import { AiChatTestController } from './ai-chat-test.controller';
     TasteProfileModule,
     CommunityInsightsModule,
     SlowQueriesModule,
+    forwardRef(() => NotificationModule),
+    BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
   controllers: [
     AdminController,
@@ -50,6 +56,7 @@ import { AiChatTestController } from './ai-chat-test.controller';
     AdminGamesController,
     BrandingController,
     DemoTestCoreController,
+    DemoTestDeactivationController,
     DemoTestVoiceController,
     DemoTestScheduledEventsController,
     DemoTestSignupsController,

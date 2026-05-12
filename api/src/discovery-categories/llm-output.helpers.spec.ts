@@ -8,7 +8,7 @@ import {
 function makeLlmService(
   chat: jest.Mock,
 ): Pick<LlmService, 'chat'> & { chat: jest.Mock } {
-  return { chat } as unknown as Pick<LlmService, 'chat'> & { chat: jest.Mock };
+  return { chat };
 }
 
 const VALID_PROPOSAL = {

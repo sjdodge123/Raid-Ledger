@@ -143,13 +143,7 @@ export async function fetchCharacterEquipment(
     );
     if (!raw) return null;
     const iconUrls = await fetchItemIconUrls(raw.data, raw.token);
-    const result = buildEquipmentResult(
-      raw.data as {
-        equipped_item_level?: number;
-        equipped_items?: Record<string, unknown>[];
-      },
-      iconUrls,
-    );
+    const result = buildEquipmentResult(raw.data, iconUrls);
     logEquipmentSample(raw.charName, result, logger);
     return result;
   } catch (err) {

@@ -20,6 +20,7 @@ import {
 import { fetchSteamLibrary } from './users-steam-query.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import { reactivateUserById } from './users-reactivate.helpers';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
 
@@ -345,5 +346,10 @@ export class UsersService {
   /** Find the instance admin (first admin user by ID). */
   async findAdmin(): Promise<{ id: number } | undefined> {
     return findAdminUser(this.db);
+  }
+
+  /** Admin-triggered reactivation (ROK-1260 AC-9). Delegates to helper. */
+  async reactivateUser(userId: number) {
+    return reactivateUserById(this.db, userId, this.logger);
   }
 }

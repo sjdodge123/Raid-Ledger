@@ -967,6 +967,13 @@
       "when": 1779000000000,
       "tag": "0137_lineup_advance_state",
       "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1779000100000,
+      "tag": "0138_add_users_deactivated_at",
+      "breakpoints": true
     }
   ]
 }

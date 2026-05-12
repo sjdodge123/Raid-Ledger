@@ -145,7 +145,7 @@ export function toResponseDto(
     maxAttendees: plan.maxAttendees,
     autoUnbench: plan.autoUnbench,
     durationMinutes: plan.durationMinutes,
-    pollOptions: plan.pollOptions as EventPlanResponseDto['pollOptions'],
+    pollOptions: plan.pollOptions,
     pollDurationHours: plan.pollDurationHours,
     pollMode: plan.pollMode as EventPlanResponseDto['pollMode'],
     pollRound: plan.pollRound,

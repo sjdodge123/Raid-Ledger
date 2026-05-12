@@ -141,7 +141,7 @@ export class ChannelBindingsService {
         })
         .where(eq(schema.channelBindings.id, existing.id))
         .returning();
-      return result as BindingRecord;
+      return result;
     }
     const [result] = await this.db
       .insert(schema.channelBindings)
@@ -155,7 +155,7 @@ export class ChannelBindingsService {
         config: opts.config ?? {},
       })
       .returning();
-    return result as BindingRecord;
+    return result;
   }
 
   /**
@@ -206,7 +206,7 @@ export class ChannelBindingsService {
       .from(schema.channelBindings)
       .where(eq(schema.channelBindings.guildId, guildId));
 
-    return rows as BindingRecord[];
+    return rows;
   }
 
   /**
@@ -233,7 +233,7 @@ export class ChannelBindingsService {
       .from(b)
       .leftJoin(schema.games, eq(b.gameId, schema.games.id))
       .where(eq(b.guildId, guildId));
-    return rows as (BindingRecord & { gameName: string | null })[];
+    return rows;
   }
 
   /**
@@ -246,7 +246,7 @@ export class ChannelBindingsService {
       .where(eq(schema.channelBindings.id, id))
       .limit(1);
 
-    return (row as BindingRecord) ?? null;
+    return row ?? null;
   }
 
   /** Shared single-channel lookup by arbitrary conditions. */
@@ -335,7 +335,7 @@ export class ChannelBindingsService {
       .set(updateSet)
       .where(eq(schema.channelBindings.id, id))
       .returning();
-    return (result as BindingRecord) ?? null;
+    return result ?? null;
   }
 
   /**

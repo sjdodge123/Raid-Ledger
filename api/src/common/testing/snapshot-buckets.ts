@@ -167,10 +167,10 @@ function summarizeHandle(h: unknown): {
   // server port). The original `address()` call returns LOCAL bind only;
   // `remote*` fields are set on connected client sockets.
   if (typeof obj?.remoteAddress === 'string') {
-    summary += `remote=${obj.remoteAddress as string}:${obj.remotePort as number} `;
+    summary += `remote=${obj.remoteAddress}:${obj.remotePort as number} `;
   }
   if (typeof obj?.localAddress === 'string') {
-    summary += `local=${obj.localAddress as string}:${obj.localPort as number} `;
+    summary += `local=${obj.localAddress}:${obj.localPort as number} `;
   }
   const addr = obj?.address;
   if (typeof addr === 'function') {

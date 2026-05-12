@@ -1,8 +1,9 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { gte, desc } from 'drizzle-orm';
+import { and, gte, desc } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { activeUsersFilter } from './users-active.helpers';
 
-/** Find recently joined users (last N days, max M results). */
+/** Find recently joined users (last N days, max M results). Skips deactivated (ROK-1260). */
 export async function findRecentUsers(
   db: PostgresJsDatabase<typeof schema>,
   days: number,
@@ -20,7 +21,7 @@ export async function findRecentUsers(
       createdAt: schema.users.createdAt,
     })
     .from(schema.users)
-    .where(gte(schema.users.createdAt, cutoff))
+    .where(and(gte(schema.users.createdAt, cutoff), activeUsersFilter()))
     .orderBy(desc(schema.users.createdAt))
     .limit(limit);
 }

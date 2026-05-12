@@ -31,7 +31,7 @@ function createMockContext(
     getType: jest.fn(),
     getArgs: jest.fn(),
     getArgByIndex: jest.fn(),
-  } as unknown as ExecutionContext;
+  };
 }
 
 describe('PluginActiveGuard', () => {
