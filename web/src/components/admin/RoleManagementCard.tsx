@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUserManagement } from '../../hooks/use-user-management';
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { useAuth } from '../../hooks/use-auth';
@@ -18,6 +18,18 @@ const SearchIcon = (
 const TrashIcon = (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+);
+
+const ReactivateIcon = (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+);
+
+const MoreVerticalIcon = (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
     </svg>
 );
 
@@ -43,6 +55,63 @@ function DeactivatedBadge() {
     );
 }
 
+function UserActionMenu({ user, isCurrentUser, isDeactivated, onRemove, onReactivate, isPending }: {
+    user: { id: number; username: string };
+    isCurrentUser: boolean;
+    isDeactivated: boolean;
+    onRemove: (u: { id: number; username: string }) => void;
+    onReactivate: (u: { id: number; username: string }) => void;
+    isPending: boolean;
+}) {
+    const [open, setOpen] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const onClick = (e: MouseEvent) => {
+            if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+        };
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', onClick);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onClick);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+
+    if (isCurrentUser && !isDeactivated) return null;
+
+    const handleAction = (fn: () => void) => { setOpen(false); fn(); };
+
+    return (
+        <div ref={rootRef} className="relative">
+            <button type="button" onClick={() => setOpen((v) => !v)} disabled={isPending}
+                aria-haspopup="menu" aria-expanded={open} aria-label={`Actions for ${user.username}`}
+                className="p-1.5 text-dim hover:text-foreground rounded-lg hover:bg-overlay transition-colors disabled:opacity-50">
+                {MoreVerticalIcon}
+            </button>
+            {open && (
+                <div role="menu" className="absolute right-0 top-full mt-1 z-10 min-w-[12rem] bg-panel border border-edge rounded-lg shadow-lg py-1">
+                    {isDeactivated ? (
+                        <button role="menuitem" onClick={() => handleAction(() => onReactivate({ id: user.id, username: user.username }))}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-500/10 transition-colors">
+                            {ReactivateIcon}
+                            Reactivate user
+                        </button>
+                    ) : (
+                        <button role="menuitem" onClick={() => handleAction(() => onRemove({ id: user.id, username: user.username }))}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+                            {TrashIcon}
+                            Remove user
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function UserRowActions({ user, isCurrentUser, isAdmin, isDeactivated, isDisabled, onRoleChange, onRemove, onReactivate, isRemoving, isReactivating }: {
     user: { id: number; username: string; role: string }; isCurrentUser: boolean; isAdmin: boolean;
     isDeactivated: boolean;
@@ -60,20 +129,9 @@ function UserRowActions({ user, isCurrentUser, isAdmin, isDeactivated, isDisable
                 <option value="member">Member</option>
                 <option value="operator">Operator</option>
             </select>
-            {isDeactivated ? (
-                <button onClick={() => onReactivate({ id: user.id, username: user.username })} disabled={isReactivating}
-                    className="px-2 py-1 text-xs bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 rounded transition-colors disabled:opacity-50"
-                    title="Reactivate user">
-                    {isReactivating ? 'Reactivating...' : 'Reactivate'}
-                </button>
-            ) : (
-                !isCurrentUser && (
-                    <button onClick={() => onRemove({ id: user.id, username: user.username })} disabled={isRemoving}
-                        className="p-1.5 text-dim hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10" title="Remove user">
-                        {TrashIcon}
-                    </button>
-                )
-            )}
+            <UserActionMenu user={{ id: user.id, username: user.username }} isCurrentUser={isCurrentUser}
+                isDeactivated={isDeactivated} onRemove={onRemove} onReactivate={onReactivate}
+                isPending={isRemoving || isReactivating} />
         </>
     );
 }
