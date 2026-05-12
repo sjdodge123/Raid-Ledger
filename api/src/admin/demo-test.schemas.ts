@@ -133,7 +133,13 @@ export const SetAutoNominatePrefSchema = z.object({
   enabled: z.boolean(),
 });
 
-const VALID_STATUSES = ['signed_up', 'tentative', 'declined'] as const;
+const VALID_STATUSES = [
+  'signed_up',
+  'tentative',
+  'declined',
+  'roached_out',
+  'departed',
+] as const;
 
 export const CreateTestSignupSchema = z.object({
   eventId: z.number().int().positive(),
