@@ -5,14 +5,15 @@
 - [Configuration Reference](Configuration-Reference)
 
 **Features**
-- [Events and Scheduling](Events-and-Scheduling)
-- [Roster Management](Roster-Management)
 - [Ad-Hoc Voice Events](Ad-Hoc-Voice-Events)
-- [Game Library and IGDB](Game-Library-and-IGDB)
 - [Analytics and Metrics](Analytics-and-Metrics)
+- [Authentication](Authentication)
+- [Community Lineup](Community-Lineup)
+- [Events and Scheduling](Events-and-Scheduling)
+- [Game Library and IGDB](Game-Library-and-IGDB)
 - [Notifications and Reminders](Notifications-and-Reminders)
 - [Plugin System](Plugin-System)
-- [Authentication](Authentication)
+- [Roster Management](Roster-Management)
 
 **Operations**
 - [Backup and Recovery](Backup-and-Recovery)

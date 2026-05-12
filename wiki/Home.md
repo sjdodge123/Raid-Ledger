@@ -19,10 +19,11 @@ Check the container logs for your initial admin credentials, then open [http://l
 - [Configuration Reference](Configuration-Reference) — Environment variables and admin settings
 
 ### Features
-- [Events and Scheduling](Events-and-Scheduling) — Create and manage events
-- [Roster Management](Roster-Management) — Role assignments and PUG invites
 - [Ad-Hoc Voice Events](Ad-Hoc-Voice-Events) — Spontaneous voice channel events
+- [Community Lineup](Community-Lineup) — Nominate, vote, and decide what to play next
+- [Events and Scheduling](Events-and-Scheduling) — Create and manage events
 - [Game Library and IGDB](Game-Library-and-IGDB) — Browse 200,000+ games
+- [Roster Management](Roster-Management) — Role assignments and PUG invites
 - [Analytics and Metrics](Analytics-and-Metrics) — Track community engagement
 - [Notifications and Reminders](Notifications-and-Reminders) — Automated alerts
 - [Plugin System](Plugin-System) — Extend Raid Ledger
