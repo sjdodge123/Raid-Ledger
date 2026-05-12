@@ -181,9 +181,6 @@ export function buildRosterAssignmentResponseDto(
       (row.event_signups.preferredRoles as
         | ('tank' | 'healer' | 'dps')[]
         | null) ?? null,
-    signupStatus: row.event_signups.status as
-      | 'signed_up'
-      | 'tentative'
-      | 'declined',
+    signupStatus: row.event_signups.status as SignupStatus,
   };
 }

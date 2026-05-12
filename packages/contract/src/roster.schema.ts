@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SignupStatusSchema } from './signups.schema.js';
 
 /**
  * Valid role types for roster slots (ROK-114, ROK-183).
@@ -61,8 +62,8 @@ export const RosterAssignmentResponseSchema = z.object({
     }).nullable(),
     /** ROK-452: Preferred roles the player is willing to play */
     preferredRoles: z.array(z.enum(['tank', 'healer', 'dps'])).nullable().optional(),
-    /** ROK-459: Signup attendance status (signed_up, tentative, declined) */
-    signupStatus: z.enum(['signed_up', 'tentative', 'declined']).optional(),
+    /** ROK-459 / ROK-1237: Signup attendance status — canonical enum (covers departed/roached_out too). */
+    signupStatus: SignupStatusSchema.optional(),
 });
 export type RosterAssignmentResponse = z.infer<typeof RosterAssignmentResponseSchema>;
 

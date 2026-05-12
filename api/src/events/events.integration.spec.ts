@@ -11,7 +11,7 @@ import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
-import { events } from '../drizzle/schema';
+import { events, eventSignups } from '../drizzle/schema';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -379,4 +379,60 @@ describe('GET /events/:id/detail (ROK-1046)', () => {
     testDetailShapeParityPerSlice());
   it('returns 404 when the event does not exist', () =>
     testDetail404OnMissingEvent());
+});
+
+// ============================================================
+// ROK-1237: GET /events/:id/detail tolerates roster rows whose
+// underlying signup is in the 'departed' state. Reproduces the
+// enum-drift bug that bricked event detail in production.
+// ============================================================
+
+async function assignAdminToTankSlot(eventId: number) {
+  const res = await testApp.request
+    .patch(`/events/${eventId}/roster`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({
+      assignments: [
+        {
+          userId: testApp.seed.adminUser.id,
+          slot: 'tank',
+          position: 1,
+          isOverride: false,
+        },
+      ],
+    });
+  expect(res.status).toBe(200);
+}
+
+async function testDetailWithDepartedRosterRow() {
+  const eventId = await createDetailFixtureEvent();
+  await assignAdminToTankSlot(eventId);
+
+  // Mutate the admin's signup row directly to 'departed' — this is the state
+  // that bricked the page in prod when the frontend Zod parse rejected the
+  // value (ROK-1237). The endpoint must still respond with 200.
+  await testApp.db
+    .update(eventSignups)
+    .set({ status: 'departed' })
+    .where(eq(eventSignups.eventId, eventId));
+
+  const res = await testApp.request
+    .get(`/events/${eventId}/detail`)
+    .set('Authorization', `Bearer ${adminToken}`);
+
+  expect(res.status).toBe(200);
+  const assignments = res.body.rosterAssignments.assignments as Array<{
+    signupStatus?: string;
+    userId: number;
+  }>;
+  const adminAssignment = assignments.find(
+    (a) => a.userId === testApp.seed.adminUser.id,
+  );
+  expect(adminAssignment).toBeDefined();
+  expect(adminAssignment?.signupStatus).toBe('departed');
+}
+
+describe('GET /events/:id/detail — departed signup (ROK-1237)', () => {
+  it('returns 200 when a roster row has signupStatus="departed"', () =>
+    testDetailWithDepartedRosterRow());
 });
