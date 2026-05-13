@@ -19,11 +19,12 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
+  reseedAdminCreds,
 } from '../common/testing/integration-helpers';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { JwtService } from '@nestjs/jwt';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -201,47 +202,50 @@ function describeBackupCRUD() {
     describeDELETEAdminBackupsTypeFilename());
 
   function describePOSTAdminBackupsTypeFilenameRestore() {
-    it('should restore data from a backup', async () => {
-      // 1. Create some identifiable data
-      await testApp.request
-        .put('/admin/settings/timezone')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ timezone: 'America/New_York' });
+    it('should restore non-sanitized table data from a backup (round-trip)', async () => {
+      // app_settings is permanently sanitized (ROK-1279), so the round-trip
+      // is verified against `games` (a non-sanitized table).
+      // 1. Insert an identifying row
+      await testApp.db.insert(schema.games).values({
+        name: 'pre-backup-name',
+        slug: 'rok-1279-roundtrip',
+      });
 
-      // 2. Create a backup (captures the timezone setting)
+      // 2. Create a backup (captures the row above)
       const createRes = await testApp.request
         .post('/admin/backups')
         .set('Authorization', `Bearer ${adminToken}`);
       const filename = createRes.body.backup.filename as string;
 
-      // 3. Change the data (overwrite timezone)
-      await testApp.request
-        .put('/admin/settings/timezone')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ timezone: 'Europe/London' });
-
-      // Verify it changed
-      const midRes = await testApp.request
-        .get('/admin/settings/timezone')
-        .set('Authorization', `Bearer ${adminToken}`);
-      expect(midRes.body.timezone).toBe('Europe/London');
+      // 3. Mutate the row
+      await testApp.db
+        .update(schema.games)
+        .set({ name: 'mutated-name' })
+        .where(eq(schema.games.slug, 'rok-1279-roundtrip'));
+      const midRows = await testApp.db
+        .select()
+        .from(schema.games)
+        .where(eq(schema.games.slug, 'rok-1279-roundtrip'));
+      expect(midRows[0]?.name).toBe('mutated-name');
 
       // 4. Restore from backup
       const restoreRes = await testApp.request
         .post(`/admin/backups/daily/${filename}/restore`)
         .set('Authorization', `Bearer ${adminToken}`);
-
       expect(restoreRes.status).toBe(201);
       expect(restoreRes.body.success).toBe(true);
 
-      // 5. Re-login (restore may have changed session state)
+      // 5. Re-seed local_credentials (sanitization wipes it; prod reseeds via
+      //    deploy_dev.sh --reset-password) then re-login.
+      await reseedAdminCreds(testApp, testApp.seed);
       adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 
-      // 6. Verify the timezone reverted to the backup value
-      const afterRes = await testApp.request
-        .get('/admin/settings/timezone')
-        .set('Authorization', `Bearer ${adminToken}`);
-      expect(afterRes.body.timezone).toBe('America/New_York');
+      // 6. Verify the row reverted to the backed-up value
+      const afterRows = await testApp.db
+        .select()
+        .from(schema.games)
+        .where(eq(schema.games.slug, 'rok-1279-roundtrip'));
+      expect(afterRows[0]?.name).toBe('pre-backup-name');
     });
 
     it('should create a pre-restore safety snapshot', async () => {
@@ -407,9 +411,8 @@ describeBackup('Backup sanitization (integration, ROK-1279)', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(restoreRes.status).toBe(201);
 
-    // Re-login: restore wiped the session row.
-    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-
+    // No re-login here: sanitization wiped local_credentials, and the
+    // assertions below query testApp.db directly (no HTTP auth needed).
     for (const table of SANITIZED_EXCLUDED_TABLES) {
       const rows = await testApp.db.execute<{ count: string }>(
         sql.raw(`SELECT COUNT(*)::text AS count FROM "${table}"`),
