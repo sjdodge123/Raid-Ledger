@@ -14,6 +14,28 @@ import {
   type GameRow,
 } from './games-dedup-audit.helpers';
 
+// ROK-1277: union-find grouping helper. The file
+// `./games-dedup-union-find.helpers` DOES NOT YET EXIST — the dev agent
+// will create it.
+//
+// We use `require()` inside each test (not a top-level `import`) so the
+// missing module fails only the NEW union-find tests, not the existing
+// bucketing / canonical / runAudit suites in the same file. The expected
+// failure shape is `Cannot find module './games-dedup-union-find.helpers'`,
+// which is a valid TDD red signal.
+type UnionFindGroup = {
+  rows: GameRow[];
+  matchType: 'igdb' | 'steam' | 'name';
+  matchKey: string;
+};
+function loadGroupRowsByConnectedKeys(): (rows: GameRow[]) => UnionFindGroup[] {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require('./games-dedup-union-find.helpers') as {
+    groupRowsByConnectedKeys: (rows: GameRow[]) => UnionFindGroup[];
+  };
+  return mod.groupRowsByConnectedKeys;
+}
+
 function zeros(n: number): number[] {
   return Array.from<number>({ length: n }).fill(0);
 }
@@ -431,5 +453,113 @@ describe('GamesDedupAuditService.persistSnapshot', () => {
     expect(summary.totalDupRows).toBe(1);
     expect(summary.byStrategy).toEqual({ igdb: 1, steam: 0, name: 0 });
     expect(typeof summary.snapshotAt).toBe('string');
+  });
+});
+
+// ============================================================================
+// ROK-1277 — union-find connected-components grouping (failing).
+//
+// Production showed BG3 persisting as TWO rows because the precedence-key
+// bucketing in `bucketRowsByDedupKey` routes a row to ONE bucket only:
+//   row A: igdb_id=119171, steam_app_id=NULL, name="Baldur's Gate 3"
+//          → bucket `igdb:119171`
+//   row B: igdb_id=NULL,    steam_app_id=1086940, name="Baldur's Gate 3"
+//          → bucket `steam:1086940`
+// The two rows share the normalized NAME but neither shares the precedence-
+// winning key, so they land in separate single-row buckets and the audit
+// misses the dup entirely.
+//
+// The fix is union-find over ALL keys a row exposes (igdb, steam, name) —
+// rows connected through ANY shared key collapse into one group.
+//
+// `groupRowsByConnectedKeys(rows)` returns ONLY connected components with
+// ≥ 2 rows. Each group reports a `matchType` reflecting the STRONGEST shared
+// key in the component (igdb > steam > name) and the corresponding `matchKey`
+// for that shared key. The shape contract is:
+//   Array<{ rows: GameRow[]; matchType: 'igdb'|'steam'|'name'; matchKey: string }>.
+// ============================================================================
+describe('groupRowsByConnectedKeys (union-find)', () => {
+  it('groups two rows that share only igdbId — matchType=igdb', () => {
+    const rows = [
+      row({ id: 1, name: 'A', igdbId: 100 }),
+      row({ id: 2, name: 'B', igdbId: 100 }),
+    ];
+    const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
+    const groups = groupRowsByConnectedKeys(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].rows.map((r) => r.id).sort()).toEqual([1, 2]);
+    expect(groups[0].matchType).toBe('igdb');
+    expect(groups[0].matchKey).toBe('100');
+  });
+
+  it('groups two rows that share only steamAppId — matchType=steam', () => {
+    const rows = [
+      row({ id: 3, name: 'Foo', steamAppId: 555 }),
+      row({ id: 4, name: 'Bar', steamAppId: 555 }),
+    ];
+    const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
+    const groups = groupRowsByConnectedKeys(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].matchType).toBe('steam');
+    expect(groups[0].matchKey).toBe('555');
+  });
+
+  it('groups two rows that share only normalized name — matchType=name', () => {
+    const rows = [
+      row({ id: 5, name: 'Slay the Spire 2' }),
+      row({ id: 6, name: 'Slay the Spire II' }),
+    ];
+    const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
+    const groups = groupRowsByConnectedKeys(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].matchType).toBe('name');
+    // normalized form of both is 'slay the spire 2' (Roman numeral + arabic
+    // both normalize to the same digit form).
+    expect(groups[0].matchKey).toMatch(/slay the spire 2/);
+  });
+
+  it("groups BG3 cross-key: igdb-only + same-name steam-only — matchType=name", () => {
+    // The exact production case driving ROK-1277. Rows share ONLY normalized
+    // name; the precedence-bucket implementation routes them to separate
+    // single-row buckets and misses the dup. Union-find joins them via name.
+    const rows = [
+      row({ id: 10, name: "Baldur's Gate 3", igdbId: 119171 }),
+      row({ id: 11, name: "Baldur's Gate 3", steamAppId: 1086940 }),
+    ];
+    const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
+    const groups = groupRowsByConnectedKeys(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].rows.map((r) => r.id).sort()).toEqual([10, 11]);
+    expect(groups[0].matchType).toBe('name');
+    expect(groups[0].matchKey).toMatch(/baldur.s gate 3/);
+  });
+
+  it('reports the STRONGEST shared key when a 3-row component shares igdb (A+B) and name (B+C)', () => {
+    // A+B share igdbId=42 (strong shared key for this component).
+    // B+C share normalized name (weaker shared key).
+    // The component contains all three rows. matchType must reflect the
+    // STRONGEST shared key actually connecting members — here that's igdb.
+    const rows = [
+      row({ id: 20, name: 'Original Title', igdbId: 42 }),
+      row({ id: 21, name: 'Shared Name', igdbId: 42 }),
+      row({ id: 22, name: 'Shared Name' }),
+    ];
+    const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
+    const groups = groupRowsByConnectedKeys(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].rows.map((r) => r.id).sort()).toEqual([20, 21, 22]);
+    expect(groups[0].matchType).toBe('igdb');
+    expect(groups[0].matchKey).toBe('42');
+  });
+
+  it('excludes single-row components from output (only ≥2-row groups returned)', () => {
+    const rows = [
+      row({ id: 30, name: 'Lone One', igdbId: 1 }),
+      row({ id: 31, name: 'Lone Two', igdbId: 2 }),
+      row({ id: 32, name: 'Lone Three', steamAppId: 100 }),
+    ];
+    const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
+    const groups = groupRowsByConnectedKeys(rows);
+    expect(groups).toEqual([]);
   });
 });
