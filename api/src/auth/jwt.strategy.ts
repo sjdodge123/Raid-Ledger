@@ -35,10 +35,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const cached = getCachedAuthUser(payload.sub);
     if (cached) {
-      return buildAuthResult(payload, cached.role, cached.discordId);
+      return buildAuthResult(
+        payload,
+        cached.role,
+        cached.discordId,
+        cached.deactivatedAt,
+      );
     }
     const [user] = await this.db
-      .select({ role: schema.users.role, discordId: schema.users.discordId })
+      .select({
+        role: schema.users.role,
+        discordId: schema.users.discordId,
+        deactivatedAt: schema.users.deactivatedAt,
+      })
       .from(schema.users)
       .where(eq(schema.users.id, payload.sub))
       .limit(1);
@@ -46,8 +55,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     setCachedAuthUser(payload.sub, {
       role: user.role,
       discordId: user.discordId,
+      deactivatedAt: user.deactivatedAt,
     });
-    return buildAuthResult(payload, user.role, user.discordId);
+    return buildAuthResult(
+      payload,
+      user.role,
+      user.discordId,
+      user.deactivatedAt,
+    );
   }
 }
 
@@ -55,12 +70,14 @@ function buildAuthResult(
   payload: JwtPayload,
   role: string,
   discordId: string | null,
+  deactivatedAt: Date | null,
 ) {
   return {
     id: payload.sub,
     username: payload.username,
     role,
     discordId,
+    deactivatedAt,
     impersonatedBy: payload.impersonatedBy || null,
   };
 }

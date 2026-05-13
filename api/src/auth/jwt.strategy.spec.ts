@@ -9,7 +9,7 @@ let strategy: JwtStrategy;
 let mockBlocklist: { isBlocked: jest.Mock };
 let mockDb: { select: jest.Mock };
 
-const mockUser = { role: 'member', discordId: '12345' };
+const mockUser = { role: 'member', discordId: '12345', deactivatedAt: null };
 
 function buildPayload(overrides: Record<string, unknown> = {}) {
   return {

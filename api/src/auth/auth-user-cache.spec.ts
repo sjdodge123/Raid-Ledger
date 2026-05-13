@@ -9,7 +9,11 @@ import {
 afterEach(() => clearAuthUserCache());
 
 describe('auth-user-cache', () => {
-  const userData = { role: 'member' as const, discordId: 'discord-123' };
+  const userData = {
+    role: 'member' as const,
+    discordId: 'discord-123',
+    deactivatedAt: null,
+  };
 
   it('returns null on cache miss', () => {
     expect(getCachedAuthUser(1)).toBeNull();
@@ -27,7 +31,11 @@ describe('auth-user-cache', () => {
   });
 
   it('does not affect other user entries on invalidation', () => {
-    const otherData = { role: 'admin' as const, discordId: 'discord-456' };
+    const otherData = {
+      role: 'admin' as const,
+      discordId: 'discord-456',
+      deactivatedAt: null,
+    };
     setCachedAuthUser(1, userData);
     setCachedAuthUser(2, otherData);
 
@@ -63,7 +71,11 @@ describe('auth-user-cache', () => {
 
   it('clearAuthUserCache removes all entries', () => {
     setCachedAuthUser(1, userData);
-    setCachedAuthUser(2, { role: 'admin', discordId: null });
+    setCachedAuthUser(2, {
+      role: 'admin',
+      discordId: null,
+      deactivatedAt: null,
+    });
 
     clearAuthUserCache();
 

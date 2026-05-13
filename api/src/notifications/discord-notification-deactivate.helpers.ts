@@ -7,6 +7,7 @@ import { UsersService } from '../users/users.service';
 import { NotificationService } from './notification.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
+import { invalidateAuthUser } from '../auth/auth-user-cache';
 
 /**
  * ModuleRef-aware entry point — resolves cross-module deps lazily to
@@ -93,6 +94,9 @@ export async function deactivateUserOrchestrated(
     );
     return;
   }
+  // ROK-1275: drop the cached auth-user row so any in-flight JWT validates
+  // against the fresh deactivated_at value, not the 30-second-stale cache.
+  invalidateAuthUser(row.id);
   deps.logger.log(
     `ROK-1260: deactivated user ${row.id} (${row.username}) — running cancel cascade`,
   );
