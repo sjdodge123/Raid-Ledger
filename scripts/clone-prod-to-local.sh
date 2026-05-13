@@ -3,11 +3,18 @@
 # clone-prod-to-local.sh - Sanitized prod -> local DB clone (ROK-1279)
 # =============================================================================
 # Triggers a sanitized backup on prod, downloads it, restores into the local
-# DB, then resets the local admin password.
+# DB, then resets the local admin password. Preserves local app_settings
+# (API keys) across the clone unless explicitly disabled.
 #
 # Sanitization (server-side, baked into BackupService) excludes ROW DATA for:
 #   app_settings, local_credentials, sessions, consumed_intent_tokens
 # Schema is preserved, rows are empty after restore.
+#
+# Local preservation: app_settings is dumped (pg_dump --data-only --inserts)
+# BEFORE restore, then re-applied AFTER restore. Operator's IGDB/ITAD/Blizzard
+# /OAuth/Sentry keys survive the clone. The other 3 sanitized tables stay
+# empty — local_credentials/sessions have FK→users.id and would attach the
+# local admin password to a now-prod user if preserved.
 #
 # Safety rails (HARDCODED):
 #   - prod_post_safe()/prod_get_safe() whitelist the paths this script may
@@ -15,10 +22,14 @@
 #   - LOCAL_URL must resolve to localhost/127.0.0.1/::1 — checked before any
 #     local curl. Prevents accidental clone-into-staging.
 #   - NEVER issues restore / reset-instance / DELETE against $PROD_URL.
+#   - Interactive confirmation: operator must type 'clone' (--yes skips).
 #
 # Env file: .env.clone at repo root (gitignored), required vars:
 #   PROD_URL, PROD_ADMIN_EMAIL, PROD_ADMIN_PASSWORD,
-#   LOCAL_URL, LOCAL_ADMIN_EMAIL
+#   LOCAL_URL, LOCAL_ADMIN_EMAIL, DATABASE_URL
+# Optional:
+#   PRESERVE_LOCAL_APP_SETTINGS=true   (default: true)
+#   LOCAL_DB_CONTAINER=raid-ledger-db  (default)
 # =============================================================================
 
 set -euo pipefail
@@ -33,6 +44,9 @@ PROD_GET_ALLOWED_PREFIX="/admin/backups"  # exact list endpoint or */download
 
 MODE="fresh"   # default per locked decision #5
 FORCE=false
+SKIP_PROMPT=false
+PRESERVE_FILE="/tmp/rl-preserved-app-settings.sql"
+PRESERVED_NOTE="none"
 
 red()    { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
@@ -44,7 +58,7 @@ usage() {
 clone-prod-to-local.sh — sanitized prod -> local DB clone
 
 USAGE:
-  ./scripts/clone-prod-to-local.sh [--fresh|--latest] [--force]
+  ./scripts/clone-prod-to-local.sh [--fresh|--latest] [--force] [--yes]
   ./scripts/clone-prod-to-local.sh --help
 
 FLAGS:
@@ -52,6 +66,9 @@ FLAGS:
   --latest   Skip the create step; download the most recent existing backup.
   --force    Overwrite a local dump file if one already exists with the same
              name. Default refuses with a helpful message.
+  --yes      Skip the destructive-action confirmation prompt. Use for
+             non-interactive runs. Default: prompt the operator to type
+             'clone' before any prod call.
   --help     Show this help.
 
 REQUIRED .env.clone (repo root, gitignored):
@@ -60,6 +77,12 @@ REQUIRED .env.clone (repo root, gitignored):
   PROD_ADMIN_PASSWORD=...
   LOCAL_URL=http://localhost:3000
   LOCAL_ADMIN_EMAIL=admin@local
+  DATABASE_URL=postgresql://user:password@localhost:5432/raid_ledger
+
+OPTIONAL .env.clone:
+  LOCAL_ADMIN_PASSWORD=...            # for the local login step (auto-reset later)
+  LOCAL_DB_CONTAINER=raid-ledger-db   # docker container name for local Postgres
+  PRESERVE_LOCAL_APP_SETTINGS=true    # preserve API keys across clones (default: true)
 
 SAFETY RAILS (HARDCODED):
   * Prod allowed paths:
@@ -84,6 +107,7 @@ while [[ $# -gt 0 ]]; do
         --fresh)  MODE="fresh"; shift ;;
         --latest) MODE="latest"; shift ;;
         --force)  FORCE=true; shift ;;
+        --yes|-y) SKIP_PROMPT=true; shift ;;
         --help|-h) usage; exit 0 ;;
         *) red "Unknown flag: $1"; usage; exit 1 ;;
     esac
@@ -100,13 +124,17 @@ set -a
 source "$ENV_FILE"
 set +a
 
-REQUIRED_VARS=(PROD_URL PROD_ADMIN_EMAIL PROD_ADMIN_PASSWORD LOCAL_URL LOCAL_ADMIN_EMAIL)
+REQUIRED_VARS=(PROD_URL PROD_ADMIN_EMAIL PROD_ADMIN_PASSWORD LOCAL_URL LOCAL_ADMIN_EMAIL DATABASE_URL)
 for v in "${REQUIRED_VARS[@]}"; do
     if [[ -z "${!v:-}" ]]; then
         red "Missing required var in .env.clone: $v"
         exit 1
     fi
 done
+
+# Defaults for optional vars.
+: "${PRESERVE_LOCAL_APP_SETTINGS:=true}"
+: "${LOCAL_DB_CONTAINER:=raid-ledger-db}"
 
 # ─── Localhost guard (STRICT) ─────────────────────────────────────────────
 if ! [[ "$LOCAL_URL" =~ ^https?://(localhost|127\.0\.0\.1|::1)(:[0-9]+)?(/.*)?$ ]]; then
@@ -160,6 +188,59 @@ if ! curl -fsS -o /dev/null "$LOCAL_URL/api/health" 2>/dev/null \
     exit 2
 fi
 green "  local API healthy"
+
+# ─── Confirmation prompt (destructive action) ─────────────────────────────
+preserve_line="WILL BE PRESERVED:  app_settings (your API keys)"
+if [[ "$PRESERVE_LOCAL_APP_SETTINGS" != "true" ]]; then
+    preserve_line="WILL BE EMPTY AFTER: app_settings (PRESERVE_LOCAL_APP_SETTINGS=false)"
+fi
+cat <<EOF
+
+$(bold "This will WIPE your local Raid Ledger DB at $LOCAL_URL")
+and replace it with a sanitized clone of $PROD_URL.
+
+WILL BE WIPED THEN REPLACED: users, events, games, characters, all non-secret tables
+WILL BE EMPTY AFTER:         local_credentials (admin password reset), sessions, consumed_intent_tokens
+$preserve_line
+
+Local admin password will be regenerated and printed at the end.
+
+EOF
+if [[ "$SKIP_PROMPT" != "true" ]]; then
+    read -r -p "Type 'clone' to continue: " confirm
+    if [[ "$confirm" != "clone" ]]; then
+        yellow "Aborted (confirmation not given)."
+        exit 0
+    fi
+fi
+
+# ─── Step 0.5: preserve local app_settings (if enabled) ───────────────────
+if [[ "$PRESERVE_LOCAL_APP_SETTINGS" == "true" ]]; then
+    bold "Step 0.5: preserving local app_settings (API keys) ..."
+    rm -f "$PRESERVE_FILE"
+    if docker exec "$LOCAL_DB_CONTAINER" pg_dump \
+            --data-only --inserts --table=public.app_settings \
+            "$DATABASE_URL" >"$PRESERVE_FILE" 2>/dev/null; then
+        # Check whether any INSERT lines actually landed in the file.
+        if grep -qE '^INSERT INTO ' "$PRESERVE_FILE"; then
+            row_count=$(grep -cE '^INSERT INTO ' "$PRESERVE_FILE")
+            green "  preserved $row_count app_settings row(s)"
+            PRESERVED_NOTE="app_settings ($row_count rows)"
+        else
+            yellow "  no app_settings rows to preserve (empty table) — skipping re-apply"
+            rm -f "$PRESERVE_FILE"
+            PRESERVED_NOTE="app_settings (empty — nothing to preserve)"
+        fi
+    else
+        yellow "  pg_dump of local app_settings failed (container=$LOCAL_DB_CONTAINER not running?)"
+        yellow "  Continuing without preserve — re-configure API keys via /admin/settings after clone."
+        rm -f "$PRESERVE_FILE"
+        PRESERVED_NOTE="app_settings (preserve failed)"
+    fi
+else
+    yellow "Skipping app_settings preserve (PRESERVE_LOCAL_APP_SETTINGS=false)."
+    PRESERVED_NOTE="none (disabled by env)"
+fi
 
 # ─── Step 1: prod login ───────────────────────────────────────────────────
 bold "Step 1: prod login as $PROD_ADMIN_EMAIL ..."
@@ -288,6 +369,27 @@ RESTORE_RESP=$(local_curl POST "/admin/backups/daily/$FILENAME/restore" \
 }
 green "  restored"
 
+# ─── Step 6.5: re-apply preserved local app_settings ──────────────────────
+if [[ -f "$PRESERVE_FILE" ]]; then
+    bold "Step 6.5: re-applying preserved local app_settings ..."
+    # Defensive truncate: sanitized restore leaves zero rows but a server-config
+    # drift could leave junk; truncate first so the INSERTs from the preserve
+    # file are the only rows.
+    if ! docker exec "$LOCAL_DB_CONTAINER" psql "$DATABASE_URL" \
+            -c "TRUNCATE app_settings" >/dev/null 2>&1; then
+        yellow "  TRUNCATE app_settings failed — re-apply may collide with existing rows."
+    fi
+    if docker exec -i "$LOCAL_DB_CONTAINER" psql "$DATABASE_URL" \
+            <"$PRESERVE_FILE" >/dev/null 2>&1; then
+        green "  re-applied $(grep -cE '^INSERT INTO ' "$PRESERVE_FILE") row(s)"
+    else
+        yellow "  re-apply failed — local app_settings is now empty."
+        yellow "  Re-configure API keys via /admin/settings."
+        PRESERVED_NOTE="app_settings (re-apply failed)"
+    fi
+    rm -f "$PRESERVE_FILE"
+fi
+
 # ─── Step 7: reset local admin password ───────────────────────────────────
 bold "Step 7: resetting local admin password ..."
 bash "$SCRIPT_DIR/deploy_dev.sh" --reset-password --ci || {
@@ -300,8 +402,9 @@ green "  reset done — see deploy_dev.sh output above for the new password."
 # ─── Summary ──────────────────────────────────────────────────────────────
 bold ""
 green "DONE."
-printf '  Prod file:    %s\n' "$FILENAME"
-printf '  Local file:   %s\n' "$LOCAL_FILE"
-printf '  Local URL:    %s\n' "$LOCAL_URL"
-printf '  Mode:         %s\n' "$MODE"
+printf '  Prod file:        %s\n' "$FILENAME"
+printf '  Local file:       %s\n' "$LOCAL_FILE"
+printf '  Local URL:        %s\n' "$LOCAL_URL"
+printf '  Mode:             %s\n' "$MODE"
+printf '  Preserved tables: %s\n' "$PRESERVED_NOTE"
 printf 'Next: log in at %s with the new password above.\n' "$LOCAL_URL"

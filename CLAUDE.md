@@ -91,7 +91,7 @@ This rule exists because parallel agents kept seeing these commits, assuming "no
 - **Ports:** API on `:3000`, Web on `:5173` (Vite may increment to `:5174` if `:5173` is in use — CORS allows both)
 - **DEMO_MODE=true** in root `.env` enables auth bypass with prefilled credentials
 - **Docker volume gotcha (handled automatically):** The deploy script uses `docker start` by name first, falling back to `docker compose` from the main repo's compose file. This prevents worktrees from creating separate volumes with wrong directory prefixes.
-- **Clone prod → local:** `./scripts/clone-prod-to-local.sh` triggers a sanitized prod backup, downloads it, restores into the local DB, and resets the local admin password. Requires `.env.clone` at repo root (`PROD_URL`, `PROD_ADMIN_EMAIL`, `PROD_ADMIN_PASSWORD`, `LOCAL_URL`, `LOCAL_ADMIN_EMAIL`).
+- **Clone prod → local:** `./scripts/clone-prod-to-local.sh` triggers a sanitized prod backup, downloads it, restores into the local DB, resets the local admin password, and preserves your local `app_settings` (API keys) across clones. Requires `.env.clone` at repo root (`PROD_URL`, `PROD_ADMIN_EMAIL`, `PROD_ADMIN_PASSWORD`, `LOCAL_URL`, `LOCAL_ADMIN_EMAIL`, `DATABASE_URL`). Operator must type `clone` to confirm; pass `--yes` for non-interactive runs.
 
 ### Env coordination across agents (STRICT)
 
