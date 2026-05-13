@@ -22,7 +22,16 @@ export interface GameRow {
   cachedAt: Date;
 }
 
-/** Match key for a row, indicates how the dup was detected. */
+/**
+ * Match key for a row in the precedence-based bucketing.
+ *
+ * NOTE (ROK-1277): the audit pipeline no longer uses precedence-key
+ * bucketing for grouping — see `games-dedup-union-find.helpers.ts` for the
+ * connected-components grouping that replaced it. `DedupKey` and
+ * `bucketRowsByDedupKey` remain exported because they're still covered by
+ * unit tests (they're a useful primitive for any future code paths that need
+ * single-precedence bucketing).
+ */
 export type DedupKey = `igdb:${number}` | `steam:${number}` | `name:${string}`;
 
 /**
@@ -32,6 +41,11 @@ export type DedupKey = `igdb:${number}` | `steam:${number}` | `name:${string}`;
  * name is placed in exactly one bucket — the first matching precedence
  * tier. Rows whose normalized name is empty (cannot happen for valid
  * seed data but guards against junk) are silently dropped.
+ *
+ * NOTE (ROK-1277): the audit pipeline (`GamesDedupAuditService.runAudit`)
+ * now uses `groupRowsByConnectedKeys` from `games-dedup-union-find.helpers`
+ * instead of this helper. This function is retained for unit coverage and
+ * potential future single-precedence use cases.
  */
 export function bucketRowsByDedupKey(
   rows: GameRow[],

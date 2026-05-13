@@ -718,3 +718,244 @@ describe('POST /admin/games/dedup-audit/run', () => {
     }
   }, 60_000);
 });
+
+// ===========================================================================
+// ROK-1277 — union-find connected-components grouping (TDD failing block).
+//
+// Production showed BG3 persisting as TWO rows because the precedence-key
+// bucketing (`bucketRowsByDedupKey`) routes a row to ONE bucket only:
+//   row A: igdb_id=119171, steam_app_id=NULL, name="Baldur's Gate 3"
+//          → bucket `igdb:119171`
+//   row B: igdb_id=NULL,    steam_app_id=1086940, name="Baldur's Gate 3"
+//          → bucket `steam:1086940`
+// The two rows share the normalized NAME but neither shares the precedence-
+// winning key, so they land in separate single-row buckets and the audit
+// misses the dup entirely.
+//
+// Until the dev agent ships the union-find grouping in the audit pipeline,
+// every test in this block MUST fail. Expected failure shapes:
+//   - The persisted snapshot has ZERO groups for these cases (current impl
+//     emits single-row buckets and filters them out via `rows.length < 2`).
+//   - Or the persisted snapshot routes the row to the WRONG match_type
+//     (e.g. picks `igdb` when only `name` is shared).
+// ===========================================================================
+describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
+  let testApp: TestApp;
+  let adminToken: string;
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  });
+
+  // -------------------------------------------------------------------------
+  // (a) BG3 cross-key — the exact production failure case.
+  // Row A: igdb only. Row B: steam only. Both share normalized name.
+  // Precedence-bucket routes A → `igdb:119171`, B → `steam:1086940` → MISS.
+  // Union-find joins them via shared normalized name.
+  // -------------------------------------------------------------------------
+  it("BG3 cross-key: igdb-only + steam-only with shared name forms one group (match_type='name')", async () => {
+    const inserted = await testApp.db
+      .insert(schema.games)
+      .values([
+        // Row A: igdb_id set, steam_app_id null.
+        {
+          name: "Baldur's Gate 3",
+          slug: 'bg3-igdb',
+          igdbId: 119171,
+        },
+        // Row B: steam_app_id set, igdb_id null. Same name as A.
+        {
+          name: "Baldur's Gate 3",
+          slug: 'bg3-steam',
+          steamAppId: 1086940,
+        },
+      ])
+      .returning({ id: schema.games.id });
+    const [rowA, rowB] = inserted;
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-audit/run')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+
+    const rows = await readAuditRows(testApp);
+    // Exactly one group containing both ids.
+    expect(rows).toHaveLength(1);
+    const group = rows[0];
+    expect(group.match_type).toBe('name');
+    expect(group.match_key).toMatch(/baldur.s gate 3/);
+    expect(group.group_size).toBe(2);
+
+    const idsInGroup = [group.canonical_game_id, ...group.dup_game_ids].sort();
+    expect(idsInGroup).toEqual([rowA.id, rowB.id].sort());
+
+    // The non-canonical id is reported in dup_game_ids.
+    expect(group.dup_game_ids).toHaveLength(1);
+    expect([rowA.id, rowB.id]).toContain(group.dup_game_ids[0]);
+    expect(group.dup_game_ids[0]).not.toBe(group.canonical_game_id);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // (b) igdb-only + same-name name-only.
+  // Row A has igdb_id + name N. Row B has only name N (no igdb, no steam).
+  // Precedence-bucket routes A → `igdb:X`, B → `name:N` → MISS.
+  // Union-find joins via shared normalized name. matchType=name (only
+  // shared key is name).
+  // -------------------------------------------------------------------------
+  it("igdb-only + name-only with shared name forms one group (match_type='name')", async () => {
+    const inserted = await testApp.db
+      .insert(schema.games)
+      .values([
+        { name: 'Shared Title Alpha', slug: 'sta-igdb', igdbId: 555_001 },
+        { name: 'Shared Title Alpha', slug: 'sta-noid' },
+      ])
+      .returning({ id: schema.games.id });
+    const [rowA, rowB] = inserted;
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-audit/run')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+
+    const rows = await readAuditRows(testApp);
+    expect(rows).toHaveLength(1);
+    const group = rows[0];
+    expect(group.match_type).toBe('name');
+    expect(group.group_size).toBe(2);
+
+    const idsInGroup = [group.canonical_game_id, ...group.dup_game_ids].sort();
+    expect(idsInGroup).toEqual([rowA.id, rowB.id].sort());
+    expect(group.dup_game_ids).toHaveLength(1);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // (c) steam-only + same-name name-only.
+  // Row A has steam_app_id + name N. Row B has only name N.
+  // Precedence-bucket routes A → `steam:Y`, B → `name:N` → MISS.
+  // Union-find joins via shared normalized name. matchType=name.
+  // -------------------------------------------------------------------------
+  it("steam-only + name-only with shared name forms one group (match_type='name')", async () => {
+    const inserted = await testApp.db
+      .insert(schema.games)
+      .values([
+        { name: 'Shared Title Beta', slug: 'stb-steam', steamAppId: 555_002 },
+        { name: 'Shared Title Beta', slug: 'stb-noid' },
+      ])
+      .returning({ id: schema.games.id });
+    const [rowA, rowB] = inserted;
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-audit/run')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+
+    const rows = await readAuditRows(testApp);
+    expect(rows).toHaveLength(1);
+    const group = rows[0];
+    expect(group.match_type).toBe('name');
+    expect(group.group_size).toBe(2);
+
+    const idsInGroup = [group.canonical_game_id, ...group.dup_game_ids].sort();
+    expect(idsInGroup).toEqual([rowA.id, rowB.id].sort());
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // (d) Transitive 3-row chain via two different shared keys.
+  // A — name N + igdb X
+  // B — name N + steam Y (shares name with A, shares steam with C)
+  // C — name "OtherName" + steam Y (shares steam with B only)
+  // A↔B connect via name; B↔C connect via steam_app_id. Union-find merges
+  // all three into ONE component.
+  // Note: games.igdb_id is UNIQUE at the DB level, so only B+C can share
+  // steam_app_id; A's igdb_id is unique to A.
+  // -------------------------------------------------------------------------
+  it('forms one group for a 3-row chain connected through different shared keys (A-B by name, B-C by steam)', async () => {
+    const inserted = await testApp.db
+      .insert(schema.games)
+      .values([
+        // A: igdb + name N. Shares ONLY name with B.
+        {
+          name: 'Chain Title Gamma',
+          slug: 'chain-a',
+          igdbId: 555_003,
+        },
+        // B: steam + name N. Shares name with A, shares steam with C.
+        {
+          name: 'Chain Title Gamma',
+          slug: 'chain-b',
+          steamAppId: 555_004,
+        },
+        // C: steam (same as B's) + DIFFERENT name. Shares ONLY steam with B.
+        {
+          name: 'OtherName',
+          slug: 'chain-c',
+          steamAppId: 555_004,
+        },
+      ])
+      .returning({ id: schema.games.id });
+    const [rowA, rowB, rowC] = inserted;
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-audit/run')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+
+    const rows = await readAuditRows(testApp);
+    // Exactly ONE group — A, B, C all transitively connected.
+    expect(rows).toHaveLength(1);
+    const group = rows[0];
+    expect(group.group_size).toBe(3);
+
+    const idsInGroup = [group.canonical_game_id, ...group.dup_game_ids].sort();
+    expect(idsInGroup).toEqual([rowA.id, rowB.id, rowC.id].sort());
+    expect(group.dup_game_ids).toHaveLength(2);
+  }, 60_000);
+
+  // -------------------------------------------------------------------------
+  // (e) Same name + different igdb_ids — false-positive trade-off.
+  //
+  // Two distinct franchises can share a normalized name (e.g. two unrelated
+  // games both titled "Untitled Goose Game" or franchise reboots with
+  // different IGDB entries). With igdb_id set on both rows, they appear to
+  // be genuinely different titles in IGDB's catalog. Even so, we group them.
+  //
+  // Rationale: this audit favors false positives over false negatives because
+  // the operator reviews every group before Phase 2 merges anything. A false
+  // positive (two unrelated games briefly flagged together) is caught and
+  // dismissed by review; a false negative (the BG3-style miss) is invisible
+  // and Phase 2 silently leaves the duplicate in place.
+  // -------------------------------------------------------------------------
+  it('groups two rows that share normalized name but have DIFFERENT igdb_ids (false-positive trade-off)', async () => {
+    const inserted = await testApp.db
+      .insert(schema.games)
+      .values([
+        { name: 'Collision Title', slug: 'coll-a', igdbId: 555_005 },
+        { name: 'Collision Title', slug: 'coll-b', igdbId: 555_006 },
+      ])
+      .returning({ id: schema.games.id });
+    const [rowA, rowB] = inserted;
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-audit/run')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+
+    const rows = await readAuditRows(testApp);
+    // STILL ONE GROUP via shared name — audit favors false positives over
+    // false negatives. Operator review catches false positives; Phase 2
+    // misses false negatives entirely.
+    expect(rows).toHaveLength(1);
+    const group = rows[0];
+    expect(group.match_type).toBe('name');
+    expect(group.group_size).toBe(2);
+
+    const idsInGroup = [group.canonical_game_id, ...group.dup_game_ids].sort();
+    expect(idsInGroup).toEqual([rowA.id, rowB.id].sort());
+  }, 60_000);
+});
