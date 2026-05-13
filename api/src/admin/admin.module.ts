@@ -15,6 +15,7 @@ import { DemoTestGamesController } from './demo-test-games.controller';
 import { DemoTestLineupController } from './demo-test-lineup.controller';
 import { DemoTestGraceController } from './demo-test-grace.controller';
 import { DemoTestResetController } from './demo-test-reset.controller';
+import { DemoTestFixtureUserController } from './demo-test-fixture-user.controller';
 import { DemoTestStandalonePollController } from './demo-test-standalone-poll.controller';
 import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
@@ -67,6 +68,7 @@ import { GamesDedupAuditService } from './games-dedup-audit.service';
     DemoTestLineupController,
     DemoTestGraceController,
     DemoTestResetController,
+    DemoTestFixtureUserController,
     DemoTestStandalonePollController,
     DemoTestRecruitmentController,
     AiChatTestController,
