@@ -54,6 +54,7 @@ function describeAuthControllerRedeemIntent() {
     username: 'testuser',
     role: 'member' as UserRole,
     discordId: null,
+    deactivatedAt: null,
     impersonatedBy: null,
   };
 

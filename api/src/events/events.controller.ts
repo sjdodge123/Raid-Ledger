@@ -16,6 +16,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
+import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { EventsService } from './events.service';
@@ -63,7 +64,7 @@ export class EventsController {
   ) {}
 
   @Post()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async create(
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
@@ -140,7 +141,7 @@ export class EventsController {
   }
 
   @Patch(':id')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -168,7 +169,7 @@ export class EventsController {
   }
 
   @Patch(':id/reschedule')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async reschedule(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -188,7 +189,7 @@ export class EventsController {
   }
 
   @Patch(':id/cancel')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async cancel(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -208,7 +209,7 @@ export class EventsController {
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async delete(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -222,7 +223,7 @@ export class EventsController {
   }
 
   @Post(':id/invite-member')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async inviteMember(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,
@@ -240,7 +241,7 @@ export class EventsController {
   }
 
   @Patch(':id/series')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async updateSeries(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -262,7 +263,7 @@ export class EventsController {
   }
 
   @Delete(':id/series')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async deleteSeries(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -283,7 +284,7 @@ export class EventsController {
   }
 
   @Patch(':id/series/cancel')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async cancelSeries(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
@@ -305,7 +306,7 @@ export class EventsController {
   }
 
   @Post(':id/share')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async shareEvent(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,

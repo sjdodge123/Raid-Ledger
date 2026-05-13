@@ -28,6 +28,7 @@ import {
 } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../../auth/optional-jwt.guard';
 import { RolesGuard } from '../../auth/roles.guard';
+import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { SchedulingService } from './scheduling.service';
 
@@ -61,7 +62,7 @@ export class SchedulingController {
 
   /** POST /lineups/:lineupId/schedule/:matchId/suggest — suggest a slot. */
   @Post(':lineupId/schedule/:matchId/suggest')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   @HttpCode(HttpStatus.CREATED)
   async suggestSlot(
     @Param('matchId', ParseIntPipe) matchId: number,
@@ -81,7 +82,7 @@ export class SchedulingController {
 
   /** POST /lineups/:lineupId/schedule/:matchId/vote — toggle a vote. */
   @Post(':lineupId/schedule/:matchId/vote')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   @HttpCode(HttpStatus.OK)
   async toggleVote(
     @Param('matchId', ParseIntPipe) matchId: number,
@@ -107,7 +108,7 @@ export class SchedulingController {
    * separately.
    */
   @Post(':lineupId/schedule/:matchId/create-event')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   @HttpCode(HttpStatus.CREATED)
   async createEventFromSlot(
     @Param('matchId', ParseIntPipe) matchId: number,
@@ -128,7 +129,7 @@ export class SchedulingController {
 
   /** POST /lineups/:lineupId/schedule/:matchId/cancel — cancel poll (operator). */
   @Post(':lineupId/schedule/:matchId/cancel')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   @HttpCode(HttpStatus.OK)
   async cancelPoll(
@@ -140,7 +141,7 @@ export class SchedulingController {
 
   /** DELETE /lineups/:lineupId/schedule/:matchId/votes — retract all votes. */
   @Delete(':lineupId/schedule/:matchId/votes')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async retractAllVotes(
     @Param('matchId', ParseIntPipe) matchId: number,

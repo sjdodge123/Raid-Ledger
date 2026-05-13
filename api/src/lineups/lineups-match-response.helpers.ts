@@ -5,11 +5,17 @@
 import { NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  CarriedForwardEntryDto,
   GroupedMatchesResponseDto,
   MatchDetailResponseDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import { findLineupById, countDistinctVoters } from './lineups-query.helpers';
+import {
+  countDistinctVoters,
+  countVotesPerGame,
+  findEntriesWithGames,
+  findLineupById,
+} from './lineups-query.helpers';
 import {
   findMatchesByLineup,
   findMatchMembers,
@@ -82,21 +88,49 @@ export async function buildGroupedMatchesResponse(
 
   const threshold = lineup.matchThreshold ?? 35;
 
-  const [matches, voterRows] = await Promise.all([
+  const [matches, voterRows, entries, voteRows] = await Promise.all([
     findMatchesByLineup(db, lineupId),
     countDistinctVoters(db, lineupId),
+    findEntriesWithGames(db, lineupId),
+    countVotesPerGame(db, lineupId),
   ]);
 
   const totalVoters = voterRows[0]?.total ?? 0;
   const matchIds = matches.map((m) => m.id);
   const matchMemberRows = await findMatchMembers(db, matchIds);
+  const voteMap = new Map(voteRows.map((v) => [v.gameId, v.voteCount]));
 
   return groupMatchesIntoTiers(
     matches,
     matchMemberRows,
     threshold,
     totalVoters,
+    mapCarriedForwardEntries(entries, voteMap),
   );
+}
+
+/**
+ * Build the `carriedForward` chip-strip payload (ROK-1274).
+ * Filters entries with a non-null `carriedOverFrom` back-reference and maps
+ * each to the contract shape. `voteMap` is the per-game tally already
+ * computed for the decided view's tier counts, so we reuse it here.
+ */
+export function mapCarriedForwardEntries(
+  entries: Awaited<ReturnType<typeof findEntriesWithGames>>,
+  voteMap: Map<number, number>,
+): CarriedForwardEntryDto[] {
+  return entries
+    .filter((e) => e.carriedOverFrom !== null)
+    .map((e) => ({
+      gameId: e.gameId,
+      gameName: e.gameName,
+      gameCoverUrl: e.gameCoverUrl,
+      voteCount: voteMap.get(e.gameId) ?? 0,
+      nominatedBy: {
+        id: e.nominatedById,
+        displayName: e.nominatedByName,
+      },
+    }));
 }
 
 /** Group matches into scheduling/almostThere/rallyYourCrew tiers. */
@@ -105,12 +139,13 @@ function groupMatchesIntoTiers(
   memberRows: MatchMemberRow[],
   threshold: number,
   totalVoters: number,
+  carriedForward: CarriedForwardEntryDto[],
 ): GroupedMatchesResponseDto {
   const result: GroupedMatchesResponseDto = {
     scheduling: [],
     almostThere: [],
     rallyYourCrew: [],
-    carriedForward: [],
+    carriedForward,
     matchThreshold: threshold,
     totalVoters,
   };

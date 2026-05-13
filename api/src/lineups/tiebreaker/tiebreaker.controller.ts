@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../../auth/roles.guard';
+import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import { Roles } from '../../auth/roles.decorator';
 import {
   StartTiebreakerSchema,
@@ -45,7 +46,7 @@ export class TiebreakerController {
 
   /** POST /lineups/:id/tiebreaker — start tiebreaker (operator). */
   @Post()
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   @HttpCode(HttpStatus.CREATED)
   async start(@Param('id', ParseIntPipe) id: number, @Body() body: unknown) {
@@ -58,7 +59,7 @@ export class TiebreakerController {
 
   /** POST /lineups/:id/tiebreaker/dismiss — dismiss (operator). */
   @Post('dismiss')
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   @HttpCode(HttpStatus.OK)
   async dismiss(@Param('id', ParseIntPipe) id: number) {
@@ -68,6 +69,7 @@ export class TiebreakerController {
 
   /** POST /lineups/:id/tiebreaker/bracket-vote — vote on matchup. */
   @Post('bracket-vote')
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.OK)
   async bracketVote(
     @Param('id', ParseIntPipe) id: number,
@@ -83,6 +85,7 @@ export class TiebreakerController {
 
   /** POST /lineups/:id/tiebreaker/veto — submit a veto. */
   @Post('veto')
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.OK)
   async submitVeto(
     @Param('id', ParseIntPipe) id: number,
@@ -98,7 +101,7 @@ export class TiebreakerController {
 
   /** POST /lineups/:id/tiebreaker/resolve — force-resolve (operator). */
   @Post('resolve')
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   @HttpCode(HttpStatus.OK)
   async forceResolve(@Param('id', ParseIntPipe) id: number) {

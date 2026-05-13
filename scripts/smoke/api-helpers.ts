@@ -94,6 +94,69 @@ export async function getAdminToken(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Invitee token — non-admin smoke fixture user (ROK-1276)
+// ---------------------------------------------------------------------------
+
+// The lineup-confirmation-pills smoke tests need a non-admin persona to
+// exercise the invitee branches of `getLineupPersona`. The admin user always
+// resolves to `organizer` when they're the creator. We mint a stable
+// `role: 'member'` fixture user via `/admin/test/seed-fixture-user` and
+// cache its JWT for the lifetime of the worker process — same shape as
+// `getAdminToken` above so call-sites are interchangeable.
+
+interface InviteeFixture {
+    userId: number;
+    discordId: string;
+    jwt: string;
+}
+
+let _cachedInvitee: InviteeFixture | null = null;
+let _inviteePromise: Promise<InviteeFixture> | null = null;
+
+async function fetchInviteeFixture(
+    adminToken: string,
+): Promise<InviteeFixture> {
+    const res = await fetch(`${API_BASE}/admin/test/seed-fixture-user`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken}`,
+        },
+    });
+    if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(
+            `seed-fixture-user failed: ${res.status} ${body.slice(0, 200)}`,
+        );
+    }
+    return (await res.json()) as InviteeFixture;
+}
+
+/**
+ * Resolve the smoke-invitee fixture user and return its JWT. The fixture is
+ * idempotent server-side (stable `discord_id`) so re-entry returns the same
+ * `userId`. Cached at module level — first caller pays the API round-trip,
+ * the rest get the cached token. Mirrors `getAdminToken` semantics.
+ */
+export async function getInviteeToken(): Promise<string> {
+    const fixture = await getInviteeFixture();
+    return fixture.jwt;
+}
+
+/** Like `getInviteeToken` but exposes `userId` for tests that need it. */
+export async function getInviteeFixture(): Promise<InviteeFixture> {
+    if (_cachedInvitee) return _cachedInvitee;
+    if (_inviteePromise) return _inviteePromise;
+    _inviteePromise = (async () => {
+        const adminToken = await getAdminToken();
+        return fetchInviteeFixture(adminToken);
+    })();
+    _cachedInvitee = await _inviteePromise;
+    _inviteePromise = null;
+    return _cachedInvitee;
+}
+
+// ---------------------------------------------------------------------------
 // HTTP helpers
 // ---------------------------------------------------------------------------
 

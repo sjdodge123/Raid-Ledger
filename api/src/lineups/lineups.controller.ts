@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../auth/roles.guard';
+import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { Roles } from '../auth/roles.decorator';
 import {
   AbortLineupSchema,
@@ -52,7 +53,7 @@ export class LineupsController {
 
   /** POST /lineups — create a new lineup (operator/admin). */
   @Post()
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   @HttpCode(HttpStatus.CREATED)
   async create(
@@ -105,6 +106,7 @@ export class LineupsController {
 
   /** POST /lineups/:id/vote — toggle a vote on a game (ROK-936). */
   @Post(':id/vote')
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.OK)
   async vote(
     @Param('id', ParseIntPipe) id: number,
@@ -125,6 +127,7 @@ export class LineupsController {
 
   /** POST /lineups/:id/nominate — add a game to a lineup. */
   @Post(':id/nominate')
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.CREATED)
   async nominate(
     @Param('id', ParseIntPipe) id: number,
@@ -145,6 +148,7 @@ export class LineupsController {
 
   /** DELETE /lineups/:id/nominations/:gameId — remove a nomination. */
   @Delete(':id/nominations/:gameId')
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeNomination(
     @Param('id', ParseIntPipe) id: number,
@@ -159,7 +163,7 @@ export class LineupsController {
 
   /** POST /lineups/:id/abort — force-archive a lineup (operator/admin) (ROK-1062). */
   @Post(':id/abort')
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   @HttpCode(HttpStatus.OK)
   async abort(
@@ -176,7 +180,7 @@ export class LineupsController {
 
   /** PATCH /lineups/:id/status — transition status (operator/admin). */
   @Patch(':id/status')
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   async transitionStatus(
     @Param('id', ParseIntPipe) id: number,
@@ -195,6 +199,7 @@ export class LineupsController {
    * Allowed for admin/operator or the original creator.
    */
   @Patch(':id/metadata')
+  @UseGuards(NotDeactivatedGuard)
   async updateMetadata(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: unknown,
@@ -220,6 +225,7 @@ export class LineupsController {
 
   /** POST /lineups/:id/matches/:matchId/join — bandwagon join (ROK-937). */
   @Post(':id/matches/:matchId/join')
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.OK)
   async joinMatch(
     @Param('id', ParseIntPipe) id: number,
@@ -236,7 +242,7 @@ export class LineupsController {
 
   /** POST /lineups/:id/matches/:matchId/advance — operator advance (ROK-937). */
   @Post(':id/matches/:matchId/advance')
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   @HttpCode(HttpStatus.OK)
   async advanceMatch(
@@ -259,7 +265,7 @@ export class LineupsController {
    * Admin/operator only.
    */
   @Post(':id/invitees')
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   async addInvitees(
     @Param('id', ParseIntPipe) id: number,
@@ -282,7 +288,7 @@ export class LineupsController {
    * Operator-only. Disabling preserves the slug for re-enabling.
    */
   @Patch(':id/public-share')
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   async togglePublicShare(
     @Param('id', ParseIntPipe) id: number,
@@ -305,7 +311,7 @@ export class LineupsController {
    * Admin/operator only.
    */
   @Delete(':id/invitees/:userId')
-  @UseGuards(RolesGuard)
+  @UseGuards(NotDeactivatedGuard, RolesGuard)
   @Roles('operator')
   async removeInvitee(
     @Param('id', ParseIntPipe) id: number,
