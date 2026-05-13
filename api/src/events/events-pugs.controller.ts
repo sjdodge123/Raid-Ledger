@@ -12,6 +12,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { PugsService } from './pugs.service';
 import {
   CreatePugSlotSchema,
@@ -27,7 +28,7 @@ export class EventsPugsController {
   constructor(private readonly pugsService: PugsService) {}
 
   @Post(':id/pugs')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async createPug(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,
@@ -54,7 +55,7 @@ export class EventsPugsController {
   }
 
   @Patch(':id/pugs/:pugId')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async updatePug(
     @Param('id', ParseIntPipe) eventId: number,
     @Param('pugId', ParseUUIDPipe) pugId: string,
@@ -76,7 +77,7 @@ export class EventsPugsController {
   }
 
   @Post(':id/pugs/:pugId/regenerate-code')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async regeneratePugInviteCode(
     @Param('id', ParseIntPipe) eventId: number,
     @Param('pugId', ParseUUIDPipe) pugId: string,
@@ -91,7 +92,7 @@ export class EventsPugsController {
   }
 
   @Delete(':id/pugs/:pugId')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async deletePug(
     @Param('id', ParseIntPipe) eventId: number,
     @Param('pugId', ParseUUIDPipe) pugId: string,

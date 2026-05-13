@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
+import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { AttendanceService } from './attendance.service';
 import { EventsService } from './events.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
@@ -105,7 +106,7 @@ export class EventsAttendanceController {
   }
 
   @Patch(':id/attendance')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async recordAttendance(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,
