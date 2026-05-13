@@ -30,6 +30,7 @@ function buildMockRequest(userId = 1): AuthenticatedRequest {
       username: 'testuser',
       role: 'member',
       discordId: null,
+      deactivatedAt: null,
       impersonatedBy: null,
     },
   };

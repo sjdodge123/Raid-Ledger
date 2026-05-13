@@ -221,7 +221,7 @@ function sendWith(token: string, ep: Endpoint) {
     'Authorization',
     `Bearer ${token}`,
   );
-  return ep.body !== undefined ? req.send(ep.body) : req;
+  return ep.body !== undefined ? req.send(ep.body as string | object) : req;
 }
 
 describe('NotDeactivatedGuard — integration (ROK-1275)', () => {
@@ -238,9 +238,7 @@ describe('NotDeactivatedGuard — integration (ROK-1275)', () => {
     });
 
     it(`${ep.name}: active user is NOT blocked by the gate`, async () => {
-      const user = await createMember(
-        `active-${ep.name.replace(/\W+/g, '-')}`,
-      );
+      const user = await createMember(`active-${ep.name.replace(/\W+/g, '-')}`);
       await ensureCacheConsistent(user.id, false);
       const token = signFor(user);
       const res = await sendWith(token, ep);

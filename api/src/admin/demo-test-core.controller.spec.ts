@@ -305,6 +305,7 @@ function clearGameTimeConfirmationTests(
         username: 'test',
         role: 'admin' as const,
         discordId: null,
+        deactivatedAt: null,
         impersonatedBy: null,
       },
     };
@@ -479,6 +480,7 @@ function resetOnboardingTests(getController: GetController) {
         username: 'admin',
         role: 'admin' as const,
         discordId: null,
+        deactivatedAt: null,
         impersonatedBy: null,
       },
     };

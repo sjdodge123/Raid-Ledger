@@ -9,7 +9,9 @@ function buildContext(user: Partial<AuthenticatedUser> | undefined) {
   } as unknown as ExecutionContext;
 }
 
-function buildUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
+function buildUser(
+  overrides: Partial<AuthenticatedUser> = {},
+): AuthenticatedUser {
   return {
     id: 1,
     username: 'tester',

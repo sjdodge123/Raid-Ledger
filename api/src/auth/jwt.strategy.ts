@@ -34,14 +34,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token has been revoked');
     }
     const cached = getCachedAuthUser(payload.sub);
-    if (cached) {
-      return buildAuthResult(
-        payload,
-        cached.role,
-        cached.discordId,
-        cached.deactivatedAt,
-      );
-    }
+    if (cached) return buildAuthResult(payload, cached);
+    const user = await this.loadAuthUser(payload.sub);
+    setCachedAuthUser(payload.sub, user);
+    return buildAuthResult(payload, user);
+  }
+
+  private async loadAuthUser(userId: number) {
     const [user] = await this.db
       .select({
         role: schema.users.role,
@@ -49,35 +48,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         deactivatedAt: schema.users.deactivatedAt,
       })
       .from(schema.users)
-      .where(eq(schema.users.id, payload.sub))
+      .where(eq(schema.users.id, userId))
       .limit(1);
     if (!user) throw new UnauthorizedException('User no longer exists');
-    setCachedAuthUser(payload.sub, {
-      role: user.role,
-      discordId: user.discordId,
-      deactivatedAt: user.deactivatedAt,
-    });
-    return buildAuthResult(
-      payload,
-      user.role,
-      user.discordId,
-      user.deactivatedAt,
-    );
+    return user;
   }
 }
 
 function buildAuthResult(
   payload: JwtPayload,
-  role: string,
-  discordId: string | null,
-  deactivatedAt: Date | null,
+  user: { role: string; discordId: string | null; deactivatedAt: Date | null },
 ) {
   return {
     id: payload.sub,
     username: payload.username,
-    role,
-    discordId,
-    deactivatedAt,
+    role: user.role,
+    discordId: user.discordId,
+    deactivatedAt: user.deactivatedAt,
     impersonatedBy: payload.impersonatedBy || null,
   };
 }
