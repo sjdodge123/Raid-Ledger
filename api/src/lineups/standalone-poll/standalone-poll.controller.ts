@@ -17,6 +17,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import {
   CreateSchedulingPollSchema,
   type SchedulingPollResponseDto,
@@ -40,6 +41,7 @@ export class StandalonePollController {
 
   /** Mark a standalone poll as completed (after reschedule or event creation). */
   @Post(':matchId/complete')
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.OK)
   async complete(
     @Param('matchId', ParseIntPipe) matchId: number,
@@ -62,6 +64,7 @@ export class StandalonePollController {
    * No role guard — any authenticated user can create.
    */
   @Post()
+  @UseGuards(NotDeactivatedGuard)
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() body: unknown,
