@@ -73,6 +73,24 @@ export async function seedBaseline(
   return { adminUser, adminPassword, adminEmail, game };
 }
 
+/**
+ * Re-insert the seeded admin's local_credentials row after a restore.
+ * Restore sanitizes local_credentials (ROK-1279). Production reseeds via
+ * `deploy_dev.sh --reset-password` in `scripts/clone-prod-to-local.sh` step 9;
+ * tests mirror that here so subsequent loginAsAdmin() works as before.
+ */
+export async function reseedAdminCreds(
+  testApp: TestApp,
+  seed: SeededData,
+): Promise<void> {
+  const passwordHash = await bcrypt.hash(seed.adminPassword, 4);
+  await testApp.db.insert(schema.localCredentials).values({
+    email: seed.adminEmail,
+    passwordHash,
+    userId: seed.adminUser.id,
+  });
+}
+
 const DEADLOCK_MAX_RETRIES = 5;
 const DEADLOCK_BASE_DELAY_MS = 200;
 

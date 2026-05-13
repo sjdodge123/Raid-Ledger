@@ -4,10 +4,14 @@ import {
   Post,
   Delete,
   Param,
+  Res,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { AdminGuard } from '../auth/admin.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { BackupService } from './backup.service';
@@ -31,6 +35,23 @@ export class BackupController {
     const filename = filepath.split('/').pop()!;
     const backup = backups.find((b) => b.filename === filename);
     return { success: true, message: `Backup created: ${filename}`, backup };
+  }
+
+  @Get(':type/:filename/download')
+  downloadBackup(
+    @Param('type') type: string,
+    @Param('filename') filename: string,
+    @Res({ passthrough: false }) res: Response,
+  ): void {
+    this.validateType(type);
+    const absPath = this.backupService.getBackupFilePath(
+      type as 'daily' | 'migration',
+      filename,
+    );
+    const basename = path.basename(absPath);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${basename}"`);
+    fs.createReadStream(absPath).pipe(res);
   }
 
   @Delete(':type/:filename')

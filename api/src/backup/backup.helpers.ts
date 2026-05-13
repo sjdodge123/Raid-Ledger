@@ -9,13 +9,24 @@ import * as path from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
+/** Build `--exclude-table-data=<t>` flags for each sanitized table. */
+function excludeTableDataFlags(tables?: readonly string[]): string[] {
+  if (!tables || tables.length === 0) return [];
+  return tables.map((t) => `--exclude-table-data=${t}`);
+}
+
 /** Build pg_dump args for custom format. */
-function pgDumpArgs(outputPath: string, dbUrl: string): string[] {
+function pgDumpArgs(
+  outputPath: string,
+  dbUrl: string,
+  excludeTableData?: readonly string[],
+): string[] {
   return [
     '--format=custom',
     '--no-owner',
     '--no-privileges',
     `--file=${outputPath}`,
+    ...excludeTableDataFlags(excludeTableData),
     dbUrl,
   ];
 }
@@ -24,8 +35,12 @@ function pgDumpArgs(outputPath: string, dbUrl: string): string[] {
 export async function runPgDumpDirect(
   outputPath: string,
   dbUrl: string,
+  excludeTableData?: readonly string[],
 ): Promise<void> {
-  await execFileAsync('pg_dump', pgDumpArgs(outputPath, dbUrl));
+  await execFileAsync(
+    'pg_dump',
+    pgDumpArgs(outputPath, dbUrl, excludeTableData),
+  );
 }
 
 /** Run pg_dump via Docker container (dev). */
@@ -33,6 +48,7 @@ export async function runPgDumpDocker(
   outputPath: string,
   dbUrl: string,
   container: string,
+  excludeTableData?: readonly string[],
 ): Promise<void> {
   const containerTmp = '/tmp/backup.dump';
   await execFileAsync('docker', [
@@ -43,6 +59,7 @@ export async function runPgDumpDocker(
     '--no-owner',
     '--no-privileges',
     `--file=${containerTmp}`,
+    ...excludeTableDataFlags(excludeTableData),
     dbUrl,
   ]);
   await execFileAsync('docker', [
