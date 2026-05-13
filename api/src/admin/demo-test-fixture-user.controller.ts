@@ -81,13 +81,22 @@ export class DemoTestFixtureUserController {
       .from(schema.users)
       .where(eq(schema.users.discordId, SMOKE_INVITEE_DISCORD_ID))
       .limit(1);
-    if (existing[0]) return existing[0];
+    if (existing[0]) {
+      // Ensure pre-existing fixture rows have onboarding completed so the
+      // wizard never blocks the lineup detail view (idempotent).
+      await this.db
+        .update(schema.users)
+        .set({ onboardingCompletedAt: new Date() })
+        .where(eq(schema.users.id, existing[0].id));
+      return existing[0];
+    }
     const [created] = await this.db
       .insert(schema.users)
       .values({
         discordId: SMOKE_INVITEE_DISCORD_ID,
         username: SMOKE_INVITEE_USERNAME,
         role: 'member',
+        onboardingCompletedAt: new Date(),
       })
       .returning({
         id: schema.users.id,

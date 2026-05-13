@@ -71,9 +71,9 @@ test.beforeAll(async ({}, testInfo) => {
     inviteeToken = invitee.jwt;
     gameIds = await fetchGameIds(adminToken, 3);
 
-    // Admin creates the lineup (default visibility: public) so the invitee
-    // resolves to `invitee-*` rather than `uninvited` per
-    // `canParticipateInLineup`.
+    // Admin creates the lineup, then explicitly adds the fixture user to
+    // the invitee list so `canParticipateInLineup` / persona logic
+    // resolves to `invitee-*` rather than `uninvited`.
     const { id } = await createLineupOrRetry(
         adminToken,
         {
@@ -86,6 +86,10 @@ test.beforeAll(async ({}, testInfo) => {
         workerPrefix,
     );
     lineupId = id;
+    await apiPost(adminToken, `/lineups/${id}/invitees`, {
+        userIds: [invitee.userId],
+    });
+    await awaitProcessing(adminToken);
 });
 
 // ---------------------------------------------------------------------------
