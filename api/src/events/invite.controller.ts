@@ -9,6 +9,7 @@ import {
   Header,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { InviteService } from './invite.service';
 import { OgMetaService } from './og-meta.service';
 import { InviteCodeClaimSchema } from '@raid-ledger/contract';
@@ -54,7 +55,7 @@ export class InviteController {
    * Optional role override allows user to select their preferred role (ROK-394).
    */
   @Post(':code/claim')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async claimInvite(
     @Param('code') code: string,
     @Request() req: AuthenticatedRequest,

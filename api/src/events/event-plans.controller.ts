@@ -13,6 +13,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import {
   CreateEventPlanSchema,
   ConvertEventToPlanSchema,
@@ -74,7 +75,7 @@ export class EventPlansController {
    * Requires authentication.
    */
   @Post()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async create(
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
@@ -99,7 +100,7 @@ export class EventPlansController {
    * Requires authentication.
    */
   @Post('from-event/:eventId')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async convertFromEvent(
     @Param('eventId', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,
@@ -148,7 +149,7 @@ export class EventPlansController {
    * Requires authentication. Only the creator can cancel.
    */
   @Patch(':id/cancel')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
@@ -161,7 +162,7 @@ export class EventPlansController {
    * Requires authentication. Only the creator can restart.
    */
   @Patch(':id/restart')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async restart(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,

@@ -10,6 +10,10 @@ export interface AuthenticatedUser {
   username: string;
   role: UserRole;
   discordId: string | null;
+  /** Non-null when the user was auto-deactivated by ROK-1260 (left Discord
+   * guild). Gated write endpoints reject these via NotDeactivatedGuard
+   * (ROK-1275). Null = active. */
+  deactivatedAt: Date | null;
   impersonatedBy: number | null;
 }
 

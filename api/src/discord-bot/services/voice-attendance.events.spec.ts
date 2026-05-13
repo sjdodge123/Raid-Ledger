@@ -416,6 +416,7 @@ describe('EventsController — voice endpoint authorization', () => {
     role: 'admin' as UserRole,
     username: 'admin',
     discordId: null,
+    deactivatedAt: null,
     impersonatedBy: null,
   };
   const operatorUser = {
@@ -423,6 +424,7 @@ describe('EventsController — voice endpoint authorization', () => {
     role: 'operator' as UserRole,
     username: 'operator',
     discordId: null,
+    deactivatedAt: null,
     impersonatedBy: null,
   };
   const memberUser = {
@@ -430,6 +432,7 @@ describe('EventsController — voice endpoint authorization', () => {
     role: 'member' as UserRole,
     username: 'member',
     discordId: null,
+    deactivatedAt: null,
     impersonatedBy: null,
   };
 
@@ -523,6 +526,7 @@ describe('EventsController — voice endpoint authorization', () => {
           role: 'member',
           username: 'creator',
           discordId: null,
+          deactivatedAt: null,
           impersonatedBy: null,
         },
       });
@@ -570,6 +574,7 @@ describe('EventsController — voice endpoint authorization', () => {
           role: 'member',
           username: 'creator',
           discordId: null,
+          deactivatedAt: null,
           impersonatedBy: null,
         },
       });
@@ -629,6 +634,7 @@ describe('EventsController — voice endpoint authorization', () => {
           role: 'member',
           username: 'creator',
           discordId: null,
+          deactivatedAt: null,
           impersonatedBy: null,
         },
       });
@@ -660,6 +666,7 @@ describe('EventsController — voice endpoint authorization', () => {
           role: 'member',
           username: 'creator',
           discordId: null,
+          deactivatedAt: null,
           impersonatedBy: null,
         },
       });

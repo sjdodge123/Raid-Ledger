@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { SignupsService } from './signups.service';
 import { EventsService } from './events.service';
 import {
@@ -36,7 +37,7 @@ export class EventsSignupsController {
   ) {}
 
   @Post(':id/signup')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async signup(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,
@@ -71,7 +72,7 @@ export class EventsSignupsController {
   }
 
   @Patch(':id/roster')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async updateRoster(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,
@@ -124,7 +125,7 @@ export class EventsSignupsController {
   }
 
   @Patch(':id/signups/:signupId/confirm')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async confirmSignup(
     @Param('id', ParseIntPipe) eventId: number,
     @Param('signupId', ParseIntPipe) signupId: number,
@@ -145,7 +146,7 @@ export class EventsSignupsController {
   }
 
   @Patch(':id/signup/status')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async updateSignupStatus(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,

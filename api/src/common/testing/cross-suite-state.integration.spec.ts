@@ -61,7 +61,11 @@ function describeOriginalResets(testAppRef: { current: TestApp }) {
   it('clears the auth-user cache so stale role/discordId data does not leak', async () => {
     const testApp = testAppRef.current;
     const staleId = 999_999;
-    setCachedAuthUser(staleId, { role: 'member', discordId: 'stale' });
+    setCachedAuthUser(staleId, {
+      role: 'member',
+      discordId: 'stale',
+      deactivatedAt: null,
+    });
     expect(getCachedAuthUser(staleId)).not.toBeNull();
 
     testApp.seed = await truncateAllTables(testApp.db);

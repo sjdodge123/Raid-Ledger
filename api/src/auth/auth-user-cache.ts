@@ -12,6 +12,7 @@ import type { UserRole } from '@raid-ledger/contract';
 export interface CachedAuthUser {
   role: UserRole;
   discordId: string | null;
+  deactivatedAt: Date | null;
 }
 
 interface CacheEntry {
