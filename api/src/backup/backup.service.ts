@@ -30,6 +30,19 @@ const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
 const DEFAULT_DB_CONTAINER = 'raid-ledger-db';
 
+// ROK-1279: tables whose ROW DATA is excluded from every dump produced by this
+// service. Schema is preserved (so restore works); contents are not. Local
+// bootstrap repopulates app_settings from env; --reset-password rehydrates
+// local_credentials.
+const SANITIZED_EXCLUDED_TABLES = [
+  'app_settings',
+  'local_credentials',
+  'sessions',
+  'consumed_intent_tokens',
+] as const;
+
+const SAFE_FILENAME = /^[a-zA-Z0-9_.-]+$/;
+
 @Injectable()
 export class BackupService implements OnModuleInit {
   private readonly logger = new Logger(BackupService.name);
@@ -166,6 +179,23 @@ export class BackupService implements OnModuleInit {
     );
   }
 
+  /**
+   * Resolve a sanitized absolute path for the given backup file, or throw
+   * NotFoundException. Used by the streaming download endpoint. Path traversal
+   * attempts collapse to 404 — never 400 — to avoid leaking whether a path
+   * shape was malformed vs. a file is missing (ROK-1279).
+   */
+  getBackupFilePath(type: 'daily' | 'migration', filename: string): string {
+    const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
+    const notFound = `Backup file not found: ${type}/${filename}`;
+    if (!SAFE_FILENAME.test(filename)) throw new NotFoundException(notFound);
+    const resolved = path.resolve(dir, filename);
+    if (path.dirname(resolved) !== path.resolve(dir))
+      throw new NotFoundException(notFound);
+    if (!fs.existsSync(resolved)) throw new NotFoundException(notFound);
+    return resolved;
+  }
+
   /** Delete a specific backup file. */
   deleteBackup(type: 'daily' | 'migration', filename: string): void {
     this.validateFilename(filename);
@@ -272,13 +302,22 @@ export class BackupService implements OnModuleInit {
     }
   }
 
-  /** Run pg_dump (direct or via Docker). */
+  /** Run pg_dump (direct or via Docker), excluding ROW DATA for sanitized tables. */
   private async runPgDump(outputPath: string): Promise<void> {
     try {
       if (!this.dbContainer) {
-        await runPgDumpDirect(outputPath, this.databaseUrl);
+        await runPgDumpDirect(
+          outputPath,
+          this.databaseUrl,
+          SANITIZED_EXCLUDED_TABLES,
+        );
       } else {
-        await runPgDumpDocker(outputPath, this.databaseUrl, this.dbContainer);
+        await runPgDumpDocker(
+          outputPath,
+          this.databaseUrl,
+          this.dbContainer,
+          SANITIZED_EXCLUDED_TABLES,
+        );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
