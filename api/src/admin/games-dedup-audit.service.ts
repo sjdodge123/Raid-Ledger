@@ -1,17 +1,19 @@
 /**
- * ROK-1271: GamesDedupAuditService.
+ * ROK-1271 / ROK-1277: GamesDedupAuditService.
  *
- * Phase 0 of ROK-1270: read-only audit of duplicate `games` rows.
- * Returns dup groups, per-loser blast-radius counts (17 FK tables), and
- * a summary. NO mutations — purely SELECT queries.
+ * Read-only audit of duplicate `games` rows. Returns dup groups, per-loser
+ * blast-radius counts (23 FK tables), and a summary. NO mutations — purely
+ * SELECT queries.
  *
  * Algorithm:
  *   1. Load (id, name, slug, igdbId, itadGameId, steamAppId, cachedAt)
  *      from every row in `games`.
- *   2. Bucket rows by precedence key: igdb → steam → name.
- *   3. For each bucket with > 1 rows: pick canonical (itad → igdb → min id),
- *      everything else is a "dup id".
- *   4. For every dup id, run the 17-table blast-radius counter in parallel.
+ *   2. (ROK-1277) Build connected components of rows joined by ANY shared
+ *      key (igdb_id, steam_app_id, normalized name) via union-find.
+ *   3. For each component with > 1 rows: pick canonical (itad → igdb → min
+ *      id); everything else is a "dup id". `matchType` reports the strongest
+ *      key actually shared inside the component (igdb > steam > name).
+ *   4. For every dup id, run the 23-table blast-radius counter in parallel.
  *   5. Sort groups by total dups DESC, blast radius by total downstream DESC.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -20,15 +22,14 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import {
-  bucketRowsByDedupKey,
   computeBlastRadiusForId,
   pickCanonicalId,
   totalBlastRadius,
   type BlastRadiusCounts,
   type BlastRadiusRow,
-  type DedupKey,
   type GameRow,
 } from './games-dedup-audit.helpers';
+import { groupRowsByConnectedKeys } from './games-dedup-union-find.helpers';
 import {
   computeUniqueConflicts,
   type UniqueConflictCounts,
@@ -109,8 +110,8 @@ export class GamesDedupAuditService {
 
   async runAudit(): Promise<DedupAuditResponse> {
     const rows = await this.loadGameRows();
-    const buckets = bucketRowsByDedupKey(rows);
-    const groups = buildGroups(buckets);
+    const connected = groupRowsByConnectedKeys(rows);
+    const groups = buildGroups(connected);
     const dupIds = groups.flatMap((g) => g.dupIds);
     this.logger.log(
       `dedup-audit: ${rows.length} games, ${groups.length} groups, ${dupIds.length} dup rows`,
@@ -196,30 +197,24 @@ export class GamesDedupAuditService {
   }
 }
 
-function buildGroups(buckets: Map<DedupKey, GameRow[]>): DedupGroup[] {
+function buildGroups(
+  connectedGroups: Array<{
+    rows: GameRow[];
+    matchType: DedupMatchType;
+    matchKey: string;
+  }>,
+): DedupGroup[] {
   const groups: DedupGroup[] = [];
-  for (const [key, rows] of buckets.entries()) {
+  for (const { rows, matchType, matchKey } of connectedGroups) {
     if (rows.length < 2) continue;
     const canonicalId = pickCanonicalId(rows);
     const dupIds = rows
       .map((r) => r.id)
       .filter((id) => id !== canonicalId)
       .sort((a, b) => a - b);
-    const { matchType, matchKey } = parseKey(key);
     groups.push({ matchType, matchKey, canonicalId, dupIds });
   }
   return groups;
-}
-
-function parseKey(key: DedupKey): {
-  matchType: DedupMatchType;
-  matchKey: string;
-} {
-  if (key.startsWith('igdb:'))
-    return { matchType: 'igdb', matchKey: key.slice(5) };
-  if (key.startsWith('steam:'))
-    return { matchType: 'steam', matchKey: key.slice(6) };
-  return { matchType: 'name', matchKey: key.slice(5) };
 }
 
 function compareGroups(a: DedupGroup, b: DedupGroup): number {

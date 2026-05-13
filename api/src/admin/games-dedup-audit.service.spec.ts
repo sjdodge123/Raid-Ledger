@@ -518,7 +518,7 @@ describe('groupRowsByConnectedKeys (union-find)', () => {
     expect(groups[0].matchKey).toMatch(/slay the spire 2/);
   });
 
-  it("groups BG3 cross-key: igdb-only + same-name steam-only — matchType=name", () => {
+  it('groups BG3 cross-key: igdb-only + same-name steam-only — matchType=name', () => {
     // The exact production case driving ROK-1277. Rows share ONLY normalized
     // name; the precedence-bucket implementation routes them to separate
     // single-row buckets and misses the dup. Union-find joins them via name.
