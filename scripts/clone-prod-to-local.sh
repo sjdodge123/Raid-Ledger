@@ -25,8 +25,10 @@
 #   - Interactive confirmation: operator must type 'clone' (--yes skips).
 #
 # Env file: .env.clone at repo root (gitignored), required vars:
-#   PROD_URL, PROD_ADMIN_EMAIL, PROD_ADMIN_PASSWORD,
-#   LOCAL_URL, LOCAL_ADMIN_EMAIL, DATABASE_URL
+#   PROD_URL, LOCAL_URL, LOCAL_ADMIN_EMAIL, DATABASE_URL
+# Prod auth (pick ONE):
+#   PROD_BEARER_TOKEN                  (paste from browser/DM auth)
+#   PROD_ADMIN_EMAIL + PROD_ADMIN_PASSWORD  (script logs in via /auth/local)
 # Optional:
 #   PRESERVE_LOCAL_APP_SETTINGS=true   (default: true)
 #   LOCAL_DB_CONTAINER=raid-ledger-db  (default)
@@ -124,13 +126,24 @@ set -a
 source "$ENV_FILE"
 set +a
 
-REQUIRED_VARS=(PROD_URL PROD_ADMIN_EMAIL PROD_ADMIN_PASSWORD LOCAL_URL LOCAL_ADMIN_EMAIL DATABASE_URL)
+REQUIRED_VARS=(PROD_URL LOCAL_URL LOCAL_ADMIN_EMAIL DATABASE_URL)
 for v in "${REQUIRED_VARS[@]}"; do
     if [[ -z "${!v:-}" ]]; then
         red "Missing required var in .env.clone: $v"
         exit 1
     fi
 done
+
+# Either PROD_BEARER_TOKEN (preferred — paste from Discord/web session)
+# OR PROD_ADMIN_EMAIL + PROD_ADMIN_PASSWORD (script logs in via /auth/local).
+if [[ -z "${PROD_BEARER_TOKEN:-}" ]]; then
+    for v in PROD_ADMIN_EMAIL PROD_ADMIN_PASSWORD; do
+        if [[ -z "${!v:-}" ]]; then
+            red "Missing prod auth: set PROD_BEARER_TOKEN, or set both PROD_ADMIN_EMAIL+PROD_ADMIN_PASSWORD."
+            exit 1
+        fi
+    done
+fi
 
 # Defaults for optional vars.
 : "${PRESERVE_LOCAL_APP_SETTINGS:=true}"
@@ -242,24 +255,37 @@ else
     PRESERVED_NOTE="none (disabled by env)"
 fi
 
-# ─── Step 1: prod login ───────────────────────────────────────────────────
-bold "Step 1: prod login as $PROD_ADMIN_EMAIL ..."
-LOGIN_BODY=$(jq -n --arg e "$PROD_ADMIN_EMAIL" --arg p "$PROD_ADMIN_PASSWORD" \
-    '{email:$e, password:$p}')
-LOGIN_RESP=$(prod_post_safe /auth/local \
-    -H 'Content-Type: application/json' \
-    -d "$LOGIN_BODY") || {
-    red "Prod login failed."
-    red "  PROD_URL=$PROD_URL  PROD_ADMIN_EMAIL=$PROD_ADMIN_EMAIL"
-    red "  (password not shown)"
-    exit 1
-}
-TOKEN=$(printf '%s' "$LOGIN_RESP" | jq -r '.access_token // empty')
-if [[ -z "$TOKEN" ]]; then
-    red "Prod login: no access_token in response."
-    exit 1
+# ─── Step 1: prod auth ────────────────────────────────────────────────────
+if [[ -n "${PROD_BEARER_TOKEN:-}" ]]; then
+    bold "Step 1: using PROD_BEARER_TOKEN (skipping /auth/local login) ..."
+    TOKEN="$PROD_BEARER_TOKEN"
+    # Sanity-check the token by hitting the allow-listed list endpoint.
+    if ! prod_get_safe /admin/backups \
+            -H "Authorization: Bearer $TOKEN" \
+            -o /dev/null >/dev/null 2>&1; then
+        red "Token rejected by $PROD_URL/admin/backups (expired or insufficient role?)."
+        exit 1
+    fi
+    green "  token accepted"
+else
+    bold "Step 1: prod login as $PROD_ADMIN_EMAIL ..."
+    LOGIN_BODY=$(jq -n --arg e "$PROD_ADMIN_EMAIL" --arg p "$PROD_ADMIN_PASSWORD" \
+        '{email:$e, password:$p}')
+    LOGIN_RESP=$(prod_post_safe /auth/local \
+        -H 'Content-Type: application/json' \
+        -d "$LOGIN_BODY") || {
+        red "Prod login failed."
+        red "  PROD_URL=$PROD_URL  PROD_ADMIN_EMAIL=$PROD_ADMIN_EMAIL"
+        red "  (password not shown)"
+        exit 1
+    }
+    TOKEN=$(printf '%s' "$LOGIN_RESP" | jq -r '.access_token // empty')
+    if [[ -z "$TOKEN" ]]; then
+        red "Prod login: no access_token in response."
+        exit 1
+    fi
+    green "  authenticated"
 fi
-green "  authenticated"
 
 prod_auth=( -H "Authorization: Bearer $TOKEN" )
 
