@@ -70,16 +70,18 @@ export class GuildReconciliationService {
     );
   }
 
-  /** Pull the current guild member list; returns null when bot offline. */
+  /**
+   * Pull the current guild member list.
+   *
+   * Returns null ONLY when the bot is disconnected (`getGuild()` returned
+   * null inside the helper) — that's a benign no-op heartbeat. Discord API
+   * errors (403, missing GuildMembers intent, network, rate-limit) bubble up
+   * so `CronJobService` records a real failure instead of a healthy no-op.
+   * Codex P2 (2026-05-14): the previous blanket catch hid every fault as
+   * "bot disconnected", masking silent breakage.
+   */
   private async fetchCurrentGuildMemberIds(): Promise<Set<string> | null> {
-    try {
-      return await this.botClient.listAllGuildMemberIds();
-    } catch (err: unknown) {
-      this.logger.error(
-        `[ROK-1282] Failed to fetch guild members: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return null;
-    }
+    return this.botClient.listAllGuildMemberIds();
   }
 
   /**

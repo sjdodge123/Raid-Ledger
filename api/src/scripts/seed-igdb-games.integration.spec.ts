@@ -93,6 +93,50 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     expect(rows[0].igdbId).toBe(119171);
   });
 
+  // Codex P1 (2026-05-14): when BOTH a canonical row (igdb_id=X) AND a leftover
+  // orphan (igdb_id=NULL) exist for the same name, findGameByNormalizedName may
+  // return either. Returning the orphan and trying to UPDATE its igdb_id to X
+  // would crash on the UNIQUE index — aborting boot. The guard must detect this
+  // and fall through to ON CONFLICT (igdb_id) so the canonical row is updated.
+  it('does NOT crash when a canonical row already owns the seed igdb_id alongside a null-igdb_id orphan', async () => {
+    // Canonical row: already enriched by IGDB.
+    const [canonical] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: "Baldur's Gate 3",
+        slug: 'baldurs-gate-iii-canonical',
+        igdbId: 119171,
+        steamAppId: null,
+      })
+      .returning();
+    // Leftover orphan: same name, null igdb_id, different slug.
+    const [orphan] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: "Baldur's Gate 3",
+        slug: 'baldurs-gate-3-orphan',
+        igdbId: null,
+        steamAppId: 1086940,
+      })
+      .returning();
+
+    // Must not throw — would crash the entire deploy at container boot.
+    const touched = await upsertSeedGames(testApp.db, [BG3_SEED]);
+    expect(touched).toBe(1);
+
+    // Both rows still exist; canonical retains its igdb_id, orphan untouched.
+    const survivors = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG));
+    expect(survivors).toHaveLength(2);
+    const canonicalRow = survivors.find((r) => r.id === canonical.id);
+    const orphanRow = survivors.find((r) => r.id === orphan.id);
+    expect(canonicalRow?.igdbId).toBe(119171);
+    expect(orphanRow?.igdbId).toBeNull();
+    expect(orphanRow?.steamAppId).toBe(1086940);
+  });
+
   it('does NOT collapse sequels: existing row with different non-null igdb_id is left alone', async () => {
     // A row that legitimately represents a different IGDB entity. A
     // normalize() collision (e.g. unusual title) must not overwrite it.

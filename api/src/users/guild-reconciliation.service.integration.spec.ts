@@ -130,4 +130,18 @@ describe('GuildReconciliationService.runReconciliation (ROK-1282)', () => {
     expect(result).toBe(false);
     expect(await getDeactivatedAt(lonely.id)).toBeNull();
   });
+
+  // Codex P2 (2026-05-14): only the disconnected case is a no-op; any Discord
+  // API fault must bubble so CronJobService records a real failure instead of
+  // a silent healthy heartbeat.
+  it('lets Discord API errors bubble up (not swallowed as a no-op)', async () => {
+    const survivor = await createUserWithDiscordId('survivor', '888888');
+    const apiFault = new Error('DiscordAPIError: Missing Permissions');
+    listSpy = jest
+      .spyOn(botClient, 'listAllGuildMemberIds')
+      .mockRejectedValue(apiFault);
+
+    await expect(service.runReconciliation()).rejects.toBe(apiFault);
+    expect(await getDeactivatedAt(survivor.id)).toBeNull();
+  });
 });

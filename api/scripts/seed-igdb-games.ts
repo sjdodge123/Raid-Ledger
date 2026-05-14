@@ -145,12 +145,32 @@ async function mergeSeedIntoExistingRow(
     .where(eq(schema.games.id, existingId));
 }
 
+/** Does any row already own this igdb_id? Codex P1 (2026-05-14) guard. */
+async function rowExistsWithIgdbId(
+  db: Db,
+  igdbId: number,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(eq(schema.games.igdbId, igdbId))
+    .limit(1);
+  return rows.length > 0;
+}
+
 /**
  * Upsert a batch of seed rows into `games`. For each row:
  *   1. Look up an existing row by normalized name (ROK-1113 guard).
- *      If found AND its igdbId is null OR matches the seed's igdbId → merge.
- *      Mismatched non-null igdbIds (sequels/variants) are left alone.
- *   2. Otherwise fall back to INSERT ... ON CONFLICT (igdb_id) DO UPDATE.
+ *      Two safe-merge cases:
+ *        (a) Existing row's igdbId already matches the seed → idempotent merge.
+ *        (b) Existing row's igdbId is null AND no other row already owns the
+ *            seed's igdbId → safe merge (back-fills the orphan).
+ *      Codex P1 (2026-05-14): merging a null-igdb_id orphan when a canonical
+ *      row already owns the seed's igdb_id would crash on the UNIQUE index,
+ *      aborting boot. In that case, fall through to ON CONFLICT (igdb_id) so
+ *      the canonical row is updated and the orphan is left for the next
+ *      dedup audit (ROK-1277/1278) to merge.
+ *   2. Otherwise INSERT ... ON CONFLICT (igdb_id) DO UPDATE.
  * Returns the count of rows touched.
  */
 export async function upsertSeedGames(
@@ -161,13 +181,16 @@ export async function upsertSeedGames(
   for (const seed of seeds) {
     const values = mapGameToValues(seed);
     const nameMatch = await findGameByNormalizedName(db, seed.name);
-    if (
-      nameMatch &&
-      (nameMatch.igdbId == null || nameMatch.igdbId === seed.igdbId)
-    ) {
-      await mergeSeedIntoExistingRow(db, nameMatch.id, values);
-      touched++;
-      continue;
+    if (nameMatch) {
+      const sameIgdbId = nameMatch.igdbId === seed.igdbId;
+      const orphanSafe =
+        nameMatch.igdbId == null &&
+        !(await rowExistsWithIgdbId(db, seed.igdbId));
+      if (sameIgdbId || orphanSafe) {
+        await mergeSeedIntoExistingRow(db, nameMatch.id, values);
+        touched++;
+        continue;
+      }
     }
     await db
       .insert(schema.games)
