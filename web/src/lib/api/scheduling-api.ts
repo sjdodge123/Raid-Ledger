@@ -93,9 +93,9 @@ export async function getMatchAvailability(
   );
 }
 
-/** Fetch scheduling banner for the events page. */
+/** Fetch scheduling banner for the events page (ROK-1235). */
 export async function getSchedulingBanner(): Promise<SchedulingBannerDto | null> {
-  return fetchApi('/lineups/scheduling-banner');
+  return fetchApi('/scheduling/banner');
 }
 
 /** Fetch other scheduling polls for the current user. */
