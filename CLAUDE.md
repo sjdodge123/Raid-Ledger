@@ -91,7 +91,51 @@ This rule exists because parallel agents kept seeing these commits, assuming "no
 - **Ports:** API on `:3000`, Web on `:5173` (Vite may increment to `:5174` if `:5173` is in use — CORS allows both)
 - **DEMO_MODE=true** in root `.env` enables auth bypass with prefilled credentials
 - **Docker volume gotcha (handled automatically):** The deploy script uses `docker start` by name first, falling back to `docker compose` from the main repo's compose file. This prevents worktrees from creating separate volumes with wrong directory prefixes.
-- **Clone prod → local:** `./scripts/clone-prod-to-local.sh` triggers a sanitized prod backup, downloads it, restores into the local DB, resets the local admin password, and preserves your local `app_settings` (API keys) across clones. Requires `.env.clone` at repo root (`PROD_URL`, `PROD_ADMIN_EMAIL`, `PROD_ADMIN_PASSWORD`, `LOCAL_URL`, `LOCAL_ADMIN_EMAIL`, `DATABASE_URL`). Operator must type `clone` to confirm; pass `--yes` for non-interactive runs.
+- **Clone prod → local:** `./scripts/clone-prod-to-local.sh` triggers a sanitized prod backup, downloads it, restores into the local DB, resets the local admin password, and preserves your local `app_settings` (API keys) across clones. See **Cloning prod → local — agent runbook** below for the full step-by-step.
+
+### Cloning prod → local — agent runbook (STRICT — gotchas baked in)
+
+This procedure is destructive to the LOCAL DB (replaces every non-sanitized table with a sanitized copy of prod) — get explicit operator authorization before running.
+
+1. **Hold the env lock and have the local API running.** `mcp__mcp-env__env_lock_acquire({ purpose: "..." })` → `./scripts/deploy_dev.sh --ci` from your worktree. If `npx tsc` errors with `command not found`, `npm install` in the worktree first (worktrees don't share `node_modules`). Re-run deploy.
+
+2. **Create `.env.clone` at the worktree root.** Required vars:
+
+   ```ini
+   # Prod side
+   PROD_URL=https://raid.gamernight.net/api      # /api prefix is REQUIRED — without it nginx serves the SPA, POST returns 405
+   # Prod auth — pick ONE:
+   PROD_BEARER_TOKEN=eyJhbGc...                  # preferred — paste from prod web session
+   # OR
+   # PROD_ADMIN_EMAIL=...
+   # PROD_ADMIN_PASSWORD=...
+
+   # Local side
+   LOCAL_URL=http://localhost:3000
+   LOCAL_ADMIN_EMAIL=admin@local
+   LOCAL_ADMIN_PASSWORD=<current local admin pwd>  # needed for Step 5 local /auth/local login
+   DATABASE_URL=postgresql://user:password@localhost:5432/raid_ledger
+   ```
+
+   - **`PROD_URL` must end in `/api`.** Without that the script POSTs to nginx's SPA route and gets 405.
+   - **Bearer token is preferred** over storing the prod password. To grab one: in the browser logged into prod, DevTools console → `copy(localStorage.getItem('raid_ledger_token'))`. JWTs are short-lived (~24h) — one-shot use, then they expire.
+   - **`LOCAL_ADMIN_PASSWORD`** is needed because the script calls `POST /auth/local` on the LOCAL API to authorize the restore. If you don't know it, run `./scripts/deploy_dev.sh --reset-password`, copy the printed password, set it here. (Step 7 of the script will reset it again at the end — that's fine.)
+
+3. **Run the clone.** `./scripts/clone-prod-to-local.sh --fresh --yes` (or `--latest --yes --force` to reuse an existing prod backup). Operator authorization is captured by the `--yes` flag — only pass it after they've explicitly approved this clone.
+
+4. **Bounce the API to invalidate the settings cache.** The settings service caches decrypted `app_settings` for 30 min on startup. After clone, the cache holds the pre-clone (now-deleted-and-replaced) entries until the cache TTL or process restart. UI surfaces will appear "wiped" (e.g. `/admin/settings/itad` returns `configured: false`) until the cache reloads. Quickest fix: `echo "" >> api/src/main.ts` to force the `nest start --watch` watcher to restart the process, then revert (`git checkout -- api/src/main.ts`).
+
+5. **Verify success.**
+   - `curl -fsS http://localhost:3000/health | jq` — both `db.connected` and `redis.connected` should be true.
+   - `docker exec raid-ledger-db psql -U user -d raid_ledger -c "SELECT count(*) FROM games;"` — should be >>0 (prod-sized).
+   - `docker exec raid-ledger-db psql -U user -d raid_ledger -c "SELECT count(*) FROM app_settings;"` — should be your local row count (preserved across the clone).
+   - Hit a settings probe like `curl -sS http://localhost:3000/admin/settings/itad -H "Authorization: Bearer <local-token>"` — should return `configured: true` after the API restart in Step 4.
+
+6. **Release the env lock when done** (`mcp__mcp-env__env_lock_release`).
+
+**Sanitization (server-side) excludes ROW DATA for:** `app_settings`, `local_credentials`, `sessions`, `consumed_intent_tokens`. Schema preserved, rows empty after restore. The script then re-applies the LOCAL preserved `app_settings` rows (those were encrypted with the local `JWT_SECRET` so they decrypt correctly afterwards). `local_credentials`/`sessions`/`consumed_intent_tokens` stay empty — the local admin password gets regenerated by Step 7.
+
+**Backups exclude the `drizzle` schema** (migration metadata is code, not data). If a restore appears to "skip" migrations, run `DATABASE_URL=... node scripts/reconcile-migrations.mjs` to mark already-applied migrations as such. `deploy_dev.sh` runs reconcile automatically after auto-restoring from `api/backups/daily/`.
 
 ### Env coordination across agents (STRICT)
 
