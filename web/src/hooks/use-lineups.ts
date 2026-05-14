@@ -278,6 +278,13 @@ export function useAbortLineup() {
         queryKey: [...DETAIL_KEY, variables.lineupId],
       });
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+      // ROK-1207: the detail-page banner is driven off the activity log
+      // (`lineup_aborted` entry). Invalidate the timeline so the banner
+      // appears immediately for the operator who just clicked Abort, instead
+      // of waiting for the 30s staleTime to expire.
+      void qc.invalidateQueries({
+        queryKey: ['activity-timeline', 'lineup', variables.lineupId],
+      });
     },
   });
 }

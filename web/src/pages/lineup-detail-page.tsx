@@ -8,20 +8,15 @@ import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
 import { InviteeList } from '../components/lineups/InviteeList';
 import { AddInviteesButton } from '../components/lineups/AddInviteesButton';
-import { NominationGrid } from '../components/lineups/NominationGrid';
-import { VotingLeaderboard } from '../components/lineups/VotingLeaderboard';
-import { LineupEmptyState } from '../components/lineups/LineupEmptyState';
 import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton';
 import { CommonGroundPanel } from '../components/lineups/CommonGroundPanel';
 import { NominateModal } from '../components/lineups/NominateModal';
 import type { SelectedGame } from '../components/lineups/NominateModal';
 import { PastLineups } from '../components/lineups/PastLineups';
-import { DecidedView } from '../components/lineups/decided/DecidedView';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import { SteamNudgeBanner } from '../components/lineups/SteamNudgeBanner';
-import { TiebreakerView } from '../components/lineups/tiebreaker/TiebreakerView';
-import { TiebreakerClosedNotice } from '../components/lineups/tiebreaker/TiebreakerClosedNotice';
 import { TiebreakerPromptModal } from '../components/lineups/tiebreaker/TiebreakerPromptModal';
+import { LineupDetailBody } from '../components/lineups/LineupDetailBody';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useAiSuggestions } from '../hooks/use-ai-suggestions';
 import { useAiSuggestionsAvailable } from '../hooks/use-ai-suggestions-available';
@@ -30,6 +25,8 @@ import { canParticipateInLineup } from '../lib/lineup-eligibility';
 import { HeroNextStep } from '../components/common/HeroNextStep';
 import { useLineupHero } from '../hooks/use-lineup-hero';
 import { GraceCountdownBanner } from '../components/lineups/grace-countdown-banner';
+import { LineupAbortedBanner } from '../components/lineups/LineupAbortedBanner';
+import { useLineupAbortedAt } from '../lib/lineup-aborted';
 
 /**
  * Render the private-lineup invitee panel (ROK-1065). Creator/operator
@@ -154,8 +151,18 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
     preSelectedGame, setPreSelectedGame,
     promptDismissed, setPromptDismissed,
     tiebreakerPromptOpen, setTiebreakerPromptOpen,
-    isBuilding, canParticipate,
+    isBuilding: rawIsBuilding,
+    canParticipate: rawCanParticipate,
   } = props;
+  // ROK-1207: a single guard derived once from the activity log. When the
+  // lineup has been aborted, every action surface — nomination, voting, the
+  // inline Nominate button, the advance/revert pills — must be disabled.
+  // Short-circuit the body switch with a read-only snapshot instead of
+  // letting it fall through to the building/voting/decided branches.
+  const { abortedAt, reason: abortReason } = useLineupAbortedAt(lineup.id);
+  const isAborted = abortedAt != null;
+  const isBuilding = !isAborted && rawIsBuilding;
+  const canParticipate = !isAborted && rawCanParticipate;
   const { user } = useAuth();
   const leaderboardRef = useRef<HTMLElement | null>(null);
   const slotGridRef = useRef<HTMLElement | null>(null);
@@ -198,25 +205,13 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
     onAdvance,
   });
 
-  const hasEntries = lineup.entries.length > 0;
-  // ROK-1117: also render when the lineup has already advanced to 'decided'
-  // and the tiebreaker is 'resolved' so late-arriving users see the
-  // "Vote closed at HH:MM" notice instead of jumping straight to results.
-  // Dismissed tiebreakers are intentionally excluded — findPendingOrActiveTiebreaker
-  // filters them out server-side, so the API never returns a dismissed row here.
-  // Voting branch: show TiebreakerView when a tiebreaker is in flight.
+  // `hasTiebreaker` still needed here for the operator-only "show tiebreaker
+  // prompt" branch below; the body switch derives its own copy in
+  // LineupDetailBody (ROK-1117 / ROK-1253).
   const hasTiebreaker =
     !!tiebreaker &&
     lineup.status === 'voting' &&
     ['active', 'pending', 'resolved'].includes(tiebreaker.status);
-
-  // Decided branch: render the "Vote closed at HH:MM" banner above the
-  // DecidedView so users who arrive after a tiebreaker resolved see both
-  // the historical tiebreaker context AND the decided podium (ROK-1117).
-  const showDecidedTiebreakerNotice =
-    !!tiebreaker &&
-    lineup.status === 'decided' &&
-    tiebreaker.status === 'resolved';
   const isOperator = isOperatorOrAdmin(user);
 
   // Tiebreaker prompt: server-created pending tiebreaker OR operator tried to advance with ties
@@ -226,6 +221,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
 
   // Operator/admin keep the inline Nominate button so they can both nominate
   // and advance; for non-organizer invitees the hero CTA carries the action.
+  // ROK-1207: hidden once the lineup is aborted (forced via isBuilding=false).
   const showInlineNominate = isBuilding && isOperator;
 
   return (
@@ -235,11 +231,16 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         status={lineup.status}
       />
       <HeroNextStep {...heroProps} />
+      <LineupAbortedBanner abortedAt={abortedAt} reason={abortReason} />
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-        <LineupDetailHeader lineup={lineup} onTiebreakerIntercept={() => {
-          setPromptDismissed(false);
-          setTiebreakerPromptOpen(true);
-        }} />
+        <LineupDetailHeader
+          lineup={lineup}
+          isAborted={isAborted}
+          onTiebreakerIntercept={() => {
+            setPromptDismissed(false);
+            setTiebreakerPromptOpen(true);
+          }}
+        />
         {showInlineNominate && (
           <button
             type="button"
@@ -290,44 +291,14 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         </div>
       )}
 
-      {hasTiebreaker && (tiebreaker?.status === 'active' || tiebreaker?.status === 'resolved') ? (
-        // ROK-1253 fix: wire bracketRef so the hero's "Finish bracket" /
-        // "Vote in bracket" CTAs scroll here. ROK-1209 created the ref +
-        // scroll target but never attached it to a DOM node.
-        <section ref={bracketRef}>
-          <TiebreakerView tiebreaker={tiebreaker} lineupId={lineup.id} />
-        </section>
-      ) : lineup.status === 'decided' ? (
-        <>
-          {showDecidedTiebreakerNotice && tiebreaker && (
-            <TiebreakerClosedNotice
-              title={tiebreaker.mode === 'veto' ? 'Veto Elimination' : 'Bracket Tiebreaker'}
-              resolvedAt={tiebreaker.resolvedAt}
-            />
-          )}
-          <DecidedView lineup={lineup} />
-        </>
-      ) : lineup.status === 'voting' && hasEntries ? (
-        // ROK-1253 fix: attach leaderboardRef so the hero's
-        // "Open voting" CTA can `scrollIntoView` to this section.
-        // ROK-1209 created the ref + scroll target but never wired it
-        // to a DOM element — the CTA was a silent no-op.
-        <section ref={leaderboardRef}>
-          <VotingLeaderboard
-            entries={lineup.entries}
-            lineupId={lineup.id}
-            myVotes={lineup.myVotes ?? []}
-            totalVoters={lineup.totalVoters}
-            totalMembers={lineup.totalMembers}
-            maxVotesPerPlayer={lineup.maxVotesPerPlayer}
-            canParticipate={canParticipate}
-          />
-        </section>
-      ) : hasEntries ? (
-        <NominationGrid entries={lineup.entries} lineupId={lineup.id} />
-      ) : (
-        <LineupEmptyState />
-      )}
+      <LineupDetailBody
+        lineup={lineup}
+        tiebreaker={tiebreaker}
+        isAborted={isAborted}
+        canParticipate={canParticipate}
+        leaderboardRef={leaderboardRef}
+        bracketRef={bracketRef}
+      />
 
       <PastLineups />
 
