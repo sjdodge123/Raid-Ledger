@@ -24,6 +24,7 @@ import {
   searchGuildMembers as searchGuildMembersHelper,
   listGuildMembers as listGuildMembersHelper,
   isGuildMember as isGuildMemberHelper,
+  listAllGuildMemberIds as listAllGuildMemberIdsHelper,
 } from './discord-bot-client.guild.helpers';
 
 export type {
@@ -260,6 +261,15 @@ export class DiscordBotClientService {
   /** Check if a Discord user is in the guild (ROK-403). */
   async isGuildMember(discordUserId: string): Promise<boolean> {
     return isGuildMemberHelper(this.getGuild(), discordUserId);
+  }
+
+  /**
+   * Fetch every member of the guild and return their Discord IDs as a
+   * Set (ROK-1282). Returns null when the bot is disconnected — caller
+   * (`GuildReconciliationService`) treats null as a no-op.
+   */
+  async listAllGuildMemberIds(): Promise<Set<string> | null> {
+    return listAllGuildMemberIdsHelper(this.getGuild());
   }
 
   /** Check bot permissions in the guild. */

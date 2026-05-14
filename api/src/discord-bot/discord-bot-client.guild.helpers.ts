@@ -66,3 +66,17 @@ export async function isGuildMember(
     return false;
   }
 }
+
+/**
+ * Fetch every member of the guild and return their Discord IDs as a Set
+ * (ROK-1282). Used by GuildReconciliationService to diff DB users against
+ * actual guild membership. Returns null when the bot is disconnected
+ * (caller should treat as a no-op, not an error).
+ */
+export async function listAllGuildMemberIds(
+  guild: Guild | null,
+): Promise<Set<string> | null> {
+  if (!guild) return null;
+  const members = await guild.members.fetch();
+  return new Set(members.map((m) => m.user.id));
+}

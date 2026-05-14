@@ -34,6 +34,16 @@ If you encounter a failure (TypeScript error, lint error, test failure, smoke fl
 
 **Scope guard:** documenting a pre-existing failure is NOT the same as fixing it. Don't expand your story to fix unrelated tech debt unless the operator approves. The doc entry is the deliverable.
 
+## Post-merge planning artifact reconciliation (STRICT — applies to ALL agents)
+
+After a PR merges (confirmed by `gh pr view ... --json state` = `MERGED`), the Lead reconciles `planning-artifacts/current-sprint.md` BEFORE ending the session. Linear's status flip alone is insufficient — the cycle plan rots until rollover otherwise.
+
+1. **Story IS in the cycle plan** → strike-through the row (`~~ROK-XXXX~~ — ~~title~~`) and append `— **Shipped YYYY-MM-DD PR #N**.` to Notes. Don't delete; strike-through preserves the original commitment for the sprint-end retrospective.
+2. **Story is NOT in the cycle plan** (out-of-cycle hotfix, reactive bug, unplanned follow-up) → append a row to `### Reactive shipments (filed + shipped mid-cycle)` near the file's bottom. Create the section once if absent. Row format: `| **ROK-XXXX** | <title> | <why pulled in>. **Shipped YYYY-MM-DD PR #N**. |`
+3. **Strategic decision in the merge** (architecture / scope change / postmortem / new STRICT rule) → append a dated entry to the Active State Linear doc Strategic section (slug `7a4ddc5652c9`). Skip for routine fixes.
+
+If `origin/main` moved by >1 PR since the doc's last Derived update, run `/status-report` from main as part of cleanup. Step refs: `/build` 5e.5, `/fix-batch` + `/bulk` 4d.5, `/handover` 4b. Skip for reverted PRs, `chore(release|config)` ride-alongs, and back-merges from main.
+
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
 Before writing implementation code for ANY feature/fix that has a visual or UX dimension, scan for design references that may already exist. The operator regularly approves simplified-flow targets, wireframes, or design specs ahead of implementation — agents picking up follow-up work should be **implementing the approved target, not redesigning it**.
@@ -228,6 +238,22 @@ Backups exclude the `drizzle` schema (migration metadata is code, not data) to p
 - `deploy_dev.sh` calls reconcile automatically after an auto-restore from `api/backups/daily/`.
 - **Symptom that means you need reconcile:** `drizzle-kit migrate` fails with `column/relation X already exists` on a migration whose hash isn't in `drizzle.__drizzle_migrations`.
 
+### Games-table INSERT paths must use the name-dedup guard (STRICT — ROK-1113 / ROK-1283)
+
+Postgres UNIQUE constraints treat NULL as never-equal, so `ON CONFLICT (igdb_id)` does NOT fire when an existing row has `igdb_id IS NULL`. Any new code that inserts into `games` MUST first call `findGameByNormalizedName(db, name)` (or the batch variant `findGameIdsByNormalizedName`) and merge into the existing row when one matches. Otherwise the next migration that collapses dups will be silently undone on the next deploy.
+
+The 5 current INSERT-into-`games` paths, all of which use the name-dedup guard:
+
+1. `api/src/steam/steam-itad-discovery.helpers.ts` — steam-itad discovery (ROK-1113).
+2. `api/src/igdb/igdb-itad-upsert.helpers.ts` — IGDB+ITAD upsert path (ROK-1113).
+3. `api/src/igdb/igdb-upsert.helpers.ts::upsertSingleGameRow` — single-row IGDB upsert (ROK-1113; canonical pattern).
+4. `api/src/igdb/igdb-upsert.helpers.ts::upsertGamesFromApi` — batch IGDB upsert (ROK-1113).
+5. `api/scripts/seed-igdb-games.ts::upsertSeedGames` — boot-time IGDB seed (ROK-1283).
+
+A 6th path exists at `api/scripts/seed-games.ts` (boot-time game-registry seed) and uses `ON CONFLICT (slug) DO NOTHING`. It is theoretically vulnerable to the same NULL-as-distinct trap but practically safe: its slugs match the IGDB seed and prod data has no surviving name dups post-ROK-1278. The same fix should be applied when next touching that file — tracked in TECH-DEBT-BACKLOG.md under 2026-05-14 / ROK-1283.
+
+When adding a NEW INSERT-into-`games` path, append it to this list. The reproduction that motivates the rule: prod 2026-05-14 — migration 0140 merged 21 BG3-like dups, then `seed-igdb-games.ts` immediately re-created the BG3 dup on the same boot because its `ON CONFLICT (igdb_id)` target ignored the NULL-keyed survivor row.
+
 ## Testing
 
 - **Backend:** `npm run test -w api` (Jest). Coverage: `npm run test:cov -w api`
@@ -334,6 +360,18 @@ npx playwright test
   - Discord bot/notification changes → Discord companion bot smoke test
   - API-only changes → Integration test (Jest, real DB)
   - Pure logic → Unit test
+
+## Discord User Deactivation (ROK-1260, ROK-1282)
+
+When a user leaves the Discord guild we must flip `users.deactivated_at` so they stop receiving DMs, get cancelled from upcoming signups, and disappear from the Players list. There is **no `GuildMemberRemove` listener** — ROK-1260's spec mentioned one but it was never shipped. Three layers cover the gap instead. Before adding a fourth, confirm one of the existing three is insufficient.
+
+| Layer | Trigger | Where | Misses |
+|-------|---------|-------|--------|
+| 1. Reactive 50278 classifier | DM send fails with `DiscordAPIError[50278]` | `api/src/notifications/discord-notification.processor.ts` (~line 117) | Quiet users who never receive a notification |
+| 2. `GuildMemberAdd` listener | User joins/rejoins the guild | `api/src/discord-bot/listeners/guild-member-add.listener.ts` | Only re-enables; nothing on the leave side |
+| 3. Daily reconciliation cron | `@Cron('0 0 7 * * *')` — 07:00 UTC daily | `api/src/users/guild-reconciliation.service.ts` | Users gone for <24h (rare; layer 1 usually catches first DM) |
+
+All three call into `DiscordNotificationService.deactivateUser(userId)` so the cancel cascade + admin notification path is identical. `deactivateUser` is idempotent (RETURNING-guarded UPDATE), so overlap between layers is safe.
 
 ## Discord Testing (tools/)
 

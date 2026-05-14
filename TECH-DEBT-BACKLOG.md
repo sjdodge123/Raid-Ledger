@@ -252,3 +252,47 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
   Suggested: replace `runMigrations` in `api/src/backup/backup.helpers.ts:124` with a call to `runBootMigrations(databaseUrl)` from the new runner. Restore flows benefit from the audit refresh + Sentry capture for free.
 - **[med]** Prod recovery required manually marking 0140 as applied in `drizzle.__drizzle_migrations` before the new image could boot. This pattern (insert hash row to skip a failed migration) is not documented anywhere — operator had to derive it. Add a `scripts/recover-stuck-migration.sh` runbook.
   Suggested: a script that takes a migration tag, looks up its hash from `meta/_journal.json`, inserts the journal row, and prints next-steps. Idempotent.
+
+### 2026-05-14 — fix/rok-1283 (ROK-1283 follow-up)
+
+- **[low]** `api/scripts/seed-games.ts` — sibling of `seed-igdb-games.ts` audited as part of ROK-1283. Same shape (`ON CONFLICT (slug) DO NOTHING`), same NULL-distinct vulnerability in principle. Practically dormant in prod: its slugs match `seed-igdb-games.ts` AND post-ROK-1278 cleanup left no name dups for this seed's names to collide with. Was NOT fixed in ROK-1283 because the file already exceeds `max-lines` (302/300) on `origin/main` and applying the same fix would push it further over; CI lint would fail. Apply the name-dedup guard the next time this file is touched, alongside breaking up the `GAMES_SEED` constant (move to a sibling `seed-games.data.ts`) to bring the file back under 300 effective lines.
+  Suggested: extract `GAMES_SEED` to `api/scripts/seed-games.data.ts` (no logic, just data) and apply the same `findGameByNormalizedName` pre-check pattern used in `seed-igdb-games.ts::upsertSeedGames`.
+
+### 2026-05-14 — fix/rok-1283 (surfaced during ROK-1283 typecheck)
+
+Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched by this story. Re-verified by stashing the ROK-1283 changes and re-running `npx tsc --noEmit -p api/tsconfig.json`. All four exist verbatim on main.
+
+- **[med]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — Three `TS2352` errors from postgres-js `RowList<…>` ↔ snake_case struct casts (e.g., `RowList<{ totalSeconds: number; }[]>` → `{ total_seconds: number; }[]`). Drizzle returns camelCase, the cast assumes snake_case.
+  Suggested: cast through `unknown` first (as the compiler error suggests) or fix the destination shape to match Drizzle's camelCase output.
+- **[med]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — `TS2345`: Argument of type `SQL<unknown>` is not assignable to parameter of type `string | SQLWrapper`. Two copies of drizzle-orm types are visible (separate declarations of `shouldInlineParams`). Looks like hoisting / peer-dep dedup drift.
+  Suggested: `npm dedupe` to remove the duplicate `drizzle-orm/sql/sql` instance, or pin a single drizzle-orm version across workspaces.
+- **[med]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — Four `TS2556` "spread argument must either have a tuple type or be passed to a rest parameter". Test uses `fn(...args)` where `args` is inferred as `unknown[]` instead of a tuple.
+  Suggested: add `as const` to the array literals or annotate the helper parameter as a rest tuple.
+- **[med]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — `TS2769`: No overload matches this call. Likely the same drizzle-orm dedup drift as the lineup-deadline-vote-race error above.
+  Suggested: `npm dedupe` (paired with the lineup-deadline fix).
+
+### 2026-05-14 — fix/batch-2026-05-14 (PR pending — ROK-1282 + ROK-1283)
+
+- **[low]** `api/src/users/guild-reconciliation.service.ts:107-109` — dead-code `rows.filter((r): r is { id: number; discordId: string } => r.discordId !== null)`. SQL already guarantees `isNotNull(discordId)` so the filter never drops a row.
+  Suggested: drop the filter and tighten the return type via a non-null assertion or Drizzle column-level non-null inference.
+- **[low]** `api/src/users/guild-reconciliation.service.ts:113-123` — `deactivateGap` runs deactivations sequentially. Fine at current scale (~5–10 leavers per run on a 500-user guild), but a post-outage run with hundreds of leavers serialises per-row cascades (cancel signups + admin notification).
+  Suggested: keep sequential for now (audit-trail simplicity); revisit if a single run ever exceeds ~50 deactivations.
+- **[low]** `api/src/users/guild-reconciliation.service.ts:93-106` — `loadActiveDbUsers` has no index on `deactivated_at` and full-scans `users` daily. Acceptable at current user volume; index becomes relevant past several thousand rows.
+  Suggested: revisit if cron duration exceeds ~1s on prod.
+
+
+### 2026-05-14 — fix/batch-2026-05-14 (surfaced during ROK-1282 + ROK-1283 push validation)
+
+- **[med]** `web/src/components/admin/onboarding/secure-account-step.test.tsx` — 6/20 specs in this file flake with `Test timed out in 5000ms` when run as part of the full vitest suite (`npm run test:cov -w web`). All 20 PASS in 773ms when the file is run in isolation (`npx vitest run src/components/admin/onboarding/secure-account-step.test.tsx`). The failing assertions are synchronous DOM class lookups (`toHaveClass('min-h-[44px]')`), so the 5000ms timeout is concurrency starvation, not test logic. Last touched in #379 (months ago); independent of fix/batch-2026-05-14 (zero web/ changes in the batch).
+  Suggested: bump this file's `testTimeout` to 15000ms in vitest.config.ts (the FTE wizard tests do heavier jsdom setup than typical) OR move it to its own project shard. The cheap-experiment plan: run `npx vitest run secure-account-step` 50× to characterise the flake rate, then either bump the timeout or shard the file.
+
+
+### 2026-05-14 — fix/batch-2026-05-14 (post-Codex reviewer pass)
+
+- **[low]** `api/src/common/testing/test-app.ts:122` vs `api/src/common/testing/integration-setup.ts:64` — inconsistent CI gating. `test-app.ts` uses strict `process.env.CI === 'true'` after the post-clone audit fix; `integration-setup.ts` uses loose `!process.env.CI`. Both behave correctly under GitHub Actions (`CI=true`) but a developer setting `CI=1` locally would get DATABASE_URL deleted by integration-setup yet ignored anyway by test-app (Testcontainers fires).
+  Suggested: align both to `process.env.CI === 'true'`. ~5-line change in `integration-setup.ts`.
+- **[low]** `api/scripts/seed-igdb-games.ts:181-194` — extra DB roundtrip via `rowExistsWithIgdbId` per orphan-match row. Acceptable at boot-time (~hundreds of rows, single-threaded). Could fold into a single SQL CTE if seed counts grow into the thousands.
+  Suggested: no action unless seed perf becomes a bottleneck.
+- **[low]** `api/src/users/guild-reconciliation.service.integration.spec.ts:137-146` — the "Discord API errors bubble up" test calls `runReconciliation()` directly, not via `CronJobService.executeWithTracking`. Confirms the throw bubbles but doesn't assert the cron wrapper records a failed run vs. healthy heartbeat (which is the actual P2 motivation). Integration with `executeWithTracking` is likely already covered by existing cron-service tests but not explicitly asserted in this regression spec.
+  Suggested: add one spec that mocks `cronJobService.executeWithTracking` and asserts `failedRun` was recorded when `listAllGuildMemberIds` throws.
+

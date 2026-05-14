@@ -6,9 +6,16 @@
  * reused across all integration test suites for performance.
  *
  * Dual-mode:
- *   - Local dev: Testcontainers spins up a fresh PostgreSQL container.
- *   - CI: Detects DATABASE_URL env var and connects to the existing
- *     CI postgres service (no Docker-in-Docker needed).
+ *   - Local dev: Testcontainers spins up a fresh `pgvector/pgvector:pg16`
+ *     container (same image as prod / CI / `raid-ledger-db`). Ephemeral —
+ *     dies with the suite, never touches the operator's live local DB.
+ *   - CI: Honors `DATABASE_URL` only when `CI=true` (GitHub Actions sets
+ *     this) so the service container is reused. Locally, `DATABASE_URL`
+ *     pointing at the live `raid-ledger-db` is IGNORED — otherwise
+ *     `truncateAllTables` would wipe operator-restored app_settings,
+ *     local_credentials, etc. on every `npm run test:integration` run,
+ *     breaking the clone-prod-to-local recovery flow. (Surfaced by the
+ *     fix/batch-2026-05-14 post-clone audit.)
  *
  * Usage:
  *   const { app, request } = await getTestApp();
@@ -108,7 +115,11 @@ async function provisionDatabase(): Promise<{
   connectionString: string;
   container: StartedPostgreSqlContainer | null;
 }> {
-  if (process.env.DATABASE_URL) {
+  // Honor DATABASE_URL ONLY in CI. Locally this env var points at the
+  // operator's live `raid-ledger-db` and truncateAllTables would erase
+  // app_settings / local_credentials / etc., breaking the clone-prod-to-local
+  // recovery flow. See file-level comment + fix/batch-2026-05-14 audit.
+  if (process.env.CI === 'true' && process.env.DATABASE_URL) {
     return { connectionString: process.env.DATABASE_URL, container: null };
   }
   const container = await new PostgreSqlContainer('pgvector/pgvector:pg16')

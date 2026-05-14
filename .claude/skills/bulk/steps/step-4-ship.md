@@ -54,6 +54,19 @@ Then retry `TeamDelete`. Only fall back to removing `~/.claude/teams/batch-YYYY-
 
 ---
 
+## 4d.5. Reconcile planning artifacts (STRICT)
+
+Per CLAUDE.md "Post-merge planning artifact reconciliation." After the merge confirms. **Run for every story in the batch.**
+
+1. **Story in `planning-artifacts/current-sprint.md`?** Strike-through the row (`~~ROK-XXXX~~ — ~~title~~`) and append `— **Shipped YYYY-MM-DD PR #N**.` to the Notes column. Preserve the row.
+2. **Story NOT in `current-sprint.md`?** Append a row to the `### Reactive shipments (filed + shipped mid-cycle)` section (create once if absent). Row format: `| **ROK-XXXX** | <title> | <why pulled in>. **Shipped YYYY-MM-DD PR #N**. |`
+3. **Strategic decision in this merge?** Append a dated entry to the Active State Linear doc Strategic section (slug `7a4ddc5652c9`). Skip for routine fixes.
+4. **Derived freshness:** if main has moved >1 PR since the last Derived update, run `/status-report` from main.
+
+Commit inline with `chore(planning): reconcile current-sprint.md post-batch-YYYY-MM-DD merge` or fold into the next `chore(config):` ride-along.
+
+---
+
 ## 4e. Final Summary
 
 ```

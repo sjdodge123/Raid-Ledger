@@ -220,4 +220,9 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Force-finalizes orphaned Quick Play (ad-hoc) events whose end time passed >30 min ago every 5 minutes',
     category: 'Events',
   },
+  GuildReconciliationService_reconcileGuildMembers: {
+    description:
+      'Cross-references DB users against Discord guild membership and deactivates users no longer in the guild — daily at 07:00 UTC (ROK-1282)',
+    category: 'Maintenance',
+  },
 };
