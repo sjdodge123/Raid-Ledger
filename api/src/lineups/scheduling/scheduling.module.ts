@@ -9,6 +9,7 @@ import { DiscordBotModule } from '../../discord-bot/discord-bot.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { LineupsModule } from '../lineups.module';
 import { SchedulingController } from './scheduling.controller';
+import { SchedulingBannerController } from './scheduling-banner.controller';
 import { SchedulingService } from './scheduling.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 
@@ -20,7 +21,7 @@ import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
     SettingsModule,
     forwardRef(() => LineupsModule),
   ],
-  controllers: [SchedulingController],
+  controllers: [SchedulingController, SchedulingBannerController],
   providers: [SchedulingService, SchedulingPollEmbedService],
   exports: [SchedulingService, SchedulingPollEmbedService],
 })

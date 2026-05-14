@@ -8,6 +8,32 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - **Testing guide:** `TESTING.md` — patterns, anti-patterns, coverage thresholds, exemplary files
 - **Tech debt backlog:** `TECH-DEBT-BACKLOG.md` — append reviewer findings here, do NOT auto-file Linear `tech-debt:` stories. Operator triages and files manually. See file header for format.
 
+## Document pre-existing failures (STRICT — applies to ALL agents)
+
+If you encounter a failure (TypeScript error, lint error, test failure, smoke flake, broken build step, etc.) on `origin/main` or a freshly-checked-out worktree that is **NOT caused by your changes**, you MUST append it to `TECH-DEBT-BACKLOG.md` under a dated section before continuing your work.
+
+**Why:** pre-existing failures get re-discovered every cycle, distract agents from their actual story, and leak into reviewer reports as if they were new regressions. Capturing them once in tech-debt:
+
+1. Stops the next agent from rediscovering the same noise.
+2. Gives the operator a single triage list instead of finding errors via fire-drill.
+3. Lets `validate-ci.sh` results be triaged as "your work" vs "pre-existing".
+
+**How:**
+
+1. Run the failing command on a clean batch worktree or `origin/main` checkout to confirm the failure is NOT caused by your branch's changes (`git stash` + retry, or check on the batch base).
+2. Open `TECH-DEBT-BACKLOG.md` and append (do NOT prepend, do NOT edit existing entries) under a level-3 heading matching the file's format: `### YYYY-MM-DD — <branch-or-context> (surfaced during ...)`.
+3. One bullet per distinct failure. Severity (`high` / `med` / `low` / `nit`), file:line in backticks, what the error says verbatim, why you think it's pre-existing, and a one-line `Suggested:` fix.
+4. Group multiple errors in the same file under one bullet only if they share the same root cause; otherwise list separately.
+5. The Lead commits the tech-debt addition as part of the batch — no separate PR. Use `chore(tech-debt): document pre-existing failures` or fold it into another `chore(config):` commit.
+
+**When NOT to do this:**
+
+- The failure is caused by your changes — fix it.
+- The failure is already documented in `TECH-DEBT-BACKLOG.md` under a recent entry — don't duplicate.
+- The failure is in a file you're already touching for the story — fix it as scope creep is justified.
+
+**Scope guard:** documenting a pre-existing failure is NOT the same as fixing it. Don't expand your story to fix unrelated tech debt unless the operator approves. The doc entry is the deliverable.
+
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
 Before writing implementation code for ANY feature/fix that has a visual or UX dimension, scan for design references that may already exist. The operator regularly approves simplified-flow targets, wireframes, or design specs ahead of implementation — agents picking up follow-up work should be **implementing the approved target, not redesigning it**.

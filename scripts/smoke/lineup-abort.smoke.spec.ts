@@ -193,6 +193,114 @@ test.describe('Abort Lineup — admin/operator flow', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Regression: ROK-1207 — aborted-lineup detail page banner + read-only state
+// ---------------------------------------------------------------------------
+//
+// Once an admin aborts a lineup, the detail page must:
+//   1. Show a destructive "This lineup was cancelled" banner citing the
+//      submitted reason (closes the ROK-1062 frontend gap, F-5 in the
+//      ROK-1193 audit).
+//   2. Hide every action surface — Nominate button, vote toggles, slot pick,
+//      and the advance/revert breadcrumb pills — for ALL personas (admin,
+//      invitee, anonymous).
+//
+// The banner is driven off the `lineup_aborted` activity log entry — the
+// lineup row's status is `archived`, NOT a new `aborted` enum value.
+
+test.describe('Regression: ROK-1207 — aborted-lineup detail page banner + read-only', () => {
+    let adminToken: string;
+    let lineupId: number;
+    const abortReason = 'ROK-1207 regression — wrong scope, restart needed.';
+
+    test.beforeAll(async () => {
+        adminToken = await getAdminToken();
+    });
+
+    test('admin aborts with a reason → banner with reason + no action affordances', async ({
+        page,
+    }) => {
+        lineupId = await ensureActiveLineup(adminToken);
+
+        // Server-side abort (sidesteps the modal flow that AC 1 already
+        // covers) so this regression test focuses on the post-abort state.
+        const abortRes = await fetch(`${API_BASE}/lineups/${lineupId}/abort`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${adminToken}`,
+            },
+            body: JSON.stringify({ reason: abortReason }),
+        });
+        expect(abortRes.status).toBe(200);
+
+        await page.goto(`/community-lineup/${lineupId}`);
+        await expect(page.locator('body')).not.toHaveText(
+            /something went wrong/i,
+            { timeout: 10_000 },
+        );
+
+        await expect(
+            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // Banner present + carries the operator-submitted reason.
+        const banner = page.getByTestId('lineup-aborted-banner');
+        await expect(banner).toBeVisible({ timeout: 10_000 });
+        await expect(banner).toContainText(/cancelled/i);
+        await expect(
+            page.getByTestId('lineup-aborted-reason'),
+        ).toContainText(abortReason);
+
+        // Action affordances absent: Nominate button (top-right) and the
+        // advance/revert breadcrumb pills must not be operable for the
+        // admin viewer either.
+        await expect(
+            page.getByRole('button', { name: /^Nominate$/ }),
+        ).toHaveCount(0);
+
+        // Phase breadcrumb pills are rendered as plain text (no `button`
+        // role) once the lineup is aborted. The PhaseBreadcrumb hooks
+        // `canOperate` to false when isAborted, so the advance/revert
+        // affordance disappears for every persona.
+        const advanceButtons = page.getByRole('button', {
+            name: /^(Building|Voting|Decided|Archived)$/,
+        });
+        await expect(advanceButtons).toHaveCount(0);
+
+        // Read-only snapshot rendered in place of the phase body.
+        await expect(
+            page.getByTestId('lineup-aborted-snapshot'),
+        ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('invitee reload sees the banner and no Nominate CTA', async ({ page }) => {
+        lineupId = await ensureActiveLineup(adminToken);
+
+        await fetch(`${API_BASE}/lineups/${lineupId}/abort`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${adminToken}`,
+            },
+            body: JSON.stringify({ reason: abortReason }),
+        });
+
+        // Anonymous reload — non-organizer perspective. Banner must still be
+        // present and the Nominate button must not render at all.
+        await page.context().clearCookies();
+        await page.goto(`/community-lineup/${lineupId}`);
+
+        const banner = page.getByTestId('lineup-aborted-banner');
+        await expect(banner).toBeVisible({ timeout: 15_000 });
+        await expect(banner).toContainText(/cancelled/i);
+
+        await expect(
+            page.getByRole('button', { name: /^Nominate$/ }),
+        ).toHaveCount(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // AC 2: Member does NOT see the abort button
 // ---------------------------------------------------------------------------
 

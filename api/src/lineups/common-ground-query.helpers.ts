@@ -265,12 +265,25 @@ export function mapCommonGroundRow(
   };
 }
 
+/** Shape the meta.appliedWeights subobject from raw weights. */
+function toAppliedWeights(weights: CommonGroundWeights) {
+  return {
+    ownerWeight: weights.ownerWeight,
+    saleBonus: weights.saleBonus,
+    fullPricePenalty: weights.fullPricePenalty,
+    tasteWeight: weights.tasteWeight,
+    socialWeight: weights.socialWeight,
+    intensityWeight: weights.intensityWeight,
+  };
+}
+
 /** Build the full Common Ground response from DB. */
 export async function buildCommonGroundResponse(
   db: Db,
   lineupId: number,
   nominatedIds: number[],
   nominatorCount: number,
+  participantCount: number,
   filters: CommonGroundQueryDto,
   ctx: ScoringContext | null = null,
 ): Promise<CommonGroundResponseDto> {
@@ -282,17 +295,11 @@ export async function buildCommonGroundResponse(
     data: scored,
     meta: {
       total: scored.length,
-      appliedWeights: {
-        ownerWeight: weights.ownerWeight,
-        saleBonus: weights.saleBonus,
-        fullPricePenalty: weights.fullPricePenalty,
-        tasteWeight: weights.tasteWeight,
-        socialWeight: weights.socialWeight,
-        intensityWeight: weights.intensityWeight,
-      },
+      appliedWeights: toAppliedWeights(weights),
       activeLineupId: lineupId,
       nominatedCount: nominatedIds.length,
       maxNominations: nominationCap(nominatorCount),
+      participantCount,
     },
   };
 }

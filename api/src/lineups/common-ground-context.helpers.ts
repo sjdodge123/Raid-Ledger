@@ -21,6 +21,7 @@ import {
   findLineupVoterIds,
   findNominatedGameIds,
 } from './lineups-query.helpers';
+import { loadInvitees } from './lineups-eligibility.helpers';
 import { computeCombinedVoterVector } from './common-ground-taste.helpers';
 import type { IntensityBucket } from './common-ground-taste.helpers';
 import {
@@ -95,19 +96,36 @@ function averageIntensityBucket(
 async function resolveScoringLineup(
   db: PostgresJsDatabase<typeof schema>,
   filters: CommonGroundQueryDto,
-): Promise<{ id: number }> {
+): Promise<{ id: number; visibility: 'public' | 'private' }> {
   if (filters.lineupId != null) {
     const [row] = await findLineupById(db, filters.lineupId);
     if (!row) throw new NotFoundException('Lineup not found');
     if (row.status !== 'building') {
       throw new BadRequestException('Lineup is not in building status');
     }
-    return { id: row.id };
+    return { id: row.id, visibility: row.visibility };
   }
   const [lineup] = await findBuildingLineup(db);
   if (!lineup)
     throw new NotFoundException('No active lineup in building status');
-  return { id: lineup.id };
+  return { id: lineup.id, visibility: lineup.visibility };
+}
+
+/**
+ * Resolve voting-eligibility size for the nomination-phase filter (ROK-1255).
+ * Private: creator + invitees (one row per invitee, plus the creator).
+ * Public: union of voters + nominators + creator, mirroring `findLineupVoterIds`.
+ */
+async function resolveParticipantCount(
+  db: PostgresJsDatabase<typeof schema>,
+  lineup: { id: number; visibility: 'public' | 'private' },
+): Promise<number> {
+  if (lineup.visibility === 'private') {
+    const invitees = await loadInvitees(db, lineup.id);
+    return invitees.length + 1;
+  }
+  const voterIds = await findLineupVoterIds(db, lineup.id);
+  return voterIds.length;
 }
 
 /**
@@ -125,12 +143,14 @@ export async function runCommonGroundForBuildingLineup(
   const lineup = await resolveScoringLineup(db, filters);
   const nominated = await findNominatedGameIds(db, lineup.id);
   const [nominators] = await countDistinctNominators(db, lineup.id);
+  const participantCount = await resolveParticipantCount(db, lineup);
   const ctx = await buildScoringContext(db, lineup.id, tasteProfile, settings);
   return buildCommonGroundResponse(
     db,
     lineup.id,
     nominated,
     nominators?.count ?? 0,
+    participantCount,
     filters,
     ctx,
   );

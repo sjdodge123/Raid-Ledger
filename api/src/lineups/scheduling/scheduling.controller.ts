@@ -22,7 +22,6 @@ import {
   ToggleScheduleVoteSchema,
   CreateEventFromSlotSchema,
   type SchedulePollPageResponseDto,
-  type SchedulingBannerDto,
   type OtherPollsResponseDto,
   type AggregateGameTimeResponse,
 } from '@raid-ledger/contract';
@@ -39,15 +38,6 @@ interface AuthRequest extends Request {
 @Controller('lineups')
 export class SchedulingController {
   constructor(private readonly schedulingService: SchedulingService) {}
-
-  /** GET /lineups/scheduling-banner — banner for events page. */
-  @Get('scheduling-banner')
-  @UseGuards(AuthGuard('jwt'))
-  async getSchedulingBanner(
-    @Req() req: AuthRequest,
-  ): Promise<SchedulingBannerDto | null> {
-    return this.schedulingService.getSchedulingBanner(req.user!.id);
-  }
 
   /** GET /lineups/:lineupId/schedule/:matchId — full poll page. */
   @Get(':lineupId/schedule/:matchId')

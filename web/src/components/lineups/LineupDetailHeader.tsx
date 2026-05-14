@@ -20,6 +20,9 @@ import { PhaseTransitionModal } from './phase-transition-modal';
 
 interface Props {
   lineup: LineupDetailResponseDto;
+  /** ROK-1207: when true, the lineup has been aborted via activity log and
+   *  the phase breadcrumb's advance/revert pills are disabled. */
+  isAborted?: boolean;
   onTiebreakerIntercept?: () => void;
 }
 
@@ -43,12 +46,16 @@ function PhaseCircle({ status }: { status: string }): JSX.Element {
   );
 }
 
-function PhaseBreadcrumb({ lineup, onTiebreakerIntercept }: {
-  lineup: LineupDetailResponseDto; onTiebreakerIntercept?: () => void;
+function PhaseBreadcrumb({ lineup, isAborted, onTiebreakerIntercept }: {
+  lineup: LineupDetailResponseDto;
+  isAborted: boolean;
+  onTiebreakerIntercept?: () => void;
 }): JSX.Element {
   const { user } = useAuth();
   const transition = useTransitionLineupStatus();
-  const canOperate = isOperatorOrAdmin(user);
+  // ROK-1207: an aborted lineup is terminal — admin must not be able to
+  // revert it back to voting/building. Disable all pills regardless of role.
+  const canOperate = !isAborted && isOperatorOrAdmin(user);
   const currentIdx = PHASES.indexOf(lineup.status as LineupStatusDto);
   const [targetIdx, setTargetIdx] = useState<number | null>(null);
 
@@ -182,7 +189,7 @@ function useCanEdit(lineup: LineupDetailResponseDto): boolean {
   return user.id === lineup.createdBy.id;
 }
 
-export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JSX.Element {
+export function LineupDetailHeader({ lineup, isAborted = false, onTiebreakerIntercept }: Props): JSX.Element {
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
   const canEdit = useCanEdit(lineup);
@@ -221,13 +228,13 @@ export function LineupDetailHeader({ lineup, onTiebreakerIntercept }: Props): JS
         <AbortLineupButton lineup={lineup} />
         {/* Desktop-only inline breadcrumb + circle after edit */}
         <div className="hidden md:flex items-center gap-3 flex-shrink-0">
-          <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
+          <PhaseBreadcrumb lineup={lineup} isAborted={isAborted} onTiebreakerIntercept={onTiebreakerIntercept} />
           <PhaseCircle status={lineup.status} />
         </div>
       </div>
       {/* Row 2 (mobile only): breadcrumb + circle */}
       <div className="md:hidden flex items-center gap-2 flex-wrap mb-2 ml-8">
-        <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
+        <PhaseBreadcrumb lineup={lineup} isAborted={isAborted} onTiebreakerIntercept={onTiebreakerIntercept} />
         <PhaseCircle status={lineup.status} />
       </div>
       {lineup.description && (

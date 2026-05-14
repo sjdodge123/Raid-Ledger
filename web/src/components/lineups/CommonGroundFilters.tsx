@@ -2,7 +2,7 @@
  * Filter controls for the Common Ground panel (ROK-934).
  * Min owners slider, genre dropdown, max players input.
  */
-import { type JSX, useCallback } from 'react';
+import { type JSX, useCallback, useEffect, useRef } from 'react';
 import type { CommonGroundParams } from '../../lib/api-client';
 
 interface Props {
@@ -11,6 +11,13 @@ interface Props {
     availableTags: string[];
     search: string;
     onSearchChange: (v: string) => void;
+    /**
+     * Voting-eligibility size for the active lineup (ROK-1255). When > 0
+     * and `filters.maxPlayers` is unset, the player-count slider auto-sets
+     * to this value on first mount so a 3-person group sees 3-player-
+     * compatible games immediately. Manual adjustments are preserved.
+     */
+    participantCount?: number;
 }
 
 /** Slider for the minimum owners threshold (0–15). */
@@ -90,11 +97,24 @@ function PlayersSlider({
 }
 
 /** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, availableTags, search, onSearchChange }: Props): JSX.Element {
+export function CommonGroundFilters({ filters, onChange, availableTags, search, onSearchChange, participantCount }: Props): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
         [filters, onChange],
     );
+
+    // ROK-1255: pre-set the player-count filter to the lineup's participant
+    // count the FIRST time we see a known value (>0). Captures intent on
+    // entry to the nomination panel without re-pinning when invitees join
+    // or leave mid-building, and without overriding manual adjustments.
+    const didInitPlayersRef = useRef(false);
+    useEffect(() => {
+        if (didInitPlayersRef.current) return;
+        if (!participantCount || participantCount <= 0) return;
+        didInitPlayersRef.current = true;
+        if (filters.maxPlayers != null) return;
+        onChange({ ...filters, maxPlayers: participantCount });
+    }, [participantCount, filters, onChange]);
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[160px_1fr_1fr_1fr] gap-3 sm:gap-4 items-center">

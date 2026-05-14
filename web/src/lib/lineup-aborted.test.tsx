@@ -46,7 +46,53 @@ describe('useLineupAbortedAt', () => {
 
     const { result } = renderHook(() => useLineupAbortedAt(42));
     expect(result.current.abortedAt).toBe('2026-04-28T15:00:00Z');
+    expect(result.current.reason).toBeNull();
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it('returns reason from the latest abort entry (ROK-1207)', () => {
+    mockUseActivityTimeline.mockReturnValue({
+      data: buildResponse([
+        {
+          id: 1,
+          action: 'lineup_aborted',
+          actor: { id: 1, displayName: 'Op' },
+          metadata: { reason: 'stale, restarting' },
+          createdAt: '2026-04-01T10:00:00Z',
+        },
+        {
+          id: 2,
+          action: 'lineup_aborted',
+          actor: { id: 1, displayName: 'Op' },
+          metadata: { reason: 'wrong scope' },
+          createdAt: '2026-04-28T15:00:00Z',
+        },
+      ]),
+      isLoading: false,
+    } as never);
+
+    const { result } = renderHook(() => useLineupAbortedAt(42));
+    expect(result.current.abortedAt).toBe('2026-04-28T15:00:00Z');
+    expect(result.current.reason).toBe('wrong scope');
+  });
+
+  it('returns reason = null when latest abort has no metadata.reason', () => {
+    mockUseActivityTimeline.mockReturnValue({
+      data: buildResponse([
+        {
+          id: 1,
+          action: 'lineup_aborted',
+          actor: null,
+          metadata: { reason: '   ' },
+          createdAt: '2026-04-28T15:00:00Z',
+        },
+      ]),
+      isLoading: false,
+    } as never);
+
+    const { result } = renderHook(() => useLineupAbortedAt(42));
+    expect(result.current.abortedAt).toBe('2026-04-28T15:00:00Z');
+    expect(result.current.reason).toBeNull();
   });
 
   it("returns abortedAt = null when log has no 'lineup_aborted' entries", () => {
