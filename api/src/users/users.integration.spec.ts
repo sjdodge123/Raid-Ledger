@@ -438,3 +438,36 @@ describe('Discord link/unlink (integration)', () => {
   it('findByDiscordIdIncludingUnlinked finds exact and prefixed', () =>
     testFindByDiscordIdIncludingUnlinked());
 });
+
+// ─── ROK-1282: Players list excludes deactivated users ───────────────────────
+
+/**
+ * Regression test pinning the behaviour ROK-1260 already shipped: the
+ * `GET /users` listing must filter `deactivated_at IS NOT NULL` rows.
+ * If a future refactor strips the `activeUsersFilter()` call from
+ * `findAllUsers`, this test catches it.
+ */
+async function testPlayersListExcludesDeactivatedUsers() {
+  const active = await createDiscordUser('rok1282-active', '1282-active-id');
+  const deactivated = await createDiscordUser(
+    'rok1282-deactivated',
+    '1282-deact-id',
+  );
+  await testApp.db.execute(
+    /* sql */ `UPDATE users SET deactivated_at = NOW() WHERE id = ${deactivated.id}`,
+  );
+
+  const res = await testApp.request
+    .get('/users')
+    .set('Authorization', `Bearer ${adminToken}`);
+  expect(res.status).toBe(200);
+
+  const ids = (res.body.data as { id: number }[]).map((u) => u.id);
+  expect(ids).toContain(active.id);
+  expect(ids).not.toContain(deactivated.id);
+}
+
+describe('Regression: ROK-1282 — Players list excludes deactivated users', () => {
+  it('GET /users does not return users with deactivated_at set', () =>
+    testPlayersListExcludesDeactivatedUsers());
+});
