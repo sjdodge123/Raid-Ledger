@@ -156,6 +156,7 @@ function PanelContent({
     filters,
     setFilters,
     availableTags,
+    participantCount,
     isLoading,
     isError,
     refetch,
@@ -170,6 +171,7 @@ function PanelContent({
     filters: CommonGroundParams;
     setFilters: (f: CommonGroundParams) => void;
     availableTags: string[];
+    participantCount: number;
     isLoading: boolean;
     isError: boolean;
     refetch: () => void;
@@ -182,7 +184,14 @@ function PanelContent({
 }): JSX.Element {
     return (
         <>
-            <CommonGroundFilters filters={filters} onChange={setFilters} availableTags={availableTags} search={search} onSearchChange={setSearch} />
+            <CommonGroundFilters
+                filters={filters}
+                onChange={setFilters}
+                availableTags={availableTags}
+                search={search}
+                onSearchChange={setSearch}
+                participantCount={participantCount}
+            />
             {isLoading && <LoadingSkeleton />}
             {isError && <ErrorState onRetry={refetch} />}
             {mergedData && mergedData.data.length === 0 && <EmptyState />}

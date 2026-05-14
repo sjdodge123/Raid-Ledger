@@ -389,6 +389,13 @@ export const CommonGroundResponseSchema = z.object({
         activeLineupId: z.number(),
         nominatedCount: z.number(),
         maxNominations: z.number(),
+        /**
+         * Voting-eligibility size for the active lineup (ROK-1255).
+         * Private lineups: creator + invitees. Public lineups: union of
+         * nominators + voters + creator. Used by the panel's player-count
+         * filter to auto-set on first mount.
+         */
+        participantCount: z.number(),
     }),
 });
 

@@ -49,6 +49,12 @@ export interface UseCommonGroundStateResult {
     search: string;
     setSearch: (v: string) => void;
     availableTags: string[];
+    /**
+     * Voting-eligibility size for the active lineup (ROK-1255). 0 when
+     * unknown / not yet loaded — consumers should fall back to default
+     * behavior. Drives the auto-set player-count filter on first mount.
+     */
+    participantCount: number;
     isLoading: boolean;
     isError: boolean;
     refetch: () => void;
@@ -133,6 +139,7 @@ export function useCommonGroundState(
         }),
         [data],
     );
+    const participantCount = data?.meta.participantCount ?? 0;
 
     const [nominatingId, setNominatingId] = useState<number | null>(null);
     const nominate = useNominateGame();
@@ -166,6 +173,7 @@ export function useCommonGroundState(
         search,
         setSearch,
         availableTags,
+        participantCount,
         isLoading,
         isError,
         refetch: stableRefetch,

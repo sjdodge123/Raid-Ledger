@@ -272,7 +272,10 @@ export async function validateDecidedGame(
 /** Find an active lineup specifically in building status. */
 export function findBuildingLineup(db: PostgresJsDatabase<typeof schema>) {
   return db
-    .select({ id: schema.communityLineups.id })
+    .select({
+      id: schema.communityLineups.id,
+      visibility: schema.communityLineups.visibility,
+    })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.status, 'building'))
     .orderBy(desc(schema.communityLineups.createdAt))
