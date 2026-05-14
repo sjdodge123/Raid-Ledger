@@ -5,12 +5,15 @@ import { UsersService } from './users.service';
 import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
 import { GameTimeService } from './game-time.service';
+import { GuildReconciliationService } from './guild-reconciliation.service';
 import { UsersController } from './users.controller';
 import { UsersMeController } from './users-me.controller';
 import { UsersManagementController } from './users-management.controller';
 import { CharactersModule } from '../characters/characters.module';
 import { EventsModule } from '../events/events.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
+import { NotificationModule } from '../notifications/notification.module';
+import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
 
 @Module({
@@ -18,6 +21,8 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
     forwardRef(() => CharactersModule),
     EventsModule,
     forwardRef(() => DiscordBotModule),
+    forwardRef(() => NotificationModule),
+    CronJobModule,
     MulterModule.register({ storage: multer.memoryStorage() }),
   ],
   controllers: [UsersMeController, UsersManagementController, UsersController],
@@ -26,6 +31,7 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
     AvatarService,
     PreferencesService,
     GameTimeService,
+    GuildReconciliationService,
     TokenBlocklistService,
   ],
   exports: [UsersService, AvatarService, PreferencesService, GameTimeService],
