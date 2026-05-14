@@ -126,15 +126,18 @@ describe('buildDetailResponse', () => {
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ limitResult: [mockUser] }),
     );
-    // 6. countOwnersPerGame
+    // 6. listInviteesWithProfile (ROK-1065 / ROK-1252 — pulled into the
+    //    parallel batch so the audience is available for fetchEnrichment).
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
+    // 7. countOwnersPerGame
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ groupByResult: [{ gameId: 42, count: 8 }] }),
     );
-    // 7. countWishlistPerGame
+    // 8. countWishlistPerGame
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ groupByResult: [{ gameId: 42, count: 2 }] }),
     );
-    // 8. fetchPricingMetadata
+    // 9. fetchPricingMetadata
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({
         whereResult: [
@@ -148,12 +151,10 @@ describe('buildDetailResponse', () => {
         ],
       }),
     );
-    // 9. countTotalMembers
+    // 10. countTotalMembers
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ whereResult: [{ count: 15 }] }),
     );
-    // 10. listInviteesWithProfile (ROK-1065) — empty for public lineup
-    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
 
     const result = await buildDetailResponse(mockDb as any, 1);
 
@@ -200,18 +201,19 @@ describe('buildDetailResponse', () => {
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ limitResult: [mockUser] }),
     );
-    // 6. countOwnersPerGame — empty
-    mockDb.select.mockReturnValueOnce(makeSelectChain({ groupByResult: [] }));
-    // 7. countWishlistPerGame — empty
-    mockDb.select.mockReturnValueOnce(makeSelectChain({ groupByResult: [] }));
-    // 8. fetchPricingMetadata — no pricing
+    // 6. listInviteesWithProfile (ROK-1065 / ROK-1252 — pulled into the
+    //    parallel batch so the audience is available for fetchEnrichment).
     mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
-    // 9. countTotalMembers
+    // 7. countOwnersPerGame — empty
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ groupByResult: [] }));
+    // 8. countWishlistPerGame — empty
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ groupByResult: [] }));
+    // 9. fetchPricingMetadata — no pricing
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
+    // 10. countTotalMembers
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ whereResult: [{ count: 10 }] }),
     );
-    // 10. listInviteesWithProfile (ROK-1065) — empty for public lineup
-    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
 
     const result = await buildDetailResponse(mockDb as any, 1);
 
