@@ -3,6 +3,7 @@ import {
 } from 'recharts';
 import type { CommunityRadarResponseDto, TasteProfilePoolAxis } from '@raid-ledger/contract';
 import { axisLabel } from '../../taste-profile/taste-profile-helpers';
+import { reshape } from './taste-drift-helpers';
 
 interface Props {
     driftSeries: CommunityRadarResponseDto['driftSeries'];
@@ -35,33 +36,14 @@ export function TasteDriftChart({ driftSeries }: Props) {
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     {topAxes.map((axis, i) => (
                         <Line key={axis} type="monotone" dataKey={axis}
-                            stroke={COLORS[i] ?? '#a855f7'} strokeWidth={2} dot={false}
+                            stroke={COLORS[i] ?? '#a855f7'} strokeWidth={2}
+                            dot={weeks.length === 1}
                             isAnimationActive={false}
                             name={axisLabel(axis as TasteProfilePoolAxis)} />
                     ))}
-                    {/* weeks consumed as X-axis categories */}
-                    {weeks.length === 0 && null}
                 </LineChart>
             </ResponsiveContainer>
         </div>
     );
 }
 
-function reshape(driftSeries: CommunityRadarResponseDto['driftSeries']) {
-    const weeks = Array.from(new Set(driftSeries.map((p) => p.weekStart))).sort();
-    const latest = weeks[weeks.length - 1];
-    const topAxes = driftSeries
-        .filter((p) => p.weekStart === latest)
-        .sort((a, b) => b.meanScore - a.meanScore)
-        .slice(0, 3)
-        .map((p) => p.axis);
-    const rows = weeks.map((weekStart) => {
-        const row: Record<string, string | number> = { weekStart };
-        for (const axis of topAxes) {
-            const p = driftSeries.find((x) => x.weekStart === weekStart && x.axis === axis);
-            row[axis] = Math.round(p?.meanScore ?? 0);
-        }
-        return row;
-    });
-    return { weeks, topAxes, rows };
-}

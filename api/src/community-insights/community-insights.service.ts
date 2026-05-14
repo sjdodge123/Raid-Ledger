@@ -69,4 +69,20 @@ export class CommunityInsightsService {
       .limit(1);
     return rows[0] ?? null;
   }
+
+  /**
+   * Up to `limit` most recent snapshots, newest-first. Used by the radar
+   * query to stitch multi-week drift history (ROK-1280). LIMIT-based
+   * rather than date-based so tests can seed historical dates without
+   * coupling to the system clock.
+   */
+  async readRecentSnapshots(
+    limit: number,
+  ): Promise<CommunityInsightsSnapshotRow[]> {
+    return this.db
+      .select()
+      .from(schema.communityInsightsSnapshots)
+      .orderBy(desc(schema.communityInsightsSnapshots.snapshotDate))
+      .limit(limit);
+  }
 }
