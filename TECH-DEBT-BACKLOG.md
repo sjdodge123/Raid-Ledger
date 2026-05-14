@@ -307,3 +307,8 @@ Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched
 - **[med]** `scripts/smoke/navigation.smoke.spec.ts:161` (mobile) — "Navigation (mobile) › no critical console errors during navigation" failed. The assertion is asserting absence of console errors, so the failure means SOMETHING is logging a console error on mobile nav. Worth investigating because it could mask a real regression — but it's not new in ROK-1162 (Sentry filters don't touch console output).
   Suggested: run in isolation with `--repeat-each 5` to confirm reproducibility; if reproducible, capture the console error message to identify the source.
 
+### 2026-05-14 — rok-1252-lineup-banner-counts (surfaced during ROK-1252 validate-ci.sh --full)
+
+- **[med]** `api/src/events/events-dashboard.actions.integration.spec.ts:241` — `reschedule with 12 signups completes under 200ms (ROK-1043)` is a wall-clock perf assertion that flakes under full-suite system load. Failure observed: `Expected: < 200, Received: 255.87208299999475` after a 581s integration run. Re-running the spec in isolation: 21/21 passed in 7.3s with no flake. The full-suite wall clock means the test machine is under heavier concurrent load when this spec runs vs. solo. Untouched on this branch (`api/src/events/**` not modified); this branch touches only `api/src/lineups/lineups-enrichment.helpers.ts` + `api/src/lineups/lineups-response.helpers.ts`.
+  Suggested: raise the threshold to ~400ms (current real measurement is ~256ms under load) OR convert the assertion to a percentile measurement across N runs OR move the perf assertion to a dedicated bench job not coupled to the full integration suite. Symptom matches the classic `toBeLessThan(<wallclock_ms>)` flake pattern in CI-heavy environments.
+
