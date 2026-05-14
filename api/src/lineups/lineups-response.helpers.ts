@@ -25,6 +25,7 @@ import {
   countUnlinkedSteamMembers,
   findUnlinkedSteamMembers,
   type GamePricing,
+  type LineupAudience,
   type UnlinkedSteamMember,
 } from './lineups-enrichment.helpers';
 import { findUserVotes } from './lineups-voting.helpers';
@@ -143,6 +144,7 @@ function mapToDetailResponse(
 async function fetchEnrichment(
   db: Db,
   gameIds: number[],
+  audience: LineupAudience,
 ): Promise<EnrichmentMaps> {
   const [ownerMap, wishlistMap, pricingMap, totalMembers, uc, um] =
     await Promise.all([
@@ -150,8 +152,8 @@ async function fetchEnrichment(
       countWishlistPerGame(db, gameIds),
       fetchPricingMetadata(db, gameIds),
       countTotalMembers(db),
-      countUnlinkedSteamMembers(db),
-      findUnlinkedSteamMembers(db),
+      countUnlinkedSteamMembers(db, audience),
+      findUnlinkedSteamMembers(db, audience),
     ]);
   return {
     ownerMap,
@@ -179,21 +181,38 @@ export async function buildDetailResponse(
   const [lineup] = await findLineupById(db, lineupId);
   if (!lineup) throw new NotFoundException('Lineup not found');
 
-  const [entries, voteCounts, voterCount, creator, decidedGame, myVotes] =
-    await Promise.all([
-      findEntriesWithGames(db, lineupId),
-      countVotesPerGame(db, lineupId),
-      countDistinctVoters(db, lineupId),
-      findUserById(db, lineup.createdBy),
-      lineup.decidedGameId
-        ? findGameName(db, lineup.decidedGameId)
-        : Promise.resolve([]),
-      findUserVotes(db, lineupId, userId),
-    ]);
+  const [
+    entries,
+    voteCounts,
+    voterCount,
+    creator,
+    decidedGame,
+    myVotes,
+    invitees,
+  ] = await Promise.all([
+    findEntriesWithGames(db, lineupId),
+    countVotesPerGame(db, lineupId),
+    countDistinctVoters(db, lineupId),
+    findUserById(db, lineup.createdBy),
+    lineup.decidedGameId
+      ? findGameName(db, lineup.decidedGameId)
+      : Promise.resolve([]),
+    findUserVotes(db, lineupId, userId),
+    // ROK-1252: pulled into the parallel batch so the audience is available
+    // before fetchEnrichment runs.
+    listInviteesWithProfile(db, lineupId),
+  ]);
 
+  // ROK-1252: scope steam-link enrichment to the lineup audience.
+  const audience: LineupAudience = {
+    visibility: lineup.visibility,
+    createdBy: lineup.createdBy,
+    inviteeUserIds: invitees.map((i) => i.id),
+  };
   const enrichment = await fetchEnrichment(
     db,
     entries.map((e) => e.gameId),
+    audience,
   );
   const channelOverrideName = lineup.channelOverrideId
     ? (resolveChannelName?.(lineup.channelOverrideId) ?? null)
@@ -210,7 +229,7 @@ export async function buildDetailResponse(
     channelOverrideName,
   );
   // ROK-1065: invitees populated for both public (empty) and private lineups.
-  detail.invitees = await listInviteesWithProfile(db, lineupId);
+  detail.invitees = invitees;
 
   // Attach tiebreaker detail if one exists (ROK-938)
   if (lineup.activeTiebreakerId) {
