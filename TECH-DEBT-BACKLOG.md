@@ -208,3 +208,16 @@ Suggested triage path: one chore-labeled story. First task is the bisect — onc
 **Why this matters:** `validate-ci.sh --full` will fail on the batch base today, blocking every fix-batch / build / dispatch that runs the full integration gate. Existing memory `reference_bullmq_ioredis_test_carrier.md` documents the socket-leak class; the auth-state-leak (signups-roster) class is new and worth its own slot.
 
 Suggested triage path: two stories — (1) continue ROK-1250 socket cleanup with the new carrier evidence, (2) new auth-state-isolation chore. Estimated 1-3h each. Cheap-experiments-first applies (memory `feedback_cheap_experiments_first`): start with bisect, don't pay for instrumented full-suite loops until the bisect names the polluting predecessor.
+
+### 2026-05-13 — Playwright cross-project flakes (surfaced during fix/batch-2026-05-13 smoke gate)
+
+3 smoke tests failed in the full Playwright sweep (632 passed / 3 failed / 200 skipped / 5 did not run). None of the 3 failing files are in the batch's 24-file diff. The failure signatures are cross-project (each fails on ONE viewport — desktop OR mobile — and passes on the other), strongly suggesting test-data state pollution rather than functional regression.
+
+- **[med]** `scripts/smoke/lineup-admin-abort-phases.smoke.spec.ts:121` (desktop only, 17ms instant fail) — `expect(before?.status).toBe(phase)` failed because the lineup fixture wasn't in the expected phase when the API check ran. Mobile equivalent test passes in 470ms. The 17ms duration on desktop = fixture state was already wrong before the test body executed. Likely a previous desktop test left the same lineup ID in a different phase.
+  Suggested: add `beforeEach` that asserts/forces lineup-into-phase state via the seed API, or scope each phase test to its own seeded lineup ID rather than sharing a fixture.
+- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:416` (mobile only, 6.5s — hit the 5s timeout) — asserts the "COMMUNITY LINEUP" banner + "Nominate" button on `/games`. This is the GamesPage's LineupBanner/StandalonePollBanner (NOT lineup-detail-page.tsx, which ROK-1207 changed). Mobile-only failure with the banner showing but the Nominate button not appearing within 5s. Possibly a fixture lineup with no Nominate CTA on mobile or a render race.
+  Suggested: bump the Nominate-button timeout to match the COMMUNITY-LINEUP-text timeout (15s), or assert on a state-stable signal first (e.g., banner CTAs visible) before per-button.
+- **[low]** `scripts/smoke/events.smoke.spec.ts:370` (desktop only) — Regression test for ROK-784 (attendance dashboard light mode theme). Completely unrelated to this batch's diff. Pre-existing theme/contrast intermittent.
+  Suggested: stabilize with explicit `prefers-color-scheme: light` media emulation, or `page.emulateMedia({ colorScheme: 'light' })` at test start.
+
+**Verdict for this batch:** all 3 failures unrelated to the 24-file diff. ROK-1207's own regression tests (`scripts/smoke/lineup-abort.smoke.spec.ts:219`, `:276`) PASSED on BOTH desktop and mobile (4 of 4 ROK-1207 regression cases green). GitHub CI has been consistently green on `main` (last 5 merges, including PR #787 mid-session). Proceeding to ship per operator approval; flakes documented for follow-up triage.
