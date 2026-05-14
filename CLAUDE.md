@@ -375,6 +375,18 @@ npx playwright test
   - API-only changes → Integration test (Jest, real DB)
   - Pure logic → Unit test
 
+## Discord User Deactivation (ROK-1260, ROK-1282)
+
+When a user leaves the Discord guild we must flip `users.deactivated_at` so they stop receiving DMs, get cancelled from upcoming signups, and disappear from the Players list. There is **no `GuildMemberRemove` listener** — ROK-1260's spec mentioned one but it was never shipped. Three layers cover the gap instead. Before adding a fourth, confirm one of the existing three is insufficient.
+
+| Layer | Trigger | Where | Misses |
+|-------|---------|-------|--------|
+| 1. Reactive 50278 classifier | DM send fails with `DiscordAPIError[50278]` | `api/src/notifications/discord-notification.processor.ts` (~line 117) | Quiet users who never receive a notification |
+| 2. `GuildMemberAdd` listener | User joins/rejoins the guild | `api/src/discord-bot/listeners/guild-member-add.listener.ts` | Only re-enables; nothing on the leave side |
+| 3. Daily reconciliation cron | `@Cron('0 0 7 * * *')` — 07:00 UTC daily | `api/src/users/guild-reconciliation.service.ts` | Users gone for <24h (rare; layer 1 usually catches first DM) |
+
+All three call into `DiscordNotificationService.deactivateUser(userId)` so the cancel cascade + admin notification path is identical. `deactivateUser` is idempotent (RETURNING-guarded UPDATE), so overlap between layers is safe.
+
 ## Discord Testing (tools/)
 
 Two tools exist for testing Discord bot functionality. **Use these when testing any Discord-related feature** (events, attendance, notifications, embeds, voice).
