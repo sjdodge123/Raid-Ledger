@@ -66,11 +66,25 @@ async function createOperatorAndLogin(testApp: TestApp): Promise<string> {
 async function seedSnapshot(
   testApp: TestApp,
   snapshotDate: string,
+  options: { rpgDriftScore?: number } = {},
 ): Promise<void> {
   const fixture = buildSnapshotFixture(snapshotDate);
+  const radarPayload =
+    options.rpgDriftScore !== undefined
+      ? {
+          ...fixture.radar,
+          driftSeries: [
+            {
+              weekStart: snapshotDate,
+              axis: 'rpg' as const,
+              meanScore: options.rpgDriftScore,
+            },
+          ],
+        }
+      : fixture.radar;
   await testApp.db.insert(schema.communityInsightsSnapshots).values({
     snapshotDate,
-    radarPayload: fixture.radar,
+    radarPayload,
     engagementPayload: fixture.engagement,
     churnPayload: fixture.churn,
     socialGraphPayload: fixture.socialGraph,
@@ -149,6 +163,91 @@ describe('Community Insights (ROK-1099)', () => {
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.insights).toHaveLength(1);
+    });
+  });
+
+  describe('GET /insights/community/radar drift history (ROK-1280)', () => {
+    it('stitches one drift entry per ISO week across multiple snapshots', async () => {
+      // Three snapshots in three distinct ISO weeks. Apr 20 / Apr 27 / May 4
+      // are all Mondays, so each snapshot lands in its own week.
+      await seedSnapshot(testApp, '2026-04-22', { rpgDriftScore: 30 });
+      await seedSnapshot(testApp, '2026-04-29', { rpgDriftScore: 45 });
+      await seedSnapshot(testApp, '2026-05-06', { rpgDriftScore: 60 });
+
+      const res = await testApp.request
+        .get('/insights/community/radar')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+
+      const drift = res.body.driftSeries as Array<{
+        weekStart: string;
+        axis: string;
+        meanScore: number;
+      }>;
+      const weeks = Array.from(new Set(drift.map((p) => p.weekStart))).sort();
+      expect(weeks).toEqual(['2026-04-20', '2026-04-27', '2026-05-04']);
+      const rpgByWeek = Object.fromEntries(
+        drift
+          .filter((p) => p.axis === 'rpg')
+          .map((p) => [p.weekStart, p.meanScore]),
+      );
+      expect(rpgByWeek).toEqual({
+        '2026-04-20': 30,
+        '2026-04-27': 45,
+        '2026-05-04': 60,
+      });
+    });
+
+    it('keeps the latest snapshot per ISO week when multiple snapshots share a week', async () => {
+      // Both 2026-04-22 (Wed) and 2026-04-25 (Sat) live in ISO week 2026-04-20.
+      await seedSnapshot(testApp, '2026-04-22', { rpgDriftScore: 10 });
+      await seedSnapshot(testApp, '2026-04-25', { rpgDriftScore: 99 });
+
+      const res = await testApp.request
+        .get('/insights/community/radar')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+
+      expect(res.body.driftSeries).toHaveLength(1);
+      expect(res.body.driftSeries[0]).toMatchObject({
+        weekStart: '2026-04-20',
+        axis: 'rpg',
+        meanScore: 99,
+      });
+    });
+
+    it('caps the drift series at 8 weeks even when more snapshots exist', async () => {
+      // 10 snapshots, each in its own ISO week, every Monday going back.
+      const mondays = [
+        '2026-03-09',
+        '2026-03-16',
+        '2026-03-23',
+        '2026-03-30',
+        '2026-04-06',
+        '2026-04-13',
+        '2026-04-20',
+        '2026-04-27',
+        '2026-05-04',
+        '2026-05-11',
+      ];
+      for (const d of mondays) {
+        await seedSnapshot(testApp, d, { rpgDriftScore: 50 });
+      }
+
+      const res = await testApp.request
+        .get('/insights/community/radar')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+
+      const weeks = Array.from(
+        new Set(
+          (res.body.driftSeries as { weekStart: string }[]).map(
+            (p) => p.weekStart,
+          ),
+        ),
+      ).sort();
+      expect(weeks).toHaveLength(8);
+      expect(weeks[weeks.length - 1]).toBe('2026-05-11');
     });
   });
 
