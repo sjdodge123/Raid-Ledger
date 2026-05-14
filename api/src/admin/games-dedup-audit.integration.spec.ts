@@ -61,9 +61,7 @@ async function seedGames(testApp: TestApp): Promise<{
   // DETECTS such rows when they exist (e.g. residual prod data pre-cleanup).
   // Drop the index for the seed; `ensureSteamUniqueIndex` re-creates it after
   // each test's truncate so subsequent inserts see the production schema.
-  await testApp.db.execute(
-    sql`DROP INDEX IF EXISTS games_steam_app_id_unique`,
-  );
+  await testApp.db.execute(sql`DROP INDEX IF EXISTS games_steam_app_id_unique`);
   const pairs = await testApp.db
     .insert(schema.games)
     .values([
@@ -143,9 +141,7 @@ async function ensureSteamUniqueIndex(testApp: TestApp): Promise<void> {
  * layer in production). The afterEach hook restores it after each test.
  */
 async function dropSteamUniqueIndex(testApp: TestApp): Promise<void> {
-  await testApp.db.execute(
-    sql`DROP INDEX IF EXISTS games_steam_app_id_unique`,
-  );
+  await testApp.db.execute(sql`DROP INDEX IF EXISTS games_steam_app_id_unique`);
 }
 
 describe('GET /admin/games/dedup-audit', () => {
