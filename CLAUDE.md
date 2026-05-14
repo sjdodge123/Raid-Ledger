@@ -34,6 +34,46 @@ If you encounter a failure (TypeScript error, lint error, test failure, smoke fl
 
 **Scope guard:** documenting a pre-existing failure is NOT the same as fixing it. Don't expand your story to fix unrelated tech debt unless the operator approves. The doc entry is the deliverable.
 
+## Post-merge planning artifact reconciliation (STRICT — applies to ALL agents)
+
+When a PR merges, Linear flips to `Done` but the cycle plan at `planning-artifacts/current-sprint.md` does NOT auto-update — it rots silently until cycle rollover. The operator reads this file at session start to understand cycle state; a stale plan steers the next session toward already-shipped work. Caught 2026-05-14 during `/sprint-planning` when three Highs shown "open" had shipped 2 days prior.
+
+Every agent (Lead) that merges a PR — single-story or batched — MUST reconcile the planning artifacts as the last step of the ship phase, BEFORE ending the session. Run AFTER `gh pr view ... --json state` confirms `MERGED` (so the PR # and merge date are real).
+
+**Three reconciliation cases:**
+
+1. **Merged story IS listed in `planning-artifacts/current-sprint.md`** (any Wave / batch / table row):
+   - Strike-through the title in place (`~~ROK-XXXX~~ — ~~original title~~`) and append `— **Shipped YYYY-MM-DD PR #N**.` to the Notes column (or trailing text).
+   - Do NOT delete the row — the strike-through preserves the cycle's original commitment for sprint-end review. Deletion erases context for the retrospective.
+
+2. **Merged story is NOT in `current-sprint.md`** (out-of-cycle hotfix, reactive bug filed mid-cycle, unplanned follow-up):
+   - Append a row to the `### Reactive shipments (filed + shipped mid-cycle)` section near the bottom of the file (between "Deferred from Cycle N" and "Capacity guidance"). Create the section once if it doesn't exist; subsequent merges just append.
+   - Row format: `| **ROK-XXXX** | <title> | <1-line why this got pulled in / what prompted it>. **Shipped YYYY-MM-DD PR #N**. |`
+   - This is the part the operator specifically asked for ("I want a good picture of what was actually built during each sprint"). Without it, the sprint review undercounts what shipped.
+
+3. **The merge represents a strategic decision** (architecture call, scope change, deferral, lesson learned, new STRICT rule, dependency reversal, prod-incident postmortem):
+   - Append a dated entry to the **Active State Linear doc's Strategic section** (slug `7a4ddc5652c9`). Format matches existing entries: `**YYYY-MM-DD** — <headline>` followed by 1–3 bullets. The Strategic section is append-only and is NOT cleared by `/status-report`.
+   - Skip this for routine bug-fix merges with no broader implication. Don't pad the doc.
+
+**Plus: Derived freshness check.** If main has moved by >1 PR since the last Derived update on the Active State doc, run `/status-report` from main as part of cleanup. The Derived section is owned by `/status-report` — manual edits get overwritten on the next run.
+
+**Who runs it:**
+
+| Skill | Step where reconciliation lives |
+|---|---|
+| `/build` | `steps/step-5-ship.md` § 5e.5 |
+| `/fix-batch` | `steps/step-4-ship.md` § 4d.5 |
+| `/bulk` | `steps/step-4-ship.md` § 4d.5 |
+| `/handover` | `SKILL.md` Step 4 (extension) |
+
+For an operator-driven manual merge (`gh pr merge` outside any skill), the operator either updates the doc themselves OR re-invokes `/status-report` from main on the next session.
+
+**When NOT to do this:**
+
+- The PR was reverted or closed without merging — nothing to reconcile.
+- The merge is a routine `chore(release): bump version` or pure `chore(config)` operator-config ride-along — no story attached, no reconciliation needed.
+- The merge is a back-merge from main into a working branch — not a story shipment.
+
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
 Before writing implementation code for ANY feature/fix that has a visual or UX dimension, scan for design references that may already exist. The operator regularly approves simplified-flow targets, wireframes, or design specs ahead of implementation — agents picking up follow-up work should be **implementing the approved target, not redesigning it**.

@@ -84,6 +84,19 @@ git pull --rebase origin main
 
 ---
 
+## 5e.5. Reconcile planning artifacts (STRICT)
+
+Per CLAUDE.md "Post-merge planning artifact reconciliation." After `gh pr view ... --json state` confirms `MERGED`:
+
+1. **Story in `planning-artifacts/current-sprint.md`?** Strike-through the row (`~~ROK-XXXX~~ — ~~title~~`) and append `— **Shipped YYYY-MM-DD PR #N**.` to the Notes column. Preserve the row — don't delete.
+2. **Story NOT in `current-sprint.md`?** Append a row to the `### Reactive shipments (filed + shipped mid-cycle)` section (create it once if absent, between "Deferred from Cycle N" and "Capacity guidance"). Row format: `| **ROK-XXXX** | <title> | <why pulled in>. **Shipped YYYY-MM-DD PR #N**. |`
+3. **Strategic decision in this merge?** (architecture call, scope change, deferral, lesson learned, postmortem) — append a dated entry to the Active State Linear doc Strategic section (slug `7a4ddc5652c9`). Skip for routine bug fixes.
+4. **Derived freshness:** if main has moved >1 PR since the last Active State Derived update, run `/status-report` from main.
+
+Commit the `current-sprint.md` change inline as part of cleanup with `chore(planning): reconcile current-sprint.md post-ROK-XXXX merge` OR fold it into the existing `chore(config):` ride-along commit per operator-config rules.
+
+---
+
 ## 5f. Update State
 
 ```yaml

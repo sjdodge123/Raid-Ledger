@@ -96,7 +96,9 @@ Delete any found with `git branch -d`.
 
 ---
 
-## Step 4: Sync Linear
+## Step 4: Sync Linear + Reconcile Planning Artifacts
+
+### 4a. Linear status
 
 For each story identified in Step 2:
 1. `mcp__linear__get_issue` — check current status
@@ -104,6 +106,19 @@ For each story identified in Step 2:
 3. If different, `mcp__linear__update_issue` to set new status
 
 Agents should have already posted summary comments during their work. If a story is missing a summary comment (committed code but no Linear comment), flag it in the report.
+
+### 4b. Planning artifact reconciliation (STRICT)
+
+Per CLAUDE.md "Post-merge planning artifact reconciliation." For each PR that merged this session:
+
+1. **Story in `planning-artifacts/current-sprint.md`?** Strike-through the row (`~~ROK-XXXX~~ — ~~title~~`) and append `— **Shipped YYYY-MM-DD PR #N**.` to the Notes column. Preserve the row.
+2. **Story NOT in `current-sprint.md`?** Append a row to the `### Reactive shipments (filed + shipped mid-cycle)` section (create once if absent, between "Deferred from Cycle N" and "Capacity guidance"). Row format: `| **ROK-XXXX** | <title> | <why pulled in>. **Shipped YYYY-MM-DD PR #N**. |`
+3. **Strategic decisions this session?** Append a dated entry to the Active State Linear doc Strategic section (slug `7a4ddc5652c9`).
+4. **Derived freshness:** if main moved >1 PR since the last Active State Derived update, run `/status-report` from main as part of this step.
+
+`/handover` is the final-mile reconciler — even if individual skills missed Step 4d.5 (build) or 4d.5 (fix-batch/bulk), this step catches the gap. Treat it as belt-and-suspenders, not redundant.
+
+Commit the `current-sprint.md` change inline with `chore(planning): reconcile current-sprint.md` if uncommitted at session-end.
 
 ---
 
