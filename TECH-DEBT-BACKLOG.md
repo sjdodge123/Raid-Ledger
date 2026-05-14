@@ -270,3 +270,13 @@ Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched
   Suggested: add `as const` to the array literals or annotate the helper parameter as a rest tuple.
 - **[med]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — `TS2769`: No overload matches this call. Likely the same drizzle-orm dedup drift as the lineup-deadline-vote-race error above.
   Suggested: `npm dedupe` (paired with the lineup-deadline fix).
+
+### 2026-05-14 — fix/batch-2026-05-14 (PR pending — ROK-1282 + ROK-1283)
+
+- **[low]** `api/src/users/guild-reconciliation.service.ts:107-109` — dead-code `rows.filter((r): r is { id: number; discordId: string } => r.discordId !== null)`. SQL already guarantees `isNotNull(discordId)` so the filter never drops a row.
+  Suggested: drop the filter and tighten the return type via a non-null assertion or Drizzle column-level non-null inference.
+- **[low]** `api/src/users/guild-reconciliation.service.ts:113-123` — `deactivateGap` runs deactivations sequentially. Fine at current scale (~5–10 leavers per run on a 500-user guild), but a post-outage run with hundreds of leavers serialises per-row cascades (cancel signups + admin notification).
+  Suggested: keep sequential for now (audit-trail simplicity); revisit if a single run ever exceeds ~50 deactivations.
+- **[low]** `api/src/users/guild-reconciliation.service.ts:93-106` — `loadActiveDbUsers` has no index on `deactivated_at` and full-scans `users` daily. Acceptable at current user volume; index becomes relevant past several thousand rows.
+  Suggested: revisit if cron duration exceeds ~1s on prod.
+
