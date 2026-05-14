@@ -54,6 +54,14 @@ async function seedGames(testApp: TestApp): Promise<{
   steamDup2Ids: [number, number];
   uniqueIds: number[];
 }> {
+  // ROK-1278 added a partial UNIQUE INDEX on games.steam_app_id WHERE NOT NULL,
+  // so we can no longer insert two rows with the same steam_app_id at the DB
+  // layer. The historical state this spec seeds (steam-key dups) can't happen
+  // via normal inserts going forward — but we still need to verify the audit
+  // DETECTS such rows when they exist (e.g. residual prod data pre-cleanup).
+  // Drop the index for the seed; `ensureSteamUniqueIndex` re-creates it after
+  // each test's truncate so subsequent inserts see the production schema.
+  await testApp.db.execute(sql`DROP INDEX IF EXISTS games_steam_app_id_unique`);
   const pairs = await testApp.db
     .insert(schema.games)
     .values([
@@ -113,6 +121,29 @@ async function seedDepRowsForLoser(
   });
 }
 
+/**
+ * Re-create the partial UNIQUE INDEX on games.steam_app_id (ROK-1278) if a
+ * prior `seedGames` / `dropSteamUniqueIndex` call dropped it. Safe to call
+ * when the index already exists (IF NOT EXISTS). Run after `truncateAllTables`
+ * so dup-rows are already gone and the index can be created without violating
+ * itself.
+ */
+async function ensureSteamUniqueIndex(testApp: TestApp): Promise<void> {
+  await testApp.db.execute(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS games_steam_app_id_unique
+        ON games (steam_app_id) WHERE steam_app_id IS NOT NULL`,
+  );
+}
+
+/**
+ * Drop the partial UNIQUE INDEX on games.steam_app_id so this spec can seed
+ * historical-style steam-key dup rows (which the index prevents at the DB
+ * layer in production). The afterEach hook restores it after each test.
+ */
+async function dropSteamUniqueIndex(testApp: TestApp): Promise<void> {
+  await testApp.db.execute(sql`DROP INDEX IF EXISTS games_steam_app_id_unique`);
+}
+
 describe('GET /admin/games/dedup-audit', () => {
   let testApp: TestApp;
   let adminToken: string;
@@ -124,6 +155,7 @@ describe('GET /admin/games/dedup-audit', () => {
 
   afterEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
+    await ensureSteamUniqueIndex(testApp);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
 
@@ -324,6 +356,7 @@ describe('POST /admin/games/dedup-audit/run', () => {
 
   afterEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
+    await ensureSteamUniqueIndex(testApp);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
 
@@ -461,7 +494,9 @@ describe('POST /admin/games/dedup-audit/run', () => {
     expect(steamRow!.group_size).toBe(2);
 
     // Each loser was seeded with 1 event + 1 character + 1 interest.
-    // downstream_counts sums across ALL dup ids in the group (not canonical).
+    // downstream_counts sums across the WHOLE group (canonical + every dup),
+    // so any rows on either side contribute (ROK-1278 fix — earlier semantics
+    // were dup-only and undercounted real impact).
     expect(steamRow!.downstream_counts.events).toBeGreaterThanOrEqual(1);
     expect(steamRow!.downstream_counts.characters).toBeGreaterThanOrEqual(1);
     expect(steamRow!.downstream_counts.interests).toBeGreaterThanOrEqual(1);
@@ -561,6 +596,9 @@ describe('POST /admin/games/dedup-audit/run', () => {
   // Expected canonical = row C's id even though rows A and B have lower ids.
   // -------------------------------------------------------------------------
   it('breaks ties by itad_game_id > igdb_id > min id (mixed-tiebreak group)', async () => {
+    // Seed shares steam_app_id across 3 rows — bypass ROK-1278's partial
+    // UNIQUE index for the test duration; afterEach restores it.
+    await dropSteamUniqueIndex(testApp);
     const inserted = await testApp.db
       .insert(schema.games)
       .values([
@@ -750,6 +788,7 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
 
   afterEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
+    await ensureSteamUniqueIndex(testApp);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
 
@@ -876,6 +915,9 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
   // steam_app_id; A's igdb_id is unique to A.
   // -------------------------------------------------------------------------
   it('forms one group for a 3-row chain connected through different shared keys (A-B by name, B-C by steam)', async () => {
+    // Seed shares steam_app_id across rows B and C — bypass ROK-1278's
+    // partial UNIQUE index for the test; afterEach restores it.
+    await dropSteamUniqueIndex(testApp);
     const inserted = await testApp.db
       .insert(schema.games)
       .values([

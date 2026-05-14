@@ -131,20 +131,28 @@ export class GamesDedupAuditService {
   /**
    * ROK-1270: same audit as `runAudit()`, but TRUNCATE+INSERT the result
    * into `games_dedup_audit` in a single transaction. One row per dup
-   * group; downstream_counts is the per-key sum across the group's dupIds.
+   * group; downstream_counts is the per-key sum across the WHOLE group
+   * (canonical + every dup), so the persisted value reflects total data
+   * impact rather than dup-side-only repoint count (ROK-1278 fix —
+   * dup-only undercounted real impact when canonical had its own rows).
    * Returns a compact summary with the top 10 groups by downstream rows.
    */
   async persistSnapshot(): Promise<PersistSummary> {
     const audit = await this.runAudit();
-    const blastByGameId = new Map<number, BlastRadiusRow>(
-      audit.blastRadius.map((b) => [b.gameId, b]),
-    );
+    const canonicalIds = audit.groups.map((g) => g.canonicalId);
+    const canonicalBlast = await this.computeBlastRadius(canonicalIds);
+    const blastByGameId = new Map<number, BlastRadiusRow>([
+      ...audit.blastRadius.map((b) => [b.gameId, b] as const),
+      ...canonicalBlast.map((b) => [b.gameId, b] as const),
+    ]);
     const snapshotAt = new Date();
 
     const rows = await Promise.all(
       audit.groups.map(async (group) => {
         const downstreamCounts = sumBlastRadius(
-          group.dupIds.map((id) => blastByGameId.get(id) ?? null),
+          [group.canonicalId, ...group.dupIds].map(
+            (id) => blastByGameId.get(id) ?? null,
+          ),
         );
         const uniqueConflicts = await computeUniqueConflicts(this.db, {
           canonicalId: group.canonicalId,
@@ -290,3 +298,5 @@ function buildPersistSummary(
     topGroups,
   };
 }
+
+
