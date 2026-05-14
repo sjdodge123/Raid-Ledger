@@ -252,3 +252,21 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
   Suggested: replace `runMigrations` in `api/src/backup/backup.helpers.ts:124` with a call to `runBootMigrations(databaseUrl)` from the new runner. Restore flows benefit from the audit refresh + Sentry capture for free.
 - **[med]** Prod recovery required manually marking 0140 as applied in `drizzle.__drizzle_migrations` before the new image could boot. This pattern (insert hash row to skip a failed migration) is not documented anywhere — operator had to derive it. Add a `scripts/recover-stuck-migration.sh` runbook.
   Suggested: a script that takes a migration tag, looks up its hash from `meta/_journal.json`, inserts the journal row, and prints next-steps. Idempotent.
+
+### 2026-05-14 — fix/rok-1283 (ROK-1283 follow-up)
+
+- **[low]** `api/scripts/seed-games.ts` — sibling of `seed-igdb-games.ts` audited as part of ROK-1283. Same shape (`ON CONFLICT (slug) DO NOTHING`), same NULL-distinct vulnerability in principle. Practically dormant in prod: its slugs match `seed-igdb-games.ts` AND post-ROK-1278 cleanup left no name dups for this seed's names to collide with. Was NOT fixed in ROK-1283 because the file already exceeds `max-lines` (302/300) on `origin/main` and applying the same fix would push it further over; CI lint would fail. Apply the name-dedup guard the next time this file is touched, alongside breaking up the `GAMES_SEED` constant (move to a sibling `seed-games.data.ts`) to bring the file back under 300 effective lines.
+  Suggested: extract `GAMES_SEED` to `api/scripts/seed-games.data.ts` (no logic, just data) and apply the same `findGameByNormalizedName` pre-check pattern used in `seed-igdb-games.ts::upsertSeedGames`.
+
+### 2026-05-14 — fix/rok-1283 (surfaced during ROK-1283 typecheck)
+
+Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched by this story. Re-verified by stashing the ROK-1283 changes and re-running `npx tsc --noEmit -p api/tsconfig.json`. All four exist verbatim on main.
+
+- **[med]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — Three `TS2352` errors from postgres-js `RowList<…>` ↔ snake_case struct casts (e.g., `RowList<{ totalSeconds: number; }[]>` → `{ total_seconds: number; }[]`). Drizzle returns camelCase, the cast assumes snake_case.
+  Suggested: cast through `unknown` first (as the compiler error suggests) or fix the destination shape to match Drizzle's camelCase output.
+- **[med]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — `TS2345`: Argument of type `SQL<unknown>` is not assignable to parameter of type `string | SQLWrapper`. Two copies of drizzle-orm types are visible (separate declarations of `shouldInlineParams`). Looks like hoisting / peer-dep dedup drift.
+  Suggested: `npm dedupe` to remove the duplicate `drizzle-orm/sql/sql` instance, or pin a single drizzle-orm version across workspaces.
+- **[med]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — Four `TS2556` "spread argument must either have a tuple type or be passed to a rest parameter". Test uses `fn(...args)` where `args` is inferred as `unknown[]` instead of a tuple.
+  Suggested: add `as const` to the array literals or annotate the helper parameter as a rest tuple.
+- **[med]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — `TS2769`: No overload matches this call. Likely the same drizzle-orm dedup drift as the lineup-deadline-vote-race error above.
+  Suggested: `npm dedupe` (paired with the lineup-deadline fix).

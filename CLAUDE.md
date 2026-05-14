@@ -268,6 +268,22 @@ Backups exclude the `drizzle` schema (migration metadata is code, not data) to p
 - `deploy_dev.sh` calls reconcile automatically after an auto-restore from `api/backups/daily/`.
 - **Symptom that means you need reconcile:** `drizzle-kit migrate` fails with `column/relation X already exists` on a migration whose hash isn't in `drizzle.__drizzle_migrations`.
 
+### Games-table INSERT paths must use the name-dedup guard (STRICT — ROK-1113 / ROK-1283)
+
+Postgres UNIQUE constraints treat NULL as never-equal, so `ON CONFLICT (igdb_id)` does NOT fire when an existing row has `igdb_id IS NULL`. Any new code that inserts into `games` MUST first call `findGameByNormalizedName(db, name)` (or the batch variant `findGameIdsByNormalizedName`) and merge into the existing row when one matches. Otherwise the next migration that collapses dups will be silently undone on the next deploy.
+
+The 5 current INSERT-into-`games` paths, all of which use the name-dedup guard:
+
+1. `api/src/steam/steam-itad-discovery.helpers.ts` — steam-itad discovery (ROK-1113).
+2. `api/src/igdb/igdb-itad-upsert.helpers.ts` — IGDB+ITAD upsert path (ROK-1113).
+3. `api/src/igdb/igdb-upsert.helpers.ts::upsertSingleGameRow` — single-row IGDB upsert (ROK-1113; canonical pattern).
+4. `api/src/igdb/igdb-upsert.helpers.ts::upsertGamesFromApi` — batch IGDB upsert (ROK-1113).
+5. `api/scripts/seed-igdb-games.ts::upsertSeedGames` — boot-time IGDB seed (ROK-1283).
+
+A 6th path exists at `api/scripts/seed-games.ts` (boot-time game-registry seed) and uses `ON CONFLICT (slug) DO NOTHING`. It is theoretically vulnerable to the same NULL-as-distinct trap but practically safe: its slugs match the IGDB seed and prod data has no surviving name dups post-ROK-1278. The same fix should be applied when next touching that file — tracked in TECH-DEBT-BACKLOG.md under 2026-05-14 / ROK-1283.
+
+When adding a NEW INSERT-into-`games` path, append it to this list. The reproduction that motivates the rule: prod 2026-05-14 — migration 0140 merged 21 BG3-like dups, then `seed-igdb-games.ts` immediately re-created the BG3 dup on the same boot because its `ON CONFLICT (igdb_id)` target ignored the NULL-keyed survivor row.
+
 ## Testing
 
 - **Backend:** `npm run test -w api` (Jest). Coverage: `npm run test:cov -w api`
