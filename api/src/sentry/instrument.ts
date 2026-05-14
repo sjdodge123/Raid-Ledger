@@ -52,6 +52,41 @@ if (!telemetryDisabled && isProduction) {
       ) {
         return null;
       }
+      // ROK-1162: drop ConflictException from applyStatusUpdate race detection.
+      // NestJS surfaces ConflictException as HttpException 409; the 409 is
+      // already in HTTP access logs, and the race is correct behavior
+      // (ROK-1118), not a bug.
+      if (
+        exceptionType === 'HttpException' &&
+        typeof exceptionValue === 'string' &&
+        /status changed concurrently/.test(exceptionValue)
+      ) {
+        return null;
+      }
+      // ROK-1162: drop AbortError from cancelled fetches / IGDB stream
+      // cancellation. These are intentional client-side or stream-cleanup
+      // aborts, never a bug.
+      if (
+        exceptionType === 'AbortError' ||
+        (exceptionType === 'DOMException' &&
+          typeof exceptionValue === 'string' &&
+          /abort/i.test(exceptionValue))
+      ) {
+        return null;
+      }
+      // ROK-1162: fingerprint discord.js transient/network failures so
+      // they collapse into one inbox issue instead of N. discord.js v14
+      // retries internally; what reaches Sentry is retry exhaustion —
+      // worth visibility, but grouped.
+      if (
+        exceptionType === 'DiscordAPIError' &&
+        typeof exceptionValue === 'string' &&
+        /5\d\d|ECONNRESET|ETIMEDOUT|getaddrinfo|fetch failed|network/i.test(
+          exceptionValue,
+        )
+      ) {
+        event.fingerprint = ['discord-api-transient'];
+      }
       return event;
     },
     // Filter out pg_catalog type introspection queries from the Postgres driver.

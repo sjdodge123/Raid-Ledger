@@ -111,6 +111,7 @@ function describeSentryInstrumentTs() {
     describe('beforeSend filter', () => {
       type SentryEvent = {
         exception?: { values?: { type?: string; value?: string }[] };
+        fingerprint?: string[];
       };
       type BeforeSend = (event: SentryEvent) => SentryEvent | null;
 
@@ -274,6 +275,140 @@ function describeSentryInstrumentTs() {
             },
           };
           expect(getBeforeSend()(event)).toBe(event);
+        });
+      });
+
+      // ── ROK-1162: Sentry noise reduction ──
+      describe('ROK-1162: ConflictException applyStatusUpdate drop', () => {
+        it('drops HttpException with "status changed concurrently" value', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'HttpException',
+                  value:
+                    "Lineup abc-123 status changed concurrently; expected 'pending'",
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('does NOT drop unrelated HttpException 409s', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                { type: 'HttpException', value: 'Duplicate signup detected' },
+              ],
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
+      });
+
+      describe('ROK-1162: AbortError drop', () => {
+        it('drops AbortError typed events', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                { type: 'AbortError', value: 'The operation was aborted' },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops DOMException whose value mentions abort', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DOMException',
+                  value: 'The user aborted a request.',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('does NOT drop unrelated DOMException events', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [{ type: 'DOMException', value: 'QuotaExceededError' }],
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
+      });
+
+      describe('ROK-1162: DiscordAPIError transient fingerprint', () => {
+        it('fingerprints DiscordAPIError 5xx events', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Internal Server Error (HTTP 503)',
+                },
+              ],
+            },
+          };
+          const result = getBeforeSend()(event) as SentryEvent;
+          expect(result).toBe(event);
+          expect(result.fingerprint).toEqual(['discord-api-transient']);
+        });
+
+        it('fingerprints DiscordAPIError network failures (ECONNRESET)', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'fetch failed: ECONNRESET',
+                },
+              ],
+            },
+          };
+          const result = getBeforeSend()(event) as SentryEvent;
+          expect(result.fingerprint).toEqual(['discord-api-transient']);
+        });
+
+        it('does NOT fingerprint non-transient DiscordAPIError events', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Unknown Channel (code 10003)',
+                },
+              ],
+            },
+          };
+          const result = getBeforeSend()(event) as SentryEvent;
+          expect(result).toBe(event);
+          expect(result.fingerprint).toBeUndefined();
+        });
+      });
+
+      describe('ROK-1162: malformed OAuth state (already covered by ROK-668)', () => {
+        it('drops InternalOAuthError whose value indicates a state mismatch', () => {
+          // The ROK-668 filter already drops by type alone, so any value
+          // (including malformed/missing state) is suppressed. This is a
+          // regression guard for the noise class named in ROK-1162.
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'InternalOAuthError',
+                  value:
+                    'InternalOAuthError: Failed to obtain access token (state mismatch)',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
         });
       });
     });

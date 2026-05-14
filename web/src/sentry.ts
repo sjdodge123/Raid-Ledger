@@ -29,6 +29,22 @@ if (!telemetryDisabled) {
             Sentry.browserTracingIntegration(),
             Sentry.replayIntegration(),
         ],
+        // ROK-1162: drop AbortError noise (TanStack Query cancels in-flight
+        // fetches on unmount / refetch; the cancellation surfaces as
+        // AbortError or DOMException and is not a bug).
+        beforeSend(event) {
+            const exceptionType = event.exception?.values?.[0]?.type;
+            const exceptionValue = event.exception?.values?.[0]?.value;
+            if (
+                exceptionType === 'AbortError' ||
+                (exceptionType === 'DOMException' &&
+                    typeof exceptionValue === 'string' &&
+                    /abort/i.test(exceptionValue))
+            ) {
+                return null;
+            }
+            return event;
+        },
         initialScope: {
             tags: {
                 app_version: (window as unknown as { __APP_VERSION__?: string })
