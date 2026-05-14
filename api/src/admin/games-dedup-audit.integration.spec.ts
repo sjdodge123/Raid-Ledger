@@ -461,7 +461,9 @@ describe('POST /admin/games/dedup-audit/run', () => {
     expect(steamRow!.group_size).toBe(2);
 
     // Each loser was seeded with 1 event + 1 character + 1 interest.
-    // downstream_counts sums across ALL dup ids in the group (not canonical).
+    // downstream_counts sums across the WHOLE group (canonical + every dup),
+    // so any rows on either side contribute (ROK-1278 fix — earlier semantics
+    // were dup-only and undercounted real impact).
     expect(steamRow!.downstream_counts.events).toBeGreaterThanOrEqual(1);
     expect(steamRow!.downstream_counts.characters).toBeGreaterThanOrEqual(1);
     expect(steamRow!.downstream_counts.interests).toBeGreaterThanOrEqual(1);
