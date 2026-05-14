@@ -15,7 +15,7 @@ import postgres from 'postgres';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { refreshDedupAudit } from './run-migrations-with-sentry';
+import { refreshDedupAudit } from '../../scripts/run-migrations-with-sentry';
 
 describe('ROK-1281 boot-time refreshDedupAudit', () => {
   let testApp: TestApp;

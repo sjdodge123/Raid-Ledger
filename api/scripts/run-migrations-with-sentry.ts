@@ -15,7 +15,7 @@
  * MUST stay self-contained — no NestJS bootstrap. The migration phase
  * runs before the app DI container exists.
  */
-import '../sentry/instrument'; // MUST be first — installs Sentry handlers
+import '../src/sentry/instrument'; // MUST be first — installs Sentry handlers
 import * as Sentry from '@sentry/nestjs';
 
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -24,11 +24,11 @@ import postgres from 'postgres';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { groupRowsByConnectedKeys } from '../admin/games-dedup-union-find.helpers';
+import { groupRowsByConnectedKeys } from '../src/admin/games-dedup-union-find.helpers';
 import {
   pickCanonicalId,
   type GameRow,
-} from '../admin/games-dedup-audit.helpers';
+} from '../src/admin/games-dedup-audit.helpers';
 
 const MIGRATIONS_FOLDER =
   process.env.MIGRATIONS_FOLDER ?? './drizzle/migrations';

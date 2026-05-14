@@ -21,7 +21,7 @@ jest.mock('@sentry/nestjs', () => ({
   init: jest.fn(),
 }));
 
-import { reportBootFailure } from './run-migrations-with-sentry';
+import { reportBootFailure } from '../../scripts/run-migrations-with-sentry';
 
 describe('ROK-1281 reportBootFailure', () => {
   beforeEach(() => {
