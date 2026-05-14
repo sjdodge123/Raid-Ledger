@@ -36,7 +36,6 @@ Run in parallel:
 git fetch origin main
 git worktree list
 ls -1d ../Raid-Ledger--* 2>/dev/null
-gh pr list --state merged --limit 100 --json number,title,headRefName,mergedAt
 ```
 
 Also fetch:
@@ -45,15 +44,31 @@ Also fetch:
 
 If `git fetch origin main` fails (non-zero exit), **STOP** and tell the operator. Do not proceed.
 
-### Step 2: Classify each entry
+**Do NOT pull a flat `gh pr list --state merged --limit N`.** That list is capped — anything older than the most recent N PRs (or filtered out by labels/authors/etc.) won't appear, and the skill will misclassify a merged worktree as "not merged" and skip it forever. Step 2 verifies each branch with a per-branch `gh pr list --search` query instead.
 
-For every `Raid-Ledger--*` dir AND every registered worktree:
+### Step 2: Classify each entry — per-branch verification (STRICT)
+
+For every `Raid-Ledger--*` dir AND every registered worktree, run the **rigorous per-branch merge check** before any classification:
+
+```bash
+# Resolve the branch this dir was tracking (don't parse the dir name — read git state)
+BRANCH=$(git -C <path> rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# Did this branch ship via a merged PR? Returns JSON array, empty if no merged PR exists.
+gh pr list --search "head:${BRANCH}" --state merged --json number,mergedAt,title,headRefName
+
+# Belt-and-suspenders: if the merged query is empty, check ALL states for this branch.
+# Helps distinguish "merged via different mechanism" from "PR open/closed-without-merge"
+# from "no PR ever existed."
+gh pr list --search "head:${BRANCH}" --state all --json state,number,title
+```
+
+**Rule:** a branch is `MERGED` ONLY if the per-branch `--state merged` query returns ≥1 entry. **Do not infer merge status from a flat top-N list, from `git branch --merged main` alone, or from the absence of the branch on origin.** The per-branch search is the only authoritative signal.
 
 **Registered worktree:**
 
 ```bash
 cd <worktree_path>
-BRANCH=$(git branch --show-current)
 git status --porcelain          # any output = dirty
 git log @{u}..HEAD --oneline    # any output = unpushed (may be squash ghosts — see below)
 ```
@@ -64,10 +79,11 @@ git log @{u}..HEAD --oneline    # any output = unpushed (may be squash ghosts �
 | Branch holds env lock | SKIP — env-lock holder |
 | Branch listed in Active State "In flight" | SKIP — in flight |
 | `git status --porcelain` non-empty | SKIP — uncommitted changes |
-| Branch is `MERGED` per `gh pr list`, working tree clean, no unpushed commits | REMOVE |
-| Branch is `MERGED` per `gh pr list`, working tree clean, unpushed commits exist but the diff is squash-equivalent to the merged PR (verify with `git log @{u}..HEAD` lines correspond to the merged PR title) | REMOVE — flag as squash-ghost |
-| Branch NOT merged, last commit > 14 days old | SURFACE — possible abandoned work |
-| Branch NOT merged, recent activity | SKIP — likely active |
+| Per-branch `gh pr list --state merged` returns ≥1 entry, working tree clean, no unpushed commits | REMOVE |
+| Per-branch `gh pr list --state merged` returns ≥1 entry, working tree clean, unpushed commits exist but diff is squash-equivalent to the merged PR (verify `git log @{u}..HEAD` subjects match the merged PR title) | REMOVE — flag as squash-ghost |
+| Per-branch `gh pr list --state merged` returns 0 entries (no merged PR for this branch) | SURFACE — do NOT remove even if branch looks abandoned. Operator decides. |
+| Per-branch open/closed-without-merge PR exists, last commit > 14 days old | SURFACE — possible abandoned work |
+| Per-branch open PR exists, recent activity | SKIP — likely active |
 
 **Orphaned dir (filesystem only, NOT in `git worktree list`):**
 
@@ -75,14 +91,20 @@ git log @{u}..HEAD --oneline    # any output = unpushed (may be squash ghosts �
 cd <dir>
 git status 2>&1               # may say "fatal: ... .git file ... gitdir invalid"
 git log -1 --oneline 2>&1
+BRANCH=$(git -C <dir> rev-parse --abbrev-ref HEAD 2>/dev/null)
+# Same per-branch check as above:
+gh pr list --search "head:${BRANCH}" --state merged --json number,mergedAt,title
 ```
 
 | Condition | Bucket |
 |---|---|
-| Has `.git` file pointing at a NUKED gitdir (registered worktree was removed but dir persisted) | REMOVE — orphan |
+| Has `.git` file pointing at a NUKED gitdir (registered worktree was removed but dir persisted) AND per-branch query confirms a merged PR | REMOVE — orphan |
+| Has `.git` file pointing at a NUKED gitdir, per-branch query returns 0 merged PRs | SURFACE — branch wasn't shipped via PR; operator decides |
 | Has `.git` dir (full clone, not a worktree) with uncommitted changes | SURFACE — operator decides |
-| Has `.git` dir, clean, branch is merged on origin | REMOVE — operator confirms |
+| Has `.git` dir, clean, per-branch query confirms a merged PR | REMOVE — operator confirms |
 | No `.git` at all, just files | SURFACE — operator decides (probably not a worktree-related artifact) |
+
+**Why the per-branch query is non-negotiable:** a flat `gh pr list --state merged --limit N` is capped at N most-recent PRs. Project history > N means older worktrees get misclassified as "not merged" and skipped forever — the dir then lingers and the next /janitor pass repeats the mistake. Caught 2026-05-14 on the first /janitor invocation.
 
 ### Step 3: Propose plan (STOP HERE)
 
