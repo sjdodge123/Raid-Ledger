@@ -286,3 +286,13 @@ Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched
 - **[med]** `web/src/components/admin/onboarding/secure-account-step.test.tsx` — 6/20 specs in this file flake with `Test timed out in 5000ms` when run as part of the full vitest suite (`npm run test:cov -w web`). All 20 PASS in 773ms when the file is run in isolation (`npx vitest run src/components/admin/onboarding/secure-account-step.test.tsx`). The failing assertions are synchronous DOM class lookups (`toHaveClass('min-h-[44px]')`), so the 5000ms timeout is concurrency starvation, not test logic. Last touched in #379 (months ago); independent of fix/batch-2026-05-14 (zero web/ changes in the batch).
   Suggested: bump this file's `testTimeout` to 15000ms in vitest.config.ts (the FTE wizard tests do heavier jsdom setup than typical) OR move it to its own project shard. The cheap-experiment plan: run `npx vitest run secure-account-step` 50× to characterise the flake rate, then either bump the timeout or shard the file.
 
+
+### 2026-05-14 — fix/batch-2026-05-14 (post-Codex reviewer pass)
+
+- **[low]** `api/src/common/testing/test-app.ts:122` vs `api/src/common/testing/integration-setup.ts:64` — inconsistent CI gating. `test-app.ts` uses strict `process.env.CI === 'true'` after the post-clone audit fix; `integration-setup.ts` uses loose `!process.env.CI`. Both behave correctly under GitHub Actions (`CI=true`) but a developer setting `CI=1` locally would get DATABASE_URL deleted by integration-setup yet ignored anyway by test-app (Testcontainers fires).
+  Suggested: align both to `process.env.CI === 'true'`. ~5-line change in `integration-setup.ts`.
+- **[low]** `api/scripts/seed-igdb-games.ts:181-194` — extra DB roundtrip via `rowExistsWithIgdbId` per orphan-match row. Acceptable at boot-time (~hundreds of rows, single-threaded). Could fold into a single SQL CTE if seed counts grow into the thousands.
+  Suggested: no action unless seed perf becomes a bottleneck.
+- **[low]** `api/src/users/guild-reconciliation.service.integration.spec.ts:137-146` — the "Discord API errors bubble up" test calls `runReconciliation()` directly, not via `CronJobService.executeWithTracking`. Confirms the throw bubbles but doesn't assert the cron wrapper records a failed run vs. healthy heartbeat (which is the actual P2 motivation). Integration with `executeWithTracking` is likely already covered by existing cron-service tests but not explicitly asserted in this regression spec.
+  Suggested: add one spec that mocks `cronJobService.executeWithTracking` and asserts `failedRun` was recorded when `listAllGuildMemberIds` throws.
+
