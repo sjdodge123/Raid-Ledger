@@ -152,9 +152,7 @@ export async function countUnlinkedSteamMembers(
     const [row] = await db
       .select({ count: sql<number>`count(*)::int`.as('count') })
       .from(schema.users)
-      .where(
-        and(inArray(schema.users.id, ids), isNull(schema.users.steamId)),
-      );
+      .where(and(inArray(schema.users.id, ids), isNull(schema.users.steamId)));
     return Number(row?.count ?? 0);
   }
 
@@ -184,9 +182,7 @@ export async function findUnlinkedSteamMembers(
           ),
       })
       .from(schema.users)
-      .where(
-        and(inArray(schema.users.id, ids), isNull(schema.users.steamId)),
-      );
+      .where(and(inArray(schema.users.id, ids), isNull(schema.users.steamId)));
     return rows.map((r) => ({ id: r.id, displayName: r.displayName }));
   }
 

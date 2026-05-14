@@ -192,7 +192,9 @@ function describeAudienceScopedEnrichment() {
     });
 
     const returnedIds = members.map((m) => m.id).sort((a, b) => a - b);
-    expect(returnedIds).toEqual([creator.id, invitee2.id].sort((a, b) => a - b));
+    expect(returnedIds).toEqual(
+      [creator.id, invitee2.id].sort((a, b) => a - b),
+    );
 
     // The three outside-the-audience community users must not appear.
     expect(returnedIds).not.toContain(extra1.id);
