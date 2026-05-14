@@ -162,3 +162,49 @@ Findings from pre-launch validation of the Community Lineup feature (33 runbook 
 - **[low]** `scripts/clone-prod-to-local.sh:165` — `prod_get_safe` glob `[[ "$pth" != "$PROD_GET_ALLOWED_PREFIX"/*/download ]]` is looser than strict-whitelist intent. Bash `[[ ]]` glob `*` matches `/`, so a path like `/admin/backups/a/b/c/download` passes the bash check. Server-side AdminGuard + path-traversal regex still block any real damage, but cosmetic strictness would close the gap.
   Suggested: replace bash glob with regex check: `[[ ! "$pth" =~ ^/admin/backups/(daily|migration)/[A-Za-z0-9_.-]+/download$ ]]` and the exact list-endpoint match. ~3 lines.
 - **[low]** Two backup-path helpers exist for similar intent: `BackupService.getBackupFilePath` (new in ROK-1279; 404-only on traversal) and `BackupService.resolveBackupPath` (existing; uses 400 for traversal — feeds restore/delete). Unify on the 404-only behavior to reduce info leak surface across all path-validated routes. Non-urgent; both are admin-only.
+
+### 2026-05-13 — pre-existing `tsc --noEmit` errors on `origin/main` (surfaced during fix/batch-2026-05-13 viability gate)
+
+10 TypeScript errors fire on `npx tsc --noEmit -p api/tsconfig.json` against a clean `origin/main` checkout (commit `9461559c`). All are in `*.spec.ts` files and do NOT block Jest runs (ts-jest is more permissive than `tsc --noEmit`) — but they leak into agent worktrees as red herrings when devs/leads gate on a clean type-check before starting work. Group by file:
+
+- **[med]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — TS2556 "spread argument must have a tuple type or be passed to a rest parameter". The spec is intentional TDD scaffolding (file header at lines 100-102 says *"the dev's job is to widen the signatures to accept the lineup/visibility parameter"*), but the gate it scaffolds (private-visibility on notification dispatch) was never implemented. Either complete the visibility gate (widen `notifyNominationMilestone` / `notifyMatchesFound` / `notifySchedulingOpen` / `notifyEventCreated` to accept a `lineup` or `visibility` argument), OR delete the spec, OR mark it `xdescribe` so it stops leaking errors.
+  Suggested: triage whether private-visibility on notifications is still desired post-ROK-1067; if not, delete the spec — the test-only `AnyArgs = unknown[]` trick papers over a feature that no longer needs the test.
+- **[med]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — TS2769 "no overload matches this call". Likely landed alongside the ROK-1277 union-find work; the audit assertion shape may have drifted from the underlying helper signature.
+- **[med]** `api/src/admin/games-dedup-audit.service.spec.ts:432` — TS2502 "'tx' is referenced directly or indirectly in its own type annotation". Drizzle transaction-callback type recursion — fixable with an explicit annotation on `tx`.
+- **[med]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — TS2352 three `as` cast errors. Spec is casting Drizzle `RowList<{ camelCase }[]>` directly to `{ snake_case }[]`. Either case-correct the assertions or wrap the cast through `unknown` (per TS's own remediation hint in the error).
+- **[low]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — TS2345 `SQL<unknown>` not assignable to `string | SQLWrapper`. Drizzle helper signature drift; one-line fix to wrap or annotate the SQL fragment.
+
+**Why this matters:** `validate-ci.sh --full` runs `tsc --noEmit` and these 10 errors will appear on every full CI run from now until cleaned up. Agents that gate on "type-check is clean before I start" will hit a false-positive blocker. Same applies to `/build`, `/fix-batch`, `/dispatch` viability gates.
+
+Suggested triage path: one chore-labeled story to triage + fix the 5 files (or delete the private-visibility spec if obsolete). Estimated 30-60 min. Alternative: change `validate-ci.sh` to compare against an `origin/main` baseline and only fail on net-new errors — more durable, but heavier to build.
+
+### 2026-05-13 — pre-existing vitest test-order flakes (surfaced during fix/batch-2026-05-13 ROK-1207 verification)
+
+Two web-workspace vitest tests pass cleanly in isolation but fail when run as part of the full suite (`npx vitest run --coverage` from `web/`). Surfaced by `dev-rok-1207` agent during their pre-commit verification — neither file was touched by the ROK-1207 change. Suggests test-order dependency or shared module state that leaks across files.
+
+- **[med]** `web/src/pages/invite-page.test.tsx` — fails in full suite, passes 21/21 in isolation. Likely msw handler state or React Query cache singleton bleeding from an earlier test file.
+  Suggested: bisect the full-suite order to find the polluting predecessor (`vitest --reporter=verbose | head -n <position>`), then either add `beforeEach` cleanup in the predecessor or move the predecessor's mocks into local `vi.mock()` calls scoped to its `describe`.
+- **[med]** `web/src/components/health/EngagementHealthSection.test.tsx` — fails in full suite, passes in isolation. Same class of issue.
+  Suggested: same bisect approach. May share a common predecessor with `invite-page.test.tsx` — worth checking if both fail on the same upstream pollutant.
+
+**Why this matters:** masks net-new regressions during fix-batch / build validation gates. The Lead currently has to manually compare "did my changes cause this?" by re-running the file in isolation, which costs ~30s per false alarm. Cleaning the test-isolation primitives (likely in `web/src/test/setup.ts` or a shared mock factory) removes that toil for every future batch.
+
+Suggested triage path: one chore-labeled story. First task is the bisect — once the polluting file is named, the fix is usually a one-liner (move a `vi.mock` from top-level into a `beforeEach` or add an `afterEach(() => vi.resetModules())`).
+
+### 2026-05-13 — scheduling-banner queryKey mismatch (surfaced during ROK-1235 review)
+
+- **[low]** `web/src/hooks/use-standalone-poll.ts:29` invalidates `queryClient.invalidateQueries({ queryKey: ['scheduling-banner'] })` but the actual key declared in `web/src/lib/hooks/use-scheduling.ts:28` is `['scheduling', 'banner']` (two-element tuple). TanStack Query matches by prefix array equality, so the invalidation never matches anything → after creating a standalone poll, the events-page scheduling banner is not invalidated and the user must reload or wait for `staleTime` to refresh. Out of scope for ROK-1235 (which fixed the 400-route-shadow); pre-existing.
+  Suggested: change line 29 to `queryKey: ['scheduling', 'banner']`. One-line fix. Confirm by triggering "create standalone poll" and watching network for the immediate `/scheduling/banner` refetch.
+
+### 2026-05-13 — full-suite integration test flakes (surfaced during fix/batch-2026-05-13 CI gate)
+
+`./scripts/validate-ci.sh --full` against the batch base produced 2 failures out of 1009 integration tests, neither in any file changed by the batch (24 file diff, neither file present in diff). Both pass 3/3 cleanly in isolation via `./scripts/spec-loop.sh`. Cross-suite carrier flake, NOT caused by this batch.
+
+- **[med]** `api/src/lineups/lineups-matches.integration.spec.ts:GET /lineups/:id/matches › places thresholdMet=true matches in scheduling tier` — fails mid-suite with `socket hang up`. Classic BullMQ/ioredis socket-leak carrier pattern; matches the documented signature in memory `reference_bullmq_ioredis_test_carrier.md` (ROK-1250 / PR #760). Passes 3/3 isolated.
+  Suggested: continue the ROK-1250 socket-leak cleanup — the carrier surface keeps surfacing the same class of mid-suite hang. Specific lead: snapshot remote sockets in `closeTestApp` and destroy any held by ioredis when the test app shuts down.
+- **[med]** `api/src/events/signups-roster.integration.spec.ts:Signups — admin remove › should allow admin to remove a signup` — fails mid-suite with `createFutureEvent failed: 401 — Unauthorized`. This is a different pattern from the socket leak — admin cookie / JWT state appears to be pre-empted by a sibling spec's auth flow. Passes 3/3 isolated.
+  Suggested: bisect the full-suite order to find which spec leaves auth state mutated. Likely candidates: anything that calls `logout` or sets a different-user session and doesn't reset. Add `beforeEach` cookie/JWT reset in the test app factory.
+
+**Why this matters:** `validate-ci.sh --full` will fail on the batch base today, blocking every fix-batch / build / dispatch that runs the full integration gate. Existing memory `reference_bullmq_ioredis_test_carrier.md` documents the socket-leak class; the auth-state-leak (signups-roster) class is new and worth its own slot.
+
+Suggested triage path: two stories — (1) continue ROK-1250 socket cleanup with the new carrier evidence, (2) new auth-state-isolation chore. Estimated 1-3h each. Cheap-experiments-first applies (memory `feedback_cheap_experiments_first`): start with bisect, don't pay for instrumented full-suite loops until the bisect names the polluting predecessor.
