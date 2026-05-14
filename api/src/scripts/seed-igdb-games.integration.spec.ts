@@ -9,11 +9,13 @@
  * The fix routes each seed row through `findGameByNormalizedName`
  * before inserting; this spec asserts the merge replaces the INSERT.
  */
-import { eq } from 'drizzle-orm';
+import { eq, ne } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { upsertSeedGames, type GameSeed } from '../../scripts/seed-igdb-games';
+
+const FIXTURE_GAME_SLUG = 'test-game';
 
 const BG3_SEED: GameSeed = {
   igdbId: 119171,
@@ -52,7 +54,10 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
       .select()
       .from(schema.games)
       .where(eq(schema.games.id, existing.id));
-    const survivors = await testApp.db.select().from(schema.games);
+    const survivors = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG));
 
     // Exactly one BG3 row — the existing one — now carries the seed's igdb_id
     // AND retains the steam_app_id from upstream discovery.
@@ -68,7 +73,10 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     const touched = await upsertSeedGames(testApp.db, [BG3_SEED]);
     expect(touched).toBe(1);
 
-    const rows = await testApp.db.select().from(schema.games);
+    const rows = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG));
     expect(rows).toHaveLength(1);
     expect(rows[0].igdbId).toBe(119171);
     expect(rows[0].slug).toBe('baldurs-gate-iii');
@@ -77,7 +85,10 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
   it('is idempotent: re-running the seed against its own output does not duplicate', async () => {
     await upsertSeedGames(testApp.db, [BG3_SEED]);
     await upsertSeedGames(testApp.db, [BG3_SEED]);
-    const rows = await testApp.db.select().from(schema.games);
+    const rows = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG));
     expect(rows).toHaveLength(1);
     expect(rows[0].igdbId).toBe(119171);
   });
@@ -102,6 +113,7 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     const rows = await testApp.db
       .select()
       .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG))
       .orderBy(schema.games.igdbId);
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.igdbId).sort()).toEqual([100001, 200001]);
