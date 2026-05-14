@@ -213,6 +213,12 @@ State lives at `~/.raid-ledger/env-lock.json` (outside any worktree). The lease 
 - **Validate against a real Postgres instance** before pushing: `./scripts/validate-migrations.sh` spins up a temporary container, runs all migrations, and tears down. This is also run automatically by `validate-ci.sh` when migration files appear in the diff.
 - **Never hand-edit migration SQL** unless fixing a known Drizzle codegen bug. If you must, document the edit in the commit message.
 - **One migration per schema change.** Do not combine unrelated schema changes into a single migration file.
+- **Migrations must be self-contained (STRICT — ROK-1281).** A migration MUST NOT depend on data populated by app-side code (cron jobs, manual admin endpoints, user actions). If a migration needs derived state (e.g. a deduplication audit), either compute it inline via SQL CTEs or wire a pre-step into the boot-time migration runner (`api/src/scripts/run-migrations-with-sentry.ts`) so the dependency is enforced by the deploy pipeline, not human memory. ROK-1278's 0140 violated this rule, assumed `games_dedup_audit` was populated by the ROK-1277 cron, and crashed prod for 30 min when prod's audit was stale.
+- **Boot-time scripts must instrument errors via Sentry (STRICT — ROK-1281).** Any Node script that runs before NestJS bootstrap (migrations, bootstrap-admin, seed-igdb-games, re-encrypt-settings) must:
+  1. Import `./sentry/instrument` as the first statement (init must happen before any throw).
+  2. Wrap the script's main path in try/catch.
+  3. On error: `Sentry.captureException(err, { tags: { context: '<phase>' } })`, then `await Sentry.flush(2000)`, then `process.exit(1)`.
+  The pattern is implemented in `run-migrations-with-sentry.ts::reportBootFailure` — copy it. Boot-time errors that exit synchronously WITHOUT flushing are invisible to alerting even when Sentry IS initialized — `process.exit` kills the event before the HTTP POST completes.
 
 ### Migration State Recovery
 

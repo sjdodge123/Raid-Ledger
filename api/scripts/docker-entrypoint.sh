@@ -19,58 +19,14 @@ if [ -n "$DATABASE_URL" ]; then
         rm -f "$SNAPSHOT_FILE" 2>/dev/null || true
     fi
 
-    echo "📦 Running database migrations..."
+    echo "📦 Running database migrations (Sentry-instrumented)..."
 
-    # Run drizzle-kit migrate using the compiled config
-    # Note: drizzle.config.js is compiled to dist/drizzle.config.js
-    node -e "
-      const { migrate } = require('drizzle-orm/postgres-js/migrator');
-      const { drizzle } = require('drizzle-orm/postgres-js');
-      const postgres = require('postgres');
-      const fs = require('fs');
-
-      async function runMigrations() {
-        const sql = postgres(process.env.DATABASE_URL);
-        const db = drizzle(sql);
-        await migrate(db, { migrationsFolder: '/app/drizzle/migrations' });
-
-        // Validate: count applied migrations vs journal entries
-        const journal = JSON.parse(fs.readFileSync('/app/drizzle/migrations/meta/_journal.json', 'utf8'));
-        const expectedCount = journal.entries.length;
-        const [row] = await sql\`SELECT count(*)::int AS applied FROM drizzle.__drizzle_migrations\`;
-        const appliedCount = row.applied;
-
-        if (appliedCount < expectedCount) {
-          console.error('⚠️  MIGRATION MISMATCH: ' + appliedCount + ' applied vs ' + expectedCount + ' in journal.');
-          console.error('   This usually means journal timestamps are out of order.');
-          console.error('   Run: ./scripts/fix-migration-order.sh');
-        } else {
-          console.log('✅ Migrations completed (' + appliedCount + '/' + expectedCount + ' applied)');
-        }
-
-        // Verify critical tables exist (phantom migration detection)
-        const criticalTables = [
-          'community_lineups', 'community_lineup_matches',
-          'community_lineup_match_members', 'events', 'users'
-        ];
-        const missing = [];
-        for (const t of criticalTables) {
-          const [r] = await sql\`SELECT to_regclass('public.' || \${t}) AS oid\`;
-          if (!r.oid) missing.push(t);
-        }
-        if (missing.length > 0) {
-          console.warn('⚠️  PHANTOM MIGRATION: Tables missing despite ' + appliedCount + ' migrations applied: ' + missing.join(', '));
-          console.warn('   The __drizzle_migrations tracking table may be out of sync.');
-        }
-
-        await sql.end();
-      }
-
-      runMigrations().catch(err => {
-        console.error('Migration error:', err);
-        process.exit(1);
-      });
-    " 2>&1
+    # ROK-1281: boot-time migration runner with Sentry capture.
+    # Refreshes games_dedup_audit before drizzle migrate so data migrations
+    # that consume the audit table (e.g. 0140) see current state regardless
+    # of cron timing. Sentry captures + flushes any failure here.
+    MIGRATIONS_FOLDER=/app/drizzle/migrations \
+      node /app/dist/scripts/run-migrations-with-sentry.js 2>&1
 
     # Re-encrypt app_settings if migrating from default JWT_SECRET (ROK-1035)
     if [ ! -f /data/.jwt_secret_migrated ]; then
