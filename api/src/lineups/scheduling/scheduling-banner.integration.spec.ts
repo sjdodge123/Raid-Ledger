@@ -40,5 +40,4 @@ describe('GET /scheduling/banner (ROK-1235)', () => {
     expect(res.status).toBe(200);
     expect(res.text === '' || res.body === null || res.body === '').toBe(true);
   });
-
 });

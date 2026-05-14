@@ -298,5 +298,3 @@ function buildPersistSummary(
     topGroups,
   };
 }
-
-
