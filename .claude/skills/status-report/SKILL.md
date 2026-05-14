@@ -1,15 +1,20 @@
 ---
 name: status-report
-description: "Print a consistent, scannable status report. On a story branch (matches `rok-\\d+`): per-agent snapshot — story ID, phase, what's done, what's next, blockers; during Reviewing also drives the work forward (implements undelivered ACs, runs missing e2e). On `main` (no story branch): global mode — reconciles the 'Raid Ledger — Active State' Linear doc by re-deriving env lock, in-flight stories, recently shipped, open follow-ups, and known stale state. Use when the operator asks for a status update ('status', 'where are we', 'what's the state', 'update', 'sync state')."
+description: "Print a consistent, scannable status snapshot AND sync the 'Raid Ledger — Active State' Linear doc — both happen on every invocation. On a story branch (matches `rok-\\d+`): per-agent snapshot — story ID, phase, what's done, what's next, blockers; during Reviewing also drives the work forward (implements undelivered ACs, runs missing e2e). On `main` (no story branch): fleet snapshot across every active worktree (env lock, in-flight stories with inferred phase, recently shipped, follow-ups, stale state). After the visible snapshot, the Active State Linear doc Derived section is reconciled silently and a one-line footer confirms the sync. Use when the operator asks for a status update ('status', 'where are we', 'what's the state', 'update', 'sync state')."
 ---
 
-# Status Report — Per-Agent Snapshot or Global State Sync
+# Status Report — Snapshot + Active State Sync
 
-**Two modes**, dispatched by branch:
+**Every invocation produces two outputs:**
 
-1. **Story-branch mode** (`rok-\d+` in branch name) — per-agent snapshot. The operator runs 10+ agent windows in parallel and forgets which window is which; this skill produces a 10-second-readable snapshot of THIS agent's work so they can identify the window and decide whether to interact. Output MUST match the template exactly — same fields, same order, same labels — every invocation. Consistency is the entire point. If a field has no content, write `none`. Never substitute "no progress yet" or other prose for missing fields.
+1. A **visible snapshot** printed to the operator's terminal — what's happening right now.
+2. A **silent Linear doc sync** of the "Raid Ledger — Active State" doc Derived section — so future sessions can read the cross-session picture. A one-line footer confirms it ran.
 
-2. **Global mode** (`main` or any branch with no `rok-\d+`) — reconcile the cross-session "Active State" Linear doc. Reads current doc, re-derives env lock + in-flight + recently shipped + open follow-ups + known stale state from authoritative sources, overwrites the Derived section, preserves Strategic and Conventions sections verbatim, prints a brief 3-line summary.
+The visible snapshot's shape depends on branch — but **both pieces fire on every run**, regardless of branch. You do not pick one or the other.
+
+- **Story-branch mode** (`rok-\d+` in branch name) — per-agent snapshot of THIS window. The operator runs 10+ agent windows in parallel and forgets which window is which; this skill lets them identify the window in 10 seconds. Output MUST match the template exactly — same fields, same order, same labels — every invocation. Consistency is the entire point. If a field has no content, write `none`. Never substitute "no progress yet" or other prose for missing fields.
+
+- **Main-branch mode** (`main` or any branch with no `rok-\d+`) — fleet snapshot across every active worktree. Shows what every other Claude window is currently doing so the operator can decide which window to attend to.
 
 ---
 
@@ -17,10 +22,14 @@ description: "Print a consistent, scannable status report. On a story branch (ma
 
 Run `git branch --show-current`. Pick the path:
 
-- Branch matches `rok-\d+` → **Story-branch mode**: continue with Steps 1–4 below.
-- Branch is `main` (or any branch with no `rok-\d+`) → **Global mode**: jump to the "Global mode" section near the end of this file. Do **not** run Steps 1–4.
+- Branch matches `rok-\d+` → run **Story-branch mode** (Steps 1–4 below), then **Step S: Active State sync** at the very end.
+- Branch is `main` (or any branch with no `rok-\d+`) → run **Main-branch mode** (Steps M1–M2), then **Step S: Active State sync**.
+
+Step S is the same in both modes — it's how the Active State doc gets reconciled regardless of which window the operator invoked from.
 
 ---
+
+# Story-branch mode (Steps 1–4)
 
 ## Step 1: Gather Signals (only what you need)
 
@@ -136,7 +145,7 @@ No additional self-checks today. Do not invent them.
 
 ## Step 3: Print the Report
 
-Print **this template exactly**. No prose before, no commentary after. The report ends with the `BLOCKERS` section.
+Print **this template exactly**. No prose before, no commentary after. The report ends with the `BLOCKERS` section — the only thing allowed after `BLOCKERS` is the Step S footer line (one line, generated post-print).
 
 **Base template (every phase):**
 
@@ -192,7 +201,7 @@ Cite check names verbatim from `statusCheckRollup` so the operator can `gh run v
 - **BLOCKERS** — anything preventing forward progress: failing tests, missing decisions, missing creds, awaiting operator approval, unresolved questions, plus every AC-trace gap surfaced in Step 2.5. Write `none` if there are none.
 - **AC TRACE** — required when Phase started as `Reviewing` in Step 2 (even if downgraded by Step 2.5). Omit entirely for any other phase. One line per AC, ≤120 chars per line. The `e2e` field cites the actual test path (e.g. `web/e2e/lineup-vote.spec.ts`) or writes `missing`.
 - **PR STATUS** — required when Phase started as `PR-Open` in Step 2 (even if downgraded to `Merged` or `Blocked` by Step 2.5). Omit entirely for any other phase. Field labels are fixed; values come straight from `gh pr view --json` output.
-- Do **not** add summary, recommendations, or "let me know if…" lines after the template. Stop **printing text** at `BLOCKERS`. Tool calls invoked from Step 4 (Drive Forward) are not text and do not violate this rule — they fire silently after the report renders.
+- Do **not** add summary, recommendations, or "let me know if…" lines after the template. Stop **printing text** at `BLOCKERS`, with one exception: the Step S footer (a single confirmation line, generated after the doc sync runs). Tool calls invoked from Step 4 (Drive Forward) or Step S (doc sync) are not text and do not violate this rule — they fire silently.
 - Do **not** wrap the report in additional markdown headers, code fences, or callouts. Print it as-is.
 - If invoked twice in the same conversation, the report should be reproducible — same phase + same DONE list as last time, plus any new entries.
 
@@ -200,7 +209,7 @@ Cite check names verbatim from `statusCheckRollup` so the operator can `gh run v
 
 ## Step 4: Phase-Conditional Drive Forward (post-print)
 
-After the report renders, run the action that matches the originally-chosen phase from Step 2. These are the **action counterpart to Step 2.5's checks** — same per-phase structure, same "If Phase == X / Other phases: do not invent" voice, just running *after* the operator sees the snapshot rather than before. Step 4 may invoke tools (commits, tests, env management) but never prints additional text — the report still ends at `BLOCKERS`.
+After the report renders, run the action that matches the originally-chosen phase from Step 2. These are the **action counterpart to Step 2.5's checks** — same per-phase structure, same "If Phase == X / Other phases: do not invent" voice, just running *after* the operator sees the snapshot rather than before. Step 4 may invoke tools (commits, tests, env management) but never prints additional text — the report still ends at `BLOCKERS` (plus the Step S footer).
 
 ### If Phase == `Reviewing`
 
@@ -253,36 +262,132 @@ No driving today. Do not invent it.
 
 ### Halts that override every phase
 
-- Operator has explicitly asked in *this conversation* for a passive snapshot ("just give me the status, don't do anything") → skip Step 4 entirely.
-- No story is associated (`Story: no story — ...`) → skip; without ACs, "drive forward" has no target.
+- Operator has explicitly asked in *this conversation* for a passive snapshot ("just give me the status, don't do anything") → skip Step 4 entirely. Step S still runs (it's a sync, not a driver) unless the operator also said "don't update the doc."
+- No story is associated (`Story: no story — ...`) → skip Step 4; without ACs, "drive forward" has no target. Step S still runs.
 
-(Note: `main` no longer halts — Step 0 routes main-branch invocations to Global mode below.)
+After Step 4's actions complete (or are skipped), proceed to **Step S** to sync the Active State doc.
 
 ---
 
-## Global mode — reconcile the Active State Linear doc
+# Main-branch mode (Steps M1–M2)
 
 Trigger: Step 0 routed here because branch is `main` (or any branch with no `rok-\d+`).
 
-**Goal:** keep the cross-session "Raid Ledger — Active State" Linear doc current by re-deriving the auto-managed sections from authoritative sources, while preserving operator/agent-authored strategic context untouched.
+**Goal:** give the operator a 10-second-readable picture of EVERY active worktree (so they can see what their whole fleet of Claude windows is doing) before the doc sync writes that same picture to Linear.
+
+## Step M1: Gather fleet signals
+
+Run these in parallel where possible. Several feed both the snapshot AND the Step S doc sync — capture once, reuse.
+
+| Signal | Source |
+|---|---|
+| Worktrees | `git worktree list` |
+| Open PRs | `gh pr list --state open --json number,title,headRefName,state,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,autoMergeRequest,url --limit 30` |
+| Recently shipped (7d) | `gh pr list --state merged --search "merged:>=$(date -u -v-7d +%Y-%m-%d)" --json number,title,headRefName,mergedAt --limit 20` |
+| Env lock | `cat ~/.raid-ledger/env-lock.json 2>/dev/null` (file may not exist — that's `null` holder, empty queue) |
+| Linear in-flight | `mcp__linear__list_issues` filtered to statuses `In Progress`, `Code Review` |
+| Linear follow-ups (7d) | `mcp__linear__list_issues --createdAt -P7D` filtered to states `Backlog`, `Todo` |
+
+For each non-main worktree from `git worktree list`:
+
+- `git -C <path> log -1 --format='%h %ar %s'` — last commit (use the path so it works regardless of this window's cwd).
+- `git -C <path> rev-list --count origin/main..HEAD 2>/dev/null` — commits ahead of main.
+- Extract story ID from the worktree's branch name via `rok-\d+` (uppercase for display).
+
+Cross-reference each worktree:
+- Worktree story ID → matching open PR (by `headRefName`) → matching Linear story (by story ID prefix).
+- Worktree on a branch whose PR is `MERGED` → flag for STALE.
+- Worktree on a branch with no PR and 0 commits ahead → `Idle`.
+
+If any source command fails, write `(unavailable — <one-line reason>)` for the affected subsection and surface the failure in BLOCKERS. Never invent values.
+
+---
+
+## Step M2: Print the fleet snapshot
+
+Print **this template exactly**. No prose before, no commentary after. The snapshot ends with `BLOCKERS` — the only thing allowed after is the Step S footer line.
+
+```
+═══ FLEET STATUS ═══
+Branch:   main (this window)
+Env lock: <holder branch + purpose, or `null`>
+Queue:    <comma-separated queued branches in order, or `empty`>
+
+IN FLIGHT (<n> worktrees)
+- <ROK-XXXX> [<phase>]  branch <branch>  last <relative time>  PR #<n> <CI summary or "no PR yet">
+- ...
+
+RECENTLY SHIPPED (last 7d, newest first)
+- PR #<n> — <ROK-XXXX> <title>
+- ...
+
+OPEN FOLLOW-UPS (filed last 7d)
+- <ROK-XXXX> (<status>) — <one-line why-it-matters>
+- ...
+
+STALE
+- <worktree path>  branch <branch>  story shipped — safe to remove
+- ...  OR  none
+
+BLOCKERS
+- <bullet, or "none">
+```
+
+### Rules
+
+- **Env lock / Queue** — holder format: `<branch> (<purpose>, held <relative time>)`. If `holder: null` and queue empty, write `null` / `empty`. If queue has entries, comma-separate in queue order.
+- **IN FLIGHT** — every non-main worktree with commits ahead of main OR a matching open PR. Skip worktrees at parity with main (those go in STALE if their story shipped, otherwise ignore). Order: newest activity first (by last commit timestamp).
+- **Phase per worktree** — infer (cannot read each worktree's TaskList from here):
+  - PR `MERGED` → `Merged`
+  - PR `OPEN`, not draft, `reviewDecision=APPROVED`, `autoMergeRequest=null` → `Reviewing`
+  - PR `OPEN`, not draft, any CI check failing → `Blocked`
+  - PR `OPEN`, draft → `Implementing` (draft = WIP)
+  - PR `OPEN`, otherwise → `PR-Open`
+  - No PR, branch has commits ahead → `Implementing`
+  - No PR, 0 commits ahead → `Idle`
+- **CI summary** — when a PR exists: `<passing>/<total>` (bucket per Step 2.5 PR-Open tally rules — `conclusion` wins over `status`). If any failing, append `, <failing> failing`. If draft, prefix `[draft]`. If `autoMergeRequest` set, append ` [auto-merge]`. If no PR, write `no PR yet`.
+- **RECENTLY SHIPPED** — map merged PRs to story IDs (via branch name `rok-\d+` or PR title). Cap at 10; if more, append `- (+<N> more)`.
+- **OPEN FOLLOW-UPS** — skip stories that already appear in IN FLIGHT. Cap at 10.
+- **STALE** — worktree on a branch whose PR is `MERGED` (story shipped). NOT stale: worktrees whose story is still in flight, worktrees with uncommitted operator work. If nothing, write `none`.
+- **BLOCKERS** — env-lock held by a dead PID / lease past TTL with queue waiting; PR CI failing for >1h; source command failures from M1; doc sync failures from Step S (added after S runs). Write `none` if nothing.
+- Cap IN FLIGHT at 10 entries. If more, append `- (+<N> more)` and prioritize: (a) any with failing CI, (b) most-recently active.
+- Do **not** add prose, recommendations, or summary after BLOCKERS. The only post-BLOCKERS text is the Step S footer.
+
+After printing, proceed to **Step S** to sync the Active State Linear doc.
+
+---
+
+# Step S: Active State Linear doc sync (silent — runs in BOTH modes)
+
+This step fires on every invocation, after the visible snapshot has printed. It is the second of the two outputs every `/status-report` produces.
+
+**Goal:** keep the cross-session "Raid Ledger — Active State" Linear doc current by re-deriving the auto-managed Derived section from authoritative sources, while preserving operator/agent-authored Strategic + Conventions sections untouched.
 
 **Doc reference (stable):** see memory `reference_active_state_doc.md`.
 - URL: `https://linear.app/roknua-projects/document/raid-ledger-active-state-7a4ddc5652c9`
 - Doc ID for `mcp__linear__save_document`: `bbacd5ae-0c99-4eaf-bbd7-24e7eb90ffce`
 - Slug: `7a4ddc5652c9`
 
-### Step G1: Read the current doc
+## Step S1: Read the current doc
 
 `mcp__linear__get_document` with the slug above. Capture the full content. **Identify three section anchors** by markdown heading:
 - `## Derived (auto-overwritten by ...)` — to be replaced
 - `## Strategic (operator + agent updates ...)` — preserve verbatim
 - `## Conventions` — preserve verbatim
 
-If any anchor is missing or out of order, **stop and surface a BLOCKER** (`active state doc structure broken: <which anchor>`). Do not write a malformed doc.
+If any anchor is missing or out of order, **skip S2–S4** and print the failure footer:
 
-### Step G2: Re-derive each Derived bucket
+```
+─── Active State sync FAILED ─── doc structure broken: <which anchor>
+```
 
-Run these in parallel where possible. Each bucket maps to a labelled subsection in the new Derived block.
+Do not attempt to write a malformed doc.
+
+## Step S2: Re-derive each Derived bucket
+
+**In Main-branch mode:** the data was already gathered in Step M1 — reuse it directly. Do not re-query.
+
+**In Story-branch mode:** gather it now (in parallel where possible). Each bucket maps to a labelled subsection in the new Derived block.
 
 | Bucket | Source command(s) | Notes |
 |---|---|---|
@@ -292,14 +397,14 @@ Run these in parallel where possible. Each bucket maps to a labelled subsection 
 | **Open follow-ups (last 7 days)** | `mcp__linear__list_issues --createdAt -P7D` filtered to states `Backlog`, `Todo` | Skip stories already in flight (covered above). Brief why-it-matters one-liner per entry. |
 | **Known stale state** | Cross-reference `git worktree list` against `git log --oneline origin/main` | Worktrees on commits that aren't on main AND whose corresponding story is shipped → flag as cleanable. Worktrees on commits that aren't on main AND whose story is in flight → not stale, skip. |
 
-If any source command fails (network, auth, missing file), surface the failure as a BLOCKER in the print summary AND skip that bucket (write the literal text `(unavailable — <one-line reason>)`). Do not invent values.
+If any source command fails (network, auth, missing file), surface the failure in the footer AND skip that bucket (write the literal text `(unavailable — <one-line reason>)`). Do not invent values.
 
-### Step G3: Construct the new Derived section
+## Step S3: Construct the new Derived section
 
 Use this exact layout:
 
 ```markdown
-## Derived (auto-overwritten by `/status-report` on `main`)
+## Derived (auto-overwritten by `/status-report`)
 
 ### Env lock
 - Holder: <holder block or `null`>
@@ -320,39 +425,47 @@ Use this exact layout:
 
 If a subsection has no content, write `- none` rather than omitting the subsection — readers should see the structure even when the bucket is empty.
 
-### Step G4: Write back
+## Step S4: Write back
 
 Reassemble the full doc:
 
 ```
 <header up to and including the two intro blockquotes>
 ---
-<new ## Derived section from Step G3>
+<new ## Derived section from Step S3>
 ---
-<preserved ## Strategic section from Step G1, byte-for-byte>
+<preserved ## Strategic section from Step S1, byte-for-byte>
 ---
-<preserved ## Conventions section from Step G1, byte-for-byte>
+<preserved ## Conventions section from Step S1, byte-for-byte>
 ```
 
 The horizontal rules (`---`) between sections are part of the layout; preserve them. Update the `**Last derived update:**` date at the top to today's ISO-8601 date (UTC).
 
 Call `mcp__linear__save_document` with `id: bbacd5ae-0c99-4eaf-bbd7-24e7eb90ffce` and the reassembled content.
 
-### Step G5: Print a 3-line summary
+## Step S5: Print the one-line footer
 
-Output **exactly** this format (no template, no addenda — global mode has its own minimal output):
+After the doc save returns (success or failure), append a single line to the output (the only text allowed after the snapshot's `BLOCKERS`):
 
+**On success:**
 ```
-═══ ACTIVE STATE SYNCED ═══
-Doc:      https://linear.app/roknua-projects/document/raid-ledger-active-state-7a4ddc5652c9
-Derived:  <N> in-flight | <M> shipped 7d | <K> follow-ups | <S> stale items
-Note:     <one-line — anything that warranted attention, or "no anomalies">
+─── Active State synced ─── https://linear.app/roknua-projects/document/raid-ledger-active-state-7a4ddc5652c9
 ```
 
-The `Note:` line is for things the operator should see at a glance — e.g. "ROK-1250 in flight 24h+ without PR", "env lock held by ROK-XXXX since <time>", "stale --rok-XXXX worktree can be removed". One sentence max. If nothing is notable, write `no anomalies`.
+**On failure (S1 anchor check failed, S4 save errored, or operator opted out):**
+```
+─── Active State sync FAILED ─── <one-line error>
+```
 
-### Halts specific to Global mode
+or, if the operator said "don't update the doc" in this conversation:
+```
+─── Active State sync skipped per operator request ───
+```
 
-- Doc structure broken (Step G1 anchor check failed) → print BLOCKER and stop without writing.
-- `mcp__linear__save_document` returns an error → print BLOCKER `doc save failed: <error>`. The next invocation will re-derive and retry.
-- Operator explicitly says "don't update the doc" in this conversation → run Steps G1–G3, print Step G5's summary with `Note: doc-write skipped per operator request`, but skip Step G4 entirely.
+This is the only text allowed after the snapshot. Do not add summaries, recommendations, or follow-up commentary.
+
+## Halts specific to Step S
+
+- Doc structure broken (S1 anchor check failed) → print failure footer, do not write.
+- `mcp__linear__save_document` returns an error → print failure footer with the error. The next invocation will re-derive and retry.
+- Operator explicitly said "don't update the doc" in this conversation → run S1–S3 silently for consistency-check purposes, skip S4, print the "skipped per operator request" footer.
