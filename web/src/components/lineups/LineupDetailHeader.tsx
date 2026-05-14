@@ -234,7 +234,7 @@ export function LineupDetailHeader({ lineup, isAborted = false, onTiebreakerInte
       </div>
       {/* Row 2 (mobile only): breadcrumb + circle */}
       <div className="md:hidden flex items-center gap-2 flex-wrap mb-2 ml-8">
-        <PhaseBreadcrumb lineup={lineup} onTiebreakerIntercept={onTiebreakerIntercept} />
+        <PhaseBreadcrumb lineup={lineup} isAborted={isAborted} onTiebreakerIntercept={onTiebreakerIntercept} />
         <PhaseCircle status={lineup.status} />
       </div>
       {lineup.description && (

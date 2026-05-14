@@ -274,7 +274,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         </div>
       )}
 
-      {lineup.status === 'building' && (
+      {isBuilding && (
         <div className="mt-4">
           {!canParticipate && (
             <p
