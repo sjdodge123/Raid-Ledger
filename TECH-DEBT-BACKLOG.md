@@ -237,7 +237,7 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
 
 ### 2026-05-15 — rok-1036-allinone-privilege-drop (surfaced during ROK-1036 validate-ci)
 
-- **[med]** `npx tsc --noEmit -p api/tsconfig.json` errors in 4 spec files on `origin/main` — reproduces on a clean stash of the ROK-1036 changes, so unrelated to this story:
+- **[med]** `npx tsc --noEmit -p api/tsconfig.json` errors in 5 spec files (10 errors total) on `origin/main` — reproduces on a clean stash of the ROK-1036 changes, so unrelated to this story:
   - `api/src/admin/games-dedup-audit.integration.spec.ts:386` — TS2769 (no overload matches `db.execute(sql\`...\`)` call shape).
   - `api/src/admin/games-dedup-audit.service.spec.ts:432` — TS2502 (`tx` referenced directly or indirectly in its own type annotation).
   - `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — TS2352 (drizzle `RowList<{ totalSeconds }>` vs hand-written `{ total_seconds }` cast mismatch; snake_case vs camelCase column mapping).
