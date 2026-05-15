@@ -156,7 +156,12 @@ export class AdHocNotificationService implements OnModuleDestroy {
   /**
    * Update the existing embed in-place to show the completed state (ROK-612).
    * No second "completed" message is posted — the original embed is edited.
+   *
+   * ROK-1243: bindingId / event / participants are kept on the signature for
+   * backwards compatibility with `ad-hoc-event.handlers.ts::notifyCompleted`
+   * but the implementation re-reads everything it needs from the DB.
    */
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   async notifyCompleted(
     eventId: number,
     _bindingId: string,
@@ -173,6 +178,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
       totalDurationSeconds: number | null;
     }>,
   ): Promise<void> {
+    /* eslint-enable @typescript-eslint/no-unused-vars */
     const tracked = this.messageIds.get(eventId);
     if (!tracked) {
       this.pendingUpdates.delete(eventId);

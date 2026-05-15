@@ -583,9 +583,7 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
     const editSpy = jest
       .spyOn(clientService, 'editEmbed')
       .mockResolvedValue({ id: 'spawn-msg-1243' } as never);
-    jest
-      .spyOn(clientService, 'getGuildId')
-      .mockReturnValue('guild-1243');
+    jest.spyOn(clientService, 'getGuildId').mockReturnValue('guild-1243');
 
     // Create a binding (so resolveNotificationChannel succeeds) + ad-hoc event.
     // `notificationChannelId` is a runtime config key used by the resolver

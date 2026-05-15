@@ -531,9 +531,11 @@ describe('AdHocNotificationService', () => {
       await jest.advanceTimersByTimeAsync(0);
       const lastCall = embedFactory.buildEventEmbed.mock.calls.at(-1);
       expect(lastCall).toBeDefined();
-      const lastMentions = (lastCall![0] as {
-        signupMentions: Array<{ discordId: string; status?: string }>;
-      }).signupMentions;
+      const lastMentions = (
+        lastCall![0] as {
+          signupMentions: Array<{ discordId: string; status?: string }>;
+        }
+      ).signupMentions;
       expect(lastMentions).toHaveLength(1);
       expect(lastMentions[0].discordId).toBe('u1');
       expect(lastMentions[0].status).toBeUndefined();
