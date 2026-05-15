@@ -288,3 +288,8 @@ ROK-1292 ships in 3 PRs per its body. **PR 1 (this PR) lands the 4 docker-compos
 
 **ROK-1292 AC reconciliation:** the story body's AC line "Backlog section '2026-05-14 — fix/batch-2026-05-14 (surfaced during operator-triggered /security-review on whole repo + local env)' pruned from `TECH-DEBT-BACKLOG.md`" is N/A — that section was never added; operator filed direct to Linear. Strike that AC bullet when ROK-1292 closes.
 
+### 2026-05-15 — rok-1292-pr1-local-env-hardening (surfaced during validate-ci.sh typecheck)
+
+- **[low]** `api/src/version/version.controller.spec.ts:15+` and `api/test/app.e2e-spec.ts:7+` — `npx tsc --noEmit -p api/tsconfig.json` fails with `TS2593: Cannot find name 'describe'/'it'/'beforeEach'` and `TS2304: Cannot find name 'expect'/'jest'`. Reproduces on a clean `origin/main` checkout (verified via `git stash` + retry). Jest types resolve fine when running the specs (`npm run test -w api -- <spec>` works), so the issue is config-only — these spec files aren't picked up by the same `types: ['jest']` resolution that other specs use. CI doesn't catch this because GitHub Actions uses `tsconfig.build.json` (which excludes specs), but `scripts/validate-ci.sh::run_typecheck` (line 112) uses the full `tsconfig.json` and trips. Result: anyone running `./scripts/validate-ci.sh --full` locally sees a noisy "regression" that isn't theirs.
+  Suggested: add `"types": ["jest", "node"]` to `api/tsconfig.json` (or move the spec includes into a tsconfig that picks up `@types/jest`). One-line fix per file once the right tsconfig is identified.
+
