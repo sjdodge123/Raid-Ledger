@@ -1,6 +1,7 @@
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin as isAdminCheck } from '../../hooks/use-auth';
 import { AdminSidebar } from './admin-sidebar';
+import { UpdateBanner } from './UpdateBanner';
 
 function LoadingSkeleton() {
     return (
@@ -43,7 +44,8 @@ export function AdminSettingsLayout() {
 
     return (
         <div className="max-w-6xl mx-auto px-4 py-6">
-            <div className="mb-6">
+            <UpdateBanner enabled={isAdminCheck(user)} />
+            <div className="mb-6 mt-4">
                 <h1 className="text-2xl font-bold text-foreground">Admin Settings</h1>
                 <p className="text-sm text-muted mt-0.5">Manage your community configuration</p>
             </div>
