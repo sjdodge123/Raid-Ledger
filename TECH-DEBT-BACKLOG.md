@@ -247,3 +247,44 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
 
 - **[nit]** `tools/test-bot/scripts/no-sleep-lint.sh` still flags the comment on `tools/test-bot/src/smoke/tests/lineup-abort.test.ts:26` (same entry under fix/rok-1243 worktree) — reproduces on origin/main, still unresolved.
 
+### 2026-05-15 — rok-1292-pr1-local-env-hardening (deferred PR 2 + PR 3 from ROK-1292 /security-review)
+
+ROK-1292 ships in 3 PRs per its body. **PR 1 (this PR) lands the 4 docker-compose / allinone JWT-guard items + 2 validation-pass follow-ups (BANNED_SECRETS symmetry + CI negative-path test).** The remaining 9-10 original findings + 2 new completeness/reviewer findings stay tracked here so the parent Linear story (ROK-1292) and TECH-DEBT-BACKLOG agree. Source reports preserved at `planning-artifacts/security-review-7bec0fb2-fullrepo.md` + `planning-artifacts/security-review-7bec0fb2-summary.md`.
+
+**Group B — App-code HIGH severity (PR 2 of ROK-1292):**
+
+- **[high]** `api/src/admin/branding.controller.ts:25, 152-164` + `api/src/main.ts:59-65` — SVG entry in `ALLOWED_TYPES` declares `magic: [0x3c]` (single `<` byte). Any text file beginning with `<` passes the magic-byte check; uploaded SVG is written as `logo.svg` and served same-origin from `/uploads/branding/logo.svg`. Helmet's app-wide CSP doesn't extend per-asset. Admin-only upload limits to admin-trojan / social-engineering, but a logo SVG with `<script>` executes JS in the API origin when navigated directly. (Avatar upload is hardened via `sharp` re-encode; branding intentionally preserves SVG.)
+  Suggested: drop SVG from `ALLOWED_TYPES`. If SVG required: server-side sanitize (`svg-sanitizer` / `DOMPurify`), serve with `Content-Disposition: attachment` AND per-static-asset CSP `default-src 'none'; style-src 'unsafe-inline'`, consider a sandboxed subdomain for branding. Ship with a regression test that uploads `<svg><script>...</script></svg>` and asserts rejection.
+
+**Group C — App-code defense-in-depth (PR 3 of ROK-1292):**
+
+- **[med]** `api/src/ai/ai-providers.controller.ts:60-73, 234-250` — `@Body() body: AiProviderConfigDto` is a TS type alias only; no `ValidationPipe`, no Zod parse. `body.apiKey` / `body.url` / `body.model` persisted via `settings.set()` as-is. Admin-gated so external impact is low, but data-integrity / settings-cache corruption / log tampering possible from inside an admin session.
+  Suggested: add `AiProviderConfigSchema` to `packages/contract` and `.parse(body)` at controller, OR convert DTO to class-validator with paired `ValidationPipe`.
+- **[med]** `api/src/main.ts:23-46` (`installAutoClientUrlDetection`) — When `CORS_ORIGIN === 'auto'` and `CLIENT_URL` unset, first request writes `process.env.CLIENT_URL` from unverified `Host` + `X-Forwarded-Proto` headers. No allow-list. In direct-access deployment (no nginx normalization), one crafted request poisons `CLIENT_URL` for process lifetime — flows into OG-embed redirects, OAuth callbacks, Discord magic-link bodies. Synology + nginx mitigates in practice; code doesn't enforce the contract.
+  Suggested: in `auto` mode, require `ALLOWED_HOSTS` env var (comma-separated allow-list) and reject non-matching `Host` headers before mutating env. Better: derive `CLIENT_URL` per-request via request-scoped helper instead of mutating `process.env`.
+- **[med]** `api/src/auth/magic-link.service.ts:36-49` + `web/src/App.tsx:42-56` — 15-min JWT shipped as `?token=` in URL sent to Discord. Frontend strips query AFTER page load (already too late — Discord link-tracker, browser history, HTTPS proxies, Referer headers may have logged it). `magicLink: true` claim NOT enforced downstream — JWT interchangeable with a normal login token. No single-use enforcement: captured magic link grants 15 min of full account impersonation.
+  Suggested: store `jti` in Redis at issue (`setex(jti, 900, '1')`), `getdel` on consumption, reject if absent. Add magic-link-only guard requiring `magicLink === true` and refusing write endpoints. Best long-term: server-side `/auth/redeem-magic-link` POST instead of GET-with-query.
+- **[med]** `api/src/settings/encryption.util.ts:32-37` (`deriveKey`) — Salt built as `Buffer.from(secret.slice(0, 32).padEnd(32, '0'))`. Salt derived deterministically from the secret defeats the salt's purpose. Acceptable for per-process JWT_SECRET use-case in isolation; dangerous if reused for password hashing. Short JWT_SECRET values get padded with literal `'0'` chars, weakening entropy.
+  Suggested: persist a process-local random 32-byte salt in `app_settings` (`encryption_salt`), pass explicitly. At minimum add a code comment marking this pattern as JWT-secret-only and forbidding reuse for password storage.
+- **[low]** `api/src/steam/steam-auth.controller.ts:233-255` + `api/src/steam/steam-http.util.ts:49-81` — Steam-OpenID nonce replay protection currently relies on Steam (`mode=check_authentication`). We don't cache `openid.response_nonce` ourselves. Replay risk low (only re-links the same Steam ID to the same user); layered-defense story missing.
+  Suggested: after successful link, `redis.setex(`steam-openid:${nonce}`, 86400, '1')` and reject if already present.
+- **[low]** `api/src/auth/jwt.strategy.ts:28` — `process.env.JWT_SECRET!` non-null assertion at construction. If env var missing in prod, passport-jwt receives `undefined` as `secretOrKey` and may either crash at boot or accept tokens signed with an empty key.
+  Suggested: throw at module init if `JWT_SECRET` missing or < 32 chars (fail-closed).
+- **[low]** `api/src/auth/auth.controller.ts:48-67` (`exchangeCode`) — `redis.get` then `redis.del` is not atomic. Two simultaneous requests with the same code could both retrieve, both `del`, both succeed. Single-use semantics claimed in code comment but not enforced.
+  Suggested: replace with `redis.getdel(key)` (Redis 6.2+) or wrap in `MULTI/EXEC`.
+- **[low]** `api/src/csp-report/csp-report.controller.ts:14-32` — Logs full CSP report payload to structured logger. 64kb body limit caps abuse but an attacker producing CSP violations can spam logs with arbitrary content reaching the configured log sink.
+  Suggested: cap and redact (`JSON.stringify(report).slice(0, 4096)`), or rely on Sentry tags + sampling and skip the second log line.
+- **[low]** `api/src/plugins/wow-common/blizzard-equipment.helpers.ts:25-52` (`fetchSingleIconUrl`) — Sends `Bearer ${token}` Authorization header to a URL pulled from parent Blizzard JSON response (`equipped_items[].media.key.href`) without host validation. If a future Blizzard endpoint returns a non-Blizzard URL (or MITM injects one), bearer leaks to third-party host.
+  Suggested: assert `new URL(mediaHref).hostname.endsWith('blizzard.com') || .endsWith('battle.net')` before fetch.
+- **[low]** `api/src/version/version-check.service.ts:144` → `web/src/components/admin/UpdateBanner.tsx:48` — `latestReleaseUrl` flows from GitHub's `body.html_url` through `app_settings` to a JSX `<a href={href}>`. Zod's `z.string().url()` allows `javascript:` URLs (uses URL constructor which accepts them), so contract doesn't block scheme-based XSS. Trusted source today; defense-in-depth one-liner.
+  Suggested: validate `href.startsWith('https://github.com/')` either at storage step in `storeVersionCheckResults` (reject otherwise, store empty) OR at render time in `BannerContent`.
+
+**Sibling/completeness findings (surfaced by `/validate` + `/code-review` over PR 1):**
+
+- **[low]** `docker-compose.test.yml` (sibling to `docker-compose.yml`) binds `5433:5432` for the test Postgres — same wide-open `0.0.0.0` exposure as the main compose file before PR 1. Out of scope for the PR1 framing but the obvious sibling to harden.
+  Suggested: change to `"127.0.0.1:5433:5432"`. Same risk profile, same one-line fix.
+- **[nit]** `api/scripts/reencrypt-settings.ts:116` — recovery-instructions help text bakes the literal `raid-ledger-default-secret-change-in-production` into a `console.log` example. Not in `BANNED_SECRETS` scope (it's documentation), but if the literal naming is ever rotated this is a 4th replication site to update (alongside `Dockerfile.allinone`, `docker-entrypoint.sh`, `encryption.util.ts`).
+  Suggested: leave for now; flag if anyone proposes renaming the legacy literal.
+
+**ROK-1292 AC reconciliation:** the story body's AC line "Backlog section '2026-05-14 — fix/batch-2026-05-14 (surfaced during operator-triggered /security-review on whole repo + local env)' pruned from `TECH-DEBT-BACKLOG.md`" is N/A — that section was never added; operator filed direct to Linear. Strike that AC bullet when ROK-1292 closes.
+

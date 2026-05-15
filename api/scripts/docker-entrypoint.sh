@@ -28,16 +28,20 @@ if [ -n "$DATABASE_URL" ]; then
     MIGRATIONS_FOLDER=/app/drizzle/migrations \
       node /app/dist/scripts/run-migrations-with-sentry.js 2>&1
 
-    # Re-encrypt app_settings if migrating from default JWT_SECRET (ROK-1035)
+    # Re-encrypt app_settings if migrating from a known dev JWT_SECRET (ROK-1035, ROK-1292)
+    # Keep this list in sync with Dockerfile.allinone HARDCODED_DEFAULTS and the
+    # docker-compose.yml JWT_SECRET fallback.
     if [ ! -f /data/.jwt_secret_migrated ]; then
-        HARDCODED_DEFAULT="raid-ledger-default-secret-change-in-production"
+        HARDCODED_DEFAULTS="raid-ledger-default-secret-change-in-production dev-secret-change-in-prod"
         echo "🔄 Checking if app_settings re-encryption is needed..."
         if [ -f /app/dist/scripts/reencrypt-settings.js ]; then
-            node /app/dist/scripts/reencrypt-settings.js \
-                --old-secret "$HARDCODED_DEFAULT" \
-                --new-secret "$JWT_SECRET" 2>&1 || {
-                echo "⚠️ Re-encryption failed (non-fatal — settings may already use new key)"
-            }
+            for OLD_SECRET in $HARDCODED_DEFAULTS; do
+                node /app/dist/scripts/reencrypt-settings.js \
+                    --old-secret "$OLD_SECRET" \
+                    --new-secret "$JWT_SECRET" 2>&1 || {
+                    echo "⚠️ Re-encryption attempt with default '$OLD_SECRET' failed (non-fatal — settings may already use new key)"
+                }
+            done
         fi
         touch /data/.jwt_secret_migrated
         echo "✅ Re-encryption migration marker created"
