@@ -78,10 +78,15 @@ if (!telemetryDisabled && isProduction) {
       // they collapse into one inbox issue instead of N. discord.js v14
       // retries internally; what reaches Sentry is retry exhaustion —
       // worth visibility, but grouped.
+      //
+      // Word boundaries on `\b5\d\d\b` are load-bearing: Discord application
+      // error codes (50013 Missing Permissions, 50001 Missing Access, etc.)
+      // start with `500` as a numeric prefix. Without `\b`, `/5\d\d/` would
+      // mis-group those PERMANENT failures as transient network noise.
       if (
         exceptionType === 'DiscordAPIError' &&
         typeof exceptionValue === 'string' &&
-        /5\d\d|ECONNRESET|ETIMEDOUT|getaddrinfo|fetch failed|network/i.test(
+        /\b5\d\d\b|ECONNRESET|ETIMEDOUT|getaddrinfo|fetch failed|\bnetwork\b/i.test(
           exceptionValue,
         )
       ) {

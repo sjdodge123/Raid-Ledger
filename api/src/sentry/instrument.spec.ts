@@ -421,6 +421,39 @@ function describeSentryInstrumentTs() {
           expect(result.fingerprint).toBeUndefined();
         });
 
+        it('does NOT fingerprint Discord permission/access codes that start with 500x (regex word-boundary regression guard)', () => {
+          // 50013 Missing Permissions, 50001 Missing Access — these are
+          // PERMANENT permission failures, NOT transient 5xx HTTP. Without
+          // \b boundaries on /5\d\d/, the regex would match "500" inside
+          // "50013" and mis-group these as discord-api-transient.
+          const missingPermissions: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Missing Permissions (code 50013)',
+                },
+              ],
+            },
+          };
+          const missingAccess: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Missing Access (code 50001)',
+                },
+              ],
+            },
+          };
+          expect(
+            (getBeforeSend()(missingPermissions) as SentryEvent).fingerprint,
+          ).toBeUndefined();
+          expect(
+            (getBeforeSend()(missingAccess) as SentryEvent).fingerprint,
+          ).toBeUndefined();
+        });
+
         it('drops 50278 ahead of fingerprinting when both regexes would match (clause ordering guard)', () => {
           // A DiscordAPIError carrying BOTH "code 50278" AND a transient
           // substring ("fetch failed") must drop on the 50278 clause and
