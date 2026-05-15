@@ -551,6 +551,167 @@ jobs:
           docker stop rl-ci-test 2>/dev/null || true
           docker rm rl-ci-test 2>/dev/null || true
 
+  # ─── Synthetic Production Volume Gate (ROK-1036) ───────────────────
+  # Boots the allinone image against a pre-populated volume that mimics a
+  # pre-1036 production /data tree: root-owned .jwt_secret, root-owned log
+  # files, postgres-owned PGDATA, ~50 root-owned avatar PNGs, and a
+  # root-owned dump in /data/backups/daily/. Asserts the privilege-drop
+  # entrypoint chowns the right paths, that postgresql.log and redis.log
+  # retain their original owners, that nginx workers and node drop to `app`,
+  # and that no `PERMISSION DENIED` lines leak into docker logs.
+  container-upgrade-path:
+    needs: detect-changes
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.detect-changes.outputs.container == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build allinone image
+        run: docker build -f Dockerfile.allinone -t raid-ledger:ci-upgrade --build-arg COMMIT_SHA=${{ github.sha }} .
+
+      - name: Seed synthetic production volume
+        # UIDs/GIDs hard-coded to match the production image's apk-installed
+        # users (postgres=70:70, redis=101:102). Numeric chown avoids relying
+        # on the seed-side alpine container having those named users.
+        run: |
+          docker volume create rl-priv-test
+          docker run --rm -v rl-priv-test:/data alpine sh -c '
+            set -e
+            mkdir -p /data/postgresql /data/redis /data/backups/daily \
+                     /data/backups/migrations /data/logs /data/avatars \
+                     /data/uploads/branding
+            # Root-owned secret (pre-1036 state from ROK-1035)
+            printf "test-secret-value" > /data/.jwt_secret
+            chmod 600 /data/.jwt_secret
+            touch /data/.jwt_secret_migrated
+            # Root-owned log files (pre-1036 state — entrypoint must flip
+            # api.log + nginx.log to app and KEEP postgresql.log/redis.log on
+            # their respective UIDs).
+            printf "old api log\n"        > /data/logs/api.log
+            printf "old nginx log\n"      > /data/logs/nginx.log
+            printf "old postgresql log\n" > /data/logs/postgresql.log
+            printf "old redis log\n"      > /data/logs/redis.log
+            # 50 dummy avatar PNGs to exercise the recursive chown on a
+            # non-empty tree.
+            for i in $(seq 1 50); do
+              printf "\x89PNG\r\n\x1a\ndummy" > /data/avatars/avatar-${i}.png
+            done
+            # Small backup dump in /data/backups/daily/
+            printf "dummy dump\n" > /data/backups/daily/snapshot.dump
+            # PGDATA + redis dir ownership (numeric — matches prod image users)
+            chown -R 70:70   /data/postgresql
+            chown -R 101:102 /data/redis
+            chown 70:70   /data/logs/postgresql.log
+            chown 101:102 /data/logs/redis.log
+          '
+          echo "✅ Synthetic volume seeded"
+
+      - name: Start container against synthetic volume
+        run: |
+          docker run -d --name rl-upgrade-test \
+            -v rl-priv-test:/data \
+            -p 8080:80 \
+            -e ADMIN_PASSWORD=ci-test-password \
+            raid-ledger:ci-upgrade
+
+      - name: Wait for /api/health (max 90s)
+        run: |
+          for i in $(seq 1 90); do
+            RUNNING=$(docker inspect rl-upgrade-test --format '{{.State.Running}}' 2>/dev/null || echo "false")
+            if [ "$RUNNING" = "false" ]; then
+              echo "❌ Container exited unexpectedly"
+              docker logs rl-upgrade-test --tail 80
+              exit 1
+            fi
+            if curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -q '"status":"ok"'; then
+              echo "✅ /api/health OK after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Timed out waiting for /api/health"
+          docker logs rl-upgrade-test --tail 80
+          exit 1
+
+      - name: Assert privilege-drop process topology
+        run: |
+          PS=$(docker exec rl-upgrade-test ps -o user,comm)
+          echo "$PS"
+          # nginx master must be root
+          echo "$PS" | grep -E '^root[[:space:]]+nginx' >/dev/null || {
+            echo "❌ No root nginx master found"; exit 1; }
+          # nginx workers must be app
+          echo "$PS" | grep -E '^app[[:space:]]+nginx' >/dev/null || {
+            echo "❌ No app nginx worker found"; exit 1; }
+          # node must be app
+          echo "$PS" | grep -E '^app[[:space:]]+node' >/dev/null || {
+            echo "❌ Node is not running as app"; exit 1; }
+          echo "✅ Process topology correct"
+
+      - name: Assert /data/.jwt_secret is app:app 600
+        run: |
+          LINE=$(docker exec rl-upgrade-test ls -l /data/.jwt_secret)
+          echo "$LINE"
+          echo "$LINE" | grep -E '^-rw-------[^ ]*[[:space:]]+[0-9]+[[:space:]]+app[[:space:]]+app' >/dev/null || {
+            echo "❌ .jwt_secret is not app:app 600"; exit 1; }
+
+      - name: Assert postgresql.log retained postgres:postgres
+        run: |
+          LINE=$(docker exec rl-upgrade-test ls -l /data/logs/postgresql.log)
+          echo "$LINE"
+          echo "$LINE" | grep -E '[[:space:]]postgres[[:space:]]+postgres[[:space:]]' >/dev/null || {
+            echo "❌ postgresql.log is NOT postgres:postgres after recursive chown (regression)"
+            exit 1; }
+
+      - name: Assert redis.log retained redis:redis
+        run: |
+          LINE=$(docker exec rl-upgrade-test ls -l /data/logs/redis.log)
+          echo "$LINE"
+          echo "$LINE" | grep -E '[[:space:]]redis[[:space:]]+redis[[:space:]]' >/dev/null || {
+            echo "❌ redis.log is NOT redis:redis after recursive chown (regression)"
+            exit 1; }
+
+      - name: Assert api.log is app:app
+        run: |
+          LINE=$(docker exec rl-upgrade-test ls -l /data/logs/api.log)
+          echo "$LINE"
+          echo "$LINE" | grep -E '[[:space:]]app[[:space:]]+app[[:space:]]' >/dev/null || {
+            echo "❌ api.log is not app:app"; exit 1; }
+
+      - name: Assert avatars chowned to app:app
+        run: |
+          docker exec rl-upgrade-test sh -c 'ls -l /data/avatars/avatar-1.png /data/avatars/avatar-25.png /data/avatars/avatar-50.png' | tee /tmp/avatar-listing
+          COUNT=$(grep -E '[[:space:]]app[[:space:]]+app[[:space:]]' /tmp/avatar-listing | wc -l)
+          if [ "$COUNT" -lt 1 ]; then
+            echo "❌ No avatar PNG was chowned to app:app — recursive chown did not run"
+            exit 1
+          fi
+
+      - name: Assert privilege-drop diagnostics + no PERMISSION DENIED
+        run: |
+          LOGS=$(docker logs rl-upgrade-test 2>&1)
+          echo "$LOGS" | grep -E '🔒 API running as: uid=1001' >/dev/null || {
+            echo "❌ Missing '🔒 API running as: uid=1001' diagnostic"
+            echo "--- last 50 log lines ---"
+            echo "$LOGS" | tail -50
+            exit 1; }
+          if echo "$LOGS" | grep -i 'PERMISSION DENIED' >/dev/null; then
+            echo "❌ Found PERMISSION DENIED lines in docker logs:"
+            echo "$LOGS" | grep -i 'PERMISSION DENIED'
+            exit 1
+          fi
+          echo "✅ Diagnostics present, no PERMISSION DENIED"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop rl-upgrade-test 2>/dev/null || true
+          docker rm rl-upgrade-test 2>/dev/null || true
+          docker volume rm rl-priv-test 2>/dev/null || true
+
   # ─── Docker Image Build (main only) ───────────────────────────────
   docker-build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

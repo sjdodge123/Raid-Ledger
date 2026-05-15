@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import {
   OllamaNativeService,
   getOllamaDownloadUrl,
@@ -53,15 +54,30 @@ describe('OllamaNativeService', () => {
     );
   }
 
+  const originalGetuid = process.getuid;
+
   beforeEach(async () => {
     jest.clearAllMocks();
     // Default: allinone mode detected (supervisor config exists)
     mockExistsSync.mockReturnValue(true);
+    // ROK-1036: default to root so legacy tests exercise the unguarded code
+    // path. The privilege-drop describe overrides this per-test.
+    Object.defineProperty(process, 'getuid', {
+      value: () => 0,
+      configurable: true,
+    });
 
     const module = await Test.createTestingModule({
       providers: [OllamaNativeService],
     }).compile();
     service = module.get(OllamaNativeService);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'getuid', {
+      value: originalGetuid,
+      configurable: true,
+    });
   });
 
   describe('isAllinoneMode', () => {
@@ -435,6 +451,219 @@ describe('OllamaNativeService', () => {
       });
       expect(service.isBinaryInstalled()).toBe(false);
       expect(service.isAllinoneMode()).toBe(true);
+    });
+  });
+
+  /**
+   * ROK-1036 — UID guard. In the allinone container the API now runs as `app`
+   * (UID 1001), not root. Ollama installation needs root (writes to
+   * /usr/local/bin, /usr/local/lib/ollama, /etc/supervisor.d/services, and the
+   * supervisor control socket), so side-effectful methods must short-circuit
+   * + warn when !hasRoot. Read-only methods are unaffected.
+   */
+  describe('privilege drop / UID guard (ROK-1036)', () => {
+    const originalGetuid = process.getuid;
+    let warnSpy: jest.SpyInstance;
+
+    /**
+     * Reconstruct the service under a specific uid scenario.
+     * Mocks `process.getuid` per-test BEFORE constructing so the constructor's
+     * `hasRoot` calculation observes the desired value.
+     */
+    async function buildService(
+      uid: number | 'undefined-getuid',
+    ): Promise<OllamaNativeService> {
+      if (uid === 'undefined-getuid') {
+        Object.defineProperty(process, 'getuid', {
+          value: undefined,
+          configurable: true,
+        });
+      } else {
+        Object.defineProperty(process, 'getuid', {
+          value: () => uid,
+          configurable: true,
+        });
+      }
+      // allinone sentinel exists so the constructor's allinone branch fires.
+      mockExistsSync.mockReturnValue(true);
+      const module = await Test.createTestingModule({
+        providers: [OllamaNativeService],
+      }).compile();
+      return module.get(OllamaNativeService);
+    }
+
+    beforeEach(() => {
+      warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+      Object.defineProperty(process, 'getuid', {
+        value: originalGetuid,
+        configurable: true,
+      });
+    });
+
+    describe('process.getuid() === 0 (root)', () => {
+      it('constructor does NOT log the privilege-drop warning', async () => {
+        await buildService(0);
+
+        const warned = warnSpy.mock.calls.some((call) =>
+          String(call[0] ?? '').includes(
+            'Ollama native provider requires root',
+          ),
+        );
+        expect(warned).toBe(false);
+      });
+
+      it('install() invokes downloadAndExtractBinary', async () => {
+        const svc = await buildService(0);
+        mockDownloadAndExtract.mockClear();
+
+        await svc.install();
+
+        expect(mockDownloadAndExtract).toHaveBeenCalledTimes(1);
+      });
+
+      it('startService() invokes supervisorctl reread/update/start', async () => {
+        const svc = await buildService(0);
+        mockExecFile.mockClear();
+        mockExecResult('');
+
+        await svc.startService();
+
+        const cmds = mockExecFile.mock.calls.map(
+          (c: [string, string[]]) => `${c[0]} ${c[1].join(' ')}`,
+        );
+        expect(cmds).toContain('supervisorctl reread');
+        expect(cmds).toContain('supervisorctl update');
+        expect(cmds).toContain('supervisorctl start ollama');
+      });
+
+      it('writeSupervisorConfig() invokes writeFileSync', async () => {
+        const svc = await buildService(0);
+        const mockWriteFileSync = fs.writeFileSync as jest.Mock;
+        mockWriteFileSync.mockClear();
+
+        svc.writeSupervisorConfig();
+
+        expect(mockWriteFileSync).toHaveBeenCalledWith(
+          '/etc/supervisor.d/services/ollama.ini',
+          expect.stringContaining('[program:ollama]'),
+        );
+      });
+    });
+
+    describe('process.getuid() === 1001 (app — post-ROK-1036 allinone)', () => {
+      it('constructor logs the privilege-drop warning', async () => {
+        await buildService(1001);
+
+        const warned = warnSpy.mock.calls.some((call) =>
+          String(call[0] ?? '').includes(
+            'Ollama native provider requires root',
+          ),
+        );
+        expect(warned).toBe(true);
+      });
+
+      it('warning mentions the allinone container context', async () => {
+        await buildService(1001);
+
+        const messages = warnSpy.mock.calls.map((c) => String(c[0] ?? ''));
+        const hasContextual = messages.some(
+          (m) =>
+            m.includes('allinone') &&
+            (m.includes('skipped') || m.includes('skip')),
+        );
+        expect(hasContextual).toBe(true);
+      });
+
+      it('install() is a no-op — downloadAndExtractBinary is NOT called', async () => {
+        const svc = await buildService(1001);
+        mockDownloadAndExtract.mockClear();
+
+        await svc.install();
+
+        expect(mockDownloadAndExtract).not.toHaveBeenCalled();
+      });
+
+      it('startService() is a no-op — supervisorctl is NOT invoked', async () => {
+        const svc = await buildService(1001);
+        mockExecFile.mockClear();
+
+        await svc.startService();
+
+        expect(mockExecFile).not.toHaveBeenCalled();
+      });
+
+      it('writeSupervisorConfig() is a no-op — writeFileSync is NOT called', async () => {
+        const svc = await buildService(1001);
+        const mockWriteFileSync = fs.writeFileSync as jest.Mock;
+        mockWriteFileSync.mockClear();
+
+        svc.writeSupervisorConfig();
+
+        expect(mockWriteFileSync).not.toHaveBeenCalled();
+      });
+
+      it('stopService() is a no-op — supervisorctl is NOT invoked (Codex P2.2)', async () => {
+        const svc = await buildService(1001);
+        mockExecFile.mockClear();
+
+        await svc.stopService();
+
+        expect(mockExecFile).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('process.getuid undefined (non-POSIX / defensive)', () => {
+      it('treats undefined getuid as non-root (warning emitted)', async () => {
+        await buildService('undefined-getuid');
+
+        const warned = warnSpy.mock.calls.some((call) =>
+          String(call[0] ?? '').includes(
+            'Ollama native provider requires root',
+          ),
+        );
+        expect(warned).toBe(true);
+      });
+
+      it('install() is a no-op when getuid is undefined', async () => {
+        const svc = await buildService('undefined-getuid');
+        mockDownloadAndExtract.mockClear();
+
+        await svc.install();
+
+        expect(mockDownloadAndExtract).not.toHaveBeenCalled();
+      });
+
+      it('startService() is a no-op when getuid is undefined', async () => {
+        const svc = await buildService('undefined-getuid');
+        mockExecFile.mockClear();
+
+        await svc.startService();
+
+        expect(mockExecFile).not.toHaveBeenCalled();
+      });
+
+      it('writeSupervisorConfig() is a no-op when getuid is undefined', async () => {
+        const svc = await buildService('undefined-getuid');
+        const mockWriteFileSync = fs.writeFileSync as jest.Mock;
+        mockWriteFileSync.mockClear();
+
+        svc.writeSupervisorConfig();
+
+        expect(mockWriteFileSync).not.toHaveBeenCalled();
+      });
+
+      it('stopService() is a no-op when getuid is undefined (Codex P2.2)', async () => {
+        const svc = await buildService('undefined-getuid');
+        mockExecFile.mockClear();
+
+        await svc.stopService();
+
+        expect(mockExecFile).not.toHaveBeenCalled();
+      });
     });
   });
 });

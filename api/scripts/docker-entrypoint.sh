@@ -9,7 +9,7 @@ if [ -n "$DATABASE_URL" ]; then
     mkdir -p /data/backups/daily /data/backups/migrations 2>/dev/null || true
 
     # Take a pre-migration snapshot before running migrations (ROK-420)
-    echo "📸 Taking pre-migration database snapshot..."
+    echo "📸 Taking pre-migration database snapshot as $(whoami) (UID $(id -u))..."
     SNAPSHOT_TS=$(date +%Y-%m-%d_%H%M%S)
     SNAPSHOT_FILE="/data/backups/migrations/pre_migration_${SNAPSHOT_TS}.dump"
     if pg_dump --format=custom --no-owner --no-privileges --file="$SNAPSHOT_FILE" "$DATABASE_URL" 2>/dev/null; then

@@ -107,6 +107,13 @@ RUN addgroup -g 1001 -S app && \
   adduser -S -D -H -u 1001 -G app app && \
   addgroup app redis
 
+# ROK-1036: Drop nginx worker privileges to app (master stays root for port 80).
+# Replaces any existing top-level `user <name>;` directive (commented or not)
+# with `user app;`. Appends if absent. Idempotent across rebuilds and across
+# whatever stock nginx.conf the alpine `nginx` package ships in future versions.
+RUN sed -i 's/^[[:space:]]*#*[[:space:]]*user[[:space:]]\+[a-zA-Z0-9_-]\+;/user app;/' /etc/nginx/nginx.conf && \
+    grep -q '^user app;' /etc/nginx/nginx.conf || echo 'user app;' >> /etc/nginx/nginx.conf
+
 WORKDIR /app
 
 # ==================
@@ -232,6 +239,7 @@ redirect_stderr=true
 command=/bin/bash -c '/app/start-api.sh 2>&1 | tee -a /data/logs/api.log'
 directory=/app
 environment=PORT=3000
+user=app
 autostart=true
 autorestart=true
 priority=40
@@ -266,42 +274,22 @@ COPY <<'EOF' /app/start-api.sh
 #!/bin/bash
 set -e
 
-# Wait for PostgreSQL to be ready
+# ROK-1036: identity + write-permission diagnostic at the very top.
+echo "🔒 API running as: $(id)"
+echo "   Can write /data/logs:    $(test -w /data/logs    && echo 'yes' || echo 'NO — PERMISSION DENIED')"
+echo "   Can write /data/backups: $(test -w /data/backups && echo 'yes' || echo 'NO — PERMISSION DENIED')"
+echo "   Can write /data/avatars: $(test -w /data/avatars && echo 'yes' || echo 'NO — PERMISSION DENIED')"
+echo "   Can write /data/uploads: $(test -w /data/uploads && echo 'yes' || echo 'NO — PERMISSION DENIED')"
+echo "   Redis socket readable:   $(test -r /tmp/redis.sock && echo 'yes' || echo 'not yet / NO')"
+
+# Wait for PostgreSQL to be ready (TCP probe; `app` cannot `su-exec postgres`).
+# Probe as the `raid_ledger` role (created by init-db.sh) so `pg_isready` does
+# not default to the OS user (`app`), which has no Postgres role.
 echo "⏳ Waiting for PostgreSQL..."
-until /sbin/su-exec postgres pg_isready -q; do
+until pg_isready -h localhost -U raid_ledger -d raid_ledger -q; do
   sleep 1
 done
 echo "✅ PostgreSQL is ready"
-
-# Ensure pgvector extension is installed (ROK-948). pgvector v0.7.x is NOT a
-# trusted extension, so the raid_ledger role cannot install it via a plain
-# drizzle migration. init-db.sh handles fresh installs; existing data volumes
-# (PG_VERSION present) skip that block — so we also install here on every
-# start as the postgres superuser. Idempotent; the migration 0120 then no-ops.
-# Fail loud if it can't install — an unbootable API is clearer than a
-# mid-migration crash.
-if ! /sbin/su-exec postgres psql -v ON_ERROR_STOP=1 -qt -d raid_ledger \
-    -c "CREATE EXTENSION IF NOT EXISTS vector;" > /dev/null 2>&1; then
-  echo "❌ FATAL: pgvector extension could not be installed"
-  echo "   The pgvector binary may be missing from this image, or the"
-  echo "   postgres data dir is corrupted. Check /data/logs/postgresql.log."
-  exit 1
-fi
-echo "✅ pgvector extension ensured"
-
-# Ensure pg_stat_statements extension is installed (ROK-1156). Same superuser
-# constraint as pgvector — the raid_ledger app role cannot install it via the
-# drizzle migration. Requires shared_preload_libraries=pg_stat_statements in
-# the postgres command (see [program:postgres] above) so the shared memory
-# allocation happens at server start. Migration 0131 is then a no-op.
-if ! /sbin/su-exec postgres psql -v ON_ERROR_STOP=1 -qt -d raid_ledger \
-    -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" > /dev/null 2>&1; then
-  echo "❌ FATAL: pg_stat_statements extension could not be installed"
-  echo "   shared_preload_libraries may not include pg_stat_statements."
-  echo "   Check the [program:postgres] command in supervisord.conf."
-  exit 1
-fi
-echo "✅ pg_stat_statements extension ensured"
 
 # Wait for Redis to be ready (Unix socket)
 echo "⏳ Waiting for Redis..."
@@ -318,7 +306,11 @@ HARDCODED_DEFAULT="raid-ledger-default-secret-change-in-production"
 
 if [ -n "$JWT_SECRET" ] && [ "$JWT_SECRET" != "$HARDCODED_DEFAULT" ]; then
   echo "🔑 JWT_SECRET: using explicit env var"
-elif [ -f /data/.jwt_secret ]; then
+elif [ -s /data/.jwt_secret ]; then
+  # ROK-1036: `-s` instead of `-f` because entrypoint.sh pre-touches the
+  # file as root + chown to app (the parent /data is root-owned by VOLUME
+  # so app cannot create files directly under it). An empty pre-touched
+  # file falls through to the generation path.
   export JWT_SECRET=$(cat /data/.jwt_secret)
   echo "🔑 JWT_SECRET: loaded from /data/.jwt_secret"
 else
@@ -431,8 +423,79 @@ mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migratio
 chown -R postgres:postgres /data/postgresql
 chown -R redis:redis /data/redis
 
+# ROK-1036: prepare app-owned filesystem state. The API now runs as `app`
+# (UID 1001) and needs write access to logs, backups, avatars, uploads, and
+# the persisted JWT secret. Runs synchronously before supervisord so the
+# child processes never observe a half-chowned tree.
+mkdir -p /data/logs /data/backups/daily /data/backups/migrations /data/avatars /data/uploads/branding
+chown -R app:app /data/logs /data/backups /data/avatars /data/uploads || true
+
+# /data parent must be app-writable so the API can CREATE new files at
+# runtime (the ROK-1035 re-encryption sentinel `.jwt_secret_migrated` is
+# created by `api/scripts/docker-entrypoint.sh` after the migration runs;
+# `app` cannot otherwise add new files because Docker's `VOLUME /data`
+# declaration leaves the parent root-owned). Subdirs retain their own
+# ownership (postgres/redis/etc — not affected).
+chown app:app /data
+
+# ROK-1035 .jwt_secret: pre-touch as root so the existing root:root 600 file
+# on upgraded volumes flips to app:app 600 without start-api.sh needing
+# parent-directory write permission. chmod 600 matches start-api.sh's
+# invariant. The redirect that start-api.sh performs
+# (`printf '%s' "$JWT_SECRET" > /data/.jwt_secret`) overwrites the existing
+# app-owned file without touching the parent directory.
+touch /data/.jwt_secret
+chmod 600 /data/.jwt_secret
+chown app:app /data/.jwt_secret
+
+# ROK-1035 .jwt_secret_migrated: this is the re-encryption sentinel —
+# `docker-entrypoint.sh:32` skips the migration block when the file exists,
+# so we MUST NOT pre-create it. Only fix ownership if a previous boot
+# already wrote it (pre-ROK-1036 upgrade after ROK-1035 already ran).
+[ -e /data/.jwt_secret_migrated ] && chown app:app /data/.jwt_secret_migrated || true
+
+# Log files for supervisor's tee pipelines. Flip api.log + nginx.log to `app`
+# so the unprivileged tee can append.
+touch /data/logs/api.log /data/logs/nginx.log
+chown app:app /data/logs/api.log /data/logs/nginx.log
+
+# Restore log ownership for the postgres/redis programs after the recursive
+# chown swept their files to `app`. Touch-and-chown so existing files survive
+# unchanged and fresh-install creates an empty file with the right owner.
+touch /data/logs/postgresql.log
+chown postgres:postgres /data/logs/postgresql.log || true
+touch /data/logs/redis.log
+chown redis:redis /data/logs/redis.log || true
+
+# Diagnostic block — one `docker logs` look answers "did chown run?".
+echo "🔒 PRIVILEGE DROP: filesystem prepared for app (UID 1001)"
+echo "   /data/logs          → $(ls -ld /data/logs    | awk '{print $3":"$4}')"
+echo "   /data/backups       → $(ls -ld /data/backups | awk '{print $3":"$4}')"
+echo "   /data/avatars       → $(ls -ld /data/avatars | awk '{print $3":"$4}')"
+echo "   /data/uploads       → $(ls -ld /data/uploads | awk '{print $3":"$4}')"
+echo "   .jwt_secret owner   → $(ls -l /data/.jwt_secret 2>/dev/null | awk '{print $3":"$4}' || echo 'not yet created')"
+echo "   /tmp/redis.sock     → $(ls -la /tmp/redis.sock 2>/dev/null || echo 'not yet created')"
+echo "   app user groups     → $(id app)"
+
 # Initialize database on first run
 /app/init-db.sh
+
+# ROK-1036: ensure postgres extensions on existing volumes. init-db.sh handles
+# fresh installs; existing volumes (PG_VERSION present) skipped that path and
+# start-api.sh can no longer install extensions (it now runs as `app` and
+# cannot `su-exec`). Start postgres temporarily on the standard socket path,
+# create extensions idempotently, stop cleanly — all before supervisord
+# launches `[program:postgres]`.
+if [ -s "${PGDATA}/PG_VERSION" ]; then
+  echo "🔍 Ensuring postgres extensions (vector, pg_stat_statements)..."
+  /sbin/su-exec postgres pg_ctl -D "${PGDATA}" \
+    -o "-k /run/postgresql -c log_min_messages=FATAL" -w start
+  /sbin/su-exec postgres psql -v ON_ERROR_STOP=1 -qt -d raid_ledger \
+    -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+    -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
+  /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -m fast -w stop
+  echo "✅ Extensions ensured"
+fi
 
 # Resolve nginx listen port from $PORT (Render injects PORT=10000)
 export NGINX_PORT="${PORT:-80}"
