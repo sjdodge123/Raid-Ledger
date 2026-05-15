@@ -43,17 +43,21 @@ export class VersionController {
   @Get('admin/update-status')
   @UseGuards(AuthGuard('jwt'), AdminGuard)
   async getUpdateStatus(): Promise<UpdateStatusDto> {
-    const [latestVersion, lastChecked, updateAvailable] = await Promise.all([
-      this.settingsService.get(SETTING_KEYS.LATEST_VERSION),
-      this.settingsService.get(SETTING_KEYS.VERSION_CHECK_LAST_RUN),
-      this.settingsService.get(SETTING_KEYS.UPDATE_AVAILABLE),
-    ]);
+    const [latestVersion, lastChecked, updateAvailable, latestReleaseUrl] =
+      await Promise.all([
+        this.settingsService.get(SETTING_KEYS.LATEST_VERSION),
+        this.settingsService.get(SETTING_KEYS.VERSION_CHECK_LAST_RUN),
+        this.settingsService.get(SETTING_KEYS.UPDATE_AVAILABLE),
+        this.settingsService.get(SETTING_KEYS.LATEST_RELEASE_URL),
+      ]);
 
     return {
       currentVersion: this.versionCheck.getVersion(),
       latestVersion,
       updateAvailable: updateAvailable === 'true',
       lastChecked,
+      latestReleaseUrl:
+        latestReleaseUrl && latestReleaseUrl !== '' ? latestReleaseUrl : null,
     };
   }
 }

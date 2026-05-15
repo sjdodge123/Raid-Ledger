@@ -39,6 +39,8 @@ export const SETTING_KEYS = {
   LATEST_VERSION: 'latest_version',
   VERSION_CHECK_LAST_RUN: 'version_check_last_run',
   UPDATE_AVAILABLE: 'update_available',
+  /** ROK-1242: html_url of the latest GitHub release; '' when no per-release URL. */
+  LATEST_RELEASE_URL: 'latest_release_url',
   DISCORD_BOT_TOKEN: 'discord_bot_token',
   DISCORD_BOT_ENABLED: 'discord_bot_enabled',
   DISCORD_BOT_DEFAULT_CHANNEL: 'discord_bot_default_channel',

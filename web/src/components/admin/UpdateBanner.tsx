@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useUpdateStatus } from '../../hooks/use-version';
+
+const RELEASES_FALLBACK_URL = 'https://github.com/sjdodge123/Raid-Ledger/releases';
+const DISMISS_KEY_PREFIX = 'raid_ledger_update_banner_dismissed_v';
 
 const WarningIcon = (
     <svg className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -13,7 +16,28 @@ const CloseIcon = (
     </svg>
 );
 
-function BannerContent({ data }: { data: { latestVersion: string | null; currentVersion: string } }) {
+function dismissKey(latestVersion: string): string {
+    return `${DISMISS_KEY_PREFIX}${latestVersion}`;
+}
+
+function readDismissed(latestVersion: string): boolean {
+    try {
+        return sessionStorage.getItem(dismissKey(latestVersion)) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function writeDismissed(latestVersion: string): void {
+    try {
+        sessionStorage.setItem(dismissKey(latestVersion), '1');
+    } catch {
+        // Private mode / blocked storage — fall back to in-memory state.
+    }
+}
+
+function BannerContent({ data }: { data: { latestVersion: string; currentVersion: string; latestReleaseUrl: string | null } }) {
+    const href = data.latestReleaseUrl ?? RELEASES_FALLBACK_URL;
     return (
         <div className="flex items-start gap-3">
             {WarningIcon}
@@ -21,9 +45,9 @@ function BannerContent({ data }: { data: { latestVersion: string | null; current
                 <p className="text-sm text-amber-300 font-medium">
                     A new version of Raid Ledger is available (v{data.latestVersion}). You are running v{data.currentVersion}.
                 </p>
-                <a href="https://github.com/sjdodge123/Raid-Ledger/Releases" target="_blank" rel="noopener noreferrer"
+                <a href={href} target="_blank" rel="noopener noreferrer"
                     className="text-sm text-amber-400 hover:text-amber-300 underline underline-offset-2 mt-1 inline-block">
-                    View releases on GitHub
+                    View release notes
                 </a>
             </div>
         </div>
@@ -31,20 +55,44 @@ function BannerContent({ data }: { data: { latestVersion: string | null; current
 }
 
 /**
- * Admin update banner (ROK-294).
+ * Admin update banner (ROK-294 + ROK-1242).
  * Shows a warning when a newer version is available on GitHub.
- * Dismissible per page load (returns on next navigation).
+ * Dismissal persists for the session via sessionStorage, keyed by latest
+ * version so a NEW release re-surfaces the banner. Falls back to in-memory
+ * dismissal when sessionStorage is unavailable (private mode).
  */
 export function UpdateBanner({ enabled }: { enabled: boolean }) {
     const { data } = useUpdateStatus(enabled);
-    const [dismissed, setDismissed] = useState(false);
+    const [memoryDismissed, setMemoryDismissed] = useState(false);
+    const [storageDismissed, setStorageDismissed] = useState(false);
 
-    if (!data?.updateAvailable || dismissed) return null;
+    const latestVersion = data?.latestVersion ?? null;
+
+    useEffect(() => {
+        if (!latestVersion) {
+            setStorageDismissed(false);
+            return;
+        }
+        setStorageDismissed(readDismissed(latestVersion));
+    }, [latestVersion]);
+
+    if (!data?.updateAvailable || !data.latestVersion) return null;
+    if (memoryDismissed || storageDismissed) return null;
+
+    const onDismiss = () => {
+        writeDismissed(data.latestVersion as string);
+        setStorageDismissed(true);
+        setMemoryDismissed(true);
+    };
 
     return (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start justify-between gap-3">
-            <BannerContent data={data} />
-            <button onClick={() => setDismissed(true)} className="text-amber-400/60 hover:text-amber-300 transition-colors flex-shrink-0" aria-label="Dismiss update banner">
+        <div role="status" className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start justify-between gap-3">
+            <BannerContent data={{
+                latestVersion: data.latestVersion,
+                currentVersion: data.currentVersion,
+                latestReleaseUrl: data.latestReleaseUrl,
+            }} />
+            <button onClick={onDismiss} className="text-amber-400/60 hover:text-amber-300 transition-colors flex-shrink-0" aria-label="Dismiss update banner">
                 {CloseIcon}
             </button>
         </div>

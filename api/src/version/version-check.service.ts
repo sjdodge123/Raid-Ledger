@@ -8,6 +8,12 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 
 interface GitHubRelease {
   tag_name: string;
+  html_url: string;
+}
+
+interface LatestRelease {
+  version: string;
+  htmlUrl: string | null;
 }
 
 /**
@@ -71,15 +77,19 @@ export class VersionCheckService implements OnModuleInit {
   async checkForUpdates(): Promise<void> {
     this.logger.debug('Checking for updates...');
     try {
-      const latestVersion = await this.fetchLatestVersion();
-      if (!latestVersion) {
+      const latest = await this.fetchLatestRelease();
+      if (!latest) {
         this.logger.debug('Could not determine latest version from GitHub');
         return;
       }
-      const updateAvailable = this.isNewer(latestVersion, this.currentVersion);
-      await this.storeVersionCheckResults(latestVersion, updateAvailable);
+      const updateAvailable = this.isNewer(latest.version, this.currentVersion);
+      await this.storeVersionCheckResults(
+        latest.version,
+        updateAvailable,
+        latest.htmlUrl,
+      );
       this.logger.debug(
-        `Version check complete: current=${this.currentVersion}, latest=${latestVersion}, updateAvailable=${updateAvailable}`,
+        `Version check complete: current=${this.currentVersion}, latest=${latest.version}, updateAvailable=${updateAvailable}`,
       );
     } catch (error) {
       this.logger.warn(
@@ -93,6 +103,7 @@ export class VersionCheckService implements OnModuleInit {
   private async storeVersionCheckResults(
     latestVersion: string,
     updateAvailable: boolean,
+    latestReleaseUrl: string | null,
   ): Promise<void> {
     await Promise.all([
       this.settingsService.set(SETTING_KEYS.LATEST_VERSION, latestVersion),
@@ -103,6 +114,10 @@ export class VersionCheckService implements OnModuleInit {
       this.settingsService.set(
         SETTING_KEYS.UPDATE_AVAILABLE,
         updateAvailable ? 'true' : 'false',
+      ),
+      this.settingsService.set(
+        SETTING_KEYS.LATEST_RELEASE_URL,
+        latestReleaseUrl ?? '',
       ),
     ]);
   }
@@ -116,16 +131,19 @@ export class VersionCheckService implements OnModuleInit {
     'User-Agent': 'RaidLedger-VersionCheck',
   };
 
-  private async fetchLatestVersion(): Promise<string | null> {
+  private async fetchLatestRelease(): Promise<LatestRelease | null> {
     try {
       const response = await fetch(
         'https://api.github.com/repos/sjdodge123/Raid-Ledger/releases/latest',
         { headers: this.githubHeaders, signal: AbortSignal.timeout(10_000) },
       );
-      if (response.ok)
-        return this.normalizeVersion(
-          ((await response.json()) as GitHubRelease).tag_name,
-        );
+      if (response.ok) {
+        const body = (await response.json()) as GitHubRelease;
+        return {
+          version: this.normalizeVersion(body.tag_name),
+          htmlUrl: body.html_url ?? null,
+        };
+      }
       if (response.status === 404)
         return this.fetchLatestTag(this.githubHeaders);
       if (response.status === 403 || response.status === 429) {
@@ -144,11 +162,13 @@ export class VersionCheckService implements OnModuleInit {
   }
 
   /**
-   * Fallback: fetch latest tag if no releases exist.
+   * Fallback: fetch latest tag if no releases exist. Tags have no
+   * per-release html_url, so we return `htmlUrl: null` and let the UI
+   * fall back to the generic /releases index.
    */
   private async fetchLatestTag(
     headers: Record<string, string>,
-  ): Promise<string | null> {
+  ): Promise<LatestRelease | null> {
     try {
       const response = await fetch(
         'https://api.github.com/repos/sjdodge123/Raid-Ledger/tags?per_page=1',
@@ -160,7 +180,7 @@ export class VersionCheckService implements OnModuleInit {
       const tags = (await response.json()) as Array<{ name: string }>;
       if (tags.length === 0) return null;
 
-      return this.normalizeVersion(tags[0].name);
+      return { version: this.normalizeVersion(tags[0].name), htmlUrl: null };
     } catch {
       return null;
     }
