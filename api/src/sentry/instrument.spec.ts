@@ -305,6 +305,36 @@ function describeSentryInstrumentTs() {
           };
           expect(getBeforeSend()(event)).toBe(event);
         });
+
+        it('does NOT confuse no_snapshot_yet 503s with the concurrent-status drop (cross-clause guard)', () => {
+          // Both clauses target HttpException; their value substrings are
+          // disjoint. This guards against a future refactor that loosens
+          // one regex into the other's territory.
+          const noSnapshot = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'HttpException',
+                  value: "{ error: 'no_snapshot_yet' }",
+                },
+              ],
+            },
+          });
+          const concurrent = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'HttpException',
+                  value: 'status changed concurrently',
+                },
+              ],
+            },
+          });
+          // Both drop, but via different clauses — assert both null without
+          // either regex matching the other's substring.
+          expect(noSnapshot).toBeNull();
+          expect(concurrent).toBeNull();
+        });
       });
 
       describe('ROK-1162: AbortError drop', () => {
@@ -389,6 +419,25 @@ function describeSentryInstrumentTs() {
           const result = getBeforeSend()(event) as SentryEvent;
           expect(result).toBe(event);
           expect(result.fingerprint).toBeUndefined();
+        });
+
+        it('drops 50278 ahead of fingerprinting when both regexes would match (clause ordering guard)', () => {
+          // A DiscordAPIError carrying BOTH "code 50278" AND a transient
+          // substring ("fetch failed") must drop on the 50278 clause and
+          // never reach the fingerprint clause. This regression-guards the
+          // ordering of the two clauses.
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value:
+                    'Cannot send messages to this user (code 50278) — fetch failed',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
         });
       });
 

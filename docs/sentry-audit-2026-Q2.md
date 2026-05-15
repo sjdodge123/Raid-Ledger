@@ -49,7 +49,7 @@ Per-operator direction, this audit works from the noise classes named in the ROK
 ## Code delivered
 
 - `api/src/sentry/instrument.ts` — extended `beforeSend` with 3 new clauses (ConflictException drop, AbortError drop, Discord transient fingerprint).
-- `api/src/sentry/instrument.spec.ts` — 8 new test cases covering each new disposition + a regression test for the OAuth-state class.
+- `api/src/sentry/instrument.spec.ts` — new test cases covering each new disposition (drop / fingerprint), cross-clause guards (concurrent-status vs `no_snapshot_yet`, 50278 vs transient-fingerprint ordering), and a regression test for the OAuth-state class.
 - `web/src/sentry.ts` — new `beforeSend` callback (none existed previously) — drops AbortError / DOMException-abort events.
 - `web/src/sentry.test.ts` — new Vitest spec covering the web filter.
 
