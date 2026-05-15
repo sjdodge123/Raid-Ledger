@@ -17,7 +17,9 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
   const settingsStore = new Map<string, string | null>();
 
   const mockSettingsService = {
-    get: jest.fn(async (key: string) => settingsStore.get(key) ?? null),
+    get: jest.fn((key: string) =>
+      Promise.resolve(settingsStore.get(key) ?? null),
+    ),
   };
 
   const mockVersionCheck = {
@@ -41,7 +43,10 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
 
   it('returns latestReleaseUrl when stored value is a non-empty URL', async () => {
     settingsStore.set(SETTING_KEYS.LATEST_VERSION, '1.2.0');
-    settingsStore.set(SETTING_KEYS.VERSION_CHECK_LAST_RUN, '2026-05-14T00:00:00Z');
+    settingsStore.set(
+      SETTING_KEYS.VERSION_CHECK_LAST_RUN,
+      '2026-05-14T00:00:00Z',
+    );
     settingsStore.set(SETTING_KEYS.UPDATE_AVAILABLE, 'true');
     settingsStore.set(
       SETTING_KEYS.LATEST_RELEASE_URL,
@@ -62,7 +67,10 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
 
   it('maps stored empty-string release URL to null in the DTO', async () => {
     settingsStore.set(SETTING_KEYS.LATEST_VERSION, '1.2.0');
-    settingsStore.set(SETTING_KEYS.VERSION_CHECK_LAST_RUN, '2026-05-14T00:00:00Z');
+    settingsStore.set(
+      SETTING_KEYS.VERSION_CHECK_LAST_RUN,
+      '2026-05-14T00:00:00Z',
+    );
     settingsStore.set(SETTING_KEYS.UPDATE_AVAILABLE, 'true');
     settingsStore.set(SETTING_KEYS.LATEST_RELEASE_URL, '');
 
@@ -96,9 +104,7 @@ describe('VersionController — GET /admin/update-status (ROK-1242)', () => {
   it('reads all four settings keys in parallel (single Promise.all)', async () => {
     await controller.getUpdateStatus();
 
-    const calls = mockSettingsService.get.mock.calls.map(
-      ([k]: [string]) => k,
-    );
+    const calls = mockSettingsService.get.mock.calls.map(([k]: [string]) => k);
     expect(calls).toEqual(
       expect.arrayContaining([
         SETTING_KEYS.LATEST_VERSION,

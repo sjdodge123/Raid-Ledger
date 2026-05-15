@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useUpdateStatus } from '../../hooks/use-version';
 
 const RELEASES_FALLBACK_URL = 'https://github.com/sjdodge123/Raid-Ledger/releases';
@@ -54,6 +54,19 @@ function BannerContent({ data }: { data: { latestVersion: string; currentVersion
     );
 }
 
+function BannerView({ latestVersion, currentVersion, latestReleaseUrl, onDismiss }: {
+    latestVersion: string; currentVersion: string; latestReleaseUrl: string | null; onDismiss: () => void;
+}) {
+    return (
+        <div role="status" className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start justify-between gap-3">
+            <BannerContent data={{ latestVersion, currentVersion, latestReleaseUrl }} />
+            <button onClick={onDismiss} className="text-amber-400/60 hover:text-amber-300 transition-colors flex-shrink-0" aria-label="Dismiss update banner">
+                {CloseIcon}
+            </button>
+        </div>
+    );
+}
+
 /**
  * Admin update banner (ROK-294 + ROK-1242).
  * Shows a warning when a newer version is available on GitHub.
@@ -63,38 +76,24 @@ function BannerContent({ data }: { data: { latestVersion: string; currentVersion
  */
 export function UpdateBanner({ enabled }: { enabled: boolean }) {
     const { data } = useUpdateStatus(enabled);
-    const [memoryDismissed, setMemoryDismissed] = useState(false);
-    const [storageDismissed, setStorageDismissed] = useState(false);
-
-    const latestVersion = data?.latestVersion ?? null;
-
-    useEffect(() => {
-        if (!latestVersion) {
-            setStorageDismissed(false);
-            return;
-        }
-        setStorageDismissed(readDismissed(latestVersion));
-    }, [latestVersion]);
+    const [memoryDismissed, setMemoryDismissed] = useState<string | null>(null);
 
     if (!data?.updateAvailable || !data.latestVersion) return null;
-    if (memoryDismissed || storageDismissed) return null;
+    if (memoryDismissed === data.latestVersion) return null;
+    if (readDismissed(data.latestVersion)) return null;
 
     const onDismiss = () => {
-        writeDismissed(data.latestVersion as string);
-        setStorageDismissed(true);
-        setMemoryDismissed(true);
+        const v = data.latestVersion as string;
+        writeDismissed(v);
+        setMemoryDismissed(v);
     };
 
     return (
-        <div role="status" className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start justify-between gap-3">
-            <BannerContent data={{
-                latestVersion: data.latestVersion,
-                currentVersion: data.currentVersion,
-                latestReleaseUrl: data.latestReleaseUrl,
-            }} />
-            <button onClick={onDismiss} className="text-amber-400/60 hover:text-amber-300 transition-colors flex-shrink-0" aria-label="Dismiss update banner">
-                {CloseIcon}
-            </button>
-        </div>
+        <BannerView
+            latestVersion={data.latestVersion}
+            currentVersion={data.currentVersion}
+            latestReleaseUrl={data.latestReleaseUrl}
+            onDismiss={onDismiss}
+        />
     );
 }

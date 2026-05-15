@@ -27,9 +27,11 @@ function makeSettings(): MockSettingsService {
 
 function makeCronJobs(): MockCronJobService {
   return {
-    executeWithTracking: jest.fn(async (_name: string, fn: () => Promise<void>) => {
-      await fn();
-    }),
+    executeWithTracking: jest.fn(
+      async (_name: string, fn: () => Promise<void>) => {
+        await fn();
+      },
+    ),
   };
 }
 
@@ -40,6 +42,23 @@ function createService(
   return new VersionCheckService(
     settings as unknown as ConstructorParameters<typeof VersionCheckService>[0],
     cron as unknown as ConstructorParameters<typeof VersionCheckService>[1],
+  );
+}
+
+function jsonResponse(
+  status: number,
+  body: unknown,
+): { ok: boolean; status: number; json: () => Promise<unknown> } {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+  };
+}
+
+function settingsMap(settings: MockSettingsService): Map<string, string> {
+  return new Map<string, string>(
+    settings.set.mock.calls.map(([k, v]: [string, string]) => [k, v]),
   );
 }
 
@@ -55,192 +74,140 @@ describe('VersionCheckService — ROK-1242 release-URL plumbing', () => {
     jest.clearAllMocks();
   });
 
-  describe('checkForUpdates — releases/latest 200 success path', () => {
-    it('persists tag_name and html_url into settings', async () => {
-      const settings = makeSettings();
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          tag_name: 'v999.0.0',
-          html_url:
-            'https://github.com/sjdodge123/Raid-Ledger/releases/tag/v999.0.0',
-        }),
-      }) as unknown as typeof fetch;
+  it('persists tag_name and html_url into settings on 200', async () => {
+    const settings = makeSettings();
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse(200, {
+        tag_name: 'v999.0.0',
+        html_url:
+          'https://github.com/sjdodge123/Raid-Ledger/releases/tag/v999.0.0',
+      }),
+    );
 
-      const service = createService(settings);
-      await service.checkForUpdates();
+    const service = createService(settings);
+    await service.checkForUpdates();
 
-      const calls = settings.set.mock.calls;
-      const map = new Map<string, string>(
-        calls.map(([key, value]: [string, string]) => [key, value]),
-      );
-      expect(map.get(SETTING_KEYS.LATEST_VERSION)).toBe('999.0.0');
-      expect(map.get(SETTING_KEYS.LATEST_RELEASE_URL)).toBe(
-        'https://github.com/sjdodge123/Raid-Ledger/releases/tag/v999.0.0',
-      );
-      expect(map.get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe('true');
-      expect(map.has(SETTING_KEYS.VERSION_CHECK_LAST_RUN)).toBe(true);
-    });
-
-    it('normalises a leading v from tag_name when storing', async () => {
-      const settings = makeSettings();
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          tag_name: 'V2.0.0',
-          html_url: 'https://github.com/x/y/releases/tag/V2.0.0',
-        }),
-      }) as unknown as typeof fetch;
-
-      const service = createService(settings);
-      await service.checkForUpdates();
-
-      const versionCall = settings.set.mock.calls.find(
-        ([k]: [string]) => k === SETTING_KEYS.LATEST_VERSION,
-      );
-      expect(versionCall?.[1]).toBe('2.0.0');
-    });
+    const map = settingsMap(settings);
+    expect(map.get(SETTING_KEYS.LATEST_VERSION)).toBe('999.0.0');
+    expect(map.get(SETTING_KEYS.LATEST_RELEASE_URL)).toBe(
+      'https://github.com/sjdodge123/Raid-Ledger/releases/tag/v999.0.0',
+    );
+    expect(map.get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe('true');
+    expect(map.has(SETTING_KEYS.VERSION_CHECK_LAST_RUN)).toBe(true);
   });
 
-  describe('checkForUpdates — 404 falls back to tags API', () => {
-    it('writes htmlUrl as empty string (null htmlUrl from tag fallback)', async () => {
-      const settings = makeSettings();
-      const fetchMock = jest
-        .fn()
-        // First call: /releases/latest -> 404
-        .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) })
-        // Second call: /tags?per_page=1 -> 200
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => [{ name: 'v3.0.0' }],
-        });
-      global.fetch = fetchMock as unknown as typeof fetch;
+  it('normalises a leading v from tag_name when storing', async () => {
+    const settings = makeSettings();
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse(200, {
+        tag_name: 'V2.0.0',
+        html_url: 'https://github.com/x/y/releases/tag/V2.0.0',
+      }),
+    );
 
-      const service = createService(settings);
-      await service.checkForUpdates();
+    const service = createService(settings);
+    await service.checkForUpdates();
 
-      const map = new Map<string, string>(
-        settings.set.mock.calls.map(
-          ([key, value]: [string, string]) => [key, value],
-        ),
-      );
-      expect(map.get(SETTING_KEYS.LATEST_VERSION)).toBe('3.0.0');
-      expect(map.get(SETTING_KEYS.LATEST_RELEASE_URL)).toBe('');
-    });
-
-    it('returns silently when both releases and tags fail', async () => {
-      const settings = makeSettings();
-      const fetchMock = jest
-        .fn()
-        .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) })
-        .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) });
-      global.fetch = fetchMock as unknown as typeof fetch;
-
-      const service = createService(settings);
-      await service.checkForUpdates();
-      expect(settings.set).not.toHaveBeenCalled();
-    });
+    expect(settingsMap(settings).get(SETTING_KEYS.LATEST_VERSION)).toBe(
+      '2.0.0',
+    );
   });
 
-  describe('checkForUpdates — rate-limit / network failure modes', () => {
-    it('returns silently on 403 rate-limit (no settings written)', async () => {
-      const settings = makeSettings();
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 403,
-        json: async () => ({}),
-      }) as unknown as typeof fetch;
+  it('falls back to tags API on 404 and writes empty string for release URL', async () => {
+    const settings = makeSettings();
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: 'v3.0.0' }]));
+    global.fetch = fetchMock;
 
-      const service = createService(settings);
-      await service.checkForUpdates();
-      expect(settings.set).not.toHaveBeenCalled();
-    });
+    const service = createService(settings);
+    await service.checkForUpdates();
 
-    it('returns silently on 429 rate-limit (no settings written)', async () => {
-      const settings = makeSettings();
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 429,
-        json: async () => ({}),
-      }) as unknown as typeof fetch;
-
-      const service = createService(settings);
-      await service.checkForUpdates();
-      expect(settings.set).not.toHaveBeenCalled();
-    });
-
-    it('returns silently on network timeout / abort', async () => {
-      const settings = makeSettings();
-      global.fetch = jest
-        .fn()
-        .mockRejectedValue(new Error('timeout')) as unknown as typeof fetch;
-
-      const service = createService(settings);
-      await service.checkForUpdates();
-      expect(settings.set).not.toHaveBeenCalled();
-    });
-
-    it('returns silently on unexpected non-2xx response (e.g. 500)', async () => {
-      const settings = makeSettings();
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        json: async () => ({}),
-      }) as unknown as typeof fetch;
-
-      const service = createService(settings);
-      await service.checkForUpdates();
-      expect(settings.set).not.toHaveBeenCalled();
-    });
+    const map = settingsMap(settings);
+    expect(map.get(SETTING_KEYS.LATEST_VERSION)).toBe('3.0.0');
+    expect(map.get(SETTING_KEYS.LATEST_RELEASE_URL)).toBe('');
   });
 
-  describe('checkForUpdates — flags updateAvailable correctly', () => {
-    it('marks updateAvailable=false when remote equals local', async () => {
-      const settings = makeSettings();
-      const service = createService(settings);
-      const localVersion = service.getVersion();
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          tag_name: `v${localVersion}`,
-          html_url: `https://github.com/sjdodge123/Raid-Ledger/releases/tag/v${localVersion}`,
-        }),
-      }) as unknown as typeof fetch;
+  it('returns silently when both releases and tags fail', async () => {
+    const settings = makeSettings();
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(jsonResponse(404, {}));
+    global.fetch = fetchMock;
 
-      await service.checkForUpdates();
+    const service = createService(settings);
+    await service.checkForUpdates();
+    expect(settings.set).not.toHaveBeenCalled();
+  });
 
-      const map = new Map<string, string>(
-        settings.set.mock.calls.map(
-          ([k, v]: [string, string]) => [k, v],
-        ),
-      );
-      expect(map.get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe('false');
-    });
+  it('returns silently on 403 rate-limit (no settings written)', async () => {
+    const settings = makeSettings();
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse(403, {}));
 
-    it('marks updateAvailable=false when remote is older than local', async () => {
-      const settings = makeSettings();
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          tag_name: 'v0.0.1',
-          html_url: 'https://github.com/x/y/releases/tag/v0.0.1',
-        }),
-      }) as unknown as typeof fetch;
+    const service = createService(settings);
+    await service.checkForUpdates();
+    expect(settings.set).not.toHaveBeenCalled();
+  });
 
-      const service = createService(settings);
-      await service.checkForUpdates();
+  it('returns silently on 429 rate-limit (no settings written)', async () => {
+    const settings = makeSettings();
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse(429, {}));
 
-      const map = new Map<string, string>(
-        settings.set.mock.calls.map(
-          ([k, v]: [string, string]) => [k, v],
-        ),
-      );
-      expect(map.get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe('false');
-    });
+    const service = createService(settings);
+    await service.checkForUpdates();
+    expect(settings.set).not.toHaveBeenCalled();
+  });
+
+  it('returns silently on network timeout / abort', async () => {
+    const settings = makeSettings();
+    global.fetch = jest.fn().mockRejectedValue(new Error('timeout'));
+
+    const service = createService(settings);
+    await service.checkForUpdates();
+    expect(settings.set).not.toHaveBeenCalled();
+  });
+
+  it('returns silently on unexpected non-2xx response (e.g. 500)', async () => {
+    const settings = makeSettings();
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse(500, {}));
+
+    const service = createService(settings);
+    await service.checkForUpdates();
+    expect(settings.set).not.toHaveBeenCalled();
+  });
+
+  it('marks updateAvailable=false when remote equals local', async () => {
+    const settings = makeSettings();
+    const service = createService(settings);
+    const localVersion = service.getVersion();
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse(200, {
+        tag_name: `v${localVersion}`,
+        html_url: `https://github.com/sjdodge123/Raid-Ledger/releases/tag/v${localVersion}`,
+      }),
+    );
+
+    await service.checkForUpdates();
+    expect(settingsMap(settings).get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe(
+      'false',
+    );
+  });
+
+  it('marks updateAvailable=false when remote is older than local', async () => {
+    const settings = makeSettings();
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse(200, {
+        tag_name: 'v0.0.1',
+        html_url: 'https://github.com/x/y/releases/tag/v0.0.1',
+      }),
+    );
+
+    const service = createService(settings);
+    await service.checkForUpdates();
+    expect(settingsMap(settings).get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe(
+      'false',
+    );
   });
 });
