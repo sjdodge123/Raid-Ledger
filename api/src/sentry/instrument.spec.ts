@@ -111,6 +111,7 @@ function describeSentryInstrumentTs() {
     describe('beforeSend filter', () => {
       type SentryEvent = {
         exception?: { values?: { type?: string; value?: string }[] };
+        fingerprint?: string[];
       };
       type BeforeSend = (event: SentryEvent) => SentryEvent | null;
 
@@ -274,6 +275,222 @@ function describeSentryInstrumentTs() {
             },
           };
           expect(getBeforeSend()(event)).toBe(event);
+        });
+      });
+
+      // ── ROK-1162: Sentry noise reduction ──
+      describe('ROK-1162: ConflictException applyStatusUpdate drop', () => {
+        it('drops HttpException with "status changed concurrently" value', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'HttpException',
+                  value:
+                    "Lineup abc-123 status changed concurrently; expected 'pending'",
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('does NOT drop unrelated HttpException 409s', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                { type: 'HttpException', value: 'Duplicate signup detected' },
+              ],
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
+
+        it('does NOT confuse no_snapshot_yet 503s with the concurrent-status drop (cross-clause guard)', () => {
+          // Both clauses target HttpException; their value substrings are
+          // disjoint. This guards against a future refactor that loosens
+          // one regex into the other's territory.
+          const noSnapshot = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'HttpException',
+                  value: "{ error: 'no_snapshot_yet' }",
+                },
+              ],
+            },
+          });
+          const concurrent = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'HttpException',
+                  value: 'status changed concurrently',
+                },
+              ],
+            },
+          });
+          // Both drop, but via different clauses — assert both null without
+          // either regex matching the other's substring.
+          expect(noSnapshot).toBeNull();
+          expect(concurrent).toBeNull();
+        });
+      });
+
+      describe('ROK-1162: AbortError drop', () => {
+        it('drops AbortError typed events', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                { type: 'AbortError', value: 'The operation was aborted' },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops DOMException whose value mentions abort', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DOMException',
+                  value: 'The user aborted a request.',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('does NOT drop unrelated DOMException events', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [{ type: 'DOMException', value: 'QuotaExceededError' }],
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
+      });
+
+      describe('ROK-1162: DiscordAPIError transient fingerprint', () => {
+        it('fingerprints DiscordAPIError 5xx events', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Internal Server Error (HTTP 503)',
+                },
+              ],
+            },
+          };
+          const result = getBeforeSend()(event) as SentryEvent;
+          expect(result).toBe(event);
+          expect(result.fingerprint).toEqual(['discord-api-transient']);
+        });
+
+        it('fingerprints DiscordAPIError network failures (ECONNRESET)', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'fetch failed: ECONNRESET',
+                },
+              ],
+            },
+          };
+          const result = getBeforeSend()(event) as SentryEvent;
+          expect(result.fingerprint).toEqual(['discord-api-transient']);
+        });
+
+        it('does NOT fingerprint non-transient DiscordAPIError events', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Unknown Channel (code 10003)',
+                },
+              ],
+            },
+          };
+          const result = getBeforeSend()(event) as SentryEvent;
+          expect(result).toBe(event);
+          expect(result.fingerprint).toBeUndefined();
+        });
+
+        it('does NOT fingerprint Discord permission/access codes that start with 500x (regex word-boundary regression guard)', () => {
+          // 50013 Missing Permissions, 50001 Missing Access — these are
+          // PERMANENT permission failures, NOT transient 5xx HTTP. Without
+          // \b boundaries on /5\d\d/, the regex would match "500" inside
+          // "50013" and mis-group these as discord-api-transient.
+          const missingPermissions: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Missing Permissions (code 50013)',
+                },
+              ],
+            },
+          };
+          const missingAccess: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value: 'Missing Access (code 50001)',
+                },
+              ],
+            },
+          };
+          expect(
+            (getBeforeSend()(missingPermissions) as SentryEvent).fingerprint,
+          ).toBeUndefined();
+          expect(
+            (getBeforeSend()(missingAccess) as SentryEvent).fingerprint,
+          ).toBeUndefined();
+        });
+
+        it('drops 50278 ahead of fingerprinting when both regexes would match (clause ordering guard)', () => {
+          // A DiscordAPIError carrying BOTH "code 50278" AND a transient
+          // substring ("fetch failed") must drop on the 50278 clause and
+          // never reach the fingerprint clause. This regression-guards the
+          // ordering of the two clauses.
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError',
+                  value:
+                    'Cannot send messages to this user (code 50278) — fetch failed',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+      });
+
+      describe('ROK-1162: malformed OAuth state (already covered by ROK-668)', () => {
+        it('drops InternalOAuthError whose value indicates a state mismatch', () => {
+          // The ROK-668 filter already drops by type alone, so any value
+          // (including malformed/missing state) is suppressed. This is a
+          // regression guard for the noise class named in ROK-1162.
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'InternalOAuthError',
+                  value:
+                    'InternalOAuthError: Failed to obtain access token (state mismatch)',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
         });
       });
     });
