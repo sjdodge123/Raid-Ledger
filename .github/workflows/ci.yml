@@ -560,7 +560,7 @@ jobs:
               -e ADMIN_PASSWORD=ci-test-password \
               raid-ledger:ci-test
             FOUND=0
-            for i in $(seq 1 30); do
+            for i in $(seq 1 60); do
               if docker logs "$CONTAINER" 2>&1 | grep -q "FATAL: JWT_SECRET is still an insecure hardcoded default"; then
                 echo "✅ Guard rejected '$SECRET' after ${i}s"
                 FOUND=1
@@ -568,12 +568,18 @@ jobs:
               fi
               sleep 1
             done
-            docker stop "$CONTAINER" 2>/dev/null || true
-            docker rm -f "$CONTAINER" 2>/dev/null || true
             if [ "$FOUND" != "1" ]; then
-              echo "❌ Guard did NOT reject '$SECRET' within 30s"
+              echo "❌ Guard did NOT reject '$SECRET' within 60s — dumping diagnostics:"
+              echo "─── docker inspect ───"
+              docker inspect "$CONTAINER" --format '{{.State.Status}} (exit {{.State.ExitCode}})' 2>&1 || true
+              echo "─── docker logs (tail 200) ───"
+              docker logs "$CONTAINER" --tail 200 2>&1 || true
+              docker stop "$CONTAINER" 2>/dev/null || true
+              docker rm -f "$CONTAINER" 2>/dev/null || true
               exit 1
             fi
+            docker stop "$CONTAINER" 2>/dev/null || true
+            docker rm -f "$CONTAINER" 2>/dev/null || true
           done
 
       - name: Cleanup

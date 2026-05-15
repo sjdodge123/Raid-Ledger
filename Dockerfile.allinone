@@ -299,10 +299,10 @@ done
 echo "✅ Redis is ready"
 
 # ── JWT_SECRET resolution (ROK-1035, ROK-1292) ────────────────────
-# Priority: 1) env var (if set and not a known dev default) → use it
-#           2) /data/.jwt_secret file exists → read it
+# Priority: 1) env var (must NOT be a known dev default — fail fast)
+#           2) /data/.jwt_secret file exists & non-empty → read it
 #           3) generate new secret, persist to /data/.jwt_secret
-# Known dev defaults rejected by the guard below — keep in sync with
+# Known dev defaults rejected by both guards below — keep in sync with
 # api/scripts/docker-entrypoint.sh and docker-compose.yml.
 HARDCODED_DEFAULTS="raid-ledger-default-secret-change-in-production dev-secret-change-in-prod"
 
@@ -313,7 +313,18 @@ is_known_default() {
   return 1
 }
 
-if [ -n "$JWT_SECRET" ] && ! is_known_default "$JWT_SECRET"; then
+# ROK-1292: fail fast if env var is explicitly a known default.
+# (Original ROK-1035 code fell through to file/generate which silently
+# overwrote JWT_SECRET — the post-resolution guard then checked the *new*
+# random value and never fired. Net effect pre-ROK-1292: known-bad env
+# var was accepted in practice.)
+if [ -n "$JWT_SECRET" ] && is_known_default "$JWT_SECRET"; then
+  echo "❌ FATAL: JWT_SECRET is still an insecure hardcoded default ($JWT_SECRET)."
+  echo "   Remove the env var override or set a real secret."
+  exit 1
+fi
+
+if [ -n "$JWT_SECRET" ]; then
   echo "🔑 JWT_SECRET: using explicit env var"
 elif [ -s /data/.jwt_secret ]; then
   # ROK-1036: `-s` instead of `-f` because entrypoint.sh pre-touches the
@@ -329,10 +340,11 @@ else
   echo "🔑 JWT_SECRET: generated new secret → /data/.jwt_secret"
 fi
 
-# Guard: refuse to start with any known insecure default
+# Guard: catch a /data/.jwt_secret file that was pre-populated with an
+# insecure historical literal (legacy install before ROK-1035).
 if is_known_default "$JWT_SECRET"; then
-  echo "❌ FATAL: JWT_SECRET is still an insecure hardcoded default ($JWT_SECRET)."
-  echo "   Remove the env var override or set a real secret."
+  echo "❌ FATAL: JWT_SECRET loaded from /data/.jwt_secret is an insecure hardcoded default."
+  echo "   Delete /data/.jwt_secret and restart to generate a new one."
   exit 1
 fi
 
