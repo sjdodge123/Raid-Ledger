@@ -430,15 +430,29 @@ chown -R redis:redis /data/redis
 mkdir -p /data/logs /data/backups/daily /data/backups/migrations /data/avatars /data/uploads/branding
 chown -R app:app /data/logs /data/backups /data/avatars /data/uploads || true
 
-# ROK-1035 secret files. Pre-touch them as root so `app` can later overwrite
-# (`app` cannot create new files directly under `/data` because the parent
-# directory is root-owned by Docker's VOLUME declaration). chmod 600 on the
-# secret matches start-api.sh's invariant. The redirect that start-api.sh
-# performs (`printf '%s' "$JWT_SECRET" > /data/.jwt_secret`) overwrites
-# the existing app-owned file without touching the parent directory.
-touch /data/.jwt_secret /data/.jwt_secret_migrated
+# /data parent must be app-writable so the API can CREATE new files at
+# runtime (the ROK-1035 re-encryption sentinel `.jwt_secret_migrated` is
+# created by `api/scripts/docker-entrypoint.sh` after the migration runs;
+# `app` cannot otherwise add new files because Docker's `VOLUME /data`
+# declaration leaves the parent root-owned). Subdirs retain their own
+# ownership (postgres/redis/etc — not affected).
+chown app:app /data
+
+# ROK-1035 .jwt_secret: pre-touch as root so the existing root:root 600 file
+# on upgraded volumes flips to app:app 600 without start-api.sh needing
+# parent-directory write permission. chmod 600 matches start-api.sh's
+# invariant. The redirect that start-api.sh performs
+# (`printf '%s' "$JWT_SECRET" > /data/.jwt_secret`) overwrites the existing
+# app-owned file without touching the parent directory.
+touch /data/.jwt_secret
 chmod 600 /data/.jwt_secret
-chown app:app /data/.jwt_secret /data/.jwt_secret_migrated
+chown app:app /data/.jwt_secret
+
+# ROK-1035 .jwt_secret_migrated: this is the re-encryption sentinel —
+# `docker-entrypoint.sh:32` skips the migration block when the file exists,
+# so we MUST NOT pre-create it. Only fix ownership if a previous boot
+# already wrote it (pre-ROK-1036 upgrade after ROK-1035 already ran).
+[ -e /data/.jwt_secret_migrated ] && chown app:app /data/.jwt_secret_migrated || true
 
 # Log files for supervisor's tee pipelines. Flip api.log + nginx.log to `app`
 # so the unprivileged tee can append.

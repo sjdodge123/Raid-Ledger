@@ -95,6 +95,7 @@ export class OllamaNativeService {
 
   /** Stop Ollama via supervisorctl. */
   async stopService(): Promise<void> {
+    if (!this.hasRoot) return;
     await this.execQuick('supervisorctl', ['stop', 'ollama']);
     this.logger.log('Ollama native service stopped');
   }

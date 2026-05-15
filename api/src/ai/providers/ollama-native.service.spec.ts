@@ -605,6 +605,15 @@ describe('OllamaNativeService', () => {
 
         expect(mockWriteFileSync).not.toHaveBeenCalled();
       });
+
+      it('stopService() is a no-op — supervisorctl is NOT invoked (Codex P2.2)', async () => {
+        const svc = await buildService(1001);
+        mockExecFile.mockClear();
+
+        await svc.stopService();
+
+        expect(mockExecFile).not.toHaveBeenCalled();
+      });
     });
 
     describe('process.getuid undefined (non-POSIX / defensive)', () => {
@@ -645,6 +654,15 @@ describe('OllamaNativeService', () => {
         svc.writeSupervisorConfig();
 
         expect(mockWriteFileSync).not.toHaveBeenCalled();
+      });
+
+      it('stopService() is a no-op when getuid is undefined (Codex P2.2)', async () => {
+        const svc = await buildService('undefined-getuid');
+        mockExecFile.mockClear();
+
+        await svc.stopService();
+
+        expect(mockExecFile).not.toHaveBeenCalled();
       });
     });
   });
