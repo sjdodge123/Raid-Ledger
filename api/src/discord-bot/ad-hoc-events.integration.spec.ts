@@ -588,6 +588,10 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
       .mockReturnValue('guild-1243');
 
     // Create a binding (so resolveNotificationChannel succeeds) + ad-hoc event.
+    // `notificationChannelId` is a runtime config key used by the resolver
+    // (`extractConfigChannel` in ad-hoc-notification.helpers.ts); the drizzle
+    // schema's config type is narrower than runtime — cast to satisfy the
+    // insert overload without changing column semantics.
     const [binding] = await db
       .insert(schema.channelBindings)
       .values({
@@ -596,7 +600,11 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
         channelType: 'voice',
         bindingPurpose: 'game-voice-monitor',
         gameId: testApp.seed.game.id,
-        config: { notificationChannelId: 'text-1243' },
+        config: { notificationChannelId: 'text-1243' } as unknown as {
+          minPlayers?: number;
+          autoClose?: boolean;
+          gracePeriod?: number;
+        },
       })
       .returning();
 
