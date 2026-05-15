@@ -109,14 +109,14 @@ function assembleEmbedData(
   game: { name: string; coverUrl?: string | null } | null,
   voiceChannelId: string | null,
 ): EmbedEventData {
-  const active = participants.filter((p) => p.isActive);
   const effectiveEnd = event.extendedUntil ?? event.duration[1];
   const data: EmbedEventData = {
     id: event.id,
     title: event.title,
     startTime: event.duration[0].toISOString(),
     endTime: effectiveEnd.toISOString(),
-    signupCount: active.length,
+    // ROK-1243: ROSTER header reflects cumulative participation, not currently-active.
+    signupCount: participants.length,
     maxAttendees: event.maxAttendees,
     slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
     game: game ?? undefined,

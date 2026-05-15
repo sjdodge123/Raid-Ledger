@@ -19,11 +19,11 @@ import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import {
   type AdHocNotificationDeps,
+  type AdHocParticipant,
   buildContext,
   buildEmbedEventData,
   resolveNotificationChannel,
   toActiveParticipants,
-  toInactiveParticipants,
 } from './ad-hoc-notification.helpers';
 
 /** Batch flush interval for embed updates (ms). */
@@ -167,7 +167,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
       startTime: string;
       endTime: string;
     },
-    participants: Array<{
+    _participants: Array<{
       discordUserId: string;
       discordUsername: string;
       totalDurationSeconds: number | null;
@@ -178,14 +178,32 @@ export class AdHocNotificationService implements OnModuleDestroy {
       this.pendingUpdates.delete(eventId);
       return;
     }
-    const inactive = toInactiveParticipants(participants);
-    const embedData = await buildEmbedEventData(this.deps, eventId, inactive);
+    // ROK-1243: re-read participants from DB so any join/leave that happened
+    // during the final 5s batch window (or was lost to a silent editEmbed
+    // failure) is reflected in the COMPLETED historical record.
+    const reconciled = await this.readReconciledParticipants(eventId);
+    const embedData = await buildEmbedEventData(this.deps, eventId, reconciled);
     if (!embedData) {
       this.cleanup(eventId);
       return;
     }
     await this.editTrackedEmbed(tracked, embedData, EMBED_STATES.COMPLETED);
     this.cleanup(eventId);
+  }
+
+  /** ROK-1243: read every ad_hoc_participants row for the event; all inactive on COMPLETED. */
+  private async readReconciledParticipants(
+    eventId: number,
+  ): Promise<AdHocParticipant[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.adHocParticipants)
+      .where(eq(schema.adHocParticipants.eventId, eventId));
+    return rows.map((r) => ({
+      discordUserId: r.discordUserId,
+      discordUsername: r.discordUsername,
+      isActive: false,
+    }));
   }
 
   /** Clean up tracked state for an event. */
