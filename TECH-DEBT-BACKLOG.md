@@ -235,3 +235,15 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
 - **[low]** Playwright full-suite flakes during ROK-1242 batch run (`scripts/smoke/events.smoke.spec.ts:370` Regression-ROK-784 light-mode attendance + `scripts/smoke/scheduling-poll.smoke.spec.ts:771` "Your Other Scheduling Polls"). Neither touches the ROK-1242 / ROK-1243 changed surface. Symptom matches the cross-cutting full-suite contention pattern already documented under the 2026-05-14 rok-1252-lineup-banner-counts section (line 316+).
   Suggested: same as the ROK-1252 grouping — bump per-test timeouts OR split the 840-test suite into smaller parallel-friendly chunks. Five other flakes in the same ROK-1242 run (community-lineup:491, navigation:22/161, notifications:20, lineup-carryover:165) match the existing documented set exactly; no new entries needed.
 
+### 2026-05-15 — rok-1036-allinone-privilege-drop (surfaced during ROK-1036 validate-ci)
+
+- **[med]** `npx tsc --noEmit -p api/tsconfig.json` errors in 4 spec files on `origin/main` — reproduces on a clean stash of the ROK-1036 changes, so unrelated to this story:
+  - `api/src/admin/games-dedup-audit.integration.spec.ts:386` — TS2769 (no overload matches `db.execute(sql\`...\`)` call shape).
+  - `api/src/admin/games-dedup-audit.service.spec.ts:432` — TS2502 (`tx` referenced directly or indirectly in its own type annotation).
+  - `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — TS2352 (drizzle `RowList<{ totalSeconds }>` vs hand-written `{ total_seconds }` cast mismatch; snake_case vs camelCase column mapping).
+  - `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — TS2345 (`SQL<unknown>` from one drizzle copy not assignable to `SQLWrapper` from another copy — duplicate drizzle-orm in node_modules causing nominal-type drift).
+  - `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — TS2556 (spread argument needs tuple type — `expect.objectContaining(...args)` shape after recent type bump).
+  Suggested: align the merge-integration test casts to drizzle's camelCase return shape (rename `.total_seconds`→`.totalSeconds`, `.game_id`→`.gameId` in the local cast types); for the SQL nominal drift, dedupe `drizzle-orm` in `package-lock.json` (npm dedupe + commit lock) so a single copy is resolved; for the spread errors, rewrite the assertion call sites to pass an inline tuple. All four files are integration/spec — not blocking CI lint, but `--noEmit` typecheck fails locally and on CI's lint job.
+
+- **[nit]** `tools/test-bot/scripts/no-sleep-lint.sh` still flags the comment on `tools/test-bot/src/smoke/tests/lineup-abort.test.ts:26` (same entry under fix/rok-1243 worktree) — reproduces on origin/main, still unresolved.
+

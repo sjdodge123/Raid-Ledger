@@ -53,9 +53,19 @@ priority=45
 export class OllamaNativeService {
   private readonly logger = new Logger(OllamaNativeService.name);
   private readonly allinoneMode: boolean;
+  private readonly hasRoot: boolean;
 
   constructor() {
     this.allinoneMode = existsSync(ALLINONE_SENTINEL);
+    this.hasRoot =
+      typeof process.getuid === 'function' && process.getuid() === 0;
+    if (this.allinoneMode && !this.hasRoot) {
+      this.logger.warn(
+        'Ollama native provider requires root in the allinone container; ' +
+          'API is now running as app (UID 1001). Ollama setup will be skipped. ' +
+          'Tracked as a follow-up to ROK-1036.',
+      );
+    }
   }
 
   /** Whether we are running inside the allinone container. */
@@ -76,6 +86,7 @@ export class OllamaNativeService {
 
   /** Start Ollama via supervisorctl (reread + update + start). */
   async startService(): Promise<void> {
+    if (!this.hasRoot) return;
     await this.execQuick('supervisorctl', ['reread']);
     await this.execQuick('supervisorctl', ['update']);
     await this.execQuick('supervisorctl', ['start', 'ollama']);
@@ -90,12 +101,14 @@ export class OllamaNativeService {
 
   /** Write the supervisor config for Ollama. */
   writeSupervisorConfig(): void {
+    if (!this.hasRoot) return;
     writeFileSync(SUPERVISOR_CONFIG_PATH, SUPERVISOR_CONFIG);
     this.logger.log('Wrote Ollama supervisor config');
   }
 
   /** Download and install the Ollama binary from tar.zst archive. */
   async install(): Promise<void> {
+    if (!this.hasRoot) return;
     this.logger.log('Downloading Ollama binary...');
     await downloadAndExtractBinary(getOllamaDownloadUrl(), OLLAMA_BINARY_PATH);
     this.logger.log('Ollama binary installed');

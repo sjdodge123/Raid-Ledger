@@ -54,15 +54,30 @@ describe('OllamaNativeService', () => {
     );
   }
 
+  const originalGetuid = process.getuid;
+
   beforeEach(async () => {
     jest.clearAllMocks();
     // Default: allinone mode detected (supervisor config exists)
     mockExistsSync.mockReturnValue(true);
+    // ROK-1036: default to root so legacy tests exercise the unguarded code
+    // path. The privilege-drop describe overrides this per-test.
+    Object.defineProperty(process, 'getuid', {
+      value: () => 0,
+      configurable: true,
+    });
 
     const module = await Test.createTestingModule({
       providers: [OllamaNativeService],
     }).compile();
     service = module.get(OllamaNativeService);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'getuid', {
+      value: originalGetuid,
+      configurable: true,
+    });
   });
 
   describe('isAllinoneMode', () => {
