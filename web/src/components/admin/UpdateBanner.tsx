@@ -36,7 +36,7 @@ function writeDismissed(latestVersion: string): void {
     }
 }
 
-function BannerContent({ data }: { data: { latestVersion: string; currentVersion: string; latestReleaseUrl: string | null } }) {
+function BannerContent({ data }: { data: { latestVersion: string; currentVersion: string; latestReleaseUrl: string | null | undefined } }) {
     const href = data.latestReleaseUrl ?? RELEASES_FALLBACK_URL;
     return (
         <div className="flex items-start gap-3">
@@ -55,7 +55,7 @@ function BannerContent({ data }: { data: { latestVersion: string; currentVersion
 }
 
 function BannerView({ latestVersion, currentVersion, latestReleaseUrl, onDismiss }: {
-    latestVersion: string; currentVersion: string; latestReleaseUrl: string | null; onDismiss: () => void;
+    latestVersion: string; currentVersion: string; latestReleaseUrl: string | null | undefined; onDismiss: () => void;
 }) {
     return (
         <div role="status" className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start justify-between gap-3">
@@ -78,6 +78,9 @@ export function UpdateBanner({ enabled }: { enabled: boolean }) {
     const { data } = useUpdateStatus(enabled);
     const [memoryDismissed, setMemoryDismissed] = useState<string | null>(null);
 
+    // ROK-1242 (Codex P3): cached data from a prior admin render could leak
+    // into a later non-admin render. Honor `enabled` before reading `data`.
+    if (!enabled) return null;
     if (!data?.updateAvailable || !data.latestVersion) return null;
     if (memoryDismissed === data.latestVersion) return null;
     if (readDismissed(data.latestVersion)) return null;
