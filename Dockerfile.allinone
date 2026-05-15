@@ -298,13 +298,22 @@ until redis-cli -s /tmp/redis.sock ping > /dev/null 2>&1; do
 done
 echo "✅ Redis is ready"
 
-# ── JWT_SECRET resolution (ROK-1035) ──────────────────────────────
-# Priority: 1) env var (if set and not the old default) → use it
+# ── JWT_SECRET resolution (ROK-1035, ROK-1292) ────────────────────
+# Priority: 1) env var (if set and not a known dev default) → use it
 #           2) /data/.jwt_secret file exists → read it
 #           3) generate new secret, persist to /data/.jwt_secret
-HARDCODED_DEFAULT="raid-ledger-default-secret-change-in-production"
+# Known dev defaults rejected by the guard below — keep in sync with
+# api/scripts/docker-entrypoint.sh and docker-compose.yml.
+HARDCODED_DEFAULTS="raid-ledger-default-secret-change-in-production dev-secret-change-in-prod"
 
-if [ -n "$JWT_SECRET" ] && [ "$JWT_SECRET" != "$HARDCODED_DEFAULT" ]; then
+is_known_default() {
+  for d in $HARDCODED_DEFAULTS; do
+    [ "$1" = "$d" ] && return 0
+  done
+  return 1
+}
+
+if [ -n "$JWT_SECRET" ] && ! is_known_default "$JWT_SECRET"; then
   echo "🔑 JWT_SECRET: using explicit env var"
 elif [ -s /data/.jwt_secret ]; then
   # ROK-1036: `-s` instead of `-f` because entrypoint.sh pre-touches the
@@ -320,9 +329,9 @@ else
   echo "🔑 JWT_SECRET: generated new secret → /data/.jwt_secret"
 fi
 
-# Guard: refuse to start with the old hardcoded default
-if [ "$JWT_SECRET" = "$HARDCODED_DEFAULT" ]; then
-  echo "❌ FATAL: JWT_SECRET is still the insecure hardcoded default."
+# Guard: refuse to start with any known insecure default
+if is_known_default "$JWT_SECRET"; then
+  echo "❌ FATAL: JWT_SECRET is still an insecure hardcoded default ($JWT_SECRET)."
   echo "   Remove the env var override or set a real secret."
   exit 1
 fi

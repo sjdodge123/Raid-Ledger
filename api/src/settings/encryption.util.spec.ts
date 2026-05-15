@@ -190,9 +190,10 @@ function describeEncryptionUtil() {
     });
   });
 
-  describe('getEncryptionKey production rejection (ROK-1035)', () => {
+  describe('getEncryptionKey production rejection (ROK-1035, ROK-1292)', () => {
     const HARDCODED_DEFAULT = 'raid-ledger-default-secret-change-in-production';
     const DEV_FALLBACK = 'dev-encryption-key-change-me';
+    const COMPOSE_DEFAULT = 'dev-secret-change-in-prod';
 
     afterEach(() => {
       // Restore non-production env and clear cache
@@ -234,6 +235,26 @@ function describeEncryptionUtil() {
     it('should NOT throw in non-production when JWT_SECRET is the dev fallback', () => {
       process.env.NODE_ENV = 'test';
       process.env.JWT_SECRET = DEV_FALLBACK;
+      _resetKeyCache();
+
+      expect(() => getEncryptionKey()).not.toThrow();
+    });
+
+    it('should throw in production when JWT_SECRET is the docker-compose default (ROK-1292)', () => {
+      expect(typeof getEncryptionKey).toBe('function');
+
+      process.env.NODE_ENV = 'production';
+      process.env.JWT_SECRET = COMPOSE_DEFAULT;
+      _resetKeyCache();
+
+      expect(() => getEncryptionKey()).toThrow(
+        /default.*secret|insecure|banned/i,
+      );
+    });
+
+    it('should NOT throw in non-production when JWT_SECRET is the docker-compose default (ROK-1292)', () => {
+      process.env.NODE_ENV = 'test';
+      process.env.JWT_SECRET = COMPOSE_DEFAULT;
       _resetKeyCache();
 
       expect(() => getEncryptionKey()).not.toThrow();

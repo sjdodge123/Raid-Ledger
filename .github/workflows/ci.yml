@@ -545,11 +545,49 @@ jobs:
             exit 1
           fi
 
+      - name: Verify JWT guard rejects known dev defaults (ROK-1292)
+        # Negative-path test: start a fresh container with each banned literal
+        # as JWT_SECRET and assert start-api.sh logs the FATAL guard message.
+        # Uses a separate container per literal so prior cached state (e.g.
+        # /data/.jwt_secret) from the previous step doesn't influence the
+        # guard's env-var-priority branch.
+        run: |
+          for SECRET in "raid-ledger-default-secret-change-in-production" "dev-secret-change-in-prod"; do
+            CONTAINER="rl-jwt-guard-$(echo "$SECRET" | tr -c 'a-z0-9' '-' | head -c 30)"
+            echo "── Testing JWT_SECRET=$SECRET should be rejected ──"
+            docker run -d --name "$CONTAINER" \
+              -e JWT_SECRET="$SECRET" \
+              -e ADMIN_PASSWORD=ci-test-password \
+              raid-ledger:ci-test
+            FOUND=0
+            for i in $(seq 1 30); do
+              if docker logs "$CONTAINER" 2>&1 | grep -q "FATAL: JWT_SECRET is still an insecure hardcoded default"; then
+                echo "✅ Guard rejected '$SECRET' after ${i}s"
+                FOUND=1
+                break
+              fi
+              sleep 1
+            done
+            docker stop "$CONTAINER" 2>/dev/null || true
+            docker rm -f "$CONTAINER" 2>/dev/null || true
+            if [ "$FOUND" != "1" ]; then
+              echo "❌ Guard did NOT reject '$SECRET' within 30s"
+              exit 1
+            fi
+          done
+
       - name: Cleanup
         if: always()
         run: |
           docker stop rl-ci-test 2>/dev/null || true
           docker rm rl-ci-test 2>/dev/null || true
+          # Defensive: the JWT-guard step cleans up its own containers, but
+          # if it errored mid-loop one might still be around.
+          for SECRET in "raid-ledger-default-secret-change-in-production" "dev-secret-change-in-prod"; do
+            CONTAINER="rl-jwt-guard-$(echo "$SECRET" | tr -c 'a-z0-9' '-' | head -c 30)"
+            docker stop "$CONTAINER" 2>/dev/null || true
+            docker rm -f "$CONTAINER" 2>/dev/null || true
+          done
 
   # ─── Synthetic Production Volume Gate (ROK-1036) ───────────────────
   # Boots the allinone image against a pre-populated volume that mimics a

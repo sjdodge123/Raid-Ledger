@@ -11,10 +11,15 @@ const AUTH_TAG_LENGTH = 16;
 const SALT_LENGTH = 32;
 const KEY_LENGTH = 32;
 
-/** Secrets that must never be used in production. */
+/**
+ * Secrets that must never be used in production.
+ * Keep this in sync with the allinone JWT guard:
+ * Dockerfile.allinone (HARDCODED_DEFAULTS) and api/scripts/docker-entrypoint.sh.
+ */
 const BANNED_SECRETS = [
   'raid-ledger-default-secret-change-in-production',
   'dev-encryption-key-change-me',
+  'dev-secret-change-in-prod',
 ];
 
 /**
