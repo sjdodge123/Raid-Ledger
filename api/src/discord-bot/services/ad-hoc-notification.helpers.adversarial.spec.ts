@@ -104,7 +104,7 @@ describe('buildEmbedEventData — edge cases (ROK-680)', () => {
     expect(result!.signupCount).toBe(0);
   });
 
-  it('signupCount is 0 when all participants have left', async () => {
+  it('signupCount reflects cumulative count even when all participants have left (ROK-1243)', async () => {
     mockEventAndGame(mockDb);
     const participants: AdHocParticipant[] = [
       { discordUserId: 'u1', discordUsername: 'P1', isActive: false },
@@ -113,7 +113,8 @@ describe('buildEmbedEventData — edge cases (ROK-680)', () => {
     ];
     const result = await buildEmbedEventData(deps, 1, participants);
     expect(result).not.toBeNull();
-    expect(result!.signupCount).toBe(0);
+    // ROSTER is "3 signed up" on the COMPLETED embed — the historical record.
+    expect(result!.signupCount).toBe(3);
     expect(result!.signupMentions).toHaveLength(3);
     for (const mention of result!.signupMentions!) {
       expect(mention.status).toBe('left');

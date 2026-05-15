@@ -19,11 +19,11 @@ import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import {
   type AdHocNotificationDeps,
+  type AdHocParticipant,
   buildContext,
   buildEmbedEventData,
   resolveNotificationChannel,
   toActiveParticipants,
-  toInactiveParticipants,
 } from './ad-hoc-notification.helpers';
 
 /** Batch flush interval for embed updates (ms). */
@@ -156,7 +156,12 @@ export class AdHocNotificationService implements OnModuleDestroy {
   /**
    * Update the existing embed in-place to show the completed state (ROK-612).
    * No second "completed" message is posted — the original embed is edited.
+   *
+   * ROK-1243: bindingId / event / participants are kept on the signature for
+   * backwards compatibility with `ad-hoc-event.handlers.ts::notifyCompleted`
+   * but the implementation re-reads everything it needs from the DB.
    */
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   async notifyCompleted(
     eventId: number,
     _bindingId: string,
@@ -167,25 +172,45 @@ export class AdHocNotificationService implements OnModuleDestroy {
       startTime: string;
       endTime: string;
     },
-    participants: Array<{
+    _participants: Array<{
       discordUserId: string;
       discordUsername: string;
       totalDurationSeconds: number | null;
     }>,
   ): Promise<void> {
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+    // ROK-1243 review: close flusher race window — drop pendingUpdates BEFORE the
+    // DB read so a 5s-interval flushUpdates cycle that fires mid-await cannot
+    // land a LIVE-state editEmbed AFTER our COMPLETED edit.
+    this.pendingUpdates.delete(eventId);
     const tracked = this.messageIds.get(eventId);
-    if (!tracked) {
-      this.pendingUpdates.delete(eventId);
-      return;
-    }
-    const inactive = toInactiveParticipants(participants);
-    const embedData = await buildEmbedEventData(this.deps, eventId, inactive);
+    if (!tracked) return;
+    // ROK-1243: re-read participants from DB so any join/leave that happened
+    // during the final 5s batch window (or was lost to a silent editEmbed
+    // failure) is reflected in the COMPLETED historical record.
+    const reconciled = await this.readReconciledParticipants(eventId);
+    const embedData = await buildEmbedEventData(this.deps, eventId, reconciled);
     if (!embedData) {
       this.cleanup(eventId);
       return;
     }
     await this.editTrackedEmbed(tracked, embedData, EMBED_STATES.COMPLETED);
     this.cleanup(eventId);
+  }
+
+  /** ROK-1243: read every ad_hoc_participants row for the event; all inactive on COMPLETED. */
+  private async readReconciledParticipants(
+    eventId: number,
+  ): Promise<AdHocParticipant[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.adHocParticipants)
+      .where(eq(schema.adHocParticipants.eventId, eventId));
+    return rows.map((r) => ({
+      discordUserId: r.discordUserId,
+      discordUsername: r.discordUsername,
+      isActive: false,
+    }));
   }
 
   /** Clean up tracked state for an event. */

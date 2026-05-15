@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api-client';
+import { UpdateStatusSchema } from '@raid-ledger/contract';
 import type { VersionInfoDto, UpdateStatusDto } from '@raid-ledger/contract';
 
 /**
@@ -21,7 +22,7 @@ export function useVersionInfo() {
 export function useUpdateStatus(enabled: boolean) {
     return useQuery<UpdateStatusDto>({
         queryKey: ['admin', 'update-status'],
-        queryFn: () => fetchApi<UpdateStatusDto>('/admin/update-status'),
+        queryFn: () => fetchApi<UpdateStatusDto>('/admin/update-status', undefined, UpdateStatusSchema),
         staleTime: 60 * 1000,
         enabled,
     });

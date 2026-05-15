@@ -249,6 +249,14 @@ describe('AdHocNotificationService', () => {
 
     it('edits the existing embed in-place (ROK-612)', async () => {
       await spawnEvent(60);
+      // ROK-1243: notifyCompleted now reads ad_hoc_participants first.
+      mockDb.where.mockResolvedValueOnce([
+        {
+          discordUserId: 'user-1',
+          discordUsername: 'Player1',
+          leftAt: new Date(),
+        },
+      ]);
       mockBuildEmbedData(mockDb, { id: 60 });
       await service.notifyCompleted(
         60,
@@ -285,6 +293,7 @@ describe('AdHocNotificationService', () => {
 
     it('cleans up pending updates after completion', async () => {
       await spawnEvent(70);
+      mockDb.where.mockResolvedValueOnce([]);
       mockBuildEmbedData(mockDb, { id: 70 });
       service.queueUpdate(70, 'binding-complete');
       await service.notifyCompleted(
@@ -303,6 +312,7 @@ describe('AdHocNotificationService', () => {
 
     it('handles edit errors gracefully', async () => {
       await spawnEvent(80);
+      mockDb.where.mockResolvedValueOnce([]);
       mockBuildEmbedData(mockDb, { id: 80 });
       clientService.editEmbed.mockRejectedValue(new Error('fail'));
       await expect(
@@ -334,6 +344,79 @@ describe('AdHocNotificationService', () => {
       );
       expect(clientService.sendEmbed).not.toHaveBeenCalled();
       expect(clientService.editEmbed).not.toHaveBeenCalled();
+    });
+
+    // ROK-1243: completion reconciliation rescues missed mid-session flushes.
+    it('reads ad_hoc_participants and includes every participant (ROK-1243)', async () => {
+      await spawnEvent(110);
+      // Simulate a leaver who was queued for the final batch but the edit
+      // never landed: DB has 2 rows with leftAt set; the caller passed 0.
+      mockDb.where.mockResolvedValueOnce([
+        {
+          discordUserId: 'user-A',
+          discordUsername: 'Aery',
+          leftAt: new Date(),
+        },
+        {
+          discordUserId: 'user-B',
+          discordUsername: 'Belle',
+          leftAt: new Date(),
+        },
+      ]);
+      mockBuildEmbedData(mockDb, { id: 110 });
+      await service.notifyCompleted(
+        110,
+        'binding-complete',
+        {
+          id: 110,
+          title: 'Reconciliation Test',
+          startTime: '2026-02-10T18:00:00Z',
+          endTime: '2026-02-10T20:00:00Z',
+        },
+        // Caller-supplied participants are IGNORED in favor of the DB read.
+        [],
+      );
+      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signupCount: 2,
+          signupMentions: expect.arrayContaining([
+            expect.objectContaining({
+              discordId: 'user-A',
+              username: 'Aery',
+              status: 'left',
+            }),
+            expect.objectContaining({
+              discordId: 'user-B',
+              username: 'Belle',
+              status: 'left',
+            }),
+          ]),
+        }),
+        expect.any(Object),
+        expect.objectContaining({ state: 'completed', buttons: 'none' }),
+      );
+    });
+
+    it('cleans up when reconciliation read finds no rows (ROK-1243)', async () => {
+      await spawnEvent(120);
+      mockDb.where.mockResolvedValueOnce([]);
+      mockBuildEmbedData(mockDb, { id: 120 });
+      await service.notifyCompleted(
+        120,
+        'binding-complete',
+        {
+          id: 120,
+          title: 'Empty Reconciliation',
+          startTime: '2026-02-10T18:00:00Z',
+          endTime: '2026-02-10T20:00:00Z',
+        },
+        [],
+      );
+      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({ signupCount: 0, signupMentions: [] }),
+        expect.any(Object),
+        expect.objectContaining({ state: 'completed' }),
+      );
     });
   });
 
@@ -381,6 +464,95 @@ describe('AdHocNotificationService', () => {
         expect.any(Object),
         expect.any(Object),
       );
+    });
+
+    // ROK-1243: a leaver appears with status:'left' after a single flush cycle.
+    it('a leaver shows with status:left after a single flush (ROK-1243)', async () => {
+      await spawnAndTrack(101);
+      service.queueUpdate(101, 'binding-flush');
+      mockDb.where.mockResolvedValueOnce([
+        {
+          discordUserId: 'u1',
+          discordUsername: 'P1',
+          leftAt: new Date(),
+        },
+      ]);
+      mockBuildEmbedData(mockDb, { id: 101 });
+      jest.advanceTimersByTime(5000);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signupCount: 1,
+          signupMentions: [
+            expect.objectContaining({
+              discordId: 'u1',
+              status: 'left',
+            }),
+          ],
+        }),
+        expect.any(Object),
+        expect.any(Object),
+      );
+    });
+
+    // ROK-1243: rejoin clears strikethrough.
+    it('rejoin clears strikethrough after subsequent flush (ROK-1243)', async () => {
+      await spawnAndTrack(102);
+      // First flush: u1 has left.
+      service.queueUpdate(102, 'binding-flush');
+      mockDb.where.mockResolvedValueOnce([
+        {
+          discordUserId: 'u1',
+          discordUsername: 'P1',
+          leftAt: new Date(),
+        },
+      ]);
+      mockBuildEmbedData(mockDb, { id: 102 });
+      jest.advanceTimersByTime(5000);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(embedFactory.buildEventEmbed).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          signupMentions: [
+            expect.objectContaining({ discordId: 'u1', status: 'left' }),
+          ],
+        }),
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Second flush after rejoin: leftAt cleared.
+      embedFactory.buildEventEmbed.mockClear();
+      service.queueUpdate(102, 'binding-flush');
+      mockDb.where.mockResolvedValueOnce([
+        { discordUserId: 'u1', discordUsername: 'P1', leftAt: null },
+      ]);
+      mockBuildEmbedData(mockDb, { id: 102 });
+      jest.advanceTimersByTime(5000);
+      await jest.advanceTimersByTimeAsync(0);
+      const lastCall = embedFactory.buildEventEmbed.mock.calls.at(-1);
+      expect(lastCall).toBeDefined();
+      const lastMentions = (
+        lastCall![0] as {
+          signupMentions: Array<{ discordId: string; status?: string }>;
+        }
+      ).signupMentions;
+      expect(lastMentions).toHaveLength(1);
+      expect(lastMentions[0].discordId).toBe('u1');
+      expect(lastMentions[0].status).toBeUndefined();
+    });
+
+    // ROK-1243: edit-in-place failure does not throw or kill the flusher.
+    it('processUpdate swallows editEmbed errors (ROK-1243)', async () => {
+      await spawnAndTrack(103);
+      service.queueUpdate(103, 'binding-flush');
+      mockDb.where.mockResolvedValueOnce([
+        { discordUserId: 'u1', discordUsername: 'P1', leftAt: null },
+      ]);
+      mockBuildEmbedData(mockDb, { id: 103 });
+      clientService.editEmbed.mockRejectedValueOnce(new Error('rate limit'));
+      jest.advanceTimersByTime(5000);
+      // Should not throw — error is logged.
+      await expect(jest.advanceTimersByTimeAsync(0)).resolves.not.toThrow();
     });
   });
 });

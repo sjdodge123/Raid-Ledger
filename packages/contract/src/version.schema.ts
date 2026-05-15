@@ -21,6 +21,12 @@ export const UpdateStatusSchema = z.object({
     latestVersion: z.string().nullable(),
     updateAvailable: z.boolean(),
     lastChecked: z.string().nullable(),
+    /**
+     * ROK-1242: deep link to the specific GitHub release. Null when no release
+     * has been fetched yet, when the cron fell back to the tags API (which has
+     * no per-release URL), or when the check failed.
+     */
+    latestReleaseUrl: z.string().url().nullable(),
 });
 
 export type UpdateStatusDto = z.infer<typeof UpdateStatusSchema>;

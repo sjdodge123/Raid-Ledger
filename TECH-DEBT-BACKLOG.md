@@ -143,53 +143,13 @@ Findings from pre-launch validation of the Community Lineup feature (33 runbook 
 - **[low]** `api/src/sentry/instrument.ts` `beforeSend` filter — add a CSP-report noise drop, parallel to the existing `no_snapshot_yet` / `ThrottlerException` patterns. GH #778 was a single curl-driven test of `POST /csp-report` with placeholder data (`document-uri: https://example/`, `blocked-uri: https://evil.example/foo.js`, `User-Agent: curl/8.7.1`) yet still produced a production Sentry issue. Once **ROK-1158** (CSP rollout) leaves report-only mode, a few of these test-pattern reports will keep landing whenever the operator probes the endpoint.
   Suggested: drop events when `tags.source === 'csp_report'` AND any of (`user-agent matches /curl|wget|python-requests/i`, `document-uri matches /^https?:\/\/(example|test|localhost)/i`, `blocked-uri matches /evil\.example/i`). Optional: add `@nestjs/throttler` to `POST /csp-report` so a noisy browser can't flood Sentry either. Fold into ROK-1158 if still in flight; otherwise tiny stand-alone PR after it ships.
 
-### 2026-05-13 — rok-1277-dedup-audit-union-find (ROK-1277)
-
-- **[med]** `api/src/admin/games-dedup-union-find.helpers.ts:142-176` (`strongestSharedKey`) — when a connected component contains more than one shared value at the strongest key tier (e.g. component spans two pairs A↔B sharing `steam:123` and C↔D sharing `steam:456`, joined transitively by a name match), the returned `matchKey` depends on iteration order of `rows`. `loadGameRows()` has no `ORDER BY`, so Postgres heap-order changes (autovacuum, updates, large insert activity) could flip `matchKey` between consecutive runs over unchanged data. Idempotency test (`'is idempotent — calling POST twice replaces the snapshot'`) currently passes because heap order is stable within a single test run; on prod with 1906 rows the practical impact is low but non-zero. Surfaced by Codex review (P2).
-  Suggested: in `strongestSharedKey`, sort the candidate values lexicographically (or numerically for igdb/steam) before picking the first count ≥ 2. ~3 lines. Alternative: add `ORDER BY id ASC` to `loadGameRows()` SELECT, which also fixes the latent issue more broadly.
-
-### 2026-05-13 — rok-1279-prod-clone (ROK-1279) — Testcontainers port-bind flake
-
-- **[med]** `api/src/common/testing/test-app.ts:114` — `PostgreSqlContainer.start()` flakes intermittently with `Timed out after 10000ms while waiting for container ports to be bound to the host` when the full integration suite runs back-to-back. Two specs reliably surface it under Docker pressure: `api/src/settings/reencrypt-settings.integration.spec.ts` and `api/src/availability/availability.integration.spec.ts` (the only two that spawn their own Testcontainers Postgres; all others reuse `DATABASE_URL` against the shared `raid-ledger-db` container). Both pass cleanly in isolation (28 tests in ~12s). Surfaced during ROK-1279's second `validate-ci.sh --full` run (first run was clean 1005/1005).
-  Suggested: bump the 10s port-bind timeout. Testcontainers reads `TESTCONTAINERS_HOST_OVERRIDE` and respects a `withWaitStrategy(Wait.forListeningPorts().withStartupTimeout(30_000))` on the container builder. Adding `.withWaitStrategy(...)` to the `PostgreSqlContainer` instance in `provisionDatabase` would extend it without affecting the existing `withStartupTimeout(60_000)` (which is the overall container-start timeout, not the port-bind retry). ~3 lines. Alternative: serialize back-to-back full-suite runs with a `docker stop` cooldown between, which is more an operator-workflow fix than a code one.
-
 ### 2026-05-13 — rok-1279-prod-clone (ROK-1279) — Codex review findings (non-blocking)
 
 - **[med]** `api/src/backup/backup.controller.ts:54` — `fs.createReadStream(absPath).pipe(res)` has no `.on('error', ...)` handler. TOCTOU between `existsSync` and stream open: if the file is deleted between resolution and stream open (race with rotation cron or operator DELETE), the read stream emits `error` after headers are already sent → client sees 200 + truncated body, Node may surface an unhandled error. Low practical risk (rotation cron only deletes >30d files; admin DELETE flow is operator-only) but cheap to harden.
   Suggested: attach `stream.on('error', err => { this.logger.warn(...); res.destroy(err); })` before the pipe. ~3 lines.
-- **[med]** `api/src/backup/backup.integration.spec.ts:316` — `getSchemaTables` test helper regex `/^\s*\d+;\s+\d+\s+\d+\s+TABLE\s+\S+\s+(\S+)/` matches both `TABLE public games admin` AND `TABLE DATA public games admin` (because `\S+` consumes `DATA` and the capture takes the schema name `public`). Current assertions still pass because they only assert `expect(schemaTables).toContain('app_settings')` and the genuine `TABLE` line is present — but the helper name is misleading and could mask a real regression where ONLY `TABLE DATA` lines exist and someone refactors the helper to actually mean what its name says.
-  Suggested: tighten to `/^\s*\d+;\s+\d+\s+\d+\s+TABLE\s+(?!DATA\s)\S+\s+(\S+)/` (negative lookahead). ~1 line.
 - **[low]** `scripts/clone-prod-to-local.sh:165` — `prod_get_safe` glob `[[ "$pth" != "$PROD_GET_ALLOWED_PREFIX"/*/download ]]` is looser than strict-whitelist intent. Bash `[[ ]]` glob `*` matches `/`, so a path like `/admin/backups/a/b/c/download` passes the bash check. Server-side AdminGuard + path-traversal regex still block any real damage, but cosmetic strictness would close the gap.
   Suggested: replace bash glob with regex check: `[[ ! "$pth" =~ ^/admin/backups/(daily|migration)/[A-Za-z0-9_.-]+/download$ ]]` and the exact list-endpoint match. ~3 lines.
 - **[low]** Two backup-path helpers exist for similar intent: `BackupService.getBackupFilePath` (new in ROK-1279; 404-only on traversal) and `BackupService.resolveBackupPath` (existing; uses 400 for traversal — feeds restore/delete). Unify on the 404-only behavior to reduce info leak surface across all path-validated routes. Non-urgent; both are admin-only.
-
-### 2026-05-13 — pre-existing `tsc --noEmit` errors on `origin/main` (surfaced during fix/batch-2026-05-13 viability gate)
-
-10 TypeScript errors fire on `npx tsc --noEmit -p api/tsconfig.json` against a clean `origin/main` checkout (commit `9461559c`). All are in `*.spec.ts` files and do NOT block Jest runs (ts-jest is more permissive than `tsc --noEmit`) — but they leak into agent worktrees as red herrings when devs/leads gate on a clean type-check before starting work. Group by file:
-
-- **[med]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — TS2556 "spread argument must have a tuple type or be passed to a rest parameter". The spec is intentional TDD scaffolding (file header at lines 100-102 says *"the dev's job is to widen the signatures to accept the lineup/visibility parameter"*), but the gate it scaffolds (private-visibility on notification dispatch) was never implemented. Either complete the visibility gate (widen `notifyNominationMilestone` / `notifyMatchesFound` / `notifySchedulingOpen` / `notifyEventCreated` to accept a `lineup` or `visibility` argument), OR delete the spec, OR mark it `xdescribe` so it stops leaking errors.
-  Suggested: triage whether private-visibility on notifications is still desired post-ROK-1067; if not, delete the spec — the test-only `AnyArgs = unknown[]` trick papers over a feature that no longer needs the test.
-- **[med]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — TS2769 "no overload matches this call". Likely landed alongside the ROK-1277 union-find work; the audit assertion shape may have drifted from the underlying helper signature.
-- **[med]** `api/src/admin/games-dedup-audit.service.spec.ts:432` — TS2502 "'tx' is referenced directly or indirectly in its own type annotation". Drizzle transaction-callback type recursion — fixable with an explicit annotation on `tx`.
-- **[med]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — TS2352 three `as` cast errors. Spec is casting Drizzle `RowList<{ camelCase }[]>` directly to `{ snake_case }[]`. Either case-correct the assertions or wrap the cast through `unknown` (per TS's own remediation hint in the error).
-- **[low]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — TS2345 `SQL<unknown>` not assignable to `string | SQLWrapper`. Drizzle helper signature drift; one-line fix to wrap or annotate the SQL fragment.
-
-**Why this matters:** `validate-ci.sh --full` runs `tsc --noEmit` and these 10 errors will appear on every full CI run from now until cleaned up. Agents that gate on "type-check is clean before I start" will hit a false-positive blocker. Same applies to `/build`, `/fix-batch`, `/dispatch` viability gates.
-
-Suggested triage path: one chore-labeled story to triage + fix the 5 files (or delete the private-visibility spec if obsolete). Estimated 30-60 min. Alternative: change `validate-ci.sh` to compare against an `origin/main` baseline and only fail on net-new errors — more durable, but heavier to build.
-
-### 2026-05-13 — pre-existing vitest test-order flakes (surfaced during fix/batch-2026-05-13 ROK-1207 verification)
-
-Two web-workspace vitest tests pass cleanly in isolation but fail when run as part of the full suite (`npx vitest run --coverage` from `web/`). Surfaced by `dev-rok-1207` agent during their pre-commit verification — neither file was touched by the ROK-1207 change. Suggests test-order dependency or shared module state that leaks across files.
-
-- **[med]** `web/src/pages/invite-page.test.tsx` — fails in full suite, passes 21/21 in isolation. Likely msw handler state or React Query cache singleton bleeding from an earlier test file.
-  Suggested: bisect the full-suite order to find the polluting predecessor (`vitest --reporter=verbose | head -n <position>`), then either add `beforeEach` cleanup in the predecessor or move the predecessor's mocks into local `vi.mock()` calls scoped to its `describe`.
-- **[med]** `web/src/components/health/EngagementHealthSection.test.tsx` — fails in full suite, passes in isolation. Same class of issue.
-  Suggested: same bisect approach. May share a common predecessor with `invite-page.test.tsx` — worth checking if both fail on the same upstream pollutant.
-
-**Why this matters:** masks net-new regressions during fix-batch / build validation gates. The Lead currently has to manually compare "did my changes cause this?" by re-running the file in isolation, which costs ~30s per false alarm. Cleaning the test-isolation primitives (likely in `web/src/test/setup.ts` or a shared mock factory) removes that toil for every future batch.
-
-Suggested triage path: one chore-labeled story. First task is the bisect — once the polluting file is named, the fix is usually a one-liner (move a `vi.mock` from top-level into a `beforeEach` or add an `afterEach(() => vi.resetModules())`).
 
 ### 2026-05-13 — scheduling-banner queryKey mismatch (surfaced during ROK-1235 review)
 
@@ -208,19 +168,6 @@ Suggested triage path: one chore-labeled story. First task is the bisect — onc
 **Why this matters:** `validate-ci.sh --full` will fail on the batch base today, blocking every fix-batch / build / dispatch that runs the full integration gate. Existing memory `reference_bullmq_ioredis_test_carrier.md` documents the socket-leak class; the auth-state-leak (signups-roster) class is new and worth its own slot.
 
 Suggested triage path: two stories — (1) continue ROK-1250 socket cleanup with the new carrier evidence, (2) new auth-state-isolation chore. Estimated 1-3h each. Cheap-experiments-first applies (memory `feedback_cheap_experiments_first`): start with bisect, don't pay for instrumented full-suite loops until the bisect names the polluting predecessor.
-
-### 2026-05-13 — Playwright cross-project flakes (surfaced during fix/batch-2026-05-13 smoke gate)
-
-3 smoke tests failed in the full Playwright sweep (632 passed / 3 failed / 200 skipped / 5 did not run). None of the 3 failing files are in the batch's 24-file diff. The failure signatures are cross-project (each fails on ONE viewport — desktop OR mobile — and passes on the other), strongly suggesting test-data state pollution rather than functional regression.
-
-- **[med]** `scripts/smoke/lineup-admin-abort-phases.smoke.spec.ts:121` (desktop only, 17ms instant fail) — `expect(before?.status).toBe(phase)` failed because the lineup fixture wasn't in the expected phase when the API check ran. Mobile equivalent test passes in 470ms. The 17ms duration on desktop = fixture state was already wrong before the test body executed. Likely a previous desktop test left the same lineup ID in a different phase.
-  Suggested: add `beforeEach` that asserts/forces lineup-into-phase state via the seed API, or scope each phase test to its own seeded lineup ID rather than sharing a fixture.
-- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:416` (mobile only, 6.5s — hit the 5s timeout) — asserts the "COMMUNITY LINEUP" banner + "Nominate" button on `/games`. This is the GamesPage's LineupBanner/StandalonePollBanner (NOT lineup-detail-page.tsx, which ROK-1207 changed). Mobile-only failure with the banner showing but the Nominate button not appearing within 5s. Possibly a fixture lineup with no Nominate CTA on mobile or a render race.
-  Suggested: bump the Nominate-button timeout to match the COMMUNITY-LINEUP-text timeout (15s), or assert on a state-stable signal first (e.g., banner CTAs visible) before per-button.
-- **[low]** `scripts/smoke/events.smoke.spec.ts:370` (desktop only) — Regression test for ROK-784 (attendance dashboard light mode theme). Completely unrelated to this batch's diff. Pre-existing theme/contrast intermittent.
-  Suggested: stabilize with explicit `prefers-color-scheme: light` media emulation, or `page.emulateMedia({ colorScheme: 'light' })` at test start.
-
-**Verdict for this batch:** all 3 failures unrelated to the 24-file diff. ROK-1207's own regression tests (`scripts/smoke/lineup-abort.smoke.spec.ts:219`, `:276`) PASSED on BOTH desktop and mobile (4 of 4 ROK-1207 regression cases green). GitHub CI has been consistently green on `main` (last 5 merges, including PR #787 mid-session). Proceeding to ship per operator approval; flakes documented for follow-up triage.
 
 ### 2026-05-13 — fix/batch-2026-05-13 reviewer findings (medium/low/nitpick — non-blocking)
 
@@ -258,19 +205,6 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
 - **[low]** `api/scripts/seed-games.ts` — sibling of `seed-igdb-games.ts` audited as part of ROK-1283. Same shape (`ON CONFLICT (slug) DO NOTHING`), same NULL-distinct vulnerability in principle. Practically dormant in prod: its slugs match `seed-igdb-games.ts` AND post-ROK-1278 cleanup left no name dups for this seed's names to collide with. Was NOT fixed in ROK-1283 because the file already exceeds `max-lines` (302/300) on `origin/main` and applying the same fix would push it further over; CI lint would fail. Apply the name-dedup guard the next time this file is touched, alongside breaking up the `GAMES_SEED` constant (move to a sibling `seed-games.data.ts`) to bring the file back under 300 effective lines.
   Suggested: extract `GAMES_SEED` to `api/scripts/seed-games.data.ts` (no logic, just data) and apply the same `findGameByNormalizedName` pre-check pattern used in `seed-igdb-games.ts::upsertSeedGames`.
 
-### 2026-05-14 — fix/rok-1283 (surfaced during ROK-1283 typecheck)
-
-Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched by this story. Re-verified by stashing the ROK-1283 changes and re-running `npx tsc --noEmit -p api/tsconfig.json`. All four exist verbatim on main.
-
-- **[med]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — Three `TS2352` errors from postgres-js `RowList<…>` ↔ snake_case struct casts (e.g., `RowList<{ totalSeconds: number; }[]>` → `{ total_seconds: number; }[]`). Drizzle returns camelCase, the cast assumes snake_case.
-  Suggested: cast through `unknown` first (as the compiler error suggests) or fix the destination shape to match Drizzle's camelCase output.
-- **[med]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — `TS2345`: Argument of type `SQL<unknown>` is not assignable to parameter of type `string | SQLWrapper`. Two copies of drizzle-orm types are visible (separate declarations of `shouldInlineParams`). Looks like hoisting / peer-dep dedup drift.
-  Suggested: `npm dedupe` to remove the duplicate `drizzle-orm/sql/sql` instance, or pin a single drizzle-orm version across workspaces.
-- **[med]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — Four `TS2556` "spread argument must either have a tuple type or be passed to a rest parameter". Test uses `fn(...args)` where `args` is inferred as `unknown[]` instead of a tuple.
-  Suggested: add `as const` to the array literals or annotate the helper parameter as a rest tuple.
-- **[med]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — `TS2769`: No overload matches this call. Likely the same drizzle-orm dedup drift as the lineup-deadline-vote-race error above.
-  Suggested: `npm dedupe` (paired with the lineup-deadline fix).
-
 ### 2026-05-14 — fix/batch-2026-05-14 (PR pending — ROK-1282 + ROK-1283)
 
 - **[low]** `api/src/users/guild-reconciliation.service.ts:107-109` — dead-code `rows.filter((r): r is { id: number; discordId: string } => r.discordId !== null)`. SQL already guarantees `isNotNull(discordId)` so the filter never drops a row.
@@ -279,12 +213,6 @@ Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched
   Suggested: keep sequential for now (audit-trail simplicity); revisit if a single run ever exceeds ~50 deactivations.
 - **[low]** `api/src/users/guild-reconciliation.service.ts:93-106` — `loadActiveDbUsers` has no index on `deactivated_at` and full-scans `users` daily. Acceptable at current user volume; index becomes relevant past several thousand rows.
   Suggested: revisit if cron duration exceeds ~1s on prod.
-
-
-### 2026-05-14 — fix/batch-2026-05-14 (surfaced during ROK-1282 + ROK-1283 push validation)
-
-- **[med]** `web/src/components/admin/onboarding/secure-account-step.test.tsx` — 6/20 specs in this file flake with `Test timed out in 5000ms` when run as part of the full vitest suite (`npm run test:cov -w web`). All 20 PASS in 773ms when the file is run in isolation (`npx vitest run src/components/admin/onboarding/secure-account-step.test.tsx`). The failing assertions are synchronous DOM class lookups (`toHaveClass('min-h-[44px]')`), so the 5000ms timeout is concurrency starvation, not test logic. Last touched in #379 (months ago); independent of fix/batch-2026-05-14 (zero web/ changes in the batch).
-  Suggested: bump this file's `testTimeout` to 15000ms in vitest.config.ts (the FTE wizard tests do heavier jsdom setup than typical) OR move it to its own project shard. The cheap-experiment plan: run `npx vitest run secure-account-step` 50× to characterise the flake rate, then either bump the timeout or shard the file.
 
 
 ### 2026-05-14 — fix/batch-2026-05-14 (post-Codex reviewer pass)
@@ -297,47 +225,13 @@ Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched
   Suggested: add one spec that mocks `cronJobService.executeWithTracking` and asserts `failedRun` was recorded when `listAllGuildMemberIds` throws.
 
 
-### 2026-05-14 — rok-1162-sentry-tuning (surfaced during /push playwright)
+### 2026-05-14 — fix/rok-1243 worktree (surfaced during ROK-1243 implementation)
 
-- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:491` (desktop) — "Voting phase › leaderboard renders sorted by vote count descending" failed during the full Playwright run that gated ROK-1162. Confirmed pre-existing: ROK-1162 is API-only Sentry filter tuning, zero possible UI impact. Likely a fixture race in the voting-phase lineup setup. Not yet in the documented set under line 97.
-  Suggested: characterise with `npx playwright test scripts/smoke/community-lineup.smoke.spec.ts --project=desktop --repeat-each 10` to confirm flake rate, then fix the fixture rather than the assertion.
-- **[med]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:96` (desktop) — "Building phase — hero + pill › hero shows action tone with Nominate CTA when organizer has not nominated" failed during ROK-1162 push validation. Same provenance as the community-lineup flake — completely unrelated to Sentry changes.
-  Suggested: companion failure with `lineup-confirmation-pills-invitee.smoke.spec.ts:127` (below) — both likely share a fixture or render-race root cause.
-- **[med]** `scripts/smoke/lineup-confirmation-pills-invitee.smoke.spec.ts:127` (desktop) — "Building phase — invitee hero variants › invitee-acted: hero flips to waiting tone after nomination" failed during the same ROK-1162 run. Sister spec to `lineup-confirmation-pills.smoke.spec.ts:96`.
-- **[med]** `scripts/smoke/navigation.smoke.spec.ts:161` (mobile) — "Navigation (mobile) › no critical console errors during navigation" failed. The assertion is asserting absence of console errors, so the failure means SOMETHING is logging a console error on mobile nav. Worth investigating because it could mask a real regression — but it's not new in ROK-1162 (Sentry filters don't touch console output).
-  Suggested: run in isolation with `--repeat-each 5` to confirm reproducibility; if reproducible, capture the console error message to identify the source.
+- **[nit]** `tools/test-bot/scripts/no-sleep-lint.sh` flags the *comment* on `tools/test-bot/src/smoke/tests/lineup-abort.test.ts:26` (`Use \`pollForEmbed\` (NEVER \`sleep()\`) to look for the channel`). The grep pattern is too coarse — it matches `sleep()` anywhere in source files including doc comments. Reproduces on a clean `origin/main` checkout; unrelated to ROK-1243.
+  Suggested: tighten the lint pattern to exclude single- and multi-line comment lines, or update the lineup-abort.test.ts comment to escape the `sleep()` token (e.g. backticks already there but the script doesn't honor them). Easiest fix: rewrite the comment as "Use pollForEmbed instead of fixed delays."
 
-### 2026-05-14 — rok-1252-lineup-banner-counts (surfaced during ROK-1252 validate-ci.sh --full)
+### 2026-05-14 — fix/batch-2026-05-14 (surfaced during ROK-1242 smoke validation)
 
-- **[med]** `api/src/events/events-dashboard.actions.integration.spec.ts:241` — `reschedule with 12 signups completes under 200ms (ROK-1043)` is a wall-clock perf assertion that flakes under full-suite system load. Failure observed: `Expected: < 200, Received: 255.87208299999475` after a 581s integration run. Re-running the spec in isolation: 21/21 passed in 7.3s with no flake. The full-suite wall clock means the test machine is under heavier concurrent load when this spec runs vs. solo. Untouched on this branch (`api/src/events/**` not modified); this branch touches only `api/src/lineups/lineups-enrichment.helpers.ts` + `api/src/lineups/lineups-response.helpers.ts`.
-  Suggested: raise the threshold to ~400ms (current real measurement is ~256ms under load) OR convert the assertion to a percentile measurement across N runs OR move the perf assertion to a dedicated bench job not coupled to the full integration suite. Symptom matches the classic `toBeLessThan(<wallclock_ms>)` flake pattern in CI-heavy environments.
-
-### 2026-05-14 — rok-1252-lineup-banner-counts (Playwright flakes surfaced during ROK-1252 full smoke run)
-
-A `npx playwright test` (desktop + mobile) on the deployed branch failed 7/840 tests after a 6.9m suite run. All 7 are full-suite-load test-infra flakes — none touch any code path modified by ROK-1252. Re-running the 3 lineup-related specs in isolation immediately passed 51/51 (5 skipped) in 39.5s. Branch diff is limited to `api/src/lineups/lineups-enrichment.helpers.ts`, `api/src/lineups/lineups-response.helpers.ts`, and a deleted `web/src/components/lineups/LineupProgressBar.tsx`.
-
-Failures observed under load (resolved on retry in isolation):
-
-- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:491` — `Voting phase › leaderboard renders sorted by vote count descending` (desktop). Cross-worker state pollution: the `beforeAll` resolved the worker's "voting" lineup to one already archived by a sibling test (reason "Smoke test abort — wrong scope" visible in the captured page snapshot). The lineup-detail page rendered the cancelled-readonly view, so `[data-testid="voting-leaderboard"]` was never present. Passed on retry.
-  Suggested: in `Voting phase` `beforeAll`, assert `banner.status !== 'archived'` before reuse, and call `archiveLineup` + recreate when archived. Today the helper only branches on `voting | building`, so an archived banner leaks through.
-
-- **[med]** `scripts/smoke/lineup-admin-abort-phases.smoke.spec.ts:121` — `Admin abort from building › POST /lineups/:id/abort succeeds and flips status to archived` (desktop). `expect(before?.status).toBe('building')` failed with `Received: "archived"`. `createLineupInPhase` calls `cancelLineupPhaseJobs` to prevent the auto-advance scheduler from racing the test, but the cancel ran after the scheduler had already moved the lineup to `archived` mid-test. Mobile + decided/voting variants of the same `describe` block passed in the same run.
-  Suggested: in `createLineupInPhase`, after `cancelLineupPhaseJobs`, re-read the lineup detail and assert `status === target` before returning; fail fast inside the helper rather than at `expect(before)` so the helper's contract is honored.
-
-- **[med]** `scripts/smoke/lineup-carryover.smoke.spec.ts:165` — `creating a new lineup auto-populates entries from prior decided suggested matches` (mobile). `carriedEntries.length` was 0 (expected ≥ 1). The prior-lineup-archival in `buildPriorDecidedLineup` likely didn't fully settle before the new lineup's create-time carryover ran, even with `await awaitProcessing(token)`. Passed on retry.
-  Suggested: replace the `awaitProcessing` after archive with a polling read on the prior lineup's status until `'archived'` is observed (or add a short retry around the `apiPost('/lineups', ...)` if `carriedEntries.length === 0` on first read).
-
-- **[med]** `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:597` — `Tiebreaker active badge on Games page › Games page banner shows Tiebreaker active badge` (desktop). Unrelated to lineup detail; banner data hadn't propagated when the assertion fired. Not re-run in isolation; symptom matches the same full-suite contention.
-  Suggested: replace the static visibility wait with a `pollForCondition` on `/lineups/banner` returning a tiebreaker-active payload before the page assertion.
-
-- **[med]** `scripts/smoke/navigation.smoke.spec.ts:22` — `Navigation (desktop) › nav links navigate to correct pages`. Selector race during initial mount. Not re-run.
-  Suggested: wait for `<main>` content to be visible per route before asserting URL or link visibility (the test currently asserts on the link itself without waiting for the destination route to settle).
-
-- **[med]** `scripts/smoke/navigation.smoke.spec.ts:62` — `Navigation (desktop) › no critical console errors during navigation`. Likely the same console-message race — a transient `pendingAdvanceAt` mount log might be classified as a critical error under load.
-  Suggested: review the critical-error allowlist + tighten the navigation wait conditions.
-
-- **[med]** `scripts/smoke/notifications.smoke.spec.ts:20` — `Notifications › dropdown opens and shows content` (mobile). The dropdown click fired before the notifications-bell button hydrated. Visible 6.9m into the suite run only.
-  Suggested: wait for the bell button to have `data-testid` AND be enabled before clicking, then poll for the `Notifications` heading instead of a single `toBeVisible` with a 5s timeout.
-
-Cross-cutting: these all share the symptom that the full 840-test suite under parallel mobile + desktop workers introduces enough wall-clock latency that test-data setup races feature code by 1-3s. Either bumping the per-test timeouts in the affected `beforeAll`s OR splitting the suite into smaller parallel-friendly chunks would reduce the flake rate substantially. None of these failures indicate a regression in this branch's audience-scoping change.
+- **[low]** Playwright full-suite flakes during ROK-1242 batch run (`scripts/smoke/events.smoke.spec.ts:370` Regression-ROK-784 light-mode attendance + `scripts/smoke/scheduling-poll.smoke.spec.ts:771` "Your Other Scheduling Polls"). Neither touches the ROK-1242 / ROK-1243 changed surface. Symptom matches the cross-cutting full-suite contention pattern already documented under the 2026-05-14 rok-1252-lineup-banner-counts section (line 316+).
+  Suggested: same as the ROK-1252 grouping — bump per-test timeouts OR split the 840-test suite into smaller parallel-friendly chunks. Five other flakes in the same ROK-1242 run (community-lineup:491, navigation:22/161, notifications:20, lineup-carryover:165) match the existing documented set exactly; no new entries needed.
 

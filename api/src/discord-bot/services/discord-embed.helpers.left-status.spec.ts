@@ -66,4 +66,19 @@ describe('getMentionsForRole — left participant strikethrough (ROK-680)', () =
     const result = getMentionsForRole([mention], null, mockEmojiService);
     expect(result).toContain('~~departed-user~~');
   });
+
+  it('renders all mentions with strikethrough when every participant left (ROK-1243)', () => {
+    const mentions = [
+      makeMention('left-1', 'left'),
+      makeMention('left-2', 'left'),
+      makeMention('left-3', 'left'),
+    ];
+    const result = getMentionsForRole(mentions, null, mockEmojiService);
+    expect(result).toContain('~~<@left-1>~~');
+    expect(result).toContain('~~<@left-2>~~');
+    expect(result).toContain('~~<@left-3>~~');
+    // No un-struck mention must remain in the rendered output.
+    const unstruck = /(?<!~~)<@left-[123]>(?!~~)/g;
+    expect(result.match(unstruck)).toBeNull();
+  });
 });
