@@ -179,11 +179,12 @@ export class AdHocNotificationService implements OnModuleDestroy {
     }>,
   ): Promise<void> {
     /* eslint-enable @typescript-eslint/no-unused-vars */
+    // ROK-1243 review: close flusher race window — drop pendingUpdates BEFORE the
+    // DB read so a 5s-interval flushUpdates cycle that fires mid-await cannot
+    // land a LIVE-state editEmbed AFTER our COMPLETED edit.
+    this.pendingUpdates.delete(eventId);
     const tracked = this.messageIds.get(eventId);
-    if (!tracked) {
-      this.pendingUpdates.delete(eventId);
-      return;
-    }
+    if (!tracked) return;
     // ROK-1243: re-read participants from DB so any join/leave that happened
     // during the final 5s batch window (or was lost to a silent editEmbed
     // failure) is reflected in the COMPLETED historical record.
