@@ -105,6 +105,31 @@ describe('LineupDetailHeader — private badge (ROK-1065)', () => {
     });
 });
 
+describe('LineupDetailHeader — unlinked Steam nudge (ROK-1252)', () => {
+    beforeEach(() => {
+        vi.mocked(useAuth).mockReturnValue({
+            user: { id: 1, role: 'operator' },
+        } as ReturnType<typeof useAuth>);
+        vi.mocked(isOperatorOrAdmin).mockReturnValue(true);
+    });
+
+    it('does not render the without-Steam nudge for a private 3-person lineup with unlinkedSteamCount=0', () => {
+        const lineup = buildDetail({
+            title: 'Private Trio',
+            status: 'building',
+            visibility: 'private',
+            invitees: [
+                { id: 2, displayName: 'Invitee A', username: 'a' },
+                { id: 3, displayName: 'Invitee B', username: 'b' },
+            ],
+            unlinkedSteamCount: 0,
+        } as DetailOverrides);
+        renderWithProviders(<LineupDetailHeader lineup={lineup} />);
+
+        expect(screen.queryByText(/without Steam/i)).toBeNull();
+    });
+});
+
 describe('LineupDetailHeader — phase advance modal (ROK-1123)', () => {
     beforeEach(() => {
         mockTransitionMutate.mockReset();

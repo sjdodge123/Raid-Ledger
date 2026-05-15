@@ -2,7 +2,7 @@
  * Enrichment helpers for lineup detail responses (ROK-935).
  * Provides batch queries for ownership, wishlist, pricing, and member counts.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
@@ -124,9 +124,38 @@ export interface UnlinkedSteamMember {
 }
 
 /**
- * Count members without a linked Steam account (ROK-993).
+ * Audience scope for steam-link helpers (ROK-1252). Public lineups query
+ * community-wide; private lineups restrict to creator + invitees.
  */
-export async function countUnlinkedSteamMembers(db: Db): Promise<number> {
+export interface LineupAudience {
+  visibility: 'public' | 'private';
+  createdBy: number;
+  inviteeUserIds: number[];
+}
+
+/** Resolve the distinct id set for a private audience (creator ∪ invitees). */
+function audienceIds(audience: LineupAudience): number[] {
+  return Array.from(new Set([audience.createdBy, ...audience.inviteeUserIds]));
+}
+
+/**
+ * Count members without a linked Steam account, scoped to the lineup
+ * audience (ROK-993, ROK-1252).
+ */
+export async function countUnlinkedSteamMembers(
+  db: Db,
+  audience: LineupAudience,
+): Promise<number> {
+  if (audience.visibility === 'private') {
+    const ids = audienceIds(audience);
+    if (ids.length === 0) return 0;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int`.as('count') })
+      .from(schema.users)
+      .where(and(inArray(schema.users.id, ids), isNull(schema.users.steamId)));
+    return Number(row?.count ?? 0);
+  }
+
   const rows = (await db.execute(sql`
     SELECT count(*)::int AS count FROM users WHERE steam_id IS NULL
   `)) as unknown as { count: number }[];
@@ -134,11 +163,29 @@ export async function countUnlinkedSteamMembers(db: Db): Promise<number> {
 }
 
 /**
- * Find members without a linked Steam account (ROK-993).
+ * Find members without a linked Steam account, scoped to the lineup
+ * audience (ROK-993, ROK-1252).
  */
 export async function findUnlinkedSteamMembers(
   db: Db,
+  audience: LineupAudience,
 ): Promise<UnlinkedSteamMember[]> {
+  if (audience.visibility === 'private') {
+    const ids = audienceIds(audience);
+    if (ids.length === 0) return [];
+    const rows = await db
+      .select({
+        id: schema.users.id,
+        displayName:
+          sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`.as(
+            'display_name',
+          ),
+      })
+      .from(schema.users)
+      .where(and(inArray(schema.users.id, ids), isNull(schema.users.steamId)));
+    return rows.map((r) => ({ id: r.id, displayName: r.displayName }));
+  }
+
   const rows = (await db.execute(sql`
     SELECT id, COALESCE(display_name, username) AS display_name
     FROM users WHERE steam_id IS NULL
