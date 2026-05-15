@@ -341,3 +341,8 @@ Failures observed under load (resolved on retry in isolation):
 
 Cross-cutting: these all share the symptom that the full 840-test suite under parallel mobile + desktop workers introduces enough wall-clock latency that test-data setup races feature code by 1-3s. Either bumping the per-test timeouts in the affected `beforeAll`s OR splitting the suite into smaller parallel-friendly chunks would reduce the flake rate substantially. None of these failures indicate a regression in this branch's audience-scoping change.
 
+### 2026-05-14 — fix/rok-1243 worktree (surfaced during ROK-1243 implementation)
+
+- **[nit]** `tools/test-bot/scripts/no-sleep-lint.sh` flags the *comment* on `tools/test-bot/src/smoke/tests/lineup-abort.test.ts:26` (`Use \`pollForEmbed\` (NEVER \`sleep()\`) to look for the channel`). The grep pattern is too coarse — it matches `sleep()` anywhere in source files including doc comments. Reproduces on a clean `origin/main` checkout; unrelated to ROK-1243.
+  Suggested: tighten the lint pattern to exclude single- and multi-line comment lines, or update the lineup-abort.test.ts comment to escape the `sleep()` token (e.g. backticks already there but the script doesn't honor them). Easiest fix: rewrite the comment as "Use pollForEmbed instead of fixed delays."
+

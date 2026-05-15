@@ -3,7 +3,11 @@
  * Each test picks its own voice channel and creates/cleans up bindings.
  */
 import { joinVoice, leaveVoice, getVoiceMembers } from '../../helpers/voice.js';
-import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
+import {
+  pollForCondition,
+  pollForEmbed,
+  waitForEmbedUpdate,
+} from '../../helpers/polling.js';
 import {
   createBinding,
   createEvent,
@@ -131,6 +135,65 @@ const adHocSpawn: SmokeTest = {
           ctx.config.timeoutMs,
         );
         if (msg.embeds.length === 0) throw new Error('No ad-hoc embed found');
+      } finally {
+        leaveVoice();
+      }
+    });
+  },
+};
+
+/**
+ * ROK-1243: Quick Play embed preserves every participant.
+ *
+ * The bot joins a bound voice channel → embed posts with ROSTER: 1 +
+ * un-struck mention. Bot leaves → after the 5s batch flush, the embed
+ * still shows ROSTER: 1 (cumulative count unchanged) AND the bot's
+ * mention is struck through. Pre-fix the count would drop to 0 and the
+ * mention would either disappear or remain un-struck.
+ *
+ * SLOW: relies on the 15-minute SPAWN_DELAY_MS — gated on
+ * SMOKE_INCLUDE_SLOW alongside the rest of the ad-hoc smoke tests.
+ */
+const adHocPreservesParticipants: SmokeTest = {
+  name: 'Quick Play embed preserves participants after leave (ROK-1243)',
+  category: 'voice',
+  async run(ctx) {
+    await withVoiceBinding(ctx, 2, 'general-lobby', async (vChId, tChId) => {
+      const botMention = `<@${ctx.testBotDiscordId}>`;
+      const struckBotMention = `~~${botMention}~~`;
+
+      await joinVoice(vChId);
+      try {
+        // 1) Spawn embed posts with ROSTER: 1 + un-struck bot mention.
+        await pollForEmbed(
+          tChId,
+          (m) =>
+            m.embeds.some((e) => {
+              const desc = e.description ?? '';
+              return (
+                desc.includes(botMention) &&
+                !desc.includes(struckBotMention) &&
+                /ROSTER:\s*1\s+signed up/i.test(desc)
+              );
+            }),
+          ctx.config.timeoutMs,
+        );
+
+        // 2) Bot leaves — wait for the batched edit (≤ 5s + jitter).
+        leaveVoice();
+        await waitForEmbedUpdate(
+          tChId,
+          (m) =>
+            m.embeds.some((e) => {
+              const desc = e.description ?? '';
+              // ROSTER count stays at 1 (cumulative) AND bot mention is struck.
+              return (
+                desc.includes(struckBotMention) &&
+                /ROSTER:\s*1\s+signed up/i.test(desc)
+              );
+            }),
+          ctx.config.timeoutMs,
+        );
       } finally {
         leaveVoice();
       }
@@ -667,7 +730,9 @@ const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
 export const voiceActivityTests: SmokeTest[] = [
   ...(canJoinVoice ? [voiceJoinDetected, voiceLeaveRecorded] : []),
   classifyPopulatesAttendance,
-  ...(includeSlow ? [adHocSpawn, metricsVoicePopulated] : []),
+  ...(includeSlow
+    ? [adHocSpawn, adHocPreservesParticipants, metricsVoicePopulated]
+    : []),
   ...(canJoinVoice
     ? [voiceMemberList, multiGameVoiceDetected, siblingBindingSuppression, attendancePipelineE2E]
     : []),
