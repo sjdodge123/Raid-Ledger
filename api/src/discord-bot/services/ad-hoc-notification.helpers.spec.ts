@@ -111,7 +111,7 @@ describe('buildEmbedEventData — participant inclusion (ROK-680)', () => {
     expect(leftEntry!.status).toBe('left');
   });
 
-  it('sets signupCount to number of active participants only', async () => {
+  it('sets signupCount to cumulative participants (ROK-1243)', async () => {
     mockEventAndGame(mockDb);
     const participants: AdHocParticipant[] = [
       { discordUserId: 'u1', discordUsername: 'Active', isActive: true },
@@ -120,7 +120,42 @@ describe('buildEmbedEventData — participant inclusion (ROK-680)', () => {
     ];
     const result = await buildEmbedEventData(deps, 1, participants);
     expect(result).not.toBeNull();
-    expect(result!.signupCount).toBe(2);
+    // ROSTER must reflect cumulative participation, not currently-active.
+    expect(result!.signupCount).toBe(3);
+  });
+
+  it('keeps signupCount 0 for empty participants (defensive)', async () => {
+    mockEventAndGame(mockDb);
+    const result = await buildEmbedEventData(deps, 1, []);
+    expect(result).not.toBeNull();
+    expect(result!.signupCount).toBe(0);
+    expect(result!.signupMentions).toEqual([]);
+  });
+
+  it('mention length always equals participants length', async () => {
+    mockEventAndGame(mockDb);
+    const participants: AdHocParticipant[] = [
+      { discordUserId: 'u1', discordUsername: 'A', isActive: true },
+      { discordUserId: 'u2', discordUsername: 'B', isActive: false },
+      { discordUserId: 'u3', discordUsername: 'C', isActive: false },
+      { discordUserId: 'u4', discordUsername: 'D', isActive: true },
+    ];
+    const result = await buildEmbedEventData(deps, 1, participants);
+    expect(result).not.toBeNull();
+    expect(result!.signupMentions).toHaveLength(participants.length);
+  });
+
+  it('status is "left" iff isActive is false', async () => {
+    mockEventAndGame(mockDb);
+    const participants: AdHocParticipant[] = [
+      { discordUserId: 'u1', discordUsername: 'A', isActive: true },
+      { discordUserId: 'u2', discordUsername: 'B', isActive: false },
+    ];
+    const result = await buildEmbedEventData(deps, 1, participants);
+    expect(result).not.toBeNull();
+    const byId = new Map(result!.signupMentions!.map((m) => [m.discordId, m]));
+    expect(byId.get('u1')!.status).toBeUndefined();
+    expect(byId.get('u2')!.status).toBe('left');
   });
 });
 
