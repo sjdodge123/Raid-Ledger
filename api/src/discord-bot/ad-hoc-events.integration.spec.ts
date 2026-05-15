@@ -16,6 +16,8 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { AdHocNotificationService } from './services/ad-hoc-notification.service';
+import { DiscordBotClientService } from './discord-bot-client.service';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -563,5 +565,140 @@ describe('Ad-Hoc Events — listing filter', () => {
     );
     expect(titles).toContain('Regular Event 2');
     expect(titles).not.toContain('Hidden Ad-Hoc');
+  });
+});
+
+// ── ROK-1243: COMPLETED embed preserves every participant ────
+
+describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () => {
+  it('lists every participant struck through after finalize, even those missed mid-session', async () => {
+    const db = testApp.db;
+    const notificationService = testApp.app.get(AdHocNotificationService);
+    const clientService = testApp.app.get(DiscordBotClientService);
+
+    // Stub Discord I/O — we assert on the embed payload, not the network call.
+    const sendSpy = jest
+      .spyOn(clientService, 'sendEmbed')
+      .mockResolvedValue({ id: 'spawn-msg-1243' } as never);
+    const editSpy = jest
+      .spyOn(clientService, 'editEmbed')
+      .mockResolvedValue({ id: 'spawn-msg-1243' } as never);
+    jest
+      .spyOn(clientService, 'getGuildId')
+      .mockReturnValue('guild-1243');
+
+    // Create a binding (so resolveNotificationChannel succeeds) + ad-hoc event.
+    const [binding] = await db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: 'guild-1243',
+        channelId: 'voice-1243',
+        channelType: 'voice',
+        bindingPurpose: 'game-voice-monitor',
+        gameId: testApp.seed.game.id,
+        config: { notificationChannelId: 'text-1243' },
+      })
+      .returning();
+
+    const now = new Date();
+    const [event] = await db
+      .insert(schema.events)
+      .values({
+        title: 'Quick Play — ROK-1243',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [now, new Date(now.getTime() + 3600_000)],
+        gameId: testApp.seed.game.id,
+        isAdHoc: true,
+        adHocStatus: 'live',
+        channelBindingId: binding.id,
+      })
+      .returning();
+
+    try {
+      // Three participants ever joined; spawn embed posts with the first.
+      await notificationService.notifySpawn(
+        event.id,
+        binding.id,
+        { id: event.id, title: event.title },
+        [{ discordUserId: 'disc-A', discordUsername: 'Aery' }],
+      );
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+
+      // Persist all three rows directly, with leftAt set on A and B so the
+      // final embed mirrors a real session where two members departed and
+      // the third was the last to leave (set leftAt for C too: finalize sets it).
+      const leftA = new Date(now.getTime() + 5 * 60_000);
+      const leftB = new Date(now.getTime() + 10 * 60_000);
+      const leftC = new Date(now.getTime() + 30 * 60_000);
+      await db.insert(schema.adHocParticipants).values([
+        {
+          eventId: event.id,
+          discordUserId: 'disc-A',
+          discordUsername: 'Aery',
+          joinedAt: now,
+          leftAt: leftA,
+          totalDurationSeconds: 300,
+          sessionCount: 1,
+        },
+        {
+          eventId: event.id,
+          discordUserId: 'disc-B',
+          discordUsername: 'Belle',
+          joinedAt: now,
+          leftAt: leftB,
+          totalDurationSeconds: 600,
+          sessionCount: 1,
+        },
+        {
+          eventId: event.id,
+          discordUserId: 'disc-C',
+          discordUsername: 'Cassie',
+          joinedAt: now,
+          leftAt: leftC,
+          totalDurationSeconds: 1800,
+          sessionCount: 1,
+        },
+      ]);
+
+      editSpy.mockClear();
+
+      // Call notifyCompleted — the reconciliation read should pick up all 3
+      // even though we pass only ONE in the caller's participants array (the
+      // pre-bug behavior would have lost B and C).
+      await notificationService.notifyCompleted(
+        event.id,
+        binding.id,
+        {
+          id: event.id,
+          title: event.title,
+          startTime: now.toISOString(),
+          endTime: new Date(now.getTime() + 3600_000).toISOString(),
+        },
+        [
+          {
+            discordUserId: 'disc-A',
+            discordUsername: 'Aery',
+            totalDurationSeconds: 300,
+          },
+        ],
+      );
+
+      expect(editSpy).toHaveBeenCalledTimes(1);
+      const editArgs = editSpy.mock.calls[0];
+      // editEmbed(channelId, messageId, embed, row?, content?)
+      const embed = editArgs[2] as { data?: { description?: string } };
+      const description = embed.data?.description ?? '';
+      // ROSTER header reflects cumulative participation.
+      expect(description).toMatch(/ROSTER:\s*3\s+signed up/);
+      // All three mentions present and struck through.
+      expect(description).toContain('~~<@disc-A>~~');
+      expect(description).toContain('~~<@disc-B>~~');
+      expect(description).toContain('~~<@disc-C>~~');
+      // No un-struck mention for any of the three (regression guard).
+      expect(description).not.toMatch(/(?<!~~)<@disc-[ABC]>(?!~~)/);
+    } finally {
+      sendSpy.mockRestore();
+      editSpy.mockRestore();
+    }
   });
 });
