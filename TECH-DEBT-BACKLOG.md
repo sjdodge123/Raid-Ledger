@@ -312,3 +312,32 @@ Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched
 - **[med]** `api/src/events/events-dashboard.actions.integration.spec.ts:241` — `reschedule with 12 signups completes under 200ms (ROK-1043)` is a wall-clock perf assertion that flakes under full-suite system load. Failure observed: `Expected: < 200, Received: 255.87208299999475` after a 581s integration run. Re-running the spec in isolation: 21/21 passed in 7.3s with no flake. The full-suite wall clock means the test machine is under heavier concurrent load when this spec runs vs. solo. Untouched on this branch (`api/src/events/**` not modified); this branch touches only `api/src/lineups/lineups-enrichment.helpers.ts` + `api/src/lineups/lineups-response.helpers.ts`.
   Suggested: raise the threshold to ~400ms (current real measurement is ~256ms under load) OR convert the assertion to a percentile measurement across N runs OR move the perf assertion to a dedicated bench job not coupled to the full integration suite. Symptom matches the classic `toBeLessThan(<wallclock_ms>)` flake pattern in CI-heavy environments.
 
+### 2026-05-14 — rok-1252-lineup-banner-counts (Playwright flakes surfaced during ROK-1252 full smoke run)
+
+A `npx playwright test` (desktop + mobile) on the deployed branch failed 7/840 tests after a 6.9m suite run. All 7 are full-suite-load test-infra flakes — none touch any code path modified by ROK-1252. Re-running the 3 lineup-related specs in isolation immediately passed 51/51 (5 skipped) in 39.5s. Branch diff is limited to `api/src/lineups/lineups-enrichment.helpers.ts`, `api/src/lineups/lineups-response.helpers.ts`, and a deleted `web/src/components/lineups/LineupProgressBar.tsx`.
+
+Failures observed under load (resolved on retry in isolation):
+
+- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:491` — `Voting phase › leaderboard renders sorted by vote count descending` (desktop). Cross-worker state pollution: the `beforeAll` resolved the worker's "voting" lineup to one already archived by a sibling test (reason "Smoke test abort — wrong scope" visible in the captured page snapshot). The lineup-detail page rendered the cancelled-readonly view, so `[data-testid="voting-leaderboard"]` was never present. Passed on retry.
+  Suggested: in `Voting phase` `beforeAll`, assert `banner.status !== 'archived'` before reuse, and call `archiveLineup` + recreate when archived. Today the helper only branches on `voting | building`, so an archived banner leaks through.
+
+- **[med]** `scripts/smoke/lineup-admin-abort-phases.smoke.spec.ts:121` — `Admin abort from building › POST /lineups/:id/abort succeeds and flips status to archived` (desktop). `expect(before?.status).toBe('building')` failed with `Received: "archived"`. `createLineupInPhase` calls `cancelLineupPhaseJobs` to prevent the auto-advance scheduler from racing the test, but the cancel ran after the scheduler had already moved the lineup to `archived` mid-test. Mobile + decided/voting variants of the same `describe` block passed in the same run.
+  Suggested: in `createLineupInPhase`, after `cancelLineupPhaseJobs`, re-read the lineup detail and assert `status === target` before returning; fail fast inside the helper rather than at `expect(before)` so the helper's contract is honored.
+
+- **[med]** `scripts/smoke/lineup-carryover.smoke.spec.ts:165` — `creating a new lineup auto-populates entries from prior decided suggested matches` (mobile). `carriedEntries.length` was 0 (expected ≥ 1). The prior-lineup-archival in `buildPriorDecidedLineup` likely didn't fully settle before the new lineup's create-time carryover ran, even with `await awaitProcessing(token)`. Passed on retry.
+  Suggested: replace the `awaitProcessing` after archive with a polling read on the prior lineup's status until `'archived'` is observed (or add a short retry around the `apiPost('/lineups', ...)` if `carriedEntries.length === 0` on first read).
+
+- **[med]** `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:597` — `Tiebreaker active badge on Games page › Games page banner shows Tiebreaker active badge` (desktop). Unrelated to lineup detail; banner data hadn't propagated when the assertion fired. Not re-run in isolation; symptom matches the same full-suite contention.
+  Suggested: replace the static visibility wait with a `pollForCondition` on `/lineups/banner` returning a tiebreaker-active payload before the page assertion.
+
+- **[med]** `scripts/smoke/navigation.smoke.spec.ts:22` — `Navigation (desktop) › nav links navigate to correct pages`. Selector race during initial mount. Not re-run.
+  Suggested: wait for `<main>` content to be visible per route before asserting URL or link visibility (the test currently asserts on the link itself without waiting for the destination route to settle).
+
+- **[med]** `scripts/smoke/navigation.smoke.spec.ts:62` — `Navigation (desktop) › no critical console errors during navigation`. Likely the same console-message race — a transient `pendingAdvanceAt` mount log might be classified as a critical error under load.
+  Suggested: review the critical-error allowlist + tighten the navigation wait conditions.
+
+- **[med]** `scripts/smoke/notifications.smoke.spec.ts:20` — `Notifications › dropdown opens and shows content` (mobile). The dropdown click fired before the notifications-bell button hydrated. Visible 6.9m into the suite run only.
+  Suggested: wait for the bell button to have `data-testid` AND be enabled before clicking, then poll for the `Notifications` heading instead of a single `toBeVisible` with a 5s timeout.
+
+Cross-cutting: these all share the symptom that the full 840-test suite under parallel mobile + desktop workers introduces enough wall-clock latency that test-data setup races feature code by 1-3s. Either bumping the per-test timeouts in the affected `beforeAll`s OR splitting the suite into smaller parallel-friendly chunks would reduce the flake rate substantially. None of these failures indicate a regression in this branch's audience-scoping change.
+
