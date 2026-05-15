@@ -296,3 +296,14 @@ Pre-existing TypeScript errors present on `origin/main` (bfc5e054) and untouched
 - **[low]** `api/src/users/guild-reconciliation.service.integration.spec.ts:137-146` — the "Discord API errors bubble up" test calls `runReconciliation()` directly, not via `CronJobService.executeWithTracking`. Confirms the throw bubbles but doesn't assert the cron wrapper records a failed run vs. healthy heartbeat (which is the actual P2 motivation). Integration with `executeWithTracking` is likely already covered by existing cron-service tests but not explicitly asserted in this regression spec.
   Suggested: add one spec that mocks `cronJobService.executeWithTracking` and asserts `failedRun` was recorded when `listAllGuildMemberIds` throws.
 
+
+### 2026-05-14 — rok-1162-sentry-tuning (surfaced during /push playwright)
+
+- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:491` (desktop) — "Voting phase › leaderboard renders sorted by vote count descending" failed during the full Playwright run that gated ROK-1162. Confirmed pre-existing: ROK-1162 is API-only Sentry filter tuning, zero possible UI impact. Likely a fixture race in the voting-phase lineup setup. Not yet in the documented set under line 97.
+  Suggested: characterise with `npx playwright test scripts/smoke/community-lineup.smoke.spec.ts --project=desktop --repeat-each 10` to confirm flake rate, then fix the fixture rather than the assertion.
+- **[med]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:96` (desktop) — "Building phase — hero + pill › hero shows action tone with Nominate CTA when organizer has not nominated" failed during ROK-1162 push validation. Same provenance as the community-lineup flake — completely unrelated to Sentry changes.
+  Suggested: companion failure with `lineup-confirmation-pills-invitee.smoke.spec.ts:127` (below) — both likely share a fixture or render-race root cause.
+- **[med]** `scripts/smoke/lineup-confirmation-pills-invitee.smoke.spec.ts:127` (desktop) — "Building phase — invitee hero variants › invitee-acted: hero flips to waiting tone after nomination" failed during the same ROK-1162 run. Sister spec to `lineup-confirmation-pills.smoke.spec.ts:96`.
+- **[med]** `scripts/smoke/navigation.smoke.spec.ts:161` (mobile) — "Navigation (mobile) › no critical console errors during navigation" failed. The assertion is asserting absence of console errors, so the failure means SOMETHING is logging a console error on mobile nav. Worth investigating because it could mask a real regression — but it's not new in ROK-1162 (Sentry filters don't touch console output).
+  Suggested: run in isolation with `--repeat-each 5` to confirm reproducibility; if reproducible, capture the console error message to identify the source.
+
