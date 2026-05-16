@@ -108,6 +108,12 @@ export const MatchDetailResponseSchema = LineupMatchSchema.extend({
             avatar: z.string().nullable(),
             discordId: z.string().nullable(),
             customAvatarUrl: z.string().nullable(),
+            /**
+             * Per-(match, member) scheduling submission timestamp
+             * (ROK-1296, U4 SubmitBar). ISO 8601 UTC string or null.
+             * Stamped by POST /lineups/:id/matches/:matchId/submit-scheduling.
+             */
+            schedulingSubmittedAt: z.string().nullable(),
         }),
     ),
 });

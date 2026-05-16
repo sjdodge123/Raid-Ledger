@@ -35,6 +35,7 @@ import { findUserVotes } from './lineups-voting.helpers';
 import { findPendingOrActiveTiebreaker } from './tiebreaker/tiebreaker-query.helpers';
 import { buildTiebreakerDetail } from './tiebreaker/tiebreaker-response.helpers';
 import { listInviteesWithProfile } from './lineups-invitees.helpers';
+import { findViewerSubmissions } from './lineups-submissions-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -242,6 +243,7 @@ export async function buildDetailResponse(
     decidedGame,
     myVotes,
     invitees,
+    viewerSubmissions,
   ] = await Promise.all([
     findEntriesWithGames(db, lineupId),
     countVotesPerGame(db, lineupId),
@@ -254,6 +256,8 @@ export async function buildDetailResponse(
     // ROK-1252: pulled into the parallel batch so the audience is available
     // before fetchEnrichment runs.
     listInviteesWithProfile(db, lineupId),
+    // ROK-1296: viewer's per-phase submit timestamps for the SubmitBar.
+    findViewerSubmissions(db, lineupId, userId),
   ]);
 
   // ROK-1252: scope steam-link enrichment to the lineup audience.
@@ -289,6 +293,9 @@ export async function buildDetailResponse(
     lineup,
     invitees,
   );
+  // ROK-1296: replace the stub from mapToDetailResponse with the real
+  // viewer-scoped row. Both fields are null when userId is undefined.
+  detail.viewerSubmissions = viewerSubmissions;
 
   // Attach tiebreaker detail if one exists (ROK-938)
   if (lineup.activeTiebreakerId) {

@@ -19,6 +19,8 @@ export interface MatchMemberRow {
   avatar: string | null;
   discordId: string | null;
   customAvatarUrl: string | null;
+  /** ROK-1296: scheduling submission timestamp (null = not submitted). */
+  schedulingSubmittedAt: Date | null;
 }
 
 /** Find all matches for a given lineup with game info. */
@@ -67,6 +69,8 @@ export function findMatchMembers(
       avatar: schema.users.avatar,
       discordId: schema.users.discordId,
       customAvatarUrl: schema.users.customAvatarUrl,
+      schedulingSubmittedAt:
+        schema.communityLineupMatchMembers.schedulingSubmittedAt,
     })
     .from(schema.communityLineupMatchMembers)
     .innerJoin(
