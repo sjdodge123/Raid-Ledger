@@ -1,0 +1,56 @@
+/**
+ * Public types for the JourneyHero component (ROK-1294).
+ * `phase` is the primary input; `active` is an optional override.
+ */
+export type HeroTone = 'action' | 'waiting' | 'set';
+export type HeroActive = 0 | 1 | 2 | 3 | 4;
+export type JourneyPhase = 'nominating' | 'voting' | 'decided' | 'scheduling' | 'done';
+
+export interface UserActions {
+  /** nominations_submitted_at IS NOT NULL — ships in U4 (ROK-1296); pass `false` until then */
+  hasSubmittedNominations: boolean;
+  /** votes_submitted_at IS NOT NULL — ships in U4 (ROK-1296); pass `false` until then */
+  hasSubmittedVotes: boolean;
+  scheduledMatchCount: number;
+  totalMatchCount: number;
+}
+
+export interface GroupProgress {
+  nominationsSubmitted: number;
+  votesSubmitted: number;
+  totalVoters: number;
+}
+
+export interface LineupConfig {
+  nominationQuorum: number;
+  votingQuorum: number;
+  schedulingAgreementPct: number;
+  nominationDeadline?: Date;
+  votingDeadline?: Date;
+  schedulingDeadline?: Date;
+}
+
+export interface HeroState {
+  tone: HeroTone;
+  exitCondition?: string;
+  cue?: string;
+}
+
+export interface JourneyHeroProps {
+  /** Primary input — drives `active` internally if `active` not supplied */
+  phase?: JourneyPhase;
+  /** Explicit override / Sx escape hatch — derived from `phase` when omitted */
+  active?: HeroActive;
+  badge: string;
+  task: string;
+  sub?: string;
+  cta?: string;
+  /** Real button handler — wired by consumers. When omitted with `cta` set, button renders disabled. */
+  onCtaClick?: () => void;
+  hint?: string;
+  tone?: HeroTone;
+  exitCondition?: string;
+  cue?: string;
+  donePillLabel?: string;
+  noRibbon?: boolean;
+}
