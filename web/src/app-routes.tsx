@@ -29,6 +29,7 @@ import {
   DiscordConnectionPage, DiscordChannelsPage,
   DiscordFeaturesPage,
   LineupWireframesRoute, LineupWireframesIndexRoute,
+  SimplifyWireframesPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -94,6 +95,7 @@ function DevWireframeRoutes() {
     <>
       <Route path="/dev/wireframes/lineup" element={<LineupWireframesIndexRoute />} />
       <Route path="/dev/wireframes/lineup/:page/:persona/:state" element={<LineupWireframesRoute />} />
+      <Route path="/dev/wireframes/simplify" element={<SimplifyWireframesPage />} />
     </>
   );
 }

@@ -8,6 +8,7 @@ import {
   UploadedFile,
   BadRequestException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -16,14 +17,19 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
+import { bestEffortInit } from '../common/lifecycle.util';
 
 /** Allowed MIME types and their magic bytes for logo validation */
 const ALLOWED_TYPES: Record<string, { ext: string; magic: number[] }> = {
   'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47] },
   'image/jpeg': { ext: 'jpg', magic: [0xff, 0xd8, 0xff] },
   'image/webp': { ext: 'webp', magic: [0x52, 0x49, 0x46, 0x46] },
-  'image/svg+xml': { ext: 'svg', magic: [0x3c] }, // '<'
 };
+
+// Extensions no longer accepted but possibly left on disk from prior uploads.
+// removeOldLogos walks both ALLOWED_TYPES and LEGACY_EXTS so a re-upload
+// replaces any pre-existing legacy file (ROK-1292 PR 2).
+const LEGACY_EXTS = ['svg'];
 
 const MAX_LOGO_SIZE = 2 * 1024 * 1024; // 2 MB
 
@@ -64,9 +70,7 @@ function logoFileFilter(
 ) {
   if (!ALLOWED_TYPES[file.mimetype]) {
     cb(
-      new BadRequestException(
-        'Only PNG, JPEG, WebP, and SVG images are allowed',
-      ),
+      new BadRequestException('Only PNG, JPEG, and WebP images are allowed'),
       false,
     );
     return;
@@ -88,10 +92,39 @@ function buildLogoMulterOptions() {
  * Manages community name, logo, and accent color.
  */
 @Controller('admin/branding')
-export class BrandingController {
+export class BrandingController implements OnModuleInit {
   private readonly logger = new Logger(BrandingController.name);
 
   constructor(private readonly settingsService: SettingsService) {}
+
+  // Boot-time legacy SVG eviction (ROK-1292 PR 2). The upload path stopped
+  // accepting SVG in this PR, but any logo.svg already on disk would otherwise
+  // remain reachable at /uploads/branding/logo.svg and the persisted
+  // community_logo_path setting would keep pointing at it. Self-heals each
+  // boot so deploys are complete without operator manual cleanup.
+  // Wrapped in bestEffortInit: a disk or DB error during cleanup must not
+  // crash boot — the API serves more than just branding.
+  async onModuleInit(): Promise<void> {
+    await bestEffortInit('branding-legacy-svg-eviction', this.logger, () =>
+      this.evictLegacySvg(),
+    );
+  }
+
+  private async evictLegacySvg(): Promise<void> {
+    const dir = getBrandingDir();
+    const svgPath = path.join(dir, 'logo.svg');
+    if (fs.existsSync(svgPath)) {
+      fs.unlinkSync(svgPath);
+      this.logger.warn(`Removed legacy logo.svg from ${dir} (ROK-1292 PR 2)`);
+    }
+    const branding = await this.settingsService.getBranding();
+    if (branding.communityLogoPath?.endsWith('.svg')) {
+      await this.settingsService.clearCommunityLogoPath();
+      this.logger.warn(
+        'Cleared community_logo_path (pointed at .svg) (ROK-1292 PR 2)',
+      );
+    }
+  }
 
   /** Format branding settings for API responses. */
   private async formatBranding() {
@@ -163,11 +196,15 @@ export class BrandingController {
     }
   }
 
-  /** Remove old logo files with different extensions. */
+  /** Remove old logo files with different extensions (including legacy formats). */
   private removeOldLogos(currentFilename: string): void {
     const dir = getBrandingDir();
     const currentExt = path.extname(currentFilename);
-    for (const { ext } of Object.values(ALLOWED_TYPES)) {
+    const allExts = [
+      ...Object.values(ALLOWED_TYPES).map((t) => t.ext),
+      ...LEGACY_EXTS,
+    ];
+    for (const ext of allExts) {
       if (`.${ext}` !== currentExt) {
         const oldPath = path.join(dir, `logo.${ext}`);
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
