@@ -309,6 +309,7 @@ jobs:
   # Only runs when web/UI files or Playwright config changed
   smoke-test-shard:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
@@ -379,8 +380,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 5
+        run: |
+          for i in 1 2 3; do
+            npx playwright install --with-deps chromium && exit 0
+            echo "Attempt $i failed; retrying..."
+            sleep 5
+          done
+          exit 1
 
       - name: Build contract
         run: npm run build -w packages/contract

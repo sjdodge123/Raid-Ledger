@@ -342,9 +342,49 @@ Reviewer (sonnet, devedup-rl:reviewer) verdict PASS WITH NOTES on the batch diff
   Suggested: drop the `?.` in the page since the contract guarantees the array.
 - **[low]** `api/src/lineups/lineups-response.helpers.ts:154-176` — `loadStillWaitingOnVoters` runs an extra `GROUP BY userId` aggregate on every `GET /lineups/:id` when status=voting+private. Selective (filtered by `lineupId`, backed by `uq_lineup_vote_user_game`'s leading column) so not a hotspot today, but it's serial after the parallel batch.
   Suggested: fold into the existing `Promise.all` batch in `buildDetailResponse`.
+
+### 2026-05-16 — rok-1272-smoke-shard (surfaced during actionlint sweep)
+
+`actionlint .github/workflows/ci.yml` reports 3 pre-existing shellcheck warnings, all unrelated to the ROK-1272 timeout/retry/cache edits. Reproduces on `origin/main` verbatim. Documenting per the STRICT pre-existing-failures rule; not in-scope to fix here.
+
+- **[nit]** `.github/workflows/ci.yml:274` — SC2034 from shellcheck: `i appears unused. Verify use (or export if used externally)`. The `for i in $(seq 1 60); do ... done` API-readiness wait loop uses `$i` only inside the success branch (`exit 0` before the echo runs), so on the failing path `i` is genuinely unused. Cosmetic; the loop is correct.
+  Suggested: rename `i` to `_` (bash convention for unused loop var) or echo `$i` in the final timeout message (`echo "API failed to start within ${i}s"`).
+- **[nit]** `.github/workflows/ci.yml:416` — SC2034 same pattern as line 274, this time on the Postgres-readiness wait loop (`for i in $(seq 1 30)`). Same fix.
+- **[nit]** `.github/workflows/ci.yml:742` — SC2126 from shellcheck: `Consider using 'grep -c' instead of 'grep|wc -l'`. Stylistic; behavior identical.
+  Suggested: replace `grep ... | wc -l` with `grep -c ...` (single fork instead of two).
 - **[low]** `api/src/lineups/lineups-response.helpers.ts:161` — `lineup.maxVotesPerPlayer ?? 3` duplicates the `3` default that already lives in `mapLineupCore` (line 104).
   Suggested: extract `DEFAULT_MAX_VOTES_PER_PLAYER` or read the mapped value.
 - **[low]** `api/src/lineups/lineups.service.ts:370` — `maybeAutoAdvance` fires on every invitee removal even when status is `decided`/`archived` (cheap internal no-op, but a wasted round-trip).
   Suggested: short-circuit on lineup status before the call, or document that `maybeAutoAdvance` already gates by status.
 - **[low]** `api/src/lineups/quorum/quorum-voters.helpers.ts:65-72` — `findDistinctVoters`/`findDistinctNominators` re-queried serially after `loadPrivateExpectedVoters`. Two sequential round-trips where one combined query would do.
   Suggested: run roster + participant fetch in `Promise.all`.
+
+### 2026-05-16 — batch/2026-05-16 (surfaced during Playwright sweep on bulk batch ROK-1293 + ROK-1272)
+
+Full-suite `npx playwright test` (desktop + mobile): 23 failed / 587 passed / 199 skipped / 35 did-not-run. Batch diff is **infra-only** (`.github/workflows/ci.yml` + `TECH-DEBT-BACKLOG.md` + `web/src/pages/admin-settings-page.tsx` deleted). Zero overlap between changed files and the failing spec subjects (all lineup/scheduling/nomination/onboarding). 9 of the 19 unique spec:line combos are already documented in earlier sections of this file as the cross-worker race / modal-materialise / fixture-bleed class under full-suite contention. The 10 below are NEW line numbers of the same class. Recording so they aren't re-discovered.
+
+- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:201` (mobile) — `Nomination modal › clicking a search result shows preview card with game name`. Same fixture race class as the `:184` / `:491` / `:506` / `:316` entries above. New line.
+- **[low]** `scripts/smoke/lineup-abort.smoke.spec.ts:276` (mobile) — `Regression: ROK-1207 — aborted-lineup detail page banner + read-only › invitee reload sees the banner and no Nominate CTA`. Modal-materialise race; ROK-1207 surface still pre-existing under full-suite load.
+- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:96` — Same cross-worker race class as the documented `lineup-confirmation-pills-invitee.smoke.spec.ts` family at lines 297 / 324 / 326 / 327.
+- **[low]** `scripts/smoke/lineup-decided.smoke.spec.ts:512` — Cross-worker active-lineup bleedover, same shape as `lineup-admin-abort-phases.smoke.spec.ts:121` (line 295 above).
+- **[low]** `scripts/smoke/lineup-tiebreaker-late-join.smoke.spec.ts:153` — Same modal-materialise race class as `lineup-tiebreaker.smoke.spec.ts:597` documented at line 97 above.
+- **[low]** `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:231` — Same family as `:597` already documented at line 97; new line number under full-suite load.
+- **[low]** `scripts/smoke/my-events.smoke.spec.ts:12` — Not previously documented. Worth a one-time isolation check on origin/main to confirm pre-existing if this carrier surfaces again — likely worker contention given the line is at the top of the spec file.
+- **[low]** `scripts/smoke/onboarding.smoke.spec.ts:330` (mobile) — `Onboarding wizard game-time step (ROK-1011) › game-time step renders compact GameTimeGrid on all viewports`. Mobile-only; not previously documented in this carrier. ROK-1011 territory.
+- **[low]** `scripts/smoke/paste-nominate.smoke.spec.ts:272` (desktop) — `Non-Steam URLs ignored (AC5) › pasting a non-Steam URL does not open modal or show toast`. Not previously documented. Likely the same modal-materialise race; carrier under full-suite load only.
+- **[low]** `scripts/smoke/scheduling-poll.smoke.spec.ts:801` (mobile) — Sibling of the documented `:771` (line 235 above). Same `"Your Other Scheduling Polls"` class on a different test.
+
+**Why this matters:** No fix is on this batch's critical path; these are noise carriers tracked so the same lines aren't re-discovered each cycle. Pattern across all three classes (modal-materialise, fixture cross-worker bleed, cached snapshot under 15s staleTime) is consistent with the documented memory `feedback_smoke_polling_for_async_writes.md` and the long ROK-1068 lineage at line 97. A focused chore — "stabilise the cross-worker active-lineup fixture state for smoke specs" — would retire most of this block in one shot. Estimated 2-4h, suitable for `/build` (not `/bulk` since it touches test infrastructure across many files).
+
+**Empirical verification (2026-05-16, full PW sweep on `origin/main` for cross-comparison):** `origin/main` (HEAD `23aac93c`) under the same dev env: 16 failed / 623 passed / 200 skipped / 5 did-not-run. Compared to batch's 23 failed / 587 passed. Pass rates: origin/main 97.5%, batch 96.2% — same statistical neighborhood. Crucially, the FILES that flake on both runs are nearly identical (lineup-confirmation-pills, community-lineup, lineup-decided, lineup-confirmation-pills-invitee, lineup-admin-abort-phases, lineup-abort), but the SPECIFIC LINES differ run-to-run. Example: `lineup-confirmation-pills.smoke.spec.ts` flaked at `:96` on the batch run vs `:134 / :184 / :198 / :229` on origin/main. Same flake class, different roulette wheel each run. **A real regression would deterministically fail the SAME lines run-to-run; the same-file-different-lines signature is the textbook fingerprint of cross-worker fixture race noise.** Recording this comparison so future agents have a calibrated baseline (a sub-3% smoke fail rate is endemic, not a ship blocker).
+
+**Additional origin/main-only flake lines observed during the verification run (not previously documented; same race class):**
+
+- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:416` (mobile) — `Community Lineup responsive layout › banner is visible on mobile viewport`. Cross-worker active-lineup bleedover.
+- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:134` — `Building phase — hero + pill › after nominating, per-card pill appears on organizer's nominated card`. Same family as `:96` (above).
+- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:184` — `Voting phase — pill variant transitions › pill shows 'count' variant before reaching the vote limit`. Same family.
+- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:198` — `Voting phase — pill variant transitions › pill flips to waitingOnN variant after using all votes`. Same family.
+- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:229` — `Decided phase — hero schedule CTA › hero offers schedule CTA referencing the decided game name`. Same family.
+- **[low]** `scripts/smoke/lineup-decided.smoke.spec.ts:314` — `Decided view tiered match cards › Carried Forward section renders within the decided view`. Same cross-worker race as the `:512` entry above.
+
+Combined batch + origin/main flake lines documented today: 16 new lines (10 batch-only + 6 origin/main-only) across 6 carrier spec files. All map to the modal-materialise / cross-worker fixture race / 15s staleTime cached-snapshot class. Suggestion stands: a one-shot chore on the fixture infrastructure (`scripts/smoke/api-helpers.ts` + the `?test=open-lineup-modal` pattern + 15s staleTime defeat) would retire most of this block.
