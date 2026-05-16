@@ -107,9 +107,10 @@ describe('checkBuildingQuorum', () => {
     expect(result.reason).toContain('solo lineup');
   });
 
-  it('reports not ready when an expected nominator has not nominated', async () => {
+  it('reports not ready when an expected nominator has not submitted (ROK-1296)', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3, 4]);
+    // Only voters 1-3 stamped `nominations_submitted_at`; voter 4 missing.
     db.groupBy.mockResolvedValueOnce(
       nominationsPerVoter([
         { userId: 1, count: 3 },
@@ -126,20 +127,18 @@ describe('checkBuildingQuorum', () => {
     );
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/below 3 nominations/);
+    expect(result.reason).toMatch(/have not submitted/);
   });
 
-  it('reports not ready when nominators have only 1 of 3 nominations each', async () => {
+  it('reports not ready when zero nominators have submitted (ROK-1296 — was: 1 of 3 nominations each)', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3, 4]);
-    db.groupBy.mockResolvedValueOnce(
-      nominationsPerVoter([
-        { userId: 1, count: 1 },
-        { userId: 2, count: 1 },
-        { userId: 3, count: 1 },
-        { userId: 4, count: 1 },
-      ]),
-    );
+    // Pre-1296 this row set encoded "all 4 voters at 1/3 entries" and the
+    // per-voter min was 3 → short. Post-1296 the per-voter gate is
+    // submission presence — the same input now means "all 4 voters DID
+    // submit" → ready. Update the input to express the new intent (nobody
+    // submitted) so the test still validates the predicate's short-circuit.
+    db.groupBy.mockResolvedValueOnce(nominationsPerVoter([]));
     db.execute.mockResolvedValueOnce(totalRow(4));
 
     const result = await checkBuildingQuorum(
@@ -149,7 +148,7 @@ describe('checkBuildingQuorum', () => {
     );
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/below 3 nominations/);
+    expect(result.reason).toMatch(/have not submitted/);
   });
 
   it('reports not ready when per-voter is met but total floor not met', async () => {
@@ -274,14 +273,15 @@ describe('checkVotingQuorum', () => {
     expect(result.reason).toContain('solo lineup');
   });
 
-  it('reports not ready when each voter has cast 1 of 3 votes', async () => {
+  it('reports not ready when zero voters have submitted (ROK-1296 — was: 1 of 3 votes each)', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3]);
-    db.groupBy.mockResolvedValueOnce([
-      { userId: 1, count: 1 },
-      { userId: 2, count: 1 },
-      { userId: 3, count: 1 },
-    ]);
+    // Pre-1296: this row set encoded "all 3 voters cast 1 of 3 votes" and
+    // the per-voter required = 3 → short. Post-1296 the per-voter gate is
+    // submission presence; same input would now mean "all 3 voters DID
+    // submit" → ready. Update the input to express the new intent (nobody
+    // submitted yet) so the predicate's short-circuit is still validated.
+    db.groupBy.mockResolvedValueOnce([]);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -289,16 +289,16 @@ describe('checkVotingQuorum', () => {
     });
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/below 3 votes/);
+    expect(result.reason).toMatch(/have not submitted/);
   });
 
-  it('reports not ready when one voter is one vote short', async () => {
+  it('reports not ready when one voter has not submitted (ROK-1296 — was: one vote short)', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3]);
+    // Voters 1 + 2 submitted; voter 3 missing.
     db.groupBy.mockResolvedValueOnce([
       { userId: 1, count: 3 },
       { userId: 2, count: 3 },
-      { userId: 3, count: 2 },
     ]);
 
     const result = await checkVotingQuorum(db as never, {
@@ -307,7 +307,7 @@ describe('checkVotingQuorum', () => {
     });
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/below 3 votes/);
+    expect(result.reason).toMatch(/have not submitted/);
   });
 
   it('reports ready when every voter has used their full allotment', async () => {
