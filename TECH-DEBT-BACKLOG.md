@@ -342,6 +342,16 @@ Reviewer (sonnet, devedup-rl:reviewer) verdict PASS WITH NOTES on the batch diff
   Suggested: drop the `?.` in the page since the contract guarantees the array.
 - **[low]** `api/src/lineups/lineups-response.helpers.ts:154-176` — `loadStillWaitingOnVoters` runs an extra `GROUP BY userId` aggregate on every `GET /lineups/:id` when status=voting+private. Selective (filtered by `lineupId`, backed by `uq_lineup_vote_user_game`'s leading column) so not a hotspot today, but it's serial after the parallel batch.
   Suggested: fold into the existing `Promise.all` batch in `buildDetailResponse`.
+
+### 2026-05-16 — rok-1272-smoke-shard (surfaced during actionlint sweep)
+
+`actionlint .github/workflows/ci.yml` reports 3 pre-existing shellcheck warnings, all unrelated to the ROK-1272 timeout/retry/cache edits. Reproduces on `origin/main` verbatim. Documenting per the STRICT pre-existing-failures rule; not in-scope to fix here.
+
+- **[nit]** `.github/workflows/ci.yml:274` — SC2034 from shellcheck: `i appears unused. Verify use (or export if used externally)`. The `for i in $(seq 1 60); do ... done` API-readiness wait loop uses `$i` only inside the success branch (`exit 0` before the echo runs), so on the failing path `i` is genuinely unused. Cosmetic; the loop is correct.
+  Suggested: rename `i` to `_` (bash convention for unused loop var) or echo `$i` in the final timeout message (`echo "API failed to start within ${i}s"`).
+- **[nit]** `.github/workflows/ci.yml:416` — SC2034 same pattern as line 274, this time on the Postgres-readiness wait loop (`for i in $(seq 1 30)`). Same fix.
+- **[nit]** `.github/workflows/ci.yml:742` — SC2126 from shellcheck: `Consider using 'grep -c' instead of 'grep|wc -l'`. Stylistic; behavior identical.
+  Suggested: replace `grep ... | wc -l` with `grep -c ...` (single fork instead of two).
 - **[low]** `api/src/lineups/lineups-response.helpers.ts:161` — `lineup.maxVotesPerPlayer ?? 3` duplicates the `3` default that already lives in `mapLineupCore` (line 104).
   Suggested: extract `DEFAULT_MAX_VOTES_PER_PLAYER` or read the mapped value.
 - **[low]** `api/src/lineups/lineups.service.ts:370` — `maybeAutoAdvance` fires on every invitee removal even when status is `decided`/`archived` (cheap internal no-op, but a wasted round-trip).
