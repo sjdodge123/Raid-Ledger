@@ -167,6 +167,12 @@ function buildDbMock(
     select: jest.fn(() => ({
       from: jest.fn(() => ({
         where: jest.fn(() => Promise.resolve(nextCount())),
+        // ROK-1287: loadGameRows now calls .orderBy(asc(games.id)). The mock
+        // doesn't actually order — loadRows() is authoritative for test input.
+        orderBy: jest.fn(() => ({
+          then: (resolve: (v: GameRow[]) => unknown) =>
+            Promise.resolve(loadRows()).then(resolve),
+        })),
         then: (resolve: (v: GameRow[]) => unknown) =>
           Promise.resolve(loadRows()).then(resolve),
       })),
@@ -421,6 +427,11 @@ describe('GamesDedupAuditService.persistSnapshot', () => {
             executeIdx += 1;
             return Promise.resolve([{ c: v }]);
           }),
+          // ROK-1287: loadGameRows now chains .orderBy(asc(games.id)).
+          orderBy: jest.fn(() => ({
+            then: (resolve: (v: GameRow[]) => unknown) =>
+              Promise.resolve(gameRows).then(resolve),
+          })),
           then: (resolve: (v: GameRow[]) => unknown) =>
             Promise.resolve(gameRows).then(resolve),
         })),

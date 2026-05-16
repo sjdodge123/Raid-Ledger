@@ -17,7 +17,7 @@
  *   5. Sort groups by total dups DESC, blast radius by total downstream DESC.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
+import { asc, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -182,6 +182,10 @@ export class GamesDedupAuditService {
   }
 
   private async loadGameRows(): Promise<GameRow[]> {
+    // ROK-1287: ORDER BY id ASC pins traversal order across the entire
+    // union-find pipeline. Without it, Postgres heap order (changes on
+    // autovacuum / update churn) can flip which `matchKey` strongestSharedKey
+    // returns for components with multiple shared values at the same tier.
     return this.db
       .select({
         id: schema.games.id,
@@ -192,7 +196,8 @@ export class GamesDedupAuditService {
         steamAppId: schema.games.steamAppId,
         cachedAt: schema.games.cachedAt,
       })
-      .from(schema.games);
+      .from(schema.games)
+      .orderBy(asc(schema.games.id));
   }
 
   private async computeBlastRadius(
