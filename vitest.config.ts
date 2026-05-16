@@ -15,8 +15,6 @@ export default defineConfig({
         setupFiles: ['./web/src/test/setup.ts'],
         include: [
             'web/src/**/*.test.{ts,tsx}',
-            // ROK-1295: co-located unit specs that use `.spec.tsx` suffix (TDD pattern).
-            'web/src/**/*.spec.{ts,tsx}',
             // ROK-1085: unit tests for scripts/smoke helpers (excludes Playwright .smoke.spec.ts files).
             'scripts/smoke/**/*.spec.ts',
         ],

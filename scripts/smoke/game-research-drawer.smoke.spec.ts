@@ -12,7 +12,7 @@
  * NOTE: All assertions target the in-development component contract. They
  *       MUST fail until ROK-1295 ships the implementation.
  */
-import { test, expect } from '../../scripts/smoke/base';
+import { test, expect } from './base';
 
 const DRAWER_TESTID = 'game-research-drawer';
 const DRAWER_BACKDROP_TESTID = 'game-research-drawer-backdrop';
