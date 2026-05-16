@@ -17,6 +17,7 @@ import {
   truncateAllTables,
 } from '../common/testing/integration-helpers';
 import { SettingsService } from '../settings/settings.service';
+import { BrandingController } from './branding.controller';
 
 const BRANDING_DIR = path.join(process.cwd(), 'uploads', 'branding');
 
@@ -99,6 +100,39 @@ describe('ROK-1292 PR 2 — branding logo SVG XSS rejection', () => {
       });
 
     expect(res.status).toBe(400);
+  });
+
+  it('on boot, removes any legacy logo.svg from disk and clears community_logo_path if it points to .svg (Codex P1)', async () => {
+    if (!fs.existsSync(BRANDING_DIR))
+      fs.mkdirSync(BRANDING_DIR, { recursive: true });
+    const svgPath = path.join(BRANDING_DIR, 'logo.svg');
+    fs.writeFileSync(
+      svgPath,
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+    );
+    const settings = testApp.app.get(SettingsService);
+    await settings.setCommunityLogoPath(svgPath);
+    expect(fs.existsSync(svgPath)).toBe(true);
+    expect((await settings.getBranding()).communityLogoPath).toBe(svgPath);
+
+    await testApp.app.get(BrandingController).onModuleInit();
+
+    expect(fs.existsSync(svgPath)).toBe(false);
+    expect((await settings.getBranding()).communityLogoPath).toBeNull();
+  });
+
+  it('on boot, leaves a non-SVG logo intact (no false-positive eviction)', async () => {
+    if (!fs.existsSync(BRANDING_DIR))
+      fs.mkdirSync(BRANDING_DIR, { recursive: true });
+    const pngPath = path.join(BRANDING_DIR, 'logo.png');
+    fs.writeFileSync(pngPath, makeTinyPngBuffer());
+    const settings = testApp.app.get(SettingsService);
+    await settings.setCommunityLogoPath(pngPath);
+
+    await testApp.app.get(BrandingController).onModuleInit();
+
+    expect(fs.existsSync(pngPath)).toBe(true);
+    expect((await settings.getBranding()).communityLogoPath).toBe(pngPath);
   });
 
   it('accepts a valid PNG and exposes a .png logo URL (regression baseline)', async () => {

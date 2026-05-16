@@ -8,6 +8,7 @@ import {
   UploadedFile,
   BadRequestException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -90,10 +91,31 @@ function buildLogoMulterOptions() {
  * Manages community name, logo, and accent color.
  */
 @Controller('admin/branding')
-export class BrandingController {
+export class BrandingController implements OnModuleInit {
   private readonly logger = new Logger(BrandingController.name);
 
   constructor(private readonly settingsService: SettingsService) {}
+
+  // Boot-time legacy SVG eviction (ROK-1292 PR 2). The upload path stopped
+  // accepting SVG in this PR, but any logo.svg already on disk would otherwise
+  // remain reachable at /uploads/branding/logo.svg and the persisted
+  // community_logo_path setting would keep pointing at it. Self-heals each
+  // boot so deploys are complete without operator manual cleanup.
+  async onModuleInit(): Promise<void> {
+    const dir = getBrandingDir();
+    const svgPath = path.join(dir, 'logo.svg');
+    if (fs.existsSync(svgPath)) {
+      fs.unlinkSync(svgPath);
+      this.logger.warn(`Removed legacy logo.svg from ${dir} (ROK-1292 PR 2)`);
+    }
+    const branding = await this.settingsService.getBranding();
+    if (branding.communityLogoPath?.endsWith('.svg')) {
+      await this.settingsService.clearCommunityLogoPath();
+      this.logger.warn(
+        'Cleared community_logo_path (pointed at .svg) (ROK-1292 PR 2)',
+      );
+    }
+  }
 
   /** Format branding settings for API responses. */
   private async formatBranding() {
