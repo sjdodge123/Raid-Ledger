@@ -9,10 +9,10 @@
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 
 jest.mock('./quorum-voters.helpers', () => ({
-  loadExpectedVoters: jest.fn(),
+  loadQuorumGatingVoters: jest.fn(),
 }));
 
-import { loadExpectedVoters } from './quorum-voters.helpers';
+import { loadQuorumGatingVoters } from './quorum-voters.helpers';
 import { checkBuildingQuorum, checkVotingQuorum } from './quorum-check.helpers';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import type * as schema from '../../drizzle/schema';
@@ -44,7 +44,7 @@ const baseLineup: LineupRow = {
 } as unknown as LineupRow;
 
 function setExpectedVoters(ids: number[]): void {
-  (loadExpectedVoters as jest.Mock).mockResolvedValue(ids);
+  (loadQuorumGatingVoters as jest.Mock).mockResolvedValue(ids);
 }
 
 function nominationsPerVoter(rows: Array<{ userId: number; count: number }>) {
@@ -361,5 +361,173 @@ describe('checkVotingQuorum', () => {
     });
 
     expect(result.ready).toBe(true);
+  });
+
+  // ROK-1258 hybrid policy: checkVotingQuorum consumes whatever
+  // loadQuorumGatingVoters returns. These tests pin the contract by
+  // simulating the pre-/post-drop gating set the new helper produces.
+  it('advances once post-deadline drop narrows the gating set to actual voters', async () => {
+    const db = createDrizzleMock();
+    // 5-invitee private; after deadline drops 2 non-voters, gating set =
+    // creator + 2 voters who already cast 3.
+    setExpectedVoters([1, 2, 3]);
+    db.groupBy.mockResolvedValueOnce([
+      { userId: 1, count: 3 },
+      { userId: 2, count: 3 },
+      { userId: 3, count: 3 },
+    ]);
+
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      visibility: 'private',
+    });
+
+    expect(result.ready).toBe(true);
+  });
+
+  it('still blocks when the only voter is the creator (creator never dropped)', async () => {
+    const db = createDrizzleMock();
+    // Solo-creator gating set after every non-voter dropped post-deadline.
+    setExpectedVoters([1]);
+    db.groupBy.mockResolvedValueOnce([]);
+
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      visibility: 'private',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toContain('solo lineup');
+  });
+});
+
+// ROK-1258: dedicated coverage for the hybrid voter-participation policy.
+// quorum-check is mocked above, so here we exercise the real helper against
+// a small handwritten drizzle stub keyed on the (in order) queries it makes:
+//   1. invitees lookup
+//   2. participants lookup (votes during voting, entries during building)
+describe('loadQuorumGatingVoters (ROK-1258 hybrid policy)', () => {
+  // Resolve dynamically so the jest.mock above (used by the
+  // quorum-check tests) doesn't suppress the real helper here.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const actual = jest.requireActual<{
+    loadQuorumGatingVoters: (
+      db: unknown,
+      lineup: unknown,
+    ) => Promise<number[]>;
+  }>('./quorum-voters.helpers');
+
+  /**
+   * Minimal stub: each `.where(...)` resolves to the next queued row set,
+   * matching the order helpers run their queries. The helper's
+   * loadPrivateExpectedVoters runs the invitee query first; then if the
+   * post-deadline branch hits, findDistinctVoters / findDistinctNominators
+   * runs the participants query.
+   */
+  function makeDb(invitees: number[], participants: number[]) {
+    const queue: Array<Array<{ userId: number }>> = [
+      invitees.map((userId) => ({ userId })),
+      participants.map((userId) => ({ userId })),
+    ];
+    const stub = {
+      select: jest.fn().mockReturnThis(),
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockImplementation(async () => queue.shift() ?? []),
+    };
+    return stub;
+  }
+
+  const privateBase = {
+    ...baseLineup,
+    visibility: 'private' as const,
+    status: 'voting' as const,
+  };
+
+  it('returns the full roster when the phase deadline is still future', async () => {
+    const future = new Date(Date.now() + 60_000);
+    const db = makeDb([2, 3, 4], []);
+
+    const result = await actual.loadQuorumGatingVoters(db, {
+      ...privateBase,
+      createdBy: 1,
+      phaseDeadline: future,
+    });
+
+    expect(result.sort()).toEqual([1, 2, 3, 4]);
+  });
+
+  it('drops non-voting invitees once the phase deadline has passed', async () => {
+    const past = new Date(Date.now() - 60_000);
+    // Invited: 2,3,4,5. Only 2 and 3 voted. Creator=1 never dropped.
+    const db = makeDb([2, 3, 4, 5], [2, 3]);
+
+    const result = await actual.loadQuorumGatingVoters(db, {
+      ...privateBase,
+      createdBy: 1,
+      phaseDeadline: past,
+    });
+
+    expect(result.sort()).toEqual([1, 2, 3]);
+  });
+
+  it('returns the full roster when the deadline is null (no grace path)', async () => {
+    const db = makeDb([2, 3, 4], []);
+
+    const result = await actual.loadQuorumGatingVoters(db, {
+      ...privateBase,
+      createdBy: 1,
+      phaseDeadline: null,
+      votingDeadline: null,
+    });
+
+    expect(result.sort()).toEqual([1, 2, 3, 4]);
+  });
+
+  it('keeps the creator after deadline even when they have not voted', async () => {
+    const past = new Date(Date.now() - 60_000);
+    // Creator=1 has not voted; only invitee 2 voted. 1 still gates.
+    const db = makeDb([2, 3], [2]);
+
+    const result = await actual.loadQuorumGatingVoters(db, {
+      ...privateBase,
+      createdBy: 1,
+      phaseDeadline: past,
+    });
+
+    expect(result.sort()).toEqual([1, 2]);
+  });
+
+  it('falls back to votingDeadline when phaseDeadline is null but votingDeadline is set', async () => {
+    const past = new Date(Date.now() - 60_000);
+    // Pre-fix legacy path: operator set an explicit votingDeadline only.
+    const db = makeDb([2, 3, 4], [2]);
+
+    const result = await actual.loadQuorumGatingVoters(db, {
+      ...privateBase,
+      createdBy: 1,
+      phaseDeadline: null,
+      votingDeadline: past,
+    });
+
+    expect(result.sort()).toEqual([1, 2]);
+  });
+
+  it('uses phaseDeadline for the building phase grace window', async () => {
+    const past = new Date(Date.now() - 60_000);
+    // Building phase: dropped invitees = those without nominations.
+    // Invited: 2,3. Only 2 nominated.
+    const db = makeDb([2, 3], [2]);
+
+    const result = await actual.loadQuorumGatingVoters(db, {
+      ...privateBase,
+      status: 'building',
+      createdBy: 1,
+      phaseDeadline: past,
+      votingDeadline: null,
+    });
+
+    expect(result.sort()).toEqual([1, 2]);
   });
 });

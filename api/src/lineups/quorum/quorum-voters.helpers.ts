@@ -39,7 +39,10 @@ export async function loadExpectedVoters(
  * The creator is never dropped — solo creators still gate quorum.
  *
  * Deadline source by status:
- *   - voting   → `lineup.votingDeadline`
+ *   - voting   → `lineup.phaseDeadline ?? lineup.votingDeadline`
+ *                (parity with `lineup-reminder.service.ts`; phase_deadline is
+ *                always written by transitions, voting_deadline is the
+ *                operator-supplied override used by some legacy flows).
  *   - building → `lineup.phaseDeadline`
  *   - other    → no grace (callers don't quorum-gate other statuses).
  *
@@ -70,7 +73,9 @@ export async function loadQuorumGatingVoters(
 }
 
 function pickPhaseDeadline(lineup: LineupRow): Date | null {
-  if (lineup.status === 'voting') return lineup.votingDeadline ?? null;
+  if (lineup.status === 'voting') {
+    return lineup.phaseDeadline ?? lineup.votingDeadline ?? null;
+  }
   if (lineup.status === 'building') return lineup.phaseDeadline ?? null;
   return null;
 }
