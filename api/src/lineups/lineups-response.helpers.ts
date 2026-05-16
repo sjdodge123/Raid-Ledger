@@ -5,7 +5,9 @@
 import type {
   LineupDetailResponseDto,
   LineupEntryResponseDto,
+  LineupInviteeResponseDto,
 } from '@raid-ledger/contract';
+import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { NotFoundException } from '@nestjs/common';
 import * as schema from '../drizzle/schema';
@@ -137,7 +139,40 @@ function mapToDetailResponse(
     unlinkedSteamMembers: enrichment.unlinkedSteamMembers,
     // ROK-1065: populated below via a parallel query.
     invitees: [],
+    // ROK-1258: populated below for private voting lineups; empty otherwise.
+    stillWaitingOnVoters: [],
   };
+}
+
+/**
+ * ROK-1258: Resolve the invitees who still owe their full vote allotment
+ * during the voting phase. Empty array for any non-voting / non-private
+ * lineup, OR when every invitee has met their allotment. Creator is never
+ * included even if they haven't voted — the panel is about who else the
+ * creator is waiting on, not the creator themselves.
+ */
+async function loadStillWaitingOnVoters(
+  db: Db,
+  lineup: typeof schema.communityLineups.$inferSelect,
+  invitees: LineupInviteeResponseDto[],
+): Promise<LineupInviteeResponseDto[]> {
+  if (lineup.status !== 'voting' || lineup.visibility !== 'private') return [];
+  if (invitees.length === 0) return [];
+  const required = lineup.maxVotesPerPlayer ?? 3;
+  const rows = await db
+    .select({
+      userId: schema.communityLineupVotes.userId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.communityLineupVotes)
+    .where(eq(schema.communityLineupVotes.lineupId, lineup.id))
+    .groupBy(schema.communityLineupVotes.userId);
+  const counts = new Map(rows.map((r) => [r.userId, Number(r.count)]));
+  return invitees.filter(
+    (invitee) =>
+      invitee.id !== lineup.createdBy &&
+      (counts.get(invitee.id) ?? 0) < required,
+  );
 }
 
 /** Fetch enrichment data for lineup entries. */
@@ -230,6 +265,12 @@ export async function buildDetailResponse(
   );
   // ROK-1065: invitees populated for both public (empty) and private lineups.
   detail.invitees = invitees;
+  // ROK-1258: still-waiting-on-voters panel for private voting lineups.
+  detail.stillWaitingOnVoters = await loadStillWaitingOnVoters(
+    db,
+    lineup,
+    invitees,
+  );
 
   // Attach tiebreaker detail if one exists (ROK-938)
   if (lineup.activeTiebreakerId) {
