@@ -166,4 +166,30 @@ describe('ROK-1292 PR 2 — branding logo SVG XSS rejection', () => {
       communityLogoUrl: expect.stringMatching(/\.png$/),
     });
   });
+
+  // Regression guard for ROK-1292 PR 2 follow-up: an uploaded logo's
+  // on-disk path MUST resolve under the sandboxed BRANDING_DIR, not
+  // process.cwd()/uploads/branding. If this test ever fails, the
+  // env-var override is broken and `npm run test -w api` will resume
+  // wiping the operator's real dev logo.
+  it('upload lands under the sandboxed BRANDING_DIR, never under process.cwd()', async () => {
+    const png = makeTinyPngBuffer();
+    await testApp.request
+      .post('/admin/branding/logo')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('logo', png, {
+        filename: 'logo.png',
+        contentType: 'image/png',
+      })
+      .expect(201);
+
+    const settings = testApp.app.get(SettingsService);
+    const branding = await settings.getBranding();
+    expect(branding.communityLogoPath).toBeTruthy();
+    expect(branding.communityLogoPath?.startsWith(BRANDING_DIR)).toBe(true);
+    expect(branding.communityLogoPath).not.toContain(
+      path.join(process.cwd(), 'uploads', 'branding'),
+    );
+    expect(fs.existsSync(branding.communityLogoPath!)).toBe(true);
+  });
 });
