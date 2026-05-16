@@ -2,7 +2,7 @@
  * Matching algorithm for community lineups (ROK-936).
  * Runs on voting -> decided transition to create match records.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import {
@@ -11,6 +11,7 @@ import {
 } from './lineups-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /** Fit category based on voter count vs game capacity. */
 export type FitCategory =
@@ -22,6 +23,19 @@ export type FitCategory =
 /**
  * Build match records for a lineup transitioning to 'decided'.
  * Creates community_lineup_matches and community_lineup_match_members rows.
+ *
+ * ROK-1306: wipes pre-existing `suggested`/`scheduling` matches for the lineup
+ * before re-inserting. This is the "decide" event — a fresh snapshot of the
+ * vote tally — so any leftover rows from an earlier decide (then-reverted) or
+ * a half-finished prior transaction must not survive. Without this, the UQ on
+ * (lineupId, gameId) caused `onConflictDoNothing` to silently drop the new
+ * INSERT and the lineup ended up wired to a stale match row whose `linkedEvent`
+ * / scheduling slots still pointed at the old game's poll (wrong-game-link).
+ *
+ * Caller note: `runMatchingAlgorithm` invokes this AFTER `applyStatusUpdate`
+ * has flipped the lineup row to `decided`. `decided`/`scheduled`/`archived`
+ * matches are preserved (only `suggested`/`scheduling` are wiped) because those
+ * statuses represent committed downstream state we must not blow away.
  */
 export async function buildMatchesForLineup(
   db: Db,
@@ -43,15 +57,41 @@ export async function buildMatchesForLineup(
   const totalVoters = voterRows[0]?.total ?? 0;
   if (totalVoters === 0) return;
 
-  for (const vc of voteCounts) {
-    if (vc.voteCount === 0) continue;
-    await insertMatch(db, lineupId, vc, totalVoters, threshold);
-  }
+  // ROK-1225 / ROK-1306: wipe-then-insert runs inside ONE transaction so
+  // concurrent auto-advance callers can't interleave a stale-match wipe with
+  // another caller's fresh insert.
+  await db.transaction(async (tx) => {
+    await wipeStaleMatches(tx, lineupId);
+    for (const vc of voteCounts) {
+      if (vc.voteCount === 0) continue;
+      await insertMatch(tx, lineupId, vc, totalVoters, threshold);
+    }
+  });
+}
+
+/**
+ * Delete any pre-existing matches in `suggested`/`scheduling` status for this
+ * lineup so the upcoming insert pass starts from a clean slate. FK cascade
+ * clears `community_lineup_match_members` and `community_lineup_schedule_slots`.
+ * `decided`/`scheduled`/`archived` rows are intentionally preserved.
+ */
+async function wipeStaleMatches(tx: Tx, lineupId: number): Promise<void> {
+  await tx
+    .delete(schema.communityLineupMatches)
+    .where(
+      and(
+        eq(schema.communityLineupMatches.lineupId, lineupId),
+        inArray(schema.communityLineupMatches.status, [
+          'suggested',
+          'scheduling',
+        ]),
+      ),
+    );
 }
 
 /** Insert a single match row and its member rows. */
 async function insertMatch(
-  db: Db,
+  tx: Tx,
   lineupId: number,
   vc: { gameId: number; voteCount: number },
   totalVoters: number,
@@ -60,34 +100,32 @@ async function insertMatch(
   const pct = (vc.voteCount / totalVoters) * 100;
   const status: 'scheduling' | 'suggested' =
     pct >= threshold ? 'scheduling' : 'suggested';
-  const fitCategory = await computeFitCategory(db, vc.gameId, vc.voteCount);
+  const fitCategory = await computeFitCategory(tx, vc.gameId, vc.voteCount);
 
-  // ROK-1225: parent + member inserts share one transaction so concurrent
-  // auto-advance callers either both succeed or both roll back. Without this
-  // a racing pair could insert two parents (one rolled back by uq_lineup_match_game)
-  // and orphan member rows pointing at the rolled-back parent id.
-  await db.transaction(async (tx) => {
-    const [match] = await tx
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId,
-        gameId: vc.gameId,
-        status,
-        thresholdMet: status === 'scheduling',
-        voteCount: vc.voteCount,
-        votePercentage: pct.toFixed(2),
-        fitType: fitCategory,
-      })
-      .onConflictDoNothing({
-        target: [
-          schema.communityLineupMatches.lineupId,
-          schema.communityLineupMatches.gameId,
-        ],
-      })
-      .returning({ id: schema.communityLineupMatches.id });
-    if (!match) return;
-    await insertMatchMembers(tx, lineupId, match.id, vc.gameId);
-  });
+  // ROK-1306: with the wipe above, the unique (lineupId, gameId) constraint
+  // can now only collide with a preserved `decided`/`scheduled`/`archived`
+  // row. Keep `onConflictDoNothing` so the rare race against an already-
+  // promoted match is a no-op instead of a 23505.
+  const [match] = await tx
+    .insert(schema.communityLineupMatches)
+    .values({
+      lineupId,
+      gameId: vc.gameId,
+      status,
+      thresholdMet: status === 'scheduling',
+      voteCount: vc.voteCount,
+      votePercentage: pct.toFixed(2),
+      fitType: fitCategory,
+    })
+    .onConflictDoNothing({
+      target: [
+        schema.communityLineupMatches.lineupId,
+        schema.communityLineupMatches.gameId,
+      ],
+    })
+    .returning({ id: schema.communityLineupMatches.id });
+  if (!match) return;
+  await insertMatchMembers(tx, lineupId, match.id, vc.gameId);
 }
 
 /** Determine fit category from voter count and game player limits. */
