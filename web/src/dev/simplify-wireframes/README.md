@@ -225,7 +225,48 @@ File reference: see `walk-2026-05-15` notes in chat history.
 
 ## Where this doc lives + how to find it
 
-- **This doc:** `planning-artifacts/specs/cycle-4-unify-lineup.md`
+- **Tracked copy (this file):** `web/src/dev/simplify-wireframes/README.md` — committed, available to all agents on `main`
+- **Operator-local copy:** `planning-artifacts/specs/cycle-4-unify-lineup.md` (gitignored)
 - **Wireframe source:** `web/src/dev/simplify-wireframes/*`
 - **Operator memory pointer:** [`reference_cycle_4_unify_design.md`](`~/.claude/projects/-Users-sdodge-Documents-Projects-Raid-Ledger/memory/`)
-- **Indexed in:** `planning-artifacts/next-sprint.md` (cycle plan) and the per-story Linear issue bodies (once filed)
+- **Indexed in:** `planning-artifacts/next-sprint.md` (cycle plan) and the per-story Linear issue bodies
+
+---
+
+## Linear ledger (filed 2026-05-16, Cycle 4)
+
+| Slot | ID | Status |
+|---|---|---|
+| U1+U3 | ROK-1294 | Todo |
+| U2 | ROK-1295 | Todo |
+| U4 | ROK-1296 | Todo |
+| S1 | ROK-1297 | Todo |
+| Sv | ROK-1298 | Todo |
+| S3 | ROK-1299 | Todo |
+| Ss+Sx | ROK-1300 | Todo |
+| S5 | ROK-1301 | Todo |
+| S4 | ROK-1302 | Todo (closes ROK-1265) |
+| S6 | ROK-1303 | Todo |
+| S7 | ROK-1304 | Todo |
+| S9 | ROK-1305 | Todo |
+| Bug — lineup→scheduling routing | ROK-1306 | Todo |
+| Bug — voting auto-advance | ROK-1258 | Todo (reassigned to Cycle 4) |
+
+### Pre-existing in Cycle 4 (not new from this design pass, but still in cycle)
+
+- **ROK-1212** — `feat: lineups index page with Active/Past/Mine tabs` (HIGH, ROK-1193 → Page 1). Not subsumed by S1's per-page tab switcher (which is All/Yours/Trending). Still needed.
+- **ROK-1215** — `feat: public-lineup join CTA for uninvited users` (HIGH, ROK-1193 → F-27). Recruiting funnel via public share links. Independent of foundation; can ride Wave 4.
+- **ROK-1208** — `feat: decided-view "your next step" rollup with single-CTA hierarchy` (ROK-1193 → F-19, F-21). Partial overlap with S3 (ROK-1299) which provides "Your matches" + per-match CTAs. Implementer should check if S3 already satisfies this before doing extra work.
+- **ROK-1210, ROK-1211, ROK-1213, ROK-1214, ROK-1219, ROK-1220** — other ROK-1193 audit items. None subsumed by Cycle 4 foundation; keep open.
+- **ROK-1122** (Share/Rally button silent failure), **ROK-1032** (scheduling conflict warnings), **ROK-1201** (perf), **ROK-1204** (Radix Colors + shadcn/ui), **ROK-1203** (light-mode contrast audit) — independent stories.
+- **~20 tech-debt + bug-fix items** (ROK-1284–1290, ROK-1287, ROK-1164, ROK-1165, ROK-1160, ROK-1293) — ride-along carry items.
+
+### Cancellations from this audit (subsumed by new stories)
+
+| Cancelled | Subsumed by | Reason |
+|---|---|---|
+| ROK-1254 | ROK-1302 (S4) | Configurable lineup sliders — folded into S4's preset chooser + match-shape settings |
+| ROK-1256 | ROK-1295 (U2) | Research-during-voting — solved by universal game-research drawer |
+| ROK-1265 | ROK-1302 (S4) | Lineup template presets — IS the S4 preset chooser |
+| ROK-1216 | ROK-1300 (Ss+Sx) | "Unify scheduling inside lineup detail" — exactly what Ss composite does |
+| ROK-1009 | ROK-1303 (S6) | "Scheduling poll Create Event navigates with pre-filled data" — confirm card is this pattern improved |
