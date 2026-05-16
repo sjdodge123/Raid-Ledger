@@ -399,3 +399,20 @@ Full-suite `npx playwright test` (desktop + mobile) on the merged batch surfaced
 - **[low]** `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:297` (desktop) — `Bracket tiebreaker flow › BracketView renders with SVG bracket tree after starting bracket`. Sibling of `:231` and `:597` already documented under modal-materialise (line 97 and 2026-05-16 batch/2026-05-16 section).
 
 No fix on this batch's critical path — pre-existing flake noise tracked once. The chip-collapse changes (ROK-1305) and dedup determinism changes (ROK-1287) have zero overlap with the failing surfaces; ROK-1287 is API-only and never executed in any smoke spec, ROK-1305 only adds the chip + drops the inline sidebar list (the existing CalendarGameFilterModal is unchanged).
+
+### 2026-05-16 — fix/batch-2026-05-16b (reviewer findings, sonnet)
+
+Reviewer verdict PASS WITH NOTES on the batch diff. 0 critical/high/medium, 6 low/nit. Chrome MCP gate PASS for ROK-1305 (chip + modal + label-update verified in browser). None block ship.
+
+- **[low]** `web/src/components/calendar/calendar-filter-chip.tsx:11-15` — `formatChipLabel` returns "Filter: All games" for BOTH "all selected" and "0 selected" because the store treats `selectedGames.size === 0` as "treat as all". Pinned by a test (`calendar-page.test.tsx:247`), but the label is ambiguous to a user who deliberately deselected every game.
+  Suggested: add a one-line comment in the helper documenting the convention.
+- **[low]** `web/src/components/calendar/calendar-styles.css:614-631` — new `.calendar-filter-chip` rule lives only in the dark-theme block; no light-theme override under `:is([data-scheme="light"], ...)`. On light themes (`light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial`) the chip renders with dark slate colors on a light surface — readable but visually inconsistent with the sibling `.sidebar-action-btn` which DOES have a light override at line 1390.
+  Suggested: add a 4-line light override mirroring `.sidebar-action-btn` (background `rgba(226, 232, 240, 0.6)`, border `rgba(203, 213, 225, 0.5)`, color `#334155`).
+- **[low]** `web/src/pages/calendar-page.tsx:108,164-170` — `CalendarSidebar` still declares `toggleGame`, `selectAllGames`, `deselectAllGames`, `likedSlugs` props even though only `allKnownGames`, `selectedGames`, `onShowFilterModal` are consumed. Unused props forwarded via `{...filterProps}` keep TS happy but over-promise the type contract.
+  Suggested: narrow `CalendarSidebar`'s prop type to the 3 it consumes.
+- **[low]** `web/src/pages/calendar-page.tsx:113-117` — `GameItem` is locally re-declared with `{ slug, name, coverUrl }` even though `GameInfo` is already exported from `../stores/game-filter-store` (used by `calendar-filter-chip.tsx`). Same shape; duplication invites drift.
+  Suggested: import `GameInfo` from `../stores/game-filter-store` and replace local `GameItem`.
+- **[nit]** `api/src/admin/games-dedup-union-find.helpers.ts:173-178` — sort uses `Number(a) - Number(b)` for `igdb`/`steam`. Currently safe (columns are `integer`), but a future schema change loosening the column type would produce `NaN` ordering.
+  Suggested: add a one-line comment noting numeric strings are guaranteed by the integer column type.
+- **[nit]** `api/src/admin/games-dedup-audit.service.spec.ts:172-178,431-434` — `.orderBy()` thenable extension is structurally identical in two mock blocks. Will rot if the load query gains another chain step.
+  Suggested: extract a `mockLoadGameRowsChain(loadRows)` helper when next touching this file.
