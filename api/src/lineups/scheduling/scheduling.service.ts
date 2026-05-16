@@ -68,12 +68,22 @@ export class SchedulingService {
     private readonly pollEmbed: SchedulingPollEmbedService,
   ) {}
 
-  /** Get the full scheduling poll page data for a match. */
+  /**
+   * Get the full scheduling poll page data for a match.
+   *
+   * ROK-1306: validates the match belongs to the URL's lineup so a stale
+   * `matchId` from another lineup can't be served under a different lineup's
+   * URL (which previously surfaced the wrong game's poll on the page).
+   */
   async getSchedulePoll(
+    lineupId: number,
     matchId: number,
     userId: number | null,
   ): Promise<SchedulePollPageResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
+    if (match.lineupId !== lineupId) {
+      throw new NotFoundException('Match not found in this lineup');
+    }
     const [gameInfo, [lineup], members, slots, voterCount] = await Promise.all([
       resolveGameInfo(this.db, match.gameId),
       this.db

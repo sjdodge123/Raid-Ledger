@@ -403,7 +403,11 @@ describe('SchedulingService', () => {
         { status: 'decided', createdBy: 42 },
       ]);
 
-      const result = await service.getSchedulePoll(10, null);
+      const result = await service.getSchedulePoll(
+        SCHEDULING_MATCH.lineupId,
+        10,
+        null,
+      );
       expect(result.match.lineupCreatedById).toBe(42);
     });
 
@@ -413,10 +417,46 @@ describe('SchedulingService', () => {
       // 2. lineup join returns no rows
       mockDb.limit.mockResolvedValueOnce([]);
 
-      const result = await service.getSchedulePoll(10, null);
+      const result = await service.getSchedulePoll(
+        SCHEDULING_MATCH.lineupId,
+        10,
+        null,
+      );
       // buildPollResponse → buildMatchDetailDto omits the field when null,
       // so the contract DTO surfaces it as undefined rather than null.
       expect(result.match.lineupCreatedById).toBeUndefined();
+    });
+  });
+
+  // ROK-1306: route guard prevents serving a poll from one lineup under another
+  // lineup's URL (which would surface the wrong game's poll on the page).
+  describe('getSchedulePoll cross-lineup guard', () => {
+    const FULL_MATCH = {
+      ...SCHEDULING_MATCH,
+      thresholdMet: false,
+      voteCount: 0,
+      votePercentage: null,
+      fitType: null,
+      minVoteThreshold: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+
+    it('throws NotFoundException when matchId belongs to a different lineup', async () => {
+      // findMatchOrThrow returns the match — but its lineupId is 1, and the
+      // request URL claims lineupId 999. Service must reject before any
+      // further DB work.
+      mockDb.limit.mockResolvedValueOnce([FULL_MATCH]);
+      await expect(
+        service.getSchedulePoll(999, FULL_MATCH.id, null),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('still 404s when the match is missing entirely (existing behaviour)', async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+      await expect(service.getSchedulePoll(1, 99999, null)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });
