@@ -17,6 +17,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
+import { bestEffortInit } from '../common/lifecycle.util';
 
 /** Allowed MIME types and their magic bytes for logo validation */
 const ALLOWED_TYPES: Record<string, { ext: string; magic: number[] }> = {
@@ -101,7 +102,15 @@ export class BrandingController implements OnModuleInit {
   // remain reachable at /uploads/branding/logo.svg and the persisted
   // community_logo_path setting would keep pointing at it. Self-heals each
   // boot so deploys are complete without operator manual cleanup.
+  // Wrapped in bestEffortInit: a disk or DB error during cleanup must not
+  // crash boot — the API serves more than just branding.
   async onModuleInit(): Promise<void> {
+    await bestEffortInit('branding-legacy-svg-eviction', this.logger, () =>
+      this.evictLegacySvg(),
+    );
+  }
+
+  private async evictLegacySvg(): Promise<void> {
     const dir = getBrandingDir();
     const svgPath = path.join(dir, 'logo.svg');
     if (fs.existsSync(svgPath)) {
