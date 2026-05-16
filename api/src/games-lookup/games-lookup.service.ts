@@ -1,9 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GameDetailDto } from '@raid-ledger/contract';
@@ -152,10 +147,7 @@ export class GamesLookupService {
     return row.id;
   }
 
-  private async applyIgdbMerge(
-    id: number,
-    hit: GameDetailDto,
-  ): Promise<void> {
+  private async applyIgdbMerge(id: number, hit: GameDetailDto): Promise<void> {
     await this.db
       .update(schema.games)
       .set({
@@ -187,4 +179,3 @@ function pickFirstIgdbHit(raw: unknown): GameDetailDto | null {
   if (!Array.isArray(list) || list.length === 0) return null;
   return list[0] as GameDetailDto;
 }
-

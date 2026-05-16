@@ -66,7 +66,9 @@ function fakeIgdbApiGame(overrides: Partial<IgdbApiGame> = {}): IgdbApiGame {
   };
 }
 
-async function findGameRowByName(name: string): Promise<typeof schema.games.$inferSelect | undefined> {
+async function findGameRowByName(
+  name: string,
+): Promise<typeof schema.games.$inferSelect | undefined> {
   const rows = await testApp.db
     .select()
     .from(schema.games)
@@ -76,7 +78,9 @@ async function findGameRowByName(name: string): Promise<typeof schema.games.$inf
 
 async function countGameRowsLike(prefix: string): Promise<number> {
   const rows = await testApp.db.select().from(schema.games);
-  return rows.filter((r) => r.name.toLowerCase().startsWith(prefix.toLowerCase())).length;
+  return rows.filter((r) =>
+    r.name.toLowerCase().startsWith(prefix.toLowerCase()),
+  ).length;
 }
 
 // ─── Auth + validation ──────────────────────────────────────────────────────
@@ -130,7 +134,10 @@ describe('POST /games/lookup-by-name — existing-row dedup', () => {
       .mockResolvedValue([]);
     const igdbSpy = jest
       .spyOn(testApp.app.get(IgdbService), 'searchGames')
-      .mockResolvedValue({ data: [], meta: { total: 0, cached: false } } as never);
+      .mockResolvedValue({
+        data: [],
+        meta: { total: 0, cached: false },
+      } as never);
 
     const res = await testApp.request
       .post('/games/lookup-by-name')
@@ -166,7 +173,10 @@ describe('POST /games/lookup-by-name — ITAD hit path', () => {
     // IGDB fallback would NOT fire on ITAD hit.
     const igdbSpy = jest
       .spyOn(testApp.app.get(IgdbService), 'searchGames')
-      .mockResolvedValue({ data: [], meta: { total: 0, cached: false } } as never);
+      .mockResolvedValue({
+        data: [],
+        meta: { total: 0, cached: false },
+      } as never);
 
     const res = await testApp.request
       .post('/games/lookup-by-name')
@@ -219,34 +229,32 @@ describe('POST /games/lookup-by-name — IGDB fallback path', () => {
       name: 'Indie Treasure',
       slug: 'indie-treasure',
     });
-    jest
-      .spyOn(testApp.app.get(IgdbService), 'searchGames')
-      .mockResolvedValue({
-        data: [
-          {
-            id: 0,
-            igdbId: igdbHit.id,
-            name: igdbHit.name,
-            slug: igdbHit.slug,
-            coverUrl: null,
-            genres: [],
-            summary: null,
-            rating: null,
-            aggregatedRating: null,
-            popularity: null,
-            gameModes: [],
-            themes: [],
-            platforms: [],
-            screenshots: [],
-            videos: [],
-            firstReleaseDate: null,
-            playerCount: null,
-            twitchGameId: null,
-            crossplay: null,
-          },
-        ],
-        meta: { total: 1, cached: false },
-      } as never);
+    jest.spyOn(testApp.app.get(IgdbService), 'searchGames').mockResolvedValue({
+      data: [
+        {
+          id: 0,
+          igdbId: igdbHit.id,
+          name: igdbHit.name,
+          slug: igdbHit.slug,
+          coverUrl: null,
+          genres: [],
+          summary: null,
+          rating: null,
+          aggregatedRating: null,
+          popularity: null,
+          gameModes: [],
+          themes: [],
+          platforms: [],
+          screenshots: [],
+          videos: [],
+          firstReleaseDate: null,
+          playerCount: null,
+          twitchGameId: null,
+          crossplay: null,
+        },
+      ],
+      meta: { total: 1, cached: false },
+    } as never);
 
     const res = await testApp.request
       .post('/games/lookup-by-name')
@@ -270,7 +278,10 @@ describe('POST /games/lookup-by-name — both sources miss', () => {
       .mockResolvedValue([]);
     const igdbSpy = jest
       .spyOn(testApp.app.get(IgdbService), 'searchGames')
-      .mockResolvedValue({ data: [], meta: { total: 0, cached: false } } as never);
+      .mockResolvedValue({
+        data: [],
+        meta: { total: 0, cached: false },
+      } as never);
 
     const res = await testApp.request
       .post('/games/lookup-by-name')
@@ -298,11 +309,13 @@ describe('POST /games/lookup-by-name — rate limit', () => {
     // the route's reflected throttler metadata matches the 'search' tier.
     // The path requires the controller class + method to exist; until ROK-1295
     // wires up GamesLookupController this import + reflection MUST throw.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod: { GamesLookupController: new (...args: never[]) => unknown } = await import(
-      './games-lookup.controller'
-    );
-    const proto = mod.GamesLookupController.prototype as Record<string, unknown>;
+
+    const mod: { GamesLookupController: new (...args: never[]) => unknown } =
+      await import('./games-lookup.controller');
+    const proto = mod.GamesLookupController.prototype as Record<
+      string,
+      unknown
+    >;
     // Find the route method. We don't pin the name to keep this resilient to
     // dev's chosen handler name (lookupByName, search, post, etc.) — we just
     // require that AT LEAST one method on the prototype carries Throttler
@@ -314,10 +327,9 @@ describe('POST /games/lookup-by-name — rate limit', () => {
     );
     const throttleHits = methods
       .map((m) =>
-        reflector.get<Record<string, { limit?: number; ttl?: number }> | undefined>(
-          'THROTTLER:LIMIT',
-          (proto[m] as { constructor: unknown }) as never,
-        ),
+        reflector.get<
+          Record<string, { limit?: number; ttl?: number }> | undefined
+        >('THROTTLER:LIMIT', proto[m] as { constructor: unknown } as never),
       )
       .filter(Boolean);
     // If reflector doesn't surface the meta, we still expect the controller
