@@ -310,3 +310,22 @@ Pre-existing Playwright failures confirmed independent of batch (ROK-1258 + ROK-
 - **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:316` (mobile) — `Community Lineup detail page › shows nomination grid or empty state` fails with `getByRole('heading', { name: /Smoke Lineup|Lineup — / })` not found. The page snapshot shows `Next: Nothing to do — this lineup was cancelled.` — cross-worker bleedover where another worker archived the active lineup mid-test. Same root cause as the 2026-05-12 ROK-1068 entries.
 - **[low]** `scripts/smoke/navigation.smoke.spec.ts:22` (desktop) — `Navigation (desktop) › nav links navigate to correct pages` fails with `expect(page).toHaveURL(/\/calendar$/)` because the actual URL is `http://localhost:5173/calendar?date=2026-05-16` — the Calendar page auto-appends a `?date=` query param on mount (visible in error context: route header reads `/calendar` but the URL has the query string). The test's regex anchor `$` doesn't allow the query string. Passes in isolation (`--workers=1` on the batch), so it's an interaction with the auto-append timing under full-suite load. ROK-1247's previous fix didn't account for the date query param.
   Suggested: change the regex to `/\/calendar(\?|$)/` or drop the `$` anchor; this is a 1-line test fix.
+
+### 2026-05-16 — fix/batch-2026-05-16 (surfaced by code review of ROK-1258 + ROK-1306)
+
+Reviewer (sonnet, devedup-rl:reviewer) verdict PASS WITH NOTES on the batch diff. No critical/high findings. Browser validation also clean (see `planning-artifacts/chrome-mcp-summary-fix-batch-2026-05-16.md`). The 7 low items below are nits/cleanup; none block ship.
+
+- **[low]** `api/src/lineups/lineups-matching.helpers.ts:36,76,106` — Comments claim `decided`/`scheduled`/`archived` match rows are preserved, but `communityLineupMatches.status` enum is `suggested|scheduling|scheduled|archived` (no `decided`). The word `decided` here refers to the lineup status, not the match status. Code is correct (wipe only deletes `suggested`/`scheduling`); the wording is misleading for the next reader.
+  Suggested: drop `decided` from the preserved-list in the three comments.
+- **[low]** `api/src/lineups/quorum/quorum-voters.helpers.ts:62` — `Date.now() < deadline.getTime()` is TZ-safe because `phaseDeadline`/`votingDeadline` are `timestamp` columns (UTC epoch) and both sides compare as ms-since-epoch. Worth a one-line note so the next reader doesn't worry.
+  Suggested: add `// UTC ms vs UTC ms — TZ-safe`.
+- **[low]** `packages/contract/src/lineup.schema.ts:241` ↔ `web/src/pages/lineup-detail-page.tsx:274` — `stillWaitingOnVoters` is non-optional in the contract, but the page reads it with `?.length ?? 0`. Either tighten the frontend (`.length > 0`) or mark the contract field `.default([])` for forward-compat with cached older responses.
+  Suggested: drop the `?.` in the page since the contract guarantees the array.
+- **[low]** `api/src/lineups/lineups-response.helpers.ts:154-176` — `loadStillWaitingOnVoters` runs an extra `GROUP BY userId` aggregate on every `GET /lineups/:id` when status=voting+private. Selective (filtered by `lineupId`, backed by `uq_lineup_vote_user_game`'s leading column) so not a hotspot today, but it's serial after the parallel batch.
+  Suggested: fold into the existing `Promise.all` batch in `buildDetailResponse`.
+- **[low]** `api/src/lineups/lineups-response.helpers.ts:161` — `lineup.maxVotesPerPlayer ?? 3` duplicates the `3` default that already lives in `mapLineupCore` (line 104).
+  Suggested: extract `DEFAULT_MAX_VOTES_PER_PLAYER` or read the mapped value.
+- **[low]** `api/src/lineups/lineups.service.ts:370` — `maybeAutoAdvance` fires on every invitee removal even when status is `decided`/`archived` (cheap internal no-op, but a wasted round-trip).
+  Suggested: short-circuit on lineup status before the call, or document that `maybeAutoAdvance` already gates by status.
+- **[low]** `api/src/lineups/quorum/quorum-voters.helpers.ts:65-72` — `findDistinctVoters`/`findDistinctNominators` re-queried serially after `loadPrivateExpectedVoters`. Two sequential round-trips where one combined query would do.
+  Suggested: run roster + participant fetch in `Promise.all`.
