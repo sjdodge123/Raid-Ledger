@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import type { GameDetailDto, GameDiscoverRowDto, ItadGamePricingDto } from '@raid-ledger/contract';
 import { GameCarousel } from '../components/games/GameCarousel';
-import { UnifiedGameCard } from '../components/games/unified-game-card';
+import { DrawerCard } from '../components/games/DrawerCard';
 
 export type PricingMap = Map<number, ItadGamePricingDto | null>;
 
@@ -34,7 +34,7 @@ function MobileDiscoverCard({
     return (
         <div className="relative min-w-[180px] w-[180px] flex-shrink-0 snap-start">
             {playerCount !== undefined && playerCount >= 1 && <PlayedBadge count={playerCount} />}
-            <UnifiedGameCard variant="link" game={game} compact showRating pricing={pricing} />
+            <DrawerCard game={game} pricing={pricing} />
         </div>
     );
 }
@@ -111,6 +111,7 @@ function CuratedSection({
                         games={row.games}
                         pricingMap={pricingMap}
                         metadata={row.metadata}
+                        clickMode="drawer"
                     />
                 ))}
             </div>
@@ -149,6 +150,7 @@ export function DiscoverRows({
                         games={row.games}
                         pricingMap={pricingMap}
                         metadata={row.metadata}
+                        clickMode="drawer"
                     />
                 ))}
             </div>

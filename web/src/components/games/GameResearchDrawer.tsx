@@ -38,19 +38,12 @@ function useResolvedGame(
     const byId = useGameDetail(gameId);
     const lookupEnabled = isOpen && !gameId && !!name;
     const byName = useGameLookupByName(name, lookupEnabled);
-    if (gameId) {
-        return {
-            game: byId.data,
-            isLoading: byId.isLoading,
-            isError: byId.isError,
-            refetch: byId.refetch,
-        };
-    }
+    const source = gameId ? byId : byName;
     return {
-        game: byName.data,
-        isLoading: byName.isLoading,
-        isError: byName.isError,
-        refetch: byName.refetch,
+        game: source?.data,
+        isLoading: source?.isLoading ?? false,
+        isError: source?.isError ?? false,
+        refetch: source?.refetch ?? (() => {}),
     };
 }
 
