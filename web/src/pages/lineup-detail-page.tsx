@@ -8,6 +8,7 @@ import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
 import { InviteeList } from '../components/lineups/InviteeList';
 import { AddInviteesButton } from '../components/lineups/AddInviteesButton';
+import { StillWaitingPanel } from '../components/lineups/StillWaitingPanel';
 import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton';
 import { CommonGroundPanel } from '../components/lineups/CommonGroundPanel';
 import { NominateModal } from '../components/lineups/NominateModal';
@@ -267,6 +268,13 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           canManage={isOperator || user?.id === lineup.createdBy.id}
         />
       )}
+
+      {lineup.visibility === 'private' &&
+        lineup.status === 'voting' &&
+        (isOperator || user?.id === lineup.createdBy.id) &&
+        lineup.stillWaitingOnVoters.length > 0 && (
+          <StillWaitingPanel voters={lineup.stillWaitingOnVoters} />
+        )}
 
       {isBuilding && (
         <div className="mt-3">

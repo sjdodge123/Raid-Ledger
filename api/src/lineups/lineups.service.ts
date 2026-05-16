@@ -345,7 +345,15 @@ export class LineupsService {
   togglePublicShare = (id: number, enabled: boolean, actorId: number) =>
     togglePublicShare(this.db, this.activityLog, this.resolveChannelName, id, enabled, actorId);
 
-  /** Remove a single invitee (ROK-1065). */
+  /**
+   * Remove a single invitee (ROK-1065).
+   *
+   * ROK-1258: triggers `maybeAutoAdvance` so creator-driven removal of
+   * non-voting invitees can immediately unblock a private lineup whose
+   * quorum was stuck because the dropped users would never vote.
+   * `maybeAutoAdvance` has internal try/catch, so this is fire-safe and
+   * will not fail the mutation if the advance attempt errors.
+   */
   async removeInvitee(
     lineupId: number,
     userId: number,
@@ -359,6 +367,7 @@ export class LineupsService {
       callerId,
     );
     await this.invalidateAiCache(lineupId);
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
     return result;
   }
 }

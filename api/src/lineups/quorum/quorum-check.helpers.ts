@@ -19,7 +19,7 @@ import {
   type SettingKey,
 } from '../../drizzle/schema/app-settings';
 import type { SettingsService } from '../../settings/settings.service';
-import { loadExpectedVoters } from './quorum-voters.helpers';
+import { loadQuorumGatingVoters } from './quorum-voters.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -38,7 +38,7 @@ export async function checkBuildingQuorum(
   settings: SettingsService,
   lineup: LineupRow,
 ): Promise<QuorumResult> {
-  const expected = await loadExpectedVoters(db, lineup);
+  const expected = await loadQuorumGatingVoters(db, lineup);
   if (expected.length < 2) {
     // Solo lineup (creator alone or no participants yet) — manual advance only.
     // Auto-advancing here would surprise the operator who's still setting up.
@@ -71,7 +71,7 @@ export async function checkVotingQuorum(
   db: Db,
   lineup: LineupRow,
 ): Promise<QuorumResult> {
-  const expected = await loadExpectedVoters(db, lineup);
+  const expected = await loadQuorumGatingVoters(db, lineup);
   const perVoterCounts = await countVotesPerVoter(db, lineup.id);
   if (expected.length < 2) {
     // Solo lineup — manual advance only. Same reasoning as building quorum.

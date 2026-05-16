@@ -232,6 +232,13 @@ export const LineupDetailResponseSchema = z.object({
     visibility: LineupVisibilitySchema,
     /** Explicit invitees when visibility === 'private' (ROK-1065). */
     invitees: z.array(LineupInviteeResponseSchema),
+    /**
+     * Invitees who still owe their full vote allotment during the voting phase
+     * (ROK-1258). Backs the "Still waiting on N voters" panel for private
+     * lineups. Always present — empty array for public lineups, non-voting
+     * states, or when nobody is outstanding.
+     */
+    stillWaitingOnVoters: z.array(LineupInviteeResponseSchema),
     /** Public-share toggle (ROK-1067) — only applicable to public lineups. */
     publicShareEnabled: z.boolean(),
     /** URL-safe slug used for the public share link (ROK-1067). */

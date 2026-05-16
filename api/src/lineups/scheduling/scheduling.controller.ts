@@ -43,11 +43,12 @@ export class SchedulingController {
   @Get(':lineupId/schedule/:matchId')
   @UseGuards(OptionalJwtGuard)
   async getSchedulePoll(
+    @Param('lineupId', ParseIntPipe) lineupId: number,
     @Param('matchId', ParseIntPipe) matchId: number,
     @Req() req: AuthRequest,
   ): Promise<SchedulePollPageResponseDto> {
     const userId = req.user?.id ?? null;
-    return this.schedulingService.getSchedulePoll(matchId, userId);
+    return this.schedulingService.getSchedulePoll(lineupId, matchId, userId);
   }
 
   /** POST /lineups/:lineupId/schedule/:matchId/suggest — suggest a slot. */
