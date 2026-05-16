@@ -9,8 +9,8 @@ interface CalendarFilterChipProps {
 }
 
 function formatChipLabel(allCount: number, selectedCount: number): string {
-    const allSelected = selectedCount === allCount;
-    if (allSelected || selectedCount === 0) return 'Filter: All games';
+    if (selectedCount === allCount) return 'Filter: All games';
+    if (selectedCount === 0) return 'Filter: No games';
     return `Filter: ${selectedCount} games`;
 }
 

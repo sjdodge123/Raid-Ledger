@@ -244,7 +244,7 @@ describe('CalendarPage — filter chip', () => {
         expect(getChip()).toHaveTextContent(/Filter: All games/);
     });
 
-    it('chip label reads "Filter: All games" when zero games are selected', () => {
+    it('chip label reads "Filter: No games" when user clicks None (CalendarView shows zero events)', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
@@ -254,7 +254,7 @@ describe('CalendarPage — filter chip', () => {
         fireEvent.click(noneBtn!);
         fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
 
-        expect(getChip()).toHaveTextContent(/Filter: All games/);
+        expect(getChip()).toHaveTextContent(/Filter: No games/);
     });
 
     it('chip label reads "Filter: N games" when partial selection', () => {
