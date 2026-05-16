@@ -142,6 +142,13 @@ function mapToDetailResponse(
     invitees: [],
     // ROK-1258: populated below for private voting lineups; empty otherwise.
     stillWaitingOnVoters: [],
+    // ROK-1296: populated by buildDetailResponse via a parallel query.
+    // Stubbed null/null at the mapper boundary so the type compiles even when
+    // the caller is unauthenticated; the response builder overwrites both.
+    viewerSubmissions: {
+      nominationsSubmittedAt: null,
+      votesSubmittedAt: null,
+    },
   };
 }
 

@@ -12,7 +12,11 @@ export * from './lineup-invitees.schema.js';
 // Re-export public-share schemas (ROK-1067)
 export * from './lineup-public.schema.js';
 
+// Re-export submit schemas (ROK-1296, U4 SubmitBar)
+export * from './lineup-submit.schema.js';
+
 import { LineupVisibilitySchema, LineupInviteeResponseSchema } from './lineup-invitees.schema.js';
+import { ViewerSubmissionsSchema } from './lineup-submit.schema.js';
 
 // ============================================================
 // Community Lineup Schemas (ROK-933)
@@ -243,6 +247,14 @@ export const LineupDetailResponseSchema = z.object({
     publicShareEnabled: z.boolean(),
     /** URL-safe slug used for the public share link (ROK-1067). */
     publicSlug: z.string(),
+    /**
+     * Viewer's per-phase submission timestamps (ROK-1296, U4 SubmitBar).
+     * Both fields are ISO 8601 UTC strings or null. Populated for the
+     * authenticated caller from the `community_lineup_user_submissions` row
+     * scoped to (lineup, viewer). Always present in the response shape; an
+     * unauthenticated detail call (e.g. /public/...) yields both nulls.
+     */
+    viewerSubmissions: ViewerSubmissionsSchema,
 });
 
 export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;

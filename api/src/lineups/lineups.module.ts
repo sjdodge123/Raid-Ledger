@@ -4,6 +4,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LineupsController } from './lineups.controller';
 import { PublicLineupController } from './public-lineup.controller';
+import { LineupSubmitController } from './submit/lineup-submit.controller';
+import { LineupSubmitService } from './submit/lineup-submit.service';
 import { LineupsService } from './lineups.service';
 import { PublicLineupService } from './public-lineup.service';
 import { PublicLineupOgService } from './public-lineup-og.service';
@@ -45,9 +47,14 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
       inject: [ConfigService],
     }),
   ],
-  controllers: [LineupsController, PublicLineupController],
+  controllers: [
+    LineupsController,
+    PublicLineupController,
+    LineupSubmitController,
+  ],
   providers: [
     LineupsService,
+    LineupSubmitService,
     PublicLineupService,
     PublicLineupOgService,
     LineupSteamNudgeService,
