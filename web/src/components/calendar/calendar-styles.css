@@ -610,6 +610,26 @@
     color: #e2e8f0;
 }
 
+/* ROK-1305: collapsed sidebar filter chip — replaces inline list + Show all. */
+.calendar-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.5rem;
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.calendar-filter-chip:hover {
+    background: rgba(71, 85, 105, 0.6);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
 .game-filter-item {
     display: flex;
     align-items: center;

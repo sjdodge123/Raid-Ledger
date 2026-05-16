@@ -165,8 +165,19 @@ function strongestSharedKey(rows: GameRow[]): {
       if (v == null) continue;
       counts.set(v, (counts.get(v) ?? 0) + 1);
     }
-    for (const [value, n] of counts.entries()) {
-      if (n >= 2) return { matchType: c.kind, matchKey: value };
+    // ROK-1287: sort candidate values deterministically before picking the
+    // first count ≥ 2 — otherwise the pick depends on Map iteration order,
+    // which mirrors insertion order, which mirrors caller-side row order
+    // (and ultimately Postgres heap order at the loadGameRows query).
+    // igdb/steam ids are numeric strings → sort numerically; names → lex.
+    const sharedValues = Array.from(counts.entries())
+      .filter(([, n]) => n >= 2)
+      .map(([value]) => value)
+      .sort((a, b) =>
+        c.kind === 'name' ? a.localeCompare(b) : Number(a) - Number(b),
+      );
+    if (sharedValues.length > 0) {
+      return { matchType: c.kind, matchKey: sharedValues[0] };
     }
   }
   // Connected components of ≥ 2 rows ALWAYS share at least one key; the loop
