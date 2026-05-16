@@ -22,8 +22,12 @@ const ALLOWED_TYPES: Record<string, { ext: string; magic: number[] }> = {
   'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47] },
   'image/jpeg': { ext: 'jpg', magic: [0xff, 0xd8, 0xff] },
   'image/webp': { ext: 'webp', magic: [0x52, 0x49, 0x46, 0x46] },
-  'image/svg+xml': { ext: 'svg', magic: [0x3c] }, // '<'
 };
+
+// Extensions no longer accepted but possibly left on disk from prior uploads.
+// removeOldLogos walks both ALLOWED_TYPES and LEGACY_EXTS so a re-upload
+// replaces any pre-existing legacy file (ROK-1292 PR 2).
+const LEGACY_EXTS = ['svg'];
 
 const MAX_LOGO_SIZE = 2 * 1024 * 1024; // 2 MB
 
@@ -64,9 +68,7 @@ function logoFileFilter(
 ) {
   if (!ALLOWED_TYPES[file.mimetype]) {
     cb(
-      new BadRequestException(
-        'Only PNG, JPEG, WebP, and SVG images are allowed',
-      ),
+      new BadRequestException('Only PNG, JPEG, and WebP images are allowed'),
       false,
     );
     return;
@@ -163,11 +165,15 @@ export class BrandingController {
     }
   }
 
-  /** Remove old logo files with different extensions. */
+  /** Remove old logo files with different extensions (including legacy formats). */
   private removeOldLogos(currentFilename: string): void {
     const dir = getBrandingDir();
     const currentExt = path.extname(currentFilename);
-    for (const { ext } of Object.values(ALLOWED_TYPES)) {
+    const allExts = [
+      ...Object.values(ALLOWED_TYPES).map((t) => t.ext),
+      ...LEGACY_EXTS,
+    ];
+    for (const ext of allExts) {
       if (`.${ext}` !== currentExt) {
         const oldPath = path.join(dir, `logo.${ext}`);
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);

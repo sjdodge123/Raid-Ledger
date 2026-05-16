@@ -67,7 +67,7 @@ function LogoUploadSection({ logoUrl, onUploadClick, isPending, fileInputRef, on
                     className="px-4 py-2.5 min-h-[44px] text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors disabled:opacity-50">
                     {isPending ? 'Uploading...' : 'Upload Logo'}
                 </button>
-                <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={onFileChange} className="hidden" />
+                <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={onFileChange} className="hidden" />
             </div>
         </div>
     );
