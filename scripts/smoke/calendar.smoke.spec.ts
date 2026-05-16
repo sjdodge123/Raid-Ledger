@@ -68,9 +68,14 @@ test.describe('Calendar — desktop', () => {
         await chip.click();
         const dialog = page.getByRole('dialog', { name: /filter by game/i });
         await expect(dialog).toBeVisible({ timeout: 5_000 });
-        // The dialog should contain at least one game checkbox.
-        const dialogCheckboxes = dialog.getByRole('checkbox');
-        const count = await dialogCheckboxes.count();
+        // AC: dialog exposes Select all / Deselect all / search / game list.
+        // Modal items wrap visually-hidden <input type="checkbox"> in <label>,
+        // so the AX tree drops the input — target the .game-filter-item label.
+        await expect(dialog.getByRole('button', { name: 'All' })).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'None' })).toBeVisible();
+        await expect(dialog.getByRole('textbox', { name: /search games/i })).toBeVisible();
+        const items = dialog.locator('.game-filter-item');
+        const count = await items.count();
         expect(count).toBeGreaterThan(0);
     });
 });
