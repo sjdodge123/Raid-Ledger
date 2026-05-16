@@ -11,11 +11,13 @@
  * and its endpoints have been deleted. The hardcoded `DEFAULT_DURATIONS`
  * constant is exercised by the "should use admin defaults" case below.
  */
+import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
+import * as schema from '../drizzle/schema';
 
 function describePhaseScheduling() {
   let testApp: TestApp;
@@ -339,5 +341,177 @@ function describePhaseScheduling() {
     });
   }
   describe('PATCH reverse transitions', describeReverseTransitions);
+
+  // ── ROK-1306: wrong-game-link regression ───────────────────
+  //
+  // Reproduces the prod 2026-05-15 failure: Lineup #115 decided, was reverted
+  // to voting, decided again — but `buildMatchesForLineup`'s `onConflictDoNothing`
+  // silently dropped the second insert and the lineup ended up wired to the
+  // OLD match row including its stale scheduling poll (ORBITALIS #9). The fix
+  // is delete-then-insert per decide. Tests below pin both:
+  //   (a) each decide spawns fresh match ids — no carry-over of suggested/
+  //       scheduling matches from the prior decide.
+  //   (b) `GET /lineups/:lineupId/schedule/:matchId` returns 404 when the
+  //       match belongs to a different lineup (route guard).
+
+  async function seedGame(name: string, slug: string) {
+    const [game] = await testApp.db
+      .insert(schema.games)
+      .values({ name, slug })
+      .returning();
+    return game;
+  }
+
+  async function nominateAndVote(
+    lineupId: number,
+    gameIds: number[],
+  ): Promise<void> {
+    for (const gameId of gameIds) {
+      await testApp.db.insert(schema.communityLineupEntries).values({
+        lineupId,
+        gameId,
+        nominatedBy: testApp.seed.adminUser.id,
+      });
+    }
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'voting' });
+    for (const gameId of gameIds) {
+      await testApp.db.insert(schema.communityLineupVotes).values({
+        lineupId,
+        userId: testApp.seed.adminUser.id,
+        gameId,
+      });
+    }
+  }
+
+  async function advanceToDecided(
+    lineupId: number,
+    decidedGameId: number,
+  ): Promise<void> {
+    await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'decided', decidedGameId });
+  }
+
+  async function fetchMatchIdsForLineup(lineupId: number): Promise<number[]> {
+    const rows = await testApp.db
+      .select({ id: schema.communityLineupMatches.id })
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    return rows.map((r) => r.id).sort((a, b) => a - b);
+  }
+
+  function describeWrongGameLinkRegression() {
+    it('decide → revert → decide spawns FRESH match ids per game (no carry-over)', async () => {
+      const game1 = await seedGame('Helldivers 2', 'helldivers-2-r1306');
+      const game2 = await seedGame('Destiny 2', 'destiny-2-r1306');
+      const game3 = await seedGame('Valheim', 'valheim-r1306');
+
+      const { id: lineupId } = await createLineupOrFail(adminToken, {
+        buildingDurationHours: 24,
+        votingDurationHours: 48,
+        decidedDurationHours: 24,
+      });
+
+      await nominateAndVote(lineupId, [game1.id, game2.id, game3.id]);
+      await advanceToDecided(lineupId, game1.id);
+
+      const firstIds = await fetchMatchIdsForLineup(lineupId);
+      expect(firstIds.length).toBeGreaterThan(0);
+
+      // Revert decided → voting (the path the operator clicked in prod).
+      const revertRes = await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'voting' });
+      expect(revertRes.status).toBe(200);
+
+      // Advance to decided again — buildMatchesForLineup must wipe the prior
+      // suggested/scheduling matches before re-inserting. Otherwise the new
+      // insert silently drops on uq_lineup_match_game and the lineup ends up
+      // wired to the STALE match row from the first decide.
+      await advanceToDecided(lineupId, game1.id);
+      const secondIds = await fetchMatchIdsForLineup(lineupId);
+
+      // Same number of matches per game.
+      expect(secondIds).toHaveLength(firstIds.length);
+      // BUT every id must differ from the first round — proves we
+      // deleted-then-re-inserted instead of silently keeping the old rows.
+      for (const id of secondIds) {
+        expect(firstIds).not.toContain(id);
+      }
+    });
+
+    it('preserves the decide → scheduling state when no revert happens (sanity)', async () => {
+      // Negative control: a single decide with no revert must produce stable
+      // match ids — the delete-then-insert pass must not run a second time
+      // when nothing triggers a re-decide.
+      const game1 = await seedGame('Halo', 'halo-r1306');
+
+      const { id: lineupId } = await createLineupOrFail(adminToken);
+      await nominateAndVote(lineupId, [game1.id]);
+      await advanceToDecided(lineupId, game1.id);
+
+      const before = await fetchMatchIdsForLineup(lineupId);
+      expect(before.length).toBeGreaterThan(0);
+
+      // A no-op GET on the lineup must not regenerate matches.
+      const detail = await testApp.request
+        .get(`/lineups/${lineupId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(detail.status).toBe(200);
+
+      const after = await fetchMatchIdsForLineup(lineupId);
+      expect(after).toEqual(before);
+    });
+
+    it('GET /lineups/:lineupId/schedule/:matchId returns 404 when matchId belongs to a different lineup', async () => {
+      // Build TWO lineups so we have a matchId from lineup A and try to load
+      // it under lineup B's URL — the prod failure shape generalised.
+      const game = await seedGame('Cross Lineup Game', 'cross-lineup-r1306');
+
+      const { id: lineupA } = await createLineupOrFail(adminToken);
+      await nominateAndVote(lineupA, [game.id]);
+      await advanceToDecided(lineupA, game.id);
+      const [matchIdA] = await fetchMatchIdsForLineup(lineupA);
+      expect(matchIdA).toBeDefined();
+
+      // Use a deliberately unrelated 2nd lineup id — does NOT need to have
+      // a real match of its own; the guard only needs match.lineupId ≠
+      // requested lineupId.
+      const { id: lineupB } = await createLineupOrFail(adminToken);
+
+      const res = await testApp.request
+        .get(`/lineups/${lineupB}/schedule/${matchIdA}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(404);
+      // Must be the domain guard message, not a route-not-found.
+      expect(res.body.message).toMatch(/match not found in this lineup/i);
+    });
+
+    it('GET /lineups/:lineupId/schedule/:matchId still succeeds for the correct lineup', async () => {
+      // Positive control: the route guard must not break the happy path.
+      const game = await seedGame('Happy Path Game', 'happy-path-r1306');
+
+      const { id: lineupId } = await createLineupOrFail(adminToken);
+      await nominateAndVote(lineupId, [game.id]);
+      await advanceToDecided(lineupId, game.id);
+      const [matchId] = await fetchMatchIdsForLineup(lineupId);
+      expect(matchId).toBeDefined();
+
+      const res = await testApp.request
+        .get(`/lineups/${lineupId}/schedule/${matchId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.match.id).toBe(matchId);
+    });
+  }
+  describe(
+    'ROK-1306: wrong-game-link regression',
+    describeWrongGameLinkRegression,
+  );
 }
 describe('Lineup Phase Scheduling (integration)', describePhaseScheduling);
