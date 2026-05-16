@@ -297,6 +297,16 @@ ROK-1292 closed 2026-05-16. PR 1 (Group A — 4 docker-compose / allinone JWT-gu
 - **[low]** `scripts/smoke/lineup-confirmation-pills-invitee.smoke.spec.ts:127` (mobile only) — `Building phase — invitee hero variants › invitee-acted: hero flips to waiting tone after nomination` fails with `data-tone` returning `"action"` after 14 polls instead of expected `"waiting"` (5s timeout). Hero-tone state is derived from the lineup's invitee snapshot — likely the same cross-worker bleedover. Desktop passes.
   Suggested: poll for the underlying nomination state via API before asserting the derived `data-tone`, OR isolate the invitee fixture per worker so the snapshot isn't racing the global lineup state.
 
+### 2026-05-16 — rok-1294-journey-hero (surfaced during npx tsc --noEmit -p api/tsconfig.json)
+
+10 pre-existing TypeScript errors in `api/src` test files. None caused by ROK-1294's diff. The dev's CI proof for ROK-1294 ran `npx tsc --noEmit -p web/tsconfig.json` (web only) + `npm run build -w api` (which uses `nest build` and excludes `*.spec.ts` per `tsconfig.build.json`), so these never surfaced — they only appear when typechecking the full `api/tsconfig.json` including specs. Worth deciding whether the api/CI step should compile specs.
+
+- **[low]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — `TS2769: No overload matches this call`. Drizzle query builder type mismatch.
+- **[low]** `api/src/admin/games-dedup-audit.service.spec.ts:432` — `TS2502: 'tx' is referenced directly or indirectly in its own type annotation`. Recursive type in transaction mock.
+- **[low]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` (3 errors) — `TS2352: Conversion of type 'RowList<{...}>' to type '{...}' may be a mistake`. Test-side type assertion mismatches between Drizzle's camelCase result and snake_case fixture shape.
+- **[low]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — `TS2345: Argument of type 'SQL<unknown>' is not assignable to parameter of type 'string | SQLWrapper'`. Cross-package drizzle-orm version mismatch in private types (`shouldInlineParams`).
+- **[low]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` (4 errors) — `TS2556: A spread argument must either have a tuple type or be passed to a rest parameter`. Type narrowing failure on a generic mock.
+  Suggested: most are 1-2 line fixes (add `as { ... }[]` cast or narrow the mock signature). The drizzle-orm cross-package mismatch may be a workspace nohoist issue.
 
 ### 2026-05-16 — fix/batch-2026-05-16 (surfaced during Playwright sweep on batch)
 
