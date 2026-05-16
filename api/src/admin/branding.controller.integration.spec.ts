@@ -10,6 +10,7 @@
  * 201) and will pass once SVG is dropped.
  */
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -19,7 +20,16 @@ import {
 import { SettingsService } from '../settings/settings.service';
 import { BrandingController } from './branding.controller';
 
-const BRANDING_DIR = path.join(process.cwd(), 'uploads', 'branding');
+// Sandbox to a per-run tmpdir so the spec cannot wipe the operator's real
+// dev `api/uploads/branding/` (the dev server's static-asset path). The
+// production code at `branding.controller.ts::getBrandingDir` honors
+// RAID_LEDGER_BRANDING_DIR when set. Set at module load (before any
+// `beforeAll`) so the controller's multer storage callback + onModuleInit
+// pick it up. Cleaned up entirely in `afterAll` below.
+const BRANDING_DIR = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'rok-1292-branding-'),
+);
+process.env.RAID_LEDGER_BRANDING_DIR = BRANDING_DIR;
 
 function clearBrandingDir(): void {
   if (!fs.existsSync(BRANDING_DIR)) return;
@@ -71,6 +81,12 @@ describe('ROK-1292 PR 2 — branding logo SVG XSS rejection', () => {
 
   afterAll(() => {
     clearBrandingDir();
+    try {
+      fs.rmdirSync(BRANDING_DIR);
+    } catch {
+      // best-effort: removal can fail if a stray file remains
+    }
+    delete process.env.RAID_LEDGER_BRANDING_DIR;
   });
 
   it('rejects an SVG containing <script> with 400 and an error message that does not name SVG', async () => {
@@ -149,5 +165,31 @@ describe('ROK-1292 PR 2 — branding logo SVG XSS rejection', () => {
     expect(res.body).toMatchObject({
       communityLogoUrl: expect.stringMatching(/\.png$/),
     });
+  });
+
+  // Regression guard for ROK-1292 PR 2 follow-up: an uploaded logo's
+  // on-disk path MUST resolve under the sandboxed BRANDING_DIR, not
+  // process.cwd()/uploads/branding. If this test ever fails, the
+  // env-var override is broken and `npm run test -w api` will resume
+  // wiping the operator's real dev logo.
+  it('upload lands under the sandboxed BRANDING_DIR, never under process.cwd()', async () => {
+    const png = makeTinyPngBuffer();
+    await testApp.request
+      .post('/admin/branding/logo')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('logo', png, {
+        filename: 'logo.png',
+        contentType: 'image/png',
+      })
+      .expect(201);
+
+    const settings = testApp.app.get(SettingsService);
+    const branding = await settings.getBranding();
+    expect(branding.communityLogoPath).toBeTruthy();
+    expect(branding.communityLogoPath?.startsWith(BRANDING_DIR)).toBe(true);
+    expect(branding.communityLogoPath).not.toContain(
+      path.join(process.cwd(), 'uploads', 'branding'),
+    );
+    expect(fs.existsSync(branding.communityLogoPath!)).toBe(true);
   });
 });

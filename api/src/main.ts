@@ -56,9 +56,11 @@ function configureStaticAssets(
       ? '/data/avatars'
       : path.join(process.cwd(), 'uploads', 'avatars'));
   app.useStaticAssets(avatarDir, { prefix: '/avatars/', maxAge: '7d' });
-  const brandingDir = isProduction
-    ? '/data/uploads/branding'
-    : path.join(process.cwd(), 'uploads', 'branding');
+  const brandingDir =
+    process.env.RAID_LEDGER_BRANDING_DIR ||
+    (isProduction
+      ? '/data/uploads/branding'
+      : path.join(process.cwd(), 'uploads', 'branding'));
   app.useStaticAssets(brandingDir, {
     prefix: '/uploads/branding/',
     maxAge: '1d',
