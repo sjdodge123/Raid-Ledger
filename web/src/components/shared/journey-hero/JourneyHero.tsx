@@ -75,61 +75,43 @@ function pillLabelFor(tone: HeroTone, override?: string): string | null {
   return null;
 }
 
+function HeroHeader({ badgeId, badge, tone, pillLabel }: { badgeId: string; badge: string; tone: HeroTone; pillLabel: string | null }): JSX.Element {
+  const pillCls = tone === 'set' ? PILL_CLS.set : PILL_CLS.default;
+  return (
+    <div className="flex items-baseline justify-between mb-1">
+      <span id={badgeId} className={`text-[10px] uppercase tracking-wider ${BADGE_CLS[tone]}`}>{badge}</span>
+      {pillLabel && (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full border ${pillCls}`}>{pillLabel}</span>
+      )}
+    </div>
+  );
+}
+
+function HeroCta({ cta, onCtaClick, tone }: { cta: string; onCtaClick?: () => void; tone: HeroTone }): JSX.Element {
+  const cls = tone === 'action'
+    ? 'inline-block px-2 py-0.5 text-[10px] rounded bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed'
+    : 'inline-block px-2 py-0.5 text-[10px] rounded border border-edge text-muted disabled:opacity-50 disabled:cursor-not-allowed';
+  return (
+    <div className="text-right">
+      <button type="button" className={cls} onClick={onCtaClick} disabled={!onCtaClick}>{cta}</button>
+    </div>
+  );
+}
+
 export function JourneyHero(props: JourneyHeroProps): JSX.Element {
-  const {
-    phase,
-    active,
-    badge,
-    task,
-    sub,
-    cta,
-    onCtaClick,
-    hint,
-    tone = 'action',
-    exitCondition,
-    cue,
-    donePillLabel,
-    noRibbon,
-  } = props;
+  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon } = props;
   const badgeId = useId();
   const computedActive: HeroActive = active ?? PHASE_TO_ACTIVE[phase ?? 'nominating'];
   const taskCls = tone === 'action' ? 'text-foreground' : 'text-secondary';
   const pillLabel = pillLabelFor(tone, donePillLabel);
-  const pillCls = tone === 'set' ? PILL_CLS.set : PILL_CLS.default;
-  const ctaCls = tone === 'action'
-    ? 'inline-block px-2 py-0.5 text-[10px] rounded bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed'
-    : 'inline-block px-2 py-0.5 text-[10px] rounded border border-edge text-muted disabled:opacity-50 disabled:cursor-not-allowed';
-
   return (
-    <div
-      role="region"
-      aria-labelledby={badgeId}
-      className={`border rounded-lg p-3 ${BORDER_CLS[tone]}`}
-    >
+    <div role="region" aria-labelledby={badgeId} className={`border rounded-lg p-3 ${BORDER_CLS[tone]}`}>
       {!noRibbon && <PhaseRibbon active={computedActive} />}
-      <div className="flex items-baseline justify-between mb-1">
-        <span id={badgeId} className={`text-[10px] uppercase tracking-wider ${BADGE_CLS[tone]}`}>{badge}</span>
-        {pillLabel && (
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full border ${pillCls}`}>
-            {pillLabel}
-          </span>
-        )}
-      </div>
+      <HeroHeader badgeId={badgeId} badge={badge} tone={tone} pillLabel={pillLabel} />
       <div className={`text-sm font-semibold mb-1 ${taskCls}`}>{task}</div>
       {sub && <div className="text-[11px] text-muted mb-1">{sub}</div>}
       {exitCondition && <div className="text-[10px] text-amber-300/80 mb-2 italic">⏱ {exitCondition}</div>}
-      {cta && (
-        <div className="text-right">
-          <button
-            type="button"
-            className={ctaCls}
-            onClick={onCtaClick}
-            disabled={!onCtaClick}
-          >
-            {cta}
-          </button>
-        </div>
-      )}
+      {cta && <HeroCta cta={cta} onCtaClick={onCtaClick} tone={tone} />}
       {cue && <div className="text-[10px] text-emerald-300/80 mt-2">🔔 {cue}</div>}
       {hint && <div className="text-[10px] text-muted mt-2 italic">{hint}</div>}
     </div>
