@@ -14,8 +14,8 @@ import path from 'path';
  *   - Web running on :5173 (auto-started locally via webServer below)
  */
 export default defineConfig({
-    testDir: './scripts/smoke',
-    testMatch: /\.smoke\.spec\.ts$/,
+    testDir: './',
+    testMatch: [/scripts\/smoke\/.*\.smoke\.spec\.ts$/, /tests\/playwright\/.*\.spec\.ts$/],
 
     /* Global setup: authenticate admin and save storageState */
     globalSetup: path.resolve('scripts/playwright-global-setup.ts'),
