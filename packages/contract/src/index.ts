@@ -147,3 +147,6 @@ export * from './community-insights.schema.js';
 
 // Community Lineup Realtime WS Events (ROK-1118)
 export * from './lineups/index.js';
+
+// Games lookup by name (ROK-1295)
+export * from './games-lookup-by-name.schema.js';
