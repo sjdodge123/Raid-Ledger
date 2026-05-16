@@ -138,6 +138,9 @@ export const LineupWireframesRoute = lazyWithRetry(() =>
 export const LineupWireframesIndexRoute = lazyWithRetry(() =>
     import('./dev/lineup-wireframes/LineupWireframesRoute').then((m) => ({ default: m.LineupWireframesIndexRoute })),
 );
+export const SimplifyWireframesPage = lazyWithRetry(() =>
+    import('./dev/simplify-wireframes/SimplifyWireframesPage').then((m) => ({ default: m.SimplifyWireframesPage })),
+);
 
 // -- Lazy loaded admin panels --
 export const AdminSettingsLayout = lazyWithRetry(() =>
