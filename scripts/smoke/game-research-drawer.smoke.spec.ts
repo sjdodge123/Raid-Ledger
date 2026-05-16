@@ -27,8 +27,15 @@ const GAMEREF_ROW_TESTID = 'game-ref-row';
  */
 async function gotoGamesAndWaitForRows(page: import('@playwright/test').Page): Promise<void> {
     await page.goto('/games');
-    const firstRow = page.getByTestId(GAMEREF_ROW_TESTID).first();
-    await expect(firstRow).toBeVisible({ timeout: 15_000 });
+    // Both desktop (`hidden md:block`) and mobile (`md:hidden`) blocks render the
+    // same `data-testid="game-ref-row"`. `.first()` picks the first in DOM order
+    // (the desktop block), which is `display:none` on the mobile viewport. Filter
+    // to the visible occurrence so the same helper works in both projects.
+    await expect(firstVisibleGameRef(page)).toBeVisible({ timeout: 15_000 });
+}
+
+function firstVisibleGameRef(page: import('@playwright/test').Page) {
+    return page.locator(`[data-testid="${GAMEREF_ROW_TESTID}"]:visible`).first();
 }
 
 test.describe('Game Research Drawer — desktop', () => {
@@ -40,7 +47,7 @@ test.describe('Game Research Drawer — desktop', () => {
         await gotoGamesAndWaitForRows(page);
         const urlBeforeClick = page.url();
 
-        await page.getByTestId(GAMEREF_ROW_TESTID).first().click();
+        await firstVisibleGameRef(page).click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible({ timeout: 5_000 });
@@ -49,7 +56,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('Escape key closes the drawer', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await page.getByTestId(GAMEREF_ROW_TESTID).first().click();
+        await firstVisibleGameRef(page).click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -60,7 +67,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('outside-click on backdrop closes the drawer', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await page.getByTestId(GAMEREF_ROW_TESTID).first().click();
+        await firstVisibleGameRef(page).click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -71,7 +78,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('dedicated close button (X) closes the drawer', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await page.getByTestId(GAMEREF_ROW_TESTID).first().click();
+        await firstVisibleGameRef(page).click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -82,7 +89,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('drawer is a labelled dialog (role=dialog + aria-modal)', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await page.getByTestId(GAMEREF_ROW_TESTID).first().click();
+        await firstVisibleGameRef(page).click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -93,7 +100,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('inline action button does NOT trigger drawer (whole row is the trigger except action)', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        const row = page.getByTestId(GAMEREF_ROW_TESTID).first();
+        const row = firstVisibleGameRef(page);
         const inlineAction = row.getByTestId('game-ref-row-action');
         const present = await inlineAction.isVisible({ timeout: 3_000 }).catch(() => false);
         test.skip(!present, 'Demo integration row has no inline action — skip click-area discrimination');
@@ -105,7 +112,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('drawer CTA fires without navigating (action commits in-page)', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await page.getByTestId(GAMEREF_ROW_TESTID).first().click();
+        await firstVisibleGameRef(page).click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -129,26 +136,29 @@ test.describe('Game Research Drawer — mobile', () => {
 
     test('mobile drawer is anchored to the bottom of the viewport (bottom-sheet)', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await page.getByTestId(GAMEREF_ROW_TESTID).first().click();
+        await firstVisibleGameRef(page).click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible({ timeout: 5_000 });
 
-        const drawerBox = await drawer.boundingBox();
+        // Measure the inner panel (the actual sized box), not the fixed inset-0 dialog wrapper.
+        const panel = page.getByTestId('game-research-drawer-panel');
+        const panelBox = await panel.boundingBox();
         const viewportSize = page.viewportSize();
-        if (!drawerBox || !viewportSize) {
-            throw new Error('Could not measure drawer or viewport');
+        if (!panelBox || !viewportSize) {
+            throw new Error('Could not measure drawer panel or viewport');
         }
-        // Bottom-sheet contract: drawer bottom edge is flush with viewport bottom
-        // (allow a 2px sub-pixel rounding tolerance) AND the drawer occupies the
-        // lower half (top edge > 50% of viewport height).
-        expect(drawerBox.y + drawerBox.height).toBeGreaterThanOrEqual(viewportSize.height - 2);
-        expect(drawerBox.y).toBeGreaterThan(viewportSize.height * 0.4);
+        // Bottom-sheet contract: panel bottom edge flush with viewport bottom
+        // (2px sub-pixel rounding tolerance) AND panel height capped at ~85vh
+        // (mobile bottom-sheet convention — never covers the full viewport).
+        expect(panelBox.y + panelBox.height).toBeGreaterThanOrEqual(viewportSize.height - 2);
+        expect(panelBox.height).toBeLessThanOrEqual(viewportSize.height * 0.85 + 2);
+        expect(panelBox.y).toBeGreaterThan(0);
     });
 
     test('mobile drawer closes on outside tap', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await page.getByTestId(GAMEREF_ROW_TESTID).first().click();
+        await firstVisibleGameRef(page).click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
