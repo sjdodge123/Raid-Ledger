@@ -247,16 +247,11 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
 
 - **[nit]** `tools/test-bot/scripts/no-sleep-lint.sh` still flags the comment on `tools/test-bot/src/smoke/tests/lineup-abort.test.ts:26` (same entry under fix/rok-1243 worktree) — reproduces on origin/main, still unresolved.
 
-### 2026-05-15 — rok-1292-pr1-local-env-hardening (deferred PR 2 + PR 3 from ROK-1292 /security-review)
+### 2026-05-16 — security-review 2026-05-14 PR 3 defense-in-depth (Group C deferred from ROK-1292)
 
-ROK-1292 ships in 3 PRs per its body. **PR 1 (this PR) lands the 4 docker-compose / allinone JWT-guard items + 2 validation-pass follow-ups (BANNED_SECRETS symmetry + CI negative-path test).** The remaining 9-10 original findings + 2 new completeness/reviewer findings stay tracked here so the parent Linear story (ROK-1292) and TECH-DEBT-BACKLOG agree. Source reports preserved at `planning-artifacts/security-review-7bec0fb2-fullrepo.md` + `planning-artifacts/security-review-7bec0fb2-summary.md`.
+ROK-1292 closed 2026-05-16. PR 1 (Group A — 4 docker-compose / allinone JWT-guard items + BANNED_SECRETS symmetry + CI negative-path test) shipped as PR #795 + #796. PR 2 (Group B — drop SVG from branding `ALLOWED_TYPES` + boot-time legacy `logo.svg` eviction + `bestEffortInit` classification) shipped as PR #797. Group C below is the remaining 10 app-code defense-in-depth items + 2 sibling/completeness findings, originally planned as PR 3. Operator decision to leave PR 3 in the backlog rather than carry an open Linear story for it — items will be triaged into a future fix-batch or build when convenient. Source reports preserved at `planning-artifacts/security-review-7bec0fb2-fullrepo.md` + `planning-artifacts/security-review-7bec0fb2-summary.md`.
 
-**Group B — App-code HIGH severity (PR 2 of ROK-1292):**
-
-- **[high]** `api/src/admin/branding.controller.ts:25, 152-164` + `api/src/main.ts:59-65` — SVG entry in `ALLOWED_TYPES` declares `magic: [0x3c]` (single `<` byte). Any text file beginning with `<` passes the magic-byte check; uploaded SVG is written as `logo.svg` and served same-origin from `/uploads/branding/logo.svg`. Helmet's app-wide CSP doesn't extend per-asset. Admin-only upload limits to admin-trojan / social-engineering, but a logo SVG with `<script>` executes JS in the API origin when navigated directly. (Avatar upload is hardened via `sharp` re-encode; branding intentionally preserves SVG.)
-  Suggested: drop SVG from `ALLOWED_TYPES`. If SVG required: server-side sanitize (`svg-sanitizer` / `DOMPurify`), serve with `Content-Disposition: attachment` AND per-static-asset CSP `default-src 'none'; style-src 'unsafe-inline'`, consider a sandboxed subdomain for branding. Ship with a regression test that uploads `<svg><script>...</script></svg>` and asserts rejection.
-
-**Group C — App-code defense-in-depth (PR 3 of ROK-1292):**
+**Group C — App-code defense-in-depth:**
 
 - **[med]** `api/src/ai/ai-providers.controller.ts:60-73, 234-250` — `@Body() body: AiProviderConfigDto` is a TS type alias only; no `ValidationPipe`, no Zod parse. `body.apiKey` / `body.url` / `body.model` persisted via `settings.set()` as-is. Admin-gated so external impact is low, but data-integrity / settings-cache corruption / log tampering possible from inside an admin session.
   Suggested: add `AiProviderConfigSchema` to `packages/contract` and `.parse(body)` at controller, OR convert DTO to class-validator with paired `ValidationPipe`.
@@ -285,8 +280,6 @@ ROK-1292 ships in 3 PRs per its body. **PR 1 (this PR) lands the 4 docker-compos
   Suggested: change to `"127.0.0.1:5433:5432"`. Same risk profile, same one-line fix.
 - **[nit]** `api/scripts/reencrypt-settings.ts:116` — recovery-instructions help text bakes the literal `raid-ledger-default-secret-change-in-production` into a `console.log` example. Not in `BANNED_SECRETS` scope (it's documentation), but if the literal naming is ever rotated this is a 4th replication site to update (alongside `Dockerfile.allinone`, `docker-entrypoint.sh`, `encryption.util.ts`).
   Suggested: leave for now; flag if anyone proposes renaming the legacy literal.
-
-**ROK-1292 AC reconciliation:** the story body's AC line "Backlog section '2026-05-14 — fix/batch-2026-05-14 (surfaced during operator-triggered /security-review on whole repo + local env)' pruned from `TECH-DEBT-BACKLOG.md`" is N/A — that section was never added; operator filed direct to Linear. Strike that AC bullet when ROK-1292 closes.
 
 ### 2026-05-15 — rok-1292-pr1-local-env-hardening (surfaced during validate-ci.sh typecheck)
 
