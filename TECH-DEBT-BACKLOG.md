@@ -358,3 +358,20 @@ Reviewer (sonnet, devedup-rl:reviewer) verdict PASS WITH NOTES on the batch diff
   Suggested: short-circuit on lineup status before the call, or document that `maybeAutoAdvance` already gates by status.
 - **[low]** `api/src/lineups/quorum/quorum-voters.helpers.ts:65-72` — `findDistinctVoters`/`findDistinctNominators` re-queried serially after `loadPrivateExpectedVoters`. Two sequential round-trips where one combined query would do.
   Suggested: run roster + participant fetch in `Promise.all`.
+
+### 2026-05-16 — batch/2026-05-16 (surfaced during Playwright sweep on bulk batch ROK-1293 + ROK-1272)
+
+Full-suite `npx playwright test` (desktop + mobile): 23 failed / 587 passed / 199 skipped / 35 did-not-run. Batch diff is **infra-only** (`.github/workflows/ci.yml` + `TECH-DEBT-BACKLOG.md` + `web/src/pages/admin-settings-page.tsx` deleted). Zero overlap between changed files and the failing spec subjects (all lineup/scheduling/nomination/onboarding). 9 of the 19 unique spec:line combos are already documented in earlier sections of this file as the cross-worker race / modal-materialise / fixture-bleed class under full-suite contention. The 10 below are NEW line numbers of the same class. Recording so they aren't re-discovered.
+
+- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:201` (mobile) — `Nomination modal › clicking a search result shows preview card with game name`. Same fixture race class as the `:184` / `:491` / `:506` / `:316` entries above. New line.
+- **[low]** `scripts/smoke/lineup-abort.smoke.spec.ts:276` (mobile) — `Regression: ROK-1207 — aborted-lineup detail page banner + read-only › invitee reload sees the banner and no Nominate CTA`. Modal-materialise race; ROK-1207 surface still pre-existing under full-suite load.
+- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:96` — Same cross-worker race class as the documented `lineup-confirmation-pills-invitee.smoke.spec.ts` family at lines 297 / 324 / 326 / 327.
+- **[low]** `scripts/smoke/lineup-decided.smoke.spec.ts:512` — Cross-worker active-lineup bleedover, same shape as `lineup-admin-abort-phases.smoke.spec.ts:121` (line 295 above).
+- **[low]** `scripts/smoke/lineup-tiebreaker-late-join.smoke.spec.ts:153` — Same modal-materialise race class as `lineup-tiebreaker.smoke.spec.ts:597` documented at line 97 above.
+- **[low]** `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:231` — Same family as `:597` already documented at line 97; new line number under full-suite load.
+- **[low]** `scripts/smoke/my-events.smoke.spec.ts:12` — Not previously documented. Worth a one-time isolation check on origin/main to confirm pre-existing if this carrier surfaces again — likely worker contention given the line is at the top of the spec file.
+- **[low]** `scripts/smoke/onboarding.smoke.spec.ts:330` (mobile) — `Onboarding wizard game-time step (ROK-1011) › game-time step renders compact GameTimeGrid on all viewports`. Mobile-only; not previously documented in this carrier. ROK-1011 territory.
+- **[low]** `scripts/smoke/paste-nominate.smoke.spec.ts:272` (desktop) — `Non-Steam URLs ignored (AC5) › pasting a non-Steam URL does not open modal or show toast`. Not previously documented. Likely the same modal-materialise race; carrier under full-suite load only.
+- **[low]** `scripts/smoke/scheduling-poll.smoke.spec.ts:801` (mobile) — Sibling of the documented `:771` (line 235 above). Same `"Your Other Scheduling Polls"` class on a different test.
+
+**Why this matters:** No fix is on this batch's critical path; these are noise carriers tracked so the same lines aren't re-discovered each cycle. Pattern across all three classes (modal-materialise, fixture cross-worker bleed, cached snapshot under 15s staleTime) is consistent with the documented memory `feedback_smoke_polling_for_async_writes.md` and the long ROK-1068 lineage at line 97. A focused chore — "stabilise the cross-worker active-lineup fixture state for smoke specs" — would retire most of this block in one shot. Estimated 2-4h, suitable for `/build` (not `/bulk` since it touches test infrastructure across many files).
