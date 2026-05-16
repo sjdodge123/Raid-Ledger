@@ -208,7 +208,11 @@ function describeParticipationPolicy() {
     // the deadline or remove the non-voters.
     expect(await readStatus(lineupId)).toBe('voting');
 
-    return { lineupId, nonVoter1: nonVoter1.userId, nonVoter2: nonVoter2.userId };
+    return {
+      lineupId,
+      nonVoter1: nonVoter1.userId,
+      nonVoter2: nonVoter2.userId,
+    };
   }
 
   // AC3 — time-based grace after deadline passes.
@@ -233,7 +237,7 @@ function describeParticipationPolicy() {
       .from(schema.communityLineups)
       .where(eq(schema.communityLineups.id, lineupId));
     expect(row?.deadline).toBeTruthy();
-    expect(row!.deadline!.getTime()).toBeGreaterThan(Date.now());
+    expect(row.deadline!.getTime()).toBeGreaterThan(Date.now());
 
     const drop1 = await testApp.request
       .delete(`/lineups/${lineupId}/invitees/${nonVoter1}`)

@@ -411,12 +411,9 @@ describe('checkVotingQuorum', () => {
 describe('loadQuorumGatingVoters (ROK-1258 hybrid policy)', () => {
   // Resolve dynamically so the jest.mock above (used by the
   // quorum-check tests) doesn't suppress the real helper here.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+
   const actual = jest.requireActual<{
-    loadQuorumGatingVoters: (
-      db: unknown,
-      lineup: unknown,
-    ) => Promise<number[]>;
+    loadQuorumGatingVoters: (db: unknown, lineup: unknown) => Promise<number[]>;
   }>('./quorum-voters.helpers');
 
   /**
@@ -434,7 +431,9 @@ describe('loadQuorumGatingVoters (ROK-1258 hybrid policy)', () => {
     const stub = {
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockImplementation(async () => queue.shift() ?? []),
+      where: jest
+        .fn()
+        .mockImplementation(() => Promise.resolve(queue.shift() ?? [])),
     };
     return stub;
   }
