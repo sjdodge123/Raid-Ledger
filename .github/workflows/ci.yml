@@ -390,10 +390,11 @@ jobs:
         timeout-minutes: 5
         run: |
           for i in 1 2 3; do
-            npx playwright install --with-deps chromium && break
+            npx playwright install --with-deps chromium && exit 0
             echo "Attempt $i failed; retrying..."
             sleep 5
           done
+          exit 1
 
       - name: Build contract
         run: npm run build -w packages/contract
