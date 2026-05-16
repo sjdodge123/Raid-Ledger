@@ -10,6 +10,7 @@
  * 201) and will pass once SVG is dropped.
  */
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -19,7 +20,16 @@ import {
 import { SettingsService } from '../settings/settings.service';
 import { BrandingController } from './branding.controller';
 
-const BRANDING_DIR = path.join(process.cwd(), 'uploads', 'branding');
+// Sandbox to a per-run tmpdir so the spec cannot wipe the operator's real
+// dev `api/uploads/branding/` (the dev server's static-asset path). The
+// production code at `branding.controller.ts::getBrandingDir` honors
+// RAID_LEDGER_BRANDING_DIR when set. Set at module load (before any
+// `beforeAll`) so the controller's multer storage callback + onModuleInit
+// pick it up. Cleaned up entirely in `afterAll` below.
+const BRANDING_DIR = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'rok-1292-branding-'),
+);
+process.env.RAID_LEDGER_BRANDING_DIR = BRANDING_DIR;
 
 function clearBrandingDir(): void {
   if (!fs.existsSync(BRANDING_DIR)) return;
@@ -71,6 +81,12 @@ describe('ROK-1292 PR 2 — branding logo SVG XSS rejection', () => {
 
   afterAll(() => {
     clearBrandingDir();
+    try {
+      fs.rmdirSync(BRANDING_DIR);
+    } catch {
+      // best-effort: removal can fail if a stray file remains
+    }
+    delete process.env.RAID_LEDGER_BRANDING_DIR;
   });
 
   it('rejects an SVG containing <script> with 400 and an error message that does not name SVG', async () => {

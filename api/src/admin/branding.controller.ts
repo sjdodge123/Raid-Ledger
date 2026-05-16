@@ -34,6 +34,13 @@ const LEGACY_EXTS = ['svg'];
 const MAX_LOGO_SIZE = 2 * 1024 * 1024; // 2 MB
 
 function getBrandingDir(): string {
+  // Test-only escape hatch so integration specs can sandbox to a tmpdir
+  // instead of mutating real dev uploads. ROK-1292 PR 2's spec wiped the
+  // operator's dev logo on every CI run because it computed the same
+  // `process.cwd()/uploads/branding` path the dev server serves from.
+  if (process.env.RAID_LEDGER_BRANDING_DIR) {
+    return process.env.RAID_LEDGER_BRANDING_DIR;
+  }
   const isProduction = process.env.NODE_ENV === 'production';
   return isProduction
     ? '/data/uploads/branding'
