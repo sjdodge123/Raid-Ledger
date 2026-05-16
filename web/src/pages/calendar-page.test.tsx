@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, within } from '@testing-library/react';
 import { QueryClient } from '@tanstack/react-query';
 import { makeGame, makeRegistryGame, renderPage, deliverGames } from './calendar-page.test-helpers';
 
@@ -85,36 +85,50 @@ function deliver(games: ReturnType<typeof makeGame>[]) {
     deliverGames(games, useGameFilterStore.getState().reportGames);
 }
 
+/** Open the desktop filter modal by clicking the [Filter: …] chip.
+ * Note: the mobile FAB also has aria-label "Filter by Game"; we use the
+ * .calendar-filter-chip class to disambiguate. */
+function getChip(): HTMLElement {
+    const chip = document.querySelector('.calendar-filter-chip') as HTMLElement | null;
+    if (!chip) throw new Error('CalendarFilterChip not rendered');
+    return chip;
+}
+
+function openModalViaChip() {
+    fireEvent.click(getChip());
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-function calendarpageAllKnownGamesAccumulatorGroup1() {
-it('renders the calendar view', () => {
+function accumulatorTestsGroup1() {
+    it('renders the calendar view', () => {
         render_page();
         expect(screen.getByTestId('calendar-view')).toBeInTheDocument();
     });
 
-it('game filter section is hidden before any games arrive', () => {
+    it('filter chip is hidden before any games arrive', () => {
         render_page();
-        expect(screen.queryByText('Filter by Game')).not.toBeInTheDocument();
+        expect(document.querySelector('.calendar-filter-chip')).toBeNull();
     });
 
-it('shows game filter section after games arrive', () => {
+    it('shows filter chip after games arrive', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
-        expect(screen.getAllByText('Filter by Game').length).toBeGreaterThan(0);
+        expect(document.querySelector('.calendar-filter-chip')).not.toBeNull();
     });
-
 }
 
-function calendarpageAllKnownGamesAccumulatorGroup2() {
-it('accumulates games across multiple calls (no duplicates)', () => {
+function accumulatorTestsGroup2() {
+    it('accumulates games across multiple calls (no duplicates)', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('ff14', 'Final Fantasy XIV')]);
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('gw2', 'Guild Wars 2')]);
 
-        const gameNames = screen.getAllByRole('checkbox').map(
+        openModalViaChip();
+        const dialog = screen.getByRole('dialog');
+        const gameNames = Array.from(dialog.querySelectorAll('input[type="checkbox"]')).map(
             (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
         );
         expect(gameNames).toContain('World of Warcraft');
@@ -123,19 +137,18 @@ it('accumulates games across multiple calls (no duplicates)', () => {
         expect(gameNames.length).toBe(3);
     });
 
-it('does not duplicate games when same slug appears multiple times', () => {
+    it('does not duplicate games when same slug appears multiple times', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        const checkboxes = screen.getAllByRole('checkbox');
+        openModalViaChip();
+        const dialog = screen.getByRole('dialog');
+        const checkboxes = within(dialog).getAllByRole('checkbox');
         expect(checkboxes).toHaveLength(1);
     });
 
-}
-
-function calendarpageAllKnownGamesAccumulatorGroup3() {
-it('sorts games alphabetically', () => {
+    it('sorts games alphabetically inside the filter modal', () => {
         render_page();
         deliver([
             makeGame('wow', 'World of Warcraft'),
@@ -143,31 +156,30 @@ it('sorts games alphabetically', () => {
             makeGame('ff14', 'Final Fantasy XIV'),
         ]);
 
-        const labels = screen
-            .getAllByRole('checkbox')
+        openModalViaChip();
+        const dialog = screen.getByRole('dialog');
+        const labels = Array.from(dialog.querySelectorAll('input[type="checkbox"]'))
             .map((cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '');
 
         expect(labels[0]).toBe('Apex Legends');
         expect(labels[1]).toBe('Final Fantasy XIV');
         expect(labels[2]).toBe('World of Warcraft');
     });
-
 }
 
 describe('CalendarPage — allKnownGames accumulator', () => {
-beforeEach(() => {
+    beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
 
-afterEach(() => {
+    afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    calendarpageAllKnownGamesAccumulatorGroup1();
-    calendarpageAllKnownGamesAccumulatorGroup2();
-    calendarpageAllKnownGamesAccumulatorGroup3();
+    accumulatorTestsGroup1();
+    accumulatorTestsGroup2();
 });
 
 describe('CalendarPage — auto-select behaviour', () => {
@@ -188,7 +200,9 @@ describe('CalendarPage — auto-select behaviour', () => {
         ];
         render_page();
 
-        const checkboxes = screen.getAllByRole('checkbox');
+        openModalViaChip();
+        const dialog = screen.getByRole('dialog');
+        const checkboxes = within(dialog).getAllByRole('checkbox');
         checkboxes.forEach((cb) => expect(cb).toBeChecked());
     });
 
@@ -196,139 +210,114 @@ describe('CalendarPage — auto-select behaviour', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        const wowCheckbox = screen.getByRole('checkbox');
+        openModalViaChip();
+        const dialog = screen.getByRole('dialog');
+        const wowCheckbox = within(dialog).getByRole('checkbox');
         fireEvent.change(wowCheckbox, { target: { checked: false } });
         expect(wowCheckbox).not.toBeChecked();
 
         deliver([makeGame('apex', 'Apex Legends')]);
 
-        const checkboxes = screen.getAllByRole('checkbox');
-        const apexCb = checkboxes.find(
+        const updatedCheckboxes = within(screen.getByRole('dialog')).getAllByRole('checkbox');
+        const apexCb = updatedCheckboxes.find(
             (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent === 'Apex Legends',
         );
         expect(apexCb).not.toBeChecked();
     });
 });
 
-function calendarpageInlineListCappingMaxVisibleGroup1() {
-it('shows all games inline when count <= maxVisible (5)', () => {
-        render_page();
-        deliver([
-            makeGame('a', 'Alpha'),
-            makeGame('b', 'Beta'),
-            makeGame('c', 'Gamma'),
-            makeGame('d', 'Delta'),
-            makeGame('e', 'Epsilon'),
-        ]);
-
-        const checkboxes = screen.getAllByRole('checkbox');
-        expect(checkboxes).toHaveLength(5);
-
-        expect(screen.queryByText(/Show all/i)).not.toBeInTheDocument();
-    });
-
-}
-
-function calendarpageInlineListCappingMaxVisibleGroup2() {
-it('shows "Show all N games..." button when count > maxVisible', () => {
-        render_page();
-        deliver([
-            makeGame('a', 'Alpha'),
-            makeGame('b', 'Beta'),
-            makeGame('c', 'Gamma'),
-            makeGame('d', 'Delta'),
-            makeGame('e', 'Epsilon'),
-            makeGame('f', 'Foxtrot'),
-        ]);
-
-        expect(screen.getByText(/Show all 6 games/i)).toBeInTheDocument();
-    });
-
-}
-
-function calendarpageInlineListCappingMaxVisibleGroup3() {
-it('only shows maxVisible (5) items inline when overflow', () => {
-        render_page();
-        deliver([
-            makeGame('a', 'Alpha'),
-            makeGame('b', 'Beta'),
-            makeGame('c', 'Gamma'),
-            makeGame('d', 'Delta'),
-            makeGame('e', 'Epsilon'),
-            makeGame('f', 'Foxtrot'),
-        ]);
-
-        const checkboxes = screen.getAllByRole('checkbox');
-        expect(checkboxes).toHaveLength(5);
-    });
-
-}
-
-function calendarpageInlineListCappingMaxVisibleGroup4() {
-it('"Show all" button count reflects total game count including overflow', () => {
-        render_page();
-        deliver([
-            makeGame('a', 'Alpha'),
-            makeGame('b', 'Beta'),
-            makeGame('c', 'Gamma'),
-            makeGame('d', 'Delta'),
-            makeGame('e', 'Epsilon'),
-            makeGame('f', 'Foxtrot'),
-            makeGame('g', 'Golf'),
-        ]);
-
-        expect(screen.getByText(/Show all 7 games/i)).toBeInTheDocument();
-    });
-
-}
-
-describe('CalendarPage — inline list capping (maxVisible=5)', () => {
-beforeEach(() => {
+describe('CalendarPage — filter chip', () => {
+    beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
 
-afterEach(() => {
+    afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    calendarpageInlineListCappingMaxVisibleGroup1();
-    calendarpageInlineListCappingMaxVisibleGroup2();
-    calendarpageInlineListCappingMaxVisibleGroup3();
-    calendarpageInlineListCappingMaxVisibleGroup4();
+    it('chip label reads "Filter: All games" when every game is selected', () => {
+        mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft'), makeRegistryGame('apex', 'Apex Legends', 2)];
+        render_page();
+
+        expect(getChip()).toHaveTextContent(/Filter: All games/);
+    });
+
+    it('chip label reads "Filter: All games" when zero games are selected', () => {
+        render_page();
+        deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
+
+        openModalViaChip();
+        const dialog = screen.getByRole('dialog');
+        const noneBtn = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'None');
+        fireEvent.click(noneBtn!);
+        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
+
+        expect(getChip()).toHaveTextContent(/Filter: All games/);
+    });
+
+    it('chip label reads "Filter: N games" when partial selection', () => {
+        render_page();
+        deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends'), makeGame('ff14', 'FFXIV')]);
+
+        openModalViaChip();
+        const dialog = screen.getByRole('dialog');
+        const apexLabel = Array.from(dialog.querySelectorAll('label.game-filter-item')).find(
+            (lbl) => lbl.querySelector('.game-filter-name')?.textContent === 'Apex Legends',
+        ) as HTMLElement | undefined;
+        expect(apexLabel).toBeDefined();
+        fireEvent.click(apexLabel!);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
+
+        expect(getChip()).toHaveTextContent(/Filter: 2 games/);
+    });
+
+    it('clicking the chip opens the filter modal', () => {
+        render_page();
+        deliver([makeGame('wow', 'World of Warcraft')]);
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        openModalViaChip();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('chip is hidden when no games are known', () => {
+        render_page();
+        expect(document.querySelector('.calendar-filter-chip')).toBeNull();
+    });
 });
 
-function setupWithOverflow() {
-        render_page();
-        deliver([
-            makeGame('a', 'Alpha'),
-            makeGame('b', 'Beta'),
-            makeGame('c', 'Gamma'),
-            makeGame('d', 'Delta'),
-            makeGame('e', 'Epsilon'),
-            makeGame('f', 'Foxtrot'),
-        ]);
-    }
+function setupWithGames() {
+    render_page();
+    deliver([
+        makeGame('a', 'Alpha'),
+        makeGame('b', 'Beta'),
+        makeGame('c', 'Gamma'),
+        makeGame('d', 'Delta'),
+        makeGame('e', 'Epsilon'),
+        makeGame('f', 'Foxtrot'),
+    ]);
+}
 
 function openModal() {
-        setupWithOverflow();
-        const showAllBtn = screen.getByText(/Show all/i);
-        fireEvent.click(showAllBtn);
-    }
+    setupWithGames();
+    openModalViaChip();
+}
 
-function calendarpageFilterModalOverflowGroup1() {
-it('filter modal is not visible initially', () => {
-        setupWithOverflow();
+function modalOverflowTestsGroup1() {
+    it('filter modal is not visible initially', () => {
+        setupWithGames();
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-it('opens filter modal when "Show all" is clicked', () => {
+    it('opens filter modal when the chip is clicked', () => {
         openModal();
         expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-it('modal shows all games (not just capped list)', () => {
+    it('modal shows all games', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         expect(dialog).toHaveTextContent('Alpha');
@@ -338,34 +327,32 @@ it('modal shows all games (not just capped list)', () => {
         expect(dialog).toHaveTextContent('Epsilon');
         expect(dialog).toHaveTextContent('Foxtrot');
     });
-
 }
 
-function calendarpageFilterModalOverflowGroup2() {
-it('modal title is "Filter by Game"', () => {
+function modalOverflowTestsGroup2() {
+    it('modal title is "Filter by Game"', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         expect(dialog).toHaveTextContent('Filter by Game');
     });
 
-it('modal closes when close button (X) is clicked', () => {
+    it('modal closes when close button (X) is clicked', () => {
         openModal();
         const closeBtn = screen.getByRole('button', { name: 'Close modal' });
         fireEvent.click(closeBtn);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-it('modal closes on Escape key', () => {
+    it('modal closes on Escape key', () => {
         openModal();
         expect(screen.getByRole('dialog')).toBeInTheDocument();
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
-
 }
 
-function calendarpageFilterModalOverflowGroup3() {
-it('modal closes when backdrop is clicked', () => {
+function modalOverflowTestsGroup3() {
+    it('modal closes when backdrop is clicked', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         const backdrop = dialog.parentElement?.querySelector('[aria-hidden="true"]') as HTMLElement | null;
@@ -374,7 +361,7 @@ it('modal closes when backdrop is clicked', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-it('modal has All and None buttons', () => {
+    it('modal has All and None buttons', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         const buttons = Array.from(dialog.querySelectorAll('button'));
@@ -382,10 +369,7 @@ it('modal has All and None buttons', () => {
         expect(buttons.find((b) => b.textContent === 'None')).toBeTruthy();
     });
 
-}
-
-function calendarpageFilterModalOverflowGroup4() {
-it('modal shows games sorted alphabetically', () => {
+    it('modal shows games sorted alphabetically', () => {
         openModal();
         const dialog = screen.getByRole('dialog');
         const checkboxes = Array.from(dialog.querySelectorAll('input[type="checkbox"]'));
@@ -399,22 +383,20 @@ it('modal shows games sorted alphabetically', () => {
         expect(names[4]).toBe('Foxtrot');
         expect(names[5]).toBe('Gamma');
     });
-
 }
 
-describe('CalendarPage — filter modal (overflow)', () => {
-beforeEach(() => {
+describe('CalendarPage — filter modal (desktop overflow)', () => {
+    beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
     });
 
-afterEach(() => {
+    afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    calendarpageFilterModalOverflowGroup1();
-    calendarpageFilterModalOverflowGroup2();
-    calendarpageFilterModalOverflowGroup3();
-    calendarpageFilterModalOverflowGroup4();
+    modalOverflowTestsGroup1();
+    modalOverflowTestsGroup2();
+    modalOverflowTestsGroup3();
 });

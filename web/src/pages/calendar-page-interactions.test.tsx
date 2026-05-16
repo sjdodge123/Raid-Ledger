@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { makeGame, makeRegistryGame, renderPage, deliverGames } from './calendar-page.test-helpers';
@@ -86,6 +86,23 @@ function deliver(games: ReturnType<typeof makeGame>[]) {
     deliverGames(games, useGameFilterStore.getState().reportGames);
 }
 
+/** Click the desktop [Filter: …] chip to open the modal.
+ * The mobile FAB also has aria-label "Filter by Game"; disambiguate via class. */
+function getChip(): HTMLElement {
+    const chip = document.querySelector('.calendar-filter-chip') as HTMLElement | null;
+    if (!chip) throw new Error('CalendarFilterChip not rendered');
+    return chip;
+}
+
+function openModalViaChip() {
+    fireEvent.click(getChip());
+}
+
+/** Return the currently-open modal dialog. */
+function getDialog() {
+    return screen.getByRole('dialog');
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -101,11 +118,12 @@ describe('CalendarPage — game toggle', () => {
         activeQueryClient?.clear();
     });
 
-    it('unchecking a game deselects it (checkbox becomes unchecked)', () => {
+    it('unchecking a game in the modal deselects it', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        const checkbox = screen.getByRole('checkbox');
+        openModalViaChip();
+        const checkbox = within(getDialog()).getByRole('checkbox');
         expect(checkbox).toBeChecked();
 
         fireEvent.change(checkbox, { target: { checked: false } });
@@ -116,7 +134,8 @@ describe('CalendarPage — game toggle', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        const checkbox = screen.getByRole('checkbox');
+        openModalViaChip();
+        const checkbox = within(getDialog()).getByRole('checkbox');
         fireEvent.change(checkbox, { target: { checked: false } });
         expect(checkbox).not.toBeChecked();
 
@@ -124,7 +143,7 @@ describe('CalendarPage — game toggle', () => {
         expect(checkbox).toBeChecked();
     });
 
-    it('toggling in modal stays synced with inline list', () => {
+    it('toggling in modal updates chip label', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -135,8 +154,8 @@ describe('CalendarPage — game toggle', () => {
             makeGame('f', 'Foxtrot'),
         ]);
 
-        fireEvent.click(screen.getByText(/Show all/i));
-        const dialog = screen.getByRole('dialog');
+        openModalViaChip();
+        const dialog = getDialog();
 
         const alphaLabel = Array.from(dialog.querySelectorAll('label.game-filter-item')).find(
             (lbl) => lbl.querySelector('.game-filter-name')?.textContent === 'Alpha',
@@ -153,13 +172,8 @@ describe('CalendarPage — game toggle', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
 
-        const inlineCheckboxes = screen.getAllByRole('checkbox');
-        const inlineAlpha = inlineCheckboxes.find((cb) =>
-            (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent === 'Alpha',
-        ) as HTMLInputElement | undefined;
-
-        expect(inlineAlpha).toBeDefined();
-        expect(inlineAlpha).not.toBeChecked();
+        // The chip now reflects the partial selection (5 of 6).
+        expect(getChip()).toHaveTextContent(/Filter: 5 games/);
     });
 });
 
@@ -174,31 +188,37 @@ describe('CalendarPage — All / None buttons', () => {
         activeQueryClient?.clear();
     });
 
-    it('"All" button selects all known games (inline area)', () => {
+    it('"All" button in modal selects all known games', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
-        const checkboxes = screen.getAllByRole('checkbox');
+        openModalViaChip();
+        const dialog = getDialog();
+
+        const checkboxes = within(dialog).getAllByRole('checkbox');
         fireEvent.change(checkboxes[0], { target: { checked: false } });
         expect(checkboxes[0]).not.toBeChecked();
 
-        const allBtns = screen.getAllByRole('button', { name: /^All$/i });
-        fireEvent.click(allBtns[0]);
+        const allBtn = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'All')!;
+        fireEvent.click(allBtn);
 
-        screen.getAllByRole('checkbox').forEach((cb) => expect(cb).toBeChecked());
+        within(dialog).getAllByRole('checkbox').forEach((cb) => expect(cb).toBeChecked());
     });
 
-    it('"None" button deselects all games', () => {
+    it('"None" button in modal deselects all games', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
-        const noneBtns = screen.getAllByRole('button', { name: /^None$/i });
-        fireEvent.click(noneBtns[0]);
+        openModalViaChip();
+        const dialog = getDialog();
 
-        screen.getAllByRole('checkbox').forEach((cb) => expect(cb).not.toBeChecked());
+        const noneBtn = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'None')!;
+        fireEvent.click(noneBtn);
+
+        within(dialog).getAllByRole('checkbox').forEach((cb) => expect(cb).not.toBeChecked());
     });
 
-    it('"All" in modal selects all games including those not in inline list', () => {
+    it('"All" in modal selects all games including those scrolled off the inline list', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -209,8 +229,8 @@ describe('CalendarPage — All / None buttons', () => {
             makeGame('f', 'Foxtrot'),
         ]);
 
-        fireEvent.click(screen.getByText(/Show all/i));
-        const dialog = screen.getByRole('dialog');
+        openModalViaChip();
+        const dialog = getDialog();
 
         const noneBtns = Array.from(dialog.querySelectorAll('button')).filter((b) => b.textContent === 'None');
         fireEvent.click(noneBtns[0]);
@@ -222,18 +242,6 @@ describe('CalendarPage — All / None buttons', () => {
         fireEvent.click(allBtns[0]);
 
         modalCheckboxes.forEach((cb) => expect(cb as HTMLInputElement).toBeChecked());
-    });
-
-    it('"None" deselects all games immediately', () => {
-        render_page();
-        deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
-
-        screen.getAllByRole('checkbox').forEach((cb) => expect(cb).toBeChecked());
-
-        const noneBtns = screen.getAllByRole('button', { name: /^None$/i });
-        fireEvent.click(noneBtns[0]);
-
-        screen.getAllByRole('checkbox').forEach((cb) => expect(cb).not.toBeChecked());
     });
 });
 
@@ -251,15 +259,20 @@ describe('CalendarPage — filter persistence when view changes — part 1', () 
         const { rerender } = render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        const checkboxes = screen.getAllByRole('checkbox');
-        const wowLabel = checkboxes
-            .map((cb) => cb.closest('label') as HTMLElement | null)
-            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('World'));
+        openModalViaChip();
+        const dialog = getDialog();
+
+        const wowLabel = Array.from(dialog.querySelectorAll('label.game-filter-item')).find(
+            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
+        ) as HTMLElement | undefined;
         expect(wowLabel).toBeTruthy();
         fireEvent.click(wowLabel!);
 
         const wowCb = wowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
         expect(wowCb).not.toBeChecked();
+
+        // Close modal before rerender so the modal-open state doesn't carry through.
+        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
 
         const rerenderQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
         rerender(
@@ -270,18 +283,17 @@ describe('CalendarPage — filter persistence when view changes — part 1', () 
             </QueryClientProvider>,
         );
 
-        const updatedLabels = screen.getAllByRole('checkbox').map(
-            (cb) => cb.closest('label') as HTMLElement | null,
-        );
-        const updatedWowLabel = updatedLabels.find(
-            (lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('World'),
-        );
+        // The store retained the deselection — verify by opening the modal again.
+        openModalViaChip();
+        const newDialog = getDialog();
+        const updatedWowLabel = Array.from(newDialog.querySelectorAll('label.game-filter-item')).find(
+            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
+        ) as HTMLElement | undefined;
         if (updatedWowLabel) {
             const updatedWowCb = updatedWowLabel.querySelector('input[type="checkbox"]') as HTMLInputElement;
             expect(updatedWowCb).not.toBeChecked();
         }
     });
-
 });
 
 describe('CalendarPage — filter persistence when view changes — part 2', () => {
@@ -298,9 +310,10 @@ describe('CalendarPage — filter persistence when view changes — part 2', () 
         const { unmount } = render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        const wowLabel = screen.getAllByRole('checkbox')
-            .map((cb) => cb.closest('label') as HTMLElement | null)
-            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('World'));
+        openModalViaChip();
+        const wowLabel = Array.from(getDialog().querySelectorAll('label.game-filter-item')).find(
+            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
+        ) as HTMLElement | undefined;
         expect(wowLabel).toBeTruthy();
         fireEvent.click(wowLabel!);
 
@@ -308,22 +321,21 @@ describe('CalendarPage — filter persistence when view changes — part 2', () 
         expect(wowCb).not.toBeChecked();
 
         unmount();
-
         render_page();
-
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        const updatedCheckboxes = screen.getAllByRole('checkbox');
-        const updatedWowLabel = updatedCheckboxes
-            .map((cb) => cb.closest('label') as HTMLElement | null)
-            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('World'));
+        openModalViaChip();
+        const newDialog = getDialog();
+        const updatedWowLabel = Array.from(newDialog.querySelectorAll('label.game-filter-item')).find(
+            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
+        ) as HTMLElement | undefined;
         expect(updatedWowLabel).toBeTruthy();
         const updatedWowCb = updatedWowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
         expect(updatedWowCb).not.toBeChecked();
 
-        const updatedApexLabel = updatedCheckboxes
-            .map((cb) => cb.closest('label') as HTMLElement | null)
-            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('Apex'));
+        const updatedApexLabel = Array.from(newDialog.querySelectorAll('label.game-filter-item')).find(
+            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('Apex'),
+        ) as HTMLElement | undefined;
         expect(updatedApexLabel).toBeTruthy();
         const updatedApexCb = updatedApexLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
         expect(updatedApexCb).toBeChecked();
@@ -333,18 +345,22 @@ describe('CalendarPage — filter persistence when view changes — part 2', () 
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        const wowLabel = screen.getAllByRole('checkbox')
-            .map((cb) => cb.closest('label') as HTMLElement | null)
-            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('World'));
+        openModalViaChip();
+        const wowLabel = Array.from(getDialog().querySelectorAll('label.game-filter-item')).find(
+            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
+        ) as HTMLElement | undefined;
         fireEvent.click(wowLabel!);
 
         deliver([]);
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        const updatedWowCb = wowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        // Modal is still open and re-renders with same data.
+        const updatedWowLabel = Array.from(getDialog().querySelectorAll('label.game-filter-item')).find(
+            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
+        ) as HTMLElement | undefined;
+        const updatedWowCb = updatedWowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
         expect(updatedWowCb).not.toBeChecked();
     });
-
 });
 
 describe('CalendarPage — filter persistence when view changes — part 3', () => {
@@ -362,13 +378,14 @@ describe('CalendarPage — filter persistence when view changes — part 3', () 
         deliver([makeGame('wow', 'World of Warcraft')]);
         deliver([makeGame('apex', 'Apex Legends')]);
 
-        const names = screen.getAllByRole('checkbox').map(
+        openModalViaChip();
+        const dialog = getDialog();
+        const names = within(dialog).getAllByRole('checkbox').map(
             (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
         );
         expect(names).toContain('Apex Legends');
         expect(names).toContain('World of Warcraft');
     });
-
 });
 
 describe('CalendarPage — FAB and BottomSheet', () => {
@@ -412,7 +429,7 @@ describe('CalendarPage — FAB and BottomSheet', () => {
         expect(sheet).toHaveAttribute('data-open', 'false');
     });
 
-    it('bottom sheet contains all games including overflow', () => {
+    it('bottom sheet contains all games', () => {
         render_page();
         deliver([
             makeGame('a', 'Alpha'),
@@ -460,7 +477,9 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         ];
         render_page();
 
-        const gameNames = screen.getAllByRole('checkbox').map(
+        openModalViaChip();
+        const dialog = getDialog();
+        const gameNames = within(dialog).getAllByRole('checkbox').map(
             (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
         );
         expect(gameNames).toContain('World of Warcraft');
@@ -477,7 +496,9 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         ];
         render_page();
 
-        const checkboxes = screen.getAllByRole('checkbox');
+        openModalViaChip();
+        const dialog = getDialog();
+        const checkboxes = within(dialog).getAllByRole('checkbox');
         expect(checkboxes).toHaveLength(3);
         checkboxes.forEach((cb) => expect(cb).toBeChecked());
     });

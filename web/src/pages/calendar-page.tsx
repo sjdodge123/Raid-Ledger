@@ -6,15 +6,14 @@ import { FunnelIcon } from '@heroicons/react/24/outline';
 import { CalendarView, MiniCalendar } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
+import { CalendarFilterChip } from '../components/calendar/calendar-filter-chip';
 import { FAB } from '../components/ui/fab';
-import { getGameColors } from '../constants/game-colors';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useGameFilterStore } from '../stores/game-filter-store';
 import { useLikedGameSlugs } from '../hooks/use-liked-game-slugs';
-import { CalendarGameFilterSheet, CalendarGameFilterModal, SectionedGameList } from './calendar/CalendarGameFilter';
-import { sortGamesWithLikedFirst, type GameWithLiked } from './calendar/game-filter-helpers';
+import { CalendarGameFilterSheet, CalendarGameFilterModal } from './calendar/CalendarGameFilter';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -106,16 +105,9 @@ export function CalendarPage(): JSX.Element {
     const deselectAllGames = useGameFilterStore((s) => s.deselectAll);
     const likedSlugs = useLikedGameSlugs();
 
-    const maxVisible = 5;
-    const sortedGames = useMemo(() => sortGamesWithLikedFirst(allKnownGames, likedSlugs), [allKnownGames, likedSlugs]);
-    const inlineGames = sortedGames.length > maxVisible ? sortedGames.slice(0, maxVisible) : sortedGames;
-    const hasOverflow = allKnownGames.length > maxVisible;
     const filterProps = { allKnownGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, likedSlugs };
 
-    return (
-        <CalendarPageLayout state={state} gameTimeSlots={gameTimeSlots} inlineGames={inlineGames}
-            hasOverflow={hasOverflow} filterProps={filterProps} />
-    );
+    return <CalendarPageLayout state={state} gameTimeSlots={gameTimeSlots} filterProps={filterProps} />;
 }
 
 interface GameItem { slug: string; name: string; coverUrl: string | null }
@@ -124,16 +116,15 @@ interface FilterProps {
     selectAllGames: () => void; deselectAllGames: () => void; likedSlugs: Set<string>;
 }
 
-function CalendarPageLayout({ state, gameTimeSlots, inlineGames, hasOverflow, filterProps }: {
+function CalendarPageLayout({ state, gameTimeSlots, filterProps }: {
     state: ReturnType<typeof useCalendarState>; gameTimeSlots: Set<string> | undefined;
-    inlineGames: GameWithLiked[]; hasOverflow: boolean; filterProps: FilterProps;
+    filterProps: FilterProps;
 }): JSX.Element {
     return (
         <div className="pb-20 md:pb-0" style={{ overflowX: 'clip' }}>
             <CalendarMobileToolbar activeView={state.calendarView} onViewChange={state.setCalendarView} />
             <CalendarMobileNav currentDate={state.currentDate} calendarView={state.calendarView} onPrev={state.handleMobileNavPrev} onNext={state.handleMobileNavNext} onToday={state.handleMobileNavToday} />
-            <CalendarMainContent state={state} gameTimeSlots={gameTimeSlots} inlineGames={inlineGames}
-                hasOverflow={hasOverflow} filterProps={filterProps} />
+            <CalendarMainContent state={state} gameTimeSlots={gameTimeSlots} filterProps={filterProps} />
             {filterProps.allKnownGames.length > 0 && <FAB onClick={() => state.setGameFilterOpen(true)} icon={FunnelIcon} label="Filter by Game" />}
             <CalendarGameFilterSheet isOpen={state.gameFilterOpen} onClose={() => state.setGameFilterOpen(false)}
                 allKnownGames={filterProps.allKnownGames} selectedGames={filterProps.selectedGames}
@@ -147,9 +138,9 @@ function CalendarPageLayout({ state, gameTimeSlots, inlineGames, hasOverflow, fi
     );
 }
 
-function CalendarMainContent({ state, gameTimeSlots, inlineGames, hasOverflow, filterProps }: {
+function CalendarMainContent({ state, gameTimeSlots, filterProps }: {
     state: ReturnType<typeof useCalendarState>; gameTimeSlots: Set<string> | undefined;
-    inlineGames: GameWithLiked[]; hasOverflow: boolean; filterProps: FilterProps;
+    filterProps: FilterProps;
 }): JSX.Element {
     return (
         <div className={`max-w-7xl mx-auto ${state.calendarView === 'schedule' ? 'py-0 md:py-6 md:px-4' : 'px-2 py-1 md:px-4 md:py-6'}`} style={{ overflowX: 'clip' }}>
@@ -158,8 +149,8 @@ function CalendarMainContent({ state, gameTimeSlots, inlineGames, hasOverflow, f
                 <p className="text-muted mt-1">View upcoming events and plan your schedule</p>
             </div>
             <div className="calendar-page-layout">
-                <CalendarSidebar currentDate={state.currentDate} onDateSelect={state.setCurrentDate} inlineGames={inlineGames}
-                    hasOverflow={hasOverflow} onShowFilterModal={() => state.setFilterModalOpen(true)} {...filterProps} />
+                <CalendarSidebar currentDate={state.currentDate} onDateSelect={state.setCurrentDate}
+                    onShowFilterModal={() => state.setFilterModalOpen(true)} {...filterProps} />
                 <main className="min-w-0">
                     <CalendarView currentDate={state.currentDate} onDateChange={state.setCurrentDate} selectedGames={filterProps.selectedGames}
                         gameTimeSlots={gameTimeSlots} calendarView={state.calendarView} onCalendarViewChange={state.setCalendarView} />
@@ -169,52 +160,25 @@ function CalendarMainContent({ state, gameTimeSlots, inlineGames, hasOverflow, f
     );
 }
 
-/** Desktop sidebar with mini calendar, game filter, and quick actions */
-function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal }: {
+/** Desktop sidebar with mini calendar, filter chip, and quick actions */
+function CalendarSidebar({ currentDate, onDateSelect, allKnownGames, selectedGames, onShowFilterModal }: {
     currentDate: Date; onDateSelect: (d: Date) => void;
-    allKnownGames: GameItem[]; inlineGames: GameWithLiked[];
-    selectedGames: Set<string>; toggleGame: (s: string) => void;
-    selectAllGames: () => void; deselectAllGames: () => void;
-    hasOverflow: boolean; onShowFilterModal: () => void;
+    allKnownGames: GameItem[]; selectedGames: Set<string>;
+    toggleGame: (s: string) => void; selectAllGames: () => void; deselectAllGames: () => void;
+    likedSlugs: Set<string>;
+    onShowFilterModal: () => void;
 }): JSX.Element {
     return (
         <aside className="calendar-sidebar">
             <MiniCalendar currentDate={currentDate} onDateSelect={onDateSelect} />
             {allKnownGames.length > 0 && (
-                <SidebarGameFilter allKnownGames={allKnownGames} inlineGames={inlineGames} selectedGames={selectedGames}
-                    toggleGame={toggleGame} selectAllGames={selectAllGames} deselectAllGames={deselectAllGames}
-                    hasOverflow={hasOverflow} onShowFilterModal={onShowFilterModal} />
+                <div className="sidebar-section">
+                    <CalendarFilterChip allKnownGames={allKnownGames} selectedGames={selectedGames}
+                        onOpen={onShowFilterModal} />
+                </div>
             )}
             <SidebarQuickActions />
         </aside>
-    );
-}
-
-function SidebarGameFilter({ allKnownGames, inlineGames, selectedGames, toggleGame, selectAllGames, deselectAllGames, hasOverflow, onShowFilterModal }: {
-    allKnownGames: GameItem[]; inlineGames: GameWithLiked[];
-    selectedGames: Set<string>; toggleGame: (s: string) => void;
-    selectAllGames: () => void; deselectAllGames: () => void;
-    hasOverflow: boolean; onShowFilterModal: () => void;
-}): JSX.Element {
-    return (
-        <div className="sidebar-section">
-            <div className="game-filter-header">
-                <h3 className="sidebar-section-title">Filter by Game</h3>
-                <div className="game-filter-actions">
-                    <button type="button" onClick={selectAllGames} className="filter-action-btn" title="Select all">All</button>
-                    <button type="button" onClick={deselectAllGames} className="filter-action-btn" title="Deselect all">None</button>
-                </div>
-            </div>
-            <div className="game-filter-list">
-                <SectionedGameList games={inlineGames} selectedGames={selectedGames}
-                    toggleGame={toggleGame} renderItem={SidebarGameItemWrapped} />
-            </div>
-            {hasOverflow && (
-                <button type="button" onClick={onShowFilterModal} className="game-filter-show-all">
-                    Show all {allKnownGames.length} games...
-                </button>
-            )}
-        </div>
     );
 }
 
@@ -233,29 +197,5 @@ function SidebarQuickActions(): JSX.Element {
                 </Link>
             </div>
         </div>
-    );
-}
-
-/** Wrapper to adapt SidebarGameItem for SectionedGameList renderItem interface. */
-function SidebarGameItemWrapped({ game, isSelected, onToggle }: {
-    game: GameItem & { liked: boolean }; isSelected: boolean; onToggle: () => void;
-}): JSX.Element {
-    return <SidebarGameItem game={game} isSelected={isSelected} onToggle={onToggle} />;
-}
-
-/** Single game filter item in sidebar */
-function SidebarGameItem({ game, isSelected, onToggle }: {
-    game: GameItem; isSelected: boolean; onToggle: () => void;
-}): JSX.Element {
-    const colors = getGameColors(game.slug);
-    return (
-        <label className={`game-filter-item ${isSelected ? 'selected' : ''}`}
-            style={{ '--game-color': colors.bg, '--game-border': colors.border } as React.CSSProperties}>
-            <input type="checkbox" checked={isSelected} onChange={onToggle} className="game-filter-checkbox" />
-            <div className="game-filter-icon">
-                {game.coverUrl ? (<img src={game.coverUrl} alt={game.name} className="game-filter-cover" />) : (<span className="game-filter-emoji">{colors.icon}</span>)}
-            </div>
-            <span className="game-filter-name">{game.name}</span>
-        </label>
     );
 }

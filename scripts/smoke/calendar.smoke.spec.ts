@@ -51,6 +51,28 @@ test.describe('Calendar — desktop', () => {
             }
         }
     });
+
+    test('filter chip opens dialog (ROK-1305)', async ({ page }) => {
+        await page.goto('/calendar');
+        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
+
+        // ROK-1305: the prior sidebar's inline checkbox list + "Show all N games..."
+        // overflow button collapsed into a single chip in the desktop sidebar.
+        // Soft check: chip is hidden without IGDB seed data (CI may have none).
+        const chip = page.getByRole('button', { name: /filter by game/i }).first();
+        if (!(await chip.isVisible({ timeout: 3000 }).catch(() => false))) {
+            return;
+        }
+        await expect(chip).toContainText(/Filter:/);
+
+        await chip.click();
+        const dialog = page.getByRole('dialog', { name: /filter by game/i });
+        await expect(dialog).toBeVisible({ timeout: 5_000 });
+        // The dialog should contain at least one game checkbox.
+        const dialogCheckboxes = dialog.getByRole('checkbox');
+        const count = await dialogCheckboxes.count();
+        expect(count).toBeGreaterThan(0);
+    });
 });
 
 // ---------------------------------------------------------------------------
