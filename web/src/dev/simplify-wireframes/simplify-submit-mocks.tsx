@@ -4,7 +4,8 @@
  * Each remaining phase shows a 4-state matrix: empty / partial / full-pre / post-submit.
  */
 import type { JSX, ReactNode } from 'react';
-import { SubmitBar } from './simplify-composite-mocks';
+// ROK-1296 (U4): the real <SubmitBar /> component replaces the inline mock.
+import { SubmitBar } from '../../components/shared/submit-bar';
 
 function PhaseBlock({ phase, children }: { phase: string; children: ReactNode }): JSX.Element {
   return (
