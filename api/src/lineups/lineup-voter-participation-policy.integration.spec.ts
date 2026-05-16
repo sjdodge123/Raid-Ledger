@@ -298,6 +298,41 @@ function describeParticipationPolicy() {
 
     expect(await readStatus(lineupId)).toBe('voting');
   });
+
+  // ROK-1258 Codex-P2 #1 regression: stillWaitingOnVoters must mirror the
+  // quorum-gating set, not just "voted < required". Otherwise the panel
+  // can claim "still waiting on N" after the gating set already dropped
+  // zero-voters post-deadline (which would contradict auto-advance).
+  it('stillWaitingOnVoters drops zero-voters post-deadline (matches gating set)', async () => {
+    const { lineupId, nonVoter1, nonVoter2 } = await setupPartiallyVoted();
+
+    // Pre-deadline: panel lists the 2 zero-voters (they're in the gating set
+    // AND under allotment).
+    const preDeadlineDetail = await testApp.request
+      .get(`/lineups/${lineupId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(preDeadlineDetail.status).toBe(200);
+    const preIds = (
+      preDeadlineDetail.body.stillWaitingOnVoters as { id: number }[]
+    ).map((v) => v.id);
+    expect(preIds).toEqual(expect.arrayContaining([nonVoter1, nonVoter2]));
+
+    // Post-deadline: zero-voters drop out of the gating set, so the panel
+    // must drop them too. The lineup itself may still be in voting until the
+    // next maybeAutoAdvance fires, but the panel must NOT name the dropped
+    // users (would mislead the creator into waiting on people no longer
+    // gating quorum).
+    await backdateVotingDeadline(lineupId);
+    const postDeadlineDetail = await testApp.request
+      .get(`/lineups/${lineupId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(postDeadlineDetail.status).toBe(200);
+    const postIds = (
+      postDeadlineDetail.body.stillWaitingOnVoters as { id: number }[]
+    ).map((v) => v.id);
+    expect(postIds).not.toContain(nonVoter1);
+    expect(postIds).not.toContain(nonVoter2);
+  });
 }
 
 describe(

@@ -33,9 +33,9 @@ export type FitCategory =
  * / scheduling slots still pointed at the old game's poll (wrong-game-link).
  *
  * Caller note: `runMatchingAlgorithm` invokes this AFTER `applyStatusUpdate`
- * has flipped the lineup row to `decided`. `decided`/`scheduled`/`archived`
- * matches are preserved (only `suggested`/`scheduling` are wiped) because those
- * statuses represent committed downstream state we must not blow away.
+ * has flipped the lineup row to `decided`. `scheduled`/`archived` matches are
+ * preserved (only `suggested`/`scheduling` are wiped) because those statuses
+ * represent committed downstream state we must not blow away.
  */
 export async function buildMatchesForLineup(
   db: Db,
@@ -55,13 +55,15 @@ export async function buildMatchesForLineup(
   ]);
 
   const totalVoters = voterRows[0]?.total ?? 0;
-  if (totalVoters === 0) return;
 
   // ROK-1225 / ROK-1306: wipe-then-insert runs inside ONE transaction so
   // concurrent auto-advance callers can't interleave a stale-match wipe with
-  // another caller's fresh insert.
+  // another caller's fresh insert. The wipe must ALSO run for zero-vote
+  // re-decides (operator force-decides via tiebreaker / decidedGameId) so
+  // stale `suggested`/`scheduling` rows from a prior decide can't survive.
   await db.transaction(async (tx) => {
     await wipeStaleMatches(tx, lineupId);
+    if (totalVoters === 0) return;
     for (const vc of voteCounts) {
       if (vc.voteCount === 0) continue;
       await insertMatch(tx, lineupId, vc, totalVoters, threshold);
@@ -73,7 +75,7 @@ export async function buildMatchesForLineup(
  * Delete any pre-existing matches in `suggested`/`scheduling` status for this
  * lineup so the upcoming insert pass starts from a clean slate. FK cascade
  * clears `community_lineup_match_members` and `community_lineup_schedule_slots`.
- * `decided`/`scheduled`/`archived` rows are intentionally preserved.
+ * `scheduled`/`archived` rows are intentionally preserved.
  */
 async function wipeStaleMatches(tx: Tx, lineupId: number): Promise<void> {
   await tx
@@ -103,8 +105,8 @@ async function insertMatch(
   const fitCategory = await computeFitCategory(tx, vc.gameId, vc.voteCount);
 
   // ROK-1306: with the wipe above, the unique (lineupId, gameId) constraint
-  // can now only collide with a preserved `decided`/`scheduled`/`archived`
-  // row. Keep `onConflictDoNothing` so the rare race against an already-
+  // can now only collide with a preserved `scheduled`/`archived` row. Keep
+  // `onConflictDoNothing` so the rare race against an already-
   // promoted match is a no-op instead of a 23505.
   const [match] = await tx
     .insert(schema.communityLineupMatches)

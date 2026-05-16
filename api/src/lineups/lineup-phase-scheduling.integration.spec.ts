@@ -492,6 +492,45 @@ function describePhaseScheduling() {
       expect(res.body.message).toMatch(/match not found in this lineup/i);
     });
 
+    it('zero-vote re-decide STILL wipes prior suggested/scheduling matches (Codex P2 #4)', async () => {
+      // The hostile path Codex flagged: first decide produces real matches,
+      // then the operator (or test fixture) retracts every vote and triggers
+      // a re-decide. Before the fix, buildMatchesForLineup short-circuited
+      // on totalVoters === 0 BEFORE calling wipeStaleMatches, so the prior
+      // suggested/scheduling rows survived and the wrong-game-link bug
+      // could resurface for the zero-vote re-decide.
+      const game = await seedGame('Zero Vote Wipe Game', 'zero-vote-r1306');
+
+      const { id: lineupId } = await createLineupOrFail(adminToken);
+      await nominateAndVote(lineupId, [game.id]);
+      await advanceToDecided(lineupId, game.id);
+
+      const before = await fetchMatchIdsForLineup(lineupId);
+      expect(before.length).toBeGreaterThan(0);
+
+      // Revert to voting so we can mutate vote state freely.
+      await testApp.request
+        .patch(`/lineups/${lineupId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'voting' });
+
+      // Drop every vote — simulates the "operator retracted, then force-
+      // decided via explicit decidedGameId" path.
+      await testApp.db
+        .delete(schema.communityLineupVotes)
+        .where(eq(schema.communityLineupVotes.lineupId, lineupId));
+
+      await advanceToDecided(lineupId, game.id);
+
+      // Post-fix: every suggested/scheduling match from the first decide is
+      // wiped, leaving only the matches the empty re-decide would create
+      // (which is zero — no votes, so no new inserts). The bug pre-fix would
+      // have left the original rows in place.
+      const after = await fetchMatchIdsForLineup(lineupId);
+      const overlap = after.filter((id) => before.includes(id));
+      expect(overlap).toHaveLength(0);
+    });
+
     it('GET /lineups/:lineupId/schedule/:matchId still succeeds for the correct lineup', async () => {
       // Positive control: the route guard must not break the happy path.
       const game = await seedGame('Happy Path Game', 'happy-path-r1306');

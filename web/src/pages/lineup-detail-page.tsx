@@ -271,7 +271,8 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
 
       {lineup.visibility === 'private' &&
         lineup.status === 'voting' &&
-        (lineup.stillWaitingOnVoters?.length ?? 0) > 0 && (
+        (isOperator || user?.id === lineup.createdBy.id) &&
+        lineup.stillWaitingOnVoters.length > 0 && (
           <StillWaitingPanel voters={lineup.stillWaitingOnVoters} />
         )}
 

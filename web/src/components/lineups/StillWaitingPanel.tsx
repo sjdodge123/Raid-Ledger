@@ -30,9 +30,9 @@ export function StillWaitingPanel({
         {voters.length === 1 ? 'voter' : 'voters'}
       </h2>
       <p className="text-xs text-muted mb-3">
-        These invitees have not used all of their votes yet. Quorum will close
-        automatically once the voting deadline passes, or sooner if the
-        creator removes them from the lineup.
+        These invitees are blocking quorum — they haven&apos;t used all of
+        their votes yet. The lineup will auto-advance once they finish, or
+        you can remove them from the lineup to unblock immediately.
       </p>
       <ul
         data-testid="still-waiting-voters"
