@@ -107,8 +107,8 @@ export class GamesLookupService {
   }
 
   private async tryIgdbLookup(q: string): Promise<GameDetailDto | null> {
-    const raw = (await this.igdbService.searchGames(q)) as unknown;
-    const first = pickFirstIgdbHit(raw);
+    const result = await this.igdbService.searchGames(q);
+    const first = pickFirstIgdbHit(result);
     if (!first) return null;
     return this.upsertFromIgdb(first);
   }
@@ -171,11 +171,8 @@ export class GamesLookupService {
   }
 }
 
-/** Tolerate both production SearchResult ({ games }) and test mock ({ data }). */
-function pickFirstIgdbHit(raw: unknown): GameDetailDto | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const obj = raw as { games?: unknown; data?: unknown };
-  const list = obj.games ?? obj.data;
-  if (!Array.isArray(list) || list.length === 0) return null;
-  return list[0] as GameDetailDto;
+function pickFirstIgdbHit(result: {
+  games: GameDetailDto[];
+}): GameDetailDto | null {
+  return result.games.length > 0 ? result.games[0] : null;
 }

@@ -134,10 +134,7 @@ describe('POST /games/lookup-by-name — existing-row dedup', () => {
       .mockResolvedValue([]);
     const igdbSpy = jest
       .spyOn(testApp.app.get(IgdbService), 'searchGames')
-      .mockResolvedValue({
-        data: [],
-        meta: { total: 0, cached: false },
-      } as never);
+      .mockResolvedValue({ games: [], cached: false, source: 'igdb' });
 
     const res = await testApp.request
       .post('/games/lookup-by-name')
@@ -173,10 +170,7 @@ describe('POST /games/lookup-by-name — ITAD hit path', () => {
     // IGDB fallback would NOT fire on ITAD hit.
     const igdbSpy = jest
       .spyOn(testApp.app.get(IgdbService), 'searchGames')
-      .mockResolvedValue({
-        data: [],
-        meta: { total: 0, cached: false },
-      } as never);
+      .mockResolvedValue({ games: [], cached: false, source: 'igdb' });
 
     const res = await testApp.request
       .post('/games/lookup-by-name')
@@ -230,7 +224,7 @@ describe('POST /games/lookup-by-name — IGDB fallback path', () => {
       slug: 'indie-treasure',
     });
     jest.spyOn(testApp.app.get(IgdbService), 'searchGames').mockResolvedValue({
-      data: [
+      games: [
         {
           id: 0,
           igdbId: igdbHit.id,
@@ -253,8 +247,9 @@ describe('POST /games/lookup-by-name — IGDB fallback path', () => {
           crossplay: null,
         },
       ],
-      meta: { total: 1, cached: false },
-    } as never);
+      cached: false,
+      source: 'igdb',
+    });
 
     const res = await testApp.request
       .post('/games/lookup-by-name')
@@ -278,10 +273,7 @@ describe('POST /games/lookup-by-name — both sources miss', () => {
       .mockResolvedValue([]);
     const igdbSpy = jest
       .spyOn(testApp.app.get(IgdbService), 'searchGames')
-      .mockResolvedValue({
-        data: [],
-        meta: { total: 0, cached: false },
-      } as never);
+      .mockResolvedValue({ games: [], cached: false, source: 'igdb' });
 
     const res = await testApp.request
       .post('/games/lookup-by-name')
