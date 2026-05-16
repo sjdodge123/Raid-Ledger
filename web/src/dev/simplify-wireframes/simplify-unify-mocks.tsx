@@ -3,6 +3,7 @@
  * DEV-ONLY. Static mocks; no behavior wired up.
  */
 import type { JSX, ReactNode } from 'react';
+import { JourneyHero } from '../../components/shared/journey-hero';
 
 function Btn({ children, variant = 'ghost' }: { children: ReactNode; variant?: 'primary' | 'secondary' | 'ghost' }): JSX.Element {
   const cls = {
@@ -11,72 +12,6 @@ function Btn({ children, variant = 'ghost' }: { children: ReactNode; variant?: '
     ghost: 'border border-edge text-muted',
   }[variant];
   return <span className={`inline-block px-2 py-0.5 text-[10px] rounded ${cls}`}>{children}</span>;
-}
-
-type StepState = 'done' | 'current' | 'future';
-function PhaseDot({ state, label }: { state: StepState; label: string }): JSX.Element {
-  const dotCls = {
-    done: 'bg-emerald-500/80 text-white',
-    current: 'bg-emerald-400 ring-2 ring-emerald-300/50 text-white',
-    future: 'bg-overlay/40 text-dim border border-edge',
-  }[state];
-  const symbol = state === 'done' ? '✓' : state === 'current' ? '●' : '○';
-  return (
-    <div className="flex flex-col items-center min-w-0 flex-1">
-      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] ${dotCls}`}>{symbol}</div>
-      <div className="text-[9px] text-muted mt-1 truncate">{label}</div>
-    </div>
-  );
-}
-
-function PhaseRibbon({ active }: { active: 0 | 1 | 2 | 3 | 4 }): JSX.Element {
-  const phases = ['Nominate', 'Vote', 'Decide', 'Schedule'];
-  return (
-    <div className="flex items-center gap-1 mb-3">
-      {phases.map((label, i) => {
-        const state: StepState = i < active ? 'done' : i === active ? 'current' : 'future';
-        return (
-          <div key={label} className="flex items-center flex-1">
-            <PhaseDot state={state} label={label} />
-            {i < phases.length - 1 && <div className={`h-px flex-1 ${i < active ? 'bg-emerald-500/60' : 'bg-edge'}`} />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-type HeroTone = 'action' | 'waiting' | 'set';
-export function JourneyHero({ active, badge, task, sub, cta, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon }: {
-  active: 0 | 1 | 2 | 3 | 4; badge: string; task: string; sub?: string; cta?: string; hint?: string;
-  tone?: HeroTone; exitCondition?: string; cue?: string; donePillLabel?: string; noRibbon?: boolean;
-}): JSX.Element {
-  const borderCls = {
-    action: 'border-emerald-500/30 bg-panel/70',
-    waiting: 'border-edge bg-overlay/40',
-    set: 'border-amber-500/30 bg-overlay/40',
-  }[tone];
-  const badgeCls = { action: 'text-emerald-300', waiting: 'text-muted', set: 'text-amber-300' }[tone];
-  const taskCls = tone === 'action' ? 'text-foreground' : 'text-secondary';
-  const pillLabel = donePillLabel ?? (tone === 'set' ? "✓ You're set" : tone === 'waiting' ? "✓ You're done here" : null);
-  const pillCls = tone === 'set'
-    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
-  return (
-    <div className={`border rounded-lg p-3 ${borderCls}`}>
-      {!noRibbon && <PhaseRibbon active={active} />}
-      <div className="flex items-baseline justify-between mb-1">
-        <span className={`text-[10px] uppercase tracking-wider ${badgeCls}`}>{badge}</span>
-        {pillLabel && <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full border ${pillCls}`}>{pillLabel}</span>}
-      </div>
-      <div className={`text-sm font-semibold mb-1 ${taskCls}`}>{task}</div>
-      {sub && <div className="text-[11px] text-muted mb-1">{sub}</div>}
-      {exitCondition && <div className="text-[10px] text-amber-300/80 mb-2 italic">⏱ {exitCondition}</div>}
-      {cta && <div className="text-right">{tone === 'action' ? <Btn variant="primary">{cta}</Btn> : <span className="inline-block px-2 py-0.5 text-[10px] rounded border border-edge text-muted">{cta}</span>}</div>}
-      {cue && <div className="text-[10px] text-emerald-300/80 mt-2">🔔 {cue}</div>}
-      {hint && <div className="text-[10px] text-muted mt-2 italic">{hint}</div>}
-    </div>
-  );
 }
 
 function StateGroup({ label, kicker, children }: { label: string; kicker: string; children: ReactNode }): JSX.Element {

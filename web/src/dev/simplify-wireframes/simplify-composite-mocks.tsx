@@ -4,7 +4,7 @@
  * and U2 game-research drawer affordances on every game reference.
  */
 import type { JSX, ReactNode } from 'react';
-import { JourneyHero } from './simplify-unify-mocks';
+import { JourneyHero } from '../../components/shared/journey-hero';
 
 function Btn({ children, variant = 'ghost' }: { children: ReactNode; variant?: 'primary' | 'secondary' | 'ghost' }): JSX.Element {
   const cls = {
