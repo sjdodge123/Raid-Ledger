@@ -1,108 +1,159 @@
 /**
- * Top-level orchestrator for the decided phase view (ROK-989).
- * Renders the podium, action buttons, match tiers, stats panel,
- * and also-ran list from the lineup detail data.
+ * Decided page composite (ROK-1299).
+ * JourneyHero on top (action tone), a personal "Your matches" section with
+ * per-match "Pick a time →" CTAs, an "Other matches in this lineup" section
+ * (no CTAs), an optional leftover-voters affordance, and CarriedForward
+ * below. No podium, no page-level Submit, no AlsoRanList/LineupStatsPanel.
  */
 import { useMemo } from 'react';
 import type { JSX } from 'react';
-import type { LineupDetailResponseDto } from '@raid-ledger/contract';
-import { VotingPodium } from './VotingPodium';
-import { AlsoRanList } from './AlsoRanList';
-import { PodiumActionButtons } from './PodiumActionButtons';
-import { LineupStatsPanel } from './LineupStatsPanel';
-import { DecidedMatchesView } from './DecidedMatchesView';
-import { ConfirmationPill } from '../../common/ConfirmationPill';
+import type {
+  GroupedMatchesResponseDto,
+  LineupDetailResponseDto,
+  MatchDetailResponseDto,
+} from '@raid-ledger/contract';
 import { useAuth } from '../../../hooks/use-auth';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
+import { JourneyHero } from '../../shared/journey-hero/JourneyHero';
+import { CarriedForwardSection } from './CarriedForwardSection';
+import { MatchCard } from './MatchCard';
+import { LeftoverVotersRow } from './LeftoverVotersRow';
 
 interface DecidedViewProps {
   lineup: LineupDetailResponseDto;
 }
 
-/** Sort entries by vote count descending, with tiebreaker winner pinned to #1. */
-function sortedEntries(
-  entries: LineupDetailResponseDto['entries'],
-  decidedGameId?: number | null,
-): LineupDetailResponseDto['entries'] {
-  return [...entries].sort((a, b) => {
-    // Tiebreaker winner always first
-    if (decidedGameId) {
-      if (a.gameId === decidedGameId) return -1;
-      if (b.gameId === decidedGameId) return 1;
-    }
-    if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
-    return b.ownerCount - a.ownerCount;
-  });
+interface MatchPartition {
+  mine: MatchDetailResponseDto[];
+  others: MatchDetailResponseDto[];
 }
 
-/** Sum all entry vote counts. */
-function sumVotes(entries: LineupDetailResponseDto['entries']): number {
-  return entries.reduce((acc, e) => acc + e.voteCount, 0);
-}
-
-function countMyMatches(
-  matches: ReturnType<typeof useLineupMatches>['data'],
+function partitionMatches(
+  data: GroupedMatchesResponseDto | undefined,
   userId: number | undefined,
+): MatchPartition {
+  if (!data) return { mine: [], others: [] };
+  const all = [...data.scheduling, ...data.almostThere, ...data.rallyYourCrew];
+  const mine: MatchDetailResponseDto[] = [];
+  const others: MatchDetailResponseDto[] = [];
+  for (const m of all) {
+    const isMine =
+      userId != null && m.members.some((mem) => mem.userId === userId);
+    if (isMine) mine.push(m);
+    else others.push(m);
+  }
+  return { mine, others };
+}
+
+function leftoverVoterCount(
+  data: GroupedMatchesResponseDto | undefined,
 ): number {
-  if (!userId || !matches) return 0;
-  const all = [
-    ...(matches.scheduling ?? []),
-    ...(matches.almostThere ?? []),
-    ...(matches.rallyYourCrew ?? []),
-  ];
-  return all.filter((m) => m.members.some((mem) => mem.userId === userId)).length;
+  if (!data) return 0;
+  const matchedUserIds = new Set<number>();
+  for (const m of [
+    ...data.scheduling,
+    ...data.almostThere,
+    ...data.rallyYourCrew,
+  ]) {
+    for (const mem of m.members) matchedUserIds.add(mem.userId);
+  }
+  return Math.max(0, data.totalVoters - matchedUserIds.size);
 }
 
-function ActedPills({
-  myVoteCount, myMatchCount,
-}: { myVoteCount: number; myMatchCount: number }): JSX.Element {
+function buildHeroProps(
+  mineCount: number,
+  totalMatches: number,
+  totalVoters: number,
+  matchedVoters: number,
+) {
+  const task =
+    totalMatches > 0
+      ? `We matched ${matchedVoters} of ${totalVoters} voters into ${totalMatches} ${
+          totalMatches === 1 ? 'game' : 'games'
+        }.`
+      : 'No matches were generated from voting results.';
+  const sub =
+    mineCount > 0
+      ? `You're in ${mineCount} ${mineCount === 1 ? 'match' : 'matches'}.`
+      : "You're not in any matches yet.";
+  return { task, sub };
+}
+
+function YourMatches({
+  matches,
+  lineupId,
+}: {
+  matches: MatchDetailResponseDto[];
+  lineupId: number;
+}): JSX.Element | null {
+  if (matches.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-3">
-      <ConfirmationPill variant="text">
-        You voted for {myVoteCount} games
-      </ConfirmationPill>
-      <ConfirmationPill variant="text">
-        You&apos;re in {myMatchCount} {myMatchCount === 1 ? 'match' : 'matches'}
-      </ConfirmationPill>
-    </div>
+    <section data-testid="decided-your-matches-section" className="mt-3 mb-2">
+      <div className="text-[10px] uppercase tracking-wider text-emerald-300 mb-1">
+        Your matches ({matches.length})
+      </div>
+      {matches.map((m) => (
+        <MatchCard key={m.id} match={m} lineupId={lineupId} showCta />
+      ))}
+    </section>
   );
 }
 
-/** Decided phase view with podium, matches, and stats. */
-export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
+function OtherMatches({
+  matches,
+  lineupId,
+}: {
+  matches: MatchDetailResponseDto[];
+  lineupId: number;
+}): JSX.Element | null {
+  if (matches.length === 0) return null;
+  return (
+    <section data-testid="decided-other-matches-section" className="mb-2">
+      <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
+        Other matches in this lineup ({matches.length})
+      </div>
+      {matches.map((m) => (
+        <MatchCard key={m.id} match={m} lineupId={lineupId} showCta={false} />
+      ))}
+    </section>
+  );
+}
+
+function useDecidedState(lineup: LineupDetailResponseDto) {
   const { user } = useAuth();
-  const { data: matches } = useLineupMatches(lineup.id);
-  const sorted = useMemo(
-    () => sortedEntries(lineup.entries, lineup.decidedGameId),
-    [lineup.entries, lineup.decidedGameId],
+  const { data } = useLineupMatches(lineup.id);
+  const { mine, others } = useMemo(
+    () => partitionMatches(data, user?.id),
+    [data, user?.id],
   );
-  const top3 = sorted.slice(0, 3);
-  const alsoRan = sorted.slice(3);
-  const maxVotes = top3[0]?.voteCount ?? 0;
-  const totalVotes = useMemo(() => sumVotes(lineup.entries), [lineup.entries]);
-  const myVoteCount = (lineup.myVotes ?? []).length;
-  const myMatchCount = countMyMatches(matches, user?.id);
-  const showActedPills = myVoteCount > 0;
+  const leftover = useMemo(() => leftoverVoterCount(data), [data]);
+  const totalVoters = data?.totalVoters ?? 0;
+  const matchedVoters = Math.max(0, totalVoters - leftover);
+  const hero = buildHeroProps(
+    mine.length,
+    mine.length + others.length,
+    totalVoters,
+    matchedVoters,
+  );
+  return { mine, others, leftover, hero, carriedForward: data?.carriedForward ?? [] };
+}
 
+export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
+  const { mine, others, leftover, hero, carriedForward } = useDecidedState(lineup);
   return (
-    <div>
-      {showActedPills && (
-        <ActedPills myVoteCount={myVoteCount} myMatchCount={myMatchCount} />
-      )}
-
-      {top3.length > 0 && <VotingPodium entries={top3} />}
-
-      <PodiumActionButtons />
-
-      <AlsoRanList entries={alsoRan} maxVotes={maxVotes} />
-
-      <DecidedMatchesView lineupId={lineup.id} entries={lineup.entries} />
-
-      <LineupStatsPanel
-        totalVoters={lineup.totalVoters}
-        nominatedCount={lineup.entries.length}
-        totalVotes={totalVotes}
+    <div data-testid="decided-composite-view">
+      <JourneyHero
+        phase="decided"
+        tone="action"
+        badge="Step 3 of 4 · Decided"
+        task={hero.task}
+        sub={hero.sub}
+        hint="Tap any game to learn more before scheduling."
       />
+      <YourMatches matches={mine} lineupId={lineup.id} />
+      <OtherMatches matches={others} lineupId={lineup.id} />
+      <LeftoverVotersRow leftoverCount={leftover} />
+      <CarriedForwardSection entries={carriedForward} />
     </div>
   );
 }
