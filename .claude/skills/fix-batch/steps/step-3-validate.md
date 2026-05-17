@@ -1,8 +1,15 @@
-# Step 3: Review & Validate — CI, Chrome MCP, Reviewer, Push
+# Step 3: Review & Validate — CI, parallel { Chrome MCP | Reviewer }, Push
 
 **Lead runs validation directly on the batch branch.**
 
-Order matters: cheap static gates first → deploy + Playwright + **Chrome MCP e2e** (operator-facing browser validation) → reviewer agent → push. The Chrome MCP gate must complete BEFORE the reviewer agent spawns, BEFORE the PR is created, and BEFORE auto-merge is enabled. See `~/.claude/projects/-Users-sdodge-Documents-Projects-Raid-Ledger/memory/feedback_chrome_mcp_e2e_before_review.md` for the rationale.
+Order:
+1. Cheap static gates sequential: build (3a) → ts (3b) → lint (3c) → unit (3d) → integration (3e).
+2. **Then fork into two parallel tracks**:
+   - **Track A (Lead, env-bound):** acquire env lock (3f) → deploy → Playwright (3g) → Chrome MCP e2e (3h) → release env lock.
+   - **Track B (Reviewer agent, no env):** spawn reviewer in background (3i) reviewing the merged batch diff.
+3. Both tracks converge before test gaps (3j) + regression (3k) + push (3l).
+
+The reviewer no longer waits on Chrome MCP — it reviews code-level concerns against the merged diff. If a critical/high reviewer finding requires browser re-verification (e.g. a UI behavior change), Lead reruns the affected flow via Chrome MCP after Track A releases the env lock. See `~/.claude/projects/-Users-sdodge-Documents-Projects-Raid-Ledger/memory/feedback_chrome_mcp_e2e_before_review.md` for the original sequential rationale; the parallelization preserves the *gate* (reviewer + Chrome MCP both block PR) while removing the artificial ordering between them.
 
 ```bash
 # Ensure you're on the batch branch
@@ -76,9 +83,20 @@ Update state: `gates.integration: PASS` (or `FAIL`)
 
 ---
 
-## 3f. Acquire Env Lock + Deploy Locally
+## Fork: Track A + Track B start in parallel
 
-**Env-lock discipline (STRICT):** hold the lock for the minimum span needed — just deploy (3f) → Playwright (3g) → Chrome MCP (3h). Release immediately after 3h. The reviewer, push, PR, and auto-merge do NOT need the env.
+After 3e (integration) passes, kick off BOTH tracks in the same message — Track A (env-bound, Lead-driven) and Track B (reviewer agent, no env).
+
+**Track A** runs 3f → 3g → 3h sequentially (Lead actions).
+**Track B** runs 3i once (reviewer agent invocation).
+
+If reviewer finishes before Chrome MCP, hold reviewer output and continue Track A. If Chrome MCP finishes before reviewer, do non-env work (PR body draft, state file updates) until the reviewer mailbox returns. Both must be complete before 3j.
+
+---
+
+## 3f. [Track A] Acquire Env Lock + Deploy Locally
+
+**Env-lock discipline (STRICT):** hold the lock for the minimum span needed — just deploy (3f) → Playwright (3g) → Chrome MCP (3h). Release immediately after 3h. The reviewer (Track B), push, PR, and auto-merge do NOT need the env.
 
 ```
 mcp__mcp-env__env_lock_status                                                # see who holds it
@@ -96,7 +114,7 @@ If deploy fails: stop. Debug the deploy before continuing — there is no point 
 
 ---
 
-## 3g. Playwright Smoke (regression sweep)
+## 3g. [Track A] Playwright Smoke (regression sweep)
 
 Automated regression check across all flows. Runs BOTH desktop and mobile projects (CI runs both — local must match).
 
@@ -114,9 +132,9 @@ Update state: `gates.playwright: PASS` (or `FAIL`)
 
 ---
 
-## 3h. Chrome MCP e2e Gate (MANDATORY — operator-facing browser validation)
+## 3h. [Track A] Chrome MCP e2e Gate (MANDATORY — operator-facing browser validation)
 
-This is the new pre-review gate. Drives the *changed user flows* via `mcp__claude-in-chrome__*` on the deployed batch branch, captures screenshots / GIFs, audits console + network, and produces an operator-facing summary. **Must complete BEFORE the reviewer agent runs (3i) and BEFORE the branch is pushed (3j).**
+Drives the *changed user flows* via `mcp__claude-in-chrome__*` on the deployed batch branch, captures screenshots / GIFs, audits console + network, and produces an operator-facing summary. **Must PASS before the branch is pushed (3l).** Runs in parallel with the reviewer (3i) but both must converge before 3j.
 
 Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 
@@ -126,7 +144,7 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 2. Pass that list + the batch story IDs as inputs to the shared playbook.
 3. Execute the playbook step-by-step. Do NOT skim it; the anti-pattern section catches the failure modes that triggered this gate's creation (ROK-1237).
 4. Write the summary to `planning-artifacts/chrome-mcp-summary-fix-batch-YYYY-MM-DD.md`. Save captures under `planning-artifacts/chrome-mcp-screenshots/fix-batch-YYYY-MM-DD/`.
-5. **Release the env lock IMMEDIATELY after the summary is written** — `mcp__mcp-env__env_lock_release`. Reviewer (3i), test gap (3j), regression check (3k), push (3l), and Step 4 (PR + auto-merge) do NOT need the env. Re-acquire ONLY if a reviewer finding requires a fix + re-verify against the deployed app.
+5. **Release the env lock IMMEDIATELY after the summary is written** — `mcp__mcp-env__env_lock_release`. Test gap (3j), regression check (3k), push (3l), and Step 4 (PR + auto-merge) do NOT need the env. Re-acquire ONLY if a reviewer finding requires a fix + re-verify against the deployed app.
 
 **Gate outcomes:**
 
@@ -138,22 +156,19 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 
 ---
 
-## 3i. Code Review (Reviewer Agent)
+## 3i. [Track B] Code Review (Reviewer Agent)
 
-Only after Chrome MCP e2e is `PASS` (or `N/A`). Spawn a reviewer agent (sonnet) to review the full batch diff against `origin/main`. The reviewer checks correctness, security, performance, and contract integrity.
+**Spawn at the same moment Track A acquires the env lock (3f).** The reviewer runs in parallel with Playwright + Chrome MCP — it reviews the merged batch diff and does not need the deployed env or the browser summary. Use `run_in_background: true` so Lead can drive Track A while the reviewer works.
 
 ```
 Agent(subagent_type: "devedup-rl:reviewer", model: "sonnet",
+      run_in_background: true,
       description: "Review batch diff",
       prompt: """
       Review the changes on branch fix/batch-YYYY-MM-DD compared to origin/main.
 
       This is a fix-batch containing the following stories:
       <list each ROK-### with title and label>
-
-      Browser validation already complete — see planning-artifacts/chrome-mcp-summary-fix-batch-YYYY-MM-DD.md
-      for the changed-flow walkthrough, screenshots, console + network audit, and verdict. Do not duplicate
-      that work; focus your review on code-level correctness.
 
       Run your full review checklist:
       1. Correctness — logic bugs, edge cases, error handling
@@ -164,14 +179,20 @@ Agent(subagent_type: "devedup-rl:reviewer", model: "sonnet",
 
       For each finding, classify severity: [critical], [high], [medium], [low].
       Critical/high findings MUST be fixed before shipping.
+
+      You are running in parallel with browser validation (Chrome MCP) — focus on code-level
+      concerns. If you spot a UI behavior risk that would benefit from manual verification,
+      flag it explicitly so the lead can re-run the browser flow after the env lock returns.
       """)
 ```
 
 When the reviewer completes:
 
-1. **Critical/high findings:** Lead fixes directly on the batch branch, or re-spawns a dev if the fix is non-trivial. If a fix touches a changed UI flow, re-run 3h Chrome MCP scoped to that flow.
+1. **Critical/high findings:** Lead fixes directly on the batch branch, or re-spawns a dev if the fix is non-trivial. If a fix touches a changed UI flow, re-run 3h Chrome MCP scoped to that flow (this requires re-acquiring the env lock).
 2. **Medium/low findings:** append to **`TECH-DEBT-BACKLOG.md`** at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Do NOT auto-file Linear tech-debt; the operator triages the file.
 3. **Update state:** `gates.review: PASS` (or `FAIL` if critical/high findings remain unfixed)
+
+**Convergence rule:** do not proceed to 3j until BOTH tracks have completed (`gates.chrome_mcp_e2e: PASS` AND `gates.review: PASS`).
 
 ---
 
