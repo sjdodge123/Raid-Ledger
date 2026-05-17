@@ -22,11 +22,12 @@ async function steamFetch<T>(path: string, method = 'GET', errorMsg = 'Request f
     return response.json();
 }
 
-function useUnlinkSteam() {
+export function useUnlinkSteam() {
     const queryClient = useQueryClient();
     return useMutation<void, Error>({
         mutationFn: async () => { await steamFetch('/auth/steam/link', 'DELETE', 'Failed to unlink Steam'); },
         onSuccess: () => {
+            queryClient.setQueryData(['steam', 'status'], { linked: false });
             queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
             queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
             toast.success('Steam account unlinked');
@@ -35,7 +36,7 @@ function useUnlinkSteam() {
     });
 }
 
-function useSyncLibrary() {
+export function useSyncLibrary() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: () => steamFetch<{ success: boolean; message: string; matched: number; newInterests: number }>('/auth/steam/sync', 'POST', 'Sync failed'),
@@ -44,11 +45,14 @@ function useSyncLibrary() {
             queryClient.invalidateQueries({ queryKey: ['game-interests'] });
             toast.success(data.message);
         },
-        onError: (err: Error) => toast.error(err.message),
+        onError: (err: Error) => {
+            queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
+            toast.error(err.message);
+        },
     });
 }
 
-function useSyncWishlist() {
+export function useSyncWishlist() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: () => steamFetch<{ success: boolean; message: string }>('/auth/steam/sync-wishlist', 'POST', 'Wishlist sync failed'),
@@ -57,7 +61,10 @@ function useSyncWishlist() {
             queryClient.invalidateQueries({ queryKey: ['userSteamWishlist'] });
             toast.success(data.message);
         },
-        onError: (err: Error) => toast.error(err.message),
+        onError: (err: Error) => {
+            queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
+            toast.error(err.message);
+        },
     });
 }
 

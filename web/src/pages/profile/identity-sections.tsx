@@ -88,11 +88,11 @@ function SteamLinkedPanel({ personaName, isPublic, syncLibrary, syncWishlist, un
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <SteamLinkedInfo personaName={personaName} isPublic={isPublic} />
                 <div className="flex flex-wrap items-center gap-2" data-testid="steam-action-buttons">
-                    <button onClick={() => syncLibrary.mutate()} disabled={syncLibrary.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
+                    <button onClick={() => syncLibrary.mutate()} disabled={syncLibrary.isPending || unlinkSteam.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
                         {syncLibrary.isPending ? 'Syncing...' : 'Sync Library'}
                     </button>
                     <span className="text-muted">|</span>
-                    <button onClick={() => syncWishlist.mutate()} disabled={syncWishlist.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
+                    <button onClick={() => syncWishlist.mutate()} disabled={syncWishlist.isPending || unlinkSteam.isPending} className="text-sm text-accent hover:text-accent/80 disabled:opacity-50">
                         {syncWishlist.isPending ? 'Syncing...' : 'Sync Wishlist'}
                     </button>
                     <span className="text-muted">|</span>
