@@ -441,3 +441,12 @@ Reviewer verdict PASS WITH NOTES on the batch diff. 0 critical/high/medium, 6 lo
   Suggested: check whether ROK-1099's role-hierarchy decorators on the community-insights routes still treat operator as a covered role, OR whether a recent guard change tightened the gate.
 
 Other ROK-1295 integration suites (including the new `games-lookup.integration.spec.ts` — 10/10 passing) succeed on the same DB run, so this is isolated to the community-insights operator-role path.
+
+### 2026-05-17 — rok-1307-steam-sync-400-and-private (surfaced during validate-ci --full)
+
+Full integration suite (`npm run test:integration -w api`) on the ROK-1307 worktree surfaced 6 failures across 2 specs (`backup/backup.integration.spec.ts` x3, `game-taste/game-taste.integration.spec.ts` x3). All 6 specs pass in isolation against the same HEAD (verified: `npx jest --testPathPatterns="game-taste"` → 27/27 pass; `npx jest --testPathPatterns="backup"` → 21/21 pass). Failure shapes match documented cross-suite flake classes (`feedback_smoke_polling_for_async_writes.md`, `reference_bullmq_ioredis_test_carrier.md`). Zero file overlap with the ROK-1307 diff (sentry/instrument.ts, steam/* services + controller, web hooks + components). Not blocking ROK-1307 ship; recording so they aren't re-discovered.
+
+- **[low]** `api/src/backup/backup.integration.spec.ts` — 3 cases (`createDailyBackup keeps non-excluded table data`, `restored dump has 0 rows in the 4 sanitized tables`, `createMigrationSnapshot also excludes data`) fail with `read ECONNRESET` only when run inside the full integration suite. Same socket-leak carrier class as ROK-1250 / ROK-1264. Passes 21/21 in isolation.
+  Suggested: belongs to the BullMQ ioredis carrier follow-up; not in scope here.
+- **[low]** `api/src/game-taste/game-taste.integration.spec.ts:381` — `AdminGuard › POST /games/similar returns 403 for non-admin` returns 404 instead of 403 only inside the full suite (passes 27/27 in isolation). Smells like cross-suite seed bleed: the non-admin user OR the target game row is mutated by an earlier-running spec, so the route 404s before the AdminGuard fires. Same pattern as the lineup fixture-bleed entries above.
+  Suggested: harden the test's seed setup (re-fetch target gameId after seeding, or use a non-1 sentinel ID); separately worth checking whether the AdminGuard ordering changed recently in router config.
