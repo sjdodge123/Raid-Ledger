@@ -37,6 +37,7 @@ function CoverContent({
         <div className="relative aspect-[3/4] bg-panel">
             {game.coverUrl ? <CoverImage src={game.coverUrl} alt={game.name} /> : <CoverPlaceholder />}
             {rating != null && <RatingBadge rating={rating} />}
+            <CoverInfoAffordance />
             <GradientOverlay />
             <div className="absolute bottom-0 left-0 right-0 p-3">
                 <CardTitle name={game.name} />
@@ -47,6 +48,19 @@ function CoverContent({
                 )}
             </div>
         </div>
+    );
+}
+
+function CoverInfoAffordance(): JSX.Element {
+    return (
+        <span
+            data-testid="game-ref-info-affordance"
+            aria-hidden="true"
+            title="Open game details"
+            className="absolute top-2 left-2 inline-flex items-center justify-center w-6 h-6 rounded-full bg-black/55 text-white text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+            i
+        </span>
     );
 }
 
