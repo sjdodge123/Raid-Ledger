@@ -50,7 +50,7 @@ function useResolvedGame(
     };
 }
 
-function useInitialFocus(isOpen: boolean, dialogRef: React.RefObject<HTMLDivElement>) {
+function useInitialFocus(isOpen: boolean, dialogRef: React.RefObject<HTMLDivElement | null>) {
     useEffect(() => {
         if (!isOpen) return;
         const node = dialogRef.current;
