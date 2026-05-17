@@ -41,13 +41,18 @@ if (!telemetryDisabled && isProduction) {
       }
       // ROK-1307: drop user-fixable Steam-sync 4xx noise. Manual
       // `POST /auth/steam/sync` and `/auth/steam/sync-wishlist` raise
-      // BadRequestException / ServiceUnavailableException for unlinked
-      // Steam, private profile, or missing API key. These are expected
-      // 4xx responses, NOT Sentry-worthy bugs. Match on value (not type)
-      // so legacy bare `Error` payloads from cron paths also drop.
+      // BadRequestException for unlinked Steam or private profile.
+      // These are user-correctable conditions, NOT Sentry-worthy bugs.
+      // Match on value (not type) so legacy bare `Error` payloads from
+      // cron paths also drop.
+      //
+      // DO NOT add "Steam integration is not configured" here — that
+      // ServiceUnavailableException signals a real ops issue (admin
+      // forgot to set the Steam API key) and MUST stay visible in
+      // Sentry. Codex review of ROK-1307 flagged this regression.
       if (
         typeof exceptionValue === 'string' &&
-        /Steam account not linked|User has no linked Steam account|Steam profile is private|Steam integration is not configured/.test(
+        /Steam account not linked|User has no linked Steam account|Steam profile is private/.test(
           exceptionValue,
         )
       ) {

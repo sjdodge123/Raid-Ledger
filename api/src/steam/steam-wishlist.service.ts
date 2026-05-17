@@ -268,9 +268,19 @@ export class SteamWishlistService {
         totalNewInterests += result.newInterests;
         usersProcessed++;
       } catch (error) {
-        this.logger.warn(
-          `Wishlist sync failed for user ${user.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        );
+        // ROK-1307: BadRequestException (AC-7 private profile) is an
+        // expected skip, not a failure. Count toward usersProcessed so
+        // cron metrics stay accurate. Codex review caught this.
+        if (error instanceof BadRequestException) {
+          usersProcessed++;
+          this.logger.debug(
+            `Wishlist sync skipped for user ${user.id}: ${error.message}`,
+          );
+        } else {
+          this.logger.warn(
+            `Wishlist sync failed for user ${user.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
       }
       await new Promise((resolve) => setTimeout(resolve, 200));
     }

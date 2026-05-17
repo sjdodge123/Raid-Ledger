@@ -27,7 +27,12 @@ export function useUnlinkSteam() {
     const queryClient = useQueryClient();
     return useMutation<void, Error>({
         mutationFn: async () => { await steamFetch('/auth/steam/link', 'DELETE', 'Failed to unlink Steam'); },
-        onSuccess: () => {
+        onSuccess: async () => {
+            // Cancel any in-flight status refetch before writing optimistic
+            // state — otherwise a refetch that started before the DELETE
+            // can land after setQueryData and overwrite { linked: false }
+            // with the stale { linked: true } response. Codex review fix.
+            await queryClient.cancelQueries({ queryKey: ['steam', 'status'] });
             queryClient.setQueryData(['steam', 'status'], { linked: false });
             queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
             queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });

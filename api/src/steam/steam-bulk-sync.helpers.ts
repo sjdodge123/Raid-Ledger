@@ -2,7 +2,7 @@
  * Bulk sync helpers for Steam library sync (ROK-774).
  * Extracted from steam.service.ts for file size compliance.
  */
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { isNotNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -31,9 +31,21 @@ export async function syncAllLinkedUsers(
       totalNewInterests += result.newInterests;
       usersProcessed++;
     } catch (error) {
-      logger.warn(
-        `Steam sync failed for user ${user.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      // ROK-1307: BadRequestException (e.g. private profile per AC-7) is an
+      // expected user-state "skip", not a sync failure. Count toward
+      // usersProcessed so cron metrics aren't distorted by users with
+      // private Steam profiles. Other errors (5xx, network, etc.) stay at
+      // warn-level failures. Codex review caught this regression.
+      if (error instanceof BadRequestException) {
+        usersProcessed++;
+        logger.debug(
+          `Steam sync skipped for user ${user.id}: ${error.message}`,
+        );
+      } else {
+        logger.warn(
+          `Steam sync failed for user ${user.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, USER_DELAY_MS));
   }

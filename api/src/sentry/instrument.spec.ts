@@ -529,8 +529,12 @@ function describeSentryInstrumentTs() {
           expect(result).toBeNull();
         });
 
-        it('drops ServiceUnavailableException: "Steam integration is not configured"', () => {
-          const result = getBeforeSend()({
+        it('does NOT drop "Steam integration is not configured" (Codex fix: ops signal, not user-fixable)', () => {
+          // ServiceUnavailableException for missing API key is an admin/ops
+          // problem — admin needs to set the Steam API key in app_settings.
+          // It MUST reach Sentry so ops sees it. Codex review of ROK-1307
+          // caught this filter regression.
+          const event: SentryEvent = {
             exception: {
               values: [
                 {
@@ -539,8 +543,8 @@ function describeSentryInstrumentTs() {
                 },
               ],
             },
-          });
-          expect(result).toBeNull();
+          };
+          expect(getBeforeSend()(event)).toBe(event);
         });
 
         it('does NOT drop unrelated Steam-themed exceptions', () => {
