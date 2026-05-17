@@ -1,0 +1,1 @@
+ALTER TABLE "feedback" ADD COLUMN "client_logs" text;

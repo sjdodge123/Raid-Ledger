@@ -64,9 +64,16 @@ export class FeedbackController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     const userId = req.user.id;
     const { category, message, pageUrl, clientLogs } = parsed.data;
+    const truncatedClientLogs = clientLogs ? clientLogs.slice(0, 50_000) : null;
     const [inserted] = await this.db
       .insert(schema.feedback)
-      .values({ userId, category, message, pageUrl: pageUrl ?? null })
+      .values({
+        userId,
+        category,
+        message,
+        pageUrl: pageUrl ?? null,
+        clientLogs: truncatedClientLogs,
+      })
       .returning();
     this.logger.log(
       `Feedback submitted: id=${inserted.id} category=${category} user=${userId}`,
