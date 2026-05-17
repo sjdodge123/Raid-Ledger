@@ -460,6 +460,66 @@ function describeLineupSubmit() {
     // match" failure.
     expect([403, 404]).toContain(res.status);
   });
+
+  // -- Codex P1: cross-lineup match guard ----------------------------------
+
+  it('POST /lineups/:idA/matches/:idB/submit-scheduling rejects when match belongs to a DIFFERENT lineup', async () => {
+    // Build two decided lineups, both with the same admin as creator. Admin
+    // is a participant in both. Find a match in lineup B and try to stamp it
+    // via lineup A's URL — must be rejected before any row is touched.
+    const sharedMember = await createMember('cross-lineup-shared');
+
+    async function buildDecidedLineup(label: string): Promise<{
+      lineupId: number;
+      matchId: number;
+    }> {
+      const createRes = await createPrivateLineup(adminToken, [
+        sharedMember.userId,
+      ]);
+      const lineupId = createRes.body.id as number;
+      const games = await createGames(2);
+      for (const g of games) await nominate(adminToken, lineupId, g.id);
+      await advanceToVoting(lineupId, adminToken);
+      await vote(adminToken, lineupId, games[0].id);
+      await vote(adminToken, lineupId, games[1].id);
+      await vote(sharedMember.token, lineupId, games[0].id);
+      await testApp.request
+        .post(`/lineups/${lineupId}/submit-votes`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
+      await testApp.request
+        .post(`/lineups/${lineupId}/submit-votes`)
+        .set('Authorization', `Bearer ${sharedMember.token}`)
+        .send({});
+      const matchRows = await testApp.db.execute<{ id: number }>(
+        sql`SELECT id FROM community_lineup_matches WHERE lineup_id = ${lineupId} ORDER BY id LIMIT 1`,
+      );
+      expect(matchRows.length).toBeGreaterThan(0);
+      void label;
+      return { lineupId, matchId: matchRows[0].id };
+    }
+
+    const lineupA = await buildDecidedLineup('A');
+    const lineupB = await buildDecidedLineup('B');
+
+    // Stamp lineup B's match via lineup A's URL — must be rejected.
+    const cross = await testApp.request
+      .post(
+        `/lineups/${lineupA.lineupId}/matches/${lineupB.matchId}/submit-scheduling`,
+      )
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({});
+    expect(cross.status).toBe(403);
+
+    // Verify lineup B's match-member row was NOT stamped (regression guard).
+    const stampedRows = await testApp.db.execute<{
+      scheduling_submitted_at: Date | null;
+    }>(
+      sql`SELECT scheduling_submitted_at FROM community_lineup_match_members WHERE match_id = ${lineupB.matchId} AND user_id = ${testApp.seed.adminUser.id}`,
+    );
+    expect(stampedRows.length).toBeGreaterThan(0);
+    expect(stampedRows[0].scheduling_submitted_at).toBeNull();
+  });
 }
 
 describe(

@@ -47,7 +47,11 @@ export function useSubmitScheduling() {
   >({
     mutationFn: ({ lineupId, matchId }) => submitScheduling(lineupId, matchId),
     onSuccess: () => {
+      // ROK-1296 Codex P2: scheduling pages read from useSchedulePoll under
+      // ['scheduling', 'poll', ...] with a 15s staleTime. Invalidate that
+      // key too so the SubmitBar flips to `post` without manual refetch.
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+      void qc.invalidateQueries({ queryKey: ['scheduling'] });
     },
   });
 }

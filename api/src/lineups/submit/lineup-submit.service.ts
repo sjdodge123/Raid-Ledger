@@ -131,12 +131,31 @@ export class LineupSubmitService {
     return lineup;
   }
 
-  /** Stamp the match-member row; 403 when the user is not a member. */
+  /**
+   * Stamp the match-member row. 403 when the user is not a member of the
+   * match OR when the match doesn't belong to this lineup. ROK-1296 Codex
+   * P1: without the lineup-id verification, a participant in lineup A who
+   * shares a match-member row in lineup B could stamp B via lineup A's
+   * URL — write succeeds but activity-log credits the wrong lineup.
+   */
   private async stampMatchMember(
     lineupId: number,
     matchId: number,
     userId: number,
   ): Promise<void> {
+    const [match] = await this.db
+      .select({ id: schema.communityLineupMatches.id })
+      .from(schema.communityLineupMatches)
+      .where(
+        and(
+          eq(schema.communityLineupMatches.id, matchId),
+          eq(schema.communityLineupMatches.lineupId, lineupId),
+        ),
+      )
+      .limit(1);
+    if (!match) {
+      throw new ForbiddenException('Match does not belong to this lineup');
+    }
     const result = await this.db
       .update(schema.communityLineupMatchMembers)
       .set({ schedulingSubmittedAt: sql`now()` })
@@ -150,7 +169,6 @@ export class LineupSubmitService {
     if (result.length === 0) {
       throw new ForbiddenException('Not a member of this match');
     }
-    void lineupId; // reserved for future audit hooks.
   }
 
   /** Fire auto-advance with the service-owned deps, swallowing errors. */

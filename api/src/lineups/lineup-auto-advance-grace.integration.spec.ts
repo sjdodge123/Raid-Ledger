@@ -494,6 +494,62 @@ function describeGrace() {
     expect(await readStatus(lineupId)).toBe('building');
   });
 
+  // ── ROK-1296 (Codex P2): revert clears stale submitted_at stamps ──
+
+  it('reverting voting → building clears stale nominations_submitted_at stamps so post-TTL quorum requires re-submit', async () => {
+    await settings.set(graceKey, '500');
+    await settings.set(pauseTtlKey, '86400000');
+
+    const v1 = await createMember('p2-v1');
+    const v2 = await createMember('p2-v2');
+    const createRes = await createPrivateLineup(
+      adminToken,
+      [v1.userId, v2.userId],
+      1,
+    );
+    const lineupId = createRes.body.id as number;
+    const games = await createGames(2);
+    await nominate(adminToken, lineupId, games[0].id);
+    await nominate(v1.token, lineupId, games[1].id);
+
+    // Stamp every voter's nominations_submitted_at BEFORE the revert so
+    // there's something to clear.
+    for (const token of [adminToken, v1.token, v2.token]) {
+      await testApp.request
+        .post(`/lineups/${lineupId}/submit-nominations`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+    }
+
+    const beforeRevert = await testApp.db.execute<{
+      user_id: number;
+      nominations_submitted_at: Date | null;
+    }>(
+      sql`SELECT user_id, nominations_submitted_at FROM community_lineup_user_submissions WHERE lineup_id = ${lineupId}`,
+    );
+    expect(beforeRevert.length).toBe(3);
+    for (const row of beforeRevert) {
+      expect(row.nominations_submitted_at).not.toBeNull();
+    }
+
+    // Advance to voting, then revert back to building.
+    await advanceToVoting(lineupId, adminToken);
+    await revertToBuilding(lineupId, adminToken);
+    expect(await readStatus(lineupId)).toBe('building');
+
+    // Revert MUST have cleared the stale nominations_submitted_at stamps.
+    const afterRevert = await testApp.db.execute<{
+      user_id: number;
+      nominations_submitted_at: Date | null;
+    }>(
+      sql`SELECT user_id, nominations_submitted_at FROM community_lineup_user_submissions WHERE lineup_id = ${lineupId}`,
+    );
+    expect(afterRevert.length).toBe(3);
+    for (const row of afterRevert) {
+      expect(row.nominations_submitted_at).toBeNull();
+    }
+  });
+
   // ── AC-T4: pause TTL elapse → next mutation advances normally ──
 
   it('AC-T4: after pause TTL elapses, next mutation re-schedules grace and advances', async () => {
