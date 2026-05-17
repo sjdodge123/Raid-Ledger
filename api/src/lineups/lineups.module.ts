@@ -66,6 +66,7 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
   ],
   exports: [
     LineupsService,
+    LineupSubmitService,
     LineupSteamNudgeService,
     LineupNotificationService,
     LineupsGateway,

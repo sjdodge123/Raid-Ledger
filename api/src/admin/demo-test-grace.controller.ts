@@ -1,5 +1,5 @@
 /**
- * DemoTestGraceController (ROK-1253).
+ * DemoTestGraceController (ROK-1253, ROK-1296).
  *
  * DEMO_MODE-only endpoints used by the lineup-grace-countdown smoke test:
  *
@@ -7,8 +7,12 @@
  *   - POST /admin/test/cast-vote     — toggle a vote without needing a
  *                                       per-user JWT (smoke fixture
  *                                       impersonates members via userId).
+ *   - POST /admin/test/submit-votes  — (ROK-1296) fire the new submit-votes
+ *                                       endpoint for a given userId so smoke
+ *                                       fixtures can close the per-voter
+ *                                       quorum gate without minting JWTs.
  *
- * Both endpoints are off in production builds (guarded by `assertDemoMode`).
+ * All endpoints are off in production builds (guarded by `assertDemoMode`).
  */
 import {
   Body,
@@ -25,6 +29,7 @@ import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { LineupsService } from '../lineups/lineups.service';
+import { LineupSubmitService } from '../lineups/submit/lineup-submit.service';
 import { SETTING_KEYS, type SettingKey } from '../drizzle/schema/app-settings';
 import { parseDemoBody } from './demo-test.utils';
 
@@ -40,6 +45,11 @@ const CastVoteSchema = z.object({
   userId: z.number().int().positive(),
 });
 
+const SubmitVotesSchema = z.object({
+  lineupId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
 /** Whitelist of setting keys this endpoint accepts. */
 const KNOWN_KEYS = new Set<string>(Object.values(SETTING_KEYS));
 
@@ -50,6 +60,7 @@ export class DemoTestGraceController {
   constructor(
     private readonly settings: SettingsService,
     private readonly lineupsService: LineupsService,
+    private readonly submitService: LineupSubmitService,
   ) {}
 
   private async assertDemoMode(): Promise<void> {
@@ -94,6 +105,25 @@ export class DemoTestGraceController {
     await this.lineupsService.toggleVote(
       parsed.lineupId,
       parsed.gameId,
+      parsed.userId,
+      'admin',
+    );
+    return { success: true };
+  }
+
+  /**
+   * ROK-1296: fire the new `POST /lineups/:id/submit-votes` endpoint
+   * impersonating `userId` so smoke fixtures can close the per-voter
+   * quorum gate without minting per-user JWTs. Mirrors `cast-vote`'s
+   * shape but stamps `community_lineup_user_submissions.votes_submitted_at`.
+   */
+  @Post('submit-votes')
+  @HttpCode(HttpStatus.OK)
+  async submitVotes(@Body() body: unknown): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const parsed = parseDemoBody(SubmitVotesSchema, body);
+    await this.submitService.submitVotes(
+      parsed.lineupId,
       parsed.userId,
       'admin',
     );

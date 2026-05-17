@@ -1,20 +1,25 @@
 /**
  * ROK-1253 — Grace-countdown smoke test (AC-T5).
+ * ROK-1296 — adapted for submission-presence quorum: a vote-toggle no
+ * longer breaks quorum (submission stamps persist). The equivalent
+ * quorum-break action under the new semantics is `addInvitee` — adding
+ * an unsubmitted voter grows the expected set and re-evaluates quorum
+ * synchronously (see `LineupsService.addInvitees` ROK-1296 hook).
  *
  * Verifies the end-to-end behavior of the pre-advance grace window
  * against the live API + Discord bot:
  *
  *   1. Three-person private lineup is created and force-advanced into
  *      voting.
- *   2. Each invitee casts their single vote → quorum closes →
- *      `pendingAdvanceAt` becomes a populated ISO string on
- *      GET /lineups/:id without the status flipping.
- *   3. One voter toggles their vote off (POST /vote on the same gameId
- *      is a toggle) → `pendingAdvanceAt` is cleared synchronously and
- *      the lineup stays in voting.
- *   4. They re-cast their vote → `pendingAdvanceAt` populates again →
- *      after the short grace window elapses the BullMQ job fires and
- *      the lineup transitions to `decided`.
+ *   2. Each invitee casts their single vote AND calls submit-votes →
+ *      quorum closes → `pendingAdvanceAt` becomes a populated ISO string
+ *      on GET /lineups/:id without the status flipping.
+ *   3. A 4th invitee is added (unsubmitted) → `pendingAdvanceAt` is
+ *      cleared synchronously by the `addInvitees → maybeAutoAdvance`
+ *      hook and the lineup stays in voting.
+ *   4. The new invitee votes AND submits → `pendingAdvanceAt` populates
+ *      again → after the short grace window elapses the BullMQ job fires
+ *      and the lineup transitions to `decided`.
  *
  * The grace TTL is shortened via `POST /admin/test/set-setting` (a
  * DEMO_MODE-only endpoint that the dev for ROK-1253 must add — its
@@ -158,28 +163,26 @@ const graceCountdown: SmokeTest = {
       });
       await awaitProcessing(ctx.api);
 
-      // Cast every voter's single vote so quorum closes.
-      await ctx.api.post('/admin/test/cast-vote', {
-        lineupId: lineup.id,
-        gameId: gameA,
-        userId: ctx.testUserId,
-      });
-      await ctx.api.post('/admin/test/cast-vote', {
-        lineupId: lineup.id,
-        gameId: gameA,
-        userId: ctx.dmRecipientUserId,
-      });
-      const decidingVote = await ctx.api.post<LineupPayload>(
-        '/admin/test/cast-vote',
-        {
+      // Cast every voter's single vote.
+      const voterIds = [ctx.testUserId, ctx.dmRecipientUserId, otherInviteeId];
+      for (const userId of voterIds) {
+        await ctx.api.post('/admin/test/cast-vote', {
           lineupId: lineup.id,
           gameId: gameA,
-          userId: otherInviteeId,
-        },
-      );
-      void decidingVote;
+          userId,
+        });
+      }
 
-      // After the third vote: pendingAdvanceAt populates and status
+      // ROK-1296: quorum is now driven by submit-presence, so each voter
+      // must explicitly submit-votes. The third submit closes quorum.
+      for (const userId of voterIds) {
+        await ctx.api.post('/admin/test/submit-votes', {
+          lineupId: lineup.id,
+          userId,
+        });
+      }
+
+      // After the third submit: pendingAdvanceAt populates and status
       // STAYS 'voting' (grace window in effect).
       await pollForCondition(
         async () => {
@@ -196,11 +199,17 @@ const graceCountdown: SmokeTest = {
         { intervalMs: 500 },
       );
 
-      // One voter toggles their vote off — POST /vote is a toggle.
-      await ctx.api.post('/admin/test/cast-vote', {
-        lineupId: lineup.id,
-        gameId: gameA,
-        userId: otherInviteeId,
+      // ROK-1296 quorum-break: add a fourth invitee (unsubmitted) → the
+      // `addInvitees → maybeAutoAdvance` hook clears pendingAdvanceAt
+      // synchronously because the expected-voter set just grew by one.
+      const fourthInviteeId = pickFourthParticipant(ctx, voterIds);
+      if (!fourthInviteeId) {
+        throw new Error(
+          'No fourth demo user available to break quorum — check ctx.demoUserIds',
+        );
+      }
+      await ctx.api.post(`/lineups/${lineup.id}/invitees`, {
+        userIds: [fourthInviteeId],
       });
 
       // pendingAdvanceAt clears synchronously.
@@ -216,11 +225,15 @@ const graceCountdown: SmokeTest = {
         { intervalMs: 500 },
       );
 
-      // Re-cast that vote — quorum closes again, grace re-schedules.
+      // 4th invitee votes + submits → quorum closes again, grace re-schedules.
       await ctx.api.post('/admin/test/cast-vote', {
         lineupId: lineup.id,
         gameId: gameA,
-        userId: otherInviteeId,
+        userId: fourthInviteeId,
+      });
+      await ctx.api.post('/admin/test/submit-votes', {
+        lineupId: lineup.id,
+        userId: fourthInviteeId,
       });
 
       // After grace elapses (~3s + worker tick), the lineup advances
@@ -246,6 +259,16 @@ function pickThirdParticipant(ctx: TestContext): number | undefined {
   return ctx.demoUserIds.find(
     (id) => id !== ctx.testUserId && id !== ctx.dmRecipientUserId,
   );
+}
+
+/** Pick a demo user not already in the voter set (ROK-1296 quorum-break). */
+function pickFourthParticipant(
+  ctx: TestContext,
+  exclude: number[],
+): number | undefined {
+  if (!ctx.demoUserIds?.length) return undefined;
+  const excludeSet = new Set(exclude);
+  return ctx.demoUserIds.find((id) => !excludeSet.has(id));
 }
 
 export const lineupGraceCountdownTests: SmokeTest[] = [graceCountdown];
