@@ -35,7 +35,10 @@ function useResolvedGame(
     gameId: number | undefined,
     name: string | undefined,
 ): ResolvedGame {
-    const byId = useGameDetail(gameId);
+    // Pass gameId only when isOpen — every DrawerCard mounts a hidden drawer,
+    // so an unconditional useGameDetail would fire one GET /games/:id per card
+    // on first render of /games (Codex review finding P1).
+    const byId = useGameDetail(isOpen ? gameId : undefined);
     const lookupEnabled = isOpen && !gameId && !!name;
     const byName = useGameLookupByName(name, lookupEnabled);
     const source = gameId ? byId : byName;

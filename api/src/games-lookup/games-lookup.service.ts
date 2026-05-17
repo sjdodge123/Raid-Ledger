@@ -124,25 +124,9 @@ export class GamesLookupService {
   }
 
   private async insertIgdbRow(hit: GameDetailDto): Promise<number> {
-    const videos = (hit.videos ?? []).map((v) => ({
-      name: v.name ?? '',
-      videoId: v.videoId,
-    }));
     const [row] = await this.db
       .insert(schema.games)
-      .values({
-        igdbId: hit.igdbId,
-        name: hit.name,
-        slug: hit.slug,
-        coverUrl: hit.coverUrl,
-        summary: hit.summary,
-        genres: hit.genres ?? [],
-        gameModes: hit.gameModes ?? [],
-        themes: hit.themes ?? [],
-        platforms: hit.platforms ?? [],
-        screenshots: hit.screenshots ?? [],
-        videos,
-      })
+      .values(buildIgdbRowValues(hit))
       .returning({ id: schema.games.id });
     return row.id;
   }
@@ -150,11 +134,7 @@ export class GamesLookupService {
   private async applyIgdbMerge(id: number, hit: GameDetailDto): Promise<void> {
     await this.db
       .update(schema.games)
-      .set({
-        igdbId: hit.igdbId ?? undefined,
-        coverUrl: hit.coverUrl ?? undefined,
-        summary: hit.summary ?? undefined,
-      })
+      .set(buildIgdbRowValues(hit))
       .where(eq(schema.games.id, id));
   }
 
@@ -175,4 +155,39 @@ function pickFirstIgdbHit(result: {
   games: GameDetailDto[];
 }): GameDetailDto | null {
   return result.games.length > 0 ? result.games[0] : null;
+}
+
+/**
+ * Map a hydrated GameDetailDto to the full set of `games` columns IGDB can
+ * populate. Used for both first-insert and update-on-merge paths so a row
+ * created via /games/lookup-by-name carries the same payload it would have
+ * from the regular IGDB sync (rating, releaseDate, playerCount, crossplay,
+ * popularity, twitchGameId — Codex review finding P2 fix).
+ */
+function buildIgdbRowValues(
+  hit: GameDetailDto,
+): typeof schema.games.$inferInsert {
+  return {
+    igdbId: hit.igdbId,
+    name: hit.name,
+    slug: hit.slug,
+    coverUrl: hit.coverUrl,
+    summary: hit.summary,
+    genres: hit.genres ?? [],
+    gameModes: hit.gameModes ?? [],
+    themes: hit.themes ?? [],
+    platforms: hit.platforms ?? [],
+    screenshots: hit.screenshots ?? [],
+    videos: (hit.videos ?? []).map((v) => ({
+      name: v.name ?? '',
+      videoId: v.videoId,
+    })),
+    rating: hit.rating ?? null,
+    aggregatedRating: hit.aggregatedRating ?? null,
+    popularity: hit.popularity ?? null,
+    firstReleaseDate: hit.firstReleaseDate ? new Date(hit.firstReleaseDate) : null,
+    playerCount: hit.playerCount ?? null,
+    twitchGameId: hit.twitchGameId ?? null,
+    crossplay: hit.crossplay ?? null,
+  };
 }
