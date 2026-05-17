@@ -303,6 +303,8 @@ describe('MatchDetailResponseSchema (ROK-964)', () => {
         avatar: null,
         discordId: null,
         customAvatarUrl: null,
+        // ROK-1296: per-match scheduling submission timestamp (null = unsubmitted).
+        schedulingSubmittedAt: null,
       },
     ],
   };

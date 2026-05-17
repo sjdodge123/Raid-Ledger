@@ -31,8 +31,7 @@ export async function findViewerSubmissions(
     .select({
       nominationsSubmittedAt:
         schema.communityLineupUserSubmissions.nominationsSubmittedAt,
-      votesSubmittedAt:
-        schema.communityLineupUserSubmissions.votesSubmittedAt,
+      votesSubmittedAt: schema.communityLineupUserSubmissions.votesSubmittedAt,
     })
     .from(schema.communityLineupUserSubmissions)
     .where(

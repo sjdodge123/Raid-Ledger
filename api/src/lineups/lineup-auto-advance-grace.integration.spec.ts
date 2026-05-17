@@ -173,6 +173,18 @@ function describeGrace() {
       .send({ status: 'voting' });
   }
 
+  // ROK-1296: per-voter quorum gate now requires explicit submit. Helper
+  // posts /submit-votes for each token so the grace tests can drive the
+  // pending_advance_at / grace-job paths exactly as before.
+  async function submitAllVotes(lineupId: number, tokens: string[]) {
+    for (const t of tokens) {
+      await testApp.request
+        .post(`/lineups/${lineupId}/submit-votes`)
+        .set('Authorization', `Bearer ${t}`)
+        .send({});
+    }
+  }
+
   async function revertToBuilding(lineupId: number, token: string) {
     return testApp.request
       .patch(`/lineups/${lineupId}/status`)
@@ -322,6 +334,8 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
     // Immediately after quorum closes: status is still 'voting' AND
     // pending_advance_at is populated.
@@ -371,13 +385,24 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
     // Quorum just closed — grace pending.
     let state = await readAdvanceState(lineupId);
     expect(state.pendingAdvanceAt).not.toBeNull();
 
-    // v2 toggles their vote off (POST /vote is a toggle).
-    await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: per-voter quorum gate is submission presence, so a vote
+    // toggle no longer breaks quorum. Adding a NEW invitee who has not
+    // submitted is the post-1296 equivalent — the gating set grows by one
+    // unsubmitted voter, so quorum breaks.
+    const v3 = await createMember('act2-v3');
+    const addRes = await testApp.request
+      .post(`/lineups/${lineupId}/invitees`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ userIds: [v3.userId] });
+    // POST returns 201 by default; the endpoint also tolerates 200.
+    expect([200, 201]).toContain(addRes.status);
 
     // Synchronously: pending_advance_at must be cleared on the mutation
     // path. The status remains 'voting' (no advance fired).
@@ -419,6 +444,8 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
     expect((await readAdvanceState(lineupId)).pendingAdvanceAt).not.toBeNull();
 
     // Operator reverts BEFORE the grace job fires.
@@ -441,20 +468,19 @@ function describeGrace() {
     ).toEqual(expect.any(String));
 
     // The next quorum-affecting mutation must NOT re-schedule the grace
-    // window. We need another nomination to satisfy building quorum
-    // (3 voters × min 3 noms each = 9), so we add nominations and confirm
-    // the lineup does not auto-advance through grace.
+    // window. ROK-1296: building quorum is met when every expected voter
+    // calls /submit-nominations. We satisfy that AND ensure the nomination
+    // floor (default 4) is hit so a paused-but-otherwise-ready lineup is
+    // exercised — the pause must suppress advance regardless.
     for (let i = 0; i < 3; i++) {
       const morePersonal = await createGames(1);
       await nominate(adminToken, lineupId, morePersonal[0].id);
     }
-    for (let i = 0; i < 3; i++) {
-      const morePersonal = await createGames(1);
-      await nominate(v1.token, lineupId, morePersonal[0].id);
-    }
-    for (let i = 0; i < 3; i++) {
-      const morePersonal = await createGames(1);
-      await nominate(v2.token, lineupId, morePersonal[0].id);
+    for (const token of [adminToken, v1.token, v2.token]) {
+      await testApp.request
+        .post(`/lineups/${lineupId}/submit-nominations`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
     }
 
     // Even with quorum technically met, pause must keep the lineup put.
@@ -492,6 +518,8 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: submit closes the voting-quorum gate so grace is set.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
     await revertToBuilding(lineupId, adminToken);
     expect(
@@ -501,18 +529,18 @@ function describeGrace() {
     // Wait past the 50ms TTL.
     await new Promise((r) => setTimeout(r, 200));
 
-    // Top up nominations to satisfy building quorum (3 voters × 3 noms = 9).
+    // Top up nominations to satisfy the nomination floor (default 4).
     for (let i = 0; i < 3; i++) {
       const g = await createGames(1);
       await nominate(adminToken, lineupId, g[0].id);
     }
-    for (let i = 0; i < 3; i++) {
-      const g = await createGames(1);
-      await nominate(v1.token, lineupId, g[0].id);
-    }
-    for (let i = 0; i < 3; i++) {
-      const g = await createGames(1);
-      await nominate(v2.token, lineupId, g[0].id);
+
+    // ROK-1296: every voter must submit-nominations for building quorum.
+    for (const token of [adminToken, v1.token, v2.token]) {
+      await testApp.request
+        .post(`/lineups/${lineupId}/submit-nominations`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
     }
 
     // Once the floor is met AND TTL has elapsed, the next mutation must
@@ -540,6 +568,8 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
     // Grace job exists.
     const before = await getGraceJob(lineupId);
@@ -581,6 +611,8 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
     expect((await readAdvanceState(lineupId)).pendingAdvanceAt).not.toBeNull();
 
     // Manually stamp the row as paused WHILE the grace job is still
@@ -616,6 +648,8 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
     expect((await readAdvanceState(lineupId)).pendingAdvanceAt).not.toBeNull();
     const beforeJob = await getGraceJob(lineupId);
     expect(beforeJob).toBeTruthy();
@@ -685,6 +719,8 @@ function describeGrace() {
     // attempts. The conditional-UPDATE (`pending_advance_at IS NULL`)
     // must ensure only one wins; the loser must no-op.
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
     // Clear any baseline pending_advance_at written by the vote path
     // so the race is observable on its own merits.
@@ -730,6 +766,8 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
     // Wait for grace to elapse and the BullMQ worker to process.
     await waitForStatus(lineupId, 'decided', 10_000);
@@ -826,19 +864,22 @@ function describeGrace() {
     await nominate(v1.token, lineupId, games[1].id);
     await advanceToVoting(lineupId, adminToken);
 
-    // Cast 2 of 3 votes — quorum not yet ready.
+    // All 3 voters vote, but only 2 submit — quorum not yet ready under
+    // the ROK-1296 per-voter submission gate.
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
+    await vote(v2.token, lineupId, games[0].id);
+    await submitAllVotes(lineupId, [adminToken, v1.token]);
 
-    // Spy on the gateway BEFORE the quorum-closing vote so the emit is
+    // Spy on the gateway BEFORE the quorum-closing submit so the emit is
     // captured. Use jest.spyOn so we don't clobber the real socket.io server.
     const spy = jest
       .spyOn(lineupsGateway, 'emitGraceScheduled')
       .mockImplementation(() => undefined);
 
     try {
-      // v2's vote closes quorum → maybeAutoAdvance → scheduleOrAdvance.
-      await vote(v2.token, lineupId, games[0].id);
+      // v2's submit closes quorum → maybeAutoAdvance → scheduleOrAdvance.
+      await submitAllVotes(lineupId, [v2.token]);
 
       // The fire-and-forget call inside the toggle handler races the HTTP
       // response; give it a brief window to flush.
@@ -885,10 +926,12 @@ function describeGrace() {
     await vote(adminToken, lineupId, games[0].id);
     await vote(v1.token, lineupId, games[0].id);
     await vote(v2.token, lineupId, games[0].id);
+    // ROK-1296: explicit submit closes the per-voter quorum gate.
+    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
-    // The three votes already triggered the real grace pipeline. Cancel
-    // any in-flight grace job + reset claim so we drive the processor by
-    // hand under the stub.
+    // The three votes + submits already triggered the real grace pipeline.
+    // Cancel any in-flight grace job + reset claim so we drive the
+    // processor by hand under the stub.
     await phaseQueue.cancelGraceAdvance(lineupId);
     const futureDeadline = new Date(Date.now() + 60_000);
     await writeAdvanceState(lineupId, 'pending_advance_at', futureDeadline);

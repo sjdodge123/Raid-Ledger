@@ -206,9 +206,9 @@ function describeLineupSubmit() {
     );
     expect(submitRes.body.viewerSubmissions.votesSubmittedAt).toBeNull();
     // ISO-shaped timestamp.
-    expect(
-      submitRes.body.viewerSubmissions.nominationsSubmittedAt,
-    ).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(submitRes.body.viewerSubmissions.nominationsSubmittedAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T/,
+    );
 
     const after = await readSubmission(lineupId, testApp.seed.adminUser.id);
     expect(after).not.toBeNull();
@@ -243,9 +243,9 @@ function describeLineupSubmit() {
     expect(typeof submitRes.body.viewerSubmissions.votesSubmittedAt).toBe(
       'string',
     );
-    expect(
-      submitRes.body.viewerSubmissions.votesSubmittedAt,
-    ).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(submitRes.body.viewerSubmissions.votesSubmittedAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T/,
+    );
 
     const row = await readSubmission(lineupId, member.userId);
     expect(row).not.toBeNull();
@@ -271,22 +271,32 @@ function describeLineupSubmit() {
     }
     await advanceToVoting(lineupId, adminToken);
 
-    // Every voter casts 3 votes — quorum closes, lineup decides automatically.
+    // Vote layout: games[0] is the outright winner (3 votes), games[1] is
+    // a second-place match (2 votes). Both meet the 35% threshold so both
+    // become matches; the clear winner avoids TIEBREAKER_REQUIRED on the
+    // voting→decided transition. ROK-1296 quorum is submission-based, so
+    // we no longer need to backfill to votesPerPlayer=3 — the per-voter
+    // vote-count check is gone.
     await vote(adminToken, lineupId, games[0].id);
-    await vote(adminToken, lineupId, games[1].id);
     await vote(member.token, lineupId, games[0].id);
     await vote(member.token, lineupId, games[1].id);
     await vote(other.token, lineupId, games[0].id);
     await vote(other.token, lineupId, games[1].id);
 
-    // Backfill to votesPerPlayer=3 floor — add a personal pick each.
-    const filler = await createGames(3);
-    for (const g of filler) {
-      await nominate(adminToken, lineupId, g.id);
-    }
-    await vote(adminToken, lineupId, filler[0].id);
-    await vote(member.token, lineupId, filler[1].id);
-    await vote(other.token, lineupId, filler[2].id);
+    // Every expected voter (creator + 2 invitees) must submit-votes for
+    // quorum to flip the lineup voting → decided.
+    await testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({});
+    await testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({});
+    await testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${other.token}`)
+      .send({});
 
     const matches = await testApp.db.execute<{ id: number; game_id: number }>(
       sql`SELECT id, game_id FROM community_lineup_matches WHERE lineup_id = ${lineupId} ORDER BY id`,
@@ -328,7 +338,8 @@ function describeLineupSubmit() {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({});
     expect(first.status).toBe(200);
-    const firstTs = first.body.viewerSubmissions.nominationsSubmittedAt as string;
+    const firstTs = first.body.viewerSubmissions
+      .nominationsSubmittedAt as string;
     expect(typeof firstTs).toBe('string');
 
     // Postgres now() has microsecond resolution; sleep ensures a STRICT >.
@@ -417,13 +428,21 @@ function describeLineupSubmit() {
     for (const g of games) await nominate(adminToken, lineupId, g.id);
     await advanceToVoting(lineupId, adminToken);
 
-    // Two voters use full allotment so the lineup decides.
+    // games[0] is the outright winner (2 votes), games[1] is a second
+    // match (1 vote) — no tie, no TIEBREAKER_REQUIRED on voting→decided.
     await vote(adminToken, lineupId, games[0].id);
     await vote(adminToken, lineupId, games[1].id);
-    await vote(adminToken, lineupId, games[2].id);
     await vote(member.token, lineupId, games[0].id);
-    await vote(member.token, lineupId, games[1].id);
-    await vote(member.token, lineupId, games[2].id);
+
+    // Post-ROK-1296: also call submit-votes so quorum can flip to decided.
+    await testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({});
+    await testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({});
 
     const matches = await testApp.db.execute<{ id: number }>(
       sql`SELECT id FROM community_lineup_matches WHERE lineup_id = ${lineupId} ORDER BY id LIMIT 1`,
@@ -443,4 +462,7 @@ function describeLineupSubmit() {
   });
 }
 
-describe('Lineup submit endpoints (ROK-1296, integration)', describeLineupSubmit);
+describe(
+  'Lineup submit endpoints (ROK-1296, integration)',
+  describeLineupSubmit,
+);

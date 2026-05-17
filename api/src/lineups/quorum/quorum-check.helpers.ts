@@ -17,7 +17,7 @@
  * ≥2-voter "solo lineup" guard and the building-phase nomination floor
  * stay intact.
  */
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -101,8 +101,10 @@ async function loadNominationSubmitters(
     })
     .from(schema.communityLineupUserSubmissions)
     .where(
-      sql`${schema.communityLineupUserSubmissions.lineupId} = ${lineupId}
-          AND ${schema.communityLineupUserSubmissions.nominationsSubmittedAt} IS NOT NULL`,
+      and(
+        eq(schema.communityLineupUserSubmissions.lineupId, lineupId),
+        isNotNull(schema.communityLineupUserSubmissions.nominationsSubmittedAt),
+      ),
     )
     .groupBy(schema.communityLineupUserSubmissions.userId);
   return new Set(rows.map((r) => r.userId));
@@ -120,8 +122,10 @@ async function loadVoteSubmitters(
     })
     .from(schema.communityLineupUserSubmissions)
     .where(
-      sql`${schema.communityLineupUserSubmissions.lineupId} = ${lineupId}
-          AND ${schema.communityLineupUserSubmissions.votesSubmittedAt} IS NOT NULL`,
+      and(
+        eq(schema.communityLineupUserSubmissions.lineupId, lineupId),
+        isNotNull(schema.communityLineupUserSubmissions.votesSubmittedAt),
+      ),
     )
     .groupBy(schema.communityLineupUserSubmissions.userId);
   return new Set(rows.map((r) => r.userId));

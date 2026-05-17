@@ -338,6 +338,10 @@ export class LineupsService {
       callerId,
     );
     await this.invalidateAiCache(lineupId);
+    // ROK-1296: under submission-based quorum, a new invitee who has not
+    // submitted can break a pending grace window. Mirror removeInvitee so
+    // pending_advance_at clears synchronously when the gating set grows.
+    await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
     return result;
   }
 
