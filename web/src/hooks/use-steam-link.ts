@@ -16,9 +16,10 @@ function steamAuthHeaders(): Record<string, string> {
 async function steamFetch<T>(path: string, method = 'GET', errorMsg = 'Request failed'): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${path}`, { method, headers: steamAuthHeaders() });
     if (!response.ok) {
-        const body = method === 'POST' ? await response.json().catch(() => ({ message: errorMsg })) : null;
+        const body = await response.json().catch(() => ({ message: errorMsg }));
         throw new Error(body?.message || errorMsg);
     }
+    if (response.status === 204) return undefined as T;
     return response.json();
 }
 
