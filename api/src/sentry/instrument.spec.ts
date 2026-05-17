@@ -474,6 +474,94 @@ function describeSentryInstrumentTs() {
         });
       });
 
+      // ── ROK-1307: drop Steam-sync 4xx noise ──
+      //
+      // Manual `POST /auth/steam/sync` and `/auth/steam/sync-wishlist` raise
+      // BadRequestException / ServiceUnavailableException for user-fixable
+      // states (unlinked Steam, private profile, missing API key). These are
+      // expected 4xx responses, NOT Sentry-worthy bugs. The filter drops the
+      // four canonical messages by regex; the load-bearing case is the
+      // `BadRequestException: Steam account not linked` burst that motivated
+      // the story. Mirrors the `no_snapshot_yet` / `status changed concurrently`
+      // shape — match on `exception.values[0].value`, not on type, so legacy
+      // bare `Error` payloads still under cron paths are also caught.
+      describe('ROK-1307: Steam-sync 4xx drop', () => {
+        it('drops BadRequestException: "Steam account not linked"', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'BadRequestException',
+                  value: 'Steam account not linked',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops legacy bare Error: "User has no linked Steam account"', () => {
+          // Cron paths still throw the pre-AC-1 bare message. The regex MUST
+          // catch this spelling too — it is the literal text from the Sentry
+          // burst that prompted ROK-1307.
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                { type: 'Error', value: 'User has no linked Steam account' },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops BadRequestException: "Steam profile is private — …"', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'BadRequestException',
+                  value:
+                    'Steam profile is private — set Game Details to Public in your Steam Privacy Settings, then try again',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops ServiceUnavailableException: "Steam integration is not configured"', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'ServiceUnavailableException',
+                  value: 'Steam integration is not configured',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('does NOT drop unrelated Steam-themed exceptions', () => {
+          // A real Steam-side outage that DOES warrant Sentry attention must
+          // pass through unchanged — only the four canonical user-fixable
+          // strings are filtered.
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'Error',
+                  value:
+                    'Steam API returned HTTP 503 from GetOwnedGames — retrying',
+                },
+              ],
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
+      });
+
       describe('ROK-1162: malformed OAuth state (already covered by ROK-668)', () => {
         it('drops InternalOAuthError whose value indicates a state mismatch', () => {
           // The ROK-668 filter already drops by type alone, so any value
