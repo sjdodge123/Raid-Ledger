@@ -82,9 +82,11 @@ function buildHeroProps(
 function YourMatches({
   matches,
   lineupId,
+  threshold,
 }: {
   matches: MatchDetailResponseDto[];
   lineupId: number;
+  threshold: number;
 }): JSX.Element | null {
   if (matches.length === 0) return null;
   return (
@@ -93,7 +95,13 @@ function YourMatches({
         Your matches ({matches.length})
       </div>
       {matches.map((m) => (
-        <MatchCard key={m.id} match={m} lineupId={lineupId} showCta />
+        <MatchCard
+          key={m.id}
+          match={m}
+          lineupId={lineupId}
+          threshold={threshold}
+          isPersonal
+        />
       ))}
     </section>
   );
@@ -102,9 +110,11 @@ function YourMatches({
 function OtherMatches({
   matches,
   lineupId,
+  threshold,
 }: {
   matches: MatchDetailResponseDto[];
   lineupId: number;
+  threshold: number;
 }): JSX.Element | null {
   if (matches.length === 0) return null;
   return (
@@ -113,7 +123,13 @@ function OtherMatches({
         Other matches in this lineup ({matches.length})
       </div>
       {matches.map((m) => (
-        <MatchCard key={m.id} match={m} lineupId={lineupId} showCta={false} />
+        <MatchCard
+          key={m.id}
+          match={m}
+          lineupId={lineupId}
+          threshold={threshold}
+          isPersonal={false}
+        />
       ))}
     </section>
   );
@@ -135,11 +151,19 @@ function useDecidedState(lineup: LineupDetailResponseDto) {
     totalVoters,
     matchedVoters,
   );
-  return { mine, others, leftover, hero, carriedForward: data?.carriedForward ?? [] };
+  return {
+    mine,
+    others,
+    leftover,
+    hero,
+    threshold: data?.matchThreshold ?? 0,
+    carriedForward: data?.carriedForward ?? [],
+  };
 }
 
 export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
-  const { mine, others, leftover, hero, carriedForward } = useDecidedState(lineup);
+  const { mine, others, leftover, hero, threshold, carriedForward } =
+    useDecidedState(lineup);
   return (
     <div data-testid="decided-composite-view">
       <JourneyHero
@@ -150,8 +174,8 @@ export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
         sub={hero.sub}
         hint="Tap any game to learn more before scheduling."
       />
-      <YourMatches matches={mine} lineupId={lineup.id} />
-      <OtherMatches matches={others} lineupId={lineup.id} />
+      <YourMatches matches={mine} lineupId={lineup.id} threshold={threshold} />
+      <OtherMatches matches={others} lineupId={lineup.id} threshold={threshold} />
       <LeftoverVotersRow leftoverCount={leftover} />
       <CarriedForwardSection entries={carriedForward} />
     </div>

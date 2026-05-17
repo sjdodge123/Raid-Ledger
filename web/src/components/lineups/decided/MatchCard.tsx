@@ -12,12 +12,24 @@ import { GameRef } from '../../games/GameRef';
 interface MatchCardProps {
   match: MatchDetailResponseDto;
   lineupId: number;
-  /** When true, renders the per-card "Pick a time →" schedule CTA. */
-  showCta: boolean;
+  /** Lineup-wide per-game player cap (from GroupedMatchesResponseDto.matchThreshold). */
+  threshold: number;
+  /** True if the authenticated user is a member of this match. */
+  isPersonal: boolean;
 }
 
-function memberCountSub(memberCount: number): string {
-  return `${memberCount} ${memberCount === 1 ? 'player' : 'players'}`;
+function matchSubLine(
+  memberCount: number,
+  threshold: number,
+  isPersonal: boolean,
+): string {
+  if (!isPersonal) {
+    return `${memberCount} ${memberCount === 1 ? 'player' : 'players'}`;
+  }
+  const others = Math.max(0, memberCount - 1);
+  const othersText = `You + ${others} ${others === 1 ? 'other' : 'others'}`;
+  const isFull = threshold > 0 && memberCount >= threshold;
+  return `${memberCount} of ${threshold} · ${othersText}${isFull ? ' · group is full' : ''}`;
 }
 
 function PickATimeCta({
@@ -41,7 +53,8 @@ function PickATimeCta({
 export function MatchCard({
   match,
   lineupId,
-  showCta,
+  threshold,
+  isPersonal,
 }: MatchCardProps): JSX.Element {
   return (
     <div data-testid="decided-match-card" className="mb-2">
@@ -50,9 +63,9 @@ export function MatchCard({
         gameId={match.gameId}
         name={match.gameName}
         coverUrl={match.gameCoverUrl}
-        sub={memberCountSub(match.members.length)}
+        sub={matchSubLine(match.members.length, threshold, isPersonal)}
       />
-      {showCta && <PickATimeCta lineupId={lineupId} matchId={match.id} />}
+      {isPersonal && <PickATimeCta lineupId={lineupId} matchId={match.id} />}
     </div>
   );
 }
