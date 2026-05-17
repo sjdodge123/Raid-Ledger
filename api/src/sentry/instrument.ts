@@ -39,6 +39,20 @@ if (!telemetryDisabled && isProduction) {
       ) {
         return null;
       }
+      // ROK-1307: drop user-fixable Steam-sync 4xx noise. Manual
+      // `POST /auth/steam/sync` and `/auth/steam/sync-wishlist` raise
+      // BadRequestException / ServiceUnavailableException for unlinked
+      // Steam, private profile, or missing API key. These are expected
+      // 4xx responses, NOT Sentry-worthy bugs. Match on value (not type)
+      // so legacy bare `Error` payloads from cron paths also drop.
+      if (
+        typeof exceptionValue === 'string' &&
+        /Steam account not linked|User has no linked Steam account|Steam profile is private|Steam integration is not configured/.test(
+          exceptionValue,
+        )
+      ) {
+        return null;
+      }
       // ROK-1260: defense-in-depth — drop DiscordAPIError 50278/50007
       // events. The primary fix is in the processor (it catches these
       // before Sentry's auto-instrumentation), but if anything ever

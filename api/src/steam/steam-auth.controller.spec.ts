@@ -1,6 +1,16 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+
+// Sentry's nestjs export wraps `setUser` in a non-redefinable proxy that
+// `jest.spyOn(Sentry, 'setUser')` cannot replace. Hoisted `jest.mock` lets
+// us intercept the call without touching the live binding.
+const setUserMock = jest.fn();
+jest.mock('@sentry/nestjs', () => ({
+  ...jest.requireActual('@sentry/nestjs'),
+  setUser: (...args: unknown[]) => setUserMock(...args),
+}));
+
 import { SteamAuthController } from './steam-auth.controller';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
@@ -8,6 +18,7 @@ import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
 import * as crypto from 'crypto';
 import type { Response, Request } from 'express';
+import type { AuthenticatedExpressRequest } from '../auth/types';
 
 function createMockResponse(): Response {
   return {
@@ -63,6 +74,8 @@ interface MockDeps {
   config: { get: jest.Mock };
   jwt: { verify: jest.Mock };
   settings: { isSteamConfigured: jest.Mock };
+  steam: { syncLibrary: jest.Mock };
+  wishlist: { syncWishlist: jest.Mock };
 }
 
 async function createTestController(): Promise<{
@@ -78,6 +91,8 @@ async function createTestController(): Promise<{
     },
     jwt: { verify: jest.fn() },
     settings: { isSteamConfigured: jest.fn() },
+    steam: { syncLibrary: jest.fn() },
+    wishlist: { syncWishlist: jest.fn() },
   };
 
   const module = await Test.createTestingModule({
@@ -87,8 +102,8 @@ async function createTestController(): Promise<{
       { provide: SettingsService, useValue: mocks.settings },
       { provide: ConfigService, useValue: mocks.config },
       { provide: JwtService, useValue: mocks.jwt },
-      { provide: SteamService, useValue: {} },
-      { provide: SteamWishlistService, useValue: {} },
+      { provide: SteamService, useValue: mocks.steam },
+      { provide: SteamWishlistService, useValue: mocks.wishlist },
     ],
   }).compile();
 
@@ -251,6 +266,64 @@ describe('SteamAuthController', () => {
       expect(state).not.toBeNull();
       // Protocol-relative URL should be rejected, defaulting to /profile
       expect(state!.returnTo).toBe('/profile');
+    });
+  });
+
+  // ROK-1307 AC-3: tag every Sentry event with the acting userId so when
+  // ANY Steam-sync exception (a 4xx that slips past the filter, or a real
+  // 5xx) reaches Sentry, the inbox row is attributed to the user instead
+  // of anonymous.
+  describe('ROK-1307 AC-3: Sentry.setUser on sync endpoints', () => {
+    function fakeRequest(userId: number): AuthenticatedExpressRequest {
+      return {
+        user: { id: userId },
+      } as unknown as AuthenticatedExpressRequest;
+    }
+
+    beforeEach(() => {
+      setUserMock.mockClear();
+    });
+
+    it('calls Sentry.setUser with the requesting user id before syncLibrary', async () => {
+      mocks.steam.syncLibrary.mockResolvedValue({
+        totalOwned: 0,
+        matched: 0,
+        newInterests: 0,
+        updatedPlaytime: 0,
+      });
+
+      await controller.syncLibrary(fakeRequest(42));
+
+      expect(setUserMock).toHaveBeenCalledWith({ id: '42' });
+      // Ordering: setUser must run BEFORE the sync service is invoked.
+      const setUserOrder = setUserMock.mock.invocationCallOrder[0];
+      const syncOrder = mocks.steam.syncLibrary.mock.invocationCallOrder[0];
+      expect(setUserOrder).toBeLessThan(syncOrder);
+    });
+
+    it('calls Sentry.setUser with the requesting user id before syncWishlist', async () => {
+      mocks.wishlist.syncWishlist.mockResolvedValue({
+        totalWishlisted: 0,
+        matched: 0,
+        newInterests: 0,
+        removed: 0,
+      });
+
+      await controller.syncWishlist(fakeRequest(99));
+
+      expect(setUserMock).toHaveBeenCalledWith({ id: '99' });
+      const setUserOrder = setUserMock.mock.invocationCallOrder[0];
+      const syncOrder = mocks.wishlist.syncWishlist.mock.invocationCallOrder[0];
+      expect(setUserOrder).toBeLessThan(syncOrder);
+    });
+
+    it('still calls Sentry.setUser when syncLibrary throws (try/catch preserved)', async () => {
+      mocks.steam.syncLibrary.mockRejectedValue(new Error('boom'));
+
+      await expect(controller.syncLibrary(fakeRequest(7))).rejects.toThrow(
+        'boom',
+      );
+      expect(setUserMock).toHaveBeenCalledWith({ id: '7' });
     });
   });
 });

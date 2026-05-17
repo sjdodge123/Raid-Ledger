@@ -3,7 +3,14 @@
  * Fetches wishlist from Steam, matches to IGDB records via steam_app_id,
  * and populates game_interests with source='steam_wishlist'.
  */
-import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  Optional,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { eq, inArray, and, isNotNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -52,7 +59,9 @@ export class SteamWishlistService {
       this.logger.warn(
         `Steam profile for user ${userId} is private — skipping wishlist sync`,
       );
-      return this.emptyResult();
+      throw new BadRequestException(
+        'Steam profile is private — set Game Details to Public in your Steam Privacy Settings, then try again',
+      );
     }
     const items = await getWishlist(apiKey, steamId);
     if (items.length === 0) {
@@ -68,9 +77,13 @@ export class SteamWishlistService {
     const user = await this.db.query.users.findFirst({
       where: eq(schema.users.id, userId),
     });
-    if (!user?.steamId) throw new Error('User has no linked Steam account');
+    if (!user?.steamId)
+      throw new BadRequestException('Steam account not linked');
     const apiKey = await this.settingsService.getSteamApiKey();
-    if (!apiKey) throw new Error('Steam API key is not configured');
+    if (!apiKey)
+      throw new ServiceUnavailableException(
+        'Steam integration is not configured',
+      );
     return { apiKey, steamId: user.steamId };
   }
 

@@ -49,8 +49,6 @@ import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import * as steamHttp from './steam-http.util';
 
-jest.mock('./steam-http.util');
-
 const STEAM_ID = '76561198000000001';
 const STEAM_API_KEY = 'integration-test-steam-key';
 
@@ -63,7 +61,7 @@ function describeSteamAuthSync() {
   });
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.restoreAllMocks();
     testApp.seed = await truncateAllTables(testApp.db);
     token = await loginAsAdmin(testApp.request, testApp.seed);
 
@@ -75,6 +73,10 @@ function describeSteamAuthSync() {
     // pathway happens to mask the unlinked-user pathway.
     const settings = testApp.app.get(SettingsService);
     await settings.setSteamApiKey(STEAM_API_KEY);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('POST /auth/steam/sync (AC-1 + AC-7)', () => {
@@ -102,14 +104,23 @@ function describeSteamAuthSync() {
       // Simulate Steam reporting the profile as private
       // (communityvisibilitystate !== 3). HEAD silently returns [] here and
       // produces a 200 OK with `matched: 0`; AC-7 requires a 400 instead.
-      (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
+      //
+      // ROK-1307 dev follow-up: `jest.mock('./steam-http.util')` does NOT
+      // take effect because the integration suite's `setupFilesAfterEnv`
+      // imports `AppModule` → `SteamService` → `./steam-http.util` BEFORE
+      // the spec file's hoisted mock is registered. Patch the live module
+      // namespace via `jest.spyOn` instead, which DOES intercept the
+      // already-bound import on the service side.
+      jest.spyOn(steamHttp, 'getPlayerSummary').mockResolvedValue({
         steamid: STEAM_ID,
         personaname: 'private-user',
+        profileurl: '',
+        avatar: '',
+        avatarmedium: '',
+        avatarfull: '',
         communityvisibilitystate: 1,
       });
-      // Defensive — should never be reached after AC-7 lands, but on HEAD
-      // it IS called and an unmocked return would yield `undefined.length`.
-      (steamHttp.getOwnedGames as jest.Mock).mockResolvedValue([]);
+      jest.spyOn(steamHttp, 'getOwnedGames').mockResolvedValue([]);
 
       const res = await testApp.request
         .post('/auth/steam/sync')
@@ -146,12 +157,16 @@ function describeSteamAuthSync() {
         .set({ steamId: STEAM_ID })
         .where(eq(schema.users.id, testApp.seed.adminUser.id));
 
-      (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
+      jest.spyOn(steamHttp, 'getPlayerSummary').mockResolvedValue({
         steamid: STEAM_ID,
         personaname: 'private-user',
+        profileurl: '',
+        avatar: '',
+        avatarmedium: '',
+        avatarfull: '',
         communityvisibilitystate: 2, // friends-only counts as not-public
       });
-      (steamHttp.getWishlist as jest.Mock).mockResolvedValue([]);
+      jest.spyOn(steamHttp, 'getWishlist').mockResolvedValue([]);
 
       const res = await testApp.request
         .post('/auth/steam/sync-wishlist')

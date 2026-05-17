@@ -116,7 +116,7 @@ describe('SteamWishlistService', () => {
       });
     });
 
-    it('throws when user has no Steam account', async () => {
+    it('throws BadRequestException when user has no Steam account (ROK-1307 AC-5)', async () => {
       mockDb.query = {
         users: {
           findFirst: jest.fn().mockResolvedValue({ id: 1, steamId: null }),
@@ -124,49 +124,48 @@ describe('SteamWishlistService', () => {
       };
 
       await expect(service.syncWishlist(1)).rejects.toThrow(
-        'User has no linked Steam account',
+        'Steam account not linked',
       );
+      await expect(service.syncWishlist(1)).rejects.toMatchObject({
+        status: 400,
+      });
     });
 
-    it('returns zero result when profile is private', async () => {
+    it('throws BadRequestException when profile is private (ROK-1307 AC-5)', async () => {
       (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
         communityvisibilitystate: 1,
       });
 
-      const result = await service.syncWishlist(1);
-
-      expect(result).toMatchObject({
-        totalWishlisted: 0,
-        matched: 0,
-        newInterests: 0,
-        removed: 0,
+      await expect(service.syncWishlist(1)).rejects.toThrow(
+        /Steam profile is private/,
+      );
+      await expect(service.syncWishlist(1)).rejects.toMatchObject({
+        status: 400,
       });
     });
 
-    it('returns zero result for friends-only profile (state 2)', async () => {
+    it('throws BadRequestException for friends-only profile (state 2)', async () => {
       (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
         communityvisibilitystate: 2,
       });
 
-      const result = await service.syncWishlist(1);
-
-      expect(result).toMatchObject({
-        totalWishlisted: 0,
-        matched: 0,
-        newInterests: 0,
-        removed: 0,
-      });
-    });
-
-    it('throws when Steam API key is not configured', async () => {
-      mockSettingsService.getSteamApiKey.mockResolvedValue(null);
-
       await expect(service.syncWishlist(1)).rejects.toThrow(
-        'Steam API key is not configured',
+        /Steam profile is private/,
       );
     });
 
-    it('throws when user does not exist', async () => {
+    it('throws ServiceUnavailableException when Steam API key is not configured (ROK-1307 AC-5)', async () => {
+      mockSettingsService.getSteamApiKey.mockResolvedValue(null);
+
+      await expect(service.syncWishlist(1)).rejects.toThrow(
+        'Steam integration is not configured',
+      );
+      await expect(service.syncWishlist(1)).rejects.toMatchObject({
+        status: 503,
+      });
+    });
+
+    it('throws BadRequestException when user does not exist', async () => {
       mockDb.query = {
         users: {
           findFirst: jest.fn().mockResolvedValue(null),
@@ -174,7 +173,7 @@ describe('SteamWishlistService', () => {
       };
 
       await expect(service.syncWishlist(1)).rejects.toThrow(
-        'User has no linked Steam account',
+        'Steam account not linked',
       );
     });
 

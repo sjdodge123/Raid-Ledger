@@ -13,6 +13,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as Sentry from '@sentry/nestjs';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
@@ -315,6 +316,7 @@ export class SteamAuthController {
   @Post('sync')
   @UseGuards(AuthGuard('jwt'))
   async syncLibrary(@Req() req: AuthenticatedExpressRequest) {
+    Sentry.setUser({ id: req.user.id.toString() });
     try {
       const result = await this.steamService.syncLibrary(req.user.id);
       return {
@@ -336,6 +338,7 @@ export class SteamAuthController {
   @Post('sync-wishlist')
   @UseGuards(AuthGuard('jwt'))
   async syncWishlist(@Req() req: AuthenticatedExpressRequest) {
+    Sentry.setUser({ id: req.user.id.toString() });
     const result = await this.steamWishlistService.syncWishlist(req.user.id);
     return {
       success: true,
