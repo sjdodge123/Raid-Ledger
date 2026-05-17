@@ -28,7 +28,8 @@ export function DrawerActionRow({ game, action }: DrawerActionRowProps) {
             </div>
         );
     }
-    const href = `/games/${game.slug || game.id}`;
+    // game-detail-page.tsx parses :id as a number — slugs never resolve there.
+    const href = `/games/${game.id}`;
     return (
         <div className="mt-6">
             <Link
