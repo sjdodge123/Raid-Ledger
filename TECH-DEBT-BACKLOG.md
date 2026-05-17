@@ -464,3 +464,11 @@ Full integration suite (`npm run test:integration -w api`) on the ROK-1307 workt
 - **[med]** `scripts/smoke/lineup-carryover.smoke.spec.ts:165` — mobile: `creating a new lineup auto-populates entries from prior decided suggested matches` fails.
 
 Net: 640/650 smoke passing. ROK-1307's manual-sync flow is not exercised by any Playwright test today; coverage is via Chrome MCP e2e in this build pass.
+
+### 2026-05-17 — pre-existing Steam-link cosmetic + dev-env collision (surfaced during ROK-1307 Chrome MCP)
+
+Operator hit `ConflictException: This Steam account is already linked to another user` during a Link Steam test on the ROK-1307 deploy. **Not introduced by ROK-1307** — the Link flow is untouched by this story. Two surfaces:
+
+- **[low]** Pre-existing cosmetic bug in `web/src/pages/profile/identity-sections.tsx:153` (or wherever the Link Steam button is wired). `<button onClick={linkSteam}>` binds the React `MouseEvent` SyntheticEvent as the function's first argument — and `linkSteam(returnTo?: string)` then `encodeURIComponent`s the SyntheticEvent object, producing `?returnTo=%5Bobject%20Object%5D` in the URL. The backend allowlist (`SteamAuthController.RETURN_TO_ALLOWLIST`) silently normalizes to `/profile`, so no functional impact, but the URL is wrong and confusing in logs. Confirmed in `api.log` 2026-05-17 18:50:04/44 entries.
+  Suggested: wrap the handler — `onClick={() => linkSteam()}` — or change `linkSteam`'s signature to accept `unknown` and reject non-strings. The Discord link button at `:64` has the same shape and likely the same issue.
+- **[dev-env-only, NOT tech-debt]** Clone-prod-to-local DB carries the operator's prod `users.steam_id` on the `roknua` user row (id=1). When the operator authenticates as the local `admin@local` user (id=115) and tries to Link Steam through OpenID with their real Steam ID, the `users_steam_id_unique` constraint correctly throws Conflict. Solution for dev testing: `UPDATE users SET steam_id = NULL WHERE id = 1;` before attempting the link, or test as `roknua` directly. Documenting in case other agents are confused by the same symptom.
