@@ -29,9 +29,12 @@ const INFO_AFFORDANCE_TESTID = 'game-ref-info-affordance';
  *     trigger. Card body click still navigates.
  *   - Mobile (<md): DrawerCard with whole-button → drawer (data-testid="game-ref-row").
  */
-async function gotoGamesAndWaitForRows(page: import('@playwright/test').Page): Promise<void> {
+async function gotoGamesAndWaitForRows(
+    page: import('@playwright/test').Page,
+    project: 'desktop' | 'mobile',
+): Promise<void> {
     await page.goto('/games');
-    await expect(firstVisibleDrawerTrigger(page, 'desktop').or(firstVisibleDrawerTrigger(page, 'mobile'))).toBeVisible({ timeout: 15_000 });
+    await expect(firstVisibleDrawerTrigger(page, project)).toBeVisible({ timeout: 15_000 });
 }
 
 function firstVisibleDrawerTrigger(
@@ -48,7 +51,7 @@ test.describe('Game Research Drawer — desktop', () => {
     });
 
     test('clicking a GameRef row opens the research drawer in-place (no navigation)', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "desktop");
         const urlBeforeClick = page.url();
 
         await firstVisibleDrawerTrigger(page, "desktop").click();
@@ -59,7 +62,7 @@ test.describe('Game Research Drawer — desktop', () => {
     });
 
     test('Escape key closes the drawer', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "desktop");
         await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
@@ -70,7 +73,7 @@ test.describe('Game Research Drawer — desktop', () => {
     });
 
     test('outside-click on backdrop closes the drawer', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "desktop");
         await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
@@ -81,7 +84,7 @@ test.describe('Game Research Drawer — desktop', () => {
     });
 
     test('dedicated close button (X) closes the drawer', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "desktop");
         await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
@@ -92,7 +95,7 @@ test.describe('Game Research Drawer — desktop', () => {
     });
 
     test('drawer is a labelled dialog (role=dialog + aria-modal)', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "desktop");
         await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
@@ -103,7 +106,7 @@ test.describe('Game Research Drawer — desktop', () => {
     });
 
     test('inline action button does NOT trigger drawer (whole row is the trigger except action)', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "desktop");
         const row = firstVisibleDrawerTrigger(page, "desktop");
         const inlineAction = row.getByTestId('game-ref-row-action');
         const present = await inlineAction.isVisible({ timeout: 3_000 }).catch(() => false);
@@ -115,7 +118,7 @@ test.describe('Game Research Drawer — desktop', () => {
     });
 
     test('drawer CTA fires without navigating (action commits in-page)', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "desktop");
         await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
@@ -139,7 +142,7 @@ test.describe('Game Research Drawer — mobile', () => {
     });
 
     test('mobile drawer is anchored to the bottom of the viewport (bottom-sheet)', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "mobile");
         await firstVisibleDrawerTrigger(page, "mobile").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
@@ -161,7 +164,7 @@ test.describe('Game Research Drawer — mobile', () => {
     });
 
     test('mobile drawer closes on outside tap', async ({ page }) => {
-        await gotoGamesAndWaitForRows(page);
+        await gotoGamesAndWaitForRows(page, "mobile");
         await firstVisibleDrawerTrigger(page, "mobile").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);

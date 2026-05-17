@@ -52,12 +52,14 @@ function CoverContent({
 }
 
 function CoverInfoAffordance(): JSX.Element {
-    // Mobile bottom-sheet trigger lives on the whole card; the ⓘ icon is a
-    // visual signifier. Sized for mobile touch / iPad ergonomics (~36px square)
-    // and always visible so the affordance reads without hover state.
+    // Mobile bottom-sheet trigger lives on the whole card (the outer button
+    // carries `data-testid="game-ref-row"`); this icon is purely a visual
+    // signifier. Sized for mobile touch / iPad ergonomics (~36px square) and
+    // always visible so the affordance reads without hover state. Not a
+    // separate test target — keep the `game-ref-info-affordance` testid
+    // reserved for the desktop ⓘ-only trigger (GameDiscoverCard).
     return (
         <span
-            data-testid="game-ref-info-affordance"
             aria-hidden="true"
             title="Open game details"
             className="absolute top-2 left-2 inline-flex items-center justify-center w-9 h-9 rounded-full bg-black/65 text-white text-sm font-semibold ring-1 ring-white/15"

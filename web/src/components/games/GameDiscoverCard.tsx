@@ -48,7 +48,7 @@ function ResearchTriggerButton({
             aria-label={`Research ${gameName}`}
             title="Open game research"
             onClick={onOpen}
-            className="absolute top-2 left-2 z-20 w-8 h-8 inline-flex items-center justify-center rounded-full bg-black/65 hover:bg-black/85 text-white text-sm font-semibold ring-1 ring-white/15 hover:ring-emerald-400/60 transition-colors"
+            className="absolute bottom-3 right-3 z-20 w-9 h-9 inline-flex items-center justify-center rounded-full bg-black/75 hover:bg-black/90 text-white text-sm font-semibold ring-1 ring-white/20 hover:ring-emerald-400/70 shadow-lg shadow-black/40 transition-colors"
         >
             i
         </button>
