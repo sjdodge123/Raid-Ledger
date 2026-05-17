@@ -415,3 +415,10 @@ Reviewer verdict PASS WITH NOTES on the batch diff. 0 critical/high/medium, 6 lo
   Suggested: add a one-line comment noting numeric strings are guaranteed by the integer column type.
 - **[nit]** `api/src/admin/games-dedup-audit.service.spec.ts:172-178,431-434` — `.orderBy()` thenable extension is structurally identical in two mock blocks. Will rot if the load query gains another chain step.
   Suggested: extract a `mockLoadGameRowsChain(loadRows)` helper when next touching this file.
+
+### 2026-05-16 — rok-1295 (surfaced during ROK-1295 validate-ci.sh --full)
+
+- **[med]** `api/src/community-insights/community-insights.integration.spec.ts:349` — `Community Insights (ROK-1099) › operator role hierarchy › allows operator role with 200 on every GET endpoint and POST /refresh` fails with `Expected: 200 / Received: 401`. The assertion loops a list of GET URLs with `operatorToken`; one of them rejects the operator role. Branch diff has zero overlap with `api/src/community-insights/**` or the auth/role machinery — ROK-1295 only adds `api/src/games-lookup/**` and a new contract schema. Reproduces on a clean integration run in this worktree.
+  Suggested: check whether ROK-1099's role-hierarchy decorators on the community-insights routes still treat operator as a covered role, OR whether a recent guard change tightened the gate.
+
+Other ROK-1295 integration suites (including the new `games-lookup.integration.spec.ts` — 10/10 passing) succeed on the same DB run, so this is isolated to the community-insights operator-role path.

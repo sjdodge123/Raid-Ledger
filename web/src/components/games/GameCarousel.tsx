@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import type { GameDetailDto, ItadGamePricingDto } from '@raid-ledger/contract';
 import { UnifiedGameCard } from './unified-game-card';
+import { GameDiscoverCard } from './GameDiscoverCard';
 
 interface GameCarouselProps {
     category: string;
@@ -9,6 +10,15 @@ interface GameCarouselProps {
     pricingMap?: Map<number, ItadGamePricingDto | null>;
     /** ROK-565: Optional per-game stats keyed by stringified game id. Renders a "N played" overlay badge. */
     metadata?: Record<string, { playerCount: number; totalSeconds: number }>;
+    /**
+     * ROK-1295: when 'drawer', wraps each card in <GameDiscoverCard /> which
+     * overlays an ⓘ research-trigger button on top of the normal Link card.
+     * The card body still navigates to /games/:id (preserving heart + detail
+     * UX); only the ⓘ button opens the research drawer in-place. Default
+     * 'navigate' preserves the existing behaviour for callers that didn't
+     * opt in (no ⓘ overlay).
+     */
+    clickMode?: 'navigate' | 'drawer';
 }
 
 const PLAYED_BADGE_CLS =
@@ -66,20 +76,26 @@ function CarouselCard({
     game,
     pricing,
     playerCount,
+    clickMode,
 }: {
     game: GameDetailDto;
     pricing: ItadGamePricingDto | null;
     playerCount: number | undefined;
+    clickMode: 'navigate' | 'drawer';
 }) {
     return (
         <div className="relative min-w-[180px] flex-shrink-0 snap-start">
             {playerCount !== undefined && playerCount >= 1 && <PlayedBadge count={playerCount} />}
-            <UnifiedGameCard variant="link" game={game} compact showRating showInfoBar pricing={pricing} />
+            {clickMode === 'drawer' ? (
+                <GameDiscoverCard game={game} pricing={pricing} />
+            ) : (
+                <UnifiedGameCard variant="link" game={game} compact showRating showInfoBar pricing={pricing} />
+            )}
         </div>
     );
 }
 
-export function GameCarousel({ category, games, pricingMap, metadata }: GameCarouselProps) {
+export function GameCarousel({ category, games, pricingMap, metadata, clickMode = 'navigate' }: GameCarouselProps) {
     const { scrollRef, canScrollLeft, canScrollRight, scroll } = useCarouselScroll(games);
     if (games.length === 0) return null;
 
@@ -95,6 +111,7 @@ export function GameCarousel({ category, games, pricingMap, metadata }: GameCaro
                             game={game}
                             pricing={pricingMap?.get(game.id) ?? null}
                             playerCount={metadata?.[String(game.id)]?.playerCount}
+                            clickMode={clickMode}
                         />
                     ))}
                 </div>
