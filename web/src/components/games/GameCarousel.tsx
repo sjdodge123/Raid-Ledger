@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import type { GameDetailDto, ItadGamePricingDto } from '@raid-ledger/contract';
 import { UnifiedGameCard } from './unified-game-card';
-import { DrawerCard } from './DrawerCard';
+import { GameDiscoverCard } from './GameDiscoverCard';
 
 interface GameCarouselProps {
     category: string;
@@ -11,9 +11,12 @@ interface GameCarouselProps {
     /** ROK-565: Optional per-game stats keyed by stringified game id. Renders a "N played" overlay badge. */
     metadata?: Record<string, { playerCount: number; totalSeconds: number }>;
     /**
-     * ROK-1295: when 'drawer', cards open <GameResearchDrawer /> in-place
-     * instead of navigating to /games/:id. Default 'navigate' preserves the
-     * existing behaviour for callers that didn't opt in.
+     * ROK-1295: when 'drawer', wraps each card in <GameDiscoverCard /> which
+     * overlays an ⓘ research-trigger button on top of the normal Link card.
+     * The card body still navigates to /games/:id (preserving heart + detail
+     * UX); only the ⓘ button opens the research drawer in-place. Default
+     * 'navigate' preserves the existing behaviour for callers that didn't
+     * opt in (no ⓘ overlay).
      */
     clickMode?: 'navigate' | 'drawer';
 }
@@ -84,7 +87,7 @@ function CarouselCard({
         <div className="relative min-w-[180px] flex-shrink-0 snap-start">
             {playerCount !== undefined && playerCount >= 1 && <PlayedBadge count={playerCount} />}
             {clickMode === 'drawer' ? (
-                <DrawerCard game={game} pricing={pricing} />
+                <GameDiscoverCard game={game} pricing={pricing} />
             ) : (
                 <UnifiedGameCard variant="link" game={game} compact showRating showInfoBar pricing={pricing} />
             )}

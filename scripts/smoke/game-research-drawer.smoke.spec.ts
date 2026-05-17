@@ -19,23 +19,27 @@ const DRAWER_BACKDROP_TESTID = 'game-research-drawer-backdrop';
 const DRAWER_CLOSE_TESTID = 'game-research-drawer-close';
 const DRAWER_CTA_TESTID = 'game-research-drawer-cta';
 const GAMEREF_ROW_TESTID = 'game-ref-row';
+const INFO_AFFORDANCE_TESTID = 'game-ref-info-affordance';
 
 /**
- * Open the Games index page and wait for the GameCarousel rows that act as
- * the drawer trigger surface to render. The carousel rows are the operator-
- * picked demo integration site (per dev brief decision 1).
+ * Open the Games index page and wait for the GameCarousel surface to render.
+ * Desktop and mobile use different trigger affordances per operator decision:
+ *   - Desktop (≥md): UnifiedGameCard with Link → /games/:id + an ⓘ overlay
+ *     button (data-testid="game-ref-info-affordance") that is the ONLY drawer
+ *     trigger. Card body click still navigates.
+ *   - Mobile (<md): DrawerCard with whole-button → drawer (data-testid="game-ref-row").
  */
 async function gotoGamesAndWaitForRows(page: import('@playwright/test').Page): Promise<void> {
     await page.goto('/games');
-    // Both desktop (`hidden md:block`) and mobile (`md:hidden`) blocks render the
-    // same `data-testid="game-ref-row"`. `.first()` picks the first in DOM order
-    // (the desktop block), which is `display:none` on the mobile viewport. Filter
-    // to the visible occurrence so the same helper works in both projects.
-    await expect(firstVisibleGameRef(page)).toBeVisible({ timeout: 15_000 });
+    await expect(firstVisibleDrawerTrigger(page, 'desktop').or(firstVisibleDrawerTrigger(page, 'mobile'))).toBeVisible({ timeout: 15_000 });
 }
 
-function firstVisibleGameRef(page: import('@playwright/test').Page) {
-    return page.locator(`[data-testid="${GAMEREF_ROW_TESTID}"]:visible`).first();
+function firstVisibleDrawerTrigger(
+    page: import('@playwright/test').Page,
+    project: 'desktop' | 'mobile',
+) {
+    const testid = project === 'desktop' ? INFO_AFFORDANCE_TESTID : GAMEREF_ROW_TESTID;
+    return page.locator(`[data-testid="${testid}"]:visible`).first();
 }
 
 test.describe('Game Research Drawer — desktop', () => {
@@ -47,7 +51,7 @@ test.describe('Game Research Drawer — desktop', () => {
         await gotoGamesAndWaitForRows(page);
         const urlBeforeClick = page.url();
 
-        await firstVisibleGameRef(page).click();
+        await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible({ timeout: 5_000 });
@@ -56,7 +60,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('Escape key closes the drawer', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await firstVisibleGameRef(page).click();
+        await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -67,7 +71,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('outside-click on backdrop closes the drawer', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await firstVisibleGameRef(page).click();
+        await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -78,7 +82,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('dedicated close button (X) closes the drawer', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await firstVisibleGameRef(page).click();
+        await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -89,7 +93,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('drawer is a labelled dialog (role=dialog + aria-modal)', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await firstVisibleGameRef(page).click();
+        await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -100,7 +104,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('inline action button does NOT trigger drawer (whole row is the trigger except action)', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        const row = firstVisibleGameRef(page);
+        const row = firstVisibleDrawerTrigger(page, "desktop");
         const inlineAction = row.getByTestId('game-ref-row-action');
         const present = await inlineAction.isVisible({ timeout: 3_000 }).catch(() => false);
         test.skip(!present, 'Demo integration row has no inline action — skip click-area discrimination');
@@ -112,7 +116,7 @@ test.describe('Game Research Drawer — desktop', () => {
 
     test('drawer CTA fires without navigating (action commits in-page)', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await firstVisibleGameRef(page).click();
+        await firstVisibleDrawerTrigger(page, "desktop").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
@@ -136,7 +140,7 @@ test.describe('Game Research Drawer — mobile', () => {
 
     test('mobile drawer is anchored to the bottom of the viewport (bottom-sheet)', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await firstVisibleGameRef(page).click();
+        await firstVisibleDrawerTrigger(page, "mobile").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible({ timeout: 5_000 });
@@ -158,7 +162,7 @@ test.describe('Game Research Drawer — mobile', () => {
 
     test('mobile drawer closes on outside tap', async ({ page }) => {
         await gotoGamesAndWaitForRows(page);
-        await firstVisibleGameRef(page).click();
+        await firstVisibleDrawerTrigger(page, "mobile").click();
 
         const drawer = page.getByTestId(DRAWER_TESTID);
         await expect(drawer).toBeVisible();
