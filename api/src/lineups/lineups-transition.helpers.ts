@@ -80,7 +80,7 @@ export async function runStatusTransition(
   // entry when this transition is a reversion. The pause-stamp itself was
   // already written atomically inside applyStatusUpdate.
   await applyRevertSideEffects(
-    { activityLog: deps.activityLog, phaseQueue: deps.phaseQueue },
+    { db: deps.db, activityLog: deps.activityLog, phaseQueue: deps.phaseQueue },
     id,
     lineup.status,
     dto.status,

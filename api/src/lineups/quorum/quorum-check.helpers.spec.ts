@@ -107,9 +107,10 @@ describe('checkBuildingQuorum', () => {
     expect(result.reason).toContain('solo lineup');
   });
 
-  it('reports not ready when an expected nominator has not nominated', async () => {
+  it('reports not ready when an expected nominator has not submitted (ROK-1296)', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3, 4]);
+    // Only voters 1-3 stamped `nominations_submitted_at`; voter 4 missing.
     db.groupBy.mockResolvedValueOnce(
       nominationsPerVoter([
         { userId: 1, count: 3 },
@@ -126,20 +127,18 @@ describe('checkBuildingQuorum', () => {
     );
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/below 3 nominations/);
+    expect(result.reason).toMatch(/have not submitted/);
   });
 
-  it('reports not ready when nominators have only 1 of 3 nominations each', async () => {
+  it('reports not ready when zero nominators have submitted (ROK-1296 — was: 1 of 3 nominations each)', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3, 4]);
-    db.groupBy.mockResolvedValueOnce(
-      nominationsPerVoter([
-        { userId: 1, count: 1 },
-        { userId: 2, count: 1 },
-        { userId: 3, count: 1 },
-        { userId: 4, count: 1 },
-      ]),
-    );
+    // Pre-1296 this row set encoded "all 4 voters at 1/3 entries" and the
+    // per-voter min was 3 → short. Post-1296 the per-voter gate is
+    // submission presence — the same input now means "all 4 voters DID
+    // submit" → ready. Update the input to express the new intent (nobody
+    // submitted) so the test still validates the predicate's short-circuit.
+    db.groupBy.mockResolvedValueOnce(nominationsPerVoter([]));
     db.execute.mockResolvedValueOnce(totalRow(4));
 
     const result = await checkBuildingQuorum(
@@ -149,7 +148,7 @@ describe('checkBuildingQuorum', () => {
     );
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/below 3 nominations/);
+    expect(result.reason).toMatch(/have not submitted/);
   });
 
   it('reports not ready when per-voter is met but total floor not met', async () => {
@@ -274,14 +273,15 @@ describe('checkVotingQuorum', () => {
     expect(result.reason).toContain('solo lineup');
   });
 
-  it('reports not ready when each voter has cast 1 of 3 votes', async () => {
+  it('reports not ready when zero voters have submitted (ROK-1296 — was: 1 of 3 votes each)', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3]);
-    db.groupBy.mockResolvedValueOnce([
-      { userId: 1, count: 1 },
-      { userId: 2, count: 1 },
-      { userId: 3, count: 1 },
-    ]);
+    // Pre-1296: this row set encoded "all 3 voters cast 1 of 3 votes" and
+    // the per-voter required = 3 → short. Post-1296 the per-voter gate is
+    // submission presence; same input would now mean "all 3 voters DID
+    // submit" → ready. Update the input to express the new intent (nobody
+    // submitted yet) so the predicate's short-circuit is still validated.
+    db.groupBy.mockResolvedValueOnce([]);
 
     const result = await checkVotingQuorum(db as never, {
       ...baseLineup,
@@ -289,16 +289,16 @@ describe('checkVotingQuorum', () => {
     });
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/below 3 votes/);
+    expect(result.reason).toMatch(/have not submitted/);
   });
 
-  it('reports not ready when one voter is one vote short', async () => {
+  it('reports not ready when one voter has not submitted (ROK-1296 — was: one vote short)', async () => {
     const db = createDrizzleMock();
     setExpectedVoters([1, 2, 3]);
+    // Voters 1 + 2 submitted; voter 3 missing.
     db.groupBy.mockResolvedValueOnce([
       { userId: 1, count: 3 },
       { userId: 2, count: 3 },
-      { userId: 3, count: 2 },
     ]);
 
     const result = await checkVotingQuorum(db as never, {
@@ -307,7 +307,7 @@ describe('checkVotingQuorum', () => {
     });
 
     expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/below 3 votes/);
+    expect(result.reason).toMatch(/have not submitted/);
   });
 
   it('reports ready when every voter has used their full allotment', async () => {
@@ -528,5 +528,191 @@ describe('loadQuorumGatingVoters (ROK-1258 hybrid policy)', () => {
     });
 
     expect(result.sort()).toEqual([1, 2]);
+  });
+});
+
+// ============================================================================
+// ROK-1296 (U4 SubmitBar) — submission-presence quorum semantics.
+//
+// New contract: quorum no longer counts nominations or vote totals per voter.
+// It checks whether every expected voter has stamped a row in
+// `community_lineup_user_submissions`:
+//   - building → voting: `nominations_submitted_at IS NOT NULL` for all.
+//   - voting   → decided: `votes_submitted_at IS NOT NULL` for all.
+//
+// The nomination FLOOR + ≥2-voter guards stay intact — those tests already
+// exist above and continue to pass. These tests pin the NEW per-voter
+// predicate. They MUST fail at commit time because checkBuildingQuorum and
+// checkVotingQuorum still read from community_lineup_entries /
+// community_lineup_votes for the per-voter gate.
+// ============================================================================
+
+/**
+ * Submission row shape used by the new per-voter query path.
+ *
+ * Includes `count: 0` so the SAME mock value can be served to the old code
+ * path (which reads `.count`): the old code computes `(0 ?? 0) < 3` → true,
+ * flags all returned voters as short, returns NOT ready. The NEW code path
+ * reads only `.userId` from this row set — same input, opposite verdict.
+ * This is the deliberate behavioural pivot the dev's predicate rewrite must
+ * cross to make these tests green.
+ */
+function submissionsForVoters(voterIds: number[]) {
+  return voterIds.map((userId) => ({ userId, count: 0 }));
+}
+
+describe('checkBuildingQuorum — ROK-1296 submission-presence semantics', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  // CRITICAL DIFFERENCE FROM OLD SEMANTICS:
+  // Old code counts entries-per-voter via communityLineupEntries.groupBy. New
+  // code probes communityLineupUserSubmissions for nominations_submitted_at.
+  // The deliberate split below would return DIFFERENT ready values under each
+  // semantic, which is the only way to force the dev to actually rewrite the
+  // predicate rather than tweak the existing one.
+
+  it('NOT ready when entries-per-voter passes but NO submission rows exist (new behaviour diverges from old)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2]);
+    // First .groupBy() call: NEW code reads submission rows — none exist.
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([]));
+    // Floor query: trivially satisfied.
+    db.execute.mockResolvedValueOnce(totalRow(99));
+    // OLD code would also read .groupBy() here (entries-per-voter, both at 5,
+    // i.e. ≥ minPerVoter 3) and return ready: true. The drizzle-mock returns
+    // empty on extra calls, so the OLD code path actually flags both voters
+    // as short and returns ready: false — but for the WRONG reason. The
+    // reason match below pins the new semantic.
+    const result = await checkBuildingQuorum(
+      db as never,
+      makeSettings() as never,
+      baseLineup,
+    );
+
+    expect(result.ready).toBe(false);
+    // The new gate's reason mentions submissions, not "below N nominations".
+    expect(result.reason).toMatch(/submit|submission/i);
+  });
+
+  it('READY when every voter has a submission row, even with ZERO entries (new ignores entry count)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2]);
+    // NEW: both voters submitted.
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
+    // Floor satisfied.
+    db.execute.mockResolvedValueOnce(totalRow(99));
+    // OLD code would query entries-per-voter on a SECOND groupBy and see []
+    // (drizzle-mock default), flag both as 0 < 3, return NOT ready. NEW code
+    // returns ready: true because the per-voter gate is just submission
+    // presence. Only the new semantic produces ready === true here.
+    const result = await checkBuildingQuorum(
+      db as never,
+      makeSettings() as never,
+      baseLineup,
+    );
+
+    expect(result.ready).toBe(true);
+  });
+
+  it('still blocks on the nomination floor regardless of submissions', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2]);
+    // Both submitted — per-voter gate passes…
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
+    // …but total nominations (3) fall below the default floor of 4.
+    db.execute.mockResolvedValueOnce(totalRow(3));
+
+    const result = await checkBuildingQuorum(
+      db as never,
+      makeSettings() as never,
+      baseLineup,
+    );
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toContain('floor');
+  });
+
+  it('still blocks for a solo lineup (creator alone) regardless of submission (≥2 voters guard stays)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1]);
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1]));
+
+    const result = await checkBuildingQuorum(
+      db as never,
+      makeSettings() as never,
+      baseLineup,
+    );
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toContain('solo lineup');
+  });
+});
+
+describe('checkVotingQuorum — ROK-1296 submission-presence semantics', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('NOT ready when votes-per-voter passes but NO submission rows exist (reason mentions submission)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2]);
+    // NEW gate reads submission rows — none exist.
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([]));
+
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      visibility: 'private',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toMatch(/submit|submission/i);
+  });
+
+  it('READY when every voter has a submission row, even with ZERO raw votes (new ignores vote count)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2]);
+    // NEW: both submitted.
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
+    // OLD code would query votes-per-voter and see [], flag both as 0 < 3
+    // and return NOT ready. Only the new semantic produces ready === true.
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      visibility: 'private',
+      maxVotesPerPlayer: 99,
+    });
+
+    expect(result.ready).toBe(true);
+  });
+
+  it('ignores maxVotesPerPlayer for the per-voter check (submission supersedes vote-count)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1, 2]);
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
+
+    // A lineup with a 10-vote cap: the OLD code would require 10 votes per
+    // voter. The NEW predicate ignores the cap entirely.
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      visibility: 'private',
+      maxVotesPerPlayer: 10,
+    });
+
+    expect(result.ready).toBe(true);
+  });
+
+  it('still blocks the solo-creator lineup even when they submitted (≥2 voters guard stays)', async () => {
+    const db = createDrizzleMock();
+    setExpectedVoters([1]);
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1]));
+
+    const result = await checkVotingQuorum(db as never, {
+      ...baseLineup,
+      status: 'voting',
+      visibility: 'private',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.reason).toContain('solo lineup');
   });
 });

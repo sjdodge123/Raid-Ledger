@@ -29,6 +29,7 @@ const baseMembers = [
     matchId: 10,
     userId: 100,
     source: 'voted',
+    schedulingSubmittedAt: null,
     createdAt: new Date('2026-03-01'),
     displayName: 'Alice',
     avatar: null,

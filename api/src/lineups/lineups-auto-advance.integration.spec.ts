@@ -133,6 +133,24 @@ function describeAutoAdvance() {
       .send({ status: 'voting' });
   }
 
+  // ROK-1296: quorum per-voter gate is now "did the user explicitly submit?"
+  // not "did the user cast N votes / nominations?" — the original
+  // auto-advance asserts pre-1296 were "cast 3 votes → advance"; post-1296
+  // they're "cast 3 votes AND call /submit-votes → advance".
+  async function submitNominations(token: string, lineupId: number) {
+    return testApp.request
+      .post(`/lineups/${lineupId}/submit-nominations`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+  }
+
+  async function submitVotes(token: string, lineupId: number) {
+    return testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+  }
+
   /** Read the current persisted status from the DB (bypasses cache). */
   async function readStatus(lineupId: number): Promise<string> {
     const [row] = await testApp.db
@@ -187,13 +205,20 @@ function describeAutoAdvance() {
     await vote(invitee2.token, lineupId, games[3].id);
     expect(await readStatus(lineupId)).toBe('voting');
 
-    // Each voter casts their 3rd (final) vote — quorum closes. The shared
-    // favorite g0 has 3 votes; everything else has 1, so no tie at the top.
+    // Each voter casts their 3rd (final) vote — under pre-ROK-1296 semantics
+    // this alone would advance. Post-ROK-1296 the per-voter gate requires
+    // explicit submit, so still 'voting' here.
     await vote(adminToken, lineupId, games[4].id);
     await vote(invitee1.token, lineupId, games[5].id);
     await vote(invitee2.token, lineupId, games[6].id);
+    expect(await readStatus(lineupId)).toBe('voting');
 
-    // Status should flip without any explicit PATCH /status call.
+    // Every voter calls /submit-votes — quorum closes on the last submit.
+    await submitVotes(adminToken, lineupId);
+    expect(await readStatus(lineupId)).toBe('voting');
+    await submitVotes(invitee1.token, lineupId);
+    expect(await readStatus(lineupId)).toBe('voting');
+    await submitVotes(invitee2.token, lineupId);
     expect(await readStatus(lineupId)).toBe('decided');
   });
 
@@ -275,13 +300,20 @@ function describeAutoAdvance() {
     await nominate(m1.token, lineupId, games[2].id);
     expect(await readStatus(lineupId)).toBe('building');
 
-    // m2 hits 2 of 3 → still below per-voter min.
+    // m2 hits 2 of 3 → still building.
     await nominate(m2.token, lineupId, games[3].id);
     await nominate(m2.token, lineupId, games[4].id);
     expect(await readStatus(lineupId)).toBe('building');
 
-    // m2's 3rd nomination closes the quorum — total = 6, both at min 3.
+    // m2's 3rd nomination — pre-1296 this alone advanced; post-1296 the
+    // per-voter gate is submission presence so still 'building' here.
     await nominate(m2.token, lineupId, games[5].id);
+    expect(await readStatus(lineupId)).toBe('building');
+
+    // Both nominators submit — the last call closes the quorum.
+    await submitNominations(m1.token, lineupId);
+    expect(await readStatus(lineupId)).toBe('building');
+    await submitNominations(m2.token, lineupId);
     expect(await readStatus(lineupId)).toBe('voting');
   });
 

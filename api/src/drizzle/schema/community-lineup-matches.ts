@@ -81,6 +81,12 @@ export const communityLineupMatchMembers = pgTable(
     source: text('source', {
       enum: ['voted', 'bandwagon'],
     }).notNull(),
+    /**
+     * Stamped when the user submits scheduling for THIS match
+     * (ROK-1296, U4 SubmitBar). Per-match: a user can submit one match while
+     * leaving others autosaving. Re-submission overwrites to `now()`.
+     */
+    schedulingSubmittedAt: timestamp('scheduling_submitted_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [unique('uq_match_member_user').on(table.matchId, table.userId)],

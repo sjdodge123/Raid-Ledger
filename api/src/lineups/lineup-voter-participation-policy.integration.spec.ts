@@ -130,6 +130,14 @@ function describeParticipationPolicy() {
       .send({ status: 'voting' });
   }
 
+  // ROK-1296: per-voter quorum gate is submission presence, not vote count.
+  async function submitVotes(token: string, lineupId: number) {
+    return testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+  }
+
   async function readStatus(lineupId: number): Promise<string> {
     const [row] = await testApp.db
       .select({ status: schema.communityLineups.status })
@@ -204,6 +212,15 @@ function describeParticipationPolicy() {
     await vote(voter2.token, lineupId, games[0].id);
     await vote(voter2.token, lineupId, games[5].id);
     await vote(voter2.token, lineupId, games[6].id);
+
+    // Post-ROK-1296: explicit submit is required for the per-voter quorum
+    // gate. All three actual voters submit; the two non-voters never do,
+    // which is the very condition the deadline-drop / removeInvitee path
+    // exercises below.
+    await submitVotes(adminToken, lineupId);
+    await submitVotes(voter1.token, lineupId);
+    await submitVotes(voter2.token, lineupId);
+
     // Pre-fix would have hung here. Post-fix only fires once we either pass
     // the deadline or remove the non-voters.
     expect(await readStatus(lineupId)).toBe('voting');

@@ -68,6 +68,8 @@ export function buildMatchDetailDto(
       avatar: m.avatar,
       discordId: m.discordId,
       customAvatarUrl: m.customAvatarUrl,
+      // ROK-1296: per-match scheduling submission timestamp.
+      schedulingSubmittedAt: m.schedulingSubmittedAt?.toISOString() ?? null,
     })),
   };
 }

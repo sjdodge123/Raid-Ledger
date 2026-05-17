@@ -1,17 +1,23 @@
 /**
- * Quorum predicates for lineup auto-advance (ROK-1118).
+ * Quorum predicates for lineup auto-advance (ROK-1118, ROK-1296).
  *
- * Building quorum: every expected voter has nominated ≥ minPerVoter games
- *   AND total distinct nominations ≥ floor (settings).
- * Voting quorum: every expected voter has cast their FULL vote allotment
- *   (`lineup.maxVotesPerPlayer`).
+ * Building quorum:
+ *   - every expected voter has stamped `nominations_submitted_at` AND
+ *   - total nominations ≥ floor (settings).
  *
- * The ≥1 / ≥1 thresholds were too eager — operator confirmed a private
- * lineup auto-advanced after each voter cast 1 of 3 votes. Both predicates
- * now require participants to use their full allotment so people can't
- * skip the room ahead by being first.
+ * Voting quorum:
+ *   - every expected voter has stamped `votes_submitted_at`.
+ *
+ * ROK-1296 pivot: the per-voter gate switched from counting raw entries /
+ * votes to checking submission presence. Operators repeatedly asked "how
+ * many actually said they were done?" — autosave-touch counts were the
+ * wrong signal. The explicit Submit ritual now carries the "I'm done"
+ * semantic; autosave only protects in-flight work.
+ *
+ * ≥2-voter "solo lineup" guard and the building-phase nomination floor
+ * stay intact.
  */
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -25,7 +31,6 @@ type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 
 const DEFAULT_MIN_NOMINATIONS = 4;
-const DEFAULT_MIN_NOMINATIONS_PER_VOTER = 3;
 
 export interface QuorumResult {
   ready: boolean;
@@ -40,19 +45,14 @@ export async function checkBuildingQuorum(
 ): Promise<QuorumResult> {
   const expected = await loadQuorumGatingVoters(db, lineup);
   if (expected.length < 2) {
-    // Solo lineup (creator alone or no participants yet) — manual advance only.
-    // Auto-advancing here would surprise the operator who's still setting up.
     return { ready: false, reason: 'solo lineup; manual advance required' };
   }
-  const perVoterCounts = await countNominationsPerVoter(db, lineup.id);
-  const minPerVoter = await readMinNominationsPerVoter(settings);
-  const short = expected.filter(
-    (id) => (perVoterCounts.get(id) ?? 0) < minPerVoter,
-  );
-  if (short.length > 0) {
+  const submitted = await loadNominationSubmitters(db, lineup.id);
+  const shortfall = countMissingSubmissions(expected, submitted);
+  if (shortfall > 0) {
     return {
       ready: false,
-      reason: `${short.length} expected nominator(s) below ${minPerVoter} nominations`,
+      reason: `${shortfall} expected nominator(s) have not submitted`,
     };
   }
   const totalNominations = await countNominations(db, lineup.id);
@@ -72,52 +72,71 @@ export async function checkVotingQuorum(
   lineup: LineupRow,
 ): Promise<QuorumResult> {
   const expected = await loadQuorumGatingVoters(db, lineup);
-  const perVoterCounts = await countVotesPerVoter(db, lineup.id);
+  // Drain the per-voter query unconditionally so the mock drizzle queue
+  // (used by unit tests) consumes the same number of calls as the real
+  // path. The result is only consulted after the ≥2-voter guard.
+  const submitted = await loadVoteSubmitters(db, lineup.id);
   if (expected.length < 2) {
-    // Solo lineup — manual advance only. Same reasoning as building quorum.
     return { ready: false, reason: 'solo lineup; manual advance required' };
   }
-  const required = lineup.maxVotesPerPlayer ?? 3;
-  const short = expected.filter(
-    (id) => (perVoterCounts.get(id) ?? 0) < required,
-  );
-  if (short.length > 0) {
+  const shortfall = countMissingSubmissions(expected, submitted);
+  if (shortfall > 0) {
     return {
       ready: false,
-      reason: `${short.length} expected voter(s) below ${required} votes`,
+      reason: `${shortfall} expected voter(s) have not submitted`,
     };
   }
   return { ready: true };
 }
 
-async function countNominationsPerVoter(
+/** Distinct userIds with `nominations_submitted_at IS NOT NULL`. */
+async function loadNominationSubmitters(
   db: Db,
   lineupId: number,
-): Promise<Map<number, number>> {
+): Promise<Set<number>> {
   const rows = await db
     .select({
-      userId: schema.communityLineupEntries.nominatedBy,
+      userId: schema.communityLineupUserSubmissions.userId,
       count: sql<number>`count(*)::int`,
     })
-    .from(schema.communityLineupEntries)
-    .where(eq(schema.communityLineupEntries.lineupId, lineupId))
-    .groupBy(schema.communityLineupEntries.nominatedBy);
-  return new Map(rows.map((r) => [r.userId, Number(r.count)]));
+    .from(schema.communityLineupUserSubmissions)
+    .where(
+      and(
+        eq(schema.communityLineupUserSubmissions.lineupId, lineupId),
+        isNotNull(schema.communityLineupUserSubmissions.nominationsSubmittedAt),
+      ),
+    )
+    .groupBy(schema.communityLineupUserSubmissions.userId);
+  return new Set(rows.map((r) => r.userId));
 }
 
-async function countVotesPerVoter(
+/** Distinct userIds with `votes_submitted_at IS NOT NULL`. */
+async function loadVoteSubmitters(
   db: Db,
   lineupId: number,
-): Promise<Map<number, number>> {
+): Promise<Set<number>> {
   const rows = await db
     .select({
-      userId: schema.communityLineupVotes.userId,
+      userId: schema.communityLineupUserSubmissions.userId,
       count: sql<number>`count(*)::int`,
     })
-    .from(schema.communityLineupVotes)
-    .where(eq(schema.communityLineupVotes.lineupId, lineupId))
-    .groupBy(schema.communityLineupVotes.userId);
-  return new Map(rows.map((r) => [r.userId, Number(r.count)]));
+    .from(schema.communityLineupUserSubmissions)
+    .where(
+      and(
+        eq(schema.communityLineupUserSubmissions.lineupId, lineupId),
+        isNotNull(schema.communityLineupUserSubmissions.votesSubmittedAt),
+      ),
+    )
+    .groupBy(schema.communityLineupUserSubmissions.userId);
+  return new Set(rows.map((r) => r.userId));
+}
+
+/** Count how many `expected` voter ids are missing from `submitted`. */
+function countMissingSubmissions(
+  expected: number[],
+  submitted: Set<number>,
+): number {
+  return expected.filter((id) => !submitted.has(id)).length;
 }
 
 async function countNominations(db: Db, lineupId: number): Promise<number> {
@@ -134,16 +153,6 @@ async function readMinNominations(settings: SettingsService): Promise<number> {
     settings,
     SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS,
     DEFAULT_MIN_NOMINATIONS,
-  );
-}
-
-async function readMinNominationsPerVoter(
-  settings: SettingsService,
-): Promise<number> {
-  return readPositiveSetting(
-    settings,
-    SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER,
-    DEFAULT_MIN_NOMINATIONS_PER_VOTER,
   );
 }
 

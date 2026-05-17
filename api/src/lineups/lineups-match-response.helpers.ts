@@ -48,6 +48,8 @@ function mapMemberRow(m: MatchMemberRow) {
     avatar: m.avatar,
     discordId: m.discordId,
     customAvatarUrl: m.customAvatarUrl,
+    // ROK-1296: per-match scheduling submission timestamp (null = not yet).
+    schedulingSubmittedAt: m.schedulingSubmittedAt?.toISOString() ?? null,
   };
 }
 

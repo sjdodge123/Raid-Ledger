@@ -18,6 +18,10 @@ export const ActivityActionSchema = z.enum([
     'lineup_public_share_toggled',
     'lineup_auto_advance_paused',
     'event_linked',
+    // ROK-1296 (U4 SubmitBar) — explicit submit ritual.
+    'submit_nominations',
+    'submit_votes',
+    'submit_scheduling',
     // Event actions
     'event_created',
     'signup_added',
