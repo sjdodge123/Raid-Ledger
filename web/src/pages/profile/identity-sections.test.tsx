@@ -51,6 +51,35 @@ describe('SteamSection — linked state', () => {
     });
 });
 
+describe('ROK-1307 AC-2a — Sync buttons disabled while unlink is in flight', () => {
+    // RCA: while `unlinkSteam.isPending === true`, the `<SteamLinkedPanel>`
+    // is still mounted (the steam-status query cache holds `linked: true`
+    // until the unlink mutation settles AND the refetch resolves). Today
+    // the Sync Library / Sync Wishlist buttons stay clickable — clicking
+    // them races a `users.steam_id IS NULL` write against the in-flight
+    // sync, producing 500s and the Sentry burst that motivated ROK-1307.
+    //
+    // The fix: each Sync button's `disabled` prop ORs `unlinkSteam.isPending`
+    // alongside its own pending flag.
+    it('Sync Library button is disabled when unlinkSteam.isPending === true', () => {
+        const props = createLinkedSteamProps({
+            unlinkSteam: { mutate: vi.fn(), isPending: true },
+        });
+        render(<SteamSection {...props} />);
+        const button = screen.getByRole('button', { name: /sync library/i });
+        expect(button).toBeDisabled();
+    });
+
+    it('Sync Wishlist button is disabled when unlinkSteam.isPending === true', () => {
+        const props = createLinkedSteamProps({
+            unlinkSteam: { mutate: vi.fn(), isPending: true },
+        });
+        render(<SteamSection {...props} />);
+        const button = screen.getByRole('button', { name: /sync wishlist/i });
+        expect(button).toBeDisabled();
+    });
+});
+
 describe('Regression: ROK-783 — Steam buttons overflow on mobile', () => {
     it('button container uses flex-wrap so buttons can wrap on narrow viewports', () => {
         render(<SteamSection {...createLinkedSteamProps()} />);

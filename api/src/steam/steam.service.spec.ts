@@ -142,6 +142,36 @@ describe('SteamService', () => {
       itadResolve!();
     });
 
+    // ROK-1307 AC-5: service-level error contracts.
+    it('throws BadRequestException when user has no linked Steam account', async () => {
+      mockDb.query = {
+        users: {
+          findFirst: jest.fn().mockResolvedValue({ id: 1, steamId: null }),
+        },
+        games: { findFirst: jest.fn().mockResolvedValue(null) },
+      };
+
+      await expect(service.syncLibrary(1)).rejects.toThrow(
+        'Steam account not linked',
+      );
+      await expect(service.syncLibrary(1)).rejects.toMatchObject({
+        status: 400,
+      });
+    });
+
+    it('throws BadRequestException when Steam profile is private', async () => {
+      (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
+        communityvisibilitystate: 1,
+      });
+
+      await expect(service.syncLibrary(1)).rejects.toThrow(
+        /Steam profile is private/,
+      );
+      await expect(service.syncLibrary(1)).rejects.toMatchObject({
+        status: 400,
+      });
+    });
+
     it('logs errors from background ITAD discovery without crashing', async () => {
       mockItadService.lookupBySteamAppId.mockRejectedValue(
         new Error('ITAD API down'),

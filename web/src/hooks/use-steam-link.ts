@@ -16,17 +16,24 @@ function steamAuthHeaders(): Record<string, string> {
 async function steamFetch<T>(path: string, method = 'GET', errorMsg = 'Request failed'): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${path}`, { method, headers: steamAuthHeaders() });
     if (!response.ok) {
-        const body = method === 'POST' ? await response.json().catch(() => ({ message: errorMsg })) : null;
+        const body = await response.json().catch(() => ({ message: errorMsg }));
         throw new Error(body?.message || errorMsg);
     }
+    if (response.status === 204) return undefined as T;
     return response.json();
 }
 
-function useUnlinkSteam() {
+export function useUnlinkSteam() {
     const queryClient = useQueryClient();
     return useMutation<void, Error>({
         mutationFn: async () => { await steamFetch('/auth/steam/link', 'DELETE', 'Failed to unlink Steam'); },
-        onSuccess: () => {
+        onSuccess: async () => {
+            // Cancel any in-flight status refetch before writing optimistic
+            // state — otherwise a refetch that started before the DELETE
+            // can land after setQueryData and overwrite { linked: false }
+            // with the stale { linked: true } response. Codex review fix.
+            await queryClient.cancelQueries({ queryKey: ['steam', 'status'] });
+            queryClient.setQueryData(['steam', 'status'], { linked: false });
             queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
             queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
             toast.success('Steam account unlinked');
@@ -35,7 +42,7 @@ function useUnlinkSteam() {
     });
 }
 
-function useSyncLibrary() {
+export function useSyncLibrary() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: () => steamFetch<{ success: boolean; message: string; matched: number; newInterests: number }>('/auth/steam/sync', 'POST', 'Sync failed'),
@@ -44,11 +51,14 @@ function useSyncLibrary() {
             queryClient.invalidateQueries({ queryKey: ['game-interests'] });
             toast.success(data.message);
         },
-        onError: (err: Error) => toast.error(err.message),
+        onError: (err: Error) => {
+            queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
+            toast.error(err.message);
+        },
     });
 }
 
-function useSyncWishlist() {
+export function useSyncWishlist() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: () => steamFetch<{ success: boolean; message: string }>('/auth/steam/sync-wishlist', 'POST', 'Wishlist sync failed'),
@@ -57,7 +67,10 @@ function useSyncWishlist() {
             queryClient.invalidateQueries({ queryKey: ['userSteamWishlist'] });
             toast.success(data.message);
         },
-        onError: (err: Error) => toast.error(err.message),
+        onError: (err: Error) => {
+            queryClient.invalidateQueries({ queryKey: ['steam', 'status'] });
+            toast.error(err.message);
+        },
     });
 }
 

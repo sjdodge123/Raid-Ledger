@@ -441,3 +441,34 @@ Reviewer verdict PASS WITH NOTES on the batch diff. 0 critical/high/medium, 6 lo
   Suggested: check whether ROK-1099's role-hierarchy decorators on the community-insights routes still treat operator as a covered role, OR whether a recent guard change tightened the gate.
 
 Other ROK-1295 integration suites (including the new `games-lookup.integration.spec.ts` — 10/10 passing) succeed on the same DB run, so this is isolated to the community-insights operator-role path.
+
+### 2026-05-17 — rok-1307-steam-sync-400-and-private (surfaced during validate-ci --full)
+
+Full integration suite (`npm run test:integration -w api`) on the ROK-1307 worktree surfaced 6 failures across 2 specs (`backup/backup.integration.spec.ts` x3, `game-taste/game-taste.integration.spec.ts` x3). All 6 specs pass in isolation against the same HEAD (verified: `npx jest --testPathPatterns="game-taste"` → 27/27 pass; `npx jest --testPathPatterns="backup"` → 21/21 pass). Failure shapes match documented cross-suite flake classes (`feedback_smoke_polling_for_async_writes.md`, `reference_bullmq_ioredis_test_carrier.md`). Zero file overlap with the ROK-1307 diff (sentry/instrument.ts, steam/* services + controller, web hooks + components). Not blocking ROK-1307 ship; recording so they aren't re-discovered.
+
+- **[low]** `api/src/backup/backup.integration.spec.ts` — 3 cases (`createDailyBackup keeps non-excluded table data`, `restored dump has 0 rows in the 4 sanitized tables`, `createMigrationSnapshot also excludes data`) fail with `read ECONNRESET` only when run inside the full integration suite. Same socket-leak carrier class as ROK-1250 / ROK-1264. Passes 21/21 in isolation.
+  Suggested: belongs to the BullMQ ioredis carrier follow-up; not in scope here.
+- **[low]** `api/src/game-taste/game-taste.integration.spec.ts:381` — `AdminGuard › POST /games/similar returns 403 for non-admin` returns 404 instead of 403 only inside the full suite (passes 27/27 in isolation). Smells like cross-suite seed bleed: the non-admin user OR the target game row is mutated by an earlier-running spec, so the route 404s before the AdminGuard fires. Same pattern as the lineup fixture-bleed entries above.
+  Suggested: harden the test's seed setup (re-fetch target gameId after seeding, or use a non-1 sentinel ID); separately worth checking whether the AdminGuard ordering changed recently in router config.
+
+### 2026-05-17 — rok-1307-steam-sync-400-and-private (surfaced during Playwright desktop+mobile)
+
+`npx playwright test` (both projects) on the ROK-1307 worktree, deployed locally with `deploy_dev.sh --ci --rebuild`: 640 passed, 10 failed. ROK-1307's diff is `api/src/steam/**` + `api/src/sentry/instrument*` + `web/src/hooks/use-steam-link*` + `web/src/pages/profile/identity-sections*` — none of the failing tests visit those surfaces. Most-likely upstream: recent Cycle 4 commits on main (`23aac93c ROK-1294` JourneyHero, `8c7e1f20 ROK-1295` Game Research Drawer) changed DOM around lineup/events/onboarding components.
+
+- **[med]** `scripts/smoke/lineup-confirmation-pills-invitee.smoke.spec.ts:127,180,210` — three cases fail across BOTH desktop and mobile (six total): hero-tone flips after nomination, per-row checkmark, waiting-tone after one vote. Asserts on `data-voted='true'` markers and `text=/sit tight/i` copy that aren't present in the rendered DOM. Pattern matches a recently-changed lineup page layout.
+  Suggested: re-check selectors against current `web/src/pages/lineup-page` markup; likely a Cycle 4 hero-component refactor moved the data attributes.
+- **[med]** `scripts/smoke/events.smoke.spec.ts:370` — desktop: `attendance dashboard light mode › attendance tracker uses theme-aware backgrounds in light mode` fails. Theme-token assertion against rendered CSS.
+  Suggested: confirm light-mode tokens still resolve on `/events/:id` after the JourneyHero migration.
+- **[med]** `scripts/smoke/onboarding.smoke.spec.ts:330` — desktop: `Onboarding wizard game-time step (ROK-1011) › game-time step renders compact GameTimeGrid on all viewports` fails. Likely a layout-breakpoint regression from a recent UI change.
+- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:416` — mobile: `Community Lineup responsive layout › banner is visible on mobile viewport` fails. Mobile-specific.
+- **[med]** `scripts/smoke/lineup-carryover.smoke.spec.ts:165` — mobile: `creating a new lineup auto-populates entries from prior decided suggested matches` fails.
+
+Net: 640/650 smoke passing. ROK-1307's manual-sync flow is not exercised by any Playwright test today; coverage is via Chrome MCP e2e in this build pass.
+
+### 2026-05-17 — pre-existing Steam-link cosmetic + dev-env collision (surfaced during ROK-1307 Chrome MCP)
+
+Operator hit `ConflictException: This Steam account is already linked to another user` during a Link Steam test on the ROK-1307 deploy. **Not introduced by ROK-1307** — the Link flow is untouched by this story. Two surfaces:
+
+- **[low]** Pre-existing cosmetic bug in `web/src/pages/profile/identity-sections.tsx:153` (or wherever the Link Steam button is wired). `<button onClick={linkSteam}>` binds the React `MouseEvent` SyntheticEvent as the function's first argument — and `linkSteam(returnTo?: string)` then `encodeURIComponent`s the SyntheticEvent object, producing `?returnTo=%5Bobject%20Object%5D` in the URL. The backend allowlist (`SteamAuthController.RETURN_TO_ALLOWLIST`) silently normalizes to `/profile`, so no functional impact, but the URL is wrong and confusing in logs. Confirmed in `api.log` 2026-05-17 18:50:04/44 entries.
+  Suggested: wrap the handler — `onClick={() => linkSteam()}` — or change `linkSteam`'s signature to accept `unknown` and reject non-strings. The Discord link button at `:64` has the same shape and likely the same issue.
+- **[dev-env-only, NOT tech-debt]** Clone-prod-to-local DB carries the operator's prod `users.steam_id` on the `roknua` user row (id=1). When the operator authenticates as the local `admin@local` user (id=115) and tries to Link Steam through OpenID with their real Steam ID, the `users_steam_id_unique` constraint correctly throws Conflict. Solution for dev testing: `UPDATE users SET steam_id = NULL WHERE id = 1;` before attempting the link, or test as `roknua` directly. Documenting in case other agents are confused by the same symptom.
