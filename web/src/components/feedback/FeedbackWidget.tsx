@@ -53,11 +53,24 @@ function buildPayload(category: FeedbackCategory, message: string, includeClient
     return payload;
 }
 
-function buildSentryOptions(category: FeedbackCategory, _message: string, feedbackId: number) {
+function buildSentryOptions(
+    category: FeedbackCategory,
+    _message: string,
+    feedbackId: number,
+    clientLogs?: string,
+) {
+    const feedbackContext: Record<string, unknown> = {
+        pageUrl: window.location.href,
+        category,
+        feedbackId,
+    };
+    // Sentry truncates contexts at 8 KiB; keep the tail so the most recent
+    // events survive. DB column has full 50 KiB as source of truth.
+    if (clientLogs) feedbackContext.clientLogs = clientLogs.slice(-7000);
     return {
         level: (category === 'bug' ? 'error' : 'info') as 'error' | 'info',
         tags: { feedback_category: category, feedback_id: String(feedbackId), source: 'feedback_widget' },
-        contexts: { feedback: { pageUrl: window.location.href, category, feedbackId } },
+        contexts: { feedback: feedbackContext },
     };
 }
 
@@ -78,9 +91,10 @@ function useFeedbackSubmitHandler(
     return useCallback(() => {
         if (state.message.length < 10 || state.isSubmitting) return;
         state.setIsSubmitting(true); state.setSentryError(false);
-        submitFeedback.mutate(buildPayload(state.category, state.message, state.includeClientLogs), {
+        const payload = buildPayload(state.category, state.message, state.includeClientLogs);
+        submitFeedback.mutate(payload, {
             onSuccess: async (data) => {
-                const ok = await captureMessageVerified(`[${state.category.toUpperCase()}] ${state.message}`, buildSentryOptions(state.category, state.message, data.id));
+                const ok = await captureMessageVerified(`[${state.category.toUpperCase()}] ${state.message}`, buildSentryOptions(state.category, state.message, data.id, payload.clientLogs));
                 if (ok) state.setShowSuccess(true); else state.setSentryError(true);
                 state.setIsSubmitting(false);
             },

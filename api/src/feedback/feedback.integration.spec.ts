@@ -112,6 +112,49 @@ function describeFeedback() {
   describe('POST /feedback', () => describePOSTFeedback());
 
   // ===================================================================
+  // Regression: ROK-1312 — clientLogs persistence + Zod gate
+  // ===================================================================
+
+  function describeRegressionROK1312() {
+    it('persists clientLogs into the new client_logs column', async () => {
+      const sampleLogs =
+        '[2026-05-17T18:00:00.000Z] [ERROR] uncaught: boom @ app.js:1:1\n' +
+        '[2026-05-17T18:00:01.000Z] [LOG] hello world';
+      const res = await testApp.request
+        .post('/feedback')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          category: 'bug',
+          message: 'Bug report with attached client logs for triage',
+          clientLogs: sampleLogs,
+        });
+
+      expect(res.status).toBe(201);
+
+      const [row] = await testApp.db.select().from(schema.feedback).limit(1);
+
+      expect(row).toBeDefined();
+      expect(row.clientLogs).toBe(sampleLogs);
+    });
+
+    it('rejects clientLogs >50000 chars with 400', async () => {
+      const oversized = 'x'.repeat(60_000);
+      const res = await testApp.request
+        .post('/feedback')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          category: 'bug',
+          message: 'Bug report with oversized client logs payload',
+          clientLogs: oversized,
+        });
+
+      expect(res.status).toBe(400);
+    });
+  }
+  describe('Regression: ROK-1312 — clientLogs persistence + uncaught error capture', () =>
+    describeRegressionROK1312());
+
+  // ===================================================================
   // GET /feedback (listFeedback)
   // ===================================================================
 

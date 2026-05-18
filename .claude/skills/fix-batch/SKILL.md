@@ -6,7 +6,7 @@ argument-hint: "[ROK-XXX ROK-YYY | all]"
 
 # Fix-Batch — Fast Fix Pipeline
 
-Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linear, batches them, spawns parallel dev agents in worktrees, merges all into a single batch branch, validates, and ships one PR. **No operator review gate, no test agents, no reviewer agents, no architect checks.** The quality gate is: integration tests + full CI pass on the merged batch branch.
+Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linear, batches them, spawns parallel dev agents in worktrees, merges all into a single batch branch, validates, and ships one PR. **No operator review gate, no test agents, no architect checks.** A code-review agent runs in parallel with the env-bound browser-validation track so it adds minimal wall time. The quality gate is: integration tests + full CI + reviewer pass on the merged batch branch.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
@@ -33,21 +33,33 @@ Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linea
 ```
 Step 1: Gather    → Linear search by label, profile (incl. root cause + planner assessment), present, operator approves
 Step 2: Implement → Batch branch, worktrees, spike unknown bugs, plan complex stories, parallel devs, merge into batch branch
-Step 3: Validate  → CI (build/ts/lint/unit/integration) → deploy + Playwright → Chrome MCP e2e gate → reviewer → test gaps → regression
+Step 3: Validate  → CI (build/ts/lint/unit/integration) → PARALLEL { Track A: deploy + Playwright + Chrome MCP | Track B: reviewer agent } → test gaps → regression → push
 Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 ```
 
-**Eight gates before PR (run in this order — Chrome MCP MUST land before reviewer):**
-1. **CI** — build + type check + lint
-2. **Unit tests** — all workspaces pass
-3. **Integration tests** — `npm run test:integration -w api`
+**Eight gates before PR.** Gates 1–3 are sequential. Gates 4+5 (env-bound) run in parallel with gate 6 (reviewer, no env needed). Gates 7+8 run after both tracks converge.
+
+1. **CI** — build + type check + lint *(sequential)*
+2. **Unit tests** — all workspaces pass *(sequential)*
+3. **Integration tests** — `npm run test:integration -w api` *(sequential)*
+
+   → fork into two parallel tracks ↓
+
+   **Track A (Lead, env-bound):**
 4. **Playwright smoke** — desktop + mobile, automated regression sweep
-5. **Chrome MCP e2e** — Lead drives the *changed user flows* on the deployed batch branch via `mcp__claude-in-chrome__*`; captures screenshots / GIFs / console / network and produces an operator-facing summary. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. **Must complete before the reviewer agent runs.**
-6. **Code review** — reviewer agent (sonnet) checks correctness, security, performance, contract integrity
+5. **Chrome MCP e2e** — Lead drives the *changed user flows* on the deployed batch branch via `mcp__claude-in-chrome__*`; captures screenshots / GIFs / console / network and produces an operator-facing summary. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
+
+   **Track B (Reviewer agent, no env):**
+6. **Code review** — reviewer agent (sonnet) checks correctness, security, performance, contract integrity. Runs against the merged batch diff; does NOT depend on Chrome MCP output. If a critical/high finding requires browser re-verification, Lead reruns the affected flow after Track A releases the env lock.
+
+   → tracks converge ↓
+
 7. **Test gap analysis** — reviewer identifies untested changes; lead adds missing tests before proceeding
 8. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
 
-**Env-lock rule:** the env lock (`mcp__mcp-env__env_lock_acquire`) is held only for gates 4 + 5 (Playwright + Chrome MCP). Lead releases the lock immediately after the Chrome MCP summary is written. Reviewer, push, PR creation, and auto-merge do NOT need the env.
+**Env-lock rule:** the env lock (`mcp__mcp-env__env_lock_acquire`) is held only for Track A (Playwright + Chrome MCP). Lead releases the lock immediately after the Chrome MCP summary is written. Reviewer (Track B), push, PR creation, and auto-merge do NOT need the env.
+
+**Parallelization rule:** spawn the reviewer agent at the same moment Lead acquires the env lock for Track A. Both tracks must complete before gates 7+8 run. If reviewer finishes first, Lead checks Track A progress; if Track A finishes first, wait on the reviewer mailbox before proceeding.
 
 ---
 
@@ -161,7 +173,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 |------|------|-------------|
 | 1 | `steps/step-1-gather.md` | Cleanup, fetch stories by label, profile, present batch, init state |
 | 2 | `steps/step-2-implement.md` | Batch branch, worktrees, spawn devs, merge into batch branch |
-| 3 | `steps/step-3-validate.md` | CI (build/ts/lint/unit/integration) → deploy + Playwright → Chrome MCP e2e (operator-facing) → reviewer → test gaps → regression → push |
+| 3 | `steps/step-3-validate.md` | CI (build/ts/lint/unit/integration) → PARALLEL { deploy + Playwright + Chrome MCP \| reviewer agent } → test gaps → regression → push |
 | 4 | `steps/step-4-ship.md` | Single PR, auto-merge, Linear "Done", cleanup, summary, wiki sync (4f) |
 
 ---
@@ -173,6 +185,6 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 | Spike | Explore subagent | Step 2c (unknown root cause bugs only) | opus | Per-story |
 | Planner | Plan subagent | Step 2c½ (standard stories needing plan) | opus | Per-story |
 | Dev | `templates/dev-fix.md` | Step 2d (one per story) | opus | Per-story |
-| Reviewer | `devedup-rl:reviewer` subagent | Step 3a (once, on batch branch diff) | sonnet | Once per batch |
+| Reviewer | `devedup-rl:reviewer` subagent | Step 3 (parallel with Track A) | sonnet | Once per batch |
 
 5 agent types total: Lead + Spike (conditional) + Planner (conditional) + Dev + Reviewer.
