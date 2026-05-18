@@ -324,6 +324,29 @@ export function NominatingComposite(
   const heroHidden =
     scrollDir === 'down' && isStuck && commonGroundMode !== 'search';
 
+  // ROK-1297 round 5o: when the operator opens search while scrolled deep
+  // into Common Ground, the sticky hero grows by ~200px to fit the filter
+  // bar. Without scrolling the page itself, the tile they were looking at
+  // ends up BEHIND the expanded sticky. Re-anchor: scroll the Common
+  // Ground section just BELOW the expanded sticky so the first matching
+  // tile lands directly under the filters.
+  const stickyHeaderRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (commonGroundMode !== 'search') return;
+    // requestAnimationFrame lets the filter bar finish rendering so
+    // getBoundingClientRect captures the EXPANDED sticky height.
+    requestAnimationFrame(() => {
+      const cg = document.querySelector('[data-testid="common-ground-hero"]');
+      const sticky = stickyHeaderRef.current;
+      if (!cg || !sticky) return;
+      const stickyBottom = sticky.getBoundingClientRect().bottom;
+      const cgTop = cg.getBoundingClientRect().top;
+      const delta = cgTop - stickyBottom - 8; // 8px breathing room
+      if (Math.abs(delta) < 4) return;
+      window.scrollBy({ top: delta, behavior: 'smooth' });
+    });
+  }, [commonGroundMode]);
+
   const myNominatedCount = useMemo(() => {
     if (viewerId == null) return 0;
     return lineup.entries.filter((e) => e.nominatedBy.id === viewerId).length;
@@ -365,6 +388,7 @@ export function NominatingComposite(
           scrolls through Common Ground tiles. Mobile-only action row sits
           inside the sticky wrapper. */}
       <div
+        ref={stickyHeaderRef}
         className={`sticky top-14 z-20 bg-background/95 backdrop-blur-sm rounded-md py-1 will-change-transform md:translate-y-0 ${
           heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
         }`}
