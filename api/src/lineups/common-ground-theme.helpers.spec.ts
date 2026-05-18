@@ -8,10 +8,7 @@
  * "Why-reason templates" table and the brief's `classifyTheme` priority
  * (owned > taste > trending on tie).
  */
-import {
-  classifyTheme,
-  buildWhyReason,
-} from './common-ground-theme.helpers';
+import { classifyTheme, buildWhyReason } from './common-ground-theme.helpers';
 import type {
   CommonGroundGameDto,
   CommonGroundScoreBreakdownDto,
@@ -63,24 +60,32 @@ describe('classifyTheme (ROK-1297)', () => {
 
   it('returns "taste" when tasteScore dominates', () => {
     expect(
-      classifyTheme(breakdown({ socialScore: 5, tasteScore: 30, baseScore: 0 })),
+      classifyTheme(
+        breakdown({ socialScore: 5, tasteScore: 30, baseScore: 0 }),
+      ),
     ).toBe('taste');
   });
 
   it('returns "trending" when baseScore dominates', () => {
     expect(
-      classifyTheme(breakdown({ socialScore: 2, tasteScore: 2, baseScore: 25 })),
+      classifyTheme(
+        breakdown({ socialScore: 2, tasteScore: 2, baseScore: 25 }),
+      ),
     ).toBe('trending');
   });
 
   it('breaks ties in priority order: owned > taste > trending', () => {
     // socialScore == tasteScore == baseScore → owned wins.
     expect(
-      classifyTheme(breakdown({ socialScore: 10, tasteScore: 10, baseScore: 10 })),
+      classifyTheme(
+        breakdown({ socialScore: 10, tasteScore: 10, baseScore: 10 }),
+      ),
     ).toBe('owned');
     // tasteScore == baseScore (no social) → taste wins.
     expect(
-      classifyTheme(breakdown({ socialScore: 0, tasteScore: 10, baseScore: 10 })),
+      classifyTheme(
+        breakdown({ socialScore: 0, tasteScore: 10, baseScore: 10 }),
+      ),
     ).toBe('taste');
   });
 
@@ -150,11 +155,10 @@ describe('buildWhyReason — taste theme (ROK-1297)', () => {
 
 describe('buildWhyReason — trending theme (ROK-1297)', () => {
   it('renders the wishlist template when wishlistCount > 0 and no sale', () => {
-    const reason = buildWhyReason(
-      game({ wishlistCount: 6 }),
-      'trending',
-      { ownerCount: 0, wishlistCount: 6 },
-    );
+    const reason = buildWhyReason(game({ wishlistCount: 6 }), 'trending', {
+      ownerCount: 0,
+      wishlistCount: 6,
+    });
     expect(reason).toBe('Wishlisted by 6 · launches soon');
   });
 
