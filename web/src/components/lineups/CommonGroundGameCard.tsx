@@ -19,6 +19,13 @@ interface Props {
     /** ROK-931: mark this card as LLM-suggested with a ✨ AI badge + tooltip reasoning. */
     aiSuggested?: boolean;
     aiReasoning?: string;
+    /**
+     * ROK-1297 rework: suppress the hover-to-reveal Nominate overlay. The
+     * Cycle 4 composite wraps the card in its own wrapper that exposes a
+     * permanent + Nominate button below, so the overlay becomes visual
+     * noise. Default false keeps the legacy CommonGroundPanel behavior.
+     */
+    hideOverlay?: boolean;
 }
 
 /** Violet ✨ AI Pick chip rendered on cards blended in from the AI suggester. */
@@ -132,7 +139,7 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
 }
 
 /** Game card for the Common Ground panel. */
-export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, aiSuggested, aiReasoning }: Props): JSX.Element {
+export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, aiSuggested, aiReasoning, hideOverlay }: Props): JSX.Element {
     const borderCls = aiSuggested
         ? 'border-violet-500/50 hover:border-violet-400/80'
         : 'border-edge/50 hover:border-emerald-500/50';
@@ -148,11 +155,13 @@ export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, ai
                     <CardTitle name={game.gameName} />
                     <BadgeRow game={game} />
                 </div>
-                <NominateOverlay
-                    onNominate={() => onNominate(game.gameId)}
-                    isNominating={isNominating}
-                    atCap={atCap}
-                />
+                {!hideOverlay && (
+                    <NominateOverlay
+                        onNominate={() => onNominate(game.gameId)}
+                        isNominating={isNominating}
+                        atCap={atCap}
+                    />
+                )}
             </div>
         </div>
     );

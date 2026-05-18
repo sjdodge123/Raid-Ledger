@@ -4,12 +4,12 @@
  * lineup detail page while a lineup is in the building phase.
  *
  * Wires the U1 JourneyHero, the multi-row Common Ground hero (which
- * owns its own inline `Search any game` mode — see CommonGroundHero),
- * the NominatingTabs filter strip, and the existing nominations grid
- * (filtered by tab). Nominations autosave; per the operator browser-
- * test (Linear 2026-05-18 comment 52025e97) the U4 SubmitBar is
- * intentionally NOT mounted here — there is no "submit" verb on this
- * page.
+ * owns its own inline `Search` mode — see CommonGroundHero), and the
+ * existing nominations grid. Nominations autosave; per the operator
+ * browser-test (Linear 2026-05-18 comment 52025e97) the U4 SubmitBar
+ * is intentionally NOT mounted here — there is no "submit" verb on
+ * this page. Tabs were removed in the second rework cycle (operator
+ * preferred a single nominations list).
  */
 import { useMemo, useState, type JSX } from 'react';
 import type {
@@ -20,7 +20,6 @@ import { JourneyHero } from '../../shared/journey-hero';
 import { useNominateGame, useRemoveNomination } from '../../../hooks/use-lineups';
 import { useAuth } from '../../../hooks/use-auth';
 import { CommonGroundHero } from './CommonGroundHero';
-import { NominatingTabs, type NominatingTab } from './NominatingTabs';
 import { NominationCard } from '../NominationCard';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 
@@ -58,20 +57,6 @@ function deriveJourneyState(
     sub: `${lineup.entries.length} of ${totalVoters || '?'} nominated by ${totalVoters} voters.`,
     tone: 'action',
   };
-}
-
-function filterAndSortEntries(
-  entries: readonly LineupEntryResponseDto[],
-  tab: NominatingTab,
-  viewerId: number | null,
-): LineupEntryResponseDto[] {
-  if (tab === 'yours' && viewerId != null) {
-    return entries.filter((e) => e.nominatedBy.id === viewerId);
-  }
-  if (tab === 'trending') {
-    return [...entries].sort((a, b) => b.wishlistCount - a.wishlistCount);
-  }
-  return [...entries];
 }
 
 function ExistingNominations({
@@ -121,7 +106,6 @@ export function NominatingComposite(
   const { lineup, canParticipate } = props;
   const { user } = useAuth();
   const viewerId = user?.id ?? null;
-  const [activeTab, setActiveTab] = useState<NominatingTab>('all');
   const [drawerGameId, setDrawerGameId] = useState<number | null>(null);
   const nominate = useNominateGame();
 
@@ -130,16 +114,7 @@ export function NominatingComposite(
     return lineup.entries.filter((e) => e.nominatedBy.id === viewerId).length;
   }, [lineup.entries, viewerId]);
 
-  const filteredEntries = useMemo(
-    () => filterAndSortEntries(lineup.entries, activeTab, viewerId),
-    [lineup.entries, activeTab, viewerId],
-  );
-
   const journey = deriveJourneyState(lineup, myNominatedCount);
-  const tabCounts = {
-    all: lineup.entries.length,
-    yours: myNominatedCount,
-  };
 
   const handleTileNominate = (gameId: number): void => {
     if (!canParticipate) return;
@@ -163,11 +138,6 @@ export function NominatingComposite(
         task={journey.task}
         sub={journey.sub}
       />
-      <NominatingTabs
-        activeTab={activeTab}
-        onChange={setActiveTab}
-        counts={tabCounts}
-      />
       <CommonGroundHero
         lineupId={lineup.id}
         canParticipate={canParticipate}
@@ -175,7 +145,7 @@ export function NominatingComposite(
         onTileOpenDrawer={handleTileOpenDrawer}
       />
       <ExistingNominations
-        entries={filteredEntries}
+        entries={[...lineup.entries]}
         lineupId={lineup.id}
       />
       {drawerGameId != null && (

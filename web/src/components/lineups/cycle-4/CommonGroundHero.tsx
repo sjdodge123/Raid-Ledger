@@ -16,11 +16,13 @@
  * mutation state.
  */
 import { useMemo, useState, type JSX } from 'react';
-import type { CommonGroundGameDto } from '@raid-ledger/contract';
-import { useCommonGround } from '../../../hooks/use-lineups';
+import type {
+  AiSuggestionDto,
+  CommonGroundGameDto,
+} from '@raid-ledger/contract';
+import { useCommonGroundState } from '../use-common-ground-state';
 import { CommonGroundThemedRow, CommonGroundTileWrapper } from './CommonGroundThemedRow';
 import { SearchAnyGameView } from './SearchAnyGameView';
-import { WhyTheseModal } from './WhyTheseModal';
 
 export interface CommonGroundHeroProps {
   lineupId: number;
@@ -48,13 +50,14 @@ function bucketByTheme(tiles: CommonGroundGameDto[]): ThemedBuckets {
 }
 
 function HeroHeader({
+  inSearch,
   onRegenerate,
-  onOpenWhy,
   onOpenSearch,
   isFetching,
 }: {
+  inSearch: boolean;
+  /** In suggestions mode: refetch tiles. In search mode: exit back to suggestions. */
   onRegenerate: () => void;
-  onOpenWhy: () => void;
   onOpenSearch: () => void;
   isFetching: boolean;
 }): JSX.Element {
@@ -66,24 +69,32 @@ function HeroHeader({
         ✨ Common Ground
       </h2>
       <div className="flex items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          onClick={onOpenSearch}
-          aria-label="Search any game in the library"
-          data-testid="nominate-search-any"
-          className={btnCls}
-        >
-          🔍 Search any game
-        </button>
+        {!inSearch && (
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            aria-label="Search the game library"
+            data-testid="nominate-search-any"
+            className={btnCls}
+          >
+            🔍 Search
+          </button>
+        )}
         <button
           type="button"
           onClick={onRegenerate}
-          disabled={isFetching}
-          aria-label="Regenerate Common Ground suggestions"
-          aria-busy={isFetching}
+          disabled={isFetching && !inSearch}
+          aria-label={
+            inSearch
+              ? 'Back to Common Ground suggestions'
+              : 'Regenerate Common Ground suggestions'
+          }
+          aria-busy={isFetching && !inSearch}
           className={`${btnCls} disabled:opacity-60 disabled:cursor-not-allowed`}
         >
-          {isFetching ? (
+          {inSearch ? (
+            <>← Back</>
+          ) : isFetching ? (
             <>
               <span
                 aria-hidden="true"
@@ -94,14 +105,6 @@ function HeroHeader({
           ) : (
             <>↻ Regenerate</>
           )}
-        </button>
-        <button
-          type="button"
-          onClick={onOpenWhy}
-          aria-label="Why these suggestions?"
-          className={btnCls}
-        >
-          Why these?
         </button>
       </div>
     </div>
@@ -115,6 +118,7 @@ function LegacyFallbackRow({
   nominatingId,
   onTileNominate,
   onTileOpenDrawer,
+  aiSuggestionsByGameId,
 }: {
   tiles: CommonGroundGameDto[];
   canParticipate: boolean;
@@ -122,6 +126,7 @@ function LegacyFallbackRow({
   nominatingId: number | null;
   onTileNominate: (gameId: number) => void;
   onTileOpenDrawer: (gameId: number) => void;
+  aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
 }): JSX.Element {
   return (
     <div
@@ -129,17 +134,22 @@ function LegacyFallbackRow({
       className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide"
       style={{ scrollbarWidth: 'none' }}
     >
-      {tiles.map((tile) => (
-        <CommonGroundTileWrapper
-          key={tile.gameId}
-          tile={tile}
-          disabled={!canParticipate}
-          atCap={atCap}
-          isNominating={nominatingId === tile.gameId}
-          onNominate={onTileNominate}
-          onOpenDrawer={onTileOpenDrawer}
-        />
-      ))}
+      {tiles.map((tile) => {
+        const ai = aiSuggestionsByGameId.get(tile.gameId);
+        return (
+          <CommonGroundTileWrapper
+            key={tile.gameId}
+            tile={tile}
+            disabled={!canParticipate}
+            atCap={atCap}
+            isNominating={nominatingId === tile.gameId}
+            onNominate={onTileNominate}
+            onOpenDrawer={onTileOpenDrawer}
+            aiSuggested={!!ai}
+            aiReasoning={ai?.reasoning}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -156,6 +166,7 @@ function ThemedLayout({
   nominatingId,
   onTileNominate,
   onTileOpenDrawer,
+  aiSuggestionsByGameId,
 }: {
   buckets: ThemedBuckets;
   canParticipate: boolean;
@@ -163,6 +174,7 @@ function ThemedLayout({
   nominatingId: number | null;
   onTileNominate: (gameId: number) => void;
   onTileOpenDrawer: (gameId: number) => void;
+  aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
 }): JSX.Element {
   return (
     <div className="space-y-6">
@@ -176,6 +188,7 @@ function ThemedLayout({
           nominatingId={nominatingId}
           onTileNominate={onTileNominate}
           onTileOpenDrawer={onTileOpenDrawer}
+          aiSuggestionsByGameId={aiSuggestionsByGameId}
         />
       ))}
     </div>
@@ -184,20 +197,36 @@ function ThemedLayout({
 
 export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
   const { lineupId, canParticipate, onTileNominate, onTileOpenDrawer } = props;
-  const { data, isLoading, isFetching, refetch } = useCommonGround(
-    { minOwners: 0, lineupId },
-    true,
-  );
-  const [whyOpen, setWhyOpen] = useState(false);
+  // useCommonGroundState merges AI suggestions in for free, gives us
+  // aiSuggestionsByGameId for the ✨ AI Pick badge, and tracks atCap.
+  const {
+    mergedData,
+    isLoading,
+    refetch,
+    aiSuggestionsByGameId,
+    atCap,
+  } = useCommonGroundState(lineupId, canParticipate);
+  const [isFetching, setIsFetching] = useState(false);
   const [mode, setMode] = useState<'suggestions' | 'search'>('suggestions');
 
-  const tiles = useMemo(() => data?.data ?? [], [data]);
+  const tiles = useMemo(() => mergedData?.data ?? [], [mergedData]);
   const buckets = useMemo(() => bucketByTheme(tiles), [tiles]);
   const themedCount =
     buckets.owned.length + buckets.taste.length + buckets.trending.length;
   const useThemedLayout = themedCount > 0;
-  const atCap =
-    (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
+
+  const handleRegenerate = (): void => {
+    if (mode === 'search') {
+      setMode('suggestions');
+      return;
+    }
+    setIsFetching(true);
+    refetch();
+    // Spinner clears on next render — refetch() reuses cached data unless
+    // the underlying server returns fresh signals. The spinner here is an
+    // affordance, not a guarantee of new content.
+    window.setTimeout(() => setIsFetching(false), 500);
+  };
 
   return (
     <section
@@ -205,8 +234,8 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
       className="border border-edge rounded-lg bg-panel/30 p-3 mt-3"
     >
       <HeroHeader
-        onRegenerate={() => void refetch()}
-        onOpenWhy={() => setWhyOpen(true)}
+        inSearch={mode === 'search'}
+        onRegenerate={handleRegenerate}
         onOpenSearch={() => setMode('search')}
         isFetching={isFetching}
       />
@@ -228,12 +257,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
           atCap={atCap}
           onTileNominate={onTileNominate}
           onTileOpenDrawer={onTileOpenDrawer}
-        />
-      )}
-      {whyOpen && (
-        <WhyTheseModal
-          weights={data?.meta.appliedWeights}
-          onClose={() => setWhyOpen(false)}
+          aiSuggestionsByGameId={aiSuggestionsByGameId}
         />
       )}
     </section>
@@ -249,6 +273,7 @@ interface SuggestionsBodyProps {
   atCap: boolean;
   onTileNominate: (gameId: number) => void;
   onTileOpenDrawer: (gameId: number) => void;
+  aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
 }
 
 function SuggestionsBody(props: SuggestionsBodyProps): JSX.Element {
@@ -261,6 +286,7 @@ function SuggestionsBody(props: SuggestionsBodyProps): JSX.Element {
     atCap,
     onTileNominate,
     onTileOpenDrawer,
+    aiSuggestionsByGameId,
   } = props;
   if (isLoading) {
     return <div className="text-[11px] text-muted">Loading suggestions…</div>;
@@ -281,6 +307,7 @@ function SuggestionsBody(props: SuggestionsBodyProps): JSX.Element {
         nominatingId={null}
         onTileNominate={onTileNominate}
         onTileOpenDrawer={onTileOpenDrawer}
+        aiSuggestionsByGameId={aiSuggestionsByGameId}
       />
     );
   }
@@ -292,6 +319,7 @@ function SuggestionsBody(props: SuggestionsBodyProps): JSX.Element {
       nominatingId={null}
       onTileNominate={onTileNominate}
       onTileOpenDrawer={onTileOpenDrawer}
+      aiSuggestionsByGameId={aiSuggestionsByGameId}
     />
   );
 }

@@ -174,32 +174,35 @@ test.describe('Nominating composite — drawer interactions (ROK-1297)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC-Nominate — Per-tile Nominate increments Yours count
+// AC-Nominate — Per-tile Nominate adds a card to the Nominated Games list
+// (Operator rework 2026-05-18: tabs removed; the existing-nominations list
+// now shows every nomination, so the test asserts that count increments.)
 // ---------------------------------------------------------------------------
 
-test.describe('Nominating composite — nominate increments tab count (ROK-1297)', () => {
-    test('clicking + Nominate increments the Yours tab count', async ({
+test.describe('Nominating composite — nominate adds to existing list (ROK-1297)', () => {
+    test('clicking + Nominate increments the Nominated Games count', async ({
         page,
     }) => {
         await gotoNominating(page);
 
-        const tabs = page.getByTestId('nominating-tabs');
-        await expect(tabs).toBeVisible({ timeout: 10_000 });
-
-        const yoursTabBefore = tabs.getByRole('tab', { name: /yours/i });
-        const beforeText = await yoursTabBefore.textContent();
-        const beforeMatch = /(\d+)/.exec(beforeText ?? '');
-        const before = beforeMatch ? Number(beforeMatch[1]) : 0;
+        const list = page.getByTestId('nominations-list');
+        const empty = page.getByTestId('nominations-empty');
+        // The list may be empty or populated at start (shared fixture).
+        // Count "<N> shown" if list rendered, else 0.
+        const before = await (async () => {
+            if (await empty.isVisible().catch(() => false)) return 0;
+            const t = await list.textContent();
+            const m = /(\d+) shown/.exec(t ?? '');
+            return m ? Number(m[1]) : 0;
+        })();
 
         const firstTile = page.getByTestId('common-ground-tile').first();
         await firstTile.getByTestId('common-ground-tile-nominate').click();
 
         await expect
             .poll(async () => {
-                const t = await tabs
-                    .getByRole('tab', { name: /yours/i })
-                    .textContent();
-                const m = /(\d+)/.exec(t ?? '');
+                const t = await list.textContent();
+                const m = /(\d+) shown/.exec(t ?? '');
                 return m ? Number(m[1]) : -1;
             }, { timeout: 10_000 })
             .toBe(before + 1);

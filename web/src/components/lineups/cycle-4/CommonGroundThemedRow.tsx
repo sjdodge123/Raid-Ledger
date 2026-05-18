@@ -11,6 +11,7 @@
  */
 import { type JSX } from 'react';
 import type {
+  AiSuggestionDto,
   CommonGroundGameDto,
   CommonGroundTheme,
 } from '@raid-ledger/contract';
@@ -24,6 +25,7 @@ export interface CommonGroundThemedRowProps {
   nominatingId: number | null;
   onTileNominate: (gameId: number) => void;
   onTileOpenDrawer: (gameId: number) => void;
+  aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
 }
 
 const THEME_LABELS: Record<CommonGroundTheme, { title: string; aria: string }> =
@@ -53,6 +55,7 @@ export function CommonGroundThemedRow(
     nominatingId,
     onTileNominate,
     onTileOpenDrawer,
+    aiSuggestionsByGameId,
   } = props;
   const meta = THEME_LABELS[theme];
   return (
@@ -71,17 +74,22 @@ export function CommonGroundThemedRow(
         </p>
       ) : (
         <div className="flex flex-wrap gap-3 pb-2">
-          {tiles.map((tile) => (
-            <CommonGroundTileWrapper
-              key={tile.gameId}
-              tile={tile}
-              disabled={!canParticipate}
-              atCap={atCap}
-              isNominating={nominatingId === tile.gameId}
-              onNominate={onTileNominate}
-              onOpenDrawer={onTileOpenDrawer}
-            />
-          ))}
+          {tiles.map((tile) => {
+            const ai = aiSuggestionsByGameId.get(tile.gameId);
+            return (
+              <CommonGroundTileWrapper
+                key={tile.gameId}
+                tile={tile}
+                disabled={!canParticipate}
+                atCap={atCap}
+                isNominating={nominatingId === tile.gameId}
+                onNominate={onTileNominate}
+                onOpenDrawer={onTileOpenDrawer}
+                aiSuggested={!!ai}
+                aiReasoning={ai?.reasoning}
+              />
+            );
+          })}
         </div>
       )}
     </section>
@@ -95,11 +103,21 @@ interface TileWrapperProps {
   isNominating: boolean;
   onNominate: (gameId: number) => void;
   onOpenDrawer: (gameId: number) => void;
+  aiSuggested?: boolean;
+  aiReasoning?: string;
 }
 
 export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
-  const { tile, disabled, atCap, isNominating, onNominate, onOpenDrawer } =
-    props;
+  const {
+    tile,
+    disabled,
+    atCap,
+    isNominating,
+    onNominate,
+    onOpenDrawer,
+    aiSuggested,
+    aiReasoning,
+  } = props;
   return (
     <div
       data-testid="common-ground-tile"
@@ -126,6 +144,9 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
           }}
           isNominating={isNominating}
           atCap={atCap || disabled}
+          aiSuggested={aiSuggested}
+          aiReasoning={aiReasoning}
+          hideOverlay
         />
       </div>
       {tile.whyReason && (

@@ -44,6 +44,23 @@ function detailToTile(g: GameDetailDto): CommonGroundGameDto {
   };
 }
 
+/**
+ * Collapse DLC / edition variants returned by `/games/search` to the
+ * single canonical row per "base game." ITAD surfaces every DLC bundle as
+ * its own entry (e.g. `TMNT: Splintered Fate - Gold Edition`,
+ * `... and Alopex Character`, etc.), which the operator flagged as
+ * duplicates. We dedupe by everything before the first ` - ` / ` and `,
+ * keeping the first hit (search is already sorted by relevance / rating).
+ */
+function dedupeByBaseName(rows: GameDetailDto[]): GameDetailDto[] {
+  const seen = new Map<string, GameDetailDto>();
+  for (const g of rows) {
+    const base = g.name.split(/ - | and /i)[0].trim().toLowerCase();
+    if (!seen.has(base)) seen.set(base, g);
+  }
+  return [...seen.values()];
+}
+
 export function SearchAnyGameView(props: SearchAnyGameViewProps): JSX.Element {
   const { canParticipate, atCap, onTileNominate, onTileOpenDrawer, onExit } =
     props;
@@ -51,7 +68,7 @@ export function SearchAnyGameView(props: SearchAnyGameViewProps): JSX.Element {
   const { data, isFetching } = useGameSearch(query, query.length >= 2);
 
   const tiles = useMemo(
-    () => (data?.data ?? []).map(detailToTile),
+    () => dedupeByBaseName(data?.data ?? []).map(detailToTile),
     [data],
   );
 
