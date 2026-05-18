@@ -141,38 +141,21 @@ function HeroHeader({
             <span>Search</span>
           </button>
         )}
-        <button
-          type="button"
-          onClick={onRegenerate}
-          disabled={isFetching && !inSearch}
-          aria-label={
-            inSearch
-              ? 'Back to Common Ground suggestions'
-              : 'Regenerate Common Ground suggestions'
-          }
-          aria-busy={isFetching && !inSearch}
-          className={btnCls}
-        >
-          {inSearch ? (
-            <>
-              <BackIcon />
-              <span>Back</span>
-            </>
-          ) : isFetching ? (
-            <>
-              <span
-                aria-hidden="true"
-                className="inline-block w-3.5 h-3.5 border-2 border-emerald-200 border-t-transparent rounded-full animate-spin"
-              />
-              <span>Regenerating…</span>
-            </>
-          ) : (
-            <>
-              <RegenerateIcon />
-              <span>Regenerate</span>
-            </>
-          )}
-        </button>
+        {/* ROK-1297 round 5i: Regenerate dropped — Common Ground now
+            renders all tiles per theme (no cap), so there's nothing to
+            "regenerate" against. The button is preserved ONLY as a Back
+            affordance while in search mode. */}
+        {inSearch && (
+          <button
+            type="button"
+            onClick={onRegenerate}
+            aria-label="Back to Common Ground suggestions"
+            className={btnCls}
+          >
+            <BackIcon />
+            <span>Back</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -275,10 +258,10 @@ function LegacyFallbackRow({
   );
 }
 
-/** Operator-set ceiling per theme (B, 2026-05-18) — prevents a runaway
- *  response from rendering hundreds of tiles. The API caps the response
- *  set today; this is a UI-side belt-and-braces. */
-const PER_THEME_CEILING = 24;
+/** ROK-1297 round 5i: cap removed. Common Ground now renders every tile
+ *  the server returns so the user scrolls through the full catalogue
+ *  instead of tapping a Regenerate button. The API still bounds the
+ *  response size server-side. */
 
 function ThemedLayout({
   buckets,
@@ -303,7 +286,7 @@ function ThemedLayout({
         <CommonGroundThemedRow
           key={theme}
           theme={theme}
-          tiles={buckets[theme].slice(0, PER_THEME_CEILING)}
+          tiles={buckets[theme]}
           atCap={atCap}
           canParticipate={canParticipate}
           nominatingId={nominatingId}

@@ -21,6 +21,7 @@ import { useNominateGame, useRemoveNomination } from '../../../hooks/use-lineups
 import { useAuth } from '../../../hooks/use-auth';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import { CommonGroundHero, type CommonGroundMode } from './CommonGroundHero';
+import { MyNominationsDrawer } from './MyNominationsDrawer';
 import { NominationCard } from '../NominationCard';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 
@@ -267,15 +268,11 @@ export function NominatingComposite(
   // ROK-1297 round-5d: monotonic counter the sticky-hero Regenerate
   // button bumps to fire the same flow CommonGroundHero runs from its
   // own in-panel button (refetch + shuffle nonce).
-  const [regenerateTrigger, setRegenerateTrigger] = useState(0);
+  // ROK-1297 round 5h: replace the smooth-scroll-to-section flow with a
+  // proper drawer so the user can review/remove their nominations
+  // without leaving the Common Ground context.
+  const [nominationsDrawerOpen, setNominationsDrawerOpen] = useState(false);
   const nominate = useNominateGame();
-
-  const jumpToNominations = (): void => {
-    const target = document.querySelector(
-      '[data-testid="nominations-list"]',
-    );
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
   // ROK-1297 round-4b: sync the sticky JourneyHero with the global Header's
   // mobile auto-hide. On mobile, scrolling down past 100px hides the
   // header (`-translate-y-full`); we slide the hero away by the same
@@ -367,14 +364,10 @@ export function NominatingComposite(
               disabled={false}
             />
           )}
-          <StickyHeroRegenerateButton
-            onClick={() => setRegenerateTrigger((c) => c + 1)}
-            disabled={commonGroundMode === 'search'}
-          />
           {lineup.entries.length > 0 && (
             <StickyHeroJumpButton
               count={lineup.entries.length}
-              onClick={jumpToNominations}
+              onClick={() => setNominationsDrawerOpen(true)}
             />
           )}
         </div>
@@ -386,12 +379,15 @@ export function NominatingComposite(
         onTileOpenDrawer={handleTileOpenDrawer}
         mode={commonGroundMode}
         onModeChange={setCommonGroundMode}
-        externalRegenerateTrigger={regenerateTrigger}
       />
-      <ExistingNominations
-        entries={[...lineup.entries]}
-        lineupId={lineup.id}
-      />
+      {/* Nominations section is mobile-hidden — the StickyHeroJumpButton
+          opens MyNominationsDrawer there. Desktop keeps the inline list. */}
+      <div className="hidden md:block">
+        <ExistingNominations
+          entries={[...lineup.entries]}
+          lineupId={lineup.id}
+        />
+      </div>
       {drawerGameId != null && (
         <GameResearchDrawer
           isOpen={true}
@@ -399,6 +395,12 @@ export function NominatingComposite(
           onClose={() => setDrawerGameId(null)}
         />
       )}
+      <MyNominationsDrawer
+        isOpen={nominationsDrawerOpen}
+        onClose={() => setNominationsDrawerOpen(false)}
+        entries={lineup.entries}
+        lineupId={lineup.id}
+      />
     </section>
   );
 }
