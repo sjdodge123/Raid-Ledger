@@ -373,9 +373,11 @@ test.describe('Bracket tiebreaker flow', () => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // Bracket auto-resolved → lineup transitioned to decided → podium visible
-        const podiumOrBracket = page.locator('[data-testid="bracket-view"], h2:has-text("PODIUM")');
-        await expect(podiumOrBracket.first()).toBeVisible({ timeout: 15_000 });
+        // Bracket auto-resolved → lineup transitioned to decided → composite renders
+        const decidedOrBracket = page.locator(
+            '[data-testid="bracket-view"], [data-testid="decided-composite-view"]',
+        );
+        await expect(decidedOrBracket.first()).toBeVisible({ timeout: 15_000 });
     });
 });
 
@@ -456,13 +458,10 @@ test.describe('Veto tiebreaker flow', () => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // After force-resolve, lineup transitions to decided → podium shows winner
-        const podium = page.getByText(/podium/i);
-        await expect(podium).toBeVisible({ timeout: 15_000 });
-
-        // The decided view should show a champion
-        const champion = page.getByText('Champion');
-        await expect(champion).toBeVisible({ timeout: 5_000 });
+        // After force-resolve, lineup transitions to decided → composite renders
+        await expect(
+            page.locator('[data-testid="decided-composite-view"]'),
+        ).toBeVisible({ timeout: 15_000 });
     });
 });
 
@@ -497,8 +496,10 @@ test.describe('Dismiss tiebreaker', () => {
         await page.reload();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // The decided view should render (podium section)
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({ timeout: 15_000 });
+        // The decided view should render (composite layout)
+        await expect(
+            page.locator('[data-testid="decided-composite-view"]'),
+        ).toBeVisible({ timeout: 15_000 });
 
         // The tiebreaker UI should no longer be visible
         await expect(page.locator('[data-testid="bracket-view"]')).not.toBeVisible();
@@ -555,7 +556,9 @@ test.describe('Dismiss tiebreaker', () => {
 
         // Modal closes and the page re-renders into the decided view.
         await expect(modal).not.toBeVisible({ timeout: 10_000 });
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({ timeout: 15_000 });
+        await expect(
+            page.locator('[data-testid="decided-composite-view"]'),
+        ).toBeVisible({ timeout: 15_000 });
     });
 });
 
