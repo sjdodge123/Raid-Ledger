@@ -54,6 +54,63 @@ x-runner-base: &runner-base
   # node_modules + caches live in named volumes (do NOT sync via Mutagen).
 
 services:
+  # Path-filtered Docker API proxy (wollomatic/socket-proxy).
+  #
+  # Replaces tecnativa/docker-socket-proxy whose POST flag was all-or-nothing
+  # and couldn't filter by container name. wollomatic supports regex on URL
+  # path, so the allowlist restricts destructive ops to env containers
+  # (rl-env-{slug}-{pg,allinone}) and runner containers (rl-runner-1..4) ONLY.
+  # Infra container names (rl-traefik, rl-grafana, rl-loki, rl-promtail,
+  # rl-registry, rl-gc-sweeper, rl-docker-proxy) cannot be stopped/killed/rm'd
+  # through this proxy.
+  #
+  # Operator (rl) bypasses the proxy by using the raw socket directly
+  # (DOCKER_HOST unset). The orchestrator scripts auto-detect the proxy when
+  # available (see _state.sh).
+  docker-socket-proxy:
+    image: wollomatic/socket-proxy:1
+    container_name: rl-docker-proxy
+    restart: unless-stopped
+    networks: [rl-net]
+    # Wollomatic runs as non-root (UID 65532). Match GID to the host's
+    # docker group so the proxy can read /var/run/docker.sock without root.
+    # Host docker GID is 1001 (verified on rl-infra VM 2026-05-18).
+    user: "65532:1001"
+    ports:
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # wollomatic regex flags. Single regex per method, pipe-separated
+    # alternatives. The boundary lives entirely in these regexes — broaden
+    # them and you weaken the hardening. Patterns accept an optional
+    # `/v[0-9.]+/` API version prefix.
+    #
+    # SAFE container names: rl-env-{slug}-{pg,allinone}, rl-runner-1..4.
+    # PROTECTED (NOT in allowlist — stop/kill/rm blocked): rl-traefik,
+    # rl-grafana, rl-loki, rl-promtail, rl-registry, rl-gc-sweeper,
+    # rl-docker-proxy.
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=0.0.0.0/0
+      - -loglevel=INFO
+      - -allowHEAD=^.*$
+      - >-
+        -allowGET=^(/v[0-9.]+)?/(_ping|version|info|events)$|^(/v[0-9.]+)?/containers/json(\?.*)?$|^(/v[0-9.]+)?/containers/[A-Za-z0-9_.-]+/(json|stats|logs|top|changes)(\?.*)?$|^(/v[0-9.]+)?/networks(/[A-Za-z0-9_.-]*)?(\?.*)?$|^(/v[0-9.]+)?/volumes(/[A-Za-z0-9_.-]*)?(\?.*)?$|^(/v[0-9.]+)?/images/json(\?.*)?$|^(/v[0-9.]+)?/images/[A-Za-z0-9_.@:/-]+/json(\?.*)?$|^(/v[0-9.]+)?/exec/[A-Za-z0-9_.-]+/json$
+      # POST allowlist. SAFE ops (start/wait/attach/resize) are allowed
+      # on ANY container — the Docker CLI uses container IDs (hex) after
+      # create, so name-based filtering breaks `docker run -d`. These ops
+      # are non-destructive: starting a running container is a no-op,
+      # waiting blocks until exit, attach/resize need a terminal.
+      # DESTRUCTIVE ops (stop/restart/kill/exec) stay name-filtered to
+      # rl-env-* / rl-runner-N so infra containers can't be brought down
+      # even by an attacker who first lists their IDs via docker ps.
+      - >-
+        -allowPOST=^(/v[0-9.]+)?/images/create(\?.*)?$|^(/v[0-9.]+)?/containers/create(\?.*)?$|^(/v[0-9.]+)?/networks/create$|^(/v[0-9.]+)?/volumes/create$|^(/v[0-9.]+)?/containers/[A-Za-z0-9_.-]+/(start|wait|attach|resize)(\?.*)?$|^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])/(stop|restart|kill|exec)(\?.*)?$|^(/v[0-9.]+)?/exec/[A-Za-z0-9]+/(start|resize)(\?.*)?$
+      - >-
+        -allowDELETE=^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])(\?.*)?$|^(/v[0-9.]+)?/volumes/rl-data-[A-Za-z0-9_.-]+$|^(/v[0-9.]+)?/networks/[A-Za-z0-9_.-]+$
+    labels:
+      rl.role: infra
+
   traefik:
     # File-provider only (no Docker provider) — Traefik v3.x's Docker client
     # is pinned to API 1.24, which Docker 25+ refuses. Routes come from

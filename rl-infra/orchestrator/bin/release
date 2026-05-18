@@ -37,9 +37,13 @@ for slug in $ENV_SLUGS; do
     "$(dirname "$0")/env-destroy" --slug "$slug" --force >/dev/null || true
 done
 
-# Scoped prune: remove containers/images tagged with this slot.
-docker container prune -f --filter "label=rl.slot=$SLOT" >/dev/null || true
-docker image prune -f --filter "label=rl.slot=$SLOT" >/dev/null || true
+# Scoped prune: belt-and-suspenders for any container/image tagged with
+# this slot that env-destroy didn't catch. Both stdout AND stderr suppressed
+# because the socket-proxy blocks prune endpoints entirely (intended) and
+# the "Forbidden" noise is misleading — env-destroy already does the real
+# work via targeted docker rm.
+docker container prune -f --filter "label=rl.slot=$SLOT" >/dev/null 2>&1 || true
+docker image prune -f --filter "label=rl.slot=$SLOT" >/dev/null 2>&1 || true
 
 # Drop the claim record.
 state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \

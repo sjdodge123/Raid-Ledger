@@ -11,6 +11,17 @@
 
 set -euo pipefail
 
+# Route Docker calls through the socket-proxy by default. The operator can
+# override with RL_USE_DOCKER_SOCKET=1 to bypass and hit /var/run/docker.sock
+# directly (useful for ops like `docker compose down` that the proxy blocks).
+# When the proxy is unreachable (e.g. on first stack bring-up), this falls
+# back transparently.
+if [[ -z "${DOCKER_HOST:-}" && "${RL_USE_DOCKER_SOCKET:-0}" != "1" ]]; then
+    if curl -fsS --max-time 1 http://127.0.0.1:2375/_ping >/dev/null 2>&1; then
+        export DOCKER_HOST=tcp://127.0.0.1:2375
+    fi
+fi
+
 RL_STATE_DIR="${RL_STATE_DIR:-/srv/rl-infra/state}"
 RL_CLAIMS_FILE="${RL_STATE_DIR}/claims.json"
 RL_ENVS_FILE="${RL_STATE_DIR}/env-registry.json"
@@ -38,6 +49,13 @@ state::init() {
 
 # Atomic transform: state::mutate <file> <jq-filter>
 # Acquires flock, applies the filter, writes back atomically.
+#
+# Tmpfile lives in the SAME directory as the target file so:
+#   1. mv across directories isn't needed (atomic rename works only same-fs).
+#   2. The setgid bit on the state dir (chmod 2775) makes the new file
+#      inherit the rl-fleet group, so both rl and rl-agent can write.
+# After the mv, force mode 664 — mktemp creates with 600 which would lock
+# out the other fleet user on the next call.
 state::mutate() {
     local file="$1"
     shift
@@ -46,9 +64,10 @@ state::mutate() {
     (
         flock -x 200
         local tmp
-        tmp=$(mktemp)
+        tmp=$(mktemp "${file}.XXXXXX")
         jq "$@" "$file" > "$tmp"
         mv "$tmp" "$file"
+        chmod 664 "$file" 2>/dev/null || true
     ) 200>"$RL_LOCK_DIR/$lockname"
 }
 

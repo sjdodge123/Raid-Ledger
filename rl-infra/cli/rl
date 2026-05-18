@@ -13,7 +13,19 @@
 set -euo pipefail
 
 RL_PROXMOX_HOST="${RL_PROXMOX_HOST:-rl-infra.lan}"
-RL_PROXMOX_USER="${RL_PROXMOX_USER:-rl}"
+# User identity:
+#   - Default: rl-agent (no sudo, no docker group, Docker API filtered via
+#     socket-proxy, infra config files read-only). This is what agents use.
+#   - Operator override: export RL_OPERATOR=1 (becomes rl) for ops like
+#     `docker compose up -d`, daemon restarts, editing infra config.
+#   - Explicit override: export RL_PROXMOX_USER=<user> wins over either.
+if [[ -z "${RL_PROXMOX_USER:-}" ]]; then
+    if [[ "${RL_OPERATOR:-0}" == "1" ]]; then
+        RL_PROXMOX_USER=rl
+    else
+        RL_PROXMOX_USER=rl-agent
+    fi
+fi
 RL_TARGET="${RL_TARGET:-auto}"
 
 # Find the repo root from the OPERATOR's cwd (not from this script's location —
