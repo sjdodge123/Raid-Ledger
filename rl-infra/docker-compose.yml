@@ -213,6 +213,11 @@ services:
       RL_PUBLIC_DOMAIN: ${RL_PUBLIC_DOMAIN:-}
     volumes:
       - ./state:/state:ro
+      # Bind-mount public/ so operator edits to app.js/index.html/style.css
+      # land immediately without rebuilding the image. The Dockerfile still
+      # COPY's public/ as a fallback for fresh-deploy scenarios where the
+      # host path may not exist yet.
+      - ./dashboard/public:/app/public:ro
     labels:
       rl.role: infra
 

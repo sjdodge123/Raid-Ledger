@@ -35,10 +35,11 @@ const fmtTime = (iso) => {
   }
 };
 
-// slot-N.rl.lan / slot-N-debug.rl.lan are LAN-only (no external DNS/cert).
-// When the dashboard is accessed externally (mobile 5G hitting
-// fleet.gamernight.net), the web/debug links 502 because the hostnames
-// don't resolve publicly. Hide them externally, same treatment as infra.
+// isLan controls whether the LAN-only infra section (Traefik/Grafana/Registry)
+// is shown. The slot web/debug links below are ALWAYS shown — operators
+// often hit fleet.gamernight.net from a LAN phone where slot-N.rl.lan
+// still resolves via Pi-hole. Off-LAN clicks will fail at DNS resolution
+// (the slot hostnames have no public DNS), which is acceptable feedback.
 const isLan = window.location.hostname.endsWith('.rl.lan');
 
 const renderSlot = (s) => {
@@ -62,12 +63,27 @@ const renderSlot = (s) => {
       el('span', { class: 'val', text: fmtTime(s.last_heartbeat) }),
     ));
   }
-  if (isLan) {
-    const actions = el('div', { class: 'actions' });
+  const actions = el('div', { class: 'actions' });
+  // Server probes the runner's 5173 / 9229 ports on each /api/state call.
+  // When the probe says "listening", render a real link. When down (the
+  // common case — runner is a tmux shell until an agent runs `npm run dev`
+  // or starts a Node process with --inspect), render a disabled span so
+  // tapping doesn't surface a confusing 502 from Traefik.
+  if (s.web_listening) {
     actions.appendChild(el('a', { href: `http://slot-${s.slot}.rl.lan`, target: '_blank', rel: 'noopener', text: 'web' }));
-    actions.appendChild(el('a', { href: `http://slot-${s.slot}-debug.rl.lan`, target: '_blank', rel: 'noopener', text: 'debug' }));
-    card.appendChild(actions);
+  } else {
+    const span = el('span', { class: 'btn-disabled', text: 'web (idle)' });
+    span.title = 'No dev server detected on this slot. Run `npm run dev -w web` inside the runner via `rl shell` to enable.';
+    actions.appendChild(span);
   }
+  if (s.debug_listening) {
+    actions.appendChild(el('a', { href: `http://slot-${s.slot}-debug.rl.lan`, target: '_blank', rel: 'noopener', text: 'debug' }));
+  } else {
+    const span = el('span', { class: 'btn-disabled', text: 'debug (idle)' });
+    span.title = 'No Node inspector detected on this slot (port 9229). Start a Node process with --inspect=0.0.0.0:9229 to enable.';
+    actions.appendChild(span);
+  }
+  card.appendChild(actions);
   return card;
 };
 

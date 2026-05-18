@@ -325,19 +325,34 @@ ensure_mutagen_sync() {
         echo "[rl] mutagen not installed — install from https://mutagen.io/" >&2
         return
     fi
-    # If an existing session points at a DIFFERENT source than $REPO_ROOT
-    # (e.g. operator flipped between worktrees), terminate it so the new
-    # source takes effect. Without this, mutagen sync create errors with
-    # "session already exists" and we silently keep syncing the wrong tree.
-    if mutagen sync list 2>/dev/null | grep -q "Name: $session"; then
+    # CRITICAL: Mutagen lets multiple sessions share the same NAME — only
+    # the identifier is unique. If past claim/release cycles leaked orphans
+    # (e.g. user-prefix change rl@ → rl-agent@, or stop_mutagen_sync didn't
+    # fire), multiple sessions named "rl-slot-N" can race the same source/
+    # dest pair and never converge. Count first; if >1 OR if the single
+    # one's alpha doesn't match REPO_ROOT, terminate ALL (mutagen sync
+    # terminate <name> handles duplicates in one shot) and recreate.
+    local count
+    # `grep -c` exits 1 when zero matches — which with set -e would abort
+    # this function silently right where we MOST want to fall through to
+    # the create branch. `|| echo 0` keeps the pipeline's exit at 0 and
+    # gives count a real value. Verified via bash -x trace 2026-05-18.
+    count=$(mutagen sync list 2>/dev/null | grep -c "^Name: $session$" || echo 0)
+    if (( count == 1 )); then
         local current_alpha
         current_alpha=$(mutagen sync list "$session" 2>/dev/null \
             | awk '/^Alpha:/{flag=1;next} flag && /URL:/{print $2; exit}')
         if [[ -n "$current_alpha" && "$current_alpha" == "$REPO_ROOT" ]]; then
-            # Same source — reuse existing session.
+            # Single session, correct source — reuse.
             return
         fi
         echo "[rl] mutagen session $session points at '$current_alpha', re-creating for '$REPO_ROOT'" >&2
+    elif (( count > 1 )); then
+        echo "[rl] WARNING: $count duplicate Mutagen sessions named $session — terminating all and recreating" >&2
+    fi
+    if (( count > 0 )); then
+        # `mutagen sync terminate <name>` terminates ALL sessions matching the
+        # name in one shot — verified during the bug-fix that motivated this.
         mutagen sync terminate "$session" 2>/dev/null || true
     fi
     mutagen sync create \

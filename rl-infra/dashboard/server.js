@@ -10,6 +10,7 @@
 // Intentionally zero deps. Pure Node http module.
 
 import { createServer } from 'node:http';
+import { createConnection } from 'node:net';
 import { readFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 
@@ -34,15 +35,53 @@ const sendJson = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 
+// TCP probe with short timeout. Used to detect whether the runner is
+// actively serving a dev server on its conventional ports — slots are just
+// shell containers until an agent runs `npm run dev -w web` or starts a
+// Node process with --inspect. Without this probe, the dashboard's web/
+// debug buttons would always render but 502 on click whenever nothing is
+// listening, which is most of the time.
+const probePort = (host, port, timeoutMs = 400) =>
+  new Promise((resolve) => {
+    let done = false;
+    const socket = createConnection({ host, port });
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      try { socket.destroy(); } catch {}
+      resolve(ok);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.once('timeout', () => finish(false));
+  });
+
+const enrichSlotsWithProbes = async (slots) =>
+  Promise.all(
+    slots.map(async (slot) => {
+      // Slot containers are reachable by name on the rl-net Docker network.
+      // Conventional dev ports: 5173 (Vite), 9229 (Node inspector).
+      const host = `rl-runner-${slot.slot}`;
+      const [webUp, debugUp] = await Promise.all([
+        probePort(host, 5173),
+        probePort(host, 9229),
+      ]);
+      return { ...slot, web_listening: webUp, debug_listening: debugUp };
+    }),
+  );
+
 const handleApiState = async (res) => {
   try {
     const [claims, envs] = await Promise.all([
       readFile(join(STATE_DIR, 'claims.json'), 'utf-8'),
       readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8'),
     ]);
+    const slots = JSON.parse(claims);
+    const probedSlots = await enrichSlotsWithProbes(slots);
     sendJson(res, 200, {
       ok: true,
-      slots: JSON.parse(claims),
+      slots: probedSlots,
       envs: JSON.parse(envs),
       public_domain: PUBLIC_DOMAIN || null,
       generated_at: new Date().toISOString(),
