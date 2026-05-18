@@ -94,7 +94,8 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
   }
   log('env_spin', true, t, sp.url || '');
 
-  // 4. Sync app_settings (Discord/Blizzard/ITAD keys + admin creds).
+  // 4. Sync app_settings (Discord/Blizzard/ITAD keys).
+  let syncedSettings = false;
   if (!params.skip_sync) {
     t = now();
     const sy = await envSync.execute({ slug: params.slug, mode: 'settings' });
@@ -103,9 +104,35 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
       // Non-fatal — env is usable, just without operator's keys.
     } else {
       log('sync_settings', true, t);
+      syncedSettings = true;
     }
   } else {
     log('sync_settings', true, t, 'skipped');
+  }
+
+  // 5. If we just synced settings, restart the allinone container so its
+  // SettingsService re-reads + re-caches the new (decryptable) rows.
+  // The boot-time cache otherwise stays empty for 30 min — agents would
+  // see "Discord not configured" even though the rows are in the DB.
+  if (syncedSettings) {
+    t = now();
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execFileAsync = promisify(execFile);
+    const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
+    const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+    try {
+      await execFileAsync(
+        'ssh',
+        ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`,
+         `docker restart rl-env-${params.slug}-allinone && sleep 6`],
+        { timeout: 60_000 },
+      );
+      log('restart_for_settings', true, t);
+    } catch (err) {
+      const e = err as Error & { stderr?: string };
+      log('restart_for_settings', false, t, undefined, e.stderr || e.message);
+    }
   }
 
   return {

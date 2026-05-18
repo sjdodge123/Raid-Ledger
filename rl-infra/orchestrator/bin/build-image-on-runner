@@ -34,10 +34,24 @@ SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
 
 RUNNER="rl-runner-${SLOT}"
 FULL_TAG="registry.rl.lan:5000/rl-allinone:${TAG}"
-BUILD_CMD="cd /workspace && docker build -f Dockerfile.allinone -t '${FULL_TAG}' ."
+
+# We build from a TEMP COPY of /workspace inside the runner, not /workspace
+# itself, because we apply a workaround patch to Dockerfile.allinone (see
+# TECH-DEBT-BACKLOG.md 2026-05-18 — `npm run build -w @raid-ledger/contract`
+# emits only .d.ts, web build fails). Patching the source would round-trip
+# through Mutagen back to operator's worktree. Once the repo-side fix
+# ships, the sed below becomes a no-op (pattern won't match).
+PATCH_SED='s|RUN npm run build -w @raid-ledger/contract|RUN cd packages/contract \&\& rm -rf dist *.tsbuildinfo \&\& npx tsc|'
+BUILD_CMD="set -e; \
+  TMPDIR=\$(mktemp -d /tmp/rl-build-XXXXXX); \
+  cp -a /workspace/. \"\$TMPDIR/\"; \
+  cd \"\$TMPDIR\"; \
+  sed -i '$PATCH_SED' Dockerfile.allinone; \
+  docker build -f Dockerfile.allinone -t '${FULL_TAG}' ."
 if [[ "$PUSH" == "1" ]]; then
     BUILD_CMD="${BUILD_CMD} && docker push '${FULL_TAG}'"
 fi
+BUILD_CMD="${BUILD_CMD}; RC=\$?; rm -rf \"\$TMPDIR\"; exit \$RC"
 
 audit::log build_image started "$(jq -nc --argjson slot "$SLOT" --arg tag "$TAG" '{slot:$slot, tag:$tag}')"
 

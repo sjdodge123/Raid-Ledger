@@ -71,17 +71,18 @@ fi
 case "$MODE" in
     settings)
         # --data-only: keep schema as-is; just refresh row data.
-        # --table flags: only the config-bearing tables.
-        # --inserts: emit INSERT statements (more portable than COPY for cross-version Postgres).
-        # We TRUNCATE first so re-running is idempotent.
+        # ONLY app_settings — local_credentials has a FK to users.id and
+        # would attach the operator's admin password to a non-existent
+        # user in the env's fresh DB (same reason clone-prod-to-local.sh
+        # excludes it). The env's allinone uses DEMO_MODE which prefills
+        # admin login, so testers don't need the operator's creds anyway.
+        # consumed_intent_tokens is short-lived state — no value syncing.
         DUMP_ARGS=(
             --data-only --inserts
             --table=app_settings
-            --table=local_credentials
-            --table=consumed_intent_tokens
             --no-owner --no-privileges
         )
-        PRE_SQL="TRUNCATE app_settings, local_credentials, consumed_intent_tokens CASCADE;"
+        PRE_SQL="TRUNCATE app_settings CASCADE;"
         ;;
     full)
         # Full data clone. Schema preserved (env's allinone runs migrations at
