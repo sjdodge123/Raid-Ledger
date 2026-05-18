@@ -485,6 +485,13 @@ Two Codex-review findings deferred because they're MEDIUM/correctness-non-blocke
 - **[med]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — four `error TS2556` "spread argument must have tuple type or rest parameter". Mock/spy invocations spreading a non-tuple array.
   Suggested: type the spread source `as const` or accept the rest-arg call signature on the mock.
 
+### 2026-05-17 — fix/batch-2026-05-17 (surfaced during reviewer pass on ROK-1315)
+
+- **[low]** `web/src/components/calendar/calendar-view.utils.test.ts:1-78` — 7 vitest cases cover gameless/game-having × undefined/empty/non-empty Set, but no case exercises `event.game` defined with `slug === ''` (empty string slug). Predicate treats it as gameless via `!event.game?.slug`, which is the intended behavior, but it's untested.
+  Suggested: add one case `eventWithGame('')` + non-empty Set → expect `true`, locking in the empty-string-slug branch.
+- **[low]** `scripts/smoke/calendar.smoke.spec.ts:159-223` — Regression test creates event via `apiPost` BEFORE entering the `try` block; if `apiPost` partially succeeds but throws, the event leaks (no `world.cleanup()` prefix-sweep covers `/events` rows).
+  Suggested: either move `apiPost` inside `try` with `event?.id` guard in `finally`, or rely on `world.prefix` + a `/admin/test/reset-scheduled-events` cleanup hook.
+
 ### 2026-05-17 — fix/batch-2026-05-17 (surfaced during validate-ci.sh run on ROK-1315)
 
 - **[high]** `scripts/validate-ci.sh::run_typecheck` silently masks api failures. The function runs `npx tsc -p api/tsconfig.json` then `npx tsc -p web/tsconfig.json` back-to-back. Inside `run_step`, `"$@" || rc=$?` disables `set -e` for the LHS, and the function's exit status is the last command's — so when api tsc fails (exit 1) but web tsc passes (exit 0), `run_typecheck` returns 0 and validate-ci reports "TypeScript (all): PASS" even with 11 active api errors. Demonstrated 2026-05-17 22:05: direct `npx tsc -p api/tsconfig.json` → exit 1, 11 errors; same checkout under `./scripts/validate-ci.sh --no-e2e` → PASS. Explains why prior batches (#806, #807) shipped over the pre-existing API spec errors without local pre-push catching them. `run_lint` and `run_unit_tests` have the same multi-command shape and likely the same masking behavior — audit all of them.
