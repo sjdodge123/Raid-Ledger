@@ -49,15 +49,19 @@ function leftoverVoterCount(
   data: GroupedMatchesResponseDto | undefined,
 ): number {
   if (!data) return 0;
-  const matchedUserIds = new Set<number>();
+  // Only voted-source members count — bandwagon joiners didn't vote, so
+  // including them would deflate the leftover count.
+  const matchedVoterIds = new Set<number>();
   for (const m of [
     ...data.scheduling,
     ...data.almostThere,
     ...data.rallyYourCrew,
   ]) {
-    for (const mem of m.members) matchedUserIds.add(mem.userId);
+    for (const mem of m.members) {
+      if (mem.source === 'voted') matchedVoterIds.add(mem.userId);
+    }
   }
-  return Math.max(0, data.totalVoters - matchedUserIds.size);
+  return Math.max(0, data.totalVoters - matchedVoterIds.size);
 }
 
 function buildHeroProps(

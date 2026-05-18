@@ -364,6 +364,34 @@ describe('DecidedView — leftover voters row (AC4)', () => {
     expect(screen.getByTestId('decided-composite-view')).toBeInTheDocument();
     expect(screen.queryByTestId('decided-leftover-voters-row')).toBeNull();
   });
+
+  it('excludes bandwagon members from the matched-voter count', () => {
+    // 5 voters total; 2 voted into a match; 1 bandwagon-joined that match.
+    // Leftover MUST be 3 (5 - 2 voted), NOT 2 (5 - 3 incl. bandwagon).
+    const lineup = createMockLineupDetail({ status: 'decided' });
+    useLineupMatchesMock.mockReturnValue({
+      data: makeMatches({
+        totalVoters: 5,
+        scheduling: [
+          makeMatch({
+            id: 1,
+            gameId: 42,
+            members: [
+              makeMember({ id: 1, userId: 99, source: 'voted' }),
+              makeMember({ id: 2, userId: 200, source: 'voted' }),
+              makeMember({ id: 3, userId: 201, source: 'bandwagon' }),
+            ],
+          }),
+        ],
+      }),
+      isLoading: false,
+    });
+
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    const row = screen.getByTestId('decided-leftover-voters-row');
+    expect(within(row).getByText(/3 voters didn'?t match/i)).toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
