@@ -83,7 +83,9 @@ export function SearchAnyGameView(props: SearchAnyGameViewProps): JSX.Element {
         aria-label="Search the game library"
         data-testid="search-any-game-input"
         autoFocus
-        className="w-full min-h-[44px] px-3 py-2 text-[13px] rounded border border-edge bg-overlay/30 text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-emerald-300"
+        // text-base (16px) prevents iOS Safari's auto-zoom-on-focus
+        // (any input < 16px triggers the page-zoom UX bug on iPhone).
+        className="w-full min-h-[44px] px-4 py-2 text-base rounded-md border border-edge bg-overlay/30 text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-emerald-300"
       />
       {/* The CommonGroundHero header swaps Regenerate for "← Back" while
           search mode is active — only one Back affordance, in a stable

@@ -65,7 +65,7 @@ export function CommonGroundThemedRow(
       data-testid={`common-ground-themed-row-${theme}`}
       className="space-y-2"
     >
-      <h3 className="text-[12px] uppercase tracking-wider text-muted">
+      <h3 className="text-base sm:text-lg font-semibold text-foreground">
         {meta.title}
       </h3>
       {tiles.length === 0 ? (
@@ -156,7 +156,7 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
         />
       </div>
       {tile.whyReason && (
-        <div className="text-[10px] text-emerald-300 leading-snug px-1 line-clamp-2">
+        <div className="text-xs text-emerald-300 leading-snug px-1 line-clamp-2">
           ★ {tile.whyReason}
         </div>
       )}
@@ -170,7 +170,8 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
           if (disabled || atCap || isNominating) return;
           onNominate(tile.gameId);
         }}
-        className="min-h-[44px] px-3 py-2 text-[12px] rounded bg-emerald-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+        // 44px min-height + text-sm = Apple HIG / Material tappable button.
+        className="min-h-[44px] px-4 py-2 text-sm rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 transition-colors"
       >
         {isNominating ? 'Adding…' : atCap ? 'Lineup full' : '+ Nominate'}
       </button>

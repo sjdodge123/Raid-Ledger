@@ -130,14 +130,21 @@ export function NominatingComposite(
       data-testid="nominating-composite-view"
       className="space-y-3"
     >
-      <JourneyHero
-        phase="nominating"
-        active={0}
-        tone={journey.tone}
-        badge={journey.badge}
-        task={journey.task}
-        sub={journey.sub}
-      />
+      {/* Sticky JourneyHero (ROK-1297 round-4): keeps the Nominating step
+          context + sub-line visible as the user scrolls deep into the
+          Common Ground grid. `top-2` leaves a small breathing margin
+          below the fixed page nav; `bg-background` prevents tiles from
+          showing through. */}
+      <div className="sticky top-2 z-30 bg-background/95 backdrop-blur-sm rounded-md py-1">
+        <JourneyHero
+          phase="nominating"
+          active={0}
+          tone={journey.tone}
+          badge={journey.badge}
+          task={journey.task}
+          sub={journey.sub}
+        />
+      </div>
       <CommonGroundHero
         lineupId={lineup.id}
         canParticipate={canParticipate}

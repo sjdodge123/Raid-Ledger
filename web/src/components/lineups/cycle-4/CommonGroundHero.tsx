@@ -94,14 +94,19 @@ function HeroHeader({
   onOpenSearch: () => void;
   isFetching: boolean;
 }): JSX.Element {
+  // Mobile-compliant per Apple HIG / Material Design / WCAG 2.5.5:
+  //   - 44px min tap target
+  //   - 14px text (matches Material body / iOS minimum touch label)
+  //   - Stack full-width below the section title on sub-sm viewports;
+  //     inline at sm+ where horizontal space permits.
   const btnCls =
-    'min-h-[36px] text-[11px] text-muted hover:text-foreground border border-edge rounded px-2 py-1 inline-flex items-center gap-1';
+    'min-h-[44px] text-sm text-foreground hover:text-emerald-200 border border-edge rounded-md px-4 py-2 inline-flex items-center justify-center gap-1.5 flex-1 sm:flex-initial transition-colors';
   return (
-    <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-      <h2 className="text-sm font-semibold text-foreground">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-3">
+      <h2 className="text-lg sm:text-base font-semibold text-foreground">
         ✨ Common Ground
       </h2>
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 w-full sm:w-auto">
         {!inSearch && (
           <button
             type="button"
