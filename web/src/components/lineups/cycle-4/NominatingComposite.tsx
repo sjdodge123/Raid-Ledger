@@ -403,22 +403,35 @@ export function NominatingComposite(
             Tapping Search while scrolled deep into Common Ground expands
             the filters right there, not back at the panel header (which
             could be off-screen). */}
-        {commonGroundMode === 'search' && (
-          <div className="mt-2 px-1">
-            {/* Solid panel + emerald accents so the controls read clearly
-                against any backdrop scrolling underneath the sticky. */}
-            <div className="p-3 rounded-md border border-emerald-500/30 bg-surface shadow-lg">
-              <CommonGroundFilters
-                filters={filters}
-                onChange={setFilters}
-                availableTags={availableTags}
-                search={search}
-                onSearchChange={setSearch}
-                participantCount={participantCount}
-              />
+        {/* ROK-1297 round 5p: filter bar uses a grid-rows 0fr→1fr animation
+            so opening it expands the sticky vertically over ~250ms. The
+            sticky's flow slot grows in lockstep, which pushes the
+            Common Ground tiles below the expanded panel smoothly
+            (operator: "the page should shift down below it with an
+            animation"). When closed, max-height collapses back so the
+            sticky reclaims its compact size. */}
+        <div
+          className="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out"
+          style={{
+            gridTemplateRows:
+              commonGroundMode === 'search' ? '1fr' : '0fr',
+          }}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="mt-2 px-1">
+              <div className="p-3 rounded-md border border-emerald-500/30 bg-surface shadow-lg">
+                <CommonGroundFilters
+                  filters={filters}
+                  onChange={setFilters}
+                  availableTags={availableTags}
+                  search={search}
+                  onSearchChange={setSearch}
+                  participantCount={participantCount}
+                />
+              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
       <CommonGroundHero
         canParticipate={canParticipate}
