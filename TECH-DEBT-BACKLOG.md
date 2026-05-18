@@ -484,3 +484,8 @@ Two Codex-review findings deferred because they're MEDIUM/correctness-non-blocke
   Suggested: wrap with `sql.raw()` or assert the SQLWrapper interface.
 - **[med]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — four `error TS2556` "spread argument must have tuple type or rest parameter". Mock/spy invocations spreading a non-tuple array.
   Suggested: type the spread source `as const` or accept the rest-arg call signature on the mock.
+
+### 2026-05-17 — fix/batch-2026-05-17 (surfaced during validate-ci.sh run on ROK-1315)
+
+- **[high]** `scripts/validate-ci.sh::run_typecheck` silently masks api failures. The function runs `npx tsc -p api/tsconfig.json` then `npx tsc -p web/tsconfig.json` back-to-back. Inside `run_step`, `"$@" || rc=$?` disables `set -e` for the LHS, and the function's exit status is the last command's — so when api tsc fails (exit 1) but web tsc passes (exit 0), `run_typecheck` returns 0 and validate-ci reports "TypeScript (all): PASS" even with 11 active api errors. Demonstrated 2026-05-17 22:05: direct `npx tsc -p api/tsconfig.json` → exit 1, 11 errors; same checkout under `./scripts/validate-ci.sh --no-e2e` → PASS. Explains why prior batches (#806, #807) shipped over the pre-existing API spec errors without local pre-push catching them. `run_lint` and `run_unit_tests` have the same multi-command shape and likely the same masking behavior — audit all of them.
+  Suggested: split each tsc invocation into its own `run_step` (cleanest), OR convert `run_typecheck` to `local rc=0; npx tsc … || rc=$?; npx tsc … || rc=$?; return $rc`. Apply the same fix to `run_lint`, `run_unit_tests`, and any other multi-command `run_*` helper.
