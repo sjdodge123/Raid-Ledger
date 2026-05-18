@@ -638,5 +638,121 @@ function describeLineups() {
     });
   }
   describe('ROK-1064: per-lineup channel override', describeROK1064);
+
+  // ── ROK-1298: votingEligibleCount on GET /lineups/:id ───────────────
+  //
+  // The Sv Voting composite normalizes vote bars to a voter-pool denominator
+  // (`voteCount / votingEligibleCount`) instead of `totalVoters` (which only
+  // counts users who have cast >=1 vote). The new field is computed by
+  // `computeVotingEligibleCount(lineup, invitees, totalMembers)` and wired
+  // into `mapToDetailResponse`. These tests pin the cross-visibility wiring
+  // through the live HTTP layer.
+
+  function describeROK1298() {
+    /** Seed N fixture users with locally-hashed creds and return their ids. */
+    async function seedNUsers(count: number): Promise<number[]> {
+      const ids: number[] = [];
+      for (let i = 0; i < count; i++) {
+        const [user] = await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: `local:sv-voter-${i}@test.local`,
+            username: `sv-voter-${i}`,
+            role: 'member',
+          })
+          .returning();
+        ids.push(user.id);
+      }
+      return ids;
+    }
+
+    it('public lineup with 12 total members returns votingEligibleCount=12', async () => {
+      // Seed 11 additional members (admin already exists -> 12 total).
+      await seedNUsers(11);
+
+      const createRes = await createLineup(adminToken);
+      const lineupId = createRes.body.id as number;
+
+      const res = await testApp.request
+        .get(`/lineups/${lineupId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      // Public lineups use the membership count as the denominator.
+      expect(res.body.totalMembers).toBe(12);
+      expect(res.body.votingEligibleCount).toBe(12);
+    });
+
+    it('private lineup with 5 invitees returns votingEligibleCount=6 (creator + invitees)', async () => {
+      // Seed 5 invitees. Admin is the creator.
+      const inviteeIds = await seedNUsers(5);
+
+      const createRes = await testApp.request
+        .post('/lineups')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          title: 'Private Sv Lineup',
+          visibility: 'private',
+          inviteeUserIds: inviteeIds,
+        });
+      expect(createRes.status).toBe(201);
+      const lineupId = createRes.body.id as number;
+
+      const res = await testApp.request
+        .get(`/lineups/${lineupId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      // Private: 1 (creator) + 5 invitees = 6, regardless of total membership.
+      expect(res.body.visibility).toBe('private');
+      expect(res.body.votingEligibleCount).toBe(6);
+    });
+
+    it('private lineup never double-counts the creator if creator is also in invitees', async () => {
+      // Seed 3 invitees plus the admin's invitee row (creator dedup case).
+      const others = await seedNUsers(3);
+      const adminId = testApp.seed.adminUser.id;
+
+      const createRes = await testApp.request
+        .post('/lineups')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          title: 'Dedup Private Lineup',
+          visibility: 'private',
+          inviteeUserIds: others,
+        });
+      expect(createRes.status).toBe(201);
+      const lineupId = createRes.body.id as number;
+
+      // Manually insert an invitee row for the creator to simulate the
+      // edge case the helper dedupes.
+      await testApp.db.insert(schema.communityLineupInvitees).values({
+        lineupId,
+        userId: adminId,
+      });
+
+      const res = await testApp.request
+        .get(`/lineups/${lineupId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      // 1 (creator) + 3 non-creator invitees = 4 (NOT 5).
+      expect(res.body.votingEligibleCount).toBe(4);
+    });
+
+    it('public lineup floors votingEligibleCount at 1 (creator always eligible)', async () => {
+      // Don't seed any extra users — only the admin/seed user(s) exist.
+      const createRes = await createLineup(adminToken);
+      const lineupId = createRes.body.id as number;
+
+      const res = await testApp.request
+        .get(`/lineups/${lineupId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.votingEligibleCount).toBeGreaterThanOrEqual(1);
+    });
+  }
+  describe('ROK-1298: votingEligibleCount', describeROK1298);
 }
 describe('Lineups (integration)', describeLineups);
