@@ -123,20 +123,18 @@ function ThemedLayout({
 }): JSX.Element {
   return (
     <div className="space-y-4">
-      {(['owned', 'taste', 'trending'] as const).map((theme) =>
-        buckets[theme].length === 0 ? null : (
-          <CommonGroundThemedRow
-            key={theme}
-            theme={theme}
-            tiles={buckets[theme].slice(0, 4)}
-            atCap={atCap}
-            canParticipate={canParticipate}
-            nominatingId={nominatingId}
-            onTileNominate={onTileNominate}
-            onTileOpenDrawer={onTileOpenDrawer}
-          />
-        ),
-      )}
+      {(['owned', 'taste', 'trending'] as const).map((theme) => (
+        <CommonGroundThemedRow
+          key={theme}
+          theme={theme}
+          tiles={buckets[theme].slice(0, 4)}
+          atCap={atCap}
+          canParticipate={canParticipate}
+          nominatingId={nominatingId}
+          onTileNominate={onTileNominate}
+          onTileOpenDrawer={onTileOpenDrawer}
+        />
+      ))}
     </div>
   );
 }
