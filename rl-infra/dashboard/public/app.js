@@ -93,18 +93,24 @@ const renderEnv = (e, publicDomain) => {
   ));
 
   const actions = el('div', { class: 'actions' });
-  actions.appendChild(el('a', { href: internalUrl, target: '_blank', rel: 'noopener', text: 'internal' }));
+  // When public URL is available, it's the PRIMARY action — operator and
+  // testers see the same URL, and Pi-hole short-circuits the LAN path so
+  // there's no Cloudflare round-trip cost on home network. Internal URL
+  // is kept as a small fallback for the rare CF/NPM-outage case.
   if (publicUrl) {
-    const ext = el('a', { href: publicUrl, target: '_blank', rel: 'noopener', text: 'external (share)' });
-    // Long-press / right-click copies the public URL for sharing with testers.
+    const ext = el('a', { href: publicUrl, target: '_blank', rel: 'noopener', text: 'open' });
+    // Long-press / right-click copies the URL for sharing with testers.
     ext.addEventListener('contextmenu', (ev) => {
       ev.preventDefault();
       navigator.clipboard?.writeText(publicUrl).then(() => {
         ext.textContent = 'copied!';
-        setTimeout(() => { ext.textContent = 'external (share)'; }, 1200);
+        setTimeout(() => { ext.textContent = 'open'; }, 1200);
       });
     });
     actions.appendChild(ext);
+    actions.appendChild(el('a', { class: 'secondary', href: internalUrl, target: '_blank', rel: 'noopener', text: 'lan' }));
+  } else {
+    actions.appendChild(el('a', { href: internalUrl, target: '_blank', rel: 'noopener', text: 'open' }));
   }
   card.appendChild(actions);
   return card;

@@ -128,6 +128,14 @@ main { padding-bottom: 96px; }
   font-weight: 600;
 }
 .actions a:active { background: rgba(94, 184, 255, 0.15); }
+.actions a.secondary {
+  flex: 0 0 auto;
+  background: transparent;
+  border-color: transparent;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
 
 .empty {
   grid-column: 1 / -1;

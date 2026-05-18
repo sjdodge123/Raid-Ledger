@@ -65,8 +65,16 @@ http:
         servers:
           - url: "http://${APP_CONTAINER}:80"
 EOF
-    jq -nc --arg slug "$SLUG" --arg url "http://${SLUG}.rl.lan" --argjson slot "$SLOT" \
-        '{ok: true, idempotent: true, slug: $slug, url: $url, slot: $slot}'
+    # Same primary/internal/public split as the non-idempotent path below.
+    IDEM_PUBLIC=""
+    if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
+        IDEM_PUBLIC="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
+    fi
+    if [[ -n "$IDEM_PUBLIC" ]]; then IDEM_PRIMARY="$IDEM_PUBLIC"; else IDEM_PRIMARY="http://${SLUG}.rl.lan"; fi
+    jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
+        --arg internal_url "http://${SLUG}.rl.lan" \
+        --arg public_url "$IDEM_PUBLIC" --argjson slot "$SLOT" \
+        '{ok: true, idempotent: true, slug: $slug, url: $url, internal_url: $internal_url, public_url: (if $public_url == "" then null else $public_url end), slot: $slot}'
     audit::log env-spin idempotent "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug,slot:$slot}')"
     exit 0
 fi
@@ -194,13 +202,22 @@ state::mutate "$RL_ENVS_FILE" \
 
 audit::log env-spin ok "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image}')"
 
-# Output: internal URL + public URL (if RL_PUBLIC_DOMAIN set) so callers
-# (dashboard, MCP, operator) know exactly what URL external testers see.
+# Output. When RL_PUBLIC_DOMAIN is set, the EXTERNAL URL is the canonical
+# `url` field — that's what agents emit, testers click, operator bookmarks.
+# Pi-hole short-circuits *.{RL_PUBLIC_DOMAIN} to the rl-infra VM IP for LAN
+# clients (no Cloudflare hop), so external is fast on LAN AND reachable
+# off-LAN. The internal http://{slug}.rl.lan URL is kept as `internal_url`
+# for fallback (if CF/NPM/internet is down, LAN clients can hit it directly).
 PUBLIC_URL_OUT=""
 if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
-    # ${SLUG}test.${RL_PUBLIC_DOMAIN} — same pattern as HOST_RULE above.
     PUBLIC_URL_OUT="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
 fi
-jq -nc --arg slug "$SLUG" --arg url "http://${SLUG}.rl.lan" \
+if [[ -n "$PUBLIC_URL_OUT" ]]; then
+    PRIMARY_URL="$PUBLIC_URL_OUT"
+else
+    PRIMARY_URL="http://${SLUG}.rl.lan"
+fi
+jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
+    --arg internal_url "http://${SLUG}.rl.lan" \
     --arg public_url "$PUBLIC_URL_OUT" --argjson slot "$SLOT" \
-    '{ok: true, slug: $slug, url: $url, public_url: (if $public_url == "" then null else $public_url end), slot: $slot, app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'
+    '{ok: true, slug: $slug, url: $url, internal_url: $internal_url, public_url: (if $public_url == "" then null else $public_url end), slot: $slot, app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'

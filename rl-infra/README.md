@@ -39,18 +39,33 @@ Proxmox host
 
 ## Hostnames (wildcard DNS `*.rl.lan` → Proxmox VM IP)
 
+**Tester-facing (external — works on any network):**
+
+| Hostname                          | Points at                                       |
+| --------------------------------- | ----------------------------------------------- |
+| `fleet.${RL_PUBLIC_DOMAIN}`       | Mobile fleet dashboard (bookmark on phone)      |
+| `{slug}test.${RL_PUBLIC_DOMAIN}`  | Env `{slug}` allinone — share URL with testers  |
+
+Wired through your external reverse proxy (NPM at the operator's apex
+domain). DNS: `*.{RL_PUBLIC_DOMAIN}` → operator's WAN IP via Cloudflare or
+similar. Pi-hole adds local overrides so LAN clients short-circuit the CF
+hop (see SETUP.md Phase 10).
+
+**Operator-facing (LAN-only, no external dependency):**
+
 | Hostname                    | Points at                                   |
 | --------------------------- | ------------------------------------------- |
-| `fleet.rl.lan`              | Mobile fleet dashboard (bookmark on phone)  |
 | `traefik.rl.lan`            | Traefik dashboard                           |
 | `grafana.rl.lan`            | Grafana (logs, dashboards)                  |
 | `registry.rl.lan`           | Local Docker registry                       |
 | `slot-N.rl.lan`             | Runner N's API+web ports                    |
 | `slot-N-debug.rl.lan`       | Runner N's node `--inspect` debug port      |
-| `{slug}.rl.lan`             | Env `{slug}` allinone container             |
+| `{slug}.rl.lan`             | Env `{slug}` allinone — LAN-only fallback   |
 | `db-{slug}.rl.lan`          | pgweb UI for env `{slug}`'s Postgres        |
 
-Set the wildcard in your router/Pi-hole. Without DNS, edit `/etc/hosts` per hostname.
+Resolved by Pi-hole wildcard `*.rl.lan → 192.168.0.132`. These keep working
+even if Cloudflare/your-WAN/NPM is down — use them when iterating fast on
+the operator laptop or when external chain is broken.
 
 ## The CLI
 
