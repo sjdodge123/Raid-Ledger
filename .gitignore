@@ -45,6 +45,8 @@ scripts/*
 !scripts/loop-integration.sh
 !scripts/spec-loop.sh
 !scripts/clone-prod-to-local.sh
+!scripts/sync-local-to-env.sh
+!scripts/clone-prod-to-env.sh
 !/api/scripts/
 implementation_plan.md
 walkthrough.md
