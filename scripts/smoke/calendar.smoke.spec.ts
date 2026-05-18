@@ -181,13 +181,18 @@ test.describe('Regression: ROK-1315 — calendar shows gameless events when filt
             // assertion is deterministic across stored prefs.
             await page.getByRole('button', { name: 'Week' }).click();
 
+            // Calendar grid events render as <div class="week-event-block"> via
+            // WeekEventCard — they are NOT anchor links, so locate by the
+            // unique event title instead of an href selector. world.uid() makes
+            // the title globally unique across worker shards.
+            const eventCard = page.locator('.week-event-block').filter({ hasText: title }).first();
+
             // Pre-condition: the gameless event renders at least once with the
             // chip in its untouched default state. (The chip start state has a
             // defined Set populated by `selectAll` once `allKnownGames` lands —
             // this would have failed on the buggy predicate too, since the bug
             // applies to ANY defined Set, not only the "None" state.)
-            const eventLink = page.locator(`a[href*="/events/${event.id}"]`).first();
-            await expect(eventLink).toBeVisible({ timeout: 15_000 });
+            await expect(eventCard).toBeVisible({ timeout: 15_000 });
 
             // Drive the chip into the defined-but-empty state (deselect all).
             // The chip is gated by `allKnownGames.length > 0` — without IGDB
@@ -216,7 +221,7 @@ test.describe('Regression: ROK-1315 — calendar shows gameless events when filt
             // filter chip is in a defined non-default state. Pre-fix this
             // assertion fails because the predicate short-circuited on
             // `event.game?.slug` being falsy.
-            await expect(eventLink).toBeVisible({ timeout: 5_000 });
+            await expect(eventCard).toBeVisible({ timeout: 5_000 });
         } finally {
             await apiDelete(token, `/events/${event.id}`);
         }
