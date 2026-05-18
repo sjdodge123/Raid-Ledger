@@ -317,7 +317,12 @@ export function NominatingComposite(
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, []);
-  const heroHidden = scrollDir === 'down' && isStuck;
+  // ROK-1297 round 5m: keep the sticky hero visible while the operator
+  // is in search mode. Auto-hiding while the filter bar is expanded
+  // makes the entire filter row vanish on the first scroll-down — the
+  // operator can't see what they're filtering against.
+  const heroHidden =
+    scrollDir === 'down' && isStuck && commonGroundMode !== 'search';
 
   const myNominatedCount = useMemo(() => {
     if (viewerId == null) return 0;
@@ -397,7 +402,9 @@ export function NominatingComposite(
             could be off-screen). */}
         {commonGroundMode === 'search' && (
           <div className="mt-2 px-1">
-            <div className="p-3 rounded-md border border-edge bg-overlay/40">
+            {/* Solid panel + emerald accents so the controls read clearly
+                against any backdrop scrolling underneath the sticky. */}
+            <div className="p-3 rounded-md border border-emerald-500/30 bg-surface shadow-lg">
               <CommonGroundFilters
                 filters={filters}
                 onChange={setFilters}
