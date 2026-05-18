@@ -326,6 +326,34 @@ export function NominatingComposite(
 
   const stickyHeaderRef = useRef<HTMLDivElement | null>(null);
 
+  // ROK-1297 round 5r: when the typed query changes WHILE in search mode,
+  // the filtered Common Ground response may collapse from N tiles to a
+  // few — the user's existing scroll position can land them deep inside
+  // a now-tiny grid (or off the bottom of it), with the matching tile
+  // visually behind the expanded sticky. Re-anchor on query change so
+  // the first tile lands just below the sticky.
+  //
+  // This is distinct from auto-scrolling on the Search button press
+  // (which the operator rejected): we only adjust scroll position when
+  // the user has actively typed a new query.
+  useEffect(() => {
+    if (commonGroundMode !== 'search') return;
+    if (!search.trim()) return;
+    const id = requestAnimationFrame(() => {
+      const cg = document.querySelector('[data-testid="common-ground-hero"]');
+      const sticky = stickyHeaderRef.current;
+      if (!cg || !sticky) return;
+      const stickyBottom = sticky.getBoundingClientRect().bottom;
+      const cgTop = cg.getBoundingClientRect().top;
+      const delta = cgTop - stickyBottom - 8;
+      // Only fire when the CG hero is meaningfully off-position. Skip
+      // small deltas to avoid jitter on each keystroke.
+      if (Math.abs(delta) < 24) return;
+      window.scrollBy({ top: delta, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [search, commonGroundMode]);
+
   const myNominatedCount = useMemo(() => {
     if (viewerId == null) return 0;
     return lineup.entries.filter((e) => e.nominatedBy.id === viewerId).length;
