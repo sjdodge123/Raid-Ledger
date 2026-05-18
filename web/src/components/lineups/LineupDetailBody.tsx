@@ -78,6 +78,13 @@ export function LineupDetailBody(props: Props): JSX.Element {
         );
     }
 
+    // ROK-1297: during the building phase NominatingComposite renders the
+    // existing-nominations grid (filtered by the NominatingTabs). Leaving
+    // the fallthrough here would double-render the list.
+    if (lineup.status === 'building') {
+        return <></>;
+    }
+
     if (hasEntries) {
         return <NominationGrid entries={lineup.entries} lineupId={lineup.id} />;
     }
