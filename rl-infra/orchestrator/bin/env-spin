@@ -103,6 +103,16 @@ done
 # to the container so the Discord bot and other URL-emitting code reach
 # external testers through the operator's reverse proxy. Without that, the
 # bot would emit http://{slug}.rl.lan URLs which only work on the LAN.
+EXTRA_ENV=()
+# When set, env-spin shares the operator's JWT_SECRET with the test env so
+# app_settings rows (encrypted with that secret on operator's local DB) will
+# decrypt at runtime after rl_env_sync_from_local. Set in /srv/rl-infra/.env:
+#   RL_ENV_JWT_SECRET=<paste operator's local JWT_SECRET here>
+# Without this, the env's allinone generates its own JWT_SECRET and any
+# sync'd app_settings rows will fail to decrypt.
+if [[ -n "${RL_ENV_JWT_SECRET:-}" ]]; then
+    EXTRA_ENV+=(-e "JWT_SECRET=${RL_ENV_JWT_SECRET}")
+fi
 PUBLIC_URL_FLAG=()
 if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
     # External hostname pattern: ${SLUG}test.${RL_PUBLIC_DOMAIN}. The literal
@@ -129,6 +139,7 @@ docker run -d \
     -e DEMO_MODE=true \
     -e NODE_ENV=production \
     "${PUBLIC_URL_FLAG[@]}" \
+    "${EXTRA_ENV[@]}" \
     --label "rl.role=env" \
     --label "rl.env_slug=${SLUG}" \
     --label "rl.slot=${SLOT}" \

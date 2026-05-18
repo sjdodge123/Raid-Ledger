@@ -18,6 +18,8 @@ import * as runOnRunner from './tools/run-on-runner.js';
 import * as validateCi from './tools/validate-ci.js';
 import * as dbUrl from './tools/db-url.js';
 import * as logsUrl from './tools/logs-url.js';
+import * as envSync from './tools/env-sync.js';
+import * as envCloneProd from './tools/env-clone-prod.js';
 
 const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.1.0' });
 
@@ -98,6 +100,28 @@ server.tool(
   logsUrl.TOOL_DESCRIPTION,
   { query: z.string().optional(), since: z.string().optional() },
   async (p) => jsonResult(await logsUrl.execute(p)),
+);
+
+server.tool(
+  envSync.TOOL_NAME,
+  envSync.TOOL_DESCRIPTION,
+  {
+    slug: z.string().regex(/^[a-z0-9-]+$/),
+    mode: z.enum(['settings', 'full']).optional(),
+    timeout_seconds: z.number().int().min(30).max(7200).optional(),
+  },
+  async (p) => jsonResult(await envSync.execute(p)),
+);
+
+server.tool(
+  envCloneProd.TOOL_NAME,
+  envCloneProd.TOOL_DESCRIPTION,
+  {
+    slug: z.string().regex(/^[a-z0-9-]+$/),
+    skip_local_refresh: z.boolean().optional(),
+    timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  },
+  async (p) => jsonResult(await envCloneProd.execute(p)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the
