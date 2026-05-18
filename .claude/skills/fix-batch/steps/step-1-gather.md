@@ -109,6 +109,22 @@ mcp__linear__get_issue({ issueId: "ROK-XXX" })
 mcp__linear__get_issue({ issueId: "ROK-YYY" })
 ```
 
+### 1c.1 Read latest comments for every candidate story (STRICT)
+
+After fetching each story (whether via the broad `list_issues` queries above OR the targeted `get_issue` per-ID calls), ALSO call `mcp__linear__list_comments({ issueId: "ROK-XXX" })`. Operators and `/readlogs` append fresh evidence, priority escalations, and post-filing context as **comments** rather than editing the description. Skipping this step means you miss:
+
+- `/readlogs triage <date>` comments with new prod-log evidence — often the reason a story needs fast-tracking into this batch.
+- Operator-added scope notes ("ship this with X", "the suggested fix in the description is wrong — do Y instead").
+- Reviewer findings from prior fix-batches that got appended rather than re-filed.
+
+**How to apply:**
+- If a comment escalates the issue → push it to the front of the batch ordering in 1e, not the back.
+- If a comment changes the suggested fix → treat the comment as the source of truth for the dev agent's spec, overriding the description.
+- If a comment names a blocker → defer the story or sequence it after the dependency.
+- Empty comment thread is fine — just note "no triage comments" and move on. Don't block.
+
+Print a one-line summary per story: `ROK-XXX: <N> comments, <0|N> triage-relevant`.
+
 ### Verify "Chore" label exists
 
 On first run, check that the "Chore" label exists in Linear. If not, create it:

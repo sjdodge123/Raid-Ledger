@@ -255,28 +255,63 @@ Surface `[merged]` candidates first when presenting in 3a.v. Include even border
 
 **Always exclude:** "reduce logging", "lower log level", "silence noisy logs", "rotate faster", "trim verbose output". The operator explicitly does not want these. If a candidate's only suggested action would be to log less, drop it.
 
-### 3a.iv — Investigate each candidate before drafting (STRICT)
+### 3a.iv — Cluster candidates by root cause + ONE Linear search per cluster (STRICT — group before drafting stories)
 
-Per `feedback_investigate_before_stories.md`: do NOT write a story from grep output alone. For each candidate from 3a.iii:
+Many small reports of the same root cause should produce ONE elevated story, not 6 line items the operator has to manually consolidate. This step turns the raw candidate list from 3a.iii into a ranked set of CLUSTERS, then does the Linear cross-reference once per cluster (not once per candidate). Multiplicity is the strongest priority signal in this skill — six smoke-flake reports of the same class outrank a single isolated [med].
 
-- Read the file referenced by the stack frame / module tag. Confirm the behavior is reachable in current `main` (not already fixed).
-- `git log --oneline -10 -- <file>` — scan for a recent fix matching the signal.
-- `mcp__linear__list_issues` (project: Raid Ledger) — search by file name, module name, AND by error keyword. If an open story covers the same root cause, plan to **append evidence as a comment** rather than create a duplicate.
-- Decide severity: Urgent (1) only for production outages or data loss; High (2) for reliability regressions affecting users; Medium (3) for silent degradation / observability gaps / meaningful perf; Low (4) for minor cleanup.
+1. **Cluster the candidates from 3a.iii.** Merge candidates into the same cluster when ANY of these match:
+   - **Same file path** (or sibling paths under the same module dir).
+   - **Same NestJS module / Discord listener / cron service tag** in error output (e.g., everything mentioning `[BlizzardService]` or `EventsController`).
+   - **Same symptom keyword** across descriptions. Examples (extend as new classes emerge):
+     - "cross-worker race", "modal-materialise", "fixture-bleed", "active-lineup banner" → smoke-flake-class cluster
+     - "socket hang up", "ECONNRESET", "ioredis", "BullMQ carrier" → BullMQ-socket-leak cluster
+     - "ITAD HTTP 521", "Cloudflare upstream", "retry 5xx", `status=completed` despite errors → ITAD-upstream cluster
+     - "dedup", "name-dedup guard", "NULL distinct", `ON CONFLICT (igdb_id)` → games-dedup cluster
+     - "tsc errors on origin/main", "spec compile failure", `tsconfig.build.json` exclusion → typecheck-spec-drift cluster
+     - "process.cwd() upload dir", `RAID_LEDGER_*_DIR`, "spec wipes operator files" → uploads-foot-gun cluster
+   - Pre-existing tech-debt entries from the backlog automatically belong to a cluster. Count each batch's entry as a separate report toward the cluster's occurrence count, even if the bullets are textually different.
 
-Write the decision per candidate internally before surfacing to the operator: **promote to story / demote to observation / defer (comment on existing story) / drop as noise**. Include a one-line reason for demotions so the operator can override.
+2. **Rank clusters by occurrence count + impact.**
+   - **Heavy cluster (≥3 reports)** = elevated priority regardless of individual severity. Worth one consolidated story even if every report was `[low]` — the recurrence IS the signal.
+   - **Medium cluster (2 reports)** = candidate; promote per severity, but call out the recurrence in the operator table.
+   - **Singleton cluster (1 report)** = standard candidate flow.
+   - Tie-break order: prod-impact > test-infra-impact > docs-only.
 
-### 3a.v — Present full triage summary, wait for approval
+3. **ONE Linear cross-reference per cluster** (NOT per candidate):
+   - `mcp__linear__list_issues` with `query=<strongest cluster keyword>` (file path, module name, or symptom). Add a second search with a synonym ONLY if the first returns nothing relevant.
+   - Always check status of any matches:
+     - `Backlog` / `Todo` / `In Progress` → cluster outcome is **append evidence to existing story**; do NOT draft a new one.
+     - `Canceled` / `Done` matching the symptom → **flag for operator**; might be a regression or wrongly-closed story.
+     - Nothing matches → cluster becomes a new-story candidate.
+   - Record the matched ROK ID(s) on the cluster so 3a.v investigation knows it's an append-only path.
 
-Now (and only now) present to the operator. Include:
+4. **Print the cluster table** before continuing to per-cluster investigation. Columns: rank | cluster name | occurrence count (log + backlog + Linear-match) | inferred root cause | Linear status (`open ROK-X` / `closed ROK-Y (regression?)` / `none`) | preliminary decision.
+
+### 3a.v — Investigate each cluster before drafting (STRICT)
+
+Per `feedback_investigate_before_stories.md`: do NOT write a story from grep output alone. Investigate ONCE PER CLUSTER, not per candidate.
+
+For each cluster from 3a.iv:
+
+- Read the strongest-signal file in the cluster (the one with most reports or freshest log evidence). Confirm the behavior is reachable in current `main`.
+- `git log --oneline -10 -- <file>` — scan for a recent fix that may have already addressed the root cause. If a fix landed but pre-fix logs are in your window, expect the cluster to self-resolve on the next deploy.
+- For clusters with an `existing-open` Linear match: skim the latest issue activity to make sure the new evidence is actually new (different timestamps / lines / users) — append a comment instead of restating known evidence.
+- Decide severity at the CLUSTER level: Urgent (1) only for production outages or data loss; High (2) for reliability regressions affecting users OR any cluster with ≥5 reports; Medium (3) for silent degradation / observability gaps / meaningful perf / 3-4-report clusters; Low (4) for cleanup or 1-2-report low-severity clusters.
+
+Write the decision per cluster internally: **promote to NEW story / append to EXISTING story / demote to observation / drop as noise / surface regression for operator**. Include a one-line reason for demotions so the operator can override.
+
+### 3a.vi — Present cluster-ranked triage summary, wait for approval
+
+Now (and only now) present to the operator. Lead with clusters — not raw candidates. Include:
 
 1. The 3a.ii sweep summary (so the operator can see what you checked).
-2. A table of every **promoted** story candidate: title, category, severity, occurrence count, source files, one-line evidence snippet.
-3. A short list of **demoted** observations (chatty endpoints, minor perf, nice-to-haves) so the operator can green-light any of them.
-4. Any **matched existing stories** where you plan to comment rather than duplicate.
-5. Ask the operator which to create (use `AskUserQuestion` if the list is ≥3 items). Phrase the ask so the operator can approve all, approve a subset, or add a demoted item.
+2. **Cluster table** ranked by occurrence count. One row per cluster: rank | cluster name | reports (logs/backlog/Linear) | severity | recommended action (`new story` / `append ROK-XXXX` / `defer` / `regression?`) | one-line evidence snippet.
+3. A short list of **singleton candidates** that didn't cluster — promoted on their own merits.
+4. A short list of **demoted observations** so the operator can green-light any of them.
+5. Any **regression flags** — clusters with an existing closed Linear story that may need to be reopened.
+6. Ask the operator which to action (use `AskUserQuestion` if ≥3 decisions are needed). Phrase the ask so the operator can approve all, approve a subset, add a demoted item, or override a regression flag.
 
-### 3a.vi — Create approved stories AND prune the backlog
+### 3a.vii — Create approved stories AND prune the backlog
 
 For each approved finding:
 - Title prefix: `fix:` / `perf:` / `tech-debt:` / `chore:`
@@ -304,6 +339,34 @@ For each approved finding:
 Backlog entries that the operator wanted to keep for later (deferred, not dropped) stay in the file. Demoted-to-observation entries that the operator did NOT explicitly keep are pruned — if the same signal recurs in a future batch's review, the reviewer will append it again.
 
 Print a final summary listing each created `ROK-NNN` (with `[log]` / `[backlog]` / `[merged]` source tag), any comments appended, and the count of backlog entries pruned.
+
+### 3a.viii — Groom TECH-DEBT-BACKLOG.md (STRICT — consolidate survivors after pruning)
+
+After 3a.vii deletes promoted / dropped entries, the file may still hold multi-batch duplicates that the operator chose to keep (because they're tracked but unfixed, or because they're below the current severity filter). One pass to consolidate near-duplicates prevents the same cluster from being rediscovered every cycle.
+
+Skip this step if `--no-backlog` was passed OR if 3a.vii pruned 0 entries AND no surviving cluster has ≥3 entries (nothing to consolidate).
+
+1. **Re-cluster the SURVIVING entries** using the rules from 3a.iv (file path, module, symptom keyword).
+2. For each cluster with **≥2 surviving entries that share a root cause**:
+   - Insert ONE consolidated bullet at the **most recent batch's section** (preserves chronology for the next reader).
+   - Format:
+     ```
+     - **[<highest-severity-in-cluster>]** <root-cause-summary>. Flagged across <comma-separated dates>: <comma-separated short branch/PR refs>. Instances: <inline-code path:line>, <inline-code path:line>, ... Last surfaced <YYYY-MM-DD>. <If a Linear story tracks it: "Tracked in ROK-XXXX (status)."; otherwise "No Linear coverage yet.">
+       Suggested: <merged suggestion from highest-detail original entry>.
+     ```
+   - Delete the original individual bullets from their batch sections.
+   - If a section header has no remaining bullets after deletion, drop the header too.
+3. **Severity-merge rules:** never merge entries more than one severity step apart (don't fold a `[high]` and a `[low]` into one bullet — they have different operational urgency). Split into two consolidated bullets if needed.
+4. **Cross-section drift:** if the cluster spans >6 weeks of batch dates, add a `_Carrier pattern — likely needs a dedicated fix-batch story rather than continued tech-debt deferral._` note at the end of the consolidated bullet.
+5. Stage + commit (folded into the same `chore(config):` commit as 3a.vii's pruning if both happened in the same session):
+   ```bash
+   git add TECH-DEBT-BACKLOG.md
+   git commit -m "chore(config): groom tech-debt backlog (consolidate <cluster-name> + <N> more)"
+   ```
+
+Print the final grooming summary: number of clusters consolidated, total bullets removed, total bullets added, net line delta.
+
+**Side benefit:** the operator can now scroll the backlog and see one bullet per recurring class instead of 6+ separate dated entries — the file becomes a usable triage surface again instead of an append-only journal.
 
 ---
 
