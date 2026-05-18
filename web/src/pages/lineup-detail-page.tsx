@@ -10,7 +10,7 @@ import { InviteeList } from '../components/lineups/InviteeList';
 import { AddInviteesButton } from '../components/lineups/AddInviteesButton';
 import { StillWaitingPanel } from '../components/lineups/StillWaitingPanel';
 import { LineupDetailSkeleton } from '../components/lineups/LineupDetailSkeleton';
-import { CommonGroundPanel } from '../components/lineups/CommonGroundPanel';
+import { NominatingComposite } from '../components/lineups/cycle-4/NominatingComposite';
 import { NominateModal } from '../components/lineups/NominateModal';
 import type { SelectedGame } from '../components/lineups/NominateModal';
 import { PastLineups } from '../components/lineups/PastLineups';
@@ -220,10 +220,10 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
     (hasTiebreaker && tiebreaker?.status === 'pending') || tiebreakerPromptOpen
   );
 
-  // Operator/admin keep the inline Nominate button so they can both nominate
-  // and advance; for non-organizer invitees the hero CTA carries the action.
-  // ROK-1207: hidden once the lineup is aborted (forced via isBuilding=false).
-  const showInlineNominate = isBuilding && isOperator;
+  // ROK-1297 (Cycle 4 STRICT) — per-tile + Nominate is the ONLY nominate CTA
+  // during the building phase. The page-header inline Nominate button is
+  // removed; NominatingComposite owns the nominate affordance during
+  // `isBuilding`, and there is no nominate path post-build.
 
   return (
     <div className="max-w-4xl mx-auto px-4 pt-4 pb-24 md:pb-4">
@@ -242,21 +242,6 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
             setTiebreakerPromptOpen(true);
           }}
         />
-        {showInlineNominate && (
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            disabled={!canParticipate}
-            title={
-              !canParticipate
-                ? 'Private lineup — ask the creator for an invite'
-                : undefined
-            }
-            className="sm:mt-1 px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors flex-shrink-0 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
-          >
-            Nominate
-          </button>
-        )}
       </div>
 
       <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
@@ -292,8 +277,8 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
               Private lineup — ask the creator for an invite to nominate games.
             </p>
           )}
-          <CommonGroundPanel
-            lineupId={lineup.id}
+          <NominatingComposite
+            lineup={lineup}
             canParticipate={canParticipate}
           />
         </div>
