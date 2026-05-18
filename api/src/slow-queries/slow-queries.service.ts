@@ -10,6 +10,7 @@ import {
   DIGEST_TOP_N,
   formatDigestBlock,
   normalizeRawRow,
+  resetPgStatStatementsSql,
   selectPgStatStatementsSql,
   type RawPgStatStatementsRow,
   type SlowQueryEntryRecord,
@@ -54,6 +55,17 @@ export class SlowQueriesService {
       this.logger.log(
         `Appended slow-query digest entries=${entries.length} → ${this.logFilePath}`,
       );
+      // ROK-1273: reset cumulative counters AFTER the operator has the
+      // digest on disk, so the next hour reflects only fresh traffic.
+      // Guarded by an inner try/catch so a reset failure cannot flip the
+      // boolean contract (depended on by demo-test-core.controller.ts:184
+      // and logs.slow-queries-alignment.spec.ts).
+      try {
+        await this.db.execute(resetPgStatStatementsSql());
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`pg_stat_statements_reset failed: ${msg}`);
+      }
     }
     return written;
   }
