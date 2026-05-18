@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# Claim a runner slot. Picks the lowest-numbered free slot.
+# Claim a runner slot, queueing if none are free.
 #
 # Required env: RL_AGENT_ID
-# Optional flags: --branch <name>
-# Output: JSON with slot, hostnames, ssh exec command.
+# Optional flags:
+#   --branch <name>      branch label recorded on the claim
+#   --keep-alive         exempt from the max-claim-age TTL (operator only)
+#
+# Pull-based queue. If all slots are busy OR this agent is queued behind
+# others, returns a queued response with the agent's 0-based position. The
+# caller (CLI / MCP tool) is responsible for polling. Stale queue entries
+# auto-expire via gc-sweeper after QUEUE_TTL_SECONDS (default 1800).
 set -euo pipefail
 source "$(dirname "$0")/_state.sh"
 
 BRANCH=""
+KEEP_ALIVE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --branch) BRANCH="$2"; shift 2 ;;
+        --keep-alive) KEEP_ALIVE=1; shift ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
@@ -20,44 +28,78 @@ if [[ -z "${RL_AGENT_ID:-}" ]]; then
     exit 2
 fi
 
-# If this agent already has a slot, return it (idempotent).
+emit_slot_result() {
+    local slot="$1"
+    jq -nc \
+        --argjson slot "$slot" \
+        --arg branch "$BRANCH" \
+        --arg agent "$RL_AGENT_ID" \
+        '{
+            ok: true,
+            slot: $slot,
+            agent_id: $agent,
+            branch: $branch,
+            hostnames: {
+                web: "slot-\($slot|tostring).rl.lan",
+                debug: "slot-\($slot|tostring)-debug.rl.lan"
+            },
+            worktree: "/srv/rl-infra/runners/slot-\($slot|tostring)/worktree",
+            container: "rl-runner-\($slot|tostring)",
+            shell_cmd: "docker exec -it rl-runner-\($slot|tostring) tmux attach -t main"
+        }'
+}
+
+# Idempotent: if this agent already has a slot, return it.
 EXISTING=$(state::slot_for_agent "$RL_AGENT_ID")
 if [[ -n "$EXISTING" ]]; then
-    SLOT="$EXISTING"
-else
-    # Find first claimed=false slot.
-    SLOT=$(state::query "$RL_CLAIMS_FILE" '[.[] | select(.claimed == false) | .slot] | first // empty')
-    if [[ -z "$SLOT" ]]; then
-        audit::log claim queued '{"reason": "no_free_slot"}'
-        jq -nc --arg agent "$RL_AGENT_ID" \
-            '{ok: false, error: "no_free_slot", message: "All slots busy. Try `rl status` to see claimants."}'
-        exit 1
-    fi
-    NOW=$(date -u +%FT%TZ)
-    state::mutate "$RL_CLAIMS_FILE" \
-        --arg agent "$RL_AGENT_ID" \
-        --arg branch "$BRANCH" \
-        --arg ts "$NOW" \
-        --argjson slot "$SLOT" \
-        '(.[] | select(.slot == $slot)) |= (.claimed = true | .agent_id = $agent | .branch = $branch | .started_at = $ts | .last_heartbeat = $ts)'
+    audit::log claim idempotent "$(jq -nc --argjson slot "$EXISTING" '{slot:$slot}')"
+    emit_slot_result "$EXISTING"
+    exit 0
 fi
 
-audit::log claim acquired "$(jq -nc --argjson slot "$SLOT" --arg branch "$BRANCH" '{slot: $slot, branch: $branch}')"
+NOW=$(date -u +%FT%TZ)
+
+# Decide whether this agent can take a slot right now:
+#   - Queue empty → anyone can grab a free slot.
+#   - Queue non-empty → only the head of the queue can grab; newcomers
+#     must enqueue first.
+QUEUE_HEAD=$(queue::head_agent)
+if [[ -z "$QUEUE_HEAD" || "$QUEUE_HEAD" == "$RL_AGENT_ID" ]]; then
+    FREE_SLOT=$(state::query "$RL_CLAIMS_FILE" '[.[] | select(.claimed == false) | .slot] | first // empty')
+    if [[ -n "$FREE_SLOT" ]]; then
+        state::mutate "$RL_CLAIMS_FILE" \
+            --arg agent "$RL_AGENT_ID" \
+            --arg branch "$BRANCH" \
+            --arg ts "$NOW" \
+            --argjson slot "$FREE_SLOT" \
+            --argjson keep_alive "$KEEP_ALIVE" \
+            '(.[] | select(.slot == $slot)) |= (.claimed = true | .agent_id = $agent | .branch = $branch | .started_at = $ts | .last_heartbeat = $ts | .keep_alive = ($keep_alive == 1))'
+        # Remove from queue if was head.
+        queue::remove "$RL_AGENT_ID"
+        audit::log claim acquired "$(jq -nc --argjson slot "$FREE_SLOT" --arg branch "$BRANCH" --argjson keep_alive "$KEEP_ALIVE" '{slot:$slot, branch:$branch, keep_alive:($keep_alive == 1)}')"
+        emit_slot_result "$FREE_SLOT"
+        exit 0
+    fi
+fi
+
+# No slot for us right now — enqueue (idempotent) and report position.
+queue::add "$RL_AGENT_ID" "$BRANCH" "$NOW"
+POSITION=$(queue::position "$RL_AGENT_ID")
+QUEUE_LEN=$(state::query "$RL_QUEUE_FILE" 'length')
+
+audit::log claim queued "$(jq -nc --arg agent "$RL_AGENT_ID" --argjson pos "$POSITION" '{agent:$agent, position:$pos}')"
 
 jq -nc \
-    --argjson slot "$SLOT" \
-    --arg branch "$BRANCH" \
     --arg agent "$RL_AGENT_ID" \
+    --arg branch "$BRANCH" \
+    --argjson position "$POSITION" \
+    --argjson queue_length "$QUEUE_LEN" \
     '{
         ok: true,
-        slot: $slot,
+        queued: true,
         agent_id: $agent,
         branch: $branch,
-        hostnames: {
-            web: "slot-\($slot|tostring).rl.lan",
-            debug: "slot-\($slot|tostring)-debug.rl.lan"
-        },
-        worktree: "/srv/rl-infra/runners/slot-\($slot|tostring)/worktree",
-        container: "rl-runner-\($slot|tostring)",
-        shell_cmd: "docker exec -it rl-runner-\($slot|tostring) tmux attach -t main"
+        position: $position,
+        queue_length: $queue_length,
+        message: "All slots busy. Position \($position) in queue (length \($queue_length)). Poll claim again to recheck — head of queue gets the next freed slot."
     }'

@@ -20,6 +20,8 @@ import * as dbUrl from './tools/db-url.js';
 import * as logsUrl from './tools/logs-url.js';
 import * as envSync from './tools/env-sync.js';
 import * as envCloneProd from './tools/env-clone-prod.js';
+import * as envBuildImage from './tools/env-build-image.js';
+import * as envDeploy from './tools/env-deploy.js';
 
 const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.1.0' });
 
@@ -122,6 +124,30 @@ server.tool(
     timeout_seconds: z.number().int().min(60).max(7200).optional(),
   },
   async (p) => jsonResult(await envCloneProd.execute(p)),
+);
+
+server.tool(
+  envBuildImage.TOOL_NAME,
+  envBuildImage.TOOL_DESCRIPTION,
+  {
+    tag: z.string().regex(/^[a-zA-Z0-9._-]+$/).min(1).max(63),
+    no_push: z.boolean().optional(),
+    timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  },
+  async (p) => jsonResult(await envBuildImage.execute(p)),
+);
+
+server.tool(
+  envDeploy.TOOL_NAME,
+  envDeploy.TOOL_DESCRIPTION,
+  {
+    slug: z.string().regex(/^[a-z0-9-]+$/).min(1).max(63),
+    branch: z.string().optional(),
+    skip_sync: z.boolean().optional(),
+    skip_build: z.boolean().optional(),
+    timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  },
+  async (p) => jsonResult(await envDeploy.execute(p)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the

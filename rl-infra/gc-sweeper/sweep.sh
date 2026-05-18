@@ -14,8 +14,11 @@ set -euo pipefail
 STATE_DIR="${STATE_DIR:-/state}"
 CLAIMS="${STATE_DIR}/claims.json"
 ENVS="${STATE_DIR}/env-registry.json"
+QUEUE="${STATE_DIR}/queue.json"
 AUDIT="${STATE_DIR}/audit.log"
 LOCK_DIR="${STATE_DIR}/locks"
+QUEUE_TTL_SECONDS="${QUEUE_TTL_SECONDS:-1800}"   # 30 min — stale waiters
+MAX_CLAIM_AGE_SECONDS="${MAX_CLAIM_AGE_SECONDS:-28800}"   # 8 hr — slot hoarding
 mkdir -p "$LOCK_DIR"
 NOW_EPOCH=$(date -u +%s)
 NOW_ISO=$(date -u +%FT%TZ)
@@ -65,6 +68,42 @@ for slot in $DEAD_SLOTS; do
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null)'
     audit dead_claim_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
+done
+
+# 1b'. Hoarded-slot reaper. Claims older than MAX_CLAIM_AGE_SECONDS get
+# released regardless of heartbeat — stops a "stuck-alive" agent from
+# holding a slot indefinitely. Operator can opt out per-claim with the
+# `--keep-alive` flag (sets claims[].keep_alive=true).
+HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AGE_SECONDS" \
+    '.[] | select(.claimed == true and (.keep_alive // false) == false and .started_at != null
+        and ((($cutoff - ($tol|tonumber)) | tostring) > (.started_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring)
+    ) | .slot' "$CLAIMS" 2>/dev/null || true)
+for slot in $HOARDED_SLOTS; do
+    log "releasing hoarded slot $slot (claim age > ${MAX_CLAIM_AGE_SECONDS}s, keep_alive=false)"
+    docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
+        --format '{{ index .Labels "rl.env_slug" }} {{.ID}}' 2>/dev/null \
+      | while read -r slug cid; do
+            [[ -z "$slug" ]] && continue
+            docker rm -f "$cid" >/dev/null 2>&1 || true
+            docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+            docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+            rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+        done
+    mutate "$CLAIMS" --argjson s "$slot" \
+        '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .keep_alive=false)'
+    audit hoarded_slot_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
+done
+
+# 1c. Stale queue entries. Waiters older than QUEUE_TTL_SECONDS get dropped
+# so dead callers don't block the queue head.
+STALE_WAITERS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$QUEUE_TTL_SECONDS" \
+    '.[] | select(.queued_at != null
+        and ((($cutoff - ($tol|tonumber)) | tostring) > (.queued_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring)
+    ) | .agent_id' "$QUEUE" 2>/dev/null || true)
+for waiter in $STALE_WAITERS; do
+    log "dropping stale queue entry: $waiter"
+    mutate "$QUEUE" --arg a "$waiter" 'map(select(.agent_id != $a))'
+    audit queue_waiter_expired "$(jq -nc --arg agent "$waiter" '{agent:$agent}')"
 done
 
 # 1b. Orphan / unhealthy envs. Two failure modes the sweeper catches:

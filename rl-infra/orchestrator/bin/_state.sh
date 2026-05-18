@@ -36,6 +36,7 @@ fi
 RL_STATE_DIR="${RL_STATE_DIR:-/srv/rl-infra/state}"
 RL_CLAIMS_FILE="${RL_STATE_DIR}/claims.json"
 RL_ENVS_FILE="${RL_STATE_DIR}/env-registry.json"
+RL_QUEUE_FILE="${RL_STATE_DIR}/queue.json"
 RL_AUDIT_LOG="${RL_STATE_DIR}/audit.log"
 RL_LOCK_DIR="${RL_STATE_DIR}/locks"
 # Default matches the docker-compose.yml default profile (2 runners). Override
@@ -55,7 +56,37 @@ state::init() {
     if [[ ! -s "$RL_ENVS_FILE" ]]; then
         echo "[]" > "$RL_ENVS_FILE"
     fi
+    if [[ ! -s "$RL_QUEUE_FILE" ]]; then
+        echo "[]" > "$RL_QUEUE_FILE"
+    fi
     touch "$RL_AUDIT_LOG"
+}
+
+# Queue helpers. The queue is an ordered array of {agent_id, branch, queued_at}.
+# Pull-based: release just frees a slot, the next claim from the queue head
+# atomically dequeues + acquires.
+queue::position() {
+    # Echoes 0-based position if agent is in queue, else empty.
+    local agent="$1"
+    state::query "$RL_QUEUE_FILE" --arg a "$agent" \
+        '[.[] | .agent_id] | index($a) // empty'
+}
+
+queue::head_agent() {
+    state::query "$RL_QUEUE_FILE" '.[0].agent_id // empty'
+}
+
+queue::add() {
+    # Append agent to queue if not already present. No-op if present.
+    local agent="$1" branch="$2" ts="$3"
+    state::mutate "$RL_QUEUE_FILE" \
+        --arg a "$agent" --arg b "$branch" --arg t "$ts" \
+        'if any(.[]; .agent_id == $a) then . else . + [{agent_id: $a, branch: $b, queued_at: $t}] end'
+}
+
+queue::remove() {
+    local agent="$1"
+    state::mutate "$RL_QUEUE_FILE" --arg a "$agent" 'map(select(.agent_id != $a))'
 }
 
 # Atomic transform: state::mutate <file> <jq-filter>
