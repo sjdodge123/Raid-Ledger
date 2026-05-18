@@ -128,12 +128,13 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
         type="button"
         disabled={disabled || atCap || isNominating}
         aria-label={`Nominate ${tile.gameName}`}
+        data-testid="common-ground-tile-nominate"
         onClick={(e) => {
           e.stopPropagation();
           if (disabled || atCap || isNominating) return;
           onNominate(tile.gameId);
         }}
-        className="md:hidden min-h-[44px] px-3 py-2 text-[12px] rounded bg-emerald-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+        className="min-h-[44px] px-3 py-2 text-[12px] rounded bg-emerald-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
       >
         {isNominating ? 'Adding…' : atCap ? 'Lineup full' : '+ Nominate'}
       </button>
