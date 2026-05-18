@@ -2,17 +2,17 @@
  * Cycle 4 Common Ground hero (ROK-1297, S1 Nominating composite).
  *
  * Replaces the single horizontal carousel of `CommonGroundPanel` with three
- * themed rows × four tiles. Falls back to a single un-themed row when the
- * server response carries no `theme` field on any tile (deployment-skew
- * safety net). Pure presentational over `useCommonGround` — the parent
- * passes callbacks for nomination + drawer-open so the composite owns the
- * mutation state.
+ * themed rows × four tiles, reusing the existing `CommonGroundGameCard`
+ * (badges, AI Pick, sale %, owner / wishlist / player counts, early
+ * access). Falls back to a single un-themed row when the server response
+ * carries no `theme` field on any tile (deployment-skew safety net). Pure
+ * presentational over `useCommonGround` — the parent passes callbacks for
+ * nomination + drawer-open so the composite owns the mutation state.
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { CommonGroundGameDto } from '@raid-ledger/contract';
 import { useCommonGround } from '../../../hooks/use-lineups';
-import { CommonGroundHeroTile } from './CommonGroundHeroTile';
-import { CommonGroundThemedRow } from './CommonGroundThemedRow';
+import { CommonGroundThemedRow, CommonGroundTileWrapper } from './CommonGroundThemedRow';
 
 export interface CommonGroundHeroProps {
   lineupId: number;
@@ -42,9 +42,11 @@ function bucketByTheme(tiles: CommonGroundGameDto[]): ThemedBuckets {
 function HeroHeader({
   onRegenerate,
   onOpenWhy,
+  isFetching,
 }: {
   onRegenerate: () => void;
   onOpenWhy: () => void;
+  isFetching: boolean;
 }): JSX.Element {
   return (
     <div className="flex items-center justify-between mb-2">
@@ -55,16 +57,28 @@ function HeroHeader({
         <button
           type="button"
           onClick={onRegenerate}
+          disabled={isFetching}
           aria-label="Regenerate Common Ground suggestions"
-          className="text-[11px] text-muted hover:text-foreground border border-edge rounded px-2 py-0.5"
+          aria-busy={isFetching}
+          className="min-h-[36px] text-[11px] text-muted hover:text-foreground border border-edge rounded px-2 py-1 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1"
         >
-          ↻ Regenerate
+          {isFetching ? (
+            <>
+              <span
+                aria-hidden="true"
+                className="inline-block w-3 h-3 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin"
+              />
+              Regenerating…
+            </>
+          ) : (
+            <>↻ Regenerate</>
+          )}
         </button>
         <button
           type="button"
           onClick={onOpenWhy}
           aria-label="Why these suggestions?"
-          className="text-[11px] text-muted hover:text-foreground border border-edge rounded px-2 py-0.5"
+          className="min-h-[36px] text-[11px] text-muted hover:text-foreground border border-edge rounded px-2 py-1"
         >
           Why these?
         </button>
@@ -91,15 +105,18 @@ function LegacyFallbackRow({
   return (
     <div
       data-testid="common-ground-fallback-row"
-      className="grid grid-cols-2 md:grid-cols-4 gap-3"
+      className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide"
+      style={{ scrollbarWidth: 'none' }}
     >
       {tiles.map((tile) => (
-        <CommonGroundHeroTile
+        <CommonGroundTileWrapper
           key={tile.gameId}
-          game={tile}
-          disabled={atCap || !canParticipate || nominatingId === tile.gameId}
-          onNominate={() => onTileNominate(tile.gameId)}
-          onOpenDrawer={() => onTileOpenDrawer(tile.gameId)}
+          tile={tile}
+          disabled={!canParticipate}
+          atCap={atCap}
+          isNominating={nominatingId === tile.gameId}
+          onNominate={onTileNominate}
+          onOpenDrawer={onTileOpenDrawer}
         />
       ))}
     </div>
@@ -141,7 +158,7 @@ function ThemedLayout({
 
 export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
   const { lineupId, canParticipate, onTileNominate, onTileOpenDrawer } = props;
-  const { data, isLoading, refetch } = useCommonGround(
+  const { data, isLoading, isFetching, refetch } = useCommonGround(
     { minOwners: 0, lineupId },
     true,
   );
@@ -163,6 +180,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
       <HeroHeader
         onRegenerate={() => void refetch()}
         onOpenWhy={() => setWhyOpen(true)}
+        isFetching={isFetching}
       />
       {isLoading && (
         <div className="text-[11px] text-muted">Loading suggestions…</div>

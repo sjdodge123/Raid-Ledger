@@ -1,15 +1,17 @@
 /**
  * Single themed row (Owned / Taste / Trending) in the Common Ground hero
- * (ROK-1297). Renders up to 4 tiles in a responsive 4-column grid (2 on
- * small screens). The row is announced via `role="region"` with the theme
- * label so screen readers can navigate between the three buckets.
+ * (ROK-1297). Reuses the existing CommonGroundGameCard (badges, AI pick,
+ * sale %, owner count, wishlist count, player count, early access) and
+ * adds the per-tile `★ {whyReason}` annotation below each card. Mobile
+ * variant exposes the Nominate button always (hover overlay is desktop-
+ * only) so the affordance is reachable on touch.
  */
-import type { JSX } from 'react';
+import { type JSX } from 'react';
 import type {
   CommonGroundGameDto,
   CommonGroundTheme,
 } from '@raid-ledger/contract';
-import { CommonGroundHeroTile } from './CommonGroundHeroTile';
+import { CommonGroundGameCard } from '../CommonGroundGameCard';
 
 export interface CommonGroundThemedRowProps {
   theme: CommonGroundTheme;
@@ -60,19 +62,81 @@ export function CommonGroundThemedRow(
       <h3 className="text-[12px] uppercase tracking-wider text-muted">
         {meta.title}
       </h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
         {tiles.map((tile) => (
-          <CommonGroundHeroTile
+          <CommonGroundTileWrapper
             key={tile.gameId}
-            game={tile}
-            disabled={
-              atCap || !canParticipate || nominatingId === tile.gameId
-            }
-            onNominate={() => onTileNominate(tile.gameId)}
-            onOpenDrawer={() => onTileOpenDrawer(tile.gameId)}
+            tile={tile}
+            disabled={!canParticipate}
+            atCap={atCap}
+            isNominating={nominatingId === tile.gameId}
+            onNominate={onTileNominate}
+            onOpenDrawer={onTileOpenDrawer}
           />
         ))}
       </div>
     </section>
+  );
+}
+
+interface TileWrapperProps {
+  tile: CommonGroundGameDto;
+  disabled: boolean;
+  atCap: boolean;
+  isNominating: boolean;
+  onNominate: (gameId: number) => void;
+  onOpenDrawer: (gameId: number) => void;
+}
+
+export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
+  const { tile, disabled, atCap, isNominating, onNominate, onOpenDrawer } =
+    props;
+  return (
+    <div
+      data-testid="common-ground-tile"
+      className="flex-shrink-0 flex flex-col gap-1 w-[180px]"
+    >
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Open details for ${tile.gameName}`}
+        onClick={() => onOpenDrawer(tile.gameId)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpenDrawer(tile.gameId);
+          }
+        }}
+        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 rounded-xl"
+      >
+        <CommonGroundGameCard
+          game={tile}
+          onNominate={(gameId: number) => {
+            if (disabled || atCap || isNominating) return;
+            onNominate(gameId);
+          }}
+          isNominating={isNominating}
+          atCap={atCap || disabled}
+        />
+      </div>
+      {tile.whyReason && (
+        <div className="text-[10px] text-emerald-300 leading-snug px-1 line-clamp-2">
+          ★ {tile.whyReason}
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={disabled || atCap || isNominating}
+        aria-label={`Nominate ${tile.gameName}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (disabled || atCap || isNominating) return;
+          onNominate(tile.gameId);
+        }}
+        className="md:hidden min-h-[44px] px-3 py-2 text-[12px] rounded bg-emerald-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+      >
+        {isNominating ? 'Adding…' : atCap ? 'Lineup full' : '+ Nominate'}
+      </button>
+    </div>
   );
 }
