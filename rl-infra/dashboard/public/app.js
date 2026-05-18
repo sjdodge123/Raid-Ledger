@@ -70,8 +70,10 @@ const renderEnv = (e, publicDomain) => {
   const internalUrl = `http://${slug}.rl.lan`;
   // Prefer the env's own recorded public_domain (in case it was spun under
   // a different RL_PUBLIC_DOMAIN), fall back to the server's current value.
+  // Public hostname pattern is ${slug}test.${publicDomain} to avoid colliding
+  // with real subdomains under a single-level wildcard.
   const envPublic = e.public_domain || publicDomain;
-  const publicUrl = envPublic ? `https://${slug}.${envPublic}` : null;
+  const publicUrl = envPublic ? `https://${slug}test.${envPublic}` : null;
 
   const card = el('div', { class: 'card' });
   card.appendChild(el('div', { class: 'card-title' }, slug, ' ',

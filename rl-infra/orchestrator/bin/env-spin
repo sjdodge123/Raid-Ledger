@@ -46,7 +46,8 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     mkdir -p "$TRAEFIK_CONF_D"
     PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
     if [[ -n "$PUBLIC_DOMAIN" ]]; then
-        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}.${PUBLIC_DOMAIN}\`)"
+        # ${SLUG}test.${PUBLIC_DOMAIN} pattern — keep in sync with non-idempotent path.
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
     else
         HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
     fi
@@ -104,12 +105,19 @@ done
 # bot would emit http://{slug}.rl.lan URLs which only work on the LAN.
 PUBLIC_URL_FLAG=()
 if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
-    PUBLIC_URL="https://${SLUG}.${RL_PUBLIC_DOMAIN}"
+    # External hostname pattern: ${SLUG}test.${RL_PUBLIC_DOMAIN}. The literal
+    # 'test' suffix on the slug avoids collisions with real subdomains under
+    # the operator's apex (raid, plex, status, etc.) so a single-level
+    # wildcard `*.${RL_PUBLIC_DOMAIN}` covers all test envs while real
+    # services keep their own A records. Set on Cloudflare as `*` (single
+    # level), Universal SSL covers it.
+    PUBLIC_HOST="${SLUG}test.${RL_PUBLIC_DOMAIN}"
+    PUBLIC_URL="https://${PUBLIC_HOST}"
     PUBLIC_URL_FLAG=(
         -e "PUBLIC_URL=${PUBLIC_URL}"
         -e "APP_URL=${PUBLIC_URL}"
         -e "BASE_URL=${PUBLIC_URL}"
-        -e "PUBLIC_DOMAIN=${SLUG}.${RL_PUBLIC_DOMAIN}"
+        -e "PUBLIC_DOMAIN=${PUBLIC_HOST}"
     )
 fi
 
@@ -139,7 +147,8 @@ TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
 PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
 mkdir -p "$TRAEFIK_CONF_D"
 if [[ -n "$PUBLIC_DOMAIN" ]]; then
-    HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}.${PUBLIC_DOMAIN}\`)"
+    # ${SLUG}test.${PUBLIC_DOMAIN} pattern — see comment near PUBLIC_URL_FLAG above.
+    HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
 else
     HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
 fi
@@ -178,7 +187,8 @@ audit::log env-spin ok "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg
 # (dashboard, MCP, operator) know exactly what URL external testers see.
 PUBLIC_URL_OUT=""
 if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
-    PUBLIC_URL_OUT="https://${SLUG}.${RL_PUBLIC_DOMAIN}"
+    # ${SLUG}test.${RL_PUBLIC_DOMAIN} — same pattern as HOST_RULE above.
+    PUBLIC_URL_OUT="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
 fi
 jq -nc --arg slug "$SLUG" --arg url "http://${SLUG}.rl.lan" \
     --arg public_url "$PUBLIC_URL_OUT" --argjson slot "$SLOT" \
