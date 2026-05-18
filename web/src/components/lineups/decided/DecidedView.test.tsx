@@ -538,15 +538,19 @@ describe('DecidedView — single-match edge case (AC7)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// MatchCard sub-line copy (spec § Match card spec) — locks the wireframe wording
+// MatchCard sub-line copy — locks accurate personal-context wording.
+// NOTE: The data model does not expose a per-match player cap (matchThreshold
+// on GroupedMatchesResponseDto is a 0–100 percentage for the grouping algo,
+// not a player count), so "X of Y players" is deliberately absent. Restoring
+// the wireframe denominator + "group is full" requires extending
+// MatchDetailResponseDto with a per-match playerCap — tracked as a follow-up.
 // ---------------------------------------------------------------------------
 
 describe('DecidedView — MatchCard sub-line copy', () => {
-  it('personal card shows "X of Y players · You + N others" when group is not full', () => {
+  it('personal card shows "You + N others" (no false denominator) when group has multiple voters', () => {
     const lineup = createMockLineupDetail({ id: 1, status: 'decided' });
     useLineupMatchesMock.mockReturnValue({
       data: makeMatches({
-        matchThreshold: 10,
         scheduling: [
           makeMatch({
             id: 1,
@@ -568,15 +572,16 @@ describe('DecidedView — MatchCard sub-line copy', () => {
     renderWithProviders(<DecidedView lineup={lineup} />);
 
     const yourSection = screen.getByTestId('decided-your-matches-section');
-    expect(within(yourSection).getByText(/6 of 10 · You \+ 5 others/i)).toBeInTheDocument();
+    expect(within(yourSection).getByText(/^You \+ 5 others$/i)).toBeInTheDocument();
+    // No false denominator, no "group is full" surface.
+    expect(within(yourSection).queryByText(/of \d+/i)).toBeNull();
     expect(within(yourSection).queryByText(/group is full/i)).toBeNull();
   });
 
-  it('personal card appends "· group is full" when memberCount === threshold', () => {
+  it('personal card with 1 other uses singular "other"', () => {
     const lineup = createMockLineupDetail({ id: 1, status: 'decided' });
     useLineupMatchesMock.mockReturnValue({
       data: makeMatches({
-        matchThreshold: 4,
         scheduling: [
           makeMatch({
             id: 1,
@@ -584,8 +589,6 @@ describe('DecidedView — MatchCard sub-line copy', () => {
             members: [
               makeMember({ id: 1, userId: 99 }),
               makeMember({ id: 2, userId: 200 }),
-              makeMember({ id: 3, userId: 201 }),
-              makeMember({ id: 4, userId: 202 }),
             ],
           }),
         ],
@@ -596,16 +599,35 @@ describe('DecidedView — MatchCard sub-line copy', () => {
     renderWithProviders(<DecidedView lineup={lineup} />);
 
     const yourSection = screen.getByTestId('decided-your-matches-section');
-    expect(
-      within(yourSection).getByText(/4 of 4 · You \+ 3 others · group is full/i),
-    ).toBeInTheDocument();
+    expect(within(yourSection).getByText(/^You \+ 1 other$/i)).toBeInTheDocument();
+  });
+
+  it('personal solo (only the viewer in the match) reads "Just you so far"', () => {
+    const lineup = createMockLineupDetail({ id: 1, status: 'decided' });
+    useLineupMatchesMock.mockReturnValue({
+      data: makeMatches({
+        scheduling: [
+          makeMatch({
+            id: 1,
+            lineupId: 1,
+            members: [makeMember({ id: 1, userId: 99 })],
+          }),
+        ],
+      }),
+      isLoading: false,
+    });
+
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    const yourSection = screen.getByTestId('decided-your-matches-section');
+    expect(within(yourSection).getByText(/^Just you so far$/i)).toBeInTheDocument();
+    expect(within(yourSection).queryByText(/You \+ 0 others/i)).toBeNull();
   });
 
   it('non-personal card shows just "N players" (no "of Y", no "You")', () => {
     const lineup = createMockLineupDetail({ id: 1, status: 'decided' });
     useLineupMatchesMock.mockReturnValue({
       data: makeMatches({
-        matchThreshold: 10,
         scheduling: [
           makeMatch({
             id: 1,
@@ -627,7 +649,28 @@ describe('DecidedView — MatchCard sub-line copy', () => {
 
     const otherSection = screen.getByTestId('decided-other-matches-section');
     expect(within(otherSection).getByText(/^5 players$/i)).toBeInTheDocument();
-    expect(within(otherSection).queryByText(/of 10/i)).toBeNull();
+    expect(within(otherSection).queryByText(/of \d+/i)).toBeNull();
     expect(within(otherSection).queryByText(/You \+/i)).toBeNull();
+  });
+
+  it('non-personal card with 1 player uses singular "player"', () => {
+    const lineup = createMockLineupDetail({ id: 1, status: 'decided' });
+    useLineupMatchesMock.mockReturnValue({
+      data: makeMatches({
+        scheduling: [
+          makeMatch({
+            id: 1,
+            lineupId: 1,
+            members: [makeMember({ id: 9, userId: 200, displayName: 'A' })],
+          }),
+        ],
+      }),
+      isLoading: false,
+    });
+
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    const otherSection = screen.getByTestId('decided-other-matches-section');
+    expect(within(otherSection).getByText(/^1 player$/i)).toBeInTheDocument();
   });
 });

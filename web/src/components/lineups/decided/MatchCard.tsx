@@ -12,24 +12,22 @@ import { GameRef } from '../../games/GameRef';
 interface MatchCardProps {
   match: MatchDetailResponseDto;
   lineupId: number;
-  /** Lineup-wide per-game player cap (from GroupedMatchesResponseDto.matchThreshold). */
-  threshold: number;
   /** True if the authenticated user is a member of this match. */
   isPersonal: boolean;
 }
 
-function matchSubLine(
-  memberCount: number,
-  threshold: number,
-  isPersonal: boolean,
-): string {
+// Sub-line emits "personal context only" — the decided-view data does not carry
+// a per-match player cap (GroupedMatchesResponseDto.matchThreshold is the
+// grouping-algorithm percentage 0–100, not a player count), so "X of Y players"
+// is intentionally absent. Restoring it requires extending MatchDetailResponseDto
+// with a per-match playerCap — tracked as a follow-up.
+function matchSubLine(memberCount: number, isPersonal: boolean): string {
   if (!isPersonal) {
     return `${memberCount} ${memberCount === 1 ? 'player' : 'players'}`;
   }
   const others = Math.max(0, memberCount - 1);
-  const othersText = `You + ${others} ${others === 1 ? 'other' : 'others'}`;
-  const isFull = threshold > 0 && memberCount >= threshold;
-  return `${memberCount} of ${threshold} · ${othersText}${isFull ? ' · group is full' : ''}`;
+  if (others === 0) return 'Just you so far';
+  return `You + ${others} ${others === 1 ? 'other' : 'others'}`;
 }
 
 function PickATimeCta({
@@ -53,7 +51,6 @@ function PickATimeCta({
 export function MatchCard({
   match,
   lineupId,
-  threshold,
   isPersonal,
 }: MatchCardProps): JSX.Element {
   return (
@@ -63,7 +60,7 @@ export function MatchCard({
         gameId={match.gameId}
         name={match.gameName}
         coverUrl={match.gameCoverUrl}
-        sub={matchSubLine(match.members.length, threshold, isPersonal)}
+        sub={matchSubLine(match.members.length, isPersonal)}
       />
       {isPersonal && <PickATimeCta lineupId={lineupId} matchId={match.id} />}
     </div>
