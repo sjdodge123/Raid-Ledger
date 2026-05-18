@@ -120,7 +120,10 @@ test.describe('Nominating composite — Common Ground multi-row hero (ROK-1297)'
         const tiles = page.getByTestId('common-ground-tile');
         const count = await tiles.count();
         expect(count).toBeGreaterThanOrEqual(1);
-        expect(count).toBeLessThanOrEqual(12);
+        // Cap is `PER_THEME_CEILING` (24) × 3 themes = 72. Multi-row layout
+        // wraps within each themed bucket — pre-rework this was hard-capped
+        // at 4 per row so the original assertion was `<= 12`.
+        expect(count).toBeLessThanOrEqual(72);
     });
 });
 
@@ -139,13 +142,16 @@ test.describe('Nominating composite — drawer interactions (ROK-1297)', () => {
         const firstTile = page.getByTestId('common-ground-tile').first();
         await expect(firstTile).toBeVisible({ timeout: 10_000 });
         // The card body acts as the drawer trigger (role=button, aria-label
-        // "Open details for ..."). Clicking the tile container itself would
-        // ambiguate between the drawer trigger and the wrapper Nominate
-        // button below the card; targeting the drawer trigger directly is
-        // what the user does on touch.
+        // "Open details for ..."). On desktop, `:group-hover` reveals the
+        // legacy CommonGroundGameCard's Nominate overlay; Playwright's
+        // pre-click hover triggers that overlay before the click lands.
+        // Click at a position offset (top-left of the card) to avoid the
+        // centered overlay button. The wrapper's `pointer-events-none` on
+        // the overlay backdrop only intercepts taps on the overlay's button
+        // itself — anywhere else still bubbles to the drawer trigger.
         await firstTile
             .getByRole('button', { name: /open details for/i })
-            .click();
+            .click({ position: { x: 30, y: 30 } });
 
         await expect(page.getByTestId('game-research-drawer')).toBeVisible({
             timeout: 10_000,
@@ -201,11 +207,13 @@ test.describe('Nominating composite — nominate increments tab count (ROK-1297)
 });
 
 // ---------------------------------------------------------------------------
-// AC-Search — Search any game CTA opens the legacy NominateModal
+// AC-Search — "Search any game" CTA swaps the hero body to inline search
+// (Operator rework 2026-05-18: results render in the same Common Ground
+// vertical space, NOT in a modal).
 // ---------------------------------------------------------------------------
 
 test.describe('Nominating composite — search affordance (ROK-1297)', () => {
-    test('clicking "Or search any game" opens the NominateModal', async ({
+    test('clicking "Search any game" swaps the hero body to inline search', async ({
         page,
     }) => {
         await gotoNominating(page);
@@ -214,11 +222,11 @@ test.describe('Nominating composite — search affordance (ROK-1297)', () => {
         await expect(searchBtn).toBeVisible({ timeout: 10_000 });
         await searchBtn.click();
 
-        // NominateModal is a role=dialog with the title "Nominate a Game"
-        // (legacy modal copy carried forward).
-        await expect(
-            page.getByRole('dialog', { name: /nominate a game/i }),
-        ).toBeVisible({ timeout: 10_000 });
+        // Inline view replaces the themed-rows body inside CommonGroundHero.
+        await expect(page.getByTestId('search-any-game-view')).toBeVisible({
+            timeout: 10_000,
+        });
+        await expect(page.getByTestId('search-any-game-input')).toBeVisible();
     });
 });
 

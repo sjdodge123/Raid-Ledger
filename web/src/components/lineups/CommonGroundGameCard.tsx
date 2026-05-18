@@ -106,11 +106,11 @@ function NominateOverlay({
     const label = atCap ? 'Lineup full' : '+ Nominate';
 
     return (
-        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
             <button
                 onClick={(e) => { e.stopPropagation(); onNominate(); }}
                 disabled={disabled}
-                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors pointer-events-auto"
             >
                 {isNominating ? 'Adding...' : label}
             </button>
