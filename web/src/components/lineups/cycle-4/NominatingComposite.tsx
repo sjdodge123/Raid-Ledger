@@ -132,7 +132,7 @@ function StickyHeroJumpButton({
         <path d="M12 5v14" />
         <path d="m19 12-7 7-7-7" />
       </svg>
-      <span>Yours · {count}</span>
+      <span>Nominations · {count}</span>
     </button>
   );
 }
