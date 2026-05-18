@@ -7,12 +7,35 @@
 # validation based on changed files.
 #
 # Usage:
-#   ./scripts/validate-ci.sh          # Run all checks
-#   ./scripts/validate-ci.sh --full   # Same (accepted for explicitness)
-#   ./scripts/validate-ci.sh --ci     # Hard-fail on missing local prereqs
-#                                     # (e.g. pg_dump). Use in CI to ensure
-#                                     # backup integration tests never silently
-#                                     # skip.
+#   ./scripts/validate-ci.sh             # Run all checks (e2e auto-scoped)
+#   ./scripts/validate-ci.sh --full      # Same (accepted for explicitness)
+#   ./scripts/validate-ci.sh --ci        # Hard-fail on missing local prereqs
+#                                        # (e.g. pg_dump). Use in CI to ensure
+#                                        # backup integration tests never silently
+#                                        # skip.
+#   ./scripts/validate-ci.sh --no-e2e    # Skip Playwright + Discord smoke
+#                                        # (use only when you know you don't
+#                                        # need browser/bot coverage; default
+#                                        # is auto-scoped by diff).
+#   ./scripts/validate-ci.sh --with-e2e  # Force Playwright + Discord smoke
+#                                        # even if no triggering files changed
+#                                        # (e.g. paranoid pre-push pass).
+#   ./scripts/validate-ci.sh --only-e2e  # Skip build/typecheck/lint/tests and
+#                                        # run only the diff-gated e2e steps.
+#                                        # Use in post-deploy gates where the
+#                                        # static checks already ran upstream.
+#
+# E2E auto-scope (default):
+#   * Playwright runs if web/**, api/src/auth/**, api/src/admin/demo-test*,
+#     playwright.config.*, or scripts/smoke/** changed AND the dev env is up
+#     (curl :3000/health returns ok).
+#   * Discord smoke runs if api/src/discord-bot/**, api/src/notifications/**,
+#     api/src/events/signups*, api/src/events/event-lifecycle*,
+#     api/src/admin/demo-test*, tools/test-bot/src/smoke/**, or
+#     tools/test-bot/src/helpers/polling.ts changed AND env is up.
+#   * Either step SKIPS with a clear message if scope is empty or env is down.
+#     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
+#     you need that coverage.
 # =============================================================================
 
 set -euo pipefail
@@ -34,9 +57,15 @@ FAILURES=0
 # Scope flags
 migrations_changed=false
 container_changed=false
+playwright_relevant=false
+discord_smoke_relevant=false
 
 # Mode flags
 ci_mode=false
+# e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
+e2e_mode="auto"
+# only_e2e: when true, skip everything except the e2e steps
+only_e2e=false
 
 # ---------------------------------------------------------------------------
 # Result tracking helpers
@@ -96,6 +125,42 @@ detect_scope() {
   else
     echo -e "  Container files changed: no"
   fi
+
+  # Playwright-relevant: web UI, auth (smoke tests log in), demo-test endpoints,
+  # playwright config, and the smoke specs themselves. Exclude web/src/test/**
+  # and web/src/dev/** (unit-test scaffolding and DEMO_MODE wireframes don't
+  # ship to the smoke surface).
+  if echo "$changed_files" \
+    | grep -vE '^web/src/(test|dev)/' \
+    | grep -qE '^web/|^api/src/auth/|^api/src/admin/demo-test|^playwright\.config\.|^scripts/smoke/'; then
+    playwright_relevant=true
+    echo -e "  Playwright-relevant changes: ${YELLOW}yes${NC}"
+  else
+    echo -e "  Playwright-relevant changes: no"
+  fi
+
+  # Discord-smoke-relevant: the 6 trigger paths from CLAUDE.md's
+  # "Files that trigger smoke test review" list. Matches discord-bot listeners,
+  # notifications, signup flows, lifecycle ops, demo-test endpoints used by
+  # smoke fixtures, the smoke tests themselves, and the polling helper.
+  if echo "$changed_files" \
+    | grep -qE '^api/src/discord-bot/|^api/src/notifications/|^api/src/events/signups|^api/src/events/event-lifecycle|^api/src/admin/demo-test|^tools/test-bot/src/smoke/|^tools/test-bot/src/helpers/polling\.ts$'; then
+    discord_smoke_relevant=true
+    echo -e "  Discord-smoke-relevant changes: ${YELLOW}yes${NC}"
+  else
+    echo -e "  Discord-smoke-relevant changes: no"
+  fi
+}
+
+# Returns 0 if the local dev env (API :3000 + web :5173) is up, 1 otherwise.
+# Quiet on failure — callers decide whether absence is fatal or just a skip signal.
+# Both ports must answer: Playwright's webServer config has reuseExistingServer:true
+# with a 120s timeout, so if :5173 is down it'll silently try to spawn its own
+# `npm run dev -w web` and only fail after 2 minutes — too slow for our fail-fast.
+check_env_up() {
+  curl -fsS --max-time 3 http://localhost:3000/health 2>/dev/null \
+    | grep -q '"status":"ok"' || return 1
+  curl -fsS --max-time 3 -o /dev/null http://localhost:5173 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
@@ -276,6 +341,68 @@ _check_container_security_headers() {
   echo -e "${GREEN}Security headers: all 6 present on /, /api/health, and ${bundle_path}${NC}"
 }
 
+run_playwright_e2e() {
+  case "$e2e_mode" in
+    off)
+      echo -e "${YELLOW}--no-e2e passed — skipping Playwright${NC}"
+      return 2
+      ;;
+    auto)
+      if ! $playwright_relevant; then
+        echo -e "No Playwright-relevant files changed — skipping"
+        return 2
+      fi
+      if ! check_env_up; then
+        echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Playwright${NC}"
+        echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed UI flows.${NC}"
+        return 2
+      fi
+      ;;
+    on)
+      if ! check_env_up; then
+        echo -e "${RED}--with-e2e requested but dev env is not responding on :3000/health.${NC}"
+        echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        return 1
+      fi
+      ;;
+  esac
+
+  # Runs BOTH desktop + mobile projects — matches GitHub CI exactly (ROK-935).
+  npx playwright test
+}
+
+run_discord_smoke() {
+  case "$e2e_mode" in
+    off)
+      echo -e "${YELLOW}--no-e2e passed — skipping Discord smoke${NC}"
+      return 2
+      ;;
+    auto)
+      if ! $discord_smoke_relevant; then
+        echo -e "No Discord-smoke-relevant files changed — skipping"
+        return 2
+      fi
+      if ! check_env_up; then
+        echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Discord smoke${NC}"
+        echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed bot/notification flows.${NC}"
+        return 2
+      fi
+      ;;
+    on)
+      if ! check_env_up; then
+        echo -e "${RED}--with-e2e requested but dev env is not responding on :3000/health.${NC}"
+        echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        return 1
+      fi
+      ;;
+  esac
+
+  # tools/test-bot reads its own .env (companion-bot token + guild ID).
+  # Missing config there surfaces as a clean failure inside `npm run smoke`,
+  # not something this script needs to pre-flight.
+  (cd "$REPO_ROOT/tools/test-bot" && npm run smoke)
+}
+
 _assert_security_headers() {
   local headers="$1" target="$2"
   local h
@@ -329,22 +456,37 @@ main() {
     case "$1" in
       --full) shift ;;
       --ci) ci_mode=true; shift ;;
+      --no-e2e) e2e_mode="off"; shift ;;
+      --with-e2e) e2e_mode="on"; shift ;;
+      --only-e2e) only_e2e=true; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
     esac
   done
 
+  if $only_e2e && [ "$e2e_mode" = "off" ]; then
+    echo -e "${RED}--only-e2e and --no-e2e are mutually exclusive.${NC}"
+    exit 1
+  fi
+
   echo -e "${GREEN}Starting local CI validation...${NC}"
   detect_scope
 
-  run_step "Build (all workspaces)" run_build
-  run_step "TypeScript (all)" run_typecheck
-  run_step "Lint (all)" run_lint
-  run_step "Unit tests + coverage" run_unit_tests
-  run_step "Integration tests (api)" run_integration_tests
+  if ! $only_e2e; then
+    run_step "Build (all workspaces)" run_build
+    run_step "TypeScript (all)" run_typecheck
+    run_step "Lint (all)" run_lint
+    run_step "Unit tests + coverage" run_unit_tests
+    run_step "Integration tests (api)" run_integration_tests
 
-  # Migration and container checks handle their own SKIPPED/PASS/FAIL recording
-  run_step "Migration validation" run_migration_validation
-  run_step "Container startup" run_container_validation
+    # Migration and container checks handle their own SKIPPED/PASS/FAIL recording
+    run_step "Migration validation" run_migration_validation
+    run_step "Container startup" run_container_validation
+  fi
+
+  # E2E checks are auto-scoped (diff + env gated). They SKIP cleanly when the
+  # diff doesn't touch their surface or when the dev env isn't running.
+  run_step "Playwright (desktop + mobile)" run_playwright_e2e
+  run_step "Discord smoke (companion bot)" run_discord_smoke
 
   print_summary
   echo -e "${GREEN}All checks passed!${NC}"

@@ -81,6 +81,23 @@ Only when operator explicitly says "go wider" or both A + B are empty. Same labe
 
 For specific stories named by the operator: `mcp__linear__get_issue({ id: "ROK-XXX" })` per ID. Verify label is eligible — if Bug/Feature, flag and recommend `/build`. Cycle membership is informational only when the operator named the IDs.
 
+### 1c.1 Read latest comments for every candidate story (STRICT)
+
+After fetching each story (whether via the broad `list_issues` queries above OR the targeted `get_issue` per-ID calls), ALSO call `mcp__linear__list_comments({ issueId: "ROK-XXX" })`. Operators and `/readlogs` append fresh evidence, priority escalations, and post-filing context as **comments** rather than editing the description. Skipping this step means you miss:
+
+- `/readlogs triage <date>` comments with new prod-log evidence — often a signal that a backlog item should be promoted into the active batch.
+- Operator-added context that changes scope, dependency order, or which sibling stories should ride along.
+- Reviewer findings from prior bulk runs that got appended rather than re-filed.
+- Cross-story coordination notes (e.g., "depends on ROK-YYY shipping first", "merge with ROK-ZZZ").
+
+**How to apply:**
+- If a comment escalates the issue → push it to the front of the batch in 1e and consider promoting it from the `[backlog]` source pool tag to operator-attention.
+- If a comment changes the suggested fix or scope → treat the comment as the source of truth for the dev/reviewer teammates, overriding the description.
+- If a comment names a blocker → defer the story or sequence it after the dependency.
+- Empty comment thread is fine — note "no triage comments" and move on. Don't block.
+
+Print a one-line summary per story: `ROK-XXX: <N> comments, <0|N> triage-relevant`.
+
 ### Presentation
 
 When presenting the batch (1e), tag each story's source pool: `[cycle]`, `[ready]`, or `[backlog]`. Operator should see at a glance whether they're draining the cycle or reaching past it.

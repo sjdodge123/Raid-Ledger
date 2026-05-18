@@ -92,11 +92,6 @@ A skill's job is typically: parse → group duplicates by file path → propose 
 
 Findings from pre-launch validation of the Community Lineup feature (33 runbook ACs + 35 original Linear sub-ACs cross-checked). Runbook landed at `docs/runbooks/lineup-prelaunch-validation.md`. Chrome MCP + Playwright + companion bot all driven against deployed dev env.
 
-**Test-infra debt surfaced:**
-
-- **[med]** `scripts/smoke/lineup-creation.smoke.spec.ts:147`, `scripts/smoke/community-lineup.smoke.spec.ts:184,548`, `scripts/smoke/lineup-votes-per-player.smoke.spec.ts:114`, `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:597` — five lineup specs intermittently fail when the worker can't get the `?test=open-lineup-modal` modal to materialise. Manual Chrome MCP drive of the same flows during ROK-1068 confirms every feature works end-to-end (Start Lineup modal opens with all sliders + Match Threshold 35% + Votes per Player 3 + Tiebreaker Mode selector); the failure is the fixture's cross-worker race against the global "active lineup" banner state. 9 specs fail on a single run while 200+ pass.
-  Suggested: extend the existing per-worker title-prefix isolation pattern (ROK-1147 / ROK-1227) so every Start Lineup modal test archives sibling-worker lineups by prefix before navigating, OR gate the `?test=open-lineup-modal` codepath so it force-opens the modal regardless of active-lineup banner state.
-
 **Coverage gaps (uncovered by smoke + integration + Chrome MCP):**
 
 - **[low]** `api/src/lineups/lineup-notification-channel.helpers.ts` lifecycle dispatcher when `channel_bindings.lineup` is null — no smoke or integration coverage exercises the no-bound-channel path. Every test fixture uses a channel-bound community. Regression would be silent in CI; only surfaces when an operator self-hosts without binding a channel before starting their first lineup. AC 33 in the ROK-1068 runbook is explicitly logged as a gap because DEMO_MODE does not expose channel-unbind.
@@ -160,14 +155,7 @@ Findings from pre-launch validation of the Community Lineup feature (33 runbook 
 
 `./scripts/validate-ci.sh --full` against the batch base produced 2 failures out of 1009 integration tests, neither in any file changed by the batch (24 file diff, neither file present in diff). Both pass 3/3 cleanly in isolation via `./scripts/spec-loop.sh`. Cross-suite carrier flake, NOT caused by this batch.
 
-- **[med]** `api/src/lineups/lineups-matches.integration.spec.ts:GET /lineups/:id/matches › places thresholdMet=true matches in scheduling tier` — fails mid-suite with `socket hang up`. Classic BullMQ/ioredis socket-leak carrier pattern; matches the documented signature in memory `reference_bullmq_ioredis_test_carrier.md` (ROK-1250 / PR #760). Passes 3/3 isolated.
-  Suggested: continue the ROK-1250 socket-leak cleanup — the carrier surface keeps surfacing the same class of mid-suite hang. Specific lead: snapshot remote sockets in `closeTestApp` and destroy any held by ioredis when the test app shuts down.
-- **[med]** `api/src/events/signups-roster.integration.spec.ts:Signups — admin remove › should allow admin to remove a signup` — fails mid-suite with `createFutureEvent failed: 401 — Unauthorized`. This is a different pattern from the socket leak — admin cookie / JWT state appears to be pre-empted by a sibling spec's auth flow. Passes 3/3 isolated.
-  Suggested: bisect the full-suite order to find which spec leaves auth state mutated. Likely candidates: anything that calls `logout` or sets a different-user session and doesn't reset. Add `beforeEach` cookie/JWT reset in the test app factory.
-
-**Why this matters:** `validate-ci.sh --full` will fail on the batch base today, blocking every fix-batch / build / dispatch that runs the full integration gate. Existing memory `reference_bullmq_ioredis_test_carrier.md` documents the socket-leak class; the auth-state-leak (signups-roster) class is new and worth its own slot.
-
-Suggested triage path: two stories — (1) continue ROK-1250 socket cleanup with the new carrier evidence, (2) new auth-state-isolation chore. Estimated 1-3h each. Cheap-experiments-first applies (memory `feedback_cheap_experiments_first`): start with bisect, don't pay for instrumented full-suite loops until the bisect names the polluting predecessor.
+Both findings from this section are now tracked in Linear: BullMQ socket-leak carrier in [[ROK-1268]] (cross-batch evidence appended); auth-state leak in [[ROK-1321]] (new story, distinct cluster from socket-leak).
 
 ### 2026-05-13 — fix/batch-2026-05-13 reviewer findings (medium/low/nitpick — non-blocking)
 
@@ -195,10 +183,10 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
   Fixed in ROK-1281 by extracting boot-time migration into `api/src/scripts/run-migrations-with-sentry.ts` which refreshes the audit from scratch via union-find BEFORE drizzle migrate runs.
 - **[high]** Sentry never captured the prod migration error. Three gaps: (1) `api/src/scripts/run-migrations.ts` doesn't import `instrument.ts`; (2) the runner uses sync `process.exit(1)` without `Sentry.flush(2000)`; (3) the ACTUAL prod path was an inline `node -e` block in `api/scripts/docker-entrypoint.sh:26-73`, which had no Sentry import at all.
   Fixed in ROK-1281 by routing all boot-time migrations through the new instrumented runner. The legacy `run-migrations.ts` (still used by `backup.service.ts` for restore flows) should follow up — it still has the gap but isn't on the deploy critical path.
-- **[med]** `api/src/scripts/run-migrations.ts` is now divergent from the prod path. Either migrate `backup.service.ts` to call `runBootMigrations` from the new runner, or document that `run-migrations.ts` is restore-only. Pick one to avoid a future agent treating them as interchangeable.
-  Suggested: replace `runMigrations` in `api/src/backup/backup.helpers.ts:124` with a call to `runBootMigrations(databaseUrl)` from the new runner. Restore flows benefit from the audit refresh + Sentry capture for free.
 - **[med]** Prod recovery required manually marking 0140 as applied in `drizzle.__drizzle_migrations` before the new image could boot. This pattern (insert hash row to skip a failed migration) is not documented anywhere — operator had to derive it. Add a `scripts/recover-stuck-migration.sh` runbook.
   Suggested: a script that takes a migration tag, looks up its hash from `meta/_journal.json`, inserts the journal row, and prints next-steps. Idempotent.
+
+(The `run-migrations.ts` divergence bullet that originally lived here is now tracked in [[ROK-1322]].)
 
 ### 2026-05-14 — fix/rok-1283 (ROK-1283 follow-up)
 
@@ -230,20 +218,7 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
 - **[nit]** `tools/test-bot/scripts/no-sleep-lint.sh` flags the *comment* on `tools/test-bot/src/smoke/tests/lineup-abort.test.ts:26` (`Use \`pollForEmbed\` (NEVER \`sleep()\`) to look for the channel`). The grep pattern is too coarse — it matches `sleep()` anywhere in source files including doc comments. Reproduces on a clean `origin/main` checkout; unrelated to ROK-1243.
   Suggested: tighten the lint pattern to exclude single- and multi-line comment lines, or update the lineup-abort.test.ts comment to escape the `sleep()` token (e.g. backticks already there but the script doesn't honor them). Easiest fix: rewrite the comment as "Use pollForEmbed instead of fixed delays."
 
-### 2026-05-14 — fix/batch-2026-05-14 (surfaced during ROK-1242 smoke validation)
-
-- **[low]** Playwright full-suite flakes during ROK-1242 batch run (`scripts/smoke/events.smoke.spec.ts:370` Regression-ROK-784 light-mode attendance + `scripts/smoke/scheduling-poll.smoke.spec.ts:771` "Your Other Scheduling Polls"). Neither touches the ROK-1242 / ROK-1243 changed surface. Symptom matches the cross-cutting full-suite contention pattern already documented under the 2026-05-14 rok-1252-lineup-banner-counts section (line 316+).
-  Suggested: same as the ROK-1252 grouping — bump per-test timeouts OR split the 840-test suite into smaller parallel-friendly chunks. Five other flakes in the same ROK-1242 run (community-lineup:491, navigation:22/161, notifications:20, lineup-carryover:165) match the existing documented set exactly; no new entries needed.
-
 ### 2026-05-15 — rok-1036-allinone-privilege-drop (surfaced during ROK-1036 validate-ci)
-
-- **[med]** `npx tsc --noEmit -p api/tsconfig.json` errors in 5 spec files (10 errors total) on `origin/main` — reproduces on a clean stash of the ROK-1036 changes, so unrelated to this story:
-  - `api/src/admin/games-dedup-audit.integration.spec.ts:386` — TS2769 (no overload matches `db.execute(sql\`...\`)` call shape).
-  - `api/src/admin/games-dedup-audit.service.spec.ts:432` — TS2502 (`tx` referenced directly or indirectly in its own type annotation).
-  - `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — TS2352 (drizzle `RowList<{ totalSeconds }>` vs hand-written `{ total_seconds }` cast mismatch; snake_case vs camelCase column mapping).
-  - `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — TS2345 (`SQL<unknown>` from one drizzle copy not assignable to `SQLWrapper` from another copy — duplicate drizzle-orm in node_modules causing nominal-type drift).
-  - `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — TS2556 (spread argument needs tuple type — `expect.objectContaining(...args)` shape after recent type bump).
-  Suggested: align the merge-integration test casts to drizzle's camelCase return shape (rename `.total_seconds`→`.totalSeconds`, `.game_id`→`.gameId` in the local cast types); for the SQL nominal drift, dedupe `drizzle-orm` in `package-lock.json` (npm dedupe + commit lock) so a single copy is resolved; for the spread errors, rewrite the assertion call sites to pass an inline tuple. All four files are integration/spec — not blocking CI lint, but `--noEmit` typecheck fails locally and on CI's lint job.
 
 - **[nit]** `tools/test-bot/scripts/no-sleep-lint.sh` still flags the comment on `tools/test-bot/src/smoke/tests/lineup-abort.test.ts:26` (same entry under fix/rok-1243 worktree) — reproduces on origin/main, still unresolved.
 
@@ -281,22 +256,6 @@ ROK-1292 closed 2026-05-16. PR 1 (Group A — 4 docker-compose / allinone JWT-gu
 - **[nit]** `api/scripts/reencrypt-settings.ts:116` — recovery-instructions help text bakes the literal `raid-ledger-default-secret-change-in-production` into a `console.log` example. Not in `BANNED_SECRETS` scope (it's documentation), but if the literal naming is ever rotated this is a 4th replication site to update (alongside `Dockerfile.allinone`, `docker-entrypoint.sh`, `encryption.util.ts`).
   Suggested: leave for now; flag if anyone proposes renaming the legacy literal.
 
-### 2026-05-15 — rok-1292-pr1-local-env-hardening (surfaced during validate-ci.sh typecheck)
-
-- **[low]** `api/src/version/version.controller.spec.ts:15+` and `api/test/app.e2e-spec.ts:7+` — `npx tsc --noEmit -p api/tsconfig.json` fails with `TS2593: Cannot find name 'describe'/'it'/'beforeEach'` and `TS2304: Cannot find name 'expect'/'jest'`. Reproduces on a clean `origin/main` checkout (verified via `git stash` + retry). Jest types resolve fine when running the specs (`npm run test -w api -- <spec>` works), so the issue is config-only — these spec files aren't picked up by the same `types: ['jest']` resolution that other specs use. CI doesn't catch this because GitHub Actions uses `tsconfig.build.json` (which excludes specs), but `scripts/validate-ci.sh::run_typecheck` (line 112) uses the full `tsconfig.json` and trips. Result: anyone running `./scripts/validate-ci.sh --full` locally sees a noisy "regression" that isn't theirs.
-  Suggested: add `"types": ["jest", "node"]` to `api/tsconfig.json` (or move the spec includes into a tsconfig that picks up `@types/jest`). One-line fix per file once the right tsconfig is identified.
-
-
-### 2026-05-15 — rok-1292-pr2-branding-svg-xss (surfaced during npx playwright test)
-
-5 Playwright smoke failures on the deployed worktree env. None touch branding, admin, or any file my 4-file PR 2 diff (`branding.controller.ts` + 3 frontend `accept=` attrs) modifies. Classified pre-existing per the diff-scope-mismatch heuristic; not re-running against `origin/main` because the carrier files are all in lineup code that PR 2 doesn't touch.
-
-- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:491` (both desktop + mobile) — `Voting phase › leaderboard renders sorted by vote count descending` fails with `expect(locator).toBeVisible() Timeout: 15000ms / element(s) not found`. Same `?test=open-lineup-modal` modal-materialise flake class as the existing 2026-05-12 ROK-1068 entry (line 97 above), at a new line. Same suggested fix applies.
-- **[med]** `scripts/smoke/lineup-admin-abort-phases.smoke.spec.ts:121` (both desktop + mobile) — `Admin abort from {building,voting} › POST /lineups/:id/abort succeeds and flips status to archived` fails at `expect(before?.status).toBe(phase)` — the lineup fixture isn't in the expected phase before the abort call. Classic worker-isolation race with the cross-worker active-lineup state; matches the ROK-1068 root cause but on a different spec file.
-  Suggested: gate the abort spec on the same per-worker prefix isolation pattern used by ROK-1147 / ROK-1227, OR seed the lineup directly via the DEMO_MODE test API to skip the fixture race entirely.
-- **[low]** `scripts/smoke/lineup-confirmation-pills-invitee.smoke.spec.ts:127` (mobile only) — `Building phase — invitee hero variants › invitee-acted: hero flips to waiting tone after nomination` fails with `data-tone` returning `"action"` after 14 polls instead of expected `"waiting"` (5s timeout). Hero-tone state is derived from the lineup's invitee snapshot — likely the same cross-worker bleedover. Desktop passes.
-  Suggested: poll for the underlying nomination state via API before asserting the derived `data-tone`, OR isolate the invitee fixture per worker so the snapshot isn't racing the global lineup state.
-
 ### 2026-05-16 — rok-1294-journey-hero (surfaced while fixing the ROK-1292 PR 2 branding regression)
 
 The ROK-1292 PR 2 regression was patched in this PR (commit `55475fb1`) by adding a `RAID_LEDGER_BRANDING_DIR` env override and sandboxing the integration spec to `os.tmpdir()`. Two related foot-guns remain in the codebase — not blocking, worth filing.
@@ -305,30 +264,6 @@ The ROK-1292 PR 2 regression was patched in this PR (commit `55475fb1`) by addin
   Suggested: harden defensively — either (a) rename the existing `AVATAR_UPLOAD_DIR` override to match the new `RAID_LEDGER_*` convention and document both, OR (b) make the dev default for both branding + avatars resolve to a non-`process.cwd()`-anchored path so `npm run test -w api` cwd assumptions can't collide with the dev-served dir.
 - **[low]** Root-cause-vs-symptom: the production `getBrandingDir()` still returns `process.cwd()/uploads/branding` in dev. Any future spec / seed / script that doesn't honor `RAID_LEDGER_BRANDING_DIR` can re-introduce the wipe. A real fix would either anchor the dev path off something non-`process.cwd()`-relative (e.g. a fixed `~/.raid-ledger/dev-uploads/` location) OR refuse destructive writes when `NODE_ENV !== 'production'` and the target path matches the static-asset-served dir.
   Suggested: defer until/unless another team member's spec re-trips the same bug. The env-var override + new regression test (added in this PR) is the minimum-effective fix.
-
-### 2026-05-16 — rok-1294-journey-hero (surfaced during npx tsc --noEmit -p api/tsconfig.json)
-
-10 pre-existing TypeScript errors in `api/src` test files. None caused by ROK-1294's diff. The dev's CI proof for ROK-1294 ran `npx tsc --noEmit -p web/tsconfig.json` (web only) + `npm run build -w api` (which uses `nest build` and excludes `*.spec.ts` per `tsconfig.build.json`), so these never surfaced — they only appear when typechecking the full `api/tsconfig.json` including specs. Worth deciding whether the api/CI step should compile specs.
-
-- **[low]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — `TS2769: No overload matches this call`. Drizzle query builder type mismatch.
-- **[low]** `api/src/admin/games-dedup-audit.service.spec.ts:432` — `TS2502: 'tx' is referenced directly or indirectly in its own type annotation`. Recursive type in transaction mock.
-- **[low]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` (3 errors) — `TS2352: Conversion of type 'RowList<{...}>' to type '{...}' may be a mistake`. Test-side type assertion mismatches between Drizzle's camelCase result and snake_case fixture shape.
-- **[low]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — `TS2345: Argument of type 'SQL<unknown>' is not assignable to parameter of type 'string | SQLWrapper'`. Cross-package drizzle-orm version mismatch in private types (`shouldInlineParams`).
-- **[low]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` (4 errors) — `TS2556: A spread argument must either have a tuple type or be passed to a rest parameter`. Type narrowing failure on a generic mock.
-  Suggested: most are 1-2 line fixes (add `as { ... }[]` cast or narrow the mock signature). The drizzle-orm cross-package mismatch may be a workspace nohoist issue.
-
-### 2026-05-16 — fix/batch-2026-05-16 (surfaced during Playwright sweep on batch)
-
-Pre-existing Playwright failures confirmed independent of batch (ROK-1258 + ROK-1306) changes. The `lineup-confirmation-pills-invitee.smoke.spec.ts` failures reproduced verbatim on `origin/main` (`git switch --detach origin/main` + targeted re-run, 3 desktop failures identical). `navigation.smoke.spec.ts:22` PASSED in isolation on the batch (`--workers=1`), proving cross-worker race not regression. ROK-1258 frontend changes are gated on `visibility === 'private'`; the failing community-lineup specs use public fixtures and never enter that codepath. ROK-1306 is backend-only (lineup matching + scheduling route guard) and doesn't touch the failing UI surfaces.
-
-- **[low]** `scripts/smoke/lineup-confirmation-pills-invitee.smoke.spec.ts:127` (desktop — expansion of the prior 2026-05-15 mobile-only entry) — `Building phase — invitee hero variants › invitee-acted: hero flips to waiting tone after nomination` fails with `data-tone='action'` instead of `'waiting'` even in `--workers=1` isolation on `origin/main`. The carrier is the fixture: `apiPost(.../nominate)` returns, `awaitProcessing` drains BullMQ, but the subsequent navigation+reload still reads a snapshot where the invitee's nomination hasn't propagated to the `hasUserActedInPhase` branch. Not workers race — likely the lineup-detail query's 15s `staleTime` (memory `feedback_smoke_polling_for_async_writes.md`) serving the pre-nomination cache, OR the auto-advance grace job changing the lineup phase mid-test.
-  Suggested: in the `beforeEach`/`beforeAll` that runs the nomination, also poll `apiGet(.../lineups/:id)` until `entries.some(e => e.nominatedBy.id === invitee.userId)` returns true before navigating the page; OR add `?nocache=...` query param to defeat TanStack staleTime on the navigation. Same suggestion applies to :180 and :210.
-- **[low]** `scripts/smoke/lineup-confirmation-pills-invitee.smoke.spec.ts:180` (both projects, also reproduces on `origin/main`) — `Voting phase — per-row checkmark for invitee › invitee's voted row renders ✓ marker and data-voted='true'` fails with `locator('[data-testid="leaderboard-row"][data-voted="true"]')` resolving to 0 elements. Same underlying race as :127 — the vote landed, but the page render reads a stale detail snapshot before the vote propagates.
-- **[low]** `scripts/smoke/lineup-confirmation-pills-invitee.smoke.spec.ts:210` (both projects, also reproduces on `origin/main`) — `invitee-acted: voting hero flips to waiting tone after one vote` fails with `data-tone='action'` instead of `'waiting'`. Identical fixture race to :127 / :180.
-- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:506` (desktop) — `Voting phase › clicking a game row toggles vote with emerald accent and filled checkmark` fails with `[data-testid="voting-leaderboard"]` not visible after 15s. Same modal-materialise + cross-worker race class as the documented `:491` entry (2026-05-15 above) and the prior `:184/:548/:316` entries (2026-05-12 ROK-1068). New line number; same root cause.
-- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:316` (mobile) — `Community Lineup detail page › shows nomination grid or empty state` fails with `getByRole('heading', { name: /Smoke Lineup|Lineup — / })` not found. The page snapshot shows `Next: Nothing to do — this lineup was cancelled.` — cross-worker bleedover where another worker archived the active lineup mid-test. Same root cause as the 2026-05-12 ROK-1068 entries.
-- **[low]** `scripts/smoke/navigation.smoke.spec.ts:22` (desktop) — `Navigation (desktop) › nav links navigate to correct pages` fails with `expect(page).toHaveURL(/\/calendar$/)` because the actual URL is `http://localhost:5173/calendar?date=2026-05-16` — the Calendar page auto-appends a `?date=` query param on mount (visible in error context: route header reads `/calendar` but the URL has the query string). The test's regex anchor `$` doesn't allow the query string. Passes in isolation (`--workers=1` on the batch), so it's an interaction with the auto-append timing under full-suite load. ROK-1247's previous fix didn't account for the date query param.
-  Suggested: change the regex to `/\/calendar(\?|$)/` or drop the `$` anchor; this is a 1-line test fix.
 
 ### 2026-05-16 — fix/batch-2026-05-16 (surfaced by code review of ROK-1258 + ROK-1306)
 
@@ -358,47 +293,6 @@ Reviewer (sonnet, devedup-rl:reviewer) verdict PASS WITH NOTES on the batch diff
   Suggested: short-circuit on lineup status before the call, or document that `maybeAutoAdvance` already gates by status.
 - **[low]** `api/src/lineups/quorum/quorum-voters.helpers.ts:65-72` — `findDistinctVoters`/`findDistinctNominators` re-queried serially after `loadPrivateExpectedVoters`. Two sequential round-trips where one combined query would do.
   Suggested: run roster + participant fetch in `Promise.all`.
-
-### 2026-05-16 — batch/2026-05-16 (surfaced during Playwright sweep on bulk batch ROK-1293 + ROK-1272)
-
-Full-suite `npx playwright test` (desktop + mobile): 23 failed / 587 passed / 199 skipped / 35 did-not-run. Batch diff is **infra-only** (`.github/workflows/ci.yml` + `TECH-DEBT-BACKLOG.md` + `web/src/pages/admin-settings-page.tsx` deleted). Zero overlap between changed files and the failing spec subjects (all lineup/scheduling/nomination/onboarding). 9 of the 19 unique spec:line combos are already documented in earlier sections of this file as the cross-worker race / modal-materialise / fixture-bleed class under full-suite contention. The 10 below are NEW line numbers of the same class. Recording so they aren't re-discovered.
-
-- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:201` (mobile) — `Nomination modal › clicking a search result shows preview card with game name`. Same fixture race class as the `:184` / `:491` / `:506` / `:316` entries above. New line.
-- **[low]** `scripts/smoke/lineup-abort.smoke.spec.ts:276` (mobile) — `Regression: ROK-1207 — aborted-lineup detail page banner + read-only › invitee reload sees the banner and no Nominate CTA`. Modal-materialise race; ROK-1207 surface still pre-existing under full-suite load.
-- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:96` — Same cross-worker race class as the documented `lineup-confirmation-pills-invitee.smoke.spec.ts` family at lines 297 / 324 / 326 / 327.
-- **[low]** `scripts/smoke/lineup-decided.smoke.spec.ts:512` — Cross-worker active-lineup bleedover, same shape as `lineup-admin-abort-phases.smoke.spec.ts:121` (line 295 above).
-- **[low]** `scripts/smoke/lineup-tiebreaker-late-join.smoke.spec.ts:153` — Same modal-materialise race class as `lineup-tiebreaker.smoke.spec.ts:597` documented at line 97 above.
-- **[low]** `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:231` — Same family as `:597` already documented at line 97; new line number under full-suite load.
-- **[low]** `scripts/smoke/my-events.smoke.spec.ts:12` — Not previously documented. Worth a one-time isolation check on origin/main to confirm pre-existing if this carrier surfaces again — likely worker contention given the line is at the top of the spec file.
-- **[low]** `scripts/smoke/onboarding.smoke.spec.ts:330` (mobile) — `Onboarding wizard game-time step (ROK-1011) › game-time step renders compact GameTimeGrid on all viewports`. Mobile-only; not previously documented in this carrier. ROK-1011 territory.
-- **[low]** `scripts/smoke/paste-nominate.smoke.spec.ts:272` (desktop) — `Non-Steam URLs ignored (AC5) › pasting a non-Steam URL does not open modal or show toast`. Not previously documented. Likely the same modal-materialise race; carrier under full-suite load only.
-- **[low]** `scripts/smoke/scheduling-poll.smoke.spec.ts:801` (mobile) — Sibling of the documented `:771` (line 235 above). Same `"Your Other Scheduling Polls"` class on a different test.
-
-**Why this matters:** No fix is on this batch's critical path; these are noise carriers tracked so the same lines aren't re-discovered each cycle. Pattern across all three classes (modal-materialise, fixture cross-worker bleed, cached snapshot under 15s staleTime) is consistent with the documented memory `feedback_smoke_polling_for_async_writes.md` and the long ROK-1068 lineage at line 97. A focused chore — "stabilise the cross-worker active-lineup fixture state for smoke specs" — would retire most of this block in one shot. Estimated 2-4h, suitable for `/build` (not `/bulk` since it touches test infrastructure across many files).
-
-**Empirical verification (2026-05-16, full PW sweep on `origin/main` for cross-comparison):** `origin/main` (HEAD `23aac93c`) under the same dev env: 16 failed / 623 passed / 200 skipped / 5 did-not-run. Compared to batch's 23 failed / 587 passed. Pass rates: origin/main 97.5%, batch 96.2% — same statistical neighborhood. Crucially, the FILES that flake on both runs are nearly identical (lineup-confirmation-pills, community-lineup, lineup-decided, lineup-confirmation-pills-invitee, lineup-admin-abort-phases, lineup-abort), but the SPECIFIC LINES differ run-to-run. Example: `lineup-confirmation-pills.smoke.spec.ts` flaked at `:96` on the batch run vs `:134 / :184 / :198 / :229` on origin/main. Same flake class, different roulette wheel each run. **A real regression would deterministically fail the SAME lines run-to-run; the same-file-different-lines signature is the textbook fingerprint of cross-worker fixture race noise.** Recording this comparison so future agents have a calibrated baseline (a sub-3% smoke fail rate is endemic, not a ship blocker).
-
-**Additional origin/main-only flake lines observed during the verification run (not previously documented; same race class):**
-
-- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:416` (mobile) — `Community Lineup responsive layout › banner is visible on mobile viewport`. Cross-worker active-lineup bleedover.
-- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:134` — `Building phase — hero + pill › after nominating, per-card pill appears on organizer's nominated card`. Same family as `:96` (above).
-- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:184` — `Voting phase — pill variant transitions › pill shows 'count' variant before reaching the vote limit`. Same family.
-- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:198` — `Voting phase — pill variant transitions › pill flips to waitingOnN variant after using all votes`. Same family.
-- **[low]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:229` — `Decided phase — hero schedule CTA › hero offers schedule CTA referencing the decided game name`. Same family.
-- **[low]** `scripts/smoke/lineup-decided.smoke.spec.ts:314` — `Decided view tiered match cards › Carried Forward section renders within the decided view`. Same cross-worker race as the `:512` entry above.
-
-Combined batch + origin/main flake lines documented today: 16 new lines (10 batch-only + 6 origin/main-only) across 6 carrier spec files. All map to the modal-materialise / cross-worker fixture race / 15s staleTime cached-snapshot class. Suggestion stands: a one-shot chore on the fixture infrastructure (`scripts/smoke/api-helpers.ts` + the `?test=open-lineup-modal` pattern + 15s staleTime defeat) would retire most of this block.
-
-### 2026-05-16 — fix/batch-2026-05-16b (surfaced during ROK-1287 + ROK-1305 Playwright sweep)
-
-Full-suite `npx playwright test` (desktop + mobile) on the merged batch surfaced 16 failed / 609 passed / 201 skipped / 20 did-not-run. The batch diff is `api/src/admin/games-dedup-*` + `web/src/pages/calendar-page.tsx` + new `web/src/components/calendar/calendar-filter-chip.tsx` + the targeted Vitest specs + ONE new desktop smoke (`calendar.smoke.spec.ts:55`). The new smoke was a real test bug (fixed in the same batch). The remaining 15 failures touch lineup / scheduling / nomination / onboarding flows that have ZERO file overlap with the batch diff. 12 of the 15 are already documented above (cross-worker race / modal-materialise / fixture-bleed classes — see lines 97 / 235 / 294 / 297 / 322-329 and the 2026-05-16 batch/2026-05-16 section). The 4 NEW line numbers below are recorded so they aren't re-discovered next cycle.
-
-- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:170` (mobile) — `Nomination modal › opens when clicking Nominate button on banner` fails with the modal not materialising under full-suite load. Same `?test=open-lineup-modal` race class as the documented 2026-05-12 ROK-1068 entries at line 97 and the `:184/:548/:316/:506` family. New line number; same root cause.
-- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:234` (mobile) — `Nomination modal › modal closes on close button` fails for the same modal-materialise reason — close button never resolves because the modal didn't mount on mobile under contention.
-- **[low]** `scripts/smoke/lineup-empty-participation.smoke.spec.ts:77` (desktop) — `Lineup empty-participation edge case › voting lineup with zero nominations renders without crash`. Looks like cross-worker bleedover: another worker mutated the empty-participation lineup mid-test. Same fixture-bleed class as the `lineup-decided.smoke.spec.ts:512` and `lineup-admin-abort-phases.smoke.spec.ts:121` entries.
-- **[low]** `scripts/smoke/lineup-tiebreaker.smoke.spec.ts:297` (desktop) — `Bracket tiebreaker flow › BracketView renders with SVG bracket tree after starting bracket`. Sibling of `:231` and `:597` already documented under modal-materialise (line 97 and 2026-05-16 batch/2026-05-16 section).
-
-No fix on this batch's critical path — pre-existing flake noise tracked once. The chip-collapse changes (ROK-1305) and dedup determinism changes (ROK-1287) have zero overlap with the failing surfaces; ROK-1287 is API-only and never executed in any smoke spec, ROK-1305 only adds the chip + drops the inline sidebar list (the existing CalendarGameFilterModal is unchanged).
 
 ### 2026-05-16 — fix/batch-2026-05-16b (reviewer findings, sonnet)
 
@@ -517,3 +411,59 @@ Net: GitHub CI green on origin/main (build excludes specs); local `validate-ci.s
 
 - **[low]** `api/src/feedback/feedback.controller.ts:81` — `attachSlowQueryContext` receives untrimmed `clientLogs` from `parsed.data` instead of `truncatedClientLogs`. Functionally harmless (the method only uses it as a truthiness gate; Zod already caps at 50_000), but semantically inconsistent with line 75 which correctly persists the trimmed value. ROK-1312 reviewer surfaced.
   Suggested: pass `truncatedClientLogs` for consistency, OR rename the parameter to `hasClientLogs: boolean` to make the gate intent explicit.
+### 2026-05-17 — env-lock semantics: `deploy_dev.sh --down` is the real release, not `env_lock_release` (surfaced during ROK-1307 backup)
+
+When `deploy_dev.sh --ci --rebuild` runs, it reasserts the env lock under its own PID with TTL 240min, **replacing** any MCP-acquired entry. After that point, calling `mcp__mcp-env__env_lock_release` from the original acquirer is a no-op — it returns `was_holder: false` because the deploy-script-anchored entry doesn't match the caller. The lock stays held until the deploy-anchored PID dies, the 240min TTL expires, OR `deploy_dev.sh --down` is run.
+
+This bit ROK-1307: the lock was held for ~43 minutes after the operator gave the code-review verdict (the chrome-mcp playbook says release IMMEDIATELY after writing the summary). A queued agent (ROK-1299) waited the whole time. The release call at 23:05 returned `was_holder: false` and I didn't notice the signal — assumed "call returned" meant "released."
+
+- **[low]** `.claude/skills/_shared/chrome-mcp-e2e.md` "Step 8: Release env lock" — add a note that after `deploy_dev.sh`-based deploys, `env_lock_release` is insufficient on its own; callers must `deploy_dev.sh --down` to release the script-anchored lock. Or check `was_holder: true` before treating release as successful. Tracked alongside [[ROK-1318]] (the `tools/mcp-env` semantics fix).
+
+### 2026-05-17 — rok-1299 migration-drift incident (converted to Linear stories)
+
+After rebasing rok-1299-decided-composite onto an updated origin/main (which had landed migration 0141 from ROK-1296), `./scripts/deploy_dev.sh --ci --rebuild` did **not** apply 0140 / 0141 to the local DB. The API came up healthy on the new code, but `community_lineup_user_submissions` (created by 0141) did not exist. Every `POST /lineups/:id/vote` then 500'd. Manual `node scripts/reconcile-migrations.mjs` made it worse — `Mode: trust (schemaRestored=true)` silently marked 0140 / 0141 + two older migrations as `trusted` without probing. Recovery required direct `docker exec psql` to apply `0141_late_wrecking_crew.sql` by hand.
+
+All three findings from this incident are now tracked in Linear:
+
+- [[ROK-1319]] (High) — reconcile-migrations trust-mode bug (cause + test coverage AC)
+- [[ROK-1320]] (High) — deploy_dev.sh missing-migration drift probe (failure surface)
+- [[ROK-1322]] (Med) — align legacy `run-migrations.ts` with `run-migrations-with-sentry.ts` (related boot-time / restore-time divergence from ROK-1281 postmortem)
+
+### 2026-05-17 — /readlogs groom (consolidated carriers from prior batches)
+
+This section is the result of cluster-grouping + Linear cross-reference per the new `/readlogs` 3a.iv + 3a.viii steps. Three multi-batch noise classes were rolled up into single bullets pointing at the existing Linear coverage; individual bullets in earlier sections have been removed. The class IS the signal — the recurrence is documented here so the next `/readlogs` doesn't rediscover the same lines.
+
+- **[med]** **Cross-worker Playwright smoke-flake carrier** (modal-materialise + cross-worker active-lineup bleedover + 15s TanStack `staleTime` cached snapshot). Flagged across **2026-05-12 (ROK-1068), -14 (ROK-1242), -15 (ROK-1292-pr2), -16 (fix/batch + batch/2026-05-16), -16b (fix/batch-2026-05-16b)** — ~28 distinct `spec:line` combos in 6 carrier files (`lineup-confirmation-pills*`, `community-lineup`, `lineup-decided`, `lineup-admin-abort-phases`, `lineup-tiebreaker*`, `lineup-abort`). Last surfaced 2026-05-16. **Tracked in [[ROK-1286]] (Todo, cycle)** — cross-batch evidence appended via Linear comment 2026-05-17. The narrower [[ROK-1251]] (Backlog) covers the modal-materialise sub-case specifically.
+  Suggested: a dedicated fix-batch story on the fixture infrastructure — `scripts/smoke/api-helpers.ts` + the `?test=open-lineup-modal` pattern + 15s staleTime defeat. Per-worker prefix isolation (ROK-1147 / ROK-1227 pattern) is the proven primitive. Estimated 2-4h, suitable for `/build` (not `/bulk` since it touches test infrastructure across many files). _Carrier pattern — likely needs a dedicated fix-batch story rather than continued tech-debt deferral._
+  _Note: the 2026-05-17 ROK-1307 Playwright section (above) flags 5 additional [med] entries on the SAME carrier files but with operator notes pointing at **suspected real Cycle 4 DOM regressions** (JourneyHero / Game Research Drawer). Those stay in their own section — verify they're regressions vs. carrier noise BEFORE folding them in here._
+
+- **[med]** **BullMQ/ioredis integration-suite socket-leak carrier**. Flagged across **2026-05-13 (fix/batch-2026-05-13 CI gate), -16 (ROK-1296 batch — taste-profile.integration.spec.ts), -17 (ROK-1307 — backup.integration.spec.ts ×3)**. Failure shapes: mid-suite `socket hang up` / `read ECONNRESET` / post-coverage `beforeAll` timeout > 120s. Standalone runs always pass; only `validate-ci.sh --full` reproduces. Carrier-load fingerprint per memory `reference_bullmq_ioredis_test_carrier.md`. **Tracked in [[ROK-1268]]** (Backlog) — cross-batch evidence appended via Linear comment 2026-05-17.
+  Suggested: instrument `bootstrapTestApp` to log time spent in each init phase (Drizzle pool, BullMQ Redis connect, NestJS module bootstrap) so the carrier suite under load can be identified by which init step blows the budget. The current carrier might just be alphabetical-order roulette — any suite running first after the coverage phase is at risk.
+
+- **[med]** **Pre-existing `tsc --noEmit -p api/tsconfig.json` errors on `origin/main` spec files**. Flagged across **2026-05-15 (ROK-1036 — 10 errors in 5 spec files, ROK-1292-pr1 — 2 spec files with TS2593/TS2304), -16 (ROK-1294 — same 10 errors re-documented)**. CI doesn't catch this because GitHub Actions uses `tsconfig.build.json` (which excludes specs), but `scripts/validate-ci.sh::run_typecheck` uses the full `tsconfig.json` and trips. Every `validate-ci.sh --full` run sees a noisy "regression" that isn't theirs. **Tracked in [[ROK-1284]]** (Todo, cycle).
+  Suggested: align the spec casts to drizzle's camelCase return shape; dedupe `drizzle-orm` in `package-lock.json` for the SQL nominal drift; rewrite spread-argument assertions to pass an inline tuple. The pure `types: ['jest']` config drift for `version.controller.spec.ts` / `app.e2e-spec.ts` is a one-line tsconfig fix.
+
+### 2026-05-17 — /readlogs triage outcomes (new stories filed)
+
+For provenance only — these stories were created from log + backlog cross-reconciliation today. Backlog entries that motivated them have been removed; surface them here so the next `/readlogs` knows they exist.
+
+- **[high]** **[[ROK-1316]]** `perf: /lineups/:id/suggestions blocks 10-62s on Gemini cache miss (UX-breaking)`. Log evidence: 18 slow calls + 3 client `499` disconnects on lineup #9 during 03:00 hour 2026-05-17. Voter-set hash cache key invalidates on every nomination/vote/invitee change → users pay full Gemini round-trip every visit.
+- **[med]** **[[ROK-1317]]** `fix: useAiFeatures hook polls /admin/ai/features for non-admin users (78× 403/30min)`. Log evidence: 78 unique 403s in ~30min from one non-admin client. Hook gates on `enabled: !!getAuthToken()` only — needs admin-role gate.
+- **[med]** **[[ROK-1318]]** `tech-debt: env_lock_release silently no-ops after deploy_dev.sh re-anchors the lease`. Backlog evidence: today's 2026-05-17 entry, bit ROK-1307 with a 43min phantom-hold.
+- **[high]** **[[ROK-1319]]** `fix: scripts/reconcile-migrations.mjs trust mode silently marks unapplied migrations as applied`. Backlog evidence: 2026-05-17 ROK-1299 [high] — bit during Step 3 validate, required manual `docker exec psql` recovery.
+- **[high]** **[[ROK-1320]]** `fix: deploy_dev.sh should detect migration drift before starting the API`. Sibling of ROK-1319; closes the failure surface (silent boot on drift-stricken DB) that exposed the reconcile bug.
+- **[med]** **[[ROK-1321]]** `tech-debt: auth-state leak between integration specs pre-empts admin session (signups-roster carrier)`. Backlog evidence: 2026-05-13 full-suite flakes — distinct from BullMQ socket-leak class, no prior Linear coverage.
+- **[med]** **[[ROK-1322]]** `tech-debt: align api/src/scripts/run-migrations.ts with the instrumented boot runner (ROK-1281 follow-up)`. Closes boot-time vs restore-time invariant divergence left over from 2026-05-14 prod outage postmortem.
+
+Also appended fresh evidence to **[[ROK-1103]]** (ITAD HTTP client retry-5xx) — prod 521 cluster + 115s wrap reproduced today, recommending escalation.
+
+### 2026-05-17 — rok-1299 Codex review findings (deferred MEDIUM)
+
+Two Codex-review findings deferred because they're MEDIUM/correctness-non-blockers and the operator approved the live UI without seeing them. P1 (matchThreshold-as-player-count) and the bandwagon-leftover-bug were both fixed inline in commits 33efb14f + b4e00332.
+
+- **[med]** `web/src/components/lineups/decided/DecidedView.tsx:129-136` — `useLineupMatches()` is async; on first render `data` is `undefined`, so the hero text briefly shows `"No matches were generated from voting results."` / `"You're not in any matches yet."` even for lineups that DO have matches. The old `DecidedMatchesView` rendered a loading skeleton instead. UX-jarring during the network roundtrip.
+  Suggested: gate the composite root on `useLineupMatches().isLoading` — render a hero-only loading state (or reuse the prior skeleton) until `data` resolves. Codex flagged as P2 during ROK-1299 review.
+- **[med]** `packages/contract/src/lineup-match.schema.ts::MatchDetailResponseSchema` — does not expose a per-match player cap, but the Decided-composite wireframe wants `"X of Y players · group is full"`. The cap lives on `games.defaultPlayerCap` (`api/src/drizzle/schema/games.ts:127`); `GroupedMatchesResponseDto.matchThreshold` is a 0–100 percentage for the grouping algorithm — NOT a player count. ROK-1299 shipped personal-context-only copy (`You + N others` / `Just you so far` / `N players`) as a faithful fallback.
+  Suggested: extend `MatchDetailResponseSchema` with `playerCap: z.number().int().nullable()`; populate from `games.defaultPlayerCap` in `lineups-match-response.helpers.ts`; restore a `threshold` prop on `MatchCard` and re-add the `"X of Y players · group is full"` sub-line under a non-null guard.
+- **[med]** `web/src/components/lineups/decided/MatchCard.tsx` — when a match has `linkedEventId !== null` (event already created from the scheduling poll), the deleted `AlmostThereCard` rendered `"View Event →"` linking to `/events/${linkedEventId}`. The ROK-1299 rewrite collapsed all per-card CTAs to `"Pick a time →"` and lost the event-link branch. Members in a fully-scheduled match now bounce back to the scheduling poll instead of jumping to the event.
+  Suggested: in `MatchCard::PickATimeCta`, branch on `match.linkedEventId`: if set, render `<Link to="/events/${linkedEventId}">View Event →</Link>`; else keep the schedule-poll link. Add a Vitest guard for the `linkedEventId` set branch.

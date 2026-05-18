@@ -253,9 +253,9 @@ test.describe('Lineup carryover edge case', () => {
             /something went wrong/i,
             { timeout: 10_000 },
         );
-        await expect(page.getByText("THIS WEEK'S PODIUM")).toBeVisible({
-            timeout: 15_000,
-        });
+        await expect(
+            page.locator('[data-testid="decided-composite-view"]'),
+        ).toBeVisible({ timeout: 15_000 });
 
         const carriedSection = page.locator(
             '[data-testid="carried-forward-section"]',

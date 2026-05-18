@@ -53,6 +53,23 @@ mcp__linear__list_issues({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", statu
 
 For rework: `statusName: "Changes Requested"`. For specific story: `mcp__linear__get_issue({ issueId: "ROK-XXX" })`.
 
+### 1c.1 Read latest comments for every fetched story (STRICT)
+
+After fetching the story, ALSO call `mcp__linear__list_comments({ issueId: "ROK-XXX" })`. Operators and `/readlogs` append fresh evidence, priority escalations, and post-filing context as **comments** rather than editing the description. Skipping this step means you miss:
+
+- `/readlogs triage <date>` comments — recent prod-log evidence that may escalate priority or change scope.
+- Operator-added context after the story was filed (e.g., "actually this is blocked by X", "ship with Y first").
+- Reviewer findings from prior fix-batches that got appended (rather than re-filed).
+- Cross-story coordination notes (e.g., "merge with ROK-YYY", "wait for ROK-ZZZ to ship first").
+
+**How to apply:**
+- If a comment escalates the issue ("escalate to Todo", "needs near-term fix-batch") → reflect that in your scope/severity profile in 1d, not just the description's original priority.
+- If a comment lists fresh log evidence → fold the timestamps/excerpts into the spec body when writing `planning-artifacts/specs/ROK-XXX.md` in 1e.
+- If a comment names a dependency or blocker → flag in 1d, possibly defer the story or sequence it after the dependency.
+- Empty comment thread is fine — just note "no triage comments" and move on. Don't block.
+
+Print a one-line summary per story: `ROK-XXX: <N> comments, <0|N> triage-relevant`.
+
 ---
 
 ## 1d. Profile Stories
