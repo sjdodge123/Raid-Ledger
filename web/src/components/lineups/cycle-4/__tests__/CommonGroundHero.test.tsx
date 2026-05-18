@@ -123,10 +123,13 @@ describe('CommonGroundHero — themed layout (ROK-1297)', () => {
 
         renderWithProviders(
             <CommonGroundHero
-                lineupId={7}
                 canParticipate={true}
                 onTileNominate={vi.fn()}
                 onTileOpenDrawer={vi.fn()}
+                mergedData={commonGroundResponse(buildThemedTiles())}
+                isLoading={false}
+                aiSuggestionsByGameId={new Map()}
+                atCap={false}
             />,
         );
 
@@ -158,10 +161,13 @@ describe('CommonGroundHero — themed layout (ROK-1297)', () => {
 
         renderWithProviders(
             <CommonGroundHero
-                lineupId={7}
                 canParticipate={true}
                 onTileNominate={vi.fn()}
                 onTileOpenDrawer={vi.fn()}
+                mergedData={commonGroundResponse(buildThemedTiles())}
+                isLoading={false}
+                aiSuggestionsByGameId={new Map()}
+                atCap={false}
             />,
         );
 
@@ -186,10 +192,13 @@ describe('CommonGroundHero — legacy fallback (ROK-1297)', () => {
 
         renderWithProviders(
             <CommonGroundHero
-                lineupId={7}
                 canParticipate={true}
                 onTileNominate={vi.fn()}
                 onTileOpenDrawer={vi.fn()}
+                mergedData={commonGroundResponse(tiles)}
+                isLoading={false}
+                aiSuggestionsByGameId={new Map()}
+                atCap={false}
             />,
         );
 
@@ -205,31 +214,27 @@ describe('CommonGroundHero — legacy fallback (ROK-1297)', () => {
 
 describe('CommonGroundHero — interactions (ROK-1297)', () => {
     it('per-tile + Nominate button fires onTileNominate with gameId', async () => {
-        server.use(
-            http.get(`${API_BASE}/lineups/common-ground`, () =>
-                HttpResponse.json(
-                    commonGroundResponse([
-                        buildTile({
-                            gameId: 42,
-                            gameName: 'Subnautica',
-                            slug: 'subnautica',
-                            theme: 'taste',
-                            whyReason: 'Matches your sci-fi cluster',
-                        }),
-                    ]),
-                ),
-            ),
-        );
-
+        const subnauticaTiles = [
+            buildTile({
+                gameId: 42,
+                gameName: 'Subnautica',
+                slug: 'subnautica',
+                theme: 'taste',
+                whyReason: 'Matches your sci-fi cluster',
+            }),
+        ];
         const onTileNominate = vi.fn();
         const onTileOpenDrawer = vi.fn();
 
         renderWithProviders(
             <CommonGroundHero
-                lineupId={7}
                 canParticipate={true}
                 onTileNominate={onTileNominate}
                 onTileOpenDrawer={onTileOpenDrawer}
+                mergedData={commonGroundResponse(subnauticaTiles)}
+                isLoading={false}
+                aiSuggestionsByGameId={new Map()}
+                atCap={false}
             />,
         );
 
@@ -243,31 +248,27 @@ describe('CommonGroundHero — interactions (ROK-1297)', () => {
     });
 
     it('tile body click opens the drawer (not nominate)', async () => {
-        server.use(
-            http.get(`${API_BASE}/lineups/common-ground`, () =>
-                HttpResponse.json(
-                    commonGroundResponse([
-                        buildTile({
-                            gameId: 99,
-                            gameName: 'Hades',
-                            slug: 'hades',
-                            theme: 'owned',
-                            whyReason: '5 of you own this',
-                        }),
-                    ]),
-                ),
-            ),
-        );
-
+        const hadesTiles = [
+            buildTile({
+                gameId: 99,
+                gameName: 'Hades',
+                slug: 'hades',
+                theme: 'owned',
+                whyReason: '5 of you own this',
+            }),
+        ];
         const onTileNominate = vi.fn();
         const onTileOpenDrawer = vi.fn();
 
         renderWithProviders(
             <CommonGroundHero
-                lineupId={7}
                 canParticipate={true}
                 onTileNominate={onTileNominate}
                 onTileOpenDrawer={onTileOpenDrawer}
+                mergedData={commonGroundResponse(hadesTiles)}
+                isLoading={false}
+                aiSuggestionsByGameId={new Map()}
+                atCap={false}
             />,
         );
 

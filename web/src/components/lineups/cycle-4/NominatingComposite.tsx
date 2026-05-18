@@ -20,8 +20,12 @@ import { JourneyHero } from '../../shared/journey-hero';
 import { useNominateGame, useRemoveNomination } from '../../../hooks/use-lineups';
 import { useAuth } from '../../../hooks/use-auth';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
-import { CommonGroundHero, type CommonGroundMode } from './CommonGroundHero';
+import { CommonGroundHero } from './CommonGroundHero';
+import { CommonGroundFilters } from '../CommonGroundFilters';
+import { useCommonGroundState } from '../use-common-ground-state';
 import { MyNominationsDrawer } from './MyNominationsDrawer';
+
+type CommonGroundMode = 'suggestions' | 'search';
 import { NominationCard } from '../NominationCard';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 
@@ -265,14 +269,29 @@ export function NominatingComposite(
   // that's reachable even when scrolled past the panel.
   const [commonGroundMode, setCommonGroundMode] =
     useState<CommonGroundMode>('suggestions');
-  // ROK-1297 round-5d: monotonic counter the sticky-hero Regenerate
-  // button bumps to fire the same flow CommonGroundHero runs from its
-  // own in-panel button (refetch + shuffle nonce).
   // ROK-1297 round 5h: replace the smooth-scroll-to-section flow with a
   // proper drawer so the user can review/remove their nominations
   // without leaving the Common Ground context.
   const [nominationsDrawerOpen, setNominationsDrawerOpen] = useState(false);
   const nominate = useNominateGame();
+  // ROK-1297 round 5l: own the Common Ground state at the composite level
+  // so the sticky JourneyHero can render the CommonGroundFilters inline
+  // (the filters need to live INSIDE the sticky wrapper — operator
+  // feedback: tapping Search halfway down the page should reveal filters
+  // right there, not back at the Common Ground panel).
+  const commonGroundState = useCommonGroundState(lineup.id, canParticipate);
+  const {
+    mergedData,
+    isLoading: cgLoading,
+    aiSuggestionsByGameId,
+    atCap: cgAtCap,
+    filters,
+    setFilters,
+    search,
+    setSearch,
+    availableTags,
+    participantCount,
+  } = commonGroundState;
   // ROK-1297 round-4b: sync the sticky JourneyHero with the global Header's
   // mobile auto-hide. On mobile, scrolling down past 100px hides the
   // header (`-translate-y-full`); we slide the hero away by the same
@@ -372,14 +391,33 @@ export function NominatingComposite(
             />
           )}
         </div>
+        {/* ROK-1297 round 5l: filter bar lives INSIDE the sticky wrapper.
+            Tapping Search while scrolled deep into Common Ground expands
+            the filters right there, not back at the panel header (which
+            could be off-screen). */}
+        {commonGroundMode === 'search' && (
+          <div className="mt-2 px-1">
+            <div className="p-3 rounded-md border border-edge bg-overlay/40">
+              <CommonGroundFilters
+                filters={filters}
+                onChange={setFilters}
+                availableTags={availableTags}
+                search={search}
+                onSearchChange={setSearch}
+                participantCount={participantCount}
+              />
+            </div>
+          </div>
+        )}
       </div>
       <CommonGroundHero
-        lineupId={lineup.id}
         canParticipate={canParticipate}
         onTileNominate={handleTileNominate}
         onTileOpenDrawer={handleTileOpenDrawer}
-        mode={commonGroundMode}
-        onModeChange={setCommonGroundMode}
+        mergedData={mergedData}
+        isLoading={cgLoading}
+        aiSuggestionsByGameId={aiSuggestionsByGameId}
+        atCap={cgAtCap}
       />
       {/* Nominations section is mobile-hidden — the StickyHeroJumpButton
           opens MyNominationsDrawer there. Desktop keeps the inline list. */}

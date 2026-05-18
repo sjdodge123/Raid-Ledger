@@ -15,38 +15,29 @@
  * callbacks for nomination + drawer-open so the composite owns the
  * mutation state.
  */
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import type {
   AiSuggestionDto,
   CommonGroundGameDto,
+  CommonGroundResponseDto,
 } from '@raid-ledger/contract';
-import { useCommonGroundState } from '../use-common-ground-state';
-import { CommonGroundFilters } from '../CommonGroundFilters';
 import { CommonGroundThemedRow, CommonGroundTileWrapper } from './CommonGroundThemedRow';
 
 export type CommonGroundMode = 'suggestions' | 'search';
 
 export interface CommonGroundHeroProps {
-  lineupId: number;
   canParticipate: boolean;
   /** Fired when the user clicks the per-tile `+ Nominate` button. */
   onTileNominate: (gameId: number) => void;
   /** Fired when the user clicks the tile body (opens the U2 drawer). */
   onTileOpenDrawer: (gameId: number) => void;
-  /**
-   * ROK-1297 round-5: search mode is lifted to NominatingComposite so the
-   * sticky JourneyHero can host a duplicate "Search" trigger that works
-   * even when scrolled past the panel. CommonGroundHero is now controlled.
-   */
-  mode: CommonGroundMode;
-  onModeChange: (next: CommonGroundMode) => void;
-  /**
-   * ROK-1297 round-5d: monotonic counter the parent bumps to fire the
-   * Regenerate flow from outside the panel (e.g. the sticky JourneyHero).
-   * Same flow as the in-panel Regenerate button: refetch + shuffle nonce
-   * bump + 500ms spinner.
-   */
-  externalRegenerateTrigger?: number;
+  // ROK-1297 round 5l: state lifted to NominatingComposite so the sticky
+  // JourneyHero can host the filter UI. CommonGroundHero is now purely
+  // presentational over the data + flags it receives.
+  mergedData: CommonGroundResponseDto | undefined;
+  isLoading: boolean;
+  aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
+  atCap: boolean;
 }
 
 interface ThemedBuckets {
@@ -301,98 +292,31 @@ function ThemedLayout({
 
 export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
   const {
-    lineupId,
     canParticipate,
     onTileNominate,
     onTileOpenDrawer,
-    mode,
-    onModeChange,
-    externalRegenerateTrigger = 0,
-  } = props;
-  // useCommonGroundState merges AI suggestions in for free, gives us
-  // aiSuggestionsByGameId for the ✨ AI Pick badge, and tracks atCap.
-  const {
     mergedData,
     isLoading,
-    refetch,
     aiSuggestionsByGameId,
     atCap,
-    filters,
-    setFilters,
-    search,
-    setSearch,
-    availableTags,
-    participantCount,
-  } = useCommonGroundState(lineupId, canParticipate);
-  const [isFetching, setIsFetching] = useState(false);
-  // Operator round-3 feedback: scoring is deterministic so refetch() returns
-  // the same response. Incrementing this nonce on every Regenerate click
-  // reshuffles tiles WITHIN each themed bucket, producing visible variation
-  // without any server change.
-  const [regenerateNonce, setRegenerateNonce] = useState(0);
+  } = props;
 
   const tiles = useMemo(() => mergedData?.data ?? [], [mergedData]);
-  const buckets = useMemo(
-    () => shuffleBuckets(bucketByTheme(tiles), regenerateNonce),
-    [tiles, regenerateNonce],
-  );
+  const buckets = useMemo(() => bucketByTheme(tiles), [tiles]);
   const themedCount =
     buckets.owned.length + buckets.taste.length + buckets.trending.length;
   const useThemedLayout = themedCount > 0;
-
-  const handleRegenerate = (): void => {
-    if (mode === 'search') {
-      onModeChange('suggestions');
-      return;
-    }
-    setIsFetching(true);
-    refetch();
-    // Bump the nonce so the in-bucket shuffle reroll fires synchronously
-    // — this is what makes the visible content change even when the server
-    // returns the same deterministic response.
-    setRegenerateNonce((n) => n + 1);
-    window.setTimeout(() => setIsFetching(false), 500);
-  };
-
-  // Fire the same flow when the external (sticky JourneyHero) trigger
-  // ticks. Stable ref pattern prevents double-fire on first mount.
-  const lastExternalTrigger = useRef(externalRegenerateTrigger);
-  useEffect(() => {
-    if (externalRegenerateTrigger === lastExternalTrigger.current) return;
-    lastExternalTrigger.current = externalRegenerateTrigger;
-    handleRegenerate();
-    // handleRegenerate captures the freshest closure each render — no need
-    // to depend on it here, the trigger value is the gate.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalRegenerateTrigger]);
 
   return (
     <section
       data-testid="common-ground-hero"
       className="border border-edge rounded-lg bg-panel/30 p-3 mt-3"
     >
-      <HeroHeader
-        inSearch={mode === 'search'}
-        onRegenerate={handleRegenerate}
-        onOpenSearch={() => onModeChange('search')}
-        isFetching={isFetching}
-      />
-      {/* ROK-1297 round 5j: search no longer swaps OUT Common Ground. It
-          expands a CommonGroundFilters bar (search input + min owners +
-          genre + max players) above the themed rows. The same tiles
-          remain visible, just filtered by the active query / filters. */}
-      {mode === 'search' && (
-        <div className="mb-3 p-3 rounded-md border border-edge bg-overlay/30">
-          <CommonGroundFilters
-            filters={filters}
-            onChange={setFilters}
-            availableTags={availableTags}
-            search={search}
-            onSearchChange={setSearch}
-            participantCount={participantCount}
-          />
-        </div>
-      )}
+      <div className="flex items-center mb-3">
+        <h2 className="text-lg sm:text-base font-semibold text-foreground">
+          ✨ Common Ground
+        </h2>
+      </div>
       <SuggestionsBody
         isLoading={isLoading}
         tiles={tiles}
