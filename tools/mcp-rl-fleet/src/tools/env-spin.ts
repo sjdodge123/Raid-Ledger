@@ -26,6 +26,8 @@ export interface EnvSpinParams {
   slug: string;
   image?: string;
   ttl_hours?: number;
+  /** Same worktree_path used at rl_claim time. */
+  worktree_path?: string;
 }
 
 export async function execute(params: EnvSpinParams): Promise<EnvSpinResult> {
@@ -35,7 +37,7 @@ export async function execute(params: EnvSpinParams): Promise<EnvSpinResult> {
   if (params.image) args.push('--image', params.image);
   if (params.ttl_hours) args.push('--ttl', String(params.ttl_hours));
 
-  const { stdout, stderr, exitCode } = await runRl(args);
+  const { stdout, stderr, exitCode } = await runRl(args, { cwd: params.worktree_path });
   const parsed = parseJsonFromStdout<EnvSpinResult>(stdout);
   if (parsed) return parsed;
   return {

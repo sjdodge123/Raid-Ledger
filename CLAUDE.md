@@ -87,6 +87,9 @@ Three custom MCP servers provide tools for environment management, story trackin
 **Note:** `mcp-discord` requires Discord running with CDP (`./scripts/launch-discord.sh`). Local dev only.
 
 ### `mcp-rl-fleet` — rl-infra Remote Test Fleet (`tools/mcp-rl-fleet/`)
+
+**STRICT — worktree_path:** every rl_* tool that touches a claimed slot (`rl_claim`, `rl_release`, `rl_env_spin`, `rl_env_deploy`, `rl_env_build_image_from_runner`, `rl_run_on_runner`, `rl_validate_ci`) accepts a `worktree_path` parameter. **If you're operating from a git worktree, you MUST pass `worktree_path: "<absolute path to your worktree>"` on every call.** Without it, the MCP server uses its own cwd (where Claude was started — usually the main repo) which (a) Mutagen-syncs the wrong branch's files and (b) hashes to a different `RL_AGENT_ID` so subsequent calls can't find your slot. Use the same value on every call — e.g. `/Users/sdodge/Documents/Projects/Raid-Ledger--rok-1297`.
+
 | Tool | Use When |
 |------|----------|
 | `mcp__mcp-rl-fleet__rl_claim` | Acquire a runner slot on the rl-infra VM. Starts Mutagen sync from laptop to runner. Idempotent — returns existing slot if this agent already holds one. Use at session start when you need a remote test env. |

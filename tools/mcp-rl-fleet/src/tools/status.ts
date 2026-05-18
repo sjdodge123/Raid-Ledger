@@ -3,7 +3,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_status';
 export const TOOL_DESCRIPTION =
-  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load, and live per-runner CPU/memory. Use this to check whether your slot is still valid, see what envs are spun, or diagnose resource pressure before spinning a new env.';
+  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load, live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env.';
 
 export interface StatusResult {
   ok: boolean;
@@ -27,6 +27,9 @@ export interface StatusResult {
   }>;
   runners?: Array<{ container: string; cpu: string; mem: string; net: string; block: string }>;
   host?: { memory: string; disk: string; loadavg: string };
+  queue?: Array<{ agent_id: string; branch: string | null; queued_at: string }>;
+  queue_depth?: number;
+  queue_head?: string | null;
   error?: string;
 }
 

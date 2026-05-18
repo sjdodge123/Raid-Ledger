@@ -22,6 +22,7 @@ import * as envSync from './tools/env-sync.js';
 import * as envCloneProd from './tools/env-clone-prod.js';
 import * as envBuildImage from './tools/env-build-image.js';
 import * as envDeploy from './tools/env-deploy.js';
+import * as forceRelease from './tools/force-release.js';
 
 const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.1.0' });
 
@@ -29,12 +30,24 @@ const jsonResult = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
 });
 
-server.tool(claim.TOOL_NAME, claim.TOOL_DESCRIPTION, { branch: z.string().optional() }, async (p) =>
-  jsonResult(await claim.execute(p)),
+server.tool(
+  claim.TOOL_NAME,
+  claim.TOOL_DESCRIPTION,
+  {
+    branch: z.string().optional(),
+    worktree_path: z.string().optional(),
+    wait: z.boolean().optional(),
+    wait_timeout_seconds: z.number().int().min(5).max(3600).optional(),
+    poll_interval_seconds: z.number().int().min(2).max(60).optional(),
+  },
+  async (p) => jsonResult(await claim.execute(p)),
 );
 
-server.tool(release.TOOL_NAME, release.TOOL_DESCRIPTION, {}, async () =>
-  jsonResult(await release.execute()),
+server.tool(
+  release.TOOL_NAME,
+  release.TOOL_DESCRIPTION,
+  { worktree_path: z.string().optional() },
+  async (p) => jsonResult(await release.execute(p)),
 );
 
 server.tool(status.TOOL_NAME, status.TOOL_DESCRIPTION, {}, async () =>
@@ -52,6 +65,7 @@ server.tool(
       .max(63),
     image: z.string().optional(),
     ttl_hours: z.number().int().min(1).max(168).optional(),
+    worktree_path: z.string().optional(),
   },
   async (p) => jsonResult(await envSpin.execute(p)),
 );
@@ -75,6 +89,7 @@ server.tool(
   runOnRunner.TOOL_DESCRIPTION,
   {
     command: z.string().min(1),
+    worktree_path: z.string().optional(),
     timeout_seconds: z.number().int().min(1).max(7200).optional(),
   },
   async (p) => jsonResult(await runOnRunner.execute(p)),
@@ -85,6 +100,8 @@ server.tool(
   validateCi.TOOL_DESCRIPTION,
   {
     args: z.array(z.string()).optional(),
+    worktree_path: z.string().optional(),
+    against_env_slug: z.string().regex(/^[a-z0-9-]+$/).optional(),
     timeout_seconds: z.number().int().min(60).max(7200).optional(),
   },
   async (p) => jsonResult(await validateCi.execute(p)),
@@ -132,6 +149,7 @@ server.tool(
   {
     tag: z.string().regex(/^[a-zA-Z0-9._-]+$/).min(1).max(63),
     no_push: z.boolean().optional(),
+    worktree_path: z.string().optional(),
     timeout_seconds: z.number().int().min(60).max(7200).optional(),
   },
   async (p) => jsonResult(await envBuildImage.execute(p)),
@@ -143,11 +161,25 @@ server.tool(
   {
     slug: z.string().regex(/^[a-z0-9-]+$/).min(1).max(63),
     branch: z.string().optional(),
+    worktree_path: z.string().optional(),
     skip_sync: z.boolean().optional(),
     skip_build: z.boolean().optional(),
+    clone_prod: z.boolean().optional(),
+    clone_prod_skip_local_refresh: z.boolean().optional(),
     timeout_seconds: z.number().int().min(60).max(7200).optional(),
   },
   async (p) => jsonResult(await envDeploy.execute(p)),
+);
+
+server.tool(
+  forceRelease.TOOL_NAME,
+  forceRelease.TOOL_DESCRIPTION,
+  {
+    slot: z.number().int().min(1).max(64),
+    reason: z.string().min(1).max(500),
+    no_destroy: z.boolean().optional(),
+  },
+  async (p) => jsonResult(await forceRelease.execute(p)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the

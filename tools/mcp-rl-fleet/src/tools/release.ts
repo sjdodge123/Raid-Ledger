@@ -3,7 +3,12 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_release';
 export const TOOL_DESCRIPTION =
-  'Release the runner slot held by this agent. Destroys any env stacks the slot spun up, prunes scoped resources, drops the claim. Idempotent: if the agent holds no slot, returns a noop.';
+  'Release the runner slot held by this agent. Destroys any env stacks the slot spun up, prunes scoped resources, drops the claim. Idempotent: if the agent holds no slot, returns a noop. Pass worktree_path if you claimed from a worktree — otherwise the agent_id won\'t match and the release looks like a noop.';
+
+export interface ReleaseParams {
+  /** Same worktree_path used at rl_claim time. Required for worktree-based agents. */
+  worktree_path?: string;
+}
 
 export interface ReleaseResult {
   ok: boolean;
@@ -13,8 +18,8 @@ export interface ReleaseResult {
   error?: string;
 }
 
-export async function execute(): Promise<ReleaseResult> {
-  const { stdout, stderr, exitCode } = await runRl(['release']);
+export async function execute(params: ReleaseParams = {}): Promise<ReleaseResult> {
+  const { stdout, stderr, exitCode } = await runRl(['release'], { cwd: params.worktree_path });
   const parsed = parseJsonFromStdout<ReleaseResult>(stdout);
   if (parsed) return parsed;
   return {

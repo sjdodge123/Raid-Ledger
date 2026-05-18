@@ -72,7 +72,7 @@ mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "Done" })
 
 ---
 
-## 5e. Wait for Merge, Cleanup
+## 5e. Wait for Merge, Cleanup (mode-aware)
 
 Check: `gh pr view rok-<num>-<short-name> --json state`. Once merged:
 
@@ -81,6 +81,25 @@ git worktree remove <worktree_path>
 git branch -d rok-<num>-<short-name>
 git pull --rebase origin main
 ```
+
+### Test-infra cleanup (read `pipeline.test_infra_mode`)
+
+**MODE=fleet:** explicit teardown frees runner RAM sooner than the 24h env TTL. Optional — sweeper will reap if you skip:
+
+```
+# Destroy this story's spun env (operator may want to keep it for post-merge poking — skip this call if so)
+mcp__mcp-rl-fleet__rl_env_destroy({ slug: "rok-<num>" })
+```
+
+At the END of the batch (after ALL stories in the batch are shipped), release the slot:
+
+```
+mcp__mcp-rl-fleet__rl_release({ worktree_path: "<main repo or last worktree>" })
+```
+
+If you forget, the sweeper handles it: 5-min heartbeat timeout if the session crashed, 8-hour hoarded-slot reaper otherwise. Both safety nets — explicit release is the polite path.
+
+**MODE=local:** no fleet teardown needed. Env lock was already released in 4a (or 4d for post-rebase). Nothing extra to clean.
 
 ---
 

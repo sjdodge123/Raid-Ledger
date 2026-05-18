@@ -8,6 +8,7 @@ PRETTY=0
 [[ "${1:-}" == "--pretty" ]] && PRETTY=1
 
 CLAIMS=$(cat "$RL_CLAIMS_FILE")
+QUEUE=$(cat "$RL_QUEUE_FILE" 2>/dev/null || echo "[]")
 ENVS_JSON=$(docker ps -a --filter "label=rl.role=env" --format '{{json .}}' | jq -s '
     map({
         container: .Names,
@@ -37,7 +38,8 @@ OUT=$(jq -nc \
     --argjson envs "$ENVS_JSON" \
     --argjson host "$HOST" \
     --argjson runners "$RUNNER_STATS" \
-    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), slots: $claims, envs: $envs, runners: $runners, host: $host}')
+    --argjson queue "$QUEUE" \
+    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), slots: $claims, envs: $envs, runners: $runners, host: $host, queue: $queue, queue_depth: ($queue | length), queue_head: ($queue[0].agent_id // null)}')
 
 if [[ $PRETTY -eq 1 ]]; then
     echo "=== rl-infra status ==="
@@ -48,6 +50,14 @@ if [[ $PRETTY -eq 1 ]]; then
     echo
     echo "Envs:"
     jq -r '.envs[] | "  \(.slug // .container): slot=\(.slot // "?")  ttl=\(.ttl // "?")  status=\(.status)"' <<<"$OUT"
+    echo
+    QDEPTH=$(jq -r '.queue_depth' <<<"$OUT")
+    if [[ "$QDEPTH" != "0" ]]; then
+        echo "Queue (depth=$QDEPTH):"
+        jq -r '.queue | to_entries[] | "  [\(.key)] agent=\(.value.agent_id)  branch=\(.value.branch // "?")  queued_at=\(.value.queued_at)"' <<<"$OUT"
+    else
+        echo "Queue: empty"
+    fi
     echo
     echo "Runners (live):"
     jq -r '.runners[] | "  \(.container): cpu=\(.cpu)  mem=\(.mem)"' <<<"$OUT"

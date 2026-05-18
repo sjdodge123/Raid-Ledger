@@ -28,6 +28,22 @@ if [[ -z "${RL_AGENT_ID:-}" ]]; then echo "RL_AGENT_ID required" >&2; exit 2; fi
 SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
 [[ -z "$SLOT" ]] && { echo "no slot — run claim first" >&2; exit 2; }
 
+# Per-slot env-count cap. Prevents one agent from accidentally spinning N
+# envs and OOMing the VM. Tunable via MAX_ENVS_PER_SLOT env var. Counts
+# distinct slugs labeled with this slot (allinone + pg pair = one slug).
+MAX_ENVS_PER_SLOT="${MAX_ENVS_PER_SLOT:-5}"
+EXISTING_FOR_SLOT=$(docker ps -a \
+    --filter "label=rl.slot=${SLOT}" --filter "label=rl.role=env" \
+    --format '{{ index .Labels "rl.env_slug" }}' | sort -u)
+EXISTING_COUNT=$(echo -n "$EXISTING_FOR_SLOT" | grep -c . || true)
+if (( EXISTING_COUNT >= MAX_ENVS_PER_SLOT )) && ! grep -qFx "$SLUG" <<<"$EXISTING_FOR_SLOT"; then
+    # Only block NEW slugs; re-spinning an existing one is the idempotent
+    # path (covered below) and stays within the count.
+    jq -nc --argjson slot "$SLOT" --argjson count "$EXISTING_COUNT" --argjson max "$MAX_ENVS_PER_SLOT" --arg slug "$SLUG" \
+        '{ok: false, error: "max_envs_per_slot_exceeded", slot: $slot, slug: $slug, current_count: $count, max: $max, message: "slot \($slot) already has \($count) envs (max \($max)). Destroy some before spinning \($slug)."}'
+    exit 1
+fi
+
 NOW=$(date -u +%FT%TZ)
 VOL_PG="rl-data-${SLUG}"
 NET="rl-net"
@@ -35,6 +51,21 @@ PG_CONTAINER="rl-env-${SLUG}-pg"
 APP_CONTAINER="rl-env-${SLUG}-allinone"
 
 TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
+
+# Slug-ownership guard. If the slug already exists on a DIFFERENT slot,
+# refuse — otherwise two agents can stomp each other's env state via
+# matching slugs. The operator bypass (RL_OPERATOR=1) is allowed because
+# the operator legitimately reaches across slots. The MCP server forces
+# RL_OPERATOR=0 for all agents, so this is agent-only friction.
+if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+    EXISTING_SLOT=$(docker inspect "$APP_CONTAINER" \
+        --format '{{ index .Config.Labels "rl.slot" }}' 2>/dev/null || echo "")
+    if [[ -n "$EXISTING_SLOT" && "$EXISTING_SLOT" != "$SLOT" && "${RL_OPERATOR:-0}" != "1" ]]; then
+        jq -nc --arg slug "$SLUG" --argjson existing_slot "$EXISTING_SLOT" --argjson my_slot "$SLOT" \
+            '{ok: false, error: "slug_owned_by_other_slot", slug: $slug, owned_by_slot: $existing_slot, my_slot: $my_slot, message: "Env slug \"\($slug)\" is owned by slot \($existing_slot). Pick a different slug or have its owner destroy it."}'
+        exit 1
+    fi
+fi
 
 # Idempotent: if env already exists for this slug, refresh last_touched in
 # the state registry (NOT via docker container update --label-add — that flag

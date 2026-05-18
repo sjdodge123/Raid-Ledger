@@ -10,13 +10,19 @@ The branch remains **local-only** through this step. Do NOT invoke `git push`, `
 
 When operator signals ready, poll each story: `mcp__linear__get_issue({ issueId: "<linear_id>" })`.
 
-**Env-lock release point (STRICT).** As soon as the operator gives any verdict (approve OR rework), release the env lock — the rest of Step 4 (Codex 4b, architect 4c, Lead smoke 4d) does not need the env in most cases:
+### Test-infra release point (mode-branched)
+
+Read `pipeline.test_infra_mode` from `build-state.yaml`.
+
+**MODE=fleet — DO NOT release the slot here.** The slot is cheap to hold (2 slots in the fleet, low contention). The spun env stays alive for post-rebase re-verification in 4d, possible operator follow-up testing during reviewer/architect passes, and Step 5 cleanup is where the slot release happens. Leaving the env up costs ~1 GB RAM on the runner — fine until session end. Don't churn it.
+
+**MODE=local — release the env lock as soon as the operator gives any verdict** (approve OR rework). The rest of Step 4 (Codex 4b, architect 4c, Lead smoke 4d) does not need the env in most cases:
 
 ```
 mcp__mcp-env__env_lock_release
 ```
 
-Exception: if rework is `material` and re-running the deploy + e2e on the worktree is needed before push, re-acquire then. If Lead smoke in 4d needs to run `./scripts/validate-ci.sh --only-e2e --with-e2e` (UI / bot changes against the rebased state), re-acquire just for that pass and release after. The default is **release-as-soon-as-possible**; re-acquire on demand. Don't pre-emptively hold.
+Exception (LOCAL mode only): if rework is `material` and re-running the deploy + e2e on the worktree is needed before push, re-acquire then. If Lead smoke in 4d needs to run `./scripts/validate-ci.sh --only-e2e --with-e2e` (UI / bot changes against the rebased state), re-acquire just for that pass and release after. The default is **release-as-soon-as-possible**; re-acquire on demand. Don't pre-emptively hold.
 
 ### Changes Requested → Rework Loop
 
@@ -154,20 +160,46 @@ Sequential — must finish before smoke. Read `templates/architect.md`, `<TASK_T
 
 ---
 
-## 4d. Lead Smoke Tests
+## 4d. Lead Smoke Tests (mode-aware)
 
 **Skip entirely for `scope: light`** — fast CI in step 2-light-c plus operator approval is sufficient. Set `gates.smoke_test: N/A` and proceed to 4e.
 
-For standard / full scope, never skipped. From main worktree:
+For standard / full scope, never skipped. The base CI run (no e2e) is mode-agnostic — `validate-ci.sh` self-dispatches via `RL_TARGET=auto` inside the script, so both modes use:
 
 ```bash
 git pull --rebase origin main
 ./scripts/validate-ci.sh --no-e2e
 ```
 
-`validate-ci.sh --no-e2e` covers build/typecheck/lint/unit/integration across all workspaces in one pass and skips the e2e steps (which need a deployed env and got covered in 3c.5 against the worktree).
+This covers build/typecheck/lint/unit/integration across all workspaces and skips the e2e steps (which need a deployed env; they got covered in 3c.5 against the worktree).
 
-If UI / bot changes need post-rebase re-verification: re-acquire the env lock, deploy the main worktree (`./scripts/deploy_dev.sh --ci --rebuild`), then run `./scripts/validate-ci.sh --only-e2e --with-e2e` to force the e2e steps against the rebased state. Release the env lock immediately after. Don't hold the lock through 4e or Step 5 — push and PR creation don't need the env.
+### Post-rebase UI re-verification (when needed)
+
+If UI / bot changes need post-rebase re-verification (selectors against `main`'s latest, not just the worktree):
+
+**MODE=fleet:** re-deploy the worktree to the existing slug — `rl_env_deploy` is idempotent and rebuilds from the now-rebased `/workspace`:
+
+```
+mcp__mcp-rl-fleet__rl_env_deploy({ slug: "rok-<num>", worktree_path: "<same>" })
+mcp__mcp-rl-fleet__rl_validate_ci({ args: ["--only-e2e", "--with-e2e"], against_env_slug: "rok-<num>", worktree_path: "<same>" })
+```
+
+Slot stays held; env gets refreshed in-place. No env lock churn.
+
+**MODE=local:** re-acquire the env lock, deploy the main worktree, force-run e2e, release immediately after:
+
+```
+mcp__mcp-env__env_lock_acquire({ purpose: "build ROK-XXX post-rebase e2e" })
+```
+```bash
+./scripts/deploy_dev.sh --ci --rebuild
+./scripts/validate-ci.sh --only-e2e --with-e2e
+```
+```
+mcp__mcp-env__env_lock_release
+```
+
+Don't hold the local lock through 4e or Step 5 — push and PR creation don't need the env.
 
 Gate: `gates.smoke_test: PASS` or `FAIL`. On failure: diagnose (timing? `sleep()`?). Regression → fix or respawn dev. Test infra issue (flaky, missing wait) → fix the test, don't skip. **Never dismiss as "pre-existing"** — investigate and fix, or create a Linear story with root cause.
 

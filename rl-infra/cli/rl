@@ -92,21 +92,56 @@ cmd_claim() {
         echo "Run: ./scripts/env-lock.sh acquire --purpose '<task>'" >&2
         exit 0
     fi
+    # Wait/poll flags. Default: wait up to 10 min, poll every 10s.
+    # Pass --no-wait to get a single-shot {queued, position} response.
+    local wait=1 timeout=600 interval=10
+    local extra_args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-wait) wait=0; shift ;;
+            --wait-timeout) timeout="$2"; shift 2 ;;
+            --poll-interval) interval="$2"; shift 2 ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
     local branch
     branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo unknown)"
-    RESULT=$(ssh_run "claim --branch '$branch'")
-    echo "$RESULT" | jq .
-    SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
-    if [[ -n "$SLOT" ]]; then
-        ensure_mutagen_sync "$SLOT"
-        start_heartbeat_daemon "$SLOT"
-        echo
-        echo "claimed slot $SLOT"
-        echo "  worktree synced to: $(jq -r '.worktree' <<<"$RESULT")"
-        echo "  shell:       rl shell"
-        echo "  web url:     http://$(jq -r '.hostnames.web' <<<"$RESULT")"
-        echo "  debug url:   http://$(jq -r '.hostnames.debug' <<<"$RESULT")"
-    fi
+
+    local started_at deadline now
+    started_at=$(date +%s)
+    deadline=$((started_at + timeout))
+
+    while true; do
+        RESULT=$(ssh_run "claim --branch '$branch' ${extra_args[*]:-}")
+        SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
+        QUEUED=$(jq -r '.queued // false' <<<"$RESULT")
+        if [[ -n "$SLOT" ]]; then
+            echo "$RESULT" | jq .
+            ensure_mutagen_sync "$SLOT"
+            start_heartbeat_daemon "$SLOT"
+            echo
+            echo "claimed slot $SLOT"
+            echo "  worktree synced to: $(jq -r '.worktree' <<<"$RESULT")"
+            echo "  shell:       rl shell"
+            echo "  web url:     http://$(jq -r '.hostnames.web' <<<"$RESULT")"
+            echo "  debug url:   http://$(jq -r '.hostnames.debug' <<<"$RESULT")"
+            return 0
+        fi
+        if [[ "$QUEUED" != "true" || "$wait" == "0" ]]; then
+            echo "$RESULT" | jq .
+            return 0
+        fi
+        now=$(date +%s)
+        if (( now >= deadline )); then
+            echo "$RESULT" | jq --argjson waited "$((now - started_at))" '. + {wait_timed_out: true, waited_seconds: $waited}'
+            return 0
+        fi
+        local pos len
+        pos=$(jq -r '.position // "?"' <<<"$RESULT")
+        len=$(jq -r '.queue_length // "?"' <<<"$RESULT")
+        echo "[rl] queued at position $pos of $len — polling again in ${interval}s (timeout in $((deadline - now))s)" >&2
+        sleep "$interval"
+    done
 }
 
 cmd_release() {
@@ -115,8 +150,49 @@ cmd_release() {
         ./scripts/env-lock.sh release || true
         exit 0
     fi
+    # Look up the slot BEFORE the SSH release call drops the claim record,
+    # so we know which Mutagen session to terminate.
+    local slot_for_mutagen
+    slot_for_mutagen=$(ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "jq -r --arg a '${RL_AGENT_ID}' '[.[] | select(.agent_id == \$a and .claimed == true) | .slot] | first // empty' /srv/rl-infra/state/claims.json" 2>/dev/null || true)
     stop_heartbeat_daemon
-    ssh_run "release" | jq .
+    local result
+    result=$(ssh_run "release")
+    # Compact JSON for parseability by the MCP layer (no trailing pretty-print
+    # multi-line output; the result block is already single-line JSON from the
+    # orchestrator). Print as-is, no jq reformatting.
+    echo "$result"
+    # Terminate the Mutagen sync session so the NEXT claim from a possibly
+    # different worktree starts with a fresh endpoint. Without this, the
+    # session keeps its original source path and ensure_mutagen_sync sees the
+    # existing session + no-ops, leaving the runner syncing from the wrong
+    # tree. See feedback_rl_fleet_worktree_path.md.
+    stop_mutagen_sync "$slot_for_mutagen"
+}
+
+# force-release — operator-only: clear a stuck slot regardless of holder.
+# Requires RL_OPERATOR=1 in the caller's shell (so the rl CLI SSHes as the
+# privileged `rl` user; the orchestrator script also re-checks the gate).
+cmd_force_release() {
+    [[ "$TARGET" == "local" ]] && { echo "force-release is remote-only" >&2; exit 1; }
+    if [[ "${RL_OPERATOR:-0}" != "1" ]]; then
+        echo "[rl] force-release requires RL_OPERATOR=1 (export it, then retry)" >&2
+        exit 1
+    fi
+    local slot="" reason="" no_destroy=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --slot) slot="$2"; shift 2 ;;
+            --reason) reason="$2"; shift 2 ;;
+            --no-destroy) no_destroy="--no-destroy"; shift ;;
+            *) echo "unknown arg: $1" >&2; exit 2 ;;
+        esac
+    done
+    [[ -z "$slot" ]] && { echo "usage: rl force-release --slot N [--reason '...'] [--no-destroy]" >&2; exit 2; }
+    [[ -z "$reason" ]] && { echo "--reason '<why>' is required (recorded in audit log)" >&2; exit 2; }
+    ssh -o ConnectTimeout=5 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "RL_OPERATOR=1 RL_FORCE_REASON=$(printf %q "$reason") RL_AGENT_ID='${RL_AGENT_ID}' \
+         /srv/rl-infra/orchestrator/bin/force-release --slot '${slot}' ${no_destroy}" | jq .
 }
 
 cmd_status() {
@@ -125,7 +201,11 @@ cmd_status() {
         "$REPO_ROOT/scripts/deploy_dev.sh" --status
         exit 0
     fi
-    ssh_run "status --pretty"
+    # Pass through args so the MCP server (which doesn't pass --pretty) gets
+    # parseable JSON, while operator typing `rl status --pretty` gets the
+    # human table. Previously hardcoded --pretty here, which broke the MCP
+    # rl_status wrapper that expected JSON.
+    ssh_run "status $*"
 }
 
 cmd_shell() {
@@ -241,10 +321,24 @@ ensure_claim() {
 ensure_mutagen_sync() {
     local slot="$1"
     local session="rl-slot-$slot"
-    if mutagen sync list 2>/dev/null | grep -q "Name: $session"; then return; fi
     if ! command -v mutagen >/dev/null; then
         echo "[rl] mutagen not installed — install from https://mutagen.io/" >&2
         return
+    fi
+    # If an existing session points at a DIFFERENT source than $REPO_ROOT
+    # (e.g. operator flipped between worktrees), terminate it so the new
+    # source takes effect. Without this, mutagen sync create errors with
+    # "session already exists" and we silently keep syncing the wrong tree.
+    if mutagen sync list 2>/dev/null | grep -q "Name: $session"; then
+        local current_alpha
+        current_alpha=$(mutagen sync list "$session" 2>/dev/null \
+            | awk '/^Alpha:/{flag=1;next} flag && /URL:/{print $2; exit}')
+        if [[ -n "$current_alpha" && "$current_alpha" == "$REPO_ROOT" ]]; then
+            # Same source — reuse existing session.
+            return
+        fi
+        echo "[rl] mutagen session $session points at '$current_alpha', re-creating for '$REPO_ROOT'" >&2
+        mutagen sync terminate "$session" 2>/dev/null || true
     fi
     mutagen sync create \
         --name "$session" \
@@ -266,6 +360,45 @@ flush_mutagen() {
     local slot="$1"
     command -v mutagen >/dev/null || return 0
     mutagen sync flush "rl-slot-$slot" 2>/dev/null || true
+}
+
+# Terminate the Mutagen sync session for a slot. Called from cmd_release so
+# the next claim from a (possibly different) worktree creates a fresh session
+# pointing at the new source. Without this, the existing-session-noop in
+# ensure_mutagen_sync keeps the OLD source path indefinitely.
+#
+# Two-tier guard:
+#   1. If slot is known (the typical path), terminate by name directly.
+#   2. If slot is empty (lookup raced with the release that just cleared the
+#      claim — see cmd_release), scan local sessions for any rl-slot-*
+#      whose alpha URL matches REPO_ROOT and terminate those. Belt-and-
+#      suspenders so an orphan session doesn't outlive the release.
+stop_mutagen_sync() {
+    local slot="$1"
+    command -v mutagen >/dev/null || return 0
+
+    if [[ -n "$slot" ]]; then
+        mutagen sync terminate "rl-slot-$slot" 2>/dev/null || true
+        return 0
+    fi
+
+    [[ -z "$REPO_ROOT" ]] && return 0
+    # Scan: find rl-slot-N sessions whose Alpha URL points at our REPO_ROOT.
+    # `mutagen sync list` output has alpha/beta blocks per session — match
+    # the alpha URL to our local path. Awk groups by Name then captures
+    # the alpha URL when present.
+    local orphans
+    orphans=$(mutagen sync list 2>/dev/null \
+        | awk -v root="$REPO_ROOT" '
+            /^Name: rl-slot-/ { name = $2; alpha = ""; next }
+            /^Alpha:/         { reading_alpha = 1; next }
+            /^Beta:/          { reading_alpha = 0; next }
+            reading_alpha && /URL:/ && $2 == root { print name }
+        ')
+    local s
+    for s in $orphans; do
+        mutagen sync terminate "$s" 2>/dev/null || true
+    done
 }
 
 start_heartbeat_daemon() {
@@ -297,9 +430,12 @@ usage() {
     cat <<EOF
 rl — remote runner CLI (target: $TARGET)
 
-  rl claim [--branch foo]    acquire a slot + start Mutagen + heartbeat
+  rl claim [--no-wait] [--wait-timeout N] [--poll-interval N]
+                             acquire a slot (waits + polls if all busy, default 10m / 10s poll)
   rl release                 release slot + clean up
-  rl status                  global view
+  rl force-release --slot N --reason '...' [--no-destroy]
+                             operator-only: clear stuck slot (requires RL_OPERATOR=1)
+  rl status [--pretty]       global view (JSON by default; --pretty for human table)
   rl shell                   tmux attach into your slot
   rl logs [filter]           open Loki/Grafana with filter
   rl env spin <slug>         spin per-env stack (allinone + sibling PG)
@@ -317,6 +453,7 @@ EOF
 case "${1:-}" in
     claim)        shift; cmd_claim "$@" ;;
     release)      shift; cmd_release "$@" ;;
+    force-release) shift; cmd_force_release "$@" ;;
     status)       shift; cmd_status "$@" ;;
     shell)        shift; cmd_shell "$@" ;;
     env)          shift; cmd_env "$@" ;;

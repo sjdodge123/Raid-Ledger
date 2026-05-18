@@ -168,7 +168,10 @@ detect_scope() {
 # with a 120s timeout, so if :5173 is down it'll silently try to spawn its own
 # `npm run dev -w web` and only fail after 2 minutes — too slow for our fail-fast.
 check_env_up() {
-  curl -fsS --max-time 3 http://localhost:3000/health 2>/dev/null \
+  # HEALTH_URL override (set by rl_validate_ci against_env_slug, points at
+  # the fleet env's allinone via rl-net Docker DNS). Defaults to localhost
+  # for local-dev mode.
+  curl -fsS --max-time 3 "${HEALTH_URL:-http://localhost:3000/health}" 2>/dev/null \
     | grep -q '"status":"ok"' || return 1
   curl -fsS --max-time 3 -o /dev/null http://localhost:5173 2>/dev/null
 }

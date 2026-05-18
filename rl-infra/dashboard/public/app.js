@@ -35,6 +35,12 @@ const fmtTime = (iso) => {
   }
 };
 
+// slot-N.rl.lan / slot-N-debug.rl.lan are LAN-only (no external DNS/cert).
+// When the dashboard is accessed externally (mobile 5G hitting
+// fleet.gamernight.net), the web/debug links 502 because the hostnames
+// don't resolve publicly. Hide them externally, same treatment as infra.
+const isLan = window.location.hostname.endsWith('.rl.lan');
+
 const renderSlot = (s) => {
   const card = el('div', { class: 'card' });
   card.appendChild(
@@ -56,10 +62,12 @@ const renderSlot = (s) => {
       el('span', { class: 'val', text: fmtTime(s.last_heartbeat) }),
     ));
   }
-  const actions = el('div', { class: 'actions' });
-  actions.appendChild(el('a', { href: `http://slot-${s.slot}.rl.lan`, target: '_blank', rel: 'noopener', text: 'web' }));
-  actions.appendChild(el('a', { href: `http://slot-${s.slot}-debug.rl.lan`, target: '_blank', rel: 'noopener', text: 'debug' }));
-  card.appendChild(actions);
+  if (isLan) {
+    const actions = el('div', { class: 'actions' });
+    actions.appendChild(el('a', { href: `http://slot-${s.slot}.rl.lan`, target: '_blank', rel: 'noopener', text: 'web' }));
+    actions.appendChild(el('a', { href: `http://slot-${s.slot}-debug.rl.lan`, target: '_blank', rel: 'noopener', text: 'debug' }));
+    card.appendChild(actions);
+  }
   return card;
 };
 
@@ -163,7 +171,7 @@ const tick = async () => {
 // Infra cards (Traefik/Grafana/Registry) are LAN-only because those services
 // aren't exposed externally for security. Show the section ONLY when the
 // dashboard was loaded via the .rl.lan hostname.
-if (window.location.hostname.endsWith('.rl.lan')) {
+if (isLan) {
   $('infra-section').style.display = '';
 }
 

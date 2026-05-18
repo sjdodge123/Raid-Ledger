@@ -8,7 +8,7 @@ argument-hint: "[ROK-XXX | rework | all]"
 
 Pulls dispatchable stories from Linear, profiles them, spawns dev agents in worktrees, validates, reviews, ships. State lives in `<worktree>/build-state.yaml` (per-story isolation prevents concurrent run collisions). Enriched specs go to `planning-artifacts/specs/`.
 
-**rl-infra fleet (default when Proxmox is reachable):** Heavy compute (validate-ci, env stack, integration tests, Playwright) runs on the rl-infra VM, not the laptop. Each parallel dev agent should `rl claim --branch <name>` instead of grabbing the global env lock; there are 4 slots so up to 4 dev agents work concurrently with zero contention. See `.claude/skills/_shared/rl-infra-fleet.md` for command translations. Falls back to today's local model automatically when `RL_TARGET=local`.
+**rl-infra fleet (preferred when Proxmox is reachable):** Heavy compute (validate-ci, env stack, integration tests, Playwright) runs on the rl-infra VM, not the laptop. Mode is set ONCE per session by the preflight in Step 1f.5 (probe `rl_status` with 3s timeout; persist `pipeline.test_infra_mode = fleet | local` to `build-state.yaml`). Every subsequent step that touches the test infra reads this value and branches — see Steps 3c, 3c.5, 3c.6, 4a, 4d, 5e. Preflight protocol: `.claude/skills/_shared/rl-fleet-preflight.md`. Fleet command reference: `.claude/skills/_shared/rl-infra-fleet.md`. Falls back to today's local model (env_lock + deploy_dev.sh + localhost:5173) when probe fails or operator sets `RL_TARGET=local`.
 
 **Linear Project:** Raid Ledger (`1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (`0728c19f-5268-4e16-aa45-c944349ce386`)
@@ -65,7 +65,12 @@ Requirements Interview (plan mode, if spec incomplete)
 
 **Chrome MCP e2e (Lead-driven, mandatory for standard / full):** before the operator FULL STOP, Lead drives the changed user flows via `mcp__claude-in-chrome__*` on the locally-deployed worktree — captures screenshots / GIFs, audits console + network, produces a summary block that's included in the operator-presentation table. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. Source-of-truth memory: `feedback_chrome_mcp_e2e_before_review.md`.
 
-**Env-lock discipline:** acquire just before deploy (3c), hold through Playwright + Chrome MCP + the operator FULL STOP (operator needs the env to browser-test), release as soon as the operator gives a verdict (4a). Reviewer (4b), architect (4c), and most of Lead smoke (4d) do NOT need the env — re-acquire ONLY for 4d Playwright on UI changes. Light scope skips the lock entirely.
+**Test-infra discipline (mode-branched):**
+
+- **MODE=fleet:** preflight (1f.5) implicitly claims a slot. Step 3c spins the per-story env via `rl_env_deploy`. Slot + env stay alive through reviewer / architect / Lead-smoke / Step 5. Cleanup: optional `rl_env_destroy` per story after PR merges, single `rl_release` at end of batch (5e). Sweeper safety-nets: 5-min heartbeat / 8-hr hoarded-slot / 24-hr env TTL.
+- **MODE=local:** env-lock acquire just before deploy (3c), hold through Playwright + Chrome MCP + the operator FULL STOP (operator needs the env to browser-test), release as soon as the operator gives a verdict (4a). Reviewer (4b), architect (4c), and most of Lead smoke (4d) do NOT need the env — re-acquire ONLY for 4d Playwright on UI changes.
+
+Both modes: light scope skips test-infra steps entirely.
 
 ---
 

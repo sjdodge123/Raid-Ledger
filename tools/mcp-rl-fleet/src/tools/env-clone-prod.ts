@@ -26,19 +26,22 @@ export interface EnvCloneProdResult {
   stdout: string;
   stderr: string;
   exit_code: number;
+  /** Whether the allinone was restarted after the clone to refresh SettingsService cache. */
+  restarted_for_settings?: boolean;
+  restart_error?: string;
 }
 
 export async function execute(params: EnvCloneProdParams): Promise<EnvCloneProdResult> {
   const timeoutMs = (params.timeout_seconds ?? 1200) * 1000;
   const args = [params.slug];
   if (params.skip_local_refresh) args.push('--skip-local-refresh');
+  let cloneResult: { stdout: string; stderr: string };
   try {
-    const result = await execFileAsync(CLONE_SCRIPT, args, {
+    cloneResult = await execFileAsync(CLONE_SCRIPT, args, {
       timeout: timeoutMs,
       maxBuffer: 32 * 1024 * 1024,
       env: { ...process.env },
     });
-    return { ok: true, slug: params.slug, stdout: result.stdout, stderr: result.stderr, exit_code: 0 };
   } catch (err) {
     const e = err as Error & { stdout?: string; stderr?: string; code?: number };
     return {
@@ -49,4 +52,34 @@ export async function execute(params: EnvCloneProdParams): Promise<EnvCloneProdR
       exit_code: e.code ?? 1,
     };
   }
+
+  // Restart allinone so SettingsService re-reads + re-caches the new
+  // app_settings rows. Without this, the 30-min boot cache holds the
+  // pre-clone state and integrations look broken until TTL.
+  const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
+  const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+  let restartedForSettings = false;
+  let restartError: string | undefined;
+  try {
+    await execFileAsync(
+      'ssh',
+      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`,
+       `docker restart rl-env-${params.slug}-allinone && sleep 6`],
+      { timeout: 60_000 },
+    );
+    restartedForSettings = true;
+  } catch (err) {
+    const e = err as Error & { stderr?: string };
+    restartError = e.stderr || e.message;
+  }
+
+  return {
+    ok: true,
+    slug: params.slug,
+    stdout: cloneResult.stdout,
+    stderr: cloneResult.stderr,
+    exit_code: 0,
+    restarted_for_settings: restartedForSettings,
+    restart_error: restartError,
+  };
 }

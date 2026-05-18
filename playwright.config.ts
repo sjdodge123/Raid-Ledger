@@ -54,13 +54,18 @@ export default defineConfig({
         screenshot: 'only-on-failure',
     },
 
-    /* Auto-start dev server when running locally */
-    webServer: {
-        command: 'npm run dev -w web',
-        url: 'http://localhost:5173',
-        reuseExistingServer: true,
-        timeout: 120_000,
-    },
+    /* Auto-start dev server when running locally.
+     * When BASE_URL is set (e.g. running against a fleet env URL like
+     * http://rl-env-<slug>-allinone), skip the webServer block entirely —
+     * the app is already deployed somewhere else, no Vite to spin up. */
+    webServer: process.env.BASE_URL
+        ? undefined
+        : {
+              command: 'npm run dev -w web',
+              url: 'http://localhost:5173',
+              reuseExistingServer: true,
+              timeout: 120_000,
+          },
 
     /* Configure projects for desktop and mobile viewports */
     projects: [
