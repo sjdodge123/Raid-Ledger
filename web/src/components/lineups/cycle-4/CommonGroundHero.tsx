@@ -5,14 +5,21 @@
  * themed rows × four tiles, reusing the existing `CommonGroundGameCard`
  * (badges, AI Pick, sale %, owner / wishlist / player counts, early
  * access). Falls back to a single un-themed row when the server response
- * carries no `theme` field on any tile (deployment-skew safety net). Pure
- * presentational over `useCommonGround` — the parent passes callbacks for
- * nomination + drawer-open so the composite owns the mutation state.
+ * carries no `theme` field on any tile (deployment-skew safety net).
+ *
+ * Operator browser-test feedback 2026-05-18 (C): the hero owns an inline
+ * `Search any game` mode that swaps its body for the library-search view
+ * — no modal. State toggles via the header CTA.
+ *
+ * Pure presentational over `useCommonGround` — the parent passes
+ * callbacks for nomination + drawer-open so the composite owns the
+ * mutation state.
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { CommonGroundGameDto } from '@raid-ledger/contract';
 import { useCommonGround } from '../../../hooks/use-lineups';
 import { CommonGroundThemedRow, CommonGroundTileWrapper } from './CommonGroundThemedRow';
+import { SearchAnyGameView } from './SearchAnyGameView';
 
 export interface CommonGroundHeroProps {
   lineupId: number;
@@ -42,25 +49,38 @@ function bucketByTheme(tiles: CommonGroundGameDto[]): ThemedBuckets {
 function HeroHeader({
   onRegenerate,
   onOpenWhy,
+  onOpenSearch,
   isFetching,
 }: {
   onRegenerate: () => void;
   onOpenWhy: () => void;
+  onOpenSearch: () => void;
   isFetching: boolean;
 }): JSX.Element {
+  const btnCls =
+    'min-h-[36px] text-[11px] text-muted hover:text-foreground border border-edge rounded px-2 py-1 inline-flex items-center gap-1';
   return (
-    <div className="flex items-center justify-between mb-2">
+    <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
       <h2 className="text-sm font-semibold text-foreground">
         ✨ Common Ground
       </h2>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          aria-label="Search any game in the library"
+          data-testid="nominate-search-any"
+          className={btnCls}
+        >
+          🔍 Search any game
+        </button>
         <button
           type="button"
           onClick={onRegenerate}
           disabled={isFetching}
           aria-label="Regenerate Common Ground suggestions"
           aria-busy={isFetching}
-          className="min-h-[36px] text-[11px] text-muted hover:text-foreground border border-edge rounded px-2 py-1 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1"
+          className={`${btnCls} disabled:opacity-60 disabled:cursor-not-allowed`}
         >
           {isFetching ? (
             <>
@@ -78,7 +98,7 @@ function HeroHeader({
           type="button"
           onClick={onOpenWhy}
           aria-label="Why these suggestions?"
-          className="min-h-[36px] text-[11px] text-muted hover:text-foreground border border-edge rounded px-2 py-1"
+          className={btnCls}
         >
           Why these?
         </button>
@@ -123,6 +143,11 @@ function LegacyFallbackRow({
   );
 }
 
+/** Operator-set ceiling per theme (B, 2026-05-18) — prevents a runaway
+ *  response from rendering hundreds of tiles. The API caps the response
+ *  set today; this is a UI-side belt-and-braces. */
+const PER_THEME_CEILING = 24;
+
 function ThemedLayout({
   buckets,
   canParticipate,
@@ -139,12 +164,12 @@ function ThemedLayout({
   onTileOpenDrawer: (gameId: number) => void;
 }): JSX.Element {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {(['owned', 'taste', 'trending'] as const).map((theme) => (
         <CommonGroundThemedRow
           key={theme}
           theme={theme}
-          tiles={buckets[theme].slice(0, 4)}
+          tiles={buckets[theme].slice(0, PER_THEME_CEILING)}
           atCap={atCap}
           canParticipate={canParticipate}
           nominatingId={nominatingId}
@@ -163,6 +188,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
     true,
   );
   const [whyOpen, setWhyOpen] = useState(false);
+  const [mode, setMode] = useState<'suggestions' | 'search'>('suggestions');
 
   const tiles = useMemo(() => data?.data ?? [], [data]);
   const buckets = useMemo(() => bucketByTheme(tiles), [tiles]);
@@ -180,32 +206,25 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
       <HeroHeader
         onRegenerate={() => void refetch()}
         onOpenWhy={() => setWhyOpen(true)}
+        onOpenSearch={() => setMode('search')}
         isFetching={isFetching}
       />
-      {isLoading && (
-        <div className="text-[11px] text-muted">Loading suggestions…</div>
-      )}
-      {!isLoading && tiles.length === 0 && (
-        <div className="text-[11px] text-muted py-4 text-center">
-          No suggestions yet.
-        </div>
-      )}
-      {!isLoading && useThemedLayout && (
-        <ThemedLayout
-          buckets={buckets}
+      {mode === 'search' ? (
+        <SearchAnyGameView
           canParticipate={canParticipate}
           atCap={atCap}
-          nominatingId={null}
           onTileNominate={onTileNominate}
           onTileOpenDrawer={onTileOpenDrawer}
+          onExit={() => setMode('suggestions')}
         />
-      )}
-      {!isLoading && !useThemedLayout && tiles.length > 0 && (
-        <LegacyFallbackRow
-          tiles={tiles.slice(0, 12)}
+      ) : (
+        <SuggestionsBody
+          isLoading={isLoading}
+          tiles={tiles}
+          buckets={buckets}
+          useThemedLayout={useThemedLayout}
           canParticipate={canParticipate}
           atCap={atCap}
-          nominatingId={null}
           onTileNominate={onTileNominate}
           onTileOpenDrawer={onTileOpenDrawer}
         />
@@ -217,6 +236,62 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
         />
       )}
     </section>
+  );
+}
+
+interface SuggestionsBodyProps {
+  isLoading: boolean;
+  tiles: CommonGroundGameDto[];
+  buckets: ThemedBuckets;
+  useThemedLayout: boolean;
+  canParticipate: boolean;
+  atCap: boolean;
+  onTileNominate: (gameId: number) => void;
+  onTileOpenDrawer: (gameId: number) => void;
+}
+
+function SuggestionsBody(props: SuggestionsBodyProps): JSX.Element {
+  const {
+    isLoading,
+    tiles,
+    buckets,
+    useThemedLayout,
+    canParticipate,
+    atCap,
+    onTileNominate,
+    onTileOpenDrawer,
+  } = props;
+  if (isLoading) {
+    return <div className="text-[11px] text-muted">Loading suggestions…</div>;
+  }
+  if (tiles.length === 0) {
+    return (
+      <div className="text-[11px] text-muted py-4 text-center">
+        No suggestions yet.
+      </div>
+    );
+  }
+  if (useThemedLayout) {
+    return (
+      <ThemedLayout
+        buckets={buckets}
+        canParticipate={canParticipate}
+        atCap={atCap}
+        nominatingId={null}
+        onTileNominate={onTileNominate}
+        onTileOpenDrawer={onTileOpenDrawer}
+      />
+    );
+  }
+  return (
+    <LegacyFallbackRow
+      tiles={tiles.slice(0, 12)}
+      canParticipate={canParticipate}
+      atCap={atCap}
+      nominatingId={null}
+      onTileNominate={onTileNominate}
+      onTileOpenDrawer={onTileOpenDrawer}
+    />
   );
 }
 

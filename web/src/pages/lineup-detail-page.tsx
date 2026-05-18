@@ -280,7 +280,6 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           <NominatingComposite
             lineup={lineup}
             canParticipate={canParticipate}
-            onOpenSearchModal={() => setModalOpen(true)}
           />
         </div>
       )}

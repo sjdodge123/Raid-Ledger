@@ -1,0 +1,159 @@
+/**
+ * Inline search view (ROK-1297, B/C 2026-05-18) — replaces the themed
+ * suggestion rows in `CommonGroundHero` when the user toggles search
+ * mode. Pulls results from `useGameSearch` (the existing library
+ * search behind `/games/search`) and maps each `GameDetailDto` onto
+ * the tile shape used by `CommonGroundTileWrapper` so the per-tile
+ * Nominate / drawer affordances stay identical.
+ *
+ * Lives in its own file so `CommonGroundHero.tsx` stays under the
+ * 300-line cap.
+ */
+import { useMemo, useState, type JSX } from 'react';
+import type {
+  CommonGroundGameDto,
+  GameDetailDto,
+} from '@raid-ledger/contract';
+import { useGameSearch } from '../../../hooks/use-game-search';
+import { CommonGroundTileWrapper } from './CommonGroundThemedRow';
+
+export interface SearchAnyGameViewProps {
+  canParticipate: boolean;
+  atCap: boolean;
+  onTileNominate: (gameId: number) => void;
+  onTileOpenDrawer: (gameId: number) => void;
+  onExit: () => void;
+}
+
+function detailToTile(g: GameDetailDto): CommonGroundGameDto {
+  return {
+    gameId: g.id,
+    gameName: g.name,
+    slug: g.slug,
+    coverUrl: g.coverUrl,
+    ownerCount: 0,
+    wishlistCount: 0,
+    nonOwnerPrice: g.itadCurrentPrice ?? null,
+    itadCurrentCut: g.itadCurrentCut ?? null,
+    itadCurrentShop: g.itadCurrentShop ?? null,
+    itadCurrentUrl: g.itadCurrentUrl ?? null,
+    earlyAccess: g.earlyAccess ?? false,
+    itadTags: g.itadTags ?? [],
+    playerCount: g.playerCount ?? null,
+    score: 0,
+  };
+}
+
+export function SearchAnyGameView(props: SearchAnyGameViewProps): JSX.Element {
+  const { canParticipate, atCap, onTileNominate, onTileOpenDrawer, onExit } =
+    props;
+  const [query, setQuery] = useState('');
+  const { data, isFetching } = useGameSearch(query, query.length >= 2);
+
+  const tiles = useMemo(
+    () => (data?.data ?? []).map(detailToTile),
+    [data],
+  );
+
+  return (
+    <div data-testid="search-any-game-view" className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search any game by name…"
+          aria-label="Search the game library"
+          data-testid="search-any-game-input"
+          autoFocus
+          className="flex-1 min-h-[44px] px-3 py-2 text-[13px] rounded border border-edge bg-overlay/30 text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-emerald-300"
+        />
+        <button
+          type="button"
+          onClick={onExit}
+          aria-label="Back to Common Ground suggestions"
+          data-testid="search-any-game-back"
+          className="min-h-[44px] px-3 py-2 text-[12px] rounded border border-edge bg-overlay/30 text-foreground hover:text-emerald-200 hover:border-emerald-500/40"
+        >
+          ← Back
+        </button>
+      </div>
+      <SearchResultsBody
+        query={query}
+        isFetching={isFetching}
+        tiles={tiles}
+        canParticipate={canParticipate}
+        atCap={atCap}
+        onTileNominate={onTileNominate}
+        onTileOpenDrawer={onTileOpenDrawer}
+      />
+    </div>
+  );
+}
+
+interface ResultsBodyProps {
+  query: string;
+  isFetching: boolean;
+  tiles: CommonGroundGameDto[];
+  canParticipate: boolean;
+  atCap: boolean;
+  onTileNominate: (gameId: number) => void;
+  onTileOpenDrawer: (gameId: number) => void;
+}
+
+function SearchResultsBody(props: ResultsBodyProps): JSX.Element {
+  const {
+    query,
+    isFetching,
+    tiles,
+    canParticipate,
+    atCap,
+    onTileNominate,
+    onTileOpenDrawer,
+  } = props;
+  if (query.length < 2) {
+    return (
+      <p className="text-[12px] text-muted py-6 px-1 text-center">
+        Type at least 2 characters to search the library.
+      </p>
+    );
+  }
+  if (isFetching && tiles.length === 0) {
+    return (
+      <p
+        className="text-[12px] text-muted py-6 px-1 text-center"
+        data-testid="search-any-game-loading"
+      >
+        Searching…
+      </p>
+    );
+  }
+  if (tiles.length === 0) {
+    return (
+      <p
+        className="text-[12px] text-muted py-6 px-1 text-center"
+        data-testid="search-any-game-empty"
+      >
+        No games matched “{query}”.
+      </p>
+    );
+  }
+  return (
+    <div
+      data-testid="search-any-game-results"
+      className="flex flex-wrap gap-3 pb-2"
+    >
+      {tiles.map((tile) => (
+        <CommonGroundTileWrapper
+          key={tile.gameId}
+          tile={tile}
+          disabled={!canParticipate}
+          atCap={atCap}
+          isNominating={false}
+          onNominate={onTileNominate}
+          onOpenDrawer={onTileOpenDrawer}
+        />
+      ))}
+    </div>
+  );
+}

@@ -1,10 +1,13 @@
 /**
- * Single themed row (Owned / Taste / Trending) in the Common Ground hero
- * (ROK-1297). Reuses the existing CommonGroundGameCard (badges, AI pick,
- * sale %, owner count, wishlist count, player count, early access) and
- * adds the per-tile `★ {whyReason}` annotation below each card. Mobile
- * variant exposes the Nominate button always (hover overlay is desktop-
- * only) so the affordance is reachable on touch.
+ * Single themed section (Owned / Taste / Trending) in the Common Ground
+ * hero (ROK-1297). Reuses the existing CommonGroundGameCard (badges, AI
+ * Pick, sale %, owner count, wishlist count, player count, early access)
+ * and adds the per-tile `★ {whyReason}` annotation below each card.
+ *
+ * Operator browser-test feedback 2026-05-18 (B): tiles now flex-wrap into
+ * multiple visual rows per theme rather than overflowing horizontally —
+ * triples the on-screen game density. Empty themes render the label with
+ * a single-line "(no suggestions in this category yet)" placeholder.
  */
 import { type JSX } from 'react';
 import type {
@@ -62,19 +65,25 @@ export function CommonGroundThemedRow(
       <h3 className="text-[12px] uppercase tracking-wider text-muted">
         {meta.title}
       </h3>
-      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
-        {tiles.map((tile) => (
-          <CommonGroundTileWrapper
-            key={tile.gameId}
-            tile={tile}
-            disabled={!canParticipate}
-            atCap={atCap}
-            isNominating={nominatingId === tile.gameId}
-            onNominate={onTileNominate}
-            onOpenDrawer={onTileOpenDrawer}
-          />
-        ))}
-      </div>
+      {tiles.length === 0 ? (
+        <p className="text-[11px] text-muted py-2 px-1 italic">
+          (no suggestions in this category yet)
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-3 pb-2">
+          {tiles.map((tile) => (
+            <CommonGroundTileWrapper
+              key={tile.gameId}
+              tile={tile}
+              disabled={!canParticipate}
+              atCap={atCap}
+              isNominating={nominatingId === tile.gameId}
+              onNominate={onTileNominate}
+              onOpenDrawer={onTileOpenDrawer}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
