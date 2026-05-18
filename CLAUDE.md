@@ -86,6 +86,26 @@ Three custom MCP servers provide tools for environment management, story trackin
 
 **Note:** `mcp-discord` requires Discord running with CDP (`./scripts/launch-discord.sh`). Local dev only.
 
+### `mcp-rl-fleet` — rl-infra Remote Test Fleet (`tools/mcp-rl-fleet/`)
+| Tool | Use When |
+|------|----------|
+| `mcp__mcp-rl-fleet__rl_claim` | Acquire a runner slot on the rl-infra VM. Starts Mutagen sync from laptop to runner. Idempotent — returns existing slot if this agent already holds one. Use at session start when you need a remote test env. |
+| `mcp__mcp-rl-fleet__rl_release` | Release the runner slot held by this agent. Destroys child envs, prunes scoped resources. Call at session end. |
+| `mcp__mcp-rl-fleet__rl_status` | Snapshot the fleet: per-slot claim state, active envs, host RAM/disk/load, per-runner CPU/mem. Use to check if your slot is still valid or before spinning a new env. |
+| `mcp__mcp-rl-fleet__rl_env_spin` | Bring up a per-test env (allinone + sibling Postgres). Returns `{slug}.rl.lan` (internal) + `{slug}test.gamernight.net` (external if `RL_PUBLIC_DOMAIN` is set). |
+| `mcp__mcp-rl-fleet__rl_env_destroy` | Tear down an env: containers + volume + Traefik route file + state entry. |
+| `mcp__mcp-rl-fleet__rl_env_list` | List active test envs (slug, slot, ttl, last_touched). |
+| `mcp__mcp-rl-fleet__rl_env_sync_from_local` | Copy data from operator's local raid-ledger-db into an env. mode=`settings` (default) syncs app_settings/local_credentials/consumed_intent_tokens. mode=`full` does full data dump. Requires `RL_ENV_JWT_SECRET` in `/srv/rl-infra/.env` for encrypted app_settings to decrypt at runtime. |
+| `mcp__mcp-rl-fleet__rl_env_clone_prod` | Two-step: refresh operator's local DB from prod (sanitized backup), then push to env. Use `skip_local_refresh=true` for subsequent envs when local DB is already fresh. |
+| `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Use for `npm test`, `jest`, `npx playwright test`, etc. Captures stdout/stderr/exit_code. Requires `rl_claim` first. |
+| `mcp__mcp-rl-fleet__rl_validate_ci` | Run the full validate-ci.sh pipeline inside the runner — far faster than running locally. Args: `["--no-e2e"]`, `["--only-e2e"]`, etc. |
+| `mcp__mcp-rl-fleet__rl_db_url` | Get psql/pgweb URLs for an env's Postgres. Pure metadata — no remote call. |
+| `mcp__mcp-rl-fleet__rl_logs_url` | Generate a Grafana Explore URL pre-filled with a Loki LogQL query (e.g. `{rl_slot="1"}` or `{rl_env="myslug"} \|= "error"`). |
+
+**Note:** `mcp-rl-fleet` forces `RL_PROXMOX_USER=rl-agent` (limited identity) and `RL_OPERATOR=0` so an agent can never elevate to the operator user via these tools, even if the operator's shell exports `RL_OPERATOR=1`. Operator ops still use the `rl` CLI directly.
+
+**Dashboard:** `http://fleet.rl.lan` (LAN) or `http://fleet.gamernight.net` (external, behind your proxy) — mobile-friendly fleet status page, no auth.
+
 ### Diagnosing offline MCP servers
 
 If `mcp-discord` or `mcp-env` tools come back as offline:

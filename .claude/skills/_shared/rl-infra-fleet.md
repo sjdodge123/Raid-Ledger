@@ -80,20 +80,45 @@ rl release                                        # destroy child envs, prune, d
 So skills that already use `deploy_dev.sh` + the MCP env lock work unchanged
 when `RL_TARGET=local`. The remote path is purely additive.
 
+## MCP tools (preferred for agents)
+
+Agents should use the `mcp__mcp-rl-fleet__*` tools instead of shelling out
+to `rl <cmd>` via Bash. The MCP server forces `rl-agent` identity (no
+operator elevation possible) and returns structured JSON. Full reference
+in CLAUDE.md under "`mcp-rl-fleet`". Common flows:
+
+| Task | MCP tool |
+| ---- | -------- |
+| Start session, claim a runner | `rl_claim` |
+| Spin a prod-like env for testing | `rl_env_spin` (slug=foo) |
+| Seed API keys/config into the env | `rl_env_sync_from_local` (slug, mode='settings') |
+| Realistic prod-shaped data | `rl_env_clone_prod` (slug) |
+| Run build/test inside the runner | `rl_run_on_runner` (command='npm test') |
+| Run full local CI in the runner | `rl_validate_ci` |
+| Check fleet state | `rl_status` / `rl_env_list` |
+| Get Postgres URL for an env | `rl_db_url` (slug) |
+| Open Grafana with a Loki filter | `rl_logs_url` (query) |
+| Clean up | `rl_env_destroy` (slug) → `rl_release` |
+
+The mobile dashboard at `http://fleet.rl.lan` (LAN) or
+`http://fleet.gamernight.net` (external) shows the same state visually.
+
 ## Quick reference for skill authors
 
-When writing/updating a skill that previously called any of the below, prefer
-the `rl` wrapper instead. It handles both remote and local automatically.
+When writing/updating a skill, prefer MCP tools (agents) or the `rl` CLI
+(shell scripts). Both handle remote+local fallback automatically.
 
-| Today (local-only)                          | Use instead                          |
-| ------------------------------------------- | ------------------------------------ |
-| `mcp__mcp-env__env_lock_acquire`            | `rl claim --branch <name>`           |
-| `mcp__mcp-env__env_lock_release`            | `rl release`                         |
-| `./scripts/deploy_dev.sh --ci --rebuild`    | `rl env spin <slug>` (NAS-like)      |
-| `./scripts/deploy_dev.sh --status`          | `rl status`                          |
-| `./scripts/validate-ci.sh --full`           | `rl validate-ci --full`              |
-| `docker exec raid-ledger-db psql …`         | `rl db <slug>`                       |
-| `npx playwright test`                       | `rl validate-ci --only-e2e`          |
+| Today (local-only)                          | Agent-facing replacement              |
+| ------------------------------------------- | ------------------------------------- |
+| `mcp__mcp-env__env_lock_acquire`            | `mcp__mcp-rl-fleet__rl_claim`         |
+| `mcp__mcp-env__env_lock_release`            | `mcp__mcp-rl-fleet__rl_release`       |
+| `./scripts/deploy_dev.sh --ci --rebuild`    | `mcp__mcp-rl-fleet__rl_env_spin`      |
+| `./scripts/deploy_dev.sh --status`          | `mcp__mcp-rl-fleet__rl_status`        |
+| `./scripts/validate-ci.sh --full`           | `mcp__mcp-rl-fleet__rl_validate_ci`   |
+| `docker exec raid-ledger-db psql …`         | `mcp__mcp-rl-fleet__rl_db_url`        |
+| `npx playwright test`                       | `rl_validate_ci` (args=['--only-e2e']) |
+| `./scripts/clone-prod-to-local.sh`          | `mcp__mcp-rl-fleet__rl_env_clone_prod` (target is a test env) |
 
-Setting `RL_TARGET=local` (or being on a plane) makes every `rl` call
-transparently dispatch to the local-only equivalent.
+For shell scripts that can't call MCP tools (build pipelines, CI), use the
+`rl` CLI at `rl-infra/cli/rl`. Setting `RL_TARGET=local` (or being on a
+plane) makes every `rl` call transparently dispatch to the local equivalent.
