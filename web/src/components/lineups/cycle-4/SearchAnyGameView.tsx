@@ -37,6 +37,7 @@ function detailToTile(g: GameDetailDto): CommonGroundGameDto {
     itadCurrentCut: g.itadCurrentCut ?? null,
     itadCurrentShop: g.itadCurrentShop ?? null,
     itadCurrentUrl: g.itadCurrentUrl ?? null,
+    itadLowestPrice: g.itadLowestPrice ?? null,
     earlyAccess: g.earlyAccess ?? false,
     itadTags: g.itadTags ?? [],
     playerCount: g.playerCount ?? null,
@@ -74,27 +75,19 @@ export function SearchAnyGameView(props: SearchAnyGameViewProps): JSX.Element {
 
   return (
     <div data-testid="search-any-game-view" className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search any game by name…"
-          aria-label="Search the game library"
-          data-testid="search-any-game-input"
-          autoFocus
-          className="flex-1 min-h-[44px] px-3 py-2 text-[13px] rounded border border-edge bg-overlay/30 text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-emerald-300"
-        />
-        <button
-          type="button"
-          onClick={onExit}
-          aria-label="Back to Common Ground suggestions"
-          data-testid="search-any-game-back"
-          className="min-h-[44px] px-3 py-2 text-[12px] rounded border border-edge bg-overlay/30 text-foreground hover:text-emerald-200 hover:border-emerald-500/40"
-        >
-          ← Back
-        </button>
-      </div>
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search any game by name…"
+        aria-label="Search the game library"
+        data-testid="search-any-game-input"
+        autoFocus
+        className="w-full min-h-[44px] px-3 py-2 text-[13px] rounded border border-edge bg-overlay/30 text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-emerald-300"
+      />
+      {/* The CommonGroundHero header swaps Regenerate for "← Back" while
+          search mode is active — only one Back affordance, in a stable
+          location. Operator feedback round 3 (2026-05-18). */}
       <SearchResultsBody
         query={query}
         isFetching={isFetching}

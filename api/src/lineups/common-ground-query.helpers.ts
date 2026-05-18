@@ -52,6 +52,7 @@ export interface CommonGroundRow {
   itadCurrentCut: number | null;
   itadCurrentShop: string | null;
   itadCurrentUrl: string | null;
+  itadLowestPrice: number | null;
   earlyAccess: boolean;
   itadTags: string[];
   playerCount: { min: number; max: number } | null;
@@ -92,6 +93,7 @@ export async function queryCommonGround(
       g.itad_current_cut AS "itadCurrentCut",
       g.itad_current_shop AS "itadCurrentShop",
       g.itad_current_url AS "itadCurrentUrl",
+      CASE WHEN g.itad_lowest_price IS NOT NULL THEN g.itad_lowest_price::float ELSE NULL END AS "itadLowestPrice",
       g.early_access AS "earlyAccess",
       COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
       g.player_count AS "playerCount",
@@ -258,6 +260,7 @@ export function mapCommonGroundRow(
     itadCurrentCut: safeRow.itadCurrentCut,
     itadCurrentShop: safeRow.itadCurrentShop,
     itadCurrentUrl: safeRow.itadCurrentUrl,
+    itadLowestPrice: safeRow.itadLowestPrice,
     earlyAccess: safeRow.earlyAccess,
     itadTags: safeRow.itadTags,
     playerCount: safeRow.playerCount,
@@ -286,7 +289,7 @@ function toAppliedWeights(weights: CommonGroundWeights) {
  */
 function withThemeAndWhyReason(game: CommonGroundGameDto): CommonGroundGameDto {
   if (!game.scoreBreakdown) return game;
-  const theme = classifyTheme(game.scoreBreakdown);
+  const theme = classifyTheme(game.scoreBreakdown, game.ownerCount);
   const whyReason = buildWhyReason(game, theme, {
     ownerCount: game.ownerCount,
     topGenres: game.itadTags.slice(0, 2),

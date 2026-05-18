@@ -389,6 +389,14 @@ export const CommonGroundGameSchema = z.object({
     itadCurrentCut: z.number().nullable(),
     itadCurrentShop: z.string().nullable(),
     itadCurrentUrl: z.string().nullable(),
+    /**
+     * ROK-1297 round-3 (2026-05-18): historical lowest price the game has
+     * been observed at via ITAD. Used by the Common Ground card to switch
+     * the sale badge to "Best Price" when current ≤ lowest. Optional for
+     * deployment-skew compatibility — legacy responses render the standard
+     * -X% badge.
+     */
+    itadLowestPrice: z.number().nullable().optional(),
     earlyAccess: z.boolean(),
     itadTags: z.array(z.string()),
     playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),

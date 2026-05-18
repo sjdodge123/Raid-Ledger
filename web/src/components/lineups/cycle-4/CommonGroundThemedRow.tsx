@@ -73,7 +73,13 @@ export function CommonGroundThemedRow(
           (no suggestions in this category yet)
         </p>
       ) : (
-        <div className="flex flex-wrap gap-3 pb-2">
+        <div
+          className="grid gap-3 pb-2"
+          style={{
+            gridTemplateColumns:
+              'repeat(auto-fill, minmax(180px, 1fr))',
+          }}
+        >
           {tiles.map((tile) => {
             const ai = aiSuggestionsByGameId.get(tile.gameId);
             return (
@@ -121,7 +127,7 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
   return (
     <div
       data-testid="common-ground-tile"
-      className="flex-shrink-0 flex flex-col gap-1 w-[180px]"
+      className="flex flex-col gap-1 w-full max-w-[180px] mx-auto"
     >
       <div
         role="button"

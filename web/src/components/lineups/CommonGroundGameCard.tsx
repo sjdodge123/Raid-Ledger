@@ -59,8 +59,16 @@ function WishlistBadge({ count }: { count: number }): JSX.Element | null {
     );
 }
 
-/** Sale/price badge. */
-function SaleBadge({ cut, price }: { cut: number | null; price: number | null }): JSX.Element | null {
+/** Sale/price badge. ROK-1297 round-3: surface "Best Price" when current ≤ lowest. */
+function SaleBadge({
+    cut,
+    price,
+    lowestPrice,
+}: {
+    cut: number | null;
+    price: number | null;
+    lowestPrice: number | null | undefined;
+}): JSX.Element | null {
     if (cut == null || cut <= 0) {
         if (price != null) {
             return (
@@ -70,6 +78,15 @@ function SaleBadge({ cut, price }: { cut: number | null; price: number | null })
             );
         }
         return null;
+    }
+    const isBestPrice =
+        price != null && lowestPrice != null && price <= lowestPrice;
+    if (isBestPrice) {
+        return (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/90 text-white rounded">
+                Best Price {price != null ? `· $${price.toFixed(2)}` : ''}
+            </span>
+        );
     }
     return (
         <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/90 text-white rounded">
@@ -132,7 +149,11 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
             <OwnerBadge count={game.ownerCount} />
             <PlayerBadge playerCount={game.playerCount} />
             <WishlistBadge count={game.wishlistCount} />
-            <SaleBadge cut={game.itadCurrentCut} price={game.nonOwnerPrice} />
+            <SaleBadge
+                cut={game.itadCurrentCut}
+                price={game.nonOwnerPrice}
+                lowestPrice={game.itadLowestPrice}
+            />
             {game.earlyAccess && <EarlyAccessBadge />}
         </div>
     );
