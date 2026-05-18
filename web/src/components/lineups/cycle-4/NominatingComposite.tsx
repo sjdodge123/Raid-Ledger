@@ -11,7 +11,7 @@
  * this page. Tabs were removed in the second rework cycle (operator
  * preferred a single nominations list).
  */
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type {
   LineupDetailResponseDto,
   LineupEntryResponseDto,
@@ -281,8 +281,27 @@ export function NominatingComposite(
   // header (`-translate-y-full`); we slide the hero away by the same
   // amount so they leave/return together. On desktop the hook returns
   // null so the hero stays parked under the always-visible header.
+  //
+  // ROK-1297 round 5g: gate the hide behind an IntersectionObserver
+  // "stuck" sentinel. Before the wrapper actually pins to top:14, hiding
+  // it via translate-y leaves a 199px ghost slot in the document flow —
+  // the operator saw this as "leaves empty DOM space" / "jumps to the
+  // sticky position." Once stuck, hiding is safe because the natural
+  // flow slot has already scrolled above the viewport.
   const scrollDir = useScrollDirection();
-  const heroHidden = scrollDir === 'down';
+  const stuckSentinelRef = useRef<HTMLDivElement | null>(null);
+  const [isStuck, setIsStuck] = useState(false);
+  useEffect(() => {
+    const sentinel = stuckSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsStuck(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+  const heroHidden = scrollDir === 'down' && isStuck;
 
   const myNominatedCount = useMemo(() => {
     if (viewerId == null) return 0;
@@ -313,6 +332,12 @@ export function NominatingComposite(
           hero under the desktop header; on mobile the slightly taller
           header overlaps a couple pixels which the hero's translucent
           backdrop covers cleanly. */}
+      {/* Sentinel just above the sticky wrapper (ROK-1297 round 5g). When
+          it scrolls off-screen the IntersectionObserver flips `isStuck`
+          true, and only then is the wrapper allowed to translate-hide
+          on scroll-down. Otherwise the hide leaves a 199px ghost slot
+          in document flow. */}
+      <div ref={stuckSentinelRef} aria-hidden="true" className="h-px" />
       {/* Sticky JourneyHero (ROK-1297 round 5b): the operator wants both
           the Search trigger AND the jump-to-nominations affordance built
           INTO the sticky element so they remain reachable while the user
