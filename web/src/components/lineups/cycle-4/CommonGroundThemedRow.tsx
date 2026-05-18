@@ -123,7 +123,7 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
   return (
     <div
       data-testid="common-ground-tile"
-      className="flex flex-col gap-1 w-full items-stretch md:items-start"
+      className="flex flex-col gap-1 w-full"
     >
       <div
         role="button"
