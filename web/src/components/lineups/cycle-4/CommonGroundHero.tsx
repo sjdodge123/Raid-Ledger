@@ -290,6 +290,68 @@ function ThemedLayout({
   );
 }
 
+/**
+ * "Suggested for you" row (ROK-1297 round 5s). The LLM returns up to ~5
+ * top picks per lineup; rendering them as ambient badges on a 250-tile
+ * grid made them effectively invisible. This row pulls those tiles up
+ * to the top so the operator can find them at a glance. Uses the same
+ * tile wrapper as the themed rows, so the violet ✨ AI Pick chip still
+ * renders inside each card.
+ */
+function AiPicksRow({
+  tiles,
+  canParticipate,
+  atCap,
+  onTileNominate,
+  onTileOpenDrawer,
+  aiSuggestionsByGameId,
+}: {
+  tiles: CommonGroundGameDto[];
+  canParticipate: boolean;
+  atCap: boolean;
+  onTileNominate: (gameId: number) => void;
+  onTileOpenDrawer: (gameId: number) => void;
+  aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
+}): JSX.Element {
+  return (
+    <section
+      role="region"
+      aria-label="Suggested for you"
+      data-testid="common-ground-ai-picks-row"
+      className="space-y-2 mb-6 p-3 rounded-md border border-violet-500/40 bg-violet-500/5"
+    >
+      <h3 className="text-base sm:text-lg font-semibold text-foreground inline-flex items-center gap-2">
+        <span aria-hidden="true">✨</span>
+        Suggested for you
+      </h3>
+      <div
+        className="grid gap-3 pb-2"
+        style={{
+          gridTemplateColumns:
+            'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
+        }}
+      >
+        {tiles.map((tile) => {
+          const ai = aiSuggestionsByGameId.get(tile.gameId);
+          return (
+            <CommonGroundTileWrapper
+              key={tile.gameId}
+              tile={tile}
+              disabled={!canParticipate}
+              atCap={atCap}
+              isNominating={false}
+              onNominate={onTileNominate}
+              onOpenDrawer={onTileOpenDrawer}
+              aiSuggested
+              aiReasoning={ai?.reasoning}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
   const {
     canParticipate,
@@ -307,6 +369,17 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
     buckets.owned.length + buckets.taste.length + buckets.trending.length;
   const useThemedLayout = themedCount > 0;
 
+  // ROK-1297 round 5s: AI picks are a Map keyed by gameId — the LLM's
+  // top suggestions for this lineup. They were rendering AS BADGES on
+  // whichever tile in the 258-tile grid they happened to fall on, which
+  // made them effectively invisible to a scrolling user. Surface them
+  // in a dedicated "Suggested for you" row at the top of Common Ground
+  // so the operator can see what the LLM picked without hunting.
+  const aiTiles = useMemo(
+    () => tiles.filter((t) => aiSuggestionsByGameId.has(t.gameId)),
+    [tiles, aiSuggestionsByGameId],
+  );
+
   return (
     <section
       data-testid="common-ground-hero"
@@ -317,6 +390,16 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
           ✨ Common Ground
         </h2>
       </div>
+      {aiTiles.length > 0 && (
+        <AiPicksRow
+          tiles={aiTiles}
+          canParticipate={canParticipate}
+          atCap={atCap}
+          onTileNominate={onTileNominate}
+          onTileOpenDrawer={onTileOpenDrawer}
+          aiSuggestionsByGameId={aiSuggestionsByGameId}
+        />
+      )}
       <SuggestionsBody
         isLoading={isLoading}
         tiles={tiles}
