@@ -328,7 +328,9 @@ async function getSchemaTables(dumpFile: string): Promise<string[]> {
   const { stdout } = await execFileAsync('pg_restore', ['--list', dumpFile]);
   const tables: string[] = [];
   for (const line of stdout.split('\n')) {
-    const match = line.match(/^\s*\d+;\s+\d+\s+\d+\s+TABLE\s+\S+\s+(\S+)/);
+    const match = line.match(
+      /^\s*\d+;\s+\d+\s+\d+\s+TABLE\s+(?!DATA\s)\S+\s+(\S+)/,
+    );
     if (match) tables.push(match[1]);
   }
   return tables;
