@@ -255,6 +255,16 @@ export const LineupDetailResponseSchema = z.object({
      * unauthenticated detail call (e.g. /public/...) yields both nulls.
      */
     viewerSubmissions: ViewerSubmissionsSchema,
+    /**
+     * Sv (ROK-1298) — total number of users *eligible* to vote on this
+     * lineup, used as the denominator for normalized vote bars. For private
+     * lineups this is creator + invitees count (deduped); for public
+     * lineups it is the membership count. Distinct from `totalVoters`
+     * (which only counts users who have cast >=1 vote) and `totalMembers`
+     * (which counts everyone regardless of lineup audience). Always
+     * `>= totalVoters`. Always `>= 1` (creator is always eligible).
+     */
+    votingEligibleCount: z.number().int().positive(),
 });
 
 export type LineupDetailResponseDto = z.infer<typeof LineupDetailResponseSchema>;
