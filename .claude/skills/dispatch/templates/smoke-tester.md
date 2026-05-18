@@ -37,15 +37,17 @@ npm run build -w api
 npm run build -w web
 ```
 
-### 3. Playwright Smoke Tests (MANDATORY)
+### 3. E2E Smoke Tests (diff-gated, MANDATORY)
 
-Run the Playwright smoke suite against the deployed app:
+Run the e2e portion of validate-ci against the deployed app. Auto-skips Playwright if no UI/auth/demo-test files changed and auto-skips Discord smoke if no bot/notification files changed:
 
 ```bash
-npx playwright test
+./scripts/validate-ci.sh --only-e2e
 ```
 
-This covers core flows: auth, calendar, events list, event detail, notifications, navigation, games, and players. All tests must pass — Playwright failures are blocking.
+This covers Playwright (auth, calendar, events list, event detail, notifications, navigation, games, players — desktop + mobile) and Discord companion-bot smoke when their respective surfaces are touched. All tests must pass — e2e failures are blocking.
+
+For batches with shared-component changes the diff detector won't flag (shared layout, nav, design tokens), force-run: `./scripts/validate-ci.sh --only-e2e --with-e2e`.
 
 ### 4. Cross-Story Impact Check
 

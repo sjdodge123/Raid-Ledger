@@ -21,25 +21,23 @@ State: `gates.test_gaps: PASS` (or `FAIL`).
 
 ---
 
-## 3b–3f. Build, TypeScript, Lint, Unit Tests, Integration
-
-Run each in sequence. Fix failures directly on batch branch (`fix: resolve <issue>`). If substantive (logic bug from a story), diagnose which story, fix or respawn dev.
+## 3b. Static CI (one command)
 
 ```bash
-npm run build -w packages/contract && npm run build -w api && npm run build -w web
-npx tsc --noEmit -p api/tsconfig.json && npx tsc --noEmit -p web/tsconfig.json
-npm run lint -w api && npm run lint -w web
-npm run test -w api && npm run test -w web
-npm run test:integration -w api
+./scripts/validate-ci.sh --no-e2e
 ```
 
-State: `gates.ci: PASS`, `gates.integration: PASS` (or FAIL).
+Covers build, TypeScript, lint, unit + coverage, integration, and conditional migration / container checks across all workspaces. `--no-e2e` defers Playwright + Discord smoke to 3g (after env verification).
+
+Fix failures directly on the batch branch (`fix: resolve <issue>`). If substantive (logic bug from a story), diagnose which story, fix or respawn dev.
+
+State: `gates.ci: PASS`, `gates.integration: PASS` (or FAIL) — map from the validate-ci summary table.
 
 ---
 
-## 3g. Playwright Smoke (mandatory for every batch)
+## 3g. Post-Deploy E2E Gate (diff-gated, mandatory for every batch)
 
-Backend changes can break UI flows — always run.
+Backend changes can break UI/bot flows — always check, but `validate-ci.sh` will auto-skip e2e steps whose surface wasn't touched by the batch diff.
 
 **Env-lock check.** The env (Docker, API :3000, web :5173) is shared. Step 2b deployed locally and should still hold the lock under this batch's worktree — confirm:
 
@@ -47,19 +45,24 @@ Backend changes can break UI flows — always run.
 mcp__mcp-env__env_lock_status        # confirm this batch's worktree still holds it
 ```
 
-If the lock is gone (released by another agent or expired), re-acquire and re-run `deploy_dev.sh --ci --rebuild` from the batch worktree before Playwright. Don't run Playwright against a stale or absent env.
+If the lock is gone (released by another agent or expired), re-acquire and re-run `deploy_dev.sh --ci --rebuild` from the batch worktree before e2e. Don't run e2e against a stale or absent env.
 
 ```bash
-# Docker/API/web already up from Step 2b. Just verify.
-curl -s http://localhost:3000/system/status | head -20
-npx playwright test
+# Docker/API/web already up from Step 2b. Run the diff-gated e2e portion.
+./scripts/validate-ci.sh --only-e2e
 ```
 
+What this runs:
+- **Playwright** (BOTH desktop + mobile — matches CI) iff diff touches `web/**`, `api/src/auth/**`, `api/src/admin/demo-test*`, `playwright.config.*`, or `scripts/smoke/**`.
+- **Discord smoke** iff diff touches `api/src/discord-bot/**`, `api/src/notifications/**`, `api/src/events/signups*`, `api/src/events/event-lifecycle*`, `api/src/admin/demo-test*`, `tools/test-bot/src/smoke/**`, or `tools/test-bot/src/helpers/polling.ts`.
+
+For batches with shared-component changes the diff detector won't flag (shared layout, nav, design tokens), force-run with `./scripts/validate-ci.sh --only-e2e --with-e2e`.
+
 On failure:
-- Selector/flake → fix test or UI (`fix: resolve Playwright issues`).
+- Selector/flake → fix test or UI (`fix: resolve e2e issues`).
 - Regression → diagnose which story, fix or respawn dev.
 
-State: `gates.smoke: PASS` (or `FAIL`).
+State: `gates.smoke: PASS` (or `FAIL` / `SKIPPED` — record the per-step verdict from the validate-ci summary).
 
 ---
 

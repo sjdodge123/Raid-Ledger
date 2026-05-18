@@ -317,9 +317,24 @@ Run `./scripts/validate-ci.sh --full` before pushing any branch. This replaces m
 | Integration tests | `npm run test:integration -w api` | `validate-ci.sh` |
 | Migration validation | Postgres container + `drizzle-kit migrate` | `validate-migrations.sh` (conditional) |
 | Container startup | Build + start allinone image, health checks | `validate-ci.sh` (conditional) |
-| Playwright | `npx playwright test` (desktop + mobile) | Manual (after deploy) |
+| Playwright (desktop + mobile) | `npx playwright test` | `validate-ci.sh` (conditional + env-gated) |
+| Discord smoke (companion bot) | `cd tools/test-bot && npm run smoke` | `validate-ci.sh` (conditional + env-gated) |
 
-Migration and container checks run conditionally based on `git diff` against `origin/main`. Playwright remains a separate step because it requires a running dev environment.
+**Conditional steps** — `validate-ci.sh` auto-scopes the expensive jobs based on `git diff` against `origin/main` and the local dev env state:
+
+- **Migrations:** run iff `drizzle/migrations/**` changed.
+- **Container startup:** run iff `Dockerfile*`, `nginx/**`, or `docker-entrypoint*` changed.
+- **Playwright:** run iff diff touches `web/**`, `api/src/auth/**`, `api/src/admin/demo-test*`, `playwright.config.*`, or `scripts/smoke/**` AND `:3000/health` + `:5173` both answer. SKIPPED otherwise (with a clear reason in the summary).
+- **Discord smoke:** run iff diff touches `api/src/discord-bot/**`, `api/src/notifications/**`, `api/src/events/signups*`, `api/src/events/event-lifecycle*`, `api/src/admin/demo-test*`, `tools/test-bot/src/smoke/**`, or `tools/test-bot/src/helpers/polling.ts` AND env is up.
+
+**E2E flags:**
+
+- Default (auto): diff + env gated as above. Backend-only branches pass through in seconds; UI/bot branches get the right coverage automatically.
+- `--no-e2e`: skip Playwright + smoke (use for pre-deploy static checks where you'll run e2e separately).
+- `--with-e2e`: force-run e2e even if diff detector says no triggering files changed (paranoid pre-push, or shared-component changes the detector won't flag).
+- `--only-e2e`: skip everything except the e2e steps (use in post-deploy gates where static checks already ran upstream).
+
+**Env-down behavior:** in default/auto mode, missing env produces SKIPPED + a "run `deploy_dev.sh` first if you need e2e coverage" message. `--with-e2e` against a missing env fails fast.
 
 **Backup integration tests** (`api/src/backup/backup.integration.spec.ts`) shell out to `pg_dump` / `pg_restore`. They are gated by `SKIP_BACKUP_INTEGRATION`:
 
@@ -328,7 +343,7 @@ Migration and container checks run conditionally based on `git diff` against `or
 
 ### Smoke Test Verification (STRICT — learned from ROK-935 incident)
 
-**CI runs BOTH desktop AND mobile Playwright projects.** Local verification MUST match CI:
+**CI runs BOTH desktop AND mobile Playwright projects.** Local verification MUST match CI. `validate-ci.sh` invokes `npx playwright test` with no `--project` filter, so both projects run automatically. If you invoke Playwright directly, never narrow it:
 
 ```bash
 # WRONG — only tests desktop, mobile failures will surprise you in CI
@@ -336,12 +351,15 @@ npx playwright test --project=desktop
 
 # RIGHT — tests both projects, matches CI exactly
 npx playwright test
+# OR (preferred — runs Discord smoke too if relevant, auto-skips if not)
+./scripts/validate-ci.sh --only-e2e
 ```
 
 **Before pushing ANY branch with UI changes:**
-1. Run `npx playwright test` (both projects) locally — not `--project=desktop`
-2. If any test fails, fix it BEFORE pushing — do NOT use CI as a debugger
-3. New components on shared pages (layout, nav, Games page) break selectors in OTHER test files — run the FULL suite, not just your feature's tests
+1. Deploy locally (`./scripts/deploy_dev.sh --ci`), then run `./scripts/validate-ci.sh --full` — it includes both desktop + mobile Playwright when web/auth/demo-test files changed.
+2. If the validate-ci summary shows `Playwright: SKIPPED — Dev env not responding`, you skipped the deploy or the env is partly down. Bring it up and re-run.
+3. If any test fails, fix it BEFORE pushing — do NOT use CI as a debugger.
+4. New components on shared pages (layout, nav, Games page) break selectors in OTHER test files — run the FULL suite, not just your feature's tests. If your diff is in a shared component the auto-scope might miss, force-run with `--with-e2e`.
 
 **When smoke tests fail in CI:**
 1. Check the ACTUAL error message — is it "element not found", "strict mode", or "timeout"?

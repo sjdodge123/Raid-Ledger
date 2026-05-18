@@ -125,20 +125,26 @@ If deploy needs `--fresh` (DB wipe), get operator approval (destructive).
 
 ---
 
-## 3c.5. Playwright Smoke Tests
+## 3c.5. Post-Deploy E2E Gate (diff-gated)
 
-After deploy, run BOTH desktop + mobile projects (CI runs both):
+After deploy, run the e2e portion of validate-ci. The script auto-skips Playwright if no UI/auth/demo-test files changed and auto-skips Discord smoke if no bot/notification files changed — so backend-only stories pass through this gate in seconds.
 
 ```bash
-cd ../Raid-Ledger--rok-<num> && npx playwright test && cd -
+cd ../Raid-Ledger--rok-<num> && ./scripts/validate-ci.sh --only-e2e && cd -
 ```
 
+What this runs:
+- **Playwright** (BOTH desktop + mobile — matches CI) iff diff touches `web/**`, `api/src/auth/**`, `api/src/admin/demo-test*`, `playwright.config.*`, or `scripts/smoke/**`.
+- **Discord smoke** iff diff touches `api/src/discord-bot/**`, `api/src/notifications/**`, `api/src/events/signups*`, `api/src/events/event-lifecycle*`, `api/src/admin/demo-test*`, `tools/test-bot/src/smoke/**`, or `tools/test-bot/src/helpers/polling.ts`.
+
+If you suspect the gate's scope is wrong for this story (e.g. you changed a shared layout component that the diff detector won't flag as UI-touching), force-run with `./scripts/validate-ci.sh --only-e2e --with-e2e`.
+
 On failure:
-- Selector/flake → fix test or UI, commit `fix: resolve Playwright issues (ROK-XXX)`.
+- Selector/flake → fix test or UI, commit `fix: resolve e2e issues (ROK-XXX)`.
 - Real regression → diagnose which story broke it, fix or respawn dev.
 - After fix: re-run, then continue. **Do not push.**
 
-Gate: `gates.playwright: PASS` or `FAIL`.
+Gates: `gates.playwright: PASS` / `FAIL` / `SKIPPED`; `gates.discord_smoke: PASS` / `FAIL` / `SKIPPED`. Map them from the validate-ci summary table.
 
 ---
 

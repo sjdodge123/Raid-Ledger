@@ -3,9 +3,9 @@
 **Lead runs validation directly on the batch branch.**
 
 Order:
-1. Cheap static gates sequential: build (3a) → ts (3b) → lint (3c) → unit (3d) → integration (3e).
+1. Cheap static gates in one pass: `validate-ci.sh --no-e2e` covers build → ts → lint → unit → integration (3a).
 2. **Then fork into two parallel tracks**:
-   - **Track A (Lead, env-bound):** acquire env lock (3f) → deploy → Playwright (3g) → Chrome MCP e2e (3h) → release env lock.
+   - **Track A (Lead, env-bound):** acquire env lock (3f) → deploy → diff-gated e2e (3g) → Chrome MCP e2e (3h) → release env lock.
    - **Track B (Reviewer agent, no env):** spawn reviewer in background (3i) reviewing the merged batch diff.
 3. Both tracks converge before test gaps (3j) + regression (3k) + push (3l).
 
@@ -18,74 +18,25 @@ git checkout fix/batch-YYYY-MM-DD
 
 ---
 
-## 3a. Build
+## 3a. Static CI (one command)
 
 ```bash
-npm run build -w packages/contract
-npm run build -w api
-npm run build -w web
+./scripts/validate-ci.sh --no-e2e
 ```
 
-If build fails: diagnose which story caused it. Fix directly, commit as `fix: resolve build issue`.
+`validate-ci.sh` runs build (all workspaces), TypeScript, lint, unit + coverage, integration, and conditional migration / container checks. `--no-e2e` defers Playwright + Discord smoke to step 3g (after deploy).
 
----
+On failure (script stops at first FAIL — read its summary table):
+- **Trivial** (lint, type error, test setup, import path): fix directly, commit `fix: resolve <issue>`.
+- **Substantive** (logic bug introduced by a story): diagnose which story, fix directly on the batch branch if possible, otherwise create a new worktree from the batch branch and re-spawn the dev with failure context.
 
-## 3b. TypeScript
-
-```bash
-npx tsc --noEmit -p api/tsconfig.json
-npx tsc --noEmit -p web/tsconfig.json
-```
-
-If type errors: fix directly, commit as `fix: resolve type errors`.
-
----
-
-## 3c. Lint
-
-```bash
-npm run lint -w api
-npm run lint -w web
-```
-
-If lint errors: fix directly, commit as `fix: resolve lint issues`.
-
----
-
-## 3d. Unit Tests
-
-```bash
-npm run test -w api
-npm run test -w web
-```
-
-If tests fail:
-- **Trivial failure** (import path, test setup): fix directly
-- **Substantive failure** (logic bug introduced by a story): diagnose which story caused it
-  - If fixable: fix directly on the batch branch
-  - If complex: create a new worktree from the batch branch, re-spawn dev with failure context
-
-Update state: `gates.ci: PASS` (or `FAIL`)
-
----
-
-## 3e. Integration Tests
-
-```bash
-npm run test:integration -w api
-```
-
-If integration tests fail:
-- Diagnose which story's changes caused the failure
-- Fix directly if possible, otherwise re-spawn dev
-
-Update state: `gates.integration: PASS` (or `FAIL`)
+Update state: `gates.ci: PASS` (or `FAIL`). Map the validate-ci summary rows onto `gates.ci` (build/tsc/lint/unit) and `gates.integration` (integration row).
 
 ---
 
 ## Fork: Track A + Track B start in parallel
 
-After 3e (integration) passes, kick off BOTH tracks in the same message — Track A (env-bound, Lead-driven) and Track B (reviewer agent, no env).
+After 3a (validate-ci --no-e2e) passes, kick off BOTH tracks in the same message — Track A (env-bound, Lead-driven) and Track B (reviewer agent, no env).
 
 **Track A** runs 3f → 3g → 3h sequentially (Lead actions).
 **Track B** runs 3i once (reviewer agent invocation).
@@ -96,7 +47,7 @@ If reviewer finishes before Chrome MCP, hold reviewer output and continue Track 
 
 ## 3f. [Track A] Acquire Env Lock + Deploy Locally
 
-**Env-lock discipline (STRICT):** hold the lock for the minimum span needed — just deploy (3f) → Playwright (3g) → Chrome MCP (3h). Release immediately after 3h. The reviewer (Track B), push, PR, and auto-merge do NOT need the env.
+**Env-lock discipline (STRICT):** hold the lock for the minimum span needed — just deploy (3f) → e2e (3g) → Chrome MCP (3h). Release immediately after 3h. The reviewer (Track B), push, PR, and auto-merge do NOT need the env.
 
 ```
 mcp__mcp-env__env_lock_status                                                # see who holds it
@@ -110,25 +61,31 @@ If queued, do non-env work (PR body draft, spec tidy) until the lock returns. Do
 curl -s http://localhost:3000/system/status | head -20
 ```
 
-If deploy fails: stop. Debug the deploy before continuing — there is no point running Playwright or Chrome MCP against a broken env. If the fix is purely code (no env state), release the lock while you fix and re-acquire.
+If deploy fails: stop. Debug the deploy before continuing — there is no point running e2e or Chrome MCP against a broken env. If the fix is purely code (no env state), release the lock while you fix and re-acquire.
 
 ---
 
-## 3g. [Track A] Playwright Smoke (regression sweep)
+## 3g. [Track A] Post-Deploy E2E Gate (diff-gated)
 
-Automated regression check across all flows. Runs BOTH desktop and mobile projects (CI runs both — local must match).
+Run the e2e portion of validate-ci against the deployed batch. The script auto-skips Playwright if no UI/auth/demo-test files changed in the batch and auto-skips Discord smoke if no bot/notification files changed — pure backend batches pass through in seconds.
 
 ```bash
-npx playwright test
+./scripts/validate-ci.sh --only-e2e
 ```
 
-If Playwright fails:
-- **Selector/flake failures:** fix the test or the UI, commit `fix: resolve Playwright issues`
-- **Real regressions:** diagnose which story broke the flow, fix or re-spawn dev
+What this runs:
+- **Playwright** (BOTH desktop + mobile — matches CI) iff diff touches `web/**`, `api/src/auth/**`, `api/src/admin/demo-test*`, `playwright.config.*`, or `scripts/smoke/**`.
+- **Discord smoke** iff diff touches `api/src/discord-bot/**`, `api/src/notifications/**`, `api/src/events/signups*`, `api/src/events/event-lifecycle*`, `api/src/admin/demo-test*`, `tools/test-bot/src/smoke/**`, or `tools/test-bot/src/helpers/polling.ts`.
+
+For batches with shared-component changes that the diff detector won't flag as UI-touching (e.g. shared layout, nav, design tokens), force-run with `./scripts/validate-ci.sh --only-e2e --with-e2e`.
+
+On failure:
+- **Selector/flake failures:** fix the test or the UI, commit `fix: resolve e2e issues`.
+- **Real regressions:** diagnose which story broke the flow, fix or re-spawn dev.
 
 Never re-run hoping it passes. Never weaken or skip tests to make CI green.
 
-Update state: `gates.playwright: PASS` (or `FAIL`)
+Update state: `gates.playwright: PASS` / `FAIL` / `SKIPPED`; `gates.discord_smoke: PASS` / `FAIL` / `SKIPPED`.
 
 ---
 

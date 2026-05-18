@@ -16,7 +16,7 @@ When operator signals ready, poll each story: `mcp__linear__get_issue({ issueId:
 mcp__mcp-env__env_lock_release
 ```
 
-Exception: if rework is `material` and re-running the deploy + Playwright on the worktree is needed before push, re-acquire then. If Lead smoke in 4d needs to run `npx playwright test` (UI changes), re-acquire just for that pass and release after. The default is **release-as-soon-as-possible**; re-acquire on demand. Don't pre-emptively hold.
+Exception: if rework is `material` and re-running the deploy + e2e on the worktree is needed before push, re-acquire then. If Lead smoke in 4d needs to run `./scripts/validate-ci.sh --only-e2e --with-e2e` (UI / bot changes against the rebased state), re-acquire just for that pass and release after. The default is **release-as-soon-as-possible**; re-acquire on demand. Don't pre-emptively hold.
 
 ### Changes Requested → Rework Loop
 
@@ -162,12 +162,12 @@ For standard / full scope, never skipped. From main worktree:
 
 ```bash
 git pull --rebase origin main
-npm run build -w packages/contract && npm run build -w api && npm run build -w web
-npm run test -w api && npm run test -w web
-npx tsc --noEmit -p api/tsconfig.json && npx tsc --noEmit -p web/tsconfig.json
+./scripts/validate-ci.sh --no-e2e
 ```
 
-If UI changes: re-acquire the env lock (`mcp__mcp-env__env_lock_acquire`), run `npx playwright test`, then `mcp__mcp-env__env_lock_release` immediately after. Don't hold the lock through 4e or Step 5 — push and PR creation don't need the env.
+`validate-ci.sh --no-e2e` covers build/typecheck/lint/unit/integration across all workspaces in one pass and skips the e2e steps (which need a deployed env and got covered in 3c.5 against the worktree).
+
+If UI / bot changes need post-rebase re-verification: re-acquire the env lock, deploy the main worktree (`./scripts/deploy_dev.sh --ci --rebuild`), then run `./scripts/validate-ci.sh --only-e2e --with-e2e` to force the e2e steps against the rebased state. Release the env lock immediately after. Don't hold the lock through 4e or Step 5 — push and PR creation don't need the env.
 
 Gate: `gates.smoke_test: PASS` or `FAIL`. On failure: diagnose (timing? `sleep()`?). Regression → fix or respawn dev. Test infra issue (flaky, missing wait) → fix the test, don't skip. **Never dismiss as "pre-existing"** — investigate and fix, or create a Linear story with root cause.
 

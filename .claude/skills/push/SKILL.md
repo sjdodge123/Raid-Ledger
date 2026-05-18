@@ -148,33 +148,34 @@ The script auto-detects scope (migration files, Dockerfile changes) and runs the
 
 ---
 
-### Step 8: Playwright Smoke Tests (if UI changes)
+### Step 8: E2E Verification (diff-gated, env-gated)
 
-Only if `web/src/` files changed:
+`validate-ci.sh --full` in Step 7 already auto-runs Playwright + Discord smoke when the diff touches their surface AND the dev env is up (`:3000/health` + `:5173`). What you do here depends on what Step 7 produced:
 
-```bash
-# CRITICAL: Do NOT add --project=desktop. CI runs BOTH desktop AND mobile.
-# Running only desktop locally and pushing will fail CI on mobile tests.
-npx playwright test
-```
+1. **Step 7 summary shows `Playwright (desktop + mobile): PASS`** — e2e is already covered. Touch the sentinel and continue:
+   ```bash
+   touch "/tmp/.playwright-verified-$(git rev-parse --short HEAD)"
+   ```
 
-**This runs BOTH desktop and mobile projects (~450 tests).** Takes ~3 minutes.
+2. **Step 7 summary shows `Playwright: SKIPPED — No Playwright-relevant files changed`** — the diff is backend-only. The pre-push hook accepts no sentinel for non-UI branches, so just continue.
 
-After Playwright passes, create the sentinel file so the pre-push hook allows `git push`:
+3. **Step 7 summary shows `Playwright: SKIPPED — Dev env not responding`** — the script couldn't reach `:3000/health` or `:5173`. Decide:
+   - **If `web/src/` files changed:** bring the env up and re-run e2e:
+     ```bash
+     ./scripts/deploy_dev.sh --ci         # acquire env lock first if needed
+     ./scripts/validate-ci.sh --only-e2e --with-e2e
+     touch "/tmp/.playwright-verified-$(git rev-parse --short HEAD)"
+     ```
+   - **If branch is API-only:** continue without the sentinel.
 
-```bash
-touch "/tmp/.playwright-verified-$(git rev-parse --short HEAD)"
-```
+The same logic applies to the `Discord smoke` row — if it FAILED, fix; if SKIPPED-no-relevant, continue; if SKIPPED-env-down on a bot/notification branch, deploy and re-run.
 
-If Playwright fails:
-- Check the error: "element not found" vs "strict mode" vs "timeout"
+**Failure handling — never circumvent:**
 - "Strict mode" = your new DOM elements collided with selectors in OTHER test files
-- New components on shared pages (Games, Events, Layout) affect tests in other files — run the FULL suite
+- New components on shared pages (Games, Events, Layout) affect tests in other files — run the FULL suite (default — do NOT add `--project=desktop`)
 - Fix the code or the test
 - **NEVER skip and proceed**
 - **NEVER re-push and re-run CI hoping it passes** — fix locally first
-
-If the branch is API-only (no web changes), this step can be skipped.
 
 ---
 
