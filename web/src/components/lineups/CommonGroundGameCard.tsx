@@ -26,13 +26,20 @@ interface Props {
      * noise. Default false keeps the legacy CommonGroundPanel behavior.
      */
     hideOverlay?: boolean;
+    /**
+     * ROK-1297 round-4: render at the parent cell's full width instead of
+     * the fixed 180px the legacy CommonGroundPanel needs for its horizontal
+     * carousel. Used by the Cycle 4 themed grid so cards scale up with
+     * available room (especially on mobile where 180px wastes real estate).
+     */
+    fluid?: boolean;
 }
 
 /** Violet ✨ AI Pick chip rendered on cards blended in from the AI suggester. */
 function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
     return (
         <span
-            className="absolute top-2 left-2 z-10 px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/90 text-white rounded shadow-sm"
+            className="absolute top-2 left-2 z-10 px-2 py-0.5 text-xs font-bold bg-violet-500/90 text-white rounded shadow-sm"
             title={reasoning ?? 'Suggested by AI'}
         >
             ✨ AI Pick
@@ -43,7 +50,7 @@ function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
 /** Emerald badge for library owner count. */
 function OwnerBadge({ count }: { count: number }): JSX.Element {
     return (
-        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/90 text-white rounded">
+        <span className="px-2 py-0.5 text-xs font-bold bg-emerald-500/90 text-white rounded">
             {count} own
         </span>
     );
@@ -53,7 +60,7 @@ function OwnerBadge({ count }: { count: number }): JSX.Element {
 function WishlistBadge({ count }: { count: number }): JSX.Element | null {
     if (count <= 0) return null;
     return (
-        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/90 text-white rounded">
+        <span className="px-2 py-0.5 text-xs font-bold bg-amber-500/90 text-white rounded">
             {count} wishlisted
         </span>
     );
@@ -72,7 +79,7 @@ function SaleBadge({
     if (cut == null || cut <= 0) {
         if (price != null) {
             return (
-                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-zinc-600/80 text-white rounded">
+                <span className="px-2 py-0.5 text-xs font-bold bg-zinc-600/80 text-white rounded">
                     ${price.toFixed(2)}
                 </span>
             );
@@ -83,13 +90,13 @@ function SaleBadge({
         price != null && lowestPrice != null && price <= lowestPrice;
     if (isBestPrice) {
         return (
-            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/90 text-white rounded">
+            <span className="px-2 py-0.5 text-xs font-bold bg-emerald-500/90 text-white rounded">
                 Best Price {price != null ? `· $${price.toFixed(2)}` : ''}
             </span>
         );
     }
     return (
-        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/90 text-white rounded">
+        <span className="px-2 py-0.5 text-xs font-bold bg-emerald-500/90 text-white rounded">
             -{cut}%{price != null ? ` $${price.toFixed(2)}` : ''}
         </span>
     );
@@ -101,7 +108,7 @@ function PlayerBadge({ playerCount }: { playerCount: { min: number; max: number 
     const { min, max } = playerCount;
     const label = min === max ? `${min}` : `${min}-${max}`;
     return (
-        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/90 text-white rounded">
+        <span className="px-2 py-0.5 text-xs font-bold bg-violet-500/90 text-white rounded">
             {label} {max === 1 ? 'player' : 'players'}
         </span>
     );
@@ -110,7 +117,7 @@ function PlayerBadge({ playerCount }: { playerCount: { min: number; max: number 
 /** Early access indicator badge. */
 function EarlyAccessBadge(): JSX.Element {
     return (
-        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-500/90 text-white rounded">
+        <span className="px-2 py-0.5 text-xs font-bold bg-blue-500/90 text-white rounded">
             Early Access
         </span>
     );
@@ -160,12 +167,13 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
 }
 
 /** Game card for the Common Ground panel. */
-export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, aiSuggested, aiReasoning, hideOverlay }: Props): JSX.Element {
+export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, aiSuggested, aiReasoning, hideOverlay, fluid }: Props): JSX.Element {
     const borderCls = aiSuggested
         ? 'border-violet-500/50 hover:border-violet-400/80'
         : 'border-edge/50 hover:border-emerald-500/50';
+    const widthCls = fluid ? 'w-full' : 'w-[180px] flex-shrink-0';
     return (
-        <div className={`group relative w-[180px] flex-shrink-0 rounded-xl overflow-hidden bg-panel border ${borderCls} hover:shadow-lg transition-all cursor-pointer`}>
+        <div className={`group relative ${widthCls} rounded-xl overflow-hidden bg-panel border ${borderCls} hover:shadow-lg transition-all cursor-pointer`}>
             <div className="relative aspect-[3/4] bg-panel">
                 {aiSuggested && <AiBadge reasoning={aiReasoning} />}
                 {game.coverUrl

@@ -76,8 +76,12 @@ export function CommonGroundThemedRow(
         <div
           className="grid gap-3 pb-2"
           style={{
+            // ROK-1297 round-4: bump the min cell width so mobile renders
+            // 1 generous card instead of one 180px card with ~150px wasted
+            // air either side. Cards now go fluid via the `fluid` prop and
+            // grow with the cell.
             gridTemplateColumns:
-              'repeat(auto-fill, minmax(180px, 1fr))',
+              'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
           }}
         >
           {tiles.map((tile) => {
@@ -127,7 +131,7 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
   return (
     <div
       data-testid="common-ground-tile"
-      className="flex flex-col gap-1 w-full max-w-[180px] mx-auto"
+      className="flex flex-col gap-1 w-full"
     >
       <div
         role="button"
@@ -153,6 +157,7 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
           aiSuggested={aiSuggested}
           aiReasoning={aiReasoning}
           hideOverlay
+          fluid
         />
       </div>
       {tile.whyReason && (
