@@ -66,27 +66,49 @@ describe('classifyTheme (ROK-1297)', () => {
     ).toBe('taste');
   });
 
-  it('returns "trending" when baseScore dominates', () => {
+  // ROK-1297 round-3b (2026-05-18): on-sale tiles must always land in
+  // Trending regardless of ownership; co-play wins only when strictly
+  // greater than taste (no tie promotion). Fallback `ownerCount >= 2 →
+  // owned` only fires when no other signal applies.
+  it('returns "trending" when no co-play, no taste, no ownership, no sale', () => {
     expect(
       classifyTheme(
-        breakdown({ socialScore: 2, tasteScore: 2, baseScore: 25 }),
+        breakdown({ socialScore: 0, tasteScore: 0, baseScore: 25 }),
       ),
     ).toBe('trending');
   });
 
-  it('breaks ties in priority order: owned > taste > trending', () => {
-    // socialScore == tasteScore == baseScore → owned wins.
+  it('routes on-sale tiles to "trending" even with high ownership', () => {
+    expect(
+      classifyTheme(
+        breakdown({ socialScore: 0, tasteScore: 0, baseScore: 10 }),
+        17, // ownerCount — fallback would otherwise route to "owned"
+        50, // itadCurrentCut → trending wins
+      ),
+    ).toBe('trending');
+  });
+
+  it('falls back to "owned" when ownerCount >= 2 and no other signal', () => {
+    expect(
+      classifyTheme(
+        breakdown({ socialScore: 0, tasteScore: 0, baseScore: 10 }),
+        5,
+        null,
+      ),
+    ).toBe('owned');
+  });
+
+  it('prefers co-play strictly over taste (ties go to taste)', () => {
     expect(
       classifyTheme(
         breakdown({ socialScore: 10, tasteScore: 10, baseScore: 10 }),
       ),
-    ).toBe('owned');
-    // tasteScore == baseScore (no social) → taste wins.
+    ).toBe('taste');
     expect(
       classifyTheme(
-        breakdown({ socialScore: 0, tasteScore: 10, baseScore: 10 }),
+        breakdown({ socialScore: 11, tasteScore: 10, baseScore: 10 }),
       ),
-    ).toBe('taste');
+    ).toBe('owned');
   });
 
   it('returns "trending" when all factors are zero (no signal → trending fallback)', () => {

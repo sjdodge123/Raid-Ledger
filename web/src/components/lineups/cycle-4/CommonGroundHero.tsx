@@ -39,6 +39,39 @@ interface ThemedBuckets {
   trending: CommonGroundGameDto[];
 }
 
+/**
+ * Reshuffle tiles within each themed bucket deterministically by seed.
+ * Operator round-3 (2026-05-18): scoring is deterministic so refetch
+ * returns the same response. Shuffling client-side produces visible
+ * "new picks" feedback on every Regenerate click without burdening the
+ * scoring layer with randomness. Seed=0 leaves the original score order
+ * untouched on first render.
+ */
+function shuffleBuckets(buckets: ThemedBuckets, seed: number): ThemedBuckets {
+  if (seed === 0) return buckets;
+  const rotate = (arr: CommonGroundGameDto[]): CommonGroundGameDto[] => {
+    if (arr.length <= 1) return arr;
+    // Mulberry32-style LCG keyed by seed × bucket-length for stable
+    // re-orderings — different seeds produce different tile orders but the
+    // same seed always produces the same shuffle (avoids React-render flap).
+    let s = (seed * 2654435761 + arr.length) >>> 0;
+    const out = [...arr];
+    for (let i = out.length - 1; i > 0; i--) {
+      s = Math.imul(s ^ (s >>> 15), 2246822507);
+      s = Math.imul(s ^ (s >>> 13), 3266489909);
+      const r = (s ^ (s >>> 16)) >>> 0;
+      const j = r % (i + 1);
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  };
+  return {
+    owned: rotate(buckets.owned),
+    taste: rotate(buckets.taste),
+    trending: rotate(buckets.trending),
+  };
+}
+
 function bucketByTheme(tiles: CommonGroundGameDto[]): ThemedBuckets {
   const out: ThemedBuckets = { owned: [], taste: [], trending: [] };
   for (const t of tiles) {
@@ -208,9 +241,17 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
   } = useCommonGroundState(lineupId, canParticipate);
   const [isFetching, setIsFetching] = useState(false);
   const [mode, setMode] = useState<'suggestions' | 'search'>('suggestions');
+  // Operator round-3 feedback: scoring is deterministic so refetch() returns
+  // the same response. Incrementing this nonce on every Regenerate click
+  // reshuffles tiles WITHIN each themed bucket, producing visible variation
+  // without any server change.
+  const [regenerateNonce, setRegenerateNonce] = useState(0);
 
   const tiles = useMemo(() => mergedData?.data ?? [], [mergedData]);
-  const buckets = useMemo(() => bucketByTheme(tiles), [tiles]);
+  const buckets = useMemo(
+    () => shuffleBuckets(bucketByTheme(tiles), regenerateNonce),
+    [tiles, regenerateNonce],
+  );
   const themedCount =
     buckets.owned.length + buckets.taste.length + buckets.trending.length;
   const useThemedLayout = themedCount > 0;
@@ -222,9 +263,10 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
     }
     setIsFetching(true);
     refetch();
-    // Spinner clears on next render — refetch() reuses cached data unless
-    // the underlying server returns fresh signals. The spinner here is an
-    // affordance, not a guarantee of new content.
+    // Bump the nonce so the in-bucket shuffle reroll fires synchronously
+    // — this is what makes the visible content change even when the server
+    // returns the same deterministic response.
+    setRegenerateNonce((n) => n + 1);
     window.setTimeout(() => setIsFetching(false), 500);
   };
 

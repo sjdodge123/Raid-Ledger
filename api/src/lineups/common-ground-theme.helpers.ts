@@ -22,27 +22,42 @@ export interface WhyReasonContext {
 }
 
 /**
- * Map a tile onto its dominant themed row. Operator round-3 feedback
- * (2026-05-18): the original "socialScore-only" classifier left the
- * "Owned by your group" row empty whenever the viewer has no co-play
- * partner graph, even when 15+ guildmates owned the game. The classifier
- * now ALSO promotes a tile to "owned" when the raw guild ownership count
- * is >= 2, which matches operator and player intuition. `socialScore`
- * still wins on ties so co-play matches surface above generic
- * "guild owns this" tiles. "Matches your taste" still requires a real
- * tasteScore — surfaces only when the viewer has a taste vector.
+ * Map a tile onto its dominant themed row.
+ *
+ * Operator iteration log (2026-05-18):
+ *   - Round 1: socialScore-only. Owned row stayed empty whenever the
+ *     viewer had no co-play graph, even with 15+ guildmates owning the
+ *     game.
+ *   - Round 3a: added `ownerCount >= 2 → owned` fallback. Fixed the
+ *     empty Owned row but swept EVERY tile (including on-sale ones)
+ *     into Owned, leaving Trending empty.
+ *   - Round 3b (this version): on-sale tiles ALWAYS land in Trending
+ *     (operators expect deals there), regardless of guild ownership.
+ *     Tiles fall to Owned only when no sale signal AND no co-play
+ *     signal AND ownerCount >= 2.
+ *
+ * Resulting priority:
+ *   1. Strong co-play match (socialScore > 0 AND socialScore > taste) → owned
+ *   2. Taste-vector match (tasteScore > 0)                            → taste
+ *   3. On sale / free (itadCurrentCut > 0)                            → trending
+ *   4. Guild owns ≥ 2 with none of the above                          → owned
+ *   5. Default                                                        → trending
  */
 export function classifyTheme(
   breakdown: CommonGroundScoreBreakdownDto,
   ownerCount: number = 0,
+  itadCurrentCut: number | null = null,
 ): CommonGroundTheme {
   const social = breakdown.socialScore;
   const taste = breakdown.tasteScore;
-  const base = breakdown.baseScore;
-  if (social >= taste && social >= base && social > 0) return 'owned';
-  if (taste >= base && taste > 0) return 'taste';
-  // Round-3 fallback: high raw guild ownership reads as "Owned by your group"
-  // even when the co-play graph is empty.
+  // Strong co-play match outranks everything (matches the wishlist + sale
+  // signals are noisier than "your friends own this together").
+  if (social > 0 && social > taste) return 'owned';
+  if (taste > 0) return 'taste';
+  // On-sale / free → trending. Operators expect deals to show up under
+  // "Trending or on sale" regardless of who else owns the game.
+  if (itadCurrentCut != null && itadCurrentCut > 0) return 'trending';
+  // No sale signal, no co-play, no taste — but the guild does own this.
   if (ownerCount >= 2) return 'owned';
   return 'trending';
 }

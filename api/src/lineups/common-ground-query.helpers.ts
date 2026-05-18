@@ -289,7 +289,11 @@ function toAppliedWeights(weights: CommonGroundWeights) {
  */
 function withThemeAndWhyReason(game: CommonGroundGameDto): CommonGroundGameDto {
   if (!game.scoreBreakdown) return game;
-  const theme = classifyTheme(game.scoreBreakdown, game.ownerCount);
+  const theme = classifyTheme(
+    game.scoreBreakdown,
+    game.ownerCount,
+    game.itadCurrentCut,
+  );
   const whyReason = buildWhyReason(game, theme, {
     ownerCount: game.ownerCount,
     topGenres: game.itadTags.slice(0, 2),
