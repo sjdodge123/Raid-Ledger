@@ -11,6 +11,17 @@
 
 set -euo pipefail
 
+# Source the stack-wide .env so orchestrator scripts inherit RL_PUBLIC_DOMAIN,
+# GRAFANA_ADMIN_PASSWORD, etc. Without this, env-spin wouldn't know to write
+# external host rules for Traefik or pass PUBLIC_URL to the allinone container.
+# Safe — .env is operator-owned and read-only to rl-agent.
+if [[ -f /srv/rl-infra/.env ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    . /srv/rl-infra/.env
+    set +a
+fi
+
 # Route Docker calls through the socket-proxy by default. The operator can
 # override with RL_USE_DOCKER_SOCKET=1 to bypass and hit /var/run/docker.sock
 # directly (useful for ops like `docker compose down` that the proxy blocks).

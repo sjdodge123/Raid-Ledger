@@ -41,6 +41,7 @@ Proxmox host
 
 | Hostname                    | Points at                                   |
 | --------------------------- | ------------------------------------------- |
+| `fleet.rl.lan`              | Mobile fleet dashboard (bookmark on phone)  |
 | `traefik.rl.lan`            | Traefik dashboard                           |
 | `grafana.rl.lan`            | Grafana (logs, dashboards)                  |
 | `registry.rl.lan`           | Local Docker registry                       |

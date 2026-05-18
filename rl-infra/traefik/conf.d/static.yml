@@ -27,6 +27,18 @@ http:
       entryPoints: [web]
       middlewares: [rl-headers]
 
+    # Mobile-friendly fleet dashboard. Bookmark on phone for at-a-glance
+    # slot/env state. Reads state/*.json read-only; no mutating actions.
+    # Dashboard. Internal: fleet.rl.lan. External via reverse-proxy: also
+    # accept any Host whose path starts with /fleet/ AND the bare host
+    # `fleet.${RL_PUBLIC_DOMAIN}` if you set that on the proxy side.
+    # If you want a different external hostname, add it here.
+    dashboard:
+      rule: "Host(`fleet.rl.lan`) || HostRegexp(`^fleet\\..+$`)"
+      service: dashboard
+      entryPoints: [web]
+      middlewares: [rl-headers]
+
     # Runner slots — both default (1,2) and optional (3,4) listed. Routes for
     # slot-3/slot-4 are inactive until you enable the `extra-slots` compose
     # profile; Traefik will log "no available servers" until then, which is
@@ -104,6 +116,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://rl-registry:5000"
+
+    dashboard:
+      loadBalancer:
+        servers:
+          - url: "http://rl-dashboard:8080"
 
     slot-1-web:
       loadBalancer:

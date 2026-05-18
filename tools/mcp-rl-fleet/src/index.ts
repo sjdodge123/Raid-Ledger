@@ -1,0 +1,113 @@
+// mcp-rl-fleet — MCP server exposing rl-infra fleet operations to agents.
+//
+// The server always forces RL_PROXMOX_USER=rl-agent and RL_OPERATOR=0 so
+// agents can never accidentally execute as the privileged operator user.
+// See ../../rl-infra/README.md for the fleet architecture.
+
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
+
+import * as claim from './tools/claim.js';
+import * as release from './tools/release.js';
+import * as status from './tools/status.js';
+import * as envSpin from './tools/env-spin.js';
+import * as envDestroy from './tools/env-destroy.js';
+import * as envList from './tools/env-list.js';
+import * as runOnRunner from './tools/run-on-runner.js';
+import * as validateCi from './tools/validate-ci.js';
+import * as dbUrl from './tools/db-url.js';
+import * as logsUrl from './tools/logs-url.js';
+
+const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.1.0' });
+
+const jsonResult = (data: unknown) => ({
+  content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+});
+
+server.tool(claim.TOOL_NAME, claim.TOOL_DESCRIPTION, { branch: z.string().optional() }, async (p) =>
+  jsonResult(await claim.execute(p)),
+);
+
+server.tool(release.TOOL_NAME, release.TOOL_DESCRIPTION, {}, async () =>
+  jsonResult(await release.execute()),
+);
+
+server.tool(status.TOOL_NAME, status.TOOL_DESCRIPTION, {}, async () =>
+  jsonResult(await status.execute()),
+);
+
+server.tool(
+  envSpin.TOOL_NAME,
+  envSpin.TOOL_DESCRIPTION,
+  {
+    slug: z
+      .string()
+      .regex(/^[a-z0-9-]+$/, 'slug must match [a-z0-9-]+')
+      .min(1)
+      .max(63),
+    image: z.string().optional(),
+    ttl_hours: z.number().int().min(1).max(168).optional(),
+  },
+  async (p) => jsonResult(await envSpin.execute(p)),
+);
+
+server.tool(
+  envDestroy.TOOL_NAME,
+  envDestroy.TOOL_DESCRIPTION,
+  {
+    slug: z.string().regex(/^[a-z0-9-]+$/, 'slug must match [a-z0-9-]+'),
+    force: z.boolean().optional(),
+  },
+  async (p) => jsonResult(await envDestroy.execute(p)),
+);
+
+server.tool(envList.TOOL_NAME, envList.TOOL_DESCRIPTION, {}, async () =>
+  jsonResult(await envList.execute()),
+);
+
+server.tool(
+  runOnRunner.TOOL_NAME,
+  runOnRunner.TOOL_DESCRIPTION,
+  {
+    command: z.string().min(1),
+    timeout_seconds: z.number().int().min(1).max(7200).optional(),
+  },
+  async (p) => jsonResult(await runOnRunner.execute(p)),
+);
+
+server.tool(
+  validateCi.TOOL_NAME,
+  validateCi.TOOL_DESCRIPTION,
+  {
+    args: z.array(z.string()).optional(),
+    timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  },
+  async (p) => jsonResult(await validateCi.execute(p)),
+);
+
+server.tool(
+  dbUrl.TOOL_NAME,
+  dbUrl.TOOL_DESCRIPTION,
+  { slug: z.string().regex(/^[a-z0-9-]+$/) },
+  async (p) => jsonResult(await dbUrl.execute(p)),
+);
+
+server.tool(
+  logsUrl.TOOL_NAME,
+  logsUrl.TOOL_DESCRIPTION,
+  { query: z.string().optional(), since: z.string().optional() },
+  async (p) => jsonResult(await logsUrl.execute(p)),
+);
+
+// CLI self-check: invoking with --self-check prints OK and exits 0 if the
+// imports + tool registrations didn't throw. Used by the mcp-env::mcp_health
+// tool to confirm this server can start.
+if (process.argv.includes('--self-check')) {
+  // eslint-disable-next-line no-console
+  console.log('mcp-rl-fleet OK');
+  process.exit(0);
+}
+
+const transport = new StdioServerTransport();
+await server.connect(transport);

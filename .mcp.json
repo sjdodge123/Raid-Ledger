@@ -24,6 +24,15 @@
         "tools/mcp-discord/src/index.ts"
       ],
       "env": {}
+    },
+    "mcp-rl-fleet": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "tsx",
+        "tools/mcp-rl-fleet/src/index.ts"
+      ],
+      "env": {}
     }
   }
 }

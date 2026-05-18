@@ -194,6 +194,28 @@ services:
     labels:
       rl.role: infra
 
+  # Mobile-friendly fleet status page at http://fleet.rl.lan. Reads
+  # /srv/rl-infra/state/{claims.json,env-registry.json} (mounted read-only)
+  # and serves a single HTML page + /api/state JSON endpoint that polls
+  # every 5s. Designed to be bookmarked on the operator's phone for
+  # at-a-glance slot/env state. Zero deps — pure Node http module.
+  dashboard:
+    build:
+      context: ./dashboard
+    image: rl-infra/dashboard:latest
+    container_name: rl-dashboard
+    restart: unless-stopped
+    networks: [rl-net]
+    env_file: .env
+    environment:
+      # When set in .env, dashboard renders external (share-with-tester) URLs
+      # per env in addition to the internal http://{slug}.rl.lan link.
+      RL_PUBLIC_DOMAIN: ${RL_PUBLIC_DOMAIN:-}
+    volumes:
+      - ./state:/state:ro
+    labels:
+      rl.role: infra
+
   gc-sweeper:
     build:
       context: ./gc-sweeper

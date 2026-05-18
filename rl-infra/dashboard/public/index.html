@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="rl-fleet">
+  <title>rl-infra fleet</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>rl-infra <span class="muted">fleet</span></h1>
+    <span class="refresh-indicator" id="refresh-indicator" title="last update"></span>
+  </header>
+
+  <main>
+    <section>
+      <h2>Slots</h2>
+      <div id="slots" class="grid"></div>
+    </section>
+
+    <section>
+      <h2>Test envs <span id="env-count" class="muted"></span></h2>
+      <div id="envs" class="grid"></div>
+    </section>
+
+    <section>
+      <h2>Infra</h2>
+      <div class="grid">
+        <a class="card link" href="http://traefik.rl.lan/dashboard/" target="_blank" rel="noopener">
+          <div class="card-title">Traefik</div>
+          <div class="muted">routing dashboard</div>
+        </a>
+        <a class="card link" href="http://grafana.rl.lan" target="_blank" rel="noopener">
+          <div class="card-title">Grafana</div>
+          <div class="muted">logs + dashboards</div>
+        </a>
+        <a class="card link" href="http://registry.rl.lan:5000/v2/_catalog" target="_blank" rel="noopener">
+          <div class="card-title">Registry</div>
+          <div class="muted">allinone images</div>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="generated-at">—</span>
+    <span class="muted">·</span>
+    <span class="muted">auto-refresh every 5s</span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
