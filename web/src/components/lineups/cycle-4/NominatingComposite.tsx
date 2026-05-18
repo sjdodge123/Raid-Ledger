@@ -341,9 +341,10 @@ export function NominatingComposite(
           scrolls through Common Ground tiles. Mobile-only action row sits
           inside the sticky wrapper. */}
       <div
-        className={`sticky top-14 z-20 bg-background/95 backdrop-blur-sm rounded-md py-1 transition-transform duration-200 will-change-transform md:translate-y-0 ${
+        className={`sticky top-14 z-20 bg-background/95 backdrop-blur-sm rounded-md py-1 will-change-transform md:translate-y-0 ${
           heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
         }`}
+        style={{ transition: 'transform 300ms ease-in-out' }}
       >
         <JourneyHero
           phase="nominating"

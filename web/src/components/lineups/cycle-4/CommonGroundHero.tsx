@@ -21,8 +21,8 @@ import type {
   CommonGroundGameDto,
 } from '@raid-ledger/contract';
 import { useCommonGroundState } from '../use-common-ground-state';
+import { CommonGroundFilters } from '../CommonGroundFilters';
 import { CommonGroundThemedRow, CommonGroundTileWrapper } from './CommonGroundThemedRow';
-import { SearchAnyGameView } from './SearchAnyGameView';
 
 export type CommonGroundMode = 'suggestions' | 'search';
 
@@ -317,6 +317,12 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
     refetch,
     aiSuggestionsByGameId,
     atCap,
+    filters,
+    setFilters,
+    search,
+    setSearch,
+    availableTags,
+    participantCount,
   } = useCommonGroundState(lineupId, canParticipate);
   const [isFetching, setIsFetching] = useState(false);
   // Operator round-3 feedback: scoring is deterministic so refetch() returns
@@ -371,27 +377,33 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
         onOpenSearch={() => onModeChange('search')}
         isFetching={isFetching}
       />
-      {mode === 'search' ? (
-        <SearchAnyGameView
-          canParticipate={canParticipate}
-          atCap={atCap}
-          onTileNominate={onTileNominate}
-          onTileOpenDrawer={onTileOpenDrawer}
-          onExit={() => onModeChange('suggestions')}
-        />
-      ) : (
-        <SuggestionsBody
-          isLoading={isLoading}
-          tiles={tiles}
-          buckets={buckets}
-          useThemedLayout={useThemedLayout}
-          canParticipate={canParticipate}
-          atCap={atCap}
-          onTileNominate={onTileNominate}
-          onTileOpenDrawer={onTileOpenDrawer}
-          aiSuggestionsByGameId={aiSuggestionsByGameId}
-        />
+      {/* ROK-1297 round 5j: search no longer swaps OUT Common Ground. It
+          expands a CommonGroundFilters bar (search input + min owners +
+          genre + max players) above the themed rows. The same tiles
+          remain visible, just filtered by the active query / filters. */}
+      {mode === 'search' && (
+        <div className="mb-3 p-3 rounded-md border border-edge bg-overlay/30">
+          <CommonGroundFilters
+            filters={filters}
+            onChange={setFilters}
+            availableTags={availableTags}
+            search={search}
+            onSearchChange={setSearch}
+            participantCount={participantCount}
+          />
+        </div>
       )}
+      <SuggestionsBody
+        isLoading={isLoading}
+        tiles={tiles}
+        buckets={buckets}
+        useThemedLayout={useThemedLayout}
+        canParticipate={canParticipate}
+        atCap={atCap}
+        onTileNominate={onTileNominate}
+        onTileOpenDrawer={onTileOpenDrawer}
+        aiSuggestionsByGameId={aiSuggestionsByGameId}
+      />
     </section>
   );
 }
