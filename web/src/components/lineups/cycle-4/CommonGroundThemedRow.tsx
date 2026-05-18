@@ -74,15 +74,7 @@ export function CommonGroundThemedRow(
         </p>
       ) : (
         <div
-          className="grid gap-3 pb-2"
-          style={{
-            // ROK-1297 round-4: bump the min cell width so mobile renders
-            // 1 generous card instead of one 180px card with ~150px wasted
-            // air either side. Cards now go fluid via the `fluid` prop and
-            // grow with the cell.
-            gridTemplateColumns:
-              'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
-          }}
+          className="grid gap-3 pb-2 [grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))] md:[grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]"
         >
           {tiles.map((tile) => {
             const ai = aiSuggestionsByGameId.get(tile.gameId);

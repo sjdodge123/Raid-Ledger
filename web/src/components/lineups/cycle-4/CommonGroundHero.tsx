@@ -324,13 +324,7 @@ function AiPicksRow({
         <span aria-hidden="true">✨</span>
         Suggested for you
       </h3>
-      <div
-        className="grid gap-3 pb-2"
-        style={{
-          gridTemplateColumns:
-            'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
-        }}
-      >
+      <div className="grid gap-3 pb-2 [grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))] md:[grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
         {tiles.map((tile) => {
           const ai = aiSuggestionsByGameId.get(tile.gameId);
           return (

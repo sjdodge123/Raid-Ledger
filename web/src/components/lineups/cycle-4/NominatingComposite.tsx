@@ -409,7 +409,7 @@ export function NominatingComposite(
           task={journey.task}
           sub={journey.sub}
         />
-        <div className="sm:hidden flex items-center gap-2 mt-2 px-1">
+        <div className="flex items-center gap-2 mt-2 px-1">
           {commonGroundMode === 'search' ? (
             <StickyHeroBackButton
               onClick={() => setCommonGroundMode('suggestions')}
