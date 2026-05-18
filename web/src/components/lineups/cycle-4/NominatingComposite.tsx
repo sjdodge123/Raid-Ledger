@@ -79,7 +79,7 @@ function StickyHeroSearchButton({
       disabled={disabled}
       aria-label="Search the game library"
       data-testid="sticky-hero-search"
-      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-sm font-medium text-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/50 bg-emerald-500/25 hover:bg-emerald-500/35 active:bg-emerald-500/45 text-sm font-semibold text-emerald-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <svg
         aria-hidden="true"
@@ -118,7 +118,7 @@ function StickyHeroJumpButton({
       onClick={onClick}
       data-testid="sticky-hero-jump"
       aria-label={`Jump to your ${count} nominated games`}
-      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-sm font-medium text-emerald-100 transition-colors whitespace-nowrap"
+      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/50 bg-emerald-500/25 hover:bg-emerald-500/35 active:bg-emerald-500/45 text-sm font-semibold text-emerald-50 transition-colors whitespace-nowrap"
     >
       <svg
         aria-hidden="true"
@@ -156,7 +156,7 @@ function StickyHeroRegenerateButton({
       disabled={disabled}
       aria-label="Regenerate Common Ground suggestions"
       data-testid="sticky-hero-regenerate"
-      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-sm font-medium text-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/50 bg-emerald-500/25 hover:bg-emerald-500/35 active:bg-emerald-500/45 text-sm font-semibold text-emerald-50 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <svg
         aria-hidden="true"
@@ -192,7 +192,7 @@ function StickyHeroBackButton({
       onClick={onClick}
       aria-label="Back to Common Ground suggestions"
       data-testid="sticky-hero-back"
-      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-sm font-medium text-emerald-100 transition-colors whitespace-nowrap"
+      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/50 bg-emerald-500/25 hover:bg-emerald-500/35 active:bg-emerald-500/45 text-sm font-semibold text-emerald-50 transition-colors whitespace-nowrap"
     >
       <svg
         aria-hidden="true"
