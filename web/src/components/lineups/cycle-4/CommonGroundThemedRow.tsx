@@ -123,7 +123,7 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
   return (
     <div
       data-testid="common-ground-tile"
-      className="flex flex-col gap-1 w-full"
+      className="flex flex-col gap-1 w-full items-stretch md:items-start"
     >
       <div
         role="button"
@@ -153,7 +153,7 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
         />
       </div>
       {tile.whyReason && (
-        <div className="text-xs text-emerald-300 leading-snug px-1 line-clamp-2">
+        <div className="text-xs text-emerald-300 leading-snug px-1 line-clamp-2 md:min-h-[2.5rem] md:w-full">
           ★ {tile.whyReason}
         </div>
       )}
@@ -167,8 +167,9 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
           if (disabled || atCap || isNominating) return;
           onNominate(tile.gameId);
         }}
-        // 44px min-height + text-sm = Apple HIG / Material tappable button.
-        className="min-h-[44px] px-4 py-2 text-sm rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 transition-colors"
+        // Mobile: 44px tap target full-width. Desktop: 32px compact,
+        // intrinsic width so the button doesn't stretch across the card.
+        className="min-h-[44px] sm:min-h-[32px] px-4 py-2 sm:py-1 text-sm rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 transition-colors md:w-auto md:self-start"
       >
         {isNominating ? 'Adding…' : atCap ? 'Lineup full' : '+ Nominate'}
       </button>
