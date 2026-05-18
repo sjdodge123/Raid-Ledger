@@ -456,3 +456,14 @@ For provenance only — these stories were created from log + backlog cross-reco
 - **[med]** **[[ROK-1322]]** `tech-debt: align api/src/scripts/run-migrations.ts with the instrumented boot runner (ROK-1281 follow-up)`. Closes boot-time vs restore-time invariant divergence left over from 2026-05-14 prod outage postmortem.
 
 Also appended fresh evidence to **[[ROK-1103]]** (ITAD HTTP client retry-5xx) — prod 521 cluster + 115s wrap reproduced today, recommending escalation.
+
+### 2026-05-17 — rok-1299 Codex review findings (deferred MEDIUM)
+
+Two Codex-review findings deferred because they're MEDIUM/correctness-non-blockers and the operator approved the live UI without seeing them. P1 (matchThreshold-as-player-count) and the bandwagon-leftover-bug were both fixed inline in commits 33efb14f + b4e00332.
+
+- **[med]** `web/src/components/lineups/decided/DecidedView.tsx:129-136` — `useLineupMatches()` is async; on first render `data` is `undefined`, so the hero text briefly shows `"No matches were generated from voting results."` / `"You're not in any matches yet."` even for lineups that DO have matches. The old `DecidedMatchesView` rendered a loading skeleton instead. UX-jarring during the network roundtrip.
+  Suggested: gate the composite root on `useLineupMatches().isLoading` — render a hero-only loading state (or reuse the prior skeleton) until `data` resolves. Codex flagged as P2 during ROK-1299 review.
+- **[med]** `packages/contract/src/lineup-match.schema.ts::MatchDetailResponseSchema` — does not expose a per-match player cap, but the Decided-composite wireframe wants `"X of Y players · group is full"`. The cap lives on `games.defaultPlayerCap` (`api/src/drizzle/schema/games.ts:127`); `GroupedMatchesResponseDto.matchThreshold` is a 0–100 percentage for the grouping algorithm — NOT a player count. ROK-1299 shipped personal-context-only copy (`You + N others` / `Just you so far` / `N players`) as a faithful fallback.
+  Suggested: extend `MatchDetailResponseSchema` with `playerCap: z.number().int().nullable()`; populate from `games.defaultPlayerCap` in `lineups-match-response.helpers.ts`; restore a `threshold` prop on `MatchCard` and re-add the `"X of Y players · group is full"` sub-line under a non-null guard.
+- **[med]** `web/src/components/lineups/decided/MatchCard.tsx` — when a match has `linkedEventId !== null` (event already created from the scheduling poll), the deleted `AlmostThereCard` rendered `"View Event →"` linking to `/events/${linkedEventId}`. The ROK-1299 rewrite collapsed all per-card CTAs to `"Pick a time →"` and lost the event-link branch. Members in a fully-scheduled match now bounce back to the scheduling poll instead of jumping to the event.
+  Suggested: in `MatchCard::PickATimeCta`, branch on `match.linkedEventId`: if set, render `<Link to="/events/${linkedEventId}">View Event →</Link>`; else keep the schedule-poll link. Add a Vitest guard for the `linkedEventId` set branch.
