@@ -94,13 +94,16 @@ function HeroHeader({
   onOpenSearch: () => void;
   isFetching: boolean;
 }): JSX.Element {
-  // Mobile-compliant per Apple HIG / Material Design / WCAG 2.5.5:
+  // Uniform mobile-compliant button styling (Apple HIG / Material / WCAG 2.5.5):
   //   - 44px min tap target
-  //   - 14px text (matches Material body / iOS minimum touch label)
+  //   - text-sm (14px) body, font-medium
+  //   - Filled emerald-tinted background + emerald border so the affordance
+  //     reads clearly as a button on the dark Common Ground panel.
+  //   - Hover state darkens. Disabled fades.
   //   - Stack full-width below the section title on sub-sm viewports;
   //     inline at sm+ where horizontal space permits.
   const btnCls =
-    'min-h-[44px] text-sm text-foreground hover:text-emerald-200 border border-edge rounded-md px-4 py-2 inline-flex items-center justify-center gap-1.5 flex-1 sm:flex-initial transition-colors';
+    'min-h-[44px] text-sm font-medium text-emerald-100 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/40 hover:border-emerald-500/70 rounded-md px-4 py-2 inline-flex items-center justify-center gap-2 flex-1 sm:flex-initial transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
   return (
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-3">
       <h2 className="text-lg sm:text-base font-semibold text-foreground">
@@ -115,7 +118,8 @@ function HeroHeader({
             data-testid="nominate-search-any"
             className={btnCls}
           >
-            🔍 Search
+            <SearchIcon />
+            <span>Search</span>
           </button>
         )}
         <button
@@ -128,24 +132,84 @@ function HeroHeader({
               : 'Regenerate Common Ground suggestions'
           }
           aria-busy={isFetching && !inSearch}
-          className={`${btnCls} disabled:opacity-60 disabled:cursor-not-allowed`}
+          className={btnCls}
         >
           {inSearch ? (
-            <>← Back</>
+            <>
+              <BackIcon />
+              <span>Back</span>
+            </>
           ) : isFetching ? (
             <>
               <span
                 aria-hidden="true"
-                className="inline-block w-3 h-3 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin"
+                className="inline-block w-3.5 h-3.5 border-2 border-emerald-200 border-t-transparent rounded-full animate-spin"
               />
-              Regenerating…
+              <span>Regenerating…</span>
             </>
           ) : (
-            <>↻ Regenerate</>
+            <>
+              <RegenerateIcon />
+              <span>Regenerate</span>
+            </>
           )}
         </button>
       </div>
     </div>
+  );
+}
+
+/** Inline SVG icons — kept here so the buttons share visual weight. */
+function SearchIcon(): JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      className="w-4 h-4 stroke-current"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx={11} cy={11} r={7} />
+      <path d="m20 20-3-3" />
+    </svg>
+  );
+}
+
+function RegenerateIcon(): JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      className="w-4 h-4 stroke-current"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+      <path d="M3 21v-5h5" />
+    </svg>
+  );
+}
+
+function BackIcon(): JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      className="w-4 h-4 stroke-current"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </svg>
   );
 }
 
