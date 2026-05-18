@@ -120,12 +120,15 @@ function HeroHeader({
       </h2>
       <div className="flex items-center gap-2 w-full sm:w-auto">
         {!inSearch && (
+          // Hidden on mobile — sticky JourneyHero hosts the Search trigger
+          // there. Visible at sm+ where the CG header is the primary
+          // search affordance.
           <button
             type="button"
             onClick={onOpenSearch}
             aria-label="Search the game library"
             data-testid="nominate-search-any"
-            className={btnCls}
+            className={`${btnCls} hidden sm:inline-flex`}
           >
             <SearchIcon />
             <span>Search</span>

@@ -101,15 +101,15 @@ function StickyHeroSearchButton({
 /**
  * Compact jump-to-nominations affordance embedded in the sticky
  * JourneyHero (ROK-1297 round 5b). Smooth-scrolls to the Nominated
- * Games section without leaving the sticky header on screen.
+ * Games section without leaving the sticky header on screen. Visual
+ * structure mirrors `StickyHeroSearchButton` (icon + label) so the
+ * two buttons read as a uniform pair.
  */
 function StickyHeroJumpButton({
   count,
-  previews,
   onClick,
 }: {
   count: number;
-  previews: readonly LineupEntryResponseDto[];
   onClick: () => void;
 }): JSX.Element {
   return (
@@ -118,35 +118,11 @@ function StickyHeroJumpButton({
       onClick={onClick}
       data-testid="sticky-hero-jump"
       aria-label={`Jump to your ${count} nominated games`}
-      className="flex-1 min-h-[44px] inline-flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors"
+      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-sm font-medium text-emerald-100 transition-colors whitespace-nowrap"
     >
-      <span className="flex items-center gap-2 min-w-0">
-        <span className="text-sm font-medium text-emerald-100">
-          {count} yours
-        </span>
-        <span className="flex -space-x-1.5">
-          {previews.map((e) =>
-            e.gameCoverUrl ? (
-              <img
-                key={e.id}
-                src={e.gameCoverUrl}
-                alt=""
-                className="w-5 h-5 rounded object-cover border border-emerald-500/40 bg-overlay/50"
-                loading="lazy"
-              />
-            ) : (
-              <span
-                key={e.id}
-                aria-hidden="true"
-                className="w-5 h-5 rounded border border-emerald-500/40 bg-overlay/50"
-              />
-            ),
-          )}
-        </span>
-      </span>
       <svg
         aria-hidden="true"
-        className="w-4 h-4 stroke-current text-emerald-200 flex-shrink-0"
+        className="w-4 h-4 stroke-current flex-shrink-0"
         viewBox="0 0 24 24"
         fill="none"
         strokeWidth={2}
@@ -156,6 +132,9 @@ function StickyHeroJumpButton({
         <path d="M12 5v14" />
         <path d="m19 12-7 7-7-7" />
       </svg>
+      <span>
+        {count} nominated
+      </span>
     </button>
   );
 }
@@ -284,7 +263,6 @@ export function NominatingComposite(
           {lineup.entries.length > 0 && (
             <StickyHeroJumpButton
               count={lineup.entries.length}
-              previews={lineup.entries.slice(0, 3)}
               onClick={jumpToNominations}
             />
           )}
