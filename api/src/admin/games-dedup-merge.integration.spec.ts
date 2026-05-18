@@ -136,9 +136,9 @@ describe('ROK-1278 games-dedup merge migration', () => {
       WHERE game_id = ${slayCanonId} AND user_id = ${userId}
         AND period = 'week' AND period_start = '2026-05-01'
     `);
-    expect((merged as { total_seconds: number }[])[0].total_seconds).toBe(
-      36000 + 18000,
-    );
+    expect(
+      (merged as unknown as { total_seconds: number }[])[0].total_seconds,
+    ).toBe(36000 + 18000);
 
     // ── Assert: non-colliding dup rollup got repointed (not duplicated) ───
     const repointed = await testApp.db.execute(sql`
@@ -146,7 +146,9 @@ describe('ROK-1278 games-dedup merge migration', () => {
       WHERE game_id = ${slayCanonId} AND period = 'week'
       ORDER BY period_start
     `);
-    expect((repointed as { total_seconds: number }[]).length).toBe(2);
+    expect((repointed as unknown as { total_seconds: number }[]).length).toBe(
+      2,
+    );
 
     // ── Assert: characters — canonical wins on collision, survivor repointed
     const charRows = await testApp.db.execute<{
@@ -157,7 +159,7 @@ describe('ROK-1278 games-dedup merge migration', () => {
       WHERE user_id = ${userId} AND game_id IN (${bgCanonId}, ${bgDupId})
       ORDER BY name
     `);
-    const charArr = charRows as { game_id: number; name: string }[];
+    const charArr = charRows as unknown as { game_id: number; name: string }[];
     expect(charArr).toHaveLength(2); // Dupe-Conflict (canonical) + Survivor (repointed)
     expect(charArr.every((c) => c.game_id === bgCanonId)).toBe(true);
 

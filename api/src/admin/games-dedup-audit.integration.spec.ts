@@ -386,7 +386,7 @@ describe('POST /admin/games/dedup-audit/run', () => {
       .values({
         discordId: 'local:nonadmin@test.local',
         username: 'nonadmin',
-        role: 'user',
+        role: 'member',
       })
       .returning();
     await testApp.db.insert(schema.localCredentials).values({
