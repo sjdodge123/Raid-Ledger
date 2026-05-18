@@ -27,7 +27,7 @@ const TABS: readonly TabSpec[] = [
 ];
 
 const BASE_BTN =
-  'px-3 py-1.5 text-[12px] rounded border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300';
+  'min-h-[40px] px-3 py-2 text-[12px] rounded border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300';
 const ACTIVE_BTN =
   'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
 const INACTIVE_BTN =
