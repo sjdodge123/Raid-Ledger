@@ -440,8 +440,13 @@ describe('GamesDedupAuditService.persistSnapshot', () => {
         const v = readUniqueConflicts.shift() ?? 0;
         return Promise.resolve([{ c: v }]);
       }),
-      transaction: jest.fn(async (fn: (tx: typeof tx) => Promise<unknown>) =>
-        fn(tx),
+      transaction: jest.fn(
+        async (
+          fn: (tx: {
+            execute: jest.Mock;
+            insert: jest.Mock;
+          }) => Promise<unknown>,
+        ) => fn(tx),
       ),
     };
 

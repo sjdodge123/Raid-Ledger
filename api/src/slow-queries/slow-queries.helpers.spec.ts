@@ -1,6 +1,8 @@
 import {
   formatDigestBlock,
   normalizeRawRow,
+  resetPgStatStatementsSql,
+  selectPgStatStatementsSql,
   type SlowQueryEntryRecord,
   type RawPgStatStatementsRow,
 } from './slow-queries.helpers';
@@ -21,7 +23,7 @@ describe('formatDigestBlock', () => {
     expect(block).toContain(
       '=== Slow Query Digest @ 2026-04-28T13:00:00.000Z ===',
     );
-    expect(block).toContain('top 10 by mean_exec_time');
+    expect(block).toContain('top 10 by total_exec_time');
     expect(block).toContain('calls');
     expect(block).toContain('mean_ms');
     expect(block).toContain('total_ms');
@@ -89,5 +91,52 @@ describe('normalizeRawRow', () => {
       total_exec_time_ms: 212.5,
     };
     expect(normalizeRawRow(raw).calls).toBe(17);
+  });
+});
+
+// Flatten a drizzle SQL template's queryChunks into a single inspectable string.
+// StringChunk values are string[] (joined); interpolated primitives are stringified.
+function flattenSqlChunks(chunks: ReadonlyArray<unknown>): string {
+  return chunks
+    .map((chunk) => {
+      if (typeof chunk === 'string') return chunk;
+      if (chunk && typeof chunk === 'object') {
+        const value = (chunk as { value?: unknown }).value;
+        if (Array.isArray(value)) return value.join('');
+        if (typeof value === 'string') return value;
+      }
+      return String(chunk);
+    })
+    .join('');
+}
+
+describe('selectPgStatStatementsSql', () => {
+  // ROK-1273: assert the SQL contract via the rendered drizzle template so
+  // changes to sort key or filters surface as a unit-test failure even when
+  // the per-environment integration spec is skipped.
+  const sqlText = flattenSqlChunks(selectPgStatStatementsSql().queryChunks);
+
+  it('reads from pg_stat_statements', () => {
+    expect(sqlText).toContain('pg_stat_statements');
+  });
+
+  it('sorts by total_exec_time DESC (not mean_exec_time)', () => {
+    expect(sqlText).toMatch(/ORDER BY\s+total_exec_time\s+DESC/);
+    expect(sqlText).not.toMatch(/ORDER BY\s+mean_exec_time/);
+  });
+
+  it('defends against zero-call rows', () => {
+    expect(sqlText).toMatch(/calls\s*>\s*0/);
+  });
+
+  it('filters out COPY operations (nightly-backup noise)', () => {
+    expect(sqlText).toMatch(/query\s+NOT\s+ILIKE\s+'COPY\s+%'/i);
+  });
+});
+
+describe('resetPgStatStatementsSql', () => {
+  it('invokes pg_stat_statements_reset()', () => {
+    const sqlText = flattenSqlChunks(resetPgStatStatementsSql().queryChunks);
+    expect(sqlText).toContain('pg_stat_statements_reset()');
   });
 });

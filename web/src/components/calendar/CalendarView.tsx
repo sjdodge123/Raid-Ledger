@@ -15,7 +15,7 @@ import { WeekEventCard } from './WeekEventCard';
 import { ScheduleView } from './ScheduleView';
 import { CalendarToolbar } from './CalendarToolbar';
 import { MonthEventComponent } from './MonthEventComponent';
-import { VIEW_MAP, viewToStr, computeDateRange } from './calendar-view.utils';
+import { VIEW_MAP, viewToStr, computeDateRange, shouldRenderInCalendar } from './calendar-view.utils';
 import type { CalendarViewMode } from './calendar-mobile-toolbar';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -89,8 +89,7 @@ function useCalendarEvents(eventsData: ReturnType<typeof useEvents>['data'], sel
             .filter((event) => {
                 if (event.cancelledAt) return false;
                 if (event.reschedulingPollId) return false;
-                if (selectedGames === undefined) return true;
-                return event.game?.slug && selectedGames.has(event.game.slug);
+                return shouldRenderInCalendar(event, selectedGames);
             })
             .map((event) => ({
                 id: event.id, title: event.title,

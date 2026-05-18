@@ -320,6 +320,20 @@ async function getDataSegmentTables(dumpFile: string): Promise<string[]> {
 }
 
 /**
+ * Match a `TABLE` (schema-definition) line from `pg_restore --list` output and
+ * return the table name. Uses a `(?!DATA\s)` negative lookahead so it does NOT
+ * match `TABLE DATA` lines — those are handled by `getDataSegmentTables`.
+ * Exported as a pure helper so the regex can be unit-tested without shelling
+ * out to `pg_restore`.
+ */
+function parseSchemaTableLine(line: string): string | null {
+  const match = line.match(
+    /^\s*\d+;\s+\d+\s+\d+\s+TABLE\s+(?!DATA\s)\S+\s+(\S+)/,
+  );
+  return match ? match[1] : null;
+}
+
+/**
  * Parse `pg_restore --list <dump>` and return the table names whose schema
  * definition is present. Sanitization preserves schema, so the four locked
  * tables MUST still appear here even though their DATA segments are gone.
@@ -328,11 +342,36 @@ async function getSchemaTables(dumpFile: string): Promise<string[]> {
   const { stdout } = await execFileAsync('pg_restore', ['--list', dumpFile]);
   const tables: string[] = [];
   for (const line of stdout.split('\n')) {
-    const match = line.match(/^\s*\d+;\s+\d+\s+\d+\s+TABLE\s+\S+\s+(\S+)/);
-    if (match) tables.push(match[1]);
+    const name = parseSchemaTableLine(line);
+    if (name !== null) tables.push(name);
   }
   return tables;
 }
+
+// Pure-helper unit test — runs unconditionally (not gated on pg_dump
+// availability) because it never shells out. Locks in the negative case
+// the integration assertions don't exercise: a `TABLE DATA` line for a
+// sanitized table must NOT register as a surviving schema entry, else
+// the sanitization assertions become silently meaningless.
+describe('parseSchemaTableLine (ROK-1289)', () => {
+  it('matches TABLE schema lines and captures the table name', () => {
+    expect(parseSchemaTableLine('1234; 0 16834 TABLE public games admin')).toBe(
+      'games',
+    );
+  });
+
+  it('does NOT match TABLE DATA lines', () => {
+    expect(
+      parseSchemaTableLine('1234; 0 16834 TABLE DATA public games admin'),
+    ).toBeNull();
+  });
+
+  it('does NOT match unrelated entry kinds', () => {
+    expect(
+      parseSchemaTableLine('5678; 0 16900 SEQUENCE public games_id_seq admin'),
+    ).toBeNull();
+  });
+});
 
 describeBackup('Backup sanitization (integration, ROK-1279)', () => {
   let testApp: TestApp;

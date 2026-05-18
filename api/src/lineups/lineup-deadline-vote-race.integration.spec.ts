@@ -42,7 +42,7 @@
  */
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -183,7 +183,7 @@ function describeDeadlineVoteRace() {
    */
   async function fireGraceProcessor(lineupId: number): Promise<void> {
     await testApp.db.execute(
-      (await import('drizzle-orm')).sql`
+      sql`
         UPDATE community_lineups
         SET pending_advance_at = NOW() - INTERVAL '1 second'
         WHERE id = ${lineupId}

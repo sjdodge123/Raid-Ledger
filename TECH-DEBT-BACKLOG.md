@@ -388,25 +388,6 @@ ROK-1312 was generated with migration index 0141 against `origin/main` at `8c7e1
 - **[low]** `api/src/drizzle/migrations/meta/0142_snapshot.json` — snapshot is missing `community_lineup_user_submissions` (added by 0141_late_wrecking_crew). Doesn't affect `drizzle-kit migrate` or runtime. Will surface on the next `db:generate` against the `feedback` schema (and possibly produce spurious deltas for unrelated tables). Self-resolves after one clean `db:generate` cycle against a DB that includes both 0141 + 0142.
   Suggested: next agent touching `feedback` schema OR running `db:generate` should re-emit `0142_snapshot.json` from a freshly-migrated DB. No urgency — runtime + CI both green.
 
-### 2026-05-17 — fix/batch-2026-05-17 (surfaced during local `tsc --noEmit -p api/tsconfig.json` on rebased batch)
-
-11 pre-existing TS errors in `api/**/*.spec.ts` on `origin/main` at `68cf2512` (PR #805 ROK-1307 just merged). CI does NOT catch these because GitHub `nest build` uses `tsconfig.build.json` which excludes `**/*.spec*.ts` — `validate-ci.sh` runs `tsc --noEmit -p api/tsconfig.json` which includes them. Reproduced on a clean `/tmp/raid-mainonly` clone at the same SHA with `npm run build -w packages/contract` then `npx tsc --noEmit -p api/tsconfig.json`. Zero overlap with `fix/batch-2026-05-17` diff (feedback + use-want-to-play + migration only).
-
-- **[med]** `api/src/games-lookup/games-lookup.integration.spec.ts:306` — `Cannot find module './games-lookup.controller'` on a dynamic `import('./games-lookup.controller')`. The file exists (ROK-1295 wired it up at `api/src/games-lookup/games-lookup.controller.ts`). Spec comment claims "until ROK-1295 wires up GamesLookupController this import + reflection MUST throw" — the spec is stale-by-design after ROK-1295 shipped and now trips TS at compile time.
-  Suggested: delete the negative-import block at lines 297-322 (the controller exists; the "MUST throw" assertion is wrong post-ROK-1295) OR convert to a positive `expect(GamesLookupController).toBeDefined()`.
-- **[med]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — `Type '"user"' is not assignable to type '"member" | "operator" | "admin"'`. The `users.role` column tightened to those 3 values somewhere; the spec passes literal `"user"`.
-  Suggested: update the seed to use `"member"` (or the appropriate enum value); confirm against `api/src/drizzle/schema/users.ts`.
-- **[med]** `api/src/admin/games-dedup-audit.service.spec.ts:443` — `'tx' is referenced directly or indirectly in its own type annotation`. A self-referential transaction type annotation; tsc bails. Likely needs an explicit type annotation break.
-  Suggested: extract the transaction parameter type to a named type alias and reference it explicitly in the lambda signature.
-- **[med]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — 3 `TS2352` errors: drizzle-orm row results are now camelCase (`totalSeconds`, `gameId`) but the spec converts to snake_case (`total_seconds`, `game_id`) without going through `unknown` first. Snake-case probably came from raw SQL `select` shape; new drizzle version returns camelCase.
-  Suggested: replace `as { snake_case }` casts with `as unknown as { snake_case }` OR (better) update the assertions to use the camelCase property names returned by drizzle.
-- **[med]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — drizzle-orm `SQL<unknown>` not assignable to `SQLWrapper`. Two copies of `drizzle-orm` exist in the type graph (one with `resolution-mode: "import"`, one without); `shouldInlineParams` is on a private property so the structural types diverge. Symptom of a `node_modules` deduplication issue OR a version drift.
-  Suggested: `npm dedupe` or pin drizzle-orm via `overrides` in root `package.json` to a single version.
-- **[low]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — 4 `TS2556` errors: "spread argument must either have a tuple type or be passed to a rest parameter". The spec is destructuring a mock return shape into a non-rest position. Cosmetic fix.
-  Suggested: tighten the mock's return type annotation OR cast the spread argument as a tuple.
-
-Net: GitHub CI green on origin/main (build excludes specs); local `validate-ci.sh --full` red. Operator-only impact (until CI tightens). Documenting here so the next agent running `validate-ci.sh` doesn't waste time bisecting.
-
 ### 2026-05-17 — fix/batch-2026-05-17 (surfaced during reviewer pass)
 
 - **[low]** `api/src/feedback/feedback.controller.ts:81` — `attachSlowQueryContext` receives untrimmed `clientLogs` from `parsed.data` instead of `truncatedClientLogs`. Functionally harmless (the method only uses it as a truthiness gate; Zod already caps at 50_000), but semantically inconsistent with line 75 which correctly persists the trimmed value. ROK-1312 reviewer surfaced.
@@ -440,8 +421,6 @@ This section is the result of cluster-grouping + Linear cross-reference per the 
 - **[med]** **BullMQ/ioredis integration-suite socket-leak carrier**. Flagged across **2026-05-13 (fix/batch-2026-05-13 CI gate), -16 (ROK-1296 batch — taste-profile.integration.spec.ts), -17 (ROK-1307 — backup.integration.spec.ts ×3)**. Failure shapes: mid-suite `socket hang up` / `read ECONNRESET` / post-coverage `beforeAll` timeout > 120s. Standalone runs always pass; only `validate-ci.sh --full` reproduces. Carrier-load fingerprint per memory `reference_bullmq_ioredis_test_carrier.md`. **Tracked in [[ROK-1268]]** (Backlog) — cross-batch evidence appended via Linear comment 2026-05-17.
   Suggested: instrument `bootstrapTestApp` to log time spent in each init phase (Drizzle pool, BullMQ Redis connect, NestJS module bootstrap) so the carrier suite under load can be identified by which init step blows the budget. The current carrier might just be alphabetical-order roulette — any suite running first after the coverage phase is at risk.
 
-- **[med]** **Pre-existing `tsc --noEmit -p api/tsconfig.json` errors on `origin/main` spec files**. Flagged across **2026-05-15 (ROK-1036 — 10 errors in 5 spec files, ROK-1292-pr1 — 2 spec files with TS2593/TS2304), -16 (ROK-1294 — same 10 errors re-documented)**. CI doesn't catch this because GitHub Actions uses `tsconfig.build.json` (which excludes specs), but `scripts/validate-ci.sh::run_typecheck` uses the full `tsconfig.json` and trips. Every `validate-ci.sh --full` run sees a noisy "regression" that isn't theirs. **Tracked in [[ROK-1284]]** (Todo, cycle).
-  Suggested: align the spec casts to drizzle's camelCase return shape; dedupe `drizzle-orm` in `package-lock.json` for the SQL nominal drift; rewrite spread-argument assertions to pass an inline tuple. The pure `types: ['jest']` config drift for `version.controller.spec.ts` / `app.e2e-spec.ts` is a one-line tsconfig fix.
 
 ### 2026-05-17 — /readlogs triage outcomes (new stories filed)
 
@@ -467,3 +446,32 @@ Two Codex-review findings deferred because they're MEDIUM/correctness-non-blocke
   Suggested: extend `MatchDetailResponseSchema` with `playerCap: z.number().int().nullable()`; populate from `games.defaultPlayerCap` in `lineups-match-response.helpers.ts`; restore a `threshold` prop on `MatchCard` and re-add the `"X of Y players · group is full"` sub-line under a non-null guard.
 - **[med]** `web/src/components/lineups/decided/MatchCard.tsx` — when a match has `linkedEventId !== null` (event already created from the scheduling poll), the deleted `AlmostThereCard` rendered `"View Event →"` linking to `/events/${linkedEventId}`. The ROK-1299 rewrite collapsed all per-card CTAs to `"Pick a time →"` and lost the event-link branch. Members in a fully-scheduled match now bounce back to the scheduling poll instead of jumping to the event.
   Suggested: in `MatchCard::PickATimeCta`, branch on `match.linkedEventId`: if set, render `<Link to="/events/${linkedEventId}">View Event →</Link>`; else keep the schedule-poll link. Add a Vitest guard for the `linkedEventId` set branch.
+
+### 2026-05-17 — fix/batch-2026-05-17 (surfaced during ROK-1315 viability tsc)
+
+`validate-ci.sh` runs `npx tsc --noEmit -p api/tsconfig.json` which includes `*.spec.ts` files. CI workflow uses `tsconfig.build.json` (specs excluded) so these are invisible there but block local pre-push validation. Confirmed on `origin/main` (commit 3a76cd1e) after stashing my work — none of these files are touched by ROK-1315.
+
+- **[med]** `api/src/admin/games-dedup-audit.integration.spec.ts:386` — `error TS2769: No overload matches this call.` Likely drizzle/postgres-js typing drift after a recent dependency bump.
+  Suggested: inspect the call site; if the spread is over a tuple type the function expects a rest parameter — wrap as `as const`.
+- **[med]** `api/src/admin/games-dedup-audit.service.spec.ts:443` — `error TS2502: 'tx' is referenced directly or indirectly in its own type annotation.` Self-referential type from a destructured tx callback.
+  Suggested: extract the tx callback signature to a named type alias.
+- **[med]** `api/src/admin/games-dedup-merge.integration.spec.ts:139,149,160` — three `error TS2352` row-shape mismatches (`RowList<{ totalSeconds }>` vs `{ total_seconds }`). Camelcase/snake_case raw-SQL drift after drizzle bump.
+  Suggested: cast through `unknown` or align the result row interface to what postgres-js actually returns.
+- **[high]** `api/src/games-lookup/games-lookup.integration.spec.ts:306` — `error TS2307: Cannot find module './games-lookup.controller'`. The integration test imports a controller that no longer exists at that relative path (likely renamed or moved during a recent refactor).
+  Suggested: locate the new controller location and update the import, or delete the orphaned test if the controller was intentionally removed.
+- **[med]** `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts:186` — `error TS2345: Argument of type 'SQL<unknown>' is not assignable to parameter of type 'string | SQLWrapper'`. Drizzle SQL-template typing drift.
+  Suggested: wrap with `sql.raw()` or assert the SQLWrapper interface.
+- **[med]** `api/src/lineups/lineup-notification.service.private-visibility.spec.ts:108,114,120,126` — four `error TS2556` "spread argument must have tuple type or rest parameter". Mock/spy invocations spreading a non-tuple array.
+  Suggested: type the spread source `as const` or accept the rest-arg call signature on the mock.
+
+### 2026-05-17 — fix/batch-2026-05-17 (surfaced during reviewer pass on ROK-1315)
+
+- **[low]** `web/src/components/calendar/calendar-view.utils.test.ts:1-78` — 7 vitest cases cover gameless/game-having × undefined/empty/non-empty Set, but no case exercises `event.game` defined with `slug === ''` (empty string slug). Predicate treats it as gameless via `!event.game?.slug`, which is the intended behavior, but it's untested.
+  Suggested: add one case `eventWithGame('')` + non-empty Set → expect `true`, locking in the empty-string-slug branch.
+- **[low]** `scripts/smoke/calendar.smoke.spec.ts:159-223` — Regression test creates event via `apiPost` BEFORE entering the `try` block; if `apiPost` partially succeeds but throws, the event leaks (no `world.cleanup()` prefix-sweep covers `/events` rows).
+  Suggested: either move `apiPost` inside `try` with `event?.id` guard in `finally`, or rely on `world.prefix` + a `/admin/test/reset-scheduled-events` cleanup hook.
+
+### 2026-05-17 — fix/batch-2026-05-17 (surfaced during validate-ci.sh run on ROK-1315)
+
+- **[high]** `scripts/validate-ci.sh::run_typecheck` silently masks api failures. The function runs `npx tsc -p api/tsconfig.json` then `npx tsc -p web/tsconfig.json` back-to-back. Inside `run_step`, `"$@" || rc=$?` disables `set -e` for the LHS, and the function's exit status is the last command's — so when api tsc fails (exit 1) but web tsc passes (exit 0), `run_typecheck` returns 0 and validate-ci reports "TypeScript (all): PASS" even with 11 active api errors. Demonstrated 2026-05-17 22:05: direct `npx tsc -p api/tsconfig.json` → exit 1, 11 errors; same checkout under `./scripts/validate-ci.sh --no-e2e` → PASS. Explains why prior batches (#806, #807) shipped over the pre-existing API spec errors without local pre-push catching them. `run_lint` and `run_unit_tests` have the same multi-command shape and likely the same masking behavior — audit all of them.
+  Suggested: split each tsc invocation into its own `run_step` (cleanest), OR convert `run_typecheck` to `local rc=0; npx tsc … || rc=$?; npx tsc … || rc=$?; return $rc`. Apply the same fix to `run_lint`, `run_unit_tests`, and any other multi-command `run_*` helper.

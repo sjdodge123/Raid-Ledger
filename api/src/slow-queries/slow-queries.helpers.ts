@@ -37,6 +37,11 @@ export type RawPgStatStatementsRow = {
  *
  * Belt-and-braces: `track_utility=off` would also drop COMMIT/BEGIN, but we
  * don't want to globally disable utility tracking.
+ *
+ * Sort key is `total_exec_time DESC` (ROK-1273): hot-path queries that run
+ * many times per hour dominate over one-shot bulk operations (e.g. nightly
+ * `pg_dump` COPYs) that otherwise anchor the top-N on a `mean_exec_time` sort.
+ * The `COPY` filter is a hard guard so even rare hot-path COPYs cannot leak in.
  */
 export function selectPgStatStatementsSql(limit = DIGEST_TOP_N): SQL {
   return sql`
@@ -48,13 +53,27 @@ export function selectPgStatStatementsSql(limit = DIGEST_TOP_N): SQL {
       total_exec_time::text                        AS total_exec_time_ms
     FROM pg_stat_statements
     WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+      AND calls > 0
       AND query NOT LIKE '%pg_catalog%'
       AND query NOT LIKE '%information_schema%'
       AND query NOT LIKE 'COMMIT%'
       AND query NOT LIKE 'BEGIN%'
-    ORDER BY mean_exec_time DESC
+      AND query NOT ILIKE 'COPY %'
+    ORDER BY total_exec_time DESC
     LIMIT ${limit}
   `;
+}
+
+/**
+ * Drizzle SQL: reset `pg_stat_statements` cumulative counters (ROK-1273).
+ *
+ * Called from `SlowQueriesService.appendDigestToLog()` immediately after a
+ * successful digest append so the next hour's digest reflects only fresh
+ * traffic. Without this, one-shot bulk operations from server boot (nightly
+ * backup COPYs) permanently anchor the top-N until the next container restart.
+ */
+export function resetPgStatStatementsSql(): SQL {
+  return sql`SELECT pg_stat_statements_reset()`;
 }
 
 /**
@@ -84,7 +103,7 @@ export function formatDigestBlock(
 ): string {
   const ts = capturedAt.toISOString();
   const header = `=== Slow Query Digest @ ${ts} ===`;
-  const subtitle = `top ${DIGEST_TOP_N} by mean_exec_time (filtered: pg_catalog, information_schema, BEGIN, COMMIT)`;
+  const subtitle = `top ${DIGEST_TOP_N} by total_exec_time (filtered: pg_catalog, information_schema, BEGIN, COMMIT, COPY)`;
   const footer = '=== End ===';
   if (entries.length === 0) {
     return [
