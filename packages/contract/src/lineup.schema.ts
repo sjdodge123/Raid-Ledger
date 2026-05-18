@@ -325,7 +325,11 @@ export const CommonGroundQuerySchema = z.object({
     genre: z.string().optional(),
     /** Case-insensitive game name search (ILIKE). */
     search: z.string().max(100).optional(),
-    limit: z.coerce.number().int().min(1).max(50).default(50),
+    // ROK-1297 round 5k: bumped from 50/50 → 500/300 so the operator's
+    // "infinite scroll" expectation lands without hitting the bottom of
+    // the catalogue after ~50 tiles. True cursor-paginated infinite
+    // scroll is tracked separately; this is the immediate fix.
+    limit: z.coerce.number().int().min(1).max(500).default(300),
     /**
      * Explicit lineup to score against (ROK-1065).
      * When omitted the server falls back to the newest public building lineup.
