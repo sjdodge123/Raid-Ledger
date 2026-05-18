@@ -20,7 +20,7 @@ import { JourneyHero } from '../../shared/journey-hero';
 import { useNominateGame, useRemoveNomination } from '../../../hooks/use-lineups';
 import { useAuth } from '../../../hooks/use-auth';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
-import { CommonGroundHero } from './CommonGroundHero';
+import { CommonGroundHero, type CommonGroundMode } from './CommonGroundHero';
 import { NominationCard } from '../NominationCard';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 
@@ -61,68 +61,101 @@ function deriveJourneyState(
 }
 
 /**
- * Mobile-only jump affordance (ROK-1297 round 5). Surfaces the count of
- * nominated games + up to 6 thumbnail previews with a smooth-scroll
- * button that lands the user on the Nominated Games section without
- * scrolling past the entire Common Ground grid.
+ * Compact Search trigger embedded in the sticky JourneyHero (ROK-1297
+ * round 5b). Mirrors the Common Ground header's Search button but stays
+ * reachable while the user scrolls past the Common Ground panel.
  */
-function NominationsJumpStrip({
-  entries,
+function StickyHeroSearchButton({
+  onClick,
+  disabled,
 }: {
-  entries: readonly LineupEntryResponseDto[];
+  onClick: () => void;
+  disabled: boolean;
 }): JSX.Element {
-  const preview = entries.slice(0, 6);
-  const handleJump = (): void => {
-    const target = document.querySelector('[data-testid="nominations-list"]');
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
   return (
     <button
       type="button"
-      onClick={handleJump}
-      data-testid="nominations-jump-strip"
-      aria-label={`Jump to your ${entries.length} nominated games`}
-      className="md:hidden w-full flex items-center justify-between gap-3 min-h-[56px] px-3 py-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 active:bg-emerald-500/15 transition-colors"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label="Search the game library"
+      data-testid="sticky-hero-search"
+      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-sm font-medium text-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-sm font-semibold text-emerald-100">
-          {entries.length} nominated
+      <svg
+        aria-hidden="true"
+        className="w-4 h-4 stroke-current"
+        viewBox="0 0 24 24"
+        fill="none"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx={11} cy={11} r={7} />
+        <path d="m20 20-3-3" />
+      </svg>
+      <span>Search</span>
+    </button>
+  );
+}
+
+/**
+ * Compact jump-to-nominations affordance embedded in the sticky
+ * JourneyHero (ROK-1297 round 5b). Smooth-scrolls to the Nominated
+ * Games section without leaving the sticky header on screen.
+ */
+function StickyHeroJumpButton({
+  count,
+  previews,
+  onClick,
+}: {
+  count: number;
+  previews: readonly LineupEntryResponseDto[];
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid="sticky-hero-jump"
+      aria-label={`Jump to your ${count} nominated games`}
+      className="flex-1 min-h-[44px] inline-flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 transition-colors"
+    >
+      <span className="flex items-center gap-2 min-w-0">
+        <span className="text-sm font-medium text-emerald-100">
+          {count} yours
         </span>
-        <div className="flex -space-x-2">
-          {preview.map((e) =>
+        <span className="flex -space-x-1.5">
+          {previews.map((e) =>
             e.gameCoverUrl ? (
               <img
                 key={e.id}
                 src={e.gameCoverUrl}
                 alt=""
-                className="w-7 h-7 rounded-md object-cover border border-emerald-500/30 bg-overlay/50"
+                className="w-5 h-5 rounded object-cover border border-emerald-500/40 bg-overlay/50"
                 loading="lazy"
               />
             ) : (
-              <div
+              <span
                 key={e.id}
                 aria-hidden="true"
-                className="w-7 h-7 rounded-md border border-emerald-500/30 bg-overlay/50"
+                className="w-5 h-5 rounded border border-emerald-500/40 bg-overlay/50"
               />
             ),
           )}
-        </div>
-      </div>
-      <span className="text-xs text-emerald-200 inline-flex items-center gap-1 flex-shrink-0">
-        Jump
-        <svg
-          aria-hidden="true"
-          className="w-4 h-4 stroke-current"
-          viewBox="0 0 24 24"
-          fill="none"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 5v14" />
-          <path d="m19 12-7 7-7-7" />
-        </svg>
+        </span>
       </span>
+      <svg
+        aria-hidden="true"
+        className="w-4 h-4 stroke-current text-emerald-200 flex-shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 5v14" />
+        <path d="m19 12-7 7-7-7" />
+      </svg>
     </button>
   );
 }
@@ -175,7 +208,19 @@ export function NominatingComposite(
   const { user } = useAuth();
   const viewerId = user?.id ?? null;
   const [drawerGameId, setDrawerGameId] = useState<number | null>(null);
+  // ROK-1297 round-5b: search mode lives here (lifted from CommonGroundHero)
+  // so the sticky JourneyHero header can host a duplicate Search trigger
+  // that's reachable even when scrolled past the panel.
+  const [commonGroundMode, setCommonGroundMode] =
+    useState<CommonGroundMode>('suggestions');
   const nominate = useNominateGame();
+
+  const jumpToNominations = (): void => {
+    const target = document.querySelector(
+      '[data-testid="nominations-list"]',
+    );
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   // ROK-1297 round-4b: sync the sticky JourneyHero with the global Header's
   // mobile auto-hide. On mobile, scrolling down past 100px hides the
   // header (`-translate-y-full`); we slide the hero away by the same
@@ -213,6 +258,11 @@ export function NominatingComposite(
           hero under the desktop header; on mobile the slightly taller
           header overlaps a couple pixels which the hero's translucent
           backdrop covers cleanly. */}
+      {/* Sticky JourneyHero (ROK-1297 round 5b): the operator wants both
+          the Search trigger AND the jump-to-nominations affordance built
+          INTO the sticky element so they remain reachable while the user
+          scrolls through Common Ground tiles. Mobile-only action row sits
+          inside the sticky wrapper. */}
       <div
         className={`sticky top-14 z-20 bg-background/95 backdrop-blur-sm rounded-md py-1 transition-transform duration-200 will-change-transform md:translate-y-0 ${
           heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
@@ -226,21 +276,27 @@ export function NominatingComposite(
           task={journey.task}
           sub={journey.sub}
         />
+        <div className="md:hidden flex items-center gap-2 mt-2 px-1">
+          <StickyHeroSearchButton
+            onClick={() => setCommonGroundMode('search')}
+            disabled={commonGroundMode === 'search'}
+          />
+          {lineup.entries.length > 0 && (
+            <StickyHeroJumpButton
+              count={lineup.entries.length}
+              previews={lineup.entries.slice(0, 3)}
+              onClick={jumpToNominations}
+            />
+          )}
+        </div>
       </div>
-      {/* Mobile jump-to-nominations strip (ROK-1297 round 5). Desktop has
-          space for the Nominated Games section adjacent to Common Ground,
-          but mobile users would have to scroll past the entire 3-themed-row
-          grid to reach their current nominations. This compact strip
-          surfaces the count + a thumbnail preview right under the
-          JourneyHero with a smooth-scroll affordance to jump down. */}
-      {lineup.entries.length > 0 && (
-        <NominationsJumpStrip entries={lineup.entries} />
-      )}
       <CommonGroundHero
         lineupId={lineup.id}
         canParticipate={canParticipate}
         onTileNominate={handleTileNominate}
         onTileOpenDrawer={handleTileOpenDrawer}
+        mode={commonGroundMode}
+        onModeChange={setCommonGroundMode}
       />
       <ExistingNominations
         entries={[...lineup.entries]}

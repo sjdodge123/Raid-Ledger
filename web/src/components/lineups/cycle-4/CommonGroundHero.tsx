@@ -24,6 +24,8 @@ import { useCommonGroundState } from '../use-common-ground-state';
 import { CommonGroundThemedRow, CommonGroundTileWrapper } from './CommonGroundThemedRow';
 import { SearchAnyGameView } from './SearchAnyGameView';
 
+export type CommonGroundMode = 'suggestions' | 'search';
+
 export interface CommonGroundHeroProps {
   lineupId: number;
   canParticipate: boolean;
@@ -31,6 +33,13 @@ export interface CommonGroundHeroProps {
   onTileNominate: (gameId: number) => void;
   /** Fired when the user clicks the tile body (opens the U2 drawer). */
   onTileOpenDrawer: (gameId: number) => void;
+  /**
+   * ROK-1297 round-5: search mode is lifted to NominatingComposite so the
+   * sticky JourneyHero can host a duplicate "Search" trigger that works
+   * even when scrolled past the panel. CommonGroundHero is now controlled.
+   */
+  mode: CommonGroundMode;
+  onModeChange: (next: CommonGroundMode) => void;
 }
 
 interface ThemedBuckets {
@@ -298,7 +307,14 @@ function ThemedLayout({
 }
 
 export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
-  const { lineupId, canParticipate, onTileNominate, onTileOpenDrawer } = props;
+  const {
+    lineupId,
+    canParticipate,
+    onTileNominate,
+    onTileOpenDrawer,
+    mode,
+    onModeChange,
+  } = props;
   // useCommonGroundState merges AI suggestions in for free, gives us
   // aiSuggestionsByGameId for the ✨ AI Pick badge, and tracks atCap.
   const {
@@ -309,7 +325,6 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
     atCap,
   } = useCommonGroundState(lineupId, canParticipate);
   const [isFetching, setIsFetching] = useState(false);
-  const [mode, setMode] = useState<'suggestions' | 'search'>('suggestions');
   // Operator round-3 feedback: scoring is deterministic so refetch() returns
   // the same response. Incrementing this nonce on every Regenerate click
   // reshuffles tiles WITHIN each themed bucket, producing visible variation
@@ -327,7 +342,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
 
   const handleRegenerate = (): void => {
     if (mode === 'search') {
-      setMode('suggestions');
+      onModeChange('suggestions');
       return;
     }
     setIsFetching(true);
@@ -347,7 +362,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
       <HeroHeader
         inSearch={mode === 'search'}
         onRegenerate={handleRegenerate}
-        onOpenSearch={() => setMode('search')}
+        onOpenSearch={() => onModeChange('search')}
         isFetching={isFetching}
       />
       {mode === 'search' ? (
@@ -356,7 +371,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
           atCap={atCap}
           onTileNominate={onTileNominate}
           onTileOpenDrawer={onTileOpenDrawer}
-          onExit={() => setMode('suggestions')}
+          onExit={() => onModeChange('suggestions')}
         />
       ) : (
         <SuggestionsBody
