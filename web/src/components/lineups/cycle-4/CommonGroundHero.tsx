@@ -15,7 +15,7 @@
  * callbacks for nomination + drawer-open so the composite owns the
  * mutation state.
  */
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type {
   AiSuggestionDto,
   CommonGroundGameDto,
@@ -40,6 +40,13 @@ export interface CommonGroundHeroProps {
    */
   mode: CommonGroundMode;
   onModeChange: (next: CommonGroundMode) => void;
+  /**
+   * ROK-1297 round-5d: monotonic counter the parent bumps to fire the
+   * Regenerate flow from outside the panel (e.g. the sticky JourneyHero).
+   * Same flow as the in-panel Regenerate button: refetch + shuffle nonce
+   * bump + 500ms spinner.
+   */
+  externalRegenerateTrigger?: number;
 }
 
 interface ThemedBuckets {
@@ -118,17 +125,17 @@ function HeroHeader({
       <h2 className="text-lg sm:text-base font-semibold text-foreground">
         ✨ Common Ground
       </h2>
-      <div className="flex items-center gap-2 w-full sm:w-auto">
+      {/* The whole button row is desktop-only (sm:+). On mobile the
+          sticky JourneyHero hosts Search + Regenerate + Jump so a
+          duplicate set in the CG header would be noise. */}
+      <div className="hidden sm:flex items-center gap-2 sm:w-auto">
         {!inSearch && (
-          // Hidden on mobile — sticky JourneyHero hosts the Search trigger
-          // there. Visible at sm+ where the CG header is the primary
-          // search affordance.
           <button
             type="button"
             onClick={onOpenSearch}
             aria-label="Search the game library"
             data-testid="nominate-search-any"
-            className={`${btnCls} hidden sm:inline-flex`}
+            className={btnCls}
           >
             <SearchIcon />
             <span>Search</span>
@@ -317,6 +324,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
     onTileOpenDrawer,
     mode,
     onModeChange,
+    externalRegenerateTrigger = 0,
   } = props;
   // useCommonGroundState merges AI suggestions in for free, gives us
   // aiSuggestionsByGameId for the ✨ AI Pick badge, and tracks atCap.
@@ -356,6 +364,18 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
     setRegenerateNonce((n) => n + 1);
     window.setTimeout(() => setIsFetching(false), 500);
   };
+
+  // Fire the same flow when the external (sticky JourneyHero) trigger
+  // ticks. Stable ref pattern prevents double-fire on first mount.
+  const lastExternalTrigger = useRef(externalRegenerateTrigger);
+  useEffect(() => {
+    if (externalRegenerateTrigger === lastExternalTrigger.current) return;
+    lastExternalTrigger.current = externalRegenerateTrigger;
+    handleRegenerate();
+    // handleRegenerate captures the freshest closure each render — no need
+    // to depend on it here, the trigger value is the gate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalRegenerateTrigger]);
 
   return (
     <section
