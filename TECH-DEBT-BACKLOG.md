@@ -155,8 +155,7 @@ Findings from pre-launch validation of the Community Lineup feature (33 runbook 
 
 `./scripts/validate-ci.sh --full` against the batch base produced 2 failures out of 1009 integration tests, neither in any file changed by the batch (24 file diff, neither file present in diff). Both pass 3/3 cleanly in isolation via `./scripts/spec-loop.sh`. Cross-suite carrier flake, NOT caused by this batch.
 
-- **[med]** `api/src/events/signups-roster.integration.spec.ts:Signups — admin remove › should allow admin to remove a signup` — fails mid-suite with `createFutureEvent failed: 401 — Unauthorized`. This is a DIFFERENT pattern from the BullMQ socket-leak class — admin cookie / JWT state appears to be pre-empted by a sibling spec's auth flow. Passes 3/3 isolated.
-  Suggested: bisect the full-suite order to find which spec leaves auth state mutated. Likely candidates: anything that calls `logout` or sets a different-user session and doesn't reset. Add `beforeEach` cookie/JWT reset in the test app factory. NEW class — no Linear story yet. (The BullMQ socket-leak carrier sibling that landed here originally is now tracked in [[ROK-1268]] with the cross-batch evidence consolidated.)
+Both findings from this section are now tracked in Linear: BullMQ socket-leak carrier in [[ROK-1268]] (cross-batch evidence appended); auth-state leak in [[ROK-1321]] (new story, distinct cluster from socket-leak).
 
 ### 2026-05-13 — fix/batch-2026-05-13 reviewer findings (medium/low/nitpick — non-blocking)
 
@@ -184,10 +183,10 @@ Findings from senior-code-review on the batch diff. Critical + high were fixed i
   Fixed in ROK-1281 by extracting boot-time migration into `api/src/scripts/run-migrations-with-sentry.ts` which refreshes the audit from scratch via union-find BEFORE drizzle migrate runs.
 - **[high]** Sentry never captured the prod migration error. Three gaps: (1) `api/src/scripts/run-migrations.ts` doesn't import `instrument.ts`; (2) the runner uses sync `process.exit(1)` without `Sentry.flush(2000)`; (3) the ACTUAL prod path was an inline `node -e` block in `api/scripts/docker-entrypoint.sh:26-73`, which had no Sentry import at all.
   Fixed in ROK-1281 by routing all boot-time migrations through the new instrumented runner. The legacy `run-migrations.ts` (still used by `backup.service.ts` for restore flows) should follow up — it still has the gap but isn't on the deploy critical path.
-- **[med]** `api/src/scripts/run-migrations.ts` is now divergent from the prod path. Either migrate `backup.service.ts` to call `runBootMigrations` from the new runner, or document that `run-migrations.ts` is restore-only. Pick one to avoid a future agent treating them as interchangeable.
-  Suggested: replace `runMigrations` in `api/src/backup/backup.helpers.ts:124` with a call to `runBootMigrations(databaseUrl)` from the new runner. Restore flows benefit from the audit refresh + Sentry capture for free.
 - **[med]** Prod recovery required manually marking 0140 as applied in `drizzle.__drizzle_migrations` before the new image could boot. This pattern (insert hash row to skip a failed migration) is not documented anywhere — operator had to derive it. Add a `scripts/recover-stuck-migration.sh` runbook.
   Suggested: a script that takes a migration tag, looks up its hash from `meta/_journal.json`, inserts the journal row, and prints next-steps. Idempotent.
+
+(The `run-migrations.ts` divergence bullet that originally lived here is now tracked in [[ROK-1322]].)
 
 ### 2026-05-14 — fix/rok-1283 (ROK-1283 follow-up)
 
@@ -420,18 +419,15 @@ This bit ROK-1307: the lock was held for ~43 minutes after the operator gave the
 
 - **[low]** `.claude/skills/_shared/chrome-mcp-e2e.md` "Step 8: Release env lock" — add a note that after `deploy_dev.sh`-based deploys, `env_lock_release` is insufficient on its own; callers must `deploy_dev.sh --down` to release the script-anchored lock. Or check `was_holder: true` before treating release as successful. Tracked alongside [[ROK-1318]] (the `tools/mcp-env` semantics fix).
 
-### 2026-05-17 — rok-1299 (surfaced during ROK-1299 Step 3 validate — deploy + Playwright)
+### 2026-05-17 — rok-1299 migration-drift incident (converted to Linear stories)
 
-After rebasing rok-1299-decided-composite onto an updated origin/main (which had landed migration 0141 from ROK-1296), `./scripts/deploy_dev.sh --ci --rebuild` did **not** apply 0140 / 0141 to the local DB. The API came up healthy and on the new code, but `community_lineup_user_submissions` (created by 0141) did not exist. Every `POST /lineups/:id/vote` then 500'd at the `lineup-submit` query path. Playwright smokes failed at fixture setup; the failure is **not** caused by ROK-1299 changes (decided composite is web-only).
+After rebasing rok-1299-decided-composite onto an updated origin/main (which had landed migration 0141 from ROK-1296), `./scripts/deploy_dev.sh --ci --rebuild` did **not** apply 0140 / 0141 to the local DB. The API came up healthy on the new code, but `community_lineup_user_submissions` (created by 0141) did not exist. Every `POST /lineups/:id/vote` then 500'd. Manual `node scripts/reconcile-migrations.mjs` made it worse — `Mode: trust (schemaRestored=true)` silently marked 0140 / 0141 + two older migrations as `trusted` without probing. Recovery required direct `docker exec psql` to apply `0141_late_wrecking_crew.sql` by hand.
 
-Manually running `node scripts/reconcile-migrations.mjs` made it worse — the script ran in `Mode: trust (schemaRestored=true)` and silently marked 0140 + 0141 + two older migrations as `trusted` without probing whether the effects existed. Drizzle's migrations table now showed the rows as applied even though the table was missing. I had to apply `0141_late_wrecking_crew.sql` directly via `docker exec psql` to unblock the build.
+All three findings from this incident are now tracked in Linear:
 
-- **[high]** `scripts/reconcile-migrations.mjs` — `trust` mode is dangerous. It assumes the schema is fully restored and trusts every journal entry, even though the script's docstring promises it "probes each journal entry, skips any whose effects already exist, runs anything truly missing." That guarantee is broken in trust mode: it skips ALL statements without probing, so out-of-date DBs (worktree wasn't restored, just missing newer migrations) end up with phantom hash rows + missing tables. Worse, the script is auto-invoked by `deploy_dev.sh` after backup restore — meaning any time a worktree is created from a backup that's older than current main, this can fire silently.
-  Suggested: in trust mode, still probe `EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = ...)` (or the equivalent for indexes/columns) for the first statement of each migration; only trust when at least one effect is detected. Or: gate trust mode behind an explicit `--from-backup` flag and never auto-enable it.
-- **[med]** `scripts/deploy_dev.sh` — when `--ci --rebuild` runs and the worktree journal has migrations the local DB hasn't applied, the script either silently runs `db:migrate` and continues even on conflict (current behavior), OR it should detect missing migrations + offer to apply them. Today it just trusts that the DB is current and starts the API, leading to runtime 500s after rebase.
-  Suggested: add a pre-start probe that diffs `journal.json` against `drizzle.__drizzle_migrations`; if there's drift, run `db:migrate` and abort start on failure (don't silently move on like today's `|| print_warning`).
-- **[low]** No test coverage for the reconcile script. A unit test of "DB has up-to-date schema except for migration N — reconcile should run N, not trust it" would have caught this.
-  Suggested: add a test using a throwaway Postgres container that asserts trust mode + missing-table = `runs` (not `trusted`).
+- [[ROK-1319]] (High) — reconcile-migrations trust-mode bug (cause + test coverage AC)
+- [[ROK-1320]] (High) — deploy_dev.sh missing-migration drift probe (failure surface)
+- [[ROK-1322]] (Med) — align legacy `run-migrations.ts` with `run-migrations-with-sentry.ts` (related boot-time / restore-time divergence from ROK-1281 postmortem)
 
 ### 2026-05-17 — /readlogs groom (consolidated carriers from prior batches)
 
@@ -454,5 +450,9 @@ For provenance only — these stories were created from log + backlog cross-reco
 - **[high]** **[[ROK-1316]]** `perf: /lineups/:id/suggestions blocks 10-62s on Gemini cache miss (UX-breaking)`. Log evidence: 18 slow calls + 3 client `499` disconnects on lineup #9 during 03:00 hour 2026-05-17. Voter-set hash cache key invalidates on every nomination/vote/invitee change → users pay full Gemini round-trip every visit.
 - **[med]** **[[ROK-1317]]** `fix: useAiFeatures hook polls /admin/ai/features for non-admin users (78× 403/30min)`. Log evidence: 78 unique 403s in ~30min from one non-admin client. Hook gates on `enabled: !!getAuthToken()` only — needs admin-role gate.
 - **[med]** **[[ROK-1318]]** `tech-debt: env_lock_release silently no-ops after deploy_dev.sh re-anchors the lease`. Backlog evidence: today's 2026-05-17 entry, bit ROK-1307 with a 43min phantom-hold.
+- **[high]** **[[ROK-1319]]** `fix: scripts/reconcile-migrations.mjs trust mode silently marks unapplied migrations as applied`. Backlog evidence: 2026-05-17 ROK-1299 [high] — bit during Step 3 validate, required manual `docker exec psql` recovery.
+- **[high]** **[[ROK-1320]]** `fix: deploy_dev.sh should detect migration drift before starting the API`. Sibling of ROK-1319; closes the failure surface (silent boot on drift-stricken DB) that exposed the reconcile bug.
+- **[med]** **[[ROK-1321]]** `tech-debt: auth-state leak between integration specs pre-empts admin session (signups-roster carrier)`. Backlog evidence: 2026-05-13 full-suite flakes — distinct from BullMQ socket-leak class, no prior Linear coverage.
+- **[med]** **[[ROK-1322]]** `tech-debt: align api/src/scripts/run-migrations.ts with the instrumented boot runner (ROK-1281 follow-up)`. Closes boot-time vs restore-time invariant divergence left over from 2026-05-14 prod outage postmortem.
 
 Also appended fresh evidence to **[[ROK-1103]]** (ITAD HTTP client retry-5xx) — prod 521 cluster + 115s wrap reproduced today, recommending escalation.
