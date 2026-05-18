@@ -108,6 +108,7 @@ The following paths are **operator-authored configuration**. They are intentiona
 - `.claude/settings.json`, `.claude/settings.local.json` — Claude Code harness config
 - `CLAUDE.md` (this file) — project instructions
 - `.mcp.json` — MCP server registrations
+- `rl-infra/**` — Proxmox VM compose stack + orchestrator + runner image + local CLI (the remote test fleet)
 
 **Rules:**
 
@@ -173,7 +174,36 @@ This procedure is destructive to the LOCAL DB (replaces every non-sanitized tabl
 
 **Backups exclude the `drizzle` schema** (migration metadata is code, not data). If a restore appears to "skip" migrations, run `DATABASE_URL=... node scripts/reconcile-migrations.mjs` to mark already-applied migrations as such. `deploy_dev.sh` runs reconcile automatically after auto-restoring from `api/backups/daily/`.
 
-### Env coordination across agents (STRICT)
+### Remote test fleet — `rl-infra` (STRICT — preferred path when reachable)
+
+The `rl-infra` Proxmox VM hosts a 4-slot runner fleet so heavy compute (build, jest, vitest, playwright, allinone builds, per-env stacks) runs on the VM instead of the laptop, and multiple agents work in parallel without env-lock contention. Full design + runbook: `rl-infra/README.md`. Operator-facing summary: `.claude/skills/_shared/rl-infra-fleet.md`.
+
+**Default behavior:** `RL_TARGET=auto` (the default) probes `RL_PROXMOX_HOST` over SSH. Reachable → remote mode. Unreachable / `RL_TARGET=local` → fall through to the legacy local section below.
+
+In remote mode, prefer the `rl` CLI over today's equivalents:
+
+| Legacy local                                | Remote-mode replacement              |
+| ------------------------------------------- | ------------------------------------ |
+| `mcp__mcp-env__env_lock_acquire`            | `rl claim --branch <name>`           |
+| `mcp__mcp-env__env_lock_release`            | `rl release`                         |
+| `./scripts/deploy_dev.sh --ci --rebuild`    | `rl env spin <slug>` (allinone)      |
+| `./scripts/deploy_dev.sh --status`          | `rl status`                          |
+| `./scripts/validate-ci.sh --full`           | `rl validate-ci --full`              |
+| `docker exec raid-ledger-db psql …`         | `rl db <slug>`                       |
+| `npx playwright test`                       | `rl validate-ci --only-e2e`          |
+
+`scripts/validate-ci.sh` already self-dispatches to `rl validate-ci` when
+`RL_TARGET=remote`, so existing `/push` / `/build` / `/fix-batch` flows that call
+it work unchanged once `RL_TARGET` is set. Heartbeats fire every 60s while a claim
+is held; missed heartbeats > 5min auto-release the slot (gc-sweeper). Always call
+`rl release` at end-of-session anyway so the slot returns immediately.
+
+Chrome MCP, Discord MCP (companion bot + mcp-discord), Sentry, Linear, and GitHub
+stay on the laptop — they're network or display-bound, not compute-heavy. Browser
+tests point at `https://slot-N.rl.lan` (or `https://<slug>.rl.lan` for a spun env)
+instead of `localhost:5173`.
+
+### Env coordination across agents (STRICT — local-mode fallback)
 
 The local dev env (Docker DB, API `:3000`, Vite `:5173`) is a single shared resource. Multiple agents/worktrees cannot run it simultaneously — `deploy_dev.sh` will refuse to start if another worktree holds the lease.
 

@@ -1,0 +1,151 @@
+# Static Traefik routes for the rl-infra stack.
+# Per-env routes live in sibling files (env-{slug}.yml) managed by env-spin.
+http:
+  middlewares:
+    rl-headers:
+      headers:
+        customResponseHeaders:
+          X-Rl-Infra: "true"
+
+  routers:
+    # Dashboard / API on traefik.rl.lan — handled by Traefik's internal `api@internal`.
+    traefik-dash:
+      rule: "Host(`traefik.rl.lan`)"
+      service: api@internal
+      entryPoints: [web]
+      middlewares: [rl-headers]
+
+    grafana:
+      rule: "Host(`grafana.rl.lan`)"
+      service: grafana
+      entryPoints: [web]
+      middlewares: [rl-headers]
+
+    registry:
+      rule: "Host(`registry.rl.lan`)"
+      service: registry
+      entryPoints: [web]
+      middlewares: [rl-headers]
+
+    # Runner slots — both default (1,2) and optional (3,4) listed. Routes for
+    # slot-3/slot-4 are inactive until you enable the `extra-slots` compose
+    # profile; Traefik will log "no available servers" until then, which is
+    # harmless.
+    slot-1-api:
+      rule: "Host(`slot-1.rl.lan`) && PathPrefix(`/api`)"
+      service: slot-1-api
+      entryPoints: [web]
+      priority: 100
+    slot-1-web:
+      rule: "Host(`slot-1.rl.lan`)"
+      service: slot-1-web
+      entryPoints: [web]
+    slot-1-debug:
+      rule: "Host(`slot-1-debug.rl.lan`)"
+      service: slot-1-debug
+      entryPoints: [web]
+
+    slot-2-api:
+      rule: "Host(`slot-2.rl.lan`) && PathPrefix(`/api`)"
+      service: slot-2-api
+      entryPoints: [web]
+      priority: 100
+    slot-2-web:
+      rule: "Host(`slot-2.rl.lan`)"
+      service: slot-2-web
+      entryPoints: [web]
+    slot-2-debug:
+      rule: "Host(`slot-2-debug.rl.lan`)"
+      service: slot-2-debug
+      entryPoints: [web]
+
+    slot-3-api:
+      rule: "Host(`slot-3.rl.lan`) && PathPrefix(`/api`)"
+      service: slot-3-api
+      entryPoints: [web]
+      priority: 100
+    slot-3-web:
+      rule: "Host(`slot-3.rl.lan`)"
+      service: slot-3-web
+      entryPoints: [web]
+    slot-3-debug:
+      rule: "Host(`slot-3-debug.rl.lan`)"
+      service: slot-3-debug
+      entryPoints: [web]
+
+    slot-4-api:
+      rule: "Host(`slot-4.rl.lan`) && PathPrefix(`/api`)"
+      service: slot-4-api
+      entryPoints: [web]
+      priority: 100
+    slot-4-web:
+      rule: "Host(`slot-4.rl.lan`)"
+      service: slot-4-web
+      entryPoints: [web]
+    slot-4-debug:
+      rule: "Host(`slot-4-debug.rl.lan`)"
+      service: slot-4-debug
+      entryPoints: [web]
+
+    # Fallback for unknown hostnames — returns 502 so the operator gets a clear
+    # signal instead of a confusing default Traefik page.
+    fallback:
+      rule: "HostRegexp(`.+`)"
+      priority: 1
+      service: fallback
+      middlewares: [rl-headers]
+
+  services:
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://rl-grafana:3000"
+    registry:
+      loadBalancer:
+        servers:
+          - url: "http://rl-registry:5000"
+
+    slot-1-web:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-1:5173" }]
+    slot-1-api:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-1:3000" }]
+    slot-1-debug:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-1:9229" }]
+
+    slot-2-web:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-2:5173" }]
+    slot-2-api:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-2:3000" }]
+    slot-2-debug:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-2:9229" }]
+
+    slot-3-web:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-3:5173" }]
+    slot-3-api:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-3:3000" }]
+    slot-3-debug:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-3:9229" }]
+
+    slot-4-web:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-4:5173" }]
+    slot-4-api:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-4:3000" }]
+    slot-4-debug:
+      loadBalancer:
+        servers: [{ url: "http://rl-runner-4:9229" }]
+
+    fallback:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:65535"   # intentionally unreachable → 502

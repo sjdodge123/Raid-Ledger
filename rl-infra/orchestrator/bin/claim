@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Claim a runner slot. Picks the lowest-numbered free slot.
+#
+# Required env: RL_AGENT_ID
+# Optional flags: --branch <name>
+# Output: JSON with slot, hostnames, ssh exec command.
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+BRANCH=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --branch) BRANCH="$2"; shift 2 ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+if [[ -z "${RL_AGENT_ID:-}" ]]; then
+    echo "RL_AGENT_ID is required" >&2
+    exit 2
+fi
+
+# If this agent already has a slot, return it (idempotent).
+EXISTING=$(state::slot_for_agent "$RL_AGENT_ID")
+if [[ -n "$EXISTING" ]]; then
+    SLOT="$EXISTING"
+else
+    # Find first claimed=false slot.
+    SLOT=$(state::query "$RL_CLAIMS_FILE" '[.[] | select(.claimed == false) | .slot] | first // empty')
+    if [[ -z "$SLOT" ]]; then
+        audit::log claim queued '{"reason": "no_free_slot"}'
+        jq -nc --arg agent "$RL_AGENT_ID" \
+            '{ok: false, error: "no_free_slot", message: "All slots busy. Try `rl status` to see claimants."}'
+        exit 1
+    fi
+    NOW=$(date -u +%FT%TZ)
+    state::mutate "$RL_CLAIMS_FILE" \
+        --arg agent "$RL_AGENT_ID" \
+        --arg branch "$BRANCH" \
+        --arg ts "$NOW" \
+        --argjson slot "$SLOT" \
+        '(.[] | select(.slot == $slot)) |= (.claimed = true | .agent_id = $agent | .branch = $branch | .started_at = $ts | .last_heartbeat = $ts)'
+fi
+
+audit::log claim acquired "$(jq -nc --argjson slot "$SLOT" --arg branch "$BRANCH" '{slot: $slot, branch: $branch}')"
+
+jq -nc \
+    --argjson slot "$SLOT" \
+    --arg branch "$BRANCH" \
+    --arg agent "$RL_AGENT_ID" \
+    '{
+        ok: true,
+        slot: $slot,
+        agent_id: $agent,
+        branch: $branch,
+        hostnames: {
+            web: "slot-\($slot|tostring).rl.lan",
+            debug: "slot-\($slot|tostring)-debug.rl.lan"
+        },
+        worktree: "/srv/rl-infra/runners/slot-\($slot|tostring)/worktree",
+        container: "rl-runner-\($slot|tostring)",
+        shell_cmd: "docker exec -it rl-runner-\($slot|tostring) tmux attach -t main"
+    }'

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Release a runner slot owned by the calling agent.
+# Destroys any envs spun by this slot, prunes scoped resources, resets worktree.
+#
+# Required env: RL_AGENT_ID
+# Optional flags: --slot <n>  (forces release of a specific slot — sweeper use)
+#                 --force     (skip "is this your slot" check; sweeper use)
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+SLOT=""
+FORCE=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slot) SLOT="$2"; shift 2 ;;
+        --force) FORCE=1; shift ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+if [[ -z "$SLOT" ]]; then
+    if [[ -z "${RL_AGENT_ID:-}" ]]; then
+        echo "RL_AGENT_ID required (or pass --slot)" >&2
+        exit 2
+    fi
+    SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+    if [[ -z "$SLOT" ]]; then
+        jq -nc '{ok: true, message: "agent holds no slot — noop"}'
+        exit 0
+    fi
+fi
+
+# Tear down envs spun by this slot.
+ENV_SLUGS=$(docker ps -a --filter "label=rl.slot=$SLOT" --filter "label=rl.role=env" --format '{{.Label "rl.env_slug"}}' | sort -u)
+for slug in $ENV_SLUGS; do
+    [[ -z "$slug" ]] && continue
+    "$(dirname "$0")/env-destroy" --slug "$slug" --force >/dev/null || true
+done
+
+# Scoped prune: remove containers/images tagged with this slot.
+docker container prune -f --filter "label=rl.slot=$SLOT" >/dev/null || true
+docker image prune -f --filter "label=rl.slot=$SLOT" >/dev/null || true
+
+# Drop the claim record.
+state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \
+    '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null)'
+
+audit::log release ok "$(jq -nc --argjson slot "$SLOT" --argjson force "$FORCE" '{slot: $slot, force: ($force == 1)}')"
+
+# jq -n with --slurp gives null input that split() can't handle. Pipe the
+# slug list through jq with -R (raw input) and --slurp (collect into one
+# string), THEN split by newlines, dropping empties.
+ENVS_JSON=$(printf '%s' "$ENV_SLUGS" | jq -Rc --slurp 'split("\n") | map(select(length>0))')
+jq -nc --argjson slot "$SLOT" --argjson envs "$ENVS_JSON" \
+    '{ok: true, slot: $slot, destroyed_envs: $envs}'

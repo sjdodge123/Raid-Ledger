@@ -1,0 +1,51 @@
+# Mutagen sync session template. Rendered per-slot by `rl claim` into
+# ~/.mutagen/rl-slot-<N>.yml, then started with `mutagen sync create`.
+#
+# Replace {{SLOT}} and {{LAPTOP_REPO}} before applying.
+#
+#   {{SLOT}}        — runner slot number (1..4)
+#   {{LAPTOP_REPO}} — absolute path on the laptop, e.g. /Users/sdodge/Documents/Projects/Raid-Ledger
+#   {{VM_HOST}}     — SSH host of the rl-infra VM
+#   {{VM_USER}}     — SSH user
+sync:
+  defaults:
+    mode: two-way-resolved
+    symlink:
+      mode: posix-raw
+    permissions:
+      defaultFileMode: 0644
+      defaultDirectoryMode: 0755
+    ignore:
+      vcs: false   # we need .git/HEAD + refs synced for branch awareness
+      paths:
+        - node_modules
+        - "**/node_modules"
+        - dist
+        - "**/dist"
+        - coverage
+        - "**/coverage"
+        - .next
+        - .vite
+        - .turbo
+        - playwright-report
+        - test-results
+        - .git/objects   # objects stay on the laptop; refs+HEAD sync
+        - .git/lfs
+        - .DS_Store
+        - "*.swp"
+        - "*.log"
+        - tools/test-bot/node_modules
+        - api/dist
+        - web/dist
+        - packages/contract/dist
+    watch:
+      pollingInterval: 2
+    digest:
+      defaultAlgorithm: xxh128
+
+  rl-slot-{{SLOT}}:
+    alpha: "{{LAPTOP_REPO}}"
+    beta: "{{VM_USER}}@{{VM_HOST}}:/srv/rl-infra/runners/slot-{{SLOT}}/worktree"
+    configurationBeta:
+      permissions:
+        defaultFileMode: 0644

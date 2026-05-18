@@ -8,6 +8,8 @@ argument-hint: "[ROK-XXX ROK-YYY | all]"
 
 Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linear, batches them, spawns parallel dev agents in worktrees, merges all into a single batch branch, validates, and ships one PR. **No operator review gate, no test agents, no architect checks.** A code-review agent runs in parallel with the env-bound browser-validation track so it adds minimal wall time. The quality gate is: integration tests + full CI + reviewer pass on the merged batch branch.
 
+**rl-infra fleet (default when Proxmox is reachable):** Validation, env stack, and browser-validation track all run on the rl-infra VM. Use `rl claim` per parallel dev agent (4 slots = 4 concurrent fixes, no env-lock contention), `rl env spin <slug>` for the browser-validation track, `rl validate-ci --full` for the quality gate. Falls back to today's local model when `RL_TARGET=local`. See `.claude/skills/_shared/rl-infra-fleet.md`.
+
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
 

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Destroy a per-env stack and its volume.
+#
+# Required flags: --slug <slug>
+# Optional flags: --force   (skip "is this your env" check; sweeper use)
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+SLUG=""
+FORCE=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slug) SLUG="$2"; shift 2 ;;
+        --force) FORCE=1; shift ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+[[ -z "$SLUG" ]] && { echo "--slug required" >&2; exit 2; }
+
+PG_CONTAINER="rl-env-${SLUG}-pg"
+APP_CONTAINER="rl-env-${SLUG}-allinone"
+VOL_PG="rl-data-${SLUG}"
+
+# Ownership check unless --force.
+if [[ $FORCE -eq 0 ]]; then
+    if [[ -z "${RL_AGENT_ID:-}" ]]; then echo "RL_AGENT_ID required (or pass --force)" >&2; exit 2; fi
+    EXPECTED_SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+    ACTUAL_SLOT=$(docker inspect "$APP_CONTAINER" --format '{{ index .Config.Labels "rl.slot" }}' 2>/dev/null || echo "")
+    if [[ -n "$ACTUAL_SLOT" && "$ACTUAL_SLOT" != "$EXPECTED_SLOT" ]]; then
+        echo "env $SLUG owned by slot $ACTUAL_SLOT, you hold slot $EXPECTED_SLOT (use --force to override)" >&2
+        exit 1
+    fi
+fi
+
+for c in "$APP_CONTAINER" "$PG_CONTAINER"; do
+    docker rm -f "$c" >/dev/null 2>&1 || true
+done
+docker volume rm "$VOL_PG" >/dev/null 2>&1 || true
+
+# Remove the Traefik conf file so the route disappears (Traefik watches the
+# dir and auto-reloads). Without this, the host would still resolve via the
+# wildcard DNS but Traefik would 502 because the upstream container is gone.
+TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
+rm -f "$TRAEFIK_CONF_D/env-${SLUG}.yml"
+
+state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
+
+audit::log env-destroy ok "$(jq -nc --arg slug "$SLUG" --argjson force "$FORCE" '{slug:$slug, force:($force == 1)}')"
+jq -nc --arg slug "$SLUG" '{ok: true, slug: $slug}'

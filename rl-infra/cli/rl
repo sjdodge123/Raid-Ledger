@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+# rl — local CLI dispatcher for the rl-infra remote test fleet.
+#
+# Resolves RL_TARGET (auto by default) and dispatches:
+#   - remote  → SSH to rl-infra VM, invoke /srv/rl-infra/orchestrator/bin/<cmd>
+#   - local   → fall back to existing local-mode scripts (deploy_dev.sh, MCP env lock, validate-ci.sh)
+#
+# Env vars (set in shell rc):
+#   RL_PROXMOX_HOST   default: rl-infra.lan
+#   RL_PROXMOX_USER   default: rl
+#   RL_TARGET         auto|remote|local  (default: auto)
+#   RL_AGENT_ID       auto-derived from $USER + worktree path if unset
+set -euo pipefail
+
+RL_PROXMOX_HOST="${RL_PROXMOX_HOST:-rl-infra.lan}"
+RL_PROXMOX_USER="${RL_PROXMOX_USER:-rl}"
+RL_TARGET="${RL_TARGET:-auto}"
+
+# Find the repo root from the OPERATOR's cwd (not from this script's location —
+# rl is typically symlinked into /opt/homebrew/bin or similar, so resolving
+# from the script path is wrong). Falls back to empty when not in a git repo.
+# Commands that need a repo root (claim, validate-ci) call require_repo_root.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+
+if [[ -z "${RL_AGENT_ID:-}" ]]; then
+    # Stable per-worktree id: $USER + sha1 of worktree path (or cwd if no
+    # git repo, so the id is still stable per directory).
+    RL_AGENT_ID="${USER}-$(printf '%s' "${REPO_ROOT:-$PWD}" | shasum -a 1 | cut -c1-8)"
+fi
+export RL_AGENT_ID
+
+require_repo_root() {
+    if [[ -z "$REPO_ROOT" ]]; then
+        echo "[rl] this command must be run from inside the project git repo" >&2
+        echo "      cd into ~/Documents/Projects/Raid-Ledger (or your worktree) and retry" >&2
+        exit 2
+    fi
+}
+
+# --- target resolution ----------------------------------------------------
+
+resolve_target() {
+    case "$RL_TARGET" in
+        remote|local) echo "$RL_TARGET"; return ;;
+        auto) ;;
+        *) echo "RL_TARGET must be auto|remote|local (got: $RL_TARGET)" >&2; exit 2 ;;
+    esac
+    # Use SSH for the probe (not nc) so SSH config aliases like
+    # "Host rl-infra" resolve correctly. nc only does direct DNS, but
+    # operators usually point RL_PROXMOX_HOST at an ssh-config Host name.
+    if ssh -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new \
+           "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" 'true' >/dev/null 2>&1; then
+        echo "remote"
+    else
+        echo "local"
+    fi
+}
+
+TARGET="$(resolve_target)"
+
+# --- remote dispatch ------------------------------------------------------
+
+ssh_run() {
+    # Pipes RL_AGENT_ID through; orchestrator scripts read it.
+    ssh -o ConnectTimeout=5 -o BatchMode=yes \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "RL_AGENT_ID='${RL_AGENT_ID}' /srv/rl-infra/orchestrator/bin/$*"
+}
+
+ssh_run_interactive() {
+    ssh -t "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" "$@"
+}
+
+# --- subcommands ----------------------------------------------------------
+
+cmd_claim() {
+    require_repo_root
+    if [[ "$TARGET" == "local" ]]; then
+        echo "[rl] local mode — using MCP env lock instead of remote slot." >&2
+        echo "Run: ./scripts/env-lock.sh acquire --purpose '<task>'" >&2
+        exit 0
+    fi
+    local branch
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo unknown)"
+    RESULT=$(ssh_run "claim --branch '$branch'")
+    echo "$RESULT" | jq .
+    SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
+    if [[ -n "$SLOT" ]]; then
+        ensure_mutagen_sync "$SLOT"
+        start_heartbeat_daemon "$SLOT"
+        echo
+        echo "claimed slot $SLOT"
+        echo "  worktree synced to: $(jq -r '.worktree' <<<"$RESULT")"
+        echo "  shell:       rl shell"
+        echo "  web url:     http://$(jq -r '.hostnames.web' <<<"$RESULT")"
+        echo "  debug url:   http://$(jq -r '.hostnames.debug' <<<"$RESULT")"
+    fi
+}
+
+cmd_release() {
+    if [[ "$TARGET" == "local" ]]; then
+        echo "[rl] local mode — releasing MCP env lock." >&2
+        ./scripts/env-lock.sh release || true
+        exit 0
+    fi
+    stop_heartbeat_daemon
+    ssh_run "release" | jq .
+}
+
+cmd_status() {
+    if [[ "$TARGET" == "local" ]]; then
+        echo "[rl] local mode — running deploy_dev.sh --status"
+        "$REPO_ROOT/scripts/deploy_dev.sh" --status
+        exit 0
+    fi
+    ssh_run "status --pretty"
+}
+
+cmd_shell() {
+    [[ "$TARGET" == "local" ]] && { echo "no remote shell in local mode" >&2; exit 1; }
+    SLOT=$(ssh_run "claim --branch unknown" | jq -r '.slot')
+    [[ -z "$SLOT" || "$SLOT" == "null" ]] && { echo "no slot claimed — rl claim first" >&2; exit 1; }
+    ssh_run_interactive "docker exec -it rl-runner-$SLOT tmux attach -t main"
+}
+
+cmd_env() {
+    [[ "$TARGET" == "local" ]] && { echo "env subcommands are remote-only (use deploy_dev.sh locally)" >&2; exit 1; }
+    local sub="${1:-}"; shift || true
+    case "$sub" in
+        spin)     ssh_run "env-spin $*" | jq . ;;
+        destroy)  ssh_run "env-destroy $*" | jq . ;;
+        list)     ssh_run "status" | jq '.envs' ;;
+        *) echo "rl env {spin|destroy|list} [args]" >&2; exit 2 ;;
+    esac
+}
+
+cmd_db() {
+    [[ "$TARGET" == "local" ]] && { echo "db is remote-only" >&2; exit 1; }
+    local slug="${1:-}"; shift || true
+    [[ -z "$slug" ]] && { echo "usage: rl db <slug> [--web]" >&2; exit 2; }
+    if [[ "${1:-}" == "--web" ]]; then
+        ssh_run_interactive "docker exec -it rl-env-${slug}-pg true && \
+            docker run --rm -d --name pgweb-${slug} --network rl-net \
+              --label rl.role=infra \
+              --label 'traefik.enable=true' \
+              --label 'traefik.http.routers.pgweb-${slug}.rule=Host(\`db-${slug}.rl.lan\`)' \
+              --label 'traefik.http.services.pgweb-${slug}.loadbalancer.server.port=8081' \
+              sosedoff/pgweb --bind=0.0.0.0 --listen=8081 \
+              --url postgres://user:password@rl-env-${slug}-pg:5432/raid_ledger?sslmode=disable"
+        echo "pgweb up at http://db-${slug}.rl.lan"
+    else
+        ssh_run_interactive "docker exec -it rl-env-${slug}-pg psql -U user -d raid_ledger"
+    fi
+}
+
+cmd_logs() {
+    [[ "$TARGET" == "local" ]] && { tail -f "$REPO_ROOT"/*.log 2>/dev/null || echo "no local logs"; exit 0; }
+    local query="${*:-{rl_role=\"runner\"}}"
+    # Open Grafana with the query pre-filled.
+    local url="http://grafana.rl.lan/explore?left=$(printf '%s' "[\"now-1h\",\"now\",\"Loki\",{\"expr\":\"$query\"}]" | jq -sRr @uri)"
+    case "$(uname -s)" in
+        Darwin) open "$url" ;;
+        Linux)  xdg-open "$url" ;;
+        *) echo "$url" ;;
+    esac
+}
+
+cmd_validate_ci() {
+    require_repo_root
+    if [[ "$TARGET" == "local" ]]; then
+        exec "$REPO_ROOT/scripts/validate-ci.sh" "$@"
+    fi
+    ensure_claim
+    # Mutagen pre-flight: make sure the worktree is current before running.
+    SLOT=$(current_slot)
+    flush_mutagen "$SLOT"
+    ssh_run "run-on-runner -- bash /workspace/scripts/validate-ci.sh $*"
+}
+
+cmd_top() {
+    [[ "$TARGET" == "local" ]] && { command -v ctop >/dev/null && exec ctop; echo "install ctop"; exit 1; }
+    ssh_run_interactive "ctop"
+}
+
+cmd_gc() {
+    [[ "$TARGET" == "local" ]] && { echo "no remote sweeper in local mode" >&2; exit 0; }
+    ssh_run_interactive "docker exec rl-gc-sweeper sweep"
+}
+
+cmd_snapshot() {
+    [[ "$TARGET" == "local" ]] && { echo "snapshot is remote-only (ZFS-backed)" >&2; exit 1; }
+    local sub="${1:-}"; local name="${2:-}"
+    case "$sub" in
+        create)   ssh_run_interactive "sudo zfs snapshot rpool/rl-infra@$name" ;;
+        rollback) ssh_run_interactive "sudo zfs rollback rpool/rl-infra@$name" ;;
+        list)     ssh_run_interactive "zfs list -t snapshot rpool/rl-infra" ;;
+        *) echo "rl snapshot {create|rollback|list} <name>" >&2; exit 2 ;;
+    esac
+}
+
+cmd_doctor() {
+    echo "=== rl doctor ==="
+    echo "RL_TARGET (resolved): $TARGET"
+    echo "RL_AGENT_ID:          $RL_AGENT_ID"
+    echo "RL_PROXMOX_HOST:      $RL_PROXMOX_HOST"
+    if [[ "$TARGET" == "remote" ]]; then
+        echo -n "SSH connect:          "; ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" 'echo ok' 2>&1 || echo "FAILED"
+        echo -n "Orchestrator:         "; ssh_run "status" >/dev/null 2>&1 && echo "ok" || echo "FAILED"
+        echo -n "Mutagen daemon:       "; pgrep -f "mutagen daemon run" >/dev/null && echo "running" || echo "not running (start with: mutagen daemon start)"
+        echo -n "Active sync sessions: "; mutagen sync list 2>/dev/null | grep -c '^Name:' || echo 0
+    else
+        echo "(local mode — remote checks skipped)"
+        echo -n "Docker:               "; docker info >/dev/null 2>&1 && echo "ok" || echo "FAILED"
+        echo -n "Env lock:             "; "$REPO_ROOT/scripts/env-lock.sh" status 2>/dev/null | head -1 || echo "unknown"
+    fi
+}
+
+# --- helpers --------------------------------------------------------------
+
+current_slot() {
+    ssh_run "claim --branch unknown" | jq -r '.slot // empty'
+}
+
+ensure_claim() {
+    SLOT=$(current_slot)
+    [[ -z "$SLOT" ]] && { echo "no slot — run 'rl claim' first" >&2; exit 1; }
+}
+
+ensure_mutagen_sync() {
+    local slot="$1"
+    local session="rl-slot-$slot"
+    if mutagen sync list 2>/dev/null | grep -q "Name: $session"; then return; fi
+    if ! command -v mutagen >/dev/null; then
+        echo "[rl] mutagen not installed — install from https://mutagen.io/" >&2
+        return
+    fi
+    mutagen sync create \
+        --name "$session" \
+        --ignore-vcs=false \
+        --ignore=node_modules \
+        --ignore='**/node_modules' \
+        --ignore=dist \
+        --ignore='**/dist' \
+        --ignore=coverage \
+        --ignore='**/coverage' \
+        --ignore=.git/objects \
+        --ignore=playwright-report \
+        --ignore=test-results \
+        "$REPO_ROOT" \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}:/srv/rl-infra/runners/slot-${slot}/worktree"
+}
+
+flush_mutagen() {
+    local slot="$1"
+    command -v mutagen >/dev/null || return 0
+    mutagen sync flush "rl-slot-$slot" 2>/dev/null || true
+}
+
+start_heartbeat_daemon() {
+    local slot="$1"
+    local pidfile="$HOME/.rl-heartbeat-${slot}.pid"
+    [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null && return
+    (
+        while true; do
+            ssh -o ConnectTimeout=5 -o BatchMode=yes \
+                "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+                "RL_AGENT_ID='$RL_AGENT_ID' /srv/rl-infra/orchestrator/bin/heartbeat" >/dev/null 2>&1 || true
+            sleep 60
+        done
+    ) &
+    echo $! > "$pidfile"
+}
+
+stop_heartbeat_daemon() {
+    for pidfile in "$HOME"/.rl-heartbeat-*.pid; do
+        [[ -f "$pidfile" ]] || continue
+        kill "$(cat "$pidfile")" 2>/dev/null || true
+        rm -f "$pidfile"
+    done
+}
+
+# --- dispatch -------------------------------------------------------------
+
+usage() {
+    cat <<EOF
+rl — remote runner CLI (target: $TARGET)
+
+  rl claim [--branch foo]    acquire a slot + start Mutagen + heartbeat
+  rl release                 release slot + clean up
+  rl status                  global view
+  rl shell                   tmux attach into your slot
+  rl logs [filter]           open Loki/Grafana with filter
+  rl env spin <slug>         spin per-env stack (allinone + sibling PG)
+  rl env destroy <slug>      tear down env
+  rl env list                list active envs
+  rl db <slug> [--web]       psql or pgweb against env's Postgres
+  rl validate-ci [args]      run validate-ci.sh inside your runner
+  rl top                     ctop live resource view
+  rl gc                      force a sweeper run
+  rl snapshot {create|rollback|list} <name>
+  rl doctor                  end-to-end health check
+EOF
+}
+
+case "${1:-}" in
+    claim)        shift; cmd_claim "$@" ;;
+    release)      shift; cmd_release "$@" ;;
+    status)       shift; cmd_status "$@" ;;
+    shell)        shift; cmd_shell "$@" ;;
+    env)          shift; cmd_env "$@" ;;
+    db)           shift; cmd_db "$@" ;;
+    logs)         shift; cmd_logs "$@" ;;
+    validate-ci)  shift; cmd_validate_ci "$@" ;;
+    top)          shift; cmd_top "$@" ;;
+    gc)           shift; cmd_gc "$@" ;;
+    snapshot)     shift; cmd_snapshot "$@" ;;
+    doctor)       shift; cmd_doctor "$@" ;;
+    -h|--help|"") usage ;;
+    *) echo "unknown subcommand: $1" >&2; usage >&2; exit 2 ;;
+esac

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Execute a command inside the calling agent's runner container.
+# Streams stdout/stderr back to the caller. Exits with the command's exit code.
+#
+# Required env: RL_AGENT_ID
+# Usage: run-on-runner -- <command> [args...]
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+if [[ "${1:-}" != "--" ]]; then
+    echo "usage: run-on-runner -- <cmd> [args...]" >&2
+    exit 2
+fi
+shift
+
+if [[ -z "${RL_AGENT_ID:-}" ]]; then echo "RL_AGENT_ID required" >&2; exit 2; fi
+SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+[[ -z "$SLOT" ]] && { echo "no slot — run claim first" >&2; exit 2; }
+
+CONTAINER="rl-runner-${SLOT}"
+# -i (not -t) so stdin pipes work without a TTY; callers can opt in via RL_TTY=1.
+EXEC_FLAGS="-i"
+[[ "${RL_TTY:-0}" == "1" ]] && EXEC_FLAGS="-it"
+
+audit::log run-on-runner start "$(jq -nc --argjson slot "$SLOT" --arg cmd "$*" '{slot:$slot, cmd:$cmd}')"
+set +e
+docker exec $EXEC_FLAGS \
+    -w /workspace \
+    -e RL_SLOT="$SLOT" \
+    -e RL_TARGET=runner \
+    "$CONTAINER" \
+    "$@"
+RC=$?
+set -e
+audit::log run-on-runner end "$(jq -nc --argjson slot "$SLOT" --argjson rc "$RC" '{slot:$slot, rc:$rc}')"
+exit "$RC"

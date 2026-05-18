@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Global status: slots, envs, resource summary.
+# Emits JSON by default; pass --pretty for human format.
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+PRETTY=0
+[[ "${1:-}" == "--pretty" ]] && PRETTY=1
+
+CLAIMS=$(cat "$RL_CLAIMS_FILE")
+ENVS_JSON=$(docker ps -a --filter "label=rl.role=env" --format '{{json .}}' | jq -s '
+    map({
+        container: .Names,
+        slug: (.Labels | capture("rl\\.env_slug=(?<v>[^,]+)").v // null),
+        slot: (.Labels | capture("rl\\.slot=(?<v>[^,]+)").v // null),
+        ttl: (.Labels | capture("rl\\.ttl=(?<v>[^,]+)").v // null),
+        last_touched: (.Labels | capture("rl\\.last_touched=(?<v>[^,]+)").v // null),
+        status: .Status,
+        created: .CreatedAt
+    })
+')
+
+# Host resources.
+HOST=$(jq -nc \
+    --arg mem "$(free -h | awk '/^Mem:/ {print $3"/"$2}')" \
+    --arg disk "$(df -h /srv | awk 'NR==2 {print $3"/"$2" ("$5")"}')" \
+    --arg load "$(awk '{print $1, $2, $3}' /proc/loadavg)" \
+    '{memory: $mem, disk: $disk, loadavg: $load}')
+
+# Per-runner stats from docker stats (no-stream).
+RUNNER_STATS=$(docker stats --no-stream --format '{{json .}}' $(docker ps --filter "label=rl.role=runner" --format '{{.Names}}') 2>/dev/null | jq -s '
+    map({container: .Name, cpu: .CPUPerc, mem: .MemUsage, net: .NetIO, block: .BlockIO})
+' || echo '[]')
+
+OUT=$(jq -nc \
+    --argjson claims "$CLAIMS" \
+    --argjson envs "$ENVS_JSON" \
+    --argjson host "$HOST" \
+    --argjson runners "$RUNNER_STATS" \
+    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), slots: $claims, envs: $envs, runners: $runners, host: $host}')
+
+if [[ $PRETTY -eq 1 ]]; then
+    echo "=== rl-infra status ==="
+    echo "Host:    $(jq -r '.host.memory' <<<"$OUT") RAM  |  $(jq -r '.host.disk' <<<"$OUT")  |  load $(jq -r '.host.loadavg' <<<"$OUT")"
+    echo
+    echo "Slots:"
+    jq -r '.slots[] | "  slot-\(.slot): \(if .claimed then "BUSY  agent=\(.agent_id)  branch=\(.branch // "?")  heartbeat=\(.last_heartbeat // "?")" else "FREE" end)"' <<<"$OUT"
+    echo
+    echo "Envs:"
+    jq -r '.envs[] | "  \(.slug // .container): slot=\(.slot // "?")  ttl=\(.ttl // "?")  status=\(.status)"' <<<"$OUT"
+    echo
+    echo "Runners (live):"
+    jq -r '.runners[] | "  \(.container): cpu=\(.cpu)  mem=\(.mem)"' <<<"$OUT"
+else
+    echo "$OUT"
+fi

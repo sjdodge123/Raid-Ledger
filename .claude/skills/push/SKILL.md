@@ -10,6 +10,8 @@ argument-hint: "[--skip-pr]"
 
 **This skill should be used by ALL other skills (/build, /bulk, /fix-batch) when pushing to origin.** Never use raw `git push` — always invoke `/push`.
 
+**rl-infra fleet:** When `RL_TARGET=remote` (the default if Proxmox is reachable) the FULL CI pipeline runs on the rl-infra VM, not the laptop. `scripts/validate-ci.sh` auto-execs `rl validate-ci "$@"` in that case — no per-step changes needed in this skill. After the validation passes, push + PR creation stay local (git/gh are network-bound, not compute-bound). See `.claude/skills/_shared/rl-infra-fleet.md`.
+
 **References:** Read `CLAUDE.md` for project conventions and `TESTING.md` for test failure rules before proceeding. Test failures are NEVER dismissed as "pre-existing."
 
 Execute every step in order. If any step fails, STOP and fix before continuing.

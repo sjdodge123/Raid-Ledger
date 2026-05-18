@@ -8,6 +8,8 @@ argument-hint: "[ROK-XXX | rework | all]"
 
 Pulls dispatchable stories from Linear, profiles them, spawns dev agents in worktrees, validates, reviews, ships. State lives in `<worktree>/build-state.yaml` (per-story isolation prevents concurrent run collisions). Enriched specs go to `planning-artifacts/specs/`.
 
+**rl-infra fleet (default when Proxmox is reachable):** Heavy compute (validate-ci, env stack, integration tests, Playwright) runs on the rl-infra VM, not the laptop. Each parallel dev agent should `rl claim --branch <name>` instead of grabbing the global env lock; there are 4 slots so up to 4 dev agents work concurrently with zero contention. See `.claude/skills/_shared/rl-infra-fleet.md` for command translations. Falls back to today's local model automatically when `RL_TARGET=local`.
+
 **Linear Project:** Raid Ledger (`1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (`0728c19f-5268-4e16-aa45-c944349ce386`)
 

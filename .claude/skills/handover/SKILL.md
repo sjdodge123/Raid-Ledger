@@ -1,12 +1,14 @@
 ---
 name: handover
 description: "End-of-session — shut down teams, manage PRs, clean up worktrees, sync Linear, rebuild for testing, capture notes"
-allowed-tools: "Bash(git *), Bash(gh *), Bash(./scripts/deploy_dev.sh*), Read, Write, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__get_issue"
+allowed-tools: "Bash(git *), Bash(gh *), Bash(./scripts/deploy_dev.sh*), Bash(./rl-infra/cli/rl*), Bash(rl*), Read, Write, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__get_issue"
 ---
 
 # Handover
 
 End-of-session cleanup: shut down agent teams, manage open PRs, clean up worktrees, sync Linear, rebuild for manual testing, and capture session context for the next `/init`.
+
+**rl-infra fleet:** When `RL_TARGET=remote`, also `rl release` for every slot this session claimed before exiting. The gc-sweeper will auto-reclaim within ~20min anyway, but explicit release frees the slot immediately for the next agent. The "rebuild for testing" step becomes `rl env spin <slug>` (prod-like allinone) rather than `deploy_dev.sh`. See `.claude/skills/_shared/rl-infra-fleet.md`.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 

@@ -1,0 +1,90 @@
+#cloud-config
+# rl-infra VM provisioning.
+# Drop this into Proxmox's cloud-init pane (Datacenter → Storage → snippets, then
+# qm set <vmid> --cicustom "user=<storage>:snippets/cloud-init.yaml").
+
+hostname: rl-infra
+manage_etc_hosts: true
+
+users:
+  - name: rl
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    groups: [docker, sudo]
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExQVbOccZCldw5TEj+FlVIfJAnTKAaEf75BT+MhJS6K laptop@home
+
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - jq
+  - tmux
+  - htop
+  - tcpdump
+  - postgresql-client
+  - net-tools
+  - rsync
+  - git
+  - unzip
+  - software-properties-common
+
+write_files:
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": { "max-size": "10m", "max-file": "3" },
+        "default-address-pools": [
+          { "base": "172.30.0.0/16", "size": 24 }
+        ],
+        "metrics-addr": "127.0.0.1:9323",
+        "experimental": true
+      }
+  - path: /etc/sysctl.d/99-rl-infra.conf
+    content: |
+      vm.max_map_count=262144
+      fs.inotify.max_user_watches=524288
+      fs.inotify.max_user_instances=512
+  - path: /srv/rl-infra/.env.example
+    content: |
+      # Copy to /srv/rl-infra/.env and edit.
+      RL_DOMAIN=rl.lan
+      GRAFANA_ADMIN_PASSWORD=changeme
+      REGISTRY_HOST=registry.rl.lan
+      # Number of runner slots. Default 2 (sized for 16 GB VM).
+      # If you enable the `extra-slots` compose profile to start slots 3+4,
+      # also set RUNNER_SLOTS=4 here so the orchestrator initializes the
+      # additional claim rows.
+      RUNNER_SLOTS=2
+
+runcmd:
+  # Docker CE
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  - chmod a+r /etc/apt/keyrings/docker.gpg
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable --now docker
+  - sysctl -p /etc/sysctl.d/99-rl-infra.conf
+
+  # ctop (per-container resource live view)
+  - curl -fsSL https://github.com/bcicen/ctop/releases/download/v0.7.7/ctop-0.7.7-linux-amd64 -o /usr/local/bin/ctop
+  - chmod +x /usr/local/bin/ctop
+
+  # Mutagen agent (host-side; clients connect via SSH)
+  - curl -fsSL https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_linux_amd64_v0.18.1.tar.gz | tar -xz -C /usr/local/bin mutagen mutagen-agent
+  - chmod +x /usr/local/bin/mutagen /usr/local/bin/mutagen-agent
+
+  # State + runner worktree dirs (ZFS quota applied separately on Proxmox host)
+  # Default 2 runner worktree dirs. Slot 3+4 dirs are created on-demand if you
+  # enable the `extra-slots` compose profile later.
+  - mkdir -p /srv/rl-infra/{state,runners/slot-1/worktree,runners/slot-2/worktree,envs,bin,traefik,loki,grafana,gc-sweeper}
+  - chown -R rl:rl /srv/rl-infra
+  - touch /srv/rl-infra/state/{claims.json,env-registry.json,audit.log}
+  - chown rl:rl /srv/rl-infra/state/*
+
+final_message: "rl-infra VM ready. SCP rl-infra/* to /srv/rl-infra/, then `docker compose up -d`."

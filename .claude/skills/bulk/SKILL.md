@@ -8,6 +8,8 @@ argument-hint: "[ROK-XXX ROK-YYY | all]"
 
 Pulls small-scope stories (Tech Debt, Chore, Performance), batches them, spawns parallel dev and reviewer teammates inside a single Agent Team, merges all into one batch branch, validates, and ships one PR. No operator gate, no test agents, no architect. Quality gate: integration tests + full CI on the merged batch branch.
 
+**rl-infra fleet (default when Proxmox is reachable):** Each dev teammate `rl claim`s its own slot (4 slots = 4 concurrent devs, no env-lock contention). The merge-and-validate step runs `rl validate-ci --full` on the lead's slot against an `rl env spin <batch>` allinone env. Falls back to today's local model when `RL_TARGET=local`. See `.claude/skills/_shared/rl-infra-fleet.md`.
+
 **Requires Agent Teams:** `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set in `~/.claude/settings.json` (already configured). Teammates self-claim tasks from a shared task list and message each other directly for auto-fix loops — the Lead only orchestrates the batch.
 
 **Linear Project:** Raid Ledger (`1bc39f98-abaa-4d85-912f-ba62c8da1532`)

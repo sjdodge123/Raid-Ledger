@@ -43,6 +43,16 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
+# ---------------------------------------------------------------------------
+# RL_TARGET=remote shortcut — ship validation to the rl-infra runner.
+# Default behavior unchanged. Opt in by exporting RL_TARGET=remote or by
+# passing through rl-infra/cli/rl, which sets it on your behalf.
+# ---------------------------------------------------------------------------
+if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1" ]; then
+  export RL_TARGET_DISPATCHED=1   # prevent loop if rl re-execs us inside the runner
+  exec "$REPO_ROOT/rl-infra/cli/rl" validate-ci "$@"
+fi
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'

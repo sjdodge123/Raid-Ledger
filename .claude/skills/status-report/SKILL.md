@@ -10,6 +10,8 @@ description: "Print a consistent, scannable status snapshot AND sync the 'Raid L
 1. A **visible snapshot** printed to the operator's terminal — what's happening right now.
 2. A **silent Linear doc sync** of the "Raid Ledger — Active State" doc Derived section — so future sessions can read the cross-session picture. A one-line footer confirms it ran.
 
+**rl-infra fleet:** When `RL_TARGET=remote`, also include `rl status --pretty` output as a "Remote fleet" subsection of the snapshot — shows the 4 slots (busy/free, claimants, branches), active envs with TTL remaining, and host RAM/CPU. The Active State doc's Derived section gains an `rl-infra` block summarizing the same. See `.claude/skills/_shared/rl-infra-fleet.md`.
+
 The visible snapshot's shape depends on branch — but **both pieces fire on every run**, regardless of branch. You do not pick one or the other.
 
 - **Story-branch mode** (`rok-\d+` in branch name) — per-agent snapshot of THIS window. The operator runs 10+ agent windows in parallel and forgets which window is which; this skill lets them identify the window in 10 seconds. Output MUST match the template exactly — same fields, same order, same labels — every invocation. Consistency is the entire point. If a field has no content, write `none`. Never substitute "no progress yet" or other prose for missing fields.
