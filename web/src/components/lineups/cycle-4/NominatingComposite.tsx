@@ -396,7 +396,7 @@ export function NominatingComposite(
           inside the sticky wrapper. */}
       <div
         ref={stickyHeaderRef}
-        className={`sticky top-14 z-20 bg-background/95 backdrop-blur-sm rounded-md py-1 will-change-transform md:translate-y-0 ${
+        className={`sticky top-14 z-20 bg-background/95 backdrop-blur-sm rounded-md px-3 py-3 will-change-transform md:translate-y-0 ${
           heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
         }`}
         style={{ transition: 'transform 300ms ease-in-out' }}
