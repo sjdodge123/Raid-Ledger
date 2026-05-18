@@ -512,3 +512,8 @@ ROK-1312 was generated with migration index 0141 against `origin/main` at `8c7e1
   Suggested: tighten the mock's return type annotation OR cast the spread argument as a tuple.
 
 Net: GitHub CI green on origin/main (build excludes specs); local `validate-ci.sh --full` red. Operator-only impact (until CI tightens). Documenting here so the next agent running `validate-ci.sh` doesn't waste time bisecting.
+
+### 2026-05-17 — fix/batch-2026-05-17 (surfaced during reviewer pass)
+
+- **[low]** `api/src/feedback/feedback.controller.ts:81` — `attachSlowQueryContext` receives untrimmed `clientLogs` from `parsed.data` instead of `truncatedClientLogs`. Functionally harmless (the method only uses it as a truthiness gate; Zod already caps at 50_000), but semantically inconsistent with line 75 which correctly persists the trimmed value. ROK-1312 reviewer surfaced.
+  Suggested: pass `truncatedClientLogs` for consistency, OR rename the parameter to `hasClientLogs: boolean` to make the gate intent explicit.
