@@ -67,6 +67,42 @@ for slot in $DEAD_SLOTS; do
     audit dead_claim_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
 done
 
+# 1b. Orphan / unhealthy envs. Two failure modes the sweeper catches:
+#   (a) env-registry.json has a slug whose containers don't exist (env-destroy
+#       crashed mid-way, or container was killed externally).
+#   (b) Allinone container exists but Docker marks it 'unhealthy' (nginx
+#       crashed inside, app boot failed, etc.) for >5 minutes — auto-destroy
+#       so the dashboard doesn't show a dead URL as "live".
+ENVS_REGISTERED=$(jq -r '.[] | .slug' "$ENVS" 2>/dev/null || true)
+for slug in $ENVS_REGISTERED; do
+    [[ -z "$slug" ]] && continue
+    APP="rl-env-${slug}-allinone"
+    if ! docker inspect "$APP" >/dev/null 2>&1; then
+        log "destroying orphan env $slug (registry entry exists but $APP container is gone)"
+        docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+        docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+        rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+        mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
+        audit orphan_env_pruned "$(jq -nc --arg slug "$slug" '{slug:$slug, reason:"container_missing"}')"
+        continue
+    fi
+    HEALTH=$(docker inspect "$APP" --format '{{.State.Health.Status}}' 2>/dev/null || echo "none")
+    if [[ "$HEALTH" == "unhealthy" ]]; then
+        # Give the env a 5-minute grace from spin time before reaping for unhealth.
+        STARTED=$(docker inspect "$APP" --format '{{.State.StartedAt}}' 2>/dev/null || echo "")
+        STARTED_EPOCH=$(date -u -d "$STARTED" +%s 2>/dev/null || echo "$NOW_EPOCH")
+        UPTIME=$(( NOW_EPOCH - STARTED_EPOCH ))
+        if (( UPTIME >= 300 )); then
+            log "destroying unhealthy env $slug (allinone has been unhealthy for ${UPTIME}s)"
+            docker rm -f "$APP" "rl-env-${slug}-pg" >/dev/null 2>&1 || true
+            docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+            rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+            mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
+            audit unhealthy_env_pruned "$(jq -nc --arg slug "$slug" --argjson uptime "$UPTIME" '{slug:$slug, uptime_s:$uptime, reason:"unhealthy"}')"
+        fi
+    fi
+done
+
 # 2. TTL-expired envs.
 docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid; do
     [[ -z "$cid" ]] && continue

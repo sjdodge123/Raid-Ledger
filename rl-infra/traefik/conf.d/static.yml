@@ -8,7 +8,11 @@ http:
           X-Rl-Infra: "true"
 
   routers:
-    # Dashboard / API on traefik.rl.lan — handled by Traefik's internal `api@internal`.
+    # Infra services intentionally LAN-only (Host(`X.rl.lan`), NOT a regex).
+    # Traefik dashboard runs with insecure:true (no auth) and Grafana/Registry
+    # are admin tools — exposing them on the external apex would require
+    # auth wiring we don't have. The fleet dashboard surfaces a "switch to
+    # LAN" hint when accessed externally to call this out.
     traefik-dash:
       rule: "Host(`traefik.rl.lan`)"
       service: api@internal

@@ -26,8 +26,12 @@
       <div id="envs" class="grid"></div>
     </section>
 
-    <section>
-      <h2>Infra</h2>
+    <!-- Infra section is operator-only (Traefik dashboard / Grafana / Registry
+         are NOT exposed externally for security). Hidden when this page is
+         accessed via an external hostname — JS adds .show-infra to <body>
+         only when on the LAN .rl.lan domain. -->
+    <section id="infra-section" style="display:none">
+      <h2>Infra <span class="muted">— LAN only</span></h2>
       <div class="grid">
         <a class="card link" href="http://traefik.rl.lan/dashboard/" target="_blank" rel="noopener">
           <div class="card-title">Traefik</div>

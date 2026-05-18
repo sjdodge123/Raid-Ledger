@@ -160,5 +160,12 @@ const tick = async () => {
   }
 };
 
+// Infra cards (Traefik/Grafana/Registry) are LAN-only because those services
+// aren't exposed externally for security. Show the section ONLY when the
+// dashboard was loaded via the .rl.lan hostname.
+if (window.location.hostname.endsWith('.rl.lan')) {
+  $('infra-section').style.display = '';
+}
+
 tick();
 setInterval(tick, REFRESH_MS);

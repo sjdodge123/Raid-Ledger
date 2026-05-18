@@ -226,6 +226,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./state:/state
+      # Mount traefik/conf.d so the sweeper can remove env-{slug}.yml route
+      # files when it prunes orphan envs (otherwise Traefik keeps a stale
+      # route → 502 for the env URL even after the container is gone).
+      - ./traefik/conf.d:/traefik-conf.d
     environment:
       SWEEP_INTERVAL_SECONDS: "900"   # 15min
       CLAIM_HEARTBEAT_TIMEOUT_SECONDS: "300"  # 5min
