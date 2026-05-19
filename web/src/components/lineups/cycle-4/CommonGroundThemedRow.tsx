@@ -152,11 +152,6 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
           fluid
         />
       </div>
-      {tile.whyReason && (
-        <div className="text-xs text-emerald-300 leading-snug px-1 line-clamp-2 md:min-h-[2.5rem] md:w-full">
-          ★ {tile.whyReason}
-        </div>
-      )}
       <button
         type="button"
         disabled={disabled || atCap || isNominating}
@@ -167,12 +162,29 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
           if (disabled || atCap || isNominating) return;
           onNominate(tile.gameId);
         }}
-        // Mobile: 44px tap target full-width. Desktop: 32px compact,
-        // intrinsic width so the button doesn't stretch across the card.
-        className="min-h-[44px] sm:min-h-[32px] px-4 py-2 sm:py-1 text-sm rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 transition-colors md:w-auto md:self-start"
+        // ROK-1297 round 5ac: button sits ABOVE the reason text so it's
+        // adjacent to the cover (the action the user looked at last) and
+        // the reason flows underneath as supporting context. Full-width
+        // on every breakpoint; mobile keeps 44px tap target, desktop 32px.
+        className="w-full min-h-[44px] sm:min-h-[32px] px-4 py-2 sm:py-1 text-sm rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 transition-colors"
       >
         {isNominating ? 'Adding…' : atCap ? 'Lineup full' : '+ Nominate'}
       </button>
+      {(() => {
+        // ROK-1297 round 5z: when this tile is AI-suggested, the badge's
+        // old hover-tooltip carried the rich LLM reasoning while the line
+        // below showed the generic whyReason — two sources conflicting.
+        // Prefer aiReasoning (richer, contextual) when present; fall back
+        // to whyReason.
+        const reasonText =
+          aiSuggested && aiReasoning ? aiReasoning : tile.whyReason;
+        if (!reasonText) return null;
+        return (
+          <div className="text-xs text-emerald-300 leading-snug px-1 md:w-full">
+            ★ {reasonText}
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -35,13 +35,13 @@ interface Props {
     fluid?: boolean;
 }
 
-/** Violet ✨ AI Pick chip rendered on cards blended in from the AI suggester. */
-function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
+/** Violet ✨ AI Pick chip rendered on cards blended in from the AI suggester.
+ *  ROK-1297 round 5z: native title-tooltip removed; the AI reasoning is
+ *  injected into the ★ whyReason line under the card by CommonGroundThemedRow,
+ *  so there is no longer a conflicting hover surface. */
+function AiBadge(): JSX.Element {
     return (
-        <span
-            className="absolute top-2 left-2 z-10 px-2 py-0.5 text-xs font-bold bg-violet-500/90 text-white rounded shadow-sm"
-            title={reasoning ?? 'Suggested by AI'}
-        >
+        <span className="absolute top-2 left-2 z-10 px-2 py-0.5 text-xs font-bold bg-violet-500/90 text-white rounded shadow-sm">
             ✨ AI Pick
         </span>
     );
@@ -167,7 +167,7 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
 }
 
 /** Game card for the Common Ground panel. */
-export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, aiSuggested, aiReasoning, hideOverlay, fluid }: Props): JSX.Element {
+export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, aiSuggested, hideOverlay, fluid }: Props): JSX.Element {
     const borderCls = aiSuggested
         ? 'border-violet-500/50 hover:border-violet-400/80'
         : 'border-edge/50 hover:border-emerald-500/50';
@@ -175,7 +175,7 @@ export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, ai
     return (
         <div className={`group relative ${widthCls} rounded-xl overflow-hidden bg-panel border ${borderCls} hover:shadow-lg transition-all cursor-pointer`}>
             <div className="relative aspect-[3/4] bg-panel">
-                {aiSuggested && <AiBadge reasoning={aiReasoning} />}
+                {aiSuggested && <AiBadge />}
                 {game.coverUrl
                     ? <CoverImage src={game.coverUrl} alt={game.gameName} />
                     : <CoverPlaceholder />}

@@ -1,7 +1,10 @@
 /**
- * Slide-out drawer for the viewer's already-nominated games (ROK-1297
- * round 5h). Replaces the "scroll the whole page to the bottom" flow
- * when the operator taps the "Nominations · N" button in the sticky
+ * Slide-out drawer for the entire lineup's running nominations
+ * (ROK-1297 round 5h, relabel 5x). Shows every nomination on the
+ * lineup — not just the viewer's — so participants can see what
+ * the group has on the running list while scrolling Common Ground.
+ * Replaces the "scroll the whole page to the bottom" flow when the
+ * operator taps the "Nominations · N" button in the sticky
  * JourneyHero. Mobile renders as a bottom-sheet; desktop as a right-
  * side drawer. Chrome mirrors `GameResearchDrawer` (U2) so the two
  * drawers feel like the same primitive.
@@ -64,7 +67,7 @@ function DrawerHeader({
     <div className="flex items-center justify-between px-4 py-3 border-b border-edge-subtle">
       <div>
         <h2 className="text-base font-semibold text-foreground">
-          Your nominations
+          Nominations
         </h2>
         <p className="text-xs text-muted">
           {count === 0
@@ -110,7 +113,7 @@ function DrawerBody({
   if (entries.length === 0) {
     return (
       <div className="p-6 text-center text-sm text-muted">
-        You haven&apos;t nominated any games yet.
+        No nominations yet.
       </div>
     );
   }
@@ -143,7 +146,7 @@ export function MyNominationsDrawer(
       data-testid="my-nominations-drawer"
       role="dialog"
       aria-modal="true"
-      aria-label="Your nominations"
+      aria-label="Nominations"
       tabIndex={-1}
     >
       <div

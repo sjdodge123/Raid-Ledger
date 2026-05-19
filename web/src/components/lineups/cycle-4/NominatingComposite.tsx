@@ -143,46 +143,6 @@ function StickyHeroJumpButton({
 }
 
 /**
- * Compact Regenerate trigger embedded in the sticky JourneyHero (round
- * 5d). Bumps the external trigger counter on CommonGroundHero so the
- * same refetch + shuffle flow runs as the in-panel Regenerate button.
- */
-function StickyHeroRegenerateButton({
-  onClick,
-  disabled,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label="Regenerate Common Ground suggestions"
-      data-testid="sticky-hero-regenerate"
-      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <svg
-        aria-hidden="true"
-        className="w-4 h-4 stroke-current flex-shrink-0"
-        viewBox="0 0 24 24"
-        fill="none"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-        <path d="M21 3v5h-5" />
-        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-        <path d="M3 21v-5h5" />
-      </svg>
-      <span>Refresh</span>
-    </button>
-  );
-}
-
-/**
  * Replaces the Search button on mobile when search mode is active —
  * single tap returns to suggestions.
  */
@@ -396,7 +356,7 @@ export function NominatingComposite(
           inside the sticky wrapper. */}
       <div
         ref={stickyHeaderRef}
-        className={`sticky top-14 z-20 bg-background/95 backdrop-blur-sm rounded-md px-3 py-3 will-change-transform md:translate-y-0 ${
+        className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:translate-y-0 ${
           heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
         }`}
         style={{ transition: 'transform 300ms ease-in-out' }}

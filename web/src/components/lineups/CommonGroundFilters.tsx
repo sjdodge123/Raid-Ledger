@@ -54,30 +54,6 @@ function MinOwnersSlider({
     );
 }
 
-/** Dropdown to filter by ITAD tag / genre. */
-function GenreDropdown({
-    value,
-    tags,
-    onChange,
-}: {
-    value: string | undefined;
-    tags: string[];
-    onChange: (v: string | undefined) => void;
-}): JSX.Element {
-    return (
-        <select
-            value={value ?? ''}
-            onChange={(e) => onChange(e.target.value || undefined)}
-            className="min-h-[44px] w-full bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-        >
-            <option value="">All genres</option>
-            {tags.map((t) => (
-                <option key={t} value={t}>{t}</option>
-            ))}
-        </select>
-    );
-}
-
 /** Slider for filtering by player count. */
 function PlayersSlider({
     value,
@@ -109,7 +85,7 @@ function PlayersSlider({
 }
 
 /** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, availableTags, search, onSearchChange, participantCount }: Props): JSX.Element {
+export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount }: Props): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
         [filters, onChange],
@@ -129,7 +105,7 @@ export function CommonGroundFilters({ filters, onChange, availableTags, search, 
     }, [participantCount, filters, onChange]);
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr] gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:repeat(3,minmax(220px,1fr))] gap-3 sm:gap-4 items-center">
             <input
                 type="search"
                 value={search}
@@ -141,11 +117,6 @@ export function CommonGroundFilters({ filters, onChange, availableTags, search, 
             <MinOwnersSlider
                 value={filters.minOwners ?? 2}
                 onChange={(v) => update({ minOwners: v })}
-            />
-            <GenreDropdown
-                value={filters.genre}
-                tags={availableTags}
-                onChange={(v) => update({ genre: v })}
             />
             <PlayersSlider
                 value={filters.maxPlayers}
