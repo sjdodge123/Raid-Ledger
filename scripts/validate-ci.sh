@@ -40,6 +40,15 @@
 
 set -euo pipefail
 
+# ROK-1326 fix-11: when this script runs inside the rl-infra fleet runner
+# (via `rl validate-ci` → run-on-runner → docker exec as root in
+# /workspace owned by uid 1001), git's dubious-ownership check fires
+# on every git call. GIT_CONFIG_PARAMETERS is process-scoped and writes
+# no on-disk config — harmless on the laptop, required on the fleet
+# runner. Whitelists everything (the laptop's own repo root, AND
+# /workspace inside the runner container).
+export GIT_CONFIG_PARAMETERS="'safe.directory=*'"
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
