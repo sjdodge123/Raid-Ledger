@@ -413,4 +413,35 @@ else
     fi
 fi
 
+# 3. Restart the env's allinone container to flush the settings cache.
+#    The api's settings service caches decrypted settings on boot (30-min
+#    TTL). Without a restart, the new app_settings rows we just wrote sit
+#    on disk but the running api keeps serving stale cache — agents see
+#    Discord OAuth still showing client_id=placeholder + localhost
+#    callback and conclude the sync didn't work. This is the single most
+#    common agent-hit issue with the fleet sync flow (operator note
+#    2026-05-19). Same pattern as CLAUDE.md's clone-prod-to-local
+#    runbook Step 4 ("Bounce the API to invalidate the settings cache").
+#    Restart is best-effort: a failure here is non-fatal because the
+#    operator can always restart manually, but we WARN loudly so the
+#    failure surfaces in the agent's chat instead of looking like
+#    success-but-broken-OAuth.
+echo "  restarting env to flush settings cache..." >&2
+set +e
+ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+    "docker restart 'rl-env-${SLUG}-allinone' >/dev/null"
+RESTART_RC=$?
+set -e
+if (( RESTART_RC != 0 )); then
+    echo "WARN: env restart exit ${RESTART_RC} — settings cache may still be stale." >&2
+    echo "       Retry manually: ssh ${RL_PROXMOX_USER}@${RL_PROXMOX_HOST} 'docker restart rl-env-${SLUG}-allinone'" >&2
+else
+    # Allow ~12s for the api to come back up + reload its settings cache.
+    # The health probe is the api's /api/health endpoint, but that requires
+    # external network (Cloudflare etc.) — we instead just sleep, which is
+    # robust against transient routing issues during fleet bring-up.
+    sleep 12
+    echo "  env restarted; settings cache reloaded." >&2
+fi
+
 echo "Sync complete." >&2
