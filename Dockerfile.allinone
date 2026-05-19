@@ -177,7 +177,7 @@ COPY --from=builder /app/api/seeds ./dist/seeds
 # (meta/_journal.json), the JS bundle, seed JSON, or static assets at boot.
 # a+rX adds read for everyone, plus execute on directories only (so they
 # stay traversable). No-op on CI builds where perms are already 644.
-RUN chmod -R a+rX ./drizzle/migrations ./dist ./assets ./seeds ./node_modules
+RUN chmod -R a+rX ./drizzle/migrations ./dist ./assets ./node_modules
 
 # Copy entrypoint
 COPY api/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
