@@ -87,29 +87,57 @@ case "$MODE" in
     full)
         # Full data clone. Schema preserved (env's allinone runs migrations at
         # boot). We --disable-triggers so FK ordering doesn't bite. TRUNCATE
-        # pre-step computed below because the allinone's boot seeders
-        # (games, dungeon_quests, boss_encounters) populate rows BEFORE
-        # this sync runs — INSERTs would PK-collide without the wipe.
+        # pre-step + schema-drift exclusions both computed at runtime against
+        # the env's actual table set.
         DUMP_ARGS=(
             --data-only --inserts
             --disable-triggers
             --exclude-table-data='drizzle.*'
             --no-owner --no-privileges
         )
-        # Discover all user tables in the env's public schema and TRUNCATE
-        # them. RESTART IDENTITY resets serial sequences so the synced PKs
-        # don't end up below the env's nextval pointer. CASCADE handles FK
-        # ordering. drizzle schema is left alone (migration metadata).
-        echo "  computing TRUNCATE pre-step from env's public schema..." >&2
-        PRE_SQL=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+        # 1) Discover all user tables in the env's public schema. Use for
+        #    BOTH the TRUNCATE pre-step AND schema-drift filtering.
+        echo "  discovering env's public schema..." >&2
+        ENV_TABLES=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
             "docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -tA -c \"
-                SELECT 'TRUNCATE TABLE ' || string_agg(quote_ident(tablename), ', ')
-                       || ' RESTART IDENTITY CASCADE;'
-                FROM pg_tables WHERE schemaname = 'public';\"" 2>/dev/null)
-        if [[ -z "$PRE_SQL" || "$PRE_SQL" == "TRUNCATE TABLE  RESTART IDENTITY CASCADE;" ]]; then
-            echo "ERROR: couldn't compute TRUNCATE statement (env pg not ready or no tables?)." >&2
+                SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;\"" 2>/dev/null)
+        if [[ -z "$ENV_TABLES" ]]; then
+            echo "ERROR: env's public schema is empty or pg not ready." >&2
             exit 3
         fi
+        # 2) TRUNCATE all of them (CASCADE handles FK ordering, RESTART IDENTITY
+        #    resets sequences so synced PKs don't collide with the seed nextval).
+        TRUNCATE_LIST=$(echo "$ENV_TABLES" | awk '{printf "%s%s", (NR==1?"":", "), $0}')
+        PRE_SQL="TRUNCATE TABLE ${TRUNCATE_LIST} RESTART IDENTITY CASCADE;"
+        # 3) Schema-drift filter — operator's local may have tables the env
+        #    doesn't (agent's branch is behind on migrations, or older env
+        #    image, etc.). pg_dump --exclude-table-data those so the INSERT
+        #    stream doesn't try to populate tables that don't exist on the
+        #    target. Skipped data is logged below for operator visibility.
+        LOCAL_TABLES=$(docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -c \
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>/dev/null)
+        EXTRA_LOCAL=$(comm -23 \
+            <(echo "$LOCAL_TABLES" | sort -u) \
+            <(echo "$ENV_TABLES" | sort -u))
+        if [[ -n "$EXTRA_LOCAL" ]]; then
+            echo "  schema drift detected — operator has these tables, env doesn't:" >&2
+            echo "$EXTRA_LOCAL" | sed 's/^/    /' >&2
+            echo "  excluding them from the dump (env's branch may be behind on migrations)" >&2
+            while IFS= read -r t; do
+                [[ -z "$t" ]] && continue
+                DUMP_ARGS+=(--exclude-table-data="public.$t")
+            done <<< "$EXTRA_LOCAL"
+        fi
+        # 4) Sequence-drift filter. pg_dump emits SELECT pg_catalog.setval(...)
+        #    lines for EVERY sequence in operator's local, regardless of
+        #    --exclude-table-data on the parent table. Sequences for tables
+        #    that don't exist in env fail with "relation does not exist".
+        #    We capture env's sequence list now and use it later (post-dump)
+        #    to filter the stream.
+        ENV_SEQUENCES=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+            "docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -tA -c \"
+                SELECT sequence_name FROM information_schema.sequences
+                WHERE sequence_schema = 'public' ORDER BY sequence_name;\"" 2>/dev/null)
         ;;
 esac
 
@@ -120,13 +148,37 @@ echo "Sync $MODE: $LOCAL_DB_CONTAINER → $RL_PROXMOX_HOST:$ENV_PG_CONTAINER" >&
 # ON_ERROR_STOP=1 so the first error aborts the rest of the stream.
 REMOTE_PSQL="docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -v ON_ERROR_STOP=1 --single-transaction"
 
-# Apply pre-SQL (TRUNCATE) if any, then pipe pg_dump → psql.
+# Apply pre-SQL (TRUNCATE) if any, then pipe pg_dump → psql. When sequence
+# drift exists (full mode, env missing sequences operator's local has),
+# pipe through awk that drops `SELECT pg_catalog.setval('public.<X>', ...)`
+# lines for any <X> not in env's sequence list. Single-line setval calls
+# only — multi-line setvals don't happen in pg_dump output.
+SEQUENCE_FILTER='cat'
+if [[ -n "${ENV_SEQUENCES:-}" ]]; then
+    # awk -v doesn't handle embedded newlines, so flatten env's sequence
+    # list with `|` (never appears in pg sequence names) and split on `|`
+    # inside awk's BEGIN block.
+    ENV_SEQUENCES_FLAT=$(echo "$ENV_SEQUENCES" | tr '\n' '|')
+    # Parse each setval line — extract the sequence name between
+    # `setval('public.` and the closing `'`. Drop the line if not in
+    # env's allowed set.
+    SEQUENCE_FILTER='awk -v seqs="'"$ENV_SEQUENCES_FLAT"'" '"'"'
+        BEGIN { n = split(seqs, a, "|"); for (i=1; i<=n; i++) ok[a[i]] = 1 }
+        /^SELECT pg_catalog.setval\(.public\./ {
+            name = $0
+            sub(/.*setval\(.public\./, "", name)
+            sub(/.,.*/, "", name)
+            if (!(name in ok)) next
+        }
+        { print }
+    '"'"
+fi
 {
     [[ -n "$PRE_SQL" ]] && echo "$PRE_SQL"
     docker exec "$LOCAL_DB_CONTAINER" pg_dump "${DUMP_ARGS[@]}" "$DATABASE_URL"
-} | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+} | eval "$SEQUENCE_FILTER" | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
     "$REMOTE_PSQL" 2>&1 | tail -30
-SYNC_RC=${PIPESTATUS[1]}
+SYNC_RC=${PIPESTATUS[2]}
 if (( SYNC_RC != 0 )); then
     echo "ERROR: sync transaction failed (exit $SYNC_RC). DB left at pre-transaction state." >&2
     exit "$SYNC_RC"
