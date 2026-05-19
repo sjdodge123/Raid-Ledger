@@ -212,12 +212,12 @@ test.describe('Decided composite — old surfaces removed (AC5)', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Decided composite — drawer interactions (AC6)', () => {
-    test('clicking a match row opens the GameResearchDrawer', async ({
-        page,
-    }) => {
+    test('clicking a match row navigates to /games/:id', async ({ page }) => {
+        // ROK-1297 round 5y: GameResearchDrawer was replaced with a
+        // router navigation to /games/:id. The row click must change
+        // the URL, NOT mount a drawer overlay.
         await gotoDecided(page);
 
-        // Drawer not open initially.
         await expect(page.getByTestId('game-research-drawer')).toHaveCount(0);
 
         const yourSection = page.getByTestId('decided-your-matches-section');
@@ -225,8 +225,8 @@ test.describe('Decided composite — drawer interactions (AC6)', () => {
         await expect(firstRow).toBeVisible({ timeout: 10_000 });
         await firstRow.click();
 
-        const drawer = page.getByTestId('game-research-drawer');
-        await expect(drawer).toBeVisible({ timeout: 10_000 });
+        await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
+        expect(page.url()).toMatch(/\/games\/\d+/);
     });
 
     test('clicking the "Pick a time" CTA does NOT open the drawer', async ({

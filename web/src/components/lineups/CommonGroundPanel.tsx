@@ -140,7 +140,6 @@ function GameGrid(props: GameGridProps): JSX.Element {
                             isNominating={nominatingId === g.gameId}
                             atCap={atCap}
                             aiSuggested={!!ai}
-                            aiReasoning={ai?.reasoning}
                         />
                     );
                 })}
@@ -155,7 +154,6 @@ function PanelContent({
     mergedData,
     filters,
     setFilters,
-    availableTags,
     participantCount,
     isLoading,
     isError,
@@ -170,7 +168,6 @@ function PanelContent({
     mergedData: CommonGroundResponseDto | undefined;
     filters: CommonGroundParams;
     setFilters: (f: CommonGroundParams) => void;
-    availableTags: string[];
     participantCount: number;
     isLoading: boolean;
     isError: boolean;
@@ -187,7 +184,6 @@ function PanelContent({
             <CommonGroundFilters
                 filters={filters}
                 onChange={setFilters}
-                availableTags={availableTags}
                 search={search}
                 onSearchChange={setSearch}
                 participantCount={participantCount}

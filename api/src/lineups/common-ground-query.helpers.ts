@@ -27,6 +27,7 @@ import {
   gameToTasteVector,
   type IntensityBucket,
 } from './common-ground-taste.helpers';
+import { classifyTheme, buildWhyReason } from './common-ground-theme.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -51,6 +52,7 @@ export interface CommonGroundRow {
   itadCurrentCut: number | null;
   itadCurrentShop: string | null;
   itadCurrentUrl: string | null;
+  itadLowestPrice: number | null;
   earlyAccess: boolean;
   itadTags: string[];
   playerCount: { min: number; max: number } | null;
@@ -91,6 +93,7 @@ export async function queryCommonGround(
       g.itad_current_cut AS "itadCurrentCut",
       g.itad_current_shop AS "itadCurrentShop",
       g.itad_current_url AS "itadCurrentUrl",
+      CASE WHEN g.itad_lowest_price IS NOT NULL THEN g.itad_lowest_price::float ELSE NULL END AS "itadLowestPrice",
       g.early_access AS "earlyAccess",
       COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
       g.player_count AS "playerCount",
@@ -257,6 +260,7 @@ export function mapCommonGroundRow(
     itadCurrentCut: safeRow.itadCurrentCut,
     itadCurrentShop: safeRow.itadCurrentShop,
     itadCurrentUrl: safeRow.itadCurrentUrl,
+    itadLowestPrice: safeRow.itadLowestPrice,
     earlyAccess: safeRow.earlyAccess,
     itadTags: safeRow.itadTags,
     playerCount: safeRow.playerCount,
@@ -277,6 +281,48 @@ function toAppliedWeights(weights: CommonGroundWeights) {
   };
 }
 
+/**
+ * Augment a scored game with the ROK-1297 themed-row classification +
+ * human-readable rationale. Skipped when the breakdown isn't available
+ * (legacy callers without a scoring context) so the additive fields stay
+ * truly optional. Both fields are set together or not at all.
+ */
+function withThemeAndWhyReason(game: CommonGroundGameDto): CommonGroundGameDto {
+  if (!game.scoreBreakdown) return game;
+  const theme = classifyTheme(
+    game.scoreBreakdown,
+    game.ownerCount,
+    game.itadCurrentCut,
+  );
+  const whyReason = buildWhyReason(game, theme, {
+    ownerCount: game.ownerCount,
+    topGenres: game.itadTags.slice(0, 2),
+    itadCurrentCut: game.itadCurrentCut,
+    wishlistCount: game.wishlistCount,
+  });
+  return { ...game, theme, whyReason };
+}
+
+/**
+ * ROK-1297 invariant: every response game has BOTH `theme` + `whyReason`
+ * set or BOTH absent. Runtime assertion at the end of the pipe so a
+ * future regression on either path fails fast in dev/CI rather than
+ * silently leaking half-themed tiles to the client.
+ */
+function assertThemePairing(games: CommonGroundGameDto[]): void {
+  for (const g of games) {
+    const themed = g.theme !== undefined;
+    const reasoned = g.whyReason !== undefined;
+    if (themed !== reasoned) {
+      throw new Error(
+        `ROK-1297 invariant violated: gameId=${g.gameId} has theme=${
+          g.theme ?? 'undefined'
+        } but whyReason=${g.whyReason === undefined ? 'undefined' : '<set>'}`,
+      );
+    }
+  }
+}
+
 /** Build the full Common Ground response from DB. */
 export async function buildCommonGroundResponse(
   db: Db,
@@ -290,11 +336,13 @@ export async function buildCommonGroundResponse(
   const rows = await queryCommonGround(db, filters, nominatedIds);
   const scored = rows.map((r) => mapCommonGroundRow(r, ctx));
   scored.sort((a, b) => b.score - a.score);
+  const themed = scored.map(withThemeAndWhyReason);
+  assertThemePairing(themed);
   const weights = ctx?.weights ?? { ...SCORING_WEIGHTS };
   return {
-    data: scored,
+    data: themed,
     meta: {
-      total: scored.length,
+      total: themed.length,
       appliedWeights: toAppliedWeights(weights),
       activeLineupId: lineupId,
       nominatedCount: nominatedIds.length,
