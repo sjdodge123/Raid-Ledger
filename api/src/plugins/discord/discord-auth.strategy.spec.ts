@@ -217,11 +217,11 @@ describe('DiscordAuthStrategy', () => {
 
       // Spy on the inherited authenticate (OAuth2Strategy.prototype.authenticate
       // is reached via Strategy.prototype → OAuth2Strategy.prototype).
+      const superProto = Object.getPrototypeOf(
+        DiscordPassportStrategy.prototype,
+      ) as { authenticate: (req: unknown, options?: object) => void };
       const superAuth = jest
-        .spyOn(
-          Object.getPrototypeOf(DiscordPassportStrategy.prototype) as object,
-          'authenticate',
-        )
+        .spyOn(superProto, 'authenticate')
         .mockImplementation(() => undefined);
 
       const req = { query: {}, headers: {}, url: '/auth/discord' } as never;
@@ -243,11 +243,11 @@ describe('DiscordAuthStrategy', () => {
       await strategy.reloadConfig();
       expect(strategy.isEnabled()).toBe(false);
 
+      const superProto = Object.getPrototypeOf(
+        DiscordPassportStrategy.prototype,
+      ) as { authenticate: (req: unknown, options?: object) => void };
       const superAuth = jest
-        .spyOn(
-          Object.getPrototypeOf(DiscordPassportStrategy.prototype) as object,
-          'authenticate',
-        )
+        .spyOn(superProto, 'authenticate')
         .mockImplementation(() => undefined);
 
       const req = { query: {}, headers: {}, url: '/auth/discord' } as never;
@@ -322,10 +322,13 @@ describe('DiscordAuthStrategy', () => {
         'tester',
         'abc.png',
       );
-      expect(done).toHaveBeenCalledWith(null, expect.objectContaining({
-        id: 42,
-        username: 'tester',
-      }));
+      expect(done).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({
+          id: 42,
+          username: 'tester',
+        }),
+      );
     });
 
     it('AC7 — the freshly-registered bare Strategy rejects with "Failed to validate Discord user" when authService returns null', async () => {
