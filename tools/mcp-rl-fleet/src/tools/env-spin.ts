@@ -47,6 +47,31 @@ export interface EnvSpinResult {
   admin_password?: string | null;
   app_container?: string;
   pg_container?: string;
+  /**
+   * HO-2 (ROK-1326): non-fatal warnings surfaced from the env-spin pipeline.
+   * Currently emits one entry on admin-bootstrap failure (code:
+   * `admin_bootstrap_failed`, detail: tail of the bootstrap-admin script's
+   * stderr). The env itself is still healthy when this is non-empty —
+   * `admin_password` will be null and the caller must fall back to
+   * DEMO_MODE bypass for login. Empty array on the happy path.
+   */
+  bootstrap_warnings?: Array<{ code: string; detail: string }>;
+  /**
+   * HO-8 (ROK-1326): true iff this env owns the slot-N.${RL_PUBLIC_DOMAIN}
+   * Traefik Host rule (i.e. the OAuth callback hostname resolves to THIS
+   * env). When false, another env on the same slot got there first; this
+   * env is reachable only via the per-slug public URL. False when
+   * RL_PUBLIC_DOMAIN is unset (the slot URL concept doesn't apply on the
+   * LAN-only topology).
+   */
+  is_slot_owner?: boolean;
+  /**
+   * HO-8 (ROK-1326): true iff Discord OAuth (callback URI registered
+   * against slot-N.${RL_PUBLIC_DOMAIN}) will route to THIS env. Same as
+   * is_slot_owner today but kept as a separate field so future OAuth
+   * topology changes (e.g. per-env callback URIs) can decouple the two.
+   */
+  slot_oauth_available?: boolean;
   error?: string;
   message?: string;
 }
