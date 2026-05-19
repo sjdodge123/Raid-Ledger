@@ -52,6 +52,18 @@ export GIT_CONFIG_PARAMETERS="'safe.directory=*'"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
+# ROK-1326 fix-11: when this script runs inside the rl-infra fleet runner,
+# node_modules is intentionally Mutagen-excluded (large + OS-specific
+# binaries) so the freshly-claimed slot has an empty
+# /workspace/node_modules. Without `npm ci` the build step fails
+# immediately: 'sh: 1: tsc: not found' / 'sh: 1: nest: not found'. On
+# laptop runs node_modules is already populated by `npm install` at
+# worktree setup, so the guard is a no-op there.
+if [ ! -x "$REPO_ROOT/node_modules/.bin/tsc" ]; then
+  echo "[validate-ci] node_modules missing or incomplete — running npm ci..."
+  npm ci --silent --no-audit --no-fund 2>&1 | tail -5
+fi
+
 # ---------------------------------------------------------------------------
 # RL_TARGET=remote shortcut — ship validation to the rl-infra runner.
 # Default behavior unchanged. Opt in by exporting RL_TARGET=remote or by
