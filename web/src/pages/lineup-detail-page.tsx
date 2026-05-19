@@ -231,7 +231,15 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         pendingAdvanceAt={lineup.pendingAdvanceAt}
         status={lineup.status}
       />
-      <HeroNextStep {...heroProps} />
+      {/* ROK-1297 round 5ae: HeroNextStep is the legacy "NEXT: …
+          Advance to Voting" banner that ROK-1323 will fully retire
+          once every phase has a composite. During building the
+          NominatingComposite's U1 JourneyHero + U4 SubmitBar already
+          carry the next-step copy + advance affordance, so showing
+          this banner ON TOP duplicates the message and confuses
+          testers. Suppress here; other phases still get it until
+          their composites ship. */}
+      {!isBuilding && <HeroNextStep {...heroProps} />}
       <LineupAbortedBanner abortedAt={abortedAt} reason={abortReason} />
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <LineupDetailHeader
