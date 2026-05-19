@@ -216,8 +216,25 @@ footer {
   min-width: 28px;
 }
 .step-desc { flex: 1; min-width: 0; }
-.step-text { font-size: 14px; line-height: 1.35; }
-.step-expected { font-size: 12px; color: var(--fg-muted); margin-top: 4px; }
+/* ROK-1326 fix-6: long URL-encoded tokens (e.g. redirect_uri=https%3A%2F%2F...)
+   have no natural wrap boundaries; without `overflow-wrap: anywhere` they push
+   the card width past the viewport on mobile. `word-break: break-word` keeps
+   normal English wrapping, `overflow-wrap: anywhere` allows mid-token breaks
+   on long tokens. `.step-inline-link` is the auto-linkified URL anchor (also
+   fix-5) which has the same problem when the URL is long. */
+.step-text { font-size: 14px; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; }
+.step-expected {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-top: 4px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  /* Cap a single step's expected text so a paste-heavy step doesn't shove
+     siblings off-screen on mobile. Tester can scroll the inner block. */
+  max-height: 7em;
+  overflow-y: auto;
+}
+.step-inline-link { word-break: break-all; overflow-wrap: anywhere; }
 .step-buttons {
   display: flex;
   flex-direction: column;

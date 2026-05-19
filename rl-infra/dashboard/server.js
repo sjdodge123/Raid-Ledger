@@ -13,6 +13,7 @@ import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
 import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
 import { join, extname } from 'node:path';
+import { timingSafeEqual } from 'node:crypto';
 
 const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
@@ -517,7 +518,11 @@ const wrapCommentBodies = (plan) => ({
 const agentAuthorized = (req) => {
   if (!RL_AGENT_TOKEN) return true; // dev mode: allow with warning at boot
   const header = req?.headers?.['x-agent-token'];
-  return typeof header === 'string' && header === RL_AGENT_TOKEN;
+  if (typeof header !== 'string') return false;
+  const a = Buffer.from(header, 'utf8');
+  const b = Buffer.from(RL_AGENT_TOKEN, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 };
 const planForResponse = (plan, req) => {
   const includeComments = req && req.url && req.url.includes('include_comments=1');
@@ -537,8 +542,46 @@ const handleTestPlanGet = async (slug, req, res) => {
   }
 };
 
+// ROK-1326 fix-5: refuse plan creation when no env exists for the slug.
+// Previously the dashboard would happily accept a plan POST for a non-
+// existent slug, the agent would see ok:true and tell the operator the
+// plan was ready, the operator would open the dashboard and find no env
+// AND no plan to interact with. Now: 409 with the available envs in the
+// body so the agent can self-correct (call rl_env_spin/rl_env_deploy
+// first or pick a different slug).
+const envExistsForSlug = async (slug) => {
+  try {
+    const raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
+    const envs = JSON.parse(raw);
+    return Array.isArray(envs) && envs.some((e) => e && e.slug === slug);
+  } catch (err) {
+    if (err.code === 'ENOENT') return false;
+    throw err;
+  }
+};
+
+const listEnvSlugs = async () => {
+  try {
+    const raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
+    const envs = JSON.parse(raw);
+    return Array.isArray(envs) ? envs.map((e) => e && e.slug).filter(Boolean) : [];
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+};
+
 const handleTestPlanPut = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!(await envExistsForSlug(slug))) {
+    return sendJson(res, 409, {
+      ok: false,
+      error: 'env_not_found',
+      slug,
+      available_envs: await listEnvSlugs(),
+      hint: 'No env exists for this slug. Call rl_env_spin or rl_env_deploy first, then post the plan.',
+    });
+  }
   let body;
   try { body = await readJsonBody(req); }
   catch (err) { return sendBodyError(res, err); }
@@ -691,7 +734,7 @@ const ALLOWED_MIME = new Map([
 const handleAttachmentUpload = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   let body;
-  try { body = await readJsonBody(req, MAX_ATTACHMENT_BYTES + 1024 * 1024); }
+  try { body = await readJsonBody(req, Math.ceil(MAX_ATTACHMENT_BYTES * 4 / 3) + 4096); }
   catch (err) { return sendBodyError(res, err); }
 
   const mime = typeof body.mime === 'string' ? body.mime.toLowerCase() : '';

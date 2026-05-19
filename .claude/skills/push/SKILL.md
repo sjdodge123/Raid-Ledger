@@ -10,8 +10,6 @@ argument-hint: "[--skip-pr]"
 
 **This skill should be used by ALL other skills (/build, /bulk, /fix-batch) when pushing to origin.** Never use raw `git push` — always invoke `/push`.
 
-**rl-infra fleet:** When `RL_TARGET=remote` (the default if Proxmox is reachable) the FULL CI pipeline runs on the rl-infra VM, not the laptop. `scripts/validate-ci.sh` auto-execs `rl validate-ci "$@"` in that case — no per-step changes needed in this skill. After the validation passes, push + PR creation stay local (git/gh are network-bound, not compute-bound). See `.claude/skills/_shared/rl-infra-fleet.md`.
-
 **References:** Read `CLAUDE.md` for project conventions and `TESTING.md` for test failure rules before proceeding. Test failures are NEVER dismissed as "pre-existing."
 
 Execute every step in order. If any step fails, STOP and fix before continuing.
@@ -136,17 +134,36 @@ fi
 
 The marker is invalidated automatically by HEAD changing — any new commit produces a different SHA and forces a re-run. Skip is purely time-based on the same commit.
 
-#### Run validate-ci (or skip)
+#### Run validate-ci on the FLEET (or skip)
+
+**STRICT — fleet by default.** The whole purpose of the rl-infra fleet is to offload CI runs from the operator's laptop. Local CI pins CPU + memory for minutes and blocks the operator from doing anything else. Run validate-ci on the fleet runner instead:
 
 ```bash
 if [ "$SKIP_VALIDATE_CI" = "0" ]; then
-  ./scripts/validate-ci.sh --full && touch "$MARKER"
+  # Fleet path — runs in the runner container on the rl-infra VM,
+  # zero CPU/memory pressure on the laptop.
+  if [ -x "./rl-infra/cli/rl" ] && ssh -o BatchMode=yes -o ConnectTimeout=3 \
+       "${RL_PROXMOX_HOST:-rl-infra}" 'true' 2>/dev/null; then
+    RL_TARGET=remote ./rl-infra/cli/rl validate-ci --full \
+      > /tmp/vci-$(git rev-parse --short HEAD).log 2>&1 \
+      && touch "$MARKER"
+  else
+    # Fallback: fleet unreachable (laptop offline, slot full, infra down).
+    # Run locally so the push isn't blocked. Note in Step 12 report.
+    echo "[push] fleet unreachable — falling back to local validate-ci.sh"
+    ./scripts/validate-ci.sh --full && touch "$MARKER"
+  fi
 fi
 ```
 
 **STOP** and fix any failures before continuing. **NEVER dismiss failures as "pre-existing"** — investigate and fix them, or create a Linear story with root cause. On failure, do NOT touch the marker.
 
-The script auto-detects scope (migration files, Dockerfile changes) and runs the appropriate conditional checks. You do NOT need to manually decide which checks to run — the script handles it.
+The script auto-detects scope (migration files, Dockerfile changes) and runs the appropriate conditional checks. You do NOT need to manually decide which checks to run — the script handles it. The fleet path uses the same `validate-ci.sh` invocation, just inside the runner.
+
+**Fleet-only quirks to be aware of (ROK-1331 follow-ups):**
+- The web vitest step may trip on `/workspace/web/coverage/.tmp` getting deleted mid-run (Mutagen-vs-vitest race). Doesn't reproduce locally. If you hit it on a backend-only diff, the fleet api result is still authoritative.
+- inotifywait + inotify-tools must be installed on the VM (one-time `apt-get`); script fails loudly if missing.
+- `rl-infra.lan` DNS doesn't resolve from every agent context; the CLI honors `RL_PROXMOX_HOST=192.168.0.132` override.
 
 ---
 

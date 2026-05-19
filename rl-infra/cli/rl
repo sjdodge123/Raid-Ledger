@@ -151,6 +151,17 @@ cmd_claim() {
         if [[ -n "$SLOT" ]]; then
             echo "$RESULT" | jq .
             ensure_mutagen_sync "$SLOT"
+            scaffold_runner_git "$SLOT" "$branch"
+            # ROK-1326 fix-11: preempt the npm-ci cost on the FIRST
+            # validate-ci/test run. Mutagen excludes node_modules so a
+            # freshly-claimed slot has none of the workspace's deps
+            # available; without this, the first `tsc`/`nest`/`jest`
+            # invocation dies with "command not found". Running here at
+            # claim time (in the background, doesn't block claim return)
+            # moves the cost out of the first agent action and into
+            # idle setup time. Skips silently if a prior session left a
+            # populated node_modules.
+            install_runner_deps "$SLOT" &
             start_heartbeat_daemon "$SLOT"
             echo
             echo "claimed slot $SLOT"
@@ -341,10 +352,134 @@ cmd_validate_ci() {
     # Mutagen pre-flight: make sure the worktree is current before running.
     SLOT=$(current_slot)
     flush_mutagen "$SLOT"
+    # Bug R (ROK-1326) defensive re-scaffold: slots claimed BEFORE the
+    # cmd_claim scaffold change landed will have a stale or empty .git
+    # (mutagen ignore-list now excludes .git entirely). If /workspace/.git/objects
+    # is missing, re-scaffold before running validate-ci. Harmless if .git
+    # is already healthy — the check exits 0 and no work is done.
+    local branch
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo main)"
+    ensure_runner_git "$SLOT" "$branch"
     # ssh_run printf-%q's each positional. Pass "$@" so a validate-ci flag
     # like --against-env-slug=$(id) reaches the runner as a literal
     # string rather than executing on the VM (H-VM-1).
     ssh_run run-on-runner -- bash /workspace/scripts/validate-ci.sh "$@"
+}
+
+# ROK-1326 fix-7: push-notify pattern. Agents that post a test plan need
+# to know when a tester submits without the operator nudging them. The
+# Claude Code harness auto-backgrounds Bash invocations and fires a
+# task-completion notification when they finish, but MCP tools block the
+# agent's main thread for the full call duration (per ROK-1331). Solution:
+# expose `rl test-plan wait` as a CLI subcommand so the agent spawns it
+# via Bash and gets a harness wake on tester submit.
+cmd_test_plan() {
+    local sub="${1:-}"
+    [[ -z "$sub" ]] && { echo "rl test-plan {wait|status} <slug> [--timeout N]" >&2; exit 2; }
+    shift
+    case "$sub" in
+        wait)   cmd_test_plan_wait "$@" ;;
+        status) cmd_test_plan_status "$@" ;;
+        *) echo "rl test-plan {wait|status} <slug> [--timeout N]" >&2; exit 2 ;;
+    esac
+}
+
+cmd_test_plan_wait() {
+    local slug="${1:-}"
+    [[ -z "$slug" ]] && { echo "rl test-plan wait <slug> [--timeout N]" >&2; exit 2; }
+    [[ "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
+    shift
+    local timeout=600
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --timeout) timeout="$2"; shift 2 ;;
+            *) echo "unknown arg: $1" >&2; exit 2 ;;
+        esac
+    done
+    # ROK-1326 fix-10 (Codex P1): validate --timeout as a bounded
+    # positive integer BEFORE interpolating into the remote shell.
+    # Without this, `--timeout '60; rm -rf /'` becomes a command
+    # injection on the VM as rl-agent.
+    [[ "$timeout" =~ ^[0-9]+$ ]] && (( timeout >= 1 && timeout <= 3600 )) \
+        || { echo "invalid --timeout: must be 1..3600 seconds, got: $timeout" >&2; exit 2; }
+    if [[ "$TARGET" == "local" ]]; then
+        echo "test-plan wait is fleet-only (RL_TARGET=remote)" >&2
+        exit 1
+    fi
+    # Pre-flight: inotifywait MUST be installed on the VM. Without it the
+    # ssh below silently exits 127, set +e catches it, the code treats the
+    # non-zero rc as "no event = timeout" and emits a fake timed_out JSON.
+    # Result: agents think push-notify is working when it's not.
+    # Surfaced during ROK-1326 retest 2026-05-19 — same gap affects MCP
+    # rl_test_plan_wait and is folded into ROK-1331 follow-ups.
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "command -v inotifywait >/dev/null 2>&1"; then
+        cat <<EOF
+{"ok":false,"error":"inotifywait_not_installed","slug":"${slug}","hint":"inotify-tools is required for push-notify. Install on the VM: sudo apt-get install -y inotify-tools"}
+EOF
+        exit 2
+    fi
+    # close_write covers tester submit (POST /submit → writePlanAtomic
+    # writes a `.<slug>.<ts>.tmp` file then renames it to `<slug>.json`);
+    # moved_to covers the rename() landing on the parent dir; delete
+    # covers env-destroy reaping the plan. Same event set as the MCP
+    # rl_test_plan_wait (ROK-1326 D4).
+    #
+    # -m (monitor mode) is REQUIRED here. Without it, inotifywait exits
+    # after the FIRST event. The dashboard's writePlanAtomic always
+    # fires TWO events per submit: close_write on the .tmp file (filename
+    # like `.rok-1326-validate.1779226429054.tmp` — doesn't match the
+    # slug regex) then moved_to on the final filename (matches). Without
+    # -m, inotifywait grabs the .tmp event, dies, the grep -m 1 reads
+    # EOF without a match, exits 1, and the CLI mis-reports a timeout
+    # that was actually a successful submit. Surfaced during ROK-1326
+    # retest 2026-05-19 — operator wait fired in ~2 min instead of 30.
+    #
+    # With -m: inotifywait keeps streaming events; grep -m 1 reads until
+    # the slug-matching filename appears; on match, grep exits 0,
+    # SIGPIPE kills inotifywait, ssh exits 0.
+    #
+    # The remote timeout is enforced via a parent-shell timeout (the
+    # `timeout` coreutil) rather than inotifywait's -t flag, because
+    # -t and -m are not compatible (-m loops forever; -t is one-shot).
+    local plan_re
+    plan_re="^${slug}\\.json$"
+    # `set -e` at top of file would kill us on the expected non-zero exit
+    # from ssh/grep when the timeout fires (no match within window).
+    # Disable for the wait + restore immediately.
+    local rc=0
+    set +e
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "timeout ${timeout} inotifywait -m -q -e close_write,moved_to,delete --format '%f' /srv/rl-infra/state/test-plans/ 2>/dev/null | grep -m 1 -E '${plan_re}' >/dev/null"
+    rc=$?
+    set -e
+    if (( rc != 0 )); then
+        # inotifywait exits 2 on timeout, 1 on other errors. grep -m 1 exits
+        # 0 only on a match. So rc != 0 ⇒ no match within timeout.
+        echo '{"ok":true,"timed_out":true,"slug":"'"$slug"'","waited_seconds":'"$timeout"'}'
+        exit 0
+    fi
+    # Match landed — emit the current plan JSON so the agent can read
+    # verdicts on its next turn (Bash captures stdout into the harness
+    # notification).
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "cat /srv/rl-infra/state/test-plans/${slug}.json"
+}
+
+cmd_test_plan_status() {
+    local slug="${1:-}"
+    [[ -z "$slug" ]] && { echo "rl test-plan status <slug>" >&2; exit 2; }
+    [[ "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
+    if [[ "$TARGET" == "local" ]]; then
+        echo "test-plan status is fleet-only (RL_TARGET=remote)" >&2
+        exit 1
+    fi
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "cat /srv/rl-infra/state/test-plans/${slug}.json"
 }
 
 cmd_top() {
@@ -393,7 +528,18 @@ current_slot() {
 
 ensure_claim() {
     SLOT=$(current_slot)
-    [[ -z "$SLOT" ]] && { echo "no slot — run 'rl claim' first" >&2; exit 1; }
+    # Use if/fi rather than `[[ -z "$SLOT" ]] && { ... }`. With set -e in
+    # effect, the && form makes the function's last command exit with the
+    # condition's exit code — which is 1 (false) when SLOT IS set, the
+    # successful path. That non-zero return then trips set -e in any
+    # caller (e.g. cmd_validate_ci), aborting the script silently before
+    # any work is done. Pre-existing on origin/main from PR #827 —
+    # surfaced during ROK-1326 fleet validation when `rl validate-ci`
+    # exited 1 with no output despite a healthy claim.
+    if [[ -z "$SLOT" ]]; then
+        echo "no slot — run 'rl claim' first" >&2
+        exit 1
+    fi
 }
 
 ensure_mutagen_sync() {
@@ -433,14 +579,11 @@ ensure_mutagen_sync() {
         # name in one shot — verified during the bug-fix that motivated this.
         mutagen sync terminate "$session" 2>/dev/null || true
     fi
-    # --permissions-mode=portable: normalize permissions to standard Unix
-    # perms (strips macOS xattrs, the @ flag on `-rw-r--r--@`). Without
-    # this, Mutagen mirrors the source's restrictive xattr-affected perms
-    # to the runner as 0600 / 0700, which Docker COPY then bakes into
-    # the image — making files unreadable by anyone except root inside
-    # the container. Bug F (2026-05-18 rok-1297 fleet build).
-    # --default-{file,directory}-mode-beta force the runner-side perms
-    # for any file whose source perms are ambiguous.
+    # --permissions-mode=manual: Bug S Layer 1 (ROK-1326). Was --permissions-mode=portable
+    # which still propagated some macOS xattr-driven perms to the runner as 0600 / 0700
+    # and broke Docker COPY in the allinone build. `manual` ignores source perms entirely
+    # and forces the explicit defaults below on every beta-side file.
+    # --default-{file,directory}-mode-beta force the runner-side perms.
     # --mode=one-way-replica: laptop (alpha) is the SOLE source of truth.
     # Runner (beta) gets aligned to alpha — files that exist only on the
     # runner get DELETED on next sync. Without this (was: default
@@ -448,10 +591,16 @@ ensure_mutagen_sync() {
     # a previous session — e.g. operator's main-repo WIP — would
     # propagate UP into the next agent's worktree on their first sync.
     # Reported by the rok-1325 agent 2026-05-19.
+    #
+    # --ignore: keep this list in sync with rl-infra/mutagen/sync-template.yml.
+    # Bug R (ROK-1326): exclude the entire .git tree because cmd_claim
+    # scaffolds a fresh shallow .git on the runner side via `git init` +
+    # `git fetch origin`. Bug W (ROK-1326): exclude *.tsbuildinfo so tsc
+    # incremental caches don't clobber the runner's own build state.
     mutagen sync create \
         --name "$session" \
         --mode=one-way-replica \
-        --permissions-mode=portable \
+        --permissions-mode=manual \
         --default-file-mode-beta=0644 \
         --default-directory-mode-beta=0755 \
         --ignore-vcs=false \
@@ -461,7 +610,12 @@ ensure_mutagen_sync() {
         --ignore='**/dist' \
         --ignore=coverage \
         --ignore='**/coverage' \
+        --ignore=.git \
+        --ignore='.git/**' \
         --ignore=.git/objects \
+        --ignore=.git/lfs \
+        --ignore='*.tsbuildinfo' \
+        --ignore='**/*.tsbuildinfo' \
         --ignore=playwright-report \
         --ignore=test-results \
         "$REPO_ROOT" \
@@ -472,6 +626,110 @@ flush_mutagen() {
     local slot="$1"
     command -v mutagen >/dev/null || return 0
     mutagen sync flush "rl-slot-$slot" 2>/dev/null || true
+}
+
+# Bug R (ROK-1326): rebuild .git inside the runner container from scratch
+# after every claim. The Mutagen sync now ignores .git entirely (so the
+# runner never inherits the laptop's local-branch index / packed-refs /
+# possibly-corrupt objects directory), and we replace it here with a
+# fresh shallow remote-tracking clone. Tools that expect `git` state inside
+# /workspace (validate-ci, scripts that detect changed files via `git diff`,
+# the install/build steps that read package.json from the staged tree) then
+# see a clean repository pinned to the same branch the agent is working on.
+#
+# Steps run inside the runner container via docker exec, NOT on the VM host:
+#   1. rm -rf .git  (handle both file + dir case — was a regular dir before)
+#   2. git init -q  (re-create)
+#   3. git remote add origin <url>
+#   4. git fetch origin main --depth=500 -q
+#   5. git reset --mixed FETCH_HEAD  (don't blow away mutagen-synced files)
+#   6. git checkout -q -B <branch>   (best-effort; falls back if branch
+#                                     doesn't exist remotely — local-only
+#                                     branches are legal mid-development)
+# ROK-1326 fix-11: preempt `npm ci` so the first validate-ci/test run on
+# a freshly-claimed slot doesn't pay the 1-2min dep-install cost on top
+# of its own work. Mutagen-excludes node_modules (large + OS-specific
+# binaries) so /workspace/node_modules is empty on every fresh claim.
+# Runs in the background from cmd_claim — claim returns to the user
+# immediately and deps populate while they read the claim output.
+# validate-ci.sh has the same guard as a fallback, so a fast follow-up
+# run won't hit the missing-tsc failure if this background install
+# hasn't finished yet — it'll just inherit the cost there instead.
+install_runner_deps() {
+    local slot="$1"
+    [[ -z "$slot" ]] && return 0
+    # `npm ci` is a clean-slate install — faster + more reproducible than
+    # `npm install` from a populated state. We skip when node_modules is
+    # already populated (prior session, or another concurrent claim
+    # finished the install). `2>&1 >/dev/null` keeps the background
+    # logging quiet so it doesn't tangle with the claim output the user
+    # is reading.
+    ssh_run run-on-runner -- bash -c \
+        '[ -x /workspace/node_modules/.bin/tsc ] && exit 0; \
+         cd /workspace && npm ci --silent --no-audit --no-fund' \
+        >/dev/null 2>&1 || true
+}
+
+scaffold_runner_git() {
+    local slot="$1" branch="$2"
+    [[ -z "$slot" ]] && return 0
+    local origin_url
+    origin_url=$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)
+    if [[ -z "$origin_url" ]]; then
+        echo "[rl] no 'origin' remote configured locally — skipping runner .git scaffold" >&2
+        return 0
+    fi
+    [[ -z "$branch" || "$branch" == "unknown" ]] && branch="main"
+    # printf-%q every interpolated value: origin_url is a config file value
+    # (less risky) but branch can in principle carry shell metachars. Defense
+    # in depth (H-VM-1 pattern).
+    local quoted_url quoted_branch
+    quoted_url=$(printf '%q' "$origin_url")
+    quoted_branch=$(printf '%q' "$branch")
+    local script
+    # safe.directory: scaffold runs as root (via run-on-runner) but
+    # /workspace is owned by uid 1001 (rl-fleet). Git's dubious-ownership
+    # check fires on every operation when uid mismatches the dir owner.
+    # The git -c flag scopes the override to this invocation only —
+    # cleaner than touching the container's global gitconfig.
+    script=$(cat <<EOF
+set -e
+cd /workspace
+rm -rf .git
+git -c safe.directory=/workspace init -q
+git -c safe.directory=/workspace remote add origin ${quoted_url}
+git -c safe.directory=/workspace fetch origin main --depth=500 -q
+git -c safe.directory=/workspace reset --mixed FETCH_HEAD
+git -c safe.directory=/workspace checkout -q -B ${quoted_branch} 2>/dev/null || true
+EOF
+)
+    # Route through orchestrator's run-on-runner endpoint — rl-agent (the
+    # default user) is intentionally NOT in the docker group, so raw
+    # `ssh ... docker exec` fails with "permission denied while trying to
+    # connect to the docker API". run-on-runner runs as root inside the
+    # orchestrator binary, derives the slot from RL_AGENT_ID via _state.sh,
+    # and pipes stdin through to `docker exec -i`. Failures here should
+    # not be fatal — a slot without .git is still usable for non-git
+    # operations.
+    ssh_run run-on-runner -- bash -s <<<"$script" >/dev/null 2>&1 || {
+        echo "[rl] WARNING: failed to scaffold .git on slot ${slot} — validate-ci will retry" >&2
+        return 0
+    }
+}
+
+# Bug R defensive re-scaffold: only rebuild .git if /workspace/.git/objects
+# is missing on the runner. Cheap no-op when .git is healthy. Used by
+# cmd_validate_ci so slots claimed before Bug R landed self-heal.
+ensure_runner_git() {
+    local slot="$1" branch="$2"
+    [[ -z "$slot" ]] && return 0
+    # Route through run-on-runner same as scaffold_runner_git — direct
+    # `docker exec` fails under rl-agent (no docker group membership).
+    if ssh_run run-on-runner -- test -d /workspace/.git/objects >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "[rl] runner slot ${slot} missing .git/objects — re-scaffolding" >&2
+    scaffold_runner_git "$slot" "$branch"
 }
 
 # Terminate the Mutagen sync session for a slot. Called from cmd_release so
@@ -572,6 +830,8 @@ rl — remote runner CLI (target: $TARGET)
   rl env list                list active envs
   rl db <slug> [--web]       psql or pgweb against env's Postgres
   rl validate-ci [args]      run validate-ci.sh inside your runner
+  rl test-plan wait <slug>   long-poll for first tester submit (spawn in background; harness notifies on submit)
+  rl test-plan status <slug> cheap one-shot read of the plan JSON
   rl top                     ctop live resource view
   rl gc                      force a sweeper run
   rl snapshot {create|rollback|list} <name>
@@ -589,6 +849,7 @@ case "${1:-}" in
     db)           shift; cmd_db "$@" ;;
     logs)         shift; cmd_logs "$@" ;;
     validate-ci)  shift; cmd_validate_ci "$@" ;;
+    test-plan)    shift; cmd_test_plan "$@" ;;
     top)          shift; cmd_top "$@" ;;
     gc)           shift; cmd_gc "$@" ;;
     snapshot)     shift; cmd_snapshot "$@" ;;

@@ -224,6 +224,23 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     message = baseMsg;
   }
 
+  // HO-2 (ROK-1326): surface env-spin bootstrap_warnings into the human
+  // message. They're non-fatal (the container is healthy) but they cause
+  // admin_password to come back null + login to require DEMO_MODE bypass.
+  // Agents reading just the message field shouldn't have to also crawl
+  // steps.env_spin.detail to know what went sideways.
+  const warnings = sp.bootstrap_warnings ?? [];
+  if (warnings.length > 0) {
+    const summary = warnings.map((w) => `${w.code}: ${w.detail}`).join('; ');
+    message = `${message} Bootstrap warnings: ${summary}`;
+  }
+  // HO-8 (ROK-1326): when this env doesn't own the slot Host rule, Discord
+  // OAuth callbacks land on the OTHER env. Tell the agent so they pick
+  // the right URL pattern + login flow.
+  if (sp.slot_oauth_available === false) {
+    message = `${message} Discord OAuth not available on this env — another env owns the slot rule. Use the per-slug URL OR DEMO_MODE bypass for login.`;
+  }
+
   return {
     ok: !overallFailed,
     slug: params.slug,

@@ -171,12 +171,19 @@ COPY --from=builder /app/packages/contract/package.json ./node_modules/@raid-led
 COPY --from=builder /app/api/dist/scripts ./dist/scripts
 COPY --from=builder /app/api/seeds ./dist/seeds
 
-# Same Mutagen perm-drift class bug as the chmod 0755 lines below — under
-# fleet builds the source files arrive at 600 (instead of laptop's 644), so
-# the unprivileged `app` user (uid 1001) cannot read drizzle migrations
-# (meta/_journal.json), the JS bundle, seed JSON, or static assets at boot.
-# a+rX adds read for everyone, plus execute on directories only (so they
-# stay traversable). No-op on CI builds where perms are already 644.
+# Bug S Layer 2 (ROK-1326): broad chmod sweep before the runtime drops to
+# the `app` user. The Mutagen sync feeding fleet builds occasionally lands
+# files at 600 instead of laptop's 644 even with --permissions-mode=manual
+# (depends on prior session state and runner-side leftover), which then
+# bake into the COPY --from=builder layer with perms that the unprivileged
+# `app` user (uid 1001) can't read at runtime — drizzle migrations
+# (meta/_journal.json), the JS bundle, seed JSON, static assets. ROK-1325
+# (#828) added the same fix on origin/main with the same path list; this
+# branch's earlier commit `e961bdba` was a parallel solve. Resolved by
+# taking origin/main's path list verbatim. `chmod -R a+rX` adds read for
+# everyone plus execute on directories only (capital X), so the hand-
+# picked chmod 0755 lines below still control which scripts can be run.
+# Idempotent and additive.
 RUN chmod -R a+rX ./drizzle/migrations ./dist ./assets ./node_modules ./packages
 
 # Copy entrypoint

@@ -512,3 +512,14 @@ Two Codex-review findings deferred because they're MEDIUM/correctness-non-blocke
 
 - **[high]** `api/src/lineups/common-ground-query.helpers.spec.ts:49` and `:88` — `error TS2741: Property 'itadLowestPrice' is missing in type ... but required in type 'CommonGroundRow'`. ROK-1297 (#823) added `itadLowestPrice: number | null` to the `CommonGroundRow` interface (`api/src/lineups/common-ground-query.helpers.ts:55`) but did not update the two `CommonGroundRow` fixtures in the spec file. Pre-existing on origin/main; confirmed by reverting my zod 4 changes and re-running tsc. `nest build` (api workspace) does not catch this because `api/tsconfig.build.json` excludes `**/*.spec*.ts`, but `validate-ci.sh::run_typecheck` uses `api/tsconfig.json` which DOES include spec files — so this fails CI on the typecheck step.
   Suggested: add `itadLowestPrice: 1234` (or `null`) to both fixtures at lines 49 and 88 in `common-ground-query.helpers.spec.ts`. One-line each; trivial.
+
+### 2026-05-19 — rok-1326-rl-infra-fleet-bugs (surfaced during `validate-ci.sh --full` unit tests)
+
+- **[high]** `web/src/pages/invite-page.test.tsx:155` and `:302` — `Unable to find an accessible element with the role "button" and name '/join event/i'`. The rendered page shows `<button>Sign in with Discord to Join</button>` (and `<button>View Event Details</button>`) — neither matches `/join event/i`. Test searches for a button label that doesn't exist in the current invite-page renderer. Pre-existing on origin/main; my ROK-1326 branch touches zero `web/**` files, so this is NOT caused by my changes. Reproducible deterministically on a clean checkout. Fails `validate-ci.sh --full` at the "Unit tests + coverage" step (web vitest).
+  Suggested: either update the test to query `'Sign in with Discord to Join'` / `'View Event Details'` depending on the test's intent, or fix the renderer to emit a `/join event/i`-matching button. Inspect the test's intent first — the step 3 helper is calling `renderAtStep3` so it likely wants the post-Discord-auth signed-in CTA (which may be a different sub-component than the un-authed signin button).
+
+### 2026-05-19 — rok-1326 (surfaced during fleet `rl validate-ci --full` retry v4)
+
+- **[low]** `web/src/hooks/use-lineup-submit.test.tsx:193` — `expect(result.current.isError).toBe(true)` flakes under load. Bare `expect()` after `await act()` races with React Query's microtask-scheduled `isError` state update; on fast environments the setState lands inside the act batch, on slower environments it lands after. Reproduced 1/2 runs on the fleet runner (slot-2, same commit). NOT reproducible on the operator's laptop. NOT caused by ROK-1326's diff — branch touches zero files in `web/src/hooks/`.
+  Suggested: wrap with `await waitFor(() => expect(result.current.isError).toBe(true))` (single-line change). The rest of the file already uses `waitFor` for the same shape — this assertion was the outlier.
+

@@ -14,7 +14,7 @@
 //   rl_test_plan_wait    — long-poll: blocks until a verdict changes or timeout
 //   rl_test_plan_clear   — delete the plan (auto-fires on rl_env_destroy)
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { shellQuote } from '../exec.js';
@@ -63,6 +63,7 @@ const curlOnVM = async (
   method: string,
   path: string,
   body?: unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<{ status: number; body: unknown }> => {
   if (!ALLOWED_METHODS.has(method)) {
     throw new Error(`curlOnVM: disallowed HTTP method ${JSON.stringify(method)}`);
@@ -70,6 +71,19 @@ const curlOnVM = async (
   const bodyArgs = body !== undefined
     ? `-H 'content-type: application/json' -d ${shellQuote(JSON.stringify(body))}`
     : '';
+  // Header pass-through (HO-4): when RL_AGENT_TOKEN is set on the dashboard
+  // server, the agent path needs to send X-Agent-Token to receive comment
+  // bodies in ?include_comments=1 responses. We shell-quote each header
+  // value so caller-controlled tokens cannot inject shell metacharacters.
+  let headerArgs = '';
+  if (extraHeaders) {
+    for (const [name, value] of Object.entries(extraHeaders)) {
+      if (!/^[A-Za-z0-9-]+$/.test(name)) {
+        throw new Error(`curlOnVM: invalid header name ${JSON.stringify(name)}`);
+      }
+      headerArgs += ` -H ${shellQuote(`${name}: ${value}`)}`;
+    }
+  }
   // Codex round-3 HIGH fix: `path` carries caller-controlled slug. Even
   // though the MCP tool boundary validates slug against /^[a-z0-9-]+$/
   // in index.ts (defense-in-depth, see also slugSchema there), any future
@@ -83,7 +97,7 @@ const curlOnVM = async (
   // stderr so we can capture status separately, -w prints the status.
   const remote =
     `docker run --rm --network rl-net curlimages/curl:8.10.1 ` +
-    `curl -s -X ${method} ${bodyArgs} ` +
+    `curl -s -X ${method} ${bodyArgs}${headerArgs} ` +
     `-w '\\nRL_STATUS:%{http_code}' ` +
     `${quotedUrl}`;
   const { stdout } = await execFileAsync(
@@ -103,7 +117,7 @@ const curlOnVM = async (
 // ----- rl_test_plan_create -----
 export const CREATE_TOOL = 'rl_test_plan_create';
 export const CREATE_DESC =
-  "Post a test checklist tied to a fleet env slug. Steps render on the fleet.gamernight.net dashboard with pass/fail/skip buttons (and optional ↗ deep link + ↻ reset button per step) for the operator + external testers to tap. Ordering is enforced sequentially. WRITE SMALL, ACTIONABLE STEPS the user can perform in seconds — bad: 'Verify the lineups page works'. Good: 'Open /lineups → Common Ground tab, expect ≥3 themed rows'. Each step SHOULD include a `test_url` deep-linking to the right view (construct from the env_url returned by rl_env_deploy) and SHOULD include a `reset_hint` if the step mutates state that may need clearing for a re-test (e.g. 'Refresh seed data via /admin/seed-lineups'). When tester taps ↻ reset, agent gets a pending_resets signal via rl_test_plan_status / rl_test_plan_wait — execute the documented reset (the hint tells YOU what to do too), then post a verdict to clear the reset state. By default refuses to overwrite existing plan; pass replace=true to clobber. Auto-cleared on rl_env_destroy.";
+  "Post a test checklist tied to a fleet env slug. Steps render on the fleet.gamernight.net dashboard with pass/fail/skip buttons (and optional ↗ deep link + ↻ reset button per step) for the operator + external testers to tap. Ordering is enforced sequentially. WRITE SMALL, ACTIONABLE STEPS the user can perform in seconds — bad: 'Verify the lineups page works'. Good: 'Open /lineups → Common Ground tab, expect ≥3 themed rows'. AVOID pasting URL-encoded blobs (redirect_uri=https%3A%2F%2F...) into description or expected — they're unreadable on mobile and blow out card height. Describe what the tester should see in plain English ('Location header points at slot URL, not localhost') and put the deep link in `test_url` for the ↗ button. Keep description ≤ 1 sentence and expected ≤ 1 sentence. Each step SHOULD include a `test_url` deep-linking to the right view (construct from the env_url returned by rl_env_deploy) and SHOULD include a `reset_hint` if the step mutates state that may need clearing for a re-test (e.g. 'Refresh seed data via /admin/seed-lineups'). When tester taps ↻ reset, agent gets a pending_resets signal via rl_test_plan_status / rl_test_plan_wait — execute the documented reset (the hint tells YOU what to do too), then post a verdict to clear the reset state. By default refuses to overwrite existing plan; pass replace=true to clobber. Auto-cleared on rl_env_destroy.";
 
 export interface CreatePlanStep {
   description: string;
@@ -140,6 +154,29 @@ export async function executeCreate(p: CreatePlanParams) {
   }
   try {
     assertValidSlug(p.slug);
+    // ROK-1326 fix-5: pre-flight env existence check. Without it, the
+    // dashboard previously accepted plans for non-existent slugs and the
+    // agent would tell the operator "ready" against nothing. The dashboard
+    // now ALSO refuses (409 env_not_found), but checking here gives the
+    // agent a clear error before the round-trip POST.
+    const state = await curlOnVM('GET', '/api/state');
+    if (state.status >= 200 && state.status < 300) {
+      const envs = (state.body as { envs?: Array<{ slug?: string }> })?.envs ?? [];
+      const slugs = envs.map((e) => e?.slug).filter(Boolean) as string[];
+      if (!slugs.includes(p.slug)) {
+        return {
+          ok: false,
+          error: 'env_not_found',
+          slug: p.slug,
+          available_envs: slugs,
+          hint:
+            'No env exists for this slug. Call rl_env_spin or rl_env_deploy first.',
+        };
+      }
+    }
+    // If /api/state itself failed (network blip, dashboard down), fall
+    // through to the POST — the dashboard-side guard will still catch a
+    // missing env. Don't block plan creation on a transient state fetch.
     const slugPath = encodeURIComponent(p.slug);
     const { status, body } = await curlOnVM('POST', `/api/test-plans/${slugPath}`, {
       title: p.title,
@@ -147,6 +184,11 @@ export async function executeCreate(p: CreatePlanParams) {
       replace: p.replace ?? false,
       created_by: p.created_by ?? `${process.env.USER ?? 'agent'}-mcp`,
     });
+    if (status === 409 && (body as { error?: string })?.error === 'env_not_found') {
+      // Dashboard-side guard caught it (e.g. env got reaped between our
+      // /api/state read and the POST). Re-shape to match the MCP error.
+      return { ok: false, ...(body as object) };
+    }
     if (status >= 200 && status < 300) {
       const publicDomain = process.env.RL_PUBLIC_DOMAIN ?? 'gamernight.net';
       return {
@@ -175,7 +217,13 @@ export async function executeStatus(p: { slug: string }) {
     // include_comments=1: the dashboard's GET endpoint defaults to stripping
     // comment bodies (so testers can't read each others' notes). The agent
     // path opts in via this query so they get the bodies + attachment URLs.
-    const { status, body } = await curlOnVM('GET', `/api/test-plans/${slugPath}?include_comments=1`);
+    // When RL_AGENT_TOKEN is set on the dashboard (prod), comment bodies
+    // require a matching X-Agent-Token header in addition to the query —
+    // forward whichever value is configured locally. If unset, the dashboard
+    // logs a warning at boot and keeps the include_comments path open.
+    const agentToken = process.env.RL_AGENT_TOKEN;
+    const headers = agentToken ? { 'X-Agent-Token': agentToken } : undefined;
+    const { status, body } = await curlOnVM('GET', `/api/test-plans/${slugPath}?include_comments=1`, undefined, headers);
     if (status === 404) return { ok: false, error: 'no_plan_for_slug', slug: p.slug };
     if (status >= 200 && status < 300) return body;
     return { ok: false, error: 'http_status_' + status, body };
@@ -213,6 +261,15 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
   // close_write + rename moved_to). We still need the
   // summary.last_updated_at baseline check to collapse those into a
   // single agent-visible wake.
+  //
+  // ROK-1326 D4: switched from a one-shot `inotifywait -t remainingS`
+  // re-spawn loop to a single persistent `inotifywait -m` monitor
+  // session. The previous loop tore down + re-armed inotify after every
+  // event, which (a) opened a race window where dashboard writes that
+  // landed during the re-arm gap were missed, and (b) paid SSH session
+  // setup cost (~hundreds of ms) per event. Monitor mode keeps a single
+  // SSH stream alive and we read line-by-line on the consumer side, so
+  // sibling-slug events cost ~nothing.
   let baseline: string | undefined;
   try {
     const pre = await executeStatus({ slug: p.slug });
@@ -220,92 +277,132 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
   } catch { /* status fetch failed — proceed without baseline, every wake counts */ }
 
   const startedAtMs = Date.now();
-  const deadlineMs = startedAtMs + timeoutS * 1000;
   const planFilename = `${p.slug}.json`;
 
-  while (Date.now() < deadlineMs) {
-    const remainingS = Math.max(1, Math.floor((deadlineMs - Date.now()) / 1000));
-    // Watch the parent directory, not the file: atomic rename fires
-    // MOVED_TO on the directory entry, not MODIFY on the inode at the
-    // path. `close_write` covers non-atomic writers (defensive); `delete`
-    // covers plan removal so we surface the deleted state to the agent
-    // instead of hanging until timeout. `--format '%f'` makes
-    // inotifywait emit just the filename so we can grep for our slug
-    // and ignore concurrent writes to OTHER slugs' plans.
-    const remote =
-      `inotifywait -q -e close_write,moved_to,delete -t ${remainingS} ` +
-      `--format '%f' ` +
-      `/srv/rl-infra/state/test-plans/ 2>/dev/null; ` +
-      `echo RL_INOTIFY_EXIT:$?`;
-    let exitCode = -1;
-    let wakeFilename = '';
-    try {
-      const { stdout } = await execFileAsync(
-        'ssh',
-        ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
-        { timeout: (remainingS + 30) * 1000, maxBuffer: 1024 * 1024 },
-      );
-      const m = stdout.match(/RL_INOTIFY_EXIT:(\d+)/);
-      exitCode = m ? parseInt(m[1], 10) : -1;
-      // Lines before the RL_INOTIFY_EXIT sentinel are filenames from
-      // inotifywait. With -q and a single event, there should normally
-      // be exactly one. Take the last filename line as the trigger.
-      const lines = stdout
-        .split('\n')
-        .map((l: string) => l.trim())
-        .filter((l: string) => l && !l.startsWith('RL_INOTIFY_EXIT:'));
-      wakeFilename = lines[lines.length - 1] ?? '';
-    } catch (err) {
-      const e = err as Error;
-      return { ok: false, error: 'wait_failed', message: e.message };
-    }
+  // Shell-quote the filename used in the remote grep to keep with the
+  // same defense-in-depth pattern as curlOnVM (assertValidSlug already
+  // restricted the slug to [a-z0-9-], but if a future caller bypasses
+  // Zod we still want literal-byte semantics on the runner).
+  const quotedFilenameRe = shellQuote(`^${p.slug}\\.json$`);
 
-    if (exitCode === 2) {
-      // inotifywait's own timeout — fall out of the loop normally.
-      break;
-    }
-    if (exitCode !== 0) {
-      // fs error etc. Return current status so the agent sees the
-      // actual state (likely a 404-shape from executeStatus).
-      const status = await executeStatus({ slug: p.slug });
-      return { ...status, inotify_exit: exitCode };
-    }
+  // `-m` = monitor mode (keeps running, emits every event until killed).
+  // `-q` = quiet; `--format '%f'` = filename only (matches the consumer
+  // grep expectation below); `2>/dev/null` swallows inotifywait's
+  // "Watches established." chatter that lands on stderr.
+  // We pipe through `grep --line-buffered` on the runner to drop
+  // sibling-slug events at the source — saves bandwidth back through SSH
+  // when many slugs share the dir.
+  const remote =
+    `inotifywait -m -q -e close_write,moved_to,delete ` +
+    `--format '%f' ` +
+    `/srv/rl-infra/state/test-plans/ 2>/dev/null ` +
+    `| grep --line-buffered -E ${quotedFilenameRe}`;
 
-    // inotify fired for SOME file in the directory. If it wasn't our
-    // slug, that's a sibling plan being updated — loop and keep
-    // waiting on the remaining time budget without re-checking status
-    // (status fetch over the network is the expensive part).
-    if (wakeFilename && wakeFilename !== planFilename) {
-      continue;
-    }
+  return await new Promise((resolve) => {
+    const child = spawn(
+      'ssh',
+      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let settled = false;
+    let stderrBuf = '';
+    let stdoutBuf = '';
 
-    // Our slug fired. Verify it was a real change via the baseline
-    // last_updated_at — atomic rename produces close_write + moved_to
-    // pairs, and we don't want to wake the agent twice.
-    const post = await executeStatus({ slug: p.slug });
-    // Codex round-3 MED #1 fix: a `delete` inotify event makes
-    // executeStatus return the 404-shape (`no_plan_for_slug`) with no
-    // `summary.last_updated_at`. The previous code treated that as a
-    // spurious wake and looped to deadline — masking plan deletion
-    // from the caller. Treat the no-plan shape as a real state
-    // transition: the plan was just removed, surface it immediately.
-    const postShape = post as { error?: string; summary?: { last_updated_at?: string } };
-    if (postShape.error === 'no_plan_for_slug') {
-      return post;
-    }
-    const newUpdated = postShape.summary?.last_updated_at;
-    if (newUpdated && newUpdated !== baseline) {
-      return post; // real change — surface it to the agent
-    }
-    // Spurious wake (e.g. the first half of an atomic rename pair) —
-    // loop with the time we have left. baseline stays the same.
-  }
+    const cleanup = () => {
+      if (!child.killed) {
+        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      }
+    };
 
-  return {
-    ok: true,
-    timed_out: true,
-    waited_seconds: Math.round((Date.now() - startedAtMs) / 1000),
-  };
+    const settle = (value: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const timeoutHandle = setTimeout(() => {
+      settle({
+        ok: true,
+        timed_out: true,
+        waited_seconds: Math.round((Date.now() - startedAtMs) / 1000),
+      });
+    }, timeoutS * 1000);
+
+    // Helper: when we see a filename matching our slug, verify via
+    // executeStatus before settling. Atomic rename produces multiple
+    // events (close_write on the tmp + moved_to on the target), so we
+    // compare summary.last_updated_at against the baseline captured
+    // before the wait started.
+    const handleSlugEvent = async () => {
+      try {
+        const post = await executeStatus({ slug: p.slug });
+        const postShape = post as { error?: string; summary?: { last_updated_at?: string } };
+        // Codex round-3 MED #1 carry-over: surface the 404-shape so
+        // plan deletion isn't masked as a spurious wake.
+        if (postShape.error === 'no_plan_for_slug') {
+          clearTimeout(timeoutHandle);
+          settle(post);
+          return;
+        }
+        const newUpdated = postShape.summary?.last_updated_at;
+        if (newUpdated && newUpdated !== baseline) {
+          clearTimeout(timeoutHandle);
+          settle(post);
+        }
+        // else: spurious wake (half of an atomic-rename pair) — leave
+        // the stream open and keep waiting on the timeout budget.
+      } catch {
+        /* swallow status errors during the wait; the next event will retry */
+      }
+    };
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdoutBuf += chunk.toString('utf8');
+      // Process complete lines; keep a partial last line for the next chunk.
+      const lines = stdoutBuf.split('\n');
+      stdoutBuf = lines.pop() ?? '';
+      for (const line of lines) {
+        const filename = line.trim();
+        if (filename === planFilename) {
+          void handleSlugEvent();
+        }
+      }
+    });
+
+    // ROK-1326 fix-10 (reviewer F9): cap stderr buffer at 8 KiB. A noisy
+    // ssh / inotifywait could otherwise grow this unbounded over the
+    // full timeout window (up to ~3600s). The buffer is only surfaced
+    // in the error envelope at line 393; 8 KiB is more than enough.
+    const STDERR_CAP = 8 * 1024;
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderrBuf.length >= STDERR_CAP) return;
+      stderrBuf += chunk.toString('utf8');
+      if (stderrBuf.length > STDERR_CAP) {
+        stderrBuf = stderrBuf.slice(0, STDERR_CAP) + '\n[stderr truncated]';
+      }
+    });
+
+    child.on('error', (err: Error) => {
+      clearTimeout(timeoutHandle);
+      settle({ ok: false, error: 'wait_failed', message: err.message });
+    });
+
+    child.on('exit', (code: number | null, signal: string | null) => {
+      // If we already settled (timeout fired, or a slug event resolved),
+      // ignore the SIGTERM exit we just induced.
+      if (settled) return;
+      clearTimeout(timeoutHandle);
+      // grep exits 1 when the pipe closes with no matches; that should
+      // only happen if inotifywait itself died (e.g. dir unmounted).
+      // Surface the failure with the captured stderr for diagnosis.
+      settle({
+        ok: false,
+        error: 'wait_failed',
+        message: `inotifywait stream ended (code=${code ?? 'null'}, signal=${signal ?? 'null'}): ${stderrBuf.trim() || '<no stderr>'}`,
+      });
+    });
+  });
 }
 
 // ----- rl_test_plan_clear -----

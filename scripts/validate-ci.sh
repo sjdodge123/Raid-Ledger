@@ -40,8 +40,29 @@
 
 set -euo pipefail
 
+# ROK-1326 fix-11: when this script runs inside the rl-infra fleet runner
+# (via `rl validate-ci` → run-on-runner → docker exec as root in
+# /workspace owned by uid 1001), git's dubious-ownership check fires
+# on every git call. GIT_CONFIG_PARAMETERS is process-scoped and writes
+# no on-disk config — harmless on the laptop, required on the fleet
+# runner. Whitelists everything (the laptop's own repo root, AND
+# /workspace inside the runner container).
+export GIT_CONFIG_PARAMETERS="'safe.directory=*'"
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
+
+# ROK-1326 fix-11: when this script runs inside the rl-infra fleet runner,
+# node_modules is intentionally Mutagen-excluded (large + OS-specific
+# binaries) so the freshly-claimed slot has an empty
+# /workspace/node_modules. Without `npm ci` the build step fails
+# immediately: 'sh: 1: tsc: not found' / 'sh: 1: nest: not found'. On
+# laptop runs node_modules is already populated by `npm install` at
+# worktree setup, so the guard is a no-op there.
+if [ ! -x "$REPO_ROOT/node_modules/.bin/tsc" ]; then
+  echo "[validate-ci] node_modules missing or incomplete — running npm ci..."
+  npm ci --silent --no-audit --no-fund 2>&1 | tail -5
+fi
 
 # ---------------------------------------------------------------------------
 # RL_TARGET=remote shortcut — ship validation to the rl-infra runner.
@@ -421,14 +442,22 @@ run_playwright_e2e() {
       fi
       if ! check_env_up; then
         echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Playwright${NC}"
-        echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed UI flows.${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${YELLOW}  Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed UI flows.${NC}"
+        fi
         return 2
       fi
       ;;
     on)
       if ! check_env_up; then
         echo -e "${RED}--with-e2e requested but dev env is not responding on :3000/health.${NC}"
-        echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${RED}Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        fi
         return 1
       fi
       ;;
@@ -462,14 +491,22 @@ run_discord_smoke() {
       fi
       if ! check_env_up; then
         echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Discord smoke${NC}"
-        echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed bot/notification flows.${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${YELLOW}  Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed bot/notification flows.${NC}"
+        fi
         return 2
       fi
       ;;
     on)
       if ! check_env_up; then
         echo -e "${RED}--with-e2e requested but dev env is not responding on :3000/health.${NC}"
-        echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${RED}Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        fi
         return 1
       fi
       ;;

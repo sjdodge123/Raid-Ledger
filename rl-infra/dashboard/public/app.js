@@ -8,6 +8,13 @@ const REFRESH_MS = 15000;
 const $ = (id) => document.getElementById(id);
 const el = (tag, opts = {}, ...children) => {
   const node = document.createElement(tag);
+  // ROK-1326 fix-9: <button> defaults to type="submit" per HTML spec.
+  // Even without an ancestor <form> the type carries side effects
+  // (some browsers fire implicit submit logic when a button is in
+  // an "implicit form" context; varies across engines). Force
+  // type="button" unconditionally — every button on this dashboard
+  // is a click-handler, never a form-submitter.
+  if (tag === 'button') node.type = 'button';
   if (opts.class) node.className = opts.class;
   if (opts.text) node.textContent = opts.text;
   if (opts.href) node.href = opts.href;
@@ -19,6 +26,34 @@ const el = (tag, opts = {}, ...children) => {
     else node.appendChild(child);
   }
   return node;
+};
+
+// ROK-1326 fix-5: turn http(s)://... runs inside a text node into clickable
+// anchors that open in a new tab. Used by step description + step expected
+// rendering only — the agent authors those, so the URLs are trusted. Tester-
+// authored comment bodies are NOT auto-linkified (they're wrapped in
+// <untrusted-tester-comment> tags and base64-encoded for the agent).
+const URL_RE = /(https?:\/\/[^\s<>'"`)]+)/g;
+const URL_TEST = /^https?:\/\//;
+const appendWithLinks = (parent, text) => {
+  if (!text) return;
+  const parts = String(text).split(URL_RE);
+  for (const part of parts) {
+    if (!part) continue;
+    if (URL_TEST.test(part)) {
+      parent.appendChild(
+        el('a', {
+          href: part,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          class: 'step-inline-link',
+          text: part,
+        }),
+      );
+    } else {
+      parent.appendChild(document.createTextNode(part));
+    }
+  }
 };
 
 const fmtTime = (iso) => {
@@ -304,7 +339,13 @@ const renderStep = (slug, plan, step, draft) => {
   const idTag = el('span', { class: 'step-id', text: `#${step.id}` });
   const desc = el('div', { class: 'step-desc' });
   const textRow = el('div', { class: 'step-text' });
-  textRow.appendChild(document.createTextNode(step.description));
+  // ROK-1326 fix-5: inline URLs in step text + expected become clickable
+  // anchors with target=_blank so the tester can jump straight to a deep
+  // link without losing the dashboard tab. The agent-authored test plan
+  // is the only render path here — tester-authored comments are NOT
+  // auto-linkified (they're wrapped <untrusted-tester-comment> + base64,
+  // never trust untrusted-source URLs).
+  appendWithLinks(textRow, step.description);
   if (step.test_url) {
     const link = el('a', {
       href: step.test_url, target: '_blank', rel: 'noopener',
@@ -314,7 +355,12 @@ const renderStep = (slug, plan, step, draft) => {
     textRow.appendChild(link);
   }
   desc.appendChild(textRow);
-  if (step.expected) desc.appendChild(el('div', { class: 'step-expected', text: `expected: ${step.expected}` }));
+  if (step.expected) {
+    const expectedRow = el('div', { class: 'step-expected' });
+    expectedRow.appendChild(document.createTextNode('expected: '));
+    appendWithLinks(expectedRow, step.expected);
+    desc.appendChild(expectedRow);
+  }
   if (pendingReset) {
     desc.appendChild(el('div', { class: 'step-reset-banner',
       text: `↻ reset requested by ${pendingReset.tester} — agent will reset & post a new plan` }));
@@ -338,19 +384,26 @@ const renderStep = (slug, plan, step, draft) => {
     }
   }
 
+  // ROK-1326 fix-9: ALWAYS attach click listeners regardless of lock
+  // state. The disabled attribute alone prevents interaction; this lets
+  // bufferVerdict patch the DOM in-place (toggle .disabled, .locked, .selected)
+  // without needing to re-render to attach listeners to newly-unlocked
+  // buttons. The OLD path called tick({force:true}) which rebuilt the
+  // whole DOM via replaceChildren — visible as scroll-jump-to-top on
+  // mobile (operator-flagged 2026-05-19). In-place patch avoids the rebuild.
+  passBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'pass'));
+  failBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'fail'));
+  skipBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'skip'));
   if (locked || pendingReset) {
     passBtn.disabled = true; failBtn.disabled = true; skipBtn.disabled = true;
     const reason = pendingReset
       ? 'A reset is in flight — wait for the agent to post a new plan.'
       : 'Complete the prior steps first (set a verdict in the draft).';
     passBtn.title = failBtn.title = skipBtn.title = reason;
-  } else {
-    // Buffer to localStorage instead of POSTing. Re-renders the section
-    // so the next step unlocks visually.
-    passBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'pass'));
-    failBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'fail'));
-    skipBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'skip'));
   }
+  // Store back-refs so patchPlanInPlace can find this row + its plan
+  // context without walking the DOM repeatedly.
+  row.dataset.stepId = String(step.id);
   buttons.append(passBtn, failBtn, skipBtn);
   if (resetBtn) buttons.appendChild(resetBtn);
 
@@ -382,9 +435,94 @@ const bufferVerdict = (slug, plan, stepId, verdict) => {
   if (draft[stepId] === verdict) delete draft[stepId];
   else draft[stepId] = verdict;
   saveDraft(slug, plan.created_at, draft);
-  // User explicitly tapped — force a re-render so the selected state
-  // shows immediately, bypassing the hasAnyDraft auto-refresh pause.
-  tick({ force: true });
+  // ROK-1326 fix-9 (mobile fix): in-place DOM patch instead of
+  // tick({force:true}) which rebuilds the entire DOM via replaceChildren
+  // and resets scrollY on mobile (operator confirmed v1/v2/v3 attempts
+  // all failed on mobile despite working on desktop). The patch only
+  // toggles class/disabled state — no DOM swap, no scroll jump possible.
+  patchPlanInPlace(slug, plan, draft);
+};
+
+// In-place DOM update for the plan card. Recomputes the cumulative lock
+// state (a step is locked if any prior step has neither a server result
+// nor a draft) and updates each .plan-step row's:
+//   - verdict-{pass|fail|skip|pending} class
+//   - has-draft class
+//   - locked class
+//   - per-button .selected class
+//   - per-button .disabled attribute + title
+// Also updates the plan footer's draft count + submit button enabled
+// state. Falls back to a full re-render if the DOM doesn't match the
+// plan shape (e.g., the user replaced the plan via a different tab).
+const patchPlanInPlace = (slug, plan, draft) => {
+  const rows = [...document.querySelectorAll('.plan-step')];
+  if (rows.length !== plan.steps.length) {
+    tick({ force: true });
+    return;
+  }
+  // Compute the first step that has no server result and no draft.
+  // Steps AT or BEFORE this index are unlocked; steps AFTER are locked.
+  let firstUnsetIdx = plan.steps.length;
+  for (let i = 0; i < plan.steps.length; i++) {
+    const s = plan.steps[i];
+    const hasServer = s.results && s.results.length > 0;
+    const hasDraft = !!draft[s.id];
+    if (!hasServer && !hasDraft) { firstUnsetIdx = i; break; }
+  }
+  const VERDICT_CLASSES = ['verdict-pass', 'verdict-fail', 'verdict-skip', 'verdict-pending'];
+  const VERDICTS = ['pass', 'fail', 'skip'];
+  plan.steps.forEach((step, i) => {
+    const row = rows[i];
+    const draftVerdict = draft[step.id];
+    const serverVerdict = lastVerdict(step);
+    const effective = draftVerdict || serverVerdict;
+    row.classList.remove(...VERDICT_CLASSES);
+    row.classList.add(effective ? `verdict-${effective}` : 'verdict-pending');
+    row.classList.toggle('has-draft', !!draftVerdict);
+    // pendingReset stays as the server told us — patch shouldn't touch it.
+    const pendingReset = row.classList.contains('reset-pending');
+    const locked = i > firstUnsetIdx || pendingReset;
+    row.classList.toggle('locked', locked);
+    VERDICTS.forEach((v) => {
+      const btn = row.querySelector('.btn-' + v);
+      if (!btn) return;
+      btn.classList.toggle('selected', !locked && draftVerdict === v);
+      btn.disabled = locked;
+      btn.title = locked
+        ? (pendingReset
+            ? 'A reset is in flight — wait for the agent to post a new plan.'
+            : 'Complete the prior steps first (set a verdict in the draft).')
+        : '';
+    });
+  });
+  // Footer: draft count + submit button enabled state.
+  const draftCount = Object.keys(draft).length;
+  const totalSteps = plan.steps.length;
+  const footerStatus = document.querySelector('.plan-footer-status');
+  if (footerStatus) {
+    if (draftCount === 0) {
+      footerStatus.textContent = 'Tap pass/fail/skip on each step. Nothing sent until you Submit.';
+    } else {
+      const allMarked = plan.steps.every((s) => draft[s.id] || (s.results && s.results.length > 0));
+      footerStatus.textContent = `${draftCount} of ${totalSteps} drafted — ${allMarked ? 'ready to submit' : 'tap the remaining steps then Submit'}`;
+    }
+  }
+  const submitBtn = document.querySelector('.btn-submit');
+  if (submitBtn) {
+    submitBtn.disabled = draftCount === 0;
+    // F5 fix: submit title doesn't otherwise reset when draftCount toggles back to 0.
+    submitBtn.title = draftCount === 0
+      ? 'No draft verdicts yet — tap a step button first'
+      : '';
+  }
+  // F6 fix: Clear-draft button is rendered conditionally in the original
+  // render() path (only when draftCount > 0). When patchPlanInPlace makes
+  // draftCount drop back to 0 (tester toggled their last draft off),
+  // the button would otherwise linger. Remove it inline; the next full
+  // render() (on submit / clear) will re-create it if needed.
+  if (draftCount === 0) {
+    document.querySelector('.btn-clear-draft')?.remove();
+  }
 };
 
 const renderSubmitFooter = (slug, plan, draft) => {
@@ -621,21 +759,48 @@ const requestReset = async (slug, stepId) => {
 const renderEmpty = (msg) => el('div', { class: 'empty', text: msg });
 
 const render = (data) => {
+  // ROK-1326 fix-9 (final): preserve scroll position across re-renders by
+  // PINNING the containers' min-height to their current height BEFORE
+  // the replaceChildren swap. Without this, even an atomic
+  // replaceChildren(...newCards) collapses the container briefly
+  // (Chrome processes it as remove-then-add internally), the document
+  // height dips, the browser clamps scrollY to the new max (often 0),
+  // and any subsequent scrollTo doesn't visually take effect because
+  // the layout has already settled at the clamped position.
+  //
+  // Earlier attempts (v1 sync scrollTo; v2 atomic-replaceChildren + rAF)
+  // verified via Chrome MCP: scrollY 713 → 0 across the swap, scrollTo
+  // afterward read 0 unchanged. Verified by [render] diagnostic logs.
+  //
+  // Pin → swap → unpin on next animation frame so the cards' real
+  // height takes over. Document height never dips.
   const slotsDiv = $('slots');
-  slotsDiv.replaceChildren();
-  for (const s of data.slots ?? []) slotsDiv.appendChild(renderSlot(s));
-  if (!data.slots?.length) slotsDiv.appendChild(renderEmpty('No slots configured.'));
-
   const envsDiv = $('envs');
-  envsDiv.replaceChildren();
-  $('env-count').textContent = data.envs?.length ? `· ${data.envs.length}` : '';
-  if (data.envs?.length) {
-    for (const e of data.envs) envsDiv.appendChild(renderEnv(e, data.public_domain));
-  } else {
-    envsDiv.appendChild(renderEmpty('No test envs running. Use `rl env spin <slug>` from the operator shell or the rl_env_spin MCP tool.'));
+  const slotsH = slotsDiv.offsetHeight;
+  const envsH = envsDiv.offsetHeight;
+  slotsDiv.style.minHeight = slotsH + 'px';
+  envsDiv.style.minHeight = envsH + 'px';
+
+  const slotCards = (data.slots ?? []).map(renderSlot);
+  if (!slotCards.length) slotCards.push(renderEmpty('No slots configured.'));
+  slotsDiv.replaceChildren(...slotCards);
+
+  const envCards = (data.envs ?? []).map((e) => renderEnv(e, data.public_domain));
+  if (!envCards.length) {
+    envCards.push(renderEmpty('No test envs running. Use `rl env spin <slug>` from the operator shell or the rl_env_spin MCP tool.'));
   }
+  envsDiv.replaceChildren(...envCards);
+  $('env-count').textContent = data.envs?.length ? `· ${data.envs.length}` : '';
 
   $('generated-at').textContent = `updated ${fmtTime(data.generated_at)}`;
+
+  // Drop the min-height pin after layout has had a chance to compute
+  // the new natural height. rAF fires after the next style+layout
+  // pass — by then the cards have rendered at their natural height.
+  requestAnimationFrame(() => {
+    slotsDiv.style.minHeight = '';
+    envsDiv.style.minHeight = '';
+  });
 };
 
 const setStatus = (state) => {
