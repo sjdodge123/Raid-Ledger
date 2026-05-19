@@ -86,20 +86,39 @@ case "$MODE" in
         ;;
     full)
         # Full data clone. Schema preserved (env's allinone runs migrations at
-        # boot). We --disable-triggers so FK ordering doesn't bite.
+        # boot). We --disable-triggers so FK ordering doesn't bite. TRUNCATE
+        # pre-step computed below because the allinone's boot seeders
+        # (games, dungeon_quests, boss_encounters) populate rows BEFORE
+        # this sync runs — INSERTs would PK-collide without the wipe.
         DUMP_ARGS=(
             --data-only --inserts
             --disable-triggers
             --exclude-table-data='drizzle.*'
             --no-owner --no-privileges
         )
-        PRE_SQL=""  # don't truncate everything; allinone migrations + env-spin start with fresh DB
+        # Discover all user tables in the env's public schema and TRUNCATE
+        # them. RESTART IDENTITY resets serial sequences so the synced PKs
+        # don't end up below the env's nextval pointer. CASCADE handles FK
+        # ordering. drizzle schema is left alone (migration metadata).
+        echo "  computing TRUNCATE pre-step from env's public schema..." >&2
+        PRE_SQL=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+            "docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -tA -c \"
+                SELECT 'TRUNCATE TABLE ' || string_agg(quote_ident(tablename), ', ')
+                       || ' RESTART IDENTITY CASCADE;'
+                FROM pg_tables WHERE schemaname = 'public';\"" 2>/dev/null)
+        if [[ -z "$PRE_SQL" || "$PRE_SQL" == "TRUNCATE TABLE  RESTART IDENTITY CASCADE;" ]]; then
+            echo "ERROR: couldn't compute TRUNCATE statement (env pg not ready or no tables?)." >&2
+            exit 3
+        fi
         ;;
 esac
 
 echo "Sync $MODE: $LOCAL_DB_CONTAINER → $RL_PROXMOX_HOST:$ENV_PG_CONTAINER" >&2
 
-REMOTE_PSQL="docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -v ON_ERROR_STOP=1"
+# --single-transaction makes the whole TRUNCATE + INSERT stream atomic:
+# any failure rolls back — no half-loaded state to clean up. Paired with
+# ON_ERROR_STOP=1 so the first error aborts the rest of the stream.
+REMOTE_PSQL="docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -v ON_ERROR_STOP=1 --single-transaction"
 
 # Apply pre-SQL (TRUNCATE) if any, then pipe pg_dump → psql.
 {
@@ -107,6 +126,11 @@ REMOTE_PSQL="docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -v O
     docker exec "$LOCAL_DB_CONTAINER" pg_dump "${DUMP_ARGS[@]}" "$DATABASE_URL"
 } | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
     "$REMOTE_PSQL" 2>&1 | tail -30
+SYNC_RC=${PIPESTATUS[1]}
+if (( SYNC_RC != 0 )); then
+    echo "ERROR: sync transaction failed (exit $SYNC_RC). DB left at pre-transaction state." >&2
+    exit "$SYNC_RC"
+fi
 
 # Rewrite deployment-bound URL settings so the env doesn't try to use the
 # operator's localhost values. Only relevant for `settings` mode (and only
