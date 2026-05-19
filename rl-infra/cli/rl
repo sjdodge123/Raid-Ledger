@@ -355,8 +355,19 @@ ensure_mutagen_sync() {
         # name in one shot — verified during the bug-fix that motivated this.
         mutagen sync terminate "$session" 2>/dev/null || true
     fi
+    # --permissions-mode=portable: normalize permissions to standard Unix
+    # perms (strips macOS xattrs, the @ flag on `-rw-r--r--@`). Without
+    # this, Mutagen mirrors the source's restrictive xattr-affected perms
+    # to the runner as 0600 / 0700, which Docker COPY then bakes into
+    # the image — making files unreadable by anyone except root inside
+    # the container. Bug F (2026-05-18 rok-1297 fleet build).
+    # --default-{file,directory}-mode-beta force the runner-side perms
+    # for any file whose source perms are ambiguous.
     mutagen sync create \
         --name "$session" \
+        --permissions-mode=portable \
+        --default-file-mode-beta=0644 \
+        --default-directory-mode-beta=0755 \
         --ignore-vcs=false \
         --ignore=node_modules \
         --ignore='**/node_modules' \
