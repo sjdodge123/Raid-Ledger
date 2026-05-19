@@ -162,6 +162,34 @@ detect_scope() {
   fi
 }
 
+# Resolve the canonical web target for fleet/local. Sets the global `web_url`.
+# Precedence (mirrors playwright.config.ts):
+#   1. BASE_URL                     — explicit override (rl_validate_ci)
+#   2. PLAYWRIGHT_BASE_URL          — Playwright's own convention; honored for parity
+#   3. https://slot-N.<domain>      — RL_TARGET=remote + numeric RL_SLOT
+#   4. http://localhost:5173        — local-dev fallback
+# RL_SLOT is validated as a positive integer when used; non-numeric input is a
+# loud config error rather than a silently-broken `slot-foo.gamernight.net` URL.
+_resolve_web_url() {
+  if [ -n "${BASE_URL:-}" ]; then
+    web_url="$BASE_URL"
+    return 0
+  fi
+  if [ -n "${PLAYWRIGHT_BASE_URL:-}" ]; then
+    web_url="$PLAYWRIGHT_BASE_URL"
+    return 0
+  fi
+  if [ -n "${RL_SLOT:-}" ] && [ "${RL_TARGET:-local}" = "remote" ]; then
+    if ! [[ "$RL_SLOT" =~ ^[0-9]+$ ]]; then
+      echo -e "${RED}RL_SLOT='${RL_SLOT}' is not numeric — refusing to construct slot URL.${NC}" >&2
+      return 1
+    fi
+    web_url="https://slot-${RL_SLOT}.${RL_PUBLIC_DOMAIN:-gamernight.net}"
+    return 0
+  fi
+  web_url="http://localhost:5173"
+}
+
 # Returns 0 if the dev env (API + web) is up, 1 otherwise.
 # Quiet on failure — callers decide whether absence is fatal or just a skip signal.
 # Local-dev mode probes API :3000 and Vite :5173 separately. Fleet mode
@@ -173,28 +201,33 @@ detect_scope() {
 # or BASE_URL is unreachable (fleet) it'll silently try to spawn its own
 # `npm run dev -w web` and only fail after 2 minutes — too slow for fail-fast.
 #
-# TODO (separate fix): playwright.config.ts should consume BASE_URL/PLAYWRIGHT_BASE_URL
-# so the actual test runs target the fleet env instead of localhost:5173.
+# `curl --url "$..."` is used (not bare `curl "$..."`) so a URL whose value
+# starts with `-` is parsed as a URL, not as a curl flag (option injection
+# defense — codex round-3 finding).
 check_env_up() {
-  # HEALTH_URL override (set by rl_validate_ci against_env_slug, points at
-  # the fleet env's allinone via rl-net Docker DNS). Defaults to localhost
-  # for local-dev mode.
-  local health_url="${HEALTH_URL:-http://localhost:3000/health}"
-  curl -fsS --max-time 3 "$health_url" 2>/dev/null \
+  # Resolve the web target first; the API health URL is derived from it
+  # when HEALTH_URL is not explicitly set, so a single BASE_URL is enough
+  # to switch both probes to the fleet env.
+  local web_url
+  _resolve_web_url || return 1
+
+  # Health URL precedence:
+  #   1. HEALTH_URL (set by rl_validate_ci against_env_slug → rl-net DNS)
+  #   2. <web_url>/api/health when web_url is non-localhost (fleet)
+  #   3. http://localhost:3000/health (local-dev default)
+  local health_url
+  if [ -n "${HEALTH_URL:-}" ]; then
+    health_url="$HEALTH_URL"
+  elif [[ "$web_url" != "http://localhost:5173" ]]; then
+    health_url="${web_url%/}/api/health"
+  else
+    health_url="http://localhost:3000/health"
+  fi
+
+  curl -fsS --max-time 3 --url "$health_url" 2>/dev/null \
     | grep -q '"status":"ok"' || return 1
 
-  # Web probe URL: in fleet mode (BASE_URL set by rl_validate_ci, or
-  # RL_TARGET=remote / RL_SLOT set by `rl claim`), nginx in allinone serves the
-  # SPA at the same host as the API. In local-dev mode, Vite serves on :5173.
-  local web_url
-  if [ -n "${BASE_URL:-}" ]; then
-    web_url="$BASE_URL"
-  elif [ -n "${RL_SLOT:-}" ] && [ "${RL_TARGET:-local}" = "remote" ]; then
-    web_url="https://slot-${RL_SLOT}.${RL_PUBLIC_DOMAIN:-gamernight.net}"
-  else
-    web_url="http://localhost:5173"
-  fi
-  curl -fsS --max-time 5 -o /dev/null "$web_url" 2>/dev/null
+  curl -fsS --max-time 5 -o /dev/null --url "$web_url" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
@@ -400,6 +433,17 @@ run_playwright_e2e() {
       fi
       ;;
   esac
+
+  # Resolve the target URL the env probe just validated and export it so
+  # Playwright's `use.baseURL` (playwright.config.ts) actually targets the
+  # fleet env in remote mode. Without this, validate-ci would happily probe
+  # https://slot-N.gamernight.net AND THEN run tests against localhost:5173
+  # (codex round-3 HIGH).
+  local web_url
+  if _resolve_web_url; then
+    export PLAYWRIGHT_BASE_URL="$web_url"
+    echo -e "${YELLOW}Playwright targeting: ${PLAYWRIGHT_BASE_URL}${NC}"
+  fi
 
   # Runs BOTH desktop + mobile projects — matches GitHub CI exactly (ROK-935).
   npx playwright test
