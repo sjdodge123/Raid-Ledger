@@ -99,6 +99,9 @@ const renderEnv = (e, publicDomain) => {
   // with real subdomains under a single-level wildcard.
   const envPublic = e.public_domain || publicDomain;
   const publicUrl = envPublic ? `https://${slug}test.${envPublic}` : null;
+  // ROK-1324: slot-stable hostname for OAuth flows (Discord). Same env —
+  // different hostname registered once in the Discord developer portal.
+  const slotUrl = envPublic && e.slot ? `https://slot-${e.slot}.${envPublic}` : null;
 
   const card = el('div', { class: 'card' });
   card.appendChild(el('div', { class: 'card-title' }, slug, ' ',
@@ -133,6 +136,21 @@ const renderEnv = (e, publicDomain) => {
       });
     });
     actions.appendChild(ext);
+    // Slot URL — for Discord OAuth flows. Distinct so the operator
+    // knows to use this one when testing login (per-slug URL would
+    // hit a Discord OAuth callback mismatch).
+    if (slotUrl) {
+      const loginLink = el('a', { class: 'secondary', href: slotUrl, target: '_blank', rel: 'noopener', text: '🔑 login' });
+      loginLink.title = `Discord login route (slot-stable URL): ${slotUrl}`;
+      loginLink.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        navigator.clipboard?.writeText(slotUrl).then(() => {
+          loginLink.textContent = 'copied!';
+          setTimeout(() => { loginLink.textContent = '🔑 login'; }, 1200);
+        });
+      });
+      actions.appendChild(loginLink);
+    }
     actions.appendChild(el('a', { class: 'secondary', href: internalUrl, target: '_blank', rel: 'noopener', text: 'lan' }));
   } else {
     actions.appendChild(el('a', { href: internalUrl, target: '_blank', rel: 'noopener', text: 'open' }));
