@@ -432,6 +432,17 @@ start_heartbeat_daemon() {
     local pidfile="$HOME/.rl-heartbeat-${slot}.pid"
     [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null && return
     (
+        # CRITICAL: detach all inherited FDs BEFORE the long-running loop
+        # starts. Without this, the backgrounded subshell keeps the parent
+        # script's stdin/stdout/stderr open — which is fine when invoked
+        # interactively, but catastrophic when invoked from the MCP server.
+        # The MCP server's execFile/spawn reads from rl claim's stdout pipe
+        # and waits for EOF; the heartbeat subshell inherits that pipe and
+        # never closes it, so the MCP call hangs for the full 5-min default
+        # timeout. Closing the FDs here lets cmd_claim return cleanly to
+        # the MCP caller within milliseconds. Verified 2026-05-18 — every
+        # "hung claim" incident tonight traced back to this missing detach.
+        exec 0</dev/null 1>/dev/null 2>/dev/null
         while true; do
             ssh -o ConnectTimeout=5 -o BatchMode=yes \
                 "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
@@ -439,6 +450,7 @@ start_heartbeat_daemon() {
             sleep 60
         done
     ) &
+    disown   # remove from job table so bash doesn't track it through exit
     echo $! > "$pidfile"
 }
 
