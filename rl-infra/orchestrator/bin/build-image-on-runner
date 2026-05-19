@@ -47,6 +47,7 @@ BUILD_CMD="set -e; \
   cp -a /workspace/. \"\$TMPDIR/\"; \
   cd \"\$TMPDIR\"; \
   sed -i '$PATCH_SED' Dockerfile.allinone; \
+  grep -q 'rm -rf dist \*.tsbuildinfo' Dockerfile.allinone || { echo 'PATCH_SED did not match — Dockerfile.allinone source drifted, expected RUN line for @raid-ledger/contract build not found' >&2; exit 3; }; \
   docker build -f Dockerfile.allinone -t '${FULL_TAG}' ."
 if [[ "$PUSH" == "1" ]]; then
     BUILD_CMD="${BUILD_CMD} && docker push '${FULL_TAG}'"

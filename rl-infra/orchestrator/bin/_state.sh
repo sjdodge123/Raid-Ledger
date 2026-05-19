@@ -105,9 +105,49 @@ state::mutate() {
     lockname=$(basename "$file").lock
     (
         flock -x 200
+        # Validate the existing file IS valid JSON before mutating.
+        # Without this, a corrupted state file (kill -9 mid-rename, disk
+        # full mid-write, etc.) silently lets the jq filter receive null
+        # and produce a fresh tree that obliterates real state. Refuse
+        # loudly instead. Companion to the read-side validation in
+        # claim's queue-head check (H-VM-3).
+        if ! jq empty "$file" 2>/dev/null; then
+            echo "state::mutate: $file is not valid JSON — refusing to mutate" >&2
+            return 1
+        fi
         local tmp
         tmp=$(mktemp "${file}.XXXXXX")
         jq "$@" "$file" > "$tmp"
+        mv "$tmp" "$file"
+        chmod 664 "$file" 2>/dev/null || true
+    ) 200>"$RL_LOCK_DIR/$lockname"
+}
+
+# Like state::mutate but the caller can encode a precondition INSIDE the
+# jq filter (e.g. `select(.claimed == false)`) — used by claim to close
+# the TOCTOU race between free-slot lookup and the slot-flip mutation
+# (H-VM-2). Both the slot-pick AND the mutation happen inside the same
+# flock window. Returns 0 if the mutation took effect, 1 if the
+# precondition rejected (the produced tree was identical to input).
+state::mutate_with_precondition() {
+    local file="$1"
+    shift
+    local lockname
+    lockname=$(basename "$file").lock
+    (
+        flock -x 200
+        if ! jq empty "$file" 2>/dev/null; then
+            echo "state::mutate_with_precondition: $file is not valid JSON" >&2
+            return 1
+        fi
+        local tmp
+        tmp=$(mktemp "${file}.XXXXXX")
+        jq "$@" "$file" > "$tmp"
+        # Identical output = precondition rejected. Caller handles.
+        if cmp -s "$file" "$tmp"; then
+            rm -f "$tmp"
+            return 1
+        fi
         mv "$tmp" "$file"
         chmod 664 "$file" 2>/dev/null || true
     ) 200>"$RL_LOCK_DIR/$lockname"

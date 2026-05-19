@@ -49,6 +49,18 @@ docker image prune -f --filter "label=rl.slot=$SLOT" >/dev/null 2>&1 || true
 state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \
     '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null)'
 
+# H-VM-4: Also remove ourselves from the queue. force-release does this
+# for the displaced agent specifically, but normal release didn't — so
+# any agent who queued itself before claiming (retried `rl claim` while
+# still queued from a previous attempt) leaves a stale queue entry that
+# blocks waiters behind it until QUEUE_TTL=1800s. queue::remove is
+# idempotent (no-op if not queued). Only meaningful when we know the
+# agent id — i.e. in the non-sweeper path. Sweeper invocations pass
+# --slot --force without RL_AGENT_ID set; skip then.
+if [[ -n "${RL_AGENT_ID:-}" ]]; then
+    queue::remove "$RL_AGENT_ID"
+fi
+
 audit::log release ok "$(jq -nc --argjson slot "$SLOT" --argjson force "$FORCE" '{slot: $slot, force: ($force == 1)}')"
 
 # jq -n with --slurp gives null input that split() can't handle. Pipe the

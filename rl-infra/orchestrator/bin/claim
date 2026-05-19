@@ -59,27 +59,73 @@ fi
 
 NOW=$(date -u +%FT%TZ)
 
+# H-VM-3: Validate state files BEFORE reading them. Corrupted JSON makes
+# command substitutions silently echo empty under `set -e`, which (in
+# the prior implementation) let claim proceed as if "queue is empty,
+# anyone can grab a slot" — the WRONG fail-open direction. Refuse loudly.
+if ! jq empty "$RL_QUEUE_FILE" 2>/dev/null; then
+    audit::log claim queue_corrupt "$(jq -nc --arg agent "$RL_AGENT_ID" '{agent:$agent}')"
+    jq -nc '{ok:false, error:"queue_corrupt", message:"queue.json is invalid — operator must repair before claims can proceed"}'
+    exit 1
+fi
+if ! jq empty "$RL_CLAIMS_FILE" 2>/dev/null; then
+    audit::log claim claims_corrupt "$(jq -nc --arg agent "$RL_AGENT_ID" '{agent:$agent}')"
+    jq -nc '{ok:false, error:"claims_corrupt", message:"claims.json is invalid — operator must repair before claims can proceed"}'
+    exit 1
+fi
+
 # Decide whether this agent can take a slot right now:
 #   - Queue empty → anyone can grab a free slot.
 #   - Queue non-empty → only the head of the queue can grab; newcomers
 #     must enqueue first.
 QUEUE_HEAD=$(queue::head_agent)
 if [[ -z "$QUEUE_HEAD" || "$QUEUE_HEAD" == "$RL_AGENT_ID" ]]; then
-    FREE_SLOT=$(state::query "$RL_CLAIMS_FILE" '[.[] | select(.claimed == false) | .slot] | first // empty')
-    if [[ -n "$FREE_SLOT" ]]; then
-        state::mutate "$RL_CLAIMS_FILE" \
-            --arg agent "$RL_AGENT_ID" \
-            --arg branch "$BRANCH" \
-            --arg ts "$NOW" \
-            --argjson slot "$FREE_SLOT" \
-            --argjson keep_alive "$KEEP_ALIVE" \
-            '(.[] | select(.slot == $slot)) |= (.claimed = true | .agent_id = $agent | .branch = $branch | .started_at = $ts | .last_heartbeat = $ts | .keep_alive = ($keep_alive == 1))'
-        # Remove from queue if was head.
-        queue::remove "$RL_AGENT_ID"
-        audit::log claim acquired "$(jq -nc --argjson slot "$FREE_SLOT" --arg branch "$BRANCH" --argjson keep_alive "$KEEP_ALIVE" '{slot:$slot, branch:$branch, keep_alive:($keep_alive == 1)}')"
-        emit_slot_result "$FREE_SLOT"
-        exit 0
+    # H-VM-2: pick the free slot AND flip it claimed=true inside a SINGLE
+    # flock window. Previously `state::query` (no flock) → `state::mutate`
+    # (flock) gave two concurrent claims the same slot — the mutate filter
+    # didn't re-check `claimed == false` so A's mutate ran, then B's
+    # mutate silently overwrote with B's agent_id.
+    #
+    # The jq filter below picks the lowest free slot AND flips it in one
+    # pass, atomically inside state::mutate_with_precondition's flock.
+    # If no free slot exists at lock time, the filter is a no-op
+    # (`cmp -s` matches input vs output) and the helper returns 1 → fall
+    # through to enqueue. Set +e around the call because the no-op return
+    # is expected; we read the result via state::slot_for_agent below.
+    set +e
+    state::mutate_with_precondition "$RL_CLAIMS_FILE" \
+        --arg agent "$RL_AGENT_ID" \
+        --arg branch "$BRANCH" \
+        --arg ts "$NOW" \
+        --argjson keep_alive "$KEEP_ALIVE" \
+        '
+        . as $orig
+        | (first(.[] | select(.claimed == false)) // null) as $pick
+        | if $pick == null then $orig
+          else map(if .slot == $pick.slot
+                   then .claimed = true
+                      | .agent_id = $agent
+                      | .branch = $branch
+                      | .started_at = $ts
+                      | .last_heartbeat = $ts
+                      | .keep_alive = ($keep_alive == 1)
+                   else . end)
+          end
+        '
+    MUTATE_RC=$?
+    set -e
+    if [[ $MUTATE_RC -eq 0 ]]; then
+        # The mutation took effect — read back which slot got assigned to us.
+        # Lookup is by agent_id (unique to us under flock) so no race here.
+        FREE_SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+        if [[ -n "$FREE_SLOT" ]]; then
+            queue::remove "$RL_AGENT_ID"
+            audit::log claim acquired "$(jq -nc --argjson slot "$FREE_SLOT" --arg branch "$BRANCH" --argjson keep_alive "$KEEP_ALIVE" '{slot:$slot, branch:$branch, keep_alive:($keep_alive == 1)}')"
+            emit_slot_result "$FREE_SLOT"
+            exit 0
+        fi
     fi
+    # No slot was free at lock time — fall through to enqueue.
 fi
 
 # No slot for us right now — enqueue (idempotent) and report position.

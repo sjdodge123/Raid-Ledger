@@ -138,12 +138,23 @@ EOF
     if [[ -z "$IDEM_ADMIN_PASSWORD" ]]; then
         IDEM_ADMIN_PASSWORD="rl-$(openssl rand -hex 8)"
     fi
-    docker exec \
-        -e ADMIN_PASSWORD="$IDEM_ADMIN_PASSWORD" \
-        -e RESET_PASSWORD=true \
-        "$APP_CONTAINER" \
-        node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 || \
+    # Capture stderr instead of redirecting to /dev/null so the caller can
+    # see WHY bootstrap failed via bootstrap_warnings in the JSON output.
+    # If exec fails, blank the password (existing behavior) AND emit a soft
+    # warning rather than failing the whole env-spin. M-VM-4 (2026-05-19).
+    IDEM_BOOTSTRAP_STDERR_FILE=$(mktemp -t rl-bootstrap-admin.XXXXXX)
+    IDEM_BOOTSTRAP_WARNINGS_JSON="[]"
+    if ! docker exec \
+            -e ADMIN_PASSWORD="$IDEM_ADMIN_PASSWORD" \
+            -e RESET_PASSWORD=true \
+            "$APP_CONTAINER" \
+            node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>"$IDEM_BOOTSTRAP_STDERR_FILE"; then
+        IDEM_BOOTSTRAP_STDERR=$(tr -d '\000' < "$IDEM_BOOTSTRAP_STDERR_FILE" | tail -c 1024)
         IDEM_ADMIN_PASSWORD=""
+        IDEM_BOOTSTRAP_WARNINGS_JSON=$(jq -nc --arg msg "$IDEM_BOOTSTRAP_STDERR" \
+            '[{code: "admin_bootstrap_failed", detail: $msg}]')
+    fi
+    rm -f "$IDEM_BOOTSTRAP_STDERR_FILE"
 
     jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
         --arg internal_url "http://${SLUG}.rl.lan" \
@@ -151,12 +162,14 @@ EOF
         --arg slot_url "$IDEM_SLOT_URL" --argjson slot "$SLOT" \
         --arg admin_email "admin@local" \
         --arg admin_password "$IDEM_ADMIN_PASSWORD" \
+        --argjson bootstrap_warnings "$IDEM_BOOTSTRAP_WARNINGS_JSON" \
         '{ok: true, idempotent: true, slug: $slug, url: $url, internal_url: $internal_url,
           public_url: (if $public_url == "" then null else $public_url end),
           slot_url: (if $slot_url == "" then null else $slot_url end),
           slot: $slot,
           admin_email: $admin_email,
-          admin_password: (if $admin_password == "" then null else $admin_password end)}'
+          admin_password: (if $admin_password == "" then null else $admin_password end),
+          bootstrap_warnings: $bootstrap_warnings}'
     audit::log env-spin idempotent "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug,slot:$slot}')"
     exit 0
 fi
@@ -299,12 +312,23 @@ ADMIN_PASSWORD_OUT="${RL_ADMIN_PASSWORD:-}"
 if [[ -z "$ADMIN_PASSWORD_OUT" ]]; then
     ADMIN_PASSWORD_OUT="rl-$(openssl rand -hex 8)"
 fi
-docker exec \
-    -e ADMIN_PASSWORD="$ADMIN_PASSWORD_OUT" \
-    -e RESET_PASSWORD=true \
-    "$APP_CONTAINER" \
-    node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 || \
-    ADMIN_PASSWORD_OUT=""   # bootstrap failed (logged separately); blank the output
+# Capture bootstrap-admin stderr so callers can surface the failure reason
+# via bootstrap_warnings in the JSON output (M-VM-4 2026-05-19). Soft warning
+# — env-spin still returns ok:true so the caller can decide severity; the
+# admin_password field goes null and bootstrap_warnings explains why.
+BOOTSTRAP_STDERR_FILE=$(mktemp -t rl-bootstrap-admin.XXXXXX)
+BOOTSTRAP_WARNINGS_JSON="[]"
+if ! docker exec \
+        -e ADMIN_PASSWORD="$ADMIN_PASSWORD_OUT" \
+        -e RESET_PASSWORD=true \
+        "$APP_CONTAINER" \
+        node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>"$BOOTSTRAP_STDERR_FILE"; then
+    BOOTSTRAP_STDERR=$(tr -d '\000' < "$BOOTSTRAP_STDERR_FILE" | tail -c 1024)
+    ADMIN_PASSWORD_OUT=""   # bootstrap failed; blank the output
+    BOOTSTRAP_WARNINGS_JSON=$(jq -nc --arg msg "$BOOTSTRAP_STDERR" \
+        '[{code: "admin_bootstrap_failed", detail: $msg}]')
+fi
+rm -f "$BOOTSTRAP_STDERR_FILE"
 
 # Register.
 state::mutate "$RL_ENVS_FILE" \
@@ -344,10 +368,12 @@ jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
     --arg slot_url "$SLOT_URL_OUT" --argjson slot "$SLOT" \
     --arg admin_email "$ADMIN_EMAIL_OUT" \
     --arg admin_password "$ADMIN_PASSWORD_OUT" \
+    --argjson bootstrap_warnings "$BOOTSTRAP_WARNINGS_JSON" \
     '{ok: true, slug: $slug, url: $url, internal_url: $internal_url,
       public_url: (if $public_url == "" then null else $public_url end),
       slot_url: (if $slot_url == "" then null else $slot_url end),
       slot: $slot,
       admin_email: $admin_email,
       admin_password: (if $admin_password == "" then null else $admin_password end),
+      bootstrap_warnings: $bootstrap_warnings,
       app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'

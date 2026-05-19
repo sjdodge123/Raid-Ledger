@@ -38,6 +38,58 @@ const sendJson = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 
+// ----- Per-IP rate limiter (in-memory, no deps) -----
+// Threat: a tester (or attacker who lands a POST URL on the LAN side past
+// Cloudflare) can fire unbounded requests. Even with the per-file 5 MB
+// attachment cap, sustained uploads can fill /state cheaply. A simple
+// per-IP sliding window kills automated abuse while staying invisible
+// to legitimate testers (who click maybe once a second).
+//
+// Cap: 30 POSTs/min per IP. At 30/min a tester can submit 5 verdicts +
+// 3 comments + 2 attachments every 30s indefinitely — well past any
+// human pace, well under any abuse case.
+//
+// Memory: one entry per active IP, pruned lazily when accessed AND
+// opportunistically when the map exceeds RATE_LIMIT_MAP_CAP entries.
+const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAP_CAP = 1000;
+const rateBuckets = new Map();
+
+const clientIp = (req) => {
+  // socket.remoteAddress reflects the immediate peer. X-Forwarded-For is
+  // NOT consulted because anyone with LAN access can forge it. Per-IP is
+  // best-effort, not auth.
+  return req.socket?.remoteAddress || 'unknown';
+};
+
+// Returns true if the request should proceed; false (and writes a 429
+// response) if the caller has exceeded RATE_LIMIT_MAX in the trailing
+// window. Caller must NOT write further to res when this returns false.
+const rateLimitOk = (req, res) => {
+  const ip = clientIp(req);
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  let stamps = rateBuckets.get(ip) ?? [];
+  stamps = stamps.filter((t) => t > cutoff);
+  if (stamps.length >= RATE_LIMIT_MAX) {
+    rateBuckets.set(ip, stamps);
+    res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '60' });
+    res.end(JSON.stringify({ ok: false, error: 'rate limit exceeded' }));
+    return false;
+  }
+  stamps.push(now);
+  rateBuckets.set(ip, stamps);
+  if (rateBuckets.size > RATE_LIMIT_MAP_CAP) {
+    for (const [k, v] of rateBuckets) {
+      const fresh = v.filter((t) => t > cutoff);
+      if (fresh.length === 0) rateBuckets.delete(k);
+      else rateBuckets.set(k, fresh);
+    }
+  }
+  return true;
+};
+
 // TCP probe with short timeout. Used to detect whether the runner is
 // actively serving a dev server on its conventional ports — slots are just
 // shell containers until an agent runs `npm run dev -w web` or starts a
@@ -695,6 +747,13 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end('{"ok":true}');
     return;
+  }
+  // Rate-limit state-changing methods only — GETs are cheap and the dashboard
+  // polls /api/state every 5s per loaded tab, which would burn the budget
+  // for nothing. POST/PUT/DELETE are where the disk-fill + plan-mutation
+  // pressure lives.
+  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
+    if (!rateLimitOk(req, res)) return;
   }
   if (pathOnly === '/api/state') {
     await handleApiState(res);
