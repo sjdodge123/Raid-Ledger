@@ -274,6 +274,9 @@ export function NominatingComposite(
         isLoading={cgLoading}
         aiSuggestionsByGameId={aiSuggestionsByGameId}
         atCap={cgAtCap}
+        nominatingId={
+          nominate.isPending ? nominate.variables?.body?.gameId ?? null : null
+        }
       />
       {/* Nominations section is mobile-hidden — the StickyHeroJumpButton
           opens MyNominationsDrawer there. Desktop keeps the inline list. */}

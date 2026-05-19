@@ -38,6 +38,13 @@ export interface CommonGroundHeroProps {
   isLoading: boolean;
   aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
   atCap: boolean;
+  /**
+   * ROK-1297 round 5ag (Codex P2): id of the game currently mid-flight in
+   * the useNominateGame mutation, or null. Threaded through every tile so
+   * the clicked button immediately flips to "Adding…" and disables —
+   * prevents double-tap duplicate nominations.
+   */
+  nominatingId: number | null;
 }
 
 interface ThemedBuckets {
@@ -152,6 +159,7 @@ function AiPicksRow({
   tiles,
   canParticipate,
   atCap,
+  nominatingId,
   onTileNominate,
   onTileOpenDrawer,
   aiSuggestionsByGameId,
@@ -159,6 +167,7 @@ function AiPicksRow({
   tiles: CommonGroundGameDto[];
   canParticipate: boolean;
   atCap: boolean;
+  nominatingId: number | null;
   onTileNominate: (gameId: number) => void;
   onTileOpenDrawer: (gameId: number) => void;
   aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
@@ -183,7 +192,7 @@ function AiPicksRow({
               tile={tile}
               disabled={!canParticipate}
               atCap={atCap}
-              isNominating={false}
+              isNominating={nominatingId === tile.gameId}
               onNominate={onTileNominate}
               onOpenDrawer={onTileOpenDrawer}
               aiSuggested
@@ -205,13 +214,10 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
     isLoading,
     aiSuggestionsByGameId,
     atCap,
+    nominatingId,
   } = props;
 
-  const tiles = useMemo(() => mergedData?.data ?? [], [mergedData]);
-  const buckets = useMemo(() => bucketByTheme(tiles), [tiles]);
-  const themedCount =
-    buckets.owned.length + buckets.taste.length + buckets.trending.length;
-  const useThemedLayout = themedCount > 0;
+  const allTiles = useMemo(() => mergedData?.data ?? [], [mergedData]);
 
   // ROK-1297 round 5s: AI picks are a Map keyed by gameId — the LLM's
   // top suggestions for this lineup. They were rendering AS BADGES on
@@ -220,9 +226,22 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
   // in a dedicated "Suggested for you" row at the top of Common Ground
   // so the operator can see what the LLM picked without hunting.
   const aiTiles = useMemo(
-    () => tiles.filter((t) => aiSuggestionsByGameId.has(t.gameId)),
-    [tiles, aiSuggestionsByGameId],
+    () => allTiles.filter((t) => aiSuggestionsByGameId.has(t.gameId)),
+    [allTiles, aiSuggestionsByGameId],
   );
+
+  // ROK-1297 round 5ag (Codex P2): AI-promoted tiles already render in
+  // the AiPicksRow at the top — filter them out of the main grid so the
+  // same card doesn't appear twice with duplicated Nominate / drawer
+  // affordances.
+  const tiles = useMemo(
+    () => allTiles.filter((t) => !aiSuggestionsByGameId.has(t.gameId)),
+    [allTiles, aiSuggestionsByGameId],
+  );
+  const buckets = useMemo(() => bucketByTheme(tiles), [tiles]);
+  const themedCount =
+    buckets.owned.length + buckets.taste.length + buckets.trending.length;
+  const useThemedLayout = themedCount > 0;
 
   return (
     <section
@@ -239,6 +258,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
           tiles={aiTiles}
           canParticipate={canParticipate}
           atCap={atCap}
+          nominatingId={nominatingId}
           onTileNominate={onTileNominate}
           onTileOpenDrawer={onTileOpenDrawer}
           aiSuggestionsByGameId={aiSuggestionsByGameId}
@@ -251,6 +271,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
         useThemedLayout={useThemedLayout}
         canParticipate={canParticipate}
         atCap={atCap}
+        nominatingId={nominatingId}
         onTileNominate={onTileNominate}
         onTileOpenDrawer={onTileOpenDrawer}
         aiSuggestionsByGameId={aiSuggestionsByGameId}
@@ -266,6 +287,7 @@ interface SuggestionsBodyProps {
   useThemedLayout: boolean;
   canParticipate: boolean;
   atCap: boolean;
+  nominatingId: number | null;
   onTileNominate: (gameId: number) => void;
   onTileOpenDrawer: (gameId: number) => void;
   aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
@@ -279,6 +301,7 @@ function SuggestionsBody(props: SuggestionsBodyProps): JSX.Element {
     useThemedLayout,
     canParticipate,
     atCap,
+    nominatingId,
     onTileNominate,
     onTileOpenDrawer,
     aiSuggestionsByGameId,
@@ -299,7 +322,7 @@ function SuggestionsBody(props: SuggestionsBodyProps): JSX.Element {
         buckets={buckets}
         canParticipate={canParticipate}
         atCap={atCap}
-        nominatingId={null}
+        nominatingId={nominatingId}
         onTileNominate={onTileNominate}
         onTileOpenDrawer={onTileOpenDrawer}
         aiSuggestionsByGameId={aiSuggestionsByGameId}
@@ -311,7 +334,7 @@ function SuggestionsBody(props: SuggestionsBodyProps): JSX.Element {
       tiles={tiles.slice(0, 12)}
       canParticipate={canParticipate}
       atCap={atCap}
-      nominatingId={null}
+      nominatingId={nominatingId}
       onTileNominate={onTileNominate}
       onTileOpenDrawer={onTileOpenDrawer}
       aiSuggestionsByGameId={aiSuggestionsByGameId}
