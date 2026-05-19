@@ -10,7 +10,10 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, isAbsolute, resolve, sep } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { z } from 'zod';
 
 const execFileAsync = promisify(execFile);
 
@@ -207,6 +210,131 @@ export function parseJsonFromStdout<T = unknown>(stdout: string): T | null {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// worktree_path allowlist (M-MCP-5, codex finding #5)
+// ---------------------------------------------------------------------------
+//
+// Every MCP tool that accepts a `worktree_path` parameter ultimately hands
+// that path to `runRl({ cwd })`, which:
+//   1. Triggers Mutagen to sync the path into the runner's /workspace, AND
+//   2. Hashes the path into RL_AGENT_ID for slot lookup.
+//
+// If we accept ANY string, a malicious or buggy caller can pass e.g.
+// `/Users/<op>/.ssh` and exfiltrate the contents via a subsequent
+// `rl_run_on_runner` cat. Restrict to absolute paths under one of the
+// operator's project-roots — matches the legitimate worktree shape and
+// rejects everything else at the Zod boundary.
+//
+// Override via the env var RL_REPO_ROOT_ALLOWLIST (comma-separated absolute
+// paths). When unset, defaults to `~/Documents/Projects/` — the operator's
+// canonical Raid-Ledger projects directory (worktrees live alongside the
+// main repo there, e.g. `Raid-Ledger--rok-1297`).
+//
+// The check is structural: path must be absolute, must resolve to under one
+// of the allowed roots, must exist as a directory, and must contain a `.git`
+// entry (file OR directory — git worktrees use a file pointing at the main
+// repo's gitdir). The last gate is what blocks `/Users/<op>/.ssh` even if a
+// future operator adds `/Users/<op>` to the allowlist by accident.
+
+/**
+ * Resolve the worktree_path allowlist. Splits RL_REPO_ROOT_ALLOWLIST on commas
+ * (trim+drop empties), then ensures each entry is an absolute path normalised
+ * to its real on-disk form. Falls back to `~/Documents/Projects` when the env
+ * var is unset. Exported for the test suite — runtime callers use
+ * `assertAllowedWorktreePath` below.
+ */
+export function getWorktreeAllowlist(): string[] {
+  const raw = process.env.RL_REPO_ROOT_ALLOWLIST;
+  if (raw && raw.trim().length > 0) {
+    return raw
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0)
+      .map((s: string) => resolve(s));
+  }
+  return [resolve(homedir(), 'Documents', 'Projects')];
+}
+
+/**
+ * Validate a candidate worktree path against the allowlist. Returns null on
+ * success, or a human-readable error message on failure. Used by the Zod
+ * refinement at the MCP boundary AND by callers that want to fail-fast before
+ * spending tokens.
+ *
+ * Rules (all must pass):
+ *   1. Path is absolute (`path.isAbsolute`).
+ *   2. After `path.resolve`, path starts with one of the allowlisted roots
+ *      (with a trailing separator to prevent prefix-confusion attacks —
+ *      `/Users/op/Documents/Projects-evil` must NOT match `/Users/op/Documents/Projects`).
+ *   3. Path exists on disk.
+ *   4. Path is a directory.
+ *   5. Path contains a `.git` entry (file OR directory — git worktrees use a
+ *      file containing `gitdir: ...`, full clones use a directory).
+ */
+export function validateWorktreePath(candidate: string): string | null {
+  if (typeof candidate !== 'string' || candidate.length === 0) {
+    return 'worktree_path must be a non-empty string';
+  }
+  if (!isAbsolute(candidate)) {
+    return `worktree_path must be an absolute path; got ${JSON.stringify(candidate)}`;
+  }
+  const resolved = resolve(candidate);
+  const allowlist = getWorktreeAllowlist();
+  const underAllowed = allowlist.some((root) => {
+    const rootWithSep = root.endsWith(sep) ? root : root + sep;
+    // Exact-match root itself is allowed too (rare but valid).
+    return resolved === root || resolved.startsWith(rootWithSep);
+  });
+  if (!underAllowed) {
+    return (
+      `worktree_path must be an absolute path to a git worktree under one of: ` +
+      `${allowlist.join(', ')} (got ${JSON.stringify(resolved)})`
+    );
+  }
+  if (!existsSync(resolved)) {
+    return `worktree_path does not exist on disk: ${JSON.stringify(resolved)}`;
+  }
+  let stat;
+  try {
+    stat = statSync(resolved);
+  } catch (err) {
+    return `worktree_path stat() failed: ${(err as Error).message}`;
+  }
+  if (!stat.isDirectory()) {
+    return `worktree_path is not a directory: ${JSON.stringify(resolved)}`;
+  }
+  const gitPath = resolve(resolved, '.git');
+  if (!existsSync(gitPath)) {
+    return (
+      `worktree_path is not a git worktree (no .git entry at ${gitPath}); ` +
+      `the allowlist intentionally rejects non-repo directories`
+    );
+  }
+  return null;
+}
+
+/**
+ * Zod schema fragment for the `worktree_path` parameter, applied uniformly at
+ * the MCP boundary (in index.ts) for every tool that accepts it. Optional —
+ * the underlying `runRl` accepts `cwd: undefined` and falls back to
+ * `process.cwd()`. When provided, validated against the repo-root allowlist.
+ *
+ * Zod's `.refine` error path: we attach the error to the field itself so the
+ * MCP error response says exactly which input was rejected.
+ */
+export const worktreePathSchema = z
+  .string()
+  .optional()
+  .refine(
+    (val) => val === undefined || validateWorktreePath(val) === null,
+    (val) => ({
+      message:
+        val === undefined
+          ? 'worktree_path is invalid'
+          : (validateWorktreePath(val) ?? 'worktree_path is invalid'),
+    }),
+  );
 
 function extractBalanced(s: string, openIdx: number): string | null {
   const opener = s[openIdx];
