@@ -147,7 +147,7 @@ export class DiscoveryCategoriesAdminController {
     const parsed = AdminCategoryPatchSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(
-        parsed.error.errors[0]?.message ?? 'Invalid patch body',
+        parsed.error.issues[0]?.message ?? 'Invalid patch body',
       );
     }
     const patch = parsed.data;
@@ -189,7 +189,7 @@ export class DiscoveryCategoriesAdminController {
     const parsed = AdminRejectBodySchema.safeParse(body ?? {});
     if (!parsed.success) {
       throw new BadRequestException(
-        parsed.error.errors[0]?.message ?? 'Invalid reject body',
+        parsed.error.issues[0]?.message ?? 'Invalid reject body',
       );
     }
     // v1 does not persist reason; the column isn't in the schema yet.

@@ -71,7 +71,7 @@ export class DemoTestDiscoveryCategoriesController {
     const parsed = SeedBodySchema.safeParse(body ?? {});
     if (!parsed.success) {
       throw new BadRequestException(
-        parsed.error.errors[0]?.message ?? 'Invalid body',
+        parsed.error.issues[0]?.message ?? 'Invalid body',
       );
     }
     const input = parsed.data;

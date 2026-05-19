@@ -67,7 +67,7 @@ function EditFormBody({
     const handleSave = async () => {
         const parsed = EditSchema.safeParse({ name, description });
         if (!parsed.success) {
-            setErrors(parseFieldErrors(parsed.error.errors));
+            setErrors(parseFieldErrors(parsed.error.issues));
             return;
         }
         await onSave(suggestion.id, parsed.data);

@@ -501,3 +501,9 @@ Two Codex-review findings deferred because they're MEDIUM/correctness-non-blocke
   Suggested: same fix as 525 — explicit poll on `/lineups/:id` until `myVotes` updates before asserting.
 - **[low]** `scripts/smoke/notifications.smoke.spec.ts:20` — mobile: `Notifications › dropdown opens and shows content` flake. Notifications dropdown not visible at 7s on mobile. Not touched by ROK-1297.
   Suggested: bump the open-animation timeout or assert against an inner element instead of the container.
+
+### 2026-05-19 — rok-1330-zod-4-migration (surfaced during `npx tsc --noEmit -p api/tsconfig.json`)
+
+- **[high]** `api/src/lineups/common-ground-query.helpers.spec.ts:49` and `:88` — `error TS2741: Property 'itadLowestPrice' is missing in type ... but required in type 'CommonGroundRow'`. ROK-1297 (#823) added `itadLowestPrice: number | null` to the `CommonGroundRow` interface (`api/src/lineups/common-ground-query.helpers.ts:55`) but did not update the two `CommonGroundRow` fixtures in the spec file. Pre-existing on origin/main; confirmed by reverting my zod 4 changes and re-running tsc. `nest build` (api workspace) does not catch this because `api/tsconfig.build.json` excludes `**/*.spec*.ts`, but `validate-ci.sh::run_typecheck` uses `api/tsconfig.json` which DOES include spec files — so this fails CI on the typecheck step.
+  Suggested: add `itadLowestPrice: 1234` (or `null`) to both fixtures at lines 49 and 88 in `common-ground-query.helpers.spec.ts`. One-line each; trivial.
+

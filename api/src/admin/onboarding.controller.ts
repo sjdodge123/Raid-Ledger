@@ -147,7 +147,7 @@ export class OnboardingController {
     const parsed = UpdateStepSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(
-        parsed.error.errors.map((e) => e.message).join(', '),
+        parsed.error.issues.map((e) => e.message).join(', '),
       );
     }
 
@@ -176,7 +176,7 @@ export class OnboardingController {
     const parsed = ChangePasswordSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(
-        parsed.error.errors.map((e) => e.message).join(', '),
+        parsed.error.issues.map((e) => e.message).join(', '),
       );
     }
 
@@ -237,7 +237,7 @@ export class OnboardingController {
     const parsed = CommunityIdentitySchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(
-        parsed.error.errors.map((e) => e.message).join(', '),
+        parsed.error.issues.map((e) => e.message).join(', '),
       );
     }
 
