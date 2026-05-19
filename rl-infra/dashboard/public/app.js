@@ -660,38 +660,39 @@ const requestReset = async (slug, stepId) => {
 const renderEmpty = (msg) => el('div', { class: 'empty', text: msg });
 
 const render = (data) => {
-  // ROK-1326 fix-9: preserve scroll position across re-renders. Every
-  // verdict tap fires `tick({ force: true })` which re-fetches /api/state
-  // and rebuilds the entire DOM via replaceChildren — that resets the
-  // viewport to the top, which on mobile means the tester loses their
-  // place after every pass/fail/skip ("very jarring" per operator
-  // 2026-05-19). Save scroll BEFORE replacing, restore IMMEDIATELY
-  // after appending — we use scrollTo with 'instant' so there's no
-  // smooth-scroll flash.
+  // ROK-1326 fix-9 (revised 2): preserve scroll position across re-renders.
+  // The earlier attempt called replaceChildren() with no args to empty
+  // the container, then appendChild'd new cards. That creates a brief
+  // empty-DOM window where the document height collapses; the browser
+  // clamps scrollY to the (now lower) max scroll position before our
+  // restore runs. Switch to building the new card list FIRST and
+  // replaceChildren-ing it as a SINGLE atomic operation — the document
+  // height never dips, so the browser has nothing to clamp against.
+  //
+  // Plus: defer the explicit scrollTo into requestAnimationFrame so it
+  // wins against any browser scroll-anchoring that fires on the next
+  // frame. Two-arg form for max compatibility (mobile Safari <15.4
+  // ignores scrollTo({behavior:'instant'}) silently).
   const scrollX = window.scrollX;
   const scrollY = window.scrollY;
 
-  const slotsDiv = $('slots');
-  slotsDiv.replaceChildren();
-  for (const s of data.slots ?? []) slotsDiv.appendChild(renderSlot(s));
-  if (!data.slots?.length) slotsDiv.appendChild(renderEmpty('No slots configured.'));
+  const slotCards = (data.slots ?? []).map(renderSlot);
+  if (!slotCards.length) slotCards.push(renderEmpty('No slots configured.'));
+  $('slots').replaceChildren(...slotCards);
 
-  const envsDiv = $('envs');
-  envsDiv.replaceChildren();
-  $('env-count').textContent = data.envs?.length ? `· ${data.envs.length}` : '';
-  if (data.envs?.length) {
-    for (const e of data.envs) envsDiv.appendChild(renderEnv(e, data.public_domain));
-  } else {
-    envsDiv.appendChild(renderEmpty('No test envs running. Use `rl env spin <slug>` from the operator shell or the rl_env_spin MCP tool.'));
+  const envCards = (data.envs ?? []).map((e) => renderEnv(e, data.public_domain));
+  if (!envCards.length) {
+    envCards.push(renderEmpty('No test envs running. Use `rl env spin <slug>` from the operator shell or the rl_env_spin MCP tool.'));
   }
+  $('envs').replaceChildren(...envCards);
+  $('env-count').textContent = data.envs?.length ? `· ${data.envs.length}` : '';
 
   $('generated-at').textContent = `updated ${fmtTime(data.generated_at)}`;
 
-  // Restore scroll AFTER all the layout shifts have settled. Browsers
-  // sometimes batch layout/scroll updates; window.scrollTo with
-  // behavior:'instant' is synchronous in this position and lands at the
-  // same Y the tester was reading from.
-  window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+  // Sync restore + rAF restore. Sync handles the common case; rAF
+  // handles browsers that adjust scroll on the next layout pass.
+  window.scrollTo(scrollX, scrollY);
+  requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
 };
 
 const setStatus = (state) => {
