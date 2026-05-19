@@ -694,51 +694,9 @@ if (refreshDot) {
   refreshDot.addEventListener('click', () => tick({ force: true }));
 }
 
-// Pull-to-refresh. iOS Safari has its own native gesture that does a
-// full page reload — works but loses any in-flight draft state. This
-// custom version triggers a soft tick() instead so localStorage drafts
-// survive. Visual indicator (bar at the top) tracks the pull depth.
-const PULL_THRESHOLD = 70; // px past which the pull commits to a refresh
-const PULL_MAX_INDICATOR = 100; // visual cap
-let pullStartY = 0;
-let pullDeltaY = 0;
-let pullActive = false;
-const pullIndicator = document.createElement('div');
-pullIndicator.className = 'pull-indicator';
-pullIndicator.textContent = '↓ pull to refresh';
-document.body.appendChild(pullIndicator);
-
-window.addEventListener('touchstart', (ev) => {
-  if (window.scrollY <= 0 && ev.touches.length === 1) {
-    pullStartY = ev.touches[0].clientY;
-    pullActive = true;
-    pullDeltaY = 0;
-  }
-}, { passive: true });
-
-window.addEventListener('touchmove', (ev) => {
-  if (!pullActive) return;
-  pullDeltaY = ev.touches[0].clientY - pullStartY;
-  if (pullDeltaY > 0 && window.scrollY <= 0) {
-    const shown = Math.min(pullDeltaY, PULL_MAX_INDICATOR);
-    pullIndicator.style.height = `${shown}px`;
-    pullIndicator.style.opacity = String(Math.min(1, shown / PULL_THRESHOLD));
-    pullIndicator.textContent = pullDeltaY >= PULL_THRESHOLD
-      ? '↑ release to refresh'
-      : '↓ pull to refresh';
-  } else {
-    pullActive = false;
-    pullIndicator.style.height = '0';
-    pullIndicator.style.opacity = '0';
-  }
-}, { passive: true });
-
-window.addEventListener('touchend', () => {
-  if (!pullActive) return;
-  const committed = pullDeltaY >= PULL_THRESHOLD;
-  pullActive = false;
-  pullDeltaY = 0;
-  pullIndicator.style.height = '0';
-  pullIndicator.style.opacity = '0';
-  if (committed) tick({ force: true });
-}, { passive: true });
+// Pull-to-refresh removed 2026-05-19 — the custom gesture handler was
+// causing an empty-dashboard render in incognito sessions (reproducible).
+// Browser-native pull-to-refresh on iOS Safari / Chrome triggers a full
+// page reload instead — drafts in localStorage survive a reload, so
+// nothing's lost. The header refresh dot is also tappable as the
+// explicit one-tap alternative.
