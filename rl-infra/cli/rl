@@ -386,6 +386,12 @@ cmd_test_plan_wait() {
             *) echo "unknown arg: $1" >&2; exit 2 ;;
         esac
     done
+    # ROK-1326 fix-10 (Codex P1): validate --timeout as a bounded
+    # positive integer BEFORE interpolating into the remote shell.
+    # Without this, `--timeout '60; rm -rf /'` becomes a command
+    # injection on the VM as rl-agent.
+    [[ "$timeout" =~ ^[0-9]+$ ]] && (( timeout >= 1 && timeout <= 3600 )) \
+        || { echo "invalid --timeout: must be 1..3600 seconds, got: $timeout" >&2; exit 2; }
     if [[ "$TARGET" == "local" ]]; then
         echo "test-plan wait is fleet-only (RL_TARGET=remote)" >&2
         exit 1

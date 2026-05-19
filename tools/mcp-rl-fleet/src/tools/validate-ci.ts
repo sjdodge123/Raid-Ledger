@@ -44,10 +44,19 @@ export async function execute(params: ValidateCiParams): Promise<ValidateCiResul
   // /workspace because the Mutagen ignore list now excludes .git entirely.
   // If the runner's .git/objects is missing, rebuild it via the rl CLI
   // helper before invoking validate-ci. Harmless if .git is already healthy.
-  await ensureRunnerGit(sshUser, sshHost, agentId, params.worktree_path).catch(() => {
-    // Non-fatal — if the scaffold can't run (claim missing, runner down)
-    // validate-ci will surface the underlying failure on its own.
-  });
+  await ensureRunnerGit(sshUser, sshHost, agentId, params.worktree_path).catch(
+    (err: unknown) => {
+      // Non-fatal — if the scaffold can't run (claim missing, runner down)
+      // validate-ci will surface the underlying failure on its own. But
+      // log the cause to stderr (ROK-1326 fix-10, reviewer finding):
+      // the original `.catch(() => {})` silently dropped failures; if
+      // git init succeeds but git fetch dies (network blip, proxy
+      // outage), .git/objects ends up empty and validate-ci runs
+      // against a half-built tree without a hint of why.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[rl_validate_ci] ensureRunnerGit failed (non-fatal): ${msg}`);
+    },
+  );
   // Single-quote each arg so the remote shell does NOT expand $(...),
   // backticks, or ${var} (H-MCP-2). Zod's slug regex narrows
   // against_env_slug; args[] entries can be anything the agent passes,

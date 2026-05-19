@@ -61,21 +61,21 @@ const SALT_LENGTH = 32;
 const KEY_LENGTH = 32;
 
 function parseArgs(argv) {
+  // ROK-1326 fix-10 (Codex P1): secrets MUST NOT come from argv. The
+  // operator's JWT_SECRET and the env's RL_ENV_JWT_SECRET are read
+  // from environment variables (RL_REENCRYPT_SRC_SECRET and
+  // RL_REENCRYPT_DST_SECRET) instead — argv is visible to every user
+  // on the host via /proc/<pid>/cmdline, env is not. The wrapper
+  // script (scripts/sync-local-to-env.sh) sets the envs inline.
   const args = {
-    src: null,
-    dst: null,
+    src: process.env.RL_REENCRYPT_SRC_SECRET || null,
+    dst: process.env.RL_REENCRYPT_DST_SECRET || null,
     substitutes: new Map(),
     truncate: true,
   };
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
     switch (flag) {
-      case '--src-secret':
-        args.src = argv[++i];
-        break;
-      case '--dst-secret':
-        args.dst = argv[++i];
-        break;
       case '--substitute': {
         const pair = argv[++i];
         const eq = pair.indexOf('=');
@@ -99,7 +99,9 @@ function parseArgs(argv) {
     }
   }
   if (!args.src || !args.dst) {
-    console.error('--src-secret and --dst-secret are required');
+    console.error(
+      'RL_REENCRYPT_SRC_SECRET and RL_REENCRYPT_DST_SECRET env vars are required',
+    );
     printUsageAndExit(2);
   }
   return args;
@@ -107,8 +109,8 @@ function parseArgs(argv) {
 
 function printUsageAndExit(code) {
   console.error(
-    'usage: rl-reencrypt-settings.mjs --src-secret <S> --dst-secret <D> ' +
-      '[--substitute key=value]... [--no-truncate]',
+    'usage: RL_REENCRYPT_SRC_SECRET=<src> RL_REENCRYPT_DST_SECRET=<dst> ' +
+      'rl-reencrypt-settings.mjs [--substitute key=value]... [--no-truncate]',
   );
   process.exit(code);
 }

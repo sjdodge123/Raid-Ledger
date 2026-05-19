@@ -345,9 +345,9 @@ fi
 set +e
 docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -F$'\t' -c \
     "SELECT key, encrypted_value FROM app_settings ORDER BY key;" \
-| node "$SCRIPT_DIR/rl-reencrypt-settings.mjs" \
-    --src-secret "$LOCAL_JWT_SECRET_RESOLVED" \
-    --dst-secret "$REMOTE_ENV_JWT_SECRET" \
+| RL_REENCRYPT_SRC_SECRET="$LOCAL_JWT_SECRET_RESOLVED" \
+  RL_REENCRYPT_DST_SECRET="$REMOTE_ENV_JWT_SECRET" \
+  node "$SCRIPT_DIR/rl-reencrypt-settings.mjs" \
     "${REENCRYPT_SUBSTITUTES[@]}" \
 | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
     "$REMOTE_PSQL" 2>&1 | tail -20

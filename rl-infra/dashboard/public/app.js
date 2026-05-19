@@ -508,7 +508,21 @@ const patchPlanInPlace = (slug, plan, draft) => {
     }
   }
   const submitBtn = document.querySelector('.btn-submit');
-  if (submitBtn) submitBtn.disabled = draftCount === 0;
+  if (submitBtn) {
+    submitBtn.disabled = draftCount === 0;
+    // F5 fix: submit title doesn't otherwise reset when draftCount toggles back to 0.
+    submitBtn.title = draftCount === 0
+      ? 'No draft verdicts yet — tap a step button first'
+      : '';
+  }
+  // F6 fix: Clear-draft button is rendered conditionally in the original
+  // render() path (only when draftCount > 0). When patchPlanInPlace makes
+  // draftCount drop back to 0 (tester toggled their last draft off),
+  // the button would otherwise linger. Remove it inline; the next full
+  // render() (on submit / clear) will re-create it if needed.
+  if (draftCount === 0) {
+    document.querySelector('.btn-clear-draft')?.remove();
+  }
 };
 
 const renderSubmitFooter = (slug, plan, draft) => {

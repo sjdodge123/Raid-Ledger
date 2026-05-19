@@ -370,8 +370,17 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
       }
     });
 
+    // ROK-1326 fix-10 (reviewer F9): cap stderr buffer at 8 KiB. A noisy
+    // ssh / inotifywait could otherwise grow this unbounded over the
+    // full timeout window (up to ~3600s). The buffer is only surfaced
+    // in the error envelope at line 393; 8 KiB is more than enough.
+    const STDERR_CAP = 8 * 1024;
     child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderrBuf.length >= STDERR_CAP) return;
       stderrBuf += chunk.toString('utf8');
+      if (stderrBuf.length > STDERR_CAP) {
+        stderrBuf = stderrBuf.slice(0, STDERR_CAP) + '\n[stderr truncated]';
+      }
     });
 
     child.on('error', (err: Error) => {
