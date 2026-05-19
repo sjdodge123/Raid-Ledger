@@ -36,7 +36,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^25.7.0",
+    "@types/node": "^25.9.0",
     "@types/react": "^19.2.14",
     "@types/react-big-calendar": "^1.16.3",
     "@types/react-dom": "^19.2.3",
@@ -50,7 +50,7 @@
     "msw": "^2.14.6",
     "tailwindcss": "^4.1.18",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.59.3",
+    "typescript-eslint": "^8.59.4",
     "vite": "^7.2.4",
     "vitest": "^4.1.6",
     "vitest-axe": "^0.1.0"
