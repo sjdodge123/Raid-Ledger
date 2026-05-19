@@ -34,7 +34,10 @@ export async function getDiscordOAuthConfig(
   return {
     clientId,
     clientSecret,
-    callbackUrl: callbackUrl || 'http://localhost:3000/auth/discord/callback',
+    callbackUrl:
+      callbackUrl ||
+      process.env.DISCORD_CALLBACK_URL ||
+      'http://localhost:3000/auth/discord/callback',
   };
 }
 

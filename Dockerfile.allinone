@@ -171,6 +171,14 @@ COPY --from=builder /app/packages/contract/package.json ./node_modules/@raid-led
 COPY --from=builder /app/api/dist/scripts ./dist/scripts
 COPY --from=builder /app/api/seeds ./dist/seeds
 
+# Same Mutagen perm-drift class bug as the chmod 0755 lines below — under
+# fleet builds the source files arrive at 600 (instead of laptop's 644), so
+# the unprivileged `app` user (uid 1001) cannot read drizzle migrations
+# (meta/_journal.json), the JS bundle, seed JSON, or static assets at boot.
+# a+rX adds read for everyone, plus execute on directories only (so they
+# stay traversable). No-op on CI builds where perms are already 644.
+RUN chmod -R a+rX ./drizzle/migrations ./dist ./assets ./node_modules ./packages
+
 # Copy entrypoint
 COPY api/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 # Use absolute mode (0755) not `+x`. The Mutagen sync that feeds the

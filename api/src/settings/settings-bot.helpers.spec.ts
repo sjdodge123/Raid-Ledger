@@ -1,5 +1,6 @@
 import {
   getClientUrl,
+  getDiscordOAuthConfig,
   DEFAULT_CLIENT_URL,
   type SettingsCore,
 } from './settings-bot.helpers';
@@ -82,5 +83,68 @@ describe('getClientUrl', () => {
 describe('DEFAULT_CLIENT_URL', () => {
   it('should be the standard localhost dev URL', () => {
     expect(DEFAULT_CLIENT_URL).toBe('http://localhost:5173');
+  });
+});
+
+describe('getDiscordOAuthConfig — callbackUrl fallback chain (ROK-1325)', () => {
+  const originalEnv = process.env.DISCORD_CALLBACK_URL;
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.DISCORD_CALLBACK_URL = originalEnv;
+    } else {
+      delete process.env.DISCORD_CALLBACK_URL;
+    }
+  });
+
+  it('AC1 — falls back to process.env.DISCORD_CALLBACK_URL when setting is null', async () => {
+    process.env.DISCORD_CALLBACK_URL =
+      'https://slot-1.gamernight.net/api/auth/discord/callback';
+    const svc = mockSettingsCore({
+      [SETTING_KEYS.DISCORD_CLIENT_ID]: 'client-id',
+      [SETTING_KEYS.DISCORD_CLIENT_SECRET]: 'client-secret',
+      // DISCORD_CALLBACK_URL setting NOT set → SettingsCore.get returns null
+    });
+
+    const config = await getDiscordOAuthConfig(svc);
+
+    expect(config).not.toBeNull();
+    expect(config!.callbackUrl).toBe(
+      'https://slot-1.gamernight.net/api/auth/discord/callback',
+    );
+  });
+
+  it('AC2 — setting wins over env var when both present', async () => {
+    process.env.DISCORD_CALLBACK_URL =
+      'https://env-var.example/api/auth/discord/callback';
+    const svc = mockSettingsCore({
+      [SETTING_KEYS.DISCORD_CLIENT_ID]: 'client-id',
+      [SETTING_KEYS.DISCORD_CLIENT_SECRET]: 'client-secret',
+      [SETTING_KEYS.DISCORD_CALLBACK_URL]:
+        'https://from-setting.example/api/auth/discord/callback',
+    });
+
+    const config = await getDiscordOAuthConfig(svc);
+
+    expect(config).not.toBeNull();
+    expect(config!.callbackUrl).toBe(
+      'https://from-setting.example/api/auth/discord/callback',
+    );
+  });
+
+  it('AC3 — hardcoded localhost is the last-resort default when neither setting nor env is set', async () => {
+    delete process.env.DISCORD_CALLBACK_URL;
+    const svc = mockSettingsCore({
+      [SETTING_KEYS.DISCORD_CLIENT_ID]: 'client-id',
+      [SETTING_KEYS.DISCORD_CLIENT_SECRET]: 'client-secret',
+      // DISCORD_CALLBACK_URL setting NOT set, env var deleted above
+    });
+
+    const config = await getDiscordOAuthConfig(svc);
+
+    expect(config).not.toBeNull();
+    expect(config!.callbackUrl).toBe(
+      'http://localhost:3000/auth/discord/callback',
+    );
   });
 });
