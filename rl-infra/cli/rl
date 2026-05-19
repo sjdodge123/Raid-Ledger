@@ -72,11 +72,35 @@ TARGET="$(resolve_target)"
 
 # --- remote dispatch ------------------------------------------------------
 
+# Shell-escape each positional arg for safe interpolation into a string
+# that will be re-parsed by the remote login shell. `printf '%q'` emits a
+# form bash can re-parse exactly — so a slug, branch, or pass-through arg
+# containing `$(...)`, backticks, or quotes is treated as opaque literal
+# bytes (H-VM-1). Echoes the escaped, space-joined args.
+q_args() {
+    local out=""
+    local arg
+    for arg in "$@"; do
+        out+=" $(printf '%q' "$arg")"
+    done
+    # Strip the leading space so the caller can drop the result mid-string.
+    printf '%s' "${out# }"
+}
+
 ssh_run() {
     # Pipes RL_AGENT_ID through; orchestrator scripts read it.
+    #
+    # Callers MUST pass each argv element as a separate positional —
+    # `ssh_run claim --branch "$branch"`, NOT a pre-joined string. The
+    # remote login shell re-parses whatever string we send, so we
+    # printf-%q each arg through q_args. Previously this used "$*" which
+    # let any caller arg containing $(...) / backticks / quotes execute
+    # arbitrary code as rl-agent on the VM (H-VM-1).
+    local remote_cmd
+    remote_cmd="RL_AGENT_ID=$(printf '%q' "$RL_AGENT_ID") /srv/rl-infra/orchestrator/bin/$(q_args "$@")"
     ssh -o ConnectTimeout=5 -o BatchMode=yes \
         "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
-        "RL_AGENT_ID='${RL_AGENT_ID}' /srv/rl-infra/orchestrator/bin/$*"
+        "$remote_cmd"
 }
 
 ssh_run_interactive() {
@@ -112,7 +136,11 @@ cmd_claim() {
     deadline=$((started_at + timeout))
 
     while true; do
-        RESULT=$(ssh_run "claim --branch '$branch' ${extra_args[*]:-}")
+        # Pass each arg as a separate positional so ssh_run can printf-%q
+        # them — branch can in principle contain shell metachars (a typo
+        # could ship a worktree branch like `foo$(id)`), and any future
+        # extra_args from operator typing would too. H-VM-1.
+        RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]}")
         SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
         QUEUED=$(jq -r '.queued // false' <<<"$RESULT")
         if [[ -n "$SLOT" ]]; then
@@ -151,13 +179,17 @@ cmd_release() {
         exit 0
     fi
     # Look up the slot BEFORE the SSH release call drops the claim record,
-    # so we know which Mutagen session to terminate.
+    # so we know which Mutagen session to terminate. RL_AGENT_ID is
+    # printf-%q'd through into the remote jq invocation — defense in
+    # depth (today USER + sha1 is always alnum, but the same shape as
+    # H-VM-1 — never interpolate user-derived strings into a remote
+    # shell context without escaping).
     local slot_for_mutagen
     slot_for_mutagen=$(ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
-        "jq -r --arg a '${RL_AGENT_ID}' '[.[] | select(.agent_id == \$a and .claimed == true) | .slot] | first // empty' /srv/rl-infra/state/claims.json" 2>/dev/null || true)
+        "jq -r --arg a $(printf '%q' "$RL_AGENT_ID") '[.[] | select(.agent_id == \$a and .claimed == true) | .slot] | first // empty' /srv/rl-infra/state/claims.json" 2>/dev/null || true)
     stop_heartbeat_daemon
     local result
-    result=$(ssh_run "release")
+    result=$(ssh_run release)
     # Compact JSON for parseability by the MCP layer (no trailing pretty-print
     # multi-line output; the result block is already single-line JSON from the
     # orchestrator). Print as-is, no jq reformatting.
@@ -190,9 +222,12 @@ cmd_force_release() {
     done
     [[ -z "$slot" ]] && { echo "usage: rl force-release --slot N [--reason '...'] [--no-destroy]" >&2; exit 2; }
     [[ -z "$reason" ]] && { echo "--reason '<why>' is required (recorded in audit log)" >&2; exit 2; }
+    # printf-%q every interpolated value: reason is operator free-form,
+    # RL_AGENT_ID derives from $USER, slot/no_destroy are local flags
+    # but defense-in-depth (H-VM-1).
     ssh -o ConnectTimeout=5 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
-        "RL_OPERATOR=1 RL_FORCE_REASON=$(printf %q "$reason") RL_AGENT_ID='${RL_AGENT_ID}' \
-         /srv/rl-infra/orchestrator/bin/force-release --slot '${slot}' ${no_destroy}" | jq .
+        "RL_OPERATOR=1 RL_FORCE_REASON=$(printf '%q' "$reason") RL_AGENT_ID=$(printf '%q' "$RL_AGENT_ID") \
+         /srv/rl-infra/orchestrator/bin/force-release --slot $(printf '%q' "$slot") ${no_destroy}" | jq .
 }
 
 cmd_status() {
@@ -204,14 +239,18 @@ cmd_status() {
     # Pass through args so the MCP server (which doesn't pass --pretty) gets
     # parseable JSON, while operator typing `rl status --pretty` gets the
     # human table. Previously hardcoded --pretty here, which broke the MCP
-    # rl_status wrapper that expected JSON.
-    ssh_run "status $*"
+    # rl_status wrapper that expected JSON. Each arg goes through ssh_run's
+    # printf-%q for H-VM-1.
+    ssh_run status "$@"
 }
 
 cmd_shell() {
     [[ "$TARGET" == "local" ]] && { echo "no remote shell in local mode" >&2; exit 1; }
-    SLOT=$(ssh_run "claim --branch unknown" | jq -r '.slot')
+    SLOT=$(ssh_run claim --branch unknown | jq -r '.slot')
     [[ -z "$SLOT" || "$SLOT" == "null" ]] && { echo "no slot claimed — rl claim first" >&2; exit 1; }
+    # SLOT came from jq output of a server-controlled state file; numeric
+    # by contract. Still defense-in-depth: validate before interpolating.
+    [[ "$SLOT" =~ ^[0-9]+$ ]] || { echo "[rl] unexpected slot value: $SLOT" >&2; exit 1; }
     ssh_run_interactive "docker exec -it rl-runner-$SLOT tmux attach -t main"
 }
 
@@ -219,9 +258,12 @@ cmd_env() {
     [[ "$TARGET" == "local" ]] && { echo "env subcommands are remote-only (use deploy_dev.sh locally)" >&2; exit 1; }
     local sub="${1:-}"; shift || true
     case "$sub" in
-        spin)     ssh_run "env-spin $*" | jq . ;;
-        destroy)  ssh_run "env-destroy $*" | jq . ;;
-        list)     ssh_run "status" | jq '.envs' ;;
+        # ssh_run takes each arg as a separate positional and printf-%q's
+        # them — pass "$@" not "$*" so a slug like `foo$(id)` reaches the
+        # remote orchestrator as the literal string. H-VM-1.
+        spin)     ssh_run env-spin "$@" | jq . ;;
+        destroy)  ssh_run env-destroy "$@" | jq . ;;
+        list)     ssh_run status | jq '.envs' ;;
         *) echo "rl env {spin|destroy|list} [args]" >&2; exit 2 ;;
     esac
 }
@@ -230,10 +272,20 @@ cmd_db() {
     [[ "$TARGET" == "local" ]] && { echo "db is remote-only" >&2; exit 1; }
     local slug="${1:-}"; shift || true
     [[ -z "$slug" ]] && { echo "usage: rl db <slug> [--web]" >&2; exit 2; }
+    # CLI-side slug re-validation (H-VM-1). The orchestrator scripts
+    # validate `^[a-z0-9-]+$` server-side, but cmd_db here runs
+    # `docker exec` DIRECTLY via SSH — no orchestrator binary is invoked
+    # in this path, so the orchestrator's regex never gets to see this
+    # slug. Without this check a hostile/typo slug like `"; touch /tmp/x; #`
+    # reaches the rl-agent shell before any orchestrator validation.
+    [[ "$slug" =~ ^[a-z0-9-]+$ ]] || {
+        echo "[rl] slug must match [a-z0-9-]+ (got: $(printf '%q' "$slug"))" >&2; exit 2
+    }
     if [[ "${1:-}" == "--web" ]]; then
         ssh_run_interactive "docker exec -it rl-env-${slug}-pg true && \
             docker run --rm -d --name pgweb-${slug} --network rl-net \
               --label rl.role=infra \
+              --label rl.env_slug=${slug} \
               --label 'traefik.enable=true' \
               --label 'traefik.http.routers.pgweb-${slug}.rule=Host(\`db-${slug}.rl.lan\`)' \
               --label 'traefik.http.services.pgweb-${slug}.loadbalancer.server.port=8081' \
@@ -266,7 +318,10 @@ cmd_validate_ci() {
     # Mutagen pre-flight: make sure the worktree is current before running.
     SLOT=$(current_slot)
     flush_mutagen "$SLOT"
-    ssh_run "run-on-runner -- bash /workspace/scripts/validate-ci.sh $*"
+    # ssh_run printf-%q's each positional. Pass "$@" so a validate-ci flag
+    # like --against-env-slug=$(id) reaches the runner as a literal
+    # string rather than executing on the VM (H-VM-1).
+    ssh_run run-on-runner -- bash /workspace/scripts/validate-ci.sh "$@"
 }
 
 cmd_top() {
@@ -297,7 +352,7 @@ cmd_doctor() {
     echo "RL_PROXMOX_HOST:      $RL_PROXMOX_HOST"
     if [[ "$TARGET" == "remote" ]]; then
         echo -n "SSH connect:          "; ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" 'echo ok' 2>&1 || echo "FAILED"
-        echo -n "Orchestrator:         "; ssh_run "status" >/dev/null 2>&1 && echo "ok" || echo "FAILED"
+        echo -n "Orchestrator:         "; ssh_run status >/dev/null 2>&1 && echo "ok" || echo "FAILED"
         echo -n "Mutagen daemon:       "; pgrep -f "mutagen daemon run" >/dev/null && echo "running" || echo "not running (start with: mutagen daemon start)"
         echo -n "Active sync sessions: "; mutagen sync list 2>/dev/null | grep -c '^Name:' || echo 0
     else
@@ -310,7 +365,7 @@ cmd_doctor() {
 # --- helpers --------------------------------------------------------------
 
 current_slot() {
-    ssh_run "claim --branch unknown" | jq -r '.slot // empty'
+    ssh_run claim --branch unknown | jq -r '.slot // empty'
 }
 
 ensure_claim() {
@@ -451,10 +506,15 @@ start_heartbeat_daemon() {
         # the MCP caller within milliseconds. Verified 2026-05-18 — every
         # "hung claim" incident tonight traced back to this missing detach.
         exec 0</dev/null 1>/dev/null 2>/dev/null
+        # Snapshot RL_AGENT_ID into the subshell with printf-%q so any
+        # weird chars (defensive — see deriveAgentId validation in MCP
+        # exec.ts) can't break out of the remote shell quoting.
+        local quoted_id
+        quoted_id=$(printf '%q' "$RL_AGENT_ID")
         while true; do
             ssh -o ConnectTimeout=5 -o BatchMode=yes \
                 "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
-                "RL_AGENT_ID='$RL_AGENT_ID' /srv/rl-infra/orchestrator/bin/heartbeat" >/dev/null 2>&1 || true
+                "RL_AGENT_ID=$quoted_id /srv/rl-infra/orchestrator/bin/heartbeat" >/dev/null 2>&1 || true
             sleep 60
         done
     ) &

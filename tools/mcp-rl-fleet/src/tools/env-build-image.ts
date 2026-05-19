@@ -7,7 +7,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { deriveAgentId } from '../exec.js';
+import { deriveAgentId, shellQuote } from '../exec.js';
 import * as claim from './claim.js';
 
 const execFileAsync = promisify(execFile);
@@ -83,7 +83,13 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
 
   const args = ['--tag', params.tag];
   if (params.no_push) args.push('--no-push');
-  const remote = `RL_AGENT_ID='${agentId}' /srv/rl-infra/orchestrator/bin/build-image-on-runner ${args.map((a) => JSON.stringify(a)).join(' ')}`;
+  // shellQuote every arg crossing the SSH boundary — `tag` is Zod-regex-
+  // locked to [a-zA-Z0-9._-]+ but defense-in-depth is cheap and the
+  // pattern matches H-MCP-1/2 above. (M-MCP-4 — agentId interpolation.)
+  const remote =
+    `RL_AGENT_ID=${shellQuote(agentId)} ` +
+    `/srv/rl-infra/orchestrator/bin/build-image-on-runner ` +
+    args.map((a) => shellQuote(a)).join(' ');
 
   try {
     const result = await execFileAsync(

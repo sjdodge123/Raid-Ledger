@@ -47,6 +47,13 @@ export async function runRl(
   args: string[],
   opts: RlEnv = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  // Privilege-elevation knobs (RL_OPERATOR, RL_FORCE_REASON) live ONLY in
+  // an internal allowlist gated by user='rl' AND the operator-opt-in env
+  // var RL_FLEET_ALLOW_FORCE_RELEASE=1. Without this guard a future tool
+  // author who passes `extra: { RL_OPERATOR: '1' }` silently elevates a
+  // call (M-MCP-3). Filter the caller's extra so RL_OPERATOR is dropped
+  // unless we're explicitly in the force-release elevation path.
+  const extra = sanitizeExtra(opts);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     // Force agent identity. The MCP server is for agents — never operators.
@@ -56,8 +63,20 @@ export async function runRl(
     // Sensible default if .zshrc didn't load. ssh config alias resolves.
     RL_PROXMOX_HOST: process.env.RL_PROXMOX_HOST ?? 'rl-infra',
     ...(opts.agentId ? { RL_AGENT_ID: opts.agentId } : {}),
-    ...(opts.extra ?? {}),
+    ...extra,
   };
+  // After the spread, re-apply RL_OPERATOR if (and only if) the elevation
+  // gate is open AND the caller explicitly requested it via opts.extra.
+  // This is the single chokepoint for privilege elevation.
+  if (
+    opts.user === 'rl' &&
+    process.env.RL_FLEET_ALLOW_FORCE_RELEASE === '1' &&
+    opts.extra?.RL_OPERATOR === '1'
+  ) {
+    env.RL_OPERATOR = '1';
+  } else {
+    env.RL_OPERATOR = '0';
+  }
 
   try {
     const result = await execFileAsync(RL_BIN, args, {
@@ -77,6 +96,56 @@ export async function runRl(
 }
 
 /**
+ * Strip privilege-elevation knobs from opts.extra. RL_OPERATOR (the gate
+ * for the orchestrator's force-release path) is the only one today. Any
+ * future privilege-affecting env var must be added here AND re-applied
+ * via the explicit gate in `runRl` below. M-MCP-3.
+ */
+function sanitizeExtra(opts: RlEnv): Record<string, string> {
+  if (!opts.extra) return {};
+  const cleaned: Record<string, string> = {};
+  for (const [k, v] of Object.entries(opts.extra)) {
+    if (k === 'RL_OPERATOR') continue; // handled by the explicit gate
+    cleaned[k] = v;
+  }
+  return cleaned;
+}
+
+/**
+ * POSIX shell single-quote escape. Wraps `s` in single quotes and escapes
+ * any embedded single quote via the classic `'\''` trick. The result is
+ * safe to interpolate into a string passed to `bash -c "..."` or `ssh user
+ * 'cmd ...'` — the remote shell will see exactly the bytes in `s`, with
+ * NO expansion of `$(...)`, backticks, `${var}`, glob characters, etc.
+ *
+ * Used at every MCP→VM SSH boundary where any portion of the remote
+ * command derives from agent-controlled input (user command, args[],
+ * derived agent_id from `process.env.USER`). The SSH-injection class of
+ * bug (H-MCP-1, H-MCP-2) lives at exactly this boundary: `JSON.stringify`
+ * produces double-quoted strings, and the remote shell DOES expand
+ * `$(...)` inside double quotes. Single-quote wrapping prevents that.
+ */
+export function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Validate a string against a regex; throw if invalid. Used for inputs
+ * that are interpolated INSIDE single-quoted shell segments (where the
+ * only escape hazard is a literal single quote in the input). Today the
+ * primary user is RL_AGENT_ID, which derives from `process.env.USER`
+ * upstream — if the launching env is doctored, `USER` could carry a
+ * single quote and break out of the quoting. Defense-in-depth (M-MCP-4).
+ */
+function assertSafeForShellArg(value: string, label: string): void {
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    throw new Error(
+      `${label} contains characters disallowed for SSH-bound interpolation: ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+/**
  * Derive RL_AGENT_ID exactly the way the rl CLI does:
  *   ${USER}-sha1(<repo-root-or-cwd>)[:8]
  *
@@ -87,11 +156,20 @@ export async function runRl(
  * Caller passes worktreePath if known; otherwise we fall back to the MCP
  * server's cwd. If the worktreePath isn't a git repo, we use that path
  * as-is (matches CLI's `${REPO_ROOT:-$PWD}` fallback).
+ *
+ * The returned id is regex-validated (alphanumeric + `._-` only) so it
+ * is safe to interpolate inside a single-quoted shell segment. Throws
+ * if `process.env.USER` (the upstream input) carries chars outside that
+ * set — e.g. a doctored launching env exporting `USER="'; rm -rf /; #"`.
  */
 export function deriveAgentId(worktreePath?: string): string {
-  const user = process.env.USER ?? 'unknown';
   const explicit = process.env.RL_AGENT_ID;
-  if (explicit) return explicit;
+  if (explicit) {
+    assertSafeForShellArg(explicit, 'RL_AGENT_ID');
+    return explicit;
+  }
+  const user = process.env.USER ?? 'unknown';
+  assertSafeForShellArg(user, 'process.env.USER');
   const base = worktreePath ?? process.cwd();
   const sha = createHash('sha1').update(base).digest('hex').slice(0, 8);
   return `${user}-${sha}`;

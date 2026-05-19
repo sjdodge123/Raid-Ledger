@@ -6,7 +6,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { deriveAgentId } from '../exec.js';
+import { deriveAgentId, shellQuote } from '../exec.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -40,9 +40,20 @@ export async function execute(params: RunOnRunnerParams): Promise<RunOnRunnerRes
 
   // The orchestrator's run-on-runner takes `-- <cmd> [args...]`. We pass
   // `bash -c <user-command>` so multi-token commands work as one argument.
+  //
+  // CRITICAL (H-MCP-1): the full `remote` string is sent over SSH and the
+  // remote login shell parses it BEFORE handing to /srv/rl-infra/... .
+  // Inside double-quoted segments (which `JSON.stringify` produces) the
+  // remote shell DOES expand `$(...)`, backticks, and `${var}`. That lets
+  // a hostile `params.command` execute arbitrary code as rl-agent on the
+  // VM, escaping the runner-sandbox boundary. Wrap every user-controlled
+  // segment in POSIX single quotes (shellQuote) so the remote shell
+  // performs NO expansion. `agentId` is already regex-validated upstream
+  // in deriveAgentId (M-MCP-4) but we still single-quote it for symmetry.
   const remote =
-    `RL_AGENT_ID='${agentId}' /srv/rl-infra/orchestrator/bin/run-on-runner ` +
-    `-- bash -c ${JSON.stringify(params.command)}`;
+    `RL_AGENT_ID=${shellQuote(agentId)} ` +
+    `/srv/rl-infra/orchestrator/bin/run-on-runner ` +
+    `-- bash -c ${shellQuote(params.command)}`;
 
   try {
     const result = await execFileAsync(
