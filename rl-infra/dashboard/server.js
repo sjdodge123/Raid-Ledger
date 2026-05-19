@@ -278,6 +278,30 @@ const stripCommentBodies = (plan) => ({
   })),
 });
 
+// The <untrusted-tester-comment> wrap is a HINT to the agent that this
+// content is untrusted free-form text — it is NOT a cryptographic boundary.
+// A hostile tester can include the literal close tag in their body to
+// "escape" the wrap and inject content that LOOKS trusted to the agent.
+// Strip both open + close tags before interpolation so the wrap stays
+// unambiguous. We replace rather than encode (e.g. HTML entities) because
+// the consumer is an LLM context window, not a browser DOM.
+const stripWrapTags = (body) =>
+  typeof body === 'string'
+    ? body.replace(/<\/?untrusted-tester-comment>/gi, '[tag-stripped]')
+    : body;
+
+// Attachment URLs flow to the agent OUTSIDE the wrap, so they must match
+// the legitimate shape (the URL the upload handler returns). Anything
+// else — including agent-prompt-injection payloads in this field — is
+// nulled out. The legitimate shape is well under 100 chars; we cap to
+// 100 as belt-and-suspenders.
+const ATTACHMENT_URL_RE = /^\/api\/test-plans\/[a-z0-9-]+\/attachment\/[a-z0-9-]+\.(png|jpg|webp)$/;
+const sanitizeAttachmentUrl = (u) => {
+  if (typeof u !== 'string') return null;
+  const trimmed = u.slice(0, 100);
+  return ATTACHMENT_URL_RE.test(trimmed) ? trimmed : null;
+};
+
 const wrapCommentBodies = (plan) => ({
   ...plan,
   steps: plan.steps.map((s) => ({
@@ -287,13 +311,15 @@ const wrapCommentBodies = (plan) => ({
       ts: c.ts,
       // Wrap the body so the agent's context window has a clear "this is
       // untrusted user input" boundary. Agent must treat it as data only.
+      // Wrap tags are stripped from c.body first so a hostile tester
+      // cannot include a literal </untrusted-tester-comment> to escape it.
       body: c.body
-        ? `<untrusted-tester-comment>${c.body}</untrusted-tester-comment>`
+        ? `<untrusted-tester-comment>${stripWrapTags(c.body)}</untrusted-tester-comment>`
         : null,
-      // Attachment URL is fine to surface raw — it's a URL the agent can
-      // Read via its image tool if needed; not text the LLM interprets
-      // as instructions.
-      attachment_url: c.attachment_url ?? null,
+      // Attachment URL flows OUTSIDE the wrap so it must be validated
+      // against the legitimate shape — otherwise a tester can post
+      // agent-instruction text here and it lands raw in agent context.
+      attachment_url: sanitizeAttachmentUrl(c.attachment_url),
     })),
   })),
 });
@@ -563,7 +589,16 @@ const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
   if (!step) return sendJson(res, 404, { ok: false, error: 'step not found' });
 
   // Comment body can be empty IF an attachment is included (screenshot-only).
-  const attachmentUrl = typeof body.attachment_url === 'string' ? body.attachment_url.slice(0, 500) : null;
+  // attachment_url is validated against the legitimate shape so a hostile
+  // tester can't smuggle prompt-injection text into the agent's context (the
+  // URL flows OUTSIDE the <untrusted-tester-comment> wrap on the agent path).
+  // We reject anything that doesn't match the upload-handler output shape;
+  // explicitly-supplied bad URLs return 400 rather than silently dropping
+  // so the tester knows their attachment didn't attach.
+  const rawAttachment = typeof body.attachment_url === 'string' ? body.attachment_url : null;
+  const attachmentUrl = sanitizeAttachmentUrl(rawAttachment);
+  if (rawAttachment && !attachmentUrl)
+    return sendJson(res, 400, { ok: false, error: 'attachment_url must reference an uploaded attachment' });
   if (text.length === 0 && !attachmentUrl)
     return sendJson(res, 400, { ok: false, error: 'comment body or attachment required' });
 
