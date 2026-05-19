@@ -615,15 +615,20 @@ scaffold_runner_git() {
     quoted_url=$(printf '%q' "$origin_url")
     quoted_branch=$(printf '%q' "$branch")
     local script
+    # safe.directory: scaffold runs as root (via run-on-runner) but
+    # /workspace is owned by uid 1001 (rl-fleet). Git's dubious-ownership
+    # check fires on every operation when uid mismatches the dir owner.
+    # The git -c flag scopes the override to this invocation only —
+    # cleaner than touching the container's global gitconfig.
     script=$(cat <<EOF
 set -e
 cd /workspace
 rm -rf .git
-git init -q
-git remote add origin ${quoted_url}
-git fetch origin main --depth=500 -q
-git reset --mixed FETCH_HEAD
-git checkout -q -B ${quoted_branch} 2>/dev/null || true
+git -c safe.directory=/workspace init -q
+git -c safe.directory=/workspace remote add origin ${quoted_url}
+git -c safe.directory=/workspace fetch origin main --depth=500 -q
+git -c safe.directory=/workspace reset --mixed FETCH_HEAD
+git -c safe.directory=/workspace checkout -q -B ${quoted_branch} 2>/dev/null || true
 EOF
 )
     # Route through orchestrator's run-on-runner endpoint — rl-agent (the
