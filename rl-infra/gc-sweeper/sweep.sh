@@ -25,6 +25,18 @@ NOW_ISO=$(date -u +%FT%TZ)
 
 log() { echo "[$(date -u +%FT%TZ)] sweep: $*"; }
 
+# When the sweeper reaps an env (orphan, unhealthy, TTL, or dead-claim
+# cascade), also drop the env's test plan file. Without this, a tester
+# returning to fleet.gamernight.net would see a plan tied to a slug
+# that no longer maps to a running env — confusing + the deep links
+# would 502. Mirrors the cleanup env-destroy does for explicit teardowns.
+TEST_PLANS_DIR="${TEST_PLANS_DIR:-/state/test-plans}"
+clean_test_plan() {
+    local slug="$1"
+    [[ -z "$slug" ]] && return 0
+    rm -f "$TEST_PLANS_DIR/${slug}.json" 2>/dev/null || true
+}
+
 audit() {
     local outcome="$1"
     # Don't use ${2:-{}} — bash parses the first `}` as end of expansion,
@@ -71,6 +83,7 @@ for slot in $DEAD_SLOTS; do
             docker rm -f "$cid" >/dev/null 2>&1 || true
             docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
             docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
+            clean_test_plan "$slug"
         done
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null)'
@@ -95,6 +108,7 @@ for slot in $HOARDED_SLOTS; do
             docker rm -f "rl-env-${slug}-pg" >/dev/null 2>&1 || true
             docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
             rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
+            clean_test_plan "$slug"
         done
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .keep_alive=false)'
@@ -129,6 +143,7 @@ for slug in $ENVS_REGISTERED; do
         docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
         rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
         mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
+        clean_test_plan "$slug"
         audit orphan_env_pruned "$(jq -nc --arg slug "$slug" '{slug:$slug, reason:"container_missing"}')"
         continue
     fi
@@ -149,6 +164,7 @@ for slug in $ENVS_REGISTERED; do
             docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true
             rm -f "/traefik-conf.d/env-${slug}.yml" 2>/dev/null || true
             mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
+            clean_test_plan "$slug"
             audit unhealthy_env_pruned "$(jq -nc --arg slug "$slug" --argjson uptime "$UPTIME" '{slug:$slug, uptime_s:$uptime, reason:"unhealthy"}')"
         fi
     fi
@@ -170,6 +186,7 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
         docker rm -f "rl-env-${SLUG}-allinone" "rl-env-${SLUG}-pg" >/dev/null 2>&1 || true
         docker volume rm "rl-data-${SLUG}" >/dev/null 2>&1 || true
         mutate "$ENVS" --arg slug "$SLUG" 'map(select(.slug != $slug))'
+        clean_test_plan "$SLUG"
         audit env_expired "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" --argjson ttl "$TTL_HOURS" '{slug:$slug, age_hours:$age, ttl_hours:$ttl}')"
     fi
 done
