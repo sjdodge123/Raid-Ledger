@@ -153,16 +153,25 @@ REMOTE_PSQL="docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -v O
 # pipe through awk that drops `SELECT pg_catalog.setval('public.<X>', ...)`
 # lines for any <X> not in env's sequence list. Single-line setval calls
 # only — multi-line setvals don't happen in pg_dump output.
-SEQUENCE_FILTER='cat'
-if [[ -n "${ENV_SEQUENCES:-}" ]]; then
-    # awk -v doesn't handle embedded newlines, so flatten env's sequence
-    # list with `|` (never appears in pg sequence names) and split on `|`
-    # inside awk's BEGIN block.
-    ENV_SEQUENCES_FLAT=$(echo "$ENV_SEQUENCES" | tr '\n' '|')
-    # Parse each setval line — extract the sequence name between
-    # `setval('public.` and the closing `'`. Drop the line if not in
-    # env's allowed set.
-    SEQUENCE_FILTER='awk -v seqs="'"$ENV_SEQUENCES_FLAT"'" '"'"'
+#
+# M-VM-1 fix: previously this script built `SEQUENCE_FILTER` as a string
+# (awk program + flattened sequence list interpolated as text) and ran
+# it via `eval`. Sequence names come from a trusted information_schema
+# query so today's data is safe, but the failure mode if any name
+# contained an apostrophe or `|` would be a shell syntax error (or worse,
+# command escalation). We now pass ENV_SEQUENCES_FLAT into awk via the
+# `-v` mechanism, which quotes it correctly at the awk-VM level and
+# never reaches the shell parser.
+#
+# awk -v doesn't handle embedded newlines, so ENV_SEQUENCES_FLAT is the
+# `|`-separated form built up-script (line ~161). `|` never appears in
+# Postgres sequence names; if it did, we'd need a different delimiter.
+sequence_filter() {
+    if [[ -z "${ENV_SEQUENCES_FLAT:-}" ]]; then
+        cat
+        return
+    fi
+    awk -v seqs="$ENV_SEQUENCES_FLAT" '
         BEGIN { n = split(seqs, a, "|"); for (i=1; i<=n; i++) ok[a[i]] = 1 }
         /^SELECT pg_catalog.setval\(.public\./ {
             name = $0
@@ -171,12 +180,16 @@ if [[ -n "${ENV_SEQUENCES:-}" ]]; then
             if (!(name in ok)) next
         }
         { print }
-    '"'"
+    '
+}
+ENV_SEQUENCES_FLAT=""
+if [[ -n "${ENV_SEQUENCES:-}" ]]; then
+    ENV_SEQUENCES_FLAT=$(echo "$ENV_SEQUENCES" | tr '\n' '|')
 fi
 {
     [[ -n "$PRE_SQL" ]] && echo "$PRE_SQL"
     docker exec "$LOCAL_DB_CONTAINER" pg_dump "${DUMP_ARGS[@]}" "$DATABASE_URL"
-} | eval "$SEQUENCE_FILTER" | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+} | sequence_filter | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
     "$REMOTE_PSQL" 2>&1 | tail -30
 SYNC_RC=${PIPESTATUS[2]}
 if (( SYNC_RC != 0 )); then
@@ -210,13 +223,47 @@ REMOTE_PUBLIC_DOMAIN=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USE
     "sudo grep -E '^RL_PUBLIC_DOMAIN=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
 REMOTE_ADMIN_PASSWORD=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
     "sudo grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
+# Look up the env's slot label. We do NOT swallow inspect failures with
+# `|| echo ''` (M-VM-2): a failed `docker inspect` (env not labeled, docker
+# host unreachable) used to leave SLOT empty and fall into the skip branch
+# below — which then exited 0, the MCP env-deploy wrapper reported ok:true,
+# and Discord login silently didn't work because the OAuth callback URL
+# wasn't rewritten.
+#
+# Now: capture exit code separately so we can distinguish "ssh/docker
+# couldn't read the label" (real failure) from "the label is intentionally
+# missing" (older env without rl.slot — caller is on LAN, decides below).
+SLOT=""
+SLOT_LOOKUP_RC=0
 SLOT=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-    "docker inspect 'rl-env-${SLUG}-allinone' --format '{{ index .Config.Labels \"rl.slot\" }}' 2>/dev/null || echo ''")
+    "docker inspect 'rl-env-${SLUG}-allinone' --format '{{ index .Config.Labels \"rl.slot\" }}' 2>/dev/null") \
+    || SLOT_LOOKUP_RC=$?
+# Go template prints `<no value>` for a missing label key — treat that
+# as "no slot" rather than a literal value.
+[[ "$SLOT" == "<no value>" ]] && SLOT=""
 
 # 1. Rewrite discord_callback_url to the slot URL. Same logic as before,
 #    just no longer gated on MODE. Encrypt with env's JWT_SECRET (=operator's).
-if [[ -z "$REMOTE_ENV_JWT_SECRET" || -z "$REMOTE_PUBLIC_DOMAIN" || -z "$SLOT" ]]; then
-    echo "  skipping URL rewrite: RL_ENV_JWT_SECRET / RL_PUBLIC_DOMAIN / slot missing" >&2
+#
+# M-VM-2: when RL_PUBLIC_DOMAIN IS set on the VM, this env is public-facing
+# (Discord login required) — skipping URL rewrite would yield a broken env
+# while the MCP tool reports success. Hard-fail instead. When RL_PUBLIC_DOMAIN
+# is UNSET (LAN-only fleet), skipping IS correct — Discord OAuth isn't wired
+# up there anyway.
+if [[ -z "$REMOTE_PUBLIC_DOMAIN" ]]; then
+    echo "  skipping URL rewrite: RL_PUBLIC_DOMAIN not set on VM (LAN-only deploy)" >&2
+elif [[ -z "$REMOTE_ENV_JWT_SECRET" ]]; then
+    echo "ERROR: RL_PUBLIC_DOMAIN is set but RL_ENV_JWT_SECRET is missing in /srv/rl-infra/.env." >&2
+    echo "       Cannot encrypt discord_callback_url for a public env." >&2
+    exit 4
+elif [[ -z "$SLOT" ]]; then
+    echo "ERROR: RL_PUBLIC_DOMAIN is set but slot lookup for 'rl-env-${SLUG}-allinone' returned empty." >&2
+    if (( SLOT_LOOKUP_RC != 0 )); then
+        echo "       docker inspect via ssh exited $SLOT_LOOKUP_RC (env not running, docker host unreachable, or ssh failed)." >&2
+    else
+        echo "       Container has no 'rl.slot' label (re-deploy via 'rl env spin' to attach one)." >&2
+    fi
+    exit 4
 else
     SLOT_URL="https://slot-${SLOT}.${REMOTE_PUBLIC_DOMAIN}"
     DISCORD_CB="${SLOT_URL}/api/auth/discord/callback"
@@ -248,12 +295,33 @@ else
     # own DATABASE_URL env var. ADMIN_PASSWORD env var tells the script
     # to use a fixed password (not a random one). RESET_PASSWORD=true
     # ensures it overwrites whatever's there (handles re-deploy).
+    #
+    # M-VM-3: previously this was `ssh ... "docker exec ... | tail -5" | sed`.
+    # `set -euo pipefail` on the LOCAL side does not control the REMOTE
+    # shell's pipeline, so a failed `docker exec` was masked by `tail`'s
+    # exit 0. We now capture the docker-exec rc on the remote and
+    # propagate it as the ssh exit code so the local script sees the
+    # failure. The `tail -5 | sed` formatting is still applied (via a
+    # subshell that captures output before tail) but no longer masks rc.
+    # Local `set -e` would abort the script before we could inspect
+    # PIPESTATUS, so disable it just for this command and re-enable
+    # immediately after.
+    set +e
     ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-        "DOCKER_HOST=tcp://127.0.0.1:2375 docker exec \
+        "set -o pipefail; \
+         DOCKER_HOST=tcp://127.0.0.1:2375 docker exec \
              -e ADMIN_PASSWORD='$REMOTE_ADMIN_PASSWORD' \
              -e RESET_PASSWORD=true \
              rl-env-${SLUG}-allinone \
-             node /app/dist/scripts/bootstrap-admin.js 2>&1 | tail -5" 2>&1 | sed 's/^/    /'
+             node /app/dist/scripts/bootstrap-admin.js 2>&1 | tail -5" \
+        2>&1 | sed 's/^/    /'
+    BOOTSTRAP_RC=${PIPESTATUS[0]}
+    set -e
+    if (( BOOTSTRAP_RC != 0 )); then
+        echo "ERROR: admin bootstrap failed (exit $BOOTSTRAP_RC)." >&2
+        echo "       /auth/local in the env will reject RL_ADMIN_PASSWORD; testers can't log in." >&2
+        exit "$BOOTSTRAP_RC"
+    fi
 fi
 
 echo "Sync complete." >&2
