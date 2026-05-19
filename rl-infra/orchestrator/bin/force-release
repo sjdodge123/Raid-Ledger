@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Operator-only: force-release a slot regardless of which agent claimed it.
+# Destroys envs, drops the claim, removes the slot's current holder from queue
+# state, then promotes the queue head so the next agent can take over.
+#
+# Required flags: --slot <n>
+# Required env:   RL_OPERATOR=1  (gate; the rl CLI forwards as `rl` user)
+#                 RL_FORCE_REASON=<string>  (recorded in audit log)
+# Optional:       --no-destroy   (drop claim only, leave envs running)
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+if [[ "${RL_OPERATOR:-0}" != "1" ]]; then
+    jq -nc '{ok: false, error: "operator_only", message: "force-release requires RL_OPERATOR=1"}'
+    exit 1
+fi
+
+SLOT=""
+DESTROY=1
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slot) SLOT="$2"; shift 2 ;;
+        --no-destroy) DESTROY=0; shift ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+[[ -z "$SLOT" ]] && { echo "--slot <n> required" >&2; exit 2; }
+[[ "$SLOT" =~ ^[0-9]+$ ]] || { echo "slot must be numeric" >&2; exit 2; }
+
+REASON="${RL_FORCE_REASON:-(no reason given)}"
+
+PRIOR_AGENT=$(state::query "$RL_CLAIMS_FILE" --argjson s "$SLOT" \
+    '[.[] | select(.slot == $s) | .agent_id] | first // empty')
+
+# Reuse release with --force; it tears down envs, drops the claim record,
+# and emits the standard release JSON. We skip its env teardown if --no-destroy.
+if [[ "$DESTROY" == "1" ]]; then
+    RELEASE_OUT=$("$(dirname "$0")/release" --slot "$SLOT" --force)
+else
+    # Manually drop just the claim.
+    state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \
+        '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null)'
+    RELEASE_OUT=$(jq -nc --argjson slot "$SLOT" '{ok: true, slot: $slot, destroyed_envs: [], no_destroy: true}')
+fi
+
+# Defensive: if the displaced agent was somehow still in the queue, drop them.
+if [[ -n "$PRIOR_AGENT" ]]; then
+    queue::remove "$PRIOR_AGENT"
+fi
+
+audit::log force-release ok "$(jq -nc --argjson slot "$SLOT" \
+    --arg prior "$PRIOR_AGENT" --arg reason "$REASON" \
+    '{slot: $slot, prior_agent: $prior, reason: $reason}')"
+
+jq -nc --argjson release "$RELEASE_OUT" --arg prior "$PRIOR_AGENT" --arg reason "$REASON" \
+    '$release + {force_released: true, prior_agent: (if $prior == "" then null else $prior end), reason: $reason}'

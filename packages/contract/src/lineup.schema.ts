@@ -325,7 +325,11 @@ export const CommonGroundQuerySchema = z.object({
     genre: z.string().optional(),
     /** Case-insensitive game name search (ILIKE). */
     search: z.string().max(100).optional(),
-    limit: z.coerce.number().int().min(1).max(50).default(50),
+    // ROK-1297 round 5k: bumped from 50/50 → 500/300 so the operator's
+    // "infinite scroll" expectation lands without hitting the bottom of
+    // the catalogue after ~50 tiles. True cursor-paginated infinite
+    // scroll is tracked separately; this is the immediate fix.
+    limit: z.coerce.number().int().min(1).max(500).default(300),
     /**
      * Explicit lineup to score against (ROK-1065).
      * When omitted the server falls back to the newest public building lineup.
@@ -367,6 +371,16 @@ export type CommonGroundScoreBreakdownDto = z.infer<
     typeof CommonGroundScoreBreakdownSchema
 >;
 
+/**
+ * ROK-1297 (S1 Nominating composite) — themed-row classification for the
+ * multi-row Common Ground hero. The server tags each tile with the bucket
+ * that won its score breakdown so the client can lay out Owned / Taste /
+ * Trending rows deterministically.
+ */
+export const CommonGroundThemeSchema = z.enum(['owned', 'taste', 'trending']);
+
+export type CommonGroundTheme = z.infer<typeof CommonGroundThemeSchema>;
+
 /** A single game in the Common Ground response. */
 export const CommonGroundGameSchema = z.object({
     gameId: z.number(),
@@ -379,12 +393,32 @@ export const CommonGroundGameSchema = z.object({
     itadCurrentCut: z.number().nullable(),
     itadCurrentShop: z.string().nullable(),
     itadCurrentUrl: z.string().nullable(),
+    /**
+     * ROK-1297 round-3 (2026-05-18): historical lowest price the game has
+     * been observed at via ITAD. Used by the Common Ground card to switch
+     * the sale badge to "Best Price" when current ≤ lowest. Optional for
+     * deployment-skew compatibility — legacy responses render the standard
+     * -X% badge.
+     */
+    itadLowestPrice: z.number().nullable().optional(),
     earlyAccess: z.boolean(),
     itadTags: z.array(z.string()),
     playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),
     score: z.number(),
     /** ROK-950: per-factor score breakdown (taste, social, intensity, base). */
     scoreBreakdown: CommonGroundScoreBreakdownSchema.optional(),
+    /**
+     * ROK-1297 (S1) — themed-row bucket for the Nominating composite.
+     * Optional for backward compatibility: legacy clients render a single
+     * unthemed row when absent.
+     */
+    theme: CommonGroundThemeSchema.optional(),
+    /**
+     * ROK-1297 (S1) — short human-readable rationale ("12 of you own this",
+     * "Matches your sci-fi/co-op cluster"). Server fills; client never
+     * concocts its own. Capped at 80 chars.
+     */
+    whyReason: z.string().max(80).optional(),
 });
 
 export type CommonGroundGameDto = z.infer<typeof CommonGroundGameSchema>;

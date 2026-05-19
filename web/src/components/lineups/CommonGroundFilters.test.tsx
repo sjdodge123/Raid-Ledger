@@ -4,7 +4,6 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import type { CommonGroundParams } from '../../lib/api-client';
 import { CommonGroundFilters } from './CommonGroundFilters';
 
@@ -20,7 +19,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={defaultFilters}
                 onChange={vi.fn()}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -33,7 +31,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, minOwners: 5 }}
                 onChange={vi.fn()}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -47,7 +44,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, minOwners: undefined }}
                 onChange={vi.fn()}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -61,7 +57,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, minOwners: 8 }}
                 onChange={vi.fn()}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -75,7 +70,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, minOwners: 2 }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -96,86 +90,10 @@ describe('CommonGroundFilters — min owners slider', () => {
     });
 });
 
-describe('CommonGroundFilters — genre dropdown', () => {
-    const tags = ['RPG', 'Survival', 'Co-op'];
-
-    it('renders "All genres" option', () => {
-        render(
-            <CommonGroundFilters
-                filters={defaultFilters}
-                onChange={vi.fn()}
-                availableTags={tags}
-            />,
-        );
-        expect(screen.getByRole('option', { name: 'All genres' })).toBeInTheDocument();
-    });
-
-    it('renders all available tags as options', () => {
-        render(
-            <CommonGroundFilters
-                filters={defaultFilters}
-                onChange={vi.fn()}
-                availableTags={tags}
-            />,
-        );
-        for (const tag of tags) {
-            expect(screen.getByRole('option', { name: tag })).toBeInTheDocument();
-        }
-    });
-
-    it('calls onChange with updated genre when a tag is selected', async () => {
-        const user = userEvent.setup();
-        const onChange = vi.fn();
-        render(
-            <CommonGroundFilters
-                filters={defaultFilters}
-                onChange={onChange}
-                availableTags={tags}
-            />,
-        );
-        const select = screen.getByRole('combobox');
-        await user.selectOptions(select, 'Survival');
-        expect(onChange).toHaveBeenCalledWith({
-            ...defaultFilters,
-            genre: 'Survival',
-        });
-    });
-
-    it('calls onChange with undefined genre when "All genres" is selected', async () => {
-        const user = userEvent.setup();
-        const onChange = vi.fn();
-        render(
-            <CommonGroundFilters
-                filters={{ ...defaultFilters, genre: 'RPG' }}
-                onChange={onChange}
-                availableTags={tags}
-            />,
-        );
-        const select = screen.getByRole('combobox');
-        await user.selectOptions(select, 'All genres');
-        expect(onChange).toHaveBeenCalledWith({
-            ...defaultFilters,
-            genre: undefined,
-        });
-    });
-
-    it('renders empty dropdown when no tags are available', () => {
-        render(
-            <CommonGroundFilters
-                filters={defaultFilters}
-                onChange={vi.fn()}
-                availableTags={[]}
-                search=""
-                onSearchChange={vi.fn()}
-            />,
-        );
-        const select = screen.getByRole('combobox');
-        // Only the "All genres" option should exist
-        const options = select.querySelectorAll('option');
-        expect(options).toHaveLength(1);
-        expect(options[0]).toHaveTextContent('All genres');
-    });
-});
+// ROK-1297 round 5ad: the genre-dropdown describe block was removed
+// after the operator dropped the dropdown from the filter bar. The
+// `availableTags` prop remains on CommonGroundFilters for caller-shape
+// compatibility but no UI consumes it.
 
 describe('CommonGroundFilters — players slider', () => {
     it('renders the "Players" label', () => {
@@ -183,7 +101,6 @@ describe('CommonGroundFilters — players slider', () => {
             <CommonGroundFilters
                 filters={defaultFilters}
                 onChange={vi.fn()}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -196,7 +113,6 @@ describe('CommonGroundFilters — players slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={vi.fn()}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -209,7 +125,6 @@ describe('CommonGroundFilters — players slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 4 }}
                 onChange={vi.fn()}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -226,7 +141,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
                 participantCount={3}
@@ -244,7 +158,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
                 participantCount={3}
@@ -262,7 +175,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 5 }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
                 participantCount={3}
@@ -276,7 +188,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 5 }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
                 participantCount={7}
@@ -291,7 +202,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
                 participantCount={0}
@@ -307,7 +217,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
             />,
@@ -322,7 +231,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 4 }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
                 participantCount={3}
@@ -337,7 +245,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
                 participantCount={0}
@@ -350,7 +257,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                availableTags={[]}
                 search=""
                 onSearchChange={vi.fn()}
                 participantCount={4}

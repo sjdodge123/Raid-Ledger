@@ -77,7 +77,10 @@ export function SubmitBar(props: SubmitBarProps): JSX.Element {
   const ariaLabel = ariaLabelFor(kind, cta, disabledReason);
   const showNudge = kind === 'partial' && nudge !== undefined;
   return (
-    <div className={`mt-2 border ${WRAP_CLS[kind]} rounded p-2`}>
+    <div
+      data-testid="submit-bar"
+      className={`mt-2 border ${WRAP_CLS[kind]} rounded p-2`}
+    >
       <div className="flex justify-between items-center">
         <div className="text-[11px] text-secondary">
           {prefixFor(kind)}

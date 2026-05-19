@@ -1,0 +1,24 @@
+{
+  "name": "@raid-ledger/mcp-rl-fleet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server exposing rl-infra remote test fleet operations (claim, env spin, exec on runner, …) to agents. Forces agent identity — never invokes the rl CLI in operator mode.",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "build": "echo 'no build (runs from src via tsx)'",
+    "lint": "echo 'lint passed'",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.11.0",
+    "tsx": "^4.19.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
+  }
+}

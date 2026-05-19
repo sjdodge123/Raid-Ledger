@@ -1,0 +1,43 @@
+# Traefik static config — file-provider only.
+#
+# We deliberately do NOT use Traefik's docker provider. Reason: Traefik v3.x
+# bootstraps its Docker client with API version 1.24, which Docker daemons
+# 25+ refuse. The DOCKER_API_VERSION env var is documented but ignored by
+# the provider. Switched to file-based routing 2026-05-18.
+#
+# All static routes (infra services + slot-N entries) live in
+#   /etc/traefik/conf.d/static.yml
+# Per-env stacks are written to
+#   /etc/traefik/conf.d/env-{slug}.yml
+# by orchestrator/bin/env-spin, and removed by env-destroy.
+# Traefik watches the directory and reloads on change.
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+api:
+  dashboard: true
+  insecure: true   # dashboard bound to 127.0.0.1:8080 inside the VM only
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  file:
+    directory: /etc/traefik/conf.d
+    watch: true
+
+log:
+  level: INFO
+
+accessLog:
+  filePath: ""
+  bufferingSize: 0
+  fields:
+    headers:
+      defaultMode: drop
+      names:
+        User-Agent: keep

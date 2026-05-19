@@ -28,6 +28,16 @@ import { GameRef } from './GameRef';
 
 // ─── Hook mocks ──────────────────────────────────────────────────────────────
 
+// ROK-1297 round 5y: GameResearchDrawer no longer renders a side
+// drawer — it navigates to `/games/:id`. Mock useNavigate so tests
+// can assert navigation in lieu of drawer-DOM-mount.
+const navigateMock = vi.fn();
+vi.mock('react-router-dom', async () => {
+    const actual =
+        await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+    return { ...actual, useNavigate: () => navigateMock };
+});
+
 const mockUseGameDetail = vi.fn();
 const mockUseGameLookupByName = vi.fn();
 
@@ -108,15 +118,17 @@ describe('GameRef — row variant', () => {
         expect(row.querySelector('[data-testid="game-ref-info-affordance"]')).not.toBeNull();
     });
 
-    it('clicking the row body opens the drawer', async () => {
+    it('clicking the row body navigates to the game detail page', async () => {
+        navigateMock.mockClear();
         renderRef(<GameRef variant="row" gameId={42} name="Valheim" />);
         fireEvent.click(screen.getByTestId('game-ref-row'));
         await waitFor(() => {
-            expect(screen.getByTestId('game-research-drawer')).toBeInTheDocument();
+            expect(navigateMock).toHaveBeenCalledWith('/games/42');
         });
     });
 
-    it('clicking the inline action button does NOT open the drawer', () => {
+    it('clicking the inline action button does NOT navigate', () => {
+        navigateMock.mockClear();
         const onAction = vi.fn();
         renderRef(
             <GameRef
@@ -128,7 +140,7 @@ describe('GameRef — row variant', () => {
         );
         fireEvent.click(screen.getByRole('button', { name: '+ Nominate' }));
         expect(onAction).toHaveBeenCalledOnce();
-        expect(screen.queryByTestId('game-research-drawer')).not.toBeInTheDocument();
+        expect(navigateMock).not.toHaveBeenCalled();
     });
 });
 
@@ -139,12 +151,16 @@ describe('GameRef — gameId path', () => {
         mockUseGameLookupByName.mockReturnValue({ data: undefined, isLoading: false, isError: false });
     });
 
-    it('uses useGameDetail when a gameId is supplied (no name lookup)', () => {
+    it('navigates straight to /games/:id when gameId is supplied (no name lookup)', () => {
+        // ROK-1297 round 5y: GameResearchDrawer is now a navigate-only
+        // component. It no longer calls useGameDetail itself — the
+        // canonical game detail page does. When gameId is supplied,
+        // useGameLookupByName must NOT fire (the lookup hook only
+        // resolves a name → id when gameId is absent).
+        navigateMock.mockClear();
         renderRef(<GameRef variant="row" gameId={42} name="Valheim" />);
         fireEvent.click(screen.getByTestId('game-ref-row'));
-        // useGameDetail is called with the numeric id.
-        expect(mockUseGameDetail).toHaveBeenCalledWith(42);
-        // useGameLookupByName is disabled / not used when gameId is known.
+        expect(navigateMock).toHaveBeenCalledWith('/games/42');
         const callsWithEnabledTrue = mockUseGameLookupByName.mock.calls.filter(
             ([, enabled]) => enabled === true,
         );

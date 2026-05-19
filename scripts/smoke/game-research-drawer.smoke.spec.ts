@@ -45,7 +45,17 @@ function firstVisibleDrawerTrigger(
     return page.locator(`[data-testid="${testid}"]:visible`).first();
 }
 
-test.describe('Game Research Drawer — desktop', () => {
+// ROK-1297 round 5y: GameResearchDrawer was replaced with a router
+// navigation to /games/:id. The entire desktop+mobile drawer spec is
+// obsolete — there is no longer a drawer to open, close, or focus-trap.
+// The navigate-only behaviour is covered by:
+//   - web/src/components/games/GameResearchDrawer.test.tsx (vitest)
+//   - scripts/smoke/lineup-nominating-composite.smoke.spec.ts (smoke)
+//   - scripts/smoke/decided-composite.smoke.spec.ts (smoke, after this
+//     batch's drawer→navigate assertion update)
+// Re-purpose or delete this file alongside ROK-1323 (legacy chrome
+// teardown).
+test.describe.skip('Game Research Drawer — desktop', () => {
     test.beforeEach(({}, testInfo) => {
         test.skip(testInfo.project.name === 'mobile', 'Desktop-only assertions');
     });
@@ -136,7 +146,7 @@ test.describe('Game Research Drawer — desktop', () => {
     });
 });
 
-test.describe('Game Research Drawer — mobile', () => {
+test.describe.skip('Game Research Drawer — mobile', () => {
     test.beforeEach(({}, testInfo) => {
         test.skip(testInfo.project.name === 'desktop', 'Mobile-only assertions');
     });
@@ -163,7 +173,13 @@ test.describe('Game Research Drawer — mobile', () => {
         expect(panelBox.y).toBeGreaterThan(0);
     });
 
-    test('mobile drawer closes on outside tap', async ({ page }) => {
+    // ROK-1297 round 5y: GameResearchDrawer no longer renders a side
+    // drawer; clicking a game ref navigates to /games/:id. The "close
+    // on outside tap" assertion has no analogue — the user navigates
+    // away entirely. Skip; the navigate-only behaviour is covered by
+    // web/src/components/games/GameResearchDrawer.test.tsx and
+    // scripts/smoke/lineup-nominating-composite.smoke.spec.ts.
+    test.skip('mobile drawer closes on outside tap', async ({ page }) => {
         await gotoGamesAndWaitForRows(page, "mobile");
         await firstVisibleDrawerTrigger(page, "mobile").click();
 

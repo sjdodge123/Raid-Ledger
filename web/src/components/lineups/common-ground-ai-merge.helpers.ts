@@ -92,6 +92,14 @@ export function mergeAiIntoCommonGround(
         if (aiStubMatchesFilters(stub, filters, search)) aiOnly.push(stub);
     }
     if (aiOnly.length === 0) return data;
-    const merged = [...data.data, ...aiOnly].sort((a, b) => b.score - a.score);
+    // ROK-1297 round 5af: tiebreak by gameId so AI/CG entries with
+    // equal score land in a stable order across navigations. Without
+    // this, back-nav from /games/:id reshuffled tiles slightly when
+    // the AI query resolved a beat after CG (or with different Map
+    // iteration order on remount). Ascending gameId is arbitrary but
+    // deterministic.
+    const merged = [...data.data, ...aiOnly].sort(
+        (a, b) => b.score - a.score || a.gameId - b.gameId,
+    );
     return { ...data, data: merged };
 }
