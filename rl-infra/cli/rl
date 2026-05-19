@@ -402,7 +402,18 @@ current_slot() {
 
 ensure_claim() {
     SLOT=$(current_slot)
-    [[ -z "$SLOT" ]] && { echo "no slot — run 'rl claim' first" >&2; exit 1; }
+    # Use if/fi rather than `[[ -z "$SLOT" ]] && { ... }`. With set -e in
+    # effect, the && form makes the function's last command exit with the
+    # condition's exit code — which is 1 (false) when SLOT IS set, the
+    # successful path. That non-zero return then trips set -e in any
+    # caller (e.g. cmd_validate_ci), aborting the script silently before
+    # any work is done. Pre-existing on origin/main from PR #827 —
+    # surfaced during ROK-1326 fleet validation when `rl validate-ci`
+    # exited 1 with no output despite a healthy claim.
+    if [[ -z "$SLOT" ]]; then
+        echo "no slot — run 'rl claim' first" >&2
+        exit 1
+    fi
 }
 
 ensure_mutagen_sync() {
