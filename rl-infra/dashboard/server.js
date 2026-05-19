@@ -13,6 +13,7 @@ import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
 import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
 import { join, extname } from 'node:path';
+import { timingSafeEqual } from 'node:crypto';
 
 const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
@@ -517,7 +518,11 @@ const wrapCommentBodies = (plan) => ({
 const agentAuthorized = (req) => {
   if (!RL_AGENT_TOKEN) return true; // dev mode: allow with warning at boot
   const header = req?.headers?.['x-agent-token'];
-  return typeof header === 'string' && header === RL_AGENT_TOKEN;
+  if (typeof header !== 'string') return false;
+  const a = Buffer.from(header, 'utf8');
+  const b = Buffer.from(RL_AGENT_TOKEN, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 };
 const planForResponse = (plan, req) => {
   const includeComments = req && req.url && req.url.includes('include_comments=1');
@@ -691,7 +696,7 @@ const ALLOWED_MIME = new Map([
 const handleAttachmentUpload = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   let body;
-  try { body = await readJsonBody(req, MAX_ATTACHMENT_BYTES + 1024 * 1024); }
+  try { body = await readJsonBody(req, Math.ceil(MAX_ATTACHMENT_BYTES * 4 / 3) + 4096); }
   catch (err) { return sendBodyError(res, err); }
 
   const mime = typeof body.mime === 'string' ? body.mime.toLowerCase() : '';
