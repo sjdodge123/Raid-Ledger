@@ -255,6 +255,9 @@ services:
       - runner-1-node-modules:/workspace/node_modules
       - runner-1-cache:/root/.cache
       - /var/run/docker.sock:/var/run/docker.sock
+      # Fleet-wide flock area — Discord smoke serialization (run_discord_smoke
+      # in validate-ci.sh flocks /state-locks/discord.lock).
+      - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
       rl.slot: "1"
@@ -274,6 +277,7 @@ services:
       - runner-2-node-modules:/workspace/node_modules
       - runner-2-cache:/root/.cache
       - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/rl-infra/state/locks:/state-locks:rw
     labels:
       rl.role: runner
       rl.slot: "2"

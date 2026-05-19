@@ -57,7 +57,7 @@ for slot in $DEAD_SLOTS; do
     log "releasing dead slot $slot (heartbeat expired)"
     # Inline release: destroy envs labeled with this slot, clear claim record.
     docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ index .Labels "rl.env_slug" }} {{.ID}}' 2>/dev/null \
+        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null \
       | while read -r slug cid; do
             [[ -z "$slug" ]] && continue
             log "  destroying env $slug (orphaned by dead claim)"
@@ -81,7 +81,7 @@ HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AG
 for slot in $HOARDED_SLOTS; do
     log "releasing hoarded slot $slot (claim age > ${MAX_CLAIM_AGE_SECONDS}s, keep_alive=false)"
     docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ index .Labels "rl.env_slug" }} {{.ID}}' 2>/dev/null \
+        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null \
       | while read -r slug cid; do
             [[ -z "$slug" ]] && continue
             docker rm -f "$cid" >/dev/null 2>&1 || true

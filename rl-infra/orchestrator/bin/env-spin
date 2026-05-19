@@ -31,10 +31,16 @@ SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
 # Per-slot env-count cap. Prevents one agent from accidentally spinning N
 # envs and OOMing the VM. Tunable via MAX_ENVS_PER_SLOT env var. Counts
 # distinct slugs labeled with this slot (allinone + pg pair = one slug).
+#
+# CAREFUL: in `docker ps --format`, `.Labels` is a comma-joined STRING
+# (e.g. "rl.role=env,rl.slot=1,rl.env_slug=foo"), NOT a map. The Go
+# template `index .Labels "X"` then crashes because index treats strings
+# as []byte and can't be keyed by a string. Use `.Label "X"` (the
+# singular Method, capital L) which returns the per-key value directly.
 MAX_ENVS_PER_SLOT="${MAX_ENVS_PER_SLOT:-5}"
 EXISTING_FOR_SLOT=$(docker ps -a \
     --filter "label=rl.slot=${SLOT}" --filter "label=rl.role=env" \
-    --format '{{ index .Labels "rl.env_slug" }}' | sort -u)
+    --format '{{ .Label "rl.env_slug" }}' | sort -u)
 EXISTING_COUNT=$(echo -n "$EXISTING_FOR_SLOT" | grep -c . || true)
 if (( EXISTING_COUNT >= MAX_ENVS_PER_SLOT )) && ! grep -qFx "$SLUG" <<<"$EXISTING_FOR_SLOT"; then
     # Only block NEW slugs; re-spinning an existing one is the idempotent

@@ -413,6 +413,43 @@ run_discord_smoke() {
   # tools/test-bot reads its own .env (companion-bot token + guild ID).
   # Missing config there surfaces as a clean failure inside `npm run smoke`,
   # not something this script needs to pre-flight.
+  #
+  # Fleet-wide Discord serialization. The companion bot's Discord token and
+  # the Raid Ledger bot's token each only allow ONE active session at a
+  # time across Discord — two slots running smoke concurrently cause a
+  # bot disconnect war and non-deterministic test failures. Acquire a
+  # flock on /state-locks/discord.lock (bind-mounted into the runner from
+  # /srv/rl-infra/state/locks/) before running smoke, release after.
+  #
+  # The lock dir only exists inside fleet runners; on the operator's laptop
+  # the directory is absent and we run unsynchronized (single-host = no
+  # cross-slot contention possible).
+  local lock_dir="${RL_DISCORD_LOCK_DIR:-/state-locks}"
+  if [[ -d "$lock_dir" ]]; then
+    local lock_file="$lock_dir/discord.lock"
+    echo "Acquiring fleet Discord lock at $lock_file (up to 10 min)..."
+    local wait_start=$(date +%s)
+    # flock fd 9 against the lock file. -w 600 waits up to 10 min before
+    # timing out (typical smoke is 2-3 min). Subshell scopes the fd so the
+    # lock auto-releases when smoke exits.
+    (
+      exec 9>"$lock_file"
+      if ! flock -w 600 9; then
+        echo -e "${RED}Timed out (10 min) waiting for Discord lock. Another slot is hogging it.${NC}" >&2
+        echo -e "${RED}  Check: docker exec <runner> cat /state-locks/discord.lock — empty file but a flock holder.${NC}" >&2
+        exit 75   # sysexits.h EX_TEMPFAIL — signals lock-acquisition failure to outer shell
+      fi
+      local wait_end=$(date +%s)
+      echo "Got Discord lock (waited $((wait_end - wait_start))s); running smoke."
+      cd "$REPO_ROOT/tools/test-bot" && npm run smoke
+    )
+    local rc=$?
+    if (( rc == 75 )); then
+      return 1   # lock-timeout → fail the step
+    fi
+    return $rc
+  fi
+
   (cd "$REPO_ROOT/tools/test-bot" && npm run smoke)
 }
 
