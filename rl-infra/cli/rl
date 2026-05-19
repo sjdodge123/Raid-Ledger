@@ -433,14 +433,11 @@ ensure_mutagen_sync() {
         # name in one shot — verified during the bug-fix that motivated this.
         mutagen sync terminate "$session" 2>/dev/null || true
     fi
-    # --permissions-mode=portable: normalize permissions to standard Unix
-    # perms (strips macOS xattrs, the @ flag on `-rw-r--r--@`). Without
-    # this, Mutagen mirrors the source's restrictive xattr-affected perms
-    # to the runner as 0600 / 0700, which Docker COPY then bakes into
-    # the image — making files unreadable by anyone except root inside
-    # the container. Bug F (2026-05-18 rok-1297 fleet build).
-    # --default-{file,directory}-mode-beta force the runner-side perms
-    # for any file whose source perms are ambiguous.
+    # --permissions-mode=manual: Bug S Layer 1 (ROK-1326). Was --permissions-mode=portable
+    # which still propagated some macOS xattr-driven perms to the runner as 0600 / 0700
+    # and broke Docker COPY in the allinone build. `manual` ignores source perms entirely
+    # and forces the explicit defaults below on every beta-side file.
+    # --default-{file,directory}-mode-beta force the runner-side perms.
     # --mode=one-way-replica: laptop (alpha) is the SOLE source of truth.
     # Runner (beta) gets aligned to alpha — files that exist only on the
     # runner get DELETED on next sync. Without this (was: default
@@ -448,10 +445,16 @@ ensure_mutagen_sync() {
     # a previous session — e.g. operator's main-repo WIP — would
     # propagate UP into the next agent's worktree on their first sync.
     # Reported by the rok-1325 agent 2026-05-19.
+    #
+    # --ignore: keep this list in sync with rl-infra/mutagen/sync-template.yml.
+    # Bug R (ROK-1326): exclude the entire .git tree because cmd_claim
+    # scaffolds a fresh shallow .git on the runner side via `git init` +
+    # `git fetch origin`. Bug W (ROK-1326): exclude *.tsbuildinfo so tsc
+    # incremental caches don't clobber the runner's own build state.
     mutagen sync create \
         --name "$session" \
         --mode=one-way-replica \
-        --permissions-mode=portable \
+        --permissions-mode=manual \
         --default-file-mode-beta=0644 \
         --default-directory-mode-beta=0755 \
         --ignore-vcs=false \
@@ -461,7 +464,12 @@ ensure_mutagen_sync() {
         --ignore='**/dist' \
         --ignore=coverage \
         --ignore='**/coverage' \
+        --ignore=.git \
+        --ignore='.git/**' \
         --ignore=.git/objects \
+        --ignore=.git/lfs \
+        --ignore='*.tsbuildinfo' \
+        --ignore='**/*.tsbuildinfo' \
         --ignore=playwright-report \
         --ignore=test-results \
         "$REPO_ROOT" \

@@ -19,8 +19,15 @@ sync:
     symlink:
       mode: posix-raw
     permissions:
-      defaultFileMode: 0644
-      defaultDirectoryMode: 0755
+      # mode: manual disables Mutagen's automatic permission propagation —
+      # all runner-side files land with the explicit defaults below, regardless
+      # of laptop-side perms (which on macOS pick up restrictive xattrs that
+      # mirror to 0600 / 0700 and break Docker COPY inside the allinone build).
+      # Bug S Layer 1 (ROK-1326).
+      mode: manual
+      defaultFile: 0644
+      defaultDirectory: 0755
+      defaultFileExecutable: 0755
     ignore:
       vcs: false   # we need .git/HEAD + refs synced for branch awareness
       paths:
@@ -35,8 +42,19 @@ sync:
         - .turbo
         - playwright-report
         - test-results
-        - .git/objects   # objects stay on the laptop; refs+HEAD sync
+        # Bug R (ROK-1326): exclude the entire .git dir. The runner side
+        # scaffolds a fresh shallow .git in cmd_claim via `git init` + a
+        # remote fetch, so syncing the laptop .git (objects + refs +
+        # potentially-corrupt index) actively breaks the runner's repo.
+        - .git
+        - .git/**
+        - .git/objects   # legacy entry, harmless overlap with the broader .git rule
         - .git/lfs
+        # Bug W (ROK-1326): tsbuildinfo files are tsc incremental caches —
+        # rsyncing them mid-build clobbers the runner's own incremental
+        # state and produces phantom "no inputs found" tsc errors.
+        - "*.tsbuildinfo"
+        - "**/*.tsbuildinfo"
         - .DS_Store
         - "*.swp"
         - "*.log"
