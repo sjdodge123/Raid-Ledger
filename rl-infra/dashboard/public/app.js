@@ -158,13 +158,42 @@ const renderEnv = (e, publicDomain) => {
 
 // ----- Test plan UI -----
 
-// Tester identity persists in localStorage; first interaction prompts.
+// Tester identity persists in BOTH a cookie (1-year expiry, survives
+// most browser-storage-clear scenarios that nuke localStorage) AND
+// localStorage (fallback for browsers that block third-party-style
+// cookies). First interaction prompts. Empty/cancel returns 'anon'
+// without persisting → re-prompts next time, which matches intent
+// ("only re-ask if I genuinely don't know who they are").
+const TESTER_COOKIE = 'rl-tester-name';
+const TESTER_LS = 'rl-tester-name';
+
+const getCookie = (name) => {
+  const pair = document.cookie.split('; ').find((s) => s.startsWith(`${name}=`));
+  return pair ? decodeURIComponent(pair.split('=', 2)[1]) : null;
+};
+const setCookie = (name, value, days) => {
+  const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+  // SameSite=Lax + Secure since we're always behind HTTPS on the public
+  // hostname; on LAN http access the Secure flag means the cookie won't
+  // be set, but the localStorage fallback covers that path.
+  const secure = location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${secure}`;
+};
+
 const getTesterName = () => {
-  let name = localStorage.getItem('rl-tester-name');
+  // Prefer cookie (more persistent), fall back to localStorage.
+  let name = getCookie(TESTER_COOKIE) || localStorage.getItem(TESTER_LS);
   if (!name) {
-    name = prompt('Your name (so the agent can see who reported what):', '') || '';
+    name = prompt('Your name (so the agent + operator can see who reported what):', '') || '';
     name = name.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50).trim();
-    if (name) localStorage.setItem('rl-tester-name', name);
+    if (name) {
+      try { localStorage.setItem(TESTER_LS, name); } catch {}
+      setCookie(TESTER_COOKIE, name, 365);
+    }
+  } else {
+    // Mirror to both stores so future reads work even if one gets nuked.
+    try { localStorage.setItem(TESTER_LS, name); } catch {}
+    if (!getCookie(TESTER_COOKIE)) setCookie(TESTER_COOKIE, name, 365);
   }
   return name || 'anon';
 };
