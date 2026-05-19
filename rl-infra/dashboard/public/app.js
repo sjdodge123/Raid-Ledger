@@ -660,6 +660,17 @@ const requestReset = async (slug, stepId) => {
 const renderEmpty = (msg) => el('div', { class: 'empty', text: msg });
 
 const render = (data) => {
+  // ROK-1326 fix-9: preserve scroll position across re-renders. Every
+  // verdict tap fires `tick({ force: true })` which re-fetches /api/state
+  // and rebuilds the entire DOM via replaceChildren — that resets the
+  // viewport to the top, which on mobile means the tester loses their
+  // place after every pass/fail/skip ("very jarring" per operator
+  // 2026-05-19). Save scroll BEFORE replacing, restore IMMEDIATELY
+  // after appending — we use scrollTo with 'instant' so there's no
+  // smooth-scroll flash.
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+
   const slotsDiv = $('slots');
   slotsDiv.replaceChildren();
   for (const s of data.slots ?? []) slotsDiv.appendChild(renderSlot(s));
@@ -675,6 +686,12 @@ const render = (data) => {
   }
 
   $('generated-at').textContent = `updated ${fmtTime(data.generated_at)}`;
+
+  // Restore scroll AFTER all the layout shifts have settled. Browsers
+  // sometimes batch layout/scroll updates; window.scrollTo with
+  // behavior:'instant' is synchronous in this position and lands at the
+  // same Y the tester was reading from.
+  window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
 };
 
 const setStatus = (state) => {

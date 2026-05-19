@@ -404,11 +404,29 @@ cmd_test_plan_wait() {
 EOF
         exit 2
     fi
-    # close_write covers tester submit (POST /submit → writePlanAtomic);
-    # moved_to covers the rename() landing on the parent dir; delete covers
-    # env-destroy reaping the plan. Same event set as the MCP rl_test_plan_wait
-    # (ROK-1326 D4). Filename filter on the inside loop catches sibling-slug
-    # events at the source.
+    # close_write covers tester submit (POST /submit → writePlanAtomic
+    # writes a `.<slug>.<ts>.tmp` file then renames it to `<slug>.json`);
+    # moved_to covers the rename() landing on the parent dir; delete
+    # covers env-destroy reaping the plan. Same event set as the MCP
+    # rl_test_plan_wait (ROK-1326 D4).
+    #
+    # -m (monitor mode) is REQUIRED here. Without it, inotifywait exits
+    # after the FIRST event. The dashboard's writePlanAtomic always
+    # fires TWO events per submit: close_write on the .tmp file (filename
+    # like `.rok-1326-validate.1779226429054.tmp` — doesn't match the
+    # slug regex) then moved_to on the final filename (matches). Without
+    # -m, inotifywait grabs the .tmp event, dies, the grep -m 1 reads
+    # EOF without a match, exits 1, and the CLI mis-reports a timeout
+    # that was actually a successful submit. Surfaced during ROK-1326
+    # retest 2026-05-19 — operator wait fired in ~2 min instead of 30.
+    #
+    # With -m: inotifywait keeps streaming events; grep -m 1 reads until
+    # the slug-matching filename appears; on match, grep exits 0,
+    # SIGPIPE kills inotifywait, ssh exits 0.
+    #
+    # The remote timeout is enforced via a parent-shell timeout (the
+    # `timeout` coreutil) rather than inotifywait's -t flag, because
+    # -t and -m are not compatible (-m loops forever; -t is one-shot).
     local plan_re
     plan_re="^${slug}\\.json$"
     # `set -e` at top of file would kill us on the expected non-zero exit
@@ -418,7 +436,7 @@ EOF
     set +e
     ssh -o BatchMode=yes -o ConnectTimeout=5 \
         "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
-        "inotifywait -e close_write,moved_to,delete -t ${timeout} --format '%f' /srv/rl-infra/state/test-plans/ 2>/dev/null | grep -m 1 -E '${plan_re}' >/dev/null"
+        "timeout ${timeout} inotifywait -m -q -e close_write,moved_to,delete --format '%f' /srv/rl-infra/state/test-plans/ 2>/dev/null | grep -m 1 -E '${plan_re}' >/dev/null"
     rc=$?
     set -e
     if (( rc != 0 )); then
