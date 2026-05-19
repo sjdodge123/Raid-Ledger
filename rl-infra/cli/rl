@@ -151,6 +151,7 @@ cmd_claim() {
         if [[ -n "$SLOT" ]]; then
             echo "$RESULT" | jq .
             ensure_mutagen_sync "$SLOT"
+            scaffold_runner_git "$SLOT" "$branch"
             start_heartbeat_daemon "$SLOT"
             echo
             echo "claimed slot $SLOT"
@@ -341,6 +342,14 @@ cmd_validate_ci() {
     # Mutagen pre-flight: make sure the worktree is current before running.
     SLOT=$(current_slot)
     flush_mutagen "$SLOT"
+    # Bug R (ROK-1326) defensive re-scaffold: slots claimed BEFORE the
+    # cmd_claim scaffold change landed will have a stale or empty .git
+    # (mutagen ignore-list now excludes .git entirely). If /workspace/.git/objects
+    # is missing, re-scaffold before running validate-ci. Harmless if .git
+    # is already healthy — the check exits 0 and no work is done.
+    local branch
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo main)"
+    ensure_runner_git "$SLOT" "$branch"
     # ssh_run printf-%q's each positional. Pass "$@" so a validate-ci flag
     # like --against-env-slug=$(id) reaches the runner as a literal
     # string rather than executing on the VM (H-VM-1).
@@ -480,6 +489,80 @@ flush_mutagen() {
     local slot="$1"
     command -v mutagen >/dev/null || return 0
     mutagen sync flush "rl-slot-$slot" 2>/dev/null || true
+}
+
+# Bug R (ROK-1326): rebuild .git inside the runner container from scratch
+# after every claim. The Mutagen sync now ignores .git entirely (so the
+# runner never inherits the laptop's local-branch index / packed-refs /
+# possibly-corrupt objects directory), and we replace it here with a
+# fresh shallow remote-tracking clone. Tools that expect `git` state inside
+# /workspace (validate-ci, scripts that detect changed files via `git diff`,
+# the install/build steps that read package.json from the staged tree) then
+# see a clean repository pinned to the same branch the agent is working on.
+#
+# Steps run inside the runner container via docker exec, NOT on the VM host:
+#   1. rm -rf .git  (handle both file + dir case — was a regular dir before)
+#   2. git init -q  (re-create)
+#   3. git remote add origin <url>
+#   4. git fetch origin main --depth=500 -q
+#   5. git reset --mixed FETCH_HEAD  (don't blow away mutagen-synced files)
+#   6. git checkout -q -B <branch>   (best-effort; falls back if branch
+#                                     doesn't exist remotely — local-only
+#                                     branches are legal mid-development)
+scaffold_runner_git() {
+    local slot="$1" branch="$2"
+    [[ -z "$slot" ]] && return 0
+    local origin_url
+    origin_url=$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)
+    if [[ -z "$origin_url" ]]; then
+        echo "[rl] no 'origin' remote configured locally — skipping runner .git scaffold" >&2
+        return 0
+    fi
+    [[ -z "$branch" || "$branch" == "unknown" ]] && branch="main"
+    # printf-%q every interpolated value: origin_url is a config file value
+    # (less risky) but branch can in principle carry shell metachars. Defense
+    # in depth (H-VM-1 pattern).
+    local quoted_url quoted_branch
+    quoted_url=$(printf '%q' "$origin_url")
+    quoted_branch=$(printf '%q' "$branch")
+    local container="rl-runner-${slot}"
+    local script
+    script=$(cat <<EOF
+set -e
+cd /workspace
+rm -rf .git
+git init -q
+git remote add origin ${quoted_url}
+git fetch origin main --depth=500 -q
+git reset --mixed FETCH_HEAD
+git checkout -q -B ${quoted_branch} 2>/dev/null || true
+EOF
+)
+    # Run the scaffold inside the runner container. Failures here should not
+    # be fatal to the claim — log and continue (a slot without .git is still
+    # usable for non-git operations; validate-ci has a defensive re-scaffold).
+    ssh -o ConnectTimeout=10 -o BatchMode=yes \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "docker exec -i ${container} bash -s" <<<"$script" >/dev/null 2>&1 || {
+        echo "[rl] WARNING: failed to scaffold .git on slot ${slot} — validate-ci will retry" >&2
+        return 0
+    }
+}
+
+# Bug R defensive re-scaffold: only rebuild .git if /workspace/.git/objects
+# is missing on the runner. Cheap no-op when .git is healthy. Used by
+# cmd_validate_ci so slots claimed before Bug R landed self-heal.
+ensure_runner_git() {
+    local slot="$1" branch="$2"
+    [[ -z "$slot" ]] && return 0
+    local container="rl-runner-${slot}"
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "docker exec ${container} test -d /workspace/.git/objects" >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "[rl] runner slot ${slot} missing .git/objects — re-scaffolding" >&2
+    scaffold_runner_git "$slot" "$branch"
 }
 
 # Terminate the Mutagen sync session for a slot. Called from cmd_release so
