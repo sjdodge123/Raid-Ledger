@@ -417,6 +417,12 @@ const submitDraft = async (slug, plan, draft) => {
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
+      if (r.status === 404 && (j.error || '').includes('no plan')) {
+        alert('This test env was reaped — your draft can no longer be submitted. Clearing draft + refreshing.');
+        clearDraft(slug, plan.created_at);
+        tick({ force: true });
+        return;
+      }
       alert(`Submit failed: ${j.error || `HTTP ${r.status}`}`);
       return;
     }
@@ -527,6 +533,12 @@ const openCommentModal = (slug, stepId) => {
       });
       if (!cRes.ok) {
         const j = await cRes.json().catch(() => ({}));
+        if (cRes.status === 404 && (j.error || '').includes('no plan')) {
+          alert('This test env was reaped (most likely the API was unhealthy long enough for the sweeper to clean it up). Your draft is gone. Refreshing the dashboard now.');
+          backdrop.remove();
+          tick({ force: true });
+          return;
+        }
         alert(`Comment failed: ${j.error || `HTTP ${cRes.status}`}`);
         submitBtn.disabled = false; submitBtn.textContent = 'Send';
         return;
@@ -563,6 +575,11 @@ const requestReset = async (slug, stepId) => {
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
+      if (r.status === 404 && (j.error || '').includes('no plan')) {
+        alert('This test env was reaped — refresh.');
+        tick({ force: true });
+        return;
+      }
       alert(`Reset failed: ${j.error || `HTTP ${r.status}`}`);
       return;
     }
