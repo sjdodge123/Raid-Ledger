@@ -53,6 +53,14 @@ export interface EnvDeployResult {
    * developer-portal registration. Null in local/LAN mode.
    */
   slot_url?: string | null;
+  /** Admin email (always admin@local in DEMO_MODE envs). */
+  admin_email?: string;
+  /**
+   * Admin password seeded into the env by env-spin. Use to authenticate
+   * against /api/auth/local. Stable across deploys when RL_ADMIN_PASSWORD
+   * is set in /srv/rl-infra/.env; random per-call otherwise.
+   */
+  admin_password?: string | null;
   steps: Record<string, { ok: boolean; took_s?: number; detail?: string; error?: string }>;
   message: string;
 }
@@ -189,9 +197,11 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     url: sp.url,
     internal_url: sp.internal_url,
     slot_url: sp.slot_url ?? null,
+    admin_email: sp.admin_email,
+    admin_password: sp.admin_password ?? null,
     steps,
     message: sp.slot_url
-      ? `Deployed branch to ${sp.url}. Share that URL for general testing; use ${sp.slot_url} for Discord login flows.`
-      : `Deployed branch to ${sp.url}. Share this URL with testers.`,
+      ? `Deployed branch to ${sp.url}. Share that URL for general testing; use ${sp.slot_url} for Discord login flows. Admin login: ${sp.admin_email} / (password in admin_password field).`
+      : `Deployed branch to ${sp.url}. Share this URL with testers. Admin login: ${sp.admin_email} / (password in admin_password field).`,
   };
 }

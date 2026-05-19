@@ -3,7 +3,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_env_spin';
 export const TOOL_DESCRIPTION =
-  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route. Returns FOUR URLs: `url` (the canonical/shareable human-friendly one — external if RL_PUBLIC_DOMAIN is set, internal otherwise), `internal_url` (always http://{slug}.rl.lan for LAN fallback), `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN} or null — same as `url` when public), and `slot_url` (https://slot-N.{RL_PUBLIC_DOMAIN} — STABLE per slot, used for Discord OAuth login since Discord requires exact registered redirect URIs). Send `url` to testers for the human-friendly path; tell them to use `slot_url` if/when they want to log in with Discord. Slug must match [a-z0-9-]+. Idempotent: if env exists, refreshes last_touched and returns URLs.";
+  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. Returns FOUR URLs (`url` canonical/shareable, `internal_url` LAN, `public_url` https://{slug}test.{RL_PUBLIC_DOMAIN}, `slot_url` https://slot-N.{RL_PUBLIC_DOMAIN} — STABLE per slot for Discord OAuth) PLUS admin credentials (`admin_email`, `admin_password` — comes from RL_ADMIN_PASSWORD in /srv/rl-infra/.env if set, else generated per-call). POST {email, password} to {url}/api/auth/local to get a JWT for admin API calls. Send `url` to testers; use `slot_url` for Discord login flows. Slug must match [a-z0-9-]+. Idempotent: re-spinning re-seeds the admin password (same value if RL_ADMIN_PASSWORD is set; fresh random otherwise).";
 
 export interface EnvSpinResult {
   ok: boolean;
@@ -25,6 +25,18 @@ export interface EnvSpinResult {
    */
   slot_url?: string | null;
   slot?: number;
+  /** Admin email for /api/auth/local. Always "admin@local" in DEMO_MODE envs. */
+  admin_email?: string;
+  /**
+   * Admin password seeded into the env's local_credentials by env-spin.
+   * If `RL_ADMIN_PASSWORD` is set in `/srv/rl-infra/.env`, every env gets
+   * the same password (stable across deploys / slugs). Otherwise a random
+   * 16-char hex string is generated per call. Null only if the bootstrap
+   * step itself failed (rare — would indicate the allinone wasn't healthy
+   * yet at the bootstrap-admin exec). Use to POST to {url}/api/auth/local
+   * for a JWT.
+   */
+  admin_password?: string | null;
   app_container?: string;
   pg_container?: string;
   error?: string;

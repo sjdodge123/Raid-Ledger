@@ -126,11 +126,33 @@ EOF
         IDEM_SLOT_URL="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
     fi
     if [[ -n "$IDEM_PUBLIC" ]]; then IDEM_PRIMARY="$IDEM_PUBLIC"; else IDEM_PRIMARY="http://${SLUG}.rl.lan"; fi
+    # Re-seed admin idempotently. RL_ADMIN_PASSWORD from /srv/rl-infra/.env
+    # gives the same password every time so re-runs are stable. If unset,
+    # generate one per call — agent gets back a fresh password each time
+    # but at least it's not blank.
+    IDEM_ADMIN_PASSWORD="${RL_ADMIN_PASSWORD:-}"
+    if [[ -z "$IDEM_ADMIN_PASSWORD" ]]; then
+        IDEM_ADMIN_PASSWORD="rl-$(openssl rand -hex 8)"
+    fi
+    docker exec \
+        -e ADMIN_PASSWORD="$IDEM_ADMIN_PASSWORD" \
+        -e RESET_PASSWORD=true \
+        "$APP_CONTAINER" \
+        node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 || \
+        IDEM_ADMIN_PASSWORD=""
+
     jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
         --arg internal_url "http://${SLUG}.rl.lan" \
         --arg public_url "$IDEM_PUBLIC" \
         --arg slot_url "$IDEM_SLOT_URL" --argjson slot "$SLOT" \
-        '{ok: true, idempotent: true, slug: $slug, url: $url, internal_url: $internal_url, public_url: (if $public_url == "" then null else $public_url end), slot_url: (if $slot_url == "" then null else $slot_url end), slot: $slot}'
+        --arg admin_email "admin@local" \
+        --arg admin_password "$IDEM_ADMIN_PASSWORD" \
+        '{ok: true, idempotent: true, slug: $slug, url: $url, internal_url: $internal_url,
+          public_url: (if $public_url == "" then null else $public_url end),
+          slot_url: (if $slot_url == "" then null else $slot_url end),
+          slot: $slot,
+          admin_email: $admin_email,
+          admin_password: (if $admin_password == "" then null else $admin_password end)}'
     audit::log env-spin idempotent "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug,slot:$slot}')"
     exit 0
 fi
@@ -262,6 +284,24 @@ for _ in $(seq 1 60); do
     sleep 1
 done
 
+# Seed admin@local with RL_ADMIN_PASSWORD so agents can /auth/local
+# immediately without a separate sync_settings round-trip. Idempotent
+# via RESET_PASSWORD=true. RL_ADMIN_PASSWORD lives in /srv/rl-infra/.env;
+# /state.sh sources that at the top of every orchestrator script.
+# Generated random as a fallback if the operator hasn't set one — agent
+# still gets a usable password back, just changes each deploy.
+ADMIN_EMAIL_OUT="admin@local"
+ADMIN_PASSWORD_OUT="${RL_ADMIN_PASSWORD:-}"
+if [[ -z "$ADMIN_PASSWORD_OUT" ]]; then
+    ADMIN_PASSWORD_OUT="rl-$(openssl rand -hex 8)"
+fi
+docker exec \
+    -e ADMIN_PASSWORD="$ADMIN_PASSWORD_OUT" \
+    -e RESET_PASSWORD=true \
+    "$APP_CONTAINER" \
+    node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 || \
+    ADMIN_PASSWORD_OUT=""   # bootstrap failed (logged separately); blank the output
+
 # Register.
 state::mutate "$RL_ENVS_FILE" \
     --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
@@ -296,4 +336,12 @@ jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
     --arg internal_url "http://${SLUG}.rl.lan" \
     --arg public_url "$PUBLIC_URL_OUT" \
     --arg slot_url "$SLOT_URL_OUT" --argjson slot "$SLOT" \
-    '{ok: true, slug: $slug, url: $url, internal_url: $internal_url, public_url: (if $public_url == "" then null else $public_url end), slot_url: (if $slot_url == "" then null else $slot_url end), slot: $slot, app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'
+    --arg admin_email "$ADMIN_EMAIL_OUT" \
+    --arg admin_password "$ADMIN_PASSWORD_OUT" \
+    '{ok: true, slug: $slug, url: $url, internal_url: $internal_url,
+      public_url: (if $public_url == "" then null else $public_url end),
+      slot_url: (if $slot_url == "" then null else $slot_url end),
+      slot: $slot,
+      admin_email: $admin_email,
+      admin_password: (if $admin_password == "" then null else $admin_password end),
+      app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'
