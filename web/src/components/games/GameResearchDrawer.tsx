@@ -12,9 +12,6 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameLookupByName } from '../../hooks/use-game-lookup-by-name';
-import type { DrawerAction } from './drawer-action-row';
-
-export type { DrawerAction };
 
 interface GameResearchDrawerProps {
     isOpen: boolean;
@@ -23,11 +20,6 @@ interface GameResearchDrawerProps {
     gameId?: number;
     /** Resolve by free-text name (triggers POST /games/lookup-by-name). */
     name?: string;
-    /**
-     * Legacy prop retained for callsite-shape compatibility. The
-     * previous drawer rendered a CTA from this; navigation supersedes it.
-     */
-    action?: DrawerAction;
 }
 
 export function GameResearchDrawer({

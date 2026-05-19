@@ -66,7 +66,7 @@ describe('GameResearchDrawer (navigate)', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('waits for name lookup then navigates', () => {
+    it('waits for name lookup then navigates and calls onClose', () => {
         const { rerender, onClose, client } = renderDrawer({
             isOpen: true,
             name: 'Satisfactory',
@@ -85,5 +85,36 @@ describe('GameResearchDrawer (navigate)', () => {
             </QueryClientProvider>,
         );
         expect(navigateMock).toHaveBeenCalledWith('/games/7');
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT double-navigate when an unrelated prop reference changes (round 5aa guard)', () => {
+        // Regression guard: round 5aa added a `lastNavigatedRef` to
+        // prevent StrictMode + dep-change re-runs from pushing two
+        // history entries on /games/:id. Reviewer (chunk 3 HIGH) flagged
+        // this branch as uncovered. We can't trigger StrictMode in vitest
+        // directly, but we CAN simulate the equivalent: rerender the
+        // component with a NEW `onClose` reference while gameId and
+        // isOpen stay the same. The effect's dep array includes onClose,
+        // so a fresh identity would refire the effect; the ref guard
+        // must short-circuit it.
+        const { rerender, client } = renderDrawer({ isOpen: true, gameId: 42 });
+        expect(navigateMock).toHaveBeenCalledTimes(1);
+        const newOnClose = vi.fn();
+        rerender(
+            <QueryClientProvider client={client}>
+                <MemoryRouter>
+                    <GameResearchDrawer
+                        isOpen={true}
+                        onClose={newOnClose}
+                        gameId={42}
+                    />
+                </MemoryRouter>
+            </QueryClientProvider>,
+        );
+        expect(navigateMock).toHaveBeenCalledTimes(1);
+        // The new onClose was never invoked — the guard prevented the
+        // second navigate AND the second onClose.
+        expect(newOnClose).not.toHaveBeenCalled();
     });
 });

@@ -8,7 +8,6 @@ import type { CommonGroundParams } from '../../lib/api-client';
 interface Props {
     filters: CommonGroundParams;
     onChange: (next: CommonGroundParams) => void;
-    availableTags: string[];
     search: string;
     onSearchChange: (v: string) => void;
     /**

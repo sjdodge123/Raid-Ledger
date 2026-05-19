@@ -193,7 +193,6 @@ export function GameRef({
                 onClose={close}
                 gameId={gameId}
                 name={name}
-                action={action}
             />
         </>
     );

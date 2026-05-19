@@ -28,15 +28,6 @@ import { useAiSuggestionsAvailable } from '../../hooks/use-ai-suggestions-availa
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { mergeAiIntoCommonGround } from './common-ground-ai-merge.helpers';
 
-/** Extract unique ITAD tags from the response for the genre filter dropdown. */
-function extractUniqueTags(data: { itadTags: string[] }[]): string[] {
-    const set = new Set<string>();
-    for (const g of data) {
-        for (const t of g.itadTags) set.add(t);
-    }
-    return [...set].sort();
-}
-
 export interface UseCommonGroundStateResult {
     hasBuilding: boolean;
     mergedData: CommonGroundResponseDto | undefined;
@@ -48,7 +39,6 @@ export interface UseCommonGroundStateResult {
     setFilters: (f: CommonGroundParams) => void;
     search: string;
     setSearch: (v: string) => void;
-    availableTags: string[];
     /**
      * Voting-eligibility size for the active lineup (ROK-1255). 0 when
      * unknown / not yet loaded — consumers should fall back to default
@@ -96,11 +86,6 @@ export function useCommonGroundState(
         debouncedParams,
         hasBuilding,
     );
-    const availableTags = useMemo(
-        () => (data?.data ? extractUniqueTags(data.data) : []),
-        [data],
-    );
-
     // ROK-931: fetch AI suggestions alongside Common Ground and blend
     // them into the same grid. The map drives the ✨ AI badge + tooltip
     // reasoning on matching cards; AI-only games (not owned yet) are
@@ -172,7 +157,6 @@ export function useCommonGroundState(
         setFilters,
         search,
         setSearch,
-        availableTags,
         participantCount,
         isLoading,
         isError,

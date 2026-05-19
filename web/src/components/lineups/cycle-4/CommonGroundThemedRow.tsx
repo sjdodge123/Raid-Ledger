@@ -147,7 +147,6 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
           isNominating={isNominating}
           atCap={atCap || disabled}
           aiSuggested={aiSuggested}
-          aiReasoning={aiReasoning}
           hideOverlay
           fluid
         />

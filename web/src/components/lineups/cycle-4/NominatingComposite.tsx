@@ -12,22 +12,24 @@
  * preferred a single nominations list).
  */
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import type {
-  LineupDetailResponseDto,
-  LineupEntryResponseDto,
-} from '@raid-ledger/contract';
+import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../shared/journey-hero';
-import { useNominateGame, useRemoveNomination } from '../../../hooks/use-lineups';
+import { useNominateGame } from '../../../hooks/use-lineups';
 import { useAuth } from '../../../hooks/use-auth';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import { CommonGroundHero } from './CommonGroundHero';
 import { CommonGroundFilters } from '../CommonGroundFilters';
 import { useCommonGroundState } from '../use-common-ground-state';
 import { MyNominationsDrawer } from './MyNominationsDrawer';
+import { ExistingNominations } from './ExistingNominations';
+import {
+  StickyHeroSearchButton,
+  StickyHeroJumpButton,
+  StickyHeroBackButton,
+} from './sticky-hero-buttons';
+import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 
 type CommonGroundMode = 'suggestions' | 'search';
-import { NominationCard } from '../NominationCard';
-import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 
 export interface NominatingCompositeProps {
   lineup: LineupDetailResponseDto;
@@ -65,158 +67,6 @@ function deriveJourneyState(
   };
 }
 
-/**
- * Compact Search trigger embedded in the sticky JourneyHero (ROK-1297
- * round 5b). Mirrors the Common Ground header's Search button but stays
- * reachable while the user scrolls past the Common Ground panel.
- */
-function StickyHeroSearchButton({
-  onClick,
-  disabled,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label="Search the game library"
-      data-testid="sticky-hero-search"
-      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <svg
-        aria-hidden="true"
-        className="w-4 h-4 stroke-current"
-        viewBox="0 0 24 24"
-        fill="none"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx={11} cy={11} r={7} />
-        <path d="m20 20-3-3" />
-      </svg>
-      <span>Search</span>
-    </button>
-  );
-}
-
-/**
- * Compact jump-to-nominations affordance embedded in the sticky
- * JourneyHero (ROK-1297 round 5b). Smooth-scrolls to the Nominated
- * Games section without leaving the sticky header on screen. Visual
- * structure mirrors `StickyHeroSearchButton` (icon + label) so the
- * two buttons read as a uniform pair.
- */
-function StickyHeroJumpButton({
-  count,
-  onClick,
-}: {
-  count: number;
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid="sticky-hero-jump"
-      aria-label={`Jump to your ${count} nominated games`}
-      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors whitespace-nowrap"
-    >
-      <svg
-        aria-hidden="true"
-        className="w-4 h-4 stroke-current flex-shrink-0"
-        viewBox="0 0 24 24"
-        fill="none"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 5v14" />
-        <path d="m19 12-7 7-7-7" />
-      </svg>
-      <span>Nominations · {count}</span>
-    </button>
-  );
-}
-
-/**
- * Replaces the Search button on mobile when search mode is active —
- * single tap returns to suggestions.
- */
-function StickyHeroBackButton({
-  onClick,
-}: {
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Back to Common Ground suggestions"
-      data-testid="sticky-hero-back"
-      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors whitespace-nowrap"
-    >
-      <svg
-        aria-hidden="true"
-        className="w-4 h-4 stroke-current flex-shrink-0"
-        viewBox="0 0 24 24"
-        fill="none"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M19 12H5" />
-        <path d="m12 19-7-7 7-7" />
-      </svg>
-      <span>Back</span>
-    </button>
-  );
-}
-
-function ExistingNominations({
-  entries,
-  lineupId,
-}: {
-  entries: LineupEntryResponseDto[];
-  lineupId: number;
-}): JSX.Element {
-  const removeMutation = useRemoveNomination();
-  const handleRemove = (gameId: number): void => {
-    removeMutation.mutate({ lineupId, gameId });
-  };
-  if (entries.length === 0) {
-    return (
-      <div className="text-center py-8" data-testid="nominations-empty">
-        <p className="text-muted text-sm">
-          No nominations match this filter yet.
-        </p>
-      </div>
-    );
-  }
-  return (
-    <section data-testid="nominations-list">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-foreground">
-          Nominated Games
-        </h2>
-        <span className="text-xs text-muted">{entries.length} shown</span>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {entries.map((entry) => (
-          <NominationCard
-            key={entry.id}
-            entry={entry}
-            onRemove={handleRemove}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export function NominatingComposite(
   props: NominatingCompositeProps,
 ): JSX.Element {
@@ -249,7 +99,6 @@ export function NominatingComposite(
     setFilters,
     search,
     setSearch,
-    availableTags,
     participantCount,
   } = commonGroundState;
   // ROK-1297 round-4b: sync the sticky JourneyHero with the global Header's
@@ -409,7 +258,6 @@ export function NominatingComposite(
               <CommonGroundFilters
                 filters={filters}
                 onChange={setFilters}
-                availableTags={availableTags}
                 search={search}
                 onSearchChange={setSearch}
                 participantCount={participantCount}

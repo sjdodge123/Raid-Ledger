@@ -16,9 +16,10 @@ interface Props {
     onNominate: (gameId: number) => void;
     isNominating: boolean;
     atCap: boolean;
-    /** ROK-931: mark this card as LLM-suggested with a ✨ AI badge + tooltip reasoning. */
+    /** ROK-931: mark this card as LLM-suggested with the ✨ AI Pick badge.
+     *  The reasoning text is rendered OUTSIDE the card by callers — see the
+     *  ★ whyReason line in CommonGroundThemedRow (round 5z). */
     aiSuggested?: boolean;
-    aiReasoning?: string;
     /**
      * ROK-1297 rework: suppress the hover-to-reveal Nominate overlay. The
      * Cycle 4 composite wraps the card in its own wrapper that exposes a
