@@ -1,8 +1,9 @@
 // rl-fleet dashboard — fetches /api/state and renders cards. Auto-refreshes
-// every 5s. Designed to be useful when SSH'd into nothing — just bookmarks
-// fleet.rl.lan on the operator's phone.
+// every REFRESH_MS, but PAUSES whenever a tester has any unsent draft
+// verdicts (replaceChildren during a refresh would wipe scroll/focus and
+// make checkboxes feel jumpy). Resumes after Submit or Clear draft.
 
-const REFRESH_MS = 5000;
+const REFRESH_MS = 15000;
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, opts = {}, ...children) => {
@@ -317,6 +318,15 @@ const renderStep = (slug, plan, step, draft) => {
   buttons.append(passBtn, failBtn, skipBtn);
   if (resetBtn) buttons.appendChild(resetBtn);
 
+  // Comment button — always shown. Free-form text goes server-side
+  // but NEVER reaches the LLM (server strips comment bodies from any
+  // response the agent's MCP tools read). Operator pulls them later
+  // for Linear. Cannot be confused as a verdict — it's just a note.
+  const commentBtn = el('button', { class: 'btn-comment', text: '💬 comment' });
+  commentBtn.title = 'Add a free-form note. Visible to operator (posted to Linear), NOT sent to the LLM.';
+  commentBtn.addEventListener('click', () => promptComment(slug, step.id));
+  buttons.appendChild(commentBtn);
+
   if (step.results?.length) {
     const hist = el('div', { class: 'step-history' });
     step.results.slice(-3).forEach((r) => {
@@ -337,8 +347,9 @@ const bufferVerdict = (slug, plan, stepId, verdict) => {
   if (draft[stepId] === verdict) delete draft[stepId];
   else draft[stepId] = verdict;
   saveDraft(slug, plan.created_at, draft);
-  // Re-render just this card's plan section by triggering a tick.
-  tick();
+  // User explicitly tapped — force a re-render so the selected state
+  // shows immediately, bypassing the hasAnyDraft auto-refresh pause.
+  tick({ force: true });
 };
 
 const renderSubmitFooter = (slug, plan, draft) => {
@@ -365,7 +376,7 @@ const renderSubmitFooter = (slug, plan, draft) => {
   actions.appendChild(submitBtn);
   if (draftCount > 0) {
     const clearBtn = el('button', { class: 'btn-clear-draft', text: 'Clear draft' });
-    clearBtn.addEventListener('click', () => { clearDraft(slug, plan.created_at); tick(); });
+    clearBtn.addEventListener('click', () => { clearDraft(slug, plan.created_at); tick({ force: true }); });
     actions.appendChild(clearBtn);
   }
   footer.appendChild(actions);
@@ -407,7 +418,38 @@ const submitDraft = async (slug, plan, draft) => {
     // posts a replacement (which they may do automatically based on
     // the verdicts they just received).
     clearDraft(slug, plan.created_at);
-    tick();
+    tick({ force: true });
+  } catch (err) {
+    alert(`Network error: ${err.message}`);
+  }
+};
+
+// Comment prompt: window.prompt is the simplest mobile-friendly modal.
+// Body sent server-side; NOT shown back in this dashboard (one-way) so
+// the tester gets a fire-and-forget channel — operator pulls for Linear.
+const promptComment = async (slug, stepId) => {
+  const body = window.prompt(
+    'Add a comment for the operator (visible in Linear later, NOT sent to the LLM):',
+    '',
+  );
+  if (body == null) return;
+  const trimmed = body.trim();
+  if (trimmed.length === 0) return;
+  const tester = getTesterName();
+  try {
+    const r = await fetch(`/api/test-plans/${slug}/step/${stepId}/comment`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tester, body: trimmed }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(`Comment failed: ${j.error || `HTTP ${r.status}`}`);
+      return;
+    }
+    // Fire-and-forget — no need to re-render, the body isn't echoed back.
+    // Tester just sees the alert below as confirmation.
+    alert('Comment sent. The operator will see it in Linear.');
   } catch (err) {
     alert(`Network error: ${err.message}`);
   }
@@ -427,7 +469,7 @@ const requestReset = async (slug, stepId) => {
       alert(`Reset failed: ${j.error || `HTTP ${r.status}`}`);
       return;
     }
-    tick();
+    tick({ force: true });
   } catch (err) {
     alert(`Network error: ${err.message}`);
   }
@@ -455,15 +497,39 @@ const render = (data) => {
 
 const setStatus = (state) => {
   const indicator = $('refresh-indicator');
-  indicator.classList.remove('error', 'pulse');
+  indicator.classList.remove('error', 'pulse', 'paused');
   if (state === 'error') indicator.classList.add('error');
+  else if (state === 'paused') indicator.classList.add('paused');
   else if (state === 'ok') {
     void indicator.offsetWidth; // restart animation
     indicator.classList.add('pulse');
   }
 };
 
-const tick = async () => {
+// True if the tester has any unsent verdicts in localStorage for any plan.
+// Auto-refresh checks this before re-rendering; manual interactions
+// (submit, clear, reset) bypass via tick({ force: true }).
+const hasAnyDraft = () => {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('rl-test-draft:')) {
+        const raw = localStorage.getItem(k);
+        if (raw && raw !== '{}' && Object.keys(JSON.parse(raw)).length > 0) return true;
+      }
+    }
+  } catch { /* localStorage disabled or corrupt — assume no draft */ }
+  return false;
+};
+
+const tick = async (opts = {}) => {
+  // Skip auto-ticks while a draft is in flight — replaceChildren would
+  // wipe scroll position and visually nuke the buttons mid-tap. User-
+  // triggered ticks (after submit/clear/reset) pass force:true.
+  if (!opts.force && hasAnyDraft()) {
+    setStatus('paused');
+    return;
+  }
   try {
     const r = await fetch('/api/state', { cache: 'no-store' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);

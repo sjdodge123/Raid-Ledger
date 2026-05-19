@@ -463,3 +463,35 @@ footer {
   }
   .step-link { padding: 0 2px; font-size: inherit; }
 }
+
+/* Auto-refresh paused (when a draft exists in localStorage) — distinct
+   from the green pulse + the red error state. */
+.refresh-indicator.paused {
+  background: #ffc864;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Comment button — distinct, low-emphasis visual treatment */
+.step-buttons .btn-comment {
+  flex-basis: 100%;
+  min-height: 38px;
+  font-size: 12px;
+  margin-top: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border);
+  color: var(--fg-muted);
+}
+.step-buttons .btn-comment:hover {
+  background: rgba(94, 184, 255, 0.1);
+  color: #5eb8ff;
+  border-color: rgba(94, 184, 255, 0.4);
+}
+@media (min-width: 640px) {
+  .step-buttons .btn-comment {
+    flex-basis: auto;
+    min-height: 0;
+    font-size: 11px;
+    margin-top: 4px;
+  }
+}

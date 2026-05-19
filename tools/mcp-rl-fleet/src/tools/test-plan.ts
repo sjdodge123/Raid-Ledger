@@ -157,39 +157,75 @@ export const WAIT_DESC =
 
 export async function executeWait(p: { slug: string; timeout_seconds?: number }) {
   const timeoutS = Math.max(5, Math.min(3600, p.timeout_seconds ?? 600));
-  // inotifywait blocks until the file is modified or its timeout fires.
-  // We then call status. The wait runs inside a curl-container-style
-  // exec on the VM — actually we need a shell on the VM with inotifywait.
-  // inotify-tools is installed on the VM host (rl-infra/SETUP.md), so
-  // ssh + inotifywait directly works. Exit 0 = event; 1 = timeout (or
-  // missing file); 2 = error. Use timeout-friendly bash.
-  const remote =
-    `inotifywait -e modify -e move -e create -t ${timeoutS} ` +
-    `/srv/rl-infra/state/test-plans/${p.slug}.json 2>/dev/null; ` +
-    `echo RL_INOTIFY_EXIT:$?`;
+  // Bug J fix: inotifywait fires `modify` events even when the plan file
+  // wasn't meaningfully changed — atomic-rename artifacts from the
+  // server's writePlanAtomic, fs cache flushes, or even the plan's own
+  // creation event firing on a watcher that started before the rename
+  // finalized. So we can't trust "inotify woke up" = "verdict happened".
+  //
+  // Real-change detection: read the plan's summary.last_updated_at BEFORE
+  // we start waiting; after each inotify wake, read it again. If it
+  // hasn't advanced, that was a spurious wake — loop and wait with the
+  // remaining time budget. Only return to the agent when the timestamp
+  // actually moved (or the deadline hits).
+  let baseline: string | undefined;
   try {
-    const { stdout } = await execFileAsync(
-      'ssh',
-      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
-      { timeout: (timeoutS + 30) * 1000, maxBuffer: 1024 * 1024 },
-    );
-    const m = stdout.match(/RL_INOTIFY_EXIT:(\d+)/);
-    const code = m ? parseInt(m[1], 10) : -1;
-    if (code === 2) {
-      // inotifywait exit 2 = timeout. Return the timed_out shape so
-      // the agent can loop without ambiguity.
-      return { ok: true, timed_out: true, waited_seconds: timeoutS };
+    const pre = await executeStatus({ slug: p.slug });
+    baseline = (pre as { summary?: { last_updated_at?: string } }).summary?.last_updated_at;
+  } catch { /* status fetch failed — proceed without baseline, every wake counts */ }
+
+  const startedAtMs = Date.now();
+  const deadlineMs = startedAtMs + timeoutS * 1000;
+
+  while (Date.now() < deadlineMs) {
+    const remainingS = Math.max(1, Math.floor((deadlineMs - Date.now()) / 1000));
+    // -q suppresses inotifywait's startup chatter. Only -e modify — the
+    // -e move / -e create flags from before were no-ops on a single-file
+    // watch but added noise.
+    const remote =
+      `inotifywait -q -e modify -t ${remainingS} ` +
+      `/srv/rl-infra/state/test-plans/${p.slug}.json 2>/dev/null; ` +
+      `echo RL_INOTIFY_EXIT:$?`;
+    let exitCode = -1;
+    try {
+      const { stdout } = await execFileAsync(
+        'ssh',
+        ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
+        { timeout: (remainingS + 30) * 1000, maxBuffer: 1024 * 1024 },
+      );
+      const m = stdout.match(/RL_INOTIFY_EXIT:(\d+)/);
+      exitCode = m ? parseInt(m[1], 10) : -1;
+    } catch (err) {
+      const e = err as Error;
+      return { ok: false, error: 'wait_failed', message: e.message };
     }
-    if (code !== 0) {
-      // Could be missing file (plan was cleared) or inotify error.
-      // Fall through to a status read so the agent gets the current shape.
+
+    if (exitCode === 2) {
+      // inotifywait's own timeout — fall out of the loop normally.
+      break;
     }
-  } catch (err) {
-    const e = err as Error;
-    return { ok: false, error: 'wait_failed', message: e.message };
+    if (exitCode !== 0) {
+      // Plan deleted, fs error, etc. Return current status so the agent
+      // sees the actual state (likely a 404-shape from executeStatus).
+      const status = await executeStatus({ slug: p.slug });
+      return { ...status, inotify_exit: exitCode };
+    }
+
+    // inotify fired — verify it was a real change.
+    const post = await executeStatus({ slug: p.slug });
+    const newUpdated = (post as { summary?: { last_updated_at?: string } }).summary?.last_updated_at;
+    if (newUpdated && newUpdated !== baseline) {
+      return post; // real change — surface it to the agent
+    }
+    // Spurious wake — loop with the time we have left.
+    // (baseline stays the same since nothing moved.)
   }
-  // Event fired — return the updated status.
-  return executeStatus({ slug: p.slug });
+
+  return {
+    ok: true,
+    timed_out: true,
+    waited_seconds: Math.round((Date.now() - startedAtMs) / 1000),
+  };
 }
 
 // ----- rl_test_plan_clear -----

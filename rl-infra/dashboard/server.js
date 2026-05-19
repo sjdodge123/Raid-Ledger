@@ -178,6 +178,7 @@ const summarizePlan = (plan) => {
   const counts = { pass: 0, fail: 0, skip: 0, pending: 0 };
   let lastUpdated = plan.created_at;
   let pendingResets = 0;
+  let commentCount = 0;
   for (const step of plan.steps) {
     const last = (step.results ?? []).slice(-1)[0];
     if (!last) counts.pending++;
@@ -191,15 +192,40 @@ const summarizePlan = (plan) => {
         if (r.ts > lastUpdated) lastUpdated = r.ts;
       }
     }
+    for (const c of step.comments ?? []) {
+      commentCount++;
+      if (c.ts > lastUpdated) lastUpdated = c.ts;
+    }
   }
-  return { total, ...counts, pending_resets: pendingResets, last_updated_at: lastUpdated };
+  return {
+    total, ...counts,
+    pending_resets: pendingResets,
+    comment_count: commentCount,
+    last_updated_at: lastUpdated,
+  };
 };
+
+// Strip comment bodies (free-form tester text — could carry injection
+// payloads) from the plan before returning it to ANY API caller that
+// the LLM might consume. Step comment COUNT remains in the summary so
+// the agent knows "comments exist for the operator to triage in Linear".
+// Operator pulls full comment bodies via a separate operator-only path.
+const stripCommentBodies = (plan) => ({
+  ...plan,
+  steps: plan.steps.map((s) => ({
+    ...s,
+    comments: (s.comments ?? []).map((c) => ({
+      tester: c.tester, ts: c.ts, has_body: !!c.body,
+      // body is OMITTED on purpose
+    })),
+  })),
+});
 
 const handleTestPlanGet = async (slug, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   try {
     const plan = JSON.parse(await readFile(planPath(slug), 'utf-8'));
-    sendJson(res, 200, { ok: true, plan, summary: summarizePlan(plan) });
+    sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
   } catch (err) {
     if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
     sendJson(res, 500, { ok: false, error: err.message });
@@ -254,7 +280,7 @@ const handleTestPlanPut = async (slug, req, res) => {
     })),
   };
   await writePlanAtomic(slug, plan);
-  sendJson(res, 201, { ok: true, plan, summary: summarizePlan(plan) });
+  sendJson(res, 201, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
 };
 
 const validateUrl = (raw) => {
@@ -343,7 +369,56 @@ const handleTestPlanSubmit = async (slug, req, res) => {
   if (plan.submissions.length > 50) plan.submissions = plan.submissions.slice(-50);
 
   await writePlanAtomic(slug, plan);
-  sendJson(res, 200, { ok: true, plan, summary: summarizePlan(plan) });
+  sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
+};
+
+// POST /api/test-plans/<slug>/step/<id>/comment
+// Tester free-form comment per step. CRITICAL: this body is NOT
+// surfaced to the LLM via rl_test_plan_status / rl_test_plan_wait
+// (it's filtered out server-side from the agent's view). Instead,
+// the operator pulls comments via a separate path and reviews/posts
+// to the Linear story manually — keeping LLM-injection surface zero
+// while still giving testers a free-text channel. See linear_story_id
+// field on the plan if/when the agent wants to attach the comments.
+const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  const stepId = parseInt(stepIdRaw, 10);
+  if (!Number.isInteger(stepId) || stepId < 1)
+    return sendJson(res, 400, { ok: false, error: 'invalid step id' });
+
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+
+  const text = typeof body.body === 'string' ? body.body.trim().slice(0, 2000) : '';
+  if (text.length === 0)
+    return sendJson(res, 400, { ok: false, error: 'comment body required' });
+  const tester = typeof body.tester === 'string'
+    ? body.tester.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50)
+    : 'anon';
+
+  let plan;
+  try { plan = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+  catch (err) {
+    if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
+    return sendJson(res, 500, { ok: false, error: err.message });
+  }
+  const step = plan.steps.find((s) => s.id === stepId);
+  if (!step) return sendJson(res, 404, { ok: false, error: 'step not found' });
+
+  step.comments = step.comments ?? [];
+  step.comments.push({
+    tester,
+    body: text,
+    ts: new Date().toISOString(),
+  });
+  if (step.comments.length > 50) step.comments = step.comments.slice(-50);
+
+  await writePlanAtomic(slug, plan);
+  // Return summary only — don't echo the comment body in the response
+  // since this endpoint sits on the same path family as the LLM-facing
+  // ones and we want a consistent contract.
+  sendJson(res, 200, { ok: true, summary: summarizePlan(plan) });
 };
 
 // POST /api/test-plans/<slug>/step/<id>/reset-request
@@ -382,7 +457,7 @@ const handleTestPlanStepResetRequest = async (slug, stepIdRaw, req, res) => {
   if (step.reset_requests.length > 20) step.reset_requests = step.reset_requests.slice(-20);
 
   await writePlanAtomic(slug, plan);
-  sendJson(res, 200, { ok: true, plan, summary: summarizePlan(plan) });
+  sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
 };
 
 const handleTestPlanStepResult = async (slug, stepIdRaw, req, res) => {
@@ -433,7 +508,7 @@ const handleTestPlanStepResult = async (slug, stepIdRaw, req, res) => {
   if (step.results.length > 20) step.results = step.results.slice(-20);
 
   await writePlanAtomic(slug, plan);
-  sendJson(res, 200, { ok: true, plan, summary: summarizePlan(plan) });
+  sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
 };
 
 const handleTestPlanDelete = async (slug, res) => {
@@ -494,6 +569,7 @@ const serveStatic = async (req, res) => {
 const RE_PLAN = /^\/api\/test-plans\/([a-z0-9-]+)$/;
 const RE_STEP = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/result$/;
 const RE_RESET = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/reset-request$/;
+const RE_COMMENT = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/comment$/;
 const RE_SUBMIT = /^\/api\/test-plans\/([a-z0-9-]+)\/submit$/;
 
 const server = createServer(async (req, res) => {
@@ -528,6 +604,11 @@ const server = createServer(async (req, res) => {
   if (resetMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
     return handleTestPlanStepResetRequest(resetMatch[1], resetMatch[2], req, res);
+  }
+  const commentMatch = req.url && RE_COMMENT.exec(req.url);
+  if (commentMatch) {
+    if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    return handleTestPlanStepComment(commentMatch[1], commentMatch[2], req, res);
   }
   const submitMatch = req.url && RE_SUBMIT.exec(req.url);
   if (submitMatch) {
