@@ -100,7 +100,26 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     if [[ -n "$PUBLIC_DOMAIN" ]]; then
         # ${SLUG}test.${PUBLIC_DOMAIN} pattern + slot-N.${PUBLIC_DOMAIN} for
         # OAuth callbacks (ROK-1324) — keep in sync with non-idempotent path.
-        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
+        # Codex finding #7: when MAX_ENVS_PER_SLOT>1, only ONE env per slot may
+        # own slot-N.${PUBLIC_DOMAIN} — Traefik would otherwise silently
+        # last-write-wins between rules. Idempotent path always claims it for
+        # this slug (re-running env-spin for the SAME slug should be a no-op,
+        # and if the slug already has the route it's the rightful owner).
+        # Other envs on the same slot fall through to the per-slug URL only.
+        # TODO(env-destroy): if this slug owns the slot rule, env-destroy
+        # should re-register the rule for the next-oldest env on the slot.
+        # See cross-agent handoff note in commit message.
+        SLOT_HOST_RULE_OWNER=$(grep -l "slot-${SLOT}\.${PUBLIC_DOMAIN}\`" \
+            "$TRAEFIK_CONF_D"/env-*.yml 2>/dev/null | head -n1 || true)
+        SLOT_HOST_RULE_OWNED_BY_OTHER=0
+        if [[ -n "$SLOT_HOST_RULE_OWNER" && "$SLOT_HOST_RULE_OWNER" != "$TRAEFIK_CONF_D/env-${SLUG}.yml" ]]; then
+            SLOT_HOST_RULE_OWNED_BY_OTHER=1
+        fi
+        if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+            HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
+        else
+            HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
+        fi
     else
         HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
     fi
@@ -274,8 +293,31 @@ if [[ -n "$PUBLIC_DOMAIN" ]]; then
     # Per-slug host: ${SLUG}test.${PUBLIC_DOMAIN} (testers' human-friendly URL).
     # Slot host: slot-${SLOT}.${PUBLIC_DOMAIN} (ROK-1324 — stable hostname for
     # OAuth callbacks since Discord requires exact redirect-URI matches).
-    # Both route to the SAME env; whichever name a tester hits, they land here.
-    HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
+    # Codex finding #7: MAX_ENVS_PER_SLOT>1 + a single slot hostname means at
+    # most ONE env per slot may register the slot Host rule. Otherwise Traefik
+    # silently routes by whichever rule loaded last and both envs share the
+    # slot URL. Detect prior ownership by scanning the conf.d dir for an
+    # existing env file already carrying the slot rule. Pragmatic option (d)
+    # from the finding: per-slug URL always works for every env on the slot;
+    # the slot-stable OAuth URL routes to the OLDEST (= first registered) env.
+    # Discord OAuth users on slot-N.${PUBLIC_DOMAIN} hit the older env; agents
+    # spawning a second env on the same slot must use ${SLUG}test.${PUBLIC_DOMAIN}
+    # and forgo OAuth (or destroy the older env first).
+    SLOT_HOST_RULE_OWNER=$(grep -l "slot-${SLOT}\.${PUBLIC_DOMAIN}\`" \
+        "$TRAEFIK_CONF_D"/env-*.yml 2>/dev/null | head -n1 || true)
+    SLOT_HOST_RULE_OWNED_BY_OTHER=0
+    if [[ -n "$SLOT_HOST_RULE_OWNER" && "$SLOT_HOST_RULE_OWNER" != "$TRAEFIK_CONF_D/env-${SLUG}.yml" ]]; then
+        SLOT_HOST_RULE_OWNED_BY_OTHER=1
+    fi
+    if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+        # Another env on this slot already owns slot-N.${PUBLIC_DOMAIN}; this
+        # env gets the per-slug URL only. TODO(env-destroy): when the owner
+        # tears down, env-destroy should re-register the slot rule against
+        # the next-oldest env on the slot. Cross-agent handoff.
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
+    else
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
+    fi
 else
     HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
 fi
