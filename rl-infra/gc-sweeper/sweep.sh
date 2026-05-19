@@ -32,11 +32,14 @@ log() { echo "[$(date -u +%FT%TZ)] sweep: $*"; }
 # would 502. Mirrors the cleanup env-destroy does for explicit teardowns.
 TEST_PLANS_DIR="${TEST_PLANS_DIR:-/state/test-plans}"
 TEST_PLAN_ATTACHMENTS_DIR="${TEST_PLAN_ATTACHMENTS_DIR:-/state/test-plan-attachments}"
+# Test plan auto-cleanup is DISABLED on reaper paths too (operator pref
+# 2026-05-19). When an env is destroyed by the sweeper, its plan + any
+# screenshot attachments are preserved for review. Operators clear
+# explicitly via rl_test_plan_clear when ready. The clean_test_plan
+# function stays as a no-op so callers in this script don't need touching.
 clean_test_plan() {
-    local slug="$1"
-    [[ -z "$slug" ]] && return 0
-    rm -f "$TEST_PLANS_DIR/${slug}.json" 2>/dev/null || true
-    rm -rf "$TEST_PLAN_ATTACHMENTS_DIR/${slug}" 2>/dev/null || true
+    local _slug="$1"
+    return 0
 }
 
 audit() {

@@ -573,3 +573,24 @@ footer {
 .rl-modal .btn-cancel { background: rgba(255, 255, 255, 0.05); color: var(--fg-muted); }
 .rl-modal .btn-submit { background: rgba(94, 184, 255, 0.2); border-color: rgba(94, 184, 255, 0.5); color: #5eb8ff; }
 .rl-modal .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Pull-to-refresh indicator (custom, replaces native iOS behavior) */
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  opacity: 0;
+  background: linear-gradient(180deg, rgba(94, 184, 255, 0.25), rgba(94, 184, 255, 0.05));
+  color: #5eb8ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity 0.15s;
+  z-index: 999;
+  pointer-events: none;
+  overflow: hidden;
+}
