@@ -432,7 +432,7 @@ const submitDraft = async (slug, plan, draft) => {
     clearDraft(slug, plan.created_at);
     tick({ force: true });
   } catch (err) {
-    alert(`Network error: ${err.message}`);
+    alert(`Network error: ${(err && (err.message || err.toString())) || 'unknown (no message)'}. The env or dashboard may be down. Try refreshing.`);
   }
 };
 
@@ -545,7 +545,7 @@ const openCommentModal = (slug, stepId) => {
       }
       backdrop.remove();
     } catch (err) {
-      alert(`Network error: ${err.message}`);
+      alert(`Network error: ${(err && (err.message || err.toString())) || 'unknown (no message)'}. The env or dashboard may be down. Try refreshing.`);
       submitBtn.disabled = false; submitBtn.textContent = 'Send';
     }
   });
@@ -585,7 +585,7 @@ const requestReset = async (slug, stepId) => {
     }
     tick({ force: true });
   } catch (err) {
-    alert(`Network error: ${err.message}`);
+    alert(`Network error: ${(err && (err.message || err.toString())) || 'unknown (no message)'}. The env or dashboard may be down. Try refreshing.`);
   }
 };
 

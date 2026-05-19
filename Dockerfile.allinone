@@ -546,8 +546,14 @@ ENV ADMIN_PASSWORD=
 EXPOSE 80
 
 # Health check
+# Use 127.0.0.1 explicitly — Alpine's /etc/hosts maps `localhost` to
+# BOTH 127.0.0.1 and ::1, and getent returns ::1 first. nginx in this
+# image only listens on IPv4 (`listen 80;` without `listen [::]:80;`),
+# so wget on `localhost` got "Connection refused" and the container
+# went unhealthy permanently. Detected 2026-05-19 against the rok-1297
+# fleet build; the API itself was healthy the whole time.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-80}/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-80}/api/health || exit 1
 
 # Start everything
 ENTRYPOINT ["/app/entrypoint.sh"]
