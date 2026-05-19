@@ -39,11 +39,18 @@ audit() {
 mutate() {
     local file="$1"; shift
     local tmp
-    tmp=$(mktemp)
+    # tmpfile in the SAME directory as the target so:
+    #   1. mv is a same-fs rename (atomic + preserves the dir's setgid bit
+    #      so the new file inherits the rl-fleet group)
+    #   2. we don't cross from /tmp (root-owned, mode 600) to /state
+    #      (which would copy+unlink and leave the target as root:root 0600,
+    #      blocking the dashboard reader). Same fix already in _state.sh.
+    tmp=$(mktemp "${file}.XXXXXX")
     (
         flock -x 200
         jq "$@" "$file" > "$tmp"
         mv "$tmp" "$file"
+        chmod 664 "$file" 2>/dev/null || true
     ) 200>"$LOCK_DIR/$(basename "$file").lock"
 }
 
@@ -127,11 +134,16 @@ for slug in $ENVS_REGISTERED; do
     fi
     HEALTH=$(docker inspect "$APP" --format '{{.State.Health.Status}}' 2>/dev/null || echo "none")
     if [[ "$HEALTH" == "unhealthy" ]]; then
-        # Give the env a 5-minute grace from spin time before reaping for unhealth.
+        # Grace from spin time before reaping for unhealth. Bumped from
+        # 5min → 15min (2026-05-19): allinones with cold DB + migrations
+        # + first-load workers legitimately take >5min to come fully
+        # healthy on the smaller VM. Anything longer than 15min is
+        # almost certainly an app-level crash worth tearing down so the
+        # operator notices.
         STARTED=$(docker inspect "$APP" --format '{{.State.StartedAt}}' 2>/dev/null || echo "")
         STARTED_EPOCH=$(date -u -d "$STARTED" +%s 2>/dev/null || echo "$NOW_EPOCH")
         UPTIME=$(( NOW_EPOCH - STARTED_EPOCH ))
-        if (( UPTIME >= 300 )); then
+        if (( UPTIME >= 900 )); then
             log "destroying unhealthy env $slug (allinone has been unhealthy for ${UPTIME}s)"
             docker rm -f "$APP" "rl-env-${slug}-pg" >/dev/null 2>&1 || true
             docker volume rm "rl-data-${slug}" >/dev/null 2>&1 || true

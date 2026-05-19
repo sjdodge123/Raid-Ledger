@@ -287,4 +287,27 @@ The app is deployed at <**MODE=fleet:** `https://rok-<num>test.gamernight.net` |
 I'll wait.
 ```
 
+### Fleet-mode bonus: post a tester checklist (recommended for shareable stories)
+
+When MODE=fleet, AFTER posting the operator-presentation block above, **post a structured test checklist** so the operator (and any external testers they share the URL with) have a clear walk-through with pass/fail/skip buttons on `fleet.gamernight.net`:
+
+```
+mcp__mcp-rl-fleet__rl_test_plan_create({
+  slug: "rok-<num>",
+  worktree_path: "<same as 3c>",
+  title: "ROK-<num>: <short story title>",
+  steps: [
+    { description: "<first user-facing step>", expected: "<what should happen>" },
+    { description: "<second step>" },
+    ...
+  ]
+})
+```
+
+Derive steps from the story's ACs + the Chrome MCP e2e flows you exercised in 3c.6. Order matters — the dashboard enforces sequential completion (testers can't mark step N until step N-1 has a verdict). Keep steps to ≤10; longer plans are usually a sign the story should split.
+
+If you want to react to verdicts in-session (rework on a failed step, for example), follow up with `rl_test_plan_wait({ slug, timeout_seconds: 600 })` in a loop — it long-polls via SSH inotifywait and returns when any tester taps a button. Otherwise just check periodically with `rl_test_plan_status({ slug })`.
+
+The plan auto-deletes when `rl_env_destroy` fires at session end. SKIP this when MODE=local (the dashboard isn't part of local-mode infra).
+
 If any row shows FAIL, fix it before presenting. If Local CI Proof or Chrome MCP e2e Pre-Review Summary is missing from your output, you skipped 3a or 3c.6 — go back. Do NOT proceed until operator gives direction.
