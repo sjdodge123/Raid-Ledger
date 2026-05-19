@@ -421,14 +421,22 @@ run_playwright_e2e() {
       fi
       if ! check_env_up; then
         echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Playwright${NC}"
-        echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed UI flows.${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${YELLOW}  Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed UI flows.${NC}"
+        fi
         return 2
       fi
       ;;
     on)
       if ! check_env_up; then
         echo -e "${RED}--with-e2e requested but dev env is not responding on :3000/health.${NC}"
-        echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${RED}Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        fi
         return 1
       fi
       ;;
@@ -462,14 +470,22 @@ run_discord_smoke() {
       fi
       if ! check_env_up; then
         echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Discord smoke${NC}"
-        echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed bot/notification flows.${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${YELLOW}  Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed bot/notification flows.${NC}"
+        fi
         return 2
       fi
       ;;
     on)
       if ! check_env_up; then
         echo -e "${RED}--with-e2e requested but dev env is not responding on :3000/health.${NC}"
-        echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        if [ "${RL_TARGET:-local}" = "remote" ]; then
+          echo -e "${RED}Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
+        else
+          echo -e "${RED}Run ./scripts/deploy_dev.sh first.${NC}"
+        fi
         return 1
       fi
       ;;
