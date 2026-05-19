@@ -160,17 +160,21 @@ export const WAIT_DESC =
 
 export async function executeWait(p: { slug: string; timeout_seconds?: number }) {
   const timeoutS = Math.max(5, Math.min(3600, p.timeout_seconds ?? 600));
-  // Bug J fix: inotifywait fires `modify` events even when the plan file
-  // wasn't meaningfully changed — atomic-rename artifacts from the
-  // server's writePlanAtomic, fs cache flushes, or even the plan's own
-  // creation event firing on a watcher that started before the rename
-  // finalized. So we can't trust "inotify woke up" = "verdict happened".
+  // Codex finding #8 fix: the dashboard server writes plans via
+  // writePlanAtomic (tmp file + rename()). On Linux ext4/xfs, rename()
+  // over an existing file fires MOVED_TO on the PARENT DIRECTORY for
+  // the target name — but NOT a MODIFY event on the file at the same
+  // path. The original `-e modify` watch on the file itself therefore
+  // silently slept through every dashboard-driven plan update, and
+  // rl_test_plan_wait always returned `timed_out: true` instead of
+  // waking on the tester's Submit. Fix: watch the parent directory
+  // for close_write|moved_to|delete and filter on filename.
   //
-  // Real-change detection: read the plan's summary.last_updated_at BEFORE
-  // we start waiting; after each inotify wake, read it again. If it
-  // hasn't advanced, that was a spurious wake — loop and wait with the
-  // remaining time budget. Only return to the agent when the timestamp
-  // actually moved (or the deadline hits).
+  // Bug J carry-over: even with the correct event mask, dashboard
+  // writes can produce multiple events per logical update (tmp file
+  // close_write + rename moved_to). We still need the
+  // summary.last_updated_at baseline check to collapse those into a
+  // single agent-visible wake.
   let baseline: string | undefined;
   try {
     const pre = await executeStatus({ slug: p.slug });
@@ -179,17 +183,24 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
 
   const startedAtMs = Date.now();
   const deadlineMs = startedAtMs + timeoutS * 1000;
+  const planFilename = `${p.slug}.json`;
 
   while (Date.now() < deadlineMs) {
     const remainingS = Math.max(1, Math.floor((deadlineMs - Date.now()) / 1000));
-    // -q suppresses inotifywait's startup chatter. Only -e modify — the
-    // -e move / -e create flags from before were no-ops on a single-file
-    // watch but added noise.
+    // Watch the parent directory, not the file: atomic rename fires
+    // MOVED_TO on the directory entry, not MODIFY on the inode at the
+    // path. `close_write` covers non-atomic writers (defensive); `delete`
+    // covers plan removal so we surface the deleted state to the agent
+    // instead of hanging until timeout. `--format '%f'` makes
+    // inotifywait emit just the filename so we can grep for our slug
+    // and ignore concurrent writes to OTHER slugs' plans.
     const remote =
-      `inotifywait -q -e modify -t ${remainingS} ` +
-      `/srv/rl-infra/state/test-plans/${p.slug}.json 2>/dev/null; ` +
+      `inotifywait -q -e close_write,moved_to,delete -t ${remainingS} ` +
+      `--format '%f' ` +
+      `/srv/rl-infra/state/test-plans/ 2>/dev/null; ` +
       `echo RL_INOTIFY_EXIT:$?`;
     let exitCode = -1;
+    let wakeFilename = '';
     try {
       const { stdout } = await execFileAsync(
         'ssh',
@@ -198,6 +209,14 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
       );
       const m = stdout.match(/RL_INOTIFY_EXIT:(\d+)/);
       exitCode = m ? parseInt(m[1], 10) : -1;
+      // Lines before the RL_INOTIFY_EXIT sentinel are filenames from
+      // inotifywait. With -q and a single event, there should normally
+      // be exactly one. Take the last filename line as the trigger.
+      const lines = stdout
+        .split('\n')
+        .map((l: string) => l.trim())
+        .filter((l: string) => l && !l.startsWith('RL_INOTIFY_EXIT:'));
+      wakeFilename = lines[lines.length - 1] ?? '';
     } catch (err) {
       const e = err as Error;
       return { ok: false, error: 'wait_failed', message: e.message };
@@ -208,20 +227,30 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
       break;
     }
     if (exitCode !== 0) {
-      // Plan deleted, fs error, etc. Return current status so the agent
-      // sees the actual state (likely a 404-shape from executeStatus).
+      // fs error etc. Return current status so the agent sees the
+      // actual state (likely a 404-shape from executeStatus).
       const status = await executeStatus({ slug: p.slug });
       return { ...status, inotify_exit: exitCode };
     }
 
-    // inotify fired — verify it was a real change.
+    // inotify fired for SOME file in the directory. If it wasn't our
+    // slug, that's a sibling plan being updated — loop and keep
+    // waiting on the remaining time budget without re-checking status
+    // (status fetch over the network is the expensive part).
+    if (wakeFilename && wakeFilename !== planFilename) {
+      continue;
+    }
+
+    // Our slug fired. Verify it was a real change via the baseline
+    // last_updated_at — atomic rename produces close_write + moved_to
+    // pairs, and we don't want to wake the agent twice.
     const post = await executeStatus({ slug: p.slug });
     const newUpdated = (post as { summary?: { last_updated_at?: string } }).summary?.last_updated_at;
     if (newUpdated && newUpdated !== baseline) {
       return post; // real change — surface it to the agent
     }
-    // Spurious wake — loop with the time we have left.
-    // (baseline stays the same since nothing moved.)
+    // Spurious wake (e.g. the first half of an atomic rename pair) —
+    // loop with the time we have left. baseline stays the same.
   }
 
   return {
