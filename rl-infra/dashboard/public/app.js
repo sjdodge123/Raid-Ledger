@@ -125,35 +125,24 @@ const renderEnv = (e, publicDomain) => {
   // testers see the same URL, and Pi-hole short-circuits the LAN path so
   // there's no Cloudflare round-trip cost on home network. Internal URL
   // is kept as a small fallback for the rare CF/NPM-outage case.
-  if (publicUrl) {
-    const ext = el('a', { href: publicUrl, target: '_blank', rel: 'noopener', text: 'open' });
-    // Long-press / right-click copies the URL for sharing with testers.
-    ext.addEventListener('contextmenu', (ev) => {
-      ev.preventDefault();
-      navigator.clipboard?.writeText(publicUrl).then(() => {
-        ext.textContent = 'copied!';
-        setTimeout(() => { ext.textContent = 'open'; }, 1200);
-      });
+  // Primary "open" URL preference: slot URL > public (per-slug) URL > internal LAN.
+  // Slot URL is the one Discord OAuth callbacks are registered against
+  // (ROK-1324), so it's the only URL that supports the full feature set
+  // — operator pref 2026-05-19 is to default to it everywhere.
+  const primaryUrl = slotUrl || publicUrl || internalUrl;
+  const ext = el('a', { href: primaryUrl, target: '_blank', rel: 'noopener', text: 'open' });
+  // Long-press / right-click copies the URL for sharing with testers.
+  ext.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    navigator.clipboard?.writeText(primaryUrl).then(() => {
+      ext.textContent = 'copied!';
+      setTimeout(() => { ext.textContent = 'open'; }, 1200);
     });
-    actions.appendChild(ext);
-    // Slot URL — for Discord OAuth flows. Distinct so the operator
-    // knows to use this one when testing login (per-slug URL would
-    // hit a Discord OAuth callback mismatch).
-    if (slotUrl) {
-      const loginLink = el('a', { class: 'secondary', href: slotUrl, target: '_blank', rel: 'noopener', text: '🔑 login' });
-      loginLink.title = `Discord login route (slot-stable URL): ${slotUrl}`;
-      loginLink.addEventListener('contextmenu', (ev) => {
-        ev.preventDefault();
-        navigator.clipboard?.writeText(slotUrl).then(() => {
-          loginLink.textContent = 'copied!';
-          setTimeout(() => { loginLink.textContent = '🔑 login'; }, 1200);
-        });
-      });
-      actions.appendChild(loginLink);
-    }
+  });
+  actions.appendChild(ext);
+  // Keep "lan" as a small fallback link for the rare CF/NPM-outage case.
+  if (publicUrl) {
     actions.appendChild(el('a', { class: 'secondary', href: internalUrl, target: '_blank', rel: 'noopener', text: 'lan' }));
-  } else {
-    actions.appendChild(el('a', { href: internalUrl, target: '_blank', rel: 'noopener', text: 'open' }));
   }
   card.appendChild(actions);
 
