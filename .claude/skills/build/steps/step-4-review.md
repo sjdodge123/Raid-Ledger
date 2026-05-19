@@ -10,19 +10,13 @@ The branch remains **local-only** through this step. Do NOT invoke `git push`, `
 
 When operator signals ready, poll each story: `mcp__linear__get_issue({ issueId: "<linear_id>" })`.
 
-### Test-infra release point (mode-branched)
-
-Read `pipeline.test_infra_mode` from `build-state.yaml`.
-
-**MODE=fleet — DO NOT release the slot here.** The slot is cheap to hold (2 slots in the fleet, low contention). The spun env stays alive for post-rebase re-verification in 4d, possible operator follow-up testing during reviewer/architect passes, and Step 5 cleanup is where the slot release happens. Leaving the env up costs ~1 GB RAM on the runner — fine until session end. Don't churn it.
-
-**MODE=local — release the env lock as soon as the operator gives any verdict** (approve OR rework). The rest of Step 4 (Codex 4b, architect 4c, Lead smoke 4d) does not need the env in most cases:
+**Env-lock release point (STRICT).** As soon as the operator gives any verdict (approve OR rework), release the env lock — the rest of Step 4 (Codex 4b, architect 4c, Lead smoke 4d) does not need the env in most cases:
 
 ```
 mcp__mcp-env__env_lock_release
 ```
 
-Exception (LOCAL mode only): if rework is `material` and re-running the deploy + e2e on the worktree is needed before push, re-acquire then. If Lead smoke in 4d needs to run `./scripts/validate-ci.sh --only-e2e --with-e2e` (UI / bot changes against the rebased state), re-acquire just for that pass and release after. The default is **release-as-soon-as-possible**; re-acquire on demand. Don't pre-emptively hold.
+Exception: if rework is `material` and re-running the deploy + e2e on the worktree is needed before push, re-acquire then. If Lead smoke in 4d needs to run `./scripts/validate-ci.sh --only-e2e --with-e2e` (UI / bot changes against the rebased state), re-acquire just for that pass and release after. The default is **release-as-soon-as-possible**; re-acquire on demand. Don't pre-emptively hold.
 
 ### Changes Requested → Rework Loop
 
@@ -107,13 +101,24 @@ Reviewer prompts in 4b point at the updated spec.
 
 ---
 
-## 4b. Codex Review (single shell command — no subagent)
+## 4b. Reviewer Phase — Codex + devedup-rl + Security (PARALLEL)
 
-Reviewer is **Codex CLI**, not a Claude subagent. Different model = different blind spots, and one shell call is faster than spawning subagents into a team and aggregating outputs.
+Three review channels run in parallel during this phase. They have different blind spots; you need ALL THREE for non-trivial diffs:
+
+| Channel | What it catches | How to invoke |
+|---------|-----------------|---------------|
+| Codex (general) | broad correctness/security/style across the whole diff | `codex review` two-pass (below) |
+| Security review | auth bypasses, injection, leaked secrets, infra escalation | `/security-review` skill |
+| devedup-rl chunked review | workspace-aware correctness, contract integrity, RL conventions | fan out `Agent({ subagent_type: "devedup-rl:reviewer" })` per chunk |
+
+**Run all three concurrently** — security-review + the devedup-rl fan-out can launch in the same message as the Codex pass. They produce separate artifacts; aggregate after.
+
+Reminder: per `feedback_security_review_vs_code_review.md`, `/security-review` (Codex-driven security focus) is NOT a substitute for `/rl-review` (devedup-rl). Both run. The Codex pass below is the GENERAL reviewer; the security pass is the SECURITY-focused reviewer; the devedup-rl fan-out is the WORKSPACE-AWARE reviewer.
 
 **Skip the reviewer entirely if:**
-- Diff is `<300 net lines` AND no risk markers (no migration, no Dockerfile, no `packages/contract/`, no auth code, no money/payments code). Operator approval was the gate; Codex is for genuinely risky diffs.
-- `codex` CLI is not on PATH (record `gates.reviewer: SKIPPED — codex unavailable`, proceed).
+- Diff is `<300 net lines` AND no risk markers (no migration, no Dockerfile, no `packages/contract/`, no auth code, no money/payments code). Operator approval was the gate; reviewers are for genuinely risky diffs.
+- `codex` CLI is not on PATH AND no devedup-rl plugin available (record `gates.reviewer: SKIPPED — tools unavailable`, proceed).
+- If `codex` is on PATH, ALWAYS run the security pass even if you skip the general Codex pass — `/security-review` is the smallest and most-critical channel.
 
 ### Run Codex
 
@@ -160,46 +165,20 @@ Sequential — must finish before smoke. Read `templates/architect.md`, `<TASK_T
 
 ---
 
-## 4d. Lead Smoke Tests (mode-aware)
+## 4d. Lead Smoke Tests
 
 **Skip entirely for `scope: light`** — fast CI in step 2-light-c plus operator approval is sufficient. Set `gates.smoke_test: N/A` and proceed to 4e.
 
-For standard / full scope, never skipped. The base CI run (no e2e) is mode-agnostic — `validate-ci.sh` self-dispatches via `RL_TARGET=auto` inside the script, so both modes use:
+For standard / full scope, never skipped. From main worktree:
 
 ```bash
 git pull --rebase origin main
 ./scripts/validate-ci.sh --no-e2e
 ```
 
-This covers build/typecheck/lint/unit/integration across all workspaces and skips the e2e steps (which need a deployed env; they got covered in 3c.5 against the worktree).
+`validate-ci.sh --no-e2e` covers build/typecheck/lint/unit/integration across all workspaces in one pass and skips the e2e steps (which need a deployed env and got covered in 3c.5 against the worktree).
 
-### Post-rebase UI re-verification (when needed)
-
-If UI / bot changes need post-rebase re-verification (selectors against `main`'s latest, not just the worktree):
-
-**MODE=fleet:** re-deploy the worktree to the existing slug — `rl_env_deploy` is idempotent and rebuilds from the now-rebased `/workspace`:
-
-```
-mcp__mcp-rl-fleet__rl_env_deploy({ slug: "rok-<num>", worktree_path: "<same>" })
-mcp__mcp-rl-fleet__rl_validate_ci({ args: ["--only-e2e", "--with-e2e"], against_env_slug: "rok-<num>", worktree_path: "<same>" })
-```
-
-Slot stays held; env gets refreshed in-place. No env lock churn.
-
-**MODE=local:** re-acquire the env lock, deploy the main worktree, force-run e2e, release immediately after:
-
-```
-mcp__mcp-env__env_lock_acquire({ purpose: "build ROK-XXX post-rebase e2e" })
-```
-```bash
-./scripts/deploy_dev.sh --ci --rebuild
-./scripts/validate-ci.sh --only-e2e --with-e2e
-```
-```
-mcp__mcp-env__env_lock_release
-```
-
-Don't hold the local lock through 4e or Step 5 — push and PR creation don't need the env.
+If UI / bot changes need post-rebase re-verification: re-acquire the env lock, deploy the main worktree (`./scripts/deploy_dev.sh --ci --rebuild`), then run `./scripts/validate-ci.sh --only-e2e --with-e2e` to force the e2e steps against the rebased state. Release the env lock immediately after. Don't hold the lock through 4e or Step 5 — push and PR creation don't need the env.
 
 Gate: `gates.smoke_test: PASS` or `FAIL`. On failure: diagnose (timing? `sleep()`?). Regression → fix or respawn dev. Test infra issue (flaky, missing wait) → fix the test, don't skip. **Never dismiss as "pre-existing"** — investigate and fix, or create a Linear story with root cause.
 
