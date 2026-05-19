@@ -162,18 +162,39 @@ detect_scope() {
   fi
 }
 
-# Returns 0 if the local dev env (API :3000 + web :5173) is up, 1 otherwise.
+# Returns 0 if the dev env (API + web) is up, 1 otherwise.
 # Quiet on failure — callers decide whether absence is fatal or just a skip signal.
-# Both ports must answer: Playwright's webServer config has reuseExistingServer:true
-# with a 120s timeout, so if :5173 is down it'll silently try to spawn its own
-# `npm run dev -w web` and only fail after 2 minutes — too slow for our fail-fast.
+# Local-dev mode probes API :3000 and Vite :5173 separately. Fleet mode
+# (RL_TARGET=remote / rl_validate_ci with against_env_slug) probes the allinone
+# at HEALTH_URL/BASE_URL — same host serves /api/health and the SPA root.
+#
+# Why probe the web side at all: Playwright's webServer config has
+# reuseExistingServer:true with a 120s timeout, so if :5173 is down (local)
+# or BASE_URL is unreachable (fleet) it'll silently try to spawn its own
+# `npm run dev -w web` and only fail after 2 minutes — too slow for fail-fast.
+#
+# TODO (separate fix): playwright.config.ts should consume BASE_URL/PLAYWRIGHT_BASE_URL
+# so the actual test runs target the fleet env instead of localhost:5173.
 check_env_up() {
   # HEALTH_URL override (set by rl_validate_ci against_env_slug, points at
   # the fleet env's allinone via rl-net Docker DNS). Defaults to localhost
   # for local-dev mode.
-  curl -fsS --max-time 3 "${HEALTH_URL:-http://localhost:3000/health}" 2>/dev/null \
+  local health_url="${HEALTH_URL:-http://localhost:3000/health}"
+  curl -fsS --max-time 3 "$health_url" 2>/dev/null \
     | grep -q '"status":"ok"' || return 1
-  curl -fsS --max-time 3 -o /dev/null http://localhost:5173 2>/dev/null
+
+  # Web probe URL: in fleet mode (BASE_URL set by rl_validate_ci, or
+  # RL_TARGET=remote / RL_SLOT set by `rl claim`), nginx in allinone serves the
+  # SPA at the same host as the API. In local-dev mode, Vite serves on :5173.
+  local web_url
+  if [ -n "${BASE_URL:-}" ]; then
+    web_url="$BASE_URL"
+  elif [ -n "${RL_SLOT:-}" ] && [ "${RL_TARGET:-local}" = "remote" ]; then
+    web_url="https://slot-${RL_SLOT}.${RL_PUBLIC_DOMAIN:-gamernight.net}"
+  else
+    web_url="http://localhost:5173"
+  fi
+  curl -fsS --max-time 5 -o /dev/null "$web_url" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
