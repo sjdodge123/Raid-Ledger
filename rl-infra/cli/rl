@@ -140,7 +140,12 @@ cmd_claim() {
         # them — branch can in principle contain shell metachars (a typo
         # could ship a worktree branch like `foo$(id)`), and any future
         # extra_args from operator typing would too. H-VM-1.
-        RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]}")
+        # `${extra_args[@]:+${extra_args[@]}}` — defensive expansion. Under
+        # `set -u`, expanding an empty array via `"${extra_args[@]}"` errors
+        # on macOS bash 3.2 ("unbound variable"). The `:+` form expands to
+        # the array's elements when non-empty, and to nothing when empty —
+        # so the ssh_run call gets the right argv either way. Bug T 2026-05-19.
+        RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]:+${extra_args[@]}}")
         SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
         QUEUED=$(jq -r '.queued // false' <<<"$RESULT")
         if [[ -n "$SLOT" ]]; then
@@ -282,9 +287,27 @@ cmd_db() {
         echo "[rl] slug must match [a-z0-9-]+ (got: $(printf '%q' "$slug"))" >&2; exit 2
     }
     if [[ "${1:-}" == "--web" ]]; then
+        # Resolve the slot this agent currently holds so the pgweb container
+        # carries `rl.role=env` + `rl.slot=N` labels — the same shape the
+        # gc-sweeper uses to reap a slot's children on release. Without these,
+        # `docker run --rm -d ...` leaves an orphan container that outlives
+        # both env-destroy AND slot release (M-VM-6 2026-05-19).
+        #
+        # NB: env-destroy itself does NOT remove pgweb today — flagged for
+        # the orchestrator agent. The sweeper-on-release path closes the gap
+        # in the meantime.
+        local pgweb_slot
+        pgweb_slot=$(current_slot)
+        [[ -z "$pgweb_slot" ]] && {
+            echo "[rl] no slot claimed — run 'rl claim' before 'rl db --web'" >&2; exit 1
+        }
+        [[ "$pgweb_slot" =~ ^[0-9]+$ ]] || {
+            echo "[rl] unexpected slot value: $pgweb_slot" >&2; exit 1
+        }
         ssh_run_interactive "docker exec -it rl-env-${slug}-pg true && \
             docker run --rm -d --name pgweb-${slug} --network rl-net \
-              --label rl.role=infra \
+              --label rl.role=env \
+              --label rl.slot=${pgweb_slot} \
               --label rl.env_slug=${slug} \
               --label 'traefik.enable=true' \
               --label 'traefik.http.routers.pgweb-${slug}.rule=Host(\`db-${slug}.rl.lan\`)' \
