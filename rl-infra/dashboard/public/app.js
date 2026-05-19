@@ -8,6 +8,13 @@ const REFRESH_MS = 15000;
 const $ = (id) => document.getElementById(id);
 const el = (tag, opts = {}, ...children) => {
   const node = document.createElement(tag);
+  // ROK-1326 fix-9: <button> defaults to type="submit" per HTML spec.
+  // Even without an ancestor <form> the type carries side effects
+  // (some browsers fire implicit submit logic when a button is in
+  // an "implicit form" context; varies across engines). Force
+  // type="button" unconditionally — every button on this dashboard
+  // is a click-handler, never a form-submitter.
+  if (tag === 'button') node.type = 'button';
   if (opts.class) node.className = opts.class;
   if (opts.text) node.textContent = opts.text;
   if (opts.href) node.href = opts.href;
@@ -660,39 +667,48 @@ const requestReset = async (slug, stepId) => {
 const renderEmpty = (msg) => el('div', { class: 'empty', text: msg });
 
 const render = (data) => {
-  // ROK-1326 fix-9 (revised 2): preserve scroll position across re-renders.
-  // The earlier attempt called replaceChildren() with no args to empty
-  // the container, then appendChild'd new cards. That creates a brief
-  // empty-DOM window where the document height collapses; the browser
-  // clamps scrollY to the (now lower) max scroll position before our
-  // restore runs. Switch to building the new card list FIRST and
-  // replaceChildren-ing it as a SINGLE atomic operation — the document
-  // height never dips, so the browser has nothing to clamp against.
+  // ROK-1326 fix-9 (final): preserve scroll position across re-renders by
+  // PINNING the containers' min-height to their current height BEFORE
+  // the replaceChildren swap. Without this, even an atomic
+  // replaceChildren(...newCards) collapses the container briefly
+  // (Chrome processes it as remove-then-add internally), the document
+  // height dips, the browser clamps scrollY to the new max (often 0),
+  // and any subsequent scrollTo doesn't visually take effect because
+  // the layout has already settled at the clamped position.
   //
-  // Plus: defer the explicit scrollTo into requestAnimationFrame so it
-  // wins against any browser scroll-anchoring that fires on the next
-  // frame. Two-arg form for max compatibility (mobile Safari <15.4
-  // ignores scrollTo({behavior:'instant'}) silently).
-  const scrollX = window.scrollX;
-  const scrollY = window.scrollY;
+  // Earlier attempts (v1 sync scrollTo; v2 atomic-replaceChildren + rAF)
+  // verified via Chrome MCP: scrollY 713 → 0 across the swap, scrollTo
+  // afterward read 0 unchanged. Verified by [render] diagnostic logs.
+  //
+  // Pin → swap → unpin on next animation frame so the cards' real
+  // height takes over. Document height never dips.
+  const slotsDiv = $('slots');
+  const envsDiv = $('envs');
+  const slotsH = slotsDiv.offsetHeight;
+  const envsH = envsDiv.offsetHeight;
+  slotsDiv.style.minHeight = slotsH + 'px';
+  envsDiv.style.minHeight = envsH + 'px';
 
   const slotCards = (data.slots ?? []).map(renderSlot);
   if (!slotCards.length) slotCards.push(renderEmpty('No slots configured.'));
-  $('slots').replaceChildren(...slotCards);
+  slotsDiv.replaceChildren(...slotCards);
 
   const envCards = (data.envs ?? []).map((e) => renderEnv(e, data.public_domain));
   if (!envCards.length) {
     envCards.push(renderEmpty('No test envs running. Use `rl env spin <slug>` from the operator shell or the rl_env_spin MCP tool.'));
   }
-  $('envs').replaceChildren(...envCards);
+  envsDiv.replaceChildren(...envCards);
   $('env-count').textContent = data.envs?.length ? `· ${data.envs.length}` : '';
 
   $('generated-at').textContent = `updated ${fmtTime(data.generated_at)}`;
 
-  // Sync restore + rAF restore. Sync handles the common case; rAF
-  // handles browsers that adjust scroll on the next layout pass.
-  window.scrollTo(scrollX, scrollY);
-  requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
+  // Drop the min-height pin after layout has had a chance to compute
+  // the new natural height. rAF fires after the next style+layout
+  // pass — by then the cards have rendered at their natural height.
+  requestAnimationFrame(() => {
+    slotsDiv.style.minHeight = '';
+    envsDiv.style.minHeight = '';
+  });
 };
 
 const setStatus = (state) => {
