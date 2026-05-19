@@ -384,19 +384,26 @@ const renderStep = (slug, plan, step, draft) => {
     }
   }
 
+  // ROK-1326 fix-9: ALWAYS attach click listeners regardless of lock
+  // state. The disabled attribute alone prevents interaction; this lets
+  // bufferVerdict patch the DOM in-place (toggle .disabled, .locked, .selected)
+  // without needing to re-render to attach listeners to newly-unlocked
+  // buttons. The OLD path called tick({force:true}) which rebuilt the
+  // whole DOM via replaceChildren — visible as scroll-jump-to-top on
+  // mobile (operator-flagged 2026-05-19). In-place patch avoids the rebuild.
+  passBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'pass'));
+  failBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'fail'));
+  skipBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'skip'));
   if (locked || pendingReset) {
     passBtn.disabled = true; failBtn.disabled = true; skipBtn.disabled = true;
     const reason = pendingReset
       ? 'A reset is in flight — wait for the agent to post a new plan.'
       : 'Complete the prior steps first (set a verdict in the draft).';
     passBtn.title = failBtn.title = skipBtn.title = reason;
-  } else {
-    // Buffer to localStorage instead of POSTing. Re-renders the section
-    // so the next step unlocks visually.
-    passBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'pass'));
-    failBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'fail'));
-    skipBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'skip'));
   }
+  // Store back-refs so patchPlanInPlace can find this row + its plan
+  // context without walking the DOM repeatedly.
+  row.dataset.stepId = String(step.id);
   buttons.append(passBtn, failBtn, skipBtn);
   if (resetBtn) buttons.appendChild(resetBtn);
 
@@ -428,9 +435,80 @@ const bufferVerdict = (slug, plan, stepId, verdict) => {
   if (draft[stepId] === verdict) delete draft[stepId];
   else draft[stepId] = verdict;
   saveDraft(slug, plan.created_at, draft);
-  // User explicitly tapped — force a re-render so the selected state
-  // shows immediately, bypassing the hasAnyDraft auto-refresh pause.
-  tick({ force: true });
+  // ROK-1326 fix-9 (mobile fix): in-place DOM patch instead of
+  // tick({force:true}) which rebuilds the entire DOM via replaceChildren
+  // and resets scrollY on mobile (operator confirmed v1/v2/v3 attempts
+  // all failed on mobile despite working on desktop). The patch only
+  // toggles class/disabled state — no DOM swap, no scroll jump possible.
+  patchPlanInPlace(slug, plan, draft);
+};
+
+// In-place DOM update for the plan card. Recomputes the cumulative lock
+// state (a step is locked if any prior step has neither a server result
+// nor a draft) and updates each .plan-step row's:
+//   - verdict-{pass|fail|skip|pending} class
+//   - has-draft class
+//   - locked class
+//   - per-button .selected class
+//   - per-button .disabled attribute + title
+// Also updates the plan footer's draft count + submit button enabled
+// state. Falls back to a full re-render if the DOM doesn't match the
+// plan shape (e.g., the user replaced the plan via a different tab).
+const patchPlanInPlace = (slug, plan, draft) => {
+  const rows = [...document.querySelectorAll('.plan-step')];
+  if (rows.length !== plan.steps.length) {
+    tick({ force: true });
+    return;
+  }
+  // Compute the first step that has no server result and no draft.
+  // Steps AT or BEFORE this index are unlocked; steps AFTER are locked.
+  let firstUnsetIdx = plan.steps.length;
+  for (let i = 0; i < plan.steps.length; i++) {
+    const s = plan.steps[i];
+    const hasServer = s.results && s.results.length > 0;
+    const hasDraft = !!draft[s.id];
+    if (!hasServer && !hasDraft) { firstUnsetIdx = i; break; }
+  }
+  const VERDICT_CLASSES = ['verdict-pass', 'verdict-fail', 'verdict-skip', 'verdict-pending'];
+  const VERDICTS = ['pass', 'fail', 'skip'];
+  plan.steps.forEach((step, i) => {
+    const row = rows[i];
+    const draftVerdict = draft[step.id];
+    const serverVerdict = lastVerdict(step);
+    const effective = draftVerdict || serverVerdict;
+    row.classList.remove(...VERDICT_CLASSES);
+    row.classList.add(effective ? `verdict-${effective}` : 'verdict-pending');
+    row.classList.toggle('has-draft', !!draftVerdict);
+    // pendingReset stays as the server told us — patch shouldn't touch it.
+    const pendingReset = row.classList.contains('reset-pending');
+    const locked = i > firstUnsetIdx || pendingReset;
+    row.classList.toggle('locked', locked);
+    VERDICTS.forEach((v) => {
+      const btn = row.querySelector('.btn-' + v);
+      if (!btn) return;
+      btn.classList.toggle('selected', !locked && draftVerdict === v);
+      btn.disabled = locked;
+      btn.title = locked
+        ? (pendingReset
+            ? 'A reset is in flight — wait for the agent to post a new plan.'
+            : 'Complete the prior steps first (set a verdict in the draft).')
+        : '';
+    });
+  });
+  // Footer: draft count + submit button enabled state.
+  const draftCount = Object.keys(draft).length;
+  const totalSteps = plan.steps.length;
+  const footerStatus = document.querySelector('.plan-footer-status');
+  if (footerStatus) {
+    if (draftCount === 0) {
+      footerStatus.textContent = 'Tap pass/fail/skip on each step. Nothing sent until you Submit.';
+    } else {
+      const allMarked = plan.steps.every((s) => draft[s.id] || (s.results && s.results.length > 0));
+      footerStatus.textContent = `${draftCount} of ${totalSteps} drafted — ${allMarked ? 'ready to submit' : 'tap the remaining steps then Submit'}`;
+    }
+  }
+  const submitBtn = document.querySelector('.btn-submit');
+  if (submitBtn) submitBtn.disabled = draftCount === 0;
 };
 
 const renderSubmitFooter = (slug, plan, draft) => {
