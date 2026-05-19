@@ -120,38 +120,44 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
     aiSuggested,
     aiReasoning,
   } = props;
-  // ROK-1297 round 5ag (Codex P3): the WHOLE tile is now the click target
-  // for the detail navigation — cover, title, AND the ★ why-reason line
-  // below. Previously only the cover wrapper was role=button so tapping
-  // the reason was a dead area on touch devices. The Nominate button
-  // below uses e.stopPropagation() to keep its click from bubbling up.
+  // ROK-1297 round 5ag-revised: keep the role=button on the INNER card
+  // wrapper (avoids nested-interactive a11y warning from a <button> child
+  // inside a role=button parent) and give the ★ reason line its own
+  // mouse click handler so it isn't a dead tap area. The reason intentionally
+  // has no role/tabIndex — keyboard users already reach the same drawer via
+  // the inner card-button; a separate tab stop on the same target would be
+  // noise.
   return (
     <div
       data-testid="common-ground-tile"
-      role="button"
-      tabIndex={0}
-      aria-label={`Open details for ${tile.gameName}`}
-      onClick={() => onOpenDrawer(tile.gameId)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onOpenDrawer(tile.gameId);
-        }
-      }}
-      className="flex flex-col gap-1 w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 rounded-xl"
+      className="flex flex-col gap-1 w-full"
     >
-      <CommonGroundGameCard
-        game={tile}
-        onNominate={(gameId: number) => {
-          if (disabled || atCap || isNominating) return;
-          onNominate(gameId);
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Open details for ${tile.gameName}`}
+        onClick={() => onOpenDrawer(tile.gameId)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpenDrawer(tile.gameId);
+          }
         }}
-        isNominating={isNominating}
-        atCap={atCap || disabled}
-        aiSuggested={aiSuggested}
-        hideOverlay
-        fluid
-      />
+        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 rounded-xl"
+      >
+        <CommonGroundGameCard
+          game={tile}
+          onNominate={(gameId: number) => {
+            if (disabled || atCap || isNominating) return;
+            onNominate(gameId);
+          }}
+          isNominating={isNominating}
+          atCap={atCap || disabled}
+          aiSuggested={aiSuggested}
+          hideOverlay
+          fluid
+        />
+      </div>
       <button
         type="button"
         disabled={disabled || atCap || isNominating}
@@ -176,11 +182,17 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
         // below showed the generic whyReason — two sources conflicting.
         // Prefer aiReasoning (richer, contextual) when present; fall back
         // to whyReason.
+        // Round 5ag (Codex P3): mouse click on the reason line opens the
+        // same detail view as the cover. No role/tabIndex — keyboard users
+        // already reach the drawer via the inner card-button above.
         const reasonText =
           aiSuggested && aiReasoning ? aiReasoning : tile.whyReason;
         if (!reasonText) return null;
         return (
-          <div className="text-xs text-emerald-300 leading-snug px-1 md:w-full">
+          <div
+            onClick={() => onOpenDrawer(tile.gameId)}
+            className="text-xs text-emerald-300 leading-snug px-1 md:w-full cursor-pointer"
+          >
             ★ {reasonText}
           </div>
         );
