@@ -240,6 +240,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./state:/state
+      # Bind-mount sweep.sh so operator edits land live (next docker
+      # restart picks them up) without rebuilding the image. The
+      # Dockerfile still COPY's it as a fresh-deploy fallback.
+      - ./gc-sweeper/sweep.sh:/usr/local/bin/sweep:ro
       # Mount traefik/conf.d so the sweeper can remove env-{slug}.yml route
       # files when it prunes orphan envs (otherwise Traefik keeps a stale
       # route → 502 for the env URL even after the container is gone).
