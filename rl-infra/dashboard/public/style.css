@@ -495,3 +495,81 @@ footer {
     margin-top: 4px;
   }
 }
+
+/* ----- Comment modal ----- */
+.rl-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  padding-bottom: max(env(safe-area-inset-bottom), 16px);
+}
+.rl-modal {
+  background: #0f1a2c;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rl-modal-title { margin: 0; font-size: 16px; font-weight: 600; }
+.rl-modal-sub { margin: 0; font-size: 12px; color: var(--fg-muted); line-height: 1.4; }
+.rl-modal-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.rl-modal-filerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rl-modal-filebtn {
+  padding: 8px 14px;
+  border-radius: 5px;
+  background: rgba(94, 184, 255, 0.1);
+  border: 1px solid rgba(94, 184, 255, 0.4);
+  color: #5eb8ff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-block;
+}
+.rl-modal-filebtn:hover { background: rgba(94, 184, 255, 0.2); }
+.rl-modal-filename { font-size: 12px; color: var(--fg-muted); }
+.rl-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.rl-modal .btn-cancel,
+.rl-modal .btn-submit {
+  padding: 10px 18px;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+.rl-modal .btn-cancel { background: rgba(255, 255, 255, 0.05); color: var(--fg-muted); }
+.rl-modal .btn-submit { background: rgba(94, 184, 255, 0.2); border-color: rgba(94, 184, 255, 0.5); color: #5eb8ff; }
+.rl-modal .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }

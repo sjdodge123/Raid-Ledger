@@ -31,10 +31,12 @@ log() { echo "[$(date -u +%FT%TZ)] sweep: $*"; }
 # that no longer maps to a running env — confusing + the deep links
 # would 502. Mirrors the cleanup env-destroy does for explicit teardowns.
 TEST_PLANS_DIR="${TEST_PLANS_DIR:-/state/test-plans}"
+TEST_PLAN_ATTACHMENTS_DIR="${TEST_PLAN_ATTACHMENTS_DIR:-/state/test-plan-attachments}"
 clean_test_plan() {
     local slug="$1"
     [[ -z "$slug" ]] && return 0
     rm -f "$TEST_PLANS_DIR/${slug}.json" 2>/dev/null || true
+    rm -rf "$TEST_PLAN_ATTACHMENTS_DIR/${slug}" 2>/dev/null || true
 }
 
 audit() {

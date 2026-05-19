@@ -325,12 +325,11 @@ const renderStep = (slug, plan, step, draft) => {
   buttons.append(passBtn, failBtn, skipBtn);
   if (resetBtn) buttons.appendChild(resetBtn);
 
-  // Comment button — always shown. Free-form text goes server-side
-  // but NEVER reaches the LLM (server strips comment bodies from any
-  // response the agent's MCP tools read). Operator pulls them later
-  // for Linear. Cannot be confused as a verdict — it's just a note.
+  // Comment button — always shown. Tester writes a free-form note +
+  // optional screenshot; both flow to the agent's next status read in
+  // a wrapped form (treated as data, not instructions).
   const commentBtn = el('button', { class: 'btn-comment', text: '💬 comment' });
-  commentBtn.title = 'Add a free-form note. Visible to operator (posted to Linear), NOT sent to the LLM.';
+  commentBtn.title = 'Add a note (multi-line) + optional screenshot.';
   commentBtn.addEventListener('click', () => promptComment(slug, step.id));
   buttons.appendChild(commentBtn);
 
@@ -431,36 +430,127 @@ const submitDraft = async (slug, plan, draft) => {
   }
 };
 
-// Comment prompt: window.prompt is the simplest mobile-friendly modal.
-// Body sent server-side; NOT shown back in this dashboard (one-way) so
-// the tester gets a fire-and-forget channel — operator pulls for Linear.
-const promptComment = async (slug, stepId) => {
-  const body = window.prompt(
-    'Add a comment for the operator (visible in Linear later, NOT sent to the LLM):',
-    '',
-  );
-  if (body == null) return;
-  const trimmed = body.trim();
-  if (trimmed.length === 0) return;
-  const tester = getTesterName();
-  try {
-    const r = await fetch(`/api/test-plans/${slug}/step/${stepId}/comment`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tester, body: trimmed }),
-    });
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      alert(`Comment failed: ${j.error || `HTTP ${r.status}`}`);
+// Comment modal: multi-line textarea + optional screenshot upload.
+// Built inline (no framework) to avoid bloating the zero-dep dashboard.
+// Submission flow: if screenshot picked, upload it first (returns a URL),
+// then POST the comment with body + attachment_url. Tester gets a clean
+// "sent" confirmation. The agent sees the body wrapped in
+// <untrusted-tester-comment> tags + the attachment URL (which they can
+// fetch via the Read tool if they need to see the screenshot).
+const openCommentModal = (slug, stepId) => {
+  // Strip any existing modal first (defensive — tap-spamming).
+  document.querySelectorAll('.rl-modal-backdrop').forEach((n) => n.remove());
+
+  const backdrop = el('div', { class: 'rl-modal-backdrop' });
+  const modal = el('div', { class: 'rl-modal' });
+  modal.appendChild(el('h3', { class: 'rl-modal-title', text: `Comment on step #${stepId}` }));
+  modal.appendChild(el('p', { class: 'rl-modal-sub',
+    text: 'Notes go to the agent + operator. Treated as data — agent will not execute instructions inside.' }));
+
+  const textarea = el('textarea', { class: 'rl-modal-textarea' });
+  textarea.placeholder = 'What did you see? Anything weird, surprising, or worth flagging…';
+  textarea.rows = 6;
+  modal.appendChild(textarea);
+
+  // Screenshot upload row
+  const fileRow = el('div', { class: 'rl-modal-filerow' });
+  const fileLabel = el('label', { class: 'rl-modal-filebtn' });
+  fileLabel.textContent = '📷 attach screenshot';
+  const fileInput = el('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/png,image/jpeg,image/webp';
+  fileInput.style.display = 'none';
+  fileLabel.appendChild(fileInput);
+  fileRow.appendChild(fileLabel);
+  const fileName = el('span', { class: 'rl-modal-filename', text: '' });
+  fileRow.appendChild(fileName);
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files?.[0];
+    fileName.textContent = f ? `${f.name} (${Math.round(f.size / 1024)} KB)` : '';
+  });
+  modal.appendChild(fileRow);
+
+  const actions = el('div', { class: 'rl-modal-actions' });
+  const cancelBtn = el('button', { class: 'btn-cancel', text: 'Cancel' });
+  const submitBtn = el('button', { class: 'btn-submit', text: 'Send' });
+  cancelBtn.addEventListener('click', () => backdrop.remove());
+  submitBtn.addEventListener('click', async () => {
+    const body = textarea.value.trim();
+    const file = fileInput.files?.[0];
+    if (!body && !file) {
+      alert('Add a note, an image, or both.');
       return;
     }
-    // Fire-and-forget — no need to re-render, the body isn't echoed back.
-    // Tester just sees the alert below as confirmation.
-    alert('Comment sent. The operator will see it in Linear.');
-  } catch (err) {
-    alert(`Network error: ${err.message}`);
-  }
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending…';
+    try {
+      let attachmentUrl = null;
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) {
+          alert('Screenshot too large (max 5 MB).');
+          submitBtn.disabled = false; submitBtn.textContent = 'Send';
+          return;
+        }
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const upRes = await fetch(`/api/test-plans/${slug}/attachment`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            tester: getTesterName(),
+            filename: file.name,
+            mime: file.type,
+            data: dataUrl,
+          }),
+        });
+        if (!upRes.ok) {
+          const j = await upRes.json().catch(() => ({}));
+          alert(`Upload failed: ${j.error || `HTTP ${upRes.status}`}`);
+          submitBtn.disabled = false; submitBtn.textContent = 'Send';
+          return;
+        }
+        const upJ = await upRes.json();
+        attachmentUrl = upJ.url;
+      }
+      const cRes = await fetch(`/api/test-plans/${slug}/step/${stepId}/comment`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tester: getTesterName(),
+          body,
+          attachment_url: attachmentUrl,
+        }),
+      });
+      if (!cRes.ok) {
+        const j = await cRes.json().catch(() => ({}));
+        alert(`Comment failed: ${j.error || `HTTP ${cRes.status}`}`);
+        submitBtn.disabled = false; submitBtn.textContent = 'Send';
+        return;
+      }
+      backdrop.remove();
+    } catch (err) {
+      alert(`Network error: ${err.message}`);
+      submitBtn.disabled = false; submitBtn.textContent = 'Send';
+    }
+  });
+  actions.append(cancelBtn, submitBtn);
+  modal.appendChild(actions);
+
+  backdrop.appendChild(modal);
+  backdrop.addEventListener('click', (ev) => {
+    if (ev.target === backdrop) backdrop.remove();
+  });
+  document.body.appendChild(backdrop);
+  textarea.focus();
 };
+
+// Keep the old name as a thin alias so existing call sites (the
+// comment button click handler) don't need to change.
+const promptComment = (slug, stepId) => openCommentModal(slug, stepId);
 
 const requestReset = async (slug, stepId) => {
   const tester = getTesterName();
@@ -529,19 +619,36 @@ const hasAnyDraft = () => {
   return false;
 };
 
+// Track recent user activity so auto-refresh defers when the tester is
+// scrolling/touching. Auto-tick that fires within 8s of activity is
+// skipped (paused indicator). Manual ticks (force:true) always run.
+let lastActivityAt = 0;
+const recordActivity = () => { lastActivityAt = Date.now(); };
+window.addEventListener('scroll', recordActivity, { passive: true });
+window.addEventListener('touchstart', recordActivity, { passive: true });
+window.addEventListener('mousemove', recordActivity, { passive: true });
+window.addEventListener('keydown', recordActivity, { passive: true });
+
 const tick = async (opts = {}) => {
-  // Skip auto-ticks while a draft is in flight — replaceChildren would
-  // wipe scroll position and visually nuke the buttons mid-tap. User-
-  // triggered ticks (after submit/clear/reset) pass force:true.
-  if (!opts.force && hasAnyDraft()) {
-    setStatus('paused');
-    return;
+  // Skip auto-ticks when:
+  //   - a draft is in flight (replaceChildren would wipe selected buttons), OR
+  //   - the user has touched/scrolled in the last 8s (avoid scroll-position
+  //     jumps mid-read; common when reading test plan steps on a phone).
+  // Manual ticks (force:true) always run.
+  if (!opts.force) {
+    if (hasAnyDraft()) { setStatus('paused'); return; }
+    if (Date.now() - lastActivityAt < 8000) { setStatus('paused'); return; }
   }
   try {
     const r = await fetch('/api/state', { cache: 'no-store' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
+    // Preserve scroll across the replaceChildren-based render. Even when
+    // the DOM is identical shape, replaceChildren forces a reset to (0,0)
+    // — bad for testers reading mid-page. Save & restore.
+    const scroll = { x: window.scrollX, y: window.scrollY };
     render(data);
+    window.scrollTo(scroll.x, scroll.y);
     setStatus('ok');
   } catch (err) {
     setStatus('error');

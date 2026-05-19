@@ -17,7 +17,9 @@ import { join, extname } from 'node:path';
 const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
 const TEST_PLANS_DIR = process.env.TEST_PLANS_DIR || join(STATE_DIR, 'test-plans');
+const ATTACHMENTS_DIR = process.env.ATTACHMENTS_DIR || join(STATE_DIR, 'test-plan-attachments');
 const PORT = parseInt(process.env.PORT || '8080', 10);
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB; phone screenshots are typically <2 MB.
 // When set, the dashboard renders BOTH http://{slug}.rl.lan (internal) AND
 // http://{slug}.${PUBLIC_DOMAIN} (external, for testers behind your proxy)
 // as links per env. env-spin already writes Traefik routes for both.
@@ -205,11 +207,14 @@ const summarizePlan = (plan) => {
   };
 };
 
-// Strip comment bodies (free-form tester text — could carry injection
-// payloads) from the plan before returning it to ANY API caller that
-// the LLM might consume. Step comment COUNT remains in the summary so
-// the agent knows "comments exist for the operator to triage in Linear".
-// Operator pulls full comment bodies via a separate operator-only path.
+// Comment handling has two paths now (operator pref 2026-05-19):
+//   - Default (dashboard path): strip bodies so testers don't see each
+//     others' notes — comments stay a one-way fire-and-forget channel.
+//   - Agent path (?include_comments=1): bodies WRAPPED in an explicit
+//     <untrusted-tester-comment> tag so the agent knows the content is
+//     tester-supplied free-form text. The tag doesn't make the body
+//     LLM-injection-safe (text is text), but it gives the agent a
+//     clear cue to treat the contents as data, not instructions.
 const stripCommentBodies = (plan) => ({
   ...plan,
   steps: plan.steps.map((s) => ({
@@ -221,11 +226,39 @@ const stripCommentBodies = (plan) => ({
   })),
 });
 
-const handleTestPlanGet = async (slug, res) => {
+const wrapCommentBodies = (plan) => ({
+  ...plan,
+  steps: plan.steps.map((s) => ({
+    ...s,
+    comments: (s.comments ?? []).map((c) => ({
+      tester: c.tester,
+      ts: c.ts,
+      // Wrap the body so the agent's context window has a clear "this is
+      // untrusted user input" boundary. Agent must treat it as data only.
+      body: c.body
+        ? `<untrusted-tester-comment>${c.body}</untrusted-tester-comment>`
+        : null,
+      // Attachment URL is fine to surface raw — it's a URL the agent can
+      // Read via its image tool if needed; not text the LLM interprets
+      // as instructions.
+      attachment_url: c.attachment_url ?? null,
+    })),
+  })),
+});
+
+// Decide which transform applies to a given response based on the
+// request's query string. Used by both the GET status handler and the
+// POST handlers that return the plan.
+const planForResponse = (plan, req) => {
+  const includeComments = req && req.url && req.url.includes('include_comments=1');
+  return includeComments ? wrapCommentBodies(plan) : stripCommentBodies(plan);
+};
+
+const handleTestPlanGet = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   try {
     const plan = JSON.parse(await readFile(planPath(slug), 'utf-8'));
-    sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
+    sendJson(res, 200, { ok: true, plan: planForResponse(plan, req), summary: summarizePlan(plan) });
   } catch (err) {
     if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
     sendJson(res, 500, { ok: false, error: err.message });
@@ -372,6 +405,78 @@ const handleTestPlanSubmit = async (slug, req, res) => {
   sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
 };
 
+// POST /api/test-plans/<slug>/attachment
+// Tester uploads a screenshot as base64-in-JSON. Multipart would be more
+// efficient but requires extra parsing — keeping the zero-dep server
+// simple. Returns { url } that the tester then attaches to a comment.
+// File saved under ATTACHMENTS_DIR/<slug>/<random>.<ext>; URL served
+// back via the matching GET endpoint.
+const ALLOWED_MIME = new Map([
+  ['image/png', 'png'],
+  ['image/jpeg', 'jpg'],
+  ['image/webp', 'webp'],
+]);
+const handleAttachmentUpload = async (slug, req, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  let body;
+  try { body = await readJsonBody(req, MAX_ATTACHMENT_BYTES + 1024 * 1024); }
+  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+
+  const mime = typeof body.mime === 'string' ? body.mime.toLowerCase() : '';
+  const ext = ALLOWED_MIME.get(mime);
+  if (!ext) return sendJson(res, 400, { ok: false, error: 'mime must be image/png, image/jpeg, or image/webp' });
+
+  // Strip the data URL prefix if present (e.g. "data:image/png;base64,...")
+  const raw = typeof body.data === 'string' ? body.data : '';
+  const b64 = raw.includes(',') ? raw.split(',', 2)[1] : raw;
+  let buf;
+  try { buf = Buffer.from(b64, 'base64'); }
+  catch { return sendJson(res, 400, { ok: false, error: 'invalid base64 data' }); }
+  if (buf.length === 0)
+    return sendJson(res, 400, { ok: false, error: 'empty file' });
+  if (buf.length > MAX_ATTACHMENT_BYTES)
+    return sendJson(res, 400, { ok: false, error: `file too large (max ${MAX_ATTACHMENT_BYTES} bytes)` });
+
+  const dir = join(ATTACHMENTS_DIR, slug);
+  await mkdir(dir, { recursive: true });
+  // Random filename keeps URLs unguessable enough that bookmark-share
+  // doesn't expose other comments' attachments unless the tester explicitly
+  // re-shares the link. Plus avoids any client-supplied path traversal.
+  const id = Date.now().toString(36) + '-' +
+    Math.random().toString(36).slice(2, 10);
+  const filename = `${id}.${ext}`;
+  await writeFile(join(dir, filename), buf);
+
+  // Public URL the dashboard / agent can fetch.
+  sendJson(res, 200, {
+    ok: true,
+    url: `/api/test-plans/${slug}/attachment/${filename}`,
+    bytes: buf.length,
+    mime,
+  });
+};
+
+// GET /api/test-plans/<slug>/attachment/<filename>
+// Serves the uploaded image. No auth — dashboard is operator's network /
+// shared with explicit testers; URLs are unguessable random IDs.
+const ATTACHMENT_FILENAME_RE = /^[a-z0-9-]+\.(png|jpg|webp)$/;
+const handleAttachmentGet = async (slug, filename, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!ATTACHMENT_FILENAME_RE.test(filename))
+    return sendJson(res, 400, { ok: false, error: 'invalid filename' });
+  try {
+    const data = await readFile(join(ATTACHMENTS_DIR, slug, filename));
+    const ext = filename.split('.').pop();
+    const mime = ext === 'png' ? 'image/png'
+      : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    res.writeHead(200, { 'content-type': mime, 'cache-control': 'public, max-age=3600' });
+    res.end(data);
+  } catch (err) {
+    if (err.code === 'ENOENT') { res.writeHead(404); res.end('Not Found'); return; }
+    res.writeHead(500); res.end('Server Error');
+  }
+};
+
 // POST /api/test-plans/<slug>/step/<id>/comment
 // Tester free-form comment per step. CRITICAL: this body is NOT
 // surfaced to the LLM via rl_test_plan_status / rl_test_plan_wait
@@ -391,8 +496,7 @@ const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
   catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
 
   const text = typeof body.body === 'string' ? body.body.trim().slice(0, 2000) : '';
-  if (text.length === 0)
-    return sendJson(res, 400, { ok: false, error: 'comment body required' });
+  // text + attachment combined check happens after we know the step exists.
   const tester = typeof body.tester === 'string'
     ? body.tester.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50)
     : 'anon';
@@ -406,10 +510,16 @@ const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
   const step = plan.steps.find((s) => s.id === stepId);
   if (!step) return sendJson(res, 404, { ok: false, error: 'step not found' });
 
+  // Comment body can be empty IF an attachment is included (screenshot-only).
+  const attachmentUrl = typeof body.attachment_url === 'string' ? body.attachment_url.slice(0, 500) : null;
+  if (text.length === 0 && !attachmentUrl)
+    return sendJson(res, 400, { ok: false, error: 'comment body or attachment required' });
+
   step.comments = step.comments ?? [];
   step.comments.push({
     tester,
     body: text,
+    attachment_url: attachmentUrl,
     ts: new Date().toISOString(),
   });
   if (step.comments.length > 50) step.comments = step.comments.slice(-50);
@@ -571,49 +681,68 @@ const RE_STEP = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/result$/;
 const RE_RESET = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/reset-request$/;
 const RE_COMMENT = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/comment$/;
 const RE_SUBMIT = /^\/api\/test-plans\/([a-z0-9-]+)\/submit$/;
+const RE_ATTACH_POST = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment$/;
+const RE_ATTACH_GET = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment\/([A-Za-z0-9.-]+)$/;
 
 const server = createServer(async (req, res) => {
+  // Split path from query so the route regexes (which use $) still match
+  // when the client appends ?include_comments=1 etc. The full req.url
+  // stays available via req.url (handlers that need the query string
+  // — handleTestPlanGet → planForResponse — re-inspect it directly).
+  const pathOnly = (req.url || '').split('?', 1)[0];
   // Liveness probe for compose healthchecks / orchestrator pings.
-  if (req.url === '/health') {
+  if (pathOnly === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end('{"ok":true}');
     return;
   }
-  if (req.url === '/api/state') {
+  if (pathOnly === '/api/state') {
     await handleApiState(res);
     return;
   }
-  if (req.url === '/api/test-plans' && req.method === 'GET') {
+  if (pathOnly === '/api/test-plans' && req.method === 'GET') {
     await handleTestPlanList(res);
     return;
   }
-  const planMatch = req.url && RE_PLAN.exec(req.url);
+  const planMatch = RE_PLAN.exec(pathOnly);
   if (planMatch) {
     const slug = planMatch[1];
-    if (req.method === 'GET') return handleTestPlanGet(slug, res);
+    if (req.method === 'GET') return handleTestPlanGet(slug, req, res);
     if (req.method === 'PUT' || req.method === 'POST') return handleTestPlanPut(slug, req, res);
     if (req.method === 'DELETE') return handleTestPlanDelete(slug, res);
     res.writeHead(405); res.end('Method Not Allowed'); return;
   }
-  const stepMatch = req.url && RE_STEP.exec(req.url);
+  const stepMatch = RE_STEP.exec(pathOnly);
   if (stepMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
     return handleTestPlanStepResult(stepMatch[1], stepMatch[2], req, res);
   }
-  const resetMatch = req.url && RE_RESET.exec(req.url);
+  const resetMatch = RE_RESET.exec(pathOnly);
   if (resetMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
     return handleTestPlanStepResetRequest(resetMatch[1], resetMatch[2], req, res);
   }
-  const commentMatch = req.url && RE_COMMENT.exec(req.url);
+  const commentMatch = RE_COMMENT.exec(pathOnly);
   if (commentMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
     return handleTestPlanStepComment(commentMatch[1], commentMatch[2], req, res);
   }
-  const submitMatch = req.url && RE_SUBMIT.exec(req.url);
+  const submitMatch = RE_SUBMIT.exec(pathOnly);
   if (submitMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
     return handleTestPlanSubmit(submitMatch[1], req, res);
+  }
+  const attachPostMatch = RE_ATTACH_POST.exec(pathOnly);
+  if (attachPostMatch) {
+    if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    return handleAttachmentUpload(attachPostMatch[1], req, res);
+  }
+  const attachGetMatch = RE_ATTACH_GET.exec(pathOnly);
+  if (attachGetMatch) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405); res.end('Method Not Allowed'); return;
+    }
+    return handleAttachmentGet(attachGetMatch[1], attachGetMatch[2], res);
   }
   await serveStatic(req, res);
 });
