@@ -46,6 +46,13 @@ export interface EnvDeployResult {
   url?: string;
   /** LAN URL — operator-facing fallback. */
   internal_url?: string;
+  /**
+   * Slot-stable URL for OAuth (Discord login) — ROK-1324. Send this
+   * to testers when they need to "Continue with Discord"; the per-slug
+   * `url` can't do OAuth because each new slug would need a Discord
+   * developer-portal registration. Null in local/LAN mode.
+   */
+  slot_url?: string | null;
   steps: Record<string, { ok: boolean; took_s?: number; detail?: string; error?: string }>;
   message: string;
 }
@@ -181,7 +188,10 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     slug: params.slug,
     url: sp.url,
     internal_url: sp.internal_url,
+    slot_url: sp.slot_url ?? null,
     steps,
-    message: `Deployed branch to ${sp.url}. Share this URL with testers.`,
+    message: sp.slot_url
+      ? `Deployed branch to ${sp.url}. Share that URL for general testing; use ${sp.slot_url} for Discord login flows.`
+      : `Deployed branch to ${sp.url}. Share this URL with testers.`,
   };
 }

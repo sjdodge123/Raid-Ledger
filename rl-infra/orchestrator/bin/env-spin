@@ -83,8 +83,9 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     mkdir -p "$TRAEFIK_CONF_D"
     PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
     if [[ -n "$PUBLIC_DOMAIN" ]]; then
-        # ${SLUG}test.${PUBLIC_DOMAIN} pattern — keep in sync with non-idempotent path.
-        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
+        # ${SLUG}test.${PUBLIC_DOMAIN} pattern + slot-N.${PUBLIC_DOMAIN} for
+        # OAuth callbacks (ROK-1324) — keep in sync with non-idempotent path.
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
     else
         HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
     fi
@@ -102,16 +103,19 @@ http:
         servers:
           - url: "http://${APP_CONTAINER}:80"
 EOF
-    # Same primary/internal/public split as the non-idempotent path below.
+    # Same primary/internal/public/slot split as the non-idempotent path below.
     IDEM_PUBLIC=""
+    IDEM_SLOT_URL=""
     if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
         IDEM_PUBLIC="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
+        IDEM_SLOT_URL="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
     fi
     if [[ -n "$IDEM_PUBLIC" ]]; then IDEM_PRIMARY="$IDEM_PUBLIC"; else IDEM_PRIMARY="http://${SLUG}.rl.lan"; fi
     jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
         --arg internal_url "http://${SLUG}.rl.lan" \
-        --arg public_url "$IDEM_PUBLIC" --argjson slot "$SLOT" \
-        '{ok: true, idempotent: true, slug: $slug, url: $url, internal_url: $internal_url, public_url: (if $public_url == "" then null else $public_url end), slot: $slot}'
+        --arg public_url "$IDEM_PUBLIC" \
+        --arg slot_url "$IDEM_SLOT_URL" --argjson slot "$SLOT" \
+        '{ok: true, idempotent: true, slug: $slug, url: $url, internal_url: $internal_url, public_url: (if $public_url == "" then null else $public_url end), slot_url: (if $slot_url == "" then null else $slot_url end), slot: $slot}'
     audit::log env-spin idempotent "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug,slot:$slot}')"
     exit 0
 fi
@@ -168,11 +172,21 @@ if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
     # level), Universal SSL covers it.
     PUBLIC_HOST="${SLUG}test.${RL_PUBLIC_DOMAIN}"
     PUBLIC_URL="https://${PUBLIC_HOST}"
+    # ROK-1324: slot-stable hostname for OAuth callbacks. Discord (and any
+    # other strict-redirect-URI OAuth provider) requires the callback URL
+    # to be registered in advance — registering per-slug is impractical
+    # since slugs are arbitrary, so we register slot-1/slot-2 ONCE in the
+    # Discord developer portal and route the slot hostname to whichever
+    # env is currently on that slot. Other URL-emitting code paths
+    # (bot messages, share links) continue to use the per-slug PUBLIC_URL
+    # because those don't have the registration constraint.
+    SLOT_HOST="slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
     PUBLIC_URL_FLAG=(
         -e "PUBLIC_URL=${PUBLIC_URL}"
         -e "APP_URL=${PUBLIC_URL}"
         -e "BASE_URL=${PUBLIC_URL}"
         -e "PUBLIC_DOMAIN=${PUBLIC_HOST}"
+        -e "DISCORD_CALLBACK_URL=https://${SLOT_HOST}/api/auth/discord/callback"
     )
 fi
 
@@ -203,8 +217,11 @@ TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
 PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
 mkdir -p "$TRAEFIK_CONF_D"
 if [[ -n "$PUBLIC_DOMAIN" ]]; then
-    # ${SLUG}test.${PUBLIC_DOMAIN} pattern — see comment near PUBLIC_URL_FLAG above.
-    HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
+    # Per-slug host: ${SLUG}test.${PUBLIC_DOMAIN} (testers' human-friendly URL).
+    # Slot host: slot-${SLOT}.${PUBLIC_DOMAIN} (ROK-1324 — stable hostname for
+    # OAuth callbacks since Discord requires exact redirect-URI matches).
+    # Both route to the SAME env; whichever name a tester hits, they land here.
+    HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
 else
     HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
 fi
@@ -246,8 +263,14 @@ audit::log env-spin ok "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg
 # off-LAN. The internal http://{slug}.rl.lan URL is kept as `internal_url`
 # for fallback (if CF/NPM/internet is down, LAN clients can hit it directly).
 PUBLIC_URL_OUT=""
+SLOT_URL_OUT=""
 if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
     PUBLIC_URL_OUT="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
+    # ROK-1324: slot-stable URL for OAuth (Discord login). Same route file
+    # registers the slot host; emit it so agents can pass it to testers
+    # who want to log in with Discord. Per-slug URL stays the primary
+    # human-friendly link.
+    SLOT_URL_OUT="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
 fi
 if [[ -n "$PUBLIC_URL_OUT" ]]; then
     PRIMARY_URL="$PUBLIC_URL_OUT"
@@ -256,5 +279,6 @@ else
 fi
 jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
     --arg internal_url "http://${SLUG}.rl.lan" \
-    --arg public_url "$PUBLIC_URL_OUT" --argjson slot "$SLOT" \
-    '{ok: true, slug: $slug, url: $url, internal_url: $internal_url, public_url: (if $public_url == "" then null else $public_url end), slot: $slot, app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'
+    --arg public_url "$PUBLIC_URL_OUT" \
+    --arg slot_url "$SLOT_URL_OUT" --argjson slot "$SLOT" \
+    '{ok: true, slug: $slug, url: $url, internal_url: $internal_url, public_url: (if $public_url == "" then null else $public_url end), slot_url: (if $slot_url == "" then null else $slot_url end), slot: $slot, app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'

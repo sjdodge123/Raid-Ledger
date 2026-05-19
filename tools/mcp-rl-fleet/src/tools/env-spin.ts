@@ -3,7 +3,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_env_spin';
 export const TOOL_DESCRIPTION =
-  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route. Returns three URLs: `url` (the canonical/shareable one — external if RL_PUBLIC_DOMAIN is set, internal otherwise), `internal_url` (always http://{slug}.rl.lan for LAN fallback), and `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN} or null). Send `url` to testers — it works on LAN (via Pi-hole short-circuit) AND off LAN (via Cloudflare→NPM). Slug must match [a-z0-9-]+. Idempotent: if env exists, refreshes last_touched and returns URLs.";
+  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route. Returns FOUR URLs: `url` (the canonical/shareable human-friendly one — external if RL_PUBLIC_DOMAIN is set, internal otherwise), `internal_url` (always http://{slug}.rl.lan for LAN fallback), `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN} or null — same as `url` when public), and `slot_url` (https://slot-N.{RL_PUBLIC_DOMAIN} — STABLE per slot, used for Discord OAuth login since Discord requires exact registered redirect URIs). Send `url` to testers for the human-friendly path; tell them to use `slot_url` if/when they want to log in with Discord. Slug must match [a-z0-9-]+. Idempotent: if env exists, refreshes last_touched and returns URLs.";
 
 export interface EnvSpinResult {
   ok: boolean;
@@ -15,6 +15,15 @@ export interface EnvSpinResult {
   internal_url?: string;
   /** External URL (https://{slug}test.{RL_PUBLIC_DOMAIN}) or null if RL_PUBLIC_DOMAIN unset. */
   public_url?: string | null;
+  /**
+   * Slot-stable URL (https://slot-N.{RL_PUBLIC_DOMAIN}). ROK-1324 — Discord
+   * OAuth requires redirect URIs to be registered once in the developer
+   * portal, so per-slug URLs can't work for "Continue with Discord".
+   * The slot URL is registered once per slot and routes to whatever env
+   * is currently on that slot. Hand this to testers for login flows.
+   * Null when RL_PUBLIC_DOMAIN is unset (local/LAN mode).
+   */
+  slot_url?: string | null;
   slot?: number;
   app_container?: string;
   pg_container?: string;
