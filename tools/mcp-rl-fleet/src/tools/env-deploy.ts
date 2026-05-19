@@ -42,11 +42,31 @@ export interface EnvDeployParams {
 export interface EnvDeployResult {
   ok: boolean;
   slug: string;
-  /** External (canonical, shareable) URL — what to send testers. */
+  /**
+   * Canonical/shareable URL — ALWAYS use this for tester links, test
+   * plan deep-links, Chrome MCP navigation, etc. Slot-form when
+   * RL_PUBLIC_DOMAIN is set (https://slot-N.{RL_PUBLIC_DOMAIN}) —
+   * supports Discord OAuth + routes to the env.
+   */
   url?: string;
   /** LAN URL — operator-facing fallback. */
   internal_url?: string;
+  /**
+   * Same as `url` when public. Kept as a separate field for callers
+   * that explicitly need the slot-form. Most code just uses `url`.
+   */
+  slot_url?: string | null;
+  /** Admin email (always admin@local in DEMO_MODE envs). */
+  admin_email?: string;
+  /**
+   * Admin password seeded into the env by env-spin. Use to authenticate
+   * against /api/auth/local. Stable across deploys when RL_ADMIN_PASSWORD
+   * is set in /srv/rl-infra/.env; random per-call otherwise.
+   */
+  admin_password?: string | null;
   steps: Record<string, { ok: boolean; took_s?: number; detail?: string; error?: string }>;
+  /** Set when top-level ok=false. Short machine-readable code: "sync_settings_failed" | "clone_prod_failed". */
+  error?: string;
   message: string;
 }
 
@@ -112,14 +132,19 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
   }
   log('env_spin', true, t, sp.url || '');
 
-  // 4. Sync app_settings (Discord/Blizzard/ITAD keys).
+  // 4. Sync app_settings (Discord/Blizzard/ITAD keys + admin password).
   let syncedSettings = false;
+  let syncFailureDetail: string | undefined;
   if (!params.skip_sync) {
     t = now();
     const sy = await envSync.execute({ slug: params.slug, mode: 'settings' });
     if (!sy.ok) {
-      log('sync_settings', false, t, undefined, sy.error || sy.stderr);
-      // Non-fatal — env is usable, just without operator's keys.
+      syncFailureDetail = sy.stderr || 'sync_settings step failed';
+      log('sync_settings', false, t, undefined, syncFailureDetail);
+      // Was framed as "non-fatal" — but without settings the env has no
+      // Discord/ITAD/IGDB credentials AND no admin@local password seeded,
+      // which means most flows can't run. Propagate as a top-level
+      // failure (operator pref 2026-05-19) instead of misleading ok=true.
     } else {
       log('sync_settings', true, t);
       syncedSettings = true;
@@ -140,10 +165,16 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
     const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
     try {
+      // rl-agent has no docker group membership (intentional — see the
+      // hardening commit). docker CLI must go through the path-filtered
+      // wollomatic proxy at 127.0.0.1:2375 instead of /var/run/docker.sock.
+      // The proxy allowlist permits POST /containers/rl-env-*/restart, so
+      // this works once DOCKER_HOST points at the proxy. Without it, the
+      // CLI tries the unix socket and gets "permission denied" (Bug G).
       await execFileAsync(
         'ssh',
         ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`,
-         `docker restart rl-env-${params.slug}-allinone && sleep 6`],
+         `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${params.slug}-allinone && sleep 6`],
         { timeout: 60_000 },
       );
       log('restart_for_settings', true, t);
@@ -156,6 +187,8 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
   // 6. Optional: clone prod data into the env on top of the synced settings.
   // The clone tool itself restarts the allinone, so we'd be double-restarting
   // if step 5 already ran — that's fine (restart is idempotent + cheap).
+  let cloneFailed = false;
+  let cloneFailureDetail: string | undefined;
   if (params.clone_prod) {
     t = now();
     const cp = await envCloneProd.execute({
@@ -163,19 +196,44 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
       skip_local_refresh: params.clone_prod_skip_local_refresh,
     });
     if (!cp.ok) {
-      log('clone_prod', false, t, undefined, cp.stderr || 'clone failed');
-      // Non-fatal — env still usable with just synced settings.
+      cloneFailureDetail = cp.stderr || 'clone failed';
+      log('clone_prod', false, t, undefined, cloneFailureDetail);
+      // Treat as FATAL when caller explicitly opted in via clone_prod=true.
+      // Same shape as sync_settings (M-MCP-1, operator pref 2026-05-19):
+      // opt-in IS consent — testers expect prod-shaped rows, silent
+      // non-fatal logging makes them chase phantom bugs against an env
+      // that has settings but no prod data. Propagate as top-level failure.
+      cloneFailed = true;
     } else {
       log('clone_prod', true, t, cp.restarted_for_settings ? 'restarted' : 'no-restart');
     }
   }
 
+  const settingsFailed = !params.skip_sync && !syncedSettings;
+  const overallFailed = settingsFailed || cloneFailed;
+  const baseMsg = `Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} / (password in admin_password field).`;
+  let message: string;
+  let errorCode: string | undefined;
+  if (settingsFailed) {
+    message = `FAILED: sync_settings step did not succeed (${syncFailureDetail ?? 'unknown error'}). The container is up at ${sp.url} but has NO Discord/IGDB/ITAD credentials AND admin@local was NOT seeded — most flows will fail. Re-run rl_env_deploy or call rl_env_sync_from_local directly to recover. Admin email would be ${sp.admin_email}.`;
+    errorCode = 'sync_settings_failed';
+  } else if (cloneFailed) {
+    message = `FAILED: clone_prod step did not succeed (${cloneFailureDetail ?? 'unknown error'}). The container is up at ${sp.url} with synced settings, but prod-shaped data was NOT loaded. Tester-visible rows will be empty/default. Re-run rl_env_deploy with clone_prod=true (and clone_prod_skip_local_refresh=true if local DB is already fresh), or call rl_env_clone_prod directly to recover. Admin login: ${sp.admin_email} / (password in admin_password field).`;
+    errorCode = 'clone_prod_failed';
+  } else {
+    message = baseMsg;
+  }
+
   return {
-    ok: true,
+    ok: !overallFailed,
     slug: params.slug,
     url: sp.url,
     internal_url: sp.internal_url,
+    slot_url: sp.slot_url ?? null,
+    admin_email: sp.admin_email,
+    admin_password: sp.admin_password ?? null,
     steps,
-    message: `Deployed branch to ${sp.url}. Share this URL with testers.`,
+    error: errorCode,
+    message,
   };
 }

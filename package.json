@@ -7,7 +7,8 @@
         "web",
         "packages/*",
         "tools/mcp-discord",
-        "tools/mcp-env"
+        "tools/mcp-env",
+        "tools/mcp-rl-fleet"
     ],
     "scripts": {
         "dev": "docker-compose up",

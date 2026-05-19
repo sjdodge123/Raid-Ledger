@@ -141,6 +141,27 @@ Wait for operator approval. Approval during discussion ("go", "let's do it") IS 
 
 ---
 
+## 1f.5. rl-fleet Preflight (mode detect, persisted)
+
+Full protocol: `.claude/skills/_shared/rl-fleet-preflight.md`. Run ONCE here so MODE is committed to the state file before any dev agent spawns or any test-infra step runs.
+
+```
+mcp__mcp-rl-fleet__rl_status({})
+```
+
+Decide:
+
+- Operator's shell has `RL_TARGET=local` exported → `MODE=local`, reason `"override"`. Skip the probe.
+- Operator's shell has `RL_TARGET=remote` exported → `MODE=fleet`, reason `"override"`. Skip the probe (if VM is actually down, fail loud at first fleet call rather than silently degrade).
+- Probe returns `ok: true` with a populated `slots` array → `MODE=fleet`, reason `"probe_ok"`.
+- Probe errors / times out / returns `ok: false` → `MODE=local`, reason `"probe_failed: <error>"`.
+
+Announce one line: `Running in FLEET mode (probe ok)` or `Running in LOCAL mode (<reason>)`.
+
+Persist into the state file under Step 1g — add the three `test_infra_mode*` keys (see updated schema below). Subsequent steps read this; do NOT re-probe per step.
+
+---
+
 ## 1g. Initialize State File
 
 Write `<worktree>/build-state.yaml` after worktree creation in Step 2a. Schema:
@@ -150,6 +171,9 @@ pipeline:
   current_step: "implement"
   batch: 1
   next_action: "Read step-2-implement.md. Create worktrees and spawn dev subagents."
+  test_infra_mode: fleet              # or local — set by 1f.5 preflight
+  test_infra_mode_reason: probe_ok    # or override | probe_failed: <error>
+  test_infra_mode_set_at: "2026-05-18T21:42:00Z"
   stories:
     ROK-XXX:
       title: "..."

@@ -7,7 +7,8 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { deriveAgentId } from '../exec.js';
+import { deriveAgentId, shellQuote } from '../exec.js';
+import * as claim from './claim.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -44,6 +45,34 @@ export interface BuildImageResult {
 }
 
 export async function execute(params: BuildImageParams): Promise<BuildImageResult> {
+  // PRE-STEP: ensure the agent's Mutagen sync session is alive before we
+  // SSH off to do a Docker build inside the runner. The build sees
+  // /workspace via a bind mount; if the sync session was disrupted (op
+  // killed orphans, sweeper reaped, claim never ran through ensure_mutagen_sync,
+  // etc.) /workspace is stale and the build either fails on missing files
+  // or builds last-known stale content. claim is idempotent — returns the
+  // same slot if held, and unconditionally runs ensure_mutagen_sync +
+  // heartbeat daemon. wait:false so we never queue inside a build call.
+  const cl = await claim.execute({ worktree_path: params.worktree_path, wait: false });
+  if (!cl.ok || cl.queued) {
+    return {
+      ok: false,
+      error: 'pre_claim_failed',
+      stderr: cl.error || cl.message || 'pre-build claim returned no slot',
+    };
+  }
+  // Flush Mutagen so any pending edits land on the runner BEFORE the
+  // build context is read. Best-effort — if the session evaporated between
+  // claim and now, the flush errors and we proceed; the build will surface
+  // the staleness if real.
+  try {
+    await execFileAsync('mutagen', ['sync', 'flush', `rl-slot-${cl.slot}`], {
+      timeout: 30_000,
+    });
+  } catch {
+    // ignore; build itself will fail loud if the runner has nothing to work with
+  }
+
   const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
   const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
   // Derive the same RL_AGENT_ID the rl CLI used when claiming the slot.
@@ -54,7 +83,13 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
 
   const args = ['--tag', params.tag];
   if (params.no_push) args.push('--no-push');
-  const remote = `RL_AGENT_ID='${agentId}' /srv/rl-infra/orchestrator/bin/build-image-on-runner ${args.map((a) => JSON.stringify(a)).join(' ')}`;
+  // shellQuote every arg crossing the SSH boundary — `tag` is Zod-regex-
+  // locked to [a-zA-Z0-9._-]+ but defense-in-depth is cheap and the
+  // pattern matches H-MCP-1/2 above. (M-MCP-4 — agentId interpolation.)
+  const remote =
+    `RL_AGENT_ID=${shellQuote(agentId)} ` +
+    `/srv/rl-infra/orchestrator/bin/build-image-on-runner ` +
+    args.map((a) => shellQuote(a)).join(' ');
 
   try {
     const result = await execFileAsync(

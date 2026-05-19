@@ -8,6 +8,8 @@ argument-hint: "[ROK-XXX ROK-YYY | all]"
 
 Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linear, batches them, spawns parallel dev agents in worktrees, merges all into a single batch branch, validates, and ships one PR. **No operator review gate, no test agents, no architect checks.** A code-review agent runs in parallel with the env-bound browser-validation track so it adds minimal wall time. The quality gate is: integration tests + full CI + reviewer pass on the merged batch branch.
 
+**rl-infra fleet (preferred when Proxmox is reachable):** Lead runs the preflight at session start (`.claude/skills/_shared/rl-fleet-preflight.md`) to pick MODE=fleet vs MODE=local. Fleet has 2 slots default (4 with the `extra-slots` compose profile). Use `rl_env_deploy({ slug, worktree_path })` for the browser-validation env, `rl_validate_ci({ args, worktree_path })` for the quality gate. **Every rl_* MCP call MUST pass `worktree_path: "<absolute path to worktree>"`** (see `feedback_rl_fleet_worktree_path.md`). Falls back to local model when `RL_TARGET=local` or VM unreachable. Command translations: `.claude/skills/_shared/rl-infra-fleet.md`.
+
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
 

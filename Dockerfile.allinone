@@ -173,7 +173,13 @@ COPY --from=builder /app/api/seeds ./dist/seeds
 
 # Copy entrypoint
 COPY api/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Use absolute mode (0755) not `+x`. The Mutagen sync that feeds the
+# fleet build context occasionally lands source files at 600 instead of
+# the laptop's 644 (perm drift under stress). `chmod +x` on a 600 file
+# produces 711 — owner can rwx, group/others can ONLY exec, not READ.
+# The Alpine shell then can't open the script to interpret it →
+# "permission denied" → restart-loop. 0755 is deterministic.
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
 
 # ==================
 # Supervisor Config
@@ -372,7 +378,7 @@ fi
 cd /app
 exec /usr/local/bin/docker-entrypoint.sh node /app/dist/src/main.js
 EOF
-RUN chmod +x /app/start-api.sh
+RUN chmod 0755 /app/start-api.sh
 
 # Create init script to set up PostgreSQL on first run
 COPY <<'EOF' /app/init-db.sh
@@ -407,7 +413,7 @@ if [ ! -s "${PGDATA}/PG_VERSION" ]; then
   echo "✅ PostgreSQL initialized"
 fi
 EOF
-RUN chmod +x /app/init-db.sh
+RUN chmod 0755 /app/init-db.sh
 
 # Supervisor event listener — logs process state changes (ROK-1023)
 COPY <<'EOF' /app/supervisor-events.sh
@@ -431,7 +437,7 @@ while true; do
   printf "OK"
 done
 EOF
-RUN chmod +x /app/supervisor-events.sh
+RUN chmod 0755 /app/supervisor-events.sh
 
 # Create main entrypoint
 COPY <<'EOF' /app/entrypoint.sh
@@ -525,7 +531,7 @@ envsubst '${NGINX_PORT}' < /etc/nginx/http.d/default.conf.template > /etc/nginx/
 # Start all services via supervisor
 exec supervisord -c /etc/supervisor.d/raid-ledger.ini
 EOF
-RUN chmod +x /app/entrypoint.sh
+RUN chmod 0755 /app/entrypoint.sh
 
 # ==================
 # Environment Defaults
@@ -547,9 +553,11 @@ EXPOSE 80
 
 # Health check
 # Use 127.0.0.1 explicitly — Alpine's /etc/hosts maps `localhost` to
-# BOTH 127.0.0.1 and ::1, getent prefers ::1, and nginx in this image
-# only listens on IPv4 (`listen 80;`). Without this fix wget would
-# pick ::1 and get connection refused → unhealthy → reaper. Bug H.
+# BOTH 127.0.0.1 and ::1, and getent returns ::1 first. nginx in this
+# image only listens on IPv4 (`listen 80;` without `listen [::]:80;`),
+# so wget on `localhost` got "Connection refused" and the container
+# went unhealthy permanently. Detected 2026-05-19 against the rok-1297
+# fleet build; the API itself was healthy the whole time.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-80}/api/health || exit 1
 

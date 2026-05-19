@@ -1,15 +1,21 @@
-# Mutagen sync session template. Rendered per-slot by `rl claim` into
-# ~/.mutagen/rl-slot-<N>.yml, then started with `mutagen sync create`.
+# Mutagen sync session reference — DOCUMENTATION ONLY.
 #
-# Replace {{SLOT}} and {{LAPTOP_REPO}} before applying.
+# This file is NOT consumed at runtime. The live sync session is created by
+# `rl claim` via direct flags in `rl-infra/cli/rl::ensure_mutagen_sync`
+# (search for `mutagen sync create --mode=one-way-replica`). This template is
+# kept as a single-file reference for the flag set and the ignore list so
+# operators can audit sync behavior without grepping shell scripts.
 #
+# Placeholders, if you ever render this manually:
 #   {{SLOT}}        — runner slot number (1..4)
 #   {{LAPTOP_REPO}} — absolute path on the laptop, e.g. /Users/sdodge/Documents/Projects/Raid-Ledger
 #   {{VM_HOST}}     — SSH host of the rl-infra VM
 #   {{VM_USER}}     — SSH user
 sync:
   defaults:
-    mode: two-way-resolved
+    # one-way-replica: laptop (alpha) is the SOLE source of truth; the VM
+    # (beta) is overwritten on every sync. Matches `rl claim` --mode flag.
+    mode: one-way-replica
     symlink:
       mode: posix-raw
     permissions:

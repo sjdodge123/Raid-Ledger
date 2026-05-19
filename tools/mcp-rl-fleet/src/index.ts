@@ -8,6 +8,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
+import { worktreePathSchema } from './exec.js';
 import * as claim from './tools/claim.js';
 import * as release from './tools/release.js';
 import * as status from './tools/status.js';
@@ -23,6 +24,7 @@ import * as envCloneProd from './tools/env-clone-prod.js';
 import * as envBuildImage from './tools/env-build-image.js';
 import * as envDeploy from './tools/env-deploy.js';
 import * as forceRelease from './tools/force-release.js';
+import * as testPlan from './tools/test-plan.js';
 
 const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.1.0' });
 
@@ -35,7 +37,7 @@ server.tool(
   claim.TOOL_DESCRIPTION,
   {
     branch: z.string().optional(),
-    worktree_path: z.string().optional(),
+    worktree_path: worktreePathSchema,
     wait: z.boolean().optional(),
     wait_timeout_seconds: z.number().int().min(5).max(3600).optional(),
     poll_interval_seconds: z.number().int().min(2).max(60).optional(),
@@ -46,7 +48,7 @@ server.tool(
 server.tool(
   release.TOOL_NAME,
   release.TOOL_DESCRIPTION,
-  { worktree_path: z.string().optional() },
+  { worktree_path: worktreePathSchema },
   async (p) => jsonResult(await release.execute(p)),
 );
 
@@ -65,7 +67,7 @@ server.tool(
       .max(63),
     image: z.string().optional(),
     ttl_hours: z.number().int().min(1).max(168).optional(),
-    worktree_path: z.string().optional(),
+    worktree_path: worktreePathSchema,
   },
   async (p) => jsonResult(await envSpin.execute(p)),
 );
@@ -76,6 +78,7 @@ server.tool(
   {
     slug: z.string().regex(/^[a-z0-9-]+$/, 'slug must match [a-z0-9-]+'),
     force: z.boolean().optional(),
+    worktree_path: worktreePathSchema,
   },
   async (p) => jsonResult(await envDestroy.execute(p)),
 );
@@ -89,7 +92,7 @@ server.tool(
   runOnRunner.TOOL_DESCRIPTION,
   {
     command: z.string().min(1),
-    worktree_path: z.string().optional(),
+    worktree_path: worktreePathSchema,
     timeout_seconds: z.number().int().min(1).max(7200).optional(),
   },
   async (p) => jsonResult(await runOnRunner.execute(p)),
@@ -100,7 +103,7 @@ server.tool(
   validateCi.TOOL_DESCRIPTION,
   {
     args: z.array(z.string()).optional(),
-    worktree_path: z.string().optional(),
+    worktree_path: worktreePathSchema,
     against_env_slug: z.string().regex(/^[a-z0-9-]+$/).optional(),
     timeout_seconds: z.number().int().min(60).max(7200).optional(),
   },
@@ -149,7 +152,7 @@ server.tool(
   {
     tag: z.string().regex(/^[a-zA-Z0-9._-]+$/).min(1).max(63),
     no_push: z.boolean().optional(),
-    worktree_path: z.string().optional(),
+    worktree_path: worktreePathSchema,
     timeout_seconds: z.number().int().min(60).max(7200).optional(),
   },
   async (p) => jsonResult(await envBuildImage.execute(p)),
@@ -161,7 +164,7 @@ server.tool(
   {
     slug: z.string().regex(/^[a-z0-9-]+$/).min(1).max(63),
     branch: z.string().optional(),
-    worktree_path: z.string().optional(),
+    worktree_path: worktreePathSchema,
     skip_sync: z.boolean().optional(),
     skip_build: z.boolean().optional(),
     clone_prod: z.boolean().optional(),
@@ -180,6 +183,52 @@ server.tool(
     no_destroy: z.boolean().optional(),
   },
   async (p) => jsonResult(await forceRelease.execute(p)),
+);
+
+// ----- Test plans -----
+const slugSchema = z.string().regex(/^[a-z0-9-]+$/).min(1).max(63);
+
+server.tool(
+  testPlan.CREATE_TOOL,
+  testPlan.CREATE_DESC,
+  {
+    slug: slugSchema,
+    title: z.string().max(200).optional(),
+    steps: z.array(z.object({
+      description: z.string().min(1).max(500),
+      expected: z.string().max(500).optional(),
+      category: z.string().max(50).optional(),
+      test_url: z.string().url().max(500).optional(),
+      reset_hint: z.string().max(300).optional(),
+    })).min(1).max(100),
+    replace: z.boolean().optional(),
+    created_by: z.string().max(200).optional(),
+  },
+  async (p) => jsonResult(await testPlan.executeCreate(p)),
+);
+
+server.tool(
+  testPlan.STATUS_TOOL,
+  testPlan.STATUS_DESC,
+  { slug: slugSchema },
+  async (p) => jsonResult(await testPlan.executeStatus(p)),
+);
+
+server.tool(
+  testPlan.WAIT_TOOL,
+  testPlan.WAIT_DESC,
+  {
+    slug: slugSchema,
+    timeout_seconds: z.number().int().min(5).max(3600).optional(),
+  },
+  async (p) => jsonResult(await testPlan.executeWait(p)),
+);
+
+server.tool(
+  testPlan.CLEAR_TOOL,
+  testPlan.CLEAR_DESC,
+  { slug: slugSchema },
+  async (p) => jsonResult(await testPlan.executeClear(p)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the

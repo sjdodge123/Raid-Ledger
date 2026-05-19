@@ -1,0 +1,343 @@
+# rl-infra stack — runs inside the rl-infra VM on Proxmox.
+#
+# Start:  docker compose up -d
+# Stop:   docker compose down
+# Logs:   docker compose logs -f <service>
+#
+# Per-env stacks (rl-env-{slug}-allinone, rl-env-{slug}-pg) are NOT defined here.
+# They are spun and torn down by orchestrator/bin/env-spin and env-destroy, which
+# `docker run` them onto the `rl-net` network so Traefik picks them up by label.
+
+networks:
+  rl-net:
+    name: rl-net
+    driver: bridge
+
+volumes:
+  traefik-acme:
+  registry-data:
+  loki-data:
+  grafana-data:
+  # Per-slot node_modules + cache volumes survive across rebuilds.
+  runner-1-node-modules: {}
+  runner-2-node-modules: {}
+  runner-3-node-modules: {}
+  runner-4-node-modules: {}
+  runner-1-cache: {}
+  runner-2-cache: {}
+  runner-3-cache: {}
+  runner-4-cache: {}
+
+x-runner-base: &runner-base
+  build:
+    context: ./runner
+  image: rl-infra/runner:latest
+  restart: unless-stopped
+  cpus: 2.0
+  # Sized for a 16 GB VM (host: ~2 GB infra services + 2 default runners × 4 GB
+  # = 10 GB, leaving ~6 GB for active env stacks + headroom). Raise to 6g if
+  # you add RAM and the host can afford it.
+  mem_limit: 4g
+  pids_limit: 4096
+  init: true
+  networks: [rl-net]
+  command: ["sleep", "infinity"]
+  labels:
+    rl.role: runner
+  environment:
+    TZ: America/Denver
+    # Node heap ceiling matches mem_limit headroom: 3 GB heap + ~1 GB native
+    # (V8 + chromium for Playwright) fits under 4 GB.
+    NODE_OPTIONS: --max-old-space-size=3072
+  # Each runner needs the host docker socket so it can spin sibling containers
+  # (env stacks, testcontainers) and the host worktree dir mounted at /workspace.
+  # node_modules + caches live in named volumes (do NOT sync via Mutagen).
+
+services:
+  # Path-filtered Docker API proxy (wollomatic/socket-proxy).
+  #
+  # Replaces tecnativa/docker-socket-proxy whose POST flag was all-or-nothing
+  # and couldn't filter by container name. wollomatic supports regex on URL
+  # path, so the allowlist restricts destructive ops to env containers
+  # (rl-env-{slug}-{pg,allinone}) and runner containers (rl-runner-1..4) ONLY.
+  # Infra container names (rl-traefik, rl-grafana, rl-loki, rl-promtail,
+  # rl-registry, rl-gc-sweeper, rl-docker-proxy) cannot be stopped/killed/rm'd
+  # through this proxy.
+  #
+  # Operator (rl) bypasses the proxy by using the raw socket directly
+  # (DOCKER_HOST unset). The orchestrator scripts auto-detect the proxy when
+  # available (see _state.sh).
+  docker-socket-proxy:
+    image: wollomatic/socket-proxy:1
+    container_name: rl-docker-proxy
+    restart: unless-stopped
+    networks: [rl-net]
+    # Wollomatic runs as non-root (UID 65532). Match GID to the host's
+    # docker group so the proxy can read /var/run/docker.sock without root.
+    # Host docker GID is 1001 (verified on rl-infra VM 2026-05-18).
+    user: "65532:1001"
+    ports:
+      - "127.0.0.1:2375:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # wollomatic regex flags. Single regex per method, pipe-separated
+    # alternatives. The boundary lives entirely in these regexes — broaden
+    # them and you weaken the hardening. Patterns accept an optional
+    # `/v[0-9.]+/` API version prefix.
+    #
+    # SAFE container names: rl-env-{slug}-{pg,allinone}, rl-runner-1..4.
+    # PROTECTED (NOT in allowlist — stop/kill/rm blocked): rl-traefik,
+    # rl-grafana, rl-loki, rl-promtail, rl-registry, rl-gc-sweeper,
+    # rl-docker-proxy.
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=0.0.0.0/0
+      - -loglevel=INFO
+      - -allowHEAD=^.*$
+      - >-
+        -allowGET=^(/v[0-9.]+)?/(_ping|version|info|events)$|^(/v[0-9.]+)?/containers/json(\?.*)?$|^(/v[0-9.]+)?/containers/[A-Za-z0-9_.-]+/(json|stats|logs|top|changes)(\?.*)?$|^(/v[0-9.]+)?/networks(/[A-Za-z0-9_.-]*)?(\?.*)?$|^(/v[0-9.]+)?/volumes(/[A-Za-z0-9_.-]*)?(\?.*)?$|^(/v[0-9.]+)?/images/json(\?.*)?$|^(/v[0-9.]+)?/images/[A-Za-z0-9_.@:/-]+/json(\?.*)?$|^(/v[0-9.]+)?/exec/[A-Za-z0-9_.-]+/json$
+      # POST allowlist. SAFE ops (start/wait/attach/resize) are allowed
+      # on ANY container — the Docker CLI uses container IDs (hex) after
+      # create, so name-based filtering breaks `docker run -d`. These ops
+      # are non-destructive: starting a running container is a no-op,
+      # waiting blocks until exit, attach/resize need a terminal.
+      # DESTRUCTIVE ops (stop/restart/kill/exec) stay name-filtered to
+      # rl-env-* / rl-runner-N so infra containers can't be brought down
+      # even by an attacker who first lists their IDs via docker ps.
+      - >-
+        -allowPOST=^(/v[0-9.]+)?/images/create(\?.*)?$|^(/v[0-9.]+)?/containers/create(\?.*)?$|^(/v[0-9.]+)?/networks/create$|^(/v[0-9.]+)?/volumes/create$|^(/v[0-9.]+)?/containers/[A-Za-z0-9_.-]+/(start|wait|attach|resize)(\?.*)?$|^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])/(stop|restart|kill|exec)(\?.*)?$|^(/v[0-9.]+)?/exec/[A-Za-z0-9]+/(start|resize)(\?.*)?$
+      - >-
+        -allowDELETE=^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])(\?.*)?$|^(/v[0-9.]+)?/volumes/rl-data-[A-Za-z0-9_.-]+$|^(/v[0-9.]+)?/networks/[A-Za-z0-9_.-]+$
+    labels:
+      rl.role: infra
+
+  traefik:
+    # File-provider only (no Docker provider) — Traefik v3.x's Docker client
+    # is pinned to API 1.24, which Docker 25+ refuses. Routes come from
+    # ./traefik/conf.d/*.yml. env-spin / env-destroy write per-env files
+    # there. Watch is enabled in traefik.yml so changes apply live.
+    image: traefik:v3.4
+    container_name: rl-traefik
+    restart: unless-stopped
+    networks: [rl-net]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"  # dashboard, loopback-only on the VM
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/conf.d:/etc/traefik/conf.d:ro
+      - traefik-acme:/letsencrypt
+    labels:
+      rl.role: infra
+
+  registry:
+    image: registry:2
+    container_name: rl-registry
+    restart: unless-stopped
+    networks: [rl-net]
+    # Expose registry directly on :5000 so the Docker daemon can talk HTTP to
+    # it. Going through Traefik on :80 breaks the daemon's TLS-first behavior:
+    # the daemon tries HTTPS, Traefik serves its default cert + returns 404
+    # (no router for that host on :443), and the daemon never falls back to
+    # HTTP. With direct :5000 exposure, HTTPS connection fails outright
+    # (registry only speaks HTTP), so the daemon falls back per insecure-
+    # registries. Image tags become registry.rl.lan:5000/<image>:<tag>.
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    labels:
+      rl.role: infra
+
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: rl-loki
+    restart: unless-stopped
+    networks: [rl-net]
+    volumes:
+      - loki-data:/loki
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    labels:
+      rl.role: infra
+
+  promtail:
+    image: grafana/promtail:3.2.0
+    container_name: rl-promtail
+    restart: unless-stopped
+    networks: [rl-net]
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Required for promtail-config.yml docker_sd_configs — without the socket
+      # mount, container service discovery silently fails and rl_role/rl_slot/
+      # rl_env labels never get attached, breaking per-slot Grafana queries.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./loki/promtail-config.yml:/etc/promtail/config.yml:ro
+    command: ["-config.file=/etc/promtail/config.yml"]
+    depends_on: [loki]
+    labels:
+      rl.role: infra
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: rl-grafana
+    restart: unless-stopped
+    networks: [rl-net]
+    env_file: .env
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    labels:
+      rl.role: infra
+
+  # Mobile-friendly fleet status page at http://fleet.rl.lan. Reads
+  # /srv/rl-infra/state/{claims.json,env-registry.json} (mounted read-only)
+  # and serves a single HTML page + /api/state JSON endpoint that polls
+  # every 5s. Designed to be bookmarked on the operator's phone for
+  # at-a-glance slot/env state. Zero deps — pure Node http module.
+  dashboard:
+    build:
+      context: ./dashboard
+    image: rl-infra/dashboard:latest
+    container_name: rl-dashboard
+    restart: unless-stopped
+    networks: [rl-net]
+    env_file: .env
+    # Override the Dockerfile's USER node so the container runs with the
+    # rl-fleet GID (1004 on the VM). That's required for writes to
+    # /state/test-plans (owned rl:rl-fleet, mode 2775). Without this the
+    # test-plan POST handler EACCESs on the tmp file create.
+    user: "1000:1004"
+    environment:
+      # When set in .env, dashboard renders external (share-with-tester) URLs
+      # per env in addition to the internal http://{slug}.rl.lan link.
+      RL_PUBLIC_DOMAIN: ${RL_PUBLIC_DOMAIN:-}
+    volumes:
+      - ./state:/state:ro
+      # Test plans need RW so the dashboard can record verdicts from
+      # testers. Scoped to its own subdir so the rest of /state stays RO.
+      - ./state/test-plans:/state/test-plans:rw
+      # Tester screenshots upload here (POST /api/test-plans/<slug>/attachment).
+      # 5 MB cap per file; agent reads them via /api/test-plans/<slug>/attachment/<file>.
+      - ./state/test-plan-attachments:/state/test-plan-attachments:rw
+      # Bind-mount public/ + server.js so operator edits to either land
+      # immediately without rebuilding the image. The Dockerfile still
+      # COPY's both as a fallback for fresh-deploy scenarios where the
+      # host path may not exist yet.
+      - ./dashboard/public:/app/public:ro
+      - ./dashboard/server.js:/app/server.js:ro
+    labels:
+      rl.role: infra
+
+  gc-sweeper:
+    build:
+      context: ./gc-sweeper
+    image: rl-infra/gc-sweeper:latest
+    container_name: rl-gc-sweeper
+    restart: unless-stopped
+    networks: [rl-net]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./state:/state
+      # Bind-mount sweep.sh so operator edits land live (next docker
+      # restart picks them up) without rebuilding the image. The
+      # Dockerfile still COPY's it as a fresh-deploy fallback.
+      - ./gc-sweeper/sweep.sh:/usr/local/bin/sweep:ro
+      # Mount traefik/conf.d so the sweeper can remove env-{slug}.yml route
+      # files when it prunes orphan envs (otherwise Traefik keeps a stale
+      # route → 502 for the env URL even after the container is gone).
+      - ./traefik/conf.d:/traefik-conf.d
+    environment:
+      SWEEP_INTERVAL_SECONDS: "900"   # 15min
+      CLAIM_HEARTBEAT_TIMEOUT_SECONDS: "300"  # 5min
+      DEFAULT_ENV_TTL_HOURS: "24"
+    labels:
+      rl.role: infra
+
+  runner-1:
+    <<: *runner-base
+    container_name: rl-runner-1
+    hostname: slot-1
+    environment:
+      TZ: America/Denver
+      NODE_OPTIONS: --max-old-space-size=3072
+      RL_SLOT: "1"
+    volumes:
+      - /srv/rl-infra/runners/slot-1/worktree:/workspace
+      - runner-1-node-modules:/workspace/node_modules
+      - runner-1-cache:/root/.cache
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Fleet-wide flock area — Discord smoke serialization (run_discord_smoke
+      # in validate-ci.sh flocks /state-locks/discord.lock).
+      - /srv/rl-infra/state/locks:/state-locks:rw
+    labels:
+      rl.role: runner
+      rl.slot: "1"
+      # API/web proxy targets (Vite default :5173, Nest default :3000).
+      # Node --inspect debug bridge for VSCode/Chrome DevTools.
+
+  runner-2:
+    <<: *runner-base
+    container_name: rl-runner-2
+    hostname: slot-2
+    environment:
+      TZ: America/Denver
+      NODE_OPTIONS: --max-old-space-size=3072
+      RL_SLOT: "2"
+    volumes:
+      - /srv/rl-infra/runners/slot-2/worktree:/workspace
+      - runner-2-node-modules:/workspace/node_modules
+      - runner-2-cache:/root/.cache
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/rl-infra/state/locks:/state-locks:rw
+    labels:
+      rl.role: runner
+      rl.slot: "2"
+
+  # Slots 3 and 4 are opt-in. Default `docker compose up -d` starts only
+  # runners 1+2 (the 16 GB sizing). Enable with:
+  #   docker compose --profile extra-slots up -d
+  # and bump RUNNER_SLOTS=4 in .env so the orchestrator initializes 4 claim rows.
+  runner-3:
+    <<: *runner-base
+    profiles: ["extra-slots"]
+    container_name: rl-runner-3
+    hostname: slot-3
+    environment:
+      TZ: America/Denver
+      NODE_OPTIONS: --max-old-space-size=3072
+      RL_SLOT: "3"
+    volumes:
+      - /srv/rl-infra/runners/slot-3/worktree:/workspace
+      - runner-3-node-modules:/workspace/node_modules
+      - runner-3-cache:/root/.cache
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      rl.role: runner
+      rl.slot: "3"
+
+  runner-4:
+    <<: *runner-base
+    profiles: ["extra-slots"]
+    container_name: rl-runner-4
+    hostname: slot-4
+    environment:
+      TZ: America/Denver
+      NODE_OPTIONS: --max-old-space-size=3072
+      RL_SLOT: "4"
+    volumes:
+      - /srv/rl-infra/runners/slot-4/worktree:/workspace
+      - runner-4-node-modules:/workspace/node_modules
+      - runner-4-cache:/root/.cache
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      rl.role: runner
+      rl.slot: "4"

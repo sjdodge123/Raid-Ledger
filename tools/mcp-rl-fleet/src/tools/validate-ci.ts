@@ -1,7 +1,7 @@
 // rl_validate_ci — run validate-ci.sh inside the agent's claimed runner.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { deriveAgentId } from '../exec.js';
+import { deriveAgentId, shellQuote } from '../exec.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -38,7 +38,11 @@ export async function execute(params: ValidateCiParams): Promise<ValidateCiResul
   const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
   const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
   const agentId = deriveAgentId(params.worktree_path);
-  const extraArgs = (params.args ?? []).map((a) => JSON.stringify(a)).join(' ');
+  // Single-quote each arg so the remote shell does NOT expand $(...),
+  // backticks, or ${var} (H-MCP-2). Zod's slug regex narrows
+  // against_env_slug; args[] entries can be anything the agent passes,
+  // so they MUST be shellQuote'd before crossing the SSH boundary.
+  const extraArgs = (params.args ?? []).map((a) => shellQuote(a)).join(' ');
 
   // When targeting a spun fleet env, set BASE_URL (Playwright), API_URL
   // (companion bot), and HEALTH_URL (validate-ci's check_env_up probe) so
@@ -52,6 +56,9 @@ export async function execute(params: ValidateCiParams): Promise<ValidateCiResul
   // the orchestrator level (run-on-runner reads it on the VM to find the slot).
   const innerEnv: string[] = [];
   if (params.against_env_slug) {
+    // Slug is regex-locked by Zod to [a-z0-9-]+ so it's safe to interpolate
+    // inside the single-quoted export values. (Defense in depth: keep
+    // the literal single-quotes around each value.)
     const slug = params.against_env_slug;
     // App URL: nginx in allinone serves React at / and proxies /api/* to backend.
     // Playwright navigates here for UI flows.
@@ -69,9 +76,13 @@ export async function execute(params: ValidateCiParams): Promise<ValidateCiResul
       ? `${innerEnv.join('; ')}; /workspace/scripts/validate-ci.sh ${extraArgs}`
       : `/workspace/scripts/validate-ci.sh ${extraArgs}`;
 
+  // shellQuote the whole inner command for the remote shell. Inside the
+  // outer single-quoted shellQuote, the single-quoted exports already in
+  // `innerCmd` are escaped via the '\'' trick so they survive intact.
   const remote =
-    `RL_AGENT_ID='${agentId}' /srv/rl-infra/orchestrator/bin/run-on-runner ` +
-    `-- bash -c ${JSON.stringify(innerCmd)}`;
+    `RL_AGENT_ID=${shellQuote(agentId)} ` +
+    `/srv/rl-infra/orchestrator/bin/run-on-runner ` +
+    `-- bash -c ${shellQuote(innerCmd)}`;
 
   try {
     const result = await execFileAsync(

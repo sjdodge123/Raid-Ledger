@@ -1,0 +1,497 @@
+#!/usr/bin/env bash
+# Spin up a per-env stack: sibling Postgres + allinone container.
+# Routed by Traefik via {slug}.rl.lan. Tagged with rl.slot so release sweeps it.
+#
+# Required env: RL_AGENT_ID
+# Required flags: --slug <slug>
+# Optional flags: --image <tag>  (default: registry.rl.lan/rl-allinone:latest)
+#                 --ttl <hours>  (default: 24)
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+SLUG=""
+IMAGE="registry.rl.lan:5000/rl-allinone:latest"
+TTL_HOURS="${DEFAULT_ENV_TTL_HOURS:-24}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slug) SLUG="$2"; shift 2 ;;
+        --image) IMAGE="$2"; shift 2 ;;
+        --ttl) TTL_HOURS="$2"; shift 2 ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+[[ -z "$SLUG" ]] && { echo "--slug required" >&2; exit 2; }
+[[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
+
+if [[ -z "${RL_AGENT_ID:-}" ]]; then echo "RL_AGENT_ID required" >&2; exit 2; fi
+SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+[[ -z "$SLOT" ]] && { echo "no slot — run claim first" >&2; exit 2; }
+
+# Per-slot env-count cap. Prevents one agent from accidentally spinning N
+# envs and OOMing the VM. Tunable via MAX_ENVS_PER_SLOT env var. Counts
+# distinct slugs labeled with this slot (allinone + pg pair = one slug).
+#
+# CAREFUL: in `docker ps --format`, `.Labels` is a comma-joined STRING
+# (e.g. "rl.role=env,rl.slot=1,rl.env_slug=foo"), NOT a map. The Go
+# template `index .Labels "X"` then crashes because index treats strings
+# as []byte and can't be keyed by a string. Use `.Label "X"` (the
+# singular Method, capital L) which returns the per-key value directly.
+MAX_ENVS_PER_SLOT="${MAX_ENVS_PER_SLOT:-5}"
+EXISTING_FOR_SLOT=$(docker ps -a \
+    --filter "label=rl.slot=${SLOT}" --filter "label=rl.role=env" \
+    --format '{{ .Label "rl.env_slug" }}' | sort -u)
+EXISTING_COUNT=$(echo -n "$EXISTING_FOR_SLOT" | grep -c . || true)
+if (( EXISTING_COUNT >= MAX_ENVS_PER_SLOT )) && ! grep -qFx "$SLUG" <<<"$EXISTING_FOR_SLOT"; then
+    # Only block NEW slugs; re-spinning an existing one is the idempotent
+    # path (covered below) and stays within the count.
+    jq -nc --argjson slot "$SLOT" --argjson count "$EXISTING_COUNT" --argjson max "$MAX_ENVS_PER_SLOT" --arg slug "$SLUG" \
+        '{ok: false, error: "max_envs_per_slot_exceeded", slot: $slot, slug: $slug, current_count: $count, max: $max, message: "slot \($slot) already has \($count) envs (max \($max)). Destroy some before spinning \($slug)."}'
+    exit 1
+fi
+
+NOW=$(date -u +%FT%TZ)
+VOL_PG="rl-data-${SLUG}"
+NET="rl-net"
+PG_CONTAINER="rl-env-${SLUG}-pg"
+APP_CONTAINER="rl-env-${SLUG}-allinone"
+
+TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
+
+# Slug-ownership guard. If the slug already exists on a DIFFERENT slot,
+# refuse — otherwise two agents can stomp each other's env state via
+# matching slugs. The operator bypass (RL_OPERATOR=1) is allowed because
+# the operator legitimately reaches across slots. The MCP server forces
+# RL_OPERATOR=0 for all agents, so this is agent-only friction.
+if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+    EXISTING_SLOT=$(docker inspect "$APP_CONTAINER" \
+        --format '{{ index .Config.Labels "rl.slot" }}' 2>/dev/null || echo "")
+    if [[ -n "$EXISTING_SLOT" && "$EXISTING_SLOT" != "$SLOT" && "${RL_OPERATOR:-0}" != "1" ]]; then
+        jq -nc --arg slug "$SLUG" --argjson existing_slot "$EXISTING_SLOT" --argjson my_slot "$SLOT" \
+            '{ok: false, error: "slug_owned_by_other_slot", slug: $slug, owned_by_slot: $existing_slot, my_slot: $my_slot, message: "Env slug \"\($slug)\" is owned by slot \($existing_slot). Pick a different slug or have its owner destroy it."}'
+        exit 1
+    fi
+fi
+
+# Idempotent: if env already exists for this slug, refresh last_touched in
+# the state registry (NOT via docker container update --label-add — that flag
+# is swarm-mode only and errors on standalone containers). Re-write the
+# Traefik conf file too so the route survives state divergence.
+if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+    # UPSERT: if registry already has this slug, bump last_touched.
+    # If not (e.g. registry was clobbered while the container kept
+    # running — happened 2026-05-19 after sweeper-mutate perm bug),
+    # INSERT a fresh row reconstructed from the container's labels.
+    # Without the insert branch, a clobbered registry leaves the env
+    # invisible on the dashboard even though the container is healthy.
+    IDEM_IMAGE=$(docker inspect "$APP_CONTAINER" --format '{{.Config.Image}}' 2>/dev/null || echo "${IMAGE}")
+    IDEM_TTL=$(docker inspect "$APP_CONTAINER" --format '{{ index .Config.Labels "rl.ttl" }}' 2>/dev/null || echo "${TTL_HOURS}h")
+    state::mutate "$RL_ENVS_FILE" \
+        --arg slug "$SLUG" --argjson slot "$SLOT" \
+        --arg image "$IDEM_IMAGE" --arg ttl "$IDEM_TTL" --arg ts "$NOW" \
+        --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
+        'if any(.[]; .slug == $slug)
+         then map(if .slug == $slug then .last_touched = $ts else . end)
+         else . + [{slug: $slug, slot: $slot, image: $image, ttl: $ttl,
+                    created_at: $ts, last_touched: $ts, public_domain: $public_domain}]
+         end'
+    mkdir -p "$TRAEFIK_CONF_D"
+    PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
+    # Default ownership flag — only the public-domain branch can flip it.
+    SLOT_HOST_RULE_OWNED_BY_OTHER=0
+    if [[ -n "$PUBLIC_DOMAIN" ]]; then
+        # ${SLUG}test.${PUBLIC_DOMAIN} pattern + slot-N.${PUBLIC_DOMAIN} for
+        # OAuth callbacks (ROK-1324) — keep in sync with non-idempotent path.
+        # Codex finding #7: when MAX_ENVS_PER_SLOT>1, only ONE env per slot may
+        # own slot-N.${PUBLIC_DOMAIN} — Traefik would otherwise silently
+        # last-write-wins between rules. Idempotent path always claims it for
+        # this slug (re-running env-spin for the SAME slug should be a no-op,
+        # and if the slug already has the route it's the rightful owner).
+        # Other envs on the same slot fall through to the per-slug URL only.
+        # Codex finding #7 round-3 MED: the grep-then-write check below is
+        # serialized under a slot-scoped flock so two concurrent env-spins on
+        # the same slot can't both observe "no owner" and both write the slot
+        # rule. The lock is released when this scope's subshell exits, which
+        # is fine for the duration we hold — only the scan + cat are inside.
+        # TODO(env-destroy): if this slug owns the slot rule, env-destroy
+        # should re-register the rule for the next-oldest env on the slot.
+        # See cross-agent handoff note in commit message.
+        SLOT_LOCK_FILE="${TRAEFIK_CONF_D}/.slot-${SLOT}.lock"
+        : > "$SLOT_LOCK_FILE" 2>/dev/null || true
+        exec 9>"$SLOT_LOCK_FILE"
+        flock 9 2>/dev/null || true
+        # Codex finding #7 round-3 LOW: anchor the probe on the generated
+        # `rule:` line + the exact backtick-wrapped Host(...) literal so we
+        # don't false-positive on comments or differently quoted text.
+        SLOT_HOST_RULE_OWNER=$(grep -l -E "^[[:space:]]*rule:.*Host\(\`slot-${SLOT}\.${PUBLIC_DOMAIN}\`\)" \
+            "$TRAEFIK_CONF_D"/env-*.yml 2>/dev/null | head -n1 || true)
+        if [[ -n "$SLOT_HOST_RULE_OWNER" && "$SLOT_HOST_RULE_OWNER" != "$TRAEFIK_CONF_D/env-${SLUG}.yml" ]]; then
+            SLOT_HOST_RULE_OWNED_BY_OTHER=1
+        fi
+        if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+            HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
+        else
+            HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
+        fi
+    else
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
+    fi
+    cat > "$TRAEFIK_CONF_D/env-${SLUG}.yml" <<EOF
+# Generated by env-spin (idempotent path) — do not hand-edit.
+http:
+  routers:
+    env-${SLUG}:
+      rule: "${HOST_RULE}"
+      service: env-${SLUG}
+      entryPoints: [web]
+  services:
+    env-${SLUG}:
+      loadBalancer:
+        servers:
+          - url: "http://${APP_CONTAINER}:80"
+EOF
+    # Release the slot-scoped flock acquired above. Closing fd 9 drops the
+    # lock; subsequent steps (admin bootstrap, JSON output) don't need it.
+    exec 9>&-
+    # Same primary/internal/public/slot split as the non-idempotent path below.
+    # Codex finding #7 round-3 HIGH: when this env is NOT the slot-rule
+    # owner, the slot_url DOES NOT resolve to this env (Traefik routes
+    # slot-N.<DOMAIN> to whichever env wrote the rule). Returning slot_url
+    # as the primary URL in that case silently sends Discord OAuth + tester
+    # deep-links to the wrong env. Clamp slot_url to null AND prefer the
+    # per-slug public URL when this env isn't the slot owner.
+    IDEM_PUBLIC=""
+    IDEM_SLOT_URL=""
+    IDEM_IS_SLOT_OWNER_BOOL="true"
+    IDEM_SLOT_OAUTH_AVAILABLE_BOOL="true"
+    if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
+        IDEM_PUBLIC="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
+        if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+            # Another env owns slot-N.<DOMAIN>; slot_url would route there.
+            IDEM_SLOT_URL=""
+            IDEM_IS_SLOT_OWNER_BOOL="false"
+            IDEM_SLOT_OAUTH_AVAILABLE_BOOL="false"
+        else
+            IDEM_SLOT_URL="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
+        fi
+    else
+        # No RL_PUBLIC_DOMAIN — the slot URL concept doesn't apply.
+        IDEM_IS_SLOT_OWNER_BOOL="false"
+        IDEM_SLOT_OAUTH_AVAILABLE_BOOL="false"
+    fi
+    # Primary preference: slot_url (only if owner) > per-slug public > internal.
+    if [[ -n "$IDEM_SLOT_URL" ]]; then IDEM_PRIMARY="$IDEM_SLOT_URL"
+    elif [[ -n "$IDEM_PUBLIC" ]]; then IDEM_PRIMARY="$IDEM_PUBLIC"
+    else IDEM_PRIMARY="http://${SLUG}.rl.lan"
+    fi
+    # Re-seed admin idempotently. RL_ADMIN_PASSWORD from /srv/rl-infra/.env
+    # gives the same password every time so re-runs are stable. If unset,
+    # generate one per call — agent gets back a fresh password each time
+    # but at least it's not blank.
+    IDEM_ADMIN_PASSWORD="${RL_ADMIN_PASSWORD:-}"
+    if [[ -z "$IDEM_ADMIN_PASSWORD" ]]; then
+        IDEM_ADMIN_PASSWORD="rl-$(openssl rand -hex 8)"
+    fi
+    # Capture stderr instead of redirecting to /dev/null so the caller can
+    # see WHY bootstrap failed via bootstrap_warnings in the JSON output.
+    # If exec fails, blank the password (existing behavior) AND emit a soft
+    # warning rather than failing the whole env-spin. M-VM-4 (2026-05-19).
+    IDEM_BOOTSTRAP_STDERR_FILE=$(mktemp -t rl-bootstrap-admin.XXXXXX)
+    IDEM_BOOTSTRAP_WARNINGS_JSON="[]"
+    if ! docker exec \
+            -e ADMIN_PASSWORD="$IDEM_ADMIN_PASSWORD" \
+            -e RESET_PASSWORD=true \
+            "$APP_CONTAINER" \
+            node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>"$IDEM_BOOTSTRAP_STDERR_FILE"; then
+        IDEM_BOOTSTRAP_STDERR=$(tr -d '\000' < "$IDEM_BOOTSTRAP_STDERR_FILE" | tail -c 1024)
+        IDEM_ADMIN_PASSWORD=""
+        IDEM_BOOTSTRAP_WARNINGS_JSON=$(jq -nc --arg msg "$IDEM_BOOTSTRAP_STDERR" \
+            '[{code: "admin_bootstrap_failed", detail: $msg}]')
+    fi
+    rm -f "$IDEM_BOOTSTRAP_STDERR_FILE"
+
+    jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
+        --arg internal_url "http://${SLUG}.rl.lan" \
+        --arg public_url "$IDEM_PUBLIC" \
+        --arg slot_url "$IDEM_SLOT_URL" --argjson slot "$SLOT" \
+        --argjson is_slot_owner "$IDEM_IS_SLOT_OWNER_BOOL" \
+        --argjson slot_oauth_available "$IDEM_SLOT_OAUTH_AVAILABLE_BOOL" \
+        --arg admin_email "admin@local" \
+        --arg admin_password "$IDEM_ADMIN_PASSWORD" \
+        --argjson bootstrap_warnings "$IDEM_BOOTSTRAP_WARNINGS_JSON" \
+        '{ok: true, idempotent: true, slug: $slug, url: $url, internal_url: $internal_url,
+          public_url: (if $public_url == "" then null else $public_url end),
+          slot_url: (if $slot_url == "" then null else $slot_url end),
+          slot: $slot,
+          is_slot_owner: $is_slot_owner,
+          slot_oauth_available: $slot_oauth_available,
+          admin_email: $admin_email,
+          admin_password: (if $admin_password == "" then null else $admin_password end),
+          bootstrap_warnings: $bootstrap_warnings}'
+    audit::log env-spin idempotent "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug,slot:$slot}')"
+    exit 0
+fi
+
+# 1. Postgres (per-env, NAS-like).
+docker run -d \
+    --name "$PG_CONTAINER" \
+    --network "$NET" \
+    --restart unless-stopped \
+    -v "${VOL_PG}:/var/lib/postgresql/data" \
+    -e POSTGRES_USER=user \
+    -e POSTGRES_PASSWORD=password \
+    -e POSTGRES_DB=raid_ledger \
+    --label "rl.role=env" \
+    --label "rl.env_slug=${SLUG}" \
+    --label "rl.slot=${SLOT}" \
+    --label "rl.ttl=${TTL_HOURS}h" \
+    --label "rl.last_touched=${NOW}" \
+    pgvector/pgvector:pg16 >/dev/null
+
+# Wait for postgres ready.
+for _ in $(seq 1 30); do
+    if docker exec "$PG_CONTAINER" pg_isready -U user -d raid_ledger >/dev/null 2>&1; then break; fi
+    sleep 1
+done
+
+# 2. Allinone container — built artifacts, prod-like topology.
+#
+# Note: no traefik.* labels here. Traefik uses file-based config (see
+# /srv/rl-infra/traefik/conf.d/). We write the per-env route file below.
+#
+# When RL_PUBLIC_DOMAIN is set in /srv/rl-infra/.env (e.g.
+# "tests.gamernight.net"), pass PUBLIC_URL=https://${SLUG}.${PUBLIC_DOMAIN}
+# to the container so the Discord bot and other URL-emitting code reach
+# external testers through the operator's reverse proxy. Without that, the
+# bot would emit http://{slug}.rl.lan URLs which only work on the LAN.
+EXTRA_ENV=()
+# When set, env-spin shares the operator's JWT_SECRET with the test env so
+# app_settings rows (encrypted with that secret on operator's local DB) will
+# decrypt at runtime after rl_env_sync_from_local. Set in /srv/rl-infra/.env:
+#   RL_ENV_JWT_SECRET=<paste operator's local JWT_SECRET here>
+# Without this, the env's allinone generates its own JWT_SECRET and any
+# sync'd app_settings rows will fail to decrypt.
+if [[ -n "${RL_ENV_JWT_SECRET:-}" ]]; then
+    EXTRA_ENV+=(-e "JWT_SECRET=${RL_ENV_JWT_SECRET}")
+fi
+PUBLIC_URL_FLAG=()
+if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
+    # External hostname pattern: ${SLUG}test.${RL_PUBLIC_DOMAIN}. The literal
+    # 'test' suffix on the slug avoids collisions with real subdomains under
+    # the operator's apex (raid, plex, status, etc.) so a single-level
+    # wildcard `*.${RL_PUBLIC_DOMAIN}` covers all test envs while real
+    # services keep their own A records. Set on Cloudflare as `*` (single
+    # level), Universal SSL covers it.
+    PUBLIC_HOST="${SLUG}test.${RL_PUBLIC_DOMAIN}"
+    PUBLIC_URL="https://${PUBLIC_HOST}"
+    # ROK-1324: slot-stable hostname for OAuth callbacks. Discord (and any
+    # other strict-redirect-URI OAuth provider) requires the callback URL
+    # to be registered in advance — registering per-slug is impractical
+    # since slugs are arbitrary, so we register slot-1/slot-2 ONCE in the
+    # Discord developer portal and route the slot hostname to whichever
+    # env is currently on that slot. Other URL-emitting code paths
+    # (bot messages, share links) continue to use the per-slug PUBLIC_URL
+    # because those don't have the registration constraint.
+    SLOT_HOST="slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
+    PUBLIC_URL_FLAG=(
+        -e "PUBLIC_URL=${PUBLIC_URL}"
+        -e "APP_URL=${PUBLIC_URL}"
+        -e "BASE_URL=${PUBLIC_URL}"
+        -e "PUBLIC_DOMAIN=${PUBLIC_HOST}"
+        -e "DISCORD_CALLBACK_URL=https://${SLOT_HOST}/api/auth/discord/callback"
+    )
+fi
+
+docker run -d \
+    --name "$APP_CONTAINER" \
+    --network "$NET" \
+    --restart unless-stopped \
+    -e DATABASE_URL="postgresql://user:password@${PG_CONTAINER}:5432/raid_ledger" \
+    -e DEMO_MODE=true \
+    -e NODE_ENV=production \
+    "${PUBLIC_URL_FLAG[@]}" \
+    "${EXTRA_ENV[@]}" \
+    --label "rl.role=env" \
+    --label "rl.env_slug=${SLUG}" \
+    --label "rl.slot=${SLOT}" \
+    --label "rl.ttl=${TTL_HOURS}h" \
+    --label "rl.last_touched=${NOW}" \
+    "$IMAGE" >/dev/null
+
+# 3. Register the route with Traefik via the file provider.
+#    Traefik watches /etc/traefik/conf.d, so a write here triggers a reload.
+#
+# When RL_PUBLIC_DOMAIN is set (e.g. "tests.gamernight.net"), ALSO accept
+# host header {slug}.${RL_PUBLIC_DOMAIN}. The operator's external reverse
+# proxy (NPM, Caddy, etc.) forwards external testers to the rl-infra VM,
+# and Traefik routes them by the public hostname.
+TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
+PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
+mkdir -p "$TRAEFIK_CONF_D"
+# Default ownership flag — only the public-domain branch can flip it.
+SLOT_HOST_RULE_OWNED_BY_OTHER=0
+if [[ -n "$PUBLIC_DOMAIN" ]]; then
+    # Per-slug host: ${SLUG}test.${PUBLIC_DOMAIN} (testers' human-friendly URL).
+    # Slot host: slot-${SLOT}.${PUBLIC_DOMAIN} (ROK-1324 — stable hostname for
+    # OAuth callbacks since Discord requires exact redirect-URI matches).
+    # Codex finding #7: MAX_ENVS_PER_SLOT>1 + a single slot hostname means at
+    # most ONE env per slot may register the slot Host rule. Otherwise Traefik
+    # silently routes by whichever rule loaded last and both envs share the
+    # slot URL. Detect prior ownership by scanning the conf.d dir for an
+    # existing env file already carrying the slot rule. Pragmatic option (d)
+    # from the finding: per-slug URL always works for every env on the slot;
+    # the slot-stable OAuth URL routes to the OLDEST (= first registered) env.
+    # Discord OAuth users on slot-N.${PUBLIC_DOMAIN} hit the older env; agents
+    # spawning a second env on the same slot must use ${SLUG}test.${PUBLIC_DOMAIN}
+    # and forgo OAuth (or destroy the older env first).
+    #
+    # Codex finding #7 round-3 MED: serialize the scan + write under a
+    # slot-scoped flock so two concurrent env-spins on the same slot can't
+    # both observe "no owner" and both write the slot rule.
+    SLOT_LOCK_FILE="${TRAEFIK_CONF_D}/.slot-${SLOT}.lock"
+    : > "$SLOT_LOCK_FILE" 2>/dev/null || true
+    exec 9>"$SLOT_LOCK_FILE"
+    flock 9 2>/dev/null || true
+    # Codex finding #7 round-3 LOW: anchor the probe on the generated
+    # `rule:` line + the exact backtick-wrapped Host(...) literal so we
+    # don't false-positive on comments or differently quoted text.
+    SLOT_HOST_RULE_OWNER=$(grep -l -E "^[[:space:]]*rule:.*Host\(\`slot-${SLOT}\.${PUBLIC_DOMAIN}\`\)" \
+        "$TRAEFIK_CONF_D"/env-*.yml 2>/dev/null | head -n1 || true)
+    if [[ -n "$SLOT_HOST_RULE_OWNER" && "$SLOT_HOST_RULE_OWNER" != "$TRAEFIK_CONF_D/env-${SLUG}.yml" ]]; then
+        SLOT_HOST_RULE_OWNED_BY_OTHER=1
+    fi
+    if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+        # Another env on this slot already owns slot-N.${PUBLIC_DOMAIN}; this
+        # env gets the per-slug URL only. TODO(env-destroy): when the owner
+        # tears down, env-destroy should re-register the slot rule against
+        # the next-oldest env on the slot. Cross-agent handoff.
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`)"
+    else
+        HOST_RULE="Host(\`${SLUG}.rl.lan\`) || Host(\`${SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${SLOT}.${PUBLIC_DOMAIN}\`)"
+    fi
+else
+    HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
+fi
+cat > "$TRAEFIK_CONF_D/env-${SLUG}.yml" <<EOF
+# Generated by env-spin for env "${SLUG}" — do not hand-edit.
+http:
+  routers:
+    env-${SLUG}:
+      rule: "${HOST_RULE}"
+      service: env-${SLUG}
+      entryPoints: [web]
+  services:
+    env-${SLUG}:
+      loadBalancer:
+        servers:
+          - url: "http://${APP_CONTAINER}:80"
+EOF
+# Release the slot-scoped flock (no-op if it wasn't acquired). Closing fd 9
+# drops the lock; later steps (health wait, admin bootstrap) don't need it.
+exec 9>&- 2>/dev/null || true
+
+# Wait for /health.
+URL="http://${APP_CONTAINER}/api/health"
+for _ in $(seq 1 60); do
+    if docker exec "$APP_CONTAINER" curl -fsS "$URL" >/dev/null 2>&1; then break; fi
+    sleep 1
+done
+
+# Seed admin@local with RL_ADMIN_PASSWORD so agents can /auth/local
+# immediately without a separate sync_settings round-trip. Idempotent
+# via RESET_PASSWORD=true. RL_ADMIN_PASSWORD lives in /srv/rl-infra/.env;
+# /state.sh sources that at the top of every orchestrator script.
+# Generated random as a fallback if the operator hasn't set one — agent
+# still gets a usable password back, just changes each deploy.
+ADMIN_EMAIL_OUT="admin@local"
+ADMIN_PASSWORD_OUT="${RL_ADMIN_PASSWORD:-}"
+if [[ -z "$ADMIN_PASSWORD_OUT" ]]; then
+    ADMIN_PASSWORD_OUT="rl-$(openssl rand -hex 8)"
+fi
+# Capture bootstrap-admin stderr so callers can surface the failure reason
+# via bootstrap_warnings in the JSON output (M-VM-4 2026-05-19). Soft warning
+# — env-spin still returns ok:true so the caller can decide severity; the
+# admin_password field goes null and bootstrap_warnings explains why.
+BOOTSTRAP_STDERR_FILE=$(mktemp -t rl-bootstrap-admin.XXXXXX)
+BOOTSTRAP_WARNINGS_JSON="[]"
+if ! docker exec \
+        -e ADMIN_PASSWORD="$ADMIN_PASSWORD_OUT" \
+        -e RESET_PASSWORD=true \
+        "$APP_CONTAINER" \
+        node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>"$BOOTSTRAP_STDERR_FILE"; then
+    BOOTSTRAP_STDERR=$(tr -d '\000' < "$BOOTSTRAP_STDERR_FILE" | tail -c 1024)
+    ADMIN_PASSWORD_OUT=""   # bootstrap failed; blank the output
+    BOOTSTRAP_WARNINGS_JSON=$(jq -nc --arg msg "$BOOTSTRAP_STDERR" \
+        '[{code: "admin_bootstrap_failed", detail: $msg}]')
+fi
+rm -f "$BOOTSTRAP_STDERR_FILE"
+
+# Register.
+state::mutate "$RL_ENVS_FILE" \
+    --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
+    --arg ttl "${TTL_HOURS}h" --arg ts "$NOW" \
+    --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
+    '. += [{slug: $slug, slot: $slot, image: $image, ttl: $ttl, created_at: $ts, last_touched: $ts, public_domain: $public_domain}]'
+
+audit::log env-spin ok "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image}')"
+
+# Output. When RL_PUBLIC_DOMAIN is set, the EXTERNAL URL is the canonical
+# `url` field — that's what agents emit, testers click, operator bookmarks.
+# Pi-hole short-circuits *.{RL_PUBLIC_DOMAIN} to the rl-infra VM IP for LAN
+# clients (no Cloudflare hop), so external is fast on LAN AND reachable
+# off-LAN. The internal http://{slug}.rl.lan URL is kept as `internal_url`
+# for fallback (if CF/NPM/internet is down, LAN clients can hit it directly).
+PUBLIC_URL_OUT=""
+SLOT_URL_OUT=""
+# Codex finding #7 round-3 HIGH: slot_url MUST only be emitted when this env
+# owns the slot-N.<DOMAIN> Traefik rule. If another env on the same slot
+# already owns it, slot_url would route Discord OAuth + tester deep-links to
+# the WRONG env. Clamp to null + advertise is_slot_owner / slot_oauth_available
+# so the MCP layer can warn the agent.
+IS_SLOT_OWNER_BOOL="true"
+SLOT_OAUTH_AVAILABLE_BOOL="true"
+if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
+    PUBLIC_URL_OUT="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
+    if (( SLOT_HOST_RULE_OWNED_BY_OTHER == 1 )); then
+        SLOT_URL_OUT=""
+        IS_SLOT_OWNER_BOOL="false"
+        SLOT_OAUTH_AVAILABLE_BOOL="false"
+    else
+        SLOT_URL_OUT="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
+    fi
+else
+    # No RL_PUBLIC_DOMAIN — the slot URL concept doesn't apply.
+    IS_SLOT_OWNER_BOOL="false"
+    SLOT_OAUTH_AVAILABLE_BOOL="false"
+fi
+# Primary URL preference 2026-05-19: slot_url (only if owner) > per-slug
+# public > internal. Slot URL routes to the same env via Traefik AND is the
+# URL Discord OAuth callbacks are registered against — so it works for every
+# scenario the per-slug URL works for PLUS login. Mirrors the dashboard's
+# "open" button. NON-OWNER envs fall back to the per-slug URL.
+if [[ -n "$SLOT_URL_OUT" ]]; then
+    PRIMARY_URL="$SLOT_URL_OUT"
+elif [[ -n "$PUBLIC_URL_OUT" ]]; then
+    PRIMARY_URL="$PUBLIC_URL_OUT"
+else
+    PRIMARY_URL="http://${SLUG}.rl.lan"
+fi
+jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
+    --arg internal_url "http://${SLUG}.rl.lan" \
+    --arg public_url "$PUBLIC_URL_OUT" \
+    --arg slot_url "$SLOT_URL_OUT" --argjson slot "$SLOT" \
+    --argjson is_slot_owner "$IS_SLOT_OWNER_BOOL" \
+    --argjson slot_oauth_available "$SLOT_OAUTH_AVAILABLE_BOOL" \
+    --arg admin_email "$ADMIN_EMAIL_OUT" \
+    --arg admin_password "$ADMIN_PASSWORD_OUT" \
+    --argjson bootstrap_warnings "$BOOTSTRAP_WARNINGS_JSON" \
+    '{ok: true, slug: $slug, url: $url, internal_url: $internal_url,
+      public_url: (if $public_url == "" then null else $public_url end),
+      slot_url: (if $slot_url == "" then null else $slot_url end),
+      slot: $slot,
+      is_slot_owner: $is_slot_owner,
+      slot_oauth_available: $slot_oauth_available,
+      admin_email: $admin_email,
+      admin_password: (if $admin_password == "" then null else $admin_password end),
+      bootstrap_warnings: $bootstrap_warnings,
+      app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'

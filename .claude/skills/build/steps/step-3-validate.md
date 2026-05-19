@@ -104,7 +104,29 @@ cd -
 
 ---
 
-## 3c. Acquire Env Lock + Deploy Locally
+## 3c. Operator-Review Deploy (mode-branched)
+
+Read `pipeline.test_infra_mode` from `build-state.yaml` (set in Step 1f.5 preflight). Branch on its value.
+
+### If MODE=fleet (preferred — VM is reachable)
+
+The slot was claimed at session start in Step 1f.5 (implicitly by `rl_status` succeeding) or will be on first use of `rl_env_deploy` (idempotent). One MCP call chains claim → build allinone from the worktree's branch → spin per-env stack → sync settings → optional prod clone → return URL:
+
+```
+mcp__mcp-rl-fleet__rl_env_deploy({
+  slug: "rok-<num>",
+  worktree_path: "<absolute path to worktree, e.g. /Users/sdodge/Documents/Projects/Raid-Ledger--rok-<num>>",
+  clone_prod: <true if prod-shaped data needed; false for synthetic test data>
+})
+```
+
+The MCP returns `{ url: "https://rok-<num>test.gamernight.net", internal_url: "http://rok-<num>.rl.lan", ... }`. Use `url` everywhere downstream — it works on LAN (Pi-hole short-circuit) AND off-LAN (Cloudflare → NPM). Subsequent Chrome MCP navigation in 3c.6 points at this URL.
+
+No env lock to acquire. Other agents on other slots are unaffected.
+
+If `rl_env_deploy` returns `ok: false` with `error: "fleet_unreachable"`, the VM died mid-session. STOP. Tell the operator: "Fleet became unreachable mid-build. Set `RL_TARGET=local` and re-invoke Step 3c to fall back to local deploy." Do not silently switch.
+
+### If MODE=local (fallback — VM down / explicit override)
 
 **Env-lock discipline (STRICT):** the env (`:3000`, `:5173`, Docker DB) is a shared resource. Acquire **right before** deploy. Hold through the operator's browser-test window (operator literally needs the env to test). Release when the operator gives their verdict (Step 4a). Reviewer (4b Codex), architect (4c), and most of Lead smoke (4d) do NOT need the env — re-acquire ONLY if 4d's Playwright pass is needed for UI changes.
 
@@ -121,13 +143,35 @@ cd ../Raid-Ledger--rok-<num>
 cd -
 ```
 
-If deploy needs `--fresh` (DB wipe), get operator approval (destructive).
+If deploy needs `--fresh` (DB wipe), get operator approval (destructive). The operator-review URL is `http://localhost:5173`.
 
 ---
 
-## 3c.5. Post-Deploy E2E Gate (diff-gated)
+## 3c.5. Post-Deploy E2E Gate (diff-gated, mode-aware)
 
 After deploy, run the e2e portion of validate-ci. The script auto-skips Playwright if no UI/auth/demo-test files changed and auto-skips Discord smoke if no bot/notification files changed — so backend-only stories pass through this gate in seconds.
+
+### If MODE=fleet
+
+The runner image already has Playwright browsers (Microsoft Playwright base image). Run e2e inside the runner against the fleet env URL — laptop stays free:
+
+```
+mcp__mcp-rl-fleet__rl_validate_ci({
+  args: ["--only-e2e"],
+  against_env_slug: "rok-<num>",
+  worktree_path: "<same as 3c>"
+})
+```
+
+The MCP tool sets `BASE_URL=http://rl-env-rok-<num>-allinone` (Playwright), `API_URL=http://rl-env-rok-<num>-allinone/api` (companion bot), and `HEALTH_URL=...` inside the runner before invoking validate-ci. The runner is on `rl-net`, so it reaches the env's allinone via Docker DNS — no Cloudflare hop.
+
+**Discord-token collision constraint (read before Discord smoke runs).** The Raid Ledger bot and companion bot can each only have ONE active session per token. If your local dev allinone is ALSO running with the same operator-synced bot token, OR another fleet env is running Discord-active concurrently, Discord will disconnect one of them mid-test. Mitigations:
+
+- Keep the local allinone DOWN (`./scripts/deploy_dev.sh --down`) when running Discord smoke against a fleet env.
+- Run Discord-active fleet smokes one-at-a-time across slots until per-slot bot tokens are provisioned (future work).
+- If smoke fails with "DiscordAPIError" or sudden disconnects, this is the cause — not flake. Stop, ensure no other Discord-active env / local allinone is running, retry. No `localhost:5173` involvement.
+
+### If MODE=local
 
 ```bash
 cd ../Raid-Ledger--rok-<num> && ./scripts/validate-ci.sh --only-e2e && cd -
@@ -158,9 +202,15 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 
 1. Derive the changed-flow list from `git diff main..HEAD --name-only` in the story worktree + the story's ACs.
 2. Pass the flow list + the story ID as inputs to the shared playbook.
-3. Execute it. Do NOT skim it; the anti-pattern section catches the failure modes that triggered this gate's creation (ROK-1237).
-4. Write the summary to `planning-artifacts/chrome-mcp-summary-ROK-XXX.md`. Save captures under `planning-artifacts/chrome-mcp-screenshots/ROK-XXX/`.
-5. **Keep the env lock** — the operator will browser-test on the same deploy in the FULL STOP window. Don't release until 4a (operator verdict).
+3. **Pass the right base URL** based on `pipeline.test_infra_mode`:
+   - MODE=fleet → `https://rok-<num>test.gamernight.net` (the `url` returned by 3c's `rl_env_deploy`)
+   - MODE=local → `http://localhost:5173`
+   Chrome MCP (driven on the operator's local Chrome) navigates to whichever URL applies. The Chrome MCP tool itself stays local regardless of mode — only its TARGET changes.
+4. Execute the playbook. Do NOT skim it; the anti-pattern section catches the failure modes that triggered this gate's creation (ROK-1237).
+5. Write the summary to `planning-artifacts/chrome-mcp-summary-ROK-XXX.md`. Save captures under `planning-artifacts/chrome-mcp-screenshots/ROK-XXX/`.
+6. **Mode-aware hold behavior:**
+   - MODE=fleet → no env lock exists; the spun env stays up automatically until you destroy it or TTL reaps. Operator can browser-test against the same URL in the FULL STOP window. No action needed here.
+   - MODE=local → **keep the env lock** — the operator will browser-test on the same deploy in the FULL STOP window. Don't release until 4a (operator verdict).
 
 **Gate outcomes:**
 
@@ -230,11 +280,81 @@ Full Chrome MCP report: `planning-artifacts/chrome-mcp-summary-ROK-XXX.md`. Note
 |------|---------|
 | E2E Test First (TDD) / Dev AC Audit / CI / Test Coverage Audit / Chrome MCP e2e |
 
-The app is deployed (env-lock held — Lead releases when you give a verdict). Test each story and update Linear:
+The app is deployed at <**MODE=fleet:** `https://rok-<num>test.gamernight.net` | **MODE=local:** `http://localhost:5173` (env-lock held — Lead releases when you give a verdict)>. Test each story and update Linear:
 - **Code Review** = approved, ready for code review
 - **Changes Requested** = needs rework (add feedback as comment)
 
 I'll wait.
 ```
+
+### 3e.5. Post the operator-tester checklist (MANDATORY in fleet mode)
+
+When MODE=fleet, AFTER posting the operator-presentation block above, **always post a test plan** so the operator (and any external testers they share the URL with) have a clear walk-through with pass/fail/skip + ↗ deep-link + ↻ reset buttons per step on `fleet.gamernight.net`. This is the default — only skip for pure-API stories with no in-app surface at all.
+
+```
+mcp__mcp-rl-fleet__rl_test_plan_create({
+  slug: "rok-<num>",
+  worktree_path: "<same as 3c>",
+  title: "ROK-<num>: <short story title>",
+  steps: [
+    {
+      description: "Open Common Ground tab in /lineups",
+      expected: "≥3 themed rows render",
+      test_url: "<env.url>/lineups#common-ground",   // env.url is the slot URL — works for OAuth too
+      reset_hint: "Refresh seed data via POST /api/admin/seed-lineups",
+    },
+    {
+      description: "Vote 'why' on the top-row lineup",
+      expected: "Vote count increments by 1, why-modal closes",
+      test_url: "<env.url>/lineups#common-ground",   // env.url is the slot URL — works for OAuth too
+      reset_hint: "Reset votes for this tester via POST /api/admin/votes/reset?tester=<name>",
+    },
+    ...
+  ]
+})
+```
+
+**How to write good steps (read this before composing):**
+
+- **Small & actionable** — each step should take a tester ≤30 seconds to perform. Bad: "Verify the lineups page works." Good: "Open /lineups → Common Ground tab, expect ≥3 themed rows."
+- **One assertion per step** — if a step has two "and"s, split it.
+- **`test_url` on every step** — deep-link to the screen the tester needs. Construct from the `env_url` you got back from `rl_env_deploy` plus the relevant route/anchor. Without it the tester has to navigate manually and may end up on the wrong screen.
+- **`reset_hint` on stateful steps only** — include when the step mutates server-side data the tester might want re-set for a re-test (writes, votes, mutations). The hint serves two purposes: (a) tester-side tooltip on the ↻ button, (b) reminds YOU what to do when the tester taps reset. For read-only / navigation-only steps, omit it (the ↻ button won't render).
+- **Order matters** — dashboard enforces sequential completion. Step 5 stays locked until step 4 has a verdict.
+- **≤10 steps** — longer plans usually mean the story should split. Group related sub-assertions under one step ("Open the modal — header reads 'Why?', cancel button works").
+
+**React to submissions + reset requests:**
+
+The dashboard buffers tester verdicts locally; only **Submit test results** (per testing round) sends to you in one batch. The ↻ reset button is the exception — it pings immediately. So you have two signals to watch for:
+
+1. **A new `submissions[]` entry** — tester completed a round. `plan.submissions[-1]` carries `{ tester, ts, count, verdicts: {pass: N, fail: M, skip: K} }`. Detailed per-step results in `plan.steps[].results[]` (latest entry has the verdict + tester + ts).
+2. **`summary.pending_resets > 0`** — tester tapped ↻ on at least one step. Find via `plan.steps[].reset_requests[].status === 'pending'`. The step's `reset_hint` is the action you wrote for yourself (e.g. "Refresh seed data via POST /api/admin/seed-lineups") — execute it.
+
+After posting the initial plan, enter a wait loop:
+
+```
+loop:
+  result = rl_test_plan_wait({ slug: "rok-<num>", worktree_path: "...", timeout_seconds: 600 })
+  if result.timed_out: continue
+
+  # Reset signal — happens mid-test, react fast
+  if result.summary.pending_resets > 0:
+    # Execute the reset action(s) per pending reset_request — the step's
+    # reset_hint tells you what to do. After resetting, post a NEW plan
+    # (replace=true) with the same step list so the tester sees the
+    # reset banner clear + can continue.
+
+  # Submission signal — full testing round complete
+  new_subs = result.plan.submissions.length - last_seen_subs_count
+  if new_subs > 0:
+    review the latest submission's per-step verdicts
+    if any 'fail': make the fix, redeploy via rl_env_deploy (idempotent),
+                   post a NEW plan (replace=true) targeting the fix area
+    if all 'pass' or 'skip': testing pass complete — exit loop, continue to Step 4
+```
+
+`rl_test_plan_status({ slug })` is the cheap one-shot if you don't want long-poll.
+
+The plan auto-deletes when `rl_env_destroy` fires at session end. **SKIP this whole step when MODE=local** — the dashboard isn't part of local-mode infra.
 
 If any row shows FAIL, fix it before presenting. If Local CI Proof or Chrome MCP e2e Pre-Review Summary is missing from your output, you skipped 3a or 3c.6 — go back. Do NOT proceed until operator gives direction.

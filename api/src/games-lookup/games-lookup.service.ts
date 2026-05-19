@@ -185,7 +185,9 @@ function buildIgdbRowValues(
     rating: hit.rating ?? null,
     aggregatedRating: hit.aggregatedRating ?? null,
     popularity: hit.popularity ?? null,
-    firstReleaseDate: hit.firstReleaseDate ? new Date(hit.firstReleaseDate) : null,
+    firstReleaseDate: hit.firstReleaseDate
+      ? new Date(hit.firstReleaseDate)
+      : null,
     playerCount: hit.playerCount ?? null,
     twitchGameId: hit.twitchGameId ?? null,
     crossplay: hit.crossplay ?? null,

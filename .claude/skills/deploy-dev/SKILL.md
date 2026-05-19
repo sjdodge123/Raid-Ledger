@@ -2,12 +2,28 @@
 name: deploy-dev
 description: Start the local development environment (Docker DB + Redis, native API + Vite)
 disable-model-invocation: true
-allowed-tools: "Bash(./scripts/deploy_dev.sh*)"
+allowed-tools: "Bash(./scripts/deploy_dev.sh*), Bash(./rl-infra/cli/rl*), Bash(rl*)"
 ---
 
 # Deploy Dev Environment
 
-Start the local development environment using the deploy script.
+**Remote-first (default when `RL_PROXMOX_HOST` is reachable):** spin a per-claim
+allinone env on the rl-infra VM. This gives a prod-like (supervisor + nginx +
+unix-socket Redis) stack instead of the dev watch-mode loop and offloads CPU/RAM
+from the laptop:
+
+```bash
+rl claim --branch $(git branch --show-current)
+rl env spin $(git branch --show-current | tr / -)
+```
+
+The output prints the URL (`https://<slug>.rl.lan`) and the per-env Postgres
+container name. `rl env destroy <slug>` tears it down; the gc-sweeper auto-prunes
+after 24h. See `rl-infra/README.md` and
+`.claude/skills/_shared/rl-infra-fleet.md`.
+
+**Local fallback (airplane mode / `RL_TARGET=local`):** start the local dev
+environment using the deploy script.
 
 Run: `./scripts/deploy_dev.sh`
 

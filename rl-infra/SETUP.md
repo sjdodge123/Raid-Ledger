@@ -755,3 +755,57 @@ rl release                  # end
 
 Architecture diagram + design rationale: `README.md`.
 Per-skill changes when `RL_TARGET=remote`: `.claude/skills/_shared/rl-infra-fleet.md`.
+
+---
+
+## Phase 9 — Slot-stable hostnames for OAuth (ROK-1324)
+
+Discord OAuth (and any strict-redirect-URI provider) requires every callback URL to be pre-registered in the developer portal. Per-slug URLs (`<slug>test.gamernight.net`) can't satisfy that — slugs are arbitrary. Solution: **slot-stable hostnames** (`slot-1.gamernight.net`, `slot-2.gamernight.net`) registered once, routed to whichever env is currently on that slot.
+
+This is a one-time setup; once done, "Continue with Discord" works on any fleet env.
+
+### 9.1  DNS (Cloudflare)
+
+`slot-N.gamernight.net` needs to resolve to the same target as `*.gamernight.net`.
+
+- If your wildcard is already `*.gamernight.net` (single-level), `slot-1` and `slot-2` are already covered — no DNS change.
+- Verify: `dig +short slot-1.gamernight.net` returns your reverse-proxy / VM target IP.
+- If your wildcard is more restrictive (e.g. `*test.gamernight.net`), add explicit A or CNAME records for `slot-1` and `slot-2`.
+
+### 9.2  Discord developer portal (one-time)
+
+For each Raid Ledger OAuth app you use with the fleet (typically just the dev/test app, NOT prod):
+
+1. Go to https://discord.com/developers/applications → your app → **OAuth2** → **General**
+2. **Redirects** section → click **Add Another**
+3. Add `https://slot-1.gamernight.net/api/auth/discord/callback`
+4. Add another → `https://slot-2.gamernight.net/api/auth/discord/callback`
+5. Save
+
+Existing redirects (prod, localhost dev, etc.) stay untouched — these are additive.
+
+If you later expand to slots 3+ (via the `extra-slots` compose profile), add `slot-3` and `slot-4` redirect URIs too.
+
+### 9.3  How it works at runtime
+
+When `rl env spin --slug foo` runs on slot 1:
+
+- Traefik route covers BOTH `footest.gamernight.net` AND `slot-1.gamernight.net` (single route file at `traefik/conf.d/env-foo.yml`).
+- The allinone container receives `DISCORD_CALLBACK_URL=https://slot-1.gamernight.net/api/auth/discord/callback` as an env var. The existing `DiscordStrategy` in `api/src/auth/discord.strategy.ts` reads this directly — no API code change required.
+- `rl env spin` output (and the `rl_env_spin` / `rl_env_deploy` MCP responses) carry a new `slot_url` field. Use that for OAuth-flow test steps; use the per-slug `url` for everything else.
+
+### 9.4  What happens when a slot is empty
+
+If no env is on `slot-N`, Traefik has no matching route → 502 Bad Gateway. There's no friendly placeholder page (v1 trade-off). Document this for testers who might bookmark `slot-1.gamernight.net` directly.
+
+### 9.5  Test plan deep-link guidance
+
+When writing test plans via `rl_test_plan_create`, use the slot URL for steps that exercise OAuth login:
+
+```js
+{ description: "Sign in with Discord",
+  test_url: "https://slot-1.gamernight.net/login",   // slot URL, not per-slug
+  expected: "Lands on the home page authenticated as your Discord user" }
+```
+
+Use the per-slug URL (`<slug>test.gamernight.net`) for everything else — it's the friendlier name and reflects which env the tester is poking at.

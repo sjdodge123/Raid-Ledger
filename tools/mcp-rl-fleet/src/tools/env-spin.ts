@@ -3,19 +3,48 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_env_spin';
 export const TOOL_DESCRIPTION =
-  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route. Returns three URLs: `url` (the canonical/shareable one — external if RL_PUBLIC_DOMAIN is set, internal otherwise), `internal_url` (always http://{slug}.rl.lan for LAN fallback), and `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN} or null). Send `url` to testers — it works on LAN (via Pi-hole short-circuit) AND off LAN (via Cloudflare→NPM). Slug must match [a-z0-9-]+. Idempotent: if env exists, refreshes last_touched and returns URLs.";
+  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. **ALWAYS use the `url` field for any tester-facing link, agent navigation, test_url in plans, etc.** — it points at the slot-stable hostname (https://slot-N.{RL_PUBLIC_DOMAIN}) which routes to the same env AND supports Discord OAuth (registered redirect URI). The per-slug `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN}) is kept in the response for backward compat but should NOT be sent to testers — Discord login won't work on it. Also returns: `internal_url` (LAN fallback http://{slug}.rl.lan), `admin_email`, `admin_password` (from RL_ADMIN_PASSWORD in /srv/rl-infra/.env if set, else generated). POST {email, password} to {url}/api/auth/local for a JWT. Slug must match [a-z0-9-]+. Idempotent.";
 
 export interface EnvSpinResult {
   ok: boolean;
   idempotent?: boolean;
   slug?: string;
-  /** Canonical/shareable URL. Equals public_url when RL_PUBLIC_DOMAIN is set, else internal_url. */
+  /**
+   * Canonical/shareable URL — ALWAYS use this. When RL_PUBLIC_DOMAIN is
+   * set, this is the SLOT URL (https://slot-N.{RL_PUBLIC_DOMAIN}), not
+   * the per-slug one. Slot URL routes to the same env AND supports
+   * Discord OAuth. Falls back to public_url then internal_url when
+   * the slot URL isn't available.
+   */
   url?: string;
   /** Always http://{slug}.rl.lan — LAN-only fallback. */
   internal_url?: string;
-  /** External URL (https://{slug}test.{RL_PUBLIC_DOMAIN}) or null if RL_PUBLIC_DOMAIN unset. */
+  /**
+   * Per-slug external URL (https://{slug}test.{RL_PUBLIC_DOMAIN}). Kept
+   * in the response for backward compat but DO NOT hand this out —
+   * Discord OAuth won't accept it (callback URI is registered against
+   * slot URLs only). Prefer `url` everywhere.
+   */
   public_url?: string | null;
+  /**
+   * Same as `url` when RL_PUBLIC_DOMAIN is set. Kept as a separate field
+   * for code that explicitly wants the slot-form (e.g. constructing
+   * other slot-based hostnames). Most callers just use `url`.
+   */
+  slot_url?: string | null;
   slot?: number;
+  /** Admin email for /api/auth/local. Always "admin@local" in DEMO_MODE envs. */
+  admin_email?: string;
+  /**
+   * Admin password seeded into the env's local_credentials by env-spin.
+   * If `RL_ADMIN_PASSWORD` is set in `/srv/rl-infra/.env`, every env gets
+   * the same password (stable across deploys / slugs). Otherwise a random
+   * 16-char hex string is generated per call. Null only if the bootstrap
+   * step itself failed (rare — would indicate the allinone wasn't healthy
+   * yet at the bootstrap-admin exec). Use to POST to {url}/api/auth/local
+   * for a JWT.
+   */
+  admin_password?: string | null;
   app_container?: string;
   pg_container?: string;
   error?: string;

@@ -64,7 +64,8 @@ export async function execute(params: EnvCloneProdParams): Promise<EnvCloneProdR
     await execFileAsync(
       'ssh',
       ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`,
-       `docker restart rl-env-${params.slug}-allinone && sleep 6`],
+       // DOCKER_HOST→wollomatic proxy (rl-agent has no docker group; Bug G).
+       `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${params.slug}-allinone && sleep 6`],
       { timeout: 60_000 },
     );
     restartedForSettings = true;

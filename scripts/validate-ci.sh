@@ -43,6 +43,16 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
+# ---------------------------------------------------------------------------
+# RL_TARGET=remote shortcut — ship validation to the rl-infra runner.
+# Default behavior unchanged. Opt in by exporting RL_TARGET=remote or by
+# passing through rl-infra/cli/rl, which sets it on your behalf.
+# ---------------------------------------------------------------------------
+if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1" ]; then
+  export RL_TARGET_DISPATCHED=1   # prevent loop if rl re-execs us inside the runner
+  exec "$REPO_ROOT/rl-infra/cli/rl" validate-ci "$@"
+fi
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -152,15 +162,72 @@ detect_scope() {
   fi
 }
 
-# Returns 0 if the local dev env (API :3000 + web :5173) is up, 1 otherwise.
+# Resolve the canonical web target for fleet/local. Sets the global `web_url`.
+# Precedence (mirrors playwright.config.ts):
+#   1. BASE_URL                     — explicit override (rl_validate_ci)
+#   2. PLAYWRIGHT_BASE_URL          — Playwright's own convention; honored for parity
+#   3. https://slot-N.<domain>      — RL_TARGET=remote + numeric RL_SLOT
+#   4. http://localhost:5173        — local-dev fallback
+# RL_SLOT is validated as a positive integer when used; non-numeric input is a
+# loud config error rather than a silently-broken `slot-foo.gamernight.net` URL.
+_resolve_web_url() {
+  if [ -n "${BASE_URL:-}" ]; then
+    web_url="$BASE_URL"
+    return 0
+  fi
+  if [ -n "${PLAYWRIGHT_BASE_URL:-}" ]; then
+    web_url="$PLAYWRIGHT_BASE_URL"
+    return 0
+  fi
+  if [ -n "${RL_SLOT:-}" ] && [ "${RL_TARGET:-local}" = "remote" ]; then
+    if ! [[ "$RL_SLOT" =~ ^[0-9]+$ ]]; then
+      echo -e "${RED}RL_SLOT='${RL_SLOT}' is not numeric — refusing to construct slot URL.${NC}" >&2
+      return 1
+    fi
+    web_url="https://slot-${RL_SLOT}.${RL_PUBLIC_DOMAIN:-gamernight.net}"
+    return 0
+  fi
+  web_url="http://localhost:5173"
+}
+
+# Returns 0 if the dev env (API + web) is up, 1 otherwise.
 # Quiet on failure — callers decide whether absence is fatal or just a skip signal.
-# Both ports must answer: Playwright's webServer config has reuseExistingServer:true
-# with a 120s timeout, so if :5173 is down it'll silently try to spawn its own
-# `npm run dev -w web` and only fail after 2 minutes — too slow for our fail-fast.
+# Local-dev mode probes API :3000 and Vite :5173 separately. Fleet mode
+# (RL_TARGET=remote / rl_validate_ci with against_env_slug) probes the allinone
+# at HEALTH_URL/BASE_URL — same host serves /api/health and the SPA root.
+#
+# Why probe the web side at all: Playwright's webServer config has
+# reuseExistingServer:true with a 120s timeout, so if :5173 is down (local)
+# or BASE_URL is unreachable (fleet) it'll silently try to spawn its own
+# `npm run dev -w web` and only fail after 2 minutes — too slow for fail-fast.
+#
+# `curl --url "$..."` is used (not bare `curl "$..."`) so a URL whose value
+# starts with `-` is parsed as a URL, not as a curl flag (option injection
+# defense — codex round-3 finding).
 check_env_up() {
-  curl -fsS --max-time 3 http://localhost:3000/health 2>/dev/null \
+  # Resolve the web target first; the API health URL is derived from it
+  # when HEALTH_URL is not explicitly set, so a single BASE_URL is enough
+  # to switch both probes to the fleet env.
+  local web_url
+  _resolve_web_url || return 1
+
+  # Health URL precedence:
+  #   1. HEALTH_URL (set by rl_validate_ci against_env_slug → rl-net DNS)
+  #   2. <web_url>/api/health when web_url is non-localhost (fleet)
+  #   3. http://localhost:3000/health (local-dev default)
+  local health_url
+  if [ -n "${HEALTH_URL:-}" ]; then
+    health_url="$HEALTH_URL"
+  elif [[ "$web_url" != "http://localhost:5173" ]]; then
+    health_url="${web_url%/}/api/health"
+  else
+    health_url="http://localhost:3000/health"
+  fi
+
+  curl -fsS --max-time 3 --url "$health_url" 2>/dev/null \
     | grep -q '"status":"ok"' || return 1
-  curl -fsS --max-time 3 -o /dev/null http://localhost:5173 2>/dev/null
+
+  curl -fsS --max-time 5 -o /dev/null --url "$web_url" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
@@ -367,6 +434,17 @@ run_playwright_e2e() {
       ;;
   esac
 
+  # Resolve the target URL the env probe just validated and export it so
+  # Playwright's `use.baseURL` (playwright.config.ts) actually targets the
+  # fleet env in remote mode. Without this, validate-ci would happily probe
+  # https://slot-N.gamernight.net AND THEN run tests against localhost:5173
+  # (codex round-3 HIGH).
+  local web_url
+  if _resolve_web_url; then
+    export PLAYWRIGHT_BASE_URL="$web_url"
+    echo -e "${YELLOW}Playwright targeting: ${PLAYWRIGHT_BASE_URL}${NC}"
+  fi
+
   # Runs BOTH desktop + mobile projects — matches GitHub CI exactly (ROK-935).
   npx playwright test
 }
@@ -400,6 +478,43 @@ run_discord_smoke() {
   # tools/test-bot reads its own .env (companion-bot token + guild ID).
   # Missing config there surfaces as a clean failure inside `npm run smoke`,
   # not something this script needs to pre-flight.
+  #
+  # Fleet-wide Discord serialization. The companion bot's Discord token and
+  # the Raid Ledger bot's token each only allow ONE active session at a
+  # time across Discord — two slots running smoke concurrently cause a
+  # bot disconnect war and non-deterministic test failures. Acquire a
+  # flock on /state-locks/discord.lock (bind-mounted into the runner from
+  # /srv/rl-infra/state/locks/) before running smoke, release after.
+  #
+  # The lock dir only exists inside fleet runners; on the operator's laptop
+  # the directory is absent and we run unsynchronized (single-host = no
+  # cross-slot contention possible).
+  local lock_dir="${RL_DISCORD_LOCK_DIR:-/state-locks}"
+  if [[ -d "$lock_dir" ]]; then
+    local lock_file="$lock_dir/discord.lock"
+    echo "Acquiring fleet Discord lock at $lock_file (up to 10 min)..."
+    local wait_start=$(date +%s)
+    # flock fd 9 against the lock file. -w 600 waits up to 10 min before
+    # timing out (typical smoke is 2-3 min). Subshell scopes the fd so the
+    # lock auto-releases when smoke exits.
+    (
+      exec 9>"$lock_file"
+      if ! flock -w 600 9; then
+        echo -e "${RED}Timed out (10 min) waiting for Discord lock. Another slot is hogging it.${NC}" >&2
+        echo -e "${RED}  Check: docker exec <runner> cat /state-locks/discord.lock — empty file but a flock holder.${NC}" >&2
+        exit 75   # sysexits.h EX_TEMPFAIL — signals lock-acquisition failure to outer shell
+      fi
+      local wait_end=$(date +%s)
+      echo "Got Discord lock (waited $((wait_end - wait_start))s); running smoke."
+      cd "$REPO_ROOT/tools/test-bot" && npm run smoke
+    )
+    local rc=$?
+    if (( rc == 75 )); then
+      return 1   # lock-timeout → fail the step
+    fi
+    return $rc
+  fi
+
   (cd "$REPO_ROOT/tools/test-bot" && npm run smoke)
 }
 

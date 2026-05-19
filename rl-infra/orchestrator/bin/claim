@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# Claim a runner slot, queueing if none are free.
+#
+# Required env: RL_AGENT_ID
+# Optional flags:
+#   --branch <name>      branch label recorded on the claim
+#   --keep-alive         exempt from the max-claim-age TTL (operator only)
+#
+# Pull-based queue. If all slots are busy OR this agent is queued behind
+# others, returns a queued response with the agent's 0-based position. The
+# caller (CLI / MCP tool) is responsible for polling. Stale queue entries
+# auto-expire via gc-sweeper after QUEUE_TTL_SECONDS (default 1800).
+set -euo pipefail
+source "$(dirname "$0")/_state.sh"
+
+BRANCH=""
+KEEP_ALIVE=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --branch) BRANCH="$2"; shift 2 ;;
+        --keep-alive) KEEP_ALIVE=1; shift ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+if [[ -z "${RL_AGENT_ID:-}" ]]; then
+    echo "RL_AGENT_ID is required" >&2
+    exit 2
+fi
+
+emit_slot_result() {
+    local slot="$1"
+    jq -nc \
+        --argjson slot "$slot" \
+        --arg branch "$BRANCH" \
+        --arg agent "$RL_AGENT_ID" \
+        '{
+            ok: true,
+            slot: $slot,
+            agent_id: $agent,
+            branch: $branch,
+            hostnames: {
+                web: "slot-\($slot|tostring).rl.lan",
+                debug: "slot-\($slot|tostring)-debug.rl.lan"
+            },
+            worktree: "/srv/rl-infra/runners/slot-\($slot|tostring)/worktree",
+            container: "rl-runner-\($slot|tostring)",
+            shell_cmd: "docker exec -it rl-runner-\($slot|tostring) tmux attach -t main"
+        }'
+}
+
+# Idempotent: if this agent already has a slot, return it.
+EXISTING=$(state::slot_for_agent "$RL_AGENT_ID")
+if [[ -n "$EXISTING" ]]; then
+    audit::log claim idempotent "$(jq -nc --argjson slot "$EXISTING" '{slot:$slot}')"
+    emit_slot_result "$EXISTING"
+    exit 0
+fi
+
+NOW=$(date -u +%FT%TZ)
+
+# H-VM-3: Validate state files BEFORE reading them. Corrupted JSON makes
+# command substitutions silently echo empty under `set -e`, which (in
+# the prior implementation) let claim proceed as if "queue is empty,
+# anyone can grab a slot" — the WRONG fail-open direction. Refuse loudly.
+if ! jq empty "$RL_QUEUE_FILE" 2>/dev/null; then
+    audit::log claim queue_corrupt "$(jq -nc --arg agent "$RL_AGENT_ID" '{agent:$agent}')"
+    jq -nc '{ok:false, error:"queue_corrupt", message:"queue.json is invalid — operator must repair before claims can proceed"}'
+    exit 1
+fi
+if ! jq empty "$RL_CLAIMS_FILE" 2>/dev/null; then
+    audit::log claim claims_corrupt "$(jq -nc --arg agent "$RL_AGENT_ID" '{agent:$agent}')"
+    jq -nc '{ok:false, error:"claims_corrupt", message:"claims.json is invalid — operator must repair before claims can proceed"}'
+    exit 1
+fi
+
+# Decide whether this agent can take a slot right now:
+#   - Queue empty → anyone can grab a free slot.
+#   - Queue non-empty → only the head of the queue can grab; newcomers
+#     must enqueue first.
+QUEUE_HEAD=$(queue::head_agent)
+if [[ -z "$QUEUE_HEAD" || "$QUEUE_HEAD" == "$RL_AGENT_ID" ]]; then
+    # H-VM-2: pick the free slot AND flip it claimed=true inside a SINGLE
+    # flock window. Previously `state::query` (no flock) → `state::mutate`
+    # (flock) gave two concurrent claims the same slot — the mutate filter
+    # didn't re-check `claimed == false` so A's mutate ran, then B's
+    # mutate silently overwrote with B's agent_id.
+    #
+    # The jq filter below picks the lowest free slot AND flips it in one
+    # pass, atomically inside state::mutate_with_precondition's flock.
+    # If no free slot exists at lock time, the filter is a no-op
+    # (`cmp -s` matches input vs output) and the helper returns 1 → fall
+    # through to enqueue. Set +e around the call because the no-op return
+    # is expected; we read the result via state::slot_for_agent below.
+    set +e
+    state::mutate_with_precondition "$RL_CLAIMS_FILE" \
+        --arg agent "$RL_AGENT_ID" \
+        --arg branch "$BRANCH" \
+        --arg ts "$NOW" \
+        --argjson keep_alive "$KEEP_ALIVE" \
+        '
+        . as $orig
+        | (first(.[] | select(.claimed == false)) // null) as $pick
+        | if $pick == null then $orig
+          else map(if .slot == $pick.slot
+                   then .claimed = true
+                      | .agent_id = $agent
+                      | .branch = $branch
+                      | .started_at = $ts
+                      | .last_heartbeat = $ts
+                      | .keep_alive = ($keep_alive == 1)
+                   else . end)
+          end
+        '
+    MUTATE_RC=$?
+    set -e
+    if [[ $MUTATE_RC -eq 0 ]]; then
+        # The mutation took effect — read back which slot got assigned to us.
+        # Lookup is by agent_id (unique to us under flock) so no race here.
+        FREE_SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+        if [[ -n "$FREE_SLOT" ]]; then
+            queue::remove "$RL_AGENT_ID"
+            audit::log claim acquired "$(jq -nc --argjson slot "$FREE_SLOT" --arg branch "$BRANCH" --argjson keep_alive "$KEEP_ALIVE" '{slot:$slot, branch:$branch, keep_alive:($keep_alive == 1)}')"
+            emit_slot_result "$FREE_SLOT"
+            exit 0
+        fi
+    fi
+    # No slot was free at lock time — fall through to enqueue.
+fi
+
+# No slot for us right now — enqueue (idempotent) and report position.
+queue::add "$RL_AGENT_ID" "$BRANCH" "$NOW"
+POSITION=$(queue::position "$RL_AGENT_ID")
+QUEUE_LEN=$(state::query "$RL_QUEUE_FILE" 'length')
+
+audit::log claim queued "$(jq -nc --arg agent "$RL_AGENT_ID" --argjson pos "$POSITION" '{agent:$agent, position:$pos}')"
+
+jq -nc \
+    --arg agent "$RL_AGENT_ID" \
+    --arg branch "$BRANCH" \
+    --argjson position "$POSITION" \
+    --argjson queue_length "$QUEUE_LEN" \
+    '{
+        ok: true,
+        queued: true,
+        agent_id: $agent,
+        branch: $branch,
+        position: $position,
+        queue_length: $queue_length,
+        message: "All slots busy. Position \($position) in queue (length \($queue_length)). Poll claim again to recheck — head of queue gets the next freed slot."
+    }'
