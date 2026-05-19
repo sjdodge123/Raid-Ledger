@@ -121,32 +121,63 @@ REMOTE_PSQL="docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -v O
 # The slot URL pattern (https://slot-N.${RL_PUBLIC_DOMAIN}/...) is what
 # the operator has registered in the Discord developer portal — that's
 # the only redirect_uri Discord will accept (ROK-1324).
-if [[ "$MODE" == "settings" ]]; then
-    REMOTE_ENV_JWT_SECRET=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-        "sudo grep -E '^RL_ENV_JWT_SECRET=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
-    REMOTE_PUBLIC_DOMAIN=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-        "sudo grep -E '^RL_PUBLIC_DOMAIN=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
-    SLOT=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-        "docker inspect 'rl-env-${SLUG}-allinone' --format '{{ index .Config.Labels \"rl.slot\" }}' 2>/dev/null || echo ''")
+# URL rewrite + admin bootstrap run for BOTH settings AND full modes.
+# (The earlier `if [[ MODE == settings ]]` gate was wrong — full mode
+# from clone_prod also leaves discord_callback_url pointing at the
+# operator's localhost AND empties local_credentials per prod-backup
+# sanitization, so the env had no admin at all.)
 
-    if [[ -z "$REMOTE_ENV_JWT_SECRET" || -z "$REMOTE_PUBLIC_DOMAIN" || -z "$SLOT" ]]; then
-        echo "  skipping URL rewrite: RL_ENV_JWT_SECRET / RL_PUBLIC_DOMAIN / slot missing" >&2
-    else
-        SLOT_URL="https://slot-${SLOT}.${REMOTE_PUBLIC_DOMAIN}"
-        DISCORD_CB="${SLOT_URL}/api/auth/discord/callback"
-        DISCORD_CB_ENC=$(node "$SCRIPT_DIR/rl-encrypt-setting.mjs" "$REMOTE_ENV_JWT_SECRET" "$DISCORD_CB")
-        echo "  rewriting discord_callback_url → $DISCORD_CB" >&2
-        # Send via psql; quote-escape the ciphertext for safety. We use a
-        # heredoc to keep the SQL legible even if more rewrites get added.
-        ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-            "$REMOTE_PSQL" <<EOF 2>&1 | tail -10
+# Pull the inputs we need from the VM-side .env + container labels.
+REMOTE_ENV_JWT_SECRET=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+    "sudo grep -E '^RL_ENV_JWT_SECRET=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
+REMOTE_PUBLIC_DOMAIN=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+    "sudo grep -E '^RL_PUBLIC_DOMAIN=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
+REMOTE_ADMIN_PASSWORD=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+    "sudo grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
+SLOT=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+    "docker inspect 'rl-env-${SLUG}-allinone' --format '{{ index .Config.Labels \"rl.slot\" }}' 2>/dev/null || echo ''")
+
+# 1. Rewrite discord_callback_url to the slot URL. Same logic as before,
+#    just no longer gated on MODE. Encrypt with env's JWT_SECRET (=operator's).
+if [[ -z "$REMOTE_ENV_JWT_SECRET" || -z "$REMOTE_PUBLIC_DOMAIN" || -z "$SLOT" ]]; then
+    echo "  skipping URL rewrite: RL_ENV_JWT_SECRET / RL_PUBLIC_DOMAIN / slot missing" >&2
+else
+    SLOT_URL="https://slot-${SLOT}.${REMOTE_PUBLIC_DOMAIN}"
+    DISCORD_CB="${SLOT_URL}/api/auth/discord/callback"
+    DISCORD_CB_ENC=$(node "$SCRIPT_DIR/rl-encrypt-setting.mjs" "$REMOTE_ENV_JWT_SECRET" "$DISCORD_CB")
+    echo "  rewriting discord_callback_url → $DISCORD_CB" >&2
+    ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+        "$REMOTE_PSQL" <<EOF 2>&1 | tail -10
 INSERT INTO app_settings (key, encrypted_value, created_at, updated_at)
 VALUES ('discord_callback_url', \$\$${DISCORD_CB_ENC}\$\$, now(), now())
 ON CONFLICT (key) DO UPDATE
   SET encrypted_value = EXCLUDED.encrypted_value,
       updated_at = now();
 EOF
-    fi
+fi
+
+# 2. Seed admin@local in the env's DB. The sync (esp. with full mode
+#    from clone_prod) leaves local_credentials empty because prod
+#    backups sanitize that table. Without an admin row no one can log
+#    in via /auth/local. RL_ADMIN_PASSWORD in /srv/rl-infra/.env is the
+#    shared "fleet test password" — operator sets it once; every env
+#    inherits the same login so agents + testers have a stable cred.
+if [[ -z "$REMOTE_ADMIN_PASSWORD" ]]; then
+    echo "  skipping admin bootstrap: RL_ADMIN_PASSWORD missing in /srv/rl-infra/.env" >&2
+    echo "  (set it on the VM to enable /auth/local on fleet envs)" >&2
+else
+    echo "  bootstrapping admin@local with RL_ADMIN_PASSWORD..." >&2
+    # Run bootstrap-admin INSIDE the env's allinone — it has the right
+    # NODE_PATH + Drizzle + bcrypt deps + sees the env's DB via its
+    # own DATABASE_URL env var. ADMIN_PASSWORD env var tells the script
+    # to use a fixed password (not a random one). RESET_PASSWORD=true
+    # ensures it overwrites whatever's there (handles re-deploy).
+    ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+        "DOCKER_HOST=tcp://127.0.0.1:2375 docker exec \
+             -e ADMIN_PASSWORD='$REMOTE_ADMIN_PASSWORD' \
+             -e RESET_PASSWORD=true \
+             rl-env-${SLUG}-allinone \
+             node /app/dist/scripts/bootstrap-admin.js 2>&1 | tail -5" 2>&1 | sed 's/^/    /'
 fi
 
 echo "Sync complete." >&2
