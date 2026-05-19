@@ -10,7 +10,7 @@ export const UpdatePreferenceSchema = z.object({
         z.string(),
         z.number(),
         z.boolean(),
-        z.record(z.unknown()),
+        z.record(z.string(), z.unknown()),
         z.array(z.unknown()),
     ]),
 });
@@ -28,7 +28,7 @@ export const UpdatePreferenceBatchSchema = z.object({
             z.string(),
             z.number(),
             z.boolean(),
-            z.record(z.unknown()),
+            z.record(z.string(), z.unknown()),
             z.array(z.unknown()),
         ]),
     ).refine((obj) => Object.keys(obj).length > 0, {

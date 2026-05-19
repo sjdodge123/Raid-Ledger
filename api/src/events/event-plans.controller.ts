@@ -22,17 +22,14 @@ import {
   PollResultsResponse,
 } from '@raid-ledger/contract';
 import { EventPlansService } from './event-plans.service';
-import { type ZodType, type ZodTypeDef, ZodError } from 'zod';
+import { type ZodType, ZodError } from 'zod';
 
 import type { AuthenticatedRequest } from '../auth/types';
 
 /**
  * Parse data with a Zod schema, converting ZodError to BadRequestException.
  */
-function parseOrThrow<TOut, TDef extends ZodTypeDef, TIn>(
-  schema: ZodType<TOut, TDef, TIn>,
-  data: unknown,
-): TOut {
+function parseOrThrow<TOut>(schema: ZodType<TOut>, data: unknown): TOut {
   try {
     return schema.parse(data);
   } catch (error) {

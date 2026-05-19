@@ -28,6 +28,13 @@ import type {
 // Mocks
 // ---------------------------------------------------------------------------
 
+const navigateMock = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual =
+    await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => navigateMock };
+});
+
 const useAuthMock = vi.fn(() => ({
   user: {
     id: 99,
@@ -460,16 +467,19 @@ describe('DecidedView — drawer interactions (AC6)', () => {
       }),
       isLoading: false,
     });
+    navigateMock.mockClear();
     renderWithProviders(<DecidedView lineup={lineup} />);
 
-    // Closed by default.
-    expect(screen.queryByTestId('game-research-drawer')).toBeNull();
+    // ROK-1297 round 5y: GameResearchDrawer no longer renders a side
+    // drawer — it navigates to /games/:id. Assert the navigate call
+    // instead of looking for a `game-research-drawer` DOM node.
+    expect(navigateMock).not.toHaveBeenCalled();
 
     const section = screen.getByTestId('decided-your-matches-section');
     const row = within(section).getByTestId('game-ref-row');
     fireEvent.click(row);
 
-    expect(screen.getByTestId('game-research-drawer')).toBeInTheDocument();
+    expect(navigateMock).toHaveBeenCalledWith('/games/42');
   });
 
   it('clicking the per-match "Pick a time" CTA does NOT open the drawer', () => {
