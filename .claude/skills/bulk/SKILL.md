@@ -8,7 +8,7 @@ argument-hint: "[ROK-XXX ROK-YYY | all]"
 
 Pulls small-scope stories (Tech Debt, Chore, Performance), batches them, spawns parallel dev and reviewer teammates inside a single Agent Team, merges all into one batch branch, validates, and ships one PR. No operator gate, no test agents, no architect. Quality gate: integration tests + full CI on the merged batch branch.
 
-**rl-infra fleet (default when Proxmox is reachable):** Each dev teammate `rl claim`s its own slot (4 slots = 4 concurrent devs, no env-lock contention). The merge-and-validate step runs `rl validate-ci --full` on the lead's slot against an `rl env spin <batch>` allinone env. Falls back to today's local model when `RL_TARGET=local`. See `.claude/skills/_shared/rl-infra-fleet.md`.
+**rl-infra fleet (preferred when Proxmox is reachable):** Lead runs the preflight at session start (`.claude/skills/_shared/rl-fleet-preflight.md`) to pick MODE=fleet vs MODE=local. Fleet has 2 slots default (4 with the `extra-slots` compose profile). Use `rl_env_deploy({ slug, worktree_path })` for the validate env, `rl_validate_ci({ args, worktree_path })` for the CI gate. **Every rl_* MCP call MUST pass `worktree_path: "<absolute path to worktree>"`** (see `feedback_rl_fleet_worktree_path.md`). Falls back to local model when `RL_TARGET=local` or VM unreachable. Command translations: `.claude/skills/_shared/rl-infra-fleet.md`.
 
 **Requires Agent Teams:** `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set in `~/.claude/settings.json` (already configured). Teammates self-claim tasks from a shared task list and message each other directly for auto-fix loops — the Lead only orchestrates the batch.
 
