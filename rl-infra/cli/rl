@@ -356,6 +356,84 @@ cmd_validate_ci() {
     ssh_run run-on-runner -- bash /workspace/scripts/validate-ci.sh "$@"
 }
 
+# ROK-1326 fix-7: push-notify pattern. Agents that post a test plan need
+# to know when a tester submits without the operator nudging them. The
+# Claude Code harness auto-backgrounds Bash invocations and fires a
+# task-completion notification when they finish, but MCP tools block the
+# agent's main thread for the full call duration (per ROK-1331). Solution:
+# expose `rl test-plan wait` as a CLI subcommand so the agent spawns it
+# via Bash and gets a harness wake on tester submit.
+cmd_test_plan() {
+    local sub="${1:-}"
+    [[ -z "$sub" ]] && { echo "rl test-plan {wait|status} <slug> [--timeout N]" >&2; exit 2; }
+    shift
+    case "$sub" in
+        wait)   cmd_test_plan_wait "$@" ;;
+        status) cmd_test_plan_status "$@" ;;
+        *) echo "rl test-plan {wait|status} <slug> [--timeout N]" >&2; exit 2 ;;
+    esac
+}
+
+cmd_test_plan_wait() {
+    local slug="${1:-}"
+    [[ -z "$slug" ]] && { echo "rl test-plan wait <slug> [--timeout N]" >&2; exit 2; }
+    [[ "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
+    shift
+    local timeout=600
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --timeout) timeout="$2"; shift 2 ;;
+            *) echo "unknown arg: $1" >&2; exit 2 ;;
+        esac
+    done
+    if [[ "$TARGET" == "local" ]]; then
+        echo "test-plan wait is fleet-only (RL_TARGET=remote)" >&2
+        exit 1
+    fi
+    # close_write covers tester submit (POST /submit → writePlanAtomic);
+    # moved_to covers the rename() landing on the parent dir; delete covers
+    # env-destroy reaping the plan. Same event set as the MCP rl_test_plan_wait
+    # (ROK-1326 D4). Filename filter on the inside loop catches sibling-slug
+    # events at the source.
+    local plan_re
+    plan_re="^${slug}\\.json$"
+    # `set -e` at top of file would kill us on the expected non-zero exit
+    # from ssh/grep when the timeout fires (no match within window).
+    # Disable for the wait + restore immediately.
+    local rc=0
+    set +e
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "inotifywait -e close_write,moved_to,delete -t ${timeout} --format '%f' /srv/rl-infra/state/test-plans/ 2>/dev/null | grep -m 1 -E '${plan_re}' >/dev/null"
+    rc=$?
+    set -e
+    if (( rc != 0 )); then
+        # inotifywait exits 2 on timeout, 1 on other errors. grep -m 1 exits
+        # 0 only on a match. So rc != 0 ⇒ no match within timeout.
+        echo '{"ok":true,"timed_out":true,"slug":"'"$slug"'","waited_seconds":'"$timeout"'}'
+        exit 0
+    fi
+    # Match landed — emit the current plan JSON so the agent can read
+    # verdicts on its next turn (Bash captures stdout into the harness
+    # notification).
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "cat /srv/rl-infra/state/test-plans/${slug}.json"
+}
+
+cmd_test_plan_status() {
+    local slug="${1:-}"
+    [[ -z "$slug" ]] && { echo "rl test-plan status <slug>" >&2; exit 2; }
+    [[ "$slug" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
+    if [[ "$TARGET" == "local" ]]; then
+        echo "test-plan status is fleet-only (RL_TARGET=remote)" >&2
+        exit 1
+    fi
+    ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "cat /srv/rl-infra/state/test-plans/${slug}.json"
+}
+
 cmd_top() {
     [[ "$TARGET" == "local" ]] && { command -v ctop >/dev/null && exec ctop; echo "install ctop"; exit 1; }
     ssh_run_interactive "ctop"
@@ -675,6 +753,8 @@ rl — remote runner CLI (target: $TARGET)
   rl env list                list active envs
   rl db <slug> [--web]       psql or pgweb against env's Postgres
   rl validate-ci [args]      run validate-ci.sh inside your runner
+  rl test-plan wait <slug>   long-poll for first tester submit (spawn in background; harness notifies on submit)
+  rl test-plan status <slug> cheap one-shot read of the plan JSON
   rl top                     ctop live resource view
   rl gc                      force a sweeper run
   rl snapshot {create|rollback|list} <name>
@@ -692,6 +772,7 @@ case "${1:-}" in
     db)           shift; cmd_db "$@" ;;
     logs)         shift; cmd_logs "$@" ;;
     validate-ci)  shift; cmd_validate_ci "$@" ;;
+    test-plan)    shift; cmd_test_plan "$@" ;;
     top)          shift; cmd_top "$@" ;;
     gc)           shift; cmd_gc "$@" ;;
     snapshot)     shift; cmd_snapshot "$@" ;;
