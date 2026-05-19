@@ -65,6 +65,8 @@ export interface EnvDeployResult {
    */
   admin_password?: string | null;
   steps: Record<string, { ok: boolean; took_s?: number; detail?: string; error?: string }>;
+  /** Set when top-level ok=false. Short machine-readable code (e.g. "sync_settings_failed"). */
+  error?: string;
   message: string;
 }
 
@@ -130,14 +132,19 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
   }
   log('env_spin', true, t, sp.url || '');
 
-  // 4. Sync app_settings (Discord/Blizzard/ITAD keys).
+  // 4. Sync app_settings (Discord/Blizzard/ITAD keys + admin password).
   let syncedSettings = false;
+  let syncFailureDetail: string | undefined;
   if (!params.skip_sync) {
     t = now();
     const sy = await envSync.execute({ slug: params.slug, mode: 'settings' });
     if (!sy.ok) {
-      log('sync_settings', false, t, undefined, sy.error || sy.stderr);
-      // Non-fatal — env is usable, just without operator's keys.
+      syncFailureDetail = sy.stderr || 'sync_settings step failed';
+      log('sync_settings', false, t, undefined, syncFailureDetail);
+      // Was framed as "non-fatal" — but without settings the env has no
+      // Discord/ITAD/IGDB credentials AND no admin@local password seeded,
+      // which means most flows can't run. Propagate as a top-level
+      // failure (operator pref 2026-05-19) instead of misleading ok=true.
     } else {
       log('sync_settings', true, t);
       syncedSettings = true;
@@ -194,8 +201,14 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     }
   }
 
+  const settingsFailed = !params.skip_sync && !syncedSettings;
+  const baseMsg = `Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} / (password in admin_password field).`;
+  const message = settingsFailed
+    ? `FAILED: sync_settings step did not succeed (${syncFailureDetail ?? 'unknown error'}). The container is up at ${sp.url} but has NO Discord/IGDB/ITAD credentials AND admin@local was NOT seeded — most flows will fail. Re-run rl_env_deploy or call rl_env_sync_from_local directly to recover. Admin email would be ${sp.admin_email}.`
+    : baseMsg;
+
   return {
-    ok: true,
+    ok: !settingsFailed,
     slug: params.slug,
     url: sp.url,
     internal_url: sp.internal_url,
@@ -203,6 +216,7 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     admin_email: sp.admin_email,
     admin_password: sp.admin_password ?? null,
     steps,
-    message: `Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} / (password in admin_password field).`,
+    error: settingsFailed ? 'sync_settings_failed' : undefined,
+    message,
   };
 }

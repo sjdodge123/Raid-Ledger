@@ -363,8 +363,16 @@ ensure_mutagen_sync() {
     # the container. Bug F (2026-05-18 rok-1297 fleet build).
     # --default-{file,directory}-mode-beta force the runner-side perms
     # for any file whose source perms are ambiguous.
+    # --mode=one-way-replica: laptop (alpha) is the SOLE source of truth.
+    # Runner (beta) gets aligned to alpha — files that exist only on the
+    # runner get DELETED on next sync. Without this (was: default
+    # two-way-resolved), any stale files left on a slot's /workspace by
+    # a previous session — e.g. operator's main-repo WIP — would
+    # propagate UP into the next agent's worktree on their first sync.
+    # Reported by the rok-1325 agent 2026-05-19.
     mutagen sync create \
         --name "$session" \
+        --mode=one-way-replica \
         --permissions-mode=portable \
         --default-file-mode-beta=0644 \
         --default-directory-mode-beta=0755 \
