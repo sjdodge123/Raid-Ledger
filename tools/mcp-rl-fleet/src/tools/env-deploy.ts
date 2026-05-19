@@ -42,15 +42,18 @@ export interface EnvDeployParams {
 export interface EnvDeployResult {
   ok: boolean;
   slug: string;
-  /** External (canonical, shareable) URL — what to send testers. */
+  /**
+   * Canonical/shareable URL — ALWAYS use this for tester links, test
+   * plan deep-links, Chrome MCP navigation, etc. Slot-form when
+   * RL_PUBLIC_DOMAIN is set (https://slot-N.{RL_PUBLIC_DOMAIN}) —
+   * supports Discord OAuth + routes to the env.
+   */
   url?: string;
   /** LAN URL — operator-facing fallback. */
   internal_url?: string;
   /**
-   * Slot-stable URL for OAuth (Discord login) — ROK-1324. Send this
-   * to testers when they need to "Continue with Discord"; the per-slug
-   * `url` can't do OAuth because each new slug would need a Discord
-   * developer-portal registration. Null in local/LAN mode.
+   * Same as `url` when public. Kept as a separate field for callers
+   * that explicitly need the slot-form. Most code just uses `url`.
    */
   slot_url?: string | null;
   /** Admin email (always admin@local in DEMO_MODE envs). */
@@ -200,8 +203,6 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     admin_email: sp.admin_email,
     admin_password: sp.admin_password ?? null,
     steps,
-    message: sp.slot_url
-      ? `Deployed branch to ${sp.url}. Share that URL for general testing; use ${sp.slot_url} for Discord login flows. Admin login: ${sp.admin_email} / (password in admin_password field).`
-      : `Deployed branch to ${sp.url}. Share this URL with testers. Admin login: ${sp.admin_email} / (password in admin_password field).`,
+    message: `Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} / (password in admin_password field).`,
   };
 }

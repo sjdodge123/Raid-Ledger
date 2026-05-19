@@ -3,25 +3,33 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_env_spin';
 export const TOOL_DESCRIPTION =
-  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. Returns FOUR URLs (`url` canonical/shareable, `internal_url` LAN, `public_url` https://{slug}test.{RL_PUBLIC_DOMAIN}, `slot_url` https://slot-N.{RL_PUBLIC_DOMAIN} — STABLE per slot for Discord OAuth) PLUS admin credentials (`admin_email`, `admin_password` — comes from RL_ADMIN_PASSWORD in /srv/rl-infra/.env if set, else generated per-call). POST {email, password} to {url}/api/auth/local to get a JWT for admin API calls. Send `url` to testers; use `slot_url` for Discord login flows. Slug must match [a-z0-9-]+. Idempotent: re-spinning re-seeds the admin password (same value if RL_ADMIN_PASSWORD is set; fresh random otherwise).";
+  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. **ALWAYS use the `url` field for any tester-facing link, agent navigation, test_url in plans, etc.** — it points at the slot-stable hostname (https://slot-N.{RL_PUBLIC_DOMAIN}) which routes to the same env AND supports Discord OAuth (registered redirect URI). The per-slug `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN}) is kept in the response for backward compat but should NOT be sent to testers — Discord login won't work on it. Also returns: `internal_url` (LAN fallback http://{slug}.rl.lan), `admin_email`, `admin_password` (from RL_ADMIN_PASSWORD in /srv/rl-infra/.env if set, else generated). POST {email, password} to {url}/api/auth/local for a JWT. Slug must match [a-z0-9-]+. Idempotent.";
 
 export interface EnvSpinResult {
   ok: boolean;
   idempotent?: boolean;
   slug?: string;
-  /** Canonical/shareable URL. Equals public_url when RL_PUBLIC_DOMAIN is set, else internal_url. */
+  /**
+   * Canonical/shareable URL — ALWAYS use this. When RL_PUBLIC_DOMAIN is
+   * set, this is the SLOT URL (https://slot-N.{RL_PUBLIC_DOMAIN}), not
+   * the per-slug one. Slot URL routes to the same env AND supports
+   * Discord OAuth. Falls back to public_url then internal_url when
+   * the slot URL isn't available.
+   */
   url?: string;
   /** Always http://{slug}.rl.lan — LAN-only fallback. */
   internal_url?: string;
-  /** External URL (https://{slug}test.{RL_PUBLIC_DOMAIN}) or null if RL_PUBLIC_DOMAIN unset. */
+  /**
+   * Per-slug external URL (https://{slug}test.{RL_PUBLIC_DOMAIN}). Kept
+   * in the response for backward compat but DO NOT hand this out —
+   * Discord OAuth won't accept it (callback URI is registered against
+   * slot URLs only). Prefer `url` everywhere.
+   */
   public_url?: string | null;
   /**
-   * Slot-stable URL (https://slot-N.{RL_PUBLIC_DOMAIN}). ROK-1324 — Discord
-   * OAuth requires redirect URIs to be registered once in the developer
-   * portal, so per-slug URLs can't work for "Continue with Discord".
-   * The slot URL is registered once per slot and routes to whatever env
-   * is currently on that slot. Hand this to testers for login flows.
-   * Null when RL_PUBLIC_DOMAIN is unset (local/LAN mode).
+   * Same as `url` when RL_PUBLIC_DOMAIN is set. Kept as a separate field
+   * for code that explicitly wants the slot-form (e.g. constructing
+   * other slot-based hostnames). Most callers just use `url`.
    */
   slot_url?: string | null;
   slot?: number;

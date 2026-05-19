@@ -300,13 +300,13 @@ mcp__mcp-rl-fleet__rl_test_plan_create({
     {
       description: "Open Common Ground tab in /lineups",
       expected: "≥3 themed rows render",
-      test_url: "https://rok-<num>test.gamernight.net/lineups#common-ground",
+      test_url: "<env.url>/lineups#common-ground",   // env.url is the slot URL — works for OAuth too
       reset_hint: "Refresh seed data via POST /api/admin/seed-lineups",
     },
     {
       description: "Vote 'why' on the top-row lineup",
       expected: "Vote count increments by 1, why-modal closes",
-      test_url: "https://rok-<num>test.gamernight.net/lineups#common-ground",
+      test_url: "<env.url>/lineups#common-ground",   // env.url is the slot URL — works for OAuth too
       reset_hint: "Reset votes for this tester via POST /api/admin/votes/reset?tester=<name>",
     },
     ...

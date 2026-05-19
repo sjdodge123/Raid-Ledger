@@ -125,7 +125,11 @@ EOF
         IDEM_PUBLIC="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
         IDEM_SLOT_URL="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
     fi
-    if [[ -n "$IDEM_PUBLIC" ]]; then IDEM_PRIMARY="$IDEM_PUBLIC"; else IDEM_PRIMARY="http://${SLUG}.rl.lan"; fi
+    # Same primary preference as the non-idempotent path: slot > public > internal.
+    if [[ -n "$IDEM_SLOT_URL" ]]; then IDEM_PRIMARY="$IDEM_SLOT_URL"
+    elif [[ -n "$IDEM_PUBLIC" ]]; then IDEM_PRIMARY="$IDEM_PUBLIC"
+    else IDEM_PRIMARY="http://${SLUG}.rl.lan"
+    fi
     # Re-seed admin idempotently. RL_ADMIN_PASSWORD from /srv/rl-infra/.env
     # gives the same password every time so re-runs are stable. If unset,
     # generate one per call — agent gets back a fresh password each time
@@ -321,13 +325,15 @@ PUBLIC_URL_OUT=""
 SLOT_URL_OUT=""
 if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
     PUBLIC_URL_OUT="https://${SLUG}test.${RL_PUBLIC_DOMAIN}"
-    # ROK-1324: slot-stable URL for OAuth (Discord login). Same route file
-    # registers the slot host; emit it so agents can pass it to testers
-    # who want to log in with Discord. Per-slug URL stays the primary
-    # human-friendly link.
     SLOT_URL_OUT="https://slot-${SLOT}.${RL_PUBLIC_DOMAIN}"
 fi
-if [[ -n "$PUBLIC_URL_OUT" ]]; then
+# Primary URL preference 2026-05-19: slot_url > public (per-slug) > internal.
+# Slot URL routes to the same env via Traefik AND is the URL Discord OAuth
+# callbacks are registered against — so it works for every scenario the
+# per-slug URL works for PLUS login. Mirrors the dashboard's "open" button.
+if [[ -n "$SLOT_URL_OUT" ]]; then
+    PRIMARY_URL="$SLOT_URL_OUT"
+elif [[ -n "$PUBLIC_URL_OUT" ]]; then
     PRIMARY_URL="$PUBLIC_URL_OUT"
 else
     PRIMARY_URL="http://${SLUG}.rl.lan"
