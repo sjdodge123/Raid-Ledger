@@ -154,6 +154,29 @@ export async function executeCreate(p: CreatePlanParams) {
   }
   try {
     assertValidSlug(p.slug);
+    // ROK-1326 fix-5: pre-flight env existence check. Without it, the
+    // dashboard previously accepted plans for non-existent slugs and the
+    // agent would tell the operator "ready" against nothing. The dashboard
+    // now ALSO refuses (409 env_not_found), but checking here gives the
+    // agent a clear error before the round-trip POST.
+    const state = await curlOnVM('GET', '/api/state');
+    if (state.status >= 200 && state.status < 300) {
+      const envs = (state.body as { envs?: Array<{ slug?: string }> })?.envs ?? [];
+      const slugs = envs.map((e) => e?.slug).filter(Boolean) as string[];
+      if (!slugs.includes(p.slug)) {
+        return {
+          ok: false,
+          error: 'env_not_found',
+          slug: p.slug,
+          available_envs: slugs,
+          hint:
+            'No env exists for this slug. Call rl_env_spin or rl_env_deploy first.',
+        };
+      }
+    }
+    // If /api/state itself failed (network blip, dashboard down), fall
+    // through to the POST — the dashboard-side guard will still catch a
+    // missing env. Don't block plan creation on a transient state fetch.
     const slugPath = encodeURIComponent(p.slug);
     const { status, body } = await curlOnVM('POST', `/api/test-plans/${slugPath}`, {
       title: p.title,
@@ -161,6 +184,11 @@ export async function executeCreate(p: CreatePlanParams) {
       replace: p.replace ?? false,
       created_by: p.created_by ?? `${process.env.USER ?? 'agent'}-mcp`,
     });
+    if (status === 409 && (body as { error?: string })?.error === 'env_not_found') {
+      // Dashboard-side guard caught it (e.g. env got reaped between our
+      // /api/state read and the POST). Re-shape to match the MCP error.
+      return { ok: false, ...(body as object) };
+    }
     if (status >= 200 && status < 300) {
       const publicDomain = process.env.RL_PUBLIC_DOMAIN ?? 'gamernight.net';
       return {

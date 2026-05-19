@@ -21,6 +21,34 @@ const el = (tag, opts = {}, ...children) => {
   return node;
 };
 
+// ROK-1326 fix-5: turn http(s)://... runs inside a text node into clickable
+// anchors that open in a new tab. Used by step description + step expected
+// rendering only — the agent authors those, so the URLs are trusted. Tester-
+// authored comment bodies are NOT auto-linkified (they're wrapped in
+// <untrusted-tester-comment> tags and base64-encoded for the agent).
+const URL_RE = /(https?:\/\/[^\s<>'"`)]+)/g;
+const URL_TEST = /^https?:\/\//;
+const appendWithLinks = (parent, text) => {
+  if (!text) return;
+  const parts = String(text).split(URL_RE);
+  for (const part of parts) {
+    if (!part) continue;
+    if (URL_TEST.test(part)) {
+      parent.appendChild(
+        el('a', {
+          href: part,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          class: 'step-inline-link',
+          text: part,
+        }),
+      );
+    } else {
+      parent.appendChild(document.createTextNode(part));
+    }
+  }
+};
+
 const fmtTime = (iso) => {
   if (!iso) return '—';
   try {
@@ -304,7 +332,13 @@ const renderStep = (slug, plan, step, draft) => {
   const idTag = el('span', { class: 'step-id', text: `#${step.id}` });
   const desc = el('div', { class: 'step-desc' });
   const textRow = el('div', { class: 'step-text' });
-  textRow.appendChild(document.createTextNode(step.description));
+  // ROK-1326 fix-5: inline URLs in step text + expected become clickable
+  // anchors with target=_blank so the tester can jump straight to a deep
+  // link without losing the dashboard tab. The agent-authored test plan
+  // is the only render path here — tester-authored comments are NOT
+  // auto-linkified (they're wrapped <untrusted-tester-comment> + base64,
+  // never trust untrusted-source URLs).
+  appendWithLinks(textRow, step.description);
   if (step.test_url) {
     const link = el('a', {
       href: step.test_url, target: '_blank', rel: 'noopener',
@@ -314,7 +348,12 @@ const renderStep = (slug, plan, step, draft) => {
     textRow.appendChild(link);
   }
   desc.appendChild(textRow);
-  if (step.expected) desc.appendChild(el('div', { class: 'step-expected', text: `expected: ${step.expected}` }));
+  if (step.expected) {
+    const expectedRow = el('div', { class: 'step-expected' });
+    expectedRow.appendChild(document.createTextNode('expected: '));
+    appendWithLinks(expectedRow, step.expected);
+    desc.appendChild(expectedRow);
+  }
   if (pendingReset) {
     desc.appendChild(el('div', { class: 'step-reset-banner',
       text: `↻ reset requested by ${pendingReset.tester} — agent will reset & post a new plan` }));

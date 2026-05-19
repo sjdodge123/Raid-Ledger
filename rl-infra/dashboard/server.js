@@ -542,8 +542,46 @@ const handleTestPlanGet = async (slug, req, res) => {
   }
 };
 
+// ROK-1326 fix-5: refuse plan creation when no env exists for the slug.
+// Previously the dashboard would happily accept a plan POST for a non-
+// existent slug, the agent would see ok:true and tell the operator the
+// plan was ready, the operator would open the dashboard and find no env
+// AND no plan to interact with. Now: 409 with the available envs in the
+// body so the agent can self-correct (call rl_env_spin/rl_env_deploy
+// first or pick a different slug).
+const envExistsForSlug = async (slug) => {
+  try {
+    const raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
+    const envs = JSON.parse(raw);
+    return Array.isArray(envs) && envs.some((e) => e && e.slug === slug);
+  } catch (err) {
+    if (err.code === 'ENOENT') return false;
+    throw err;
+  }
+};
+
+const listEnvSlugs = async () => {
+  try {
+    const raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
+    const envs = JSON.parse(raw);
+    return Array.isArray(envs) ? envs.map((e) => e && e.slug).filter(Boolean) : [];
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+};
+
 const handleTestPlanPut = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!(await envExistsForSlug(slug))) {
+    return sendJson(res, 409, {
+      ok: false,
+      error: 'env_not_found',
+      slug,
+      available_envs: await listEnvSlugs(),
+      hint: 'No env exists for this slug. Call rl_env_spin or rl_env_deploy first, then post the plan.',
+    });
+  }
   let body;
   try { body = await readJsonBody(req); }
   catch (err) { return sendBodyError(res, err); }
