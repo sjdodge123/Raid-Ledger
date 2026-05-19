@@ -108,4 +108,45 @@ REMOTE_PSQL="docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -v O
 } | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
     "$REMOTE_PSQL" 2>&1 | tail -30
 
+# Rewrite deployment-bound URL settings so the env doesn't try to use the
+# operator's localhost values. Only relevant for `settings` mode (and only
+# when the operator's local DB had any of these settings to begin with).
+# Today: discord_callback_url. Future: any other *_url that is per-deploy.
+#
+# Re-encryption: the env runs with the operator's JWT_SECRET (via
+# RL_ENV_JWT_SECRET in /srv/rl-infra/.env), so we use that same secret
+# to encrypt the replacement plaintext. scripts/rl-encrypt-setting.mjs
+# mirrors the algorithm in api/src/settings/encryption.util.ts.
+#
+# The slot URL pattern (https://slot-N.${RL_PUBLIC_DOMAIN}/...) is what
+# the operator has registered in the Discord developer portal — that's
+# the only redirect_uri Discord will accept (ROK-1324).
+if [[ "$MODE" == "settings" ]]; then
+    REMOTE_ENV_JWT_SECRET=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+        "sudo grep -E '^RL_ENV_JWT_SECRET=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
+    REMOTE_PUBLIC_DOMAIN=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+        "sudo grep -E '^RL_PUBLIC_DOMAIN=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
+    SLOT=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+        "docker inspect 'rl-env-${SLUG}-allinone' --format '{{ index .Config.Labels \"rl.slot\" }}' 2>/dev/null || echo ''")
+
+    if [[ -z "$REMOTE_ENV_JWT_SECRET" || -z "$REMOTE_PUBLIC_DOMAIN" || -z "$SLOT" ]]; then
+        echo "  skipping URL rewrite: RL_ENV_JWT_SECRET / RL_PUBLIC_DOMAIN / slot missing" >&2
+    else
+        SLOT_URL="https://slot-${SLOT}.${REMOTE_PUBLIC_DOMAIN}"
+        DISCORD_CB="${SLOT_URL}/api/auth/discord/callback"
+        DISCORD_CB_ENC=$(node "$SCRIPT_DIR/rl-encrypt-setting.mjs" "$REMOTE_ENV_JWT_SECRET" "$DISCORD_CB")
+        echo "  rewriting discord_callback_url → $DISCORD_CB" >&2
+        # Send via psql; quote-escape the ciphertext for safety. We use a
+        # heredoc to keep the SQL legible even if more rewrites get added.
+        ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+            "$REMOTE_PSQL" <<EOF 2>&1 | tail -10
+INSERT INTO app_settings (key, encrypted_value, created_at, updated_at)
+VALUES ('discord_callback_url', \$\$${DISCORD_CB_ENC}\$\$, now(), now())
+ON CONFLICT (key) DO UPDATE
+  SET encrypted_value = EXCLUDED.encrypted_value,
+      updated_at = now();
+EOF
+    fi
+fi
+
 echo "Sync complete." >&2
