@@ -1,4 +1,6 @@
-import { Strategy, Profile } from 'passport-discord';
+import passport from 'passport';
+import { Strategy as DiscordStrategy, Profile } from 'passport-discord';
+import type { VerifyCallback } from 'passport-oauth2';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
@@ -16,17 +18,19 @@ import type { DiscordOAuthConfig } from '../../settings/settings.types';
  */
 @Injectable()
 export class DiscordAuthStrategy
-  extends PassportStrategy(Strategy, 'discord')
+  extends PassportStrategy(DiscordStrategy, 'discord')
   implements OnModuleInit
 {
   private readonly logger = new Logger(DiscordAuthStrategy.name);
   private isStrategyConfigured = false;
+  private latestConfig: DiscordOAuthConfig | null = null;
 
   constructor(
     private authService: AuthService,
     private settingsService: SettingsService,
   ) {
-    // Initialize with placeholder config - will be updated in onModuleInit
+    // Placeholder config — overwritten on first reloadConfig().
+    // DI requires super() to run so the NestJS class can be constructed.
     super({
       clientID: 'placeholder',
       clientSecret: 'placeholder',
@@ -42,21 +46,21 @@ export class DiscordAuthStrategy
   }
 
   /**
-   * Reload OAuth configuration from database.
-   * Called on startup and when settings are updated.
+   * Reload OAuth configuration from database. Re-registers a fresh bare
+   * passport-discord Strategy under the 'discord' name so the constructor —
+   * not post-construction mutation — installs the current callbackURL.
    */
   async reloadConfig(): Promise<void> {
     try {
       const config = await this.settingsService.getDiscordOAuthConfig();
-
       if (!config) {
         this.logger.warn('Discord OAuth not configured - strategy disabled');
         this.isStrategyConfigured = false;
+        this.latestConfig = null;
         return;
       }
-
-      // Update the passport strategy options
-      this.updateStrategyOptions(config);
+      passport.use('discord', this.buildBareStrategy(config));
+      this.latestConfig = config;
       this.isStrategyConfigured = true;
       this.logger.log('Discord OAuth strategy reloaded with new configuration');
     } catch (error) {
@@ -65,28 +69,23 @@ export class DiscordAuthStrategy
     }
   }
 
-  /**
-   * Update passport strategy options dynamically.
-   * This is a workaround since passport doesn't officially support hot-reload.
-   * We update the internal OAuth2 client directly since the strategy is already registered.
-   */
-  private updateStrategyOptions(config: DiscordOAuthConfig): void {
-    // Access the internal strategy and update its options
-    const strategy = this as unknown as {
-      _oauth2: { _clientId: string; _clientSecret: string } | undefined;
-      _callbackURL: string;
-    };
-
-    this.logger.debug(`Updating callback URL to: ${config.callbackUrl}`);
-
-    if (strategy._oauth2) {
-      strategy._oauth2._clientId = config.clientId;
-      strategy._oauth2._clientSecret = config.clientSecret;
-      this.logger.debug(`Updated OAuth2 client credentials`);
-    }
-
-    strategy._callbackURL = config.callbackUrl;
-    this.logger.debug(`_callbackURL is now: ${strategy._callbackURL}`);
+  private buildBareStrategy(config: DiscordOAuthConfig): DiscordStrategy {
+    return new DiscordStrategy(
+      {
+        clientID: config.clientId,
+        clientSecret: config.clientSecret,
+        callbackURL: config.callbackUrl,
+        scope: ['identify'],
+      },
+      (accessToken, refreshToken, profile, done) => {
+        void this.verifyDiscordProfile(
+          accessToken,
+          refreshToken,
+          profile,
+          done,
+        );
+      },
+    );
   }
 
   /**
@@ -106,16 +105,18 @@ export class DiscordAuthStrategy
   }
 
   /**
-   * Override authenticate to ensure we have the latest callback URL.
-   * Passport caches options, so we need to force-update before each attempt.
+   * Override authenticate to inject the freshest callbackURL per request.
+   * `passport-oauth2` honors `options.callbackURL` over its cached
+   * `this._callbackURL`, so this is the load-bearing override even if the
+   * registered strategy somehow drifts.
    */
   authenticate(req: Request, options?: object): void {
-    // Ensure callback URL is current before authenticating
-    if (this.isStrategyConfigured) {
-      const strategy = this as unknown as { _callbackURL: string };
-      this.logger.debug(
-        `Authenticating with callback URL: ${strategy._callbackURL}`,
-      );
+    if (this.isStrategyConfigured && this.latestConfig?.callbackUrl) {
+      super.authenticate(req, {
+        ...(options ?? {}),
+        callbackURL: this.latestConfig.callbackUrl,
+      });
+      return;
     }
     super.authenticate(req, options);
   }
@@ -128,16 +129,43 @@ export class DiscordAuthStrategy
     if (!this.isStrategyConfigured) {
       throw new Error('Discord OAuth is not configured');
     }
-
-    const { id, username, avatar } = profile;
-    const user = await this.authService.validateDiscordUser(
-      id,
-      username,
-      avatar ?? undefined,
-    );
+    const user = await this.runValidate(profile);
     if (!user) {
       throw new Error('Failed to validate Discord user');
     }
     return user;
+  }
+
+  /**
+   * Shared verify path used by both the NestJS-wrapped `validate()` and the
+   * bare Strategy registered in `reloadConfig`. Routes through
+   * `authService.validateDiscordUser` and calls back with the appropriate
+   * error/user shape passport-oauth2 expects.
+   */
+  private async verifyDiscordProfile(
+    _accessToken: string,
+    _refreshToken: string,
+    profile: Profile,
+    done: VerifyCallback,
+  ): Promise<void> {
+    try {
+      const user = await this.runValidate(profile);
+      if (!user) {
+        done(new Error('Failed to validate Discord user'));
+        return;
+      }
+      done(null, user);
+    } catch (err) {
+      done(err);
+    }
+  }
+
+  private async runValidate(profile: Profile) {
+    const { id, username, avatar } = profile;
+    return this.authService.validateDiscordUser(
+      id,
+      username,
+      avatar ?? undefined,
+    );
   }
 }
