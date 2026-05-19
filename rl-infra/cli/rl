@@ -390,6 +390,20 @@ cmd_test_plan_wait() {
         echo "test-plan wait is fleet-only (RL_TARGET=remote)" >&2
         exit 1
     fi
+    # Pre-flight: inotifywait MUST be installed on the VM. Without it the
+    # ssh below silently exits 127, set +e catches it, the code treats the
+    # non-zero rc as "no event = timeout" and emits a fake timed_out JSON.
+    # Result: agents think push-notify is working when it's not.
+    # Surfaced during ROK-1326 retest 2026-05-19 — same gap affects MCP
+    # rl_test_plan_wait and is folded into ROK-1331 follow-ups.
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 \
+        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "command -v inotifywait >/dev/null 2>&1"; then
+        cat <<EOF
+{"ok":false,"error":"inotifywait_not_installed","slug":"${slug}","hint":"inotify-tools is required for push-notify. Install on the VM: sudo apt-get install -y inotify-tools"}
+EOF
+        exit 2
+    fi
     # close_write covers tester submit (POST /submit → writePlanAtomic);
     # moved_to covers the rename() landing on the parent dir; delete covers
     # env-destroy reaping the plan. Same event set as the MCP rl_test_plan_wait
