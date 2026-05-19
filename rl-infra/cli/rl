@@ -525,7 +525,6 @@ scaffold_runner_git() {
     local quoted_url quoted_branch
     quoted_url=$(printf '%q' "$origin_url")
     quoted_branch=$(printf '%q' "$branch")
-    local container="rl-runner-${slot}"
     local script
     script=$(cat <<EOF
 set -e
@@ -538,12 +537,15 @@ git reset --mixed FETCH_HEAD
 git checkout -q -B ${quoted_branch} 2>/dev/null || true
 EOF
 )
-    # Run the scaffold inside the runner container. Failures here should not
-    # be fatal to the claim — log and continue (a slot without .git is still
-    # usable for non-git operations; validate-ci has a defensive re-scaffold).
-    ssh -o ConnectTimeout=10 -o BatchMode=yes \
-        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
-        "docker exec -i ${container} bash -s" <<<"$script" >/dev/null 2>&1 || {
+    # Route through orchestrator's run-on-runner endpoint — rl-agent (the
+    # default user) is intentionally NOT in the docker group, so raw
+    # `ssh ... docker exec` fails with "permission denied while trying to
+    # connect to the docker API". run-on-runner runs as root inside the
+    # orchestrator binary, derives the slot from RL_AGENT_ID via _state.sh,
+    # and pipes stdin through to `docker exec -i`. Failures here should
+    # not be fatal — a slot without .git is still usable for non-git
+    # operations.
+    ssh_run run-on-runner -- bash -s <<<"$script" >/dev/null 2>&1 || {
         echo "[rl] WARNING: failed to scaffold .git on slot ${slot} — validate-ci will retry" >&2
         return 0
     }
@@ -555,10 +557,9 @@ EOF
 ensure_runner_git() {
     local slot="$1" branch="$2"
     [[ -z "$slot" ]] && return 0
-    local container="rl-runner-${slot}"
-    if ssh -o ConnectTimeout=5 -o BatchMode=yes \
-        "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
-        "docker exec ${container} test -d /workspace/.git/objects" >/dev/null 2>&1; then
+    # Route through run-on-runner same as scaffold_runner_git — direct
+    # `docker exec` fails under rl-agent (no docker group membership).
+    if ssh_run run-on-runner -- test -d /workspace/.git/objects >/dev/null 2>&1; then
         return 0
     fi
     echo "[rl] runner slot ${slot} missing .git/objects — re-scaffolding" >&2
