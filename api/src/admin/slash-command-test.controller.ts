@@ -17,7 +17,7 @@ import type { CapturedResponse } from './fake-interaction';
 const SlashCommandSchema = z.object({
   commandName: z.string().min(1),
   subcommand: z.string().optional(),
-  options: z.record(z.unknown()).optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
   discordUserId: z.string().optional(),
   guildId: z.string().optional(),
   channelId: z.string().optional(),
@@ -79,7 +79,7 @@ export class SlashCommandTestController {
   private parseBody<T>(schema: z.ZodSchema<T>, body: unknown): T {
     const result = schema.safeParse(body);
     if (!result.success) {
-      const messages = result.error.errors
+      const messages = result.error.issues
         .map((e) => `${e.path.join('.')}: ${e.message}`)
         .join('; ');
       throw new BadRequestException(`Validation failed: ${messages}`);

@@ -67,7 +67,7 @@ function testRejectsPlainDate() {
   });
   expect(result.success).toBe(false);
   if (!result.success) {
-    const paths = result.error.errors.map((e) => e.path.join('.'));
+    const paths = result.error.issues.map((e) => e.path.join('.'));
     expect(paths).toContain('until');
   }
 }
@@ -176,7 +176,7 @@ function testRejectsBareDateIntegration() {
   });
   expect(result.success).toBe(false);
   if (!result.success) {
-    const allPaths = result.error.errors.map((e) => e.path.join('.'));
+    const allPaths = result.error.issues.map((e) => e.path.join('.'));
     expect(allPaths.some((p) => p.includes('until'))).toBe(true);
   }
 }
@@ -197,7 +197,7 @@ function testRejectsEndBeforeStart() {
   });
   expect(result.success).toBe(false);
   if (!result.success) {
-    const paths = result.error.errors.map((e) => e.path.join('.'));
+    const paths = result.error.issues.map((e) => e.path.join('.'));
     expect(paths).toContain('endTime');
   }
 }

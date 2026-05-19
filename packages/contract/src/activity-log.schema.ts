@@ -55,7 +55,7 @@ export const ActivityEntrySchema = z.object({
     id: z.number(),
     action: ActivityActionSchema,
     actor: ActivityActorSchema.nullable(),
-    metadata: z.record(z.unknown()).nullable(),
+    metadata: z.record(z.string(), z.unknown()).nullable(),
     createdAt: z.string(),
 });
 
