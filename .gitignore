@@ -48,6 +48,7 @@ scripts/*
 !scripts/sync-local-to-env.sh
 !scripts/clone-prod-to-env.sh
 !scripts/rl-encrypt-setting.mjs
+!scripts/rl-reencrypt-settings.mjs
 !scripts/test-plan-comments.sh
 !/api/scripts/
 implementation_plan.md

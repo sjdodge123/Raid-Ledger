@@ -71,28 +71,32 @@ fi
 case "$MODE" in
     settings)
         # --data-only: keep schema as-is; just refresh row data.
-        # ONLY app_settings — local_credentials has a FK to users.id and
-        # would attach the operator's admin password to a non-existent
-        # user in the env's fresh DB (same reason clone-prod-to-local.sh
-        # excludes it). The env's allinone uses DEMO_MODE which prefills
-        # admin login, so testers don't need the operator's creds anyway.
+        # app_settings is handled separately via the re-encrypt path below
+        # (operator's local rows are encrypted with operator's JWT_SECRET,
+        # env runs with RL_ENV_JWT_SECRET — must decrypt + re-encrypt).
+        # local_credentials has a FK to users.id and would attach the
+        # operator's admin password to a non-existent user in the env's
+        # fresh DB (same reason clone-prod-to-local.sh excludes it). The
+        # env's allinone uses DEMO_MODE which prefills admin login, so
+        # testers don't need the operator's creds anyway.
         # consumed_intent_tokens is short-lived state — no value syncing.
-        DUMP_ARGS=(
-            --data-only --inserts
-            --table=app_settings
-            --no-owner --no-privileges
-        )
-        PRE_SQL="TRUNCATE app_settings CASCADE;"
+        # Empty DUMP_ARGS skips pg_dump entirely in settings mode; the
+        # re-encrypt path below is the WHOLE sync surface for this mode.
+        DUMP_ARGS=()
+        PRE_SQL=""
         ;;
     full)
         # Full data clone. Schema preserved (env's allinone runs migrations at
         # boot). We --disable-triggers so FK ordering doesn't bite. TRUNCATE
         # pre-step + schema-drift exclusions both computed at runtime against
         # the env's actual table set.
+        # app_settings is excluded here and re-injected via the re-encrypt
+        # path below — same JWT-secret-mismatch reason as `settings` mode.
         DUMP_ARGS=(
             --data-only --inserts
             --disable-triggers
             --exclude-table-data='drizzle.*'
+            --exclude-table-data='public.app_settings'
             --no-owner --no-privileges
         )
         # 1) Discover all user tables in the env's public schema. Use for
@@ -186,15 +190,21 @@ ENV_SEQUENCES_FLAT=""
 if [[ -n "${ENV_SEQUENCES:-}" ]]; then
     ENV_SEQUENCES_FLAT=$(echo "$ENV_SEQUENCES" | tr '\n' '|')
 fi
-{
-    [[ -n "$PRE_SQL" ]] && echo "$PRE_SQL"
-    docker exec "$LOCAL_DB_CONTAINER" pg_dump "${DUMP_ARGS[@]}" "$DATABASE_URL"
-} | sequence_filter | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-    "$REMOTE_PSQL" 2>&1 | tail -30
-SYNC_RC=${PIPESTATUS[2]}
-if (( SYNC_RC != 0 )); then
-    echo "ERROR: sync transaction failed (exit $SYNC_RC). DB left at pre-transaction state." >&2
-    exit "$SYNC_RC"
+if (( ${#DUMP_ARGS[@]} > 0 )); then
+    {
+        [[ -n "$PRE_SQL" ]] && echo "$PRE_SQL"
+        docker exec "$LOCAL_DB_CONTAINER" pg_dump "${DUMP_ARGS[@]}" "$DATABASE_URL"
+    } | sequence_filter | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+        "$REMOTE_PSQL" 2>&1 | tail -30
+    SYNC_RC=${PIPESTATUS[2]}
+    if (( SYNC_RC != 0 )); then
+        echo "ERROR: sync transaction failed (exit $SYNC_RC). DB left at pre-transaction state." >&2
+        exit "$SYNC_RC"
+    fi
+else
+    # settings mode skips pg_dump entirely — the re-encrypt path below
+    # is the whole sync surface (app_settings is the only table touched).
+    echo "  (no pg_dump in $MODE mode; handled by re-encrypt path below)" >&2
 fi
 
 # Rewrite deployment-bound URL settings so the env doesn't try to use the
@@ -242,41 +252,120 @@ SLOT=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HO
 # as "no slot" rather than a literal value.
 [[ "$SLOT" == "<no value>" ]] && SLOT=""
 
-# 1. Rewrite discord_callback_url to the slot URL. Same logic as before,
-#    just no longer gated on MODE. Encrypt with env's JWT_SECRET (=operator's).
+# 1. Re-encrypt + sync app_settings (ROK-1326 fix-4). The operator's local
+# rows are encrypted with their JWT_SECRET. The env runs with a different
+# RL_ENV_JWT_SECRET, so a straight pg_dump+restore would land rows the
+# env's settings cache can't decrypt — every API key drops out and
+# Discord/IGDB/ITAD/Blizzard/bot-token flows die silently. The
+# rl-reencrypt-settings.mjs helper decrypts each row with the operator's
+# secret, optionally substitutes env-bound URL keys (discord_callback_url,
+# client_url) with the slot's external URL, then re-encrypts with the env's
+# secret. SQL emitted by the helper is piped through psql in a single
+# transaction so failure rolls back cleanly.
 #
-# M-VM-2: when RL_PUBLIC_DOMAIN IS set on the VM, this env is public-facing
-# (Discord login required) — skipping URL rewrite would yield a broken env
-# while the MCP tool reports success. Hard-fail instead. When RL_PUBLIC_DOMAIN
-# is UNSET (LAN-only fleet), skipping IS correct — Discord OAuth isn't wired
-# up there anyway.
-if [[ -z "$REMOTE_PUBLIC_DOMAIN" ]]; then
-    echo "  skipping URL rewrite: RL_PUBLIC_DOMAIN not set on VM (LAN-only deploy)" >&2
-elif [[ -z "$REMOTE_ENV_JWT_SECRET" ]]; then
-    echo "ERROR: RL_PUBLIC_DOMAIN is set but RL_ENV_JWT_SECRET is missing in /srv/rl-infra/.env." >&2
-    echo "       Cannot encrypt discord_callback_url for a public env." >&2
+# When RL_PUBLIC_DOMAIN is set on the VM, this env is public-facing and the
+# URL substitutions are required (Discord login won't accept localhost-shaped
+# redirect_uri). When unset (LAN-only), we still re-encrypt but skip URL
+# substitutes — Discord OAuth wouldn't work LAN-only anyway.
+if [[ -z "$REMOTE_ENV_JWT_SECRET" ]]; then
+    echo "ERROR: RL_ENV_JWT_SECRET missing in /srv/rl-infra/.env on $RL_PROXMOX_HOST." >&2
+    echo "       Cannot re-encrypt app_settings for the env." >&2
     exit 4
-elif [[ -z "$SLOT" ]]; then
-    echo "ERROR: RL_PUBLIC_DOMAIN is set but slot lookup for 'rl-env-${SLUG}-allinone' returned empty." >&2
-    if (( SLOT_LOOKUP_RC != 0 )); then
-        echo "       docker inspect via ssh exited $SLOT_LOOKUP_RC (env not running, docker host unreachable, or ssh failed)." >&2
-    else
-        echo "       Container has no 'rl.slot' label (re-deploy via 'rl env spin' to attach one)." >&2
+fi
+
+# Resolve LOCAL_JWT_SECRET — try (1) explicit env var, (2) operator's
+# main-repo api/.env (worktree-aware via `git rev-parse --git-common-dir`),
+# (3) operator's working-dir api/.env. Hard-fail if none found — silent
+# decrypt failures here are the exact regression mode this section exists
+# to prevent.
+resolve_local_jwt_secret() {
+    if [[ -n "${LOCAL_JWT_SECRET:-}" ]]; then
+        printf '%s' "$LOCAL_JWT_SECRET"
+        return 0
     fi
+    local common_dir main_repo
+    common_dir=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || true)
+    if [[ -n "$common_dir" ]]; then
+        # `git rev-parse --git-common-dir` returns either an absolute path
+        # (when invoked from a worktree — the worktree's .git is a file
+        # pointing at the main repo's .git/) or a relative path "."-or-".git"
+        # (when invoked from the main repo). Normalize both into the main
+        # repo root.
+        if [[ "$common_dir" == /* ]]; then
+            main_repo=$(cd "$common_dir/.." && pwd)
+        else
+            main_repo=$(cd "$REPO_ROOT/$common_dir/.." && pwd)
+        fi
+    fi
+    local f
+    for f in "$main_repo/api/.env" "$REPO_ROOT/api/.env"; do
+        [[ -z "$f" || ! -f "$f" ]] && continue
+        local secret
+        secret=$(grep -E '^JWT_SECRET=' "$f" | head -1 | cut -d= -f2-)
+        if [[ -n "$secret" ]]; then
+            printf '%s' "$secret"
+            return 0
+        fi
+    done
+    return 1
+}
+LOCAL_JWT_SECRET_RESOLVED=$(resolve_local_jwt_secret) || {
+    echo "ERROR: cannot resolve operator's local JWT_SECRET — needed to decrypt app_settings." >&2
+    echo "       Tried: \$LOCAL_JWT_SECRET env var, main-repo api/.env, working-dir api/.env." >&2
+    echo "       Set LOCAL_JWT_SECRET in your environment OR ensure api/.env exists in the main repo." >&2
     exit 4
-else
+}
+
+# Build the substitutes list. Required when RL_PUBLIC_DOMAIN is set;
+# omitted in LAN-only deploys.
+REENCRYPT_SUBSTITUTES=()
+if [[ -n "$REMOTE_PUBLIC_DOMAIN" ]]; then
+    if [[ -z "$SLOT" ]]; then
+        echo "ERROR: RL_PUBLIC_DOMAIN is set but slot lookup for 'rl-env-${SLUG}-allinone' returned empty." >&2
+        if (( SLOT_LOOKUP_RC != 0 )); then
+            echo "       docker inspect via ssh exited $SLOT_LOOKUP_RC (env not running, docker host unreachable, or ssh failed)." >&2
+        else
+            echo "       Container has no 'rl.slot' label (re-deploy via 'rl env spin' to attach one)." >&2
+        fi
+        exit 4
+    fi
     SLOT_URL="https://slot-${SLOT}.${REMOTE_PUBLIC_DOMAIN}"
-    DISCORD_CB="${SLOT_URL}/api/auth/discord/callback"
-    DISCORD_CB_ENC=$(node "$SCRIPT_DIR/rl-encrypt-setting.mjs" "$REMOTE_ENV_JWT_SECRET" "$DISCORD_CB")
-    echo "  rewriting discord_callback_url → $DISCORD_CB" >&2
-    ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-        "$REMOTE_PSQL" <<EOF 2>&1 | tail -10
-INSERT INTO app_settings (key, encrypted_value, created_at, updated_at)
-VALUES ('discord_callback_url', \$\$${DISCORD_CB_ENC}\$\$, now(), now())
-ON CONFLICT (key) DO UPDATE
-  SET encrypted_value = EXCLUDED.encrypted_value,
-      updated_at = now();
-EOF
+    REENCRYPT_SUBSTITUTES+=(
+        --substitute "discord_callback_url=${SLOT_URL}/api/auth/discord/callback"
+        --substitute "client_url=${SLOT_URL}"
+    )
+    echo "  substituting discord_callback_url + client_url → ${SLOT_URL}" >&2
+else
+    echo "  RL_PUBLIC_DOMAIN unset on VM (LAN-only deploy) — re-encrypting without URL substitutes" >&2
+fi
+
+# Pull app_settings as TSV from operator's local DB, pipe through the
+# re-encrypt helper, pipe the resulting SQL through psql on the env's DB.
+# Pipeline status is captured so a failure at any stage propagates.
+set +e
+docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -F$'\t' -c \
+    "SELECT key, encrypted_value FROM app_settings ORDER BY key;" \
+| node "$SCRIPT_DIR/rl-reencrypt-settings.mjs" \
+    --src-secret "$LOCAL_JWT_SECRET_RESOLVED" \
+    --dst-secret "$REMOTE_ENV_JWT_SECRET" \
+    "${REENCRYPT_SUBSTITUTES[@]}" \
+| ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
+    "$REMOTE_PSQL" 2>&1 | tail -20
+REENCRYPT_RC=("${PIPESTATUS[@]}")
+set -e
+# PIPESTATUS indices: 0=psql-source, 1=re-encrypt helper, 2=ssh-psql-target
+if (( REENCRYPT_RC[1] != 0 )); then
+    echo "ERROR: rl-reencrypt-settings exit ${REENCRYPT_RC[1]}." >&2
+    echo "       Most likely cause: LOCAL_JWT_SECRET doesn't match the secret operator's app_settings were encrypted with." >&2
+    exit "${REENCRYPT_RC[1]}"
+fi
+if (( REENCRYPT_RC[2] != 0 )); then
+    echo "ERROR: env-side psql exit ${REENCRYPT_RC[2]} — app_settings INSERTs failed." >&2
+    exit "${REENCRYPT_RC[2]}"
+fi
+if (( REENCRYPT_RC[0] != 0 )); then
+    echo "ERROR: local psql source exit ${REENCRYPT_RC[0]} — couldn't read app_settings from operator's DB." >&2
+    exit "${REENCRYPT_RC[0]}"
 fi
 
 # 2. Seed admin@local in the env's DB. The sync (esp. with full mode
