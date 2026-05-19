@@ -172,6 +172,10 @@ services:
     volumes:
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # Required for promtail-config.yml docker_sd_configs — without the socket
+      # mount, container service discovery silently fails and rl_role/rl_slot/
+      # rl_env labels never get attached, breaking per-slot Grafana queries.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./loki/promtail-config.yml:/etc/promtail/config.yml:ro
     command: ["-config.file=/etc/promtail/config.yml"]
     depends_on: [loki]
