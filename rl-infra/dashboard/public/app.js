@@ -698,6 +698,25 @@ const tick = async (opts = {}) => {
     setStatus('ok');
   } catch (err) {
     setStatus('error');
+    // Render a recovery placeholder so the page isn't just BLANK after a
+    // failed initial fetch (which is what users see post-pull-down-reload
+    // if the fetch fails for any reason — bfcache quirks, network blip,
+    // etc.). The slots / envs sections both render a clickable retry.
+    const retry = () => tick({ force: true });
+    [$('slots'), $('envs')].forEach((div) => {
+      if (!div) return;
+      // Only paint the recovery state if the section is currently empty
+      // (don't wipe a previously-rendered card just because a follow-up
+      // tick failed).
+      if (div.children.length === 0) {
+        div.replaceChildren();
+        const msg = el('div', { class: 'empty',
+          text: 'Failed to fetch fleet state. Tap to retry.' });
+        msg.style.cursor = 'pointer';
+        msg.addEventListener('click', retry);
+        div.appendChild(msg);
+      }
+    });
     // eslint-disable-next-line no-console
     console.warn('fetch failed', err);
   }
@@ -711,17 +730,24 @@ if (isLan) {
 }
 
 // Auto-refresh DISABLED (operator pref 2026-05-19) — the periodic
-// re-render was disrupting mid-test reading. Initial tick on load,
-// then user-initiated refreshes only via:
+// re-render was disrupting mid-test reading. Refreshes now via:
+//   - Initial page load (force, so the activity-defer doesn't suppress it)
+//   - Browser native pull-to-refresh (triggers a full reload → pageshow
+//     handler fires → force tick → fresh render)
 //   - Tap the refresh indicator dot in the header
-//   - Pull down from the top of the page (mobile-native gesture)
-tick();
+tick({ force: true });
 const refreshDot = $('refresh-indicator');
 if (refreshDot) {
   refreshDot.style.cursor = 'pointer';
   refreshDot.title = 'Tap to refresh (auto-refresh disabled)';
   refreshDot.addEventListener('click', () => tick({ force: true }));
 }
+// pageshow fires on both fresh page load and bfcache restore (back/forward
+// nav, mobile reload). Without this, bfcache-restored pages would show
+// the cached pre-reload DOM until the user manually tapped the dot.
+window.addEventListener('pageshow', (ev) => {
+  if (ev.persisted) tick({ force: true });
+});
 
 // Pull-to-refresh removed 2026-05-19 — the custom gesture handler was
 // causing an empty-dashboard render in incognito sessions (reproducible).
