@@ -152,6 +152,16 @@ cmd_claim() {
             echo "$RESULT" | jq .
             ensure_mutagen_sync "$SLOT"
             scaffold_runner_git "$SLOT" "$branch"
+            # ROK-1326 fix-11: preempt the npm-ci cost on the FIRST
+            # validate-ci/test run. Mutagen excludes node_modules so a
+            # freshly-claimed slot has none of the workspace's deps
+            # available; without this, the first `tsc`/`nest`/`jest`
+            # invocation dies with "command not found". Running here at
+            # claim time (in the background, doesn't block claim return)
+            # moves the cost out of the first agent action and into
+            # idle setup time. Skips silently if a prior session left a
+            # populated node_modules.
+            install_runner_deps "$SLOT" &
             start_heartbeat_daemon "$SLOT"
             echo
             echo "claimed slot $SLOT"
@@ -636,6 +646,30 @@ flush_mutagen() {
 #   6. git checkout -q -B <branch>   (best-effort; falls back if branch
 #                                     doesn't exist remotely — local-only
 #                                     branches are legal mid-development)
+# ROK-1326 fix-11: preempt `npm ci` so the first validate-ci/test run on
+# a freshly-claimed slot doesn't pay the 1-2min dep-install cost on top
+# of its own work. Mutagen-excludes node_modules (large + OS-specific
+# binaries) so /workspace/node_modules is empty on every fresh claim.
+# Runs in the background from cmd_claim — claim returns to the user
+# immediately and deps populate while they read the claim output.
+# validate-ci.sh has the same guard as a fallback, so a fast follow-up
+# run won't hit the missing-tsc failure if this background install
+# hasn't finished yet — it'll just inherit the cost there instead.
+install_runner_deps() {
+    local slot="$1"
+    [[ -z "$slot" ]] && return 0
+    # `npm ci` is a clean-slate install — faster + more reproducible than
+    # `npm install` from a populated state. We skip when node_modules is
+    # already populated (prior session, or another concurrent claim
+    # finished the install). `2>&1 >/dev/null` keeps the background
+    # logging quiet so it doesn't tangle with the claim output the user
+    # is reading.
+    ssh_run run-on-runner -- bash -c \
+        '[ -x /workspace/node_modules/.bin/tsc ] && exit 0; \
+         cd /workspace && npm ci --silent --no-audit --no-fund' \
+        >/dev/null 2>&1 || true
+}
+
 scaffold_runner_git() {
     local slot="$1" branch="$2"
     [[ -z "$slot" ]] && return 0
