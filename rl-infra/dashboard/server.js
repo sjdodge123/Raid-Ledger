@@ -84,11 +84,41 @@ const rateBuckets = new Map();
 // on every access.
 const byteBuckets = new Map();
 
+// Trusted-proxy chain for X-Forwarded-For interpretation. Without this, all
+// requests behind Traefik / Cloudflare collapse into the single proxy peer's
+// IP and the per-IP quota becomes a global quota — one bad actor exhausts
+// 100 MB / 24h for every other tester. With RL_TRUSTED_PROXY_CIDRS set to
+// the proxy's IP(s), we walk X-Forwarded-For right-to-left, skipping
+// trusted hops, and key the limiter on the first untrusted hop (the real
+// client). Default is empty (no proxies trusted) so dev/local stays exactly
+// as before. Comma-separated list of literal IPs (CIDR is overkill for the
+// 1-2 known proxies we deploy behind).
+const RL_TRUSTED_PROXIES = new Set(
+  (process.env.RL_TRUSTED_PROXY_CIDRS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
+// Returns the real client IP, considering X-Forwarded-For only when the
+// immediate socket peer is in the trusted-proxy allowlist. Otherwise the
+// socket peer is the client (forging XFF requires impersonating a trusted
+// proxy, which on the LAN you can't do without already controlling that
+// host).
 const clientIp = (req) => {
-  // socket.remoteAddress reflects the immediate peer. X-Forwarded-For is
-  // NOT consulted because anyone with LAN access can forge it. Per-IP is
-  // best-effort, not auth.
-  return req.socket?.remoteAddress || 'unknown';
+  const peer = req.socket?.remoteAddress || 'unknown';
+  if (!RL_TRUSTED_PROXIES.has(peer)) return peer;
+  // Walk X-Forwarded-For right-to-left, skipping trusted-proxy entries,
+  // and return the first untrusted IP (the original client).
+  const xff = req.headers?.['x-forwarded-for'];
+  if (typeof xff !== 'string' || xff.length === 0) return peer;
+  const hops = xff.split(',').map((s) => s.trim()).filter(Boolean);
+  for (let i = hops.length - 1; i >= 0; i--) {
+    if (!RL_TRUSTED_PROXIES.has(hops[i])) return hops[i];
+  }
+  // Every hop was trusted — fall back to the socket peer rather than
+  // returning a "trusted" identity as the client.
+  return peer;
 };
 
 // Returns true if the IP's cumulative byte usage in the trailing
@@ -260,9 +290,45 @@ const validSlug = (s) => typeof s === 'string' && s.length > 0 && s.length <= 63
 
 const planPath = (slug) => join(TEST_PLANS_DIR, `${slug}.json`);
 
+// Centralized error responder for readJsonBody failures. Preserves the
+// 415 status when the failure is content-type related; everything else
+// (oversize body, malformed JSON, transport errors) stays 400 so existing
+// clients aren't broken.
+const sendBodyError = (res, err) => {
+  const status = err && err.status === 415 ? 415 : 400;
+  return sendJson(res, status, { ok: false, error: err.message });
+};
+
+// CSRF mitigation: require Content-Type: application/json on all state-
+// changing endpoints. Without this check, a victim's browser on the LAN
+// can be tricked into submitting a cross-origin POST with Content-Type:
+// text/plain (a "simple request" in CORS terminology, no preflight) and
+// the server happily parses the body as JSON and mutates plans/comments.
+// Requiring application/json forces the browser into a preflight, which
+// our server doesn't answer, so the mutation can't fire. text/plain,
+// multipart/form-data, application/x-www-form-urlencoded, and missing
+// Content-Type are all rejected with 415 Unsupported Media Type. A
+// `charset=utf-8` suffix is allowed (some clients always send it).
+class UnsupportedMediaTypeError extends Error {
+  constructor() { super('Content-Type must be application/json'); this.status = 415; }
+}
+const isJsonContentType = (ct) => {
+  if (typeof ct !== 'string') return false;
+  // Strip params (charset, boundary, etc.) and trim. RFC 7231 says
+  // media type comparison is case-insensitive.
+  const mainType = ct.split(';', 1)[0].trim().toLowerCase();
+  return mainType === 'application/json';
+};
+
 // Read JSON body with a size cap so a misbehaving client can't OOM us.
+// Rejects with UnsupportedMediaTypeError (status=415) if the request
+// doesn't claim application/json — see CSRF rationale above.
 const readJsonBody = (req, max = 64 * 1024) =>
   new Promise((resolve, reject) => {
+    if (!isJsonContentType(req.headers?.['content-type'])) {
+      reject(new UnsupportedMediaTypeError());
+      return;
+    }
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
@@ -342,24 +408,38 @@ const stripCommentBodies = (plan) => ({
   })),
 });
 
-// The <untrusted-tester-comment> wrap is a HINT to the agent that this
-// content is untrusted free-form text — it is NOT a cryptographic boundary.
-// A hostile tester can include the literal close tag in their body to
-// "escape" the wrap and inject content that LOOKS trusted to the agent.
-// Strip both open + close tags before interpolation so the wrap stays
-// unambiguous. We replace rather than encode (e.g. HTML entities) because
-// the consumer is an LLM context window, not a browser DOM.
+// The <untrusted-tester-comment> wrap signals to the agent that the
+// content inside is untrusted free-form text — it is NOT a cryptographic
+// boundary in itself. The round-2 fix made the close-tag regex tolerant
+// of whitespace + attribute drift, but codex round-3 demonstrated that
+// HTML entity (`&lt;/untrusted-tester-comment&gt;`), Unicode confusable
+// (`</untrusted-tester-cοmment>` with a Cyrillic ο), and zero-width
+// character variants still slip through any plain-text strip because
+// tolerant LLM tokenizers will normalize them back to the literal close
+// tag. Defending the strip against the full normalization space is a
+// losing arms race.
 //
-// Tolerant match: tolerant XML/HTML LLM parsers treat `</untrusted-tester-comment >`
-// (whitespace before `>`), `< / untrusted-tester-comment>` (spaces around the slash),
-// and tags with stray attributes (`<untrusted-tester-comment foo="bar">`) as the
-// same close/open tag. The strict literal-tag regex used to miss all of these,
-// letting a hostile tester forge the boundary. Match: optional leading whitespace,
-// optional `/`, optional whitespace, the tag name, then ANYTHING up to the `>`.
+// Instead, comment bodies on the agent path are emitted as base64
+// INSIDE the wrap (with an explicit `encoding="base64"` attribute), so
+// the inner content is opaque to any tag-matching the consumer might
+// do. There is no way to "look like" a close tag inside base64 — every
+// character that COULD form one decodes to ASCII bytes that the agent
+// processor must explicitly decode to inspect. This removes the entire
+// "forge the boundary" attack class. Wrap tags are still stripped from
+// non-body string metadata (titles, descriptions) where base64 would be
+// user-hostile.
 const stripWrapTags = (body) =>
   typeof body === 'string'
     ? body.replace(/<\s*\/?\s*untrusted-tester-comment\s*[^>]*>/gi, '[tag-stripped]')
     : body;
+
+// Encode the comment body as base64 so the inside of the wrap is opaque
+// to tag-matching. The agent's tool description tells the consumer to
+// base64-decode the body before inspection.
+const encodeCommentBody = (body) =>
+  typeof body === 'string' && body.length > 0
+    ? Buffer.from(body, 'utf-8').toString('base64')
+    : '';
 
 // Attachment URLs flow to the agent OUTSIDE the wrap, so they must match
 // the legitimate shape (the URL the upload handler returns). Anything
@@ -407,11 +487,14 @@ const wrapCommentBodies = (plan) => ({
       tester: c.tester,
       ts: c.ts,
       // Wrap the body so the agent's context window has a clear "this is
-      // untrusted user input" boundary. Agent must treat it as data only.
-      // Wrap tags are stripped from c.body first so a hostile tester
-      // cannot include a literal </untrusted-tester-comment> to escape it.
+      // untrusted user input" boundary. The body is base64-encoded INSIDE
+      // the wrap so a hostile tester cannot forge the close tag from any
+      // amount of entity/Unicode/zero-width trickery — every character
+      // they post decodes to opaque ASCII inside the wrap. The agent's
+      // tool description instructs the consumer to base64-decode before
+      // inspecting the body. See encodeCommentBody / stripWrapTags above.
       body: c.body
-        ? `<untrusted-tester-comment>${stripWrapTags(c.body)}</untrusted-tester-comment>`
+        ? `<untrusted-tester-comment encoding="base64">${encodeCommentBody(c.body)}</untrusted-tester-comment>`
         : null,
       // Attachment URL flows OUTSIDE the wrap so it must be validated
       // against the legitimate shape — otherwise a tester can post
@@ -458,7 +541,7 @@ const handleTestPlanPut = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   let body;
   try { body = await readJsonBody(req); }
-  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+  catch (err) { return sendBodyError(res, err); }
 
   if (!Array.isArray(body.steps) || body.steps.length === 0)
     return sendJson(res, 400, { ok: false, error: 'steps[] required' });
@@ -524,7 +607,7 @@ const handleTestPlanSubmit = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   let body;
   try { body = await readJsonBody(req); }
-  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+  catch (err) { return sendBodyError(res, err); }
 
   if (!Array.isArray(body.verdicts) || body.verdicts.length === 0)
     return sendJson(res, 400, { ok: false, error: 'verdicts[] required' });
@@ -609,7 +692,7 @@ const handleAttachmentUpload = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   let body;
   try { body = await readJsonBody(req, MAX_ATTACHMENT_BYTES + 1024 * 1024); }
-  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+  catch (err) { return sendBodyError(res, err); }
 
   const mime = typeof body.mime === 'string' ? body.mime.toLowerCase() : '';
   const ext = ALLOWED_MIME.get(mime);
@@ -687,7 +770,7 @@ const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
 
   let body;
   try { body = await readJsonBody(req); }
-  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+  catch (err) { return sendBodyError(res, err); }
 
   const text = typeof body.body === 'string' ? body.body.trim().slice(0, 2000) : '';
   // text + attachment combined check happens after we know the step exists.
@@ -747,7 +830,7 @@ const handleTestPlanStepResetRequest = async (slug, stepIdRaw, req, res) => {
 
   let body;
   try { body = await readJsonBody(req); }
-  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+  catch (err) { return sendBodyError(res, err); }
   const tester = typeof body.tester === 'string'
     ? body.tester.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50)
     : 'anon';
@@ -781,7 +864,7 @@ const handleTestPlanStepResult = async (slug, stepIdRaw, req, res) => {
 
   let body;
   try { body = await readJsonBody(req); }
-  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+  catch (err) { return sendBodyError(res, err); }
 
   if (!VERDICTS.has(body.verdict))
     return sendJson(res, 400, { ok: false, error: 'verdict must be pass|fail|skip' });
