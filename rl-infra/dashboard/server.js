@@ -11,11 +11,12 @@
 
 import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 
 const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
+const TEST_PLANS_DIR = process.env.TEST_PLANS_DIR || join(STATE_DIR, 'test-plans');
 const PORT = parseInt(process.env.PORT || '8080', 10);
 // When set, the dashboard renders BOTH http://{slug}.rl.lan (internal) AND
 // http://{slug}.${PUBLIC_DOMAIN} (external, for testers behind your proxy)
@@ -71,6 +72,28 @@ const enrichSlotsWithProbes = async (slots) =>
     }),
   );
 
+// Read all current test-plan summaries (sluggable, cheap — usually 0-5 files).
+// Returned inline in /api/state so the dashboard renders without an N+1
+// fetch per env card.
+const collectPlanSummaries = async () => {
+  try {
+    const files = await readdir(TEST_PLANS_DIR);
+    const out = {};
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      const slug = f.slice(0, -5);
+      try {
+        const plan = JSON.parse(await readFile(join(TEST_PLANS_DIR, f), 'utf-8'));
+        out[slug] = summarizePlan(plan);
+      } catch { /* skip bad files */ }
+    }
+    return out;
+  } catch (err) {
+    if (err.code === 'ENOENT') return {};
+    throw err;
+  }
+};
+
 const handleApiState = async (res) => {
   try {
     const [claims, envs] = await Promise.all([
@@ -78,11 +101,21 @@ const handleApiState = async (res) => {
       readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8'),
     ]);
     const slots = JSON.parse(claims);
-    const probedSlots = await enrichSlotsWithProbes(slots);
+    const [probedSlots, planSummaries] = await Promise.all([
+      enrichSlotsWithProbes(slots),
+      collectPlanSummaries(),
+    ]);
+    // Attach per-env plan summaries to each env entry so the client
+    // doesn't need a separate fetch per card.
+    const enrichedEnvs = JSON.parse(envs).map((envEntry) =>
+      planSummaries[envEntry.slug]
+        ? { ...envEntry, _test_plan_summary: planSummaries[envEntry.slug] }
+        : envEntry,
+    );
     sendJson(res, 200, {
       ok: true,
       slots: probedSlots,
-      envs: JSON.parse(envs),
+      envs: enrichedEnvs,
       public_domain: PUBLIC_DOMAIN || null,
       generated_at: new Date().toISOString(),
     });
@@ -96,6 +129,197 @@ const sanitizePath = (urlPath) => {
   const cleaned = urlPath.split('?')[0].split('#')[0];
   if (cleaned.includes('..')) return null;
   return cleaned === '/' ? '/index.html' : cleaned;
+};
+
+// ----- Test plans -----
+// Stored at TEST_PLANS_DIR/<slug>.json. Slug already validated by the MCP
+// tool ([a-z0-9-]+); we re-validate here as defense-in-depth before any
+// filesystem ops.
+const SLUG_RE = /^[a-z0-9-]+$/;
+const VERDICTS = new Set(['pass', 'fail', 'skip']);
+
+const validSlug = (s) => typeof s === 'string' && s.length > 0 && s.length <= 63 && SLUG_RE.test(s);
+
+const planPath = (slug) => join(TEST_PLANS_DIR, `${slug}.json`);
+
+// Read JSON body with a size cap so a misbehaving client can't OOM us.
+const readJsonBody = (req, max = 64 * 1024) =>
+  new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > max) {
+        req.destroy();
+        reject(new Error('body too large'));
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')); }
+      catch (err) { reject(err); }
+    });
+    req.on('error', reject);
+  });
+
+// Atomic write: temp file in same dir + rename. Avoids partial reads
+// during the dashboard's 5s polling tick.
+const writePlanAtomic = async (slug, plan) => {
+  await mkdir(TEST_PLANS_DIR, { recursive: true });
+  const tmp = join(TEST_PLANS_DIR, `.${slug}.${Date.now()}.tmp`);
+  await writeFile(tmp, JSON.stringify(plan, null, 2));
+  const { rename } = await import('node:fs/promises');
+  await rename(tmp, planPath(slug));
+};
+
+const summarizePlan = (plan) => {
+  const total = plan.steps.length;
+  // A step's effective verdict is the LATEST result (any tester). Pending
+  // = no results yet. The first-tester-wins ordering matches what the UI
+  // shows: most-recent verdict drives the badge color.
+  const counts = { pass: 0, fail: 0, skip: 0, pending: 0 };
+  let lastUpdated = plan.created_at;
+  for (const step of plan.steps) {
+    const last = (step.results ?? []).slice(-1)[0];
+    if (!last) counts.pending++;
+    else {
+      counts[last.verdict] = (counts[last.verdict] ?? 0) + 1;
+      if (last.ts > lastUpdated) lastUpdated = last.ts;
+    }
+  }
+  return { total, ...counts, last_updated_at: lastUpdated };
+};
+
+const handleTestPlanGet = async (slug, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  try {
+    const plan = JSON.parse(await readFile(planPath(slug), 'utf-8'));
+    sendJson(res, 200, { ok: true, plan, summary: summarizePlan(plan) });
+  } catch (err) {
+    if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
+};
+
+const handleTestPlanPut = async (slug, req, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+
+  if (!Array.isArray(body.steps) || body.steps.length === 0)
+    return sendJson(res, 400, { ok: false, error: 'steps[] required' });
+  if (body.steps.length > 100)
+    return sendJson(res, 400, { ok: false, error: 'max 100 steps per plan' });
+
+  // Preserve existing results on replace=true unless explicitly cleared.
+  let existing = null;
+  if (!body.replace) {
+    try { existing = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+    catch (err) { if (err.code !== 'ENOENT') throw err; }
+    if (existing)
+      return sendJson(res, 409, { ok: false, error: 'plan exists; pass replace=true to overwrite' });
+  }
+
+  const plan = {
+    slug,
+    title: typeof body.title === 'string' ? body.title.slice(0, 200) : null,
+    created_at: new Date().toISOString(),
+    created_by: typeof body.created_by === 'string' ? body.created_by.slice(0, 200) : null,
+    steps: body.steps.map((s, idx) => ({
+      id: idx + 1,
+      description: String(s.description ?? '').slice(0, 500),
+      expected: s.expected ? String(s.expected).slice(0, 500) : null,
+      category: s.category ? String(s.category).slice(0, 50) : null,
+      results: [],
+    })),
+  };
+  await writePlanAtomic(slug, plan);
+  sendJson(res, 201, { ok: true, plan, summary: summarizePlan(plan) });
+};
+
+const handleTestPlanStepResult = async (slug, stepIdRaw, req, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  const stepId = parseInt(stepIdRaw, 10);
+  if (!Number.isInteger(stepId) || stepId < 1)
+    return sendJson(res, 400, { ok: false, error: 'invalid step id' });
+
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+
+  if (!VERDICTS.has(body.verdict))
+    return sendJson(res, 400, { ok: false, error: 'verdict must be pass|fail|skip' });
+  const tester = typeof body.tester === 'string'
+    ? body.tester.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50)
+    : 'anon';
+
+  let plan;
+  try { plan = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+  catch (err) {
+    if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
+    return sendJson(res, 500, { ok: false, error: err.message });
+  }
+
+  const step = plan.steps.find((s) => s.id === stepId);
+  if (!step) return sendJson(res, 404, { ok: false, error: 'step not found' });
+
+  // Sequential ordering: reject if any earlier step has no verdict yet.
+  // A step is "decided" if it has at least one result entry (most-recent
+  // wins). This means a tester must work through the list in order.
+  for (let i = 0; i < plan.steps.length; i++) {
+    const s = plan.steps[i];
+    if (s.id >= stepId) break;
+    if (!s.results || s.results.length === 0)
+      return sendJson(res, 409, {
+        ok: false, error: 'must complete prior steps first', blocked_by: s.id,
+      });
+  }
+
+  step.results = step.results ?? [];
+  step.results.push({
+    tester,
+    verdict: body.verdict,
+    ts: new Date().toISOString(),
+  });
+  // Cap history at 20 entries per step — keep most recent.
+  if (step.results.length > 20) step.results = step.results.slice(-20);
+
+  await writePlanAtomic(slug, plan);
+  sendJson(res, 200, { ok: true, plan, summary: summarizePlan(plan) });
+};
+
+const handleTestPlanDelete = async (slug, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  try {
+    await unlink(planPath(slug));
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    if (err.code === 'ENOENT') return sendJson(res, 200, { ok: true, noop: true });
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
+};
+
+// Lightweight list endpoint — returns a map of slug -> summary so the
+// dashboard can show "this env has a test plan" badges without N requests.
+const handleTestPlanList = async (res) => {
+  try {
+    const files = await readdir(TEST_PLANS_DIR);
+    const summaries = {};
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      const slug = f.slice(0, -5);
+      try {
+        const plan = JSON.parse(await readFile(join(TEST_PLANS_DIR, f), 'utf-8'));
+        summaries[slug] = summarizePlan(plan);
+      } catch { /* skip bad file */ }
+    }
+    sendJson(res, 200, { ok: true, summaries });
+  } catch (err) {
+    if (err.code === 'ENOENT') return sendJson(res, 200, { ok: true, summaries: {} });
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
 };
 
 const serveStatic = async (req, res) => {
@@ -119,6 +343,11 @@ const serveStatic = async (req, res) => {
   }
 };
 
+// Test-plan route patterns. Keep these as simple anchored regexes so the
+// hot path stays predictable; no Express, no router framework.
+const RE_PLAN = /^\/api\/test-plans\/([a-z0-9-]+)$/;
+const RE_STEP = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/result$/;
+
 const server = createServer(async (req, res) => {
   // Liveness probe for compose healthchecks / orchestrator pings.
   if (req.url === '/health') {
@@ -129,6 +358,23 @@ const server = createServer(async (req, res) => {
   if (req.url === '/api/state') {
     await handleApiState(res);
     return;
+  }
+  if (req.url === '/api/test-plans' && req.method === 'GET') {
+    await handleTestPlanList(res);
+    return;
+  }
+  const planMatch = req.url && RE_PLAN.exec(req.url);
+  if (planMatch) {
+    const slug = planMatch[1];
+    if (req.method === 'GET') return handleTestPlanGet(slug, res);
+    if (req.method === 'PUT' || req.method === 'POST') return handleTestPlanPut(slug, req, res);
+    if (req.method === 'DELETE') return handleTestPlanDelete(slug, res);
+    res.writeHead(405); res.end('Method Not Allowed'); return;
+  }
+  const stepMatch = req.url && RE_STEP.exec(req.url);
+  if (stepMatch) {
+    if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    return handleTestPlanStepResult(stepMatch[1], stepMatch[2], req, res);
   }
   await serveStatic(req, res);
 });

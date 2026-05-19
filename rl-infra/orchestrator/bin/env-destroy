@@ -46,5 +46,11 @@ rm -f "$TRAEFIK_CONF_D/env-${SLUG}.yml"
 
 state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 
+# Test plan auto-cleanup. If a plan exists for this slug (posted via
+# rl_test_plan_create from an agent), drop it so a future redeploy of the
+# same slug doesn't show stale verdicts. Cheap idempotent rm.
+TEST_PLANS_DIR="${RL_TEST_PLANS_DIR:-/srv/rl-infra/state/test-plans}"
+rm -f "$TEST_PLANS_DIR/${SLUG}.json" 2>/dev/null || true
+
 audit::log env-destroy ok "$(jq -nc --arg slug "$SLUG" --argjson force "$FORCE" '{slug:$slug, force:($force == 1)}')"
 jq -nc --arg slug "$SLUG" '{ok: true, slug: $slug}'

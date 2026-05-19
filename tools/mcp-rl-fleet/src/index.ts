@@ -23,6 +23,7 @@ import * as envCloneProd from './tools/env-clone-prod.js';
 import * as envBuildImage from './tools/env-build-image.js';
 import * as envDeploy from './tools/env-deploy.js';
 import * as forceRelease from './tools/force-release.js';
+import * as testPlan from './tools/test-plan.js';
 
 const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.1.0' });
 
@@ -180,6 +181,50 @@ server.tool(
     no_destroy: z.boolean().optional(),
   },
   async (p) => jsonResult(await forceRelease.execute(p)),
+);
+
+// ----- Test plans -----
+const slugSchema = z.string().regex(/^[a-z0-9-]+$/).min(1).max(63);
+
+server.tool(
+  testPlan.CREATE_TOOL,
+  testPlan.CREATE_DESC,
+  {
+    slug: slugSchema,
+    title: z.string().max(200).optional(),
+    steps: z.array(z.object({
+      description: z.string().min(1).max(500),
+      expected: z.string().max(500).optional(),
+      category: z.string().max(50).optional(),
+    })).min(1).max(100),
+    replace: z.boolean().optional(),
+    created_by: z.string().max(200).optional(),
+  },
+  async (p) => jsonResult(await testPlan.executeCreate(p)),
+);
+
+server.tool(
+  testPlan.STATUS_TOOL,
+  testPlan.STATUS_DESC,
+  { slug: slugSchema },
+  async (p) => jsonResult(await testPlan.executeStatus(p)),
+);
+
+server.tool(
+  testPlan.WAIT_TOOL,
+  testPlan.WAIT_DESC,
+  {
+    slug: slugSchema,
+    timeout_seconds: z.number().int().min(5).max(3600).optional(),
+  },
+  async (p) => jsonResult(await testPlan.executeWait(p)),
+);
+
+server.tool(
+  testPlan.CLEAR_TOOL,
+  testPlan.CLEAR_DESC,
+  { slug: slugSchema },
+  async (p) => jsonResult(await testPlan.executeClear(p)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the

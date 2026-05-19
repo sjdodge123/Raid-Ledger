@@ -140,10 +140,16 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
     const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
     try {
+      // rl-agent has no docker group membership (intentional — see the
+      // hardening commit). docker CLI must go through the path-filtered
+      // wollomatic proxy at 127.0.0.1:2375 instead of /var/run/docker.sock.
+      // The proxy allowlist permits POST /containers/rl-env-*/restart, so
+      // this works once DOCKER_HOST points at the proxy. Without it, the
+      // CLI tries the unix socket and gets "permission denied" (Bug G).
       await execFileAsync(
         'ssh',
         ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`,
-         `docker restart rl-env-${params.slug}-allinone && sleep 6`],
+         `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${params.slug}-allinone && sleep 6`],
         { timeout: 60_000 },
       );
       log('restart_for_settings', true, t);

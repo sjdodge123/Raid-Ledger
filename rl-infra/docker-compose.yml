@@ -207,17 +207,26 @@ services:
     restart: unless-stopped
     networks: [rl-net]
     env_file: .env
+    # Override the Dockerfile's USER node so the container runs with the
+    # rl-fleet GID (1004 on the VM). That's required for writes to
+    # /state/test-plans (owned rl:rl-fleet, mode 2775). Without this the
+    # test-plan POST handler EACCESs on the tmp file create.
+    user: "1000:1004"
     environment:
       # When set in .env, dashboard renders external (share-with-tester) URLs
       # per env in addition to the internal http://{slug}.rl.lan link.
       RL_PUBLIC_DOMAIN: ${RL_PUBLIC_DOMAIN:-}
     volumes:
       - ./state:/state:ro
-      # Bind-mount public/ so operator edits to app.js/index.html/style.css
-      # land immediately without rebuilding the image. The Dockerfile still
-      # COPY's public/ as a fallback for fresh-deploy scenarios where the
+      # Test plans need RW so the dashboard can record verdicts from
+      # testers. Scoped to its own subdir so the rest of /state stays RO.
+      - ./state/test-plans:/state/test-plans:rw
+      # Bind-mount public/ + server.js so operator edits to either land
+      # immediately without rebuilding the image. The Dockerfile still
+      # COPY's both as a fallback for fresh-deploy scenarios where the
       # host path may not exist yet.
       - ./dashboard/public:/app/public:ro
+      - ./dashboard/server.js:/app/server.js:ro
     labels:
       rl.role: infra
 

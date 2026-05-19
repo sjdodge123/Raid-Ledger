@@ -137,7 +137,148 @@ const renderEnv = (e, publicDomain) => {
     actions.appendChild(el('a', { href: internalUrl, target: '_blank', rel: 'noopener', text: 'open' }));
   }
   card.appendChild(actions);
+
+  // Test plan section — collapsed by default. Expands when the env has a
+  // posted plan. Per-step verdicts persist server-side; no LLM-injection
+  // surface (verdict is an enum + numeric step id + tester string).
+  const planSummary = e._test_plan_summary;
+  if (planSummary) {
+    card.appendChild(renderTestPlanSection(slug, planSummary));
+  }
   return card;
+};
+
+// ----- Test plan UI -----
+
+// Tester identity persists in localStorage; first interaction prompts.
+const getTesterName = () => {
+  let name = localStorage.getItem('rl-tester-name');
+  if (!name) {
+    name = prompt('Your name (so the agent can see who reported what):', '') || '';
+    name = name.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50).trim();
+    if (name) localStorage.setItem('rl-tester-name', name);
+  }
+  return name || 'anon';
+};
+
+const verdictBadge = (counts) => {
+  // Small badge that summarizes the plan's verdict counts at a glance.
+  const parts = [];
+  if (counts.pass) parts.push(`${counts.pass}✓`);
+  if (counts.fail) parts.push(`${counts.fail}✗`);
+  if (counts.skip) parts.push(`${counts.skip}~`);
+  if (counts.pending) parts.push(`${counts.pending}?`);
+  return parts.join(' ') || '0 steps';
+};
+
+const renderTestPlanSection = (slug, summary) => {
+  const section = el('div', { class: 'plan-section' });
+  const header = el('div', { class: 'plan-header' });
+  const totalLabel = `Test plan (${summary.total})`;
+  header.appendChild(el('span', { class: 'plan-title', text: totalLabel }));
+  header.appendChild(el('span', { class: 'plan-counts', text: verdictBadge(summary) }));
+  section.appendChild(header);
+
+  const stepsDiv = el('div', { class: 'plan-steps', text: 'Loading…' });
+  section.appendChild(stepsDiv);
+
+  // Lazy-fetch the full plan on first render of this env card. The
+  // /api/state poll only carries the summary; the full step list comes
+  // from /api/test-plans/<slug>.
+  loadTestPlanInto(slug, stepsDiv);
+  return section;
+};
+
+const loadTestPlanInto = async (slug, container) => {
+  try {
+    const r = await fetch(`/api/test-plans/${slug}`, { cache: 'no-store' });
+    if (!r.ok) {
+      container.textContent = `couldn't load plan (HTTP ${r.status})`;
+      return;
+    }
+    const { plan } = await r.json();
+    container.replaceChildren();
+    plan.steps.forEach((step) => {
+      container.appendChild(renderStep(slug, step, plan.steps));
+    });
+  } catch (err) {
+    container.textContent = `fetch failed: ${err.message}`;
+  }
+};
+
+const lastVerdict = (step) => {
+  const last = (step.results ?? []).slice(-1)[0];
+  return last ? last.verdict : null;
+};
+
+const renderStep = (slug, step, allSteps) => {
+  const row = el('div', { class: 'plan-step' });
+
+  // Sequential lock: a step is disabled until ALL earlier steps have at
+  // least one result. The server enforces the same rule, but the UI
+  // mirrors it so testers see the lock visually.
+  let locked = false;
+  for (const s of allSteps) {
+    if (s.id >= step.id) break;
+    if (!s.results || s.results.length === 0) { locked = true; break; }
+  }
+
+  const verdict = lastVerdict(step);
+  row.classList.add(verdict ? `verdict-${verdict}` : 'verdict-pending');
+  if (locked) row.classList.add('locked');
+
+  const idTag = el('span', { class: 'step-id', text: `#${step.id}` });
+  const desc = el('div', { class: 'step-desc' });
+  desc.appendChild(el('div', { class: 'step-text', text: step.description }));
+  if (step.expected) desc.appendChild(el('div', { class: 'step-expected', text: `expected: ${step.expected}` }));
+
+  const buttons = el('div', { class: 'step-buttons' });
+  const passBtn = el('button', { class: 'btn-pass', text: '✓ pass' });
+  const failBtn = el('button', { class: 'btn-fail', text: '✗ fail' });
+  const skipBtn = el('button', { class: 'btn-skip', text: '~ skip' });
+  if (locked) {
+    passBtn.disabled = true; failBtn.disabled = true; skipBtn.disabled = true;
+    passBtn.title = failBtn.title = skipBtn.title =
+      'Complete the prior steps first.';
+  } else {
+    passBtn.addEventListener('click', () => recordVerdict(slug, step.id, 'pass'));
+    failBtn.addEventListener('click', () => recordVerdict(slug, step.id, 'fail'));
+    skipBtn.addEventListener('click', () => recordVerdict(slug, step.id, 'skip'));
+  }
+  buttons.append(passBtn, failBtn, skipBtn);
+
+  // Per-step tester history (last 3 entries).
+  if (step.results?.length) {
+    const hist = el('div', { class: 'step-history' });
+    step.results.slice(-3).forEach((r) => {
+      hist.appendChild(el('span', { class: `hist-${r.verdict}`,
+        text: `${r.tester}: ${r.verdict}` }));
+    });
+    desc.appendChild(hist);
+  }
+
+  row.append(idTag, desc, buttons);
+  return row;
+};
+
+const recordVerdict = async (slug, stepId, verdict) => {
+  const tester = getTesterName();
+  try {
+    const r = await fetch(`/api/test-plans/${slug}/step/${stepId}/result`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ verdict, tester }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(`Could not record: ${j.error || `HTTP ${r.status}`}`);
+      return;
+    }
+    // Refresh the env card's plan section by re-fetching state.
+    tick();
+  } catch (err) {
+    alert(`Network error: ${err.message}`);
+  }
 };
 
 const renderEmpty = (msg) => el('div', { class: 'empty', text: msg });
