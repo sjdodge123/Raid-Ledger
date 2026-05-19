@@ -287,9 +287,9 @@ The app is deployed at <**MODE=fleet:** `https://rok-<num>test.gamernight.net` |
 I'll wait.
 ```
 
-### Fleet-mode bonus: post a tester checklist (recommended for shareable stories)
+### 3e.5. Post the operator-tester checklist (MANDATORY in fleet mode)
 
-When MODE=fleet, AFTER posting the operator-presentation block above, **post a structured test checklist** so the operator (and any external testers they share the URL with) have a clear walk-through with pass/fail/skip buttons on `fleet.gamernight.net`:
+When MODE=fleet, AFTER posting the operator-presentation block above, **always post a test plan** so the operator (and any external testers they share the URL with) have a clear walk-through with pass/fail/skip + ↗ deep-link + ↻ reset buttons per step on `fleet.gamernight.net`. This is the default — only skip for pure-API stories with no in-app surface at all.
 
 ```
 mcp__mcp-rl-fleet__rl_test_plan_create({
@@ -297,17 +297,64 @@ mcp__mcp-rl-fleet__rl_test_plan_create({
   worktree_path: "<same as 3c>",
   title: "ROK-<num>: <short story title>",
   steps: [
-    { description: "<first user-facing step>", expected: "<what should happen>" },
-    { description: "<second step>" },
+    {
+      description: "Open Common Ground tab in /lineups",
+      expected: "≥3 themed rows render",
+      test_url: "https://rok-<num>test.gamernight.net/lineups#common-ground",
+      reset_hint: "Refresh seed data via POST /api/admin/seed-lineups",
+    },
+    {
+      description: "Vote 'why' on the top-row lineup",
+      expected: "Vote count increments by 1, why-modal closes",
+      test_url: "https://rok-<num>test.gamernight.net/lineups#common-ground",
+      reset_hint: "Reset votes for this tester via POST /api/admin/votes/reset?tester=<name>",
+    },
     ...
   ]
 })
 ```
 
-Derive steps from the story's ACs + the Chrome MCP e2e flows you exercised in 3c.6. Order matters — the dashboard enforces sequential completion (testers can't mark step N until step N-1 has a verdict). Keep steps to ≤10; longer plans are usually a sign the story should split.
+**How to write good steps (read this before composing):**
 
-If you want to react to verdicts in-session (rework on a failed step, for example), follow up with `rl_test_plan_wait({ slug, timeout_seconds: 600 })` in a loop — it long-polls via SSH inotifywait and returns when any tester taps a button. Otherwise just check periodically with `rl_test_plan_status({ slug })`.
+- **Small & actionable** — each step should take a tester ≤30 seconds to perform. Bad: "Verify the lineups page works." Good: "Open /lineups → Common Ground tab, expect ≥3 themed rows."
+- **One assertion per step** — if a step has two "and"s, split it.
+- **`test_url` on every step** — deep-link to the screen the tester needs. Construct from the `env_url` you got back from `rl_env_deploy` plus the relevant route/anchor. Without it the tester has to navigate manually and may end up on the wrong screen.
+- **`reset_hint` on stateful steps only** — include when the step mutates server-side data the tester might want re-set for a re-test (writes, votes, mutations). The hint serves two purposes: (a) tester-side tooltip on the ↻ button, (b) reminds YOU what to do when the tester taps reset. For read-only / navigation-only steps, omit it (the ↻ button won't render).
+- **Order matters** — dashboard enforces sequential completion. Step 5 stays locked until step 4 has a verdict.
+- **≤10 steps** — longer plans usually mean the story should split. Group related sub-assertions under one step ("Open the modal — header reads 'Why?', cancel button works").
 
-The plan auto-deletes when `rl_env_destroy` fires at session end. SKIP this when MODE=local (the dashboard isn't part of local-mode infra).
+**React to submissions + reset requests:**
+
+The dashboard buffers tester verdicts locally; only **Submit test results** (per testing round) sends to you in one batch. The ↻ reset button is the exception — it pings immediately. So you have two signals to watch for:
+
+1. **A new `submissions[]` entry** — tester completed a round. `plan.submissions[-1]` carries `{ tester, ts, count, verdicts: {pass: N, fail: M, skip: K} }`. Detailed per-step results in `plan.steps[].results[]` (latest entry has the verdict + tester + ts).
+2. **`summary.pending_resets > 0`** — tester tapped ↻ on at least one step. Find via `plan.steps[].reset_requests[].status === 'pending'`. The step's `reset_hint` is the action you wrote for yourself (e.g. "Refresh seed data via POST /api/admin/seed-lineups") — execute it.
+
+After posting the initial plan, enter a wait loop:
+
+```
+loop:
+  result = rl_test_plan_wait({ slug: "rok-<num>", worktree_path: "...", timeout_seconds: 600 })
+  if result.timed_out: continue
+
+  # Reset signal — happens mid-test, react fast
+  if result.summary.pending_resets > 0:
+    # Execute the reset action(s) per pending reset_request — the step's
+    # reset_hint tells you what to do. After resetting, post a NEW plan
+    # (replace=true) with the same step list so the tester sees the
+    # reset banner clear + can continue.
+
+  # Submission signal — full testing round complete
+  new_subs = result.plan.submissions.length - last_seen_subs_count
+  if new_subs > 0:
+    review the latest submission's per-step verdicts
+    if any 'fail': make the fix, redeploy via rl_env_deploy (idempotent),
+                   post a NEW plan (replace=true) targeting the fix area
+    if all 'pass' or 'skip': testing pass complete — exit loop, continue to Step 4
+```
+
+`rl_test_plan_status({ slug })` is the cheap one-shot if you don't want long-poll.
+
+The plan auto-deletes when `rl_env_destroy` fires at session end. **SKIP this whole step when MODE=local** — the dashboard isn't part of local-mode infra.
 
 If any row shows FAIL, fix it before presenting. If Local CI Proof or Chrome MCP e2e Pre-Review Summary is missing from your output, you skipped 3a or 3c.6 — go back. Do NOT proceed until operator gives direction.

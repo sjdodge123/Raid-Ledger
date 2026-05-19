@@ -175,11 +175,9 @@ const writePlanAtomic = async (slug, plan) => {
 
 const summarizePlan = (plan) => {
   const total = plan.steps.length;
-  // A step's effective verdict is the LATEST result (any tester). Pending
-  // = no results yet. The first-tester-wins ordering matches what the UI
-  // shows: most-recent verdict drives the badge color.
   const counts = { pass: 0, fail: 0, skip: 0, pending: 0 };
   let lastUpdated = plan.created_at;
+  let pendingResets = 0;
   for (const step of plan.steps) {
     const last = (step.results ?? []).slice(-1)[0];
     if (!last) counts.pending++;
@@ -187,8 +185,14 @@ const summarizePlan = (plan) => {
       counts[last.verdict] = (counts[last.verdict] ?? 0) + 1;
       if (last.ts > lastUpdated) lastUpdated = last.ts;
     }
+    for (const r of step.reset_requests ?? []) {
+      if (r.status === 'pending') {
+        pendingResets++;
+        if (r.ts > lastUpdated) lastUpdated = r.ts;
+      }
+    }
   }
-  return { total, ...counts, last_updated_at: lastUpdated };
+  return { total, ...counts, pending_resets: pendingResets, last_updated_at: lastUpdated };
 };
 
 const handleTestPlanGet = async (slug, res) => {
@@ -232,11 +236,153 @@ const handleTestPlanPut = async (slug, req, res) => {
       description: String(s.description ?? '').slice(0, 500),
       expected: s.expected ? String(s.expected).slice(0, 500) : null,
       category: s.category ? String(s.category).slice(0, 50) : null,
+      // Optional deep link the tester taps to jump straight to the test
+      // scenario (e.g. https://<slug>test.gamernight.net/lineups#common-ground).
+      // URLs are validated to start with http:// or https:// — we don't try
+      // to enforce same-origin since envs use multiple hostnames.
+      test_url: validateUrl(s.test_url),
+      // Free-form hint shown to the tester as a tooltip on the reset button
+      // (e.g. "Refresh data via /admin/seed-lineups"). Agent-authored at plan
+      // creation time — NEVER from tester input. Safe to render.
+      reset_hint: s.reset_hint ? String(s.reset_hint).slice(0, 300) : null,
       results: [],
+      // Reset requests are signals from testers to the agent ("this step is
+      // in a bad state, please reset"). Each request is just {tester, ts}
+      // — no free-form text. Agent sees them via rl_test_plan_status and
+      // decides what to do (the step.reset_hint guides them).
+      reset_requests: [],
     })),
   };
   await writePlanAtomic(slug, plan);
   sendJson(res, 201, { ok: true, plan, summary: summarizePlan(plan) });
+};
+
+const validateUrl = (raw) => {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim().slice(0, 500);
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  return trimmed;
+};
+
+// POST /api/test-plans/<slug>/submit
+// Batch verdict submission: tester completes the form locally then submits
+// the whole set in one request. Server applies them in order, enforcing
+// the sequential rule (each verdict's step_id must follow the previous).
+// All-or-nothing: any failure rejects the batch. This is the primary
+// pass/fail entrypoint for the buffered-local-state flow; the per-step
+// /step/<id>/result endpoint is still there for compatibility but the
+// dashboard UI no longer uses it for the normal verdict path.
+const handleTestPlanSubmit = async (slug, req, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+
+  if (!Array.isArray(body.verdicts) || body.verdicts.length === 0)
+    return sendJson(res, 400, { ok: false, error: 'verdicts[] required' });
+  if (body.verdicts.length > 100)
+    return sendJson(res, 400, { ok: false, error: 'max 100 verdicts per batch' });
+
+  const tester = typeof body.tester === 'string'
+    ? body.tester.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50)
+    : 'anon';
+
+  let plan;
+  try { plan = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+  catch (err) {
+    if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
+    return sendJson(res, 500, { ok: false, error: err.message });
+  }
+
+  // Validate the batch BEFORE mutating anything. We sort the incoming
+  // verdicts by step_id ascending and check each is a valid step + valid
+  // verdict + respects sequential ordering against the CURRENT plan state.
+  const incoming = body.verdicts
+    .filter((v) => Number.isInteger(v.step_id) && v.step_id >= 1)
+    .sort((a, b) => a.step_id - b.step_id);
+
+  for (const v of incoming) {
+    if (!VERDICTS.has(v.verdict))
+      return sendJson(res, 400, { ok: false, error: `step ${v.step_id}: verdict must be pass|fail|skip` });
+    if (!plan.steps.find((s) => s.id === v.step_id))
+      return sendJson(res, 404, { ok: false, error: `step ${v.step_id} not found` });
+  }
+  // Sequential check: every step ID smaller than the smallest in the batch
+  // must already have a verdict (some prior submitter). The batch itself
+  // must also be contiguous starting from the lowest unblocked step.
+  const incomingIds = new Set(incoming.map((v) => v.step_id));
+  for (const step of plan.steps) {
+    const hasExisting = (step.results ?? []).length > 0;
+    const inBatch = incomingIds.has(step.id);
+    if (!hasExisting && !inBatch) {
+      // step has no verdict and isn't in this batch — any LATER step in
+      // the batch would violate the sequential rule.
+      const laterInBatch = incoming.find((v) => v.step_id > step.id);
+      if (laterInBatch)
+        return sendJson(res, 409, {
+          ok: false, error: 'sequential ordering violated',
+          blocked_by: step.id, attempted: laterInBatch.step_id,
+        });
+    }
+  }
+
+  const ts = new Date().toISOString();
+  for (const v of incoming) {
+    const step = plan.steps.find((s) => s.id === v.step_id);
+    step.results = step.results ?? [];
+    step.results.push({ tester, verdict: v.verdict, ts });
+    if (step.results.length > 20) step.results = step.results.slice(-20);
+  }
+  // Record the submission event so the agent can see "tester X completed
+  // a round" rather than inferring from per-step timestamps.
+  plan.submissions = plan.submissions ?? [];
+  plan.submissions.push({
+    tester, ts, count: incoming.length,
+    verdicts: incoming.reduce((a, v) => ({ ...a, [v.verdict]: (a[v.verdict] || 0) + 1 }), {}),
+  });
+  if (plan.submissions.length > 50) plan.submissions = plan.submissions.slice(-50);
+
+  await writePlanAtomic(slug, plan);
+  sendJson(res, 200, { ok: true, plan, summary: summarizePlan(plan) });
+};
+
+// POST /api/test-plans/<slug>/step/<id>/reset-request
+// Tester signals "this step needs a reset before I can verify it again." We
+// append a request with the tester's name and timestamp; the agent reads
+// pending requests via rl_test_plan_status. Constrained signal — no
+// free-form text from the tester.
+const handleTestPlanStepResetRequest = async (slug, stepIdRaw, req, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  const stepId = parseInt(stepIdRaw, 10);
+  if (!Number.isInteger(stepId) || stepId < 1)
+    return sendJson(res, 400, { ok: false, error: 'invalid step id' });
+
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+  const tester = typeof body.tester === 'string'
+    ? body.tester.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50)
+    : 'anon';
+
+  let plan;
+  try { plan = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+  catch (err) {
+    if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
+    return sendJson(res, 500, { ok: false, error: err.message });
+  }
+  const step = plan.steps.find((s) => s.id === stepId);
+  if (!step) return sendJson(res, 404, { ok: false, error: 'step not found' });
+
+  step.reset_requests = step.reset_requests ?? [];
+  step.reset_requests.push({
+    tester,
+    ts: new Date().toISOString(),
+    status: 'pending',
+  });
+  if (step.reset_requests.length > 20) step.reset_requests = step.reset_requests.slice(-20);
+
+  await writePlanAtomic(slug, plan);
+  sendJson(res, 200, { ok: true, plan, summary: summarizePlan(plan) });
 };
 
 const handleTestPlanStepResult = async (slug, stepIdRaw, req, res) => {
@@ -347,6 +493,8 @@ const serveStatic = async (req, res) => {
 // hot path stays predictable; no Express, no router framework.
 const RE_PLAN = /^\/api\/test-plans\/([a-z0-9-]+)$/;
 const RE_STEP = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/result$/;
+const RE_RESET = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/reset-request$/;
+const RE_SUBMIT = /^\/api\/test-plans\/([a-z0-9-]+)\/submit$/;
 
 const server = createServer(async (req, res) => {
   // Liveness probe for compose healthchecks / orchestrator pings.
@@ -375,6 +523,16 @@ const server = createServer(async (req, res) => {
   if (stepMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
     return handleTestPlanStepResult(stepMatch[1], stepMatch[2], req, res);
+  }
+  const resetMatch = req.url && RE_RESET.exec(req.url);
+  if (resetMatch) {
+    if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    return handleTestPlanStepResetRequest(resetMatch[1], resetMatch[2], req, res);
+  }
+  const submitMatch = req.url && RE_SUBMIT.exec(req.url);
+  if (submitMatch) {
+    if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
+    return handleTestPlanSubmit(submitMatch[1], req, res);
   }
   await serveStatic(req, res);
 });

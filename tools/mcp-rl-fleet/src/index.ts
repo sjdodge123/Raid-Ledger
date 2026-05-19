@@ -196,6 +196,8 @@ server.tool(
       description: z.string().min(1).max(500),
       expected: z.string().max(500).optional(),
       category: z.string().max(50).optional(),
+      test_url: z.string().url().max(500).optional(),
+      reset_hint: z.string().max(300).optional(),
     })).min(1).max(100),
     replace: z.boolean().optional(),
     created_by: z.string().max(200).optional(),

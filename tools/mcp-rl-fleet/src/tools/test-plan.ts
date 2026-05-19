@@ -75,12 +75,27 @@ const shellQuote = (s: string) => `'${s.replace(/'/g, "'\"'\"'")}'`;
 // ----- rl_test_plan_create -----
 export const CREATE_TOOL = 'rl_test_plan_create';
 export const CREATE_DESC =
-  "Post a test checklist tied to a fleet env slug. Steps render on the fleet.gamernight.net dashboard with pass/fail/skip buttons for the operator + external testers to tap. Ordering is enforced sequentially (a step is locked until all prior steps have a verdict). Returns the dashboard URL. By default refuses to overwrite an existing plan — pass replace=true to clobber. Auto-cleared on rl_env_destroy. Use after rl_env_deploy when you want the operator to validate specific flows.";
+  "Post a test checklist tied to a fleet env slug. Steps render on the fleet.gamernight.net dashboard with pass/fail/skip buttons (and optional ↗ deep link + ↻ reset button per step) for the operator + external testers to tap. Ordering is enforced sequentially. WRITE SMALL, ACTIONABLE STEPS the user can perform in seconds — bad: 'Verify the lineups page works'. Good: 'Open /lineups → Common Ground tab, expect ≥3 themed rows'. Each step SHOULD include a `test_url` deep-linking to the right view (construct from the env_url returned by rl_env_deploy) and SHOULD include a `reset_hint` if the step mutates state that may need clearing for a re-test (e.g. 'Refresh seed data via /admin/seed-lineups'). When tester taps ↻ reset, agent gets a pending_resets signal via rl_test_plan_status / rl_test_plan_wait — execute the documented reset (the hint tells YOU what to do too), then post a verdict to clear the reset state. By default refuses to overwrite existing plan; pass replace=true to clobber. Auto-cleared on rl_env_destroy.";
 
 export interface CreatePlanStep {
   description: string;
   expected?: string;
   category?: string;
+  /**
+   * Deep link to the test scenario. The dashboard renders this as a "↗"
+   * link next to the step so the tester can jump straight to the right
+   * place (e.g. https://<slug>test.gamernight.net/lineups#common-ground).
+   * MUST start with http:// or https://. Construct using the env_url
+   * returned by rl_env_deploy.
+   */
+  test_url?: string;
+  /**
+   * Free-form hint shown to the tester as a tooltip on the reset button
+   * — e.g. "Refresh seed data via /admin/seed-lineups". Presence of
+   * reset_hint is what causes the reset button to render. Omit for
+   * stateless steps that don't need a reset path.
+   */
+  reset_hint?: string;
 }
 export interface CreatePlanParams {
   slug: string;

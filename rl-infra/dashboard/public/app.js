@@ -189,6 +189,28 @@ const renderTestPlanSection = (slug, summary) => {
   return section;
 };
 
+// ----- Buffered verdicts (local until Submit) -----
+// Tester taps pass/fail/skip → stored in localStorage keyed by
+// slug:plan_created_at:step_id. Survives page refreshes. Cleared on
+// successful submit OR when a new plan replaces the existing one.
+const draftKey = (slug, planCreatedAt) => `rl-test-draft:${slug}:${planCreatedAt}`;
+
+const loadDraft = (slug, planCreatedAt) => {
+  try {
+    const raw = localStorage.getItem(draftKey(slug, planCreatedAt));
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+};
+
+const saveDraft = (slug, planCreatedAt, draft) => {
+  try { localStorage.setItem(draftKey(slug, planCreatedAt), JSON.stringify(draft)); }
+  catch { /* quota or disabled — degrade silently */ }
+};
+
+const clearDraft = (slug, planCreatedAt) => {
+  try { localStorage.removeItem(draftKey(slug, planCreatedAt)); } catch {}
+};
+
 const loadTestPlanInto = async (slug, container) => {
   try {
     const r = await fetch(`/api/test-plans/${slug}`, { cache: 'no-store' });
@@ -198,9 +220,13 @@ const loadTestPlanInto = async (slug, container) => {
     }
     const { plan } = await r.json();
     container.replaceChildren();
+    // Load any in-progress draft for THIS plan version.
+    const draft = loadDraft(slug, plan.created_at);
     plan.steps.forEach((step) => {
-      container.appendChild(renderStep(slug, step, plan.steps));
+      container.appendChild(renderStep(slug, plan, step, draft));
     });
+    // Submit + revision-watermark footer.
+    container.appendChild(renderSubmitFooter(slug, plan, draft));
   } catch (err) {
     container.textContent = `fetch failed: ${err.message}`;
   }
@@ -211,43 +237,86 @@ const lastVerdict = (step) => {
   return last ? last.verdict : null;
 };
 
-const renderStep = (slug, step, allSteps) => {
+const renderStep = (slug, plan, step, draft) => {
   const row = el('div', { class: 'plan-step' });
 
-  // Sequential lock: a step is disabled until ALL earlier steps have at
-  // least one result. The server enforces the same rule, but the UI
-  // mirrors it so testers see the lock visually.
+  // Sequential lock now considers BOTH server-persisted results AND the
+  // current tester's local draft. So tapping step 1 in the draft unlocks
+  // step 2 immediately — no need to submit between every step.
   let locked = false;
-  for (const s of allSteps) {
+  for (const s of plan.steps) {
     if (s.id >= step.id) break;
-    if (!s.results || s.results.length === 0) { locked = true; break; }
+    const hasServerResult = s.results && s.results.length > 0;
+    const hasDraft = draft[s.id];
+    if (!hasServerResult && !hasDraft) { locked = true; break; }
   }
 
-  const verdict = lastVerdict(step);
-  row.classList.add(verdict ? `verdict-${verdict}` : 'verdict-pending');
+  const draftVerdict = draft[step.id]; // 'pass' | 'fail' | 'skip' | undefined
+  const serverVerdict = lastVerdict(step);
+  const effective = draftVerdict || serverVerdict;
+  row.classList.add(effective ? `verdict-${effective}` : 'verdict-pending');
+  if (draftVerdict) row.classList.add('has-draft');
   if (locked) row.classList.add('locked');
+
+  // Reset is the ONE channel that still POSTs immediately — it's an
+  // interrupt asking the agent for help mid-test, not a verdict.
+  const pendingReset = (step.reset_requests ?? [])
+    .filter((r) => r.status === 'pending').slice(-1)[0];
+  if (pendingReset) row.classList.add('reset-pending');
 
   const idTag = el('span', { class: 'step-id', text: `#${step.id}` });
   const desc = el('div', { class: 'step-desc' });
-  desc.appendChild(el('div', { class: 'step-text', text: step.description }));
+  const textRow = el('div', { class: 'step-text' });
+  textRow.appendChild(document.createTextNode(step.description));
+  if (step.test_url) {
+    const link = el('a', {
+      href: step.test_url, target: '_blank', rel: 'noopener',
+      class: 'step-link', text: ' ↗',
+    });
+    link.title = `Open: ${step.test_url}`;
+    textRow.appendChild(link);
+  }
+  desc.appendChild(textRow);
   if (step.expected) desc.appendChild(el('div', { class: 'step-expected', text: `expected: ${step.expected}` }));
+  if (pendingReset) {
+    desc.appendChild(el('div', { class: 'step-reset-banner',
+      text: `↻ reset requested by ${pendingReset.tester} — agent will reset & post a new plan` }));
+  }
 
   const buttons = el('div', { class: 'step-buttons' });
   const passBtn = el('button', { class: 'btn-pass', text: '✓ pass' });
   const failBtn = el('button', { class: 'btn-fail', text: '✗ fail' });
   const skipBtn = el('button', { class: 'btn-skip', text: '~ skip' });
-  if (locked) {
+  if (draftVerdict === 'pass') passBtn.classList.add('selected');
+  if (draftVerdict === 'fail') failBtn.classList.add('selected');
+  if (draftVerdict === 'skip') skipBtn.classList.add('selected');
+  const resetBtn = step.reset_hint ? el('button', { class: 'btn-reset', text: '↻ reset' }) : null;
+  if (resetBtn) {
+    resetBtn.title = `Request agent reset — ${step.reset_hint}`;
+    if (pendingReset) {
+      resetBtn.disabled = true;
+      resetBtn.title = 'Reset already requested — waiting for the agent';
+    } else {
+      resetBtn.addEventListener('click', () => requestReset(slug, step.id));
+    }
+  }
+
+  if (locked || pendingReset) {
     passBtn.disabled = true; failBtn.disabled = true; skipBtn.disabled = true;
-    passBtn.title = failBtn.title = skipBtn.title =
-      'Complete the prior steps first.';
+    const reason = pendingReset
+      ? 'A reset is in flight — wait for the agent to post a new plan.'
+      : 'Complete the prior steps first (set a verdict in the draft).';
+    passBtn.title = failBtn.title = skipBtn.title = reason;
   } else {
-    passBtn.addEventListener('click', () => recordVerdict(slug, step.id, 'pass'));
-    failBtn.addEventListener('click', () => recordVerdict(slug, step.id, 'fail'));
-    skipBtn.addEventListener('click', () => recordVerdict(slug, step.id, 'skip'));
+    // Buffer to localStorage instead of POSTing. Re-renders the section
+    // so the next step unlocks visually.
+    passBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'pass'));
+    failBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'fail'));
+    skipBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'skip'));
   }
   buttons.append(passBtn, failBtn, skipBtn);
+  if (resetBtn) buttons.appendChild(resetBtn);
 
-  // Per-step tester history (last 3 entries).
   if (step.results?.length) {
     const hist = el('div', { class: 'step-history' });
     step.results.slice(-3).forEach((r) => {
@@ -261,20 +330,103 @@ const renderStep = (slug, step, allSteps) => {
   return row;
 };
 
-const recordVerdict = async (slug, stepId, verdict) => {
+const bufferVerdict = (slug, plan, stepId, verdict) => {
+  const draft = loadDraft(slug, plan.created_at);
+  // Toggle: tapping the same verdict again clears it (so testers can undo
+  // before submitting). Tapping a different verdict overrides.
+  if (draft[stepId] === verdict) delete draft[stepId];
+  else draft[stepId] = verdict;
+  saveDraft(slug, plan.created_at, draft);
+  // Re-render just this card's plan section by triggering a tick.
+  tick();
+};
+
+const renderSubmitFooter = (slug, plan, draft) => {
+  const footer = el('div', { class: 'plan-footer' });
+  const draftCount = Object.keys(draft).length;
+  const totalSteps = plan.steps.length;
+  const allMarked = plan.steps.every(
+    (s) => draft[s.id] || (s.results && s.results.length > 0),
+  );
+
+  const statusLine = el('div', { class: 'plan-footer-status' });
+  if (draftCount === 0) {
+    statusLine.textContent = 'Tap pass/fail/skip on each step. Nothing sent until you Submit.';
+  } else {
+    statusLine.textContent = `${draftCount} of ${totalSteps} drafted — ${allMarked ? 'ready to submit' : 'tap the remaining steps then Submit'}`;
+  }
+  footer.appendChild(statusLine);
+
+  const actions = el('div', { class: 'plan-footer-actions' });
+  const submitBtn = el('button', { class: 'btn-submit', text: 'Submit test results' });
+  submitBtn.disabled = draftCount === 0;
+  if (draftCount === 0) submitBtn.title = 'No draft verdicts yet — tap a step button first';
+  submitBtn.addEventListener('click', () => submitDraft(slug, plan, draft));
+  actions.appendChild(submitBtn);
+  if (draftCount > 0) {
+    const clearBtn = el('button', { class: 'btn-clear-draft', text: 'Clear draft' });
+    clearBtn.addEventListener('click', () => { clearDraft(slug, plan.created_at); tick(); });
+    actions.appendChild(clearBtn);
+  }
+  footer.appendChild(actions);
+
+  // Submission history — small, last 3 entries, so testers see "round 1
+  // already submitted by Jake at 8:32pm — yours will be round 2".
+  if (plan.submissions?.length) {
+    const subs = el('div', { class: 'plan-submissions' });
+    subs.appendChild(el('div', { class: 'subs-label', text: 'Recent submissions:' }));
+    plan.submissions.slice(-3).forEach((sub) => {
+      const summary = Object.entries(sub.verdicts)
+        .map(([k, v]) => `${v}${k[0]}`).join(' ');
+      subs.appendChild(el('div', { class: 'subs-entry',
+        text: `${sub.tester} · ${fmtTime(sub.ts)} · ${summary}` }));
+    });
+    footer.appendChild(subs);
+  }
+  return footer;
+};
+
+const submitDraft = async (slug, plan, draft) => {
   const tester = getTesterName();
+  const verdicts = Object.entries(draft).map(([stepId, verdict]) => ({
+    step_id: parseInt(stepId, 10), verdict,
+  }));
+  if (verdicts.length === 0) return;
   try {
-    const r = await fetch(`/api/test-plans/${slug}/step/${stepId}/result`, {
+    const r = await fetch(`/api/test-plans/${slug}/submit`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ verdict, tester }),
+      body: JSON.stringify({ tester, verdicts }),
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
-      alert(`Could not record: ${j.error || `HTTP ${r.status}`}`);
+      alert(`Submit failed: ${j.error || `HTTP ${r.status}`}`);
       return;
     }
-    // Refresh the env card's plan section by re-fetching state.
+    // Clear local draft + refresh. Plan stays on server until agent
+    // posts a replacement (which they may do automatically based on
+    // the verdicts they just received).
+    clearDraft(slug, plan.created_at);
+    tick();
+  } catch (err) {
+    alert(`Network error: ${err.message}`);
+  }
+};
+
+const requestReset = async (slug, stepId) => {
+  const tester = getTesterName();
+  if (!confirm('Request the agent reset this step? They\'ll see the request and may post a new plan with the step ready to re-test.')) return;
+  try {
+    const r = await fetch(`/api/test-plans/${slug}/step/${stepId}/reset-request`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tester }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(`Reset failed: ${j.error || `HTTP ${r.status}`}`);
+      return;
+    }
     tick();
   } catch (err) {
     alert(`Network error: ${err.message}`);
