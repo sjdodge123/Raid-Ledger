@@ -88,7 +88,7 @@ Three custom MCP servers provide tools for environment management, story trackin
 
 ### `mcp-rl-fleet` — rl-infra Remote Test Fleet (`tools/mcp-rl-fleet/`)
 
-**STRICT — worktree_path:** every rl_* tool that touches a claimed slot (`rl_claim`, `rl_release`, `rl_env_spin`, `rl_env_deploy`, `rl_env_build_image_from_runner`, `rl_run_on_runner`, `rl_validate_ci`) accepts a `worktree_path` parameter. **If you're operating from a git worktree, you MUST pass `worktree_path: "<absolute path to your worktree>"` on every call.** Without it, the MCP server uses its own cwd (where Claude was started — usually the main repo) which (a) Mutagen-syncs the wrong branch's files and (b) hashes to a different `RL_AGENT_ID` so subsequent calls can't find your slot. Use the same value on every call — e.g. `/Users/sdodge/Documents/Projects/Raid-Ledger--rok-1297`.
+**STRICT — worktree_path:** every rl_* tool that touches a claimed slot (`rl_claim`, `rl_release`, `rl_env_spin`, `rl_env_destroy`, `rl_env_deploy`, `rl_env_build_image_from_runner`, `rl_run_on_runner`, `rl_validate_ci`) accepts a `worktree_path` parameter. **If you're operating from a git worktree, you MUST pass `worktree_path: "<absolute path to your worktree>"` on every call.** Without it, the MCP server uses its own cwd (where Claude was started — usually the main repo) which (a) Mutagen-syncs the wrong branch's files and (b) hashes to a different `RL_AGENT_ID` so subsequent calls can't find your slot. Use the same value on every call — e.g. `/Users/sdodge/Documents/Projects/Raid-Ledger--rok-1297`.
 
 | Tool | Use When |
 |------|----------|

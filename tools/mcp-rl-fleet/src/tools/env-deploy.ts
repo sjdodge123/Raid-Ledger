@@ -65,7 +65,7 @@ export interface EnvDeployResult {
    */
   admin_password?: string | null;
   steps: Record<string, { ok: boolean; took_s?: number; detail?: string; error?: string }>;
-  /** Set when top-level ok=false. Short machine-readable code (e.g. "sync_settings_failed"). */
+  /** Set when top-level ok=false. Short machine-readable code: "sync_settings_failed" | "clone_prod_failed". */
   error?: string;
   message: string;
 }
@@ -187,6 +187,8 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
   // 6. Optional: clone prod data into the env on top of the synced settings.
   // The clone tool itself restarts the allinone, so we'd be double-restarting
   // if step 5 already ran — that's fine (restart is idempotent + cheap).
+  let cloneFailed = false;
+  let cloneFailureDetail: string | undefined;
   if (params.clone_prod) {
     t = now();
     const cp = await envCloneProd.execute({
@@ -194,21 +196,36 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
       skip_local_refresh: params.clone_prod_skip_local_refresh,
     });
     if (!cp.ok) {
-      log('clone_prod', false, t, undefined, cp.stderr || 'clone failed');
-      // Non-fatal — env still usable with just synced settings.
+      cloneFailureDetail = cp.stderr || 'clone failed';
+      log('clone_prod', false, t, undefined, cloneFailureDetail);
+      // Treat as FATAL when caller explicitly opted in via clone_prod=true.
+      // Same shape as sync_settings (M-MCP-1, operator pref 2026-05-19):
+      // opt-in IS consent — testers expect prod-shaped rows, silent
+      // non-fatal logging makes them chase phantom bugs against an env
+      // that has settings but no prod data. Propagate as top-level failure.
+      cloneFailed = true;
     } else {
       log('clone_prod', true, t, cp.restarted_for_settings ? 'restarted' : 'no-restart');
     }
   }
 
   const settingsFailed = !params.skip_sync && !syncedSettings;
+  const overallFailed = settingsFailed || cloneFailed;
   const baseMsg = `Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} / (password in admin_password field).`;
-  const message = settingsFailed
-    ? `FAILED: sync_settings step did not succeed (${syncFailureDetail ?? 'unknown error'}). The container is up at ${sp.url} but has NO Discord/IGDB/ITAD credentials AND admin@local was NOT seeded — most flows will fail. Re-run rl_env_deploy or call rl_env_sync_from_local directly to recover. Admin email would be ${sp.admin_email}.`
-    : baseMsg;
+  let message: string;
+  let errorCode: string | undefined;
+  if (settingsFailed) {
+    message = `FAILED: sync_settings step did not succeed (${syncFailureDetail ?? 'unknown error'}). The container is up at ${sp.url} but has NO Discord/IGDB/ITAD credentials AND admin@local was NOT seeded — most flows will fail. Re-run rl_env_deploy or call rl_env_sync_from_local directly to recover. Admin email would be ${sp.admin_email}.`;
+    errorCode = 'sync_settings_failed';
+  } else if (cloneFailed) {
+    message = `FAILED: clone_prod step did not succeed (${cloneFailureDetail ?? 'unknown error'}). The container is up at ${sp.url} with synced settings, but prod-shaped data was NOT loaded. Tester-visible rows will be empty/default. Re-run rl_env_deploy with clone_prod=true (and clone_prod_skip_local_refresh=true if local DB is already fresh), or call rl_env_clone_prod directly to recover. Admin login: ${sp.admin_email} / (password in admin_password field).`;
+    errorCode = 'clone_prod_failed';
+  } else {
+    message = baseMsg;
+  }
 
   return {
-    ok: !settingsFailed,
+    ok: !overallFailed,
     slug: params.slug,
     url: sp.url,
     internal_url: sp.internal_url,
@@ -216,7 +233,7 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     admin_email: sp.admin_email,
     admin_password: sp.admin_password ?? null,
     steps,
-    error: settingsFailed ? 'sync_settings_failed' : undefined,
+    error: errorCode,
     message,
   };
 }

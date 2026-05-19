@@ -77,6 +77,7 @@ server.tool(
   {
     slug: z.string().regex(/^[a-z0-9-]+$/, 'slug must match [a-z0-9-]+'),
     force: z.boolean().optional(),
+    worktree_path: z.string().optional(),
   },
   async (p) => jsonResult(await envDestroy.execute(p)),
 );
