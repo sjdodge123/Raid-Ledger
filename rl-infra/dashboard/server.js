@@ -25,6 +25,22 @@ const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB; phone screenshots are typ
 // as links per env. env-spin already writes Traefik routes for both.
 const PUBLIC_DOMAIN = process.env.RL_PUBLIC_DOMAIN || '';
 
+// Agent-only auth for the comments-leak path. `?include_comments=1` is the
+// agent's read channel for tester comment bodies + attachment URLs. Without
+// gating, any slug-knower can scrape every comment by appending the query
+// param. Default: default-allow with a boot warning so dev/local stays
+// frictionless; production sets RL_AGENT_TOKEN in /srv/rl-infra/.env and the
+// MCP server (mcp-rl-fleet/src/lib/dashboard-fetch.*) sends it as
+// X-Agent-Token on every rl_test_plan_status call. When the token IS set,
+// requests without a matching header get the same response a tester would
+// (comment bodies stripped) — they don't 401, so the dashboard UI keeps
+// working with no client changes.
+const RL_AGENT_TOKEN = process.env.RL_AGENT_TOKEN || '';
+if (!RL_AGENT_TOKEN) {
+  // eslint-disable-next-line no-console
+  console.warn('[rl-dashboard] RL_AGENT_TOKEN unset — ?include_comments=1 is OPEN to any slug-knower. Set in /srv/rl-infra/.env for prod.');
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -49,18 +65,66 @@ const sendJson = (res, status, body) => {
 // 3 comments + 2 attachments every 30s indefinitely — well past any
 // human pace, well under any abuse case.
 //
+// Cumulative byte cap: 30 req/min × 5 MB/req still allows ~9 GB/hour per IP
+// — enough to fill /state during a sustained attack. Track per-IP bytes over
+// a 24h rolling window and 429 anything that puts the IP over BYTE_LIMIT_MAX.
+// 100 MB / 24h is generous for a legitimate tester session (~50 screenshots
+// at 2 MB each) and impossible for a fill-the-disk attack to live under.
+//
 // Memory: one entry per active IP, pruned lazily when accessed AND
 // opportunistically when the map exceeds RATE_LIMIT_MAP_CAP entries.
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAP_CAP = 1000;
+const BYTE_LIMIT_MAX = 100 * 1024 * 1024; // 100 MB
+const BYTE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
 const rateBuckets = new Map();
+// Per-IP cumulative byte tracking. Each entry: { samples: [{ts, bytes}, ...] }
+// kept sorted by ts ascending; prune anything older than BYTE_LIMIT_WINDOW_MS
+// on every access.
+const byteBuckets = new Map();
 
 const clientIp = (req) => {
   // socket.remoteAddress reflects the immediate peer. X-Forwarded-For is
   // NOT consulted because anyone with LAN access can forge it. Per-IP is
   // best-effort, not auth.
   return req.socket?.remoteAddress || 'unknown';
+};
+
+// Returns true if the IP's cumulative byte usage in the trailing
+// BYTE_LIMIT_WINDOW_MS is under BYTE_LIMIT_MAX after `nextBytes` is added.
+// Writes a 429 response when over. Caller must NOT write further to res
+// when this returns false. Records `nextBytes` against the IP on success
+// so subsequent calls see the cumulative total.
+const byteQuotaOk = (req, res, nextBytes) => {
+  const ip = clientIp(req);
+  const now = Date.now();
+  const cutoff = now - BYTE_LIMIT_WINDOW_MS;
+  let samples = byteBuckets.get(ip) ?? [];
+  samples = samples.filter((s) => s.ts > cutoff);
+  const used = samples.reduce((a, s) => a + s.bytes, 0);
+  if (used + nextBytes > BYTE_LIMIT_MAX) {
+    byteBuckets.set(ip, samples);
+    res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '3600' });
+    res.end(JSON.stringify({
+      ok: false,
+      error: 'byte quota exceeded',
+      used_bytes: used,
+      limit_bytes: BYTE_LIMIT_MAX,
+      window_hours: 24,
+    }));
+    return false;
+  }
+  samples.push({ ts: now, bytes: nextBytes });
+  byteBuckets.set(ip, samples);
+  if (byteBuckets.size > RATE_LIMIT_MAP_CAP) {
+    for (const [k, v] of byteBuckets) {
+      const fresh = v.filter((s) => s.ts > cutoff);
+      if (fresh.length === 0) byteBuckets.delete(k);
+      else byteBuckets.set(k, fresh);
+    }
+  }
+  return true;
 };
 
 // Returns true if the request should proceed; false (and writes a 429
@@ -285,27 +349,60 @@ const stripCommentBodies = (plan) => ({
 // Strip both open + close tags before interpolation so the wrap stays
 // unambiguous. We replace rather than encode (e.g. HTML entities) because
 // the consumer is an LLM context window, not a browser DOM.
+//
+// Tolerant match: tolerant XML/HTML LLM parsers treat `</untrusted-tester-comment >`
+// (whitespace before `>`), `< / untrusted-tester-comment>` (spaces around the slash),
+// and tags with stray attributes (`<untrusted-tester-comment foo="bar">`) as the
+// same close/open tag. The strict literal-tag regex used to miss all of these,
+// letting a hostile tester forge the boundary. Match: optional leading whitespace,
+// optional `/`, optional whitespace, the tag name, then ANYTHING up to the `>`.
 const stripWrapTags = (body) =>
   typeof body === 'string'
-    ? body.replace(/<\/?untrusted-tester-comment>/gi, '[tag-stripped]')
+    ? body.replace(/<\s*\/?\s*untrusted-tester-comment\s*[^>]*>/gi, '[tag-stripped]')
     : body;
 
 // Attachment URLs flow to the agent OUTSIDE the wrap, so they must match
 // the legitimate shape (the URL the upload handler returns). Anything
 // else — including agent-prompt-injection payloads in this field — is
-// nulled out. The legitimate shape is well under 100 chars; we cap to
-// 100 as belt-and-suspenders.
+// nulled out. Legitimate URL shape:
+//   /api/test-plans/<slug>/attachment/<id>.<ext>
+//   - slug up to 63 chars (DNS label limit, see validSlug)
+//   - id is `Date.now().toString(36) + '-' + 8 random b36 chars` (~18 chars)
+//   - ext is 3-4 chars
+// Total: ~30 (path prefix) + 63 (slug) + 12 (attachment/) + 18 (id) + 5 (.ext) ~= 128 chars
+// Cap at 160 with margin; the anchored ^...$ regex still rejects anything longer
+// that happens to start with the legitimate prefix. The previous 100-char cap
+// silently truncated and rejected legitimate uploads (self-critique).
 const ATTACHMENT_URL_RE = /^\/api\/test-plans\/[a-z0-9-]+\/attachment\/[a-z0-9-]+\.(png|jpg|webp)$/;
 const sanitizeAttachmentUrl = (u) => {
   if (typeof u !== 'string') return null;
-  const trimmed = u.slice(0, 100);
+  const trimmed = u.slice(0, 160);
   return ATTACHMENT_URL_RE.test(trimmed) ? trimmed : null;
 };
 
+// Plan metadata fields (title, step.description, step.reset_hint, step.test_url)
+// flow to the agent OUTSIDE the <untrusted-tester-comment> wrap because they
+// are conceptually "trusted" (agent-authored at plan creation time). But the
+// PUT/POST /api/test-plans/<slug> endpoint is UNAUTHENTICATED — any tester on
+// the LAN (or anyone with the slug) can overwrite the plan with attacker-
+// controlled metadata, then the next rl_test_plan_status call lands that
+// content unwrapped in the agent's context. Strip wrap tags from every
+// agent-visible metadata field so a tester can't forge a "trusted" boundary
+// even if they manage to overwrite the plan body. This is cheap and closes
+// the prompt-injection surface without adding auth.
+const stripWrapMaybe = (v) => (typeof v === 'string' ? stripWrapTags(v) : v);
+
 const wrapCommentBodies = (plan) => ({
   ...plan,
+  title: stripWrapMaybe(plan.title),
+  created_by: stripWrapMaybe(plan.created_by),
   steps: plan.steps.map((s) => ({
     ...s,
+    description: stripWrapMaybe(s.description),
+    expected: stripWrapMaybe(s.expected),
+    category: stripWrapMaybe(s.category),
+    reset_hint: stripWrapMaybe(s.reset_hint),
+    test_url: stripWrapMaybe(s.test_url),
     comments: (s.comments ?? []).map((c) => ({
       tester: c.tester,
       ts: c.ts,
@@ -327,9 +424,23 @@ const wrapCommentBodies = (plan) => ({
 // Decide which transform applies to a given response based on the
 // request's query string. Used by both the GET status handler and the
 // POST handlers that return the plan.
+//
+// `?include_comments=1` is the agent-facing path and exposes comment bodies +
+// attachment URLs. When RL_AGENT_TOKEN is configured, the caller MUST send a
+// matching X-Agent-Token header or the comments stay stripped (we don't 401
+// — testers and the dashboard UI still get a useful response). When the env
+// var is unset (dev/local), the query alone is enough — a boot-time warning
+// is logged so the operator knows it's open.
+const agentAuthorized = (req) => {
+  if (!RL_AGENT_TOKEN) return true; // dev mode: allow with warning at boot
+  const header = req?.headers?.['x-agent-token'];
+  return typeof header === 'string' && header === RL_AGENT_TOKEN;
+};
 const planForResponse = (plan, req) => {
   const includeComments = req && req.url && req.url.includes('include_comments=1');
-  return includeComments ? wrapCommentBodies(plan) : stripCommentBodies(plan);
+  return includeComments && agentAuthorized(req)
+    ? wrapCommentBodies(plan)
+    : stripCommentBodies(plan);
 };
 
 const handleTestPlanGet = async (slug, req, res) => {
@@ -514,6 +625,11 @@ const handleAttachmentUpload = async (slug, req, res) => {
     return sendJson(res, 400, { ok: false, error: 'empty file' });
   if (buf.length > MAX_ATTACHMENT_BYTES)
     return sendJson(res, 400, { ok: false, error: `file too large (max ${MAX_ATTACHMENT_BYTES} bytes)` });
+
+  // Cumulative byte quota: 30 req/min × 5 MB/req would otherwise allow
+  // ~9 GB/hour per IP. byteQuotaOk writes its own 429 + retry-after when
+  // exceeded; bail without writing further.
+  if (!byteQuotaOk(req, res, buf.length)) return;
 
   const dir = join(ATTACHMENTS_DIR, slug);
   await mkdir(dir, { recursive: true });
