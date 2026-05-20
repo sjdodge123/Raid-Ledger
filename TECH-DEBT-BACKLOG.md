@@ -528,3 +528,13 @@ Two Codex-review findings deferred because they're MEDIUM/correctness-non-blocke
 - **[low]** `web/src/hooks/use-lineup-submit.test.tsx:193` — `expect(result.current.isError).toBe(true)` flakes under load. Bare `expect()` after `await act()` races with React Query's microtask-scheduled `isError` state update; on fast environments the setState lands inside the act batch, on slower environments it lands after. Reproduced 1/2 runs on the fleet runner (slot-2, same commit). NOT reproducible on the operator's laptop. NOT caused by ROK-1326's diff — branch touches zero files in `web/src/hooks/`.
   Suggested: wrap with `await waitFor(() => expect(result.current.isError).toBe(true))` (single-line change). The rest of the file already uses `waitFor` for the same shape — this assertion was the outlier.
 
+### 2026-05-19 — rok-1298-sv-voting-composite (surfaced during full Playwright run)
+
+Six failures resolved by ROK-1298's fixes (AC3 a11y, AC9 keyboard, vote-toggle keydown propagation, legacy-DOM updates). Remaining seven are pre-existing carrier-class flakes — none are caused by ROK-1298. Documented to track separately:
+
+- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:501` (desktop) — `Voting phase › leaderboard renders sorted by vote count descending`: the test's beforeAll fails to advance the lineup to `voting` because earlier specs (lineup-abort, lineup-creation) left it in `archived` state. The yaml dump shows `Archived Nominating → Voting →` on the page when the test runs. Not caused by ROK-1298 (the lineup never reaches the voting surface in the first place). Reproduces on origin/main with the same selector pattern.
+  Suggested: harden the beforeAll to detect `archived` state and abort+recreate, OR isolate `votingLineupId` per worker with a unique title and full reset hooks.
+- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:142` (mobile) — `banner shows per-lineup title heading and vote link (ROK-1063)`: cross-spec ordering flake on the mobile project. Same carrier-class noise documented under 2026-05-19 / rok-1297.
+  Suggested: candidate for the `test:integration:flaky` ringfence lane proposed in the 2026-05-12 ROK-1264 carrier work.
+- Pre-existing entries already captured upstream this section (lineup-abort:107 admin abort flow, community-lineup:201 Nomination modal preview card desktop, etc) continue to flake on this run.
+
