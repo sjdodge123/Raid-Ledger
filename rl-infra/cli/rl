@@ -151,6 +151,9 @@ cmd_claim() {
         if [[ -n "$SLOT" ]]; then
             echo "$RESULT" | jq .
             ensure_mutagen_sync "$SLOT"
+            # ROK-1331 M4 AC11: heartbeat must start BEFORE scaffold so a slow
+            # remote git fetch doesn't let the claim expire mid-scaffold.
+            start_heartbeat_daemon "$SLOT"
             scaffold_runner_git "$SLOT" "$branch"
             # ROK-1326 fix-11: preempt the npm-ci cost on the FIRST
             # validate-ci/test run. Mutagen excludes node_modules so a
@@ -162,7 +165,6 @@ cmd_claim() {
             # idle setup time. Skips silently if a prior session left a
             # populated node_modules.
             install_runner_deps "$SLOT" &
-            start_heartbeat_daemon "$SLOT"
             echo
             echo "claimed slot $SLOT"
             echo "  worktree synced to: $(jq -r '.worktree' <<<"$RESULT")"
@@ -512,7 +514,7 @@ cmd_doctor() {
         echo -n "SSH connect:          "; ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" 'echo ok' 2>&1 || echo "FAILED"
         echo -n "Orchestrator:         "; ssh_run status >/dev/null 2>&1 && echo "ok" || echo "FAILED"
         echo -n "Mutagen daemon:       "; pgrep -f "mutagen daemon run" >/dev/null && echo "running" || echo "not running (start with: mutagen daemon start)"
-        echo -n "Active sync sessions: "; mutagen sync list 2>/dev/null | grep -c '^Name:' || echo 0
+        echo -n "Active sync sessions: "; mutagen sync list 2>/dev/null | grep -c '^Name:' || true
     else
         echo "(local mode — remote checks skipped)"
         echo -n "Docker:               "; docker info >/dev/null 2>&1 && echo "ok" || echo "FAILED"
@@ -559,9 +561,11 @@ ensure_mutagen_sync() {
     local count
     # `grep -c` exits 1 when zero matches — which with set -e would abort
     # this function silently right where we MOST want to fall through to
-    # the create branch. `|| echo 0` keeps the pipeline's exit at 0 and
-    # gives count a real value. Verified via bash -x trace 2026-05-18.
-    count=$(mutagen sync list 2>/dev/null | grep -c "^Name: $session$" || echo 0)
+    # the create branch. `|| true` keeps the pipeline's exit at 0; grep -c
+    # already prints `0` on no-match so we don't need `echo 0` (which would
+    # double the stdout and break `(( count == 1 ))` arithmetic). ROK-1331
+    # M4 LOW #6.
+    count=$(mutagen sync list 2>/dev/null | grep -c "^Name: $session$" || true)
     if (( count == 1 )); then
         local current_alpha
         current_alpha=$(mutagen sync list "$session" 2>/dev/null \
@@ -686,19 +690,47 @@ scaffold_runner_git() {
     local quoted_url quoted_branch
     quoted_url=$(printf '%q' "$origin_url")
     quoted_branch=$(printf '%q' "$branch")
+
+    # ROK-1331 M4 AC6 — idempotency probe. If /workspace/.git is already on
+    # the target branch AND has objects/pack populated, skip the destructive
+    # rebuild (saves 2-5s of remote git work per re-claim of the same slot
+    # for the same branch). Detached HEAD or branch mismatch falls through
+    # to the rebuild.
+    local probe_script
+    probe_script=$(cat <<EOF
+set -e
+cd /workspace 2>/dev/null || exit 1
+test -d .git/objects/pack || exit 2
+current=\$(git -c safe.directory=/workspace rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [[ "\$current" != ${quoted_branch} ]]; then exit 3; fi
+ls .git/objects/pack/*.pack >/dev/null 2>&1 || exit 4
+exit 0
+EOF
+)
+    if ssh_run run-on-runner -- bash -s <<<"$probe_script" >/dev/null 2>&1; then
+        echo "[rl] scaffold-idempotent: slot ${slot} already on ${branch} with packed objects — skipping rebuild" >&2
+        return 0
+    fi
+
     local script
     # safe.directory: scaffold runs as root (via run-on-runner) but
     # /workspace is owned by uid 1001 (rl-fleet). Git's dubious-ownership
     # check fires on every operation when uid mismatches the dir owner.
     # The git -c flag scopes the override to this invocation only —
     # cleaner than touching the container's global gitconfig.
+    #
+    # ROK-1331 M4 AC7 — try fetching the agent's branch first; fall back to
+    # main if origin doesn't have it yet (fresh local-only branch). The
+    # `|| { warn; return 0; }` outer catch handles "neither branch nor main
+    # reachable" without aborting the claim.
     script=$(cat <<EOF
 set -e
 cd /workspace
 rm -rf .git
 git -c safe.directory=/workspace init -q
 git -c safe.directory=/workspace remote add origin ${quoted_url}
-git -c safe.directory=/workspace fetch origin main --depth=500 -q
+git -c safe.directory=/workspace fetch origin ${quoted_branch} --depth=500 -q 2>/dev/null \\
+    || git -c safe.directory=/workspace fetch origin main --depth=500 -q
 git -c safe.directory=/workspace reset --mixed FETCH_HEAD
 git -c safe.directory=/workspace checkout -q -B ${quoted_branch} 2>/dev/null || true
 EOF
