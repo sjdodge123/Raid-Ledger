@@ -102,8 +102,10 @@ case "$MODE" in
         # re-encrypt path below is the WHOLE sync surface for this mode.
         DUMP_ARGS=()
         PRE_SQL=""
+        SYNC_DISCORD_IDENTITY=1
         ;;
     full)
+        SYNC_DISCORD_IDENTITY=0
         # Full data clone. Schema preserved (env's allinone runs migrations at
         # boot). We --disable-triggers so FK ordering doesn't bite. TRUNCATE
         # pre-step + schema-drift exclusions both computed at runtime against
@@ -159,6 +161,105 @@ case "$MODE" in
             "SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public' ORDER BY sequence_name;" 2>/dev/null)
         ;;
 esac
+
+# =============================================================================
+# DISCORD IDENTITY sync (settings mode only)
+# =============================================================================
+# Unify the operator's Discord-linked users row across local + env so that
+# Discord OAuth login and admin@local /auth/local resolve to the SAME row.
+# Without this, every settings-mode sync left two separate admin rows in the
+# env (the operator's real discord_id row + bootstrap-admin's local:admin@local
+# placeholder), and characters/preferences keyed on user_id silently diverged
+# depending on which login path the operator used.
+#
+# Implementation:
+#   1. SELECT the operator's admin row from local DB (must have discord_id
+#      set AND not be a local: placeholder).
+#   2. If absent → skip (operator hasn't linked Discord yet locally).
+#   3. If present → emit a single BEGIN/DELETE-orphan/INSERT-ON-CONFLICT/COMMIT
+#      block to the env's psql via env-psql. Uses literal-value interpolation
+#      built via bash quoting (NOT $N placeholders — psql heredocs don't
+#      bind prepared params). The architect explicitly flagged 2026-05-20
+#      that the INSERT MUST include `username` (NOT NULL in the schema).
+dump_discord_identity() {
+    local row_json
+    row_json=$(docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -c \
+        "SELECT row_to_json(u) FROM users u WHERE u.role = 'admin' AND u.discord_id IS NOT NULL AND u.discord_id NOT LIKE 'local:%' ORDER BY u.created_at LIMIT 1;" \
+        2>/dev/null | tr -d '\r')
+    if [[ -z "$row_json" || "$row_json" == "null" ]]; then
+        echo "  skipping discord identity sync: no admin row with discord_id found in local DB" >&2
+        return 0
+    fi
+    # Pull fields via jq. Empty strings for absent columns; we map them to
+    # SQL NULL below. `username` is NOT NULL per schema — fall back to
+    # 'Admin' if somehow blank (defensive; real rows always have it).
+    local discord_id steam_id username display_name avatar custom_avatar_url role
+    discord_id=$(echo "$row_json" | jq -r '.discord_id // ""')
+    steam_id=$(echo "$row_json" | jq -r '.steam_id // ""')
+    username=$(echo "$row_json" | jq -r '.username // ""')
+    display_name=$(echo "$row_json" | jq -r '.display_name // ""')
+    avatar=$(echo "$row_json" | jq -r '.avatar // ""')
+    custom_avatar_url=$(echo "$row_json" | jq -r '.custom_avatar_url // ""')
+    role=$(echo "$row_json" | jq -r '.role // "admin"')
+    [[ -z "$username" ]] && username="Admin"
+
+    # Postgres single-quote escape: double any literal single quotes.
+    # Then wrap in single quotes. Empty source -> SQL NULL.
+    sql_lit() {
+        local s="$1"
+        if [[ -z "$s" ]]; then
+            printf 'NULL'
+        else
+            printf "'%s'" "${s//\'/\'\'}"
+        fi
+    }
+    local sql_discord_id sql_steam_id sql_username sql_display_name sql_avatar sql_custom_avatar_url sql_role
+    sql_discord_id=$(sql_lit "$discord_id")
+    sql_steam_id=$(sql_lit "$steam_id")
+    sql_username=$(sql_lit "$username")
+    sql_display_name=$(sql_lit "$display_name")
+    sql_avatar=$(sql_lit "$avatar")
+    sql_custom_avatar_url=$(sql_lit "$custom_avatar_url")
+    sql_role=$(sql_lit "$role")
+
+    # Build the SQL transaction. Literal-value interpolation only — psql
+    # heredocs DO NOT support $N prepared-parameter binding.
+    local sql
+    sql=$(cat <<SQL
+BEGIN;
+-- Wipe any pre-existing orphan local: placeholder admin (FK from
+-- local_credentials → users.id; clear creds first to satisfy FK).
+DELETE FROM local_credentials WHERE email = 'admin@local';
+DELETE FROM users WHERE discord_id = 'local:admin@local';
+-- UPSERT the operator's identity. ON CONFLICT (discord_id) handles
+-- repeat syncs idempotently. `username` is NOT NULL per schema.
+INSERT INTO users (discord_id, steam_id, username, display_name, avatar, custom_avatar_url, role, created_at, updated_at)
+VALUES (${sql_discord_id}, ${sql_steam_id}, ${sql_username}, ${sql_display_name}, ${sql_avatar}, ${sql_custom_avatar_url}, ${sql_role}, now(), now())
+ON CONFLICT (discord_id) DO UPDATE SET
+  steam_id = EXCLUDED.steam_id,
+  username = EXCLUDED.username,
+  display_name = EXCLUDED.display_name,
+  avatar = EXCLUDED.avatar,
+  custom_avatar_url = EXCLUDED.custom_avatar_url,
+  role = EXCLUDED.role,
+  updated_at = now();
+COMMIT;
+SQL
+)
+    set +e
+    echo "$sql" | "${SSH_TO_VM[@]}" "${ORCH_BIN}/env-psql" "$SLUG" -- -v ON_ERROR_STOP=1 >/dev/null 2>&1
+    local rc=$?
+    set -e
+    if (( rc != 0 )); then
+        echo "  WARN: discord identity sync exit $rc — bootstrap-admin will fall back to local: placeholder" >&2
+        return 0
+    fi
+    echo "  synced operator users row (discord_id=${discord_id:0:6}…) into env" >&2
+}
+
+if [[ "${SYNC_DISCORD_IDENTITY:-0}" == "1" ]]; then
+    dump_discord_identity
+fi
 
 echo "Sync $MODE: $LOCAL_DB_CONTAINER → $RL_PROXMOX_HOST:$ENV_PG_CONTAINER" >&2
 
@@ -306,7 +407,12 @@ fi
 # to prevent.
 resolve_local_jwt_secret() {
     if [[ -n "${LOCAL_JWT_SECRET:-}" ]]; then
-        printf '%s' "$LOCAL_JWT_SECRET"
+        local s="$LOCAL_JWT_SECRET"
+        # Strip optional surrounding double or single quotes (api/.env may have either).
+        s="${s%\"}"; s="${s#\"}"
+        s="${s%\'}"; s="${s#\'}"
+        echo "  resolved LOCAL_JWT_SECRET from \$LOCAL_JWT_SECRET env var" >&2
+        printf '%s' "$s"
         return 0
     fi
     local common_dir main_repo
@@ -329,6 +435,10 @@ resolve_local_jwt_secret() {
         local secret
         secret=$(grep -E '^JWT_SECRET=' "$f" | head -1 | cut -d= -f2-)
         if [[ -n "$secret" ]]; then
+            # Strip optional surrounding double or single quotes (api/.env may have either).
+            secret="${secret%\"}"; secret="${secret#\"}"
+            secret="${secret%\'}"; secret="${secret#\'}"
+            echo "  resolved LOCAL_JWT_SECRET from $f" >&2
             printf '%s' "$secret"
             return 0
         fi
