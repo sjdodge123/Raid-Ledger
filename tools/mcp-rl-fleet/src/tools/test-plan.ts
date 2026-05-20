@@ -17,7 +17,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { shellQuote } from '../exec.js';
+import { loadRlInfraIp, resolveProxmoxHost, shellQuote } from '../exec.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -28,7 +28,19 @@ const execFileAsync = promisify(execFile);
 const RUN_ON_VM_TIMEOUT_MS = 30_000;
 
 const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
-const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+// ROK-1331 M6b HIGH-3: share the cached DNS-fallback verdict with runRl so
+// SSH calls from test-plan.ts also tolerate `rl-infra.lan` not resolving.
+const sshHost = async (): Promise<string> => {
+  try {
+    const resolved = await resolveProxmoxHost({
+      envHost: process.env.RL_PROXMOX_HOST,
+      fallbackIp: loadRlInfraIp(),
+    });
+    return resolved.host;
+  } catch {
+    return process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+  }
+};
 
 // Defense-in-depth slug validation. The Zod boundary in index.ts already
 // enforces /^[a-z0-9-]+$/ + 1..63 chars, but every execute* function below
@@ -131,9 +143,10 @@ const curlOnVM = async (
     `curl -s -X ${method} ${bodyArgs}${headerArgs} ` +
     `-w '\\nRL_STATUS:%{http_code}' ` +
     `${quotedUrl}`;
+  const host = await sshHost();
   const { stdout } = await execFileAsync(
     'ssh',
-    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`,
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${host}`,
      `DOCKER_HOST=tcp://127.0.0.1:2375 ${remote}`],
     { timeout: RUN_ON_VM_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
   );
@@ -329,10 +342,11 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
     `/srv/rl-infra/state/test-plans/ 2>/dev/null ` +
     `| grep --line-buffered -E ${quotedFilenameRe}`;
 
+  const host = await sshHost();
   return await new Promise((resolve) => {
     const child = spawn(
       'ssh',
-      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
+      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${host}`, remote],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let settled = false;

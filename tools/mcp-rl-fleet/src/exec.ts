@@ -8,9 +8,10 @@
 
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import * as dns from 'node:dns';
 import { fileURLToPath } from 'node:url';
-import { dirname, isAbsolute, resolve, sep } from 'node:path';
-import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { z } from 'zod';
 
@@ -60,6 +61,113 @@ const __dirname = dirname(__filename);
 //   src/ → tools/mcp-rl-fleet/ → tools/ → <repo-root>/
 export const RL_BIN = resolve(__dirname, '../../../rl-infra/cli/rl');
 
+// ---------------------------------------------------------------------------
+// RL_PROXMOX_HOST resolution with DNS fallback (ROK-1331 M6b HIGH-3)
+// ---------------------------------------------------------------------------
+//
+// Agents in sandboxed Claude Code contexts can't always resolve `rl-infra.lan`
+// (the operator's LAN sets it via Pi-hole; sandbox networking doesn't forward
+// that). When the candidate host fails DNS, fall back to the literal IP loaded
+// from the repo-root `.env` (`RL_INFRA_IP=192.168.0.132`). The cache lives for
+// the MCP server lifetime — the operator's DNS doesn't flap day-to-day, and
+// we want the lookup cost paid ONCE at first call.
+
+export type ResolvedHost = {
+  host: string;
+  source: 'env' | 'dns' | 'ip-fallback';
+};
+
+const DEFAULT_HOST_CANDIDATES = new Set(['rl-infra', 'rl-infra.lan']);
+const DNS_LOOKUP_TIMEOUT_MS = 1500;
+
+let cachedResolvedHost: ResolvedHost | undefined;
+
+/** Test-only hook — production callers MUST NOT use this. */
+export function _resetResolveProxmoxHostCacheForTest(): void {
+  cachedResolvedHost = undefined;
+}
+
+/**
+ * Resolve RL_PROXMOX_HOST. Operator-set explicit values (anything not
+ * matching the default `rl-infra` / `rl-infra.lan`) win without a probe.
+ * Otherwise dns.promises.lookup is raced against a 1.5s timeout — on
+ * failure we fall back to `fallbackIp` (RL_INFRA_IP from .env). Throws
+ * when neither leg yields a host. Memoized for the MCP server lifetime.
+ */
+export async function resolveProxmoxHost(opts?: {
+  envHost?: string | undefined;
+  fallbackIp?: string | undefined;
+}): Promise<ResolvedHost> {
+  if (cachedResolvedHost) return cachedResolvedHost;
+  const envHost = opts?.envHost;
+  const fallbackIp = opts?.fallbackIp;
+
+  // Operator-explicit override (any non-default value) — trust it without probing.
+  if (envHost && !DEFAULT_HOST_CANDIDATES.has(envHost)) {
+    cachedResolvedHost = { host: envHost, source: 'env' };
+    return cachedResolvedHost;
+  }
+
+  const candidate = envHost ?? 'rl-infra.lan';
+  try {
+    await Promise.race([
+      dns.promises.lookup(candidate),
+      new Promise((_, reject) =>
+        setTimeout(() => {
+          const err: NodeJS.ErrnoException = new Error('dns lookup timeout');
+          err.code = 'ETIMEDOUT';
+          reject(err);
+        }, DNS_LOOKUP_TIMEOUT_MS),
+      ),
+    ]);
+    cachedResolvedHost = { host: candidate, source: 'dns' };
+    return cachedResolvedHost;
+  } catch {
+    if (fallbackIp) {
+      cachedResolvedHost = { host: fallbackIp, source: 'ip-fallback' };
+      return cachedResolvedHost;
+    }
+    throw new Error(
+      `Cannot resolve RL_PROXMOX_HOST (${candidate}) and no RL_INFRA_IP fallback set in .env`,
+    );
+  }
+}
+
+/**
+ * Walk process.cwd() upward looking for a sibling `.git` directory; that's
+ * the repo root. Parse a `RL_INFRA_IP=...` line out of `<repo-root>/.env`.
+ * Returns undefined when no `.git` ancestor exists, no `.env` is present,
+ * or the .env has no (uncommented) `RL_INFRA_IP=` line.
+ */
+export function loadRlInfraIp(): string | undefined {
+  let dir = process.cwd();
+  const root = resolve('/');
+  // Cap the walk to avoid pathological loops on broken filesystems.
+  for (let i = 0; i < 64; i++) {
+    if (existsSync(join(dir, '.git'))) break;
+    if (dir === root) return undefined;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+  if (!existsSync(join(dir, '.git'))) return undefined;
+  const envPath = join(dir, '.env');
+  if (!existsSync(envPath)) return undefined;
+  let raw: string;
+  try {
+    raw = readFileSync(envPath, 'utf-8');
+  } catch {
+    return undefined;
+  }
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const m = trimmed.match(/^RL_INFRA_IP=(.+)$/);
+    if (m) return m[1].trim();
+  }
+  return undefined;
+}
+
 interface RlEnv {
   /** Override the SSH user. Defaults to rl-agent (limited identity). */
   user?: string;
@@ -93,14 +201,26 @@ export async function runRl(
   // call (M-MCP-3). Filter the caller's extra so RL_OPERATOR is dropped
   // unless we're explicitly in the force-release elevation path.
   const extra = sanitizeExtra(opts);
+  // ROK-1331 M6b HIGH-3: DNS-resolve RL_PROXMOX_HOST so sandboxed agent contexts
+  // (where `rl-infra.lan` doesn't resolve) fall through to the literal IP from
+  // repo-root .env. Memoized — first call bears the lookup cost.
+  let resolvedHost: string;
+  try {
+    const resolved = await resolveProxmoxHost({
+      envHost: process.env.RL_PROXMOX_HOST,
+      fallbackIp: loadRlInfraIp(),
+    });
+    resolvedHost = resolved.host;
+  } catch {
+    resolvedHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+  }
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     // Force agent identity. The MCP server is for agents — never operators.
     RL_PROXMOX_USER: opts.user ?? 'rl-agent',
     // Defensive: even if the parent shell set RL_OPERATOR=1, clear it here.
     RL_OPERATOR: '0',
-    // Sensible default if .zshrc didn't load. ssh config alias resolves.
-    RL_PROXMOX_HOST: process.env.RL_PROXMOX_HOST ?? 'rl-infra',
+    RL_PROXMOX_HOST: resolvedHost,
     ...(opts.agentId ? { RL_AGENT_ID: opts.agentId } : {}),
     ...extra,
   };
