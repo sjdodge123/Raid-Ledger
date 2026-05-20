@@ -22,17 +22,18 @@
  *     (`useSubmitVotes`).
  *   - Client state: drawer-game-id (which entry's drawer is open).
  */
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../shared/journey-hero';
-import { SubmitBar } from '../../shared/submit-bar/SubmitBar';
 import { deriveSubmitKind, type SubmitKind } from '../../shared/submit-bar/derive-kind';
 import { useToggleVote } from '../../../hooks/use-lineups';
 import { useSubmitVotes } from '../../../hooks/use-lineup-submit';
+import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 import { toast } from '../../../lib/toast';
 import { VotesUsedPill } from './VotesUsedPill';
 import { VotingLeaderboardV2 } from './VotingLeaderboardV2';
+import { StickyHeroSubmitButton } from './sticky-hero-buttons';
 
 /** Props for {@link VotingComposite}. */
 export interface VotingCompositeProps {
@@ -91,20 +92,23 @@ function submitBarCopy(
 function buildHero(
   lineup: LineupDetailResponseDto,
   submitted: boolean,
+  used: number,
+  max: number,
 ): { badge: string; task: string; sub: string; tone: 'action' | 'waiting' } {
   const badge = 'Step 2 of 4 · Voting';
+  const voters = `${lineup.totalVoters} of ${lineup.votingEligibleCount} voters have weighed in`;
   if (submitted) {
     return {
       badge,
       task: "You're done voting.",
-      sub: `Waiting on the rest of the group · ${lineup.totalVoters} of ${lineup.votingEligibleCount} have voted`,
+      sub: `Waiting on the rest of the group · ${voters}.`,
       tone: 'waiting',
     };
   }
   return {
     badge,
     task: 'Pick the games you want to play.',
-    sub: `${lineup.totalVoters} of ${lineup.votingEligibleCount} have voted so far.`,
+    sub: `You've voted on ${used} of ${max}. ${voters}.`,
     tone: 'action',
   };
 }
@@ -121,18 +125,34 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
   const used = myVotes.length;
   const atLimit = used >= max;
   const submittedAt = lineup.viewerSubmissions?.votesSubmittedAt ?? null;
-  const submitted = submittedAt != null;
+  const serverSubmitted = submittedAt != null;
+
+  // Local "dirty since submit" flag. Two triggers:
+  //   1. User clicks "Change my votes" while in `post` state (explicit unlock).
+  //   2. User toggles a vote while submitted (implicit unlock — they're
+  //      actively editing again so the SubmitBar should re-arm).
+  // Reset to `false` whenever a fresh submittedAt arrives from the server
+  // (post-submit) so re-submitting locks the state back in.
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (serverSubmitted) setDirty(false);
+  }, [submittedAt, serverSubmitted]);
+
+  const submitted = serverSubmitted && !dirty;
+  const effectiveSubmittedAt = submitted ? submittedAt : null;
 
   const kind = deriveSubmitKind({
-    submittedAt,
+    submittedAt: effectiveSubmittedAt,
     hasAnyAction: used > 0,
     hasFullAction: atLimit,
   });
   const copy = submitBarCopy(kind, used, max);
-  const hero = buildHero(lineup, submitted);
+  const hero = buildHero(lineup, submitted, used, max);
 
   const handleToggle = (gameId: number): void => {
     if (!canParticipate) return;
+    // Implicit unlock — vote toggle after submit re-arms the SubmitBar.
+    if (serverSubmitted) setDirty(true);
     toggleVote.mutate(
       { lineupId: lineup.id, gameId },
       {
@@ -146,7 +166,14 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
     );
   };
 
-  const handleSubmit = (): void => {
+  const handleCtaClick = (): void => {
+    if (kind === 'post') {
+      // Explicit unlock — "Change my votes" flips back to editable without
+      // hitting the server. User can now toggle votes; when they Submit
+      // again, the server re-stamps viewerSubmissions.votesSubmittedAt.
+      setDirty(true);
+      return;
+    }
     submitVotes.mutate(
       { lineupId: lineup.id },
       {
@@ -158,21 +185,63 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
     );
   };
 
+  // Sticky-hero scroll behavior (mirrors NominatingComposite ROK-1297 round 5g).
+  // Sentinel divs gate the hide-on-scroll-down via IntersectionObserver so we
+  // don't leave a ghost slot in document flow before the wrapper actually
+  // pins to top:14.
+  const scrollDir = useScrollDirection();
+  const stuckSentinelRef = useRef<HTMLDivElement | null>(null);
+  const [isStuck, setIsStuck] = useState(false);
+  useEffect(() => {
+    const sentinel = stuckSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsStuck(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+  const heroHidden = scrollDir === 'down' && isStuck;
+
   return (
     <section
       data-testid="voting-composite"
       className="space-y-3"
     >
-      <JourneyHero
-        phase="voting"
-        active={1}
-        tone={hero.tone}
-        badge={hero.badge}
-        task={hero.task}
-        sub={hero.sub}
-      />
-      <div className="flex justify-end">
-        <VotesUsedPill used={used} max={max} />
+      <div ref={stuckSentinelRef} aria-hidden="true" className="h-px" />
+      <div
+        className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:translate-y-0 ${
+          heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
+        }`}
+        style={{ transition: 'transform 300ms ease-in-out' }}
+      >
+        <JourneyHero
+          phase="voting"
+          active={1}
+          tone={hero.tone}
+          badge={hero.badge}
+          task={hero.task}
+          sub={hero.sub}
+        />
+        <div className="flex items-center gap-2 mt-2 px-1">
+          <StickyHeroSubmitButton
+            submitted={submitted}
+            used={used}
+            max={max}
+            disabled={kind === 'empty' || !canParticipate}
+            disabledReason={copy.disabledReason}
+            onClick={handleCtaClick}
+          />
+          <div className="ml-auto">
+            <VotesUsedPill used={used} max={max} />
+          </div>
+        </div>
+        {copy.nudge && (
+          <p className="mt-1 px-1 text-[11px] text-muted italic">
+            {copy.nudge}
+          </p>
+        )}
       </div>
       {!canParticipate && (
         <p
@@ -190,14 +259,6 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
         canParticipate={canParticipate}
         onToggleVote={handleToggle}
         onOpenDrawer={(id) => setDrawerGameId(id)}
-      />
-      <SubmitBar
-        kind={kind}
-        status={copy.status}
-        cta={copy.cta}
-        nudge={copy.nudge}
-        disabledReason={copy.disabledReason}
-        onCtaClick={handleSubmit}
       />
       {drawerGameId != null && (
         <GameResearchDrawer

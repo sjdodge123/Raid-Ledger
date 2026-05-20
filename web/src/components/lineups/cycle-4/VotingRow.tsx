@@ -72,13 +72,20 @@ function VoteBar({
   voterDenominator: number;
 }): JSX.Element {
   const pct = voteBarPct(voteCount, voterDenominator);
+  // Floor: at low fractions (e.g. 1/114 = 0.88%) the rounded `pct` collapses
+  // to a sub-pixel sliver that's invisible against the track. When at least
+  // one vote exists, show a min 4% fill so the bar communicates "non-zero"
+  // before the user has to read the X/N label. Real ratio is still the
+  // numeric label; this is purely visual readability.
+  const visibleWidth = voteCount > 0 ? Math.max(pct, 4) : 0;
   return (
     <div className="mt-1.5 flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-overlay/60 rounded-full overflow-hidden">
+      <div className="flex-1 h-2 bg-overlay/60 rounded-full overflow-hidden">
         <div
           data-testid="vote-bar-fill"
           className="h-full bg-emerald-500 rounded-full"
-          style={{ width: `${pct}%` }}
+          style={{ width: `${visibleWidth}%` }}
+          data-pct={pct}
         />
       </div>
       <span className="text-[11px] text-muted w-10 text-right tabular-nums">

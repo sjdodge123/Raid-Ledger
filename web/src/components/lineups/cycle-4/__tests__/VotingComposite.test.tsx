@@ -279,3 +279,43 @@ describe('VotingComposite — SubmitBar 4 kinds (AC6)', () => {
         });
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Operator review 2026-05-19: post-submit dirty-state must auto-unlock
+// the SubmitBar AND clear the "You're done voting" hero copy.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('VotingComposite — post-submit dirty state', () => {
+    it('clicking "Change my votes" flips kind=post → kind=partial without hitting the server', async () => {
+        const user = (await import('@testing-library/user-event')).default.setup();
+        const lineup = buildVotingLineup({
+            votingEligibleCount: 12,
+            myVotes: [42, 43],
+            maxVotesPerPlayer: 3,
+            viewerSubmissions: {
+                nominationsSubmittedAt: null,
+                votesSubmittedAt: '2026-05-17T10:00:00.000Z',
+            },
+        });
+        renderWithProviders(
+            <VotingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        // Initially in post state.
+        const postBtn = await screen.findByRole('button', {
+            name: /Change my votes/i,
+        });
+        expect(postBtn).toBeVisible();
+
+        await user.click(postBtn);
+
+        // After click: SubmitBar re-arms to partial (2/3 selected) and the
+        // hero loses its "You're done voting" copy.
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: /Submit my votes/i }),
+            ).toBeVisible();
+        });
+        expect(screen.queryByText(/done voting/i)).not.toBeInTheDocument();
+    });
+});

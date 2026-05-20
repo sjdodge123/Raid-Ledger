@@ -252,8 +252,6 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         />
       </div>
 
-      <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
-
       {lineup.visibility === 'private' && (
         <PrivateInviteesSection
           lineupId={lineup.id}
@@ -300,6 +298,10 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         leaderboardRef={leaderboardRef}
         bracketRef={bracketRef}
       />
+
+      <div className="mt-6">
+        <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
+      </div>
 
       <PastLineups />
 
