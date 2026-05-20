@@ -79,13 +79,7 @@ describe('computeVotingEligibleCount (ROK-1298)', () => {
     it('handles a 5-invitee private lineup (spec exemplar: returns 6)', () => {
       // Direct mirror of the spec scenario: 5 invitees → 6 eligible voters.
       const lineup = makeLineup({ visibility: 'private', createdBy: 99 });
-      const invitees = [
-        { id: 1 },
-        { id: 2 },
-        { id: 3 },
-        { id: 4 },
-        { id: 5 },
-      ];
+      const invitees = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
       expect(computeVotingEligibleCount(lineup, invitees, 12)).toBe(6);
     });
   });
