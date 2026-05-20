@@ -252,7 +252,15 @@ queue::position() {
 }
 
 queue::head_agent() {
-    state::query "$RL_QUEUE_FILE" '.[0].agent_id // empty'
+    # LEGACY — pre-M5a global queue. Now superseded by `lease::head_agent <slot>`
+    # in M5a's per-slot lease-queue model. Retained for any code path that still
+    # reads the global queue.json mirror.
+    #
+    # NOTE (ROK-1331 dogfood-discovery 2026-05-20): added `-r` so the returned
+    # agent_id strips JSON quotes. Without `-r`, the value comes back as
+    # `"sdodge-xxxx"` with literal quote chars, breaking bash string comparisons
+    # like `[[ "$QUEUE_HEAD" == "$RL_AGENT_ID" ]]` in old-flow callers.
+    state::query "$RL_QUEUE_FILE" -r '.[0].agent_id // empty'
 }
 
 queue::add() {
