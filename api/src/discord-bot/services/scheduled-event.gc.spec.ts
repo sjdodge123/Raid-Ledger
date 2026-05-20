@@ -23,9 +23,10 @@ jest.mock('./scheduled-event.discord-ops', () => ({
 const findRLTrackedSEs = dbHelpers.findRLTrackedSEs as jest.MockedFunction<
   typeof dbHelpers.findRLTrackedSEs
 >;
-const clearScheduledEventId = dbHelpers.clearScheduledEventId as jest.MockedFunction<
-  typeof dbHelpers.clearScheduledEventId
->;
+const clearScheduledEventId =
+  dbHelpers.clearScheduledEventId as jest.MockedFunction<
+    typeof dbHelpers.clearScheduledEventId
+  >;
 const tryDeleteEvent = discordOps.tryDeleteEvent as jest.MockedFunction<
   typeof discordOps.tryDeleteEvent
 >;

@@ -229,7 +229,9 @@ export async function findRLTrackedSEs(
     discordScheduledEventId: r.discordScheduledEventId!,
     cancelledAt: r.cancelledAt,
     durationUpper:
-      r.durationUpper instanceof Date ? r.durationUpper : new Date(r.durationUpper as unknown as string),
+      r.durationUpper instanceof Date
+        ? r.durationUpper
+        : new Date(r.durationUpper as unknown as string),
   }));
 }
 

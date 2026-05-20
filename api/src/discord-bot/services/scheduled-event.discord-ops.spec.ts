@@ -3,7 +3,10 @@ import { makeDiscordApiError } from './scheduled-event.service.spec-helpers';
 
 describe('isAtScheduledEventCapacityError (ROK-1332 AC1)', () => {
   it('returns true for DiscordAPIError with code 30038', () => {
-    const err = makeDiscordApiError(30038, 'Max guild scheduled events reached');
+    const err = makeDiscordApiError(
+      30038,
+      'Max guild scheduled events reached',
+    );
     expect(isAtScheduledEventCapacityError(err)).toBe(true);
   });
 
@@ -13,9 +16,9 @@ describe('isAtScheduledEventCapacityError (ROK-1332 AC1)', () => {
   });
 
   it('returns false for plain Error', () => {
-    expect(isAtScheduledEventCapacityError(new Error('not a discord error'))).toBe(
-      false,
-    );
+    expect(
+      isAtScheduledEventCapacityError(new Error('not a discord error')),
+    ).toBe(false);
   });
 
   it('returns false for non-Error values', () => {

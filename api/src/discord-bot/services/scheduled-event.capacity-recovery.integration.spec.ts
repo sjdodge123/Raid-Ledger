@@ -39,12 +39,10 @@ let reconciliationService: ScheduledEventReconciliationService;
 let clientService: DiscordBotClientService;
 let channelResolver: ChannelResolverService;
 
-interface MockGuildSEMap extends Map<string, { id: string }> {}
-
 interface MockGuildShape {
   id: string;
   scheduledEvents: {
-    fetch: jest.Mock<Promise<MockGuildSEMap>, []>;
+    fetch: jest.Mock<Promise<Map<string, { id: string }>>, []>;
     create: jest.Mock<Promise<{ id: string }>, [Record<string, unknown>]>;
     delete: jest.Mock<Promise<void>, [string]>;
     edit: jest.Mock<Promise<{ id: string }>, [string, Record<string, unknown>]>;
@@ -61,7 +59,7 @@ function buildMockGuild(): MockGuildShape {
   return {
     id: 'guild-1332',
     scheduledEvents: {
-      fetch: jest.fn().mockResolvedValue(new Map() as MockGuildSEMap),
+      fetch: jest.fn().mockResolvedValue(new Map<string, { id: string }>()),
       create: jest.fn().mockResolvedValue({ id: 'new-se-default' }),
       delete: jest.fn().mockResolvedValue(undefined),
       edit: jest.fn().mockResolvedValue({ id: 'edited-default' }),
@@ -86,9 +84,9 @@ beforeAll(async () => {
     .mockReturnValue(true);
   getGuildSpy = jest
     .spyOn(clientService, 'getGuild')
-    .mockReturnValue(mockGuild as unknown as ReturnType<
-      DiscordBotClientService['getGuild']
-    >);
+    .mockReturnValue(
+      mockGuild as unknown as ReturnType<DiscordBotClientService['getGuild']>,
+    );
   resolveVoiceSpy = jest
     .spyOn(channelResolver, 'resolveVoiceChannelForScheduledEvent')
     .mockResolvedValue('voice-channel-1332');
@@ -100,9 +98,7 @@ afterEach(async () => {
   // guild's scheduledEvents methods so per-test mockResolvedValueOnce setups
   // don't bleed into the next test.
   mockGuild = buildMockGuild();
-  getGuildSpy.mockReturnValue(
-    mockGuild as unknown as ReturnType<DiscordBotClientService['getGuild']>,
-  );
+  getGuildSpy.mockReturnValue(mockGuild);
   isConnectedSpy.mockReturnValue(true);
   resolveVoiceSpy.mockResolvedValue('voice-channel-1332');
 });
@@ -169,7 +165,7 @@ describe('ROK-1332 — capacity-recovery integration', () => {
     // so a plain Map is sufficient for `[...all.keys()]` iteration in GC.
     const seIdsOnDiscord = stale.map((s) => s.discordScheduledEventId!);
     mockGuild.scheduledEvents.fetch.mockResolvedValue(
-      new Map(seIdsOnDiscord.map((id) => [id, { id }])) as MockGuildSEMap,
+      new Map<string, { id: string }>(seIdsOnDiscord.map((id) => [id, { id }])),
     );
 
     // First create() fails with 30038 (capacity full); after GC, second
@@ -220,12 +216,12 @@ describe('ROK-1332 — capacity-recovery integration', () => {
     // No RL-tracked stale SEs — only operator-owned orphans (5 SEs visible to bot,
     // none of which are in events.discord_scheduled_event_id).
     mockGuild.scheduledEvents.fetch.mockResolvedValue(
-      new Map(
+      new Map<string, { id: string }>(
         Array.from({ length: 5 }, (_, i) => [
           `operator-orphan-${i}`,
           { id: `operator-orphan-${i}` },
         ]),
-      ) as MockGuildSEMap,
+      ),
     );
 
     // Seed two candidates — the cron picks them both up. First create() throws
@@ -339,12 +335,12 @@ describe('ROK-1332 — capacity-recovery integration', () => {
 
     // The guild sees 4 SEs: 2 stale RL, 1 active RL, 1 operator-owned orphan.
     mockGuild.scheduledEvents.fetch.mockResolvedValue(
-      new Map([
+      new Map<string, { id: string }>([
         ['stale-cx-1', { id: 'stale-cx-1' }],
         ['stale-cx-2', { id: 'stale-cx-2' }],
         ['active-keep-1', { id: 'active-keep-1' }],
         ['operator-orphan-1', { id: 'operator-orphan-1' }],
-      ]) as MockGuildSEMap,
+      ]),
     );
 
     const { freed, orphanCount } = await gcStaleRLScheduledEvents(

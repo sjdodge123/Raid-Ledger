@@ -15,9 +15,10 @@ jest.mock('./scheduled-event.db-helpers', () => ({
   setReconcileBackoff: jest.fn().mockResolvedValue(undefined),
 }));
 
-const setReconcileBackoffMock = dbHelpers.setReconcileBackoff as jest.MockedFunction<
-  typeof dbHelpers.setReconcileBackoff
->;
+const setReconcileBackoffMock =
+  dbHelpers.setReconcileBackoff as jest.MockedFunction<
+    typeof dbHelpers.setReconcileBackoff
+  >;
 
 function createSelectChain(rows: unknown[] = []) {
   const chain: Record<string, jest.Mock> & { then?: unknown } = {};
@@ -188,7 +189,11 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
     });
 
     it('on CapacityStillSaturatedError: writes 1h backoff to unprocessed candidates and stops iterating', async () => {
-      const candidates = [buildCandidate(1), buildCandidate(2), buildCandidate(3)];
+      const candidates = [
+        buildCandidate(1),
+        buildCandidate(2),
+        buildCandidate(3),
+      ];
       mocks.mockDb.select.mockReturnValue(createSelectChain(candidates));
       mocks.scheduledEventService.createScheduledEvent.mockRejectedValueOnce(
         new CapacityStillSaturatedError(7),
@@ -212,7 +217,11 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
     });
 
     it('on CapacityStillSaturatedError after some success: backs off only the remaining (unprocessed) candidates', async () => {
-      const candidates = [buildCandidate(1), buildCandidate(2), buildCandidate(3)];
+      const candidates = [
+        buildCandidate(1),
+        buildCandidate(2),
+        buildCandidate(3),
+      ];
       mocks.mockDb.select.mockReturnValue(createSelectChain(candidates));
       mocks.scheduledEventService.createScheduledEvent
         .mockResolvedValueOnce(undefined)
