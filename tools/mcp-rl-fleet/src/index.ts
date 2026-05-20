@@ -33,8 +33,12 @@ import * as envDeploy from './tools/env-deploy.js';
 import * as forceRelease from './tools/force-release.js';
 import * as testPlan from './tools/test-plan.js';
 import * as task from './tools/task.js';
+import * as lease from './tools/lease.js';
 
-const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.2.0' });
+// 0.3.0 — ROK-1331 M5a: lease queue + claim duration + pin/unpin.
+// M5b will further extend this server in Wave 7 (task-status JSON
+// extensions registration); the next version bump belongs to M5b.
+const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.3.0' });
 
 const jsonResult = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
@@ -84,7 +88,13 @@ registerTool(claim.TOOL_NAME, claim.TOOL_DESCRIPTION, claimSchema, async (p) =>
   jsonResult(await claim.execute(p as claim.ClaimParams)),
 );
 
-const releaseSchema: Shape = { worktree_path: worktreePathSchema };
+const releaseSchema: Shape = {
+  worktree_path: worktreePathSchema,
+  // ROK-1331 M5a — preserve_envs defaults to true for agents (the wrapper's
+  // .execute() applies the default). Pass false to force the legacy destroy
+  // path (operator behavior).
+  preserve_envs: z.boolean().optional(),
+};
 registerTool(release.TOOL_NAME, release.TOOL_DESCRIPTION, releaseSchema, async (p) =>
   jsonResult(await release.execute(p as release.ReleaseParams)),
 );
@@ -293,6 +303,41 @@ const taskListSchema: Shape = {
 };
 registerTool('rl_task_list', TASK_LIST_DESC, taskListSchema, async (p) =>
   jsonResult(await task.executeList(p as task.ExecuteListParams)),
+);
+
+// ----- Lease tools (ROK-1331 M5a) -----
+const leaseStatusSchema: Shape = {
+  slot: z.number().int().positive().optional(),
+};
+registerTool(lease.STATUS_TOOL, lease.STATUS_DESC, leaseStatusSchema, async (p) =>
+  jsonResult(await lease.executeStatus(p as lease.LeaseStatusParams)),
+);
+
+const claimWaitSchema: Shape = {
+  timeout_seconds: z.number().int().min(5).max(3600).optional(),
+  worktree_path: worktreePathSchema,
+};
+registerTool(lease.WAIT_TOOL, lease.WAIT_DESC, claimWaitSchema, async (p) =>
+  jsonResult(await lease.executeWait(p as lease.ClaimWaitParams)),
+);
+
+const extendSchema: Shape = {
+  hours: z.number().int().min(1).max(24).optional(),
+  worktree_path: worktreePathSchema,
+};
+registerTool(lease.EXTEND_TOOL, lease.EXTEND_DESC, extendSchema, async (p) =>
+  jsonResult(await lease.executeExtend(p as lease.ExtendParams)),
+);
+
+const envPinSchema: Shape = {
+  slug: slugSchema,
+  worktree_path: worktreePathSchema,
+};
+registerTool(lease.PIN_TOOL, lease.PIN_DESC, envPinSchema, async (p) =>
+  jsonResult(await lease.executePin(p as lease.PinParams)),
+);
+registerTool(lease.UNPIN_TOOL, lease.UNPIN_DESC, envPinSchema, async (p) =>
+  jsonResult(await lease.executeUnpin(p as lease.PinParams)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the
