@@ -1296,6 +1296,61 @@ const handleFleetHealth = async (req, res) => {
   }
 };
 
+// ROK-1331 M11 — POST /api/perf-emit
+//
+// MCP clients call this from their per-tool finally{} blocks to surface
+// mcp.tool.call latency events into the same perf.log the orchestrator
+// writes to. Body shape:
+//   { event, source, tool_name, agent_id, latency_ms, status }
+//
+// No auth — same trust model as the rest of the dashboard (operator LAN +
+// Cloudflare). Body fields are whitelisted to a fixed shape so a hostile
+// caller can't inject arbitrary keys into the log. Rate-limited by the
+// existing POST handler (30/min/IP).
+const PERF_EMIT_ALLOWED_EVENTS = new Set([
+  'mcp.tool.call', 'mcp.task.status.poll', 'mcp.claim.decision',
+]);
+const handlePerfEmit = async (req, res) => {
+  if (req.method !== 'POST') {
+    res.writeHead(405); res.end('Method Not Allowed'); return;
+  }
+  let body;
+  try { body = await readJsonBody(req, 4 * 1024); }
+  catch (err) { return sendBodyError(res, err); }
+
+  const event = typeof body.event === 'string' && PERF_EMIT_ALLOWED_EVENTS.has(body.event)
+    ? body.event : null;
+  if (!event) return sendJson(res, 400, { ok: false, error: 'event must be one of: ' + [...PERF_EMIT_ALLOWED_EVENTS].join(', ') });
+  const toolName = typeof body.tool_name === 'string'
+    ? body.tool_name.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 60) : null;
+  const agentId = typeof body.agent_id === 'string'
+    ? body.agent_id.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 60) : null;
+  const latencyMs = Number.isFinite(body.latency_ms) ? Math.max(0, Math.floor(body.latency_ms)) : null;
+  const status = body.status === 'ok' || body.status === 'error' ? body.status : 'ok';
+
+  const line = JSON.stringify({
+    ts: new Date().toISOString(),
+    event,
+    source: 'mcp',
+    agent_id: agentId,
+    branch: typeof body.branch === 'string' ? body.branch.slice(0, 100) : 'unknown',
+    tool_name: toolName,
+    latency_ms: latencyMs,
+    status,
+  });
+  try {
+    const { appendFile } = await import('node:fs/promises');
+    await appendFile(join(STATE_DIR, 'perf.log'), line + '\n');
+  } catch (err) {
+    // Mirror perf::emit's posture — never 500 on disk-side issues. Log to
+    // stderr so the operator notices via journalctl but the caller (MCP
+    // client) still gets a 202.
+    // eslint-disable-next-line no-console
+    console.warn(`[dashboard] perf-emit write failed: ${err.message}`);
+  }
+  sendJson(res, 202, { ok: true });
+};
+
 // POST /api/test-plans/<slug>/step/<id>/comment
 // Tester free-form comment per step. CRITICAL: this body is NOT
 // surfaced to the LLM via rl_test_plan_status / rl_test_plan_wait
@@ -1544,6 +1599,10 @@ const server = createServer(async (req, res) => {
   }
   if (pathOnly === '/api/fleet-health') {
     await handleFleetHealth(req, res);
+    return;
+  }
+  if (pathOnly === '/api/perf-emit') {
+    await handlePerfEmit(req, res);
     return;
   }
   if (pathOnly === '/api/test-plans' && req.method === 'GET') {

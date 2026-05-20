@@ -187,6 +187,48 @@ interface RlEnv {
   cwd?: string;
 }
 
+// ROK-1331 M11 — per-tool perf instrumentation. Wraps runRl with a
+// try/finally that records the tool name (first non-flag arg) and
+// wall-clock latency, then POSTs a mcp.tool.call line to the fleet
+// dashboard's perf-log sink (via the existing dashboard-fetch helper).
+//
+// Best-effort: emit failures NEVER propagate to the caller. The MCP tool
+// surface returns the original {stdout, stderr, exitCode} regardless of
+// whether the emit landed. Latency outliers surface in perf_summary's
+// p50 step times for any operator with the dashboard open.
+const PERF_EMIT_TIMEOUT_MS = 1500;
+
+async function emitMcpToolCall(toolName: string, latencyMs: number, status: 'ok' | 'error'): Promise<void> {
+  const dashboardUrl = process.env.RL_DASHBOARD_URL || 'http://fleet.rl.lan';
+  // Build a fire-and-forget POST. We don't await its full lifetime — the
+  // AbortController bounds it to PERF_EMIT_TIMEOUT_MS so a stuck dashboard
+  // never blocks a real MCP call.
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), PERF_EMIT_TIMEOUT_MS);
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (process.env.RL_AGENT_TOKEN) {
+      headers['x-agent-token'] = process.env.RL_AGENT_TOKEN;
+    }
+    await fetch(`${dashboardUrl}/api/perf-emit`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        event: 'mcp.tool.call',
+        source: 'mcp',
+        tool_name: toolName,
+        agent_id: process.env.RL_AGENT_ID ?? null,
+        latency_ms: latencyMs,
+        status,
+      }),
+      signal: controller.signal,
+    }).catch(() => {});
+    clearTimeout(t);
+  } catch {
+    // Silent — perf emit is opt-in observability, never a hard dep.
+  }
+}
+
 /**
  * Run the rl CLI with the given subcommand arguments. Returns stdout/stderr/
  * exit code. Always forces RL_PROXMOX_USER=rl-agent unless explicitly overridden
@@ -239,6 +281,10 @@ export async function runRl(
     env.RL_OPERATOR = '0';
   }
 
+  // ROK-1331 M11 — per-tool perf instrumentation.
+  const toolName = args.find((a) => !a.startsWith('-')) ?? 'unknown';
+  const startMs = Date.now();
+  let outcomeStatus: 'ok' | 'error' = 'ok';
   try {
     const result = await execFileP(RL_BIN, args, {
       env,
@@ -247,12 +293,18 @@ export async function runRl(
     });
     return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
   } catch (err) {
+    outcomeStatus = 'error';
     const e = err as Error & { stdout?: string; stderr?: string; code?: number };
     return {
       stdout: e.stdout ?? '',
       stderr: e.stderr ?? e.message,
       exitCode: e.code ?? 1,
     };
+  } finally {
+    // Fire-and-forget. Never await — we already returned the result above
+    // (Node guarantees finally runs before the function resolves on the
+    // explicit return). The emit's own AbortController bounds it.
+    void emitMcpToolCall(toolName, Date.now() - startMs, outcomeStatus);
   }
 }
 
