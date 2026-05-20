@@ -119,13 +119,66 @@ record_result() {
   fi
 }
 
+# ROK-1331 M11 — local perf emit. Inside the fleet runner the orchestrator's
+# perf.log isn't writable, so we append to a runner-local file that release
+# flushes back to /srv/rl-infra/state/perf.log. Local laptop runs land in
+# the worktree's .rl-perf.log (cheap to inspect, gitignored).
+PERF_LOG_LOCAL="${PERF_LOG_LOCAL:-${REPO_ROOT}/.rl-perf.log}"
+if [ -d /workspace ]; then
+  PERF_LOG_LOCAL="/workspace/.rl-perf.log"
+fi
+
+# perf_emit_local <event> <extra-json>
+# Best-effort — never fails the calling step. Writes one compact JSON
+# object per call (open+append+close so logrotate is safe). Inside-runner
+# events get source=runner; everything else (laptop runs) is source=mcp.
+perf_emit_local() {
+  local event="$1"
+  local extra="${2-}"
+  [ -z "$extra" ] && extra='{}'
+  local source_label="runner"
+  [ ! -d /workspace ] && source_label="mcp"
+  local ts
+  ts=$(python3 -c "import datetime; print(datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.') + ('%03d' % (datetime.datetime.utcnow().microsecond // 1000)) + 'Z')" 2>/dev/null \
+    || date -u +%FT%TZ)
+  local slot="${RL_SLOT:-}" branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+  python3 -c "
+import json, sys
+extra = json.loads(sys.argv[5])
+extra.update({'ts': sys.argv[1], 'event': sys.argv[2], 'source': sys.argv[3], 'branch': sys.argv[4]})
+if sys.argv[6]:
+    try: extra['slot'] = int(sys.argv[6])
+    except ValueError: pass
+print(json.dumps(extra, separators=(',', ':')))
+" "$ts" "$event" "$source_label" "$branch" "$extra" "$slot" >> "$PERF_LOG_LOCAL" 2>/dev/null || true
+}
+
+# perf_now_ms — millisecond timestamp via python3 (portable).
+perf_now_ms() {
+  python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$(( $(date -u +%s) * 1000 ))"
+}
+
 run_step() {
   local name="$1"
   shift
   echo ""
   echo -e "${YELLOW}========== $name ==========${NC}"
+  local step_start_ms
+  step_start_ms=$(perf_now_ms)
   local rc=0
   "$@" || rc=$?
+  local step_end_ms step_dur
+  step_end_ms=$(perf_now_ms)
+  step_dur=$(( step_end_ms - step_start_ms ))
+  # ROK-1331 M11 — emit validate.step.end per AC2.
+  local step_extra
+  step_extra=$(python3 -c "
+import json, sys
+print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_code': int(sys.argv[3])}))
+" "$name" "$step_dur" "$rc" 2>/dev/null || echo '{}')
+  perf_emit_local "validate.step.end" "$step_extra"
+
   if [ "$rc" -eq 0 ]; then
     echo -e "${GREEN}$name: PASS${NC}"
     record_result "$name" "PASS"
@@ -378,9 +431,13 @@ run_integration_tests() {
       # NODE_OPTIONS=--max-old-space-size=3072 gives V8 a 3 GB heap ceiling
       # per shard (vs 1.4 GB default) which is ample headroom for ~25 suites
       # per shard.
+      # ROK-1331 M11 — JEST_SHARD_ID + JEST_TOTAL_SHARDS feed the perf
+       # reporter so jest.suite.end events carry shard labels.
+       # --logHeapUsage feeds the reporter's heap_used_mb sample.
       if (cd api && NODE_OPTIONS="--max-old-space-size=3072" \
+         JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${shards}" \
          npx jest --config ./jest.integration.config.js \
-                  --runInBand --verbose --shard="${i}/${shards}"); then
+                  --runInBand --verbose --logHeapUsage --shard="${i}/${shards}"); then
         shard_results+=("PASS")
       else
         shard_results+=("FAIL")
@@ -772,6 +829,29 @@ main() {
 
   echo -e "${GREEN}Starting local CI validation...${NC}"
   detect_scope
+
+  # ROK-1331 M11 — bookend the full validate-ci run with paired events so
+  # dashboards can show "last validate-ci on branch X took T seconds, exit
+  # code C". validate.end fires from an EXIT trap so abort paths (set -e,
+  # ctrl-C, run_step's fail-fast exit) still produce a terminal event.
+  local validate_start_ms
+  validate_start_ms=$(perf_now_ms)
+  local ci_flags="$*"
+  perf_emit_local "validate.start" "$(python3 -c "
+import json, sys
+print(json.dumps({'ci_flags': sys.argv[1]}))
+" "$ci_flags" 2>/dev/null || echo '{}')"
+  _perf_validate_end() {
+    local rc="$?"
+    local end_ms dur
+    end_ms=$(perf_now_ms)
+    dur=$(( end_ms - validate_start_ms ))
+    perf_emit_local "validate.end" "$(python3 -c "
+import json, sys
+print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2]), 'ci_flags': sys.argv[3]}))
+" "$dur" "$rc" "$ci_flags" 2>/dev/null || echo '{}')"
+  }
+  trap _perf_validate_end EXIT
 
   if ! $only_e2e; then
     run_step "Build (all workspaces)" run_build

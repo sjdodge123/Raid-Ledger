@@ -46,4 +46,11 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/common/testing/integration-setup.ts'],
   // Safety net for open handles (postgres-js connection pool)
   forceExit: true,
+  // ROK-1331 M11 — emit per-suite + per-shard perf events alongside jest's
+  // default reporter. JEST_SHARD_ID + JEST_TOTAL_SHARDS env vars are set
+  // by validate-ci's shard loop on the fleet runner; on a local run the
+  // reporter still emits with shard_id=null (degraded AC2 still works).
+  // Writes to /workspace/.rl-perf.log inside the runner or .rl-perf.log
+  // in the worktree root locally.
+  reporters: ['default', '<rootDir>/../jest.perf-reporter.js'],
 };
