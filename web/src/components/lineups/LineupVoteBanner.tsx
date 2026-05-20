@@ -157,7 +157,12 @@ function BannerHero({
         <button
           type="button"
           onClick={onSecondaryClick}
-          className={SECONDARY_BTN_CLS}
+          /* When the banner has no primary action (e.g. Nominated /
+             Decided / Tiebreaker variants), promote the secondary to the
+             primary style — operator review r10d 2026-05-20. */
+          className={
+            primaryLabel && onPrimaryClick ? SECONDARY_BTN_CLS : PRIMARY_BTN_CLS
+          }
         >
           <span>{secondaryLabel}</span>
         </button>
