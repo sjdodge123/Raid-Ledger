@@ -109,7 +109,24 @@ runcmd:
   # enable the `extra-slots` compose profile later.
   - mkdir -p /srv/rl-infra/{state,runners/slot-1/worktree,runners/slot-2/worktree,envs,bin,traefik,loki,grafana,gc-sweeper}
   - chown -R rl:rl /srv/rl-infra
-  - touch /srv/rl-infra/state/{claims.json,env-registry.json,audit.log}
+  - touch /srv/rl-infra/state/{claims.json,env-registry.json,audit.log,perf.log}
   - chown rl:rl /srv/rl-infra/state/*
+
+  # ROK-1331 M11 — logrotate for perf.log (sibling of audit.log). Daily
+  # rotation, keep 7 compressed copies, copytruncate keeps the long-lived
+  # gc-sweeper / orchestrator emit-FDs valid (their append-each-call posture
+  # makes this idempotent — we get the safety regardless).
+  - |
+    cat >/etc/logrotate.d/rl-infra <<'EOF'
+    /srv/rl-infra/state/perf.log {
+        daily
+        rotate 7
+        compress
+        missingok
+        notifempty
+        copytruncate
+        create 0664 rl rl-fleet
+    }
+    EOF
 
 final_message: "rl-infra VM ready. SCP rl-infra/* to /srv/rl-infra/, then `docker compose up -d`."
