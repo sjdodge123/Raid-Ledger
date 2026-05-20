@@ -28,6 +28,14 @@ const KNOWN_TASK_STATUSES = new Set(['running', 'succeeded', 'failed', 'cancelle
 const TASK_ID_RE = /^[a-z0-9]{8,32}$/;
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB; phone screenshots are typically <2 MB.
+
+// ROK-1331 M7 — fleet-health thresholds. Match the gc-sweeper's heartbeat
+// timeout (5min) + the M5a lease queue TTL (30min) so a single dial moves
+// both monitor + reaper. Audit-log tail size caps the classifier's work.
+const HEARTBEAT_STALE_SECONDS = parseInt(process.env.HEARTBEAT_STALE_SECONDS || '300', 10);
+const QUEUE_TTL_SECONDS = parseInt(process.env.QUEUE_TTL_SECONDS || '1800', 10);
+const FLEET_HEALTH_AUDIT_TAIL_LINES = parseInt(process.env.FLEET_HEALTH_AUDIT_TAIL_LINES || '200', 10);
+const FLEET_HEALTH_AUDIT_TAIL_BYTES = 256 * 1024; // 256 KiB — enough for 200 audit lines
 // When set, the dashboard renders BOTH http://{slug}.rl.lan (internal) AND
 // http://{slug}.${PUBLIC_DOMAIN} (external, for testers behind your proxy)
 // as links per env. env-spin already writes Traefik routes for both.
@@ -962,6 +970,192 @@ const handleTaskLog = async (taskId, req, res) => {
   }
 };
 
+// ----- ROK-1331 M7: GET /api/fleet-health --------------------------------
+//
+// Aggregate fleet-health snapshot for agent monitors. One cheap read covers
+// (a) stale-heartbeat slots (claim's last_heartbeat > HEARTBEAT_STALE_SECONDS),
+// (b) queue-stuck waiters (lease-queue requested_at age > QUEUE_TTL_SECONDS),
+// (c) recent audit-log error categories (tail + regex classify), and
+// (d) per-runner warnings (mem >90% — best-effort; v1 stub).
+//
+// No auth — same trust model as the rest of the dashboard (operator LAN +
+// Cloudflare). The endpoint is read-only and aggregates state the dashboard
+// already shows, so leakage surface is no broader than /api/state.
+//
+// Used by the rl_fleet_health MCP tool so agents can self-diagnose flakes
+// (e.g. "did my socket-hang-up count just spike?") without SSH access.
+
+const AUDIT_ERROR_CATEGORIES = [
+  { name: 'permission_denied', pattern: /permission\s+denied/i },
+  { name: 'exit_255', pattern: /\bexit(?:ed)?\s*(?:code\s*)?255\b/i },
+  { name: 'oom', pattern: /\b(?:OOM|out of memory|oomkilled)\b/i },
+  { name: 'socket_hang_up', pattern: /socket\s+hang\s+up/i },
+  { name: 'inotify_missing', pattern: /\binotify(?:wait)?[^a-z]?\s*(?:not\s+(?:installed|found)|missing|command\s+not\s+found)/i },
+  { name: 'dubious_ownership', pattern: /dubious\s+ownership/i },
+  { name: 'illegal_instruction', pattern: /illegal\s+instruction/i },
+];
+
+const tailAuditLog = async () => {
+  let handle = null;
+  try {
+    handle = await open(join(STATE_DIR, 'audit.log'), 'r');
+    const stat = await handle.stat();
+    const size = stat.size;
+    const tail = Math.min(size, FLEET_HEALTH_AUDIT_TAIL_BYTES);
+    const buf = Buffer.alloc(tail);
+    const start = size - tail;
+    const { bytesRead } = await handle.read(buf, 0, tail, start);
+    const text = buf.subarray(0, bytesRead).toString('utf-8');
+    // Drop the first (potentially partial) line when we didn't read from
+    // byte 0 — keeps the classifier from matching across line boundaries.
+    const lines = text.split('\n').filter((l) => l.length > 0);
+    if (start > 0 && lines.length > 0) lines.shift();
+    return lines.slice(-FLEET_HEALTH_AUDIT_TAIL_LINES);
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    // Surface as empty — fleet-health must NEVER 500 on audit.log issues.
+    return [];
+  } finally {
+    if (handle) { try { await handle.close(); } catch { /* ignore */ } }
+  }
+};
+
+const classifyAuditLines = (lines) => {
+  // Build the result skeleton FIRST so empty categories still appear with
+  // count:0 — matches the response shape contract.
+  const out = AUDIT_ERROR_CATEGORIES.map((c) => ({
+    category: c.name, count: 0, last_seen: null, sample: '',
+  }));
+  for (const line of lines) {
+    // The classifier reads the raw line — audit.log entries are JSON, but
+    // the patterns above match substrings (error messages, exit codes) that
+    // live anywhere in the line. We don't parse the JSON since malformed
+    // lines should still be classifiable; the `ts` field is extracted
+    // best-effort for last_seen.
+    let ts = null;
+    const tsMatch = line.match(/"ts"\s*:\s*"([^"]+)"/);
+    if (tsMatch) ts = tsMatch[1];
+    for (let i = 0; i < AUDIT_ERROR_CATEGORIES.length; i++) {
+      if (AUDIT_ERROR_CATEGORIES[i].pattern.test(line)) {
+        out[i].count += 1;
+        if (ts && (!out[i].last_seen || ts > out[i].last_seen)) {
+          out[i].last_seen = ts;
+        }
+        if (!out[i].sample) {
+          // Sample is the first 200 chars of the matching line — enough to
+          // recognize the failure shape without leaking giant tracebacks.
+          out[i].sample = line.slice(0, 200);
+        }
+      }
+    }
+  }
+  return out;
+};
+
+const collectStaleSlots = async (nowMs) => {
+  let claimsRaw;
+  try {
+    claimsRaw = await readFile(join(STATE_DIR, 'claims.json'), 'utf-8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  let claims;
+  try { claims = JSON.parse(claimsRaw); } catch { return []; }
+  if (!Array.isArray(claims)) return [];
+  const out = [];
+  for (const c of claims) {
+    if (!c || c.claimed !== true) continue;
+    if (!c.last_heartbeat) continue;
+    const hbMs = Date.parse(c.last_heartbeat);
+    if (!Number.isFinite(hbMs)) continue;
+    const age = Math.floor((nowMs - hbMs) / 1000);
+    if (age > HEARTBEAT_STALE_SECONDS) {
+      out.push({
+        slot: c.slot,
+        agent_id: c.agent_id ?? null,
+        branch: c.branch ?? null,
+        heartbeat_age_seconds: age,
+      });
+    }
+  }
+  return out;
+};
+
+const collectQueueStuck = async (nowMs) => {
+  let files;
+  try { files = await readdir(LEASE_QUEUE_DIR); } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const out = [];
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    let entries;
+    try {
+      const raw = await readFile(join(LEASE_QUEUE_DIR, f), 'utf-8');
+      const parsed = JSON.parse(raw);
+      entries = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.queue) ? parsed.queue : [];
+    } catch { continue; }
+    for (const e of entries) {
+      if (!e || !e.requested_at) continue;
+      const reqMs = Date.parse(e.requested_at);
+      if (!Number.isFinite(reqMs)) continue;
+      const queued_for_seconds = Math.floor((nowMs - reqMs) / 1000);
+      if (queued_for_seconds > QUEUE_TTL_SECONDS) {
+        out.push({
+          agent_id: e.agent_id ?? null,
+          branch: e.branch ?? null,
+          queued_for_seconds,
+          exceeds_ttl: true,
+        });
+      }
+    }
+  }
+  return out;
+};
+
+const handleFleetHealth = async (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('Method Not Allowed');
+    return;
+  }
+  try {
+    const nowMs = Date.now();
+    const [stale_heartbeat_slots, queue_stuck, audit_lines] = await Promise.all([
+      collectStaleSlots(nowMs).catch(() => []),
+      collectQueueStuck(nowMs).catch(() => []),
+      tailAuditLog(),
+    ]);
+    const recent_audit_errors = classifyAuditLines(audit_lines);
+    // v1 stub — runner warnings come from docker stats and require a host
+    // shell-out. Leave the field present so MCP clients can iterate; the
+    // sweeper / operator can wire real signals later.
+    const runner_warnings = [];
+
+    const stuck_queue_entries = queue_stuck.length;
+    const stale_slots = stale_heartbeat_slots.length;
+    const audit_error_total = recent_audit_errors.reduce((acc, c) => acc + c.count, 0);
+    const warning_count = stale_slots + stuck_queue_entries + audit_error_total + runner_warnings.length;
+    sendJson(res, 200, {
+      generated_at: new Date(nowMs).toISOString(),
+      stale_heartbeat_slots,
+      queue_stuck,
+      runner_warnings,
+      recent_audit_errors,
+      summary: {
+        ok: warning_count === 0,
+        warning_count,
+        stale_slots,
+        stuck_queue_entries,
+      },
+    });
+  } catch (err) {
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
+};
+
 // POST /api/test-plans/<slug>/step/<id>/comment
 // Tester free-form comment per step. CRITICAL: this body is NOT
 // surfaced to the LLM via rl_test_plan_status / rl_test_plan_wait
@@ -1206,6 +1400,10 @@ const server = createServer(async (req, res) => {
   }
   if (pathOnly === '/api/state') {
     await handleApiState(res);
+    return;
+  }
+  if (pathOnly === '/api/fleet-health') {
+    await handleFleetHealth(req, res);
     return;
   }
   if (pathOnly === '/api/test-plans' && req.method === 'GET') {
