@@ -20,6 +20,7 @@ const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
 const TEST_PLANS_DIR = process.env.TEST_PLANS_DIR || join(STATE_DIR, 'test-plans');
 const ATTACHMENTS_DIR = process.env.ATTACHMENTS_DIR || join(STATE_DIR, 'test-plan-attachments');
 const TASKS_DIR = process.env.TASKS_DIR || join(STATE_DIR, 'tasks');
+const LEASE_QUEUE_DIR = process.env.LEASE_QUEUE_DIR || join(STATE_DIR, 'lease-queue');
 const TASK_LOG_TAIL_BYTES = parseInt(process.env.TASK_LOG_TAIL_BYTES || '51200', 10);
 const TERMINAL_WINDOW_MS = parseInt(process.env.TASK_TERMINAL_WINDOW_MS || '3600000', 10);
 const MAX_ACTIVE_TASKS = 200;
@@ -299,6 +300,42 @@ const collectActiveTasks = async () => {
   return out.slice(0, MAX_ACTIVE_TASKS);
 };
 
+// ROK-1331 M5b — read per-slot lease-queue/<slot>.json files (M5a writer)
+// and emit one entry per known slot. Slots are taken from the claims array
+// so the dashboard projection stays consistent with whatever the
+// orchestrator considers a valid slot. Missing file → empty queue; bad
+// JSON → empty queue + warn (do NOT 500 the whole /api/state).
+const collectLeaseQueues = async (slots) => {
+  const out = [];
+  for (const s of slots) {
+    if (typeof s.slot !== 'number') continue;
+    const file = join(LEASE_QUEUE_DIR, `${s.slot}.json`);
+    let entry = { slot: s.slot, current_holder: null, queue: [] };
+    try {
+      const raw = await readFile(file, 'utf-8');
+      const parsed = JSON.parse(raw);
+      // M5a's lease-queue file may be either an array (legacy queue-only
+      // shape) or {slot, current_holder, queue} (current shape). Normalize.
+      if (Array.isArray(parsed)) {
+        entry = { slot: s.slot, current_holder: null, queue: parsed };
+      } else if (parsed && typeof parsed === 'object') {
+        entry = {
+          slot: typeof parsed.slot === 'number' ? parsed.slot : s.slot,
+          current_holder: parsed.current_holder ?? null,
+          queue: Array.isArray(parsed.queue) ? parsed.queue : [],
+        };
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        // eslint-disable-next-line no-console
+        console.warn(`[rl-dashboard] lease-queue/${s.slot}.json unreadable: ${err.message}`);
+      }
+    }
+    out.push(entry);
+  }
+  return out;
+};
+
 const handleApiState = async (res) => {
   try {
     const [claims, envs] = await Promise.all([
@@ -306,10 +343,11 @@ const handleApiState = async (res) => {
       readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8'),
     ]);
     const slots = JSON.parse(claims);
-    const [probedSlots, planSummaries, activeTasks] = await Promise.all([
+    const [probedSlots, planSummaries, activeTasks, leaseQueues] = await Promise.all([
       enrichSlotsWithProbes(slots),
       collectPlanSummaries(),
       collectActiveTasks(),
+      collectLeaseQueues(slots),
     ]);
     // Attach per-env plan summaries to each env entry so the client
     // doesn't need a separate fetch per card.
@@ -323,6 +361,7 @@ const handleApiState = async (res) => {
       slots: probedSlots,
       envs: enrichedEnvs,
       active_tasks: activeTasks,
+      lease_queues: leaseQueues,
       public_domain: PUBLIC_DOMAIN || null,
       generated_at: new Date().toISOString(),
     });
