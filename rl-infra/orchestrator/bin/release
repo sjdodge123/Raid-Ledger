@@ -103,6 +103,17 @@ docker exec "$RUNNER" sh -c "pkill -KILL -P 1 -f '$RUNNER_PROC_PATTERN' 2>/dev/n
 audit::log release runner_cleanup "$(jq -nc --argjson slot "$SLOT" --arg runner "$RUNNER" '{slot:$slot, runner:$runner, killed_processes:true}')"
 # =========================================================================
 
+# === ROK-1331 M8: testcontainers orphan reap ============================
+# After killing the runner-side jest, also reap any postgres/redis
+# testcontainers that jest started. ryuk normally handles this, but in
+# practice we see leaks when jest dies abruptly (OOM, kill -9, CI cancel)
+# or when ryuk's session-id tracker desyncs. Scoped to this slot — the
+# gc-sweeper's periodic `all` pass mops up anything we miss.
+# Best-effort; never fails release.
+# =========================================================================
+"$(dirname "$0")/runner-testcontainers-reap" "$SLOT" >/dev/null 2>&1 || true
+# =========================================================================
+
 # Enumerate envs for this slot. The env-registry is the source of truth —
 # docker labels are a secondary signal (used by the destroy path to find
 # containers, but they may be missing if env-destroy already ran or if the
