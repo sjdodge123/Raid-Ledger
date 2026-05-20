@@ -40,10 +40,22 @@ RL_QUEUE_FILE="${RL_STATE_DIR}/queue.json"
 RL_AUDIT_LOG="${RL_STATE_DIR}/audit.log"
 RL_LOCK_DIR="${RL_STATE_DIR}/locks"
 RL_TASKS_DIR="${RL_TASKS_DIR:-${RL_STATE_DIR}/tasks}"
+# ROK-1331 M5a — per-slot lease-queue dir. Each slot owns a FIFO array file
+# at $RL_LEASE_QUEUE_DIR/<slot>.json. The legacy global queue.json is still
+# written to for one transition cycle so the dashboard keeps rendering until
+# M5b rewires; the per-slot files are the source of truth for lease-advance.
+RL_LEASE_QUEUE_DIR="${RL_LEASE_QUEUE_DIR:-${RL_STATE_DIR}/lease-queue}"
+# Stale-head eviction threshold: queue entries whose last_heartbeat is older
+# than this are evicted by lease-advance before granting. Mirrors the
+# sweeper's CLAIM_HEARTBEAT_TIMEOUT_SECONDS shape but for queue waiters.
+RL_LEASE_HEAD_TIMEOUT_SECONDS="${RL_LEASE_HEAD_TIMEOUT_SECONDS:-300}"
+# Default claim duration when a slot is granted (lease TTL). M5a's claim
+# expiry reaper drives lifecycle once `expires_at` is populated.
+RL_CLAIM_DURATION_SECONDS="${RL_CLAIM_DURATION_SECONDS:-86400}"
 # Default matches the docker-compose.yml default profile (2 runners). Override
 # via .env to 4 when the `extra-slots` compose profile is enabled.
 RUNNER_SLOTS="${RUNNER_SLOTS:-2}"
-mkdir -p "$RL_LOCK_DIR" "$RL_TASKS_DIR"
+mkdir -p "$RL_LOCK_DIR" "$RL_TASKS_DIR" "$RL_LEASE_QUEUE_DIR"
 
 # Portability shim: flock(1) lives in util-linux on the VM, but macOS test
 # runners don't ship it. When absent we fall back to a no-op (tests are
@@ -76,7 +88,141 @@ state::init() {
     fi
     mkdir -p "$RL_TASKS_DIR"
     chmod 2775 "$RL_TASKS_DIR" 2>/dev/null || true
+    mkdir -p "$RL_LEASE_QUEUE_DIR"
+    chmod 2775 "$RL_LEASE_QUEUE_DIR" 2>/dev/null || true
     touch "$RL_AUDIT_LOG"
+}
+
+# ROK-1331 M5a — per-slot lease-queue helpers. Each slot has its own
+# FIFO file (lease-queue/<slot>.json) so inotifywait on the directory
+# can detect any slot's mutation in one watcher process.
+#
+# Lock ordering (STRICT): when an op touches BOTH claims.json AND a
+# lease-queue/<slot>.json, ALWAYS lock the queue FIRST then claims.
+# Reverse-order callers could deadlock against lease-advance, which
+# acquires queue → claims inside `lease::advance`.
+lease::file_for_slot() {
+    local slot="$1"
+    printf '%s/%s.json' "$RL_LEASE_QUEUE_DIR" "$slot"
+}
+
+# Ensure the per-slot queue file exists with `[]` initial content. Safe to
+# call repeatedly; idempotent under concurrent callers (atomic touch).
+lease::ensure_file() {
+    local slot="$1"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    if [[ ! -s "$f" ]]; then
+        echo "[]" > "$f.init.$$"
+        mv -n "$f.init.$$" "$f" 2>/dev/null || rm -f "$f.init.$$"
+        chmod 664 "$f" 2>/dev/null || true
+    fi
+}
+
+# Echo the agent_id at the head of the slot's queue, or empty.
+lease::head_agent() {
+    local slot="$1"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || { echo ""; return 0; }
+    jq -r '.[0].agent_id // empty' "$f" 2>/dev/null || true
+}
+
+# 0-based position of agent in the slot's queue (or empty if absent).
+lease::position() {
+    local slot="$1" agent="$2"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || { echo ""; return 0; }
+    jq -r --arg a "$agent" \
+        '[.[] | .agent_id] | index($a) // empty' "$f" 2>/dev/null || true
+}
+
+# Length of the slot's queue.
+lease::length() {
+    local slot="$1"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || { echo 0; return 0; }
+    jq 'length' "$f" 2>/dev/null || echo 0
+}
+
+# Append an entry (idempotent on agent_id). Updates last_heartbeat if the
+# agent is already queued — heartbeat refresh on poll.
+lease::add() {
+    local slot="$1" agent="$2" branch="$3" ts="$4"
+    lease::ensure_file "$slot"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    state::mutate "$f" \
+        --arg a "$agent" --arg b "$branch" --arg t "$ts" \
+        'if any(.[]; .agent_id == $a)
+         then map(if .agent_id == $a then .last_heartbeat = $t else . end)
+         else . + [{agent_id: $a, branch: $b, requested_at: $t, preempt: false, last_heartbeat: $t}]
+         end'
+}
+
+# Remove an entry from the slot's queue (idempotent).
+lease::remove() {
+    local slot="$1" agent="$2"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || return 0
+    state::mutate "$f" --arg a "$agent" 'map(select(.agent_id != $a))'
+}
+
+# Pick the slot to enqueue against when all slots are busy:
+# smallest queue wins; lowest slot id on tie. Echoes a slot number.
+lease::pick_enqueue_slot() {
+    local best_slot="" best_len=""
+    local slot len
+    for slot in $(seq 1 "$RUNNER_SLOTS"); do
+        len=$(lease::length "$slot")
+        if [[ -z "$best_slot" || "$len" -lt "$best_len" ]]; then
+            best_slot="$slot"
+            best_len="$len"
+        fi
+    done
+    echo "$best_slot"
+}
+
+# Read queue entries BEFORE a given agent (the "queue_ahead" slice). JSON
+# array; empty array when agent is head or not queued.
+lease::ahead_of() {
+    local slot="$1" agent="$2"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || { echo "[]"; return 0; }
+    jq --arg a "$agent" \
+        '. as $q
+         | ([.[] | .agent_id] | index($a)) as $pos
+         | if $pos == null or $pos == 0 then []
+           else $q[0:$pos] | map({agent_id, branch, requested_at})
+           end' "$f" 2>/dev/null || echo "[]"
+}
+
+# ROK-1331 M5a — env-registry pinned/claimable helpers. Default missing
+# fields to safe values via // false / // "" so legacy entries without the
+# M5a additions don't break callers.
+env_registry::set_pinned() {
+    local slug="$1" pinned="$2"
+    state::mutate "$RL_ENVS_FILE" --arg slug "$slug" --argjson p "$pinned" \
+        'map(if .slug == $slug then .pinned = ($p == true) else . end)'
+}
+
+env_registry::mark_claimable_by_next() {
+    local slot="$1" branch="$2"
+    state::mutate "$RL_ENVS_FILE" --argjson s "$slot" --arg b "$branch" \
+        'map(if .slot == $s
+             then .claimable_by_next = true
+                | .created_for_branch = $b
+             else . end)'
+}
+
+env_registry::clear_claimable_for_slot() {
+    local slot="$1"
+    state::mutate "$RL_ENVS_FILE" --argjson s "$slot" \
+        'map(if .slot == $s then .claimable_by_next = false else . end)'
 }
 
 # ROK-1331 M1: thin audit wrapper for task-* commands. Folds the task_id into
