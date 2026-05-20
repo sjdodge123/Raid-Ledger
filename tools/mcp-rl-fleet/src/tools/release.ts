@@ -14,6 +14,12 @@ export interface ReleaseResult {
   ok: boolean;
   slot?: number;
   destroyed_envs?: string[];
+  /**
+   * Task IDs the orchestrator's `release` binary cascaded SIGTERM to. Empty
+   * (never omitted) when no in-flight tasks were associated with this slot.
+   * Source: M1 `release` binary's task-cancel cascade (ROK-1331 M2 AC4).
+   */
+  cancelled_tasks?: string[];
   message?: string;
   error?: string;
 }

@@ -7,7 +7,6 @@
 //   We always pass RL_PROXMOX_USER=rl-agent and explicitly unset RL_OPERATOR.
 
 import { execFile, execFileSync } from 'node:child_process';
-import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, isAbsolute, resolve, sep } from 'node:path';
@@ -15,7 +14,42 @@ import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { z } from 'zod';
 
-const execFileAsync = promisify(execFile);
+/**
+ * Manual `execFile` promisifier that always resolves to `{stdout, stderr}`
+ * regardless of whether `node:child_process` was replaced by a vitest mock.
+ *
+ * Why not `util.promisify(execFile)`: promisify uses the `util.promisify.custom`
+ * symbol attached to the real `child_process.execFile` to return the `{stdout,
+ * stderr}` shape callers expect. When vitest's `vi.mock('node:child_process')`
+ * substitutes a plain function for execFile, the custom symbol is lost, and
+ * promisify falls back to default behavior: the resolved value becomes just
+ * the first non-error callback argument (stdout). Code that then reads
+ * `result.stdout` gets `undefined`, breaking every test that mocked execFile
+ * to verify SSH argv shape (ROK-1331 M2 release.spec, validate-ci.spec).
+ *
+ * Reading `result.stdout` on the resolved value here ALWAYS works in both
+ * real-runtime and test-mocked environments.
+ */
+function execFileP(
+  cmd: string,
+  args: string[],
+  opts: { env?: NodeJS.ProcessEnv; cwd?: string; maxBuffer?: number; timeout?: number } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (err, stdout, stderr) => {
+      const out = typeof stdout === 'string' ? stdout : stdout?.toString() ?? '';
+      const errStr = typeof stderr === 'string' ? stderr : stderr?.toString() ?? '';
+      if (err) {
+        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
+        e.stdout = out;
+        e.stderr = errStr || e.stderr || '';
+        reject(e);
+        return;
+      }
+      resolve({ stdout: out, stderr: errStr });
+    });
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -82,7 +116,7 @@ export async function runRl(
   }
 
   try {
-    const result = await execFileAsync(RL_BIN, args, {
+    const result = await execFileP(RL_BIN, args, {
       env,
       cwd: opts.cwd,
       maxBuffer: 16 * 1024 * 1024, // 16 MB — enough for validate-ci output
