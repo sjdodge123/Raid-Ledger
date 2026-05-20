@@ -368,14 +368,19 @@ run_integration_tests() {
     local i
     for i in $(seq 1 "$shards"); do
       echo "=== Integration shard ${i}/${shards} ==="
-      # `npx jest` directly so each shard is its own Node process. Passes
-      # --config explicitly because we are NOT running through `npm run
-      # test:integration -w api` here. NODE_OPTIONS=--max-old-space-size=3072
-      # gives V8 a 3 GB heap ceiling per shard (vs 1.4 GB default) which is
-      # ample headroom for ~25 suites/shard.
-      if NODE_OPTIONS="--max-old-space-size=3072" \
-         npx jest --config api/jest.integration.config.js \
-                  --runInBand --verbose --shard="${i}/${shards}"; then
+      # `npx jest` directly so each shard is its own Node process. We `cd api`
+      # FIRST so the jest config's relative paths (rootDir, transforms,
+      # ts-jest's tsconfig resolution) match what `npm run test:integration
+      # -w api` would produce. Without cd, jest loads config from repo root
+      # and ts-jest mis-resolves --ignoreDeprecations to an empty value
+      # (TS5103). Discovered ROK-1331 Probe 1 attempt 6 (2026-05-20).
+      #
+      # NODE_OPTIONS=--max-old-space-size=3072 gives V8 a 3 GB heap ceiling
+      # per shard (vs 1.4 GB default) which is ample headroom for ~25 suites
+      # per shard.
+      if (cd api && NODE_OPTIONS="--max-old-space-size=3072" \
+         npx jest --config ./jest.integration.config.js \
+                  --runInBand --verbose --shard="${i}/${shards}"); then
         shard_results+=("PASS")
       else
         shard_results+=("FAIL")
