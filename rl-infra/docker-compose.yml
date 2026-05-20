@@ -222,6 +222,11 @@ services:
       RL_PUBLIC_DOMAIN: ${RL_PUBLIC_DOMAIN:-}
     volumes:
       - ./state:/state:ro
+      # ROK-1331 M1: explicit task state mount. The ./state:/state:ro mount
+      # above already covers this transitively, but the explicit line documents
+      # the M3 dashboard read contract — `collectActiveTasks()` consumes
+      # /state/tasks/*.json from this mount.
+      - ./state/tasks:/state/tasks:ro
       # Test plans need RW so the dashboard can record verdicts from
       # testers. Scoped to its own subdir so the rest of /state stays RO.
       - ./state/test-plans:/state/test-plans:rw
