@@ -1,0 +1,446 @@
+// ROK-1331 M2 — MCP task tools: status / wait / cancel / list.
+//
+// These tools wrap the orchestrator's task-* binaries that M1 ships. The
+// orchestrator owns task lifecycle on the VM (pid-file, log tee, JSON
+// state); the MCP layer only reads + signals via SSH. All four executors
+// parse stdout JSON and surface the orchestrator's response verbatim.
+//
+// Bug B (ROK-1331, 2026-05-20): the task-status JSON shape separates
+//   - script_exit_code  (the wrapped command's exit code; null while running)
+//   - mcp_runtime_status (the runtime classification: running/succeeded/...)
+// `log_tail` is capped to a caller-supplied N (default 200, max 1000).
+// `steps[]` comes from M1's PASS/FAIL parser running over the log.
+
+import { execFile } from 'node:child_process';
+import { z } from 'zod';
+import { shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+
+export const TASK_ID_RE = /^[a-z0-9]{8,32}$/;
+export const taskIdSchema = z.string().regex(TASK_ID_RE);
+
+export const McpRuntimeStatusSchema = z.enum([
+  'running',
+  'succeeded',
+  'failed',
+  'killed_buffer_overflow',
+  'killed_timeout',
+  'cancelled',
+]);
+
+export const TaskStepSchema = z.object({
+  name: z.string(),
+  status: z.enum(['PASS', 'FAIL', 'SKIPPED']),
+  duration_s: z.number().nullable(),
+});
+
+// ISO-8601 sanity check — Zod 3 has no native datetime in our pinned slice
+// of the API, so we use a lightweight regex. Anything resembling a date
+// passes; pathological "not-a-date" strings get rejected.
+const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/, 'must be ISO-8601 datetime');
+
+export const TaskStatusResultSchema = z.object({
+  ok: z.boolean(),
+  task_id: taskIdSchema,
+  tool: z.string(),
+  slot: z.number().int().nullable(),
+  args_summary: z.string(),
+  started_at: isoDateSchema,
+  finished_at: isoDateSchema.nullable(),
+  elapsed_seconds: z.number().int(),
+  mcp_runtime_status: McpRuntimeStatusSchema,
+  script_exit_code: z.number().int().nullable(),
+  steps: z.array(TaskStepSchema),
+  log_tail: z.string(),
+  log_url: z.string(),
+  log_path: z.string(),
+  // M5b extensions — appended by the orchestrator when the .log is readable.
+  // Optional + nullable so old/in-flight responses still parse.
+  last_output_at: isoDateSchema.nullable().optional(),
+  last_line: z.string().nullable().optional(),
+  current_step: z.string().nullable().optional(),
+  progress_hint: z.string().nullable().optional(),
+  error: z.string().optional(),
+  message: z.string().optional(),
+});
+
+export type TaskStatusResult = z.infer<typeof TaskStatusResultSchema>;
+
+// Permissive shape for error envelopes (task_not_found etc.) — the
+// orchestrator may return {ok:false, error, task_id} without the full status
+// payload. We surface that verbatim rather than forcing it through the full
+// schema.
+interface TaskErrorEnvelope {
+  ok: false;
+  error?: string;
+  task_id?: string;
+  message?: string;
+}
+
+type ExecuteStatusReturn = TaskStatusResult | TaskErrorEnvelope;
+
+const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
+const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+
+/** Promisified execFile that doesn't trip Vitest's vi.mock on node:util. */
+function execFileP(
+  cmd: string,
+  args: string[],
+  opts: { timeout?: number; maxBuffer?: number } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (err, stdout, stderr) => {
+      const out = typeof stdout === 'string' ? stdout : stdout?.toString() ?? '';
+      const errStr = typeof stderr === 'string' ? stderr : stderr?.toString() ?? '';
+      if (err) {
+        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
+        e.stdout = out;
+        e.stderr = errStr || e.stderr || '';
+        reject(e);
+        return;
+      }
+      resolve({ stdout: out, stderr: errStr });
+    });
+  });
+}
+
+function sshArgs(remote: string): [string, string[]] {
+  return [
+    'ssh',
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
+  ];
+}
+
+/**
+ * Parse the orchestrator's stdout JSON. Returns null on parse failure so
+ * callers can surface a useful error rather than blowing up.
+ */
+function parseJson<T>(stdout: string): T | null {
+  try {
+    return JSON.parse(stdout.trim()) as T;
+  } catch {
+    // Try last-line strategy for binaries that prepend human text.
+    const last = stdout.trim().split('\n').pop();
+    if (!last) return null;
+    try {
+      return JSON.parse(last) as T;
+    } catch {
+      return null;
+    }
+  }
+}
+
+// --------------------------------------------------------------------------
+// rl_task_status — read current state of a task.
+// --------------------------------------------------------------------------
+
+export interface ExecuteStatusParams {
+  task_id: string;
+  /** Bug B: default 200, max 1000. */
+  log_tail_lines?: number;
+}
+
+export async function executeStatus(params: ExecuteStatusParams): Promise<ExecuteStatusReturn> {
+  const tail = params.log_tail_lines ?? 200;
+  const remote =
+    `/srv/rl-infra/orchestrator/bin/task-status ` +
+    `${shellQuote(params.task_id)} --log-tail-lines ${tail}`;
+  const [cmd, args] = sshArgs(remote);
+  try {
+    const { stdout } = await execFileP(cmd, args, {
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    const parsed = parseJson<TaskStatusResult | TaskErrorEnvelope>(stdout);
+    if (!parsed) {
+      return {
+        ok: false,
+        error: 'failed_to_parse_response',
+        task_id: params.task_id,
+      };
+    }
+    return parsed;
+  } catch (err) {
+    const e = err as Error & { stderr?: string; code?: number };
+    const stderr =
+      !e.stderr || e.stderr.trim() === ''
+        ? synthesizeEmptyStderrDiagnostic(e.code)
+        : e.stderr;
+    return {
+      ok: false,
+      error: 'task_status_failed',
+      task_id: params.task_id,
+      message: stderr,
+    };
+  }
+}
+
+// --------------------------------------------------------------------------
+// rl_task_wait — block until task transitions to terminal OR timeout.
+// --------------------------------------------------------------------------
+
+export interface ExecuteWaitParams {
+  task_id: string;
+  timeout_seconds?: number;
+  log_tail_lines?: number;
+}
+
+export interface ExecuteWaitTimedOut {
+  ok: false;
+  error: 'timed_out';
+  task_id: string;
+  waited_seconds: number;
+}
+
+export interface ExecuteWaitNotInstalled {
+  ok: false;
+  error: 'inotifywait_not_installed';
+  hint: string;
+}
+
+export type ExecuteWaitResult =
+  | ExecuteStatusReturn
+  | ExecuteWaitTimedOut
+  | ExecuteWaitNotInstalled;
+
+const TERMINAL_STATUSES = new Set([
+  'succeeded',
+  'failed',
+  'killed_buffer_overflow',
+  'killed_timeout',
+  'cancelled',
+]);
+
+export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWaitResult> {
+  const timeoutS = Math.max(5, Math.min(3600, params.timeout_seconds ?? 600));
+
+  // Preflight: probe inotifywait availability. Mirrors test-plan's pattern.
+  const probeRemote = 'command -v inotifywait';
+  const [probeCmd, probeArgs] = sshArgs(probeRemote);
+  try {
+    await execFileP(probeCmd, probeArgs, { timeout: 10_000 });
+  } catch {
+    return {
+      ok: false,
+      error: 'inotifywait_not_installed',
+      hint: 'apt-get install inotify-tools on the VM (or whatever the runner image uses)',
+    };
+  }
+
+  // Watch the task JSON file for close_write/moved_to events.
+  const taskIdQuoted = shellQuote(params.task_id);
+  const watchRemote =
+    `inotifywait -q -e close_write,moved_to ` +
+    `--format '%f' ` +
+    `/srv/rl-infra/state/tasks/ 2>/dev/null ` +
+    `| grep -m1 -E ^${taskIdQuoted}'\\.json$'`;
+  const [watchCmd, watchArgs] = sshArgs(watchRemote);
+
+  const startedAtMs = Date.now();
+
+  // Wrap the watch in a race so we can enforce the timeout deterministically.
+  const watchPromise = execFileP(watchCmd, watchArgs, {
+    timeout: timeoutS * 1000,
+    maxBuffer: 1024 * 1024,
+  });
+
+  try {
+    await Promise.race([
+      watchPromise,
+      new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              Object.assign(new Error('wait_timeout_local'), { code: 'WAIT_TIMEOUT' }),
+            ),
+          timeoutS * 1000,
+        ),
+      ),
+    ]);
+  } catch (err) {
+    const e = err as Error & { code?: string | number; signal?: string };
+    // execFile timed out (kills child with SIGTERM) OR our local timer fired.
+    const elapsed = Math.round((Date.now() - startedAtMs) / 1000);
+    if (
+      e.code === 'WAIT_TIMEOUT' ||
+      e.signal === 'SIGTERM' ||
+      elapsed >= timeoutS - 1
+    ) {
+      return {
+        ok: false,
+        error: 'timed_out',
+        task_id: params.task_id,
+        waited_seconds: elapsed,
+      };
+    }
+    // Some other failure — fall through to a final status read so the caller
+    // still gets the task state, with the error surfaced via stderr-on-status.
+    const status = await executeStatus({
+      task_id: params.task_id,
+      log_tail_lines: params.log_tail_lines,
+    });
+    return status;
+  }
+
+  // inotifywait fired — read the current state.
+  const status = await executeStatus({
+    task_id: params.task_id,
+    log_tail_lines: params.log_tail_lines,
+  });
+  // If the task is in a terminal state, return immediately. Otherwise the
+  // change was a heartbeat write; return the current state anyway (caller
+  // can re-wait if needed).
+  if ('mcp_runtime_status' in status && !TERMINAL_STATUSES.has(status.mcp_runtime_status)) {
+    // Still running. Return what we have — caller decides whether to wait
+    // again. (Spec lets caller resume polling.)
+    return status;
+  }
+  return status;
+}
+
+// --------------------------------------------------------------------------
+// rl_task_cancel — signal a running task to exit gracefully.
+// --------------------------------------------------------------------------
+
+export interface ExecuteCancelParams {
+  task_id: string;
+  reason: string;
+}
+
+export interface ExecuteCancelResult {
+  ok: boolean;
+  task_id?: string;
+  cancelled?: boolean;
+  mcp_runtime_status?: string;
+  error?: string;
+  message?: string;
+}
+
+export async function executeCancel(params: ExecuteCancelParams): Promise<ExecuteCancelResult> {
+  const remote =
+    `/srv/rl-infra/orchestrator/bin/task-cancel ` +
+    `${shellQuote(params.task_id)} --reason ${shellQuote(params.reason)}`;
+  const [cmd, args] = sshArgs(remote);
+  try {
+    const { stdout } = await execFileP(cmd, args, {
+      maxBuffer: 1024 * 1024,
+      timeout: 60_000,
+    });
+    const parsed = parseJson<ExecuteCancelResult>(stdout);
+    if (!parsed) {
+      return {
+        ok: false,
+        error: 'failed_to_parse_response',
+        task_id: params.task_id,
+      };
+    }
+    // Idempotent surface: any ok:true response means the task is in a
+    // terminal state. Stamp `cancelled: true` so callers don't have to
+    // inspect mcp_runtime_status to know the operation took.
+    return {
+      ...parsed,
+      cancelled: parsed.ok === true,
+    };
+  } catch (err) {
+    const e = err as Error & { stderr?: string; code?: number };
+    const stderr =
+      !e.stderr || e.stderr.trim() === ''
+        ? synthesizeEmptyStderrDiagnostic(e.code)
+        : e.stderr;
+    return {
+      ok: false,
+      error: 'task_cancel_failed',
+      task_id: params.task_id,
+      message: stderr,
+    };
+  }
+}
+
+// --------------------------------------------------------------------------
+// rl_task_list — list recent tasks across slots.
+// --------------------------------------------------------------------------
+
+export interface ExecuteListParams {
+  slot?: number;
+  status?: z.infer<typeof McpRuntimeStatusSchema>;
+  limit?: number;
+}
+
+export interface ExecuteListResult {
+  ok: boolean;
+  tasks?: Array<Omit<TaskStatusResult, 'log_tail'>>;
+  error?: string;
+  message?: string;
+}
+
+export async function executeList(params: ExecuteListParams): Promise<ExecuteListResult> {
+  const flags: string[] = [];
+  if (typeof params.slot === 'number') flags.push(`--slot ${params.slot}`);
+  if (params.status) flags.push(`--status ${shellQuote(params.status)}`);
+  if (typeof params.limit === 'number') flags.push(`--limit ${params.limit}`);
+  const remote =
+    `/srv/rl-infra/orchestrator/bin/task-list${flags.length ? ' ' + flags.join(' ') : ''}`;
+  const [cmd, args] = sshArgs(remote);
+  try {
+    const { stdout } = await execFileP(cmd, args, {
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    const parsed = parseJson<ExecuteListResult>(stdout);
+    if (!parsed) {
+      return {
+        ok: false,
+        error: 'failed_to_parse_response',
+      };
+    }
+    return parsed;
+  } catch (err) {
+    const e = err as Error & { stderr?: string; code?: number };
+    const stderr =
+      !e.stderr || e.stderr.trim() === ''
+        ? synthesizeEmptyStderrDiagnostic(e.code)
+        : e.stderr;
+    return {
+      ok: false,
+      error: 'task_list_failed',
+      message: stderr,
+    };
+  }
+}
+
+// --------------------------------------------------------------------------
+// M5b — parseProgressHint (parser helper for tool-aware progress hints).
+// Used by the orchestrator side to populate `progress_hint`. Exported from
+// here so the schema-level extension tests can target a single source.
+// --------------------------------------------------------------------------
+
+export function parseProgressHint(tool: string, log: string): string | null {
+  if (tool === 'rl_validate_ci') {
+    // Jest verbose: `PASS  api/src/foo/foo.spec.ts (12 of 18)` — the
+    // suite-of-suites marker. Take the LAST occurrence (latest progress).
+    const jestProgress = [...log.matchAll(/\((\d+)\s+of\s+(\d+)\)/g)].pop();
+    if (jestProgress) {
+      return `jest: suite ${jestProgress[1]} of ${jestProgress[2]}`;
+    }
+    // Fallback: jest summary line — `Tests: ... 312 total`.
+    const totalMatch = log.match(/Tests:[^\n]*?(\d+)\s+total/);
+    if (totalMatch) {
+      return `jest: ${totalMatch[1]} tests total`;
+    }
+    return null;
+  }
+  if (tool === 'rl_env_build_image_from_runner') {
+    // BuildKit: `#15 [build 12/45] ...` OR classic: `Step 12/45 :`.
+    const bkMatch = [...log.matchAll(/\[\w+\s+(\d+)\/(\d+)\]/g)].pop();
+    if (bkMatch) {
+      return `docker build: step ${bkMatch[1]} of ${bkMatch[2]}`;
+    }
+    const stepMatch = [...log.matchAll(/Step\s+(\d+)\/(\d+)\s*:/g)].pop();
+    if (stepMatch) {
+      return `docker build: step ${stepMatch[1]} of ${stepMatch[2]}`;
+    }
+    return null;
+  }
+  return null;
+}

@@ -115,6 +115,30 @@ function sanitizeExtra(opts: RlEnv): Record<string, string> {
 }
 
 /**
+ * Bug A (ROK-1331 M2): produce a one-line synthetic diagnostic when an ssh
+ * (or other child-process) call exits non-zero with empty stderr. The empty-
+ * stderr case is the worst possible UX — the agent sees `exit 255` and no
+ * hint of WHY. Common causes that all produce silent ssh failures:
+ *   - command not found inside the remote shell (PATH gap, stale image)
+ *   - shell init scripts (.bashrc) erroring before our command runs
+ *   - git "dubious-ownership" warnings blocking the rest of the line
+ *   - stdin pipeline error (e.g. closing too early)
+ *   - ssh connection drop mid-command (network, fleet down)
+ *
+ * This helper returns a fixed-format single line that callers prepend or
+ * substitute when they detect the empty-stderr condition. Keep it ONE LINE
+ * so downstream log parsers don't have to handle multiline stderr.
+ */
+export function synthesizeEmptyStderrDiagnostic(exitCode: number | undefined): string {
+  const code = typeof exitCode === 'number' ? String(exitCode) : 'unknown';
+  return (
+    `[mcp-rl-fleet: ssh returned exit ${code} with no output — ` +
+    `possible causes: command not found, shell init failure, ` +
+    `git dubious-ownership, stdin pipeline error, ssh connection drop]`
+  );
+}
+
+/**
  * POSIX shell single-quote escape. Wraps `s` in single quotes and escapes
  * any embedded single quote via the classic `'\''` trick. The result is
  * safe to interpolate into a string passed to `bash -c "..."` or `ssh user
