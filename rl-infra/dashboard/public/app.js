@@ -35,21 +35,28 @@ const el = (tag, opts = {}, ...children) => {
 // <untrusted-tester-comment> tags and base64-encoded for the agent).
 const URL_RE = /(https?:\/\/[^\s<>'"`)]+)/g;
 const URL_TEST = /^https?:\/\//;
+// Trailing sentence punctuation should not become part of the link target
+// (`http://x.com/foo.` → href `http://x.com/foo`, then a "." text node).
+const URL_TRAILING_PUNCT_RE = /^(.*?)([).,;:!?]*)$/;
 const appendWithLinks = (parent, text) => {
   if (!text) return;
   const parts = String(text).split(URL_RE);
   for (const part of parts) {
     if (!part) continue;
     if (URL_TEST.test(part)) {
+      const m = part.match(URL_TRAILING_PUNCT_RE);
+      const cleanUrl = m ? m[1] : part;
+      const tail = m ? m[2] : '';
       parent.appendChild(
         el('a', {
-          href: part,
+          href: cleanUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
           class: 'step-inline-link',
-          text: part,
+          text: cleanUrl,
         }),
       );
+      if (tail) parent.appendChild(document.createTextNode(tail));
     } else {
       parent.appendChild(document.createTextNode(part));
     }
@@ -78,7 +85,51 @@ const fmtTime = (iso) => {
 // (the slot hostnames have no public DNS), which is acceptable feedback.
 const isLan = window.location.hostname.endsWith('.rl.lan');
 
-const renderSlot = (s) => {
+const fmtElapsed = (seconds) => {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+};
+
+const TASK_MARKERS = { running: '▶', succeeded: '✓', failed: '✗', cancelled: '⊘' };
+
+const renderTaskRow = (task) => {
+  const status = TASK_MARKERS[task.status] ? task.status : 'running';
+  const row = el('li', { class: `task-row task-row-${status}` });
+  if (status === 'running') row.setAttribute('data-started-at', task.started_at);
+
+  row.appendChild(el('span', { class: 'task-marker', text: TASK_MARKERS[status] }));
+
+  const fullLabel = task.args_summary
+    ? `${task.tool} ${task.args_summary}`
+    : task.tool;
+  const trimmed = fullLabel.length > 64 ? fullLabel.slice(0, 63) + '…' : fullLabel;
+  const tool = el('span', { class: 'task-tool', text: trimmed });
+  tool.title = fullLabel;
+  row.appendChild(tool);
+
+  row.appendChild(el('span', { class: 'task-elapsed', text: `(${fmtElapsed(task.elapsed_seconds)})` }));
+
+  row.appendChild(document.createTextNode(' · '));
+  row.appendChild(el('a', {
+    class: 'task-log-link',
+    href: `/api/tasks/${task.task_id}/log`,
+    target: '_blank',
+    rel: 'noopener',
+    text: 'log',
+  }));
+  return row;
+};
+
+// Sort: running first, then by started_at desc.
+const sortTasksForSlot = (tasks) => [...tasks].sort((a, b) => {
+  if (a.status === 'running' && b.status !== 'running') return -1;
+  if (a.status !== 'running' && b.status === 'running') return 1;
+  return (Date.parse(b.started_at) || 0) - (Date.parse(a.started_at) || 0);
+});
+
+const renderSlot = (s, activeTasks = []) => {
   const card = el('div', { class: 'card' });
   card.appendChild(
     el('div', { class: 'card-title' }, `Slot ${s.slot}`, ' ',
@@ -120,6 +171,18 @@ const renderSlot = (s) => {
     actions.appendChild(span);
   }
   card.appendChild(actions);
+
+  // Per-slot task list (ROK-1331 M3). Renders running + 1h-window terminal
+  // rows that ride along /api/state. Empty placeholder only for claimed slots.
+  const slotTasks = (activeTasks || []).filter((t) => t.slot === s.slot);
+  if (slotTasks.length) {
+    const ul = el('ul', { class: 'slot-tasks' });
+    sortTasksForSlot(slotTasks).forEach((t) => ul.appendChild(renderTaskRow(t)));
+    card.appendChild(ul);
+  } else if (s.claimed) {
+    card.appendChild(el('div', { class: 'slot-tasks-empty', text: 'idle (no tasks)' }));
+  }
+
   return card;
 };
 
@@ -401,9 +464,6 @@ const renderStep = (slug, plan, step, draft) => {
       : 'Complete the prior steps first (set a verdict in the draft).';
     passBtn.title = failBtn.title = skipBtn.title = reason;
   }
-  // Store back-refs so patchPlanInPlace can find this row + its plan
-  // context without walking the DOM repeatedly.
-  row.dataset.stepId = String(step.id);
   buttons.append(passBtn, failBtn, skipBtn);
   if (resetBtn) buttons.appendChild(resetBtn);
 
@@ -781,7 +841,8 @@ const render = (data) => {
   slotsDiv.style.minHeight = slotsH + 'px';
   envsDiv.style.minHeight = envsH + 'px';
 
-  const slotCards = (data.slots ?? []).map(renderSlot);
+  const activeTasks = data.active_tasks ?? [];
+  const slotCards = (data.slots ?? []).map((s) => renderSlot(s, activeTasks));
   if (!slotCards.length) slotCards.push(renderEmpty('No slots configured.'));
   slotsDiv.replaceChildren(...slotCards);
 
@@ -920,3 +981,33 @@ window.addEventListener('pageshow', (ev) => {
 // page reload instead — drafts in localStorage survive a reload, so
 // nothing's lost. The header refresh dot is also tappable as the
 // explicit one-tap alternative.
+
+// Relabel running-task elapsed every second WITHOUT re-fetching /api/state.
+// Auto-refresh is disabled, so without this the elapsed text would freeze
+// between manual ticks. Only touches .task-elapsed text under running rows.
+const updateElapsedLabels = () => {
+  const rows = document.querySelectorAll('.task-row.task-row-running');
+  rows.forEach((row) => {
+    const startedAt = row.getAttribute('data-started-at');
+    if (!startedAt) return;
+    const startedMs = Date.parse(startedAt);
+    if (!Number.isFinite(startedMs)) return;
+    const seconds = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
+    const elapsedEl = row.querySelector('.task-elapsed');
+    if (elapsedEl) elapsedEl.textContent = `(${fmtElapsed(seconds)})`;
+  });
+};
+// Skip the 1s tick under jsdom — without this guard, the Node test runner
+// stays alive past assertion completion because jsdom-backed setInterval
+// keeps a real Node Timeout for each loaded fixture.
+const isJsdom = typeof navigator !== 'undefined'
+  && typeof navigator.userAgent === 'string'
+  && navigator.userAgent.includes('jsdom');
+if (!isJsdom) setInterval(updateElapsedLabels, 1000);
+
+// Test surface — expose internal helpers under window.__rlTest so the
+// jsdom-driven test harness can drive renderSlot / appendWithLinks /
+// fmtElapsed without a build step. No behavior change for prod.
+if (typeof window !== 'undefined') {
+  window.__rlTest = { renderSlot, appendWithLinks, fmtElapsed };
+}
