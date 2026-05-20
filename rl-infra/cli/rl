@@ -208,6 +208,25 @@ cmd_release() {
         ./scripts/env-lock.sh release || true
         exit 0
     fi
+    # ROK-1331 M5a — by default an agent release PRESERVES envs (the next
+    # claim on the same branch inherits them). Operator path keeps the legacy
+    # destroy-everything behavior. Explicit flag overrides win.
+    local extra_args=()
+    local preserve_flag=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --preserve-envs) preserve_flag="--preserve-envs"; shift ;;
+            --destroy-envs)  preserve_flag="--destroy-envs"; shift ;;
+            *) extra_args+=("$1"); shift ;;
+        esac
+    done
+    if [[ -z "$preserve_flag" ]]; then
+        if [[ "${RL_OPERATOR:-0}" == "1" || "$RL_PROXMOX_USER" == "rl" ]]; then
+            preserve_flag="--destroy-envs"
+        else
+            preserve_flag="--preserve-envs"
+        fi
+    fi
     # Look up the slot BEFORE the SSH release call drops the claim record,
     # so we know which Mutagen session to terminate. RL_AGENT_ID is
     # printf-%q'd through into the remote jq invocation — defense in
@@ -219,7 +238,7 @@ cmd_release() {
         "jq -r --arg a $(printf '%q' "$RL_AGENT_ID") '[.[] | select(.agent_id == \$a and .claimed == true) | .slot] | first // empty' /srv/rl-infra/state/claims.json" 2>/dev/null || true)
     stop_heartbeat_daemon
     local result
-    result=$(ssh_run release)
+    result=$(ssh_run release "$preserve_flag" "${extra_args[@]:+${extra_args[@]}}")
     # Compact JSON for parseability by the MCP layer (no trailing pretty-print
     # multi-line output; the result block is already single-line JSON from the
     # orchestrator). Print as-is, no jq reformatting.
