@@ -75,6 +75,34 @@ if [[ -d "$RL_TASKS_DIR" ]]; then
     done
 fi
 
+# === ROK-1331 M7: runner-side orphan cleanup =============================
+# Real bug found during M5b dogfood: shell processes started via the OLD
+# `ssh run-on-runner -- bash …` CLI path (validate-ci.sh / jest / vitest)
+# get reparented to docker-init (PID 1) inside the runner container when
+# their parent ssh closes. The M1 task-cancel cascade above catches the
+# NEW MCP task-execution path but NOT these legacy orphans, so they
+# survive `rl release` and contend with the next claim's tests for DB
+# ports + memory.
+#
+# Fix: best-effort pkill inside the runner container BEFORE we advance
+# the lease. SIGTERM first, brief grace window, then SIGKILL stragglers.
+# Block fires unconditionally (preserve-envs OR destroy-envs) — orphan
+# kill is orthogonal to env lifecycle. Missing runner container is a
+# noop; never block release on cleanup failure.
+# RUNNER_PROC_PATTERN: pgrep-style ERE matching the processes we want
+# gone. Anchored "node " (trailing space) keeps us from matching
+# unrelated commands. The runner container's PID 1 is docker-init, not
+# us — `pkill -P 1` targets all descendants of init (reparented orphans)
+# without touching init itself.
+# =========================================================================
+RUNNER="rl-runner-${SLOT}"
+RUNNER_PROC_PATTERN='validate-ci\.sh|jest|vitest|npm |node '
+docker exec "$RUNNER" sh -c "pkill -TERM -P 1 -f '$RUNNER_PROC_PATTERN' 2>/dev/null || true" >/dev/null 2>&1 || true
+sleep "${RL_RUNNER_CLEANUP_GRACE_SECONDS:-3}"
+docker exec "$RUNNER" sh -c "pkill -KILL -P 1 -f '$RUNNER_PROC_PATTERN' 2>/dev/null || true" >/dev/null 2>&1 || true
+audit::log release runner_cleanup "$(jq -nc --argjson slot "$SLOT" --arg runner "$RUNNER" '{slot:$slot, runner:$runner, killed_processes:true}')"
+# =========================================================================
+
 # Enumerate envs for this slot. The env-registry is the source of truth —
 # docker labels are a secondary signal (used by the destroy path to find
 # containers, but they may be missing if env-destroy already ran or if the
