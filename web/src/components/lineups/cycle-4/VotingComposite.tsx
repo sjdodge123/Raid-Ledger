@@ -229,16 +229,18 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
           sub={hero.sub}
         />
         <div className="flex items-center gap-2 mt-2 px-1">
-          <StickyHeroSubmitButton
-            submitted={submitted}
-            used={used}
-            max={max}
-            disabled={kind === 'empty' || !canParticipate}
-            disabledReason={copy.disabledReason}
-            onClick={handleCtaClick}
-          />
-          <div className="ml-auto flex-shrink-0">
+          <div className="flex-shrink-0">
             <VotesUsedPill used={used} max={max} />
+          </div>
+          <div className="ml-auto flex-shrink-0">
+            <StickyHeroSubmitButton
+              submitted={submitted}
+              used={used}
+              max={max}
+              disabled={kind === 'empty' || !canParticipate}
+              disabledReason={copy.disabledReason}
+              onClick={handleCtaClick}
+            />
           </div>
         </div>
         {copy.nudge && (
