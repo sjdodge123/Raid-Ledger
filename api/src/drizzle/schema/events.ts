@@ -106,6 +106,12 @@ export const events = pgTable(
     cancelledAt: timestamp('cancelled_at'),
     /** Optional reason provided when the event was cancelled (ROK-374). */
     cancellationReason: text('cancellation_reason'),
+    /** ROK-1332: When set, reconciliation cron skips this row until the timestamp
+     *  passes. Set to NOW()+1h when Discord's guild-wide 100-SE cap remains
+     *  saturated after GC sweep, so the cron stops retrying in a tight loop. */
+    scheduledEventReconcileBackoffUntil: timestamp(
+      'scheduled_event_reconcile_backoff_until',
+    ),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -124,6 +130,11 @@ export const events = pgTable(
     index('idx_events_cancelled_at').on(table.cancelledAt),
     index('idx_events_discord_scheduled_event_id').on(
       table.discordScheduledEventId,
+    ),
+    // ROK-1332: Actual DB index is partial (WHERE scheduled_event_reconcile_backoff_until
+    // IS NOT NULL) via migration 0143. Drizzle DSL doesn't support partial indexes natively.
+    index('idx_events_se_reconcile_backoff').on(
+      table.scheduledEventReconcileBackoffUntil,
     ),
   ],
 );
