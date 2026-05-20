@@ -11,7 +11,10 @@
 #   5. Append summary to audit log.
 set -euo pipefail
 
-STATE_DIR="${STATE_DIR:-/state}"
+# ROK-1331 M1: accept RL_STATE_DIR as a fallback so callers using the
+# orchestrator's canonical var name (test_helpers.sh, mcp-env tools) work
+# without re-exporting under the legacy STATE_DIR name.
+STATE_DIR="${STATE_DIR:-${RL_STATE_DIR:-/state}}"
 CLAIMS="${STATE_DIR}/claims.json"
 ENVS="${STATE_DIR}/env-registry.json"
 QUEUE="${STATE_DIR}/queue.json"
@@ -19,6 +22,9 @@ AUDIT="${STATE_DIR}/audit.log"
 LOCK_DIR="${STATE_DIR}/locks"
 QUEUE_TTL_SECONDS="${QUEUE_TTL_SECONDS:-1800}"   # 30 min — stale waiters
 MAX_CLAIM_AGE_SECONDS="${MAX_CLAIM_AGE_SECONDS:-28800}"   # 8 hr — slot hoarding
+# ROK-1331 M1: default so the task-retention block (added below) can be
+# exercised by tests that don't supply the Dockerfile-provided env vars.
+CLAIM_HEARTBEAT_TIMEOUT_SECONDS="${CLAIM_HEARTBEAT_TIMEOUT_SECONDS:-300}"
 mkdir -p "$LOCK_DIR"
 NOW_EPOCH=$(date -u +%s)
 NOW_ISO=$(date -u +%FT%TZ)
@@ -70,6 +76,47 @@ mutate() {
         chmod 664 "$file" 2>/dev/null || true
     ) 200>"$LOCK_DIR/$(basename "$file").lock"
 }
+
+# 0. ROK-1331 M1 — task retention. Drop task JSON + log pairs for completed
+# tasks older than TASK_RETENTION_SECONDS (default 86400 = 24h). Running tasks
+# are preserved unconditionally — the sweeper never kills tasks. Orphan
+# recovery: if a running task's pid is no longer alive (host reboot, OOM),
+# flip to failed with cancel_reason "orphaned" so the next sweeper pass ages
+# it out normally.
+#
+# Runs BEFORE the docker-dependent sections so it works even when the docker
+# socket is unreachable (e.g. local test runs on the operator's Mac).
+TASK_RETENTION_SECONDS="${TASK_RETENTION_SECONDS:-86400}"
+TASKS_DIR="${TASKS_DIR:-/state/tasks}"
+if [[ -d "$TASKS_DIR" ]]; then
+    for tjson in "$TASKS_DIR"/*.json; do
+        [[ -f "$tjson" ]] || continue
+        STATUS=$(jq -r '.status // "unknown"' "$tjson" 2>/dev/null || echo "unknown")
+        if [[ "$STATUS" == "running" ]]; then
+            PID=$(jq -r '.pid // empty' "$tjson" 2>/dev/null)
+            if [[ -n "$PID" ]] && ! kill -0 "$PID" 2>/dev/null; then
+                ORPHAN_FINISHED=$(date -u +%FT%TZ)
+                tmp=$(mktemp "${tjson}.XXXXXX")
+                jq --arg f "$ORPHAN_FINISHED" \
+                    '.status = "failed" | .cancel_reason = "orphaned" | (if .finished_at == null then .finished_at = $f else . end)' \
+                    "$tjson" > "$tmp" && mv "$tmp" "$tjson" || rm -f "$tmp"
+                ORPHAN_TID=$(jq -r '.task_id // "unknown"' "$tjson" 2>/dev/null)
+                audit task_orphaned "$(jq -nc --arg t "$ORPHAN_TID" '{task_id:$t}')"
+            fi
+            continue
+        fi
+        FINISHED=$(jq -r '.finished_at // empty' "$tjson" 2>/dev/null)
+        [[ -z "$FINISHED" ]] && continue
+        FINISHED_EPOCH=$(date -u -d "$FINISHED" +%s 2>/dev/null || \
+            date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$FINISHED" +%s 2>/dev/null || echo 0)
+        AGE=$(( NOW_EPOCH - FINISHED_EPOCH ))
+        if (( AGE >= TASK_RETENTION_SECONDS )); then
+            TID=$(jq -r '.task_id' "$tjson" 2>/dev/null || echo "")
+            rm -f "$tjson" "$TASKS_DIR/${TID}.log"
+            audit task_pruned "$(jq -nc --arg tid "$TID" --argjson age "$AGE" '{task_id:$tid, age_s:$age}')"
+        fi
+    done
+fi
 
 # 1. Dead claims (heartbeat older than timeout).
 DEAD_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$CLAIM_HEARTBEAT_TIMEOUT_SECONDS" \
@@ -200,6 +247,11 @@ done
 docker image prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker volume prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker container prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
+
+# 3b. ROK-1331 M1 — task retention block moved to a self-contained function
+# below + invoked at the top (before docker ops) so it runs even when docker
+# is unavailable (test runners on the operator's Mac). See `prune_old_tasks`
+# above the section-1 block.
 
 # 4. Summary.
 FREE=$(jq '[.[] | select(.claimed == false)] | length' "$CLAIMS")

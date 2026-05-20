@@ -30,6 +30,24 @@ if [[ -z "$SLOT" ]]; then
     fi
 fi
 
+# === ROK-1331 M1: task-cancel cascade — preserve across future rewrites ===
+# M5a (Wave 5) will rewrite this script to layer lease-queue advance + the
+# --preserve-envs flag on top of the existing teardown flow. The block below
+# scans for tasks owned by this slot with status=running and calls task-cancel
+# on each so in-flight long-running tools (rl_validate_ci, image builds, etc.)
+# don't outlive the slot. M5a MUST keep this block intact as step 0 of release.
+# Best-effort — never block release on cancel failure.
+# =========================================================================
+if [[ -d "$RL_TASKS_DIR" ]]; then
+    RUNNING_TASKS=$(jq -r --argjson slot "$SLOT" \
+        'select(.slot == $slot and .status == "running") | .task_id' \
+        "$RL_TASKS_DIR"/*.json 2>/dev/null || true)
+    for tid in $RUNNING_TASKS; do
+        [[ -z "$tid" ]] && continue
+        "$(dirname "$0")/task-cancel" "$tid" "slot_released" >/dev/null 2>&1 || true
+    done
+fi
+
 # Tear down envs spun by this slot.
 ENV_SLUGS=$(docker ps -a --filter "label=rl.slot=$SLOT" --filter "label=rl.role=env" --format '{{.Label "rl.env_slug"}}' | sort -u)
 for slug in $ENV_SLUGS; do

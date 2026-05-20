@@ -18,5 +18,11 @@
 # match — they start with `[`, not `[A-Z]`, so they fall through. This is
 # intentional: heartbeats and step-results share the same log stream but have
 # disjoint shapes.
-PATTERN_STEP_RESULT='^(\x1b\[[0-9;]*m)?([A-Z][A-Za-z0-9 +()-]+): (PASS|FAIL|SKIPPED)(\x1b\[[0-9;]*m)?$'
+# Bash's =~ uses POSIX ERE — `\x1b` is NOT interpreted as a hex escape there
+# (unlike Perl/Python). We build the pattern with an embedded literal ESC byte
+# via $'\033' so the optional ANSI groups match real terminal output. The
+# spec's documented pattern (`\x1b\[[0-9;]*m`) describes the byte sequence;
+# this is its bash-=~-compatible realization.
+_ESC=$'\033'
+PATTERN_STEP_RESULT="^(${_ESC}\\[[0-9;]*m)?([A-Z][A-Za-z0-9 +()-]+): (PASS|FAIL|SKIPPED)(${_ESC}\\[[0-9;]*m)?$"
 export PATTERN_STEP_RESULT
