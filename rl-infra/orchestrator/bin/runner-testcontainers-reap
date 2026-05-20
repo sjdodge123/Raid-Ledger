@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# ROK-1331 M8 — testcontainers orphan reaper.
+#
+# Real bug discovered during Step 3 Probe 1: when jest --runInBand dies
+# mid-suite without graceful teardown (or a claim transitions to a new
+# agent), the postgres+redis containers spawned by `@testcontainers/postgresql`
+# leak. The testcontainers library normally relies on its `ryuk` sidecar to
+# clean up child containers when the parent process exits; ryuk's session
+# tracking can get out of sync (claims "still in use" while parent is dead),
+# or ryuk itself can die before its children get reaped. 10+ pgvector/pgvector:pg16
+# containers from prior agents contended with new CI runs — each suite took
+# 1-2 min instead of 5-15s.
+#
+# Args:
+#   <slot>   reap containers tied to a specific runner slot's orphan sessions
+#   all      reap orphans across every slot
+#
+# Orphan detection:
+#   - A testcontainer is an orphan when NO live jest/vitest/node process exists
+#     inside the runner container that "owns" its session.
+#   - Slot ownership is read from the `rl.slot` label when present, else
+#     "best-effort" (treated as belongs-to-no-active-runner → orphan).
+#   - A session whose ryuk container is gone has all its children classified
+#     as orphans (the ryuk-mediated cleanup contract is broken; survivors are
+#     not going to be cleaned by anyone else).
+#
+# Best-effort: never crashes the caller. Exit 0 even when 0 containers were
+# reaped. Audit-logs every removal so post-mortem correlation works.
+set -uo pipefail
+source "$(dirname "$0")/_state.sh"
+
+SCOPE="${1:-}"
+if [[ -z "$SCOPE" ]]; then
+    echo "usage: $(basename "$0") <slot|all>" >&2
+    exit 2
+fi
+
+# Slot arg validation: accept positive int or the literal "all". Anything
+# else is a misuse — fail loudly so callers don't silently feed garbage.
+if [[ "$SCOPE" != "all" ]] && ! [[ "$SCOPE" =~ ^[0-9]+$ ]]; then
+    echo "invalid scope: $SCOPE (expected <slot-number> or 'all')" >&2
+    exit 2
+fi
+
+# RUNNER_PROC_PATTERN: ERE matching processes that, when present in a runner,
+# signal "tests are actively running here". Matches the release pkill pattern
+# in M7 so the two views of "is the runner busy" agree.
+RUNNER_PROC_PATTERN='validate-ci\.sh|jest|vitest|npm |node '
+
+# Returns 0 if rl-runner-<slot> has any live test-driver process. Best-effort —
+# missing runner container or docker error returns non-zero (treated as "no
+# live process").
+runner_has_live_jest() {
+    local slot="$1"
+    local out
+    # Use pgrep -f inside the runner. Output is one PID per line on match.
+    # `-P 1` is NOT used here — we want to detect ANY descendant of any pid,
+    # not just reparented orphans (which is the release-side pkill's concern).
+    out=$(docker exec "rl-runner-${slot}" sh -c "pgrep -f '$RUNNER_PROC_PATTERN' 2>/dev/null || true" 2>/dev/null || true)
+    [[ -n "$out" ]]
+}
+
+# Returns 0 if a ryuk container exists for the given session id. ryuk
+# containers themselves carry the same session-id label; absence means the
+# session is half-torn-down and all children are orphans.
+ryuk_alive_for_session() {
+    local session_id="$1"
+    [[ -z "$session_id" ]] && return 1
+    local count
+    # Match by session-id label AND image substring "ryuk". We can't filter
+    # by image-substring in `docker ps --filter`, so list the session's
+    # containers and check whether any image contains "ryuk".
+    count=$(docker ps -a --filter "label=org.testcontainers.session-id=$session_id" \
+        --format '{{.ID}} {{.Image}}' 2>/dev/null \
+        | awk '/ryuk/ {print $1}' | wc -l | tr -d ' ')
+    (( count > 0 ))
+}
+
+# Enumerate testcontainer containers as JSONL lines:
+# {id, session_id, image, rl_slot}
+# Empty when docker is unreachable or no matches.
+enumerate_testcontainers() {
+    docker ps -a --filter "label=org.testcontainers=true" \
+        --format '{{.ID}}|{{.Label "org.testcontainers.session-id"}}|{{.Image}}|{{.Label "rl.slot"}}' 2>/dev/null \
+        | grep -v '^$' || true
+}
+
+REMOVED_COUNT=0
+
+# Loop over each testcontainer-labelled container. For each, classify:
+#   - active: rl.slot label is set AND that slot has live jest → preserve.
+#   - orphan otherwise.
+# Under `<slot>` scope, only containers whose rl.slot matches are eligible
+# for reaping; the rest are skipped entirely (the corresponding slot's reap
+# call will handle them when it fires).
+while IFS='|' read -r CID SESSION_ID IMAGE RL_SLOT; do
+    [[ -z "$CID" ]] && continue
+
+    # Slot-scope filter: under `<slot>`, only consider containers tagged with
+    # that slot. Containers without an rl.slot label fall through to the
+    # `all` invocation (so they're not lost — the gc-sweeper's `all` pass
+    # picks them up).
+    if [[ "$SCOPE" != "all" ]]; then
+        if [[ -z "$RL_SLOT" || "$RL_SLOT" != "$SCOPE" ]]; then
+            continue
+        fi
+    fi
+
+    # Active classification: rl.slot label present AND that slot has live
+    # jest. Without an rl.slot label we can't claim "active" — treat as
+    # orphan candidate. (Testcontainers spawned by jest inside a runner DO
+    # inherit the runner's labels via the testcontainers config, so an
+    # unlabelled testcontainer is almost certainly a leak from a prior
+    # session that has since been torn down.)
+    IS_ACTIVE=0
+    if [[ -n "$RL_SLOT" ]]; then
+        if runner_has_live_jest "$RL_SLOT"; then
+            IS_ACTIVE=1
+        fi
+    fi
+
+    if (( IS_ACTIVE == 1 )); then
+        continue
+    fi
+
+    # Ryuk-gone amplifier: if the owning session's ryuk container is gone,
+    # we tag the audit reason as ryuk_gone so operators can correlate the
+    # mass-reap event with a ryuk death. Not gating reap on this — any
+    # container that passed the active-classification check IS being reaped.
+    REASON="parent_dead"
+    if ! ryuk_alive_for_session "$SESSION_ID"; then
+        REASON="ryuk_gone"
+    fi
+
+    if docker rm -f "$CID" >/dev/null 2>&1; then
+        REMOVED_COUNT=$((REMOVED_COUNT + 1))
+        # Audit per removal so post-mortem can attribute leaks to the right
+        # session id. Best-effort — don't error out if audit log isn't
+        # writable.
+        audit::log reap "testcontainers" \
+            "$(jq -nc --arg cid "$CID" --arg sid "$SESSION_ID" --arg image "$IMAGE" \
+                --arg slot "$RL_SLOT" --arg reason "$REASON" --arg scope "$SCOPE" \
+                '{container_id:$cid, session_id:$sid, image:$image, rl_slot:$slot, reason:$reason, scope:$scope}')" \
+            >/dev/null 2>&1 || true
+    fi
+done < <(enumerate_testcontainers)
+
+# Always exit 0 — zero-reap is a valid outcome.
+jq -nc --argjson removed "$REMOVED_COUNT" --arg scope "$SCOPE" \
+    '{ok:true, scope:$scope, removed_count:$removed}'
+exit 0
