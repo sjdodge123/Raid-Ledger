@@ -11,7 +11,7 @@
 
 import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
-import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, readdir, open } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -19,6 +19,12 @@ const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
 const TEST_PLANS_DIR = process.env.TEST_PLANS_DIR || join(STATE_DIR, 'test-plans');
 const ATTACHMENTS_DIR = process.env.ATTACHMENTS_DIR || join(STATE_DIR, 'test-plan-attachments');
+const TASKS_DIR = process.env.TASKS_DIR || join(STATE_DIR, 'tasks');
+const TASK_LOG_TAIL_BYTES = parseInt(process.env.TASK_LOG_TAIL_BYTES || '51200', 10);
+const TERMINAL_WINDOW_MS = parseInt(process.env.TASK_TERMINAL_WINDOW_MS || '3600000', 10);
+const MAX_ACTIVE_TASKS = 200;
+const KNOWN_TASK_STATUSES = new Set(['running', 'succeeded', 'failed', 'cancelled']);
+const TASK_ID_RE = /^[a-z0-9]{8,32}$/;
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB; phone screenshots are typically <2 MB.
 // When set, the dashboard renders BOTH http://{slug}.rl.lan (internal) AND
@@ -243,6 +249,56 @@ const collectPlanSummaries = async () => {
   }
 };
 
+// Read per-task summaries from `<STATE_DIR>/tasks/*.json` for the dashboard.
+// Strict projection (strips pid/log_path/cmd/agent_id and step/heartbeat
+// details from M1's writer) so /api/state never leaks absolute VM paths or
+// shell args to the public host. M1 writes the files; M3 only reads.
+const collectActiveTasks = async () => {
+  let files;
+  try {
+    files = await readdir(TASKS_DIR);
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const now = Date.now();
+  const out = [];
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    let doc;
+    try {
+      doc = JSON.parse(await readFile(join(TASKS_DIR, f), 'utf-8'));
+    } catch { continue; }
+    if (!doc || typeof doc !== 'object') continue;
+    const { task_id, tool, status, started_at } = doc;
+    if (!task_id || !tool || !started_at) continue;
+    if (!KNOWN_TASK_STATUSES.has(status)) continue;
+    const startedMs = Date.parse(started_at);
+    if (!Number.isFinite(startedMs)) continue;
+    const finished_at = doc.finished_at ?? null;
+    const finishedMs = finished_at ? Date.parse(finished_at) : null;
+    if (status !== 'running') {
+      if (!Number.isFinite(finishedMs)) continue;
+      if (now - finishedMs > TERMINAL_WINDOW_MS) continue;
+    }
+    const elapsedMs = status === 'running'
+      ? now - startedMs
+      : finishedMs - startedMs;
+    out.push({
+      task_id,
+      tool,
+      slot: doc.slot ?? null,
+      args_summary: typeof doc.args_summary === 'string' ? doc.args_summary : '',
+      status,
+      started_at,
+      elapsed_seconds: Math.max(0, Math.floor(elapsedMs / 1000)),
+      finished_at: status === 'running' ? null : finished_at,
+    });
+  }
+  out.sort((a, b) => (Date.parse(b.started_at) || 0) - (Date.parse(a.started_at) || 0));
+  return out.slice(0, MAX_ACTIVE_TASKS);
+};
+
 const handleApiState = async (res) => {
   try {
     const [claims, envs] = await Promise.all([
@@ -250,9 +306,10 @@ const handleApiState = async (res) => {
       readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8'),
     ]);
     const slots = JSON.parse(claims);
-    const [probedSlots, planSummaries] = await Promise.all([
+    const [probedSlots, planSummaries, activeTasks] = await Promise.all([
       enrichSlotsWithProbes(slots),
       collectPlanSummaries(),
+      collectActiveTasks(),
     ]);
     // Attach per-env plan summaries to each env entry so the client
     // doesn't need a separate fetch per card.
@@ -265,6 +322,7 @@ const handleApiState = async (res) => {
       ok: true,
       slots: probedSlots,
       envs: enrichedEnvs,
+      active_tasks: activeTasks,
       public_domain: PUBLIC_DOMAIN || null,
       generated_at: new Date().toISOString(),
     });
@@ -797,6 +855,42 @@ const handleAttachmentGet = async (slug, filename, res) => {
   }
 };
 
+// GET /api/tasks/<task_id>/log
+// Returns the last TASK_LOG_TAIL_BYTES (50 KiB default) of the task's append-
+// only log file. No auth — same trust model as the dashboard itself
+// (operator LAN + Cloudflare). 50 KiB caps the response so a 5+ MiB log
+// can't blow up a phone's memory; operators wanting more SSH to the VM.
+const handleTaskLog = async (taskId, req, res) => {
+  if (!TASK_ID_RE.test(taskId)) {
+    return sendJson(res, 400, { ok: false, error: 'invalid task_id' });
+  }
+  let handle = null;
+  try {
+    handle = await open(join(TASKS_DIR, `${taskId}.log`), 'r');
+    const stat = await handle.stat();
+    const size = stat.size;
+    const tail = Math.min(size, TASK_LOG_TAIL_BYTES);
+    const buf = Buffer.alloc(tail);
+    const start = size - tail;
+    const { bytesRead } = await handle.read(buf, 0, tail, start);
+    res.writeHead(200, {
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+    });
+    res.end(buf.subarray(0, bytesRead));
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Not Found');
+      return;
+    }
+    res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('Server Error');
+  } finally {
+    if (handle) { try { await handle.close(); } catch { /* ignore */ } }
+  }
+};
+
 // POST /api/test-plans/<slug>/step/<id>/comment
 // Tester free-form comment per step. CRITICAL: this body is NOT
 // surfaced to the LLM via rl_test_plan_status / rl_test_plan_wait
@@ -1012,6 +1106,13 @@ const RE_COMMENT = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/comment$/;
 const RE_SUBMIT = /^\/api\/test-plans\/([a-z0-9-]+)\/submit$/;
 const RE_ATTACH_POST = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment$/;
 const RE_ATTACH_GET = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment\/([A-Za-z0-9.-]+)$/;
+// Route regex is permissive (alphanumeric + underscore) so the handler can
+// emit a 400 with a clear error body for shape-valid-but-strict-invalid ids
+// (uppercase, too short, too long). The handler then enforces the canonical
+// `[a-z0-9]{8,32}` shape via TASK_ID_RE before any filesystem touch.
+// Path-traversal-shaped ids (containing `/`) don't match this route at all
+// and fall through to the static 404 — by design.
+const RE_TASK_LOG = /^\/api\/tasks\/([A-Za-z0-9_]+)\/log$/;
 
 const server = createServer(async (req, res) => {
   // Split path from query so the route regexes (which use $) still match
@@ -1079,6 +1180,13 @@ const server = createServer(async (req, res) => {
       res.writeHead(405); res.end('Method Not Allowed'); return;
     }
     return handleAttachmentGet(attachGetMatch[1], attachGetMatch[2], res);
+  }
+  const taskLogMatch = RE_TASK_LOG.exec(pathOnly);
+  if (taskLogMatch) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405); res.end('Method Not Allowed'); return;
+    }
+    return handleTaskLog(taskLogMatch[1], req, res);
   }
   await serveStatic(req, res);
 });
