@@ -209,10 +209,9 @@ export function NominatingComposite(
           the document scroll to catch up. */}
       <div
         ref={stickyHeaderRef}
-        className={`sticky top-14 z-20 bg-surface rounded-md px-3 will-change-transform md:max-h-none md:opacity-100 md:py-3 overflow-hidden ${
+        className={`sticky top-14 z-20 bg-surface rounded-md px-3 md:max-h-none md:opacity-100 md:py-3 overflow-hidden ${
           heroHidden ? 'max-h-0 opacity-0 py-0' : 'max-h-[800px] opacity-100 py-3'
         }`}
-        style={{ transition: 'max-height 250ms ease-in-out, opacity 250ms ease-in-out, padding 250ms ease-in-out' }}
       >
         <JourneyHero
           phase="nominating"
