@@ -18,7 +18,25 @@ export function CommunityActivitySection({ gameId }: { gameId: number }): JSX.El
     const nowPlayingCount = nowPlayingData?.count ?? 0;
     const hasAnyData = topPlayers.length > 0 || nowPlayingCount > 0;
 
-    if (!hasAnyData && !activityLoading) return null;
+    // Operator review r4 2026-05-19: once the section has rendered with data,
+    // keep it mounted across period changes. The previous gating ANDed
+    // hasAnyData with period — switching to "This Month" while the user has
+    // no activity in that window made the whole section (including the
+    // period selector) disappear, stranding them with no way to switch back.
+    //
+    // React 18+ "set state during render" pattern (avoids the
+    // react-hooks/refs lint rule about reading/writing refs in render).
+    // `everShown` latches to true once data appears and stays true until
+    // gameId changes — reset via the prev-id-in-state idiom.
+    const [everShown, setEverShown] = useState(false);
+    const [prevGameId, setPrevGameId] = useState(gameId);
+    if (gameId !== prevGameId) {
+        setPrevGameId(gameId);
+        setEverShown(false);
+    }
+    if (hasAnyData && !everShown) setEverShown(true);
+
+    if (!hasAnyData && !activityLoading && !everShown) return null;
 
     return (
         <section className="mb-8">
@@ -28,6 +46,11 @@ export function CommunityActivitySection({ gameId }: { gameId: number }): JSX.El
                 <div className="text-sm text-muted mb-3">{formatPlaytime(totalSeconds)} total community playtime</div>
             )}
             <TopPlayersList players={topPlayers} isLoading={activityLoading} />
+            {!activityLoading && topPlayers.length === 0 && nowPlayingCount === 0 && (
+                <div className="text-sm text-muted italic px-1">
+                    No community activity for {PERIOD_LABELS.find((p) => p.value === period)?.label.toLowerCase() ?? 'this period'} yet.
+                </div>
+            )}
         </section>
     );
 }

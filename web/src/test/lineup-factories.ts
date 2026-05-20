@@ -77,6 +77,8 @@ export function createMockLineupDetail(
         entries: [createMockEntry()],
         totalVoters: 5,
         totalMembers: 10,
+        // ROK-1298: voter pool denominator for Sv voting bars.
+        votingEligibleCount: 10,
         createdAt: '2026-03-20T00:00:00Z',
         updatedAt: '2026-03-20T00:00:00Z',
         // ROK-1064: optional Discord channel override fields.

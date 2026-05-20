@@ -15,6 +15,7 @@ import {
   seedAvailability,
   seedGameTimeSlots,
 } from './seed-testing-availability.helpers';
+import { seedVotingLineup } from './seed-testing-voting-lineup.helpers';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ async function bootstrap() {
     await seedAvailability(db, createdUsers);
     await seedThemePreferences(db, createdUsers);
     await seedGameTimeSlots(db, createdUsers);
+    await seedVotingLineup(db, createdUsers);
 
     console.log('\n🎉 Testing data seed complete!');
     console.log('\n📍 View events at: http://localhost:80/events');

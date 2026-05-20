@@ -101,37 +101,31 @@ export function NominatingComposite(
     setSearch,
     participantCount,
   } = commonGroundState;
-  // ROK-1297 round-4b: sync the sticky JourneyHero with the global Header's
-  // mobile auto-hide. On mobile, scrolling down past 100px hides the
-  // header (`-translate-y-full`); we slide the hero away by the same
-  // amount so they leave/return together. On desktop the hook returns
-  // null so the hero stays parked under the always-visible header.
+  // Sticky-hero auto-hide — same transform mechanism as Header.tsx
+  // BUT gated on the wrapper having reached its pin line (operator
+  // review r9 2026-05-20: "don't start the fade until it gets below
+  // this line"). The sentinel 1px div above the wrapper flips
+  // `hasPinned` true once it scrolls off-screen. Before that, the hero
+  // scrolls naturally with the page.
   //
-  // ROK-1297 round 5g: gate the hide behind an IntersectionObserver
-  // "stuck" sentinel. Before the wrapper actually pins to top:14, hiding
-  // it via translate-y leaves a 199px ghost slot in the document flow —
-  // the operator saw this as "leaves empty DOM space" / "jumps to the
-  // sticky position." Once stuck, hiding is safe because the natural
-  // flow slot has already scrolled above the viewport.
+  // ROK-1297 round 5m: keep the sticky hero visible while the operator
+  // is in search mode. Auto-hiding while the filter bar is expanded
+  // makes the entire filter row vanish on the first scroll-down.
   const scrollDir = useScrollDirection();
-  const stuckSentinelRef = useRef<HTMLDivElement | null>(null);
-  const [isStuck, setIsStuck] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [hasPinned, setHasPinned] = useState(false);
   useEffect(() => {
-    const sentinel = stuckSentinelRef.current;
+    const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setIsStuck(!entry.isIntersecting),
+      ([entry]) => setHasPinned(!entry.isIntersecting),
       { threshold: 0 },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, []);
-  // ROK-1297 round 5m: keep the sticky hero visible while the operator
-  // is in search mode. Auto-hiding while the filter bar is expanded
-  // makes the entire filter row vanish on the first scroll-down — the
-  // operator can't see what they're filtering against.
-  const heroHidden =
-    scrollDir === 'down' && isStuck && commonGroundMode !== 'search';
+  const isHidden =
+    scrollDir === 'down' && hasPinned && commonGroundMode !== 'search';
 
   const stickyHeaderRef = useRef<HTMLDivElement | null>(null);
 
@@ -184,6 +178,7 @@ export function NominatingComposite(
       data-testid="nominating-composite-view"
       className="space-y-3"
     >
+      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
       {/* Sticky JourneyHero (ROK-1297 round-4b): sits UNDER the global
           Header (Header.tsx is `sticky top-0` at ~64px tall on mobile
           and ~56px on desktop). On mobile, the Header auto-hides on
@@ -192,21 +187,20 @@ export function NominatingComposite(
           hero under the desktop header; on mobile the slightly taller
           header overlaps a couple pixels which the hero's translucent
           backdrop covers cleanly. */}
-      {/* Sentinel just above the sticky wrapper (ROK-1297 round 5g). When
-          it scrolls off-screen the IntersectionObserver flips `isStuck`
-          true, and only then is the wrapper allowed to translate-hide
-          on scroll-down. Otherwise the hide leaves a 199px ghost slot
-          in document flow. */}
-      <div ref={stuckSentinelRef} aria-hidden="true" className="h-px" />
       {/* Sticky JourneyHero (ROK-1297 round 5b): the operator wants both
           the Search trigger AND the jump-to-nominations affordance built
           INTO the sticky element so they remain reachable while the user
           scrolls through Common Ground tiles. Mobile-only action row sits
-          inside the sticky wrapper. */}
+          inside the sticky wrapper.
+
+          ROK-1298 round 8 2026-05-20: mirrors Header.tsx exactly —
+          translateY-full + 300ms transform transition + md:translate-y-0.
+          The previous IntersectionObserver-gated max-height collapse
+          caused inertia-scroll flicker and scroll-anchor teleport. */}
       <div
         ref={stickyHeaderRef}
-        className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:translate-y-0 ${
-          heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
+        className={`sticky top-14 z-20 py-3 bg-backdrop md:bg-surface md:rounded-md md:px-3 will-change-transform md:will-change-auto md:translate-y-0 ${
+          isHidden ? '-translate-y-[calc(100%+3.5rem)]' : 'translate-y-0'
         }`}
         style={{ transition: 'transform 300ms ease-in-out' }}
       >

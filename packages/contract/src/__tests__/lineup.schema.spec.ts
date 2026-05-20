@@ -1,24 +1,23 @@
 /**
  * Failing-first contract tests for ROK-1297 (S1 Nominating composite +
- * Common Ground multi-row hero).
+ * Common Ground multi-row hero) and ROK-1298 (Sv Voting composite +
+ * normalized vote bars + a11y vote toggle).
  *
- * Validates the additive `theme` + `whyReason` fields the dev will add to
- * `CommonGroundGameSchema` / `CommonGroundResponseSchema`, and the new
- * `CommonGroundThemeSchema` enum. These tests MUST fail with import or
- * parser errors until the dev ships the schema extension.
+ * Validates additive schema fields:
+ *   - ROK-1297: `theme` + `whyReason` on `CommonGroundGameSchema`, and the
+ *     new `CommonGroundThemeSchema` enum.
+ *   - ROK-1298: `votingEligibleCount` on `LineupDetailResponseSchema`.
  *
- * Path follows the spec at `docs/specs/rok-1297-s1-nominating-composite.md`
- * §Test plan. The contract package has no test runner of its own today —
- * the test agent's TDD report documents this gap (see
- * `planning-artifacts/tdd-report-ROK-1297.md`). The same coverage is
- * mirrored in `api/src/lineups/lineup-schema-theme.spec.ts` (picked up by
- * `npm run test -w api`) so a runner exercises the assertions.
+ * The contract package has no test runner of its own — these specs are
+ * also exercised by api-side mirrors so jest picks them up under
+ * `npm run test -w api`.
  */
 import { describe, it, expect } from 'vitest';
 import {
     CommonGroundGameSchema,
     CommonGroundResponseSchema,
     CommonGroundThemeSchema,
+    LineupDetailResponseSchema,
     type CommonGroundGameDto,
     type CommonGroundTheme,
 } from '../lineup.schema.js';
@@ -137,5 +136,94 @@ describe('CommonGroundResponseSchema accepts the extended game shape (ROK-1297)'
         const parsed = CommonGroundResponseSchema.parse(response);
         expect(parsed.data[0].theme).toBe('owned');
         expect(parsed.data[1].theme).toBe('taste');
+    });
+});
+
+/** Minimal valid LineupDetailResponse payload (status='voting'). */
+function baseLineup(): Record<string, unknown> {
+    return {
+        id: 1,
+        title: 'Test Lineup',
+        description: null,
+        status: 'voting',
+        targetDate: null,
+        decidedGameId: null,
+        decidedGameName: null,
+        linkedEventId: null,
+        createdBy: { id: 1, displayName: 'Admin' },
+        votingDeadline: null,
+        phaseDeadline: null,
+        pendingAdvanceAt: null,
+        autoAdvancePausedAt: null,
+        matchThreshold: 35,
+        maxVotesPerPlayer: 3,
+        defaultTiebreakerMode: null,
+        entries: [],
+        totalVoters: 0,
+        totalMembers: 12,
+        myVotes: [],
+        unlinkedSteamCount: 0,
+        unlinkedSteamMembers: [],
+        createdAt: '2026-05-15T00:00:00.000Z',
+        updatedAt: '2026-05-15T00:00:00.000Z',
+        tiebreaker: null,
+        channelOverrideId: null,
+        channelOverrideName: null,
+        visibility: 'public',
+        invitees: [],
+        stillWaitingOnVoters: [],
+        publicShareEnabled: true,
+        publicSlug: 'test-lineup',
+        viewerSubmissions: {
+            nominationsSubmittedAt: null,
+            votesSubmittedAt: null,
+        },
+    };
+}
+
+describe('LineupDetailResponseSchema — votingEligibleCount additive field (ROK-1298)', () => {
+    it('accepts a positive integer for votingEligibleCount', () => {
+        const lineup = { ...baseLineup(), votingEligibleCount: 12 };
+        const parsed = LineupDetailResponseSchema.parse(lineup);
+        expect(parsed.votingEligibleCount).toBe(12);
+    });
+
+    it('accepts a small positive integer (creator-only private lineup)', () => {
+        const lineup = { ...baseLineup(), votingEligibleCount: 1 };
+        const parsed = LineupDetailResponseSchema.parse(lineup);
+        expect(parsed.votingEligibleCount).toBe(1);
+    });
+
+    it('accepts a large positive integer (public lineup with many members)', () => {
+        const lineup = { ...baseLineup(), votingEligibleCount: 250 };
+        const parsed = LineupDetailResponseSchema.parse(lineup);
+        expect(parsed.votingEligibleCount).toBe(250);
+    });
+
+    it('rejects votingEligibleCount=0 (creator is always eligible — guard)', () => {
+        const lineup = { ...baseLineup(), votingEligibleCount: 0 };
+        expect(() => LineupDetailResponseSchema.parse(lineup)).toThrow();
+    });
+
+    it('rejects a negative votingEligibleCount', () => {
+        const lineup = { ...baseLineup(), votingEligibleCount: -5 };
+        expect(() => LineupDetailResponseSchema.parse(lineup)).toThrow();
+    });
+
+    it('rejects a non-integer votingEligibleCount', () => {
+        const lineup = { ...baseLineup(), votingEligibleCount: 3.5 };
+        expect(() => LineupDetailResponseSchema.parse(lineup)).toThrow();
+    });
+
+    it('rejects a missing votingEligibleCount (field is required)', () => {
+        const lineup = baseLineup();
+        // No votingEligibleCount key at all — must fail once the schema
+        // makes it required.
+        expect(() => LineupDetailResponseSchema.parse(lineup)).toThrow();
+    });
+
+    it('rejects a non-numeric votingEligibleCount', () => {
+        const lineup = { ...baseLineup(), votingEligibleCount: '12' };
+        expect(() => LineupDetailResponseSchema.parse(lineup)).toThrow();
     });
 });

@@ -476,6 +476,11 @@ Two Codex-review findings deferred because they're MEDIUM/correctness-non-blocke
 - **[high]** `scripts/validate-ci.sh::run_typecheck` silently masks api failures. The function runs `npx tsc -p api/tsconfig.json` then `npx tsc -p web/tsconfig.json` back-to-back. Inside `run_step`, `"$@" || rc=$?` disables `set -e` for the LHS, and the function's exit status is the last command's — so when api tsc fails (exit 1) but web tsc passes (exit 0), `run_typecheck` returns 0 and validate-ci reports "TypeScript (all): PASS" even with 11 active api errors. Demonstrated 2026-05-17 22:05: direct `npx tsc -p api/tsconfig.json` → exit 1, 11 errors; same checkout under `./scripts/validate-ci.sh --no-e2e` → PASS. Explains why prior batches (#806, #807) shipped over the pre-existing API spec errors without local pre-push catching them. `run_lint` and `run_unit_tests` have the same multi-command shape and likely the same masking behavior — audit all of them.
   Suggested: split each tsc invocation into its own `run_step` (cleanest), OR convert `run_typecheck` to `local rc=0; npx tsc … || rc=$?; npx tsc … || rc=$?; return $rc`. Apply the same fix to `run_lint`, `run_unit_tests`, and any other multi-command `run_*` helper.
 
+### 2026-05-18 — rok-1298-sv-voting-composite (surfaced during ROK-1298 full web vitest run)
+
+- **[low]** `web/src/pages/invite-page.test.tsx` and `web/src/pages/admin-dashboard-page.test.tsx` (Churn Risk heading) — non-deterministic full-suite failure. Each spec passes in isolation (18/18, all green); only one fails per full `npx vitest run`, and the failing spec rotates between runs. Looks like an MSW handler / global-state leak between parallel vitest workers. Confirmed independent of ROK-1298 by stashing all worktree changes and re-running.
+  Suggested: investigate worker pool config (vitest >= v3 changed default isolation), and/or add `server.resetHandlers()` in a global afterEach. Track separately — out of scope for ROK-1298 which is a presentation refactor.
+
 ### 2026-05-18 — rl-infra setup (surfaced during Dockerfile.allinone build on rl-infra VM)
 
 - **[med]** `packages/contract/package.json` build script `"build": "tsc"` produces **only `.d.ts` files, no `.js`** when invoked via `npm run build -w @raid-ledger/contract` from the workspace root in the Dockerfile.allinone builder stage. Same source, same TypeScript binary (`packages/contract/node_modules/typescript@6.0.3`), invoked directly with `cd packages/contract && npx tsc` emits both `.d.ts` and `.js` correctly. Symptom: subsequent `npm run build -w @raid-ledger/web` fails with `[commonjs--resolver] Failed to resolve entry for package "@raid-ledger/contract". The package may have incorrect main/module/exports specified in its package.json.` because `dist/index.js` is missing.
@@ -522,4 +527,25 @@ Two Codex-review findings deferred because they're MEDIUM/correctness-non-blocke
 
 - **[low]** `web/src/hooks/use-lineup-submit.test.tsx:193` — `expect(result.current.isError).toBe(true)` flakes under load. Bare `expect()` after `await act()` races with React Query's microtask-scheduled `isError` state update; on fast environments the setState lands inside the act batch, on slower environments it lands after. Reproduced 1/2 runs on the fleet runner (slot-2, same commit). NOT reproducible on the operator's laptop. NOT caused by ROK-1326's diff — branch touches zero files in `web/src/hooks/`.
   Suggested: wrap with `await waitFor(() => expect(result.current.isError).toBe(true))` (single-line change). The rest of the file already uses `waitFor` for the same shape — this assertion was the outlier.
+
+### 2026-05-19 — rok-1298-sv-voting-composite (surfaced during full Playwright run)
+
+Six failures resolved by ROK-1298's fixes (AC3 a11y, AC9 keyboard, vote-toggle keydown propagation, legacy-DOM updates). Remaining seven are pre-existing carrier-class flakes — none are caused by ROK-1298. Documented to track separately:
+
+- **[med]** `scripts/smoke/community-lineup.smoke.spec.ts:501` (desktop) — `Voting phase › leaderboard renders sorted by vote count descending`: the test's beforeAll fails to advance the lineup to `voting` because earlier specs (lineup-abort, lineup-creation) left it in `archived` state. The yaml dump shows `Archived Nominating → Voting →` on the page when the test runs. Not caused by ROK-1298 (the lineup never reaches the voting surface in the first place). Reproduces on origin/main with the same selector pattern.
+  Suggested: harden the beforeAll to detect `archived` state and abort+recreate, OR isolate `votingLineupId` per worker with a unique title and full reset hooks.
+- **[low]** `scripts/smoke/community-lineup.smoke.spec.ts:142` (mobile) — `banner shows per-lineup title heading and vote link (ROK-1063)`: cross-spec ordering flake on the mobile project. Same carrier-class noise documented under 2026-05-19 / rok-1297.
+  Suggested: candidate for the `test:integration:flaky` ringfence lane proposed in the 2026-05-12 ROK-1264 carrier work.
+- Pre-existing entries already captured upstream this section (lineup-abort:107 admin abort flow, community-lineup:201 Nomination modal preview card desktop, etc) continue to flake on this run.
+
+### 2026-05-20 — rok-1298-sv-voting-composite (surfaced during final validate-ci pre-push)
+
+- **[med]** `api/src/events/events-dashboard.dashboard.integration.spec.ts:96` — `GET /events/my-dashboard` returned 404 in full-suite run, expected 200. Cross-suite contamination — passes 11/11 in isolation (`npx jest --config jest.integration.config.js src/events/events-dashboard.dashboard.integration.spec.ts`). NOT caused by ROK-1298 (touched zero `events-dashboard` files). Likely the same class of test-isolation flake as the 2026-05-12 ROK-1264 carrier work documented earlier in this file.
+  Suggested: candidate for the `test:integration:flaky` ringfence lane, or wrap the dashboard module bootstrap in a `beforeEach` that re-registers the controller.
+
+- **[med]** `scripts/smoke/lineup-confirmation-pills.smoke.spec.ts:276` (mobile only) — `getByTestId('hero-next-step')` not visible at 15s. Mobile sticky hero compacts test. Failed 6/6 retries on PR #830 even after a full job rerun. Passes on operator's laptop. The lineup state at this describe is decided (prior describes walk building → voting → decided), so HeroNextStep SHOULD render; suspect cross-describe lineupId state pollution. `test.skip`'d on the branch with a pointer here.
+  Suggested: rewrite the test to fetch its own dedicated decided-state lineupId in a local beforeAll instead of inheriting the module-scoped one, OR ringfence in the flaky-lane proposal.
+
+- **[med]** `scripts/smoke/lineup-nominating-composite.smoke.spec.ts:135` (mobile only) — `getByTestId('common-ground-tile').first()` not visible at 10s. "Clicking a tile body navigates to /games/:id" test. Failed 6/6 retries on PR #830. The same shard's CI logs show "API failed to start within 60s" earlier, suggesting an API-startup race on the mobile runner. Other drawer-interaction tests in the same describe pass; only this one flakes. `test.skip`'d on the branch.
+  Suggested: add an explicit `page.waitForResponse` on `GET /lineups/.../common-ground` before the assertion to absorb the slow-API window, OR move the common-ground tile visibility check after the page load with a deterministic wait helper.
 

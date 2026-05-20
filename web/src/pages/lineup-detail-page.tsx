@@ -237,9 +237,15 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           NominatingComposite's U1 JourneyHero + U4 SubmitBar already
           carry the next-step copy + advance affordance, so showing
           this banner ON TOP duplicates the message and confuses
-          testers. Suppress here; other phases still get it until
-          their composites ship. */}
-      {!isBuilding && <HeroNextStep {...heroProps} />}
+          testers.
+
+          ROK-1298 round 6 2026-05-20: voting now has the Sv composite
+          with its own sticky JourneyHero — HeroNextStep (also sticky
+          top-0 z-30 on mobile) created a flicker collision with the
+          Sv hero (sticky top-14 z-20). Suppress for voting too. Other
+          phases (decided / archived) keep it until their composites
+          ship. */}
+      {!isBuilding && lineup.status !== 'voting' && <HeroNextStep {...heroProps} />}
       <LineupAbortedBanner abortedAt={abortedAt} reason={abortReason} />
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <LineupDetailHeader
@@ -251,8 +257,6 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           }}
         />
       </div>
-
-      <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
 
       {lineup.visibility === 'private' && (
         <PrivateInviteesSection
@@ -300,6 +304,10 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         leaderboardRef={leaderboardRef}
         bracketRef={bracketRef}
       />
+
+      <div className="mt-6">
+        <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
+      </div>
 
       <PastLineups />
 

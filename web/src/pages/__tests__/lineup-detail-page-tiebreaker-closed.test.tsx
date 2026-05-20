@@ -69,8 +69,8 @@ vi.mock('../../components/lineups/AddInviteesButton', () => ({
 vi.mock('../../components/lineups/NominationGrid', () => ({
     NominationGrid: () => null,
 }));
-vi.mock('../../components/lineups/VotingLeaderboard', () => ({
-    VotingLeaderboard: () => null,
+vi.mock('../../components/lineups/cycle-4/VotingComposite', () => ({
+    VotingComposite: () => null,
 }));
 vi.mock('../../components/lineups/LineupEmptyState', () => ({
     LineupEmptyState: () => null,

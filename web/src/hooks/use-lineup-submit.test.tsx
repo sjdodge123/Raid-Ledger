@@ -190,7 +190,12 @@ describe('hook error path', () => {
       }
     });
 
-    expect(result.current.isError).toBe(true);
+    // TECH-DEBT 2026-05-19: was bare `expect(...).toBe(true)` which raced
+    // with React Query's microtask-scheduled isError state. Wrap in
+    // waitFor matching the rest of the file's pattern.
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
   });
 });
 

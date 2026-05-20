@@ -36,6 +36,7 @@ import { findPendingOrActiveTiebreaker } from './tiebreaker/tiebreaker-query.hel
 import { buildTiebreakerDetail } from './tiebreaker/tiebreaker-response.helpers';
 import { listInviteesWithProfile } from './lineups-invitees.helpers';
 import { findViewerSubmissions } from './lineups-submissions-query.helpers';
+import { computeVotingEligibleCount } from './voting-eligibility.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -150,6 +151,10 @@ function mapToDetailResponse(
       nominationsSubmittedAt: null,
       votesSubmittedAt: null,
     },
+    // ROK-1298: voter-pool denominator for Sv vote bars. Stubbed at 1
+    // (creator floor) here; buildDetailResponse overwrites with the real
+    // value once invitees + enrichment are available.
+    votingEligibleCount: 1,
   };
 }
 
@@ -296,6 +301,13 @@ export async function buildDetailResponse(
   // ROK-1296: replace the stub from mapToDetailResponse with the real
   // viewer-scoped row. Both fields are null when userId is undefined.
   detail.viewerSubmissions = viewerSubmissions;
+  // ROK-1298: voter-pool denominator for Sv vote bars. Private =
+  // creator + invitees (deduped); public = totalMembers; floor at 1.
+  detail.votingEligibleCount = computeVotingEligibleCount(
+    { createdBy: lineup.createdBy, visibility: lineup.visibility },
+    invitees.map((i) => ({ id: i.id })),
+    enrichment.totalMembers,
+  );
 
   // Attach tiebreaker detail if one exists (ROK-938)
   if (lineup.activeTiebreakerId) {

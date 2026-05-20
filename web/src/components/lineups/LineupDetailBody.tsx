@@ -7,7 +7,7 @@
 import type { Ref, JSX } from 'react';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { NominationGrid } from './NominationGrid';
-import { VotingLeaderboard } from './VotingLeaderboard';
+import { VotingComposite } from './cycle-4/VotingComposite';
 import { LineupEmptyState } from './LineupEmptyState';
 import { DecidedView } from './decided/DecidedView';
 import { TiebreakerView } from './tiebreaker/TiebreakerView';
@@ -65,13 +65,8 @@ export function LineupDetailBody(props: Props): JSX.Element {
     if (lineup.status === 'voting' && hasEntries) {
         return (
             <section ref={leaderboardRef as Ref<HTMLElement>}>
-                <VotingLeaderboard
-                    entries={lineup.entries}
-                    lineupId={lineup.id}
-                    myVotes={lineup.myVotes ?? []}
-                    totalVoters={lineup.totalVoters}
-                    totalMembers={lineup.totalMembers}
-                    maxVotesPerPlayer={lineup.maxVotesPerPlayer}
+                <VotingComposite
+                    lineup={lineup}
                     canParticipate={canParticipate}
                 />
             </section>
