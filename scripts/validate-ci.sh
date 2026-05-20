@@ -69,7 +69,7 @@ fi
 # Default behavior unchanged. Opt in by exporting RL_TARGET=remote or by
 # passing through rl-infra/cli/rl, which sets it on your behalf.
 # ---------------------------------------------------------------------------
-if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1" ]; then
+if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1" ] && [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
   export RL_TARGET_DISPATCHED=1   # prevent loop if rl re-execs us inside the runner
   # ROK-1331 M2: the rl CLI is SYNC by default (its rl_validate_ci MCP
   # surface is wait:true under the hood), so this exec preserves the
@@ -77,6 +77,9 @@ if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1"
   # an async dispatch flag, this caller must keep passing the equivalent
   # of wait=true (or this script's stdout/stderr surfaces will return
   # immediately with a task_id instead of streaming the run).
+  # ROK-1331 M6b: the dry-run guard (RL_VALIDATE_CI_DRY=1) lets bash test
+  # harnesses source the script with RL_TARGET=remote to exercise the
+  # fallback chain WITHOUT actually shipping execution to the rl CLI.
   exec "$REPO_ROOT/rl-infra/cli/rl" validate-ci "$@"
 fi
 
@@ -279,8 +282,30 @@ run_lint() {
 }
 
 run_unit_tests() {
-  npm run test:cov -w api -- --passWithNoTests \
-    && (cd "$REPO_ROOT/web" && npx vitest run --coverage)
+  npm run test:cov -w api -- --passWithNoTests || return $?
+  # ROK-1331 M6b MED-5: vitest coverage race on fleet runners. When
+  # RL_TARGET=remote, fall through a three-step chain before declaring
+  # failure. Step (a) is the normal attempt; (b) retries (relies on the
+  # mutagen recursive **/coverage/** ignore in rl-infra/cli/rl /
+  # mutagen/sync-template.yml to break the race); (c) re-runs with
+  # --pool=forks --poolOptions.forks.singleFork=true. If all three fail,
+  # exit non-zero with an explicit PAUSED message — never silently drop
+  # --coverage. Operator approval is required to ship a no-coverage
+  # workaround for the fleet only.
+  if [ "${RL_TARGET:-local}" = "remote" ]; then
+    (
+      cd "$REPO_ROOT/web"
+      if npx vitest run --coverage; then exit 0; fi
+      echo "[validate-ci] vitest coverage race detected (step a); retrying (step b — relies on mutagen **/coverage/** recursive ignore)" >&2
+      if npx vitest run --coverage; then exit 0; fi
+      echo "[validate-ci] step (b) still failing; falling back to step (c) — --pool=forks --poolOptions.forks.singleFork=true" >&2
+      if npx vitest run --coverage --pool=forks --poolOptions.forks.singleFork=true; then exit 0; fi
+      echo "[validate-ci] PAUSED awaiting operator approval — all three remote fallback steps failed for the vitest coverage run. Refusing to silently degrade to a no-coverage run; the operator must explicitly authorize that workaround for the fleet only." >&2
+      exit 1
+    )
+  else
+    (cd "$REPO_ROOT/web" && npx vitest run --coverage)
+  fi
 }
 
 check_backup_prereqs() {
@@ -650,4 +675,11 @@ main() {
   echo -e "${GREEN}All checks passed!${NC}"
 }
 
-main "$@"
+# ROK-1331 M6b: when sourced with RL_VALIDATE_CI_DRY=1, expose all
+# functions without auto-running the main pipeline. Lets bash test
+# harnesses source the script and invoke `run_unit_tests` directly with
+# stubbed npm/npx in PATH. Production callers (operators, /push, CI) do
+# NOT set this var so the existing behavior is unchanged.
+if [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
+  main "$@"
+fi

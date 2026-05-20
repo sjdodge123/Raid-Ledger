@@ -37,6 +37,11 @@ sync:
         - "**/dist"
         - coverage
         - "**/coverage"
+        # Recursive match for any file beneath any coverage/ directory at any
+        # depth — defends against the vitest coverage-write race (ROK-1331
+        # M6b step (b)): vitest writes intermediate v8 reports during the
+        # run that Mutagen would otherwise re-sync mid-write.
+        - "**/coverage/**"
         - .next
         - .vite
         - .turbo

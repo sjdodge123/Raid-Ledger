@@ -800,6 +800,7 @@ ensure_mutagen_sync() {
         --ignore='**/dist' \
         --ignore=coverage \
         --ignore='**/coverage' \
+        --ignore='**/coverage/**' \
         --ignore=.git \
         --ignore='.git/**' \
         --ignore=.git/objects \
