@@ -335,6 +335,17 @@ run_integration_tests() {
   # run_step calls us with `"$@" || rc=$?`, so a bare check_backup_prereqs
   # would not halt this function on failure.
   check_backup_prereqs || return $?
+
+  # ROK-1331 M9: per-slot Redis sidecar for fleet integration tests.
+  # The fleet runner image ships only redis-tools (CLI), not redis-server,
+  # so any integration spec that boots a BullMQ worker (which spawns its
+  # own ioredis to the configured REDIS_URL) hits ECONNREFUSED on
+  # localhost:6379. We spawn an ephemeral sidecar on rl-net so the runner
+  # can reach it by DNS, then point REDIS_URL at it. Per-slot naming keeps
+  # concurrent slots isolated. Skipped in local mode — laptop
+  # deploy_dev.sh already manages Redis on localhost:6379.
+  _spawn_redis_sidecar_if_remote || return $?
+
   # ROK-1331 M5b — when validate-ci runs inside the fleet runner
   # (RL_TARGET=remote, after rl validate-ci self-dispatched), surface
   # per-test progress via jest --verbose. Otherwise a 12-min silent
@@ -345,6 +356,58 @@ run_integration_tests() {
   else
     npm run test:integration -w api
   fi
+}
+
+# ROK-1331 M9 — per-slot Redis sidecar for fleet integration tests.
+# Idempotent (docker rm -f any stale container first), bounded ping-wait
+# (30s), trap-cleaned on EXIT. Local mode is a no-op so deploy_dev.sh's
+# Redis on localhost:6379 stays authoritative.
+_spawn_redis_sidecar_if_remote() {
+  if [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  local slot="${RL_SLOT:-}"
+  if [ -z "$slot" ]; then
+    echo -e "${YELLOW}[rl-test-redis] RL_TARGET=remote but RL_SLOT unset — skipping sidecar spawn${NC}" >&2
+    return 0
+  fi
+
+  local cname="rl-test-redis-${slot}"
+  echo "[rl-test-redis] spawning sidecar ${cname} on rl-net (slot=${slot})"
+
+  # Idempotency: clear any stale container by that name (previous crash, etc.).
+  docker rm -f "$cname" >/dev/null 2>&1 || true
+
+  # Teardown on EXIT — even on jest panic / set -e abort. --rm on the run
+  # call means `docker stop` removes the container too, but we also issue
+  # an explicit `docker rm -f` for the rare case where stop times out.
+  # Container name pattern: rl-test-redis-${slot}
+  trap "docker stop 'rl-test-redis-${slot}' >/dev/null 2>&1 || true; docker rm -f 'rl-test-redis-${slot}' >/dev/null 2>&1 || true" EXIT
+
+  docker run -d --rm \
+    --name "$cname" \
+    --network rl-net \
+    --label "rl.role=test-redis" \
+    --label "rl.slot=${slot}" \
+    redis:7-alpine \
+    redis-server --save "" --appendonly no >/dev/null
+
+  # Bounded ping-wait (30s). The sidecar typically answers within 1s, but
+  # cold image pulls can stretch this to ~10s on a freshly-claimed slot.
+  local elapsed=0
+  while ! docker exec "$cname" redis-cli ping 2>/dev/null | grep -q PONG; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    if [ "$elapsed" -ge 30 ]; then
+      echo -e "${RED}[rl-test-redis] sidecar ${cname} failed PING after 30s${NC}" >&2
+      docker logs "$cname" --tail 30 >&2 || true
+      return 1
+    fi
+  done
+
+  # REDIS_URL=redis://rl-test-redis-${slot}:6379
+  export REDIS_URL="redis://rl-test-redis-${slot}:6379"
+  echo "[rl-test-redis] ${cname} ready after ${elapsed}s — REDIS_URL=${REDIS_URL}"
 }
 
 run_migration_validation() {
