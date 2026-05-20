@@ -355,8 +355,39 @@ run_integration_tests() {
   # runner via ssh-dispatched run-on-runner) does NOT inherit the laptop's
   # RL_TARGET=remote env. Detect "inside runner" via /workspace existing —
   # that's the orchestrator's bind-mount and is the canonical marker.
+  #
+  # ROK-1331 M10 (scope-add, 2026-05-20): on the fleet runner, jest
+  # --runInBand accumulates ~98 integration suites' module state in one
+  # Node process; V8 heap hit 3 GB and SIGABRT'd ~50 suites in (Probe 1
+  # attempt 5). Split the run into $INTEGRATION_SHARDS shards (default 4)
+  # so each shard is its own Node process; heap frees between shards.
+  # Local laptop path stays single-process (more RAM headroom).
   if [ -d /workspace ] || [ "${RL_TARGET:-local}" = "remote" ]; then
-    npm run test:integration -w api -- --verbose
+    local shards="${INTEGRATION_SHARDS:-4}"
+    local shard_results=()
+    local i
+    for i in $(seq 1 "$shards"); do
+      echo "=== Integration shard ${i}/${shards} ==="
+      # `npx jest` directly so each shard is its own Node process. Passes
+      # --config explicitly because we are NOT running through `npm run
+      # test:integration -w api` here. NODE_OPTIONS=--max-old-space-size=3072
+      # gives V8 a 3 GB heap ceiling per shard (vs 1.4 GB default) which is
+      # ample headroom for ~25 suites/shard.
+      if NODE_OPTIONS="--max-old-space-size=3072" \
+         npx jest --config api/jest.integration.config.js \
+                  --runInBand --verbose --shard="${i}/${shards}"; then
+        shard_results+=("PASS")
+      else
+        shard_results+=("FAIL")
+        echo "Shard ${i}/${shards} FAILED — stopping early"
+        break
+      fi
+    done
+    echo "=== Shard results: ${shard_results[*]} ==="
+    local r
+    for r in "${shard_results[@]}"; do
+      if [ "$r" = "FAIL" ]; then return 1; fi
+    done
   else
     npm run test:integration -w api
   fi
