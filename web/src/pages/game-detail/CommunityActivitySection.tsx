@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameActivity, useGameNowPlaying } from '../../hooks/use-games-discover';
 import { formatPlaytime, PERIOD_LABELS } from '../../lib/activity-utils';
@@ -23,14 +23,18 @@ export function CommunityActivitySection({ gameId }: { gameId: number }): JSX.El
     // hasAnyData with period — switching to "This Month" while the user has
     // no activity in that window made the whole section (including the
     // period selector) disappear, stranding them with no way to switch back.
-    const hasEverRenderedRef = useRef(false);
-    if (hasAnyData) hasEverRenderedRef.current = true;
-    const everShown = hasEverRenderedRef.current;
-    // Reset stickiness when the gameId changes so this section can disappear
-    // on a different game with no activity at all.
-    useEffect(() => {
-        hasEverRenderedRef.current = false;
-    }, [gameId]);
+    //
+    // React 18+ "set state during render" pattern (avoids the
+    // react-hooks/refs lint rule about reading/writing refs in render).
+    // `everShown` latches to true once data appears and stays true until
+    // gameId changes — reset via the prev-id-in-state idiom.
+    const [everShown, setEverShown] = useState(false);
+    const [prevGameId, setPrevGameId] = useState(gameId);
+    if (gameId !== prevGameId) {
+        setPrevGameId(gameId);
+        setEverShown(false);
+    }
+    if (hasAnyData && !everShown) setEverShown(true);
 
     if (!hasAnyData && !activityLoading && !everShown) return null;
 

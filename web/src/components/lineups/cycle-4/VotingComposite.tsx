@@ -133,10 +133,16 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
   //      actively editing again so the SubmitBar should re-arm).
   // Reset to `false` whenever a fresh submittedAt arrives from the server
   // (post-submit) so re-submitting locks the state back in.
+  //
+  // React 18+ "reset state when prop changes" pattern: track previous
+  // submittedAt in state, set during render when it changes. Avoids the
+  // eslint react-hooks 'setState in effect' warning.
   const [dirty, setDirty] = useState(false);
-  useEffect(() => {
+  const [prevSubmittedAt, setPrevSubmittedAt] = useState(submittedAt);
+  if (submittedAt !== prevSubmittedAt) {
+    setPrevSubmittedAt(submittedAt);
     if (serverSubmitted) setDirty(false);
-  }, [submittedAt, serverSubmitted]);
+  }
 
   const submitted = serverSubmitted && !dirty;
   const effectiveSubmittedAt = submitted ? submittedAt : null;
