@@ -49,6 +49,104 @@ require_repo_root() {
     fi
 }
 
+# --- DNS-fallback for RL_PROXMOX_HOST (ROK-1331 M6b HIGH-3) --------------
+#
+# Agents in sandboxed Claude Code contexts can't always resolve `rl-infra.lan`
+# (the operator's Pi-hole provides it on the LAN; sandbox networking doesn't
+# forward that). When the candidate host fails to resolve, fall back to the
+# literal IP loaded from repo-root .env (`RL_INFRA_IP=192.168.0.132`).
+#
+# Algorithm:
+#   1. Operator explicit override (any non-default host) → echo as-is.
+#   2. Otherwise probe with getent (Linux) / dscacheutil (Darwin) / host (any).
+#      On probe success → echo $RL_PROXMOX_HOST verbatim.
+#   3. Probe fail → walk cwd up to find <repo-root>/.env, parse RL_INFRA_IP,
+#      echo that.
+#   4. Both fail → echo original $RL_PROXMOX_HOST as best-effort + warn to
+#      stderr so downstream SSH errors land in a context the operator can
+#      understand.
+
+is_default_host() {
+    local h="$1"
+    [[ "$h" == "rl-infra" || "$h" == "rl-infra.lan" ]]
+}
+
+probe_dns_for_host() {
+    local h="$1"
+    if command -v getent >/dev/null 2>&1; then
+        getent hosts "$h" >/dev/null 2>&1
+        return $?
+    fi
+    if command -v dscacheutil >/dev/null 2>&1; then
+        # dscacheutil exits 0 even on no-match, so parse stdout for any
+        # `ip_address:` line. Empty stdout → no answer.
+        local out
+        out=$(dscacheutil -q host -a name "$h" 2>/dev/null)
+        if [[ -n "$out" ]] && printf '%s' "$out" | grep -q '^ip_address:'; then
+            return 0
+        fi
+        return 1
+    fi
+    if command -v host >/dev/null 2>&1; then
+        host -W 2 "$h" >/dev/null 2>&1
+        return $?
+    fi
+    # No probe tool available — treat as success; the downstream ssh will
+    # surface the real failure if the host doesn't resolve.
+    return 0
+}
+
+walk_up_for_env_var() {
+    local var_name="$1"
+    local dir
+    dir="$(pwd)"
+    local depth=0
+    while [[ "$dir" != "/" && $depth -lt 64 ]]; do
+        # `.git` is a directory in the main repo and a FILE (gitlink) in a
+        # worktree — accept either to handle both layouts.
+        if [[ -e "$dir/.git" ]]; then
+            if [[ -f "$dir/.env" ]]; then
+                local line
+                line=$(grep -E "^${var_name}=" "$dir/.env" 2>/dev/null | grep -v '^#' | head -1)
+                if [[ -n "$line" ]]; then
+                    printf '%s' "${line#*=}"
+                fi
+            fi
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+        depth=$((depth + 1))
+    done
+}
+
+resolve_proxmox_host() {
+    local host="$RL_PROXMOX_HOST"
+    if ! is_default_host "$host"; then
+        # Explicit operator override — trust it.
+        printf '%s\n' "$host"
+        return 0
+    fi
+    if probe_dns_for_host "$host"; then
+        printf '%s\n' "$host"
+        return 0
+    fi
+    local fallback_ip
+    fallback_ip="$(walk_up_for_env_var RL_INFRA_IP)"
+    if [[ -n "$fallback_ip" ]]; then
+        printf '%s\n' "$fallback_ip"
+        return 0
+    fi
+    echo "[rl] WARNING: cannot resolve $host and no RL_INFRA_IP in .env — SSH will likely fail" >&2
+    printf '%s\n' "$host"
+    return 0
+}
+
+# Resolve once at module init so every downstream ssh inherits the value.
+# The `_resolve_host` subcommand at the dispatch tail prints this verbatim
+# for the bash test harness.
+RL_PROXMOX_HOST="$(resolve_proxmox_host)"
+export RL_PROXMOX_HOST
+
 # --- target resolution ----------------------------------------------------
 
 resolve_target() {
@@ -982,6 +1080,7 @@ case "${1:-}" in
     gc)           shift; cmd_gc "$@" ;;
     snapshot)     shift; cmd_snapshot "$@" ;;
     doctor)       shift; cmd_doctor "$@" ;;
+    _resolve_host) printf '%s\n' "$RL_PROXMOX_HOST" ;;
     -h|--help|"") usage ;;
     *) echo "unknown subcommand: $1" >&2; usage >&2; exit 2 ;;
 esac

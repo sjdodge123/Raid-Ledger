@@ -143,6 +143,8 @@ export function loadRlInfraIp(): string | undefined {
   let dir = process.cwd();
   const root = resolve('/');
   // Cap the walk to avoid pathological loops on broken filesystems.
+  // `.git` is a directory in the main repo and a FILE (gitlink) in a
+  // worktree — existsSync accepts both.
   for (let i = 0; i < 64; i++) {
     if (existsSync(join(dir, '.git'))) break;
     if (dir === root) return undefined;
