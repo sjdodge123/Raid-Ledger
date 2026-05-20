@@ -242,3 +242,32 @@ ln -s "$PWD/rl-infra/cli/rl" /usr/local/bin/rl   # or add rl-infra/cli to PATH
 rl doctor                                    # verifies SSH, Mutagen, orchestrator
 rl claim --branch $(git branch --show-current)
 ```
+
+## VM dependencies
+
+The rl-infra VM host needs these packages installed via apt-get:
+
+- `inotify-tools` — push-notify (`rl test-plan wait`, `rl task wait`) uses
+  `inotifywait` to long-poll state-file changes. Without it, `wait`
+  commands silently return immediate timeouts. Install via
+  `apt-get install -y inotify-tools` on the VM host.
+
+Runner containers (per slot) auto-install these via `rl-infra/runner/Dockerfile`:
+
+- `inotify-tools` — same purpose for in-runner uses.
+- `postgresql-client`, `redis-tools`, `docker-ce-cli`, `git`, `make`,
+  `build-essential`, `netcat-openbsd`, `iproute2`, `dnsutils`, `tmux`,
+  `htop`, `tcpdump`, `strace`, `lsof`, `rsync`, `jq`, `unzip`, `curl`,
+  `gnupg`, `ca-certificates`.
+
+After changing `rl-infra/runner/Dockerfile`, rebuild the runner image on
+the VM:
+
+```bash
+cd /srv/rl-infra
+docker compose build runner-1 runner-2
+docker compose up -d
+```
+
+(This is an operator-action: agents don't have permission to restart
+compose-managed services.)

@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg jq tmux htop tcpdump strace lsof \
         postgresql-client redis-tools rsync git unzip make build-essential \
-        netcat-openbsd iproute2 dnsutils && \
+        netcat-openbsd iproute2 dnsutils inotify-tools && \
     # Docker CLI (no daemon — uses the host docker.sock).
     install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
