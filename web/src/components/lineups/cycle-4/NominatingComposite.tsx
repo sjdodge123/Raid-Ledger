@@ -101,19 +101,31 @@ export function NominatingComposite(
     setSearch,
     participantCount,
   } = commonGroundState;
-  // ROK-1298 round 8 2026-05-20: ride along with the global Header's
-  // auto-hide pattern exactly (web/src/components/layout/Header.tsx).
-  // Same singleton useScrollDirection, same translateY-full hide, same
-  // 300ms transform transition. Previous IntersectionObserver "isStuck"
-  // gate + max-height variants caused inertia-scroll flicker / scroll
-  // teleport — both diverged from Header's pattern and surfaced their
-  // own bugs.
+  // Sticky-hero auto-hide — same transform mechanism as Header.tsx
+  // BUT gated on the wrapper having reached its pin line (operator
+  // review r9 2026-05-20: "don't start the fade until it gets below
+  // this line"). The sentinel 1px div above the wrapper flips
+  // `hasPinned` true once it scrolls off-screen. Before that, the hero
+  // scrolls naturally with the page.
   //
   // ROK-1297 round 5m: keep the sticky hero visible while the operator
   // is in search mode. Auto-hiding while the filter bar is expanded
   // makes the entire filter row vanish on the first scroll-down.
+  const scrollDir = useScrollDirection();
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [hasPinned, setHasPinned] = useState(false);
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setHasPinned(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
   const isHidden =
-    useScrollDirection() === 'down' && commonGroundMode !== 'search';
+    scrollDir === 'down' && hasPinned && commonGroundMode !== 'search';
 
   const stickyHeaderRef = useRef<HTMLDivElement | null>(null);
 
@@ -166,6 +178,7 @@ export function NominatingComposite(
       data-testid="nominating-composite-view"
       className="space-y-3"
     >
+      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
       {/* Sticky JourneyHero (ROK-1297 round-4b): sits UNDER the global
           Header (Header.tsx is `sticky top-0` at ~64px tall on mobile
           and ~56px on desktop). On mobile, the Header auto-hides on

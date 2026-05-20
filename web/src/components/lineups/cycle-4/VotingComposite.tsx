@@ -22,7 +22,7 @@
  *     (`useSubmitVotes`).
  *   - Client state: drawer-game-id (which entry's drawer is open).
  */
-import { useEffect, useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../shared/journey-hero';
 import { deriveSubmitKind, type SubmitKind } from '../../shared/submit-bar/derive-kind';
@@ -185,20 +185,35 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
     );
   };
 
-  // Sticky-hero auto-hide — ride along with the global Header's behavior
-  // exactly (web/src/components/layout/Header.tsx). Same singleton
-  // useScrollDirection, same transform-translateY pattern, same 300ms
-  // transition. No IntersectionObserver "isStuck" gate, no max-height
-  // collapse — both mechanisms diverged from Header and surfaced their
-  // own bugs (layout-gap from translate-only / scroll teleport from
-  // height-collapse / direction-flicker from gated state).
-  const isHidden = useScrollDirection() === 'down';
+  // Sticky-hero auto-hide — same transform mechanism as the global
+  // Header (web/src/components/layout/Header.tsx) BUT gated on the
+  // wrapper having reached its pin line (operator review r9 2026-05-20:
+  // "don't start the fade until it gets below this line"). The sentinel
+  // is a 1px div just above the wrapper; once it scrolls off-screen the
+  // IntersectionObserver flips `hasPinned` true. From that moment the
+  // hero rides along with Header's scrollDir signal. Before pinning,
+  // the hero scrolls naturally with the page.
+  const scrollDir = useScrollDirection();
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [hasPinned, setHasPinned] = useState(false);
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setHasPinned(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+  const isHidden = scrollDir === 'down' && hasPinned;
 
   return (
     <section
       data-testid="voting-composite"
       className="space-y-3"
     >
+      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
       <div
         className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:will-change-auto md:translate-y-0 ${
           isHidden ? '-translate-y-full' : 'translate-y-0'
