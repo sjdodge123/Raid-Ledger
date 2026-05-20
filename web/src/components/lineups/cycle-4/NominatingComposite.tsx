@@ -199,7 +199,7 @@ export function NominatingComposite(
           caused inertia-scroll flicker and scroll-anchor teleport. */}
       <div
         ref={stickyHeaderRef}
-        className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:will-change-auto md:translate-y-0 ${
+        className={`sticky top-14 z-20 py-3 md:bg-surface md:rounded-md md:px-3 will-change-transform md:will-change-auto md:translate-y-0 ${
           isHidden ? '-translate-y-[calc(100%+3.5rem)]' : 'translate-y-0'
         }`}
         style={{ transition: 'transform 300ms ease-in-out' }}
