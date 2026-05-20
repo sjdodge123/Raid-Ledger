@@ -147,9 +147,19 @@ cmd_claim() {
         # so the ssh_run call gets the right argv either way. Bug T 2026-05-19.
         RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]:+${extra_args[@]}}")
         SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
-        QUEUED=$(jq -r '.queued // false' <<<"$RESULT")
+        # ROK-1331 M5a — orchestrator emits both legacy `queued:true` and the
+        # new `enqueued:true` during the transition window. Either signals a
+        # poll-and-retry response.
+        QUEUED=$(jq -r '(.queued // .enqueued // false)' <<<"$RESULT")
         if [[ -n "$SLOT" ]]; then
             echo "$RESULT" | jq .
+            # M5a hint surface: inherited envs from a branch-match handoff
+            # let the consumer skip its own env deploy. Print only when the
+            # field is non-empty so legacy callers don't see noise.
+            INH_COUNT=$(jq -r '(.inherited_envs // []) | length' <<<"$RESULT")
+            if [[ "$INH_COUNT" != "0" && -n "$INH_COUNT" ]]; then
+                echo "[rl] inherited $INH_COUNT env(s) from prior holder (branch match)" >&2
+            fi
             ensure_mutagen_sync "$SLOT"
             # ROK-1331 M4 AC11: heartbeat must start BEFORE scaffold so a slow
             # remote git fetch doesn't let the claim expire mid-scaffold.
@@ -183,8 +193,10 @@ cmd_claim() {
             return 0
         fi
         local pos len
-        pos=$(jq -r '.position // "?"' <<<"$RESULT")
-        len=$(jq -r '.queue_length // "?"' <<<"$RESULT")
+        # M5a — prefer the new queue_position field, fall back to the legacy
+        # `position` for transition-window compat.
+        pos=$(jq -r '(.queue_position // .position // "?")' <<<"$RESULT")
+        len=$(jq -r '(.queue_length // "?")' <<<"$RESULT")
         echo "[rl] queued at position $pos of $len — polling again in ${interval}s (timeout in $((deadline - now))s)" >&2
         sleep "$interval"
     done
