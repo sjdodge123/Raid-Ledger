@@ -21,6 +21,7 @@ import * as schema from '../src/drizzle/schema';
 import { nanoid } from 'nanoid';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type User = typeof schema.users.$inferSelect;
 
 const DEMO_TITLE = 'Sv Demo — Voting (25 games · 6 voters)';
 
@@ -35,7 +36,7 @@ const VOTE_DISTRIBUTION = [
 
 export async function seedVotingLineup(
   db: Db,
-  createdUsers: schema.User[],
+  createdUsers: User[],
 ): Promise<void> {
   console.log('🗳️  Seeding Sv demo voting lineup...');
 
@@ -64,8 +65,8 @@ export async function seedVotingLineup(
   // votingEligibleCount = 1 (creator) + 5 (invitees, none is creator) = 6.
   // Operator wants the bar denominator to track the demo voter pool, not
   // the full 100+ community member count of a public lineup.
-  const invitees = createdUsers.slice(0, 5);
-  const voters = [admin, ...invitees];
+  const invitees: User[] = createdUsers.slice(0, 5);
+  const voters: User[] = [admin, ...invitees];
   if (invitees.length < 5) {
     console.warn(
       `  ⚠️  Need 5 fake gamers, found ${invitees.length} — skipping voting lineup seed`,
