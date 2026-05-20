@@ -600,43 +600,75 @@ const handleTestPlanGet = async (slug, req, res) => {
   }
 };
 
-// ROK-1326 fix-5: refuse plan creation when no env exists for the slug.
-// Previously the dashboard would happily accept a plan POST for a non-
-// existent slug, the agent would see ok:true and tell the operator the
-// plan was ready, the operator would open the dashboard and find no env
-// AND no plan to interact with. Now: 409 with the available envs in the
-// body so the agent can self-correct (call rl_env_spin/rl_env_deploy
-// first or pick a different slug).
-const envExistsForSlug = async (slug) => {
+// ROK-1326 fix-5 / ROK-1331 M6b chunk-3: refuse plan creation when no env
+// exists for the slug. M6b consolidates the previous two-read pattern
+// (envExistsForSlug + listEnvSlugs each read env-registry.json
+// independently) into a SINGLE loadEnvRegistry call that returns full
+// entries — so the 409 path's `available_envs` and the existence check
+// share ONE filesystem read. Also returns full entries so M5b (Wave 7)
+// can layer lease-queue state on top.
+//
+// ENOENT → empty registry (normal "no envs yet" state).
+// JSON parse error / EACCES / EISDIR → re-throws. Handler boundary
+// converts these to HTTP 500 env_registry_unreadable so the request
+// socket doesn't hang.
+//
+// Malformed entries (missing `slug`) are dropped + console.warn'd so
+// the operator notices corrupt rows in journalctl without the dashboard
+// failing the whole request.
+const loadEnvRegistry = async () => {
+  let raw;
   try {
-    const raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
-    const envs = JSON.parse(raw);
-    return Array.isArray(envs) && envs.some((e) => e && e.slug === slug);
+    raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
   } catch (err) {
-    if (err.code === 'ENOENT') return false;
+    if (err.code === 'ENOENT') return { slugs: [], byId: new Map(), entries: [] };
     throw err;
   }
-};
-
-const listEnvSlugs = async () => {
-  try {
-    const raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
-    const envs = JSON.parse(raw);
-    return Array.isArray(envs) ? envs.map((e) => e && e.slug).filter(Boolean) : [];
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
-  }
+  const envs = JSON.parse(raw);
+  if (!Array.isArray(envs)) return { slugs: [], byId: new Map(), entries: [] };
+  const byId = new Map();
+  const slugs = [];
+  const entries = [];
+  envs.forEach((entry, idx) => {
+    if (!entry || typeof entry !== 'object') {
+      console.warn(`[dashboard] env-registry entry ${idx} is not an object — skipping (got ${typeof entry})`);
+      return;
+    }
+    if (typeof entry.slug !== 'string' || entry.slug.length === 0) {
+      console.warn(`[dashboard] env-registry entry ${idx} missing slug field (malformed/invalid registry entry) — skipping`);
+      return;
+    }
+    if (byId.has(entry.slug)) {
+      console.warn(`[dashboard] env-registry has duplicate slug '${entry.slug}' (entry ${idx} overwrites prior); investigate`);
+    }
+    byId.set(entry.slug, entry);
+    slugs.push(entry.slug);
+    entries.push(entry);
+  });
+  return { slugs, byId, entries };
 };
 
 const handleTestPlanPut = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
-  if (!(await envExistsForSlug(slug))) {
+  // ROK-1331 M6b chunk-3: wrap the registry read so non-ENOENT errors
+  // (EACCES, EISDIR, JSON parse) produce a 500 response instead of
+  // propagating up and hanging the HTTP socket.
+  let registry;
+  try {
+    registry = await loadEnvRegistry();
+  } catch (err) {
+    return sendJson(res, 500, {
+      ok: false,
+      error: 'env_registry_unreadable',
+      detail: err && typeof err.message === 'string' ? err.message : String(err),
+    });
+  }
+  if (!registry.byId.has(slug)) {
     return sendJson(res, 409, {
       ok: false,
       error: 'env_not_found',
       slug,
-      available_envs: await listEnvSlugs(),
+      available_envs: registry.slugs,
       hint: 'No env exists for this slug. Call rl_env_spin or rl_env_deploy first, then post the plan.',
     });
   }
@@ -1192,6 +1224,10 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
+  // Read the actual bound port from server.address() so PORT=0 (random
+  // port for tests) prints a real :<n> the test harness can parse.
+  const addr = server.address();
+  const boundPort = addr && typeof addr === 'object' ? addr.port : PORT;
   // eslint-disable-next-line no-console
-  console.log(`rl-dashboard listening on :${PORT}, state=${STATE_DIR}, public=${PUBLIC_DIR}`);
+  console.log(`rl-dashboard listening on :${boundPort}, state=${STATE_DIR}, public=${PUBLIC_DIR}`);
 });
