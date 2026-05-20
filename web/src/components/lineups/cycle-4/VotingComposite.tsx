@@ -214,7 +214,7 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
         className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:translate-y-0 ${
           heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
         }`}
-        style={{ transition: 'transform 300ms ease-in-out' }}
+        style={{ transition: 'transform 500ms ease-in-out' }}
       >
         <JourneyHero
           phase="voting"

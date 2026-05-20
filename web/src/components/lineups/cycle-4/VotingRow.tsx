@@ -119,21 +119,21 @@ export function VotingRow(props: VotingRowProps): JSX.Element {
     onToggleVote,
     onOpenDrawer,
   } = props;
-  const rowDisabled = disabled;
-  const handleRowClick = (): void => {
-    if (!rowDisabled) onOpenDrawer();
-  };
+  // Row body always navigates to /games/:id — operator review r3 2026-05-19:
+  // even when at the vote cap (the legacy `disabled` semantics) the user must
+  // still be able to research a game. Only the vote-toggle button is gated by
+  // `disabled`; the row body remains clickable + keyboard-reachable.
   return (
     <div
       data-testid="voting-row"
       data-voted={isVoted ? 'true' : 'false'}
       role="button"
-      tabIndex={rowDisabled ? -1 : 0}
+      tabIndex={0}
       aria-label={`Open details for ${entry.gameName}`}
       aria-haspopup="dialog"
-      onClick={handleRowClick}
-      onKeyDown={rowKeyHandler(onOpenDrawer, rowDisabled)}
-      className={`border-b border-edge hover:bg-panel/30 transition-colors relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 ${rowDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+      onClick={onOpenDrawer}
+      onKeyDown={rowKeyHandler(onOpenDrawer, false)}
+      className={`border-b border-edge hover:bg-panel/30 transition-colors relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 cursor-pointer ${disabled ? 'opacity-80' : ''}`}
     >
       {isVoted && (
         <div
