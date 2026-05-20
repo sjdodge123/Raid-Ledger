@@ -1,0 +1,245 @@
+// ROK-1331 M2 — rl_task_status, rl_task_wait, rl_task_cancel, rl_task_list.
+// Mocks `child_process.execFile` so no SSH actually happens. The four executors
+// call SSH to invoke M1's orchestrator binaries (task-status, task-cancel,
+// task-list) and parse stdout JSON; for `rl_task_wait` they also spawn
+// `inotifywait` over SSH then re-call status. We stub at the execFile boundary.
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mockExecFile = vi.fn();
+vi.mock('node:child_process', () => ({
+  execFile: (...args: unknown[]) => mockExecFile(...args),
+  execFileSync: (...args: unknown[]) => mockExecFile(...args),
+  default: {
+    execFile: (...args: unknown[]) => mockExecFile(...args),
+    execFileSync: (...args: unknown[]) => mockExecFile(...args),
+  },
+}));
+
+// NEW modules under test — DO NOT EXIST yet, so this import drives the red.
+import {
+  executeStatus,
+  executeWait,
+  executeCancel,
+  executeList,
+  TaskStatusResultSchema,
+  McpRuntimeStatusSchema,
+} from '../task.js';
+
+/** Stub one execFile call with stdout JSON success. */
+function execFileOk(stdoutJson: unknown): void {
+  mockExecFile.mockImplementationOnce(
+    (
+      _cmd: string,
+      _args: string[],
+      _opts: unknown,
+      cb: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+      callback(null, JSON.stringify(stdoutJson), '');
+    },
+  );
+}
+
+function execFileFail(exitCode = 1, stderr = 'boom'): void {
+  mockExecFile.mockImplementationOnce(
+    (
+      _cmd: string,
+      _args: string[],
+      _opts: unknown,
+      cb: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+      callback(
+        Object.assign(new Error(stderr), { code: exitCode }),
+        '',
+        stderr,
+      );
+    },
+  );
+}
+
+const FIXTURE_RUNNING = {
+  ok: true,
+  task_id: 'abc123def',
+  tool: 'rl_validate_ci',
+  slot: 1,
+  args_summary: '--no-e2e',
+  started_at: '2026-05-20T12:00:00.000Z',
+  finished_at: null,
+  elapsed_seconds: 12,
+  mcp_runtime_status: 'running',
+  script_exit_code: null,
+  steps: [],
+  log_tail: '... building ...\n',
+  log_url: 'https://fleet.gamernight.net/api/tasks/abc123def/log',
+  log_path: '/srv/rl-infra/state/tasks/abc123def.log',
+};
+
+const FIXTURE_SUCCEEDED = {
+  ...FIXTURE_RUNNING,
+  finished_at: '2026-05-20T12:05:00.000Z',
+  elapsed_seconds: 300,
+  mcp_runtime_status: 'succeeded',
+  script_exit_code: 0,
+  steps: [
+    { name: 'Build (all workspaces)', status: 'PASS', duration_s: 45 },
+    { name: 'TypeScript (api + web)', status: 'PASS', duration_s: 30 },
+    { name: 'Lint (api + web)', status: 'PASS', duration_s: 22 },
+    { name: 'Unit tests + coverage', status: 'PASS', duration_s: 90 },
+  ],
+};
+
+beforeEach(() => {
+  mockExecFile.mockReset();
+});
+
+describe('rl_task_status — executeStatus()', () => {
+  it('returns a TaskStatusResult shape with steps[], log_tail, script_exit_code, mcp_runtime_status', async () => {
+    execFileOk(FIXTURE_SUCCEEDED);
+    const result = await executeStatus({ task_id: 'abc123def' });
+    expect(result.ok).toBe(true);
+    expect(result.task_id).toBe('abc123def');
+    expect(result.script_exit_code).toBe(0);
+    expect(result.mcp_runtime_status).toBe('succeeded');
+    expect(Array.isArray(result.steps)).toBe(true);
+    expect(result.steps.length).toBeGreaterThanOrEqual(4);
+    // Bug B: separate fields
+    expect(result).toHaveProperty('script_exit_code');
+    expect(result).toHaveProperty('mcp_runtime_status');
+    // Validate via the published schema.
+    expect(() => TaskStatusResultSchema.parse(result)).not.toThrow();
+  });
+
+  it('script_exit_code is int|null AND mcp_runtime_status is the enum', () => {
+    expect(() =>
+      TaskStatusResultSchema.parse({
+        ...FIXTURE_RUNNING,
+        script_exit_code: null,
+        mcp_runtime_status: 'running',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      TaskStatusResultSchema.parse({
+        ...FIXTURE_SUCCEEDED,
+        script_exit_code: 42,
+        mcp_runtime_status: 'failed',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      TaskStatusResultSchema.parse({
+        ...FIXTURE_SUCCEEDED,
+        script_exit_code: 'not-an-int',
+      }),
+    ).toThrow();
+    expect(() =>
+      TaskStatusResultSchema.parse({
+        ...FIXTURE_SUCCEEDED,
+        mcp_runtime_status: 'made-up',
+      }),
+    ).toThrow();
+  });
+
+  it('McpRuntimeStatusSchema enumerates the full Bug-B status set', () => {
+    for (const status of [
+      'running',
+      'succeeded',
+      'failed',
+      'killed_buffer_overflow',
+      'killed_timeout',
+      'cancelled',
+    ]) {
+      expect(() => McpRuntimeStatusSchema.parse(status)).not.toThrow();
+    }
+    expect(() => McpRuntimeStatusSchema.parse('unknown')).toThrow();
+  });
+
+  it('forwards log_tail_lines to the task-status binary (default 200, max 1000)', async () => {
+    execFileOk(FIXTURE_SUCCEEDED);
+    await executeStatus({ task_id: 'abc123def', log_tail_lines: 500 });
+    // The SSH remote command should include `--log-tail-lines 500`.
+    const firstCall = mockExecFile.mock.calls[0];
+    const argv = firstCall.slice(0, 2);
+    const remote = JSON.stringify(argv);
+    expect(remote).toMatch(/log-tail-lines.*500|--log-tail-lines\D+500/);
+  });
+
+  it('surfaces a task_not_found error from the orchestrator verbatim', async () => {
+    execFileOk({ ok: false, error: 'task_not_found', task_id: 'nopenope' });
+    const result = await executeStatus({ task_id: 'nopenope' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('task_not_found');
+  });
+});
+
+describe('rl_task_wait — executeWait()', () => {
+  it('returns {ok:false, error:"timed_out", task_id} on timeout', async () => {
+    // First call probes inotifywait availability — succeed.
+    execFileOk({ ok: true });
+    // Then the watcher hangs; the wrapper must enforce the timeout.
+    mockExecFile.mockImplementationOnce(() => {
+      /* never call the callback — simulate hang */
+    });
+    const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 5 });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('timed_out');
+    expect(result.task_id).toBe('abc123def');
+  }, 15_000);
+
+  it('returns the inotifywait_not_installed hint when the binary is missing', async () => {
+    execFileFail(127, 'command not found');
+    const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 5 });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('inotifywait_not_installed');
+  });
+});
+
+describe('rl_task_cancel — executeCancel()', () => {
+  it('returns {cancelled: true} on success', async () => {
+    execFileOk({
+      ok: true,
+      task_id: 'abc123def',
+      mcp_runtime_status: 'cancelled',
+    });
+    const result = await executeCancel({ task_id: 'abc123def', reason: 'operator-requested' });
+    expect(result.ok).toBe(true);
+    expect(result.cancelled).toBe(true);
+  });
+
+  it('is idempotent: if the task already terminal, still returns ok:true', async () => {
+    execFileOk({
+      ok: true,
+      task_id: 'abc123def',
+      mcp_runtime_status: 'succeeded',
+    });
+    const result = await executeCancel({ task_id: 'abc123def', reason: 'cleanup' });
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('rl_task_list — executeList()', () => {
+  it('filters by slot/status/limit and returns the array', async () => {
+    execFileOk({
+      ok: true,
+      tasks: [
+        { ...FIXTURE_RUNNING },
+        { ...FIXTURE_SUCCEEDED },
+      ],
+    });
+    const result = await executeList({ slot: 1, status: 'running', limit: 10 });
+    expect(result.ok).toBe(true);
+    expect(Array.isArray(result.tasks)).toBe(true);
+    // Verify the SSH argv carried the filters.
+    const firstCall = mockExecFile.mock.calls[0];
+    const argv = JSON.stringify(firstCall.slice(0, 2));
+    expect(argv).toMatch(/--slot.*1|--slot\D+1/);
+    expect(argv).toMatch(/--status.*running/);
+    expect(argv).toMatch(/--limit.*10|--limit\D+10/);
+  });
+
+  it('returns {ok:true, tasks:[]} when no matching tasks (not an error)', async () => {
+    execFileOk({ ok: true, tasks: [] });
+    const result = await executeList({});
+    expect(result.ok).toBe(true);
+    expect(result.tasks).toEqual([]);
+  });
+});
