@@ -583,10 +583,24 @@ _wait_for_container_health() {
   fi
   echo -e "${GREEN}Redis: PONG${NC}"
 
-  # Verify nginx proxy (from host, matches GitHub CI)
+  # Verify nginx proxy.
+  # Laptop path: curl from host, the `-p 8080:80` mapping is visible on
+  # localhost. Github CI same shape.
+  # ROK-1331 dogfood fix (2026-05-20): on the fleet, validate-ci.sh runs
+  # INSIDE the runner container. The host port mapping is bound on the VM
+  # host, not on runner-1's localhost — curl-from-runner-1 returns HTTP
+  # 000. Docker-exec into the test container itself and curl nginx on
+  # its internal port 80 to validate the proxy without depending on
+  # cross-container port visibility.
   local http_code
-  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-    http://127.0.0.1:${host_port}/api/health)
+  if [ -d /workspace ]; then
+    http_code=$(docker exec "$cname" sh -c \
+      "wget -qS -O /dev/null http://127.0.0.1:80/api/health 2>&1 | awk '/HTTP/{print \$2; exit}'" \
+      2>/dev/null || echo 000)
+  else
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+      http://127.0.0.1:${host_port}/api/health)
+  fi
   if [ "$http_code" != "200" ]; then
     echo -e "${RED}Nginx proxy returned $http_code${NC}"
     return 1
