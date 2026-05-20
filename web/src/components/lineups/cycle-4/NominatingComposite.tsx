@@ -200,7 +200,7 @@ export function NominatingComposite(
       <div
         ref={stickyHeaderRef}
         className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:will-change-auto md:translate-y-0 ${
-          isHidden ? '-translate-y-full' : 'translate-y-0'
+          isHidden ? '-translate-y-[calc(100%+3.5rem)]' : 'translate-y-0'
         }`}
         style={{ transition: 'transform 300ms ease-in-out' }}
       >
