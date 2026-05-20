@@ -538,3 +538,8 @@ Six failures resolved by ROK-1298's fixes (AC3 a11y, AC9 keyboard, vote-toggle k
   Suggested: candidate for the `test:integration:flaky` ringfence lane proposed in the 2026-05-12 ROK-1264 carrier work.
 - Pre-existing entries already captured upstream this section (lineup-abort:107 admin abort flow, community-lineup:201 Nomination modal preview card desktop, etc) continue to flake on this run.
 
+### 2026-05-20 — rok-1298-sv-voting-composite (surfaced during final validate-ci pre-push)
+
+- **[med]** `api/src/events/events-dashboard.dashboard.integration.spec.ts:96` — `GET /events/my-dashboard` returned 404 in full-suite run, expected 200. Cross-suite contamination — passes 11/11 in isolation (`npx jest --config jest.integration.config.js src/events/events-dashboard.dashboard.integration.spec.ts`). NOT caused by ROK-1298 (touched zero `events-dashboard` files). Likely the same class of test-isolation flake as the 2026-05-12 ROK-1264 carrier work documented earlier in this file.
+  Suggested: candidate for the `test:integration:flaky` ringfence lane, or wrap the dashboard module bootstrap in a `beforeEach` that re-registers the controller.
+
