@@ -995,6 +995,121 @@ const AUDIT_ERROR_CATEGORIES = [
   { name: 'illegal_instruction', pattern: /illegal\s+instruction/i },
 ];
 
+// ROK-1331 M11 — perf.log tail + summarisation.
+//
+// Surfaces fleet-wide perf signals on the same /api/fleet-health endpoint
+// the agent monitor already polls. Tail-bounded (256 KiB) so the
+// classifier can never DoS the dashboard regardless of perf.log size; the
+// LOGROTATE daily rotation keeps the file under that cap in practice.
+//
+// MUST NEVER 500 — every read path is wrapped in try/catch and falls
+// through to safe defaults. Same posture as classifyAuditLines.
+const FLEET_HEALTH_PERF_TAIL_BYTES = 256 * 1024;
+const PERF_SUMMARY_WINDOW_MINUTES = parseInt(process.env.PERF_SUMMARY_WINDOW_MINUTES || '15', 10);
+
+const tailPerfLog = async () => {
+  let handle = null;
+  try {
+    handle = await open(join(STATE_DIR, 'perf.log'), 'r');
+    const stat = await handle.stat();
+    const size = stat.size;
+    const tail = Math.min(size, FLEET_HEALTH_PERF_TAIL_BYTES);
+    const buf = Buffer.alloc(tail);
+    const start = size - tail;
+    const { bytesRead } = await handle.read(buf, 0, tail, start);
+    const text = buf.subarray(0, bytesRead).toString('utf-8');
+    const lines = text.split('\n').filter((l) => l.length > 0);
+    if (start > 0 && lines.length > 0) lines.shift(); // drop partial leading line
+    const events = [];
+    for (const line of lines) {
+      try {
+        const ev = JSON.parse(line);
+        if (ev && typeof ev === 'object' && typeof ev.event === 'string') {
+          events.push(ev);
+        }
+      } catch {
+        // Malformed line — skip. perf::emit shouldn't produce these, but a
+        // mid-write crash or hand-edit could leave one behind. Skipping is
+        // the right posture — never 500 the endpoint.
+      }
+    }
+    return events;
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    return [];
+  } finally {
+    if (handle) { try { await handle.close(); } catch { /* ignore */ } }
+  }
+};
+
+const summarisePerfEvents = (events, claims, nowMs) => {
+  const windowMs = PERF_SUMMARY_WINDOW_MINUTES * 60_000;
+  const cutoff = nowMs - windowMs;
+  let lastValidate = null;
+  const stepBuckets = new Map(); // step -> [ms, ms, ...]
+  let lastPkillSurvivors = 0;
+  let lastPkillTs = 0;
+  let lastGcCycleMs = null;
+  let lastGcTs = 0;
+  for (const ev of events) {
+    const tsMs = Date.parse(ev.ts);
+    if (!Number.isFinite(tsMs)) continue;
+    if (ev.event === 'validate.end' && typeof ev.duration_ms === 'number') {
+      if (!lastValidate || tsMs > Date.parse(lastValidate.ts)) {
+        lastValidate = {
+          ts: ev.ts,
+          branch: ev.branch ?? null,
+          duration_ms: ev.duration_ms,
+          exit_code: typeof ev.exit_code === 'number' ? ev.exit_code : null,
+          slot: typeof ev.slot === 'number' ? ev.slot : null,
+        };
+      }
+    } else if (ev.event === 'validate.step.end' && typeof ev.duration_ms === 'number' && typeof ev.step === 'string') {
+      if (tsMs >= cutoff) {
+        const arr = stepBuckets.get(ev.step) ?? [];
+        arr.push(ev.duration_ms);
+        stepBuckets.set(ev.step, arr);
+      }
+    } else if (ev.event === 'release.pkill_audit' && typeof ev.surviving_count === 'number') {
+      if (tsMs >= lastPkillTs) {
+        lastPkillTs = tsMs;
+        lastPkillSurvivors = ev.surviving_count;
+      }
+    } else if (ev.event === 'gc.sweep.cycle' && typeof ev.duration_ms === 'number') {
+      if (tsMs >= lastGcTs) {
+        lastGcTs = tsMs;
+        lastGcCycleMs = ev.duration_ms;
+      }
+    }
+  }
+  const p50 = {};
+  for (const [step, samples] of stepBuckets) {
+    samples.sort((a, b) => a - b);
+    p50[step] = samples[Math.floor(samples.length / 2)];
+  }
+  const claimsHeldMinutes = [];
+  if (Array.isArray(claims)) {
+    for (const c of claims) {
+      if (!c || c.claimed !== true || !c.started_at) continue;
+      const startedMs = Date.parse(c.started_at);
+      if (!Number.isFinite(startedMs)) continue;
+      claimsHeldMinutes.push({
+        slot: c.slot,
+        agent_id: c.agent_id ?? null,
+        held_for_ms: Math.max(0, nowMs - startedMs),
+      });
+    }
+  }
+  return {
+    window_minutes: PERF_SUMMARY_WINDOW_MINUTES,
+    last_validate_ci: lastValidate,
+    p50_validate_step_ms: p50,
+    claims_held_minutes: claimsHeldMinutes,
+    pkill_survivors_last_release: lastPkillSurvivors,
+    gc_sweep_last_cycle_ms: lastGcCycleMs,
+  };
+};
+
 const tailAuditLog = async () => {
   let handle = null;
   try {
@@ -1123,16 +1238,40 @@ const handleFleetHealth = async (req, res) => {
   }
   try {
     const nowMs = Date.now();
-    const [stale_heartbeat_slots, queue_stuck, audit_lines] = await Promise.all([
+    // ROK-1331 M11 — read claims for both stale-slot detection AND
+    // claims_held_minutes derivation; tail perf.log alongside audit.log.
+    const claimsP = readFile(join(STATE_DIR, 'claims.json'), 'utf-8')
+      .then((raw) => { try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; } })
+      .catch(() => []);
+    const [stale_heartbeat_slots, queue_stuck, audit_lines, perf_events, claims] = await Promise.all([
       collectStaleSlots(nowMs).catch(() => []),
       collectQueueStuck(nowMs).catch(() => []),
       tailAuditLog(),
+      tailPerfLog().catch(() => []),
+      claimsP,
     ]);
     const recent_audit_errors = classifyAuditLines(audit_lines);
     // v1 stub — runner warnings come from docker stats and require a host
     // shell-out. Leave the field present so MCP clients can iterate; the
     // sweeper / operator can wire real signals later.
     const runner_warnings = [];
+
+    // ROK-1331 M11 — additive perf_summary field. Defaults are safe (null /
+    // empty / 0) when perf.log is missing, so MCP clients can iterate the
+    // shape unconditionally.
+    let perf_summary;
+    try {
+      perf_summary = summarisePerfEvents(perf_events, claims, nowMs);
+    } catch {
+      perf_summary = {
+        window_minutes: PERF_SUMMARY_WINDOW_MINUTES,
+        last_validate_ci: null,
+        p50_validate_step_ms: {},
+        claims_held_minutes: [],
+        pkill_survivors_last_release: 0,
+        gc_sweep_last_cycle_ms: null,
+      };
+    }
 
     const stuck_queue_entries = queue_stuck.length;
     const stale_slots = stale_heartbeat_slots.length;
@@ -1144,6 +1283,7 @@ const handleFleetHealth = async (req, res) => {
       queue_stuck,
       runner_warnings,
       recent_audit_errors,
+      perf_summary,
       summary: {
         ok: warning_count === 0,
         warning_count,
