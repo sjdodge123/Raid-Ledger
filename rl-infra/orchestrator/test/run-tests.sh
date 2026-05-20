@@ -36,6 +36,14 @@ else
         "$TEST_DIR/test_sweeper.sh"
         "$TEST_DIR/test_release_integration.sh"
         "$TEST_DIR/test_concurrent_steps.sh"
+        # ROK-1331 M5a — lease queue + claim duration + pin/unpin + sweeper safety.
+        "$TEST_DIR/lease-enqueue.test.sh"
+        "$TEST_DIR/lease-advance.test.sh"
+        "$TEST_DIR/lease-status.test.sh"
+        "$TEST_DIR/extend-claim.test.sh"
+        "$TEST_DIR/pin-env.test.sh"
+        "$TEST_DIR/release-preserve-envs.test.sh"
+        "$TEST_DIR/sweeper-pin-safety.test.sh"
     )
 fi
 
