@@ -230,8 +230,9 @@ footer {
   word-break: break-word;
   overflow-wrap: anywhere;
   /* Cap a single step's expected text so a paste-heavy step doesn't shove
-     siblings off-screen on mobile. Tester can scroll the inner block. */
-  max-height: 7em;
+     siblings off-screen on mobile. Tester can scroll the inner block.
+     Bumped 7em -> 12em so iOS Safari's overflow scrollbar isn't hidden. */
+  max-height: 12em;
   overflow-y: auto;
 }
 .step-inline-link { word-break: break-all; overflow-wrap: anywhere; }
@@ -611,3 +612,55 @@ footer {
   pointer-events: none;
   overflow: hidden;
 }
+
+/* ROK-1331 M3 — per-slot task list (under each claimed slot's actions row). */
+.slot-tasks {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+.slot-tasks-empty {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 12px;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  font-variant-numeric: tabular-nums;
+}
+.task-row.task-row-running { background: rgba(94, 184, 255, 0.08); }
+.task-row.task-row-succeeded,
+.task-row.task-row-failed,
+.task-row.task-row-cancelled { opacity: 0.55; }
+.task-row.task-row-failed .task-marker { color: var(--danger); }
+.task-row.task-row-cancelled .task-marker { color: var(--fg-muted); }
+.task-row.task-row-succeeded .task-marker { color: var(--accent-2); }
+.task-row.task-row-running .task-marker { color: var(--accent); }
+.task-tool {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-elapsed { color: var(--fg-muted); }
+.task-log-link {
+  color: var(--accent);
+  text-decoration: none;
+  padding: 0 2px;
+}
+.task-log-link:hover { text-decoration: underline; }
