@@ -383,6 +383,18 @@ docker image prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker volume prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker container prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 
+# 3a. ROK-1331 M8 — testcontainers orphan reap (fleet-wide).
+# release fires the reaper per-slot at handoff; this is the safety net for
+# anything that slipped through (jest killed by OOM after release already
+# ran, ryuk-session desync surfaced post-release, etc.). Best-effort —
+# silenced because the operator's Mac runs the sweeper-test without docker
+# available, and we don't want the noise. The reaper itself exits 0 on
+# zero-reap or docker unreachable.
+REAP_BIN="${ORCHESTRATOR_BIN_DIR}/runner-testcontainers-reap"
+if [[ -x "$REAP_BIN" ]]; then
+    RL_STATE_DIR="$STATE_DIR" "$REAP_BIN" all >/dev/null 2>&1 || true
+fi
+
 # 3b. ROK-1331 M1 — task retention block moved to a self-contained function
 # below + invoked at the top (before docker ops) so it runs even when docker
 # is unavailable (test runners on the operator's Mac). See `prune_old_tasks`
