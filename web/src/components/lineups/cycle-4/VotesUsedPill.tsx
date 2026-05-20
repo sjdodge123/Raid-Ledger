@@ -24,7 +24,7 @@ export function VotesUsedPill(props: VotesUsedPillProps): JSX.Element {
       data-testid="votes-used-pill"
       role="status"
       aria-live="polite"
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-edge bg-overlay/40 text-[11px] text-muted"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-edge bg-overlay/40 text-[11px] text-muted whitespace-nowrap"
     >
       {used} of {max} votes used
     </div>

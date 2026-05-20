@@ -233,7 +233,7 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
             disabledReason={copy.disabledReason}
             onClick={handleCtaClick}
           />
-          <div className="ml-auto">
+          <div className="ml-auto flex-shrink-0">
             <VotesUsedPill used={used} max={max} />
           </div>
         </div>
