@@ -22,14 +22,18 @@ import {
   PollResultsResponse,
 } from '@raid-ledger/contract';
 import { EventPlansService } from './event-plans.service';
-import { type ZodType, ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 
 import type { AuthenticatedRequest } from '../auth/types';
 
 /**
  * Parse data with a Zod schema, converting ZodError to BadRequestException.
+ * Returns the schema's output (post-defaults) type, not its input type.
  */
-function parseOrThrow<TOut>(schema: ZodType<TOut>, data: unknown): TOut {
+function parseOrThrow<T extends z.ZodTypeAny>(
+  schema: T,
+  data: unknown,
+): z.output<T> {
   try {
     return schema.parse(data);
   } catch (error) {
