@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGameActivity, useGameNowPlaying } from '../../hooks/use-games-discover';
 import { formatPlaytime, PERIOD_LABELS } from '../../lib/activity-utils';
@@ -18,7 +18,21 @@ export function CommunityActivitySection({ gameId }: { gameId: number }): JSX.El
     const nowPlayingCount = nowPlayingData?.count ?? 0;
     const hasAnyData = topPlayers.length > 0 || nowPlayingCount > 0;
 
-    if (!hasAnyData && !activityLoading) return null;
+    // Operator review r4 2026-05-19: once the section has rendered with data,
+    // keep it mounted across period changes. The previous gating ANDed
+    // hasAnyData with period — switching to "This Month" while the user has
+    // no activity in that window made the whole section (including the
+    // period selector) disappear, stranding them with no way to switch back.
+    const hasEverRenderedRef = useRef(false);
+    if (hasAnyData) hasEverRenderedRef.current = true;
+    const everShown = hasEverRenderedRef.current;
+    // Reset stickiness when the gameId changes so this section can disappear
+    // on a different game with no activity at all.
+    useEffect(() => {
+        hasEverRenderedRef.current = false;
+    }, [gameId]);
+
+    if (!hasAnyData && !activityLoading && !everShown) return null;
 
     return (
         <section className="mb-8">
@@ -28,6 +42,11 @@ export function CommunityActivitySection({ gameId }: { gameId: number }): JSX.El
                 <div className="text-sm text-muted mb-3">{formatPlaytime(totalSeconds)} total community playtime</div>
             )}
             <TopPlayersList players={topPlayers} isLoading={activityLoading} />
+            {!activityLoading && topPlayers.length === 0 && nowPlayingCount === 0 && (
+                <div className="text-sm text-muted italic px-1">
+                    No community activity for {PERIOD_LABELS.find((p) => p.value === period)?.label.toLowerCase() ?? 'this period'} yet.
+                </div>
+            )}
         </section>
     );
 }

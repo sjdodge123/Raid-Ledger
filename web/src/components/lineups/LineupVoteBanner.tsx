@@ -90,13 +90,23 @@ function hasEngaged(
 }
 
 /**
- * Hero-styled banner with a custom secondary CTA.
+ * Hero-styled banner with primary + secondary action buttons.
  *
- * JourneyHero exposes one primary `cta` slot. The lineup banners need both
- * a primary action (Vote / Nominate / etc.) AND a "View Lineup →" link. We
- * pass the primary action as JourneyHero's cta and render the secondary link
- * inline beneath using the same tone-driven color.
+ * Layout mirrors the Sv voting composite's sticky hero: JourneyHero on top
+ * (noRibbon — the game-detail page is not a lineup-phase surface so the
+ * 4-step ribbon would lie), then a horizontal action row immediately below
+ * the toolbar with mobile-friendly tap targets (44px mobile / 36px desktop).
+ *
+ * Primary action uses the emerald-solid chrome shared with the Sv composite's
+ * StickyHeroSubmitButton / Nominating's StickyHeroSearchButton, so the entire
+ * site reads as one button family. The secondary "View Lineup" is a ghost
+ * outline using the same dimensions.
  */
+const PRIMARY_BTN_CLS =
+  'flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap';
+const SECONDARY_BTN_CLS =
+  'flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-edge bg-overlay/30 hover:bg-overlay/50 active:bg-overlay/70 text-sm font-semibold text-foreground transition-colors whitespace-nowrap';
+
 function BannerHero({
   phase,
   active,
@@ -104,8 +114,9 @@ function BannerHero({
   badge,
   task,
   sub,
-  cta,
-  onCtaClick,
+  primaryLabel,
+  primaryDisabled,
+  onPrimaryClick,
   secondaryLabel,
   onSecondaryClick,
 }: {
@@ -115,17 +126,12 @@ function BannerHero({
   badge: string;
   task: string;
   sub?: string;
-  cta?: string;
-  onCtaClick?: () => void;
+  primaryLabel?: string;
+  primaryDisabled?: boolean;
+  onPrimaryClick?: () => void;
   secondaryLabel: string;
   onSecondaryClick: () => void;
 }): JSX.Element {
-  const linkCls =
-    tone === 'set'
-      ? 'text-amber-300 hover:text-amber-200'
-      : tone === 'waiting'
-        ? 'text-muted hover:text-foreground'
-        : 'text-emerald-300 hover:text-emerald-200';
   return (
     <div className="mb-6">
       <JourneyHero
@@ -135,17 +141,25 @@ function BannerHero({
         badge={badge}
         task={task}
         sub={sub}
-        cta={cta}
-        onCtaClick={onCtaClick}
         noRibbon
       />
-      <div className="mt-2 text-right">
+      <div className="flex items-center gap-2 mt-2 px-1">
+        {primaryLabel && onPrimaryClick && (
+          <button
+            type="button"
+            onClick={onPrimaryClick}
+            disabled={primaryDisabled}
+            className={PRIMARY_BTN_CLS}
+          >
+            {primaryLabel}
+          </button>
+        )}
         <button
           type="button"
           onClick={onSecondaryClick}
-          className={`text-sm font-medium whitespace-nowrap ${linkCls}`}
+          className={SECONDARY_BTN_CLS}
         >
-          {secondaryLabel}
+          <span>{secondaryLabel}</span>
         </button>
       </div>
     </div>
@@ -167,6 +181,8 @@ function NominatedBanner({ lineupId, gameName }: { lineupId: number; gameName: s
     />
   );
 }
+
+
 
 function VotingBanner({ lineupId, gameId, gameName }: {
   lineupId: number; gameId: number; gameName: string;
@@ -198,8 +214,9 @@ function VotingBanner({ lineupId, gameId, gameName }: {
       badge="Community Lineup · Voting"
       task={`${gameName} is up for a vote!`}
       sub={hasVoted ? "You've voted for this game." : 'Cast your vote or view the lineup.'}
-      cta={isVoting ? 'Saving…' : hasVoted ? '✓ Voted' : 'Vote'}
-      onCtaClick={isVoting ? undefined : handleVote}
+      primaryLabel={isVoting ? 'Saving…' : hasVoted ? '✓ Voted' : 'Vote'}
+      primaryDisabled={isVoting}
+      onPrimaryClick={handleVote}
       secondaryLabel="View Lineup →"
       onSecondaryClick={() => navigate(`/community-lineup/${lineupId}`)}
     />
