@@ -532,18 +532,33 @@ run_container_validation() {
   # Ensure cleanup on any exit path
   trap "docker stop '$cname' >/dev/null 2>&1 || true" RETURN
 
+  # ROK-1331 M13: choose a non-conflicting host port for the allinone container.
+  # The fleet VM's rl-dashboard service permanently occupies :8080, so the
+  # legacy `docker run -p 8080:80` fails with "port is already allocated".
+  # Resolution order: explicit RL_CONTAINER_STARTUP_PORT > fleet default 8090
+  # (detected via /workspace mount) > laptop default 8080.
+  local host_port="${RL_CONTAINER_STARTUP_PORT:-}"
+  if [ -z "$host_port" ]; then
+    if [ -d /workspace ]; then
+      host_port=8090
+    else
+      host_port=8080
+    fi
+  fi
+
   docker build -f Dockerfile.allinone -t rl:ci-test .
   docker run --rm -d \
     --name "$cname" \
-    -p 8080:80 \
+    -p ${host_port}:80 \
     -e ADMIN_PASSWORD=ci-test \
     rl:ci-test
 
-  _wait_for_container_health "$cname"
+  _wait_for_container_health "$cname" "$host_port"
 }
 
 _wait_for_container_health() {
   local cname="$1"
+  local host_port="${2:-8080}"
   local elapsed=0
 
   # Wait for API health (port 3000 direct — matches GitHub CI)
@@ -571,7 +586,7 @@ _wait_for_container_health() {
   # Verify nginx proxy (from host, matches GitHub CI)
   local http_code
   http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-    http://127.0.0.1:8080/api/health)
+    http://127.0.0.1:${host_port}/api/health)
   if [ "$http_code" != "200" ]; then
     echo -e "${RED}Nginx proxy returned $http_code${NC}"
     return 1
@@ -601,7 +616,7 @@ _wait_for_container_health() {
   fi
   echo -e "${GREEN}pg_stat_statements: loaded${NC}"
 
-  _check_container_security_headers || return 1
+  _check_container_security_headers "$host_port" || return 1
 }
 
 # ROK-1158: verify the 6 security headers are present on every response surface
@@ -610,7 +625,10 @@ _wait_for_container_health() {
 # location block defines its own `add_header Cache-Control`, which kills
 # parent-scope inheritance, so the snippet must be `include`d there too.
 _check_container_security_headers() {
-  local headers index_url='http://127.0.0.1:8080/' health_url='http://127.0.0.1:8080/api/health'
+  local host_port="${1:-8080}"
+  local headers
+  local index_url="http://127.0.0.1:${host_port}/"
+  local health_url="http://127.0.0.1:${host_port}/api/health"
 
   for url in "$index_url" "$health_url"; do
     headers=$(curl -sI "$url")
@@ -624,7 +642,7 @@ _check_container_security_headers() {
     echo -e "${RED}Could not locate /assets/*.js bundle URL in index.html${NC}"
     return 1
   fi
-  bundle_url="http://127.0.0.1:8080${bundle_path}"
+  bundle_url="http://127.0.0.1:${host_port}${bundle_path}"
   headers=$(curl -sI "$bundle_url")
   _assert_security_headers "$headers" "$bundle_url" || return 1
 
