@@ -210,11 +210,20 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
       className="space-y-3"
     >
       <div ref={stuckSentinelRef} aria-hidden="true" className="h-px" />
+      {/*
+       * Operator review r5 2026-05-20: collapse the wrapper's height when
+       * hiding (instead of just translate-y) so the rows below don't sit
+       * 200px lower than the visible viewport. Sticky-pinned elements
+       * reserve their full height in the layout slot — translate-y only
+       * moves the paint, not the slot. Combining max-height + opacity
+       * removes both the paint AND the slot, so the leaderboard rows
+       * scroll up to fill the space cleanly.
+       */}
       <div
-        className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:translate-y-0 ${
-          heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
+        className={`sticky top-14 z-20 bg-surface rounded-md px-3 will-change-transform md:max-h-none md:opacity-100 md:py-3 overflow-hidden ${
+          heroHidden ? 'max-h-0 opacity-0 py-0' : 'max-h-[500px] opacity-100 py-3'
         }`}
-        style={{ transition: 'transform 500ms ease-in-out' }}
+        style={{ transition: 'max-height 500ms ease-in-out, opacity 500ms ease-in-out, padding 500ms ease-in-out' }}
       >
         <JourneyHero
           phase="voting"

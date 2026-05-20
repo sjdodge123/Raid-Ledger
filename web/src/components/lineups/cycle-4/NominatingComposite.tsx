@@ -203,12 +203,16 @@ export function NominatingComposite(
           INTO the sticky element so they remain reachable while the user
           scrolls through Common Ground tiles. Mobile-only action row sits
           inside the sticky wrapper. */}
+      {/* Operator review r5 2026-05-20 (cross-applied from Sv): collapse
+          the wrapper's height when hiding instead of translate-y, so the
+          rows below scroll into the freed space rather than waiting for
+          the document scroll to catch up. */}
       <div
         ref={stickyHeaderRef}
-        className={`sticky top-14 z-20 bg-surface rounded-md px-3 py-3 will-change-transform md:translate-y-0 ${
-          heroHidden ? '-translate-y-[200%]' : 'translate-y-0'
+        className={`sticky top-14 z-20 bg-surface rounded-md px-3 will-change-transform md:max-h-none md:opacity-100 md:py-3 overflow-hidden ${
+          heroHidden ? 'max-h-0 opacity-0 py-0' : 'max-h-[800px] opacity-100 py-3'
         }`}
-        style={{ transition: 'transform 500ms ease-in-out' }}
+        style={{ transition: 'max-height 500ms ease-in-out, opacity 500ms ease-in-out, padding 500ms ease-in-out' }}
       >
         <JourneyHero
           phase="nominating"
