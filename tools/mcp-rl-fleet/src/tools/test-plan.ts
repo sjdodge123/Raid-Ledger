@@ -75,13 +75,44 @@ const curlOnVM = async (
   // server, the agent path needs to send X-Agent-Token to receive comment
   // bodies in ?include_comments=1 responses. We shell-quote each header
   // value so caller-controlled tokens cannot inject shell metacharacters.
+  // Sensitive header values (e.g. X-Agent-Token) MUST NOT be interpolated
+  // into argv — anyone with /proc/<pid>/cmdline access on the VM can read
+  // them. Route those through a `docker run -e` env injection and reference
+  // the env var by name inside the in-container curl invocation. The
+  // OUTER ssh shell never sees the value literally.
+  const ENV_INJECTED_HEADERS: Record<string, string> = {
+    'X-Agent-Token': 'RL_AGENT_TOKEN_VALUE',
+  };
   let headerArgs = '';
+  let envArgs = '';
   if (extraHeaders) {
     for (const [name, value] of Object.entries(extraHeaders)) {
       if (!/^[A-Za-z0-9-]+$/.test(name)) {
         throw new Error(`curlOnVM: invalid header name ${JSON.stringify(name)}`);
       }
-      headerArgs += ` -H ${shellQuote(`${name}: ${value}`)}`;
+      // Belt-and-suspenders: libcurl already strips CR/LF from header
+      // values, but reject explicitly so the failure surfaces in the MCP
+      // error envelope instead of becoming a silent header drop.
+      if (/[\r\n\0]/.test(value)) {
+        throw new Error(
+          `curlOnVM: invalid header value (contains CR/LF/NUL) for ${JSON.stringify(name)}`,
+        );
+      }
+      const envVar = ENV_INJECTED_HEADERS[name];
+      if (envVar !== undefined) {
+        // Inject the value into the curl container's env. Inside the
+        // container, curl's -H references the env var literally — bash
+        // expands `$envVar` AFTER docker has consumed the -e arg, so the
+        // value never reaches the curl argv.
+        envArgs += ` -e ${envVar}=${shellQuote(value)}`;
+        // The literal `$RL_AGENT_TOKEN_VALUE` is what the inner sh -c
+        // expands. We MUST NOT shellQuote the whole `-H "X: $..."` arg
+        // with single quotes (single quotes suppress expansion); double
+        // quotes are required so the env var expands inside the container.
+        headerArgs += ` -H "${name}: $${envVar}"`;
+      } else {
+        headerArgs += ` -H ${shellQuote(`${name}: ${value}`)}`;
+      }
     }
   }
   // Codex round-3 HIGH fix: `path` carries caller-controlled slug. Even
@@ -96,7 +127,7 @@ const curlOnVM = async (
   // Cloudflare. -s suppresses progress, -o /dev/stderr puts the body on
   // stderr so we can capture status separately, -w prints the status.
   const remote =
-    `docker run --rm --network rl-net curlimages/curl:8.10.1 ` +
+    `docker run --rm${envArgs} --network rl-net curlimages/curl:8.10.1 ` +
     `curl -s -X ${method} ${bodyArgs}${headerArgs} ` +
     `-w '\\nRL_STATUS:%{http_code}' ` +
     `${quotedUrl}`;
@@ -314,14 +345,22 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
       }
     };
 
+    // clearTimeout is centralized inside settle() so every settle path —
+    // slug-event, child-error, child-exit, AND the timer itself — clears
+    // the timer exactly once. Previously the timer fired after settle()
+    // was already called by a slug event (the kill+resolve raced the
+    // timer arm), which left a dangling timer that the event loop kept
+    // alive until natural expiry. Now settle() always cancels first.
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const settle = (value: unknown) => {
       if (settled) return;
       settled = true;
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
       cleanup();
       resolve(value);
     };
 
-    const timeoutHandle = setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       settle({
         ok: true,
         timed_out: true,
@@ -341,13 +380,11 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
         // Codex round-3 MED #1 carry-over: surface the 404-shape so
         // plan deletion isn't masked as a spurious wake.
         if (postShape.error === 'no_plan_for_slug') {
-          clearTimeout(timeoutHandle);
           settle(post);
           return;
         }
         const newUpdated = postShape.summary?.last_updated_at;
         if (newUpdated && newUpdated !== baseline) {
-          clearTimeout(timeoutHandle);
           settle(post);
         }
         // else: spurious wake (half of an atomic-rename pair) — leave
@@ -384,7 +421,6 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
     });
 
     child.on('error', (err: Error) => {
-      clearTimeout(timeoutHandle);
       settle({ ok: false, error: 'wait_failed', message: err.message });
     });
 
@@ -392,7 +428,6 @@ export async function executeWait(p: { slug: string; timeout_seconds?: number })
       // If we already settled (timeout fired, or a slug event resolved),
       // ignore the SIGTERM exit we just induced.
       if (settled) return;
-      clearTimeout(timeoutHandle);
       // grep exits 1 when the pipe closes with no matches; that should
       // only happen if inotifywait itself died (e.g. dir unmounted).
       // Surface the failure with the captured stderr for diagnosis.
