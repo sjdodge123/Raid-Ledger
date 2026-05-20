@@ -62,7 +62,12 @@ qm create 200 \
   --ostype l26 \
   --agent enabled=1
 qm importdisk 200 /var/lib/vz/template/iso/noble-server-cloudimg-amd64.img local-lvm
-qm set 200 --scsi0 local-lvm:vm-200-disk-0
+# `cache=writeback` is critical for fleet performance: postgres testcontainer
+# fsyncs land in the VM's RAM cache, not the host's spinning/SSD storage, which
+# brings integration-test wallclock from hours to minutes. Trade-off is host
+# crash mid-test loses recent writes — acceptable for a dev/test VM with
+# rebuildable state. See ROK-1331 dogfood discovery (2026-05-20).
+qm set 200 --scsi0 local-lvm:vm-200-disk-0,cache=writeback
 qm resize 200 scsi0 +250G
 qm set 200 --ide2 local-lvm:cloudinit
 qm set 200 --boot c --bootdisk scsi0
