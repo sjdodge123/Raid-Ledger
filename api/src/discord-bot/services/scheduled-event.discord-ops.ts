@@ -6,6 +6,7 @@ import {
 } from 'discord.js';
 import {
   UNKNOWN_SCHEDULED_EVENT,
+  MAX_SCHEDULED_EVENTS_REACHED,
   timedDiscordCall,
   type ScheduledEventData,
 } from './scheduled-event.helpers';
@@ -24,6 +25,18 @@ interface VoiceChannelResolver {
 export function isUnknownEventError(error: unknown): boolean {
   return (
     error instanceof DiscordAPIError && error.code === UNKNOWN_SCHEDULED_EVENT
+  );
+}
+
+/**
+ * Discord error 30038 — the guild is at the 100-uncompleted-scheduled-events
+ * hard cap. Used by `withCapacityRecovery` to trigger a GC sweep + single
+ * retry instead of letting the cron loop forever (ROK-1332).
+ */
+export function isAtScheduledEventCapacityError(error: unknown): boolean {
+  return (
+    error instanceof DiscordAPIError &&
+    error.code === MAX_SCHEDULED_EVENTS_REACHED
   );
 }
 
