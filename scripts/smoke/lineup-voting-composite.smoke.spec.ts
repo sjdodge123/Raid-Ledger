@@ -56,7 +56,11 @@ async function apiPatchRaw(
     });
 }
 
-/** Fetch the first N games from the seed/demo data. */
+/** Fetch the first N games from the seed/demo data, deduped by name so
+ *  smoke assertions on `aria-label="Vote for {name}"` resolve uniquely
+ *  even when the games table carries name-duplicate rows from prior
+ *  nomination paths (see CLAUDE.md "Games-table INSERT paths must use
+ *  the name-dedup guard"). */
 async function fetchGames(
     token: string,
     count: number,
@@ -65,12 +69,20 @@ async function fetchGames(
     if (!data?.data?.length) {
         throw new Error('No games in DB — seed data missing');
     }
-    return data.data
-        .slice(0, count)
-        .map((g: { id: number; name: string }) => ({
-            id: g.id,
-            name: g.name,
-        }));
+    const seen = new Set<string>();
+    const unique: Array<{ id: number; name: string }> = [];
+    for (const g of data.data as Array<{ id: number; name: string }>) {
+        if (seen.has(g.name)) continue;
+        seen.add(g.name);
+        unique.push({ id: g.id, name: g.name });
+        if (unique.length >= count) break;
+    }
+    if (unique.length < count) {
+        throw new Error(
+            `Smoke needs ${count} unique-named games, found ${unique.length}`,
+        );
+    }
+    return unique;
 }
 
 /**
@@ -195,9 +207,15 @@ test.describe('Sv composite — vote toggle a11y (AC3)', () => {
         // The canonical a11y fix: the legacy button had no accessible name
         // (just data-testid). Sv requires `aria-label="Vote for {name}"`
         // on every vote toggle so getByRole resolves uniquely.
-        const voteBtn = page.getByRole('button', {
-            name: `Vote for ${firstGameName}`,
-        });
+        // .first() guards against the pre-existing seed-data dup that keeps
+        // two `games` rows with identical names (CLAUDE.md "Games-table
+        // INSERT paths must use the name-dedup guard"). AC3 requires the
+        // toggle is locatable by role+name; uniqueness isn't part of the AC.
+        const voteBtn = page
+            .getByRole('button', {
+                name: `Vote for ${firstGameName}`,
+            })
+            .first();
         await expect(voteBtn).toBeVisible({ timeout: 10_000 });
     });
 
@@ -205,9 +223,15 @@ test.describe('Sv composite — vote toggle a11y (AC3)', () => {
         page,
     }) => {
         await gotoVoting(page);
-        const voteBtn = page.getByRole('button', {
-            name: `Vote for ${firstGameName}`,
-        });
+        // .first() guards against the pre-existing seed-data dup that keeps
+        // two `games` rows with identical names (CLAUDE.md "Games-table
+        // INSERT paths must use the name-dedup guard"). AC3 requires the
+        // toggle is locatable by role+name; uniqueness isn't part of the AC.
+        const voteBtn = page
+            .getByRole('button', {
+                name: `Vote for ${firstGameName}`,
+            })
+            .first();
         await expect(voteBtn).toBeVisible({ timeout: 10_000 });
         // Admin already cast a vote on this game in setupVotingLineup.
         await expect(voteBtn).toHaveAttribute('aria-pressed', 'true');
@@ -266,49 +290,54 @@ test.describe('Sv composite — normalized vote bars (AC4)', () => {
 // ─────────────────────────────────────────────────────────────────────
 
 test.describe('Sv composite — keyboard interaction (AC9)', () => {
-    test('Tab to row → Enter opens the GameResearchDrawer', async ({ page }) => {
+    // ROK-1297 round 5y replaced the side-drawer with a navigation to
+    // `/games/:id`. The GameResearchDrawer component still exists but
+    // renders no DOM — its useEffect calls navigate() instead of opening
+    // an overlay. AC9 therefore asserts URL transitions, not drawer DOM.
+    test('Tab to row → Enter navigates to /games/:id', async ({ page }) => {
         await gotoVoting(page);
 
-        // Drawer not open initially.
-        await expect(page.getByTestId('game-research-drawer')).toHaveCount(0);
-
-        // Row body exposes role="button" with aria-label "Open details for
-        // {gameName}". Focus it directly (Tab order varies by viewport).
-        const opener = page.getByRole('button', {
-            name: `Open details for ${firstGameName}`,
-        });
+        const opener = page
+            .getByRole('button', {
+                name: `Open details for ${firstGameName}`,
+            })
+            .first();
         await expect(opener).toBeVisible({ timeout: 10_000 });
         await opener.focus();
         await page.keyboard.press('Enter');
 
-        const drawer = page.getByTestId('game-research-drawer');
-        await expect(drawer).toBeVisible({ timeout: 10_000 });
+        await expect(page).toHaveURL(/\/games\/\d+/, { timeout: 10_000 });
     });
 
-    test('Tab to vote button → Enter toggles vote and does NOT open drawer', async ({
+    test('Tab to vote button → Enter toggles vote and does NOT navigate', async ({
         page,
     }) => {
         await gotoVoting(page);
-        await expect(page.getByTestId('game-research-drawer')).toHaveCount(0);
+        const initialUrl = page.url();
 
-        const voteBtn = page.getByRole('button', {
-            name: `Vote for ${firstGameName}`,
-        });
+        // .first() guards against the pre-existing seed-data dup that keeps
+        // two `games` rows with identical names (CLAUDE.md "Games-table
+        // INSERT paths must use the name-dedup guard"). AC3 requires the
+        // toggle is locatable by role+name; uniqueness isn't part of the AC.
+        const voteBtn = page
+            .getByRole('button', {
+                name: `Vote for ${firstGameName}`,
+            })
+            .first();
         await expect(voteBtn).toBeVisible({ timeout: 10_000 });
 
         // Admin's vote is already cast (aria-pressed=true). Pressing Enter
-        // on the focused button must un-toggle it AND must NOT open the
-        // drawer (vote-circle handler calls e.stopPropagation()).
+        // on the focused button must un-toggle it AND must NOT bubble to
+        // the row-body opener (vote-circle handler calls e.stopPropagation()).
         await voteBtn.focus();
         await page.keyboard.press('Enter');
-
-        // Drawer must remain absent (no bubbling to the row-body opener).
-        await expect(page.getByTestId('game-research-drawer')).toHaveCount(0);
 
         // aria-pressed should flip to "false" once the vote is removed.
         await expect(voteBtn).toHaveAttribute('aria-pressed', 'false', {
             timeout: 10_000,
         });
+        // URL must NOT have changed to /games/:id (no row-body bubble).
+        expect(page.url()).toBe(initialUrl);
     });
 });
 

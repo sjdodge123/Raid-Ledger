@@ -502,13 +502,13 @@ test.describe('Voting phase', () => {
         await page.goto(`/community-lineup/${votingLineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // The detail page should show the voting leaderboard when status=voting
-        // Look for the leaderboard container or a heading indicating voting mode
-        const leaderboard = page.locator('[data-testid="voting-leaderboard"]');
+        // ROK-1298: voting surface is now the Sv composite (VotingLeaderboardV2 +
+        // VotingRow). The legacy `voting-leaderboard` / `leaderboard-row`
+        // selectors were removed alongside the VotingLeaderboard component.
+        const leaderboard = page.locator('[data-testid="voting-leaderboard-v2"]');
         await expect(leaderboard).toBeVisible({ timeout: 15_000 });
 
-        // Leaderboard rows should be present (at least the nominated games)
-        const rows = leaderboard.locator('[data-testid="leaderboard-row"]');
+        const rows = leaderboard.locator('[data-testid="voting-row"]');
         const rowCount = await rows.count();
         expect(rowCount).toBeGreaterThan(0);
     });
@@ -517,19 +517,19 @@ test.describe('Voting phase', () => {
         await page.goto(`/community-lineup/${votingLineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        const leaderboard = page.locator('[data-testid="voting-leaderboard"]');
+        // ROK-1298: vote affordance moved off the row body onto a dedicated
+        // VoteToggleButton with `aria-label="Vote for {gameName}"`. Row body
+        // click opens the U2 GameResearchDrawer (per AC2); the toggle handles
+        // votes. The deep AC matrix (aria-pressed, drawer routing, bar math)
+        // lives in `lineup-voting-composite.smoke.spec.ts` — this remains a
+        // shallow regression guard that the voting surface still mounts.
+        const leaderboard = page.locator('[data-testid="voting-leaderboard-v2"]');
         await expect(leaderboard).toBeVisible({ timeout: 15_000 });
 
-        // Click the first leaderboard row to cast a vote
-        const firstRow = leaderboard.locator('[data-testid="leaderboard-row"]').first();
-        await firstRow.click();
-
-        // After voting, the row's data-voted attribute should flip to "true"
-        await expect(firstRow).toHaveAttribute('data-voted', 'true', { timeout: 5_000 });
-
-        // A filled checkmark icon should be visible on voted rows
-        const checkmark = firstRow.locator('[data-testid="vote-checkmark"]');
-        await expect(checkmark).toBeVisible({ timeout: 5_000 });
+        const voteToggle = leaderboard.locator('[data-testid="vote-toggle"]').first();
+        await expect(voteToggle).toBeVisible({ timeout: 5_000 });
+        await voteToggle.click();
+        await expect(voteToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 5_000 });
     });
 
     // ROK-1297 round 5af: mobile-only flake on the voting-pill render —

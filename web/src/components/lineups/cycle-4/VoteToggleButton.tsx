@@ -18,7 +18,7 @@
  * `web/src/dev/simplify-wireframes/simplify-composite-mocks.tsx` —
  * filled emerald disc when voted, edge-bordered ring when unvoted.
  */
-import type { JSX, MouseEvent } from 'react';
+import type { JSX, KeyboardEvent, MouseEvent } from 'react';
 
 /** Props for {@link VoteToggleButton}. */
 export interface VoteToggleButtonProps {
@@ -56,6 +56,12 @@ export function VoteToggleButton(props: VoteToggleButtonProps): JSX.Element {
     if (disabled) return;
     onToggle();
   };
+  // Stop Enter/Space from bubbling to the row's onKeyDown handler, which
+  // would otherwise navigate to /games/:id (AC2 / AC9). Click stopPropagation
+  // covers mouse activation; keydown propagation is independent.
+  const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>): void => {
+    if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+  };
   return (
     <button
       type="button"
@@ -64,6 +70,7 @@ export function VoteToggleButton(props: VoteToggleButtonProps): JSX.Element {
       aria-pressed={isVoted}
       disabled={disabled}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
       className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${cls} disabled:opacity-40 disabled:cursor-not-allowed`}
     >
       {isVoted && (

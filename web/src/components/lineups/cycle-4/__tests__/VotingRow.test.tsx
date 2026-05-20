@@ -147,6 +147,22 @@ describe('VotingRow — click-bubbling guard (AC2)', () => {
 
         expect(onToggleVote).not.toHaveBeenCalled();
     });
+
+    it('Enter on focused vote toggle fires onToggleVote and NOT onOpenDrawer (AC9 keyboard)', async () => {
+        const user = userEvent.setup();
+        const onToggleVote = vi.fn();
+        const onOpenDrawer = vi.fn();
+        renderRow({ onToggleVote, onOpenDrawer });
+
+        const voteBtn = screen.getByRole('button', { name: /Vote for/ });
+        voteBtn.focus();
+        await user.keyboard('{Enter}');
+
+        expect(onToggleVote).toHaveBeenCalledTimes(1);
+        // VoteToggleButton.onKeyDown must call e.stopPropagation() so the
+        // row's onKeyDown (which calls onOpenDrawer) never sees the event.
+        expect(onOpenDrawer).not.toHaveBeenCalled();
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────
