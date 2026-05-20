@@ -346,12 +346,16 @@ run_integration_tests() {
   # deploy_dev.sh already manages Redis on localhost:6379.
   _spawn_redis_sidecar_if_remote || return $?
 
-  # ROK-1331 M5b — when validate-ci runs inside the fleet runner
-  # (RL_TARGET=remote, after rl validate-ci self-dispatched), surface
+  # ROK-1331 M5b — when validate-ci runs inside the fleet runner, surface
   # per-test progress via jest --verbose. Otherwise a 12-min silent
   # window during the integration suite looks like the run is hung
   # (comment 23:21 B). Local runs stay quiet.
-  if [ "${RL_TARGET:-local}" = "remote" ]; then
+  #
+  # ROK-1331 dogfood fix (2026-05-20): the inner script (running INSIDE the
+  # runner via ssh-dispatched run-on-runner) does NOT inherit the laptop's
+  # RL_TARGET=remote env. Detect "inside runner" via /workspace existing —
+  # that's the orchestrator's bind-mount and is the canonical marker.
+  if [ -d /workspace ] || [ "${RL_TARGET:-local}" = "remote" ]; then
     npm run test:integration -w api -- --verbose
   else
     npm run test:integration -w api
@@ -362,13 +366,20 @@ run_integration_tests() {
 # Idempotent (docker rm -f any stale container first), bounded ping-wait
 # (30s), trap-cleaned on EXIT. Local mode is a no-op so deploy_dev.sh's
 # Redis on localhost:6379 stays authoritative.
+#
+# ROK-1331 dogfood fix (2026-05-20): when validate-ci.sh runs INSIDE the
+# fleet runner (post-ssh-dispatch), the runner does NOT inherit the laptop's
+# RL_TARGET=remote. Detect "am I in the runner that should spawn a sidecar?"
+# via /workspace bind-mount + RL_SLOT (both set by the orchestrator's
+# docker-compose runner config). Local laptop runs lack both → no-op.
 _spawn_redis_sidecar_if_remote() {
-  if [ "${RL_TARGET:-local}" != "remote" ]; then
+  # Skip if NEITHER inside-runner signals nor explicit remote flag are present.
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
     return 0
   fi
   local slot="${RL_SLOT:-}"
   if [ -z "$slot" ]; then
-    echo -e "${YELLOW}[rl-test-redis] RL_TARGET=remote but RL_SLOT unset — skipping sidecar spawn${NC}" >&2
+    echo -e "${YELLOW}[rl-test-redis] inside-runner detected but RL_SLOT unset — skipping sidecar spawn${NC}" >&2
     return 0
   fi
 
