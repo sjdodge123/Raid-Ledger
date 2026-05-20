@@ -34,10 +34,13 @@ if [[ -z "${DOCKER_HOST:-}" && "${RL_USE_DOCKER_SOCKET:-0}" != "1" ]]; then
 fi
 
 RL_STATE_DIR="${RL_STATE_DIR:-/srv/rl-infra/state}"
-RL_CLAIMS_FILE="${RL_STATE_DIR}/claims.json"
-RL_ENVS_FILE="${RL_STATE_DIR}/env-registry.json"
-RL_QUEUE_FILE="${RL_STATE_DIR}/queue.json"
-RL_AUDIT_LOG="${RL_STATE_DIR}/audit.log"
+# Honor explicit overrides so test fixtures can redirect to non-canonical
+# paths (mirrors the `RL_TASKS_DIR` + `RL_LEASE_QUEUE_DIR` pattern below).
+# Production unaffected — these env vars are never set on the VM.
+RL_CLAIMS_FILE="${RL_CLAIMS_FILE:-${RL_STATE_DIR}/claims.json}"
+RL_ENVS_FILE="${RL_ENVS_FILE:-${RL_STATE_DIR}/env-registry.json}"
+RL_QUEUE_FILE="${RL_QUEUE_FILE:-${RL_STATE_DIR}/queue.json}"
+RL_AUDIT_LOG="${RL_AUDIT_LOG:-${RL_STATE_DIR}/audit.log}"
 RL_LOCK_DIR="${RL_STATE_DIR}/locks"
 RL_TASKS_DIR="${RL_TASKS_DIR:-${RL_STATE_DIR}/tasks}"
 # ROK-1331 M5a — per-slot lease-queue dir. Each slot owns a FIFO array file
