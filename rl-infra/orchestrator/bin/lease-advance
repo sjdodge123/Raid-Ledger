@@ -30,6 +30,20 @@ done
 [[ -z "$SLOT" ]] && { echo '{"ok":false,"error":"missing_slot"}' >&2; exit 2; }
 [[ "$SLOT" =~ ^[0-9]+$ ]] || { echo '{"ok":false,"error":"invalid_slot"}' >&2; exit 2; }
 
+# ROK-1331 M11 — bookend lease-advance with a paired timer. The duration
+# covers stale eviction + branch-match destroy + claim flip + clear-flag,
+# i.e. the full lease-handoff cost. lease.advance.start fires once;
+# lease.advance.end fires on EVERY exit path (queue empty, slot still
+# claimed, race-loss, success) via trap-like inline emits.
+perf::emit "lease.advance.start" "$(jq -nc --argjson slot "$SLOT" '{slot:$slot}')"
+perf::start "lease_advance_total"
+_perf_lease_end() {
+    local granted="${1:-false}" extra="${2-}"
+    [[ -z "$extra" ]] && extra='{}'
+    perf::end "lease_advance_total" "lease.advance.end" \
+        "$(jq -nc --arg g "$granted" --argjson e "$extra" --argjson slot "$SLOT" '$e + {slot:$slot, granted:($g == "true")}')"
+}
+
 QUEUE_FILE="$(lease::file_for_slot "$SLOT")"
 lease::ensure_file "$SLOT"
 
@@ -71,6 +85,7 @@ state::mutate "$QUEUE_FILE" --argjson cutoff "$CUTOFF" '
 # Step 2 — read head. Empty queue → no-op.
 HEAD_JSON=$(jq -c '.[0] // empty' "$QUEUE_FILE" 2>/dev/null || true)
 if [[ -z "$HEAD_JSON" ]]; then
+    _perf_lease_end "false" '{"reason":"empty_queue"}'
     # Note: granted is emitted as a string ("true"/"false") rather than a
     # JSON bool so callers using `.granted // empty` (the TDD test convention)
     # don't fall through to empty on the falsy bool case (jq foot-gun).
@@ -85,6 +100,7 @@ HEAD_BRANCH=$(jq -r '.branch // ""' <<<"$HEAD_JSON")
 # different lease-advance won the flock first).
 SLOT_CLAIMED=$(jq -r --argjson s "$SLOT" '.[] | select(.slot == $s) | .claimed' "$RL_CLAIMS_FILE" 2>/dev/null || echo "")
 if [[ "$SLOT_CLAIMED" == "true" ]]; then
+    _perf_lease_end "false" '{"reason":"slot_still_claimed"}'
     jq -nc --argjson slot "$SLOT" --arg agent "$HEAD_AGENT" '{ok:true, granted:"false", slot:$slot, reason:"slot_still_claimed", head_agent:$agent}'
     exit 0
 fi
@@ -122,6 +138,7 @@ if [[ "$(jq 'length' <<<"$CLAIMABLE_ENVS")" -gt 0 ]]; then
         done < <(jq -r '.[] | .slug' <<<"$MISMATCHING")
 
         if (( DESTROY_FAILED == 1 )); then
+            _perf_lease_end "false" '{"reason":"destroy_failed"}'
             jq -nc --argjson slot "$SLOT" '{ok:false, error:"destroy_failed", slot:$slot, granted:false}'
             exit 1
         fi
@@ -169,6 +186,7 @@ set -e
 if [[ $MUTATE_RC -ne 0 ]]; then
     # Slot was claimed mid-flight. Leave the queue head intact; the next
     # lease-advance call will reattempt.
+    _perf_lease_end "false" '{"reason":"slot_taken_concurrent"}'
     jq -nc --argjson slot "$SLOT" --arg agent "$HEAD_AGENT" '{ok:true, granted:"false", slot:$slot, reason:"slot_taken_concurrent", head_agent:$agent}'
     exit 0
 fi
@@ -181,6 +199,12 @@ lease::remove "$SLOT" "$HEAD_AGENT"
 audit::log lease-advance granted \
     "$(jq -nc --argjson slot "$SLOT" --arg agent "$HEAD_AGENT" --arg branch "$HEAD_BRANCH" --argjson inh "$INHERITED_ENVS" --argjson des "$DESTROYED_ENVS" \
         '{slot:$slot, agent:$agent, branch:$branch, inherited:$inh, destroyed:$des}')"
+
+# ROK-1331 M11 — terminal success perf event. branch + counts give the
+# dashboard enough to summarise "lease-advance handed off slot N to
+# agent X (rok-Y) with K inherited / J destroyed envs in T ms".
+_perf_lease_end "true" \
+    "$(jq -nc --arg agent "$HEAD_AGENT" --arg branch "$HEAD_BRANCH" --argjson ic "$(jq 'length' <<<"$INHERITED_ENVS")" --argjson dc "$(jq 'length' <<<"$DESTROYED_ENVS")" '{granted_to_agent:$agent, branch:$branch, inherited_count:$ic, destroyed_count:$dc}')"
 
 jq -nc \
     --argjson slot "$SLOT" \

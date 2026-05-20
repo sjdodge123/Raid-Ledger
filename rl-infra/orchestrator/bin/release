@@ -53,6 +53,14 @@ if [[ -z "$SLOT" ]]; then
     fi
 fi
 
+# ROK-1331 M11 — bookend the entire release path with a paired timer so
+# release.{start,end} land in perf.log. The end-event's duration_ms covers
+# the runner-cleanup grace window, env destroys/preserves, lease-advance,
+# and the audit-log writes — i.e. the operator-perceived "how long did
+# release take". Defaults Q1/Q2 from spec §12 (safe): emit on every release.
+perf::emit "release.start" "$(jq -nc --argjson slot "$SLOT" --argjson preserve "$PRESERVE_ENVS" '{slot:$slot, preserve_envs:($preserve == 1)}')"
+perf::start "release_total"
+
 # Snapshot the claim's branch BEFORE we clear it — needed for the
 # claimable_by_next mark. State::query is read-only so safe outside flock.
 CLAIM_BRANCH=$(state::query "$RL_CLAIMS_FILE" -r --argjson s "$SLOT" \
@@ -101,6 +109,22 @@ docker exec "$RUNNER" sh -c "pkill -TERM -P 1 -f '$RUNNER_PROC_PATTERN' 2>/dev/n
 sleep "${RL_RUNNER_CLEANUP_GRACE_SECONDS:-3}"
 docker exec "$RUNNER" sh -c "pkill -KILL -P 1 -f '$RUNNER_PROC_PATTERN' 2>/dev/null || true" >/dev/null 2>&1 || true
 audit::log release runner_cleanup "$(jq -nc --argjson slot "$SLOT" --arg runner "$RUNNER" '{slot:$slot, runner:$runner, killed_processes:true}')"
+
+# ROK-1331 M11 — post-pkill verification (AC3 / closes M7 silent-failure
+# gap). M7 audit-logs `killed_processes:true` regardless of whether the
+# kill actually worked; this re-runs `pkill -f -c` to count survivors. On
+# the test host the runner container doesn't exist so the count comes back
+# as 0 (the missing-container exit-code path), which is the correct value
+# for "no orphans to kill". On the VM with a real runner, a non-zero count
+# is the loud signal the M7 task-cancel cascade missed something.
+# pipefail-safe: docker-exec failure on a missing runner produces exit code
+# 125 that propagates through pipes. Capture into a tmpfile with `|| true`
+# at the boundary, then parse separately — never let the pipe fail.
+RUNNER_SURVIVORS_RAW=""
+RUNNER_SURVIVORS_RAW=$({ docker exec "$RUNNER" sh -c "pkill -f -c '$RUNNER_PROC_PATTERN' 2>/dev/null; true" 2>/dev/null || true; } | tail -1 || true)
+RUNNER_SURVIVORS=$(printf '%s' "$RUNNER_SURVIVORS_RAW" | tr -d '[:space:]')
+[[ -z "$RUNNER_SURVIVORS" || ! "$RUNNER_SURVIVORS" =~ ^[0-9]+$ ]] && RUNNER_SURVIVORS=0
+perf::emit "release.pkill_audit" "$(jq -nc --argjson slot "$SLOT" --arg runner "$RUNNER" --argjson surv "$RUNNER_SURVIVORS" '{slot:$slot, runner:$runner, surviving_count:$surv}')"
 # =========================================================================
 
 # === ROK-1331 M8: testcontainers orphan reap ============================
@@ -186,6 +210,14 @@ audit::log release ok "$(jq -nc --argjson slot "$SLOT" --argjson force "$FORCE" 
 # env-destroy from lease-advance lands in the audit log BEFORE the grant
 # entry, which requires synchronous invocation.
 "$(dirname "$0")/lease-advance" --slot "$SLOT" >/dev/null 2>&1 || true
+
+# ROK-1331 M11 — release.end emits duration_ms + counts so dashboards can
+# distinguish "release took 12s + destroyed 3 envs" from "release took
+# 12s pkill'ing orphans". Defaults Q1/Q2 from spec §12 (safe).
+ENVS_DESTROYED_COUNT=$(jq 'length' <<<"$DESTROYED_ENVS_JSON")
+ENVS_PRESERVED_COUNT=$(jq 'length' <<<"$PRESERVED_ENVS_JSON")
+perf::end "release_total" "release.end" \
+    "$(jq -nc --argjson slot "$SLOT" --argjson preserve "$PRESERVE_ENVS" --argjson dc "$ENVS_DESTROYED_COUNT" --argjson pc "$ENVS_PRESERVED_COUNT" '{slot:$slot, preserve_envs:($preserve == 1), envs_destroyed_count:$dc, envs_preserved_count:$pc}')"
 
 jq -nc --argjson slot "$SLOT" \
     --argjson preserved "$PRESERVED_ENVS_JSON" \

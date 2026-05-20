@@ -41,6 +41,11 @@ RL_CLAIMS_FILE="${RL_CLAIMS_FILE:-${RL_STATE_DIR}/claims.json}"
 RL_ENVS_FILE="${RL_ENVS_FILE:-${RL_STATE_DIR}/env-registry.json}"
 RL_QUEUE_FILE="${RL_QUEUE_FILE:-${RL_STATE_DIR}/queue.json}"
 RL_AUDIT_LOG="${RL_AUDIT_LOG:-${RL_STATE_DIR}/audit.log}"
+# ROK-1331 M11 — perf log: sibling of audit.log. Append-only, one JSON
+# object per line. Rotated daily by logrotate (cloud-init.yaml) with
+# copytruncate — perf::emit opens+appends+closes per call so the rotation
+# is safe (no long-lived FD).
+RL_PERF_LOG="${RL_PERF_LOG:-${RL_STATE_DIR}/perf.log}"
 RL_LOCK_DIR="${RL_STATE_DIR}/locks"
 RL_TASKS_DIR="${RL_TASKS_DIR:-${RL_STATE_DIR}/tasks}"
 # ROK-1331 M5a — per-slot lease-queue dir. Each slot owns a FIFO array file
@@ -368,6 +373,96 @@ audit::log() {
         --argjson extra "$extra" \
         '{ts: $ts, cmd: $cmd, outcome: $outcome, agent: $agent} + $extra' \
         >> "$RL_AUDIT_LOG"
+}
+
+# ROK-1331 M11 — millisecond-precision timer + ISO-8601-ms timestamp.
+# bash 5+ provides EPOCHREALTIME ("1234567890.123456"); older bash (incl.
+# macOS default 3.2) does not. Fall back to python3 for portability. The
+# VM ships bash 5 so this fast-path uses EPOCHREALTIME there; the local
+# test runner uses python3 transparently.
+perf::_now_ms() {
+    if [[ -n "${EPOCHREALTIME:-}" && "$EPOCHREALTIME" == *.* ]]; then
+        # secs.usec → ms
+        local secs="${EPOCHREALTIME%.*}" frac="${EPOCHREALTIME#*.}"
+        frac="${frac}000"
+        frac="${frac:0:3}"
+        echo "${secs}${frac}"
+        return
+    fi
+    python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null \
+        || echo "$(($(date +%s) * 1000))"
+}
+
+# ROK-1331 M11 — perf logging helpers.
+#
+# perf::emit <event> [extra-json]
+#   Append one JSON object to RL_PERF_LOG. Required fields are merged with
+#   the caller's `extra` object (flat snake_case). Open+append+close per
+#   call so logrotate's copytruncate is safe (no long-lived FD).
+#
+# perf::start <key> / perf::end <key> <event> [extra-json]
+#   Paired timing helpers. perf::start stashes EPOCHREALTIME under
+#   /tmp/.rl-perf-<key>.<pid>; perf::end reads it, computes duration_ms,
+#   merges into `extra`, and calls perf::emit. EPOCHREALTIME is bash 5+
+#   (VM has it); the awk fallback uses second-resolution and still emits
+#   so callers don't break on older bash.
+#
+# Best-effort by design — every call routes through a `|| true`-ish guard
+# at the perf::emit boundary so an emit failure (disk full, jq missing on
+# a hostile path) never breaks the calling control flow.
+perf::emit() {
+    local event="$1"
+    local extra="${2-}"
+    [[ -z "$extra" ]] && extra='{}'
+    # ISO-8601 with ms precision. python3 path is portable across macOS
+    # (BSD date lacks %3N) and the Linux VM (GNU date supports %3N but the
+    # python3 path is just as cheap when bash 3.2 is the runtime).
+    local ts
+    ts=$(date -u +%FT%T.%3NZ 2>/dev/null || true)
+    if [[ -z "$ts" || "$ts" == *N* ]]; then
+        ts=$(python3 -c "import datetime; print(datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.') + ('%03d' % (datetime.datetime.utcnow().microsecond // 1000)) + 'Z')" 2>/dev/null \
+            || date -u +%FT%TZ)
+    fi
+    local agent="${RL_AGENT_ID:-unknown}"
+    local branch="${RL_BRANCH:-unknown}"
+    # jq -c (compact) + append. Errors are swallowed — perf logging never
+    # blocks the caller.
+    jq -nc \
+        --arg ts "$ts" \
+        --arg ev "$event" \
+        --arg agent "$agent" \
+        --arg branch "$branch" \
+        --argjson extra "$extra" \
+        '{ts:$ts, event:$ev, source:"orchestrator", agent_id:$agent, branch:$branch} + $extra' \
+        >> "$RL_PERF_LOG" 2>/dev/null || true
+}
+
+# Stash a millisecond timestamp under a per-pid sentinel file so multiple
+# parallel timers can coexist in the same shell.
+perf::start() {
+    local key="$1"
+    perf::_now_ms > "/tmp/.rl-perf-${key}.$$" 2>/dev/null || true
+}
+
+# Compute duration_ms from the matching perf::start and emit.
+perf::end() {
+    local key="$1" event="$2" extra="${3-}"
+    [[ -z "$extra" ]] && extra='{}'
+    local sentinel="/tmp/.rl-perf-${key}.$$"
+    local start_ms="0" end_ms dur=0
+    if [[ -r "$sentinel" ]]; then
+        start_ms=$(cat "$sentinel" 2>/dev/null || echo 0)
+    fi
+    end_ms=$(perf::_now_ms)
+    if [[ "$start_ms" != "0" ]]; then
+        dur=$(( end_ms - start_ms ))
+        (( dur < 0 )) && dur=0
+    fi
+    rm -f "$sentinel" 2>/dev/null || true
+    # Merge duration_ms into extra so it's a first-class field.
+    local merged
+    merged=$(jq -c --argjson d "$dur" --argjson e "$extra" -n '$e + {duration_ms:$d}' 2>/dev/null || echo "{\"duration_ms\":$dur}")
+    perf::emit "$event" "$merged"
 }
 
 # Resolve the slot belonging to an agent. Echoes slot number or empty.

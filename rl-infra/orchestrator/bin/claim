@@ -207,6 +207,11 @@ if [[ -n "$TARGET_SLOT" ]]; then
 
         audit::log claim acquired \
             "$(jq -nc --argjson slot "$TARGET_SLOT" --arg branch "$BRANCH" --argjson inh "$INHERITED" --argjson des "$DESTROYED" '{slot:$slot, branch:$branch, inherited:$inh, destroyed:$des}')"
+        # ROK-1331 M11 — perf event. queue_wait_ms is 0 on the fast path
+        # (no enqueue happened); the enqueue path emits its own claim.queued
+        # downstream below.
+        RL_BRANCH="$BRANCH" perf::emit "claim.acquired" \
+            "$(jq -nc --argjson slot "$TARGET_SLOT" --argjson dc "$(jq 'length' <<<"$DESTROYED")" --argjson ic "$(jq 'length' <<<"$INHERITED")" '{slot:$slot, queue_wait_ms:0, position_on_arrival:0, inherited_count:$ic, destroyed_count:$dc}')"
         emit_slot_result "$TARGET_SLOT" "$INHERITED" "$DESTROYED" "$EXPIRES_AT"
         exit 0
     fi
@@ -244,6 +249,9 @@ if [[ -n "$OUR_REQ_AT" ]]; then
 fi
 
 audit::log claim queued "$(jq -nc --arg agent "$RL_AGENT_ID" --argjson slot "$ENQUEUE_SLOT" --argjson pos "$POSITION" '{agent:$agent, slot:$slot, position:$pos}')"
+# ROK-1331 M11 — perf event for enqueue.
+RL_BRANCH="$BRANCH" perf::emit "claim.queued" \
+    "$(jq -nc --argjson slot "$ENQUEUE_SLOT" --argjson pos "$POSITION" --argjson ql "$QUEUE_LEN" '{slot:$slot, position:$pos, queue_length:$ql}')"
 
 jq -nc \
     --arg agent "$RL_AGENT_ID" \

@@ -19,6 +19,9 @@ CLAIMS="${STATE_DIR}/claims.json"
 ENVS="${STATE_DIR}/env-registry.json"
 QUEUE="${STATE_DIR}/queue.json"
 AUDIT="${STATE_DIR}/audit.log"
+# ROK-1331 M11 — sibling perf log. Per-cycle structured stats land here so
+# dashboards can show "GC sweep took 280ms last cycle, reaped K envs".
+PERF_LOG="${PERF_LOG:-${STATE_DIR}/perf.log}"
 LOCK_DIR="${STATE_DIR}/locks"
 QUEUE_TTL_SECONDS="${QUEUE_TTL_SECONDS:-1800}"   # 30 min — stale waiters
 MAX_CLAIM_AGE_SECONDS="${MAX_CLAIM_AGE_SECONDS:-28800}"   # 8 hr — slot hoarding
@@ -28,6 +31,36 @@ CLAIM_HEARTBEAT_TIMEOUT_SECONDS="${CLAIM_HEARTBEAT_TIMEOUT_SECONDS:-300}"
 mkdir -p "$LOCK_DIR"
 NOW_EPOCH=$(date -u +%s)
 NOW_ISO=$(date -u +%FT%TZ)
+
+# ROK-1331 M11 — cycle-level counters. Bumped by the reap branches below
+# and consumed by the gc.sweep.cycle perf emit at the end. Wallclock
+# timing uses python3 (portable across macOS bash 3.2 + Linux bash 5).
+# Emitted via EXIT trap so a partial cycle (docker daemon down, jq error,
+# anything that trips set -e) still surfaces "we ran" with the work done
+# up to the failure point — operators see the cycle terminated rather
+# than the sweeper silently going dark.
+CYCLE_START_MS=$(python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$((NOW_EPOCH * 1000))")
+CYCLE_CLAIMS_SWEPT=0
+CYCLE_ENVS_REAPED=0
+CYCLE_TESTCONTAINERS_REAPED=0
+
+_emit_cycle_perf() {
+    local end_ms dur ts
+    end_ms=$(python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$(( $(date -u +%s) * 1000 ))")
+    dur=$(( end_ms - CYCLE_START_MS ))
+    (( dur < 0 )) && dur=0
+    ts=$(python3 -c "import datetime; print(datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.') + ('%03d' % (datetime.datetime.utcnow().microsecond // 1000)) + 'Z')" 2>/dev/null \
+        || date -u +%FT%TZ)
+    jq -nc \
+        --arg ts "$ts" \
+        --argjson dur "$dur" \
+        --argjson cs "$CYCLE_CLAIMS_SWEPT" \
+        --argjson er "$CYCLE_ENVS_REAPED" \
+        --argjson tr "$CYCLE_TESTCONTAINERS_REAPED" \
+        '{ts:$ts, event:"gc.sweep.cycle", source:"orchestrator", agent_id:"sweeper", branch:"unknown", duration_ms:$dur, claims_swept:$cs, envs_reaped:$er, testcontainers_reaped:$tr}' \
+        >> "$PERF_LOG" 2>/dev/null || true
+}
+trap _emit_cycle_perf EXIT
 
 log() { echo "[$(date -u +%FT%TZ)] sweep: $*"; }
 
@@ -177,6 +210,7 @@ for slot in $DEAD_SLOTS; do
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'
     audit dead_claim_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
+    CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
     # ROK-1331 M5a — promote any queued waiter immediately so dead claims
     # don't strand the queue.
     sweeper_lease_advance "$slot"
@@ -213,6 +247,7 @@ for slot in $HOARDED_SLOTS; do
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .keep_alive=false | .expires_at=null | .extends_count=0)'
     audit hoarded_slot_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
+    CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
     sweeper_lease_advance "$slot"
 done
 
@@ -247,6 +282,7 @@ for slot in $EXPIRED_SLOTS; do
     mutate "$CLAIMS" --argjson s "$slot" \
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'
     audit claim_expired_released "$(jq -nc --argjson slot "$slot" --argjson q "$QLEN" '{slot:$slot, queue_depth:$q}')"
+    CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
     sweeper_lease_advance "$slot"
 done
 
@@ -299,6 +335,7 @@ for slug in $ENVS_REGISTERED; do
         mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
         clean_test_plan "$slug"
         audit orphan_env_pruned "$(jq -nc --arg slug "$slug" '{slug:$slug, reason:"container_missing"}')"
+        CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
         continue
     fi
     HEALTH=$(docker inspect "$APP" --format '{{.State.Health.Status}}' 2>/dev/null || echo "none")
@@ -353,6 +390,7 @@ for slug in $ENVS_REGISTERED; do
             mutate "$ENVS" --arg slug "$slug" 'map(select(.slug != $slug))'
             clean_test_plan "$slug"
             audit unhealthy_env_pruned "$(jq -nc --arg slug "$slug" --argjson uptime "$UPTIME" '{slug:$slug, uptime_s:$uptime, reason:"unhealthy"}')"
+            CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
         fi
     fi
 done
@@ -375,6 +413,7 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
         mutate "$ENVS" --arg slug "$SLUG" 'map(select(.slug != $slug))'
         clean_test_plan "$SLUG"
         audit env_expired "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" --argjson ttl "$TTL_HOURS" '{slug:$slug, age_hours:$age, ttl_hours:$ttl}')"
+        CYCLE_ENVS_REAPED=$((CYCLE_ENVS_REAPED + 1))
     fi
 done
 
@@ -403,6 +442,9 @@ fi
 # 4. Summary.
 FREE=$(jq '[.[] | select(.claimed == false)] | length' "$CLAIMS")
 BUSY=$(jq '[.[] | select(.claimed == true)] | length' "$CLAIMS")
-ENV_COUNT=$(docker ps -aq --filter "label=rl.role=env" | wc -l | tr -d ' ')
+ENV_COUNT=$(docker ps -aq --filter "label=rl.role=env" 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 audit summary "$(jq -nc --argjson free "$FREE" --argjson busy "$BUSY" --argjson envs "$ENV_COUNT" '{slots_free:$free, slots_busy:$busy, envs:$envs}')"
 log "summary: $FREE free / $BUSY busy / $ENV_COUNT envs"
+
+# gc.sweep.cycle perf emit fires from the EXIT trap registered at the top
+# of the script — fires on success AND on partial-cycle failure paths.

@@ -18,6 +18,12 @@ done
 
 [[ -z "$SLUG" ]] && { echo "--slug required" >&2; exit 2; }
 
+# ROK-1331 M11 — bookend env-destroy with paired timer so dashboards can
+# spot "env-destroy of slug X took 18s" outliers (Postgres volume rm on a
+# slow disk is the most common cause).
+perf::emit "env.destroy.start" "$(jq -nc --arg slug "$SLUG" --argjson force "$FORCE" '{slug:$slug, force:($force == 1)}')"
+perf::start "env_destroy_total"
+
 PG_CONTAINER="rl-env-${SLUG}-pg"
 APP_CONTAINER="rl-env-${SLUG}-allinone"
 PGWEB_CONTAINER="pgweb-${SLUG}"
@@ -161,4 +167,9 @@ state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 # disk usage trivial — JSON + a handful of small screenshots per slug.
 
 audit::log env-destroy ok "$(jq -nc --arg slug "$SLUG" --argjson force "$FORCE" '{slug:$slug, force:($force == 1)}')"
+_perf_destroyed_slot="${DESTROYED_SLOT:-}"
+[[ -z "$_perf_destroyed_slot" ]] && _perf_destroyed_slot="null"
+[[ "$_perf_destroyed_slot" =~ ^[0-9]+$ ]] || _perf_destroyed_slot="null"
+perf::end "env_destroy_total" "env.destroy.end" \
+    "$(jq -nc --arg slug "$SLUG" --argjson slot "$_perf_destroyed_slot" '{slug:$slug, slot:$slot}')"
 jq -nc --arg slug "$SLUG" '{ok: true, slug: $slug}'
