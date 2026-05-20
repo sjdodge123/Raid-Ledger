@@ -33,7 +33,13 @@ const el = (tag, opts = {}, ...children) => {
 // rendering only — the agent authors those, so the URLs are trusted. Tester-
 // authored comment bodies are NOT auto-linkified (they're wrapped in
 // <untrusted-tester-comment> tags and base64-encoded for the agent).
-const URL_RE = /(https?:\/\/[^\s<>'"`)]+)/g;
+// ROK-1331 M6b chunk-4: match the URL non-greedily and use a lookahead so
+// trailing sentence punctuation (`.,;:!?)`) and the optional terminator
+// (whitespace, end-of-string, quote) stay OUTSIDE the captured URL. Plain
+// `.` inside the URL ("example.com") still matches because the lookahead
+// only fires when the next non-punct char IS a terminator. The follow-up
+// URL_TRAILING_PUNCT_RE trim below remains as belt-and-suspenders.
+const URL_RE = /(https?:\/\/[^\s<>'"`)]+?)(?=[).,;:!?]*(?:[\s<>'"`]|$))/g;
 const URL_TEST = /^https?:\/\//;
 // Trailing sentence punctuation should not become part of the link target
 // (`http://x.com/foo.` → href `http://x.com/foo`, then a "." text node).
@@ -447,13 +453,16 @@ const renderStep = (slug, plan, step, draft) => {
     }
   }
 
-  // ROK-1326 fix-9: ALWAYS attach click listeners regardless of lock
-  // state. The disabled attribute alone prevents interaction; this lets
-  // bufferVerdict patch the DOM in-place (toggle .disabled, .locked, .selected)
-  // without needing to re-render to attach listeners to newly-unlocked
-  // buttons. The OLD path called tick({force:true}) which rebuilt the
-  // whole DOM via replaceChildren — visible as scroll-jump-to-top on
-  // mobile (operator-flagged 2026-05-19). In-place patch avoids the rebuild.
+  // ROK-1326 fix-9 / ROK-1331 M6b chunk-4: ALWAYS attach click listeners
+  // regardless of lock state. The disabled attribute alone prevents
+  // interaction; this lets bufferVerdict patch the DOM in-place
+  // (toggle .disabled, .locked, .selected) without needing to re-render
+  // to attach listeners to newly-unlocked buttons. Full re-render (via
+  // tick({force:true}) → replaceChildren) DOES discard prior nodes —
+  // GC handles those orphaned listeners — but we avoid that path on the
+  // common verdict-buffer route because replaceChildren scroll-jumps to
+  // top on mobile (operator-flagged 2026-05-19). In-place patch keeps
+  // the existing DOM nodes + listeners; re-render is the safety net.
   passBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'pass'));
   failBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'fail'));
   skipBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'skip'));
@@ -540,6 +549,14 @@ const patchPlanInPlace = (slug, plan, draft) => {
     row.classList.add(effective ? `verdict-${effective}` : 'verdict-pending');
     row.classList.toggle('has-draft', !!draftVerdict);
     // pendingReset stays as the server told us — patch shouldn't touch it.
+    // ROK-1331 M6b chunk-4: WHY read pendingReset from the CSS class
+    // instead of plan.steps[i].reset_requests? The patch path runs on
+    // every verdict tick to keep DOM/data in sync without a full re-
+    // render. Server-pushed reset signals only arrive via a fresh plan
+    // payload (re-render) or a reset-toggle tick that ALREADY flipped
+    // .reset-pending on the row. Reading the class keeps patchPlanInPlace
+    // pure-DOM with no plan-data lookup. Accurate today; revisit when/if
+    // reset signals become live-pushed without a re-render.
     const pendingReset = row.classList.contains('reset-pending');
     const locked = i > firstUnsetIdx || pendingReset;
     row.classList.toggle('locked', locked);
