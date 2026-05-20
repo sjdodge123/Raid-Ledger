@@ -37,8 +37,10 @@ function execFileP(
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, opts, (err, stdout, stderr) => {
-      const out = typeof stdout === 'string' ? stdout : stdout?.toString() ?? '';
-      const errStr = typeof stderr === 'string' ? stderr : stderr?.toString() ?? '';
+      const out =
+        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
+      const errStr =
+        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
       if (err) {
         const e = err as Error & { stdout?: string; stderr?: string; code?: number };
         e.stdout = out;

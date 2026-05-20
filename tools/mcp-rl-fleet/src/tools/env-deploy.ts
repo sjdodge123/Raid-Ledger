@@ -95,10 +95,15 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
   // 2. Build image from /workspace (the agent's branch).
   if (!params.skip_build) {
     t = now();
+    // env-deploy is the SYNC wrapper — inner buildImage is now async-by-
+    // default per ROK-1331 M2, so we explicitly pass wait:true to preserve
+    // the chained step-log behavior the deploy flow depends on.
     const bi = await buildImage.execute({
       tag: params.slug,
       worktree_path: params.worktree_path,
       timeout_seconds: params.timeout_seconds,
+      wait: true,
+      wait_timeout_seconds: params.timeout_seconds,
     });
     if (!bi.ok) {
       log('build_image', false, t, undefined, bi.error || bi.stderr || 'build failed');

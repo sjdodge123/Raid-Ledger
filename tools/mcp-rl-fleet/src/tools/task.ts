@@ -67,18 +67,23 @@ export const TaskStatusResultSchema = z.object({
 
 export type TaskStatusResult = z.infer<typeof TaskStatusResultSchema>;
 
-// Permissive shape for error envelopes (task_not_found etc.) — the
-// orchestrator may return {ok:false, error, task_id} without the full status
-// payload. We surface that verbatim rather than forcing it through the full
-// schema.
-interface TaskErrorEnvelope {
-  ok: false;
-  error?: string;
+// Wide return type for executeStatus: the orchestrator may either return a
+// full TaskStatusResult OR a `{ok:false, error, task_id}` envelope when the
+// task is missing / SSH failed. We surface either shape verbatim. Property
+// access at the call site checks `ok` first; this loose typing keeps test
+// assertions ergonomic without forcing a `'tool' in result` discriminator
+// everywhere.
+export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
+  ok: boolean;
   task_id?: string;
+  error?: string;
   message?: string;
+  // executeStatus normalizes `steps` to [] on success-shape responses (and
+  // omits it on raw error envelopes). Declared as a non-optional array so
+  // callers can write `result.steps.length` without a chain of null checks.
+  // The runtime contract is enforced at the executeStatus exit boundary.
+  steps: TaskStatusResult['steps'];
 }
-
-type ExecuteStatusReturn = TaskStatusResult | TaskErrorEnvelope;
 
 const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
 const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
@@ -91,8 +96,10 @@ function execFileP(
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, opts, (err, stdout, stderr) => {
-      const out = typeof stdout === 'string' ? stdout : stdout?.toString() ?? '';
-      const errStr = typeof stderr === 'string' ? stderr : stderr?.toString() ?? '';
+      const out =
+        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
+      const errStr =
+        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
       if (err) {
         const e = err as Error & { stdout?: string; stderr?: string; code?: number };
         e.stdout = out;
@@ -152,15 +159,18 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
       maxBuffer: 16 * 1024 * 1024,
       timeout: 30_000,
     });
-    const parsed = parseJson<TaskStatusResult | TaskErrorEnvelope>(stdout);
+    const parsed = parseJson<ExecuteStatusReturn>(stdout);
     if (!parsed) {
       return {
         ok: false,
         error: 'failed_to_parse_response',
         task_id: params.task_id,
+        steps: [],
       };
     }
-    return parsed;
+    // Normalize: steps[] is always an array, defaulting to [] on error
+    // envelopes that omit it.
+    return { ...parsed, steps: parsed.steps ?? [] };
   } catch (err) {
     const e = err as Error & { stderr?: string; code?: number };
     const stderr =
@@ -172,6 +182,7 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
       error: 'task_status_failed',
       task_id: params.task_id,
       message: stderr,
+      steps: [],
     };
   }
 }
@@ -186,31 +197,20 @@ export interface ExecuteWaitParams {
   log_tail_lines?: number;
 }
 
-export interface ExecuteWaitTimedOut {
-  ok: false;
-  error: 'timed_out';
-  task_id: string;
-  waited_seconds: number;
+// Wide wait return: timed_out, inotifywait_not_installed, or a full status
+// shape. Keep it loosely typed (Partial<TaskStatusResult> + extra optional
+// fields) so callers can read `task_id` / `waited_seconds` / `hint` without
+// a runtime discriminator.
+export interface ExecuteWaitResult extends Partial<TaskStatusResult> {
+  ok: boolean;
+  task_id?: string;
+  error?: string;
+  hint?: string;
+  waited_seconds?: number;
+  message?: string;
+  /** Mirrors the executeStatus-side normalization to make property access ergonomic. */
+  steps?: TaskStatusResult['steps'];
 }
-
-export interface ExecuteWaitNotInstalled {
-  ok: false;
-  error: 'inotifywait_not_installed';
-  hint: string;
-}
-
-export type ExecuteWaitResult =
-  | ExecuteStatusReturn
-  | ExecuteWaitTimedOut
-  | ExecuteWaitNotInstalled;
-
-const TERMINAL_STATUSES = new Set([
-  'succeeded',
-  'failed',
-  'killed_buffer_overflow',
-  'killed_timeout',
-  'cancelled',
-]);
 
 export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWaitResult> {
   const timeoutS = Math.max(5, Math.min(3600, params.timeout_seconds ?? 600));
@@ -288,14 +288,10 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
     task_id: params.task_id,
     log_tail_lines: params.log_tail_lines,
   });
-  // If the task is in a terminal state, return immediately. Otherwise the
-  // change was a heartbeat write; return the current state anyway (caller
-  // can re-wait if needed).
-  if ('mcp_runtime_status' in status && !TERMINAL_STATUSES.has(status.mcp_runtime_status)) {
-    // Still running. Return what we have — caller decides whether to wait
-    // again. (Spec lets caller resume polling.)
-    return status;
-  }
+  // If the task is in a terminal state we return; otherwise the change was
+  // a heartbeat write and we still return the current state (caller decides
+  // whether to wait again per the spec's polling-resume contract). In both
+  // cases the same widened ExecuteWaitResult shape applies.
   return status;
 }
 

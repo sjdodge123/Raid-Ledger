@@ -73,8 +73,10 @@ function execFileP(
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, opts, (err, stdout, stderr) => {
-      const out = typeof stdout === 'string' ? stdout : stdout?.toString() ?? '';
-      const errStr = typeof stderr === 'string' ? stderr : stderr?.toString() ?? '';
+      const out =
+        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
+      const errStr =
+        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
       if (err) {
         const e = err as Error & { stdout?: string; stderr?: string; code?: number };
         e.stdout = out;
@@ -223,7 +225,7 @@ function newTaskId(): string {
 
 export async function execute(
   params: ValidateCiParams,
-): Promise<ValidateCiAsyncResult | task.TaskStatusResult | { ok: false; error?: string; message?: string }> {
+): Promise<ValidateCiAsyncResult | task.ExecuteWaitResult> {
   const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
   const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
   const agentId = deriveAgentId(params.worktree_path);
@@ -321,9 +323,8 @@ export async function execute(
   }
 
   // wait:true — chain through executeWait, then return the resolved status.
-  const waited = await task.executeWait({
+  return await task.executeWait({
     task_id: finalTaskId,
     timeout_seconds: waitTimeoutS,
   });
-  return waited as task.TaskStatusResult | { ok: false; error?: string; message?: string };
 }
