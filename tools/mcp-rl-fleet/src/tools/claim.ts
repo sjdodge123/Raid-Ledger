@@ -1,4 +1,4 @@
-// rl_claim — acquire a runner slot on the rl-infra fleet.
+// rl_claim — acquire a runner slot on the rl-infra fleet (may enqueue with queue_position=N).
 //
 // Two modes:
 //   - default (wait=true): polls the queue until a slot is acquired or the
@@ -76,7 +76,7 @@ async function singleClaim(branch?: string, cwd?: string): Promise<ClaimResult> 
   return {
     ok: false,
     error: 'failed_to_parse_response',
-    message: stderr || stdout || `rl claim exited ${exitCode} with no parseable output`,
+    message: stderr || stdout || `rl claim (or rl_claim_wait if enqueued) exited ${exitCode} with no parseable output`,
   };
 }
 
@@ -92,9 +92,9 @@ export async function execute(params: ClaimParams): Promise<ClaimResult> {
   const first = await singleClaim(params.branch, params.worktree_path);
   if (!wait || !isQueued(first)) return first;
 
-  // Poll the queue. Each iteration re-calls `rl claim` — that's how the
-  // queue advances: when a slot frees and we're at the head, the next claim
-  // dequeues us atomically.
+  // Poll the queue (queue_position decrements as we advance). Each
+  // iteration re-calls `rl claim` while queued — that's how queues advance:
+  // when a slot frees and we're at the head, the next claim dequeues us atomically.
   const startedAt = Date.now();
   let last = first;
   while ((Date.now() - startedAt) / 1000 < timeoutS) {

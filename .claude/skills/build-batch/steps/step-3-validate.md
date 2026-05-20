@@ -50,7 +50,11 @@ For batch builds, the worktree env deploys to a fleet slot:
 
 ```bash
 # Claim a fleet slot for the worktree's branch
-RL_TARGET=remote ./rl-infra/cli/rl claim --branch <branch>
+RL_TARGET=remote ./rl-infra/cli/rl claim --branch <branch>   # may enqueue with queue_position=N when contended
+# If the CLI prints `enqueued queue_position=N`, every slot is held — either
+# `rl_claim_wait` (MCP) / `rl claim-wait --timeout 600` (CLI) to block on
+# queue head, OR pick non-env work and retry later. inherited_envs[] tells
+# you which child envs survive from the prior holder when the slot is granted.
 
 # Build + deploy the allinone image to the slot
 RL_TARGET=remote ./rl-infra/cli/rl env-deploy --slug <STORY>-validate --branch <branch>

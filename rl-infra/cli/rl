@@ -394,7 +394,7 @@ cmd_status() {
 cmd_shell() {
     [[ "$TARGET" == "local" ]] && { echo "no remote shell in local mode" >&2; exit 1; }
     SLOT=$(ssh_run claim --branch unknown | jq -r '.slot')
-    [[ -z "$SLOT" || "$SLOT" == "null" ]] && { echo "no slot claimed — rl claim first" >&2; exit 1; }
+    [[ -z "$SLOT" || "$SLOT" == "null" ]] && { echo "no slot claimed — rl claim first (or rl_claim_wait if enqueued)" >&2; exit 1; }
     # SLOT came from jq output of a server-controlled state file; numeric
     # by contract. Still defense-in-depth: validate before interpolating.
     [[ "$SLOT" =~ ^[0-9]+$ ]] || { echo "[rl] unexpected slot value: $SLOT" >&2; exit 1; }
@@ -498,7 +498,7 @@ cmd_db() {
         local pgweb_slot
         pgweb_slot=$(current_slot)
         [[ -z "$pgweb_slot" ]] && {
-            echo "[rl] no slot claimed — run 'rl claim' before 'rl db --web'" >&2; exit 1
+            echo "[rl] no slot claimed — run 'rl claim' (and rl_claim_wait if enqueued) before 'rl db --web'" >&2; exit 1
         }
         [[ "$pgweb_slot" =~ ^[0-9]+$ ]] || {
             echo "[rl] unexpected slot value: $pgweb_slot" >&2; exit 1
@@ -725,7 +725,7 @@ ensure_claim() {
     # surfaced during ROK-1326 fleet validation when `rl validate-ci`
     # exited 1 with no output despite a healthy claim.
     if [[ -z "$SLOT" ]]; then
-        echo "no slot — run 'rl claim' first" >&2
+        echo "no slot — run 'rl claim' first (rl_claim_wait if enqueued)" >&2
         exit 1
     fi
 }
@@ -999,7 +999,7 @@ start_heartbeat_daemon() {
         # starts. Without this, the backgrounded subshell keeps the parent
         # script's stdin/stdout/stderr open — which is fine when invoked
         # interactively, but catastrophic when invoked from the MCP server.
-        # The MCP server's execFile/spawn reads from rl claim's stdout pipe
+        # The MCP server's execFile/spawn reads from rl claim's stdout pipe (or rl_claim_wait when enqueued)
         # and waits for EOF; the heartbeat subshell inherits that pipe and
         # never closes it, so the MCP call hangs for the full 5-min default
         # timeout. Closing the FDs here lets cmd_claim return cleanly to
@@ -1036,8 +1036,8 @@ usage() {
     cat <<EOF
 rl — remote runner CLI (target: $TARGET)
 
-  rl claim [--no-wait] [--wait-timeout N] [--poll-interval N]
-                             acquire a slot (waits + polls if all busy, default 10m / 10s poll)
+  rl claim [--no-wait] [--wait-timeout N] [--poll-interval N]   # enqueues with queue_position=N when contended
+                             acquire a slot (waits + polls if all busy; enqueues with queue_position=N when contended)
   rl release                 release slot + clean up
   rl force-release --slot N --reason '...' [--no-destroy]
                              operator-only: clear stuck slot (requires RL_OPERATOR=1)
@@ -1051,7 +1051,7 @@ rl — remote runner CLI (target: $TARGET)
   rl env unpin <slug>        clear the pinned flag
   rl extend [N]              push current claim's expires_at to NOW + N hours (1..24, default 1)
   rl lease-status [N]        snapshot of lease queues + claims + pinned/claimable envs
-  rl claim-wait [--timeout N]  long-poll the lease queue until granted (push-notify shape)
+  rl claim-wait [--timeout N]  long-poll the lease queue: queues until granted (push-notify shape; mirrors rl_claim_wait MCP tool)
   rl db <slug> [--web]       psql or pgweb against env's Postgres
   rl validate-ci [args]      run validate-ci.sh inside your runner
   rl test-plan wait <slug>   long-poll for first tester submit (spawn in background; harness notifies on submit)

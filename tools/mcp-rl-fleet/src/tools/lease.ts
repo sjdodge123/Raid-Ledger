@@ -49,7 +49,7 @@ export async function executeWait(p: ClaimWaitParams = {}) {
   return {
     ok: false,
     error: 'failed_to_parse_response',
-    message: stderr || stdout || `rl claim-wait exited ${exitCode} with no parseable output`,
+    message: stderr || stdout || `rl claim-wait (queued) exited ${exitCode} with no parseable output`,
   };
 }
 

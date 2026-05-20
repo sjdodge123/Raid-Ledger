@@ -21,10 +21,12 @@ You don't have to choose by hand. `RL_TARGET=auto` (default) probes
 ## Remote-mode flow (the default when Proxmox is up)
 
 ```bash
-rl claim --branch $(git branch --show-current)   # acquires a slot 1..4
+rl claim --branch $(git branch --show-current)   # acquires a slot 1..4 (may enqueue with queue_position=N)
 # → starts Mutagen sync (laptop ↔ /srv/rl-infra/runners/slot-N/worktree)
 # → starts a 60s heartbeat daemon (missed >5min → slot auto-released)
 # Output gives: slot number, web URL (slot-N.rl.lan), debug URL, shell command.
+# When all slots are busy, prints `enqueued queue_position=N` instead — use
+# the rl_claim_wait MCP tool (or `rl claim-wait --timeout 600` CLI) to block.
 
 rl shell                                          # tmux attach into the runner
 
@@ -43,8 +45,10 @@ rl release                                        # destroy child envs, prune, d
 ## What scripts/agents must do differently in remote mode
 
 1. **Replace the env-lock dance with a slot claim.** Instead of
-   `mcp__mcp-env__env_lock_acquire`, run `rl claim`. The slot IS the lease,
-   and there are 4 of them, so no contention.
+   `mcp__mcp-env__env_lock_acquire`, run `rl claim` (queues with
+   `queue_position=N` when slots are held; `rl claim_wait` blocks until
+   queue head and may surface `inherited_envs[]` from the previous holder).
+   The slot IS the lease, and there are 4 of them, so contention is rare.
 2. **Don't `cd` into the worktree manually** — Mutagen mirrors files into the
    runner's `/workspace`. Edit on the laptop, the runner sees changes within ~1s.
 3. **Shell out to the runner for compute-heavy commands**:
@@ -74,7 +78,7 @@ rl release                                        # destroy child envs, prune, d
 `rl <cmd>` notices `RL_TARGET=local` and either:
 
 - Maps to the existing local equivalent (`rl status` → `deploy_dev.sh --status`,
-  `rl claim` → "use env-lock.sh acquire" message), or
+  `rl claim` (and its queue/`rl_claim_wait` companion) → "use env-lock.sh acquire" message — historical behavior preserved), or
 - Refuses with a clear "remote-only" message (e.g. `rl env spin`).
 
 So skills that already use `deploy_dev.sh` + the MCP env lock work unchanged
@@ -89,7 +93,7 @@ in CLAUDE.md under "`mcp-rl-fleet`". Common flows:
 
 | Task | MCP tool |
 | ---- | -------- |
-| Start session, claim a runner | `rl_claim` |
+| Start session, claim a runner (may enqueue — `rl_claim_wait` blocks on queue head) | `rl_claim` |
 | Spin a prod-like env for testing | `rl_env_spin` (slug=foo) |
 | Seed API keys/config into the env | `rl_env_sync_from_local` (slug, mode='settings') |
 | Realistic prod-shaped data | `rl_env_clone_prod` (slug) |
@@ -98,7 +102,7 @@ in CLAUDE.md under "`mcp-rl-fleet`". Common flows:
 | Check fleet state | `rl_status` / `rl_env_list` |
 | Get Postgres URL for an env | `rl_db_url` (slug) |
 | Open Grafana with a Loki filter | `rl_logs_url` (query) |
-| Clean up | `rl_env_destroy` (slug) → `rl_release` |
+| Clean up | `rl_env_destroy` (slug) → `rl_release` (default preserves child envs for next queued agent) |
 
 The mobile dashboard at `http://fleet.rl.lan` (LAN) or
 `http://fleet.gamernight.net` (external) shows the same state visually.
@@ -110,8 +114,8 @@ When writing/updating a skill, prefer MCP tools (agents) or the `rl` CLI
 
 | Today (local-only)                          | Agent-facing replacement              |
 | ------------------------------------------- | ------------------------------------- |
-| `mcp__mcp-env__env_lock_acquire`            | `mcp__mcp-rl-fleet__rl_claim`         |
-| `mcp__mcp-env__env_lock_release`            | `mcp__mcp-rl-fleet__rl_release`       |
+| `mcp__mcp-env__env_lock_acquire`            | `mcp__mcp-rl-fleet__rl_claim` (queues on contention; pair with `rl_claim_wait`) |
+| `mcp__mcp-env__env_lock_release`            | `mcp__mcp-rl-fleet__rl_release` (preserves envs by default for next queued holder) |
 | `./scripts/deploy_dev.sh --ci --rebuild`    | `mcp__mcp-rl-fleet__rl_env_spin`      |
 | `./scripts/deploy_dev.sh --status`          | `mcp__mcp-rl-fleet__rl_status`        |
 | `./scripts/validate-ci.sh --full`           | `mcp__mcp-rl-fleet__rl_validate_ci`   |

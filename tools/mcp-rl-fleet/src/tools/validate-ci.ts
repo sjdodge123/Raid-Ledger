@@ -5,7 +5,7 @@
 //   wait:true            → dispatch task then chain to task.executeWait
 //
 // Slot resolution uses `rl status --json` (operator-installed binary on the
-// VM) — replacing the previous `rl claim --branch unknown` defensive call
+// VM) — previously this was `rl claim --branch unknown` (defensive) but that
 // which had side effects on the queue. status is a pure read.
 //
 // Bug C: the wrapped script is invoked via `bash <script>` so Mutagen's
@@ -26,7 +26,7 @@ export const TOOL_DESCRIPTION =
 export interface ValidateCiParams {
   /** Extra args to pass to validate-ci.sh. */
   args?: string[];
-  /** Same worktree_path used at rl_claim time. */
+  /** Same worktree_path used at rl_claim / rl_claim_wait time. */
   worktree_path?: string;
   /**
    * Slug of a spun fleet env. When set, e2e steps target
@@ -92,7 +92,7 @@ function execFileP(
 /**
  * Resolve the slot the calling agent currently holds via `rl status --json`.
  * Chunk-5 MED follow-up: status is a pure read (no queue side effects vs the
- * previous `rl claim --branch unknown` shape).
+ * previously the `rl claim --branch unknown` shape).
  *
  * Matching strategy: prefer the slot whose `claimed_by` matches the derived
  * agentId. If no exact match BUT there's at least one claimed slot, fall

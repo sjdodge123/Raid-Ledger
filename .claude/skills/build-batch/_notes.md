@@ -202,7 +202,7 @@ After plan was written, operator asked to be interviewed on the open design ques
 
 ### 2026-05-19 — hard cutover propagates work across skill files
 
-Operator chose "hard cutover" on the claim 409 → queue migration. That means every build skill (push, build, fix-batch, handover) that calls `rl claim` needs updating. Folded into M5b sub-component J.
+Operator chose "hard cutover" on the claim 409 → queue migration. Every build skill (push, build, fix-batch, handover) that calls `rl claim` was updated to handle the new `{enqueued, queue_position, queue_ahead, inherited_envs}` response and pair with `rl_claim_wait`. Folded into M5b sub-component J — landed in this PR.
 
 **Lesson for skill:** if a story changes an MCP tool / orchestrator contract that other skills depend on, the cross-skill migration is part of the story scope. Don't defer to follow-up — that creates a window where the codebase has broken callers.
 

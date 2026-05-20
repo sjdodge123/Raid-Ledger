@@ -10,7 +10,7 @@ export const TOOL_DESCRIPTION =
   "Release the runner slot held by this agent. ROK-1331 M5a: by default PRESERVES any env stacks the slot spun up — they're marked claimable_by_next on the env-registry so the next claim on the same branch inherits them (skip-deploy fast path). Branch-mismatch handoff destroys them synchronously inside lease-advance. Pass preserve_envs:false to force destroy-everything (legacy behavior; operator path). Idempotent: if the agent holds no slot, returns a noop. Pass worktree_path if you claimed from a worktree — otherwise the agent_id won't match and the release looks like a noop.";
 
 export interface ReleaseParams {
-  /** Same worktree_path used at rl_claim time. Required for worktree-based agents. */
+  /** Same worktree_path used at rl_claim / rl_claim_wait time. Required for worktree-based agents. */
   worktree_path?: string;
   /**
    * Preserve envs across release so the next claim on the same branch can
