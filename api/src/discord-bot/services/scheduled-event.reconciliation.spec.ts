@@ -1,5 +1,5 @@
 /**
- * Tests for ScheduledEventReconciliationService (ROK-755).
+ * Tests for ScheduledEventReconciliationService (ROK-755, ROK-1332).
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ScheduledEventReconciliationService } from './scheduled-event.reconciliation';
@@ -7,6 +7,17 @@ import { ScheduledEventService } from './scheduled-event.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { CapacityStillSaturatedError } from './scheduled-event.helpers';
+import * as dbHelpers from './scheduled-event.db-helpers';
+
+jest.mock('./scheduled-event.db-helpers', () => ({
+  ...jest.requireActual('./scheduled-event.db-helpers'),
+  setReconcileBackoff: jest.fn().mockResolvedValue(undefined),
+}));
+
+const setReconcileBackoffMock = dbHelpers.setReconcileBackoff as jest.MockedFunction<
+  typeof dbHelpers.setReconcileBackoff
+>;
 
 function createSelectChain(rows: unknown[] = []) {
   const chain: Record<string, jest.Mock> & { then?: unknown } = {};
@@ -154,6 +165,83 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
     expect(
       mocks.scheduledEventService.createScheduledEvent,
     ).toHaveBeenCalledWith(2, candidates[1], 2, false, null);
+  });
+
+  describe('ROK-1332 capacity-saturated path', () => {
+    const future = new Date(Date.now() + 86400000).toISOString();
+    const futureEnd = new Date(Date.now() + 90000000).toISOString();
+    const buildCandidate = (id: number) => ({
+      id,
+      title: `Event ${id}`,
+      description: null,
+      startTime: future,
+      endTime: futureEnd,
+      gameId: id,
+      isAdHoc: false,
+      notificationChannelOverride: null,
+      signupCount: 0,
+      maxAttendees: null,
+    });
+
+    beforeEach(() => {
+      setReconcileBackoffMock.mockClear();
+    });
+
+    it('on CapacityStillSaturatedError: writes 1h backoff to unprocessed candidates and stops iterating', async () => {
+      const candidates = [buildCandidate(1), buildCandidate(2), buildCandidate(3)];
+      mocks.mockDb.select.mockReturnValue(createSelectChain(candidates));
+      mocks.scheduledEventService.createScheduledEvent.mockRejectedValueOnce(
+        new CapacityStillSaturatedError(7),
+      );
+
+      await mocks.service.reconcileMissingScheduledEvents();
+
+      // Stopped after first candidate's CapacityStillSaturatedError.
+      expect(
+        mocks.scheduledEventService.createScheduledEvent,
+      ).toHaveBeenCalledTimes(1);
+      // setReconcileBackoff called once with all 3 ids (none processed) and an
+      // expiresAt ≈ now + 1h.
+      expect(setReconcileBackoffMock).toHaveBeenCalledTimes(1);
+      const [, ids, expiresAt] = setReconcileBackoffMock.mock.calls[0];
+      expect(ids).toEqual([1, 2, 3]);
+      const diff = expiresAt.getTime() - Date.now();
+      const oneHourMs = 60 * 60 * 1000;
+      expect(diff).toBeGreaterThan(oneHourMs - 5 * 60 * 1000);
+      expect(diff).toBeLessThan(oneHourMs + 5 * 60 * 1000);
+    });
+
+    it('on CapacityStillSaturatedError after some success: backs off only the remaining (unprocessed) candidates', async () => {
+      const candidates = [buildCandidate(1), buildCandidate(2), buildCandidate(3)];
+      mocks.mockDb.select.mockReturnValue(createSelectChain(candidates));
+      mocks.scheduledEventService.createScheduledEvent
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new CapacityStillSaturatedError(3));
+
+      await mocks.service.reconcileMissingScheduledEvents();
+
+      expect(
+        mocks.scheduledEventService.createScheduledEvent,
+      ).toHaveBeenCalledTimes(2);
+      const [, ids] = setReconcileBackoffMock.mock.calls[0];
+      // First candidate (id=1) was processed; remaining are [2, 3].
+      expect(ids).toEqual([2, 3]);
+    });
+
+    it('non-CapacityStillSaturatedError still allows iteration to continue (no backoff write)', async () => {
+      const candidates = [buildCandidate(1), buildCandidate(2)];
+      mocks.mockDb.select.mockReturnValue(createSelectChain(candidates));
+      mocks.scheduledEventService.createScheduledEvent
+        .mockRejectedValueOnce(new Error('Discord timeout'))
+        .mockResolvedValueOnce(undefined);
+
+      await mocks.service.reconcileMissingScheduledEvents();
+
+      expect(
+        mocks.scheduledEventService.createScheduledEvent,
+      ).toHaveBeenCalledTimes(2);
+      expect(setReconcileBackoffMock).not.toHaveBeenCalled();
+    });
   });
 
   it('processes multiple candidates', async () => {
