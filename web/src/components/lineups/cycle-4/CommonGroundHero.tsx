@@ -248,7 +248,10 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
       data-testid="common-ground-hero"
       className="mt-3 md:border md:border-edge md:rounded-lg md:bg-panel/30 md:p-3"
     >
-      <div className="flex items-center mb-3">
+      {/* Mobile drops the heading entirely (operator review r10f
+          2026-05-20) — section is self-evident from the tiles. Desktop
+          keeps it so the bordered panel has a title. */}
+      <div className="hidden md:flex items-center mb-3">
         <h2 className="text-lg sm:text-base font-semibold text-foreground">
           ✨ Common Ground
         </h2>
