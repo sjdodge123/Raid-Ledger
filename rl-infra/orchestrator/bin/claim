@@ -52,7 +52,17 @@ emit_slot_result() {
 # Idempotent: if this agent already has a slot, return it.
 EXISTING=$(state::slot_for_agent "$RL_AGENT_ID")
 if [[ -n "$EXISTING" ]]; then
-    audit::log claim idempotent "$(jq -nc --argjson slot "$EXISTING" '{slot:$slot}')"
+    # ROK-1331 M4 LOW #7 — preserve the persisted branch when the caller
+    # passed nothing (or the literal "unknown" — `rl claim`'s default
+    # fallback when `git branch --show-current` fails). Explicit real
+    # branch values still override (operator can re-label a claim).
+    if [[ -z "$BRANCH" || "$BRANCH" == "unknown" ]]; then
+        PERSISTED_BRANCH=$(state::branch_for_agent "$RL_AGENT_ID")
+        if [[ -n "$PERSISTED_BRANCH" ]]; then
+            BRANCH="$PERSISTED_BRANCH"
+        fi
+    fi
+    audit::log claim idempotent "$(jq -nc --argjson slot "$EXISTING" --arg branch "$BRANCH" '{slot:$slot, branch:$branch}')"
     emit_slot_result "$EXISTING"
     exit 0
 fi

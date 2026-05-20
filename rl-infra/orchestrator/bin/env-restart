@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# ROK-1331 M4 — env-restart <slug>
+# Issues `docker restart rl-env-<slug>-allinone` via the socket-proxy so
+# rl-agent (no docker group) can flush the env's settings cache after a
+# sync-local-to-env run.
+#
+# Exit codes:
+#   0  ok
+#   2  bad args / slug regex fail
+#   3  allinone container missing
+#   4  docker error
+set -euo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+
+SLUG="${1:-}"
+if [[ -z "$SLUG" ]]; then
+    echo "usage: env-restart <slug>" >&2
+    exit 2
+fi
+if ! [[ "$SLUG" =~ ^[a-z0-9-]+$ ]]; then
+    echo "slug must be [a-z0-9-]+" >&2
+    exit 2
+fi
+
+APP_CONTAINER="rl-env-${SLUG}-allinone"
+
+if ! docker inspect "$APP_CONTAINER" --format '{{.State.Running}}' >/dev/null 2>&1; then
+    audit::log env-restart not_found "$(jq -nc --arg slug "$SLUG" '{slug:$slug}')" 2>/dev/null || true
+    echo "env-restart: allinone container '$APP_CONTAINER' not found" >&2
+    exit 3
+fi
+
+if ! docker restart "$APP_CONTAINER" >/dev/null 2>&1; then
+    audit::log env-restart docker_error "$(jq -nc --arg slug "$SLUG" '{slug:$slug}')" 2>/dev/null || true
+    echo "env-restart: docker restart failed for '$APP_CONTAINER'" >&2
+    exit 4
+fi
+
+RESTARTED_AT=$(date -u +%FT%TZ)
+audit::log env-restart restart "$(jq -nc --arg slug "$SLUG" --arg ts "$RESTARTED_AT" '{slug:$slug, restarted_at:$ts}')" 2>/dev/null || true
+jq -nc --arg slug "$SLUG" --arg ts "$RESTARTED_AT" '{ok: true, slug: $slug, restarted_at: $ts}'

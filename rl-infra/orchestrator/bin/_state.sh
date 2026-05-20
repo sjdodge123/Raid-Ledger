@@ -220,4 +220,14 @@ state::slot_for_agent() {
         '[.[] | select(.agent_id == $a and .claimed == true) | .slot] | first // empty'
 }
 
+# ROK-1331 M4 — resolve the branch persisted alongside this agent's claim.
+# Mirrors state::slot_for_agent. Echoes branch label or empty when no claim
+# exists. Used by `claim`'s idempotent path to preserve the original branch
+# label when the caller didn't pass --branch (or passed the literal "unknown").
+state::branch_for_agent() {
+    local agent="$1"
+    state::query "$RL_CLAIMS_FILE" -r --arg a "$agent" \
+        '[.[] | select(.agent_id == $a and .claimed == true) | .branch] | first // empty'
+}
+
 state::init
