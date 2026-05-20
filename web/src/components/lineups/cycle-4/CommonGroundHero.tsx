@@ -177,7 +177,7 @@ function AiPicksRow({
       role="region"
       aria-label="Suggested for you"
       data-testid="common-ground-ai-picks-row"
-      className="space-y-2 mb-6 p-3 rounded-md border border-violet-500/40 bg-violet-500/5"
+      className="space-y-2 mb-6 md:p-3 md:rounded-md md:border md:border-violet-500/40 md:bg-violet-500/5"
     >
       <h3 className="text-base sm:text-lg font-semibold text-foreground inline-flex items-center gap-2">
         <span aria-hidden="true">✨</span>
@@ -246,7 +246,7 @@ export function CommonGroundHero(props: CommonGroundHeroProps): JSX.Element {
   return (
     <section
       data-testid="common-ground-hero"
-      className="border border-edge rounded-lg bg-panel/30 p-3 mt-3"
+      className="mt-3 md:border md:border-edge md:rounded-lg md:bg-panel/30 md:p-3"
     >
       <div className="flex items-center mb-3">
         <h2 className="text-lg sm:text-base font-semibold text-foreground">
