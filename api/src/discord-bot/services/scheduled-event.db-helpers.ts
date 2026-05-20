@@ -1,4 +1,4 @@
-import { eq, and, isNotNull, isNull, sql } from 'drizzle-orm';
+import { eq, and, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -176,7 +176,76 @@ export async function findReconciliationCandidates(
         isNull(schema.events.cancelledAt),
         sql`${schema.events.isAdHoc} = false`,
         sql`lower(${schema.events.duration}) > ${now.toISOString()}::timestamptz`,
+        // ROK-1332: Skip rows currently in capacity-backoff. NULL means never
+        // backed off (the common case); a past timestamp means the backoff
+        // window expired and the row is eligible again.
+        sql`(${schema.events.scheduledEventReconcileBackoffUntil} IS NULL OR ${schema.events.scheduledEventReconcileBackoffUntil} <= NOW())`,
       ),
     )
     .limit(RECONCILIATION_BATCH_SIZE);
+}
+
+/** Row shape returned by findRLTrackedSEs for GC's stale-check (ROK-1332). */
+export interface RLTrackedSERow {
+  id: number;
+  discordScheduledEventId: string;
+  cancelledAt: Date | null;
+  durationUpper: Date;
+}
+
+/**
+ * Look up RL-tracked events whose discord_scheduled_event_id is in the given
+ * seIds list. Used by gcStaleRLScheduledEvents to decide which guild SEs are
+ * candidates for stale-deletion vs operator-orphans (ROK-1332).
+ *
+ * Returns id + seId + cancelledAt + the upper bound of the duration tsrange.
+ * `durationUpper` is extracted via `upper()` so callers can compare against
+ * wall-clock without parsing the postgres range string in JS.
+ */
+export async function findRLTrackedSEs(
+  db: PostgresJsDatabase<typeof schema>,
+  seIds: string[],
+): Promise<RLTrackedSERow[]> {
+  if (seIds.length === 0) return [];
+  const rows = await db
+    .select({
+      id: schema.events.id,
+      discordScheduledEventId: schema.events.discordScheduledEventId,
+      cancelledAt: schema.events.cancelledAt,
+      durationUpper: sql<Date>`upper(${schema.events.duration})`,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        isNotNull(schema.events.discordScheduledEventId),
+        inArray(schema.events.discordScheduledEventId, seIds),
+      ),
+    );
+  // Drizzle returns durationUpper as a string under postgres-js — coerce to Date.
+  // The schema typing above documents intent; the runtime value is the raw
+  // postgres timestamptz string when read via `sql<Date>`.
+  return rows.map((r) => ({
+    id: r.id,
+    discordScheduledEventId: r.discordScheduledEventId!,
+    cancelledAt: r.cancelledAt,
+    durationUpper:
+      r.durationUpper instanceof Date ? r.durationUpper : new Date(r.durationUpper as unknown as string),
+  }));
+}
+
+/**
+ * Set scheduled_event_reconcile_backoff_until on the given event rows. Used
+ * by the reconciliation cron to pause retries when Discord's guild-wide cap
+ * remains saturated after GC (ROK-1332).
+ */
+export async function setReconcileBackoff(
+  db: PostgresJsDatabase<typeof schema>,
+  eventIds: number[],
+  expiresAt: Date,
+): Promise<void> {
+  if (eventIds.length === 0) return;
+  await db
+    .update(schema.events)
+    .set({ scheduledEventReconcileBackoffUntil: expiresAt })
+    .where(inArray(schema.events.id, eventIds));
 }
