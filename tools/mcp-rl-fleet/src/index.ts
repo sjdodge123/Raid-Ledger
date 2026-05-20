@@ -34,11 +34,11 @@ import * as forceRelease from './tools/force-release.js';
 import * as testPlan from './tools/test-plan.js';
 import * as task from './tools/task.js';
 import * as lease from './tools/lease.js';
+import * as fleetHealth from './tools/fleet-health.js';
 
+// 0.4.0 — ROK-1331 M7: rl_fleet_health agent-side monitor tool.
 // 0.3.0 — ROK-1331 M5a: lease queue + claim duration + pin/unpin.
-// M5b will further extend this server in Wave 7 (task-status JSON
-// extensions registration); the next version bump belongs to M5b.
-const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.3.0' });
+const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.4.0' });
 
 const jsonResult = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
@@ -338,6 +338,14 @@ registerTool(lease.PIN_TOOL, lease.PIN_DESC, envPinSchema, async (p) =>
 );
 registerTool(lease.UNPIN_TOOL, lease.UNPIN_DESC, envPinSchema, async (p) =>
   jsonResult(await lease.executeUnpin(p as lease.PinParams)),
+);
+
+// ----- Fleet health (ROK-1331 M7) -----
+const fleetHealthSchema: Shape = {
+  severity_threshold: z.enum(['warn', 'error']).optional(),
+};
+registerTool(fleetHealth.TOOL_NAME, fleetHealth.TOOL_DESC, fleetHealthSchema, async (p) =>
+  jsonResult(await fleetHealth.execute(p as fleetHealth.FleetHealthParams)),
 );
 
 // CLI self-check: invoking with --self-check prints OK and exits 0 if the
