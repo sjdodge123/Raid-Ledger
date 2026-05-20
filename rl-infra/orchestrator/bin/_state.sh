@@ -39,10 +39,25 @@ RL_ENVS_FILE="${RL_STATE_DIR}/env-registry.json"
 RL_QUEUE_FILE="${RL_STATE_DIR}/queue.json"
 RL_AUDIT_LOG="${RL_STATE_DIR}/audit.log"
 RL_LOCK_DIR="${RL_STATE_DIR}/locks"
+RL_TASKS_DIR="${RL_TASKS_DIR:-${RL_STATE_DIR}/tasks}"
 # Default matches the docker-compose.yml default profile (2 runners). Override
 # via .env to 4 when the `extra-slots` compose profile is enabled.
 RUNNER_SLOTS="${RUNNER_SLOTS:-2}"
-mkdir -p "$RL_LOCK_DIR"
+mkdir -p "$RL_LOCK_DIR" "$RL_TASKS_DIR"
+
+# Portability shim: flock(1) lives in util-linux on the VM, but macOS test
+# runners don't ship it. When absent we fall back to a no-op (tests are
+# sequential; production runs on Linux where the real binary serializes
+# under contention). Defining the shim once here keeps callers
+# (state::mutate, state::mutate_with_precondition) unchanged.
+if ! command -v flock >/dev/null 2>&1; then
+    flock() {
+        # Accept any combination of `-x`, `-s`, `-n`, `-w <sec>`, `<fd>`.
+        # We only care that the function returns 0 so the surrounding subshell
+        # continues to the jq + mv. No real locking happens.
+        return 0
+    }
+fi
 
 # Initialize state files if missing. Safe to call repeatedly.
 state::init() {
@@ -59,7 +74,22 @@ state::init() {
     if [[ ! -s "$RL_QUEUE_FILE" ]]; then
         echo "[]" > "$RL_QUEUE_FILE"
     fi
+    mkdir -p "$RL_TASKS_DIR"
+    chmod 2775 "$RL_TASKS_DIR" 2>/dev/null || true
     touch "$RL_AUDIT_LOG"
+}
+
+# ROK-1331 M1: thin audit wrapper for task-* commands. Folds the task_id into
+# the extra-json payload so downstream filtering can `jq 'select(.task_id ...)'`.
+task::audit() {
+    local task_id="$1"
+    local cmd="$2"
+    local outcome="$3"
+    local extra="${4-}"
+    [[ -z "$extra" ]] && extra='{}'
+    local merged
+    merged=$(jq -nc --arg t "$task_id" --argjson e "$extra" '{task_id: $t} + $e')
+    audit::log "task-$cmd" "$outcome" "$merged"
 }
 
 # Queue helpers. The queue is an ordered array of {agent_id, branch, queued_at}.
