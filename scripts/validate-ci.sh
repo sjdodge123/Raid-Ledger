@@ -71,6 +71,12 @@ fi
 # ---------------------------------------------------------------------------
 if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1" ]; then
   export RL_TARGET_DISPATCHED=1   # prevent loop if rl re-execs us inside the runner
+  # ROK-1331 M2: the rl CLI is SYNC by default (its rl_validate_ci MCP
+  # surface is wait:true under the hood), so this exec preserves the
+  # operator's terminal-attached output expectation. If the CLI ever grows
+  # an async dispatch flag, this caller must keep passing the equivalent
+  # of wait=true (or this script's stdout/stderr surfaces will return
+  # immediately with a task_id instead of streaming the run).
   exec "$REPO_ROOT/rl-infra/cli/rl" validate-ci "$@"
 fi
 
