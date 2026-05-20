@@ -11,6 +11,7 @@ import { ActiveEventCacheService } from '../../events/active-event-cache.service
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import {
   buildDescriptionText,
+  CapacityStillSaturatedError,
   formatApiError,
   getCreateSkipReason,
   type ScheduledEventData,
@@ -26,6 +27,7 @@ import {
   type ScheduledEventRecord,
 } from './scheduled-event.db-helpers';
 import {
+  isAtScheduledEventCapacityError,
   isUnknownEventError,
   tryStartEvent,
   tryDeleteEvent,
@@ -36,6 +38,7 @@ import {
   tryEditFullEvent,
   resolveVoiceForEdit,
 } from './scheduled-event.discord-ops';
+import { gcStaleRLScheduledEvents } from './scheduled-event.gc';
 
 async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
   return buildDescriptionText(id, d, await s.getClientUrl());
@@ -294,8 +297,39 @@ export class ScheduledEventService {
       return;
     }
     const d = await desc(this.settingsService, eventId, eventData);
-    const se = await tryCreateNewEvent(guild, eventId, eventData, vc, d);
-    await saveScheduledEventId(this.db, eventId, se.id);
+    // ROK-1332: wrap the API-create + DB-save pair so a 30038 triggers a
+    // single GC sweep + retry. Preamble (voice channel, description) is
+    // outside the wrapper so GC doesn't re-run if the retry succeeds.
+    await this.withCapacityRecovery(guild, async () => {
+      const se = await tryCreateNewEvent(guild, eventId, eventData, vc, d);
+      await saveScheduledEventId(this.db, eventId, se.id);
+    });
+  }
+
+  /**
+   * ROK-1332: Catch Discord 30038 ("guild at 100-SE cap"), sweep stale
+   * RL-tracked SEs, retry the call once. If GC freed 0 rows, throw
+   * CapacityStillSaturatedError so the reconciliation cron can apply
+   * per-event backoff and emit a single WARN per tick.
+   */
+  private async withCapacityRecovery(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    fn: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await fn();
+    } catch (err) {
+      if (!isAtScheduledEventCapacityError(err)) throw err;
+      const { freed, orphanCount } = await gcStaleRLScheduledEvents(
+        guild,
+        this.db,
+      );
+      this.logger.log(
+        `Discord SE capacity GC freed=${freed} orphanCount=${orphanCount}`,
+      );
+      if (freed === 0) throw new CapacityStillSaturatedError(orphanCount);
+      await fn();
+    }
   }
 
   private async tryEdit(
