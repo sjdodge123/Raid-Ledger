@@ -335,7 +335,16 @@ run_integration_tests() {
   # run_step calls us with `"$@" || rc=$?`, so a bare check_backup_prereqs
   # would not halt this function on failure.
   check_backup_prereqs || return $?
-  npm run test:integration -w api
+  # ROK-1331 M5b — when validate-ci runs inside the fleet runner
+  # (RL_TARGET=remote, after rl validate-ci self-dispatched), surface
+  # per-test progress via jest --verbose. Otherwise a 12-min silent
+  # window during the integration suite looks like the run is hung
+  # (comment 23:21 B). Local runs stay quiet.
+  if [ "${RL_TARGET:-local}" = "remote" ]; then
+    npm run test:integration -w api -- --verbose
+  else
+    npm run test:integration -w api
+  fi
 }
 
 run_migration_validation() {
