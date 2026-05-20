@@ -98,6 +98,21 @@ const fmtElapsed = (seconds) => {
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 };
 
+// ROK-1331 M5b — TTL countdown from an ISO 8601 expires_at. Returns
+// "Nd Mh" / "Nh Mm" / "Nm Ms" / "Ns" depending on magnitude; once <= 0
+// returns the sentinel "expired" so callers can branch on the className.
+const fmtCountdown = (isoExpiresAt) => {
+  if (!isoExpiresAt) return '—';
+  const ms = Date.parse(isoExpiresAt) - Date.now();
+  if (!Number.isFinite(ms)) return '—';
+  if (ms <= 0) return 'expired';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+};
+
 const TASK_MARKERS = { running: '▶', succeeded: '✓', failed: '✗', cancelled: '⊘' };
 
 const renderTaskRow = (task) => {
@@ -135,7 +150,7 @@ const sortTasksForSlot = (tasks) => [...tasks].sort((a, b) => {
   return (Date.parse(b.started_at) || 0) - (Date.parse(a.started_at) || 0);
 });
 
-const renderSlot = (s, activeTasks = []) => {
+const renderSlot = (s, activeTasks = [], leaseQueues = []) => {
   const card = el('div', { class: 'card' });
   card.appendChild(
     el('div', { class: 'card-title' }, `Slot ${s.slot}`, ' ',
@@ -154,6 +169,30 @@ const renderSlot = (s, activeTasks = []) => {
     card.appendChild(el('div', { class: 'card-row' },
       el('span', { class: 'key', text: 'heartbeat' }),
       el('span', { class: 'val', text: fmtTime(s.last_heartbeat) }),
+    ));
+    // ROK-1331 M5b — claim TTL countdown. expires_at lands on the claim
+    // entry via M5a's claim-duration writer; we read it through to the
+    // dashboard render with NO middle-layer strip. data-expires-at lets
+    // the 1s tick re-render only the TTL text without refetching state.
+    if (s.expires_at) {
+      const countdown = fmtCountdown(s.expires_at);
+      const ttlClass = countdown === 'expired' ? 'val claim-ttl expired' : 'val claim-ttl';
+      const ttlNode = el('span', { class: ttlClass, text: countdown });
+      ttlNode.setAttribute('data-expires-at', s.expires_at);
+      card.appendChild(el('div', { class: 'card-row' },
+        el('span', { class: 'key', text: 'expires' }),
+        ttlNode,
+      ));
+    }
+  }
+  // ROK-1331 M5b — lease queue depth. Render whenever the slot has any
+  // waiters, regardless of claim state (a freshly-released slot with a
+  // queue is the most interesting case to surface).
+  const slotQueue = leaseQueues.find((q) => q.slot === s.slot);
+  if (slotQueue && slotQueue.queue.length > 0) {
+    card.appendChild(el('div', { class: 'card-row' },
+      el('span', { class: 'key', text: 'queue' }),
+      el('span', { class: 'val lease-queue', text: `Queue: ${slotQueue.queue.length}` }),
     ));
   }
   const actions = el('div', { class: 'actions' });
@@ -208,9 +247,18 @@ const renderEnv = (e, publicDomain) => {
   const slotUrl = envPublic && e.slot ? `https://slot-${e.slot}.${envPublic}` : null;
 
   const card = el('div', { class: 'card' });
-  card.appendChild(el('div', { class: 'card-title' }, slug, ' ',
+  const titleNode = el('div', { class: 'card-title' }, slug, ' ',
     el('span', { class: 'badge ready', text: 'live' }),
-  ));
+  );
+  // ROK-1331 M5b — pin badge (📌) rides along env-registry's `pinned` field
+  // (M5a writer). The gc-sweeper skips pinned envs; this surfaces that to
+  // the operator at a glance. Tooltip explains the semantic.
+  if (e.pinned === true) {
+    const pinBadge = el('span', { class: 'pin-badge', text: '📌' });
+    pinBadge.title = 'Pinned — gc-sweeper will not reap this env even if unhealthy';
+    titleNode.appendChild(pinBadge);
+  }
+  card.appendChild(titleNode);
   card.appendChild(el('div', { class: 'card-row' },
     el('span', { class: 'key', text: 'slot' }),
     el('span', { class: 'val', text: e.slot ?? '—' }),
@@ -859,7 +907,8 @@ const render = (data) => {
   envsDiv.style.minHeight = envsH + 'px';
 
   const activeTasks = data.active_tasks ?? [];
-  const slotCards = (data.slots ?? []).map((s) => renderSlot(s, activeTasks));
+  const leaseQueues = data.lease_queues ?? [];
+  const slotCards = (data.slots ?? []).map((s) => renderSlot(s, activeTasks, leaseQueues));
   if (!slotCards.length) slotCards.push(renderEmpty('No slots configured.'));
   slotsDiv.replaceChildren(...slotCards);
 
@@ -1014,13 +1063,31 @@ const updateElapsedLabels = () => {
     if (elapsedEl) elapsedEl.textContent = `(${fmtElapsed(seconds)})`;
   });
 };
+
+// ROK-1331 M5b — re-render TTL countdown text every second on the spans
+// emitted by renderSlot. Auto-refresh of /api/state is disabled, so without
+// this the countdown would freeze between manual ticks. Only touches the
+// text of `.claim-ttl[data-expires-at]` spans; no fetch, no replaceChildren.
+const updateTtlLabels = () => {
+  const nodes = document.querySelectorAll('.claim-ttl[data-expires-at]');
+  nodes.forEach((node) => {
+    const expiresAt = node.getAttribute('data-expires-at');
+    const next = fmtCountdown(expiresAt);
+    if (node.textContent !== next) node.textContent = next;
+    if (next === 'expired') node.classList.add('expired');
+    else node.classList.remove('expired');
+  });
+};
 // Skip the 1s tick under jsdom — without this guard, the Node test runner
 // stays alive past assertion completion because jsdom-backed setInterval
 // keeps a real Node Timeout for each loaded fixture.
 const isJsdom = typeof navigator !== 'undefined'
   && typeof navigator.userAgent === 'string'
   && navigator.userAgent.includes('jsdom');
-if (!isJsdom) setInterval(updateElapsedLabels, 1000);
+if (!isJsdom) {
+  setInterval(updateElapsedLabels, 1000);
+  setInterval(updateTtlLabels, 1000);
+}
 
 // Test surface — expose internal helpers under window.__rlTest so the
 // jsdom-driven test harness can drive renderSlot / appendWithLinks /

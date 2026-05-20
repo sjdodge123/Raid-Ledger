@@ -664,3 +664,9 @@ footer {
   padding: 0 2px;
 }
 .task-log-link:hover { text-decoration: underline; }
+
+/* ROK-1331 M5b — lease queue depth + claim TTL + pin badge */
+.lease-queue { color: #ffc864; font-variant-numeric: tabular-nums; font-weight: 600; }
+.claim-ttl { color: #5eb8ff; font-variant-numeric: tabular-nums; }
+.claim-ttl.expired { color: #ff6b6b; font-weight: 700; }
+.pin-badge { margin-left: 4px; font-size: 14px; line-height: 1; cursor: help; }
