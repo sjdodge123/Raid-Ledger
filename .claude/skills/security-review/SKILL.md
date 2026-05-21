@@ -55,38 +55,54 @@ SHA=$(git rev-parse --short HEAD)
 OUTPUT="planning-artifacts/security-review-${SHA}.md"
 mkdir -p planning-artifacts
 
-# The codex CLI rejects `--base <BRANCH>` combined with a positional [PROMPT]
-# arg, so pipe the prompt via stdin (`-` reads from stdin per `codex review --help`).
-cat <<'PROMPT' | codex review --base "$BASE" - 2>&1 | tee "$OUTPUT"
+# codex CLI limitation: `--base <BRANCH>` is mutually exclusive with ANY
+# positional [PROMPT] arg, INCLUDING `-` (stdin sentinel). So custom-prompt
+# branch reviews aren't possible today — file an upstream FR if this bites
+# again. For now we run codex with its default review prompt against the base
+# branch; the diff-driven output still surfaces the security signals we care
+# about (auth, injection, secrets, crypto, infra) because codex's default
+# review pass covers them. Skip the SECURITY_PROMPT below for now; it's
+# retained for reference + for the day codex supports `--prompt-file` or
+# similar.
+codex review --base "$BASE" 2>&1 | tee "$OUTPUT"
+```
+
+---
+
+## Reference: ideal Raid-Ledger security prompt (currently unwired)
+
+When/if codex CLI grows a `--prompt-file <path>` or similar non-positional way to inject a custom prompt alongside `--base`, swap the bash above for the prompt below. Until then, codex's default review covers most of these dimensions anyway.
+
+```text
 Security-focused review of this Raid-Ledger PR. Focus exclusively on:
 
-1. **Authentication & authorization**
+1. Authentication & authorization
    - Missing auth guards on new routes/controllers
    - Role/permission checks bypassed or weakened
    - JWT / session token handling regressions
    - Admin-only endpoints accidentally exposed
-2. **Input validation & injection**
+2. Input validation & injection
    - Zod schemas missing or weakened on new boundaries
-   - SQL injection risk in raw `db.execute(sql\`\`)` blocks
+   - SQL injection risk in raw db.execute(sql``) blocks
    - XSS risk in React components rendering user-supplied HTML
    - Path traversal in file operations
    - Unvalidated redirects
-3. **Secrets & credentials**
+3. Secrets & credentials
    - Hardcoded secrets, API keys, JWT signing keys
    - Logged credentials, tokens leaked into stdout
    - Environment variables echoed in logs or error messages
-4. **Cryptography & encryption**
+4. Cryptography & encryption
    - Weak hashing (md5, sha1) for security purposes
    - Insecure random sources for tokens/IDs
    - Hand-rolled crypto instead of project's encryption module
-5. **Dependency / supply chain**
+5. Dependency / supply chain
    - New deps added with unusual install scripts
    - Pinned versions vs floats on security-critical deps
-6. **Discord bot specific**
+6. Discord bot specific
    - User input from Discord rendered without escaping
    - Bot token / webhook URL exposure
    - Command handlers without permission checks
-7. **Infrastructure (if Dockerfile/nginx/supervisor changed)**
+7. Infrastructure (if Dockerfile/nginx/supervisor changed)
    - Privilege escalation paths
    - Exposed ports / services
    - Default credentials in compose files
@@ -94,13 +110,12 @@ Security-focused review of this Raid-Ledger PR. Focus exclusively on:
 Skip style nits, naming preferences, doc gaps, performance, code-organization.
 
 For each finding output:
-- **Severity:** CRITICAL | HIGH | MEDIUM | LOW
-- **File:Line**
-- **One-line description**
-- **Suggested fix or mitigation**
+- Severity: CRITICAL | HIGH | MEDIUM | LOW
+- File:Line
+- One-line description
+- Suggested fix or mitigation
 
-Final line MUST be one of: `VERDICT: SAFE TO MERGE`, `VERDICT: SAFE WITH FIXES`, or `VERDICT: BLOCK MERGE`.
-PROMPT
+Final line MUST be one of: VERDICT: SAFE TO MERGE, VERDICT: SAFE WITH FIXES, or VERDICT: BLOCK MERGE.
 ```
 
 ---
