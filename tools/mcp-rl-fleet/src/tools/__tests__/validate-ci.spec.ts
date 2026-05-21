@@ -158,6 +158,63 @@ describe('Bug C — validate-ci.ts invokes target via `bash <script>` (not bare 
   });
 });
 
+describe('Bug D (Session 4 dogfood) — targetCmd routes through run-on-runner', () => {
+  // task-start runs the wrapped cmd on the HOST. validate-ci.sh lives inside
+  // the runner container at /workspace, so the targetCmd MUST first `docker
+  // exec` into the container via run-on-runner. Without this wrap the M2
+  // async path returns script_exit_code:127 immediately.
+  it('SSH argv contains `run-on-runner` before the inner bash invocation', async () => {
+    execFileAlwaysOk((_cmd: string, args: string[]) => {
+      const argv = args.join(' ');
+      if (argv.includes('rl status')) {
+        return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
+      }
+      return { ok: true, task_id: 'bugd0001', started_at: '2026-05-20T12:00:00.000Z' };
+    });
+    await validateCi.execute({ args: ['--no-e2e'], wait: false });
+    const sshCall = mockExecFile.mock.calls.find((call: unknown[]) => {
+      const a = call[1] as string[];
+      return Array.isArray(a) && a.some((s) => typeof s === 'string' && s.includes('task-start'));
+    });
+    const argvStr = JSON.stringify(sshCall![1]);
+    expect(argvStr).toContain('/srv/rl-infra/orchestrator/bin/run-on-runner-with-heartbeat');
+    // run-on-runner must precede the `bash /workspace/...` so that the
+    // bash subshell executes INSIDE the container.
+    const runIdx = argvStr.indexOf('run-on-runner-with-heartbeat');
+    const bashIdx = argvStr.indexOf('/workspace/scripts/validate-ci.sh');
+    expect(runIdx).toBeGreaterThan(-1);
+    expect(bashIdx).toBeGreaterThan(runIdx);
+  });
+
+  it('against_env_slug env vars are wrapped inside the bash -c subshell', async () => {
+    execFileAlwaysOk((_cmd: string, args: string[]) => {
+      const argv = args.join(' ');
+      if (argv.includes('rl status')) {
+        return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
+      }
+      return { ok: true, task_id: 'bugd0002', started_at: '2026-05-20T12:00:00.000Z' };
+    });
+    await validateCi.execute({
+      args: ['--only-e2e'],
+      against_env_slug: 'demo',
+      wait: false,
+    });
+    const sshCall = mockExecFile.mock.calls.find((call: unknown[]) => {
+      const a = call[1] as string[];
+      return Array.isArray(a) && a.some((s) => typeof s === 'string' && s.includes('task-start'));
+    });
+    const argvStr = JSON.stringify(sshCall![1]);
+    // The env-vars block must live INSIDE the bash -c quoted payload, not
+    // outside (where it would only apply to the HOST run-on-runner process
+    // and never cross the docker exec boundary).
+    expect(argvStr).toContain('bash -c');
+    expect(argvStr).toContain('BASE_URL');
+    const bashCIdx = argvStr.indexOf('bash -c');
+    const baseUrlIdx = argvStr.indexOf('BASE_URL');
+    expect(baseUrlIdx).toBeGreaterThan(bashCIdx);
+  });
+});
+
 describe('rl_env_deploy sync asymmetry — no `wait` param', () => {
   it('TOOL_DESCRIPTION calls out the synchronous behavior (per spec AC10)', () => {
     // Per the spec: the description must explicitly note "this tool is SYNC"

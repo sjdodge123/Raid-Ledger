@@ -242,10 +242,8 @@ export async function execute(
 
   const slot = await resolveSlot(sshUser, sshHost, agentId);
 
-  // Build the inner command. Bug C: bash <script> instead of bare path. The
-  // env-vars block (for against_env_slug) is prepended to the bash command
-  // line; `bash -c` would also work but `bash <script> args` keeps argv
-  // shape simpler and lets the env vars sit on the same line.
+  // Build the inner command. Bug C: bash <script> instead of bare path so
+  // Mutagen's one-way-replica exec-bit stripping doesn't break execution.
   const extraArgs = (params.args ?? []).map((a) => shellQuote(a)).join(' ');
   let innerEnv = '';
   if (params.against_env_slug) {
@@ -255,8 +253,18 @@ export async function execute(
       `API_URL='http://rl-env-${slug}-allinone/api' ` +
       `HEALTH_URL='http://rl-env-${slug}-allinone/api/health' `;
   }
-  // Bug C: literally `bash /workspace/scripts/validate-ci.sh <args>`.
-  const targetCmd = `${innerEnv}bash /workspace/scripts/validate-ci.sh ${extraArgs}`.trim();
+  // Bug D (ROK-1331 Session 4 dogfood): validate-ci.sh lives inside the
+  // runner container at /workspace — the orchestrator's task-start runs
+  // its target on the HOST, so we must route the inner command through
+  // run-on-runner-with-heartbeat (docker exec + M5b progress lines).
+  // Wrap with bash -c so `innerEnv` applies INSIDE the container; run-on-
+  // runner only forwards RL_SLOT/RL_TARGET, so against_env_slug vars
+  // would otherwise be lost across the docker boundary.
+  const innerCmd =
+    `${innerEnv}bash /workspace/scripts/validate-ci.sh ${extraArgs}`.trim();
+  const targetCmd =
+    `/srv/rl-infra/orchestrator/bin/run-on-runner-with-heartbeat ` +
+    `-- bash -c ${shellQuote(innerCmd)}`;
 
   const taskId = newTaskId();
   const slotFlag = slot !== null ? `--slot ${slot} ` : '';

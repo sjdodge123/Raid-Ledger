@@ -153,14 +153,24 @@ describe('rl_task_status — executeStatus()', () => {
     expect(() => McpRuntimeStatusSchema.parse('unknown')).toThrow();
   });
 
-  it('forwards log_tail_lines to the task-status binary (default 200, max 1000)', async () => {
+  it('forwards log_tail_bytes to the task-status binary using the bash binary flag name', async () => {
     execFileOk(FIXTURE_SUCCEEDED);
-    await executeStatus({ task_id: 'abc123def', log_tail_lines: 500 });
-    // The SSH remote command should include `--log-tail-lines 500`.
+    await executeStatus({ task_id: 'abc123def', log_tail_bytes: 500 });
+    // The SSH remote command MUST use --log-tail-bytes (matches
+    // orchestrator/bin/task-status' CLI). A previous regression used the
+    // wrong flag name (--log-tail-lines) and the VM rejected every call;
+    // this assertion now guards both the literal flag string AND the value.
     const firstCall = mockExecFile.mock.calls[0];
-    const argv = firstCall.slice(0, 2);
-    const remote = JSON.stringify(argv);
-    expect(remote).toMatch(/log-tail-lines.*500|--log-tail-lines\D+500/);
+    const remote = String(firstCall[1].at(-1));
+    expect(remote).toContain('--log-tail-bytes 500');
+    expect(remote).not.toContain('--log-tail-lines');
+  });
+
+  it('defaults log_tail_bytes to 51200 (50 KiB) when caller omits it', async () => {
+    execFileOk(FIXTURE_SUCCEEDED);
+    await executeStatus({ task_id: 'abc123def' });
+    const remote = String(mockExecFile.mock.calls[0][1].at(-1));
+    expect(remote).toContain('--log-tail-bytes 51200');
   });
 
   it('surfaces a task_not_found error from the orchestrator verbatim', async () => {

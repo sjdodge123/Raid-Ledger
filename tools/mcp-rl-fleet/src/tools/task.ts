@@ -8,7 +8,9 @@
 // Bug B (ROK-1331, 2026-05-20): the task-status JSON shape separates
 //   - script_exit_code  (the wrapped command's exit code; null while running)
 //   - mcp_runtime_status (the runtime classification: running/succeeded/...)
-// `log_tail` is capped to a caller-supplied N (default 200, max 1000).
+// `log_tail` is capped to a caller-supplied byte count (default 51200,
+// max 1048576). Bytes — not lines — because validate-ci logs can contain
+// long progress lines and we want a deterministic cap on payload size.
 // `steps[]` comes from M1's PASS/FAIL parser running over the log.
 
 import { execFile } from 'node:child_process';
@@ -144,15 +146,15 @@ function parseJson<T>(stdout: string): T | null {
 
 export interface ExecuteStatusParams {
   task_id: string;
-  /** Bug B: default 200, max 1000. */
-  log_tail_lines?: number;
+  /** Bug B: default 51200 bytes (50KB), max 1048576 (1MB). */
+  log_tail_bytes?: number;
 }
 
 export async function executeStatus(params: ExecuteStatusParams): Promise<ExecuteStatusReturn> {
-  const tail = params.log_tail_lines ?? 200;
+  const tail = params.log_tail_bytes ?? 51200;
   const remote =
     `/srv/rl-infra/orchestrator/bin/task-status ` +
-    `${shellQuote(params.task_id)} --log-tail-lines ${tail}`;
+    `${shellQuote(params.task_id)} --log-tail-bytes ${tail}`;
   const [cmd, args] = sshArgs(remote);
   try {
     const { stdout } = await execFileP(cmd, args, {
@@ -194,7 +196,7 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
 export interface ExecuteWaitParams {
   task_id: string;
   timeout_seconds?: number;
-  log_tail_lines?: number;
+  log_tail_bytes?: number;
 }
 
 // Wide wait return: timed_out, inotifywait_not_installed, or a full status
@@ -278,7 +280,7 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
     // still gets the task state, with the error surfaced via stderr-on-status.
     const status = await executeStatus({
       task_id: params.task_id,
-      log_tail_lines: params.log_tail_lines,
+      log_tail_bytes: params.log_tail_bytes,
     });
     return status;
   }
@@ -286,7 +288,7 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
   // inotifywait fired — read the current state.
   const status = await executeStatus({
     task_id: params.task_id,
-    log_tail_lines: params.log_tail_lines,
+    log_tail_bytes: params.log_tail_bytes,
   });
   // If the task is in a terminal state we return; otherwise the change was
   // a heartbeat write and we still return the current state (caller decides

@@ -255,10 +255,10 @@ registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, asyn
 
 // ----- Task tools (ROK-1331 M2) -----
 const TASK_STATUS_DESC =
-  "Read the current state of a task spawned by rl_validate_ci, rl_env_build_image_from_runner, or rl_env_clone_prod in async (wait:false) mode. Cheap (single VM file read). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, log_tail (200 lines by default, configurable up to 1000), and separate script_exit_code vs mcp_runtime_status. Use rl_task_wait for push-notify shape.";
+  "Read the current state of a task spawned by rl_validate_ci, rl_env_build_image_from_runner, or rl_env_clone_prod in async (wait:false) mode. Cheap (single VM file read). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, log_tail (last 50KB by default, configurable up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. Use rl_task_wait for push-notify shape.";
 const taskStatusSchema: Shape = {
   task_id: taskIdSchema,
-  log_tail_lines: z.number().int().min(0).max(1000).optional(),
+  log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
 };
 registerTool('rl_task_status', TASK_STATUS_DESC, taskStatusSchema, async (p) =>
   jsonResult(await task.executeStatus(p as task.ExecuteStatusParams)),
@@ -269,7 +269,7 @@ const TASK_WAIT_DESC =
 const taskWaitSchema: Shape = {
   task_id: taskIdSchema,
   timeout_seconds: z.number().int().min(5).max(3600).optional(),
-  log_tail_lines: z.number().int().min(0).max(1000).optional(),
+  log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
 };
 registerTool('rl_task_wait', TASK_WAIT_DESC, taskWaitSchema, async (p) =>
   jsonResult(await task.executeWait(p as task.ExecuteWaitParams)),
