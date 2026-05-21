@@ -98,13 +98,27 @@ CWD=$(pwd)
 # Two-stage filter:
 #   1. Whitelist: only RL_*-prefixed orchestrator vars + a few safe basics.
 #   2. Denylist: drop anything whose NAME (chars before `=`) contains any of
-#      SECRET / KEY / TOKEN / PASSWORD / PRIVATE / AUTH (case-insensitive).
-#      Matches anywhere in the name, not just at the end — so DEPLOY_KEY,
-#      AUTH_TOKEN, GIT_PRIVATE_KEY are all rejected.
-ENV_JSON=$(env \
-    | grep -E '^(RL_[A-Z0-9_]+|USER|HOSTNAME|PWD|SHLVL)=' \
-    | grep -viE '^[^=]*(SECRET|KEY|TOKEN|PASSWORD|PRIVATE|AUTH)[^=]*=' \
-    | jq -Rn '[inputs | capture("^(?<key>[^=]+)=(?<value>.*)$")] | from_entries' \
+#      SECRET / KEY / TOKEN / PASSWORD / PRIVATE / AUTH / CREDENTIAL / SESSION
+#      / BEARER (case-insensitive). Matches anywhere in the name, not just at
+#      the end — so DEPLOY_KEY, AUTH_TOKEN, GIT_PRIVATE_KEY all rejected.
+#
+# ROK-1338 PR-1 codex P2 (2026-05-21): use NUL-delimited env output (`env -0`)
+# instead of newline-delimited. Line-based parsing was unsafe when an env
+# value contained an embedded newline — `env` would split that value across
+# multiple physical lines, and `jq capture` would treat each line as a
+# separate KEY=value record, allowing forged RL_*/USER/PWD entries to be
+# injected via a single multiline value. With env -0, each KEY=value entry
+# is delimited by a literal NUL byte (which is forbidden in env values by
+# POSIX), so the record boundary is unambiguous regardless of value content.
+ENV_JSON=$(env -0 \
+    | jq -Rn --slurp '
+        split("\u0000")
+        | map(select(length > 0))
+        | map(capture("^(?<key>[^=]+)=(?<value>.*)$"; "s"))
+        | map(select(.key | test("^(RL_[A-Z0-9_]+|USER|HOSTNAME|PWD|SHLVL)$")))
+        | map(select(.key | test("(SECRET|KEY|TOKEN|PASSWORD|PRIVATE|AUTH|CREDENTIAL|SESSION|BEARER)"; "i") | not))
+        | from_entries
+    ' \
     2>/dev/null || echo '{}')
 
 INITIAL_JSON=$(jq -nc \
