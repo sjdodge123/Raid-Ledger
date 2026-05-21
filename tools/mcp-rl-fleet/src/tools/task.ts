@@ -248,16 +248,25 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
     return initial;
   }
 
-  // ROK-1331 Session 4 dogfood (Codex P1-2): inotifywait fires on ANY task-JSON
-  // write — pid set, steps[] append, heartbeat. Loop until mcp_runtime_status
-  // is terminal OR overall deadline elapses. Each inotify cycle uses the
-  // remaining-time budget so a chatty task can't extend us past the cap.
-  const taskIdQuoted = shellQuote(params.task_id);
-  const watchRemote =
-    `inotifywait -q -e close_write,moved_to ` +
-    `--format '%f' ` +
-    `/srv/rl-infra/state/tasks/ 2>/dev/null ` +
-    `| grep -m1 -E ^${taskIdQuoted}'\\.json$'`;
+  // ROK-1336 #8 — watch the per-task JSON file directly, not the parent
+  // directory with a grep-on-filenames pipe. The old dir-watch+grep had
+  // both a regex-anchor concern AND made wait:true calls pay the full
+  // timeout latency for tasks whose log lines don't match
+  // PATTERN_STEP_RESULT (e.g. docker build via rl_env_build_image_from_runner).
+  //
+  // Event set matters: state::mutate uses mktemp+jq+mv which replaces the
+  // file inode atomically — the watched inode then receives IN_MOVE_SELF
+  // (or IN_DELETE_SELF on the now-unlinked old target) and the watch ends.
+  // Including those in -e makes inotifywait exit immediately on a mutate,
+  // not just on a heartbeat touch (which fires IN_CLOSE_WRITE on the
+  // surviving inode). The outer loop re-attaches each iteration so a
+  // mid-flight mutate is safe — the next iteration watches the new inode.
+  //
+  // File must exist when inotify attaches (it does — task-start creates
+  // both files before returning, and executeWait pre-checks status above
+  // so we wouldn't reach this loop if the file were missing).
+  const taskJsonPath = `/srv/rl-infra/state/tasks/${shellQuote(params.task_id)}.json`;
+  const watchRemote = `inotifywait -q -e close_write,move_self,delete_self ${taskJsonPath}`;
   const [watchCmd, watchArgs] = sshArgs(watchRemote);
 
   let lastStatus: ExecuteWaitResult = initial;

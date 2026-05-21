@@ -46,11 +46,20 @@ EXPIRES_AT=$(date -u -d "+${RL_CLAIM_DURATION_SECONDS} seconds" +%FT%TZ 2>/dev/n
 
 # Inherited-env lookup helper. Reads env-registry for envs on $1 (slot) with
 # claimable_by_next=true and emits a `[{slug, url}]` JSON array.
+# ROK-1336 #6 — emit slot-stable subdomain (https://slot-N.<domain>) when
+# RL_PUBLIC_DOMAIN is set; the env-registry only stores the bare domain, so
+# the old template "https://" + public_domain returned https://gamernight.net
+# which doesn't route + breaks Discord OAuth.
 _inherited_for_slot() {
     local slot="$1"
     state::query "$RL_ENVS_FILE" --argjson s "$slot" \
         '[.[] | select(.slot == $s and (.claimable_by_next // false) == true)
-              | {slug, url: ("https://" + (.public_domain // (.slug + ".rl.lan")))}]'
+              | {slug, url: (
+                  if (.public_domain // "") != ""
+                  then ("https://slot-" + ($s|tostring) + "." + .public_domain)
+                  else ("https://" + .slug + ".rl.lan")
+                  end
+              )}]'
 }
 
 emit_slot_result() {
@@ -195,7 +204,14 @@ if [[ -n "$TARGET_SLOT" ]]; then
                 DESTROYED=$(jq -c '[.[] | .slug]' <<<"$MISMATCHING")
             fi
             if [[ "$(jq 'length' <<<"$MATCHING")" -gt 0 ]]; then
-                INHERITED=$(jq -c '[.[] | {slug, url: ("https://" + (.public_domain // (.slug + ".rl.lan")))}]' <<<"$MATCHING")
+                # ROK-1336 #6 — slot-stable subdomain, never bare. See helper above.
+                INHERITED=$(jq -c --argjson slot "$TARGET_SLOT" \
+                    '[.[] | {slug, url: (
+                        if (.public_domain // "") != ""
+                        then ("https://slot-" + ($slot|tostring) + "." + .public_domain)
+                        else ("https://" + .slug + ".rl.lan")
+                        end
+                    )}]' <<<"$MATCHING")
             fi
             # Clear claimable_by_next on the slot AFTER destroy decisions resolve.
             env_registry::clear_claimable_for_slot "$TARGET_SLOT"

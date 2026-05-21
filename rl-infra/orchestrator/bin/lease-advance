@@ -146,7 +146,20 @@ if [[ "$(jq 'length' <<<"$CLAIMABLE_ENVS")" -gt 0 ]]; then
     fi
 
     if [[ "$(jq 'length' <<<"$MATCHING")" -gt 0 ]]; then
-        INHERITED_ENVS=$(jq -c '[.[] | {slug, url: ("https://" + (.public_domain // (.slug + ".rl.lan")))}]' <<<"$MATCHING")
+        # ROK-1336 #6 — env-registry stores `.public_domain` as the bare
+        # RL_PUBLIC_DOMAIN (e.g. "gamernight.net"), NOT a fully-qualified host.
+        # The previous template "https://" + public_domain emitted bare
+        # https://gamernight.net which doesn't route to any env and breaks
+        # Discord OAuth. Emit the slot-stable subdomain (https://slot-N.<domain>)
+        # which Traefik routes to whichever env owns slot-N. .rl.lan fallback
+        # keeps the per-slug form for the no-RL_PUBLIC_DOMAIN local case.
+        INHERITED_ENVS=$(jq -c --argjson slot "$SLOT" \
+            '[.[] | {slug, url: (
+                if (.public_domain // "") != ""
+                then ("https://slot-" + ($slot|tostring) + "." + .public_domain)
+                else ("https://" + .slug + ".rl.lan")
+                end
+            )}]' <<<"$MATCHING")
     fi
 fi
 
