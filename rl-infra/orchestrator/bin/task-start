@@ -87,6 +87,26 @@ ARGS_SUMMARY="${ARGS_SUMMARY:0:64}"
 # trick doesn't shadow our named --arg keys.
 CMD_JSON=$(printf '%s\n' "${CMD_ARGS[@]}" | jq -Rs 'split("\n") | map(select(length > 0))')
 
+# ROK-1338 PR-1 dogfood-2 — capture forensic context (cwd + filtered env) so
+# rl_task_inspect returns more than just rl_task_status's persisted fields.
+# Without this, inspect degenerates to a strict subset of status (no
+# environmental backstory). Capture is whitelist-only (RL_*-prefixed vars
+# plus USER/HOSTNAME/PWD/SHLVL) and pattern-denylisted (anything with
+# SECRET/KEY/TOKEN/PASSWORD/PRIVATE/AUTH in the name) so secrets don't bleed
+# into the on-disk task JSON.
+CWD=$(pwd)
+# Two-stage filter:
+#   1. Whitelist: only RL_*-prefixed orchestrator vars + a few safe basics.
+#   2. Denylist: drop anything whose NAME (chars before `=`) contains any of
+#      SECRET / KEY / TOKEN / PASSWORD / PRIVATE / AUTH (case-insensitive).
+#      Matches anywhere in the name, not just at the end — so DEPLOY_KEY,
+#      AUTH_TOKEN, GIT_PRIVATE_KEY are all rejected.
+ENV_JSON=$(env \
+    | grep -E '^(RL_[A-Z0-9_]+|USER|HOSTNAME|PWD|SHLVL)=' \
+    | grep -viE '^[^=]*(SECRET|KEY|TOKEN|PASSWORD|PRIVATE|AUTH)[^=]*=' \
+    | jq -Rn '[inputs | capture("^(?<key>[^=]+)=(?<value>.*)$")] | from_entries' \
+    2>/dev/null || echo '{}')
+
 INITIAL_JSON=$(jq -nc \
     --arg task_id "$TASK_ID" \
     --arg tool "$TOOL" \
@@ -96,6 +116,8 @@ INITIAL_JSON=$(jq -nc \
     --argjson cmd "$CMD_JSON" \
     --arg log "$LOG_PATH" \
     --arg started "$STARTED_AT" \
+    --arg cwd "$CWD" \
+    --argjson env "$ENV_JSON" \
     '{
         task_id: $task_id,
         tool: $tool,
@@ -103,6 +125,8 @@ INITIAL_JSON=$(jq -nc \
         agent_id: $agent,
         args_summary: $summary,
         cmd: $cmd,
+        cwd: $cwd,
+        env: $env,
         log_path: $log,
         pid: null,
         status: "running",
