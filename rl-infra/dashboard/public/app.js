@@ -332,40 +332,94 @@ const setCookie = (name, value, days) => {
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${secure}`;
 };
 
-const getTesterName = () => {
-  // Prefer cookie (more persistent), fall back to localStorage.
-  let name = getCookie(TESTER_COOKIE) || localStorage.getItem(TESTER_LS);
-  if (!name) {
-    name = prompt('Your name (so the agent + operator can see who reported what):', '') || '';
-    name = name.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50).trim();
-    if (name) {
-      try { localStorage.setItem(TESTER_LS, name); } catch {}
-      setCookie(TESTER_COOKIE, name, 365);
-    }
-  } else {
+// Read the stored tester name without prompting. Returns '' if unset.
+// ROK-1336 #4: separated from the modal flow so callers can branch on
+// "do we already have a name?" instead of being forced through prompt().
+const getStoredTesterName = () => {
+  const name = getCookie(TESTER_COOKIE) || localStorage.getItem(TESTER_LS) || '';
+  if (name) {
     // Mirror to both stores so future reads work even if one gets nuked.
     try { localStorage.setItem(TESTER_LS, name); } catch {}
     if (!getCookie(TESTER_COOKIE)) setCookie(TESTER_COOKIE, name, 365);
   }
-  return name || 'anon';
+  return name;
 };
 
-const verdictBadge = (counts) => {
-  // Small badge that summarizes the plan's verdict counts at a glance.
-  const parts = [];
-  if (counts.pass) parts.push(`${counts.pass}✓`);
-  if (counts.fail) parts.push(`${counts.fail}✗`);
-  if (counts.skip) parts.push(`${counts.skip}~`);
-  if (counts.pending) parts.push(`${counts.pending}?`);
-  return parts.join(' ') || '0 steps';
+// Persist a freshly-entered tester name to both stores. Sanitises same as
+// the old prompt() path.
+const setTesterName = (raw) => {
+  const name = (raw || '').replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50).trim();
+  if (name) {
+    try { localStorage.setItem(TESTER_LS, name); } catch {}
+    setCookie(TESTER_COOKIE, name, 365);
+  }
+  return name;
+};
+
+// Backwards-compat shim — older callers expect a sync name. Returns the
+// stored value or 'anon' (NEVER fires the prompt). Submit/comment paths
+// should call askTesterNameModal() first to ensure a real name is set.
+const getTesterName = () => getStoredTesterName() || 'anon';
+
+// ROK-1336 #4 — replace window.prompt() with an inline modal so mobile
+// Safari / Chrome iOS don't silently swallow the request. Returns a Promise
+// that resolves to the entered name (string) or null (user cancelled).
+// Cancel keeps the existing stored name unchanged.
+const askTesterNameModal = () => new Promise((resolve) => {
+  document.querySelectorAll('.rl-modal-backdrop').forEach((n) => n.remove());
+  const backdrop = el('div', { class: 'rl-modal-backdrop' });
+  const modal = el('div', { class: 'rl-modal' });
+  modal.appendChild(el('h3', { class: 'rl-modal-title', text: 'Your name' }));
+  modal.appendChild(el('p', { class: 'rl-modal-sub',
+    text: 'So the agent + operator can see who reported what. Saved on this device for next time.' }));
+  const input = el('input', { class: 'rl-modal-input' });
+  input.type = 'text';
+  input.placeholder = 'e.g. Jake, alice, mobile-tester';
+  input.maxLength = 50;
+  input.value = getStoredTesterName();
+  modal.appendChild(input);
+  const actions = el('div', { class: 'rl-modal-actions' });
+  const cancelBtn = el('button', { class: 'btn-cancel', text: 'Cancel' });
+  const saveBtn = el('button', { class: 'btn-submit', text: 'Save' });
+  const close = (val) => { backdrop.remove(); resolve(val); };
+  cancelBtn.addEventListener('click', () => close(null));
+  saveBtn.addEventListener('click', () => {
+    const saved = setTesterName(input.value);
+    if (!saved) { input.focus(); return; } // empty/invalid → keep modal open
+    close(saved);
+  });
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') saveBtn.click(); });
+  backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(null); });
+  actions.append(cancelBtn, saveBtn);
+  modal.appendChild(actions);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+  setTimeout(() => input.focus(), 50);
+});
+
+// Convenience: returns a name, opening the modal if none is stored. Used
+// by submit/comment paths. Resolves to null if user cancels — caller should
+// abort the action.
+const ensureTesterName = async () => {
+  const stored = getStoredTesterName();
+  if (stored) return stored;
+  const entered = await askTesterNameModal();
+  return entered;
 };
 
 const renderTestPlanSection = (slug, summary) => {
+  // data-slug lets the auto-reset-on-submit helper scope its DOM rewrite to
+  // THIS plan's card only. A prior version used document.querySelectorAll
+  // unscoped and bled the reset across every env card on the page.
   const section = el('div', { class: 'plan-section' });
+  section.dataset.slug = slug;
   const header = el('div', { class: 'plan-header' });
-  const totalLabel = `Test plan (${summary.total})`;
-  header.appendChild(el('span', { class: 'plan-title', text: totalLabel }));
-  header.appendChild(el('span', { class: 'plan-counts', text: verdictBadge(summary) }));
+  // Operator preference (2026-05-21): show the plan's actual title here, not
+  // the step total + pending counts. Footer already surfaces "N of M drafted"
+  // for at-a-glance progress, so the counts in the header were redundant +
+  // distracting. Fallback to a step-count line if title is missing.
+  const headerText = summary.title || `Test plan (${summary.total} step${summary.total === 1 ? '' : 's'})`;
+  header.appendChild(el('span', { class: 'plan-title', text: headerText }));
   section.appendChild(header);
 
   const stepsDiv = el('div', { class: 'plan-steps', text: 'Loading…' });
@@ -400,6 +454,18 @@ const clearDraft = (slug, planCreatedAt) => {
   try { localStorage.removeItem(draftKey(slug, planCreatedAt)); } catch {}
 };
 
+const renderClearFormHeader = (slug, plan) => {
+  const header = el('div', { class: 'plan-top-actions' });
+  const btn = el('button', { class: 'btn-clear-form', text: '🧹 Clear form' });
+  btn.title = 'Wipe your local draft verdicts on this plan. Server data and previous submissions are not affected.';
+  btn.addEventListener('click', () => {
+    clearDraft(slug, plan.created_at);
+    tick({ force: true });
+  });
+  header.appendChild(btn);
+  return header;
+};
+
 const loadTestPlanInto = async (slug, container) => {
   try {
     const r = await fetch(`/api/test-plans/${slug}`, { cache: 'no-store' });
@@ -411,6 +477,12 @@ const loadTestPlanInto = async (slug, container) => {
     container.replaceChildren();
     // Load any in-progress draft for THIS plan version.
     const draft = loadDraft(slug, plan.created_at);
+    // Mobile-friendly always-visible "clear my form" affordance at the top
+    // of the plan. Operator-requested explicitly over the rejected
+    // auto-reset-on-submit approach: tester wants control, not surprise.
+    // Clicking wipes the local draft only — server verdicts/submissions
+    // are not touched; tick({force:true}) re-renders against fresh state.
+    container.appendChild(renderClearFormHeader(slug, plan));
     plan.steps.forEach((step) => {
       container.appendChild(renderStep(slug, plan, step, draft));
     });
@@ -463,20 +535,23 @@ const renderStep = (slug, plan, step, draft) => {
   // auto-linkified (they're wrapped <untrusted-tester-comment> + base64,
   // never trust untrusted-source URLs).
   appendWithLinks(textRow, step.description);
-  if (step.test_url) {
-    const link = el('a', {
-      href: step.test_url, target: '_blank', rel: 'noopener',
-      class: 'step-link', text: ' ↗',
-    });
-    link.title = `Open: ${step.test_url}`;
-    textRow.appendChild(link);
-  }
   desc.appendChild(textRow);
   if (step.expected) {
     const expectedRow = el('div', { class: 'step-expected' });
     expectedRow.appendChild(document.createTextNode('expected: '));
     appendWithLinks(expectedRow, step.expected);
     desc.appendChild(expectedRow);
+  }
+  if (step.test_url) {
+    // Explicit "Link to test" affordance on its own line below the step
+    // description. Inline "↗" was hard to spot on mobile + had a tiny tap
+    // target wedged into the text flow. Block-level button is unambiguous.
+    const link = el('a', {
+      href: step.test_url, target: '_blank', rel: 'noopener',
+      class: 'step-link', text: '🔗 Link to test',
+    });
+    link.title = `Open: ${step.test_url}`;
+    desc.appendChild(link);
   }
   if (pendingReset) {
     desc.appendChild(el('div', { class: 'step-reset-banner',
@@ -511,9 +586,16 @@ const renderStep = (slug, plan, step, draft) => {
   // common verdict-buffer route because replaceChildren scroll-jumps to
   // top on mobile (operator-flagged 2026-05-19). In-place patch keeps
   // the existing DOM nodes + listeners; re-render is the safety net.
-  passBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'pass'));
-  failBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'fail'));
-  skipBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'skip'));
+  // Belt-and-suspenders for mobile sticky-state: blur the button after click
+  // so it doesn't carry :focus into the post-tap render. The hover state is
+  // gated separately via @media (hover: hover) in style.css.
+  const onVerdict = (verdict) => (ev) => {
+    ev.currentTarget?.blur();
+    bufferVerdict(slug, plan, step.id, verdict);
+  };
+  passBtn.addEventListener('click', onVerdict('pass'));
+  failBtn.addEventListener('click', onVerdict('fail'));
+  skipBtn.addEventListener('click', onVerdict('skip'));
   if (locked || pendingReset) {
     passBtn.disabled = true; failBtn.disabled = true; skipBtn.disabled = true;
     const reason = pendingReset
@@ -670,7 +752,17 @@ const renderSubmitFooter = (slug, plan, draft) => {
   const submitBtn = el('button', { class: 'btn-submit', text: 'Submit test results' });
   submitBtn.disabled = draftCount === 0;
   if (draftCount === 0) submitBtn.title = 'No draft verdicts yet — tap a step button first';
-  submitBtn.addEventListener('click', () => submitDraft(slug, plan, draft));
+  // ROK-1336 #4 follow-up — always read draft FRESH from localStorage at
+  // click time, not the closure-captured one from footer-render time. The
+  // patchPlanInPlace DOM patcher updates localStorage on every bufferVerdict
+  // but does NOT re-bind this listener, so without the fresh load the submit
+  // fires with the stale empty draft → verdicts.length === 0 → silent return.
+  // (Bug existed pre-1336 — surfaced once item #4's prompt() fix let the
+  // submit path actually run end-to-end on mobile.)
+  submitBtn.addEventListener('click', () => {
+    const freshDraft = loadDraft(slug, plan.created_at);
+    submitDraft(slug, plan, freshDraft);
+  });
   actions.appendChild(submitBtn);
   if (draftCount > 0) {
     const clearBtn = el('button', { class: 'btn-clear-draft', text: 'Clear draft' });
@@ -695,12 +787,57 @@ const renderSubmitFooter = (slug, plan, draft) => {
   return footer;
 };
 
+// Auto-reset a single plan card after a successful submit. Scoped by slug
+// via the [data-slug] attribute on .plan-section — a prior un-scoped version
+// of this helper bled its DOM rewrite across every env card on the page,
+// which is the buggy build the operator had reverted. Re-rendering through
+// loadTestPlanInto here keeps the lock/verdict logic in one place (renderStep)
+// instead of duplicating it in a DOM patcher.
+const resetPlanCardVisuals = (slug) => {
+  const section = document.querySelector(`.plan-section[data-slug="${CSS.escape(slug)}"]`);
+  if (!section) return;
+  const stepsDiv = section.querySelector('.plan-steps');
+  if (!stepsDiv) return;
+  loadTestPlanInto(slug, stepsDiv);
+};
+
+// ROK-1336 #4 follow-up — top-of-viewport toast helper. 3s self-dismiss.
+// Reused for the post-submit success ack so testers + operator see "yep,
+// it went". No framework, no audio, just a styled div.
+const showToast = (message, kind = 'success') => {
+  document.querySelectorAll('.rl-toast').forEach((n) => n.remove());
+  const toast = el('div', { class: `rl-toast rl-toast-${kind}`, text: message });
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add('rl-toast-fade'), 2700);
+  setTimeout(() => toast.remove(), 3300);
+};
+
 const submitDraft = async (slug, plan, draft) => {
-  const tester = getTesterName();
+  // ROK-1336 #4 — ensure a real tester name (opens in-page modal, not
+  // window.prompt). If user cancels the modal, abort the submit silently —
+  // they explicitly chose not to identify and we don't want a phantom
+  // 'anon' verdict landing on the plan.
+  const tester = await ensureTesterName();
+  if (!tester) return;
   const verdicts = Object.entries(draft).map(([stepId, verdict]) => ({
     step_id: parseInt(stepId, 10), verdict,
   }));
-  if (verdicts.length === 0) return;
+  if (verdicts.length === 0) {
+    // Caller had a stale closure with empty draft AND localStorage was also
+    // empty. Surface this loudly instead of the old silent-return.
+    showToast('No verdicts drafted yet — tap pass/fail/skip on a step first.', 'warn');
+    return;
+  }
+  // ROK-1336 #4 follow-up — loading state on the submit button so testers
+  // see immediate feedback their tap registered. Pre-fix this was silent
+  // until the fetch resolved, which on mobile + slow LTE looked like a
+  // dead tap → multiple frantic re-taps (each fires another fetch).
+  const submitBtn = document.querySelector('.btn-submit');
+  const origLabel = submitBtn?.textContent;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting…';
+  }
   try {
     const r = await fetch(`/api/test-plans/${slug}/submit`, {
       method: 'POST',
@@ -710,21 +847,35 @@ const submitDraft = async (slug, plan, draft) => {
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       if (r.status === 404 && (j.error || '').includes('no plan')) {
-        alert('This test env was reaped — your draft can no longer be submitted. Clearing draft + refreshing.');
+        showToast('This test env was reaped — draft cleared.', 'error');
         clearDraft(slug, plan.created_at);
         tick({ force: true });
         return;
       }
-      alert(`Submit failed: ${j.error || `HTTP ${r.status}`}`);
+      showToast(`Submit failed: ${j.error || `HTTP ${r.status}`}`, 'error');
       return;
     }
-    // Clear local draft + refresh. Plan stays on server until agent
-    // posts a replacement (which they may do automatically based on
-    // the verdicts they just received).
+    // Clear local draft + auto-reset this plan's card + refresh fleet state.
+    // resetPlanCardVisuals re-renders THIS section only so the form snaps
+    // back to neutral immediately; tick({force:true}) re-polls /api/state
+    // so the env card's counts + recent-submissions row update too.
     clearDraft(slug, plan.created_at);
+    resetPlanCardVisuals(slug);
     tick({ force: true });
+    showToast(`Submitted ${verdicts.length} verdict${verdicts.length === 1 ? '' : 's'} as ${tester}.`, 'success');
   } catch (err) {
-    alert(`Network error: ${(err && (err.message || err.toString())) || 'unknown (no message)'}. The env or dashboard may be down. Try refreshing.`);
+    showToast(`Network error: ${(err && (err.message || err.toString())) || 'unknown'}.`, 'error');
+  } finally {
+    // Restore button state regardless of outcome. If the fetch succeeded,
+    // tick({force:true}) above re-rendered the footer (button replaced
+    // entirely) so this is a no-op; if we hit a non-tick path (early
+    // 404-reap / generic error / network error) the button stays in the
+    // DOM and we need to un-disable it so the user can retry.
+    const stillThere = document.querySelector('.btn-submit');
+    if (stillThere && stillThere === submitBtn) {
+      stillThere.disabled = false;
+      if (origLabel) stillThere.textContent = origLabel;
+    }
   }
 };
 

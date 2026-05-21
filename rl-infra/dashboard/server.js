@@ -489,6 +489,7 @@ const summarizePlan = (plan) => {
   }
   return {
     total, ...counts,
+    title: stripWrapMaybe(plan.title) ?? null,
     pending_resets: pendingResets,
     comment_count: commentCount,
     last_updated_at: lastUpdated,
