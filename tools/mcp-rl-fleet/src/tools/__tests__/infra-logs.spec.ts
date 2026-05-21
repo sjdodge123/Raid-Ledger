@@ -100,8 +100,10 @@ describe('rl_infra_logs — execute()', () => {
     const remote = String(call[1].at(-1));
     // ROK-1338 PR-1 dogfood-1: route via rl-docker-proxy (rl-agent isn't in
     // docker group; proxy whitelists GET /containers/[id]/logs).
+    // codex P2 (2026-05-21): merge stderr→stdout (2>&1) on the remote side
+    // to preserve temporal ordering between docker logs's two streams.
     expect(remote).toBe(
-      'DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail 20 --timestamps rl-gc-sweeper',
+      'DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail 20 --timestamps rl-gc-sweeper 2>&1',
     );
   });
 

@@ -108,7 +108,14 @@ export async function execute(params: InfraLogsParams): Promise<InfraLogsResult>
   // intended read path. rl-agent is NOT in the host's docker group; talking
   // directly to /var/run/docker.sock returns permission-denied. The proxy
   // listens only on loopback so security posture is preserved.
-  const remote = `DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail ${tail} --timestamps ${container}`;
+  //
+  // codex P2 (2026-05-21): redirect stderr to stdout (2>&1) on the remote
+  // side. docker logs streams the container's stdout + stderr as two
+  // separate streams; preserving temporal ordering requires merging them
+  // upstream rather than locally (where we'd be left concatenating two
+  // already-buffered streams in the wrong order). `--timestamps` keeps each
+  // line individually datable if a consumer needs to re-sort.
+  const remote = `DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail ${tail} --timestamps ${container} 2>&1`;
   const args = [
     '-o',
     'BatchMode=yes',

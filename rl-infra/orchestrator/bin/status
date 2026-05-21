@@ -51,16 +51,24 @@ augment_runner_sync() {
         return
     fi
     worktree_dir="/srv/rl-infra/runners/slot-${slot}/worktree"
-    # last_sync_at: ISO-8601 mtime of the worktree dir.
-    # GNU stat: `stat -c %y` returns `2026-05-20 14:30:00.123456789 +0000`.
-    # We coerce to ISO via `date -d` so the wire format is stable.
+    # last_sync_at: ISO-8601 of the NEWEST FILE's mtime under the worktree.
+    # ROK-1338 PR-1 codex P2 (2026-05-21): stat on the dir itself only
+    # updates when files are added/removed at the top level — Mutagen's
+    # common edit-in-place writes don't bump dir mtime, leaving
+    # last_sync_at stale even though sync is healthy. find -printf '%T@'
+    # scans actual file mtimes under the tree. Exclude node_modules / .git
+    # / dist / build / .next to keep the scan cheap (under 1s on typical
+    # worktrees).
     last_sync="null"
     if [[ -d "$worktree_dir" ]]; then
-        local raw_mtime
-        raw_mtime=$(stat -c %y "$worktree_dir" 2>/dev/null || echo "")
-        if [[ -n "$raw_mtime" ]]; then
+        local newest_epoch
+        newest_epoch=$(find "$worktree_dir" \
+            -type d \( -name node_modules -o -name .git -o -name dist -o -name build -o -name .next \) -prune \
+            -o -type f -printf '%T@\n' 2>/dev/null \
+            | sort -rn | head -1)
+        if [[ -n "$newest_epoch" ]]; then
             local iso
-            iso=$(date -u -d "$raw_mtime" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
+            iso=$(date -u -d "@${newest_epoch%.*}" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
             if [[ -n "$iso" ]]; then
                 last_sync="\"$iso\""
             fi
