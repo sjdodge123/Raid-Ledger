@@ -10,12 +10,14 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header>
+  <header id="operator-header">
     <h1>rl-infra <span class="muted">fleet</span></h1>
     <span class="refresh-indicator" id="refresh-indicator" title="last update"></span>
   </header>
 
-  <main>
+  <!-- Operator view (default) — slots + envs grid. Hidden when the tester
+       route activates (URL carries ?slug=<name>). -->
+  <main id="operator-main">
     <section>
       <h2>Slots</h2>
       <div id="slots" class="grid"></div>
@@ -49,12 +51,31 @@
     </section>
   </main>
 
+  <!-- ROK-1337 — Tester route. Hidden by default; #tester-page becomes
+       visible only when app.js detects ?slug=<name> in location.search.
+       NO slug/slot/env identity in this chrome — the story chip + goal
+       are what the tester sees. -->
+  <main id="tester-page" hidden>
+    <div id="status-pill"></div>
+    <section id="now-section"></section>
+    <section id="also-section"></section>
+    <section id="done-section"></section>
+  </main>
+
   <footer>
     <span id="generated-at">—</span>
     <span class="muted">·</span>
     <span class="muted">tap the dot to refresh</span>
   </footer>
 
+  <!-- ROK-1337 — tester-page modules. Loaded BEFORE app.js so app.js can
+       detect the tester route on init and dispatch to window.__rlTester.
+       Plain <script> tags (no `type=module`) keep the zero-build dashboard
+       posture; each file attaches to window.__rlTester. -->
+  <script src="/app/test-plan-state.js"></script>
+  <script src="/app/test-plan-render.js"></script>
+  <script src="/app/test-plan-submit.js"></script>
+  <script src="/app/test-plan-polling.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
