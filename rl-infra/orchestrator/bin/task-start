@@ -247,15 +247,11 @@ pkill -P "$PARSER_PID" 2>/dev/null || true
 wait "$PARSER_PID" 2>/dev/null || true
 rm -f "$PARSE_DONE"
 
-# ROK-1336 #3 — drop the pidfile heartbeat. The heartbeat loop exits on its
-# own once kill -0 fails OR the pidfile is gone; removing the file here
-# tells the sweeper this task finished cleanly (no orphan flip needed).
-rm -f "$PIDFILE_PATH" 2>/dev/null || true
-if [[ -n "${HEARTBEAT_PID:-}" ]] && kill -0 "$HEARTBEAT_PID" 2>/dev/null; then
-    kill "$HEARTBEAT_PID" 2>/dev/null || true
-    wait "$HEARTBEAT_PID" 2>/dev/null || true
-fi
-
+# ROK-1336 #3 — finalize the terminal status FIRST, then drop the pidfile.
+# Codex P2 (post-review): removing the pidfile while .status is still
+# "running" creates a race window — gc-sweeper checks "pidfile-missing +
+# status=running" and false-orphans the task before we get to flip status
+# to succeeded/failed. Ordering matters: status flip → pidfile rm.
 FINISHED_AT=$(date -u +%FT%TZ)
 CURRENT_STATUS=$(jq -r ".status // \"running\"" "$JSON_PATH" 2>/dev/null || echo running)
 NEW_STATUS="failed"
@@ -271,6 +267,14 @@ else
     state::mutate "$JSON_PATH" --argjson c "$CMD_EXIT" --arg f "$FINISHED_AT" --arg s "$NEW_STATUS" \
         ".script_exit_code = \$c | .finished_at = \$f | .status = \$s" \
         2>/dev/null || true
+fi
+
+# Now status is terminal — the sweeper orphan check guards on status==running
+# (sweep.sh §0), so dropping the pidfile here can no longer be misread.
+rm -f "$PIDFILE_PATH" 2>/dev/null || true
+if [[ -n "${HEARTBEAT_PID:-}" ]] && kill -0 "$HEARTBEAT_PID" 2>/dev/null; then
+    kill "$HEARTBEAT_PID" 2>/dev/null || true
+    wait "$HEARTBEAT_PID" 2>/dev/null || true
 fi
 
 task::audit "$TASK_ID" "finish" "ok" \
