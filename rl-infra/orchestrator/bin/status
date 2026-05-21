@@ -33,13 +33,84 @@ RUNNER_STATS=$(docker stats --no-stream --format '{{json .}}' $(docker ps --filt
     map({container: .Name, cpu: .CPUPerc, mem: .MemUsage, net: .NetIO, block: .BlockIO})
 ' || echo '[]')
 
+# ROK-1338 PR-1 — per-runner sync state. For each runner in $RUNNER_STATS,
+# derive (a) `last_sync_at` from `stat -c %y` on /srv/rl-infra/runners/slot-N/worktree
+# (mtime of the worktree dir reflects Mutagen sync recency) and (b)
+# `worktree_head` from `git rev-parse --short HEAD` inside the runner. Both
+# default to null when missing (no claim active, or runner not running) so
+# the orchestrator never errors out the whole status read.
+augment_runner_sync() {
+    local runner_json="$1"
+    local container slot worktree_dir last_sync worktree_head
+    container=$(jq -r '.container' <<<"$runner_json")
+    # Extract slot number from container name (e.g. rl-runner-2 → 2).
+    slot=$(echo "$container" | sed -n 's/^rl-runner-\([0-9]\+\)$/\1/p')
+    if [[ -z "$slot" ]]; then
+        # Not a numbered slot runner — nothing to derive.
+        jq -c '. + {last_sync_at: null, worktree_head: null}' <<<"$runner_json"
+        return
+    fi
+    worktree_dir="/srv/rl-infra/runners/slot-${slot}/worktree"
+    # last_sync_at: ISO-8601 of the NEWEST FILE's mtime under the worktree.
+    # ROK-1338 PR-1 codex P2 (2026-05-21): stat on the dir itself only
+    # updates when files are added/removed at the top level — Mutagen's
+    # common edit-in-place writes don't bump dir mtime, leaving
+    # last_sync_at stale even though sync is healthy. find -printf '%T@'
+    # scans actual file mtimes under the tree. Exclude node_modules / .git
+    # / dist / build / .next to keep the scan cheap (under 1s on typical
+    # worktrees).
+    last_sync="null"
+    if [[ -d "$worktree_dir" ]]; then
+        local newest_epoch
+        newest_epoch=$(find "$worktree_dir" \
+            -type d \( -name node_modules -o -name .git -o -name dist -o -name build -o -name .next \) -prune \
+            -o -type f -printf '%T@\n' 2>/dev/null \
+            | sort -rn | head -1)
+        if [[ -n "$newest_epoch" ]]; then
+            local iso
+            iso=$(date -u -d "@${newest_epoch%.*}" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
+            if [[ -n "$iso" ]]; then
+                last_sync="\"$iso\""
+            fi
+        fi
+    fi
+    # worktree_head: short SHA from inside the runner container. The runner
+    # has the synced worktree at /workspace. Suppress git's "dubious-ownership"
+    # warning via -c safe.directory=*.
+    worktree_head="null"
+    local sha
+    sha=$(docker exec "rl-runner-${slot}" git -c safe.directory='*' -C /workspace rev-parse --short HEAD 2>/dev/null || echo "")
+    if [[ -n "$sha" ]]; then
+        worktree_head="\"$sha\""
+    fi
+    jq -c ". + {last_sync_at: ${last_sync}, worktree_head: ${worktree_head}}" <<<"$runner_json"
+}
+
+# Walk RUNNER_STATS and augment each entry. jq emits one runner per line, we
+# augment, then re-array.
+RUNNER_STATS_AUGMENTED=$(jq -c '.[]' <<<"$RUNNER_STATS" | while IFS= read -r runner; do
+    augment_runner_sync "$runner"
+done | jq -s '.')
+RUNNER_STATS="$RUNNER_STATS_AUGMENTED"
+
+# ROK-1338 PR-1 — deployed_sha. Operator's deploy script writes this on every
+# rsync. Absent file → null. Trim trailing whitespace defensively.
+DEPLOYED_SHA="null"
+if [[ -f /srv/rl-infra/.deployed_sha ]]; then
+    sha_content=$(tr -d '[:space:]' < /srv/rl-infra/.deployed_sha 2>/dev/null || echo "")
+    if [[ -n "$sha_content" ]]; then
+        DEPLOYED_SHA="\"$sha_content\""
+    fi
+fi
+
 OUT=$(jq -nc \
     --argjson claims "$CLAIMS" \
     --argjson envs "$ENVS_JSON" \
     --argjson host "$HOST" \
     --argjson runners "$RUNNER_STATS" \
     --argjson queue "$QUEUE" \
-    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), slots: $claims, envs: $envs, runners: $runners, host: $host, queue: $queue, queue_depth: ($queue | length), queue_head: ($queue[0].agent_id // null)}')
+    --argjson deployed_sha "$DEPLOYED_SHA" \
+    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), deployed_sha: $deployed_sha, slots: $claims, envs: $envs, runners: $runners, host: $host, queue: $queue, queue_depth: ($queue | length), queue_head: ($queue[0].agent_id // null)}')
 
 if [[ $PRETTY -eq 1 ]]; then
     echo "=== rl-infra status ==="

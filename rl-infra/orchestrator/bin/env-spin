@@ -9,6 +9,31 @@
 set -euo pipefail
 source "$(dirname "$0")/_state.sh"
 
+# ROK-1338 PR-1 fold-in (2026-05-21): emit a structured JSON error if the
+# script aborts via `set -e` before reaching the final happy-path jq emit.
+# Without this, any unhandled non-zero exit leaves the MCP layer staring at
+# empty stdout and returning `failed_to_parse_response` with no clue what
+# actually failed. The explicit exit-via-emit paths below set
+# ENV_SPIN_HANDLED=1 so the trap doesn't double-report.
+ENV_SPIN_HANDLED=0
+# ROK-1338 PR-1 fold-in #2 (2026-05-21): LAST_PHASE tracks how far env-spin
+# progressed before an unexpected abort. The EXIT trap reports it so the
+# operator/agent knows WHICH step died without needing bash -x. Updated at
+# every major transition; treat the running value as the most-recent
+# successfully-completed step at the time of abort.
+LAST_PHASE="init"
+_env_spin_trap_on_abort() {
+    local rc=$?
+    if (( rc != 0 )) && [[ "${ENV_SPIN_HANDLED:-0}" != "1" ]]; then
+        jq -nc --argjson rc "$rc" --arg slug "${SLUG:-}" --arg phase "${LAST_PHASE:-unknown}" \
+            '{ok:false, error:"env_spin_aborted_unexpectedly", exit_code:$rc, slug:$slug,
+              last_phase:$phase,
+              hint:("env-spin aborted with rc=" + ($rc|tostring) + " after completing phase \"" + $phase + "\". The failing line is between the marker for that phase and the next. Re-run with bash -x on the VM if more detail is needed: ssh rl@vm bash -x /srv/rl-infra/orchestrator/bin/env-spin --slug " + $slug)}' \
+        2>/dev/null || echo '{"ok":false,"error":"env_spin_aborted_unexpectedly","exit_code":'"$rc"',"last_phase":"'"${LAST_PHASE:-unknown}"'"}'
+    fi
+}
+trap _env_spin_trap_on_abort EXIT
+
 SLUG=""
 IMAGE="registry.rl.lan:5000/rl-allinone:latest"
 TTL_HOURS="${DEFAULT_ENV_TTL_HOURS:-24}"
@@ -73,11 +98,14 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     fi
 fi
 
+LAST_PHASE="preflight_done"
+
 # Idempotent: if env already exists for this slug, refresh last_touched in
 # the state registry (NOT via docker container update --label-add — that flag
 # is swarm-mode only and errors on standalone containers). Re-write the
 # Traefik conf file too so the route survives state divergence.
 if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+    LAST_PHASE="idempotent_path_entered"
     # UPSERT: if registry already has this slug, bump last_touched.
     # If not (e.g. registry was clobbered while the container kept
     # running — happened 2026-05-19 after sweeper-mutate perm bug),
@@ -86,15 +114,27 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     # invisible on the dashboard even though the container is healthy.
     IDEM_IMAGE=$(docker inspect "$APP_CONTAINER" --format '{{.Config.Image}}' 2>/dev/null || echo "${IMAGE}")
     IDEM_TTL=$(docker inspect "$APP_CONTAINER" --format '{{ index .Config.Labels "rl.ttl" }}' 2>/dev/null || echo "${TTL_HOURS}h")
-    state::mutate "$RL_ENVS_FILE" \
-        --arg slug "$SLUG" --argjson slot "$SLOT" \
-        --arg image "$IDEM_IMAGE" --arg ttl "$IDEM_TTL" --arg ts "$NOW" \
-        --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
-        'if any(.[]; .slug == $slug)
-         then map(if .slug == $slug then .last_touched = $ts else . end)
-         else . + [{slug: $slug, slot: $slot, image: $image, ttl: $ttl,
-                    created_at: $ts, last_touched: $ts, public_domain: $public_domain}]
-         end'
+    # ROK-1338 PR-1 fold-in: same defensive wrap as the new-env path below.
+    # `set -e` would otherwise kill the script silently on any state::mutate
+    # failure and leave the agent staring at empty stdout.
+    if ! state::mutate "$RL_ENVS_FILE" \
+            --arg slug "$SLUG" --argjson slot "$SLOT" \
+            --arg image "$IDEM_IMAGE" --arg ttl "$IDEM_TTL" --arg ts "$NOW" \
+            --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
+            'if any(.[]; .slug == $slug)
+             then map(if .slug == $slug then .last_touched = $ts else . end)
+             else . + [{slug: $slug, slot: $slot, image: $image, ttl: $ttl,
+                        created_at: $ts, last_touched: $ts, public_domain: $public_domain}]
+             end'; then
+        audit::log env-spin err "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IDEM_IMAGE" '{slug:$slug,slot:$slot,image:$image,phase:"register_idempotent"}')"
+        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IDEM_IMAGE" \
+            '{ok:false, error:"env_registry_mutate_failed", phase:"register_idempotent",
+              slug:$slug, slot:$slot, image:$image,
+              hint:"Idempotent upsert into env-registry.json failed. Container exists but registry write was rejected — check the file is valid JSON and $RL_LOCK_DIR is writable."}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    LAST_PHASE="idempotent_state_mutated"
     mkdir -p "$TRAEFIK_CONF_D"
     PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
     # Default ownership flag — only the public-domain branch can flip it.
@@ -150,6 +190,7 @@ http:
         servers:
           - url: "http://${APP_CONTAINER}:80"
 EOF
+    LAST_PHASE="idempotent_traefik_written"
     # Release the slot-scoped flock acquired above. Closing fd 9 drops the
     # lock; subsequent steps (admin bootstrap, JSON output) don't need it.
     exec 9>&-
@@ -209,6 +250,7 @@ EOF
             '[{code: "admin_bootstrap_failed", detail: $msg}]')
     fi
     rm -f "$IDEM_BOOTSTRAP_STDERR_FILE"
+    LAST_PHASE="idempotent_bootstrap_done"
 
     jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
         --arg internal_url "http://${SLUG}.rl.lan" \
@@ -232,7 +274,10 @@ EOF
     exit 0
 fi
 
+LAST_PHASE="new_env_path_entered"
+
 # 1. Postgres (per-env, NAS-like).
+LAST_PHASE="docker_run_pg_pending"
 docker run -d \
     --name "$PG_CONTAINER" \
     --network "$NET" \
@@ -248,11 +293,15 @@ docker run -d \
     --label "rl.last_touched=${NOW}" \
     pgvector/pgvector:pg16 >/dev/null
 
+LAST_PHASE="pg_run_started"
+
 # Wait for postgres ready.
 for _ in $(seq 1 30); do
     if docker exec "$PG_CONTAINER" pg_isready -U user -d raid_ledger >/dev/null 2>&1; then break; fi
     sleep 1
 done
+
+LAST_PHASE="pg_ready"
 
 # 2. Allinone container — built artifacts, prod-like topology.
 #
@@ -318,6 +367,8 @@ docker run -d \
     --label "rl.last_touched=${NOW}" \
     "$IMAGE" >/dev/null
 
+LAST_PHASE="allinone_running"
+
 # 3. Register the route with Traefik via the file provider.
 #    Traefik watches /etc/traefik/conf.d, so a write here triggers a reload.
 #
@@ -372,7 +423,16 @@ if [[ -n "$PUBLIC_DOMAIN" ]]; then
 else
     HOST_RULE="Host(\`${SLUG}.rl.lan\`)"
 fi
-cat > "$TRAEFIK_CONF_D/env-${SLUG}.yml" <<EOF
+# ROK-1338 PR-1 fold-in (2026-05-21): wrap the route-file write so
+# permission-denied failures emit a clear, actionable error instead of a
+# silent `set -e` abort. The dir owner is `rl` (operator) and group is
+# `rl-fleet` — if the dir lacks group-write, rl-agent (orchestrator's SSH
+# identity) can't CREATE new env-*.yml files even though it can read them
+# and write to existing ones it created. Symptom: container starts cleanly
+# but env_spin aborts at last_phase=allinone_running with exit 1. Fix:
+# operator must `sudo chmod 2775 /srv/rl-infra/traefik/conf.d` (matches
+# state dir's setgid+group-write pattern).
+if ! cat > "$TRAEFIK_CONF_D/env-${SLUG}.yml" <<EOF
 # Generated by env-spin for env "${SLUG}" — do not hand-edit.
 http:
   routers:
@@ -386,9 +446,22 @@ http:
         servers:
           - url: "http://${APP_CONTAINER}:80"
 EOF
+then
+    audit::log env-spin err "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg phase "traefik_route_write" --arg target "$TRAEFIK_CONF_D/env-${SLUG}.yml" '{slug:$slug,slot:$slot,phase:$phase,target:$target}')"
+    jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg target "$TRAEFIK_CONF_D/env-${SLUG}.yml" --arg dir "$TRAEFIK_CONF_D" \
+        '{ok:false, error:"traefik_route_write_failed", phase:"traefik_route_write",
+          slug:$slug, slot:$slot, target:$target,
+          hint:("Could not write Traefik route to " + $target + ". Most likely cause: rl-agent (the orchestrator SSH identity) is not in the docker/owner group of " + $dir + ", OR the dir lacks group-write. Container is RUNNING but unreachable via Traefik. Operator fix: sudo chmod 2775 " + $dir + " && sudo chown :rl-fleet " + $dir + " — matches the state dir pattern. Then re-run env-spin (idempotent path will skip the docker run and just register the route).")}'
+    ENV_SPIN_HANDLED=1
+    exit 1
+fi
+LAST_PHASE="traefik_written"
+
 # Release the slot-scoped flock (no-op if it wasn't acquired). Closing fd 9
 # drops the lock; later steps (health wait, admin bootstrap) don't need it.
 exec 9>&- 2>/dev/null || true
+
+LAST_PHASE="flock_released"
 
 # Wait for /health.
 URL="http://${APP_CONTAINER}/api/health"
@@ -396,6 +469,8 @@ for _ in $(seq 1 60); do
     if docker exec "$APP_CONTAINER" curl -fsS "$URL" >/dev/null 2>&1; then break; fi
     sleep 1
 done
+
+LAST_PHASE="health_check_passed"
 
 # Seed admin@local with RL_ADMIN_PASSWORD so agents can /auth/local
 # immediately without a separate sync_settings round-trip. Idempotent
@@ -426,14 +501,35 @@ if ! docker exec \
 fi
 rm -f "$BOOTSTRAP_STDERR_FILE"
 
-# Register.
-state::mutate "$RL_ENVS_FILE" \
-    --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
-    --arg ttl "${TTL_HOURS}h" --arg ts "$NOW" \
-    --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
-    '. += [{slug: $slug, slot: $slot, image: $image, ttl: $ttl, created_at: $ts, last_touched: $ts, public_domain: $public_domain}]'
+LAST_PHASE="bootstrap_done"
 
+# Register.
+#
+# ROK-1338 PR-1 fold-in (2026-05-21): wrap state::mutate so a non-zero return
+# (corrupt env-registry.json, flock failure, mktemp/mv permission issue, jq
+# filter error) doesn't trigger `set -e` silent abort. Without this guard the
+# script dies before the final jq-emit, the MCP layer gets empty stdout and
+# returns `failed_to_parse_response`, the dashboard sees no slug in /api/state,
+# and the operator is left with running containers and no record of them.
+# Now any registry mutation failure surfaces as structured JSON on stdout so
+# the MCP layer can show the actual cause.
+if ! state::mutate "$RL_ENVS_FILE" \
+        --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
+        --arg ttl "${TTL_HOURS}h" --arg ts "$NOW" \
+        --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
+        '. += [{slug: $slug, slot: $slot, image: $image, ttl: $ttl, created_at: $ts, last_touched: $ts, public_domain: $public_domain}]'; then
+    audit::log env-spin err "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image,phase:"register_new"}')"
+    jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
+        '{ok:false, error:"env_registry_mutate_failed", phase:"register_new",
+          slug:$slug, slot:$slot, image:$image,
+          hint:"state::mutate on /srv/rl-infra/state/env-registry.json returned non-zero — check that file is valid JSON, $RL_LOCK_DIR is writable, and the mktemp/mv in state::mutate succeeded. Containers may already be up; run env-destroy --slug to clean up."}'
+    ENV_SPIN_HANDLED=1
+    exit 1
+fi
+
+LAST_PHASE="registered"
 audit::log env-spin ok "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image}')"
+LAST_PHASE="audit_logged"
 
 # Output. When RL_PUBLIC_DOMAIN is set, the EXTERNAL URL is the canonical
 # `url` field — that's what agents emit, testers click, operator bookmarks.
@@ -476,6 +572,10 @@ elif [[ -n "$PUBLIC_URL_OUT" ]]; then
 else
     PRIMARY_URL="http://${SLUG}.rl.lan"
 fi
+LAST_PHASE="url_computed"
+# ROK-1338 PR-1 fold-in: reached the final happy-path emit, so the EXIT trap
+# should NOT also fire a duplicate error JSON.
+ENV_SPIN_HANDLED=1
 jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
     --arg internal_url "http://${SLUG}.rl.lan" \
     --arg public_url "$PUBLIC_URL_OUT" \

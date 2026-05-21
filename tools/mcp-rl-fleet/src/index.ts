@@ -33,6 +33,8 @@ import * as envDeploy from './tools/env-deploy.js';
 import * as forceRelease from './tools/force-release.js';
 import * as testPlan from './tools/test-plan.js';
 import * as task from './tools/task.js';
+import * as taskInspect from './tools/task-inspect.js';
+import * as infraLogs from './tools/infra-logs.js';
 import * as lease from './tools/lease.js';
 import * as fleetHealth from './tools/fleet-health.js';
 
@@ -303,6 +305,27 @@ const taskListSchema: Shape = {
 };
 registerTool('rl_task_list', TASK_LIST_DESC, taskListSchema, async (p) =>
   jsonResult(await task.executeList(p as task.ExecuteListParams)),
+);
+
+// ----- Task inspect (ROK-1338 PR-1) -----
+const taskInspectSchema: Shape = { task_id: taskIdSchema };
+registerTool(
+  taskInspect.TOOL_NAME,
+  taskInspect.TOOL_DESCRIPTION,
+  taskInspectSchema,
+  async (p) => jsonResult(await taskInspect.execute(p as taskInspect.ExecuteInspectParams)),
+);
+
+// ----- Infra logs (ROK-1338 PR-1) -----
+const infraLogsSchema: Shape = {
+  service: infraLogs.InfraServiceSchema,
+  tail: z.number().int().positive().max(5000).optional(),
+};
+registerTool(
+  infraLogs.TOOL_NAME,
+  infraLogs.TOOL_DESCRIPTION,
+  infraLogsSchema,
+  async (p) => jsonResult(await infraLogs.execute(p as infraLogs.InfraLogsParams)),
 );
 
 // ----- Lease tools (ROK-1331 M5a) -----

@@ -74,6 +74,24 @@ export interface EnvSpinResult {
   slot_oauth_available?: boolean;
   error?: string;
   message?: string;
+  /**
+   * ROK-1338 PR-1 (2026-05-21): diagnostic fields emitted by env-spin's
+   * orchestrator-side error paths. Populated only when `ok === false`.
+   *
+   * `phase` — which structured-error branch fired:
+   *   - `"register_new"` — state::mutate failed appending a new slug
+   *   - `"register_idempotent"` — state::mutate failed upserting an existing slug
+   *   - undefined when error is `"env_spin_aborted_unexpectedly"` (EXIT trap caught a `set -e` abort before either guarded branch ran — exit_code identifies the failing line via bash -x)
+   *
+   * `exit_code` — non-zero exit code captured by the EXIT trap. Absent for
+   * the two `register_*` branches (they exit 1 by their own logic).
+   *
+   * `hint` — human-readable next-step pointer. Tells the operator how to
+   * investigate (bash -x command, file paths to check, etc).
+   */
+  phase?: 'register_new' | 'register_idempotent';
+  exit_code?: number;
+  hint?: string;
 }
 
 export interface EnvSpinParams {
