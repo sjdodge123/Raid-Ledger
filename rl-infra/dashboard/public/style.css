@@ -23,6 +23,12 @@ html, body {
   font-size: 16px;
   -webkit-tap-highlight-color: transparent;
 }
+/* HTML's [hidden] attribute normally sets display:none, but ANY explicit
+   `display:` rule on the same element overrides it (CSS specificity wins
+   over the user-agent default). The tester route hides operator-header /
+   operator-main via .hidden=true; restore the expected semantics so the
+   tester surface is operator-chrome-free. */
+[hidden] { display: none !important; }
 header {
   position: sticky;
   top: 0;
