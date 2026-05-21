@@ -259,6 +259,17 @@ cmd_claim() {
                 echo "[rl] inherited $INH_COUNT env(s) from prior holder (branch match)" >&2
             fi
             ensure_mutagen_sync "$SLOT"
+            # ROK-1338 PR-1 fold-in (2026-05-21): block until Mutagen's initial
+            # sync round actually completes — `mutagen sync create` (called
+            # inside ensure_mutagen_sync) registers the session but returns
+            # before files have transferred. Without this flush, downstream
+            # commands like `rl_env_build_image_from_runner` start a
+            # `docker build /workspace` BEFORE the runner's /workspace has
+            # the current files — manifested as a silent 6+ minute hang
+            # during ROK-1338 dogfood Phase A. flush_mutagen blocks until
+            # the session reports in-sync; if mutagen isn't installed or
+            # the session is missing, it no-ops via `|| true` inside.
+            flush_mutagen "$SLOT"
             # ROK-1331 M4 AC11: heartbeat must start BEFORE scaffold so a slow
             # remote git fetch doesn't let the claim expire mid-scaffold.
             start_heartbeat_daemon "$SLOT"
