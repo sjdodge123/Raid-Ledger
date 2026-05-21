@@ -63,6 +63,13 @@ sync:
         - .DS_Store
         - "*.swp"
         - "*.log"
+        # ROK-1336 — without these explicit entries, Mutagen one-way-replica
+        # would delete the runner-side .rl-perf.log mid-validate-ci (laptop
+        # side never has the file). The runner emits perf events to this
+        # path; the file must persist across the full run for downstream
+        # consumers to read it.
+        - .rl-perf.log
+        - .rl-perf.log.errors
         - tools/test-bot/node_modules
         - api/dist
         - web/dist

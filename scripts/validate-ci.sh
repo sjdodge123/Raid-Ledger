@@ -920,13 +920,19 @@ main() {
   # dashboards can show "last validate-ci on branch X took T seconds, exit
   # code C". validate.end fires from an EXIT trap so abort paths (set -e,
   # ctrl-C, run_step's fail-fast exit) still produce a terminal event.
-  local validate_start_ms
+  #
+  # ROK-1336 fix: validate_start_ms + ci_flags must be SCRIPT-SCOPE, not
+  # `local` to main(). The EXIT trap fires AFTER main() returns, at which
+  # point locals are out of scope — under set -u the trap aborted with
+  # `validate_start_ms: unbound variable` and validate.end never landed
+  # in the perf log. (Discovered by running validate-ci --only-e2e directly
+  # on the runner and reading the trap's error to stderr.)
   validate_start_ms=$(perf_now_ms)
-  local ci_flags="$*"
+  validate_ci_flags="$*"
   perf_emit_local "validate.start" "$(python3 -c "
 import json, sys
 print(json.dumps({'ci_flags': sys.argv[1]}))
-" "$ci_flags" 2>/dev/null || echo '{}')"
+" "$validate_ci_flags" 2>/dev/null || echo '{}')"
   _perf_validate_end() {
     local rc="$?"
     local end_ms dur
@@ -935,7 +941,7 @@ print(json.dumps({'ci_flags': sys.argv[1]}))
     perf_emit_local "validate.end" "$(python3 -c "
 import json, sys
 print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2]), 'ci_flags': sys.argv[3]}))
-" "$dur" "$rc" "$ci_flags" 2>/dev/null || echo '{}')"
+" "$dur" "$rc" "$validate_ci_flags" 2>/dev/null || echo '{}')"
   }
   trap _perf_validate_end EXIT
 

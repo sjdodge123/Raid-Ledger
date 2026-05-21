@@ -127,6 +127,40 @@ RUNNER_SURVIVORS=$(printf '%s' "$RUNNER_SURVIVORS_RAW" | tr -d '[:space:]')
 perf::emit "release.pkill_audit" "$(jq -nc --argjson slot "$SLOT" --arg runner "$RUNNER" --argjson surv "$RUNNER_SURVIVORS" '{slot:$slot, runner:$runner, surviving_count:$surv}')"
 # =========================================================================
 
+# === ROK-1336 — runner-side perf-log flush ==============================
+# validate-ci.sh's perf_emit_local writes runner-emitted events to
+# /workspace/.rl-perf.log because /srv/rl-infra/state/perf.log isn't
+# writable from inside the runner container. The M11 spec promised release
+# would flush these back to the central perf.log — the code was never
+# implemented; this is the fix. The runner's /workspace is bind-mounted at
+# /srv/rl-infra/runners/slot-${SLOT}/worktree on the host, so we can read
+# directly without docker-exec. flock on RL_PERF_LOG matches perf::emit's
+# own locking posture so concurrent flushes from other slots don't
+# interleave half-lines.
+RUNNER_PERF_FILE="/srv/rl-infra/runners/slot-${SLOT}/worktree/.rl-perf.log"
+if [[ -s "$RUNNER_PERF_FILE" ]]; then
+    BYTES=$(stat -c%s "$RUNNER_PERF_FILE" 2>/dev/null || echo 0)
+    (
+        flock -w 2 9
+        cat "$RUNNER_PERF_FILE" >> "$RL_PERF_LOG"
+        : > "$RUNNER_PERF_FILE"
+    ) 9>"${RL_PERF_LOG}.flush.lock" 2>/dev/null || true
+    audit::log release perf_flush "$(jq -nc --argjson slot "$SLOT" --argjson bytes "$BYTES" '{slot:$slot, flushed_bytes:$bytes}')"
+fi
+# Also flush the .errors sibling — the diagnostic from ROK-1336 lands
+# there when perf_emit_local's inner python3 fails; tail it into the
+# central perf.log under a recognisable event prefix so we don't lose
+# the signal if we ever re-introduce the silent-fail class of bug.
+RUNNER_PERF_ERR="${RUNNER_PERF_FILE}.errors"
+if [[ -s "$RUNNER_PERF_ERR" ]]; then
+    (
+        flock -w 2 9
+        cat "$RUNNER_PERF_ERR" >> "$RL_PERF_LOG"
+        : > "$RUNNER_PERF_ERR"
+    ) 9>"${RL_PERF_LOG}.flush.lock" 2>/dev/null || true
+fi
+# =========================================================================
+
 # === ROK-1331 M8: testcontainers orphan reap ============================
 # After killing the runner-side jest, also reap any postgres/redis
 # testcontainers that jest started. ryuk normally handles this, but in

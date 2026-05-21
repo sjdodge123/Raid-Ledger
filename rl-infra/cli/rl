@@ -832,6 +832,8 @@ ensure_mutagen_sync() {
         --ignore='**/*.tsbuildinfo' \
         --ignore=playwright-report \
         --ignore=test-results \
+        --ignore=.rl-perf.log \
+        --ignore=.rl-perf.log.errors \
         "$REPO_ROOT" \
         "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}:/srv/rl-infra/runners/slot-${slot}/worktree"
 }
