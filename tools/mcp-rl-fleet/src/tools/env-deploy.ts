@@ -127,12 +127,26 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     worktree_path: params.worktree_path,
   });
   if (!sp.ok) {
-    log('env_spin', false, t, undefined, sp.error || sp.message);
+    // ROK-1338 PR-1 (2026-05-21): forward env-spin's diagnostic envelope
+    // through the step's `detail`. Without this, env-spin's `phase` /
+    // `exit_code` / `hint` fields are dropped at the env-deploy boundary
+    // and the caller sees only the bare error code (e.g.
+    // `env_spin_aborted_unexpectedly` with no clue what to investigate).
+    // Build a compact one-line detail so the dashboard fleet card can show
+    // it; full structured object still parseable from the JSON-stringified
+    // form if the caller needs every field.
+    const diag: Record<string, unknown> = {};
+    if (sp.phase) diag.phase = sp.phase;
+    if (sp.exit_code !== undefined) diag.exit_code = sp.exit_code;
+    if (sp.hint) diag.hint = sp.hint;
+    if (sp.message) diag.message = sp.message;
+    const detail = Object.keys(diag).length > 0 ? JSON.stringify(diag) : undefined;
+    log('env_spin', false, t, detail, sp.error || sp.message);
     return {
       ok: false,
       slug: params.slug,
       steps,
-      message: `env_spin failed: ${sp.error || sp.message}`,
+      message: `env_spin failed: ${sp.error || sp.message}${sp.hint ? ` — ${sp.hint}` : ''}`,
     };
   }
   log('env_spin', true, t, sp.url || '');
