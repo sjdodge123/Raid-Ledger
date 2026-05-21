@@ -215,8 +215,32 @@ registerTool(forceRelease.TOOL_NAME, forceRelease.TOOL_DESCRIPTION, forceRelease
 );
 
 // ----- Test plans -----
+// ROK-1337 — plan_id is minted server-side (mcp-tool-side) with format
+// `YYYY-MM-DD-HHmm-XXXX` (UTC, 4 hex). Status/wait/clear take an OPTIONAL
+// plan_id to scope to a single plan; without it they target the slug as a
+// whole (list / aggregate-wait / wipe-the-directory).
+const planIdSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}-\d{4}-[0-9a-f]{4}$/, {
+    message: 'plan_id must match YYYY-MM-DD-HHmm-XXXX (e.g. 2026-05-21-1530-7f3a)',
+  });
+
 const testPlanCreateSchema: Shape = {
   slug: slugSchema,
+  // 3-7 words. We split on whitespace, count non-empty tokens, and reject
+  // anything outside [3, 7]. Caller-visible error message lives in test-plan.ts
+  // as defense-in-depth — the Zod boundary just gates the shape.
+  goal: z.string().min(1).max(120).refine(
+    (s) => {
+      const n = s.trim().split(/\s+/).filter(Boolean).length;
+      return n >= 3 && n <= 7;
+    },
+    { message: 'goal must be 3-7 words (e.g. "Validate Discord OAuth flow")' },
+  ),
+  // Linear story ID — renders as a deep-link chip on the dashboard.
+  story_id: z.string().regex(/^ROK-\d+$/, {
+    message: 'story_id must match /^ROK-\\d+$/ (e.g. "ROK-1331")',
+  }),
   title: z.string().max(200).optional(),
   steps: z
     .array(
@@ -230,27 +254,33 @@ const testPlanCreateSchema: Shape = {
     )
     .min(1)
     .max(100),
-  replace: z.boolean().optional(),
   created_by: z.string().max(200).optional(),
 };
 registerTool(testPlan.CREATE_TOOL, testPlan.CREATE_DESC, testPlanCreateSchema, async (p) =>
   jsonResult(await testPlan.executeCreate(p as Parameters<typeof testPlan.executeCreate>[0])),
 );
 
-const testPlanStatusSchema: Shape = { slug: slugSchema };
+const testPlanStatusSchema: Shape = {
+  slug: slugSchema,
+  plan_id: planIdSchema.optional(),
+};
 registerTool(testPlan.STATUS_TOOL, testPlan.STATUS_DESC, testPlanStatusSchema, async (p) =>
   jsonResult(await testPlan.executeStatus(p as Parameters<typeof testPlan.executeStatus>[0])),
 );
 
 const testPlanWaitSchema: Shape = {
   slug: slugSchema,
+  plan_id: planIdSchema.optional(),
   timeout_seconds: z.number().int().min(5).max(3600).optional(),
 };
 registerTool(testPlan.WAIT_TOOL, testPlan.WAIT_DESC, testPlanWaitSchema, async (p) =>
   jsonResult(await testPlan.executeWait(p as Parameters<typeof testPlan.executeWait>[0])),
 );
 
-const testPlanClearSchema: Shape = { slug: slugSchema };
+const testPlanClearSchema: Shape = {
+  slug: slugSchema,
+  plan_id: planIdSchema.optional(),
+};
 registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, async (p) =>
   jsonResult(await testPlan.executeClear(p as Parameters<typeof testPlan.executeClear>[0])),
 );
