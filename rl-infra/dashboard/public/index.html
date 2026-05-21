@@ -18,6 +18,14 @@
   <!-- Operator view (default) — slots + envs grid. Hidden when the tester
        route activates (URL carries ?slug=<name>). -->
   <main id="operator-main">
+    <!-- ROK-1337 — tester discovery entry. Driven by /api/test-plans/summaries,
+         decoupled from env-registry so testers reaching fleet.gamernight.net
+         find their tests even when env-spin / env-registry are out of sync. -->
+    <section id="tests-section">
+      <h2>Tests <span id="tests-count" class="muted"></span></h2>
+      <div id="tests" class="grid"></div>
+    </section>
+
     <section>
       <h2>Slots</h2>
       <div id="slots" class="grid"></div>

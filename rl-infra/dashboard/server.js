@@ -265,6 +265,12 @@ const collectPlanSummaries = async () => {
     const agg = { total: 0, pass: 0, fail: 0, skip: 0, pending: 0, pending_resets: 0, comment_count: 0 };
     let lastUpdated = null;
     let representativeTitle = null;
+    // ROK-1337 — surface the newest plan's goal + story_id so the operator
+    // dashboard's TESTS section can show a meaningful headline + Linear link
+    // without re-fetching each plan. `plans` is already newest-first (sorted
+    // in listPlans by created_at desc), so the first element wins.
+    const representativeGoal = plans[0]?.goal ?? null;
+    const representativeStoryId = plans[0]?.story_id ?? null;
     for (const plan of plans) {
       const s = summarizePlan(plan);
       agg.total += s.total;
@@ -282,6 +288,8 @@ const collectPlanSummaries = async () => {
     out[slug] = {
       ...agg,
       title: representativeTitle,
+      goal: representativeGoal,
+      story_id: representativeStoryId,
       plan_count: plans.length,
       last_updated_at: lastUpdated,
     };

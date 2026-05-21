@@ -1074,6 +1074,43 @@ const requestReset = async (slug, stepId) => {
 
 const renderEmpty = (msg) => el('div', { class: 'empty', text: msg });
 
+// ROK-1337 — tester-discovery card for the operator dashboard's TESTS
+// section. One card per slug-with-plans. Whole card is the link → `/?slug=`.
+// Decoupled from env-registry so it works even when env-spin / env-registry
+// are out of sync (the env_spin parse-bug case).
+const renderTestSlugCard = (slug, summary) => {
+  const card = el('a', {
+    class: 'card link test-card',
+    href: `/?slug=${encodeURIComponent(slug)}`,
+  });
+  const pending = summary.pending ?? 0;
+  const total = summary.total ?? 0;
+  const planCount = summary.plan_count ?? 1;
+  const submitted = pending === 0 && total > 0;
+  const head = el('div', { class: 'test-card-head' });
+  if (summary.story_id) {
+    head.appendChild(el('a', {
+      class: 'story-chip',
+      href: `https://linear.app/roknua-projects/issue/${encodeURIComponent(summary.story_id)}`,
+      target: '_blank', rel: 'noopener',
+      text: `${summary.story_id} ↗`,
+    }));
+  }
+  const callout = el('span', { class: submitted ? 'test-card-status ok' : 'test-card-status pending' });
+  callout.textContent = submitted
+    ? `✓ All ${total} verdicted`
+    : `${pending} of ${total} need a verdict`;
+  head.appendChild(callout);
+  card.appendChild(head);
+  card.appendChild(el('div', { class: 'goal', text: summary.goal || summary.title || slug }));
+  const meta = el('div', { class: 'test-card-meta muted' });
+  meta.textContent = planCount === 1
+    ? `${slug} · 1 plan`
+    : `${slug} · ${planCount} plans`;
+  card.appendChild(meta);
+  return card;
+};
+
 const render = (data) => {
   // ROK-1326 fix-9 (final): preserve scroll position across re-renders by
   // PINNING the containers' min-height to their current height BEFORE
@@ -1092,10 +1129,32 @@ const render = (data) => {
   // height takes over. Document height never dips.
   const slotsDiv = $('slots');
   const envsDiv = $('envs');
+  const testsDiv = $('tests');
   const slotsH = slotsDiv.offsetHeight;
   const envsH = envsDiv.offsetHeight;
+  const testsH = testsDiv ? testsDiv.offsetHeight : 0;
   slotsDiv.style.minHeight = slotsH + 'px';
   envsDiv.style.minHeight = envsH + 'px';
+  if (testsDiv) testsDiv.style.minHeight = testsH + 'px';
+
+  // ROK-1337 — TESTS section. Driven by /api/test-plans summaries (NOT
+  // env-registry) so testers always have a discovery path even when
+  // env-spin / env-registry are stale.
+  if (testsDiv) {
+    const summaries = data.test_plan_summaries || {};
+    const slugs = Object.keys(summaries).sort((a, b) => {
+      const aT = summaries[a].last_updated_at || '';
+      const bT = summaries[b].last_updated_at || '';
+      return bT.localeCompare(aT);
+    });
+    const testCards = slugs.map((slug) => renderTestSlugCard(slug, summaries[slug]));
+    if (!testCards.length) {
+      testCards.push(renderEmpty('No active tests. Post a plan with rl_test_plan_create to surface it here.'));
+    }
+    testsDiv.replaceChildren(...testCards);
+    const cnt = $('tests-count');
+    if (cnt) cnt.textContent = slugs.length ? `· ${slugs.length}` : '';
+  }
 
   const activeTasks = data.active_tasks ?? [];
   const leaseQueues = data.lease_queues ?? [];
@@ -1118,6 +1177,7 @@ const render = (data) => {
   requestAnimationFrame(() => {
     slotsDiv.style.minHeight = '';
     envsDiv.style.minHeight = '';
+    if (testsDiv) testsDiv.style.minHeight = '';
   });
 };
 
@@ -1169,9 +1229,28 @@ const tick = async (opts = {}) => {
     if (Date.now() - lastActivityAt < 8000) { setStatus('paused'); return; }
   }
   try {
-    const r = await fetch('/api/state', { cache: 'no-store' });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
+    // ROK-1337 — fetch state + test-plan summaries in parallel so the
+    // TESTS section paints in the same tick as Slots/Envs (single
+    // render() call, no flash). Plan summaries failing must NOT block
+    // the operator chrome from rendering, so guard with Promise.allSettled.
+    const [stateResult, plansResult] = await Promise.allSettled([
+      fetch('/api/state', { cache: 'no-store' }),
+      fetch('/api/test-plans', { cache: 'no-store' }),
+    ]);
+    if (stateResult.status !== 'fulfilled' || !stateResult.value.ok) {
+      throw new Error(stateResult.status === 'fulfilled'
+        ? `HTTP ${stateResult.value.status}`
+        : 'state fetch rejected');
+    }
+    const data = await stateResult.value.json();
+    if (plansResult.status === 'fulfilled' && plansResult.value.ok) {
+      try {
+        const planJson = await plansResult.value.json();
+        data.test_plan_summaries = planJson.summaries ?? {};
+      } catch { data.test_plan_summaries = {}; }
+    } else {
+      data.test_plan_summaries = {};
+    }
     // Preserve scroll across the replaceChildren-based render. Even when
     // the DOM is identical shape, replaceChildren forces a reset to (0,0)
     // — bad for testers reading mid-page. Save & restore.
