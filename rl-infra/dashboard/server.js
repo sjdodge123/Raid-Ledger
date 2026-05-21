@@ -657,13 +657,35 @@ const summarizePlan = (plan) => {
 //     tester-supplied free-form text. The tag doesn't make the body
 //     LLM-injection-safe (text is text), but it gives the agent a
 //     clear cue to treat the contents as data, not instructions.
+// Codex P1 follow-up — the list endpoint and other tester-facing paths used
+// to return `stripCommentBodies(plan)` without sanitizing plan metadata,
+// leaving prompt-injection text in title/goal/description/etc. reachable by
+// an agent that calls rl_test_plan_status WITHOUT a plan_id. wrapCommentBodies
+// already sanitizes metadata for the agent-with-bodies path; this helper now
+// mirrors that sanitization for the no-bodies path so every projection that
+// reaches an agent context has wrap tags stripped from agent-visible fields.
+// Codex P2 follow-up — attachment_url is preserved (sanitized) so the tester
+// drawer can render previously-uploaded screenshot thumbnails after refresh.
+// The free-form `body` stays omitted.
 const stripCommentBodies = (plan) => ({
   ...plan,
+  title: stripWrapMaybe(plan.title),
+  goal: stripWrapMaybe(plan.goal),
+  created_by: stripWrapMaybe(plan.created_by),
   steps: plan.steps.map((s) => ({
     ...s,
+    description: stripWrapMaybe(s.description),
+    expected: stripWrapMaybe(s.expected),
+    category: stripWrapMaybe(s.category),
+    reset_hint: stripWrapMaybe(s.reset_hint),
+    test_url: stripWrapMaybe(s.test_url),
     comments: (s.comments ?? []).map((c) => ({
-      tester: c.tester, ts: c.ts, has_body: !!c.body,
-      // body is OMITTED on purpose
+      tester: c.tester,
+      ts: c.ts,
+      has_body: !!c.body,
+      // body is OMITTED on purpose; attachment_url survives so the tester
+      // UI can still render previously-attached screenshot thumbnails.
+      attachment_url: sanitizeAttachmentUrl(c.attachment_url),
     })),
   })),
 });
@@ -1792,14 +1814,24 @@ const handleTestPlanStepResult = async (slug, planId, stepIdRaw, req, res) => {
 
 // ROK-1337 — DELETE /api/test-plans/{slug}/{plan_id}: remove one plan file.
 // Slug subdirectory is LEFT INTACT (other plans may still live there).
+// Codex P2 follow-up — also wipes the matching ATTACHMENTS_DIR/<slug>/<plan_id>
+// tree so screenshots for the cleared plan don't outlive the plan itself
+// (matching the slug-wide DELETE behavior at handleTestPlanDeleteSlug).
 const handleTestPlanDelete = async (slug, planId, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   if (!validPlanId(planId)) return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
   try {
     await unlink(planFilePath(slug, planId));
+    // Best-effort attachment-dir wipe — not fatal if it fails or doesn't exist.
+    await rm(join(ATTACHMENTS_DIR, slug, planId), { recursive: true, force: true }).catch(() => {});
     sendJson(res, 200, { ok: true, plan_id: planId });
   } catch (err) {
-    if (err.code === 'ENOENT') return sendJson(res, 200, { ok: true, noop: true, plan_id: planId });
+    if (err.code === 'ENOENT') {
+      // Plan JSON already gone — still attempt the attachment cleanup so a
+      // retry after a partial delete doesn't leave stale screenshots behind.
+      await rm(join(ATTACHMENTS_DIR, slug, planId), { recursive: true, force: true }).catch(() => {});
+      return sendJson(res, 200, { ok: true, noop: true, plan_id: planId });
+    }
     sendJson(res, 500, { ok: false, error: err.message });
   }
 };
