@@ -268,10 +268,17 @@ export async function execute(
 
   const taskId = newTaskId();
   const slotFlag = slot !== null ? `--slot ${slot} ` : '';
+  // ROK-1331 Session 4 dogfood (Codex P2-2): pass timeout_seconds through
+  // to task-start so the supervisor watchdog kills the wrapped cmd if it
+  // hangs. Without this, a hung jest/playwright holds the slot until the
+  // 24h lease expires. Default 1800s (30 min) matches the legacy sync
+  // wait_timeout_seconds default; callers can override either param.
+  const timeoutS = Math.max(60, Math.min(7200, params.timeout_seconds ?? 1800));
+  const timeoutFlag = `--timeout-seconds ${timeoutS} `;
   const remote =
     `RL_AGENT_ID=${shellQuote(agentId)} ` +
     `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
-    `--tool rl_validate_ci ${slotFlag}` +
+    `--tool rl_validate_ci ${slotFlag}${timeoutFlag}` +
     `-- ${targetCmd}`;
 
   let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};

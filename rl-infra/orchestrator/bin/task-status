@@ -73,8 +73,15 @@ fi
 ELAPSED=$(( END_EPOCH - START_EPOCH ))
 (( ELAPSED < 0 )) && ELAPSED=0
 
-# Merge log_tail + elapsed into the JSON output.
+# Merge log_tail + elapsed into the JSON output, plus the MCP success
+# envelope fields. ROK-1331 Session 4 dogfood (Codex P1-1): MCP callers
+# expect `ok: true` + `mcp_runtime_status` (mirror of `.status`) + `log_url`
+# on every successful read. Without them, `executeStatus` parsing leaves
+# `ok=undefined` and the wait-chain treats successful reads as failures.
+RL_FLEET_DOMAIN="${RL_FLEET_DOMAIN:-fleet.gamernight.net}"
+LOG_URL="https://${RL_FLEET_DOMAIN}/api/tasks/${TASK_ID}/log"
 jq --rawfile tail <(printf '%s' "$LOG_TAIL") \
    --argjson elapsed "$ELAPSED" \
-   '. + {log_tail: $tail, elapsed_seconds: $elapsed}' \
+   --arg log_url "$LOG_URL" \
+   '. + {ok: true, mcp_runtime_status: .status, log_url: $log_url, log_tail: $tail, elapsed_seconds: $elapsed}' \
    "$JSON_PATH"

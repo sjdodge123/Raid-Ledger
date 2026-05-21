@@ -43,7 +43,9 @@ for f in "$RL_TASKS_DIR"/*.json; do
 done
 
 if (( ${#ALL[@]} == 0 )); then
-    echo "[]"
+    # ROK-1331 Session 4 dogfood (Codex P2-1): MCP wrapper's executeList
+    # expects {ok: true, tasks: [...]} envelope. Empty path must also wrap.
+    echo '{"ok":true,"tasks":[]}'
     exit 0
 fi
 
@@ -63,7 +65,10 @@ if [[ -n "$SINCE_FILTER" ]]; then
     FILTER="$FILTER | select(.started_at >= \$since)"
 fi
 
-# Collect, sort desc by started_at, slice limit.
+# Collect, sort desc by started_at, slice limit, wrap in MCP envelope.
+# ROK-1331 Session 4 dogfood (Codex P2-1): executeList in task.ts expects
+# {ok: true, tasks: [...]}, not a bare array. Bare-array success path made
+# callers treat healthy list operations as errors (ok === undefined).
 jq -s "${JQ_ARGS[@]}" --argjson lim "$LIMIT" \
-    "map($FILTER) | map(select(. != null)) | sort_by(.started_at) | reverse | .[0:\$lim]" \
+    "{ok: true, tasks: (map($FILTER) | map(select(. != null)) | sort_by(.started_at) | reverse | .[0:\$lim])}" \
     "${ALL[@]}"

@@ -21,6 +21,7 @@ TASK_ID=""
 TOOL=""
 SLOT=""
 AGENT_ID="${RL_AGENT_ID:-unknown}"
+TIMEOUT_SECONDS=0  # 0 = disabled (default). >0 = watchdog kills the wrapped cmd's pgid after N seconds.
 CMD_ARGS=()
 
 if [[ $# -lt 1 ]]; then
@@ -35,10 +36,16 @@ while [[ $# -gt 0 ]]; do
         --tool) TOOL="$2"; shift 2 ;;
         --slot) SLOT="$2"; shift 2 ;;
         --agent-id) AGENT_ID="$2"; shift 2 ;;
+        --timeout-seconds) TIMEOUT_SECONDS="$2"; shift 2 ;;
         --) shift; CMD_ARGS=("$@"); break ;;
         *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
     esac
 done
+
+# Validate timeout (numeric, 0..86400 = up to 24h). Bad values silently clamp to 0.
+if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( TIMEOUT_SECONDS > 86400 )); then
+    TIMEOUT_SECONDS=0
+fi
 
 # ---- validate ----
 if ! [[ "$TASK_ID" =~ ^[a-z0-9]{8,32}$ ]]; then
@@ -143,7 +150,7 @@ set -uo pipefail
 # Without `set -m`, `kill -<pgid>` from task-cancel cannot kill the wrapped
 # cmd plus its children atomically.
 set -m
-TASK_ID="$1"; BIN="$2"; shift 2
+TASK_ID="$1"; BIN="$2"; TIMEOUT_SECONDS="$3"; shift 3
 # shellcheck disable=SC1090,SC1091
 source "$BIN/_state.sh"
 # shellcheck disable=SC1090,SC1091
@@ -182,8 +189,37 @@ bash -c "exec \"\$@\"" bash "$@" >> "$LOG_PATH" 2>&1 &
 CMD_PID=$!
 state::mutate "$JSON_PATH" --argjson p "$CMD_PID" ".pid = \$p" 2>/dev/null || true
 
+# ROK-1331 Session 4 dogfood (Codex P2-2): timeout watchdog. If
+# TIMEOUT_SECONDS > 0, fork a sleeper that kills the wrapped cmds pgid
+# after the deadline. SIGTERM first, 10s grace, then SIGKILL. The
+# finalization block downstream still runs because wait $CMD_PID returns
+# the killed exit code, not an error. Without this, a hung jest/playwright
+# can hold the runner slot for the full 24h lease.
+TIMEOUT_PID=""
+if (( TIMEOUT_SECONDS > 0 )); then
+    (
+        sleep "$TIMEOUT_SECONDS"
+        if kill -0 "$CMD_PID" 2>/dev/null; then
+            echo "[task-watchdog] timeout (${TIMEOUT_SECONDS}s) reached — sending SIGTERM to pgid $CMD_PID" >> "$LOG_PATH"
+            kill -TERM -- "-$CMD_PID" 2>/dev/null || kill -TERM "$CMD_PID" 2>/dev/null || true
+            sleep 10
+            if kill -0 "$CMD_PID" 2>/dev/null; then
+                echo "[task-watchdog] still alive after 10s — sending SIGKILL" >> "$LOG_PATH"
+                kill -KILL -- "-$CMD_PID" 2>/dev/null || kill -KILL "$CMD_PID" 2>/dev/null || true
+            fi
+        fi
+    ) &
+    TIMEOUT_PID=$!
+fi
+
 wait "$CMD_PID" 2>/dev/null
 CMD_EXIT=$?
+
+# Reap the watchdog if it is still alive (cmd finished within budget).
+if [[ -n "$TIMEOUT_PID" ]] && kill -0 "$TIMEOUT_PID" 2>/dev/null; then
+    kill -TERM "$TIMEOUT_PID" 2>/dev/null || true
+    wait "$TIMEOUT_PID" 2>/dev/null || true
+fi
 
 # Spec heuristic: give parser ≤2s to drain remaining lines after cmd exit.
 sleep 2
@@ -219,7 +255,7 @@ task::audit "$TASK_ID" "finish" "ok" \
 # Detach: `&` + redirect to /dev/null + disown. macOS bash has no setsid(1),
 # so we lean on disown to remove the job from the parent shell's job table —
 # the SIGHUP trap above belt-and-suspenders the same goal.
-bash -c "$SUPERVISOR_SCRIPT" supervisor "$TASK_ID" "$BIN_DIR_SELF" "${CMD_ARGS[@]}" \
+bash -c "$SUPERVISOR_SCRIPT" supervisor "$TASK_ID" "$BIN_DIR_SELF" "$TIMEOUT_SECONDS" "${CMD_ARGS[@]}" \
     </dev/null >/dev/null 2>&1 &
 SUPER_PID=$!
 disown "$SUPER_PID" 2>/dev/null || true

@@ -117,10 +117,16 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
   const taskId = newTaskId();
   const slot = typeof cl.slot === 'number' ? cl.slot : null;
   const slotFlag = slot !== null ? `--slot ${slot} ` : '';
+  // ROK-1331 Session 4 dogfood (Codex P2-2): pass timeout_seconds through
+  // to task-start so the watchdog kills hung docker builds. Default 1800
+  // (30 min) — matches the legacy sync timeout. Builds can be long on
+  // first-run; allow up to 2h via the param.
+  const timeoutS = Math.max(60, Math.min(7200, params.timeout_seconds ?? 1800));
+  const timeoutFlag = `--timeout-seconds ${timeoutS} `;
   const remote =
     `RL_AGENT_ID=${shellQuote(agentId)} ` +
     `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
-    `--tool rl_env_build_image_from_runner ${slotFlag}` +
+    `--tool rl_env_build_image_from_runner ${slotFlag}${timeoutFlag}` +
     `-- ${targetCmd}`;
 
   let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};

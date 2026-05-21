@@ -214,8 +214,14 @@ export interface ExecuteWaitResult extends Partial<TaskStatusResult> {
   steps?: TaskStatusResult['steps'];
 }
 
+/** True when mcp_runtime_status is anything except 'running'. */
+function isTerminalStatus(s: string | undefined | null): boolean {
+  return !!s && s !== 'running';
+}
+
 export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWaitResult> {
   const timeoutS = Math.max(5, Math.min(3600, params.timeout_seconds ?? 600));
+  const overallDeadlineMs = Date.now() + timeoutS * 1000;
 
   // Preflight: probe inotifywait availability. Mirrors test-plan's pattern.
   const probeRemote = 'command -v inotifywait';
@@ -230,7 +236,22 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
     };
   }
 
-  // Watch the task JSON file for close_write/moved_to events.
+  // ROK-1331 Session 4 dogfood (Codex P1-3): pre-check status BEFORE attaching
+  // inotify. If the task already reached a terminal state, return immediately
+  // — otherwise short / immediately-failing tasks finish before the watcher
+  // attaches and we sit until timeout. inotifywait only fires on FUTURE events.
+  const initial = await executeStatus({
+    task_id: params.task_id,
+    log_tail_bytes: params.log_tail_bytes,
+  });
+  if (initial.ok && isTerminalStatus(initial.mcp_runtime_status)) {
+    return initial;
+  }
+
+  // ROK-1331 Session 4 dogfood (Codex P1-2): inotifywait fires on ANY task-JSON
+  // write — pid set, steps[] append, heartbeat. Loop until mcp_runtime_status
+  // is terminal OR overall deadline elapses. Each inotify cycle uses the
+  // remaining-time budget so a chatty task can't extend us past the cap.
   const taskIdQuoted = shellQuote(params.task_id);
   const watchRemote =
     `inotifywait -q -e close_write,moved_to ` +
@@ -239,62 +260,84 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
     `| grep -m1 -E ^${taskIdQuoted}'\\.json$'`;
   const [watchCmd, watchArgs] = sshArgs(watchRemote);
 
-  const startedAtMs = Date.now();
+  let lastStatus: ExecuteWaitResult = initial;
 
-  // Wrap the watch in a race so we can enforce the timeout deterministically.
-  const watchPromise = execFileP(watchCmd, watchArgs, {
-    timeout: timeoutS * 1000,
-    maxBuffer: 1024 * 1024,
-  });
-
-  try {
-    await Promise.race([
-      watchPromise,
-      new Promise((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              Object.assign(new Error('wait_timeout_local'), { code: 'WAIT_TIMEOUT' }),
-            ),
-          timeoutS * 1000,
-        ),
-      ),
-    ]);
-  } catch (err) {
-    const e = err as Error & { code?: string | number; signal?: string };
-    // execFile timed out (kills child with SIGTERM) OR our local timer fired.
-    const elapsed = Math.round((Date.now() - startedAtMs) / 1000);
-    if (
-      e.code === 'WAIT_TIMEOUT' ||
-      e.signal === 'SIGTERM' ||
-      elapsed >= timeoutS - 1
-    ) {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const remainingMs = overallDeadlineMs - Date.now();
+    if (remainingMs <= 0) {
       return {
         ok: false,
         error: 'timed_out',
         task_id: params.task_id,
-        waited_seconds: elapsed,
+        waited_seconds: timeoutS,
       };
     }
-    // Some other failure — fall through to a final status read so the caller
-    // still gets the task state, with the error surfaced via stderr-on-status.
-    const status = await executeStatus({
+
+    const cycleStartedMs = Date.now();
+    try {
+      await Promise.race([
+        execFileP(watchCmd, watchArgs, {
+          timeout: remainingMs,
+          maxBuffer: 1024 * 1024,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                Object.assign(new Error('wait_timeout_local'), { code: 'WAIT_TIMEOUT' }),
+              ),
+            remainingMs,
+          ),
+        ),
+      ]);
+    } catch (err) {
+      const e = err as Error & { code?: string | number; signal?: string };
+      const overallElapsed = Math.round((Date.now() - (overallDeadlineMs - timeoutS * 1000)) / 1000);
+      const cycleElapsedMs = Date.now() - cycleStartedMs;
+      // Local-timer / SIGTERM / exceeded remaining budget → overall timeout.
+      if (
+        e.code === 'WAIT_TIMEOUT' ||
+        e.signal === 'SIGTERM' ||
+        cycleElapsedMs >= remainingMs - 100
+      ) {
+        // Final status read so caller gets the last-known state even on timeout.
+        const finalStatus = await executeStatus({
+          task_id: params.task_id,
+          log_tail_bytes: params.log_tail_bytes,
+        });
+        if (finalStatus.ok && isTerminalStatus(finalStatus.mcp_runtime_status)) {
+          return finalStatus;
+        }
+        return {
+          ok: false,
+          error: 'timed_out',
+          task_id: params.task_id,
+          waited_seconds: overallElapsed,
+        };
+      }
+      // Some other failure (SSH drop, grep nomatch, etc.) — surface current state.
+      lastStatus = await executeStatus({
+        task_id: params.task_id,
+        log_tail_bytes: params.log_tail_bytes,
+      });
+      if (lastStatus.ok && isTerminalStatus(lastStatus.mcp_runtime_status)) {
+        return lastStatus;
+      }
+      // Non-terminal + non-timeout: re-loop and keep waiting.
+      continue;
+    }
+
+    // inotifywait fired — read state. If terminal, return; else re-loop.
+    lastStatus = await executeStatus({
       task_id: params.task_id,
       log_tail_bytes: params.log_tail_bytes,
     });
-    return status;
+    if (lastStatus.ok && isTerminalStatus(lastStatus.mcp_runtime_status)) {
+      return lastStatus;
+    }
+    // Still running — heartbeat or steps[] write. Re-enter the loop.
   }
-
-  // inotifywait fired — read the current state.
-  const status = await executeStatus({
-    task_id: params.task_id,
-    log_tail_bytes: params.log_tail_bytes,
-  });
-  // If the task is in a terminal state we return; otherwise the change was
-  // a heartbeat write and we still return the current state (caller decides
-  // whether to wait again per the spec's polling-resume contract). In both
-  // cases the same widened ExecuteWaitResult shape applies.
-  return status;
 }
 
 // --------------------------------------------------------------------------

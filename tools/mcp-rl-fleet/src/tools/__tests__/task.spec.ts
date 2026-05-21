@@ -183,12 +183,16 @@ describe('rl_task_status — executeStatus()', () => {
 
 describe('rl_task_wait — executeWait()', () => {
   it('returns {ok:false, error:"timed_out", task_id} on timeout', async () => {
-    // First call probes inotifywait availability — succeed.
+    // 1: probe inotifywait availability — succeed.
     execFileOk({ ok: true });
-    // Then the watcher hangs; the wrapper must enforce the timeout.
+    // 2: ROK-1331 Codex P1-3 pre-check status — task still running.
+    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' });
+    // 3: watcher hangs; the wrapper must enforce the timeout.
     mockExecFile.mockImplementationOnce(() => {
       /* never call the callback — simulate hang */
     });
+    // 4: final status read after timeout still reports running.
+    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' });
     const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 5 });
     expect(result.ok).toBe(false);
     expect(result.error).toBe('timed_out');
@@ -200,6 +204,38 @@ describe('rl_task_wait — executeWait()', () => {
     const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 5 });
     expect(result.ok).toBe(false);
     expect(result.error).toBe('inotifywait_not_installed');
+  });
+
+  it('ROK-1331 Codex P1-3: returns immediately if task already terminal (pre-check shortcut)', async () => {
+    // 1: probe inotifywait — succeed.
+    execFileOk({ ok: true });
+    // 2: pre-check status — already succeeded. Wrapper must NOT attach inotify.
+    execFileOk({ ...FIXTURE_SUCCEEDED, mcp_runtime_status: 'succeeded' });
+    const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 600 });
+    expect(result.ok).toBe(true);
+    expect((result as { mcp_runtime_status?: string }).mcp_runtime_status).toBe('succeeded');
+    // Confirm only the probe + the pre-check happened — no third inotify call.
+    expect(mockExecFile.mock.calls.length).toBe(2);
+  });
+
+  it('ROK-1331 Codex P1-2: loops until terminal, ignoring heartbeat writes', async () => {
+    // 1: probe inotifywait — succeed.
+    execFileOk({ ok: true });
+    // 2: pre-check — still running.
+    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' });
+    // 3: first inotifywait fires (heartbeat write).
+    execFileOk({ ok: true });
+    // 4: status read after first event — STILL running (heartbeat, not terminal).
+    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' });
+    // 5: second inotifywait fires (steps[] append).
+    execFileOk({ ok: true });
+    // 6: status read after second event — now terminal.
+    execFileOk({ ...FIXTURE_SUCCEEDED, mcp_runtime_status: 'succeeded' });
+    const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 30 });
+    expect(result.ok).toBe(true);
+    expect((result as { mcp_runtime_status?: string }).mcp_runtime_status).toBe('succeeded');
+    // 6 execFile calls total — proves we re-blocked on the heartbeat.
+    expect(mockExecFile.mock.calls.length).toBe(6);
   });
 });
 
