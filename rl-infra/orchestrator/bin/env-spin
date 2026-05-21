@@ -16,13 +16,20 @@ source "$(dirname "$0")/_state.sh"
 # actually failed. The explicit exit-via-emit paths below set
 # ENV_SPIN_HANDLED=1 so the trap doesn't double-report.
 ENV_SPIN_HANDLED=0
+# ROK-1338 PR-1 fold-in #2 (2026-05-21): LAST_PHASE tracks how far env-spin
+# progressed before an unexpected abort. The EXIT trap reports it so the
+# operator/agent knows WHICH step died without needing bash -x. Updated at
+# every major transition; treat the running value as the most-recent
+# successfully-completed step at the time of abort.
+LAST_PHASE="init"
 _env_spin_trap_on_abort() {
     local rc=$?
     if (( rc != 0 )) && [[ "${ENV_SPIN_HANDLED:-0}" != "1" ]]; then
-        jq -nc --argjson rc "$rc" --arg slug "${SLUG:-}" \
+        jq -nc --argjson rc "$rc" --arg slug "${SLUG:-}" --arg phase "${LAST_PHASE:-unknown}" \
             '{ok:false, error:"env_spin_aborted_unexpectedly", exit_code:$rc, slug:$slug,
-              hint:"env-spin received a non-zero exit before reaching the structured-output stage. Re-run with bash -x on the VM to find the failing line: ssh rl@vm bash -x /srv/rl-infra/orchestrator/bin/env-spin --slug <slug>"}' \
-        2>/dev/null || echo '{"ok":false,"error":"env_spin_aborted_unexpectedly","exit_code":'"$rc"'}'
+              last_phase:$phase,
+              hint:("env-spin aborted with rc=" + ($rc|tostring) + " after completing phase \"" + $phase + "\". The failing line is between the marker for that phase and the next. Re-run with bash -x on the VM if more detail is needed: ssh rl@vm bash -x /srv/rl-infra/orchestrator/bin/env-spin --slug " + $slug)}' \
+        2>/dev/null || echo '{"ok":false,"error":"env_spin_aborted_unexpectedly","exit_code":'"$rc"',"last_phase":"'"${LAST_PHASE:-unknown}"'"}'
     fi
 }
 trap _env_spin_trap_on_abort EXIT
@@ -91,11 +98,14 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     fi
 fi
 
+LAST_PHASE="preflight_done"
+
 # Idempotent: if env already exists for this slug, refresh last_touched in
 # the state registry (NOT via docker container update --label-add — that flag
 # is swarm-mode only and errors on standalone containers). Re-write the
 # Traefik conf file too so the route survives state divergence.
 if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+    LAST_PHASE="idempotent_path_entered"
     # UPSERT: if registry already has this slug, bump last_touched.
     # If not (e.g. registry was clobbered while the container kept
     # running — happened 2026-05-19 after sweeper-mutate perm bug),
@@ -261,7 +271,10 @@ EOF
     exit 0
 fi
 
+LAST_PHASE="new_env_path_entered"
+
 # 1. Postgres (per-env, NAS-like).
+LAST_PHASE="docker_run_pg_pending"
 docker run -d \
     --name "$PG_CONTAINER" \
     --network "$NET" \
@@ -277,11 +290,15 @@ docker run -d \
     --label "rl.last_touched=${NOW}" \
     pgvector/pgvector:pg16 >/dev/null
 
+LAST_PHASE="pg_run_started"
+
 # Wait for postgres ready.
 for _ in $(seq 1 30); do
     if docker exec "$PG_CONTAINER" pg_isready -U user -d raid_ledger >/dev/null 2>&1; then break; fi
     sleep 1
 done
+
+LAST_PHASE="pg_ready"
 
 # 2. Allinone container — built artifacts, prod-like topology.
 #
@@ -346,6 +363,8 @@ docker run -d \
     --label "rl.ttl=${TTL_HOURS}h" \
     --label "rl.last_touched=${NOW}" \
     "$IMAGE" >/dev/null
+
+LAST_PHASE="allinone_running"
 
 # 3. Register the route with Traefik via the file provider.
 #    Traefik watches /etc/traefik/conf.d, so a write here triggers a reload.
@@ -415,9 +434,13 @@ http:
         servers:
           - url: "http://${APP_CONTAINER}:80"
 EOF
+LAST_PHASE="traefik_written"
+
 # Release the slot-scoped flock (no-op if it wasn't acquired). Closing fd 9
 # drops the lock; later steps (health wait, admin bootstrap) don't need it.
 exec 9>&- 2>/dev/null || true
+
+LAST_PHASE="flock_released"
 
 # Wait for /health.
 URL="http://${APP_CONTAINER}/api/health"
@@ -425,6 +448,8 @@ for _ in $(seq 1 60); do
     if docker exec "$APP_CONTAINER" curl -fsS "$URL" >/dev/null 2>&1; then break; fi
     sleep 1
 done
+
+LAST_PHASE="health_check_passed"
 
 # Seed admin@local with RL_ADMIN_PASSWORD so agents can /auth/local
 # immediately without a separate sync_settings round-trip. Idempotent
@@ -455,6 +480,8 @@ if ! docker exec \
 fi
 rm -f "$BOOTSTRAP_STDERR_FILE"
 
+LAST_PHASE="bootstrap_done"
+
 # Register.
 #
 # ROK-1338 PR-1 fold-in (2026-05-21): wrap state::mutate so a non-zero return
@@ -479,7 +506,9 @@ if ! state::mutate "$RL_ENVS_FILE" \
     exit 1
 fi
 
+LAST_PHASE="registered"
 audit::log env-spin ok "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image}')"
+LAST_PHASE="audit_logged"
 
 # Output. When RL_PUBLIC_DOMAIN is set, the EXTERNAL URL is the canonical
 # `url` field — that's what agents emit, testers click, operator bookmarks.
@@ -522,6 +551,7 @@ elif [[ -n "$PUBLIC_URL_OUT" ]]; then
 else
     PRIMARY_URL="http://${SLUG}.rl.lan"
 fi
+LAST_PHASE="url_computed"
 # ROK-1338 PR-1 fold-in: reached the final happy-path emit, so the EXIT trap
 # should NOT also fire a duplicate error JSON.
 ENV_SPIN_HANDLED=1
