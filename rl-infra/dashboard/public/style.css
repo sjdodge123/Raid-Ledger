@@ -820,12 +820,6 @@ footer {
   white-space: nowrap;
 }
 .task-elapsed { color: var(--fg-muted); }
-.task-log-link {
-  color: var(--accent);
-  text-decoration: none;
-  padding: 0 2px;
-}
-.task-log-link:hover { text-decoration: underline; }
 
 /* ROK-1331 M5b — lease queue depth + claim TTL + pin badge */
 .lease-queue { color: #ffc864; font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -941,8 +935,17 @@ footer {
 #tester-page .card-also .goal { font-size: 15px; }
 #tester-page .card-meta { font-size: 12px; color: var(--tp-text-3); margin-top: 6px; }
 
-/* Step row */
-#tester-page .step { padding: 12px 0; border-top: 1px solid var(--tp-line); }
+/* Step row — whole row is clickable to expand (ROK-1337 follow-up). */
+#tester-page .step {
+  padding: 12px 0; border-top: 1px solid var(--tp-line);
+  cursor: pointer;
+}
+#tester-page .step:focus-visible {
+  outline: 2px solid var(--tp-accent); outline-offset: -2px;
+  border-radius: var(--tp-radius-sm);
+}
+#tester-page .step:hover { background: rgba(255, 255, 255, 0.015); }
+#tester-page .step.open { background: rgba(59, 130, 246, 0.04); }
 #tester-page .step:first-of-type { margin-top: 4px; }
 #tester-page .step-head { display: flex; align-items: flex-start; gap: 10px; }
 #tester-page .step-n {
@@ -971,23 +974,36 @@ footer {
 #tester-page .verdict.skip.active { background: rgba(100, 116, 139, 0.20); color: var(--tp-slate); border-color: rgba(100, 116, 139, 0.35); }
 #tester-page .verdict[disabled] { opacity: 0.45; cursor: not-allowed; }
 #tester-page .step-toggle {
-  background: transparent; border: 0; color: var(--tp-text-3);
-  font-size: 16px; cursor: pointer; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 36px; height: 30px; padding: 0 8px;
+  background: var(--tp-surface-2); color: var(--tp-text-2);
+  border: 1px solid var(--tp-line); border-radius: var(--tp-radius-sm);
+  font-size: 18px; line-height: 1; cursor: pointer; user-select: none;
 }
+#tester-page .step-toggle:hover { color: var(--tp-text); border-color: var(--tp-accent); }
+#tester-page .step-toggle:focus-visible { outline: 2px solid var(--tp-accent); outline-offset: 2px; }
+/* ROK-1337 follow-up — test URL is the primary CTA. Full-width labeled
+   button under the step description, prominent accent color so the eye
+   lands on it first. */
+#tester-page .step-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 44px; padding: 10px 14px;
+  margin-top: 10px;
+  background: var(--tp-accent); color: #fff;
+  border: 1px solid var(--tp-accent); border-radius: var(--tp-radius-sm);
+  text-decoration: none; font-size: 14px; font-weight: 600;
+  letter-spacing: 0.01em; user-select: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+#tester-page .step-link:hover { background: #2563eb; border-color: #2563eb; }
+#tester-page .step-link:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+#tester-page .step-link:active { transform: translateY(1px); }
 
 /* Drawer */
 #tester-page .drawer {
   margin-top: 12px; padding: 12px;
   background: var(--tp-surface-2); border-radius: var(--tp-radius-sm);
   border: 1px solid var(--tp-line); display: grid; gap: 12px;
-}
-#tester-page .drawer-link {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 10px 12px; border-radius: var(--tp-radius-sm);
-  background: rgba(59, 130, 246, 0.10); color: var(--tp-accent);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  text-decoration: none; font-size: 13px; font-weight: 500;
-  justify-content: center;
 }
 #tester-page .drawer-label {
   font-size: 11px; font-weight: 600; text-transform: uppercase;

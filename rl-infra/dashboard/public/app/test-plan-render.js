@@ -87,6 +87,17 @@
     if (step.expected) {
       body.appendChild(el('div', { class: 'step-expected', text: `Expected: ${step.expected}` }));
     }
+    // ROK-1337 follow-up — the test URL is the primary CTA for each step,
+    // promoted to a full-width labeled button right under the description.
+    // Live INSIDE step-body so it sits between the expected line and the
+    // verdict row, not jammed into the right-side action cluster.
+    if (step.test_url) {
+      const link = el('a', {
+        class: 'step-link', href: step.test_url,
+        target: '_blank', rel: 'noopener noreferrer',
+      }, '↗ Open test URL');
+      body.appendChild(link);
+    }
     head.appendChild(body);
 
     const actions = el('div', { class: 'step-actions' });
@@ -126,29 +137,43 @@
     head.appendChild(actions);
     row.appendChild(head);
 
-    // Drawer — built once, hidden until toggle. Contains: test URL,
-    // comment textarea, attachment row, reset row (if reset_hint).
+    // Drawer — built once, hidden until toggle. Contains: comment textarea,
+    // attachment row, reset row (if reset_hint). test_url moved up to the
+    // step head so it's tappable without expanding.
     const drawer = renderDrawer(plan, step, callbacks);
     drawer.hidden = true;
     row.appendChild(drawer);
-    toggle.addEventListener('click', () => {
-      const open = drawer.hidden;
+    const setOpen = (open) => {
       drawer.hidden = !open;
       toggle.textContent = open ? '▴' : '▾';
       toggle.title = open ? 'Close' : 'Open';
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      row.classList.toggle('open', open);
+    };
+    const toggleOpen = () => setOpen(drawer.hidden);
+    toggle.addEventListener('click', (ev) => { ev.stopPropagation(); toggleOpen(); });
+    // ROK-1337 follow-up — row-click expand. Bail if the click landed on
+    // a verdict, the link, the toggle, or any nested control (button, a,
+    // input, textarea, label). Without this guard, the verdict tap would
+    // double-fire (vote + expand) and the drawer's textarea would lose
+    // focus on every typed click.
+    row.addEventListener('click', (ev) => {
+      if (ev.target.closest('a, button, input, textarea, label, .verdict')) return;
+      toggleOpen();
+    });
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.addEventListener('keydown', (ev) => {
+      if (ev.target !== row) return;
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleOpen(); }
     });
     return row;
   };
 
   const renderDrawer = (plan, step, callbacks) => {
     const d = el('div', { class: 'drawer' });
-    if (step.test_url) {
-      d.appendChild(el('a', {
-        class: 'drawer-link', href: step.test_url,
-        target: '_blank', rel: 'noopener noreferrer',
-      }, '↗ Open test URL'));
-    }
+    // test_url moved to the collapsed step head (see renderStep) so testers
+    // can open it without expanding the drawer.
     const commentBlock = el('div');
     commentBlock.appendChild(el('div', { class: 'drawer-label', text: 'Comment (optional)' }));
     const ta = el('textarea', { class: 'drawer-textarea' });

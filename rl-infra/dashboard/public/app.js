@@ -163,14 +163,10 @@ const renderTaskRow = (task) => {
 
   row.appendChild(el('span', { class: 'task-elapsed', text: `(${fmtElapsed(task.elapsed_seconds)})` }));
 
-  row.appendChild(document.createTextNode(' · '));
-  row.appendChild(el('a', {
-    class: 'task-log-link',
-    href: `/api/tasks/${task.task_id}/log`,
-    target: '_blank',
-    rel: 'noopener',
-    text: 'log',
-  }));
+  // ROK-1337 follow-up — the per-task `· log` link was a low-value
+  // distraction (raw text log, no formatting, public endpoint blocked
+  // by Traefik anyway). Removed; operators who genuinely need a log
+  // tail can hit the LAN URL directly or use rl_infra_logs MCP.
   return row;
 };
 

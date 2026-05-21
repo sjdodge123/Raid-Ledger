@@ -163,7 +163,11 @@ test('AC-M3-5: succeeded uses ✓, cancelled uses ⊘, running uses ▶', async 
 // AC-M3-3 (log link): per-task row contains a log link pointing at the
 // new endpoint, opening in a new tab.
 // =====================================================================
-test('AC-M3-3 (log link): each task row contains a /api/tasks/<id>/log link target=_blank', async () => {
+// ROK-1337 follow-up — per-task `· log` link removed from the operator
+// dashboard. Operators on LAN can hit /api/tasks/<id>/log directly; the
+// public route is blocked by Traefik anyway. Keep the inverse assertion
+// so a future regression putting the link back gets flagged.
+test('task row does NOT render a · log link (removed in ROK-1337 follow-up)', async () => {
   const { window } = await loadAppJsIntoJsdom();
   const { renderSlot } = window.__rlTest;
   const slot = { slot: 1, claimed: true, agent_id: 'a', web_listening: false, debug_listening: false };
@@ -172,11 +176,8 @@ test('AC-M3-3 (log link): each task row contains a /api/tasks/<id>/log link targ
     status: 'running', started_at: new Date().toISOString(), finished_at: null, elapsed_seconds: 1,
   }];
   const card = renderSlot(slot, tasks);
-  const a = card.querySelector('a.task-log-link');
-  assert.ok(a, 'must render <a class="task-log-link">');
-  assert.equal(a.getAttribute('href'), '/api/tasks/logtest1/log');
-  assert.equal(a.getAttribute('target'), '_blank');
-  assert.match(a.getAttribute('rel') || '', /noopener/);
+  assert.equal(card.querySelector('a.task-log-link'), null,
+    'task-log-link should be hidden');
 });
 
 // =====================================================================
@@ -304,7 +305,6 @@ test('CSS: .task-row, .slot-tasks, .task-row-failed/succeeded/cancelled exist wi
   const src = await readFile(STYLE_CSS, 'utf-8');
   assert.match(src, /\.slot-tasks\s*\{/, 'must define .slot-tasks selector');
   assert.match(src, /\.task-row\s*\{/, 'must define .task-row selector');
-  assert.match(src, /\.task-log-link/, 'must define .task-log-link selector');
   // Terminal opacity rule:
   const failedBlock = src.match(/\.task-row\.task-row-(succeeded|failed|cancelled)[^{]*\{[^}]*\}/);
   assert.ok(failedBlock, 'must define an opacity rule for terminal task-row states');
