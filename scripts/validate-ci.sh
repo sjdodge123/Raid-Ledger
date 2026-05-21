@@ -132,6 +132,15 @@ fi
 # Best-effort — never fails the calling step. Writes one compact JSON
 # object per call (open+append+close so logrotate is safe). Inside-runner
 # events get source=runner; everything else (laptop runs) is source=mcp.
+#
+# ROK-1336 diagnostic (2026-05-21): the original implementation swallowed
+# all errors via `2>/dev/null || true`, so the runner-side perf log silently
+# fails to materialize on real fleet runs (function reproduces correctly in
+# isolation — bug is in the runtime context, theory undetermined). Capture
+# python3's stderr to `${PERF_LOG_LOCAL}.errors` so the next failed run
+# leaves behind a JSON-line trace of WHY each call failed. Best-effort
+# posture preserved — the function still returns 0 on disk-side errors so
+# the calling step never aborts.
 perf_emit_local() {
   local event="$1"
   local extra="${2-}"
@@ -143,7 +152,8 @@ perf_emit_local() {
     || date -u +%FT%TZ)
   local slot="${RL_SLOT:-}" branch
   branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
-  python3 -c "
+  local emit_out emit_rc
+  emit_out=$(python3 -c "
 import json, sys
 extra = json.loads(sys.argv[5])
 extra.update({'ts': sys.argv[1], 'event': sys.argv[2], 'source': sys.argv[3], 'branch': sys.argv[4]})
@@ -151,7 +161,22 @@ if sys.argv[6]:
     try: extra['slot'] = int(sys.argv[6])
     except ValueError: pass
 print(json.dumps(extra, separators=(',', ':')))
-" "$ts" "$event" "$source_label" "$branch" "$extra" "$slot" >> "$PERF_LOG_LOCAL" 2>/dev/null || true
+" "$ts" "$event" "$source_label" "$branch" "$extra" "$slot" 2>&1)
+  emit_rc=$?
+  if [ "$emit_rc" -eq 0 ]; then
+    # Happy path — append to perf log. Silent ignore on disk errors so the
+    # function preserves its best-effort contract.
+    printf '%s\n' "$emit_out" >> "$PERF_LOG_LOCAL" 2>/dev/null || true
+  else
+    # Failure path — log the python3 rc + captured stderr to a sibling
+    # `.errors` file. Operators tail this after a fleet run to debug why
+    # validate.start / validate.step.end / validate.end never landed.
+    python3 -c "
+import json, sys
+print(json.dumps({'ts': sys.argv[1], 'event': sys.argv[2], 'rc': int(sys.argv[3]), 'stderr': sys.argv[4], 'PERF_LOG_LOCAL': sys.argv[5]}))
+" "$ts" "$event" "$emit_rc" "$emit_out" "$PERF_LOG_LOCAL" 2>/dev/null \
+      >> "${PERF_LOG_LOCAL}.errors" 2>/dev/null || true
+  fi
 }
 
 # perf_now_ms — millisecond timestamp via python3 (portable).

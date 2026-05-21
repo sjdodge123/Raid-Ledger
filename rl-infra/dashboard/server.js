@@ -1230,6 +1230,50 @@ const collectQueueStuck = async (nowMs) => {
   return out;
 };
 
+// ROK-1336 — derive "slots still claimed by an agent whose last validate-ci
+// exited non-zero" from the same audit tail the classifier uses. Mitigates
+// the rl-CLI-no-auto-release-on-failure UX gap: callers polling fleet-health
+// can spot leaked slots (where the heartbeat daemon is keeping the lease
+// alive but the agent's actual work errored out and they may have walked
+// away). Cross-refs audit.log validate-ci end events with current claims;
+// only surfaces overlap, never standalone history.
+const collectHeldSlotsWithFailedValidateCi = (auditLines, claims) => {
+  if (!Array.isArray(claims) || claims.length === 0) return [];
+  const claimByAgent = new Map();
+  for (const c of claims) {
+    if (c && c.claimed === true && c.agent_id) {
+      claimByAgent.set(c.agent_id, c);
+    }
+  }
+  if (claimByAgent.size === 0) return [];
+  const latestFailedByAgent = new Map();
+  for (const line of auditLines) {
+    let ev;
+    try { ev = JSON.parse(line); } catch { continue; }
+    if (!ev || typeof ev !== 'object') continue;
+    if (ev.outcome !== 'end') continue;
+    if (typeof ev.cmd !== 'string' || !ev.cmd.includes('/workspace/scripts/validate-ci.sh')) continue;
+    const rc = typeof ev.rc === 'number' ? ev.rc : null;
+    if (rc === null || rc === 0) continue;
+    if (!ev.agent || !claimByAgent.has(ev.agent)) continue;
+    const tsMs = Date.parse(ev.ts);
+    if (!Number.isFinite(tsMs)) continue;
+    const existing = latestFailedByAgent.get(ev.agent);
+    if (!existing || tsMs > existing.tsMs) {
+      latestFailedByAgent.set(ev.agent, {
+        tsMs,
+        agent_id: ev.agent,
+        slot: typeof ev.slot === 'number' ? ev.slot : claimByAgent.get(ev.agent).slot,
+        last_failed_at: ev.ts,
+        exit_code: rc,
+      });
+    }
+  }
+  return [...latestFailedByAgent.values()]
+    .sort((a, b) => b.tsMs - a.tsMs)
+    .map(({ tsMs: _omit, ...rest }) => rest);
+};
+
 const handleFleetHealth = async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' });
@@ -1273,6 +1317,15 @@ const handleFleetHealth = async (req, res) => {
       };
     }
 
+    // ROK-1336 — held slots whose last validate-ci exited non-zero. Cheap
+    // derivation from already-tailed audit lines + claims snapshot. Empty
+    // array is the happy path. Doesn't contribute to warning_count (slots
+    // are valid leases, just dirty — caller decides).
+    let held_slots_with_failed_validate_ci = [];
+    try {
+      held_slots_with_failed_validate_ci = collectHeldSlotsWithFailedValidateCi(audit_lines, claims);
+    } catch { /* keep default empty */ }
+
     const stuck_queue_entries = queue_stuck.length;
     const stale_slots = stale_heartbeat_slots.length;
     const audit_error_total = recent_audit_errors.reduce((acc, c) => acc + c.count, 0);
@@ -1284,11 +1337,13 @@ const handleFleetHealth = async (req, res) => {
       runner_warnings,
       recent_audit_errors,
       perf_summary,
+      held_slots_with_failed_validate_ci,
       summary: {
         ok: warning_count === 0,
         warning_count,
         stale_slots,
         stuck_queue_entries,
+        held_slots_with_failed_validate_ci: held_slots_with_failed_validate_ci.length,
       },
     });
   } catch (err) {

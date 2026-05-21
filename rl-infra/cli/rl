@@ -536,6 +536,29 @@ cmd_validate_ci() {
     if [[ "$TARGET" == "local" ]]; then
         exec "$REPO_ROOT/scripts/validate-ci.sh" "$@"
     fi
+    # ROK-1336 — opt-in EXIT-trap release. By default the slot persists across
+    # `rl validate-ci` exit codes so the agent can ssh in to debug or chain
+    # follow-up `rl run-on-runner` calls. Pass --release-on-exit at the front
+    # of the arg list for one-shot ergonomics (release fires regardless of
+    # success/failure, just like a trap on EXIT).
+    local release_on_exit=false
+    local forwarded_args=()
+    for arg in "$@"; do
+        if [[ "$arg" == "--release-on-exit" ]]; then
+            release_on_exit=true
+        else
+            forwarded_args+=("$arg")
+        fi
+    done
+    if [[ "$release_on_exit" == "true" ]]; then
+        trap '
+            rc=$?
+            if [[ -n "${RL_AGENT_ID:-}" ]]; then
+                echo "[rl] --release-on-exit: cmd_validate_ci exited rc=$rc, releasing slot" >&2
+                cmd_release >/dev/null 2>&1 || true
+            fi
+        ' EXIT
+    fi
     ensure_claim
     # Mutagen pre-flight: make sure the worktree is current before running.
     SLOT=$(current_slot)
@@ -551,7 +574,7 @@ cmd_validate_ci() {
     # ssh_run printf-%q's each positional. Pass "$@" so a validate-ci flag
     # like --against-env-slug=$(id) reaches the runner as a literal
     # string rather than executing on the VM (H-VM-1).
-    ssh_run run-on-runner -- bash /workspace/scripts/validate-ci.sh "$@"
+    ssh_run run-on-runner -- bash /workspace/scripts/validate-ci.sh "${forwarded_args[@]:+${forwarded_args[@]}}"
 }
 
 # ROK-1326 fix-7: push-notify pattern. Agents that post a test plan need
@@ -1053,7 +1076,15 @@ rl — remote runner CLI (target: $TARGET)
   rl lease-status [N]        snapshot of lease queues + claims + pinned/claimable envs
   rl claim-wait [--timeout N]  long-poll the lease queue: queues until granted (push-notify shape; mirrors rl_claim_wait MCP tool)
   rl db <slug> [--web]       psql or pgweb against env's Postgres
-  rl validate-ci [args]      run validate-ci.sh inside your runner
+  rl validate-ci [args] [--release-on-exit]
+                             run validate-ci.sh inside your runner. The slot
+                             persists across exit codes (heartbeat daemon
+                             outlives the script) so you can ssh in to debug.
+                             Pass --release-on-exit for one-shot ergonomics:
+                             the CLI traps EXIT and calls cmd_release on any
+                             exit code. Held-but-failed slots are also
+                             surfaced via /api/fleet-health
+                             (held_slots_with_failed_validate_ci field).
   rl test-plan wait <slug>   long-poll for first tester submit (spawn in background; harness notifies on submit)
   rl test-plan status <slug> cheap one-shot read of the plan JSON
   rl top                     ctop live resource view
