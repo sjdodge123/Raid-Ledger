@@ -189,6 +189,23 @@ bash -c "exec \"\$@\"" bash "$@" >> "$LOG_PATH" 2>&1 &
 CMD_PID=$!
 state::mutate "$JSON_PATH" --argjson p "$CMD_PID" ".pid = \$p" 2>/dev/null || true
 
+# ROK-1336 #3 — pidfile liveness heartbeat. gc-sweeper runs in a different
+# PID namespace and `kill -0 $PID` from there always reports the host PID
+# dead, falsely orphaning every running task. Instead the supervisor
+# touches /srv/rl-infra/state/tasks/<id>.pid on a heartbeat; the sweeper
+# checks pidfile existence + mtime freshness, which is namespace-agnostic.
+PIDFILE_PATH="$RL_TASKS_DIR/$TASK_ID.pid"
+PIDFILE_HEARTBEAT_SECONDS="${RL_PIDFILE_HEARTBEAT_SECONDS:-30}"
+echo "$CMD_PID" > "$PIDFILE_PATH" 2>/dev/null || true
+chmod 664 "$PIDFILE_PATH" 2>/dev/null || true
+(
+    while [[ -f "$PIDFILE_PATH" ]] && kill -0 "$CMD_PID" 2>/dev/null; do
+        touch "$PIDFILE_PATH" 2>/dev/null || break
+        sleep "$PIDFILE_HEARTBEAT_SECONDS"
+    done
+) &
+HEARTBEAT_PID=$!
+
 # ROK-1331 Session 4 dogfood (Codex P2-2): timeout watchdog. If
 # TIMEOUT_SECONDS > 0, fork a sleeper that kills the wrapped cmds pgid
 # after the deadline. SIGTERM first, 10s grace, then SIGKILL. The
@@ -230,6 +247,11 @@ pkill -P "$PARSER_PID" 2>/dev/null || true
 wait "$PARSER_PID" 2>/dev/null || true
 rm -f "$PARSE_DONE"
 
+# ROK-1336 #3 — finalize the terminal status FIRST, then drop the pidfile.
+# Codex P2 (post-review): removing the pidfile while .status is still
+# "running" creates a race window — gc-sweeper checks "pidfile-missing +
+# status=running" and false-orphans the task before we get to flip status
+# to succeeded/failed. Ordering matters: status flip → pidfile rm.
 FINISHED_AT=$(date -u +%FT%TZ)
 CURRENT_STATUS=$(jq -r ".status // \"running\"" "$JSON_PATH" 2>/dev/null || echo running)
 NEW_STATUS="failed"
@@ -245,6 +267,14 @@ else
     state::mutate "$JSON_PATH" --argjson c "$CMD_EXIT" --arg f "$FINISHED_AT" --arg s "$NEW_STATUS" \
         ".script_exit_code = \$c | .finished_at = \$f | .status = \$s" \
         2>/dev/null || true
+fi
+
+# Now status is terminal — the sweeper orphan check guards on status==running
+# (sweep.sh §0), so dropping the pidfile here can no longer be misread.
+rm -f "$PIDFILE_PATH" 2>/dev/null || true
+if [[ -n "${HEARTBEAT_PID:-}" ]] && kill -0 "$HEARTBEAT_PID" 2>/dev/null; then
+    kill "$HEARTBEAT_PID" 2>/dev/null || true
+    wait "$HEARTBEAT_PID" 2>/dev/null || true
 fi
 
 task::audit "$TASK_ID" "finish" "ok" \

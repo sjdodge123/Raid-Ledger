@@ -46,11 +46,22 @@ EXPIRES_AT=$(date -u -d "+${RL_CLAIM_DURATION_SECONDS} seconds" +%FT%TZ 2>/dev/n
 
 # Inherited-env lookup helper. Reads env-registry for envs on $1 (slot) with
 # claimable_by_next=true and emits a `[{slug, url}]` JSON array.
+# ROK-1336 #6 — env-registry stores .public_domain as the bare RL_PUBLIC_DOMAIN,
+# so the old "https://" + public_domain emitted bare https://gamernight.net.
+# Use the per-slug form ({slug}test.<domain>, matches env-spin's PUBLIC_HOST)
+# rather than slot-N: a slot can hold multiple preserved envs, only one of
+# which owns Traefik's slot-N rule, so slot-N URLs route to the wrong env
+# for non-owner inherited envs.
 _inherited_for_slot() {
     local slot="$1"
     state::query "$RL_ENVS_FILE" --argjson s "$slot" \
         '[.[] | select(.slot == $s and (.claimable_by_next // false) == true)
-              | {slug, url: ("https://" + (.public_domain // (.slug + ".rl.lan")))}]'
+              | {slug, url: (
+                  if (.public_domain // "") != ""
+                  then ("https://" + .slug + "test." + .public_domain)
+                  else ("https://" + .slug + ".rl.lan")
+                  end
+              )}]'
 }
 
 emit_slot_result() {
@@ -195,7 +206,14 @@ if [[ -n "$TARGET_SLOT" ]]; then
                 DESTROYED=$(jq -c '[.[] | .slug]' <<<"$MISMATCHING")
             fi
             if [[ "$(jq 'length' <<<"$MATCHING")" -gt 0 ]]; then
-                INHERITED=$(jq -c '[.[] | {slug, url: ("https://" + (.public_domain // (.slug + ".rl.lan")))}]' <<<"$MATCHING")
+                # ROK-1336 #6 — per-slug subdomain, never bare. See _inherited_for_slot.
+                INHERITED=$(jq -c \
+                    '[.[] | {slug, url: (
+                        if (.public_domain // "") != ""
+                        then ("https://" + .slug + "test." + .public_domain)
+                        else ("https://" + .slug + ".rl.lan")
+                        end
+                    )}]' <<<"$MATCHING")
             fi
             # Clear claimable_by_next on the slot AFTER destroy decisions resolve.
             env_registry::clear_claimable_for_slot "$TARGET_SLOT"

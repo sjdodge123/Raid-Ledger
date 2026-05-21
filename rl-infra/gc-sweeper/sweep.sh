@@ -132,28 +132,60 @@ mutate() {
 # 0. ROK-1331 M1 — task retention. Drop task JSON + log pairs for completed
 # tasks older than TASK_RETENTION_SECONDS (default 86400 = 24h). Running tasks
 # are preserved unconditionally — the sweeper never kills tasks. Orphan
-# recovery: if a running task's pid is no longer alive (host reboot, OOM),
-# flip to failed with cancel_reason "orphaned" so the next sweeper pass ages
-# it out normally.
+# recovery: if a running task's pidfile is missing or its mtime heartbeat is
+# stale, flip to failed with cancel_reason "orphaned" so the next sweeper pass
+# ages it out normally.
+#
+# ROK-1336 #3 — orphan detection uses the per-task pidfile written by the
+# supervisor in task-start, NOT `kill -0 $PID`. The sweeper runs in its own
+# PID namespace so the host PID stamped in tasks/<id>.json is never visible
+# here; the previous kill -0 check returned false for EVERY running task and
+# false-orphaned them after one sweep tick. The pidfile + mtime contract is
+# namespace-agnostic: supervisor touches the file every
+# RL_PIDFILE_HEARTBEAT_SECONDS (default 30s), sweeper requires the mtime to
+# be within PIDFILE_STALE_SECONDS (default 60s, ~2× the heartbeat).
 #
 # Runs BEFORE the docker-dependent sections so it works even when the docker
 # socket is unreachable (e.g. local test runs on the operator's Mac).
 TASK_RETENTION_SECONDS="${TASK_RETENTION_SECONDS:-86400}"
 TASKS_DIR="${TASKS_DIR:-/state/tasks}"
+PIDFILE_STALE_SECONDS="${PIDFILE_STALE_SECONDS:-60}"
 if [[ -d "$TASKS_DIR" ]]; then
     for tjson in "$TASKS_DIR"/*.json; do
         [[ -f "$tjson" ]] || continue
         STATUS=$(jq -r '.status // "unknown"' "$tjson" 2>/dev/null || echo "unknown")
         if [[ "$STATUS" == "running" ]]; then
             PID=$(jq -r '.pid // empty' "$tjson" 2>/dev/null)
-            if [[ -n "$PID" ]] && ! kill -0 "$PID" 2>/dev/null; then
+            # PID empty → task is still initialising (supervisor hasn't
+            # stamped CMD_PID yet) OR is a legacy fixture without pid set.
+            # Preserve unconditionally — sweeper never racing with task-start.
+            if [[ -z "$PID" ]]; then
+                continue
+            fi
+            TID_BASE=$(basename "$tjson" .json)
+            PIDFILE="$TASKS_DIR/${TID_BASE}.pid"
+            ORPHAN_REASON=""
+            if [[ ! -f "$PIDFILE" ]]; then
+                ORPHAN_REASON="pidfile_missing"
+            else
+                # GNU stat first, BSD/macOS fallback (test runners on Mac).
+                PIDFILE_MTIME=$(stat -c %Y "$PIDFILE" 2>/dev/null || stat -f %m "$PIDFILE" 2>/dev/null || echo 0)
+                if (( NOW_EPOCH - PIDFILE_MTIME > PIDFILE_STALE_SECONDS )); then
+                    ORPHAN_REASON="pidfile_stale"
+                fi
+            fi
+            if [[ -n "$ORPHAN_REASON" ]]; then
                 ORPHAN_FINISHED=$(date -u +%FT%TZ)
-                tmp=$(mktemp "${tjson}.XXXXXX")
-                jq --arg f "$ORPHAN_FINISHED" \
-                    '.status = "failed" | .cancel_reason = "orphaned" | (if .finished_at == null then .finished_at = $f else . end)' \
-                    "$tjson" > "$tmp" && mv "$tmp" "$tjson" || rm -f "$tmp"
+                # Route through mutate() so chmod 664 fires — without it,
+                # the post-orphan JSON ends up root:root 0600 (mktemp's
+                # default) and the non-root dashboard can no longer read it.
+                mutate "$tjson" --arg f "$ORPHAN_FINISHED" \
+                    '.status = "failed" | .cancel_reason = "orphaned" | (if .finished_at == null then .finished_at = $f else . end)'
                 ORPHAN_TID=$(jq -r '.task_id // "unknown"' "$tjson" 2>/dev/null)
-                audit task_orphaned "$(jq -nc --arg t "$ORPHAN_TID" '{task_id:$t}')"
+                audit task_orphaned "$(jq -nc --arg t "$ORPHAN_TID" --arg r "$ORPHAN_REASON" '{task_id:$t, reason:$r}')"
+                # Remove the stale pidfile if present so subsequent sweeps
+                # don't re-flag the same task.
+                rm -f "$PIDFILE" 2>/dev/null || true
             fi
             continue
         fi

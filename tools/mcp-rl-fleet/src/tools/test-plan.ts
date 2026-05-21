@@ -21,6 +21,59 @@ import { loadRlInfraIp, resolveProxmoxHost, shellQuote } from '../exec.js';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Run `ssh` with the supplied argv and pipe the given payload to its stdin.
+ * Resolves with the child's stdout (string) on exit code 0; rejects with
+ * an Error carrying stderr+code otherwise. Used for ROK-1336 #9 to keep
+ * sensitive header values OFF /proc/<pid>/cmdline (argv) — we stream them
+ * over stdin into a remote `read -r VAR` so docker never sees the literal.
+ */
+function runSshWithStdin(args: string[], stdinPayload: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('ssh', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let totalStdout = 0;
+    const MAX_OUTPUT = 4 * 1024 * 1024;
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`ssh timed out after ${RUN_ON_VM_TIMEOUT_MS}ms`));
+    }, RUN_ON_VM_TIMEOUT_MS);
+    child.stdout.on('data', (d: Buffer) => {
+      totalStdout += d.length;
+      if (totalStdout > MAX_OUTPUT) {
+        child.kill('SIGTERM');
+        return;
+      }
+      stdoutChunks.push(d);
+    });
+    child.stderr.on('data', (d: Buffer) => stderrChunks.push(d));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+      const stderr = Buffer.concat(stderrChunks).toString('utf8');
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        const e = new Error(`ssh exited with code ${code}: ${stderr}`) as Error & {
+          stdout?: string;
+          stderr?: string;
+          code?: number;
+        };
+        e.stdout = stdout;
+        e.stderr = stderr;
+        e.code = code ?? undefined;
+        reject(e);
+      }
+    });
+    child.stdin.end(stdinPayload);
+  });
+}
+
 // The dashboard is reachable internally on the VM at rl-dashboard:8080
 // (Docker DNS on rl-net), but the MCP server runs on the laptop and can
 // only SSH to the VM, then curl from there. Using curl-on-VM keeps the
@@ -89,14 +142,19 @@ const curlOnVM = async (
   // value so caller-controlled tokens cannot inject shell metacharacters.
   // Sensitive header values (e.g. X-Agent-Token) MUST NOT be interpolated
   // into argv — anyone with /proc/<pid>/cmdline access on the VM can read
-  // them. Route those through a `docker run -e` env injection and reference
-  // the env var by name inside the in-container curl invocation. The
-  // OUTER ssh shell never sees the value literally.
+  // them. ROK-1336 #9: previously we passed the value via
+  // `docker run -e RL_AGENT_TOKEN_VALUE=<token>`, which kept the literal
+  // value out of curl's argv but left it in docker's argv (and the parent
+  // bash's, via ssh's remote command string). Fix: stream the value over
+  // ssh stdin, `read` it on the VM into the env, and use docker's
+  // `-e RL_AGENT_TOKEN_VALUE` (no `=value`) so docker only knows the name
+  // and inherits the value from its parent env. Net result: no /proc visibility.
   const ENV_INJECTED_HEADERS: Record<string, string> = {
     'X-Agent-Token': 'RL_AGENT_TOKEN_VALUE',
   };
   let headerArgs = '';
   let envArgs = '';
+  const stdinTokens: Array<{ envVar: string; value: string }> = [];
   if (extraHeaders) {
     for (const [name, value] of Object.entries(extraHeaders)) {
       if (!/^[A-Za-z0-9-]+$/.test(name)) {
@@ -112,16 +170,15 @@ const curlOnVM = async (
       }
       const envVar = ENV_INJECTED_HEADERS[name];
       if (envVar !== undefined) {
-        // Inject the value into the curl container's env. Inside the
-        // container, curl's -H references the env var literally — bash
-        // expands `$envVar` AFTER docker has consumed the -e arg, so the
-        // value never reaches the curl argv.
-        envArgs += ` -e ${envVar}=${shellQuote(value)}`;
+        // Env-name-only: docker inherits the value from the bash env set
+        // up by `read` on the VM. The value never appears in any argv.
+        envArgs += ` -e ${envVar}`;
         // The literal `$RL_AGENT_TOKEN_VALUE` is what the inner sh -c
         // expands. We MUST NOT shellQuote the whole `-H "X: $..."` arg
         // with single quotes (single quotes suppress expansion); double
         // quotes are required so the env var expands inside the container.
         headerArgs += ` -H "${name}: $${envVar}"`;
+        stdinTokens.push({ envVar, value });
       } else {
         headerArgs += ` -H ${shellQuote(`${name}: ${value}`)}`;
       }
@@ -138,18 +195,37 @@ const curlOnVM = async (
   // by service name without exposing it on the host or going through
   // Cloudflare. -s suppresses progress, -o /dev/stderr puts the body on
   // stderr so we can capture status separately, -w prints the status.
+  // Prepend `read`/`export` for each env-injected header so the VM-side
+  // bash binds the value from stdin BEFORE invoking docker. The remote
+  // command string still appears verbatim in the bash process argv, but
+  // it contains `read -r VAR; export VAR` — no token values.
+  const stdinPrefix = stdinTokens
+    .map(({ envVar }) => `read -r ${envVar}; export ${envVar}; `)
+    .join('');
   const remote =
-    `docker run --rm${envArgs} --network rl-net curlimages/curl:8.10.1 ` +
+    `${stdinPrefix}docker run --rm${envArgs} --network rl-net curlimages/curl:8.10.1 ` +
     `curl -s -X ${method} ${bodyArgs}${headerArgs} ` +
     `-w '\\nRL_STATUS:%{http_code}' ` +
     `${quotedUrl}`;
   const host = await sshHost();
-  const { stdout } = await execFileAsync(
-    'ssh',
-    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${host}`,
-     `DOCKER_HOST=tcp://127.0.0.1:2375 ${remote}`],
-    { timeout: RUN_ON_VM_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
-  );
+  const sshArgList = [
+    '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${host}`,
+    `DOCKER_HOST=tcp://127.0.0.1:2375 ${remote}`,
+  ];
+  let stdout: string;
+  if (stdinTokens.length > 0) {
+    // Pipe each token (NL-terminated, matches `read -r`) into ssh's stdin.
+    // Tokens never appear in any argv/proc visibility surface this way.
+    const stdinPayload =
+      stdinTokens.map(({ value }) => value).join('\n') + '\n';
+    stdout = await runSshWithStdin(sshArgList, stdinPayload);
+  } else {
+    const result = await execFileAsync('ssh', sshArgList, {
+      timeout: RUN_ON_VM_TIMEOUT_MS,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    stdout = result.stdout;
+  }
   const match = stdout.match(/\nRL_STATUS:(\d+)\s*$/);
   const status = match ? parseInt(match[1], 10) : 0;
   const rawBody = match ? stdout.slice(0, match.index ?? 0) : stdout;

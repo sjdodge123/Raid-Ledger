@@ -146,7 +146,23 @@ if [[ "$(jq 'length' <<<"$CLAIMABLE_ENVS")" -gt 0 ]]; then
     fi
 
     if [[ "$(jq 'length' <<<"$MATCHING")" -gt 0 ]]; then
-        INHERITED_ENVS=$(jq -c '[.[] | {slug, url: ("https://" + (.public_domain // (.slug + ".rl.lan")))}]' <<<"$MATCHING")
+        # ROK-1336 #6 — env-registry stores `.public_domain` as the bare
+        # RL_PUBLIC_DOMAIN (e.g. "gamernight.net"), NOT a fully-qualified host.
+        # The previous template "https://" + public_domain emitted bare
+        # https://gamernight.net which doesn't route + breaks Discord OAuth.
+        # Codex P2 post-review: the slot-stable form (https://slot-N.<domain>)
+        # only routes correctly to the env that owns Traefik's slot-N rule,
+        # and env-registry doesn't persist `is_slot_owner`, so multi-env slots
+        # would advertise URLs that route to the wrong env. Per-slug form
+        # ({slug}test.<domain>, matches env-spin's PUBLIC_HOST) is
+        # unambiguous: Traefik always routes it to the specific env.
+        INHERITED_ENVS=$(jq -c \
+            '[.[] | {slug, url: (
+                if (.public_domain // "") != ""
+                then ("https://" + .slug + "test." + .public_domain)
+                else ("https://" + .slug + ".rl.lan")
+                end
+            )}]' <<<"$MATCHING")
     fi
 fi
 

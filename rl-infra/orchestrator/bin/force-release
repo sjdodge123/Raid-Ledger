@@ -35,8 +35,13 @@ PRIOR_AGENT=$(state::query "$RL_CLAIMS_FILE" --argjson s "$SLOT" \
 
 # Reuse release with --force; it tears down envs, drops the claim record,
 # and emits the standard release JSON. We skip its env teardown if --no-destroy.
+# ROK-1336 #11 — release now gates --force on RL_PROXMOX_USER=rl. force-release
+# is operator-only (gated on RL_OPERATOR=1 above), so set the env var explicitly
+# when shelling into release. Operators can be running as either the rl or
+# rl-agent UID on the VM depending on how they SSH'd in; the wrapper's
+# RL_OPERATOR=1 gate is the source of truth for "operator intent".
 if [[ "$DESTROY" == "1" ]]; then
-    RELEASE_OUT=$("$(dirname "$0")/release" --slot "$SLOT" --force)
+    RELEASE_OUT=$(RL_PROXMOX_USER=rl "$(dirname "$0")/release" --slot "$SLOT" --force)
 else
     # Manually drop just the claim.
     state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \
