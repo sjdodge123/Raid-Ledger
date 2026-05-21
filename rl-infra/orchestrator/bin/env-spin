@@ -134,6 +134,7 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
         ENV_SPIN_HANDLED=1
         exit 1
     fi
+    LAST_PHASE="idempotent_state_mutated"
     mkdir -p "$TRAEFIK_CONF_D"
     PUBLIC_DOMAIN="${RL_PUBLIC_DOMAIN:-}"
     # Default ownership flag — only the public-domain branch can flip it.
@@ -189,6 +190,7 @@ http:
         servers:
           - url: "http://${APP_CONTAINER}:80"
 EOF
+    LAST_PHASE="idempotent_traefik_written"
     # Release the slot-scoped flock acquired above. Closing fd 9 drops the
     # lock; subsequent steps (admin bootstrap, JSON output) don't need it.
     exec 9>&-
@@ -248,6 +250,7 @@ EOF
             '[{code: "admin_bootstrap_failed", detail: $msg}]')
     fi
     rm -f "$IDEM_BOOTSTRAP_STDERR_FILE"
+    LAST_PHASE="idempotent_bootstrap_done"
 
     jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
         --arg internal_url "http://${SLUG}.rl.lan" \
