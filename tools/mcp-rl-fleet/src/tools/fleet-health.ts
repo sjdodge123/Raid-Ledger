@@ -28,7 +28,7 @@ const sshHost = async (): Promise<string> => {
 
 export const TOOL_NAME = 'rl_fleet_health';
 export const TOOL_DESC =
-  "Snapshot of fleet-wide health signals — stale-heartbeat slots, queue-stuck waiters, recent audit-log error categories (permission_denied / exit_255 / oom / socket_hang_up / inotify_missing / dubious_ownership / illegal_instruction), and per-runner warnings. Cheap, read-only, no flock. Returns the same shape the dashboard's /api/fleet-health endpoint produces. Use after a flake to discriminate 'known fleet-bug-class' (e.g. spike in socket_hang_up counts) vs 'new failure'. severity_threshold is reserved for future filtering — v1 returns everything.";
+  "Snapshot of fleet-wide health signals — stale-heartbeat slots, queue-stuck waiters, recent audit-log error categories (permission_denied / exit_255 / oom / socket_hang_up / inotify_missing / dubious_ownership / illegal_instruction), per-runner warnings, plus a 15-minute perf_summary (last_validate_ci, p50_validate_step_ms, claims_held_minutes, pkill_survivors_last_release, gc_sweep_last_cycle_ms). Cheap, read-only, no flock. Returns the same shape the dashboard's /api/fleet-health endpoint produces. Use after a flake to discriminate 'known fleet-bug-class' (e.g. spike in socket_hang_up counts) vs 'new failure'. severity_threshold is reserved for future filtering — v1 returns everything.";
 
 export interface FleetHealthParams {
   severity_threshold?: 'warn' | 'error';
@@ -61,11 +61,34 @@ export interface FleetHealthResult {
     last_seen: string | null;
     sample: string;
   }>;
+  /** ROK-1331 M11 — rolling-window perf rollup. Window default 15 min. */
+  perf_summary?: {
+    window_minutes: number;
+    last_validate_ci: {
+      ts: string;
+      branch: string | null;
+      duration_ms: number;
+      exit_code: number;
+      slot: number;
+    } | null;
+    p50_validate_step_ms: Record<string, number>;
+    claims_held_minutes: number[];
+    pkill_survivors_last_release: number;
+    gc_sweep_last_cycle_ms: number;
+  };
+  /** Slots whose held claim's last validate-ci ended with a non-zero exit. */
+  held_slots_with_failed_validate_ci?: Array<{
+    slot: number;
+    agent_id: string | null;
+    branch: string | null;
+    last_exit_code: number;
+  }>;
   summary?: {
     ok: boolean;
     warning_count: number;
     stale_slots: number;
     stuck_queue_entries: number;
+    held_slots_with_failed_validate_ci: number;
   };
   error?: string;
   status?: number;

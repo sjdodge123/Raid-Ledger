@@ -55,7 +55,9 @@ SHA=$(git rev-parse --short HEAD)
 OUTPUT="planning-artifacts/security-review-${SHA}.md"
 mkdir -p planning-artifacts
 
-codex review --base "$BASE" "$(cat <<'PROMPT'
+# The codex CLI rejects `--base <BRANCH>` combined with a positional [PROMPT]
+# arg, so pipe the prompt via stdin (`-` reads from stdin per `codex review --help`).
+cat <<'PROMPT' | codex review --base "$BASE" - 2>&1 | tee "$OUTPUT"
 Security-focused review of this Raid-Ledger PR. Focus exclusively on:
 
 1. **Authentication & authorization**
@@ -99,7 +101,6 @@ For each finding output:
 
 Final line MUST be one of: `VERDICT: SAFE TO MERGE`, `VERDICT: SAFE WITH FIXES`, or `VERDICT: BLOCK MERGE`.
 PROMPT
-)" 2>&1 | tee "$OUTPUT"
 ```
 
 ---
