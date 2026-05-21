@@ -167,7 +167,12 @@
     try {
       const data = await fetchPlans(currentSlug);
       const newBaseline = data.last_updated_at;
-      if (newBaseline && newBaseline !== lastBaseline) {
+      // Codex P2 follow-up — drop the `newBaseline && ` guard so
+      // "all plans deleted" (baseline transitions from real-ts → null)
+      // also flags refresh. Without this, a tester backgrounds the tab
+      // while the agent runs rl_test_plan_clear / env teardown and the
+      // stale plan UI persists indefinitely on return.
+      if (newBaseline !== lastBaseline) {
         refreshAvailable = true;
         currentPlans = data.plans;
         lastBaseline = newBaseline;

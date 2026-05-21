@@ -203,10 +203,15 @@
           img.src = url;
           thumb.appendChild(img);
           pickedAttachments.push(url);
-          // Post comment on attach (even if textarea empty) so the agent
-          // sees the screenshot immediately. Textarea content goes with
-          // the next "Send" tap; one attachment = one comment.
-          await callbacks.onComment?.(plan, step.id, '', url);
+          // Codex P2 follow-up — capture the typed note BEFORE the
+          // post-attach refresh blows away ta.value. Common flow is
+          // "type a note, then attach a screenshot, hit send" — passing
+          // the body along with the attach makes that one comment
+          // instead of silently dropping the note. Clear the textarea
+          // so the operator-facing Send button doesn't re-post it.
+          const body = ta.value.trim();
+          ta.value = '';
+          await callbacks.onComment?.(plan, step.id, body, url);
         } else {
           thumb.textContent = 'fail';
         }

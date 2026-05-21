@@ -1229,10 +1229,18 @@ const tick = async (opts = {}) => {
     // TESTS section paints in the same tick as Slots/Envs (single
     // render() call, no flash). Plan summaries failing must NOT block
     // the operator chrome from rendering, so guard with Promise.allSettled.
+    // Codex P2 follow-up — also bound the test-plans fetch with a 2s
+    // timeout so a slow/hung tests endpoint doesn't blank the dashboard.
+    // /api/state is the source of truth for slots/envs; /api/test-plans
+    // is decoration. Without the AbortController, allSettled still waits
+    // for the slow side before render() fires.
+    const plansAc = new AbortController();
+    const plansTimer = setTimeout(() => plansAc.abort(), 2000);
     const [stateResult, plansResult] = await Promise.allSettled([
       fetch('/api/state', { cache: 'no-store' }),
-      fetch('/api/test-plans', { cache: 'no-store' }),
+      fetch('/api/test-plans', { cache: 'no-store', signal: plansAc.signal }),
     ]);
+    clearTimeout(plansTimer);
     if (stateResult.status !== 'fulfilled' || !stateResult.value.ok) {
       throw new Error(stateResult.status === 'fulfilled'
         ? `HTTP ${stateResult.value.status}`
