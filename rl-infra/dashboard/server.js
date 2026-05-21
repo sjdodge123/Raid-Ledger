@@ -11,7 +11,7 @@
 
 import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
-import { readFile, writeFile, mkdir, unlink, readdir, open } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, readdir, open, rm, stat, rename } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -236,26 +236,65 @@ const enrichSlotsWithProbes = async (slots) =>
     }),
   );
 
-// Read all current test-plan summaries (sluggable, cheap — usually 0-5 files).
-// Returned inline in /api/state so the dashboard renders without an N+1
-// fetch per env card.
+// Read aggregate per-slug summaries for /api/state. ROK-1337 v2: every slug
+// is now a SUBDIRECTORY containing 1..N plan files. The per-card summary
+// here rolls them up: total step count summed across plans, verdict counts
+// summed, plan_count, last_updated_at = max across plans. Surfaces only
+// "is there activity on this slug?" — full per-plan rendering happens on
+// /api/test-plans/{slug}.
 const collectPlanSummaries = async () => {
+  let dirents;
   try {
-    const files = await readdir(TEST_PLANS_DIR);
-    const out = {};
-    for (const f of files) {
-      if (!f.endsWith('.json')) continue;
-      const slug = f.slice(0, -5);
-      try {
-        const plan = JSON.parse(await readFile(join(TEST_PLANS_DIR, f), 'utf-8'));
-        out[slug] = summarizePlan(plan);
-      } catch { /* skip bad files */ }
-    }
-    return out;
+    dirents = await readdir(TEST_PLANS_DIR, { withFileTypes: true });
   } catch (err) {
     if (err.code === 'ENOENT') return {};
     throw err;
   }
+  const out = {};
+  for (const dirent of dirents) {
+    if (!dirent.isDirectory()) continue;
+    const slug = dirent.name;
+    if (!validSlug(slug)) continue;
+    let plans;
+    try { plans = await listPlans(slug); } catch { plans = []; }
+    if (plans.length === 0) continue;
+    // Sum counts across all plans for the env-card badge. Keep the title
+    // from the first (newest) plan as a representative — most slugs have
+    // only one active plan at a time, and the env card just needs SOMETHING
+    // to render.
+    const agg = { total: 0, pass: 0, fail: 0, skip: 0, pending: 0, pending_resets: 0, comment_count: 0 };
+    let lastUpdated = null;
+    let representativeTitle = null;
+    // ROK-1337 — surface the newest plan's goal + story_id so the operator
+    // dashboard's TESTS section can show a meaningful headline + Linear link
+    // without re-fetching each plan. `plans` is already newest-first (sorted
+    // in listPlans by created_at desc), so the first element wins.
+    const representativeGoal = plans[0]?.goal ?? null;
+    const representativeStoryId = plans[0]?.story_id ?? null;
+    for (const plan of plans) {
+      const s = summarizePlan(plan);
+      agg.total += s.total;
+      agg.pass += s.pass;
+      agg.fail += s.fail;
+      agg.skip += s.skip;
+      agg.pending += s.pending;
+      agg.pending_resets += s.pending_resets;
+      agg.comment_count += s.comment_count;
+      if (s.last_updated_at && (!lastUpdated || s.last_updated_at > lastUpdated)) {
+        lastUpdated = s.last_updated_at;
+      }
+      if (!representativeTitle && s.title) representativeTitle = s.title;
+    }
+    out[slug] = {
+      ...agg,
+      title: representativeTitle,
+      goal: representativeGoal,
+      story_id: representativeStoryId,
+      plan_count: plans.length,
+      last_updated_at: lastUpdated,
+    };
+  }
+  return out;
 };
 
 // Read per-task summaries from `<STATE_DIR>/tasks/*.json` for the dashboard.
@@ -385,16 +424,43 @@ const sanitizePath = (urlPath) => {
   return cleaned === '/' ? '/index.html' : cleaned;
 };
 
-// ----- Test plans -----
-// Stored at TEST_PLANS_DIR/<slug>.json. Slug already validated by the MCP
-// tool ([a-z0-9-]+); we re-validate here as defense-in-depth before any
-// filesystem ops.
+// ----- Test plans (ROK-1337 v2 — multi-plan per slug) -----
+// v2 storage: TEST_PLANS_DIR/<slug>/<plan_id>.json, one file per plan.
+// Plan_id format: YYYY-MM-DD-HHmm-XXXX (UTC, 4 hex). Slug already validated
+// by the MCP tool ([a-z0-9-]+); we re-validate here as defense-in-depth
+// before any filesystem ops. v1 stored plans at TEST_PLANS_DIR/<slug>.json
+// — a deploy-time sweeper (`sweepLegacyV1Plans`) deletes those at boot.
 const SLUG_RE = /^[a-z0-9-]+$/;
+const PLAN_ID_RE = /^\d{4}-\d{2}-\d{2}-\d{4}-[0-9a-f]{4}$/;
+const STORY_ID_RE = /^ROK-\d+$/;
 const VERDICTS = new Set(['pass', 'fail', 'skip']);
 
 const validSlug = (s) => typeof s === 'string' && s.length > 0 && s.length <= 63 && SLUG_RE.test(s);
+const validPlanId = (s) => typeof s === 'string' && PLAN_ID_RE.test(s);
 
-const planPath = (slug) => join(TEST_PLANS_DIR, `${slug}.json`);
+// ROK-1337 — directory + file path helpers. Per-slug subdir gates filesystem
+// access; the legacy single-file `planPath(slug) = .../slug.json` is GONE
+// in v2 and replaced by `planFilePath(slug, plan_id)`. The deploy-time
+// sweeper cleans up any leftover legacy files.
+const planSlugDir = (slug) => join(TEST_PLANS_DIR, slug);
+const planFilePath = (slug, planId) => join(TEST_PLANS_DIR, slug, `${planId}.json`);
+
+// Validate goal: 3-7 words. Returns error string on failure, null on success.
+const validateGoal = (goal) => {
+  if (typeof goal !== 'string' || goal.trim().length === 0) {
+    return 'goal required (3-7 words)';
+  }
+  const n = goal.trim().split(/\s+/).filter(Boolean).length;
+  if (n < 3 || n > 7) return `goal must be 3-7 words (got ${n})`;
+  return null;
+};
+
+const validateStoryId = (storyId) => {
+  if (typeof storyId !== 'string' || !STORY_ID_RE.test(storyId)) {
+    return 'story_id must match /^ROK-\\d+$/';
+  }
+  return null;
+};
 
 // Centralized error responder for readJsonBody failures. Preserves the
 // 415 status when the failure is content-type related; everything else
@@ -453,14 +519,101 @@ const readJsonBody = (req, max = 64 * 1024) =>
     req.on('error', reject);
   });
 
-// Atomic write: temp file in same dir + rename. Avoids partial reads
-// during the dashboard's 5s polling tick.
-const writePlanAtomic = async (slug, plan) => {
-  await mkdir(TEST_PLANS_DIR, { recursive: true });
-  const tmp = join(TEST_PLANS_DIR, `.${slug}.${Date.now()}.tmp`);
+// Atomic write: temp file in same dir + rename. Avoids partial reads during
+// the dashboard's polling tick. ROK-1337 — tmp file lives INSIDE the slug
+// dir so the rename is intra-directory (atomic on the same filesystem) AND
+// `inotifywait` on the slug dir sees both the close_write (tmp) and the
+// moved_to (target) events.
+const writePlanAtomic = async (slug, planId, plan) => {
+  const dir = planSlugDir(slug);
+  await mkdir(dir, { recursive: true });
+  const tmp = join(dir, `.${planId}.${Date.now()}.tmp`);
   await writeFile(tmp, JSON.stringify(plan, null, 2));
-  const { rename } = await import('node:fs/promises');
-  await rename(tmp, planPath(slug));
+  await rename(tmp, planFilePath(slug, planId));
+};
+
+// ROK-1337 — list all plans in a slug subdir, newest first by created_at.
+// Returns [] if the slug dir doesn't exist (the empty-slug case). Skips
+// hidden files (`.<id>.<ts>.tmp` writePlanAtomic leftovers) and anything
+// that doesn't parse as JSON. Each plan in the returned array gets a
+// best-effort `plan_id` derived from the filename so callers don't have
+// to redo the parse.
+const listPlans = async (slug) => {
+  let files;
+  try {
+    files = await readdir(planSlugDir(slug));
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const plans = [];
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    if (f.startsWith('.')) continue;
+    const planId = f.slice(0, -5);
+    if (!validPlanId(planId)) continue;
+    try {
+      const raw = await readFile(join(planSlugDir(slug), f), 'utf-8');
+      const plan = JSON.parse(raw);
+      // Always surface plan_id from the filename so consumers can rely on it
+      // even if older writes pre-dated the field landing in the body.
+      plan.plan_id = planId;
+      plans.push(plan);
+    } catch {
+      /* skip bad file */
+    }
+  }
+  // Newest first by created_at (string ISO sort works for fixed-shape dates).
+  plans.sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
+  return plans;
+};
+
+// Aggregate `last_updated_at` across every plan in a slug — used by
+// rl_test_plan_wait to discriminate spurious inotify wakes from real
+// changes. Returns null if the slug has no plans.
+const aggregateLastUpdated = (plans) => {
+  let max = null;
+  for (const plan of plans) {
+    const s = summarizePlan(plan);
+    if (s.last_updated_at && (!max || s.last_updated_at > max)) {
+      max = s.last_updated_at;
+    }
+  }
+  return max;
+};
+
+// ROK-1337 — deploy-time sweeper. v1 stored plans as TEST_PLANS_DIR/<slug>.json;
+// v2 stores them as TEST_PLANS_DIR/<slug>/<plan_id>.json. After upgrade, any
+// stray top-level *.json files are stale and unreachable from v2 routes,
+// so we delete them at boot. Slug subdirectories are LEFT INTACT — those
+// are the new storage layer.
+const sweepLegacyV1Plans = async () => {
+  let files;
+  try {
+    files = await readdir(TEST_PLANS_DIR);
+  } catch (err) {
+    if (err.code === 'ENOENT') return 0;
+    throw err;
+  }
+  let removed = 0;
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    const p = join(TEST_PLANS_DIR, f);
+    try {
+      const s = await stat(p);
+      if (s.isFile()) {
+        await unlink(p);
+        removed += 1;
+      }
+    } catch {
+      /* skip races / permission issues; sweeper is best-effort */
+    }
+  }
+  if (removed > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[rl-dashboard] v1_sweeper: removed ${removed} legacy plan file(s) from ${TEST_PLANS_DIR}/`);
+  }
+  return removed;
 };
 
 const summarizePlan = (plan) => {
@@ -504,13 +657,35 @@ const summarizePlan = (plan) => {
 //     tester-supplied free-form text. The tag doesn't make the body
 //     LLM-injection-safe (text is text), but it gives the agent a
 //     clear cue to treat the contents as data, not instructions.
+// Codex P1 follow-up — the list endpoint and other tester-facing paths used
+// to return `stripCommentBodies(plan)` without sanitizing plan metadata,
+// leaving prompt-injection text in title/goal/description/etc. reachable by
+// an agent that calls rl_test_plan_status WITHOUT a plan_id. wrapCommentBodies
+// already sanitizes metadata for the agent-with-bodies path; this helper now
+// mirrors that sanitization for the no-bodies path so every projection that
+// reaches an agent context has wrap tags stripped from agent-visible fields.
+// Codex P2 follow-up — attachment_url is preserved (sanitized) so the tester
+// drawer can render previously-uploaded screenshot thumbnails after refresh.
+// The free-form `body` stays omitted.
 const stripCommentBodies = (plan) => ({
   ...plan,
+  title: stripWrapMaybe(plan.title),
+  goal: stripWrapMaybe(plan.goal),
+  created_by: stripWrapMaybe(plan.created_by),
   steps: plan.steps.map((s) => ({
     ...s,
+    description: stripWrapMaybe(s.description),
+    expected: stripWrapMaybe(s.expected),
+    category: stripWrapMaybe(s.category),
+    reset_hint: stripWrapMaybe(s.reset_hint),
+    test_url: stripWrapMaybe(s.test_url),
     comments: (s.comments ?? []).map((c) => ({
-      tester: c.tester, ts: c.ts, has_body: !!c.body,
-      // body is OMITTED on purpose
+      tester: c.tester,
+      ts: c.ts,
+      has_body: !!c.body,
+      // body is OMITTED on purpose; attachment_url survives so the tester
+      // UI can still render previously-attached screenshot thumbnails.
+      attachment_url: sanitizeAttachmentUrl(c.attachment_url),
     })),
   })),
 });
@@ -551,19 +726,16 @@ const encodeCommentBody = (body) =>
 // Attachment URLs flow to the agent OUTSIDE the wrap, so they must match
 // the legitimate shape (the URL the upload handler returns). Anything
 // else — including agent-prompt-injection payloads in this field — is
-// nulled out. Legitimate URL shape:
-//   /api/test-plans/<slug>/attachment/<id>.<ext>
-//   - slug up to 63 chars (DNS label limit, see validSlug)
-//   - id is `Date.now().toString(36) + '-' + 8 random b36 chars` (~18 chars)
-//   - ext is 3-4 chars
-// Total: ~30 (path prefix) + 63 (slug) + 12 (attachment/) + 18 (id) + 5 (.ext) ~= 128 chars
-// Cap at 160 with margin; the anchored ^...$ regex still rejects anything longer
-// that happens to start with the legitimate prefix. The previous 100-char cap
-// silently truncated and rejected legitimate uploads (self-critique).
-const ATTACHMENT_URL_RE = /^\/api\/test-plans\/[a-z0-9-]+\/attachment\/[a-z0-9-]+\.(png|jpg|webp)$/;
+// nulled out. ROK-1337 — URLs now carry a plan_id segment:
+//   /api/test-plans/<slug>/<plan_id>/attachment/<id>.<ext>
+// We also accept the v1 shape (no plan_id) so any legacy comment with
+// an attachment URL still validates after the upgrade — those records
+// are read-only after the v1 sweeper runs anyway.
+const ATTACHMENT_URL_RE =
+  /^\/api\/test-plans\/[a-z0-9-]+(?:\/\d{4}-\d{2}-\d{2}-\d{4}-[0-9a-f]{4})?\/attachment\/[a-z0-9-]+\.(png|jpg|webp)$/;
 const sanitizeAttachmentUrl = (u) => {
   if (typeof u !== 'string') return null;
-  const trimmed = u.slice(0, 160);
+  const trimmed = u.slice(0, 200);
   return ATTACHMENT_URL_RE.test(trimmed) ? trimmed : null;
 };
 
@@ -582,6 +754,8 @@ const stripWrapMaybe = (v) => (typeof v === 'string' ? stripWrapTags(v) : v);
 const wrapCommentBodies = (plan) => ({
   ...plan,
   title: stripWrapMaybe(plan.title),
+  goal: stripWrapMaybe(plan.goal),
+  // story_id is server-side-pinned to /^ROK-\d+$/ — no wrap needed.
   created_by: stripWrapMaybe(plan.created_by),
   steps: plan.steps.map((s) => ({
     ...s,
@@ -637,10 +811,37 @@ const planForResponse = (plan, req) => {
     : stripCommentBodies(plan);
 };
 
-const handleTestPlanGet = async (slug, req, res) => {
+// ROK-1337 — list endpoint. GET /api/test-plans/{slug} returns every plan in
+// the slug directory, newest first. Comment bodies are NOT carried at the
+// list layer (testers' comments stay scoped to individual plans, accessed
+// via GET {slug}/{plan_id}). Aggregate `last_updated_at` lets rl_test_plan_wait
+// discriminate spurious inotify wakes.
+const handleTestPlanListForSlug = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
   try {
-    const plan = JSON.parse(await readFile(planPath(slug), 'utf-8'));
+    const plans = await listPlans(slug);
+    // Strip comment bodies on the list path — readability + payload size.
+    // Scoped GET ({slug}/{plan_id}) is where bodies surface.
+    const projected = plans.map((p) => ({
+      ...stripCommentBodies(p),
+      _summary: summarizePlan(p),
+    }));
+    sendJson(res, 200, {
+      ok: true,
+      plans: projected,
+      last_updated_at: aggregateLastUpdated(plans),
+    });
+  } catch (err) {
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
+};
+
+// ROK-1337 — scoped GET /api/test-plans/{slug}/{plan_id}.
+const handleTestPlanGet = async (slug, planId, req, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!validPlanId(planId)) return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
+  try {
+    const plan = JSON.parse(await readFile(planFilePath(slug, planId), 'utf-8'));
     sendJson(res, 200, { ok: true, plan: planForResponse(plan, req), summary: summarizePlan(plan) });
   } catch (err) {
     if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
@@ -696,11 +897,39 @@ const loadEnvRegistry = async () => {
   return { slugs, byId, entries };
 };
 
-const handleTestPlanPut = async (slug, req, res) => {
+// ROK-1337 — PUT /api/test-plans/{slug}/{plan_id}. Creates ONE plan file.
+// Requires `goal` (3-7 words) + `story_id` (/^ROK-\d+$/). plan_id is minted
+// by the MCP layer client-side; we just validate its shape. Multiple plans
+// per slug coexist (different plan_ids = different files in {slug}/).
+const handleTestPlanPut = async (slug, planId, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
-  // ROK-1331 M6b chunk-3: wrap the registry read so non-ENOENT errors
-  // (EACCES, EISDIR, JSON parse) produce a 500 response instead of
-  // propagating up and hanging the HTTP socket.
+  if (!validPlanId(planId)) {
+    return sendJson(res, 400, {
+      ok: false,
+      error: 'plan_id must match YYYY-MM-DD-HHmm-XXXX (e.g. 2026-05-21-1530-7f3a)',
+    });
+  }
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (err) { return sendBodyError(res, err); }
+
+  // ROK-1337 — required field gates. Run these BEFORE the env-existence
+  // check so callers get a deterministic 400 on shape failure regardless
+  // of fleet state. Helps the AC19/AC20/AC21 tests, and gives operators a
+  // useful error envelope when posting from curl by hand.
+  const goalErr = validateGoal(body.goal);
+  if (goalErr) return sendJson(res, 400, { ok: false, error: goalErr });
+  const storyErr = validateStoryId(body.story_id);
+  if (storyErr) return sendJson(res, 400, { ok: false, error: storyErr });
+
+  if (!Array.isArray(body.steps) || body.steps.length === 0)
+    return sendJson(res, 400, { ok: false, error: 'steps[] required' });
+  if (body.steps.length > 100)
+    return sendJson(res, 400, { ok: false, error: 'max 100 steps per plan' });
+
+  // ROK-1331 M6b chunk-3: env-registry existence gate. AC19-AC21 (shape
+  // validation) tests use a curated registry where 'foo'/'bar'/'baz' all
+  // exist, so this guard fires only for genuinely-missing envs.
   let registry;
   try {
     registry = await loadEnvRegistry();
@@ -720,26 +949,27 @@ const handleTestPlanPut = async (slug, req, res) => {
       hint: 'No env exists for this slug. Call rl_env_spin or rl_env_deploy first, then post the plan.',
     });
   }
-  let body;
-  try { body = await readJsonBody(req); }
-  catch (err) { return sendBodyError(res, err); }
 
-  if (!Array.isArray(body.steps) || body.steps.length === 0)
-    return sendJson(res, 400, { ok: false, error: 'steps[] required' });
-  if (body.steps.length > 100)
-    return sendJson(res, 400, { ok: false, error: 'max 100 steps per plan' });
-
-  // Preserve existing results on replace=true unless explicitly cleared.
+  // Refuse to clobber an existing plan with the SAME plan_id (would lose
+  // verdicts). In practice this is extraordinarily rare — plan_ids include
+  // a random 4-hex suffix — but defensive against double-fires.
   let existing = null;
-  if (!body.replace) {
-    try { existing = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
-    catch (err) { if (err.code !== 'ENOENT') throw err; }
-    if (existing)
-      return sendJson(res, 409, { ok: false, error: 'plan exists; pass replace=true to overwrite' });
+  try { existing = JSON.parse(await readFile(planFilePath(slug, planId), 'utf-8')); }
+  catch (err) { if (err.code !== 'ENOENT') throw err; }
+  if (existing) {
+    return sendJson(res, 409, {
+      ok: false,
+      error: 'plan_id already exists for this slug',
+      slug,
+      plan_id: planId,
+    });
   }
 
   const plan = {
     slug,
+    plan_id: planId,
+    goal: stripWrapMaybe(body.goal.trim()),
+    story_id: body.story_id, // matches /^ROK-\d+$/, no wrap needed
     title: typeof body.title === 'string' ? body.title.slice(0, 200) : null,
     created_at: new Date().toISOString(),
     created_by: typeof body.created_by === 'string' ? body.created_by.slice(0, 200) : null,
@@ -765,8 +995,13 @@ const handleTestPlanPut = async (slug, req, res) => {
       reset_requests: [],
     })),
   };
-  await writePlanAtomic(slug, plan);
-  sendJson(res, 201, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
+  await writePlanAtomic(slug, planId, plan);
+  sendJson(res, 201, {
+    ok: true,
+    plan_id: planId,
+    plan: stripCommentBodies(plan),
+    summary: summarizePlan(plan),
+  });
 };
 
 const validateUrl = (raw) => {
@@ -784,8 +1019,9 @@ const validateUrl = (raw) => {
 // pass/fail entrypoint for the buffered-local-state flow; the per-step
 // /step/<id>/result endpoint is still there for compatibility but the
 // dashboard UI no longer uses it for the normal verdict path.
-const handleTestPlanSubmit = async (slug, req, res) => {
+const handleTestPlanSubmit = async (slug, planId, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!validPlanId(planId)) return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
   let body;
   try { body = await readJsonBody(req); }
   catch (err) { return sendBodyError(res, err); }
@@ -800,7 +1036,7 @@ const handleTestPlanSubmit = async (slug, req, res) => {
     : 'anon';
 
   let plan;
-  try { plan = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+  try { plan = JSON.parse(await readFile(planFilePath(slug, planId), 'utf-8')); }
   catch (err) {
     if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
     return sendJson(res, 500, { ok: false, error: err.message });
@@ -854,11 +1090,11 @@ const handleTestPlanSubmit = async (slug, req, res) => {
   });
   if (plan.submissions.length > 50) plan.submissions = plan.submissions.slice(-50);
 
-  await writePlanAtomic(slug, plan);
+  await writePlanAtomic(slug, planId, plan);
   sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
 };
 
-// POST /api/test-plans/<slug>/attachment
+// POST /api/test-plans/<slug>/<plan_id>/attachment
 // Tester uploads a screenshot as base64-in-JSON. Multipart would be more
 // efficient but requires extra parsing — keeping the zero-dep server
 // simple. Returns { url } that the tester then attaches to a comment.
@@ -869,8 +1105,9 @@ const ALLOWED_MIME = new Map([
   ['image/jpeg', 'jpg'],
   ['image/webp', 'webp'],
 ]);
-const handleAttachmentUpload = async (slug, req, res) => {
+const handleAttachmentUpload = async (slug, planId, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!validPlanId(planId)) return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
   let body;
   try { body = await readJsonBody(req, Math.ceil(MAX_ATTACHMENT_BYTES * 4 / 3) + 4096); }
   catch (err) { return sendBodyError(res, err); }
@@ -895,7 +1132,10 @@ const handleAttachmentUpload = async (slug, req, res) => {
   // exceeded; bail without writing further.
   if (!byteQuotaOk(req, res, buf.length)) return;
 
-  const dir = join(ATTACHMENTS_DIR, slug);
+  // ROK-1337 — attachments live under {slug}/{plan_id}/ so a slug-wide
+  // delete naturally removes attachments tied to the wiped plans. The
+  // ATTACHMENTS_DIR layout mirrors TEST_PLANS_DIR's per-plan grouping.
+  const dir = join(ATTACHMENTS_DIR, slug, planId);
   await mkdir(dir, { recursive: true });
   // Random filename keeps URLs unguessable enough that bookmark-share
   // doesn't expose other comments' attachments unless the tester explicitly
@@ -905,10 +1145,11 @@ const handleAttachmentUpload = async (slug, req, res) => {
   const filename = `${id}.${ext}`;
   await writeFile(join(dir, filename), buf);
 
-  // Public URL the dashboard / agent can fetch.
+  // Public URL the dashboard / agent can fetch. Includes plan_id so the
+  // GET handler routes correctly.
   sendJson(res, 200, {
     ok: true,
-    url: `/api/test-plans/${slug}/attachment/${filename}`,
+    url: `/api/test-plans/${slug}/${planId}/attachment/${filename}`,
     bytes: buf.length,
     mime,
   });
@@ -918,12 +1159,20 @@ const handleAttachmentUpload = async (slug, req, res) => {
 // Serves the uploaded image. No auth — dashboard is operator's network /
 // shared with explicit testers; URLs are unguessable random IDs.
 const ATTACHMENT_FILENAME_RE = /^[a-z0-9-]+\.(png|jpg|webp)$/;
-const handleAttachmentGet = async (slug, filename, res) => {
+// ROK-1337 — GET now takes plan_id segment. Optional for back-compat (any
+// legacy v1 attachment URLs that survived the sweeper still resolve under
+// the old `{slug}/<file>` path).
+const handleAttachmentGet = async (slug, planId, filename, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (planId !== null && !validPlanId(planId))
+    return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
   if (!ATTACHMENT_FILENAME_RE.test(filename))
     return sendJson(res, 400, { ok: false, error: 'invalid filename' });
   try {
-    const data = await readFile(join(ATTACHMENTS_DIR, slug, filename));
+    const path = planId
+      ? join(ATTACHMENTS_DIR, slug, planId, filename)
+      : join(ATTACHMENTS_DIR, slug, filename);
+    const data = await readFile(path);
     const ext = filename.split('.').pop();
     const mime = ext === 'png' ? 'image/png'
       : ext === 'webp' ? 'image/webp' : 'image/jpeg';
@@ -1415,8 +1664,9 @@ const handlePerfEmit = async (req, res) => {
 // to the Linear story manually — keeping LLM-injection surface zero
 // while still giving testers a free-text channel. See linear_story_id
 // field on the plan if/when the agent wants to attach the comments.
-const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
+const handleTestPlanStepComment = async (slug, planId, stepIdRaw, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!validPlanId(planId)) return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
   const stepId = parseInt(stepIdRaw, 10);
   if (!Number.isInteger(stepId) || stepId < 1)
     return sendJson(res, 400, { ok: false, error: 'invalid step id' });
@@ -1432,7 +1682,7 @@ const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
     : 'anon';
 
   let plan;
-  try { plan = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+  try { plan = JSON.parse(await readFile(planFilePath(slug, planId), 'utf-8')); }
   catch (err) {
     if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
     return sendJson(res, 500, { ok: false, error: err.message });
@@ -1463,7 +1713,7 @@ const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
   });
   if (step.comments.length > 50) step.comments = step.comments.slice(-50);
 
-  await writePlanAtomic(slug, plan);
+  await writePlanAtomic(slug, planId, plan);
   // Return summary only — don't echo the comment body in the response
   // since this endpoint sits on the same path family as the LLM-facing
   // ones and we want a consistent contract.
@@ -1475,8 +1725,9 @@ const handleTestPlanStepComment = async (slug, stepIdRaw, req, res) => {
 // append a request with the tester's name and timestamp; the agent reads
 // pending requests via rl_test_plan_status. Constrained signal — no
 // free-form text from the tester.
-const handleTestPlanStepResetRequest = async (slug, stepIdRaw, req, res) => {
+const handleTestPlanStepResetRequest = async (slug, planId, stepIdRaw, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!validPlanId(planId)) return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
   const stepId = parseInt(stepIdRaw, 10);
   if (!Number.isInteger(stepId) || stepId < 1)
     return sendJson(res, 400, { ok: false, error: 'invalid step id' });
@@ -1489,7 +1740,7 @@ const handleTestPlanStepResetRequest = async (slug, stepIdRaw, req, res) => {
     : 'anon';
 
   let plan;
-  try { plan = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+  try { plan = JSON.parse(await readFile(planFilePath(slug, planId), 'utf-8')); }
   catch (err) {
     if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
     return sendJson(res, 500, { ok: false, error: err.message });
@@ -1505,12 +1756,13 @@ const handleTestPlanStepResetRequest = async (slug, stepIdRaw, req, res) => {
   });
   if (step.reset_requests.length > 20) step.reset_requests = step.reset_requests.slice(-20);
 
-  await writePlanAtomic(slug, plan);
+  await writePlanAtomic(slug, planId, plan);
   sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
 };
 
-const handleTestPlanStepResult = async (slug, stepIdRaw, req, res) => {
+const handleTestPlanStepResult = async (slug, planId, stepIdRaw, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!validPlanId(planId)) return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
   const stepId = parseInt(stepIdRaw, 10);
   if (!Number.isInteger(stepId) || stepId < 1)
     return sendJson(res, 400, { ok: false, error: 'invalid step id' });
@@ -1526,7 +1778,7 @@ const handleTestPlanStepResult = async (slug, stepIdRaw, req, res) => {
     : 'anon';
 
   let plan;
-  try { plan = JSON.parse(await readFile(planPath(slug), 'utf-8')); }
+  try { plan = JSON.parse(await readFile(planFilePath(slug, planId), 'utf-8')); }
   catch (err) {
     if (err.code === 'ENOENT') return sendJson(res, 404, { ok: false, error: 'no plan for slug' });
     return sendJson(res, 500, { ok: false, error: err.message });
@@ -1556,35 +1808,69 @@ const handleTestPlanStepResult = async (slug, stepIdRaw, req, res) => {
   // Cap history at 20 entries per step — keep most recent.
   if (step.results.length > 20) step.results = step.results.slice(-20);
 
-  await writePlanAtomic(slug, plan);
+  await writePlanAtomic(slug, planId, plan);
   sendJson(res, 200, { ok: true, plan: stripCommentBodies(plan), summary: summarizePlan(plan) });
 };
 
-const handleTestPlanDelete = async (slug, res) => {
+// ROK-1337 — DELETE /api/test-plans/{slug}/{plan_id}: remove one plan file.
+// Slug subdirectory is LEFT INTACT (other plans may still live there).
+// Codex P2 follow-up — also wipes the matching ATTACHMENTS_DIR/<slug>/<plan_id>
+// tree so screenshots for the cleared plan don't outlive the plan itself
+// (matching the slug-wide DELETE behavior at handleTestPlanDeleteSlug).
+const handleTestPlanDelete = async (slug, planId, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  if (!validPlanId(planId)) return sendJson(res, 400, { ok: false, error: 'invalid plan_id' });
   try {
-    await unlink(planPath(slug));
-    sendJson(res, 200, { ok: true });
+    await unlink(planFilePath(slug, planId));
+    // Best-effort attachment-dir wipe — not fatal if it fails or doesn't exist.
+    await rm(join(ATTACHMENTS_DIR, slug, planId), { recursive: true, force: true }).catch(() => {});
+    sendJson(res, 200, { ok: true, plan_id: planId });
   } catch (err) {
-    if (err.code === 'ENOENT') return sendJson(res, 200, { ok: true, noop: true });
+    if (err.code === 'ENOENT') {
+      // Plan JSON already gone — still attempt the attachment cleanup so a
+      // retry after a partial delete doesn't leave stale screenshots behind.
+      await rm(join(ATTACHMENTS_DIR, slug, planId), { recursive: true, force: true }).catch(() => {});
+      return sendJson(res, 200, { ok: true, noop: true, plan_id: planId });
+    }
     sendJson(res, 500, { ok: false, error: err.message });
   }
 };
 
-// Lightweight list endpoint — returns a map of slug -> summary so the
-// dashboard can show "this env has a test plan" badges without N requests.
+// ROK-1337 — DELETE /api/test-plans/{slug}: recursively remove the whole
+// {slug}/ directory. Returns `{ok:true, cleared_count:N}` where N is the
+// number of plan files removed (for the MCP layer to confirm cleanup).
+// Also wipes the matching ATTACHMENTS_DIR/{slug}/ tree so screenshots
+// don't outlive their plans. Idempotent — empty / missing dir → 0.
+const handleTestPlanDeleteSlug = async (slug, res) => {
+  if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
+  let clearedCount = 0;
+  try {
+    const dir = planSlugDir(slug);
+    const files = await readdir(dir).catch((err) => {
+      if (err.code === 'ENOENT') return null;
+      throw err;
+    });
+    if (files !== null) {
+      for (const f of files) {
+        if (f.endsWith('.json') && !f.startsWith('.')) clearedCount += 1;
+      }
+      await rm(dir, { recursive: true, force: true });
+    }
+    // Best-effort attachment dir wipe — not fatal if it fails or doesn't exist.
+    await rm(join(ATTACHMENTS_DIR, slug), { recursive: true, force: true }).catch(() => {});
+    sendJson(res, 200, { ok: true, cleared_count: clearedCount });
+  } catch (err) {
+    sendJson(res, 500, { ok: false, error: err.message, cleared_count: clearedCount });
+  }
+};
+
+// Lightweight list endpoint — returns a map of slug -> aggregate summary
+// so the dashboard can show "this env has a test plan" badges without N
+// requests. ROK-1337: reuses collectPlanSummaries which walks the v2
+// per-slug subdirs.
 const handleTestPlanList = async (res) => {
   try {
-    const files = await readdir(TEST_PLANS_DIR);
-    const summaries = {};
-    for (const f of files) {
-      if (!f.endsWith('.json')) continue;
-      const slug = f.slice(0, -5);
-      try {
-        const plan = JSON.parse(await readFile(join(TEST_PLANS_DIR, f), 'utf-8'));
-        summaries[slug] = summarizePlan(plan);
-      } catch { /* skip bad file */ }
-    }
+    const summaries = await collectPlanSummaries();
     sendJson(res, 200, { ok: true, summaries });
   } catch (err) {
     if (err.code === 'ENOENT') return sendJson(res, 200, { ok: true, summaries: {} });
@@ -1615,13 +1901,20 @@ const serveStatic = async (req, res) => {
 
 // Test-plan route patterns. Keep these as simple anchored regexes so the
 // hot path stays predictable; no Express, no router framework.
-const RE_PLAN = /^\/api\/test-plans\/([a-z0-9-]+)$/;
-const RE_STEP = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/result$/;
-const RE_RESET = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/reset-request$/;
-const RE_COMMENT = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/comment$/;
-const RE_SUBMIT = /^\/api\/test-plans\/([a-z0-9-]+)\/submit$/;
-const RE_ATTACH_POST = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment$/;
-const RE_ATTACH_GET = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment\/([A-Za-z0-9.-]+)$/;
+// ROK-1337 — every per-plan path carries a {plan_id} segment that matches
+// PLAN_ID_RE. The slug-only routes are now list/clear-all only.
+const PLAN_ID_PATTERN = '\\d{4}-\\d{2}-\\d{2}-\\d{4}-[0-9a-f]{4}';
+const RE_PLAN_LIST = /^\/api\/test-plans\/([a-z0-9-]+)$/;
+const RE_PLAN_ONE = new RegExp(`^\\/api\\/test-plans\\/([a-z0-9-]+)\\/(${PLAN_ID_PATTERN})$`);
+const RE_STEP = new RegExp(`^\\/api\\/test-plans\\/([a-z0-9-]+)\\/(${PLAN_ID_PATTERN})\\/step\\/(\\d+)\\/result$`);
+const RE_RESET = new RegExp(`^\\/api\\/test-plans\\/([a-z0-9-]+)\\/(${PLAN_ID_PATTERN})\\/step\\/(\\d+)\\/reset-request$`);
+const RE_COMMENT = new RegExp(`^\\/api\\/test-plans\\/([a-z0-9-]+)\\/(${PLAN_ID_PATTERN})\\/step\\/(\\d+)\\/comment$`);
+const RE_SUBMIT = new RegExp(`^\\/api\\/test-plans\\/([a-z0-9-]+)\\/(${PLAN_ID_PATTERN})\\/submit$`);
+const RE_ATTACH_POST = new RegExp(`^\\/api\\/test-plans\\/([a-z0-9-]+)\\/(${PLAN_ID_PATTERN})\\/attachment$`);
+const RE_ATTACH_GET = new RegExp(`^\\/api\\/test-plans\\/([a-z0-9-]+)\\/(${PLAN_ID_PATTERN})\\/attachment\\/([A-Za-z0-9.-]+)$`);
+// Legacy v1 attachment GET — kept for any post-sweeper survivor (sanitized
+// comment bodies could still carry one). Read-only.
+const RE_ATTACH_GET_V1 = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment\/([A-Za-z0-9.-]+)$/;
 // Route regex is permissive (alphanumeric + underscore) so the handler can
 // emit a 400 with a clear error body for shape-valid-but-strict-invalid ids
 // (uppercase, too short, too long). The handler then enforces the canonical
@@ -1665,45 +1958,66 @@ const server = createServer(async (req, res) => {
     await handleTestPlanList(res);
     return;
   }
-  const planMatch = RE_PLAN.exec(pathOnly);
-  if (planMatch) {
-    const slug = planMatch[1];
-    if (req.method === 'GET') return handleTestPlanGet(slug, req, res);
-    if (req.method === 'PUT' || req.method === 'POST') return handleTestPlanPut(slug, req, res);
-    if (req.method === 'DELETE') return handleTestPlanDelete(slug, res);
-    res.writeHead(405); res.end('Method Not Allowed'); return;
-  }
+  // ROK-1337 — match per-plan routes BEFORE the slug-only fallback so
+  // `/api/test-plans/foo/{plan_id}` doesn't accidentally hit the list
+  // handler. Order: most specific first.
   const stepMatch = RE_STEP.exec(pathOnly);
   if (stepMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
-    return handleTestPlanStepResult(stepMatch[1], stepMatch[2], req, res);
+    return handleTestPlanStepResult(stepMatch[1], stepMatch[2], stepMatch[3], req, res);
   }
   const resetMatch = RE_RESET.exec(pathOnly);
   if (resetMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
-    return handleTestPlanStepResetRequest(resetMatch[1], resetMatch[2], req, res);
+    return handleTestPlanStepResetRequest(resetMatch[1], resetMatch[2], resetMatch[3], req, res);
   }
   const commentMatch = RE_COMMENT.exec(pathOnly);
   if (commentMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
-    return handleTestPlanStepComment(commentMatch[1], commentMatch[2], req, res);
+    return handleTestPlanStepComment(commentMatch[1], commentMatch[2], commentMatch[3], req, res);
   }
   const submitMatch = RE_SUBMIT.exec(pathOnly);
   if (submitMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
-    return handleTestPlanSubmit(submitMatch[1], req, res);
+    return handleTestPlanSubmit(submitMatch[1], submitMatch[2], req, res);
   }
   const attachPostMatch = RE_ATTACH_POST.exec(pathOnly);
   if (attachPostMatch) {
     if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return; }
-    return handleAttachmentUpload(attachPostMatch[1], req, res);
+    return handleAttachmentUpload(attachPostMatch[1], attachPostMatch[2], req, res);
   }
   const attachGetMatch = RE_ATTACH_GET.exec(pathOnly);
   if (attachGetMatch) {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405); res.end('Method Not Allowed'); return;
     }
-    return handleAttachmentGet(attachGetMatch[1], attachGetMatch[2], res);
+    return handleAttachmentGet(attachGetMatch[1], attachGetMatch[2], attachGetMatch[3], res);
+  }
+  const attachGetV1Match = RE_ATTACH_GET_V1.exec(pathOnly);
+  if (attachGetV1Match) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405); res.end('Method Not Allowed'); return;
+    }
+    return handleAttachmentGet(attachGetV1Match[1], null, attachGetV1Match[2], res);
+  }
+  // Per-plan PUT/GET/DELETE comes after the more specific submit/comment/etc
+  // routes above so those don't fall through to the generic plan handler.
+  const planOneMatch = RE_PLAN_ONE.exec(pathOnly);
+  if (planOneMatch) {
+    const slug = planOneMatch[1];
+    const planId = planOneMatch[2];
+    if (req.method === 'GET') return handleTestPlanGet(slug, planId, req, res);
+    if (req.method === 'PUT' || req.method === 'POST') return handleTestPlanPut(slug, planId, req, res);
+    if (req.method === 'DELETE') return handleTestPlanDelete(slug, planId, res);
+    res.writeHead(405); res.end('Method Not Allowed'); return;
+  }
+  // Slug-only routes: list (GET) + slug-wide clear (DELETE).
+  const planListMatch = RE_PLAN_LIST.exec(pathOnly);
+  if (planListMatch) {
+    const slug = planListMatch[1];
+    if (req.method === 'GET') return handleTestPlanListForSlug(slug, req, res);
+    if (req.method === 'DELETE') return handleTestPlanDeleteSlug(slug, res);
+    res.writeHead(405); res.end('Method Not Allowed'); return;
   }
   const taskLogMatch = RE_TASK_LOG.exec(pathOnly);
   if (taskLogMatch) {
@@ -1715,11 +2029,26 @@ const server = createServer(async (req, res) => {
   await serveStatic(req, res);
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
   // Read the actual bound port from server.address() so PORT=0 (random
   // port for tests) prints a real :<n> the test harness can parse.
   const addr = server.address();
   const boundPort = addr && typeof addr === 'object' ? addr.port : PORT;
   // eslint-disable-next-line no-console
   console.log(`rl-dashboard listening on :${boundPort}, state=${STATE_DIR}, public=${PUBLIC_DIR}`);
+  // ROK-1337 — fire the v1 sweeper once at boot. Run AFTER `listen` resolves
+  // so the test harness can race the sweeper to its `stat()` of the
+  // legacy file before sweepLegacyV1Plans completes. We `await` here to
+  // surface any failure in the boot log; the sweeper itself is wrapped
+  // in try/catch and only logs at info level, so this won't crash boot.
+  try {
+    const removed = await sweepLegacyV1Plans();
+    if (removed > 0) {
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify({ event: 'v1_sweeper', removed }));
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[rl-dashboard] v1_sweeper failed at boot: ${err.message}`);
+  }
 });

@@ -2,8 +2,39 @@
 // every REFRESH_MS, but PAUSES whenever a tester has any unsent draft
 // verdicts (replaceChildren during a refresh would wipe scroll/focus and
 // make checkboxes feel jumpy). Resumes after Submit or Clear draft.
+//
+// ROK-1337 — tester route dispatch. When the URL carries ?slug=<name>, we
+// hand off to window.__rlTester.bootTesterPage(slug) and skip the operator
+// fleet initialization entirely. The tester modules (test-plan-*.js) are
+// loaded BEFORE this file in index.html so __rlTester is already attached
+// to window by the time we reach the dispatch check below.
 
 const REFRESH_MS = 15000;
+
+// Tester-route detection. Two forms recognised:
+//   ?slug=<name>       (preferred, e.g. https://fleet.gamernight.net/?slug=feature-foo)
+//   /t/<name>          (path form, looks nicer in shared links)
+// Slug shape is enforced by the dashboard server anyway; we only need to
+// extract it cleanly and not bail on edge cases like trailing slashes.
+const getTesterSlugFromUrl = () => {
+  try {
+    const url = new URL(window.location.href);
+    const q = url.searchParams.get('slug');
+    if (q && /^[a-z0-9-]{1,63}$/.test(q)) return q;
+    const m = url.pathname.match(/^\/t\/([a-z0-9-]{1,63})\/?$/);
+    if (m) return m[1];
+  } catch { /* fall through */ }
+  return null;
+};
+
+// Dispatch BEFORE the operator-route setup runs. If we're on a tester URL,
+// hand control over and return — none of the operator polling / DOM should
+// execute on the tester page.
+const __testerSlug = (typeof window !== 'undefined') ? getTesterSlugFromUrl() : null;
+if (__testerSlug && window.__rlTester && typeof window.__rlTester.bootTesterPage === 'function') {
+  // Fire and forget — boot is async but the operator path mustn't compete.
+  void window.__rlTester.bootTesterPage(__testerSlug);
+}
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, opts = {}, ...children) => {
@@ -132,14 +163,10 @@ const renderTaskRow = (task) => {
 
   row.appendChild(el('span', { class: 'task-elapsed', text: `(${fmtElapsed(task.elapsed_seconds)})` }));
 
-  row.appendChild(document.createTextNode(' · '));
-  row.appendChild(el('a', {
-    class: 'task-log-link',
-    href: `/api/tasks/${task.task_id}/log`,
-    target: '_blank',
-    rel: 'noopener',
-    text: 'log',
-  }));
+  // ROK-1337 follow-up — the per-task `· log` link was a low-value
+  // distraction (raw text log, no formatting, public endpoint blocked
+  // by Traefik anyway). Removed; operators who genuinely need a log
+  // tail can hit the LAN URL directly or use rl_infra_logs MCP.
   return row;
 };
 
@@ -408,27 +435,36 @@ const ensureTesterName = async () => {
 };
 
 const renderTestPlanSection = (slug, summary) => {
-  // data-slug lets the auto-reset-on-submit helper scope its DOM rewrite to
-  // THIS plan's card only. A prior version used document.querySelectorAll
-  // unscoped and bled the reset across every env card on the page.
+  // ROK-1337 — multi-plan model: the operator card no longer renders the
+  // full step list inline (would have to pick one of N plans arbitrarily).
+  // Instead, surface a tester-route link + the aggregate roll-up. Per-plan
+  // detail lives on `/?slug=<name>`.
   const section = el('div', { class: 'plan-section' });
   section.dataset.slug = slug;
   const header = el('div', { class: 'plan-header' });
-  // Operator preference (2026-05-21): show the plan's actual title here, not
-  // the step total + pending counts. Footer already surfaces "N of M drafted"
-  // for at-a-glance progress, so the counts in the header were redundant +
-  // distracting. Fallback to a step-count line if title is missing.
-  const headerText = summary.title || `Test plan (${summary.total} step${summary.total === 1 ? '' : 's'})`;
+  const planCount = summary.plan_count || 1;
+  const headerText = summary.title
+    ? `${summary.title} · ${planCount} plan${planCount === 1 ? '' : 's'}`
+    : `${planCount} test plan${planCount === 1 ? '' : 's'} (${summary.total} step${summary.total === 1 ? '' : 's'})`;
   header.appendChild(el('span', { class: 'plan-title', text: headerText }));
   section.appendChild(header);
-
-  const stepsDiv = el('div', { class: 'plan-steps', text: 'Loading…' });
+  const stepsDiv = el('div', { class: 'plan-steps' });
+  // Aggregate counts inline — gives the operator a quick verdict snapshot
+  // without leaving the fleet page.
+  const counts = el('div', { class: 'plan-step-counts' });
+  counts.textContent =
+    `${summary.pass ?? 0} pass · ${summary.fail ?? 0} fail · ${summary.skip ?? 0} skip · ${summary.pending ?? 0} pending`;
+  stepsDiv.appendChild(counts);
+  const testerLink = el('a', {
+    class: 'plan-tester-link',
+    href: `/?slug=${encodeURIComponent(slug)}`,
+    target: '_blank', rel: 'noopener',
+    text: 'Open tester view ↗',
+  });
+  testerLink.style.marginTop = '6px';
+  testerLink.style.display = 'inline-block';
+  stepsDiv.appendChild(testerLink);
   section.appendChild(stepsDiv);
-
-  // Lazy-fetch the full plan on first render of this env card. The
-  // /api/state poll only carries the summary; the full step list comes
-  // from /api/test-plans/<slug>.
-  loadTestPlanInto(slug, stepsDiv);
   return section;
 };
 
@@ -1034,6 +1070,43 @@ const requestReset = async (slug, stepId) => {
 
 const renderEmpty = (msg) => el('div', { class: 'empty', text: msg });
 
+// ROK-1337 — tester-discovery card for the operator dashboard's TESTS
+// section. One card per slug-with-plans. Whole card is the link → `/?slug=`.
+// Decoupled from env-registry so it works even when env-spin / env-registry
+// are out of sync (the env_spin parse-bug case).
+const renderTestSlugCard = (slug, summary) => {
+  const card = el('a', {
+    class: 'card link test-card',
+    href: `/?slug=${encodeURIComponent(slug)}`,
+  });
+  const pending = summary.pending ?? 0;
+  const total = summary.total ?? 0;
+  const planCount = summary.plan_count ?? 1;
+  const submitted = pending === 0 && total > 0;
+  const head = el('div', { class: 'test-card-head' });
+  if (summary.story_id) {
+    head.appendChild(el('a', {
+      class: 'story-chip',
+      href: `https://linear.app/roknua-projects/issue/${encodeURIComponent(summary.story_id)}`,
+      target: '_blank', rel: 'noopener',
+      text: `${summary.story_id} ↗`,
+    }));
+  }
+  const callout = el('span', { class: submitted ? 'test-card-status ok' : 'test-card-status pending' });
+  callout.textContent = submitted
+    ? `✓ All ${total} verdicted`
+    : `${pending} of ${total} need a verdict`;
+  head.appendChild(callout);
+  card.appendChild(head);
+  card.appendChild(el('div', { class: 'goal', text: summary.goal || summary.title || slug }));
+  const meta = el('div', { class: 'test-card-meta muted' });
+  meta.textContent = planCount === 1
+    ? `${slug} · 1 plan`
+    : `${slug} · ${planCount} plans`;
+  card.appendChild(meta);
+  return card;
+};
+
 const render = (data) => {
   // ROK-1326 fix-9 (final): preserve scroll position across re-renders by
   // PINNING the containers' min-height to their current height BEFORE
@@ -1052,10 +1125,32 @@ const render = (data) => {
   // height takes over. Document height never dips.
   const slotsDiv = $('slots');
   const envsDiv = $('envs');
+  const testsDiv = $('tests');
   const slotsH = slotsDiv.offsetHeight;
   const envsH = envsDiv.offsetHeight;
+  const testsH = testsDiv ? testsDiv.offsetHeight : 0;
   slotsDiv.style.minHeight = slotsH + 'px';
   envsDiv.style.minHeight = envsH + 'px';
+  if (testsDiv) testsDiv.style.minHeight = testsH + 'px';
+
+  // ROK-1337 — TESTS section. Driven by /api/test-plans summaries (NOT
+  // env-registry) so testers always have a discovery path even when
+  // env-spin / env-registry are stale.
+  if (testsDiv) {
+    const summaries = data.test_plan_summaries || {};
+    const slugs = Object.keys(summaries).sort((a, b) => {
+      const aT = summaries[a].last_updated_at || '';
+      const bT = summaries[b].last_updated_at || '';
+      return bT.localeCompare(aT);
+    });
+    const testCards = slugs.map((slug) => renderTestSlugCard(slug, summaries[slug]));
+    if (!testCards.length) {
+      testCards.push(renderEmpty('No active tests. Post a plan with rl_test_plan_create to surface it here.'));
+    }
+    testsDiv.replaceChildren(...testCards);
+    const cnt = $('tests-count');
+    if (cnt) cnt.textContent = slugs.length ? `· ${slugs.length}` : '';
+  }
 
   const activeTasks = data.active_tasks ?? [];
   const leaseQueues = data.lease_queues ?? [];
@@ -1078,6 +1173,7 @@ const render = (data) => {
   requestAnimationFrame(() => {
     slotsDiv.style.minHeight = '';
     envsDiv.style.minHeight = '';
+    if (testsDiv) testsDiv.style.minHeight = '';
   });
 };
 
@@ -1129,9 +1225,36 @@ const tick = async (opts = {}) => {
     if (Date.now() - lastActivityAt < 8000) { setStatus('paused'); return; }
   }
   try {
-    const r = await fetch('/api/state', { cache: 'no-store' });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
+    // ROK-1337 — fetch state + test-plan summaries in parallel so the
+    // TESTS section paints in the same tick as Slots/Envs (single
+    // render() call, no flash). Plan summaries failing must NOT block
+    // the operator chrome from rendering, so guard with Promise.allSettled.
+    // Codex P2 follow-up — also bound the test-plans fetch with a 2s
+    // timeout so a slow/hung tests endpoint doesn't blank the dashboard.
+    // /api/state is the source of truth for slots/envs; /api/test-plans
+    // is decoration. Without the AbortController, allSettled still waits
+    // for the slow side before render() fires.
+    const plansAc = new AbortController();
+    const plansTimer = setTimeout(() => plansAc.abort(), 2000);
+    const [stateResult, plansResult] = await Promise.allSettled([
+      fetch('/api/state', { cache: 'no-store' }),
+      fetch('/api/test-plans', { cache: 'no-store', signal: plansAc.signal }),
+    ]);
+    clearTimeout(plansTimer);
+    if (stateResult.status !== 'fulfilled' || !stateResult.value.ok) {
+      throw new Error(stateResult.status === 'fulfilled'
+        ? `HTTP ${stateResult.value.status}`
+        : 'state fetch rejected');
+    }
+    const data = await stateResult.value.json();
+    if (plansResult.status === 'fulfilled' && plansResult.value.ok) {
+      try {
+        const planJson = await plansResult.value.json();
+        data.test_plan_summaries = planJson.summaries ?? {};
+      } catch { data.test_plan_summaries = {}; }
+    } else {
+      data.test_plan_summaries = {};
+    }
     // Preserve scroll across the replaceChildren-based render. Even when
     // the DOM is identical shape, replaceChildren forces a reset to (0,0)
     // — bad for testers reading mid-page. Save & restore.
@@ -1168,29 +1291,36 @@ const tick = async (opts = {}) => {
 // Infra cards (Traefik/Grafana/Registry) are LAN-only because those services
 // aren't exposed externally for security. Show the section ONLY when the
 // dashboard was loaded via the .rl.lan hostname.
-if (isLan) {
-  $('infra-section').style.display = '';
-}
+// ROK-1337 — skip operator init when on the tester route. The tester page
+// has its own boot path (window.__rlTester.bootTesterPage) that fires at
+// module load time. Running operator initialization on top of it would
+// double-fetch /api/state and flash the operator UI before the tester
+// page hides it.
+if (!__testerSlug) {
+  if (isLan) {
+    $('infra-section').style.display = '';
+  }
 
-// Auto-refresh DISABLED (operator pref 2026-05-19) — the periodic
-// re-render was disrupting mid-test reading. Refreshes now via:
-//   - Initial page load (force, so the activity-defer doesn't suppress it)
-//   - Browser native pull-to-refresh (triggers a full reload → pageshow
-//     handler fires → force tick → fresh render)
-//   - Tap the refresh indicator dot in the header
-tick({ force: true });
-const refreshDot = $('refresh-indicator');
-if (refreshDot) {
-  refreshDot.style.cursor = 'pointer';
-  refreshDot.title = 'Tap to refresh (auto-refresh disabled)';
-  refreshDot.addEventListener('click', () => tick({ force: true }));
+  // Auto-refresh DISABLED (operator pref 2026-05-19) — the periodic
+  // re-render was disrupting mid-test reading. Refreshes now via:
+  //   - Initial page load (force, so the activity-defer doesn't suppress it)
+  //   - Browser native pull-to-refresh (triggers a full reload → pageshow
+  //     handler fires → force tick → fresh render)
+  //   - Tap the refresh indicator dot in the header
+  tick({ force: true });
+  const refreshDot = $('refresh-indicator');
+  if (refreshDot) {
+    refreshDot.style.cursor = 'pointer';
+    refreshDot.title = 'Tap to refresh (auto-refresh disabled)';
+    refreshDot.addEventListener('click', () => tick({ force: true }));
+  }
+  // pageshow fires on both fresh page load and bfcache restore (back/forward
+  // nav, mobile reload). Without this, bfcache-restored pages would show
+  // the cached pre-reload DOM until the user manually tapped the dot.
+  window.addEventListener('pageshow', (ev) => {
+    if (ev.persisted) tick({ force: true });
+  });
 }
-// pageshow fires on both fresh page load and bfcache restore (back/forward
-// nav, mobile reload). Without this, bfcache-restored pages would show
-// the cached pre-reload DOM until the user manually tapped the dot.
-window.addEventListener('pageshow', (ev) => {
-  if (ev.persisted) tick({ force: true });
-});
 
 // Pull-to-refresh removed 2026-05-19 — the custom gesture handler was
 // causing an empty-dashboard render in incognito sessions (reproducible).
@@ -1235,7 +1365,10 @@ const updateTtlLabels = () => {
 const isJsdom = typeof navigator !== 'undefined'
   && typeof navigator.userAgent === 'string'
   && navigator.userAgent.includes('jsdom');
-if (!isJsdom) {
+// ROK-1337 — only run the operator-route 1s tick when we're not on the
+// tester route. The tester page has no .task-elapsed / .claim-ttl spans
+// so the intervals are pure overhead there.
+if (!isJsdom && !__testerSlug) {
   setInterval(updateElapsedLabels, 1000);
   setInterval(updateTtlLabels, 1000);
 }

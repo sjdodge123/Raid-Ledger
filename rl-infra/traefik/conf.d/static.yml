@@ -43,6 +43,22 @@ http:
       entryPoints: [web]
       middlewares: [rl-headers]
 
+    # ROK-1337 — block raw task log content from leaking to the public
+    # internet. `/api/tasks/<id>/log` returns the last 50 KiB of an
+    # append-only log file with no auth (server.js:1170 comment marks
+    # this as intentional under the LAN+Cloudflare trust model — but
+    # Cloudflare is a CDN proxy, not authentication, so any external
+    # visitor that loads the dashboard can read every task's log,
+    # including build output, postgres NOTICE dumps with schema
+    # internals, and stack traces with absolute paths). LAN access
+    # (Host(`fleet.rl.lan`)) keeps working for operators on the network.
+    # Priority must beat the dashboard router so this wins for matches.
+    dashboard-block-task-logs:
+      rule: "HostRegexp(`^fleet\\..+$`) && !Host(`fleet.rl.lan`) && PathRegexp(`^/api/tasks/[^/]+/log$`)"
+      service: fallback
+      entryPoints: [web]
+      priority: 200
+
     # Runner slots — both default (1,2) and optional (3,4) listed. Routes for
     # slot-3/slot-4 are inactive until you enable the `extra-slots` compose
     # profile; Traefik will log "no available servers" until then, which is

@@ -99,10 +99,17 @@ test('AC-M6b-15: non-ENOENT registry error returns 500, NOT a hung socket', asyn
   let response;
   let aborted = false;
   try {
-    response = await fetch(`${srv.base}/api/test-plans/anyslug`, {
+    // ROK-1337 — PUT now requires a {plan_id} segment AND goal/story_id in
+    // the body. Use shape-valid values so we exercise the registry-read
+    // path (not the early shape guards that return 400 before the read).
+    response = await fetch(`${srv.base}/api/test-plans/anyslug/2026-05-21-1530-7f3a`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ steps: [{ description: 'ok' }] }),
+      body: JSON.stringify({
+        goal: 'validate registry error path',
+        story_id: 'ROK-1337',
+        steps: [{ description: 'ok' }],
+      }),
       signal: ctrl.signal,
     });
   } catch (err) {
@@ -139,11 +146,18 @@ test('AC-M6b-16: server survives the 500 — subsequent requests still succeed',
   if (_ctx?.dir) await rm(_ctx.dir, { recursive: true, force: true });
   _ctx = { dir, srv };
 
-  // First: PUT triggers the 500.
-  const r1 = await fetch(`${srv.base}/api/test-plans/foo`, {
+  // First: PUT triggers the 500 (registry parse error). ROK-1337 — URL needs
+  // {plan_id} segment AND body needs goal/story_id; shape gates run first
+  // so we use valid values to make sure the registry-read path actually
+  // executes.
+  const r1 = await fetch(`${srv.base}/api/test-plans/foo/2026-05-21-1530-7f3a`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ steps: [{ description: 'ok' }] }),
+    body: JSON.stringify({
+      goal: 'validate registry parse error',
+      story_id: 'ROK-1337',
+      steps: [{ description: 'ok' }],
+    }),
   });
   assert.equal(r1.status, 500);
 

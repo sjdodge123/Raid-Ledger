@@ -23,6 +23,12 @@ html, body {
   font-size: 16px;
   -webkit-tap-highlight-color: transparent;
 }
+/* HTML's [hidden] attribute normally sets display:none, but ANY explicit
+   `display:` rule on the same element overrides it (CSS specificity wins
+   over the user-agent default). The tester route hides operator-header /
+   operator-main via .hidden=true; restore the expected semantics so the
+   tester surface is operator-chrome-free. */
+[hidden] { display: none !important; }
 header {
   position: sticky;
   top: 0;
@@ -60,6 +66,14 @@ main { padding-bottom: 96px; }
   gap: var(--gap);
   padding: 0 16px;
 }
+/* ROK-1337 — mobile overflow guard. CSS Grid tracks default to min-content
+   sizing, so a long unbreakable task arg (e.g.
+   `rl_validate_ci bash /workspace/scripts/validate-ci.sh '--no-e2e'`)
+   forces the 1fr track wider than the viewport. `min-width: 0` lets the
+   track shrink and `overflow-wrap: anywhere` lets the offending string
+   wrap mid-token instead of pushing the card. */
+.grid > * { min-width: 0; }
+.card { overflow-wrap: anywhere; word-break: break-word; }
 @media (min-width: 640px) {
   .grid { grid-template-columns: 1fr 1fr; }
 }
@@ -81,6 +95,34 @@ main { padding-bottom: 96px; }
   background: var(--bg-elev-2);
   transform: scale(0.985);
 }
+/* ROK-1337 — TESTS section entry cards on the operator dashboard. Brighter
+   accent border so testers see them first on fleet.gamernight.net. */
+.test-card { border-color: rgba(59, 130, 246, 0.35); }
+.test-card:hover { background: var(--bg-elev-2); border-color: rgba(59, 130, 246, 0.55); }
+.test-card .test-card-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.test-card .test-card-head .story-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12); color: var(--accent, #3b82f6);
+  font-size: 12px; font-weight: 600; text-decoration: none;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+.test-card .test-card-status {
+  margin-left: auto;
+  font-size: 12px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12); color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.test-card .test-card-status.ok {
+  background: rgba(16, 185, 129, 0.12); color: #10b981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.test-card .goal { font-size: 16px; font-weight: 600; line-height: 1.3; }
+.test-card .test-card-meta { font-size: 12px; margin-top: 6px; }
 .card-title {
   font-size: 17px;
   font-weight: 600;
@@ -778,12 +820,6 @@ footer {
   white-space: nowrap;
 }
 .task-elapsed { color: var(--fg-muted); }
-.task-log-link {
-  color: var(--accent);
-  text-decoration: none;
-  padding: 0 2px;
-}
-.task-log-link:hover { text-decoration: underline; }
 
 /* ROK-1331 M5b — lease queue depth + claim TTL + pin badge */
 .lease-queue { color: #ffc864; font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -815,3 +851,262 @@ footer {
 .rl-toast-error   { background: rgba(120, 30, 30, 0.95); border: 1px solid rgba(255, 107, 107, 0.7); }
 .rl-toast-warn    { background: rgba(120, 90, 20, 0.95); border: 1px solid rgba(255, 200, 100, 0.7); }
 .rl-toast-fade { opacity: 0; }
+
+/* ============================================================ */
+/* ROK-1337 — Tester page (multi-plan IA per wireframe).         */
+/* Mobile-first; phones see a single 414px-max column. Tokens    */
+/* are local-scoped under #tester-page so the operator route's   */
+/* existing palette is untouched.                                */
+/* ============================================================ */
+#tester-page {
+  --tp-bg: #0e1218;
+  --tp-surface: #161c25;
+  --tp-surface-2: #1f2733;
+  --tp-line: #232c39;
+  --tp-text: #e5ebf3;
+  --tp-text-2: #9aa6b8;
+  --tp-text-3: #6b7689;
+  --tp-amber: #f59e0b;
+  --tp-green: #10b981;
+  --tp-slate: #64748b;
+  --tp-gray: #475569;
+  --tp-accent: #3b82f6;
+  --tp-red: #ef4444;
+  --tp-radius: 10px;
+  --tp-radius-sm: 6px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px 14px 80px;
+  background: var(--tp-bg);
+  color: var(--tp-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+#tester-page * { box-sizing: border-box; }
+#tester-page section { margin: 0; padding: 0; }
+
+/* Status pill */
+#tester-page .pill {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: var(--tp-radius);
+  font-size: 14px; font-weight: 500; margin-bottom: 16px;
+  border: 1px solid transparent;
+}
+#tester-page .pill .ico { font-size: 16px; }
+#tester-page .pill .refresh {
+  margin-left: auto; font-size: 13px; color: inherit;
+  text-decoration: underline; cursor: pointer; background: none;
+  border: 0; padding: 0; font: inherit;
+}
+#tester-page .pill-amber   { background: rgba(245, 158, 11, 0.10); color: var(--tp-amber); border-color: rgba(245, 158, 11, 0.25); }
+#tester-page .pill-slate   { background: rgba(100, 116, 139, 0.12); color: var(--tp-slate); border-color: rgba(100, 116, 139, 0.25); }
+#tester-page .pill-green   { background: rgba(16, 185, 129, 0.10); color: var(--tp-green); border-color: rgba(16, 185, 129, 0.25); }
+#tester-page .pill-gray    { background: rgba(71, 85, 105, 0.12); color: var(--tp-gray); border-color: rgba(71, 85, 105, 0.25); }
+#tester-page .pill-refresh { background: rgba(245, 158, 11, 0.10); color: var(--tp-amber); border-color: rgba(245, 158, 11, 0.25); }
+
+/* Section label */
+#tester-page .sec-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--tp-text-3); margin: 14px 4px 8px;
+}
+
+/* Plan card */
+#tester-page .card {
+  background: var(--tp-surface); border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius); padding: 14px; margin-bottom: 12px;
+}
+#tester-page .card-now  { border-color: rgba(59, 130, 246, 0.35); }
+#tester-page .card-also { padding: 12px 14px; cursor: pointer; }
+#tester-page .card-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px; flex-wrap: wrap;
+}
+#tester-page .story-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12); color: var(--tp-accent);
+  font-size: 12px; font-weight: 600; text-decoration: none;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+#tester-page .story-chip:hover { background: rgba(59, 130, 246, 0.20); }
+#tester-page .goal {
+  font-size: 17px; font-weight: 600; color: var(--tp-text);
+  margin: 0; line-height: 1.3;
+}
+#tester-page .card-also .goal { font-size: 15px; }
+#tester-page .card-meta { font-size: 12px; color: var(--tp-text-3); margin-top: 6px; }
+
+/* Step row — whole row is clickable to expand (ROK-1337 follow-up). */
+#tester-page .step {
+  padding: 12px 0; border-top: 1px solid var(--tp-line);
+  cursor: pointer;
+}
+#tester-page .step:focus-visible {
+  outline: 2px solid var(--tp-accent); outline-offset: -2px;
+  border-radius: var(--tp-radius-sm);
+}
+#tester-page .step:hover { background: rgba(255, 255, 255, 0.015); }
+#tester-page .step.open { background: rgba(59, 130, 246, 0.04); }
+#tester-page .step:first-of-type { margin-top: 4px; }
+#tester-page .step-head { display: flex; align-items: flex-start; gap: 10px; }
+#tester-page .step-n {
+  color: var(--tp-text-3); font-size: 13px;
+  font-variant-numeric: tabular-nums; min-width: 20px;
+}
+#tester-page .step-body { flex: 1; min-width: 0; }
+#tester-page .step-desc { font-size: 14px; color: var(--tp-text); line-height: 1.4; }
+#tester-page .step-expected {
+  font-size: 12.5px; color: var(--tp-text-2); font-style: italic;
+  margin-top: 2px; padding-left: 8px; border-left: 2px solid var(--tp-line);
+}
+#tester-page .step-actions {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+}
+#tester-page .verdict {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 36px; height: 30px; padding: 0 8px;
+  border-radius: var(--tp-radius-sm); font-size: 12px; font-weight: 600;
+  background: var(--tp-surface-2); color: var(--tp-text-2);
+  border: 1px solid var(--tp-line); cursor: pointer; user-select: none;
+}
+#tester-page .verdict:focus-visible { outline: 2px solid var(--tp-accent); outline-offset: 2px; }
+#tester-page .verdict.pass.active { background: rgba(16, 185, 129, 0.15); color: var(--tp-green); border-color: rgba(16, 185, 129, 0.35); }
+#tester-page .verdict.fail.active { background: rgba(239, 68, 68, 0.15); color: var(--tp-red); border-color: rgba(239, 68, 68, 0.35); }
+#tester-page .verdict.skip.active { background: rgba(100, 116, 139, 0.20); color: var(--tp-slate); border-color: rgba(100, 116, 139, 0.35); }
+#tester-page .verdict[disabled] { opacity: 0.45; cursor: not-allowed; }
+#tester-page .step-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 36px; height: 30px; padding: 0 8px;
+  background: var(--tp-surface-2); color: var(--tp-text-2);
+  border: 1px solid var(--tp-line); border-radius: var(--tp-radius-sm);
+  font-size: 18px; line-height: 1; cursor: pointer; user-select: none;
+}
+#tester-page .step-toggle:hover { color: var(--tp-text); border-color: var(--tp-accent); }
+#tester-page .step-toggle:focus-visible { outline: 2px solid var(--tp-accent); outline-offset: 2px; }
+/* ROK-1337 follow-up — test URL is the primary CTA. Full-width labeled
+   button under the step description, prominent accent color so the eye
+   lands on it first. */
+#tester-page .step-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 44px; padding: 10px 14px;
+  margin-top: 10px;
+  background: var(--tp-accent); color: #fff;
+  border: 1px solid var(--tp-accent); border-radius: var(--tp-radius-sm);
+  text-decoration: none; font-size: 14px; font-weight: 600;
+  letter-spacing: 0.01em; user-select: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+#tester-page .step-link:hover { background: #2563eb; border-color: #2563eb; }
+#tester-page .step-link:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+#tester-page .step-link:active { transform: translateY(1px); }
+
+/* Drawer */
+#tester-page .drawer {
+  margin-top: 12px; padding: 12px;
+  background: var(--tp-surface-2); border-radius: var(--tp-radius-sm);
+  border: 1px solid var(--tp-line); display: grid; gap: 12px;
+}
+#tester-page .drawer-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--tp-text-3); margin: 0 0 6px;
+}
+#tester-page .drawer-textarea {
+  width: 100%; background: var(--tp-bg); color: var(--tp-text);
+  border: 1px solid var(--tp-line); border-radius: var(--tp-radius-sm);
+  padding: 8px 10px; font-family: inherit; font-size: 13px;
+  resize: vertical; min-height: 56px;
+}
+#tester-page .drawer-textarea::placeholder { color: var(--tp-text-3); }
+#tester-page .attach-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 8px; flex-wrap: wrap;
+}
+#tester-page .attach-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--tp-text-2);
+  background: transparent; border: 1px dashed var(--tp-line);
+  border-radius: var(--tp-radius-sm); padding: 6px 10px; cursor: pointer;
+}
+#tester-page .thumb {
+  width: 44px; height: 44px; background: linear-gradient(135deg, #2a3447 0%, #1a2230 100%);
+  border-radius: var(--tp-radius-sm); border: 1px solid var(--tp-line);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--tp-text-3); font-size: 10px; overflow: hidden;
+}
+#tester-page .thumb img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+#tester-page .reset-row {
+  display: flex; align-items: center; gap: 10px;
+  padding-top: 8px; border-top: 1px dashed var(--tp-line);
+}
+#tester-page .reset-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 10px; border-radius: var(--tp-radius-sm);
+  background: rgba(245, 158, 11, 0.08); color: var(--tp-amber);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 12px; cursor: pointer;
+}
+#tester-page .reset-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+#tester-page .reset-hint {
+  font-size: 11.5px; color: var(--tp-text-3); flex: 1; min-width: 0;
+}
+
+/* Also Active dot row */
+#tester-page .dot-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+#tester-page .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--tp-line); }
+#tester-page .dot.pass { background: var(--tp-green); }
+#tester-page .dot.fail { background: var(--tp-red); }
+#tester-page .dot.skip { background: var(--tp-slate); }
+#tester-page .dot-meta { font-size: 12px; color: var(--tp-text-3); margin-left: 4px; }
+#tester-page .tap-hint { font-size: 12px; color: var(--tp-text-2); margin-top: 8px; }
+
+/* Submit footer (within card) */
+#tester-page .submit-bar {
+  margin-top: 14px; padding: 12px;
+  background: var(--tp-surface-2); border-radius: var(--tp-radius);
+  border: 1px solid var(--tp-line);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+#tester-page .submit-bar .label { font-size: 13px; color: var(--tp-text-2); }
+#tester-page .submit-bar .label strong { color: var(--tp-text); }
+#tester-page .submit-btn {
+  background: var(--tp-accent); color: white; border: 0;
+  border-radius: var(--tp-radius-sm); padding: 10px 16px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+#tester-page .submit-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* DONE TODAY — collapsed by default */
+#tester-page .done-section { margin-top: 14px; }
+#tester-page .done-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 4px; cursor: pointer; color: var(--tp-text-2);
+  font-size: 13px; font-weight: 500; border-top: 1px solid var(--tp-line);
+  background: none; border-left: 0; border-right: 0; border-bottom: 0;
+  width: 100%; text-align: left; font-family: inherit;
+}
+#tester-page .done-header .chev { font-size: 13px; color: var(--tp-text-3); }
+#tester-page .done-list { padding: 4px 0 0; }
+#tester-page .done-list[hidden] { display: none; }
+#tester-page .done-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 6px; font-size: 13px; color: var(--tp-text-2);
+  border-bottom: 1px solid var(--tp-line);
+}
+#tester-page .done-row:last-child { border-bottom: 0; }
+#tester-page .done-row .story-chip { font-size: 11px; padding: 1px 6px; }
+#tester-page .done-row .status-ok   { color: var(--tp-green); font-weight: 700; }
+#tester-page .done-row .status-fail { color: var(--tp-red); font-weight: 700; }
+#tester-page .done-row .counts { font-variant-numeric: tabular-nums; color: var(--tp-text-3); font-size: 12px; }
+#tester-page .done-row .when { color: var(--tp-text-3); font-size: 12px; margin-left: auto; }
+#tester-page .show-more {
+  display: block; text-align: center; padding: 8px;
+  color: var(--tp-accent); font-size: 12px; cursor: pointer;
+  background: none; border: 0; width: 100%; font-family: inherit;
+}
+
+/* Empty / loading copy */
+#tester-page .empty {
+  text-align: center; color: var(--tp-text-3);
+  padding: 24px 12px; font-size: 13px;
+}
