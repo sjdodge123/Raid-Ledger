@@ -102,7 +102,13 @@ export async function execute(params: InfraLogsParams): Promise<InfraLogsResult>
   // safe (no string input from the caller reaches the shell unchecked), but
   // we still pass via execFile argv-array — never `bash -c`.
   const container = SERVICE_TO_CONTAINER[service];
-  const remote = `docker logs --tail ${tail} --timestamps ${container}`;
+  // ROK-1338 PR-1 dogfood-1: route docker calls through the rl-docker-proxy
+  // (wollomatic socket-proxy) at 127.0.0.1:2375 instead of the host's unix
+  // socket. The proxy whitelists GET /containers/[id]/logs, so this is the
+  // intended read path. rl-agent is NOT in the host's docker group; talking
+  // directly to /var/run/docker.sock returns permission-denied. The proxy
+  // listens only on loopback so security posture is preserved.
+  const remote = `DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail ${tail} --timestamps ${container}`;
   const args = [
     '-o',
     'BatchMode=yes',

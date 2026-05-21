@@ -86,7 +86,7 @@ describe('rl_infra_logs — enum + container mapping', () => {
 });
 
 describe('rl_infra_logs — execute()', () => {
-  it('SSHes the VM with `docker logs --tail N --timestamps <container>`', async () => {
+  it('SSHes the VM with DOCKER_HOST-routed `docker logs --tail N --timestamps <container>`', async () => {
     execFileOk('line1\nline2\nline3\n');
     const result = await execute({ service: 'gc-sweeper', tail: 20 });
     expect(result.ok).toBe(true);
@@ -98,7 +98,21 @@ describe('rl_infra_logs — execute()', () => {
     expect(call[0]).toBe('ssh');
     // argv-array: the final element is the remote command string.
     const remote = String(call[1].at(-1));
-    expect(remote).toBe('docker logs --tail 20 --timestamps rl-gc-sweeper');
+    // ROK-1338 PR-1 dogfood-1: route via rl-docker-proxy (rl-agent isn't in
+    // docker group; proxy whitelists GET /containers/[id]/logs).
+    expect(remote).toBe(
+      'DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail 20 --timestamps rl-gc-sweeper',
+    );
+  });
+
+  it('routes every service through the docker-proxy (DOCKER_HOST prefix)', async () => {
+    for (const service of INFRA_SERVICE_VALUES) {
+      execFileOk('');
+      await execute({ service, tail: 1 });
+      const remote = String(mockExecFile.mock.calls.at(-1)?.[1].at(-1));
+      expect(remote.startsWith('DOCKER_HOST=tcp://127.0.0.1:2375 ')).toBe(true);
+      expect(remote).toContain(`docker logs --tail 1 --timestamps ${SERVICE_TO_CONTAINER[service]}`);
+    }
   });
 
   it('defaults tail to 100 when omitted', async () => {
