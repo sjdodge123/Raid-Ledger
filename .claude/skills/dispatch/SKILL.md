@@ -8,7 +8,7 @@ argument-hint: "[ROK-XXX | rework | todo | all]"
 
 Checks for in-flight work first (and finishes it), then pulls dispatchable stories from Linear, presents everything for user approval, and spawns implementation agents **in parallel via Agent Teams and git worktrees**. Handles both **new work** (Dispatch Ready) and **rework** (Changes Requested).
 
-**rl-infra fleet (default when Proxmox is reachable):** Each parallel dev agent should `rl claim --branch <name>` instead of fighting for the global env lock; 4 slots = 4 truly parallel devs. Deploy + Playwright gate steps run via `rl env spin <slug>` + `rl validate-ci --only-e2e` on the runner. Falls back to today's local model when `RL_TARGET=local`. See `.claude/skills/_shared/rl-infra-fleet.md`.
+**rl-infra fleet (default when Proxmox is reachable):** Each parallel dev agent should `rl claim --branch <name>` instead of fighting for the global env lock; 4 slots = 4 truly parallel devs. When all slots are held, `rl claim` enqueues the caller and prints `queue_position=N`; agents call `rl claim-wait` to block on queue head OR pick non-env work in the meantime. Deploy + Playwright gate steps run via `rl env spin <slug>` + `rl validate-ci --only-e2e` on the runner. Falls back to today's local model when `RL_TARGET=local`. See `.claude/skills/_shared/rl-infra-fleet.md`.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)

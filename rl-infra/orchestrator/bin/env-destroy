@@ -18,6 +18,12 @@ done
 
 [[ -z "$SLUG" ]] && { echo "--slug required" >&2; exit 2; }
 
+# ROK-1331 M11 — bookend env-destroy with paired timer so dashboards can
+# spot "env-destroy of slug X took 18s" outliers (Postgres volume rm on a
+# slow disk is the most common cause).
+perf::emit "env.destroy.start" "$(jq -nc --arg slug "$SLUG" --argjson force "$FORCE" '{slug:$slug, force:($force == 1)}')"
+perf::start "env_destroy_total"
+
 PG_CONTAINER="rl-env-${SLUG}-pg"
 APP_CONTAINER="rl-env-${SLUG}-allinone"
 PGWEB_CONTAINER="pgweb-${SLUG}"
@@ -66,8 +72,9 @@ if [[ -n "$PUBLIC_DOMAIN" && -n "$DESTROYED_SLOT" && -f "$DESTROYED_CONF" ]]; th
     if grep -qE "^[[:space:]]*rule:.*Host\(\`slot-${DESTROYED_SLOT}\.${PUBLIC_DOMAIN}\`\)" \
             "$DESTROYED_CONF" 2>/dev/null; then
         # Find the next-oldest surviving env on the same slot. Excludes
-        # the slug being destroyed. Sort by created_at ascending.
-        SUCCESSOR_SLUG=$(state::query "$RL_ENVS_FILE" \
+        # the slug being destroyed. Sort by created_at ascending. `-r`
+        # so the captured slug doesn't carry the JSON-string double-quotes.
+        SUCCESSOR_SLUG=$(state::query "$RL_ENVS_FILE" -r \
             --arg slug "$SLUG" --argjson slot "$DESTROYED_SLOT" \
             '[.[] | select(.slot == $slot and .slug != $slug)]
              | sort_by(.created_at)
@@ -75,23 +82,58 @@ if [[ -n "$PUBLIC_DOMAIN" && -n "$DESTROYED_SLOT" && -f "$DESTROYED_CONF" ]]; th
              | .slug // empty')
         if [[ -n "$SUCCESSOR_SLUG" ]]; then
             SUCCESSOR_CONF="$TRAEFIK_CONF_D/env-${SUCCESSOR_SLUG}.yml"
-            if [[ -f "$SUCCESSOR_CONF" ]]; then
-                # Re-write the successor's rule to include the slot Host clause.
-                # We don't want to depend on regex edits of the existing YAML
-                # (brittle); regenerate the rule line from scratch. The successor's
-                # existing conf already carries `Host(\`${SUCCESSOR_SLUG}.rl.lan\`)` +
-                # `Host(\`${SUCCESSOR_SLUG}test.${PUBLIC_DOMAIN}\`)` so we just append
-                # the slot Host clause.
-                SUCCESSOR_APP_CONTAINER="rl-env-${SUCCESSOR_SLUG}-allinone"
+            SUCCESSOR_APP_CONTAINER="rl-env-${SUCCESSOR_SLUG}-allinone"
+            # Liveness probe — if the successor's allinone isn't running we
+            # MUST NOT re-register the slot route. Pointing the slot URL at
+            # a stopped container 502s every OAuth callback until next
+            # env-spin. Skip-and-log instead so the dead-route is visible.
+            SUCC_RUNNING=$(docker inspect "$SUCCESSOR_APP_CONTAINER" \
+                --format '{{.State.Running}}' 2>/dev/null || echo "")
+            if [[ "$SUCC_RUNNING" != "true" ]]; then
+                audit::log env-destroy slot-rule-skip-dead-successor \
+                    "$(jq -nc --arg from "$SLUG" --arg to "$SUCCESSOR_SLUG" \
+                        --argjson slot "$DESTROYED_SLOT" \
+                        --arg running "$SUCC_RUNNING" \
+                        '{from:$from, to:$to, slot:$slot, successor_running:$running}')"
+            elif [[ -f "$SUCCESSOR_CONF" ]]; then
                 NEW_HOST_RULE="Host(\`${SUCCESSOR_SLUG}.rl.lan\`) || Host(\`${SUCCESSOR_SLUG}test.${PUBLIC_DOMAIN}\`) || Host(\`slot-${DESTROYED_SLOT}.${PUBLIC_DOMAIN}\`)"
                 # Slot-scoped flock to keep parallel env-spin + env-destroy
                 # from racing the slot's conf files (mirrors the env-spin
-                # serialization pattern).
+                # serialization pattern). 5s timeout — never wait silently.
                 SLOT_LOCK_FILE="${TRAEFIK_CONF_D}/.slot-${DESTROYED_SLOT}.lock"
                 : > "$SLOT_LOCK_FILE" 2>/dev/null || true
                 exec 9>"$SLOT_LOCK_FILE"
-                flock 9 2>/dev/null || true
-                cat > "$SUCCESSOR_CONF" <<EOF
+                if ! flock -w 5 9 2>/dev/null; then
+                    audit::log env-destroy flock-warning \
+                        "$(jq -nc --arg slot "$DESTROYED_SLOT" \
+                            '{slot:$slot, msg:"slot-rule reassignment proceeding without lock"}')"
+                fi
+                # Conf merge: prefer in-place rule-line replacement so the
+                # successor's middlewares / tls / custom headers survive.
+                # Full-overwrite is only a fallback for anomalous confs that
+                # lack any `rule:` line (e.g. conf-not-managed-by-orchestrator).
+                if grep -qE '^[[:space:]]*rule:.*Host\(' "$SUCCESSOR_CONF"; then
+                    SUCCESSOR_CONF_TMP="${SUCCESSOR_CONF}.tmp.$$"
+                    NEW_HOST_RULE_ESC="$NEW_HOST_RULE" \
+                        awk '
+                            $0 ~ /^[[:space:]]*rule:.*Host\(/ && !done {
+                                match($0, /^[[:space:]]*/)
+                                indent = substr($0, RSTART, RLENGTH)
+                                printf "%srule: \"%s\"\n", indent, ENVIRON["NEW_HOST_RULE_ESC"]
+                                done = 1
+                                next
+                            }
+                            { print }
+                        ' "$SUCCESSOR_CONF" > "$SUCCESSOR_CONF_TMP"
+                    mv -f "$SUCCESSOR_CONF_TMP" "$SUCCESSOR_CONF"
+                else
+                    # Anomalous successor conf — no rule: line at all. Fall
+                    # back to the today-shape full overwrite (loses any
+                    # middleware/tls but at least the route works).
+                    audit::log env-destroy successor-conf-shape-anomaly \
+                        "$(jq -nc --arg slug "$SUCCESSOR_SLUG" \
+                            '{successor_slug:$slug, msg:"no rule: Host(...) line found; full-overwrite fallback"}')"
+                    cat > "$SUCCESSOR_CONF" <<EOF
 # Generated by env-destroy (slot-rule re-registration) — do not hand-edit.
 http:
   routers:
@@ -105,6 +147,7 @@ http:
         servers:
           - url: "http://${SUCCESSOR_APP_CONTAINER}:80"
 EOF
+                fi
                 exec 9>&- 2>/dev/null || true
                 audit::log env-destroy slot-rule-reassigned \
                     "$(jq -nc --arg from "$SLUG" --arg to "$SUCCESSOR_SLUG" --argjson slot "$DESTROYED_SLOT" \
@@ -124,4 +167,9 @@ state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 # disk usage trivial — JSON + a handful of small screenshots per slug.
 
 audit::log env-destroy ok "$(jq -nc --arg slug "$SLUG" --argjson force "$FORCE" '{slug:$slug, force:($force == 1)}')"
+_perf_destroyed_slot="${DESTROYED_SLOT:-}"
+[[ -z "$_perf_destroyed_slot" ]] && _perf_destroyed_slot="null"
+[[ "$_perf_destroyed_slot" =~ ^[0-9]+$ ]] || _perf_destroyed_slot="null"
+perf::end "env_destroy_total" "env.destroy.end" \
+    "$(jq -nc --arg slug "$SLUG" --argjson slot "$_perf_destroyed_slot" '{slug:$slug, slot:$slot}')"
 jq -nc --arg slug "$SLUG" '{ok: true, slug: $slug}'

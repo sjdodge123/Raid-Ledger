@@ -1,4 +1,4 @@
-// rl_claim — acquire a runner slot on the rl-infra fleet.
+// rl_claim — acquire a runner slot on the rl-infra fleet (may enqueue with queue_position=N).
 //
 // Two modes:
 //   - default (wait=true): polls the queue until a slot is acquired or the
@@ -23,10 +23,22 @@ export interface ClaimResult {
   worktree?: string;
   container?: string;
   shell_cmd?: string;
-  // Queue path:
-  queued?: boolean;
-  position?: number;
+  // Queue path — ROK-1331 M5a extended these. Legacy fields (`queued`,
+  // `position`) are still emitted by the orchestrator for one transition
+  // cycle so dashboard + skill callers don't break before M5b cutover.
+  enqueued?: boolean;
+  queued?: boolean; // DEPRECATED — mirrors enqueued
+  position?: number; // legacy mirror of queue_position
+  queue_position?: number;
   queue_length?: number;
+  queue_ahead?: Array<{ agent_id: string; branch: string; requested_at: string }>;
+  enqueued_slot?: number;
+  // M5a — populated when a branch-match handoff carries an env across:
+  inherited_envs?: Array<{ slug: string; url: string }>;
+  // M5a — populated when branch-mismatch handoff destroys the prior envs:
+  destroyed_envs?: string[];
+  // M5a — ISO 8601 of when this claim auto-expires (24h default).
+  expires_at?: string | null;
   // Polling-completed timeout path:
   wait_timed_out?: boolean;
   waited_seconds?: number;
@@ -64,7 +76,7 @@ async function singleClaim(branch?: string, cwd?: string): Promise<ClaimResult> 
   return {
     ok: false,
     error: 'failed_to_parse_response',
-    message: stderr || stdout || `rl claim exited ${exitCode} with no parseable output`,
+    message: stderr || stdout || `rl claim (or rl_claim_wait if enqueued) exited ${exitCode} with no parseable output`,
   };
 }
 
@@ -73,24 +85,29 @@ export async function execute(params: ClaimParams): Promise<ClaimResult> {
   const timeoutS = Math.max(5, Math.min(3600, params.wait_timeout_seconds ?? 600));
   const intervalS = Math.max(2, Math.min(60, params.poll_interval_seconds ?? 10));
 
-  const first = await singleClaim(params.branch, params.worktree_path);
-  if (!wait || !first.queued) return first;
+  // M5a: orchestrator emits both `queued` (legacy) and `enqueued` (new) for
+  // one transition cycle. Treat either as the wait-and-retry signal.
+  const isQueued = (r: ClaimResult): boolean => Boolean(r.queued || r.enqueued);
 
-  // Poll the queue. Each iteration re-calls `rl claim` — that's how the
-  // queue advances: when a slot frees and we're at the head, the next claim
-  // dequeues us atomically.
+  const first = await singleClaim(params.branch, params.worktree_path);
+  if (!wait || !isQueued(first)) return first;
+
+  // Poll the queue (queue_position decrements as we advance). Each
+  // iteration re-calls `rl claim` while queued — that's how queues advance:
+  // when a slot frees and we're at the head, the next claim dequeues us atomically.
   const startedAt = Date.now();
   let last = first;
   while ((Date.now() - startedAt) / 1000 < timeoutS) {
     await sleep(intervalS * 1000);
     last = await singleClaim(params.branch, params.worktree_path);
-    if (!last.queued) return last;
+    if (!isQueued(last)) return last;
   }
 
+  const pos = last.queue_position ?? last.position ?? '?';
   return {
     ...last,
     wait_timed_out: true,
     waited_seconds: Math.round((Date.now() - startedAt) / 1000),
-    message: `Still queued after ${timeoutS}s. Position ${last.position ?? '?'} of ${last.queue_length ?? '?'}. Call rl_claim again to keep waiting, or rl_status to inspect the queue.`,
+    message: `Still queued after ${timeoutS}s. Position ${pos} of ${last.queue_length ?? '?'}. Call rl_claim again to keep waiting, or rl_status to inspect the queue.`,
   };
 }

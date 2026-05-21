@@ -80,7 +80,7 @@ export interface EnvSpinParams {
   slug: string;
   image?: string;
   ttl_hours?: number;
-  /** Same worktree_path used at rl_claim time. */
+  /** Same worktree_path used at rl_claim time (or rl_claim_wait if enqueued). */
   worktree_path?: string;
 }
 

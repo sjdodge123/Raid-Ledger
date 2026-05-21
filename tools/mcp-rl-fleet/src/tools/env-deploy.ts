@@ -12,7 +12,7 @@ import * as envCloneProd from './env-clone-prod.js';
 
 export const TOOL_NAME = 'rl_env_deploy';
 export const TOOL_DESCRIPTION =
-  "Single-call branch deployment: claim a runner slot, build the allinone image from the agent's CURRENT BRANCH (Mutagen-synced /workspace), push to the local registry tagged with the slug, spin a per-test env using that image, then sync operator's app_settings (API keys, OAuth configs) so the env has working integrations. Returns the external URL the agent should share with testers. Pass clone_prod=true to ALSO pipe sanitized prod data into the env (after the settings sync — useful when testers need prod-shaped rows to reproduce a bug). Idempotent on the slug — re-running rebuilds the image from current /workspace and re-deploys.";
+  "Single-call branch deployment: claim a runner slot, build the allinone image from the agent's CURRENT BRANCH (Mutagen-synced /workspace), push to the local registry tagged with the slug, spin a per-test env using that image, then sync operator's app_settings (API keys, OAuth configs) so the env has working integrations. Returns the external URL the agent should share with testers. Pass clone_prod=true to ALSO pipe sanitized prod data into the env (after the settings sync — useful when testers need prod-shaped rows to reproduce a bug). Idempotent on the slug — re-running rebuilds the image from current /workspace and re-deploys. NOTE: this tool is SYNC (returns when the full chain completes). It does NOT accept the wait / wait_timeout_seconds params that rl_validate_ci / rl_env_build_image_from_runner / rl_env_clone_prod expose. For parallel deployments, fan out via the individual primitives (rl_env_build_image_from_runner + rl_env_spin + rl_env_sync_from_local) with wait:false and orchestrate via rl_task_wait.";
 
 export interface EnvDeployParams {
   /** Env slug — also used as the image tag. [a-z0-9-]+. */
@@ -95,10 +95,15 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
   // 2. Build image from /workspace (the agent's branch).
   if (!params.skip_build) {
     t = now();
+    // env-deploy is the SYNC wrapper — inner buildImage is now async-by-
+    // default per ROK-1331 M2, so we explicitly pass wait:true to preserve
+    // the chained step-log behavior the deploy flow depends on.
     const bi = await buildImage.execute({
       tag: params.slug,
       worktree_path: params.worktree_path,
       timeout_seconds: params.timeout_seconds,
+      wait: true,
+      wait_timeout_seconds: params.timeout_seconds,
     });
     if (!bi.ok) {
       log('build_image', false, t, undefined, bi.error || bi.stderr || 'build failed');

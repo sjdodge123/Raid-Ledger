@@ -31,10 +31,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-SLUG="${1:-}"
-MODE="${2:-settings}"
+SLUG=""
+MODE="settings"
+ALLOW_EMPTY_SOURCE=0
+# Positional + flag parsing — keeps backward compat (`<slug> [settings|full]`)
+# while also accepting `--allow-empty-source` anywhere.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --allow-empty-source) ALLOW_EMPTY_SOURCE=1; shift ;;
+        -h|--help) echo "usage: $0 <slug> [settings|full] [--allow-empty-source]" >&2; exit 0 ;;
+        --*) echo "unknown flag: $1" >&2; exit 2 ;;
+        *)
+            if [[ -z "$SLUG" ]]; then SLUG="$1"
+            else MODE="$1"
+            fi
+            shift ;;
+    esac
+done
 
-[[ -z "$SLUG" ]] && { echo "usage: $0 <slug> [settings|full]" >&2; exit 2; }
+[[ -z "$SLUG" ]] && { echo "usage: $0 <slug> [settings|full] [--allow-empty-source]" >&2; exit 2; }
 [[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || { echo "slug must be [a-z0-9-]+" >&2; exit 2; }
 [[ "$MODE" == "settings" || "$MODE" == "full" ]] || { echo "mode must be 'settings' or 'full'" >&2; exit 2; }
 
@@ -49,9 +64,11 @@ fi
 
 LOCAL_DB_CONTAINER="${LOCAL_DB_CONTAINER:-raid-ledger-db}"
 DATABASE_URL="${DATABASE_URL:-postgresql://user:password@localhost:5432/raid_ledger}"
-RL_PROXMOX_USER="${RL_PROXMOX_USER:-rl}"   # SSH as rl (operator) for the env-pg exec
+RL_PROXMOX_USER="${RL_PROXMOX_USER:-rl-agent}"   # rl-agent default — orchestrator binaries on VM route docker calls via socket-proxy (no docker-group needed)
 RL_PROXMOX_HOST="${RL_PROXMOX_HOST:-rl-infra}"
 ENV_PG_CONTAINER="rl-env-${SLUG}-pg"
+ORCH_BIN="/srv/rl-infra/orchestrator/bin"
+SSH_TO_VM=(ssh -o BatchMode=yes -o ConnectTimeout=10 "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}")
 
 # Verify local container exists + is running.
 if ! docker inspect "$LOCAL_DB_CONTAINER" --format '{{.State.Running}}' 2>/dev/null | grep -q true; then
@@ -60,9 +77,10 @@ if ! docker inspect "$LOCAL_DB_CONTAINER" --format '{{.State.Running}}' 2>/dev/n
     exit 3
 fi
 
-# Verify env's PG is running on the VM.
-if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-        "docker inspect '$ENV_PG_CONTAINER' --format '{{.State.Running}}'" 2>/dev/null | grep -q true; then
+# Verify env's PG is running on the VM via orchestrator's env-inspect binary
+# (routes through socket-proxy so rl-agent — no docker group — can probe).
+ENV_INSPECT_JSON=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-inspect" "$SLUG" 2>/dev/null || true)
+if ! echo "$ENV_INSPECT_JSON" | jq -e '.pg.running == true' >/dev/null 2>&1; then
     echo "ERROR: env DB container '$ENV_PG_CONTAINER' is not running on $RL_PROXMOX_HOST." >&2
     echo "       Spin the env first: rl env spin --slug $SLUG" >&2
     exit 3
@@ -84,8 +102,10 @@ case "$MODE" in
         # re-encrypt path below is the WHOLE sync surface for this mode.
         DUMP_ARGS=()
         PRE_SQL=""
+        SYNC_DISCORD_IDENTITY=1
         ;;
     full)
+        SYNC_DISCORD_IDENTITY=0
         # Full data clone. Schema preserved (env's allinone runs migrations at
         # boot). We --disable-triggers so FK ordering doesn't bite. TRUNCATE
         # pre-step + schema-drift exclusions both computed at runtime against
@@ -102,9 +122,8 @@ case "$MODE" in
         # 1) Discover all user tables in the env's public schema. Use for
         #    BOTH the TRUNCATE pre-step AND schema-drift filtering.
         echo "  discovering env's public schema..." >&2
-        ENV_TABLES=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-            "docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -tA -c \"
-                SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;\"" 2>/dev/null)
+        ENV_TABLES=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-psql" "$SLUG" -- -tA -c \
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>/dev/null)
         if [[ -z "$ENV_TABLES" ]]; then
             echo "ERROR: env's public schema is empty or pg not ready." >&2
             exit 3
@@ -138,19 +157,118 @@ case "$MODE" in
         #    that don't exist in env fail with "relation does not exist".
         #    We capture env's sequence list now and use it later (post-dump)
         #    to filter the stream.
-        ENV_SEQUENCES=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-            "docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -tA -c \"
-                SELECT sequence_name FROM information_schema.sequences
-                WHERE sequence_schema = 'public' ORDER BY sequence_name;\"" 2>/dev/null)
+        ENV_SEQUENCES=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-psql" "$SLUG" -- -tA -c \
+            "SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public' ORDER BY sequence_name;" 2>/dev/null)
         ;;
 esac
+
+# =============================================================================
+# DISCORD IDENTITY sync (settings mode only)
+# =============================================================================
+# Unify the operator's Discord-linked users row across local + env so that
+# Discord OAuth login and admin@local /auth/local resolve to the SAME row.
+# Without this, every settings-mode sync left two separate admin rows in the
+# env (the operator's real discord_id row + bootstrap-admin's local:admin@local
+# placeholder), and characters/preferences keyed on user_id silently diverged
+# depending on which login path the operator used.
+#
+# Implementation:
+#   1. SELECT the operator's admin row from local DB (must have discord_id
+#      set AND not be a local: placeholder).
+#   2. If absent → skip (operator hasn't linked Discord yet locally).
+#   3. If present → emit a single BEGIN/DELETE-orphan/INSERT-ON-CONFLICT/COMMIT
+#      block to the env's psql via env-psql. Uses literal-value interpolation
+#      built via bash quoting (NOT $N placeholders — psql heredocs don't
+#      bind prepared params). The architect explicitly flagged 2026-05-20
+#      that the INSERT MUST include `username` (NOT NULL in the schema).
+dump_discord_identity() {
+    local row_json
+    row_json=$(docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -c \
+        "SELECT row_to_json(u) FROM users u WHERE u.role = 'admin' AND u.discord_id IS NOT NULL AND u.discord_id NOT LIKE 'local:%' ORDER BY u.created_at LIMIT 1;" \
+        2>/dev/null | tr -d '\r')
+    if [[ -z "$row_json" || "$row_json" == "null" ]]; then
+        echo "  skipping discord identity sync: no admin row with discord_id found in local DB" >&2
+        return 0
+    fi
+    # Pull fields via jq. Empty strings for absent columns; we map them to
+    # SQL NULL below. `username` is NOT NULL per schema — fall back to
+    # 'Admin' if somehow blank (defensive; real rows always have it).
+    local discord_id steam_id username display_name avatar custom_avatar_url role
+    discord_id=$(echo "$row_json" | jq -r '.discord_id // ""')
+    steam_id=$(echo "$row_json" | jq -r '.steam_id // ""')
+    username=$(echo "$row_json" | jq -r '.username // ""')
+    display_name=$(echo "$row_json" | jq -r '.display_name // ""')
+    avatar=$(echo "$row_json" | jq -r '.avatar // ""')
+    custom_avatar_url=$(echo "$row_json" | jq -r '.custom_avatar_url // ""')
+    role=$(echo "$row_json" | jq -r '.role // "admin"')
+    [[ -z "$username" ]] && username="Admin"
+
+    # Postgres single-quote escape: double any literal single quotes.
+    # Then wrap in single quotes. Empty source -> SQL NULL.
+    sql_lit() {
+        local s="$1"
+        if [[ -z "$s" ]]; then
+            printf 'NULL'
+        else
+            printf "'%s'" "${s//\'/\'\'}"
+        fi
+    }
+    local sql_discord_id sql_steam_id sql_username sql_display_name sql_avatar sql_custom_avatar_url sql_role
+    sql_discord_id=$(sql_lit "$discord_id")
+    sql_steam_id=$(sql_lit "$steam_id")
+    sql_username=$(sql_lit "$username")
+    sql_display_name=$(sql_lit "$display_name")
+    sql_avatar=$(sql_lit "$avatar")
+    sql_custom_avatar_url=$(sql_lit "$custom_avatar_url")
+    sql_role=$(sql_lit "$role")
+
+    # Build the SQL transaction. Literal-value interpolation only — psql
+    # heredocs DO NOT support $N prepared-parameter binding.
+    local sql
+    sql=$(cat <<SQL
+BEGIN;
+-- Wipe any pre-existing orphan local: placeholder admin (FK from
+-- local_credentials → users.id; clear creds first to satisfy FK).
+DELETE FROM local_credentials WHERE email = 'admin@local';
+DELETE FROM users WHERE discord_id = 'local:admin@local';
+-- UPSERT the operator's identity. ON CONFLICT (discord_id) handles
+-- repeat syncs idempotently. `username` is NOT NULL per schema.
+INSERT INTO users (discord_id, steam_id, username, display_name, avatar, custom_avatar_url, role, created_at, updated_at)
+VALUES (${sql_discord_id}, ${sql_steam_id}, ${sql_username}, ${sql_display_name}, ${sql_avatar}, ${sql_custom_avatar_url}, ${sql_role}, now(), now())
+ON CONFLICT (discord_id) DO UPDATE SET
+  steam_id = EXCLUDED.steam_id,
+  username = EXCLUDED.username,
+  display_name = EXCLUDED.display_name,
+  avatar = EXCLUDED.avatar,
+  custom_avatar_url = EXCLUDED.custom_avatar_url,
+  role = EXCLUDED.role,
+  updated_at = now();
+COMMIT;
+SQL
+)
+    set +e
+    echo "$sql" | "${SSH_TO_VM[@]}" "${ORCH_BIN}/env-psql" "$SLUG" -- -v ON_ERROR_STOP=1 >/dev/null 2>&1
+    local rc=$?
+    set -e
+    if (( rc != 0 )); then
+        echo "  WARN: discord identity sync exit $rc — bootstrap-admin will fall back to local: placeholder" >&2
+        return 0
+    fi
+    echo "  synced operator users row (discord_id=${discord_id:0:6}…) into env" >&2
+}
+
+if [[ "${SYNC_DISCORD_IDENTITY:-0}" == "1" ]]; then
+    dump_discord_identity
+fi
 
 echo "Sync $MODE: $LOCAL_DB_CONTAINER → $RL_PROXMOX_HOST:$ENV_PG_CONTAINER" >&2
 
 # --single-transaction makes the whole TRUNCATE + INSERT stream atomic:
 # any failure rolls back — no half-loaded state to clean up. Paired with
 # ON_ERROR_STOP=1 so the first error aborts the rest of the stream.
-REMOTE_PSQL="docker exec -i '$ENV_PG_CONTAINER' psql -U user -d raid_ledger -v ON_ERROR_STOP=1 --single-transaction"
+# Routes through env-psql so rl-agent (no docker group) can stream the
+# pg_dump pipe into the env's Postgres.
+REMOTE_PSQL_CMD=("${ORCH_BIN}/env-psql" "$SLUG" -- -v ON_ERROR_STOP=1 --single-transaction)
 
 # Apply pre-SQL (TRUNCATE) if any, then pipe pg_dump → psql. When sequence
 # drift exists (full mode, env missing sequences operator's local has),
@@ -194,8 +312,7 @@ if (( ${#DUMP_ARGS[@]} > 0 )); then
     {
         [[ -n "$PRE_SQL" ]] && echo "$PRE_SQL"
         docker exec "$LOCAL_DB_CONTAINER" pg_dump "${DUMP_ARGS[@]}" "$DATABASE_URL"
-    } | sequence_filter | ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-        "$REMOTE_PSQL" 2>&1 | tail -30
+    } | sequence_filter | "${SSH_TO_VM[@]}" "${REMOTE_PSQL_CMD[@]}" 2>&1 | tail -30
     SYNC_RC=${PIPESTATUS[2]}
     if (( SYNC_RC != 0 )); then
         echo "ERROR: sync transaction failed (exit $SYNC_RC). DB left at pre-transaction state." >&2
@@ -233,24 +350,18 @@ REMOTE_PUBLIC_DOMAIN=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USE
     "sudo grep -E '^RL_PUBLIC_DOMAIN=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
 REMOTE_ADMIN_PASSWORD=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
     "sudo grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
-# Look up the env's slot label. We do NOT swallow inspect failures with
-# `|| echo ''` (M-VM-2): a failed `docker inspect` (env not labeled, docker
-# host unreachable) used to leave SLOT empty and fall into the skip branch
-# below — which then exited 0, the MCP env-deploy wrapper reported ok:true,
-# and Discord login silently didn't work because the OAuth callback URL
-# wasn't rewritten.
-#
-# Now: capture exit code separately so we can distinguish "ssh/docker
-# couldn't read the label" (real failure) from "the label is intentionally
-# missing" (older env without rl.slot — caller is on LAN, decides below).
+# Look up the env's slot via env-inspect (which reads env-registry.json on
+# the VM — authoritative slot source, not the container label which can drift
+# on older envs). We capture rc separately so "env-inspect couldn't reach
+# the VM" stays distinguishable from "env-registry doesn't know this slug"
+# (M-VM-2 — older bug where SLOT="" silently bypassed URL rewrite and let
+# the MCP wrapper report ok:true with broken Discord login).
 SLOT=""
 SLOT_LOOKUP_RC=0
-SLOT=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-    "docker inspect 'rl-env-${SLUG}-allinone' --format '{{ index .Config.Labels \"rl.slot\" }}' 2>/dev/null") \
-    || SLOT_LOOKUP_RC=$?
-# Go template prints `<no value>` for a missing label key — treat that
-# as "no slot" rather than a literal value.
-[[ "$SLOT" == "<no value>" ]] && SLOT=""
+SLOT_INSPECT_JSON=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-inspect" "$SLUG" 2>/dev/null) || SLOT_LOOKUP_RC=$?
+if (( SLOT_LOOKUP_RC == 0 )); then
+    SLOT=$(echo "$SLOT_INSPECT_JSON" | jq -r '.slot // empty' 2>/dev/null || true)
+fi
 
 # 1. Re-encrypt + sync app_settings (ROK-1326 fix-4). The operator's local
 # rows are encrypted with their JWT_SECRET. The env runs with a different
@@ -273,6 +384,22 @@ if [[ -z "$REMOTE_ENV_JWT_SECRET" ]]; then
     exit 4
 fi
 
+# --allow-empty-source guard: refuse to sync a wiped local app_settings into
+# the env unless the operator explicitly opts in. Common failure: operator's
+# local DB got reset (post `--fresh`) and a follow-on sync silently wipes
+# every API key in the env. Guard runs only when settings sync is in play
+# (always — both modes hit the re-encrypt path below).
+LOCAL_SETTINGS_COUNT=$(docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -c \
+    "SELECT count(*) FROM app_settings;" 2>/dev/null | tr -d '[:space:]')
+if [[ -z "$LOCAL_SETTINGS_COUNT" || "$LOCAL_SETTINGS_COUNT" == "0" ]]; then
+    if (( ALLOW_EMPTY_SOURCE != 1 )); then
+        echo "ERROR: local app_settings is empty — refusing to sync (would wipe env keys)." >&2
+        echo "       Pass --allow-empty-source if this is intentional." >&2
+        exit 5
+    fi
+    echo "  WARN: local app_settings is empty; --allow-empty-source set, proceeding." >&2
+fi
+
 # Resolve LOCAL_JWT_SECRET — try (1) explicit env var, (2) operator's
 # main-repo api/.env (worktree-aware via `git rev-parse --git-common-dir`),
 # (3) operator's working-dir api/.env. Hard-fail if none found — silent
@@ -280,7 +407,12 @@ fi
 # to prevent.
 resolve_local_jwt_secret() {
     if [[ -n "${LOCAL_JWT_SECRET:-}" ]]; then
-        printf '%s' "$LOCAL_JWT_SECRET"
+        local s="$LOCAL_JWT_SECRET"
+        # Strip optional surrounding double or single quotes (api/.env may have either).
+        s="${s%\"}"; s="${s#\"}"
+        s="${s%\'}"; s="${s#\'}"
+        echo "  resolved LOCAL_JWT_SECRET from \$LOCAL_JWT_SECRET env var" >&2
+        printf '%s' "$s"
         return 0
     fi
     local common_dir main_repo
@@ -303,6 +435,10 @@ resolve_local_jwt_secret() {
         local secret
         secret=$(grep -E '^JWT_SECRET=' "$f" | head -1 | cut -d= -f2-)
         if [[ -n "$secret" ]]; then
+            # Strip optional surrounding double or single quotes (api/.env may have either).
+            secret="${secret%\"}"; secret="${secret#\"}"
+            secret="${secret%\'}"; secret="${secret#\'}"
+            echo "  resolved LOCAL_JWT_SECRET from $f" >&2
             printf '%s' "$secret"
             return 0
         fi
@@ -321,11 +457,11 @@ LOCAL_JWT_SECRET_RESOLVED=$(resolve_local_jwt_secret) || {
 REENCRYPT_SUBSTITUTES=()
 if [[ -n "$REMOTE_PUBLIC_DOMAIN" ]]; then
     if [[ -z "$SLOT" ]]; then
-        echo "ERROR: RL_PUBLIC_DOMAIN is set but slot lookup for 'rl-env-${SLUG}-allinone' returned empty." >&2
+        echo "ERROR: RL_PUBLIC_DOMAIN is set but slot lookup for '${SLUG}' returned empty." >&2
         if (( SLOT_LOOKUP_RC != 0 )); then
-            echo "       docker inspect via ssh exited $SLOT_LOOKUP_RC (env not running, docker host unreachable, or ssh failed)." >&2
+            echo "       env-inspect via ssh exited $SLOT_LOOKUP_RC (env not running, docker host unreachable, or ssh failed)." >&2
         else
-            echo "       Container has no 'rl.slot' label (re-deploy via 'rl env spin' to attach one)." >&2
+            echo "       env-registry.json has no slot for this slug (re-deploy via 'rl env spin' to register one)." >&2
         fi
         exit 4
     fi
@@ -349,8 +485,7 @@ docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -F$'\t' -c \
   RL_REENCRYPT_DST_SECRET="$REMOTE_ENV_JWT_SECRET" \
   node "$SCRIPT_DIR/rl-reencrypt-settings.mjs" \
     "${REENCRYPT_SUBSTITUTES[@]}" \
-| ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-    "$REMOTE_PSQL" 2>&1 | tail -20
+| "${SSH_TO_VM[@]}" "${REMOTE_PSQL_CMD[@]}" 2>&1 | tail -20
 REENCRYPT_RC=("${PIPESTATUS[@]}")
 set -e
 # PIPESTATUS indices: 0=psql-source, 1=re-encrypt helper, 2=ssh-psql-target
@@ -385,25 +520,15 @@ else
     # to use a fixed password (not a random one). RESET_PASSWORD=true
     # ensures it overwrites whatever's there (handles re-deploy).
     #
-    # M-VM-3: previously this was `ssh ... "docker exec ... | tail -5" | sed`.
-    # `set -euo pipefail` on the LOCAL side does not control the REMOTE
-    # shell's pipeline, so a failed `docker exec` was masked by `tail`'s
-    # exit 0. We now capture the docker-exec rc on the remote and
-    # propagate it as the ssh exit code so the local script sees the
-    # failure. The `tail -5 | sed` formatting is still applied (via a
-    # subshell that captures output before tail) but no longer masks rc.
-    # Local `set -e` would abort the script before we could inspect
-    # PIPESTATUS, so disable it just for this command and re-enable
-    # immediately after.
+    # M-VM-3: pipefail issue described below — we still set local pipefail
+    # off around the ssh command so we can capture PIPESTATUS, then re-enable.
+    # env-exec-app handles -e flag forwarding and propagates docker exec rc.
     set +e
-    ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-        "set -o pipefail; \
-         DOCKER_HOST=tcp://127.0.0.1:2375 docker exec \
-             -e ADMIN_PASSWORD='$REMOTE_ADMIN_PASSWORD' \
-             -e RESET_PASSWORD=true \
-             rl-env-${SLUG}-allinone \
-             node /app/dist/scripts/bootstrap-admin.js 2>&1 | tail -5" \
-        2>&1 | sed 's/^/    /'
+    "${SSH_TO_VM[@]}" "${ORCH_BIN}/env-exec-app" "$SLUG" \
+        -e "ADMIN_PASSWORD=${REMOTE_ADMIN_PASSWORD}" \
+        -e "RESET_PASSWORD=true" \
+        -- node /app/dist/scripts/bootstrap-admin.js 2>&1 \
+        | tail -5 | sed 's/^/    /'
     BOOTSTRAP_RC=${PIPESTATUS[0]}
     set -e
     if (( BOOTSTRAP_RC != 0 )); then
@@ -428,19 +553,33 @@ fi
 #    success-but-broken-OAuth.
 echo "  restarting env to flush settings cache..." >&2
 set +e
-ssh -o BatchMode=yes -o ConnectTimeout=10 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-    "docker restart 'rl-env-${SLUG}-allinone' >/dev/null"
+"${SSH_TO_VM[@]}" "${ORCH_BIN}/env-restart" "$SLUG" >/dev/null
 RESTART_RC=$?
 set -e
 if (( RESTART_RC != 0 )); then
     echo "WARN: env restart exit ${RESTART_RC} — settings cache may still be stale." >&2
-    echo "       Retry manually: ssh ${RL_PROXMOX_USER}@${RL_PROXMOX_HOST} 'docker restart rl-env-${SLUG}-allinone'" >&2
+    echo "       Retry manually: ssh ${RL_PROXMOX_USER}@${RL_PROXMOX_HOST} ${ORCH_BIN}/env-restart ${SLUG}" >&2
 else
-    # Allow ~12s for the api to come back up + reload its settings cache.
-    # The health probe is the api's /api/health endpoint, but that requires
-    # external network (Cloudflare etc.) — we instead just sleep, which is
-    # robust against transient routing issues during fleet bring-up.
-    sleep 12
+    # Bounded poll on env-inspect's allinone status — wait until the
+    # container reports running again, up to RESTART_WAIT_SECONDS. Replaces
+    # the historical blind `sleep 12`: shorter when the env recovers fast,
+    # noisier when it doesn't.
+    RESTART_WAIT_SECONDS="${RL_RESTART_WAIT_SECONDS:-30}"
+    poll_started=$(date +%s)
+    while true; do
+        INSPECT_OUT=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-inspect" "$SLUG" 2>/dev/null || echo '{}')
+        ALLINONE_RUNNING=$(echo "$INSPECT_OUT" | jq -r '.allinone.running // false' 2>/dev/null || echo false)
+        ALLINONE_STATUS=$(echo "$INSPECT_OUT" | jq -r '.allinone.status // "missing"' 2>/dev/null || echo missing)
+        now=$(date +%s)
+        if [[ "$ALLINONE_RUNNING" == "true" && "$ALLINONE_STATUS" == "running" ]]; then
+            break
+        fi
+        if (( now - poll_started >= RESTART_WAIT_SECONDS )); then
+            echo "  WARN: env still not running after ${RESTART_WAIT_SECONDS}s (status=${ALLINONE_STATUS}); proceeding anyway." >&2
+            break
+        fi
+        sleep 1
+    done
     echo "  env restarted; settings cache reloaded." >&2
 fi
 

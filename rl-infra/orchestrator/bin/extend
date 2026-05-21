@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# ROK-1331 M5a — extend: push a claim's expires_at forward by N hours from NOW.
+#
+# Args: [--hours N] [--slot N]
+#   --hours: 1..24, default 1. HARD SET (not additive) from NOW.
+#   --slot:  required for operator path (RL_PROXMOX_USER=rl) when not the holder.
+# Required env: RL_AGENT_ID
+# Stdout JSON: {ok, slot, expires_at, extended_by_hours, extends_count, by:"holder"|"operator"}
+set -uo pipefail
+source "$(dirname "$0")/_state.sh"
+
+HOURS=1
+SLOT=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --hours) HOURS="$2"; shift 2 ;;
+        --slot)  SLOT="$2"; shift 2 ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
+    esac
+done
+
+[[ "$HOURS" =~ ^[0-9]+$ ]] || { jq -nc '{ok:"false", error:"hours_invalid"}'; exit 1; }
+if (( HOURS < 1 || HOURS > 24 )); then
+    jq -nc --argjson h "$HOURS" '{ok:"false", error:"hours_out_of_range", hours:$h, message:"hours must be 1..24"}'
+    exit 1
+fi
+
+[[ -z "${RL_AGENT_ID:-}" ]] && { jq -nc '{ok:"false", error:"missing_agent_id"}'; exit 1; }
+
+IS_OPERATOR=0
+[[ "${RL_PROXMOX_USER:-}" == "rl" ]] && IS_OPERATOR=1
+
+# Resolve target slot. Holder path: derive from RL_AGENT_ID. Operator path:
+# require --slot, no derive (operator may not be a claim holder).
+BY="holder"
+if [[ -z "$SLOT" ]]; then
+    if (( IS_OPERATOR == 1 )); then
+        # Operator must always specify --slot — no implicit derive.
+        # But if they happen to ALSO hold a claim, fall through to the
+        # derive path (rare; testing convenience).
+        SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+        if [[ -z "$SLOT" ]]; then
+            jq -nc '{ok:"false", error:"no_claim", message:"operator must pass --slot N"}'
+            exit 1
+        fi
+    else
+        SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
+        if [[ -z "$SLOT" ]]; then
+            jq -nc '{ok:"false", error:"no_claim"}'
+            exit 1
+        fi
+    fi
+else
+    # --slot passed: authorize. Either operator OR holder of that specific slot.
+    SLOT_HOLDER=$(state::query "$RL_CLAIMS_FILE" -r --argjson s "$SLOT" \
+        '[.[] | select(.slot == $s and .claimed == true) | .agent_id] | first // ""')
+    if [[ "$SLOT_HOLDER" != "$RL_AGENT_ID" ]]; then
+        if (( IS_OPERATOR == 1 )); then
+            BY="operator"
+        else
+            jq -nc --argjson s "$SLOT" '{ok:"false", error:"unauthorized", slot:$s}'
+            exit 1
+        fi
+    fi
+fi
+
+# Compute new expires_at = NOW + HOURS * 3600 (HARD SET — replaces existing,
+# not additive on top of it). Operator spec: "max 24h per single extend."
+NEW_SECONDS=$(( HOURS * 3600 ))
+NEW_EXPIRES=$(date -u -d "+${NEW_SECONDS} seconds" +%FT%TZ 2>/dev/null \
+    || python3 -W ignore -c "import datetime; print((datetime.datetime.utcnow() + datetime.timedelta(seconds=${NEW_SECONDS})).strftime('%Y-%m-%dT%H:%M:%SZ'))" 2>/dev/null)
+
+state::mutate "$RL_CLAIMS_FILE" \
+    --argjson s "$SLOT" \
+    --arg exp "$NEW_EXPIRES" \
+    '
+    (.[] | select(.slot == $s and .claimed == true))
+    |= (.expires_at = $exp | .extends_count = ((.extends_count // 0) + 1))
+    '
+
+NEW_COUNT=$(state::query "$RL_CLAIMS_FILE" -r --argjson s "$SLOT" \
+    '[.[] | select(.slot == $s) | .extends_count] | first // 0')
+
+audit::log extend ok "$(jq -nc --argjson s "$SLOT" --argjson h "$HOURS" --arg by "$BY" --arg exp "$NEW_EXPIRES" \
+    '{slot:$s, hours:$h, by:$by, expires_at:$exp}')"
+
+jq -nc \
+    --argjson slot "$SLOT" \
+    --arg exp "$NEW_EXPIRES" \
+    --argjson hours "$HOURS" \
+    --argjson count "$NEW_COUNT" \
+    --arg by "$BY" \
+    '{ok:true, slot:$slot, expires_at:$exp, extended_by_hours:$hours, extends_count:$count, by:$by}'

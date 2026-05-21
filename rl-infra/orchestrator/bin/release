@@ -1,22 +1,45 @@
 #!/usr/bin/env bash
 # Release a runner slot owned by the calling agent.
-# Destroys any envs spun by this slot, prunes scoped resources, resets worktree.
 #
-# Required env: RL_AGENT_ID
-# Optional flags: --slot <n>  (forces release of a specific slot — sweeper use)
-#                 --force     (skip "is this your slot" check; sweeper use)
-set -euo pipefail
+# ROK-1331 M5a — agent path now PRESERVES envs by default (the next claim
+# on the same branch inherits them via `lease-advance`). Operator path
+# (RL_PROXMOX_USER=rl) keeps the legacy destroy-everything behavior. Both
+# paths cascade SIGTERM to any in-flight tasks owned by the slot BEFORE
+# touching env state (M1's task-cancel cascade — STRICT preservation).
+#
+# Required env: RL_AGENT_ID (unless --slot is passed)
+# Optional flags:
+#   --slot <n>          forces release of a specific slot — sweeper / operator use
+#   --force             skip "is this your slot" check — sweeper use
+#   --preserve-envs     keep envs alive; mark claimable_by_next on env-registry
+#   --destroy-envs      destroy envs (legacy / operator path)
+# Default behavior:
+#   - agent (RL_PROXMOX_USER != "rl"): --preserve-envs is the default.
+#   - operator (RL_PROXMOX_USER == "rl"): --destroy-envs is the default.
+set -uo pipefail
 source "$(dirname "$0")/_state.sh"
 
 SLOT=""
 FORCE=0
+PRESERVE_ENVS=""    # tri-state until resolved: "", "1", "0"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --slot) SLOT="$2"; shift 2 ;;
         --force) FORCE=1; shift ;;
+        --preserve-envs) PRESERVE_ENVS=1; shift ;;
+        --destroy-envs) PRESERVE_ENVS=0; shift ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
+
+# Default to preserve for agents, destroy for operator.
+if [[ -z "$PRESERVE_ENVS" ]]; then
+    if [[ "${RL_PROXMOX_USER:-}" == "rl" ]]; then
+        PRESERVE_ENVS=0
+    else
+        PRESERVE_ENVS=1
+    fi
+fi
 
 if [[ -z "$SLOT" ]]; then
     if [[ -z "${RL_AGENT_ID:-}" ]]; then
@@ -25,47 +48,213 @@ if [[ -z "$SLOT" ]]; then
     fi
     SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
     if [[ -z "$SLOT" ]]; then
-        jq -nc '{ok: true, message: "agent holds no slot — noop"}'
+        jq -nc '{ok: true, message: "agent holds no slot — noop", preserved_envs: [], destroyed_envs: []}'
         exit 0
     fi
 fi
 
-# Tear down envs spun by this slot.
-ENV_SLUGS=$(docker ps -a --filter "label=rl.slot=$SLOT" --filter "label=rl.role=env" --format '{{.Label "rl.env_slug"}}' | sort -u)
-for slug in $ENV_SLUGS; do
-    [[ -z "$slug" ]] && continue
-    "$(dirname "$0")/env-destroy" --slug "$slug" --force >/dev/null || true
-done
+# ROK-1331 M11 — bookend the entire release path with a paired timer so
+# release.{start,end} land in perf.log. The end-event's duration_ms covers
+# the runner-cleanup grace window, env destroys/preserves, lease-advance,
+# and the audit-log writes — i.e. the operator-perceived "how long did
+# release take". Defaults Q1/Q2 from spec §12 (safe): emit on every release.
+perf::emit "release.start" "$(jq -nc --argjson slot "$SLOT" --argjson preserve "$PRESERVE_ENVS" '{slot:$slot, preserve_envs:($preserve == 1)}')"
+perf::start "release_total"
 
-# Scoped prune: belt-and-suspenders for any container/image tagged with
-# this slot that env-destroy didn't catch. Both stdout AND stderr suppressed
-# because the socket-proxy blocks prune endpoints entirely (intended) and
-# the "Forbidden" noise is misleading — env-destroy already does the real
-# work via targeted docker rm.
-docker container prune -f --filter "label=rl.slot=$SLOT" >/dev/null 2>&1 || true
-docker image prune -f --filter "label=rl.slot=$SLOT" >/dev/null 2>&1 || true
+# Snapshot the claim's branch BEFORE we clear it — needed for the
+# claimable_by_next mark. State::query is read-only so safe outside flock.
+CLAIM_BRANCH=$(state::query "$RL_CLAIMS_FILE" -r --argjson s "$SLOT" \
+    '[.[] | select(.slot == $s and .claimed == true) | .branch] | first // ""')
 
-# Drop the claim record.
-state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \
-    '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null)'
-
-# H-VM-4: Also remove ourselves from the queue. force-release does this
-# for the displaced agent specifically, but normal release didn't — so
-# any agent who queued itself before claiming (retried `rl claim` while
-# still queued from a previous attempt) leaves a stale queue entry that
-# blocks waiters behind it until QUEUE_TTL=1800s. queue::remove is
-# idempotent (no-op if not queued). Only meaningful when we know the
-# agent id — i.e. in the non-sweeper path. Sweeper invocations pass
-# --slot --force without RL_AGENT_ID set; skip then.
-if [[ -n "${RL_AGENT_ID:-}" ]]; then
-    queue::remove "$RL_AGENT_ID"
+# === ROK-1331 M1: task-cancel cascade — preserve across future rewrites ===
+# (STRICT, architect 2026-05-20) M5a's rewrite MUST keep this block intact
+# as step 0 of release, BEFORE the --preserve-envs branch logic and BEFORE
+# lease-advance. Otherwise a release-with-in-flight-tasks leaks the task
+# processes on the runner. Best-effort — never block release on cancel
+# failure.
+# =========================================================================
+if [[ -d "$RL_TASKS_DIR" ]]; then
+    RUNNING_TASKS=$(jq -r --argjson slot "$SLOT" \
+        'select(.slot == $slot and .status == "running") | .task_id' \
+        "$RL_TASKS_DIR"/*.json 2>/dev/null || true)
+    for tid in $RUNNING_TASKS; do
+        [[ -z "$tid" ]] && continue
+        "$(dirname "$0")/task-cancel" "$tid" "slot_released" >/dev/null 2>&1 || true
+    done
 fi
 
-audit::log release ok "$(jq -nc --argjson slot "$SLOT" --argjson force "$FORCE" '{slot: $slot, force: ($force == 1)}')"
+# === ROK-1331 M7: runner-side orphan cleanup =============================
+# Real bug found during M5b dogfood: shell processes started via the OLD
+# `ssh run-on-runner -- bash …` CLI path (validate-ci.sh / jest / vitest)
+# get reparented to docker-init (PID 1) inside the runner container when
+# their parent ssh closes. The M1 task-cancel cascade above catches the
+# NEW MCP task-execution path but NOT these legacy orphans, so they
+# survive `rl release` and contend with the next claim's tests for DB
+# ports + memory.
+#
+# Fix: best-effort pkill inside the runner container BEFORE we advance
+# the lease. SIGTERM first, brief grace window, then SIGKILL stragglers.
+# Block fires unconditionally (preserve-envs OR destroy-envs) — orphan
+# kill is orthogonal to env lifecycle. Missing runner container is a
+# noop; never block release on cleanup failure.
+# RUNNER_PROC_PATTERN: pgrep-style ERE matching the processes we want
+# gone. Anchored "node " (trailing space) keeps us from matching
+# unrelated commands. The runner container's PID 1 is docker-init, not
+# us — `pkill -P 1` targets all descendants of init (reparented orphans)
+# without touching init itself.
+# =========================================================================
+RUNNER="rl-runner-${SLOT}"
+RUNNER_PROC_PATTERN='validate-ci\.sh|jest|vitest|npm |node '
+docker exec "$RUNNER" sh -c "pkill -TERM -P 1 -f '$RUNNER_PROC_PATTERN' 2>/dev/null || true" >/dev/null 2>&1 || true
+sleep "${RL_RUNNER_CLEANUP_GRACE_SECONDS:-3}"
+docker exec "$RUNNER" sh -c "pkill -KILL -P 1 -f '$RUNNER_PROC_PATTERN' 2>/dev/null || true" >/dev/null 2>&1 || true
+audit::log release runner_cleanup "$(jq -nc --argjson slot "$SLOT" --arg runner "$RUNNER" '{slot:$slot, runner:$runner, killed_processes:true}')"
 
-# jq -n with --slurp gives null input that split() can't handle. Pipe the
-# slug list through jq with -R (raw input) and --slurp (collect into one
-# string), THEN split by newlines, dropping empties.
-ENVS_JSON=$(printf '%s' "$ENV_SLUGS" | jq -Rc --slurp 'split("\n") | map(select(length>0))')
-jq -nc --argjson slot "$SLOT" --argjson envs "$ENVS_JSON" \
-    '{ok: true, slot: $slot, destroyed_envs: $envs}'
+# ROK-1331 M11 — post-pkill verification (AC3 / closes M7 silent-failure
+# gap). M7 audit-logs `killed_processes:true` regardless of whether the
+# kill actually worked; this re-runs `pkill -f -c` to count survivors. On
+# the test host the runner container doesn't exist so the count comes back
+# as 0 (the missing-container exit-code path), which is the correct value
+# for "no orphans to kill". On the VM with a real runner, a non-zero count
+# is the loud signal the M7 task-cancel cascade missed something.
+# pipefail-safe: docker-exec failure on a missing runner produces exit code
+# 125 that propagates through pipes. Capture into a tmpfile with `|| true`
+# at the boundary, then parse separately — never let the pipe fail.
+RUNNER_SURVIVORS_RAW=""
+RUNNER_SURVIVORS_RAW=$({ docker exec "$RUNNER" sh -c "pkill -f -c '$RUNNER_PROC_PATTERN' 2>/dev/null; true" 2>/dev/null || true; } | tail -1 || true)
+RUNNER_SURVIVORS=$(printf '%s' "$RUNNER_SURVIVORS_RAW" | tr -d '[:space:]')
+[[ -z "$RUNNER_SURVIVORS" || ! "$RUNNER_SURVIVORS" =~ ^[0-9]+$ ]] && RUNNER_SURVIVORS=0
+perf::emit "release.pkill_audit" "$(jq -nc --argjson slot "$SLOT" --arg runner "$RUNNER" --argjson surv "$RUNNER_SURVIVORS" '{slot:$slot, runner:$runner, surviving_count:$surv}')"
+# =========================================================================
+
+# === ROK-1336 — runner-side perf-log flush ==============================
+# validate-ci.sh's perf_emit_local writes runner-emitted events to
+# /workspace/.rl-perf.log because /srv/rl-infra/state/perf.log isn't
+# writable from inside the runner container. The M11 spec promised release
+# would flush these back to the central perf.log — the code was never
+# implemented; this is the fix. The runner's /workspace is bind-mounted at
+# /srv/rl-infra/runners/slot-${SLOT}/worktree on the host, so we can read
+# directly without docker-exec. flock on RL_PERF_LOG matches perf::emit's
+# own locking posture so concurrent flushes from other slots don't
+# interleave half-lines.
+RUNNER_PERF_FILE="/srv/rl-infra/runners/slot-${SLOT}/worktree/.rl-perf.log"
+if [[ -s "$RUNNER_PERF_FILE" ]]; then
+    BYTES=$(stat -c%s "$RUNNER_PERF_FILE" 2>/dev/null || echo 0)
+    (
+        flock -w 2 9
+        cat "$RUNNER_PERF_FILE" >> "$RL_PERF_LOG"
+        : > "$RUNNER_PERF_FILE"
+    ) 9>"${RL_PERF_LOG}.flush.lock" 2>/dev/null || true
+    audit::log release perf_flush "$(jq -nc --argjson slot "$SLOT" --argjson bytes "$BYTES" '{slot:$slot, flushed_bytes:$bytes}')"
+fi
+# Also flush the .errors sibling — the diagnostic from ROK-1336 lands
+# there when perf_emit_local's inner python3 fails; tail it into the
+# central perf.log under a recognisable event prefix so we don't lose
+# the signal if we ever re-introduce the silent-fail class of bug.
+RUNNER_PERF_ERR="${RUNNER_PERF_FILE}.errors"
+if [[ -s "$RUNNER_PERF_ERR" ]]; then
+    (
+        flock -w 2 9
+        cat "$RUNNER_PERF_ERR" >> "$RL_PERF_LOG"
+        : > "$RUNNER_PERF_ERR"
+    ) 9>"${RL_PERF_LOG}.flush.lock" 2>/dev/null || true
+fi
+# =========================================================================
+
+# === ROK-1331 M8: testcontainers orphan reap ============================
+# After killing the runner-side jest, also reap any postgres/redis
+# testcontainers that jest started. ryuk normally handles this, but in
+# practice we see leaks when jest dies abruptly (OOM, kill -9, CI cancel)
+# or when ryuk's session-id tracker desyncs. Scoped to this slot — the
+# gc-sweeper's periodic `all` pass mops up anything we miss.
+# Best-effort; never fails release.
+# =========================================================================
+"$(dirname "$0")/runner-testcontainers-reap" "$SLOT" >/dev/null 2>&1 || true
+# =========================================================================
+
+# Enumerate envs for this slot. The env-registry is the source of truth —
+# docker labels are a secondary signal (used by the destroy path to find
+# containers, but they may be missing if env-destroy already ran or if the
+# container crashed externally).
+REG_SLUGS_RAW=$(state::query "$RL_ENVS_FILE" -r --argjson s "$SLOT" \
+    '.[] | select(.slot == $s) | .slug' 2>/dev/null || true)
+
+PRESERVED_ENVS_JSON="[]"
+DESTROYED_ENVS_JSON="[]"
+
+if [[ "$PRESERVE_ENVS" == "1" ]]; then
+    # Mark each env in the slot's registry as claimable_by_next + stamp the
+    # claim's branch so the next claim can detect match vs mismatch.
+    if [[ -n "$REG_SLUGS_RAW" ]]; then
+        env_registry::mark_claimable_by_next "$SLOT" "$CLAIM_BRANCH"
+    fi
+    PRESERVED_ENVS_JSON=$(printf '%s\n' "$REG_SLUGS_RAW" | jq -Rcs 'split("\n") | map(select(length>0))')
+else
+    # Operator path — destroy each env. env-destroy is best-effort; if it
+    # fails (orphaned registry row, docker daemon hiccup) the sweeper picks
+    # up the orphan on the next cycle.
+    DESTROYED_LIST=()
+    for slug in $REG_SLUGS_RAW; do
+        [[ -z "$slug" ]] && continue
+        if "$(dirname "$0")/env-destroy" --slug "$slug" --force >/dev/null 2>&1; then
+            DESTROYED_LIST+=("$slug")
+        fi
+    done
+    # Belt-and-suspenders: also catch any docker-labeled envs not in the
+    # registry (would happen if env-spin crashed mid-write).
+    DOCKER_SLUGS=$(docker ps -a --filter "label=rl.slot=$SLOT" --filter "label=rl.role=env" --format '{{.Label "rl.env_slug"}}' 2>/dev/null | sort -u | grep -v '^$' || true)
+    for slug in $DOCKER_SLUGS; do
+        [[ -z "$slug" ]] && continue
+        if ! printf '%s\n' "${DESTROYED_LIST[@]+"${DESTROYED_LIST[@]}"}" | grep -qx "$slug"; then
+            "$(dirname "$0")/env-destroy" --slug "$slug" --force >/dev/null 2>&1 && DESTROYED_LIST+=("$slug")
+        fi
+    done
+    # Scoped prune — only meaningful when destroying. Stderr suppressed
+    # because the socket-proxy blocks prune endpoints (intended); env-destroy
+    # already does the real targeted rm.
+    docker container prune -f --filter "label=rl.slot=$SLOT" >/dev/null 2>&1 || true
+    docker image prune -f --filter "label=rl.slot=$SLOT" >/dev/null 2>&1 || true
+    if (( ${#DESTROYED_LIST[@]} > 0 )); then
+        DESTROYED_ENVS_JSON=$(printf '%s\n' "${DESTROYED_LIST[@]}" | jq -Rcs 'split("\n") | map(select(length>0))')
+    fi
+fi
+
+# Drop the claim record. Also clears expires_at + extends_count (M5a fields).
+state::mutate "$RL_CLAIMS_FILE" --argjson slot "$SLOT" \
+    '(.[] | select(.slot == $slot)) |= (.claimed = false | .agent_id = null | .branch = null | .started_at = null | .last_heartbeat = null | .expires_at = null | .extends_count = 0)'
+
+# H-VM-4: Also remove ourselves from the queue. Idempotent.
+if [[ -n "${RL_AGENT_ID:-}" ]]; then
+    queue::remove "$RL_AGENT_ID"
+    # M5a: also clear from the per-slot lease queue (in case we were both
+    # queued + holding via a stale entry).
+    for s in $(seq 1 "$RUNNER_SLOTS"); do
+        lease::remove "$s" "$RL_AGENT_ID"
+    done
+fi
+
+CLEARED_LEASE="true"
+audit::log release ok "$(jq -nc --argjson slot "$SLOT" --argjson force "$FORCE" --argjson preserve "$PRESERVE_ENVS" '{slot: $slot, force: ($force == 1), preserve_envs: ($preserve == 1)}')"
+
+# Lease-advance: promote the head of this slot's queue (if any). Synchronous
+# (NOT fire-and-forget) so the branch-match-vs-destroy decision happens
+# before this release call returns. The next claim's poll sees the granted
+# state on its next tick. Per spec line 296 ("fire-and-forget") this could
+# be backgrounded; but the test (release-preserve-envs::ac8) asserts that
+# env-destroy from lease-advance lands in the audit log BEFORE the grant
+# entry, which requires synchronous invocation.
+"$(dirname "$0")/lease-advance" --slot "$SLOT" >/dev/null 2>&1 || true
+
+# ROK-1331 M11 — release.end emits duration_ms + counts so dashboards can
+# distinguish "release took 12s + destroyed 3 envs" from "release took
+# 12s pkill'ing orphans". Defaults Q1/Q2 from spec §12 (safe).
+ENVS_DESTROYED_COUNT=$(jq 'length' <<<"$DESTROYED_ENVS_JSON")
+ENVS_PRESERVED_COUNT=$(jq 'length' <<<"$PRESERVED_ENVS_JSON")
+perf::end "release_total" "release.end" \
+    "$(jq -nc --argjson slot "$SLOT" --argjson preserve "$PRESERVE_ENVS" --argjson dc "$ENVS_DESTROYED_COUNT" --argjson pc "$ENVS_PRESERVED_COUNT" '{slot:$slot, preserve_envs:($preserve == 1), envs_destroyed_count:$dc, envs_preserved_count:$pc}')"
+
+jq -nc --argjson slot "$SLOT" \
+    --argjson preserved "$PRESERVED_ENVS_JSON" \
+    --argjson destroyed "$DESTROYED_ENVS_JSON" \
+    --argjson cleared "$CLEARED_LEASE" \
+    '{ok: true, slot: $slot, preserved_envs: $preserved, destroyed_envs: $destroyed, cleared_lease: $cleared}'

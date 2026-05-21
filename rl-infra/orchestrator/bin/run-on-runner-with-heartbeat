@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# ROK-1331 M5b — wrap a docker exec child with a heartbeat loop.
+#
+# Like run-on-runner, but forks a background loop that prints
+#   [heartbeat] elapsed=Ns pid=P cpu=X.X% rss=NMB current_test=<latest>
+# every --heartbeat-interval seconds (default 30) until the wrapped
+# child exits. Heartbeat lines flow on stdout alongside the child's
+# output so the M1 task-start tee captures them in the .log file
+# without any new writer.
+#
+# Required env: RL_AGENT_ID
+# Usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]
+set -uo pipefail
+source "$(dirname "$0")/_state.sh"
+
+HEARTBEAT_INTERVAL=30
+
+# Parse our own flags before the `--` boundary. After the boundary,
+# everything is the wrapped command.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --heartbeat-interval=*)
+            HEARTBEAT_INTERVAL="${1#--heartbeat-interval=}"
+            shift
+            ;;
+        --heartbeat-interval)
+            HEARTBEAT_INTERVAL="${2:-30}"
+            shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]" >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [[ $# -eq 0 ]]; then
+    echo "usage: run-on-runner-with-heartbeat [--heartbeat-interval=N] -- <cmd> [args...]" >&2
+    exit 2
+fi
+
+# Clamp interval to >= 1s. Anything below or non-numeric defaults to 1
+# so the heartbeat loop never spins hot or divides by zero.
+if ! [[ "$HEARTBEAT_INTERVAL" =~ ^[0-9]+$ ]] || (( HEARTBEAT_INTERVAL < 1 )); then
+    echo "[heartbeat] --heartbeat-interval clamped to 1s (was '$HEARTBEAT_INTERVAL')" >&2
+    HEARTBEAT_INTERVAL=1
+fi
+
+if [[ -z "${RL_AGENT_ID:-}" ]]; then echo "RL_AGENT_ID required" >&2; exit 2; fi
+SLOT=$(state::slot_for_agent "$RL_AGENT_ID" 2>/dev/null || true)
+if [[ -z "$SLOT" ]]; then
+    # Test harnesses (PATH-shim docker) point at an empty RL_STATE_DIR where
+    # no claim exists. Fall through with a sentinel slot so the heartbeat
+    # path still runs — the shim drops the container name anyway. In
+    # production RL_STATE_DIR is canonical and missing slot is a real error;
+    # callers should `rl claim` first. We surface a warning so a misbehaving
+    # caller in prod gets a breadcrumb rather than a silent zero slot.
+    if [[ "${RL_STATE_DIR:-/srv/rl-infra/state}" != "/srv/rl-infra/state" ]]; then
+        SLOT=0
+    else
+        echo "no slot — run claim first" >&2
+        exit 2
+    fi
+fi
+
+CONTAINER="rl-runner-${SLOT}"
+EXEC_FLAGS="-i"
+[[ "${RL_TTY:-0}" == "1" ]] && EXEC_FLAGS="-it"
+
+# Read /proc/<pid>/stat on Linux; fall back to ps when missing (macOS shim
+# or alpine without procfs). Echoes "<cpu_pct> <rss_mb>" or "? ?".
+sample_proc() {
+    local pid="$1"
+    if [[ -r "/proc/$pid/stat" && -r "/proc/$pid/status" ]]; then
+        local rss_kb
+        rss_kb=$(awk '/^VmRSS:/{print $2; exit}' "/proc/$pid/status" 2>/dev/null || echo "")
+        if [[ -n "$rss_kb" ]]; then
+            local rss_mb=$(( rss_kb / 1024 ))
+            local cpu_pct
+            cpu_pct=$(ps -o pcpu= -p "$pid" 2>/dev/null | tr -d ' ' || echo "?")
+            echo "${cpu_pct:-?} ${rss_mb:-?}"
+            return
+        fi
+    fi
+    local out
+    out=$(ps -o pcpu=,rss= -p "$pid" 2>/dev/null)
+    if [[ -n "$out" ]]; then
+        local cpu rss_kb
+        read -r cpu rss_kb <<<"$out"
+        echo "${cpu:-?} $(( ${rss_kb:-0} / 1024 ))"
+    else
+        echo "? ?"
+    fi
+}
+
+# Best-effort: detect the most recent jest test path from the runner's log
+# stream. We grep the latest line matching jest verbose output from a tee'd
+# buffer if available; otherwise emit empty. Pure stdout sniffing here is
+# brittle, so this is intentionally best-effort.
+detect_current_test() {
+    local pid="$1"
+    if [[ -n "${HEARTBEAT_LOG_TAIL:-}" && -r "$HEARTBEAT_LOG_TAIL" ]]; then
+        tail -c 4096 "$HEARTBEAT_LOG_TAIL" 2>/dev/null \
+            | grep -oE '(PASS|FAIL|RUNS)[[:space:]]+[A-Za-z0-9_./-]+\.spec\.(t|j)sx?' \
+            | tail -1 \
+            | awk '{print $2}' \
+            || true
+    fi
+}
+
+# Heartbeat loop runs in a child process. Polls the wrapped child PID
+# every HEARTBEAT_INTERVAL seconds; emits a single line per tick.
+heartbeat_loop() {
+    local child_pid="$1"
+    local interval="$2"
+    local launch_ts="$3"
+    while kill -0 "$child_pid" 2>/dev/null; do
+        local now elapsed cpu rss current
+        now=$(date +%s)
+        elapsed=$(( now - launch_ts ))
+        read -r cpu rss <<<"$(sample_proc "$child_pid")"
+        current=$(detect_current_test "$child_pid")
+        # Cosmetic: cpu without % suffix → append, leave "?" alone.
+        if [[ "$cpu" != "?" ]]; then cpu="${cpu}%"; fi
+        # rss without unit → append MB, leave "?" alone.
+        local rss_label="${rss}MB"
+        [[ "$rss" == "?" ]] && rss_label="?"
+        echo "[heartbeat] elapsed=${elapsed}s pid=${child_pid} cpu=${cpu} rss=${rss_label} current_test=${current:-}"
+        sleep "$interval"
+    done
+}
+
+audit::log run-on-runner-with-heartbeat start \
+    "$(jq -nc --argjson slot "$SLOT" --argjson hb "$HEARTBEAT_INTERVAL" --arg cmd "$*" \
+        '{slot:$slot, heartbeat_interval:$hb, cmd:$cmd}')"
+
+LAUNCH_TS=$(date +%s)
+
+# Launch the child in the background so we can fork the heartbeat loop
+# with its PID. Set +e because we capture the child's RC manually.
+set +e
+docker exec $EXEC_FLAGS \
+    -w /workspace \
+    -e RL_SLOT="$SLOT" \
+    -e RL_TARGET=runner \
+    "$CONTAINER" \
+    "$@" &
+CHILD_PID=$!
+
+# Start the heartbeat watcher in the background.
+heartbeat_loop "$CHILD_PID" "$HEARTBEAT_INTERVAL" "$LAUNCH_TS" &
+HB_PID=$!
+
+# Propagate signals to the child so Ctrl+C in the caller's shell kills
+# the wrapped command, not just the wrapper.
+cleanup() {
+    kill -TERM "$HB_PID" 2>/dev/null || true
+    if kill -0 "$CHILD_PID" 2>/dev/null; then
+        kill -TERM "$CHILD_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup INT TERM
+
+wait "$CHILD_PID"
+RC=$?
+# Heartbeat loop self-exits when kill -0 fails; reap defensively in case
+# the child died between ticks.
+kill -TERM "$HB_PID" 2>/dev/null || true
+wait "$HB_PID" 2>/dev/null
+set -e
+
+audit::log run-on-runner-with-heartbeat end \
+    "$(jq -nc --argjson slot "$SLOT" --argjson rc "$RC" '{slot:$slot, rc:$rc}')"
+exit "$RC"

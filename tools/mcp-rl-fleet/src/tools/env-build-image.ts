@@ -4,55 +4,83 @@
 // The orchestrator script resolves the agent's slot, then runs `docker
 // build` INSIDE that runner — meaning the build sees the operator's
 // branch via the Mutagen-synced /workspace, not the registry's `latest`.
+//
+// ROK-1331 M2: converted to default-async via task-start. wait:false (the
+// default) dispatches and returns {task_id, log_url, started_at}; wait:true
+// chains through task.executeWait. Bug C is NOT required here — the
+// orchestrator binary is operator-installed on the VM with exec bits
+// preserved, NOT a Mutagen-synced script.
 
 import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { deriveAgentId, shellQuote } from '../exec.js';
+import { randomBytes } from 'node:crypto';
+import { deriveAgentId, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
 import * as claim from './claim.js';
-
-const execFileAsync = promisify(execFile);
+import * as task from './task.js';
 
 export const TOOL_NAME = 'rl_env_build_image_from_runner';
 export const TOOL_DESCRIPTION =
-  "Build an allinone Docker image from the agent's CURRENT BRANCH code (the Mutagen-synced /workspace inside the runner), tag it, and push to the local registry. Returns the full image tag suitable for passing to rl_env_spin's `image` param. Default tag derived from the branch name when invoked through rl_env_deploy. Build is 5–15 minutes on first run; subsequent rebuilds of the same branch are fast (Docker layer cache). Requires rl_claim first. When called from a worktree, pass worktree_path so the agent_id matches the slot you claimed — otherwise the build won't find your slot.";
+  "Build an allinone Docker image from the agent's CURRENT BRANCH code (the Mutagen-synced /workspace inside the runner), tag it, and push to the local registry. ASYNC BY DEFAULT (wait:false) — returns {task_id, log_url, started_at} within 1s; poll via rl_task_status or block via rl_task_wait. Set wait:true to preserve the legacy synchronous shape. Build is 5–15 minutes on first run; subsequent rebuilds of the same branch are fast (Docker layer cache). Requires rl_claim first. When called from a worktree, pass worktree_path so the agent_id matches the slot you claimed.";
 
 export interface BuildImageParams {
-  /** Tag to use on the registry (e.g. "rok-1297"). Image becomes registry.rl.lan:5000/rl-allinone:<tag>. */
   tag: string;
-  /** Skip the push step (build only). Defaults to false. */
   no_push?: boolean;
-  /**
-   * Absolute path to the agent's worktree — MUST match the worktree_path
-   * passed to rl_claim. Used to derive RL_AGENT_ID consistently so this
-   * build looks up YOUR claimed slot, not some other agent's.
-   */
   worktree_path?: string;
-  /** Soft timeout. Defaults to 1800 (30 min) — first-time builds need this. */
   timeout_seconds?: number;
+  /** ROK-1331: default false (async). When true, chains to rl_task_wait. */
+  wait?: boolean;
+  /** Wait budget when wait:true. Default 1800. */
+  wait_timeout_seconds?: number;
 }
 
 export interface BuildImageResult {
   ok: boolean;
-  /** The bare tag (e.g. "rok-1297"). */
   tag?: string;
-  /** Full image ref ready for `rl_env_spin image=`. */
   image?: string;
   slot?: number;
   duration_s?: number;
   pushed?: boolean;
+  /** Async dispatch fields (wait:false). */
+  task_id?: string;
+  log_url?: string;
+  log_path?: string;
+  started_at?: string;
+  mcp_runtime_status?: string;
   error?: string;
   stderr?: string;
+  message?: string;
+}
+
+const FLEET_DOMAIN = process.env.RL_FLEET_DOMAIN ?? 'fleet.gamernight.net';
+
+function execFileP(
+  cmd: string,
+  args: string[],
+  opts: { timeout?: number; maxBuffer?: number } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (err, stdout, stderr) => {
+      const out =
+        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
+      const errStr =
+        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
+      if (err) {
+        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
+        e.stdout = out;
+        e.stderr = errStr || e.stderr || '';
+        reject(e);
+        return;
+      }
+      resolve({ stdout: out, stderr: errStr });
+    });
+  });
+}
+
+function newTaskId(): string {
+  return randomBytes(6).toString('hex');
 }
 
 export async function execute(params: BuildImageParams): Promise<BuildImageResult> {
-  // PRE-STEP: ensure the agent's Mutagen sync session is alive before we
-  // SSH off to do a Docker build inside the runner. The build sees
-  // /workspace via a bind mount; if the sync session was disrupted (op
-  // killed orphans, sweeper reaped, claim never ran through ensure_mutagen_sync,
-  // etc.) /workspace is stale and the build either fails on missing files
-  // or builds last-known stale content. claim is idempotent — returns the
-  // same slot if held, and unconditionally runs ensure_mutagen_sync +
-  // heartbeat daemon. wait:false so we never queue inside a build call.
+  // PRE-STEP: ensure the agent's Mutagen sync session is alive.
   const cl = await claim.execute({ worktree_path: params.worktree_path, wait: false });
   if (!cl.ok || cl.queued) {
     return {
@@ -61,50 +89,121 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
       stderr: cl.error || cl.message || 'pre-build claim returned no slot',
     };
   }
-  // Flush Mutagen so any pending edits land on the runner BEFORE the
-  // build context is read. Best-effort — if the session evaporated between
-  // claim and now, the flush errors and we proceed; the build will surface
-  // the staleness if real.
+  // Flush Mutagen so any pending edits land on the runner BEFORE the build
+  // context is read. Best-effort.
   try {
-    await execFileAsync('mutagen', ['sync', 'flush', `rl-slot-${cl.slot}`], {
+    await execFileP('mutagen', ['sync', 'flush', `rl-slot-${cl.slot}`], {
       timeout: 30_000,
     });
   } catch {
-    // ignore; build itself will fail loud if the runner has nothing to work with
+    /* ignore */
   }
 
   const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
   const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-  // Derive the same RL_AGENT_ID the rl CLI used when claiming the slot.
-  // If worktree_path matches what was passed to rl_claim, the SHA matches
-  // and the orchestrator finds the correct slot.
   const agentId = deriveAgentId(params.worktree_path);
-  const timeoutMs = (params.timeout_seconds ?? 1800) * 1000;
+  const wait = params.wait ?? false;
+  const waitTimeoutS = params.wait_timeout_seconds ?? 1800;
 
-  const args = ['--tag', params.tag];
-  if (params.no_push) args.push('--no-push');
-  // shellQuote every arg crossing the SSH boundary — `tag` is Zod-regex-
-  // locked to [a-zA-Z0-9._-]+ but defense-in-depth is cheap and the
-  // pattern matches H-MCP-1/2 above. (M-MCP-4 — agentId interpolation.)
+  const buildArgs = ['--tag', params.tag];
+  if (params.no_push) buildArgs.push('--no-push');
+  const quotedBuildArgs = buildArgs.map((a) => shellQuote(a)).join(' ');
+
+  // Inner command: orchestrator's build binary with shellQuote'd args.
+  // Bug C exemption: build-image-on-runner is operator-installed on the VM,
+  // exec bits preserved; no `bash` wrap needed.
+  const targetCmd = `/srv/rl-infra/orchestrator/bin/build-image-on-runner ${quotedBuildArgs}`;
+
+  const taskId = newTaskId();
+  const slot = typeof cl.slot === 'number' ? cl.slot : null;
+  const slotFlag = slot !== null ? `--slot ${slot} ` : '';
+  // ROK-1331 Session 4 dogfood (Codex P2-2): pass timeout_seconds through
+  // to task-start so the watchdog kills hung docker builds. Default 1800
+  // (30 min) — matches the legacy sync timeout. Builds can be long on
+  // first-run; allow up to 2h via the param.
+  const timeoutS = Math.max(60, Math.min(7200, params.timeout_seconds ?? 1800));
+  const timeoutFlag = `--timeout-seconds ${timeoutS} `;
   const remote =
     `RL_AGENT_ID=${shellQuote(agentId)} ` +
-    `/srv/rl-infra/orchestrator/bin/build-image-on-runner ` +
-    args.map((a) => shellQuote(a)).join(' ');
+    `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
+    `--tool rl_env_build_image_from_runner ${slotFlag}${timeoutFlag}` +
+    `-- ${targetCmd}`;
 
+  let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};
   try {
-    const result = await execFileAsync(
+    const { stdout } = await execFileP(
       'ssh',
       ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`, remote],
-      { maxBuffer: 32 * 1024 * 1024, timeout: timeoutMs },
+      { maxBuffer: 4 * 1024 * 1024, timeout: 60_000 },
     );
-    const parsed = JSON.parse(result.stdout.trim().split('\n').pop() ?? '{}');
-    return parsed as BuildImageResult;
+    try {
+      dispatch = JSON.parse(stdout.trim()) as typeof dispatch;
+    } catch {
+      const last = stdout.trim().split('\n').pop();
+      if (last) {
+        try {
+          dispatch = JSON.parse(last) as typeof dispatch;
+        } catch {
+          /* fall through */
+        }
+      }
+    }
   } catch (err) {
-    const e = err as Error & { stdout?: string; stderr?: string; code?: number };
+    const e = err as Error & { stderr?: string; code?: number };
+    const stderr =
+      !e.stderr || e.stderr.trim() === ''
+        ? synthesizeEmptyStderrDiagnostic(e.code)
+        : e.stderr;
     return {
       ok: false,
-      error: 'build_image_failed',
-      stderr: e.stderr ?? e.message,
+      error: 'task_start_failed',
+      stderr,
     };
   }
+
+  const finalTaskId = dispatch.task_id ?? taskId;
+  const startedAt = dispatch.started_at ?? new Date().toISOString();
+  const logUrl = `https://${FLEET_DOMAIN}/api/tasks/${finalTaskId}/log`;
+
+  if (!wait) {
+    return {
+      ok: true,
+      task_id: finalTaskId,
+      log_url: logUrl,
+      log_path: dispatch.log_path ?? `/srv/rl-infra/state/tasks/${finalTaskId}.log`,
+      started_at: startedAt,
+      mcp_runtime_status: 'running',
+      slot: slot ?? undefined,
+    };
+  }
+
+  // wait:true — chain through executeWait and map TaskStatusResult fields
+  // back to the legacy BuildImageResult shape so callers like env-deploy.ts
+  // keep working without changes.
+  const status = await task.executeWait({
+    task_id: finalTaskId,
+    timeout_seconds: waitTimeoutS,
+  });
+  if (status.mcp_runtime_status === 'succeeded') {
+    return {
+      ok: true,
+      tag: params.tag,
+      image: `registry.rl.lan:5000/rl-allinone:${params.tag}`,
+      slot: slot ?? undefined,
+      duration_s: status.elapsed_seconds,
+      pushed: !params.no_push,
+      task_id: finalTaskId,
+      log_url: logUrl,
+      started_at: startedAt,
+      mcp_runtime_status: status.mcp_runtime_status,
+    };
+  }
+  return {
+    ok: false,
+    error: 'build_image_failed',
+    task_id: finalTaskId,
+    log_url: logUrl,
+    mcp_runtime_status: status.mcp_runtime_status ?? 'failed',
+    stderr: status.message ?? status.error ?? 'build failed',
+  };
 }

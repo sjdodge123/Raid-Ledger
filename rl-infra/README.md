@@ -118,6 +118,74 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
   `/srv/rl-infra/state/audit.log` (claim ID, command, timestamp, outcome).
 - **`rl status`** surfaces all of the above in one screen.
 
+## Task tracking (ROK-1331 M1)
+
+Long-running orchestrator commands (validate-ci, image builds, env spins) are
+tracked as **tasks** with persistent VM-side state. State survives MCP-server
+restart on the laptop and is independently observable via SSH.
+
+**Directory layout** — `/srv/rl-infra/state/tasks/`:
+
+- `<task_id>.json` — task metadata + parsed step list (see schema below)
+- `<task_id>.log` — full stdout+stderr captured from the wrapped command
+
+**Binary surface** (`/srv/rl-infra/orchestrator/bin/`):
+
+| Binary        | Usage                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------- |
+| `task-start`  | `task-start <task_id> --tool <name> [--slot N] [--agent-id ID] -- <cmd...>`             |
+| `task-status` | `task-status <task_id> [--log-tail-bytes N]` (default 50 KiB)                           |
+| `task-cancel` | `task-cancel <task_id> <reason>` — SIGTERM → 10 s grace → SIGKILL                       |
+| `task-list`   | `task-list [--slot N] [--status running\|succeeded\|failed\|cancelled] [--limit N]`     |
+
+Task IDs are caller-generated `[a-z0-9]{8,32}` strings. `task-start` returns
+within 1 s with `{ok, task_id, log_path, started_at}` JSON; the wrapped command
+runs in a detached process group so `task-cancel` can `kill -<pgid>` the whole
+subtree.
+
+**Task JSON shape** (consumed by M2's `task.ts` MCP tool + M3's dashboard):
+
+```jsonc
+{
+  "task_id": "ab12cd34ef56",
+  "tool": "rl_validate_ci",
+  "slot": 1,
+  "agent_id": "rok-1331-…",
+  "args_summary": "--full",
+  "cmd": ["bash", "/workspace/scripts/validate-ci.sh", "--full"],
+  "log_path": "/srv/rl-infra/state/tasks/ab12cd34ef56.log",
+  "pid": 12345,
+  "status": "running",                  // running | succeeded | failed | cancelled
+  "script_exit_code": null,             // null while running; int once finalized
+  "started_at": "2026-05-20T14:00:00Z",
+  "finished_at": null,
+  "cancel_reason": null,
+  "steps": [
+    {"name": "Build (all workspaces)", "status": "PASS", "duration_s": null}
+  ]
+}
+```
+
+**Step parsing** — `task-start` tails the wrapped command's log and regex-matches
+validate-ci's `<name>: PASS|FAIL|SKIPPED` lines (ANSI-colored or plain) into
+`steps[]`. The regex is the single source of truth in
+`orchestrator/bin/_parser.sh`; M2 documentation references this file rather than
+copying the pattern.
+
+**Retention** — the `gc-sweeper` container prunes terminal task JSON + log pairs
+older than `TASK_RETENTION_SECONDS` (default 86 400 s = 24 h). Running tasks
+are preserved unconditionally. Orphaned tasks (status=running but pid no longer
+alive — host reboot, OOM) get auto-flipped to failed with
+`cancel_reason: "orphaned"` so the normal age check ages them out next pass.
+
+**Release cascade** — `release` (and the sweeper's dead-claim path) cancels any
+running tasks owned by the released slot before clearing the claim record, so
+in-flight long-running tools don't outlive their slot.
+
+**Log file caps** — `task-start` does NOT rotate logs during execution; the
+sweeper handles size at end-of-life. `task-status` caps its returned `log_tail`
+(default 50 KiB) so callers don't ingest gigabyte logs.
+
 ## Strong debugging
 
 | Need                        | How                                                       |
@@ -174,3 +242,32 @@ ln -s "$PWD/rl-infra/cli/rl" /usr/local/bin/rl   # or add rl-infra/cli to PATH
 rl doctor                                    # verifies SSH, Mutagen, orchestrator
 rl claim --branch $(git branch --show-current)
 ```
+
+## VM dependencies
+
+The rl-infra VM host needs these packages installed via apt-get:
+
+- `inotify-tools` — push-notify (`rl test-plan wait`, `rl task wait`) uses
+  `inotifywait` to long-poll state-file changes. Without it, `wait`
+  commands silently return immediate timeouts. Install via
+  `apt-get install -y inotify-tools` on the VM host.
+
+Runner containers (per slot) auto-install these via `rl-infra/runner/Dockerfile`:
+
+- `inotify-tools` — same purpose for in-runner uses.
+- `postgresql-client`, `redis-tools`, `docker-ce-cli`, `git`, `make`,
+  `build-essential`, `netcat-openbsd`, `iproute2`, `dnsutils`, `tmux`,
+  `htop`, `tcpdump`, `strace`, `lsof`, `rsync`, `jq`, `unzip`, `curl`,
+  `gnupg`, `ca-certificates`.
+
+After changing `rl-infra/runner/Dockerfile`, rebuild the runner image on
+the VM:
+
+```bash
+cd /srv/rl-infra
+docker compose build runner-1 runner-2
+docker compose up -d
+```
+
+(This is an operator-action: agents don't have permission to restart
+compose-managed services.)

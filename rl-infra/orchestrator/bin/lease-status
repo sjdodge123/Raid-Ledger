@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# ROK-1331 M5a — lease-status: read-only snapshot of lease queues + claims.
+#
+# Args: [--slot N]   (omit → all slots)
+# Stdout JSON: {ok, slots: [{slot, current_holder, branch, expires_at,
+#                            last_heartbeat, queue:[...], pinned_envs:[...],
+#                            claimable_envs:[{slug, created_for_branch}]}]}
+#
+# No locks — atomic-rename semantics on writers make this race-safe.
+set -uo pipefail
+source "$(dirname "$0")/_state.sh"
+
+SLOT_FILTER=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --slot) SLOT_FILTER="$2"; shift 2 ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
+    esac
+done
+
+if [[ -n "$SLOT_FILTER" ]]; then
+    [[ "$SLOT_FILTER" =~ ^[0-9]+$ ]] || { echo '{"ok":false,"error":"invalid_slot"}' >&2; exit 2; }
+fi
+
+# Build the per-slot list iteratively in bash, then assemble with jq.
+SLOTS_JSON="[]"
+for slot in $(seq 1 "$RUNNER_SLOTS"); do
+    if [[ -n "$SLOT_FILTER" && "$slot" != "$SLOT_FILTER" ]]; then
+        continue
+    fi
+
+    CLAIM_ROW=$(jq -c --argjson s "$slot" 'first(.[] | select(.slot == $s)) // null' "$RL_CLAIMS_FILE" 2>/dev/null || echo "null")
+    if [[ -z "$CLAIM_ROW" || "$CLAIM_ROW" == "null" ]]; then
+        CLAIM_ROW='{"slot":'"$slot"',"claimed":false,"agent_id":null,"branch":null,"expires_at":null,"last_heartbeat":null}'
+    fi
+
+    QFILE="$(lease::file_for_slot "$slot")"
+    if [[ -f "$QFILE" ]]; then
+        QUEUE=$(jq -c '.' "$QFILE" 2>/dev/null || echo "[]")
+    else
+        QUEUE="[]"
+    fi
+
+    PINNED=$(jq -c --argjson s "$slot" \
+        '[.[] | select(.slot == $s and (.pinned // false) == true) | .slug]' \
+        "$RL_ENVS_FILE" 2>/dev/null || echo "[]")
+    CLAIMABLE=$(jq -c --argjson s "$slot" \
+        '[.[] | select(.slot == $s and (.claimable_by_next // false) == true) | {slug, created_for_branch: (.created_for_branch // "")}]' \
+        "$RL_ENVS_FILE" 2>/dev/null || echo "[]")
+
+    ROW=$(jq -nc \
+        --argjson slot "$slot" \
+        --argjson claim "$CLAIM_ROW" \
+        --argjson queue "$QUEUE" \
+        --argjson pinned "$PINNED" \
+        --argjson claimable "$CLAIMABLE" \
+        '{
+            slot: $slot,
+            current_holder: (if ($claim.claimed // false) == true then $claim.agent_id else null end),
+            branch: (if ($claim.claimed // false) == true then $claim.branch else null end),
+            expires_at: ($claim.expires_at // null),
+            last_heartbeat: ($claim.last_heartbeat // null),
+            queue: $queue,
+            pinned_envs: $pinned,
+            claimable_envs: $claimable
+        }')
+    SLOTS_JSON=$(jq -c --argjson row "$ROW" '. + [$row]' <<<"$SLOTS_JSON")
+done
+
+jq -nc --argjson slots "$SLOTS_JSON" '{ok:true, slots:$slots}'

@@ -7,15 +7,52 @@
 //   We always pass RL_PROXMOX_USER=rl-agent and explicitly unset RL_OPERATOR.
 
 import { execFile, execFileSync } from 'node:child_process';
-import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
+import * as dns from 'node:dns';
 import { fileURLToPath } from 'node:url';
-import { dirname, isAbsolute, resolve, sep } from 'node:path';
-import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { z } from 'zod';
 
-const execFileAsync = promisify(execFile);
+/**
+ * Manual `execFile` promisifier that always resolves to `{stdout, stderr}`
+ * regardless of whether `node:child_process` was replaced by a vitest mock.
+ *
+ * Why not `util.promisify(execFile)`: promisify uses the `util.promisify.custom`
+ * symbol attached to the real `child_process.execFile` to return the `{stdout,
+ * stderr}` shape callers expect. When vitest's `vi.mock('node:child_process')`
+ * substitutes a plain function for execFile, the custom symbol is lost, and
+ * promisify falls back to default behavior: the resolved value becomes just
+ * the first non-error callback argument (stdout). Code that then reads
+ * `result.stdout` gets `undefined`, breaking every test that mocked execFile
+ * to verify SSH argv shape (ROK-1331 M2 release.spec, validate-ci.spec).
+ *
+ * Reading `result.stdout` on the resolved value here ALWAYS works in both
+ * real-runtime and test-mocked environments.
+ */
+function execFileP(
+  cmd: string,
+  args: string[],
+  opts: { env?: NodeJS.ProcessEnv; cwd?: string; maxBuffer?: number; timeout?: number } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (err, stdout, stderr) => {
+      const out =
+        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
+      const errStr =
+        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
+      if (err) {
+        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
+        e.stdout = out;
+        e.stderr = errStr || e.stderr || '';
+        reject(e);
+        return;
+      }
+      resolve({ stdout: out, stderr: errStr });
+    });
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -23,6 +60,115 @@ const __dirname = dirname(__filename);
 // rl-infra/cli/rl. Go up three levels from this file:
 //   src/ → tools/mcp-rl-fleet/ → tools/ → <repo-root>/
 export const RL_BIN = resolve(__dirname, '../../../rl-infra/cli/rl');
+
+// ---------------------------------------------------------------------------
+// RL_PROXMOX_HOST resolution with DNS fallback (ROK-1331 M6b HIGH-3)
+// ---------------------------------------------------------------------------
+//
+// Agents in sandboxed Claude Code contexts can't always resolve `rl-infra.lan`
+// (the operator's LAN sets it via Pi-hole; sandbox networking doesn't forward
+// that). When the candidate host fails DNS, fall back to the literal IP loaded
+// from the repo-root `.env` (`RL_INFRA_IP=192.168.0.132`). The cache lives for
+// the MCP server lifetime — the operator's DNS doesn't flap day-to-day, and
+// we want the lookup cost paid ONCE at first call.
+
+export type ResolvedHost = {
+  host: string;
+  source: 'env' | 'dns' | 'ip-fallback';
+};
+
+const DEFAULT_HOST_CANDIDATES = new Set(['rl-infra', 'rl-infra.lan']);
+const DNS_LOOKUP_TIMEOUT_MS = 1500;
+
+let cachedResolvedHost: ResolvedHost | undefined;
+
+/** Test-only hook — production callers MUST NOT use this. */
+export function _resetResolveProxmoxHostCacheForTest(): void {
+  cachedResolvedHost = undefined;
+}
+
+/**
+ * Resolve RL_PROXMOX_HOST. Operator-set explicit values (anything not
+ * matching the default `rl-infra` / `rl-infra.lan`) win without a probe.
+ * Otherwise dns.promises.lookup is raced against a 1.5s timeout — on
+ * failure we fall back to `fallbackIp` (RL_INFRA_IP from .env). Throws
+ * when neither leg yields a host. Memoized for the MCP server lifetime.
+ */
+export async function resolveProxmoxHost(opts?: {
+  envHost?: string | undefined;
+  fallbackIp?: string | undefined;
+}): Promise<ResolvedHost> {
+  if (cachedResolvedHost) return cachedResolvedHost;
+  const envHost = opts?.envHost;
+  const fallbackIp = opts?.fallbackIp;
+
+  // Operator-explicit override (any non-default value) — trust it without probing.
+  if (envHost && !DEFAULT_HOST_CANDIDATES.has(envHost)) {
+    cachedResolvedHost = { host: envHost, source: 'env' };
+    return cachedResolvedHost;
+  }
+
+  const candidate = envHost ?? 'rl-infra.lan';
+  try {
+    await Promise.race([
+      dns.promises.lookup(candidate),
+      new Promise((_, reject) =>
+        setTimeout(() => {
+          const err: NodeJS.ErrnoException = new Error('dns lookup timeout');
+          err.code = 'ETIMEDOUT';
+          reject(err);
+        }, DNS_LOOKUP_TIMEOUT_MS),
+      ),
+    ]);
+    cachedResolvedHost = { host: candidate, source: 'dns' };
+    return cachedResolvedHost;
+  } catch {
+    if (fallbackIp) {
+      cachedResolvedHost = { host: fallbackIp, source: 'ip-fallback' };
+      return cachedResolvedHost;
+    }
+    throw new Error(
+      `Cannot resolve RL_PROXMOX_HOST (${candidate}) and no RL_INFRA_IP fallback set in .env`,
+    );
+  }
+}
+
+/**
+ * Walk process.cwd() upward looking for a sibling `.git` directory; that's
+ * the repo root. Parse a `RL_INFRA_IP=...` line out of `<repo-root>/.env`.
+ * Returns undefined when no `.git` ancestor exists, no `.env` is present,
+ * or the .env has no (uncommented) `RL_INFRA_IP=` line.
+ */
+export function loadRlInfraIp(): string | undefined {
+  let dir = process.cwd();
+  const root = resolve('/');
+  // Cap the walk to avoid pathological loops on broken filesystems.
+  // `.git` is a directory in the main repo and a FILE (gitlink) in a
+  // worktree — existsSync accepts both.
+  for (let i = 0; i < 64; i++) {
+    if (existsSync(join(dir, '.git'))) break;
+    if (dir === root) return undefined;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+  if (!existsSync(join(dir, '.git'))) return undefined;
+  const envPath = join(dir, '.env');
+  if (!existsSync(envPath)) return undefined;
+  let raw: string;
+  try {
+    raw = readFileSync(envPath, 'utf-8');
+  } catch {
+    return undefined;
+  }
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const m = trimmed.match(/^RL_INFRA_IP=(.+)$/);
+    if (m) return m[1].trim();
+  }
+  return undefined;
+}
 
 interface RlEnv {
   /** Override the SSH user. Defaults to rl-agent (limited identity). */
@@ -41,6 +187,48 @@ interface RlEnv {
   cwd?: string;
 }
 
+// ROK-1331 M11 — per-tool perf instrumentation. Wraps runRl with a
+// try/finally that records the tool name (first non-flag arg) and
+// wall-clock latency, then POSTs a mcp.tool.call line to the fleet
+// dashboard's perf-log sink (via the existing dashboard-fetch helper).
+//
+// Best-effort: emit failures NEVER propagate to the caller. The MCP tool
+// surface returns the original {stdout, stderr, exitCode} regardless of
+// whether the emit landed. Latency outliers surface in perf_summary's
+// p50 step times for any operator with the dashboard open.
+const PERF_EMIT_TIMEOUT_MS = 1500;
+
+async function emitMcpToolCall(toolName: string, latencyMs: number, status: 'ok' | 'error'): Promise<void> {
+  const dashboardUrl = process.env.RL_DASHBOARD_URL || 'http://fleet.rl.lan';
+  // Build a fire-and-forget POST. We don't await its full lifetime — the
+  // AbortController bounds it to PERF_EMIT_TIMEOUT_MS so a stuck dashboard
+  // never blocks a real MCP call.
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), PERF_EMIT_TIMEOUT_MS);
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (process.env.RL_AGENT_TOKEN) {
+      headers['x-agent-token'] = process.env.RL_AGENT_TOKEN;
+    }
+    await fetch(`${dashboardUrl}/api/perf-emit`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        event: 'mcp.tool.call',
+        source: 'mcp',
+        tool_name: toolName,
+        agent_id: process.env.RL_AGENT_ID ?? null,
+        latency_ms: latencyMs,
+        status,
+      }),
+      signal: controller.signal,
+    }).catch(() => {});
+    clearTimeout(t);
+  } catch {
+    // Silent — perf emit is opt-in observability, never a hard dep.
+  }
+}
+
 /**
  * Run the rl CLI with the given subcommand arguments. Returns stdout/stderr/
  * exit code. Always forces RL_PROXMOX_USER=rl-agent unless explicitly overridden
@@ -57,14 +245,26 @@ export async function runRl(
   // call (M-MCP-3). Filter the caller's extra so RL_OPERATOR is dropped
   // unless we're explicitly in the force-release elevation path.
   const extra = sanitizeExtra(opts);
+  // ROK-1331 M6b HIGH-3: DNS-resolve RL_PROXMOX_HOST so sandboxed agent contexts
+  // (where `rl-infra.lan` doesn't resolve) fall through to the literal IP from
+  // repo-root .env. Memoized — first call bears the lookup cost.
+  let resolvedHost: string;
+  try {
+    const resolved = await resolveProxmoxHost({
+      envHost: process.env.RL_PROXMOX_HOST,
+      fallbackIp: loadRlInfraIp(),
+    });
+    resolvedHost = resolved.host;
+  } catch {
+    resolvedHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+  }
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     // Force agent identity. The MCP server is for agents — never operators.
     RL_PROXMOX_USER: opts.user ?? 'rl-agent',
     // Defensive: even if the parent shell set RL_OPERATOR=1, clear it here.
     RL_OPERATOR: '0',
-    // Sensible default if .zshrc didn't load. ssh config alias resolves.
-    RL_PROXMOX_HOST: process.env.RL_PROXMOX_HOST ?? 'rl-infra',
+    RL_PROXMOX_HOST: resolvedHost,
     ...(opts.agentId ? { RL_AGENT_ID: opts.agentId } : {}),
     ...extra,
   };
@@ -81,20 +281,30 @@ export async function runRl(
     env.RL_OPERATOR = '0';
   }
 
+  // ROK-1331 M11 — per-tool perf instrumentation.
+  const toolName = args.find((a) => !a.startsWith('-')) ?? 'unknown';
+  const startMs = Date.now();
+  let outcomeStatus: 'ok' | 'error' = 'ok';
   try {
-    const result = await execFileAsync(RL_BIN, args, {
+    const result = await execFileP(RL_BIN, args, {
       env,
       cwd: opts.cwd,
       maxBuffer: 16 * 1024 * 1024, // 16 MB — enough for validate-ci output
     });
     return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
   } catch (err) {
+    outcomeStatus = 'error';
     const e = err as Error & { stdout?: string; stderr?: string; code?: number };
     return {
       stdout: e.stdout ?? '',
       stderr: e.stderr ?? e.message,
       exitCode: e.code ?? 1,
     };
+  } finally {
+    // Fire-and-forget. Never await — we already returned the result above
+    // (Node guarantees finally runs before the function resolves on the
+    // explicit return). The emit's own AbortController bounds it.
+    void emitMcpToolCall(toolName, Date.now() - startMs, outcomeStatus);
   }
 }
 
@@ -112,6 +322,30 @@ function sanitizeExtra(opts: RlEnv): Record<string, string> {
     cleaned[k] = v;
   }
   return cleaned;
+}
+
+/**
+ * Bug A (ROK-1331 M2): produce a one-line synthetic diagnostic when an ssh
+ * (or other child-process) call exits non-zero with empty stderr. The empty-
+ * stderr case is the worst possible UX — the agent sees `exit 255` and no
+ * hint of WHY. Common causes that all produce silent ssh failures:
+ *   - command not found inside the remote shell (PATH gap, stale image)
+ *   - shell init scripts (.bashrc) erroring before our command runs
+ *   - git "dubious-ownership" warnings blocking the rest of the line
+ *   - stdin pipeline error (e.g. closing too early)
+ *   - ssh connection drop mid-command (network, fleet down)
+ *
+ * This helper returns a fixed-format single line that callers prepend or
+ * substitute when they detect the empty-stderr condition. Keep it ONE LINE
+ * so downstream log parsers don't have to handle multiline stderr.
+ */
+export function synthesizeEmptyStderrDiagnostic(exitCode: number | undefined): string {
+  const code = typeof exitCode === 'number' ? String(exitCode) : 'unknown';
+  return (
+    `[mcp-rl-fleet: ssh returned exit ${code} with no output — ` +
+    `possible causes: command not found, shell init failure, ` +
+    `git dubious-ownership, stdin pipeline error, ssh connection drop]`
+  );
 }
 
 /**

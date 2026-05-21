@@ -45,9 +45,25 @@ write_files:
       }
   - path: /etc/sysctl.d/99-rl-infra.conf
     content: |
+      # rl-infra VM kernel tuning.
+      # Base values (pre-ROK-1331): elasticsearch / inotify-watcher requirements.
       vm.max_map_count=262144
       fs.inotify.max_user_watches=524288
       fs.inotify.max_user_instances=512
+      # ROK-1331 dogfood 2026-05-20: fleet stability tuning for jest + postgres
+      # testcontainers + node_modules-heavy workloads. See SETUP.md "Fleet
+      # tuning" section for rationale + measured-impact summary.
+      vm.dirty_background_ratio=5
+      vm.dirty_ratio=10
+      vm.swappiness=10
+      fs.file-max=2097152
+      net.core.somaxconn=4096
+  - path: /etc/security/limits.d/99-rl-tuning.conf
+    content: |
+      # ROK-1331 dogfood 2026-05-20: bump nofile so testcontainers + jest +
+      # multiple concurrent postgres processes don't hit the 1024 default fd cap.
+      * soft nofile 65536
+      * hard nofile 65536
   - path: /srv/rl-infra/.env.example
     content: |
       # Copy to /srv/rl-infra/.env and edit.
@@ -61,6 +77,15 @@ write_files:
       RUNNER_SLOTS=2
 
 runcmd:
+  # ROK-1331 dogfood 2026-05-20: ext4 mount tuning. Replaces the cloud-image
+  # default `relatime,errors=remount-ro,commit=30` with `noatime,commit=5`.
+  # `noatime` eliminates atime writes on every file read (huge for jest +
+  # node_modules with ~50k small files). `commit=5` shortens the kernel's
+  # ext4 journal commit interval from the cloud-image default of 30s, so
+  # postgres testcontainer fsyncs land within ~5s instead of 30+s.
+  - sed -i.bak 's|errors=remount-ro|commit=5,noatime,errors=remount-ro|; s|relatime|noatime|' /etc/fstab
+  - mount -o remount,commit=5,noatime /
+
   # Docker CE
   - install -m 0755 -d /etc/apt/keyrings
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -84,7 +109,24 @@ runcmd:
   # enable the `extra-slots` compose profile later.
   - mkdir -p /srv/rl-infra/{state,runners/slot-1/worktree,runners/slot-2/worktree,envs,bin,traefik,loki,grafana,gc-sweeper}
   - chown -R rl:rl /srv/rl-infra
-  - touch /srv/rl-infra/state/{claims.json,env-registry.json,audit.log}
+  - touch /srv/rl-infra/state/{claims.json,env-registry.json,audit.log,perf.log}
   - chown rl:rl /srv/rl-infra/state/*
+
+  # ROK-1331 M11 — logrotate for perf.log (sibling of audit.log). Daily
+  # rotation, keep 7 compressed copies, copytruncate keeps the long-lived
+  # gc-sweeper / orchestrator emit-FDs valid (their append-each-call posture
+  # makes this idempotent — we get the safety regardless).
+  - |
+    cat >/etc/logrotate.d/rl-infra <<'EOF'
+    /srv/rl-infra/state/perf.log {
+        daily
+        rotate 7
+        compress
+        missingok
+        notifempty
+        copytruncate
+        create 0664 rl rl-fleet
+    }
+    EOF
 
 final_message: "rl-infra VM ready. SCP rl-infra/* to /srv/rl-infra/, then `docker compose up -d`."

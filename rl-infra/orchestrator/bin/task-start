@@ -1,0 +1,268 @@
+#!/usr/bin/env bash
+# ROK-1331 M1 — task-start
+# Usage: task-start <task_id> --tool <name> [--slot <N>] [--agent-id <id>] -- <cmd...>
+#
+# Creates /srv/rl-infra/state/tasks/<task_id>.{json,log}, detaches a wrapped
+# command via setsid, and spawns a step-parser that tails the log for
+# validate-ci PASS/FAIL/SKIPPED lines. Returns within 1s (AC-M1-1).
+#
+# The step parser uses PATTERN_STEP_RESULT from _parser.sh — single source of
+# truth for the regex. M2's task.ts reader documentation cross-references that
+# file rather than copying the pattern.
+set -uo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_parser.sh"
+
+# ---- arg parse ----
+TASK_ID=""
+TOOL=""
+SLOT=""
+AGENT_ID="${RL_AGENT_ID:-unknown}"
+TIMEOUT_SECONDS=0  # 0 = disabled (default). >0 = watchdog kills the wrapped cmd's pgid after N seconds.
+CMD_ARGS=()
+
+if [[ $# -lt 1 ]]; then
+    echo '{"ok":false,"error":"missing_task_id"}' >&2
+    exit 2
+fi
+TASK_ID="$1"
+shift
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tool) TOOL="$2"; shift 2 ;;
+        --slot) SLOT="$2"; shift 2 ;;
+        --agent-id) AGENT_ID="$2"; shift 2 ;;
+        --timeout-seconds) TIMEOUT_SECONDS="$2"; shift 2 ;;
+        --) shift; CMD_ARGS=("$@"); break ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
+    esac
+done
+
+# Validate timeout (numeric, 0..86400 = up to 24h). Bad values silently clamp to 0.
+if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || (( TIMEOUT_SECONDS > 86400 )); then
+    TIMEOUT_SECONDS=0
+fi
+
+# ---- validate ----
+if ! [[ "$TASK_ID" =~ ^[a-z0-9]{8,32}$ ]]; then
+    echo '{"ok":false,"error":"invalid_task_id"}' >&2
+    exit 2
+fi
+if [[ -z "$TOOL" ]] || ! [[ "$TOOL" =~ ^[a-zA-Z0-9_-]+$ ]] || (( ${#TOOL} > 64 )); then
+    echo '{"ok":false,"error":"invalid_tool_name"}' >&2
+    exit 2
+fi
+if [[ ${#CMD_ARGS[@]} -eq 0 ]]; then
+    echo '{"ok":false,"error":"missing_cmd"}' >&2
+    exit 2
+fi
+
+if [[ -z "$SLOT" ]]; then
+    if [[ -n "${RL_AGENT_ID:-}" ]]; then
+        SLOT=$(state::slot_for_agent "$RL_AGENT_ID" 2>/dev/null || true)
+    fi
+fi
+if [[ -z "$SLOT" ]]; then
+    echo '{"ok":false,"error":"no_slot"}' >&2
+    exit 2
+fi
+
+# ---- collision check ----
+JSON_PATH="$RL_TASKS_DIR/$TASK_ID.json"
+LOG_PATH="$RL_TASKS_DIR/$TASK_ID.log"
+if [[ -e "$JSON_PATH" ]]; then
+    echo '{"ok":false,"error":"task_id_exists"}' >&2
+    exit 2
+fi
+
+STARTED_AT=$(date -u +%FT%TZ)
+ARGS_SUMMARY="${CMD_ARGS[*]: -1}"
+ARGS_SUMMARY="${ARGS_SUMMARY:0:64}"
+
+# Build the cmd array as a JSON literal so the top-level positional-$ARGS
+# trick doesn't shadow our named --arg keys.
+CMD_JSON=$(printf '%s\n' "${CMD_ARGS[@]}" | jq -Rs 'split("\n") | map(select(length > 0))')
+
+INITIAL_JSON=$(jq -nc \
+    --arg task_id "$TASK_ID" \
+    --arg tool "$TOOL" \
+    --argjson slot "$SLOT" \
+    --arg agent "$AGENT_ID" \
+    --arg summary "$ARGS_SUMMARY" \
+    --argjson cmd "$CMD_JSON" \
+    --arg log "$LOG_PATH" \
+    --arg started "$STARTED_AT" \
+    '{
+        task_id: $task_id,
+        tool: $tool,
+        slot: $slot,
+        agent_id: $agent,
+        args_summary: $summary,
+        cmd: $cmd,
+        log_path: $log,
+        pid: null,
+        status: "running",
+        script_exit_code: null,
+        started_at: $started,
+        finished_at: null,
+        cancel_reason: null,
+        steps: []
+    }')
+
+# Create JSON + log files BEFORE returning so callers can poll immediately.
+echo "$INITIAL_JSON" > "$JSON_PATH"
+chmod 664 "$JSON_PATH" 2>/dev/null || true
+: > "$LOG_PATH"
+chmod 664 "$LOG_PATH" 2>/dev/null || true
+
+task::audit "$TASK_ID" "start" "ok" "$(jq -nc \
+    --argjson slot "$SLOT" --arg tool "$TOOL" --arg summary "$ARGS_SUMMARY" \
+    '{slot: $slot, tool: $tool, args_summary: $summary}')"
+
+# ---- detach supervisor ----
+# The supervisor is a self-contained bash -c script. It:
+#   1. spawns a background log-parser that tails LOG_PATH, regex-matches each
+#      line against PATTERN_STEP_RESULT, and appends to steps[] via state::mutate.
+#   2. runs the wrapped cmd in its own process group so task-cancel can kill
+#      the whole tree with kill -<pgid>. We use `set -m` (job control on) +
+#      bash's automatic process-group-per-bg-job to achieve this — portable
+#      across macOS (no setsid) and Linux.
+#   3. on cmd exit: records script_exit_code + finished_at, signals the parser
+#      to stop, and finalizes status (succeeded / failed) unless task-cancel
+#      already flipped it to "cancelled".
+#
+# Detach pattern: `&` + redirect-all-to-/dev/null + `disown` keeps the
+# supervisor alive after the parent task-start exits. Portable across macOS
+# (no setsid available) and Linux.
+export RL_TASKS_DIR RL_STATE_DIR RL_LOCK_DIR RL_CLAIMS_FILE RL_ENVS_FILE RL_QUEUE_FILE RL_AUDIT_LOG
+
+# shellcheck disable=SC2016
+SUPERVISOR_SCRIPT='
+# Trap SIGHUP so the supervisor survives parent exit even on shells that
+# leak SIGHUP through disown (rare, but cheap to guard against).
+trap "" HUP
+set -uo pipefail
+# Enable job control so each backgrounded process gets its own process group.
+# Without `set -m`, `kill -<pgid>` from task-cancel cannot kill the wrapped
+# cmd plus its children atomically.
+set -m
+TASK_ID="$1"; BIN="$2"; TIMEOUT_SECONDS="$3"; shift 3
+# shellcheck disable=SC1090,SC1091
+source "$BIN/_state.sh"
+# shellcheck disable=SC1090,SC1091
+source "$BIN/_parser.sh"
+# _state.sh sets `set -euo pipefail`. We deliberately disable -e in the
+# supervisor: `wait $CMD_PID` returns the wrapped cmd exit code (often
+# non-zero), and the finalization block MUST run regardless of exit status.
+set +e
+JSON_PATH="$RL_TASKS_DIR/$TASK_ID.json"
+LOG_PATH="$RL_TASKS_DIR/$TASK_ID.log"
+PARSE_DONE="$RL_TASKS_DIR/.$TASK_ID.parse-done"
+rm -f "$PARSE_DONE"
+
+# Background parser. tail -F survives potential log rotation. Lines that match
+# PATTERN_STEP_RESULT get appended to steps[] under flock via state::mutate.
+(
+    tail -F -n 0 "$LOG_PATH" 2>/dev/null | while IFS= read -r line; do
+        if [[ -e "$PARSE_DONE" ]]; then
+            break
+        fi
+        if [[ "$line" =~ $PATTERN_STEP_RESULT ]]; then
+            step_name="${BASH_REMATCH[2]}"
+            step_status="${BASH_REMATCH[3]}"
+            state::mutate "$JSON_PATH" \
+                --arg n "$step_name" --arg s "$step_status" \
+                ".steps += [{name: \$n, status: \$s, duration_s: null}]" \
+                2>/dev/null || true
+        fi
+    done
+) &
+PARSER_PID=$!
+
+# Run wrapped cmd as a backgrounded job; with `set -m` above, bash gives it
+# its own process group (pgid == CMD_PID) so task-cancel can kill -<pgid>.
+bash -c "exec \"\$@\"" bash "$@" >> "$LOG_PATH" 2>&1 &
+CMD_PID=$!
+state::mutate "$JSON_PATH" --argjson p "$CMD_PID" ".pid = \$p" 2>/dev/null || true
+
+# ROK-1331 Session 4 dogfood (Codex P2-2): timeout watchdog. If
+# TIMEOUT_SECONDS > 0, fork a sleeper that kills the wrapped cmds pgid
+# after the deadline. SIGTERM first, 10s grace, then SIGKILL. The
+# finalization block downstream still runs because wait $CMD_PID returns
+# the killed exit code, not an error. Without this, a hung jest/playwright
+# can hold the runner slot for the full 24h lease.
+TIMEOUT_PID=""
+if (( TIMEOUT_SECONDS > 0 )); then
+    (
+        sleep "$TIMEOUT_SECONDS"
+        if kill -0 "$CMD_PID" 2>/dev/null; then
+            echo "[task-watchdog] timeout (${TIMEOUT_SECONDS}s) reached — sending SIGTERM to pgid $CMD_PID" >> "$LOG_PATH"
+            kill -TERM -- "-$CMD_PID" 2>/dev/null || kill -TERM "$CMD_PID" 2>/dev/null || true
+            sleep 10
+            if kill -0 "$CMD_PID" 2>/dev/null; then
+                echo "[task-watchdog] still alive after 10s — sending SIGKILL" >> "$LOG_PATH"
+                kill -KILL -- "-$CMD_PID" 2>/dev/null || kill -KILL "$CMD_PID" 2>/dev/null || true
+            fi
+        fi
+    ) &
+    TIMEOUT_PID=$!
+fi
+
+wait "$CMD_PID" 2>/dev/null
+CMD_EXIT=$?
+
+# Reap the watchdog if it is still alive (cmd finished within budget).
+if [[ -n "$TIMEOUT_PID" ]] && kill -0 "$TIMEOUT_PID" 2>/dev/null; then
+    kill -TERM "$TIMEOUT_PID" 2>/dev/null || true
+    wait "$TIMEOUT_PID" 2>/dev/null || true
+fi
+
+# Spec heuristic: give parser ≤2s to drain remaining lines after cmd exit.
+sleep 2
+touch "$PARSE_DONE"
+# Kill the parser subshell + its tail child.
+kill "$PARSER_PID" 2>/dev/null || true
+pkill -P "$PARSER_PID" 2>/dev/null || true
+wait "$PARSER_PID" 2>/dev/null || true
+rm -f "$PARSE_DONE"
+
+FINISHED_AT=$(date -u +%FT%TZ)
+CURRENT_STATUS=$(jq -r ".status // \"running\"" "$JSON_PATH" 2>/dev/null || echo running)
+NEW_STATUS="failed"
+if [[ "$CURRENT_STATUS" == "cancelled" ]]; then
+    NEW_STATUS="cancelled"
+    state::mutate "$JSON_PATH" --argjson c "$CMD_EXIT" --arg f "$FINISHED_AT" \
+        ".script_exit_code = \$c | (if .finished_at == null then .finished_at = \$f else . end)" \
+        2>/dev/null || true
+else
+    if [[ "$CMD_EXIT" -eq 0 ]]; then
+        NEW_STATUS="succeeded"
+    fi
+    state::mutate "$JSON_PATH" --argjson c "$CMD_EXIT" --arg f "$FINISHED_AT" --arg s "$NEW_STATUS" \
+        ".script_exit_code = \$c | .finished_at = \$f | .status = \$s" \
+        2>/dev/null || true
+fi
+
+task::audit "$TASK_ID" "finish" "ok" \
+    "$(jq -nc --argjson e "$CMD_EXIT" --arg st "$NEW_STATUS" \
+        "{script_exit_code: \$e, status: \$st}")" 2>/dev/null || true
+'
+
+# Detach: `&` + redirect to /dev/null + disown. macOS bash has no setsid(1),
+# so we lean on disown to remove the job from the parent shell's job table —
+# the SIGHUP trap above belt-and-suspenders the same goal.
+bash -c "$SUPERVISOR_SCRIPT" supervisor "$TASK_ID" "$BIN_DIR_SELF" "$TIMEOUT_SECONDS" "${CMD_ARGS[@]}" \
+    </dev/null >/dev/null 2>&1 &
+SUPER_PID=$!
+disown "$SUPER_PID" 2>/dev/null || true
+
+jq -nc \
+    --arg task_id "$TASK_ID" \
+    --arg log "$LOG_PATH" \
+    --arg started "$STARTED_AT" \
+    '{ok: true, task_id: $task_id, log_path: $log, started_at: $started}'
+exit 0

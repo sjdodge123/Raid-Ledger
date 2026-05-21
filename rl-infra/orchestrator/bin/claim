@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 # Claim a runner slot, queueing if none are free.
 #
+# ROK-1331 M5a — Hard cutover: when all slots are busy OR this caller is
+# queued behind earlier waiters, the response is `{ok:true, enqueued:true,
+# queue_position, queue_ahead, queue_length}`. No legacy busy-error response
+# shape is emitted anywhere in this binary. Polling callers see the same
+# eventual grant by re-invoking claim until they own the slot.
+#
+# On grant: the response gains `expires_at` (NOW + RL_CLAIM_DURATION_SECONDS)
+# and `inherited_envs` when a branch-match handoff carries over a preserved
+# env from the previous holder. Branch-mismatch handoffs SYNCHRONOUSLY destroy
+# the preserved envs before the grant lands so the caller never sees a clean
+# slot while envs are mid-destruction (AC8).
+#
 # Required env: RL_AGENT_ID
 # Optional flags:
 #   --branch <name>      branch label recorded on the claim
-#   --keep-alive         exempt from the max-claim-age TTL (operator only)
-#
-# Pull-based queue. If all slots are busy OR this agent is queued behind
-# others, returns a queued response with the agent's 0-based position. The
-# caller (CLI / MCP tool) is responsible for polling. Stale queue entries
-# auto-expire via gc-sweeper after QUEUE_TTL_SECONDS (default 1800).
-set -euo pipefail
+#   --keep-alive         legacy flag — exempts row from MAX_CLAIM_AGE reaper.
+#                        M5a's expires_at-driven lifecycle supersedes it but
+#                        the flag is honored for backward compat.
+set -uo pipefail
 source "$(dirname "$0")/_state.sh"
 
 BRANCH=""
@@ -28,12 +37,35 @@ if [[ -z "${RL_AGENT_ID:-}" ]]; then
     exit 2
 fi
 
+NOW=$(date -u +%FT%TZ)
+# Compute expires_at once up front — used both for new grants and for the
+# idempotent re-claim path (so callers always see the value persisted on
+# their claim row, never a freshly-computed one that drifts).
+EXPIRES_AT=$(date -u -d "+${RL_CLAIM_DURATION_SECONDS} seconds" +%FT%TZ 2>/dev/null \
+    || python3 -W ignore -c "import datetime; print((datetime.datetime.utcnow() + datetime.timedelta(seconds=${RL_CLAIM_DURATION_SECONDS})).strftime('%Y-%m-%dT%H:%M:%SZ'))" 2>/dev/null)
+
+# Inherited-env lookup helper. Reads env-registry for envs on $1 (slot) with
+# claimable_by_next=true and emits a `[{slug, url}]` JSON array.
+_inherited_for_slot() {
+    local slot="$1"
+    state::query "$RL_ENVS_FILE" --argjson s "$slot" \
+        '[.[] | select(.slot == $s and (.claimable_by_next // false) == true)
+              | {slug, url: ("https://" + (.public_domain // (.slug + ".rl.lan")))}]'
+}
+
 emit_slot_result() {
     local slot="$1"
+    local inherited="$2"      # JSON array literal
+    local destroyed="$3"      # JSON array literal
+    local expires_at="$4"
     jq -nc \
         --argjson slot "$slot" \
         --arg branch "$BRANCH" \
         --arg agent "$RL_AGENT_ID" \
+        --arg started "$NOW" \
+        --arg expires "$expires_at" \
+        --argjson inh "$inherited" \
+        --argjson des "$destroyed" \
         '{
             ok: true,
             slot: $slot,
@@ -45,19 +77,38 @@ emit_slot_result() {
             },
             worktree: "/srv/rl-infra/runners/slot-\($slot|tostring)/worktree",
             container: "rl-runner-\($slot|tostring)",
-            shell_cmd: "docker exec -it rl-runner-\($slot|tostring) tmux attach -t main"
+            shell_cmd: "docker exec -it rl-runner-\($slot|tostring) tmux attach -t main",
+            started_at: $started,
+            expires_at: $expires,
+            inherited_envs: $inh,
+            destroyed_envs: $des
         }'
 }
 
 # Idempotent: if this agent already has a slot, return it.
 EXISTING=$(state::slot_for_agent "$RL_AGENT_ID")
 if [[ -n "$EXISTING" ]]; then
-    audit::log claim idempotent "$(jq -nc --argjson slot "$EXISTING" '{slot:$slot}')"
-    emit_slot_result "$EXISTING"
+    # ROK-1331 M4 LOW #7 — preserve the persisted branch when the caller
+    # passed nothing (or the literal "unknown" — `rl claim`'s default
+    # fallback when `git branch --show-current` fails). Explicit real
+    # branch values still override (operator can re-label a claim).
+    if [[ -z "$BRANCH" || "$BRANCH" == "unknown" ]]; then
+        PERSISTED_BRANCH=$(state::branch_for_agent "$RL_AGENT_ID")
+        if [[ -n "$PERSISTED_BRANCH" ]]; then
+            BRANCH="$PERSISTED_BRANCH"
+        fi
+    fi
+    # Surface persisted expires_at + any envs already attributed to this
+    # slot as inherited_envs (idempotent — same result the original grant
+    # returned, so wait-loops can read it again safely).
+    PERSISTED_EXPIRES=$(state::query "$RL_CLAIMS_FILE" -r --arg a "$RL_AGENT_ID" \
+        '[.[] | select(.agent_id == $a and .claimed == true) | .expires_at] | first // ""')
+    [[ -z "$PERSISTED_EXPIRES" ]] && PERSISTED_EXPIRES="$EXPIRES_AT"
+    INH=$(_inherited_for_slot "$EXISTING")
+    audit::log claim idempotent "$(jq -nc --argjson slot "$EXISTING" --arg branch "$BRANCH" '{slot:$slot, branch:$branch}')"
+    emit_slot_result "$EXISTING" "$INH" "[]" "$PERSISTED_EXPIRES"
     exit 0
 fi
-
-NOW=$(date -u +%FT%TZ)
 
 # H-VM-3: Validate state files BEFORE reading them. Corrupted JSON makes
 # command substitutions silently echo empty under `set -e`, which (in
@@ -74,78 +125,152 @@ if ! jq empty "$RL_CLAIMS_FILE" 2>/dev/null; then
     exit 1
 fi
 
-# Decide whether this agent can take a slot right now:
-#   - Queue empty → anyone can grab a free slot.
-#   - Queue non-empty → only the head of the queue can grab; newcomers
-#     must enqueue first.
-QUEUE_HEAD=$(queue::head_agent)
-if [[ -z "$QUEUE_HEAD" || "$QUEUE_HEAD" == "$RL_AGENT_ID" ]]; then
-    # H-VM-2: pick the free slot AND flip it claimed=true inside a SINGLE
-    # flock window. Previously `state::query` (no flock) → `state::mutate`
-    # (flock) gave two concurrent claims the same slot — the mutate filter
-    # didn't re-check `claimed == false` so A's mutate ran, then B's
-    # mutate silently overwrote with B's agent_id.
-    #
-    # The jq filter below picks the lowest free slot AND flips it in one
-    # pass, atomically inside state::mutate_with_precondition's flock.
-    # If no free slot exists at lock time, the filter is a no-op
-    # (`cmp -s` matches input vs output) and the helper returns 1 → fall
-    # through to enqueue. Set +e around the call because the no-op return
-    # is expected; we read the result via state::slot_for_agent below.
+# Decide whether this agent can take a slot right now. The per-slot
+# lease-queue file is authoritative; the legacy global queue.json is
+# written to belt-and-suspenders for the dashboard transition window.
+#
+# Slot-pick policy (M5a): scan slots in lowest-first order; a slot is
+# grabbable if it's claimed=false AND (its per-slot queue is empty OR
+# this caller is the queue head for that slot).
+TARGET_SLOT=""
+FREE_SLOTS=$(jq -r '.[] | select(.claimed == false) | .slot' "$RL_CLAIMS_FILE" 2>/dev/null | sort -n)
+for slot in $FREE_SLOTS; do
+    HEAD=$(lease::head_agent "$slot")
+    if [[ -z "$HEAD" || "$HEAD" == "$RL_AGENT_ID" ]]; then
+        TARGET_SLOT="$slot"
+        break
+    fi
+done
+
+if [[ -n "$TARGET_SLOT" ]]; then
+    # H-VM-2: Atomic select+flip inside one flock window. The mutate filter
+    # rechecks `claimed == false` so concurrent callers can't both win.
     set +e
     state::mutate_with_precondition "$RL_CLAIMS_FILE" \
+        --argjson target "$TARGET_SLOT" \
         --arg agent "$RL_AGENT_ID" \
         --arg branch "$BRANCH" \
         --arg ts "$NOW" \
+        --arg exp "$EXPIRES_AT" \
         --argjson keep_alive "$KEEP_ALIVE" \
         '
         . as $orig
-        | (first(.[] | select(.claimed == false)) // null) as $pick
-        | if $pick == null then $orig
-          else map(if .slot == $pick.slot
+        | (first(.[] | select(.slot == $target and .claimed == false)) // null) as $row
+        | if $row == null then $orig
+          else map(if .slot == $target
                    then .claimed = true
                       | .agent_id = $agent
                       | .branch = $branch
                       | .started_at = $ts
                       | .last_heartbeat = $ts
                       | .keep_alive = ($keep_alive == 1)
+                      | .expires_at = $exp
+                      | .extends_count = 0
                    else . end)
           end
         '
     MUTATE_RC=$?
     set -e
+
     if [[ $MUTATE_RC -eq 0 ]]; then
-        # The mutation took effect — read back which slot got assigned to us.
-        # Lookup is by agent_id (unique to us under flock) so no race here.
-        FREE_SLOT=$(state::slot_for_agent "$RL_AGENT_ID")
-        if [[ -n "$FREE_SLOT" ]]; then
-            queue::remove "$RL_AGENT_ID"
-            audit::log claim acquired "$(jq -nc --argjson slot "$FREE_SLOT" --arg branch "$BRANCH" --argjson keep_alive "$KEEP_ALIVE" '{slot:$slot, branch:$branch, keep_alive:($keep_alive == 1)}')"
-            emit_slot_result "$FREE_SLOT"
-            exit 0
+        # AC2/AC3 — branch-match-or-destroy on claimable_by_next envs in this
+        # slot. Synchronous: env-destroy is called BEFORE we emit the grant.
+        CLAIMABLE=$(state::query "$RL_ENVS_FILE" --argjson s "$TARGET_SLOT" \
+            '[.[] | select(.slot == $s and (.claimable_by_next // false) == true)]')
+        INHERITED="[]"
+        DESTROYED="[]"
+        if [[ "$(jq 'length' <<<"$CLAIMABLE")" -gt 0 ]]; then
+            MATCHING=$(jq -c --arg b "$BRANCH" \
+                '[.[] | select((.created_for_branch // "") == $b)]' <<<"$CLAIMABLE")
+            MISMATCHING=$(jq -c --arg b "$BRANCH" \
+                '[.[] | select((.created_for_branch // "") != $b)]' <<<"$CLAIMABLE")
+            if [[ "$(jq 'length' <<<"$MISMATCHING")" -gt 0 ]]; then
+                while read -r mslug; do
+                    [[ -z "$mslug" ]] && continue
+                    audit::log claim destroy_starting \
+                        "$(jq -nc --argjson slot "$TARGET_SLOT" --arg slug "$mslug" --arg b "$BRANCH" '{slot:$slot, slug:$slug, new_branch:$b}')"
+                    "$(dirname "$0")/env-destroy" --slug "$mslug" --force >/dev/null 2>&1 || \
+                        audit::log claim destroy_failed "$(jq -nc --arg slug "$mslug" '{slug:$slug}')"
+                done < <(jq -r '.[] | .slug' <<<"$MISMATCHING")
+                DESTROYED=$(jq -c '[.[] | .slug]' <<<"$MISMATCHING")
+            fi
+            if [[ "$(jq 'length' <<<"$MATCHING")" -gt 0 ]]; then
+                INHERITED=$(jq -c '[.[] | {slug, url: ("https://" + (.public_domain // (.slug + ".rl.lan")))}]' <<<"$MATCHING")
+            fi
+            # Clear claimable_by_next on the slot AFTER destroy decisions resolve.
+            env_registry::clear_claimable_for_slot "$TARGET_SLOT"
         fi
+
+        # Remove caller from both queues (per-slot + legacy).
+        lease::remove "$TARGET_SLOT" "$RL_AGENT_ID"
+        queue::remove "$RL_AGENT_ID"
+
+        audit::log claim acquired \
+            "$(jq -nc --argjson slot "$TARGET_SLOT" --arg branch "$BRANCH" --argjson inh "$INHERITED" --argjson des "$DESTROYED" '{slot:$slot, branch:$branch, inherited:$inh, destroyed:$des}')"
+        # ROK-1331 M11 — perf event. queue_wait_ms is 0 on the fast path
+        # (no enqueue happened); the enqueue path emits its own claim.queued
+        # downstream below.
+        RL_BRANCH="$BRANCH" perf::emit "claim.acquired" \
+            "$(jq -nc --argjson slot "$TARGET_SLOT" --argjson dc "$(jq 'length' <<<"$DESTROYED")" --argjson ic "$(jq 'length' <<<"$INHERITED")" '{slot:$slot, queue_wait_ms:0, position_on_arrival:0, inherited_count:$ic, destroyed_count:$dc}')"
+        emit_slot_result "$TARGET_SLOT" "$INHERITED" "$DESTROYED" "$EXPIRES_AT"
+        exit 0
     fi
-    # No slot was free at lock time — fall through to enqueue.
 fi
 
-# No slot for us right now — enqueue (idempotent) and report position.
+# Enqueue path (M5a hard cutover — no legacy busy-error response shape).
+ENQUEUE_SLOT=$(lease::pick_enqueue_slot)
+lease::add "$ENQUEUE_SLOT" "$RL_AGENT_ID" "$BRANCH" "$NOW"
+# Legacy global queue mirror for the dashboard transition window.
 queue::add "$RL_AGENT_ID" "$BRANCH" "$NOW"
-POSITION=$(queue::position "$RL_AGENT_ID")
-QUEUE_LEN=$(state::query "$RL_QUEUE_FILE" 'length')
 
-audit::log claim queued "$(jq -nc --arg agent "$RL_AGENT_ID" --argjson pos "$POSITION" '{agent:$agent, position:$pos}')"
+POSITION=$(lease::position "$ENQUEUE_SLOT" "$RL_AGENT_ID")
+[[ -z "$POSITION" ]] && POSITION=0
+QUEUE_LEN=$(lease::length "$ENQUEUE_SLOT")
+
+# queue_ahead = entries across ALL slot queues whose requested_at predates
+# our own. FIFO across slots — the caller can see who's ahead of them in
+# wallclock order regardless of which slot's file they landed in.
+OUR_REQ_AT=$(jq -r --arg a "$RL_AGENT_ID" \
+    '[.[] | select(.agent_id == $a) | .requested_at] | first // ""' \
+    "$(lease::file_for_slot "$ENQUEUE_SLOT")" 2>/dev/null || echo "")
+QUEUE_AHEAD="[]"
+if [[ -n "$OUR_REQ_AT" ]]; then
+    QUEUE_AHEAD="[]"
+    for slot in $(seq 1 "$RUNNER_SLOTS"); do
+        QFILE="$(lease::file_for_slot "$slot")"
+        [[ -f "$QFILE" ]] || continue
+        SLOT_AHEAD=$(jq -c --arg ours "$OUR_REQ_AT" --arg me "$RL_AGENT_ID" \
+            '[.[] | select(.agent_id != $me and .requested_at <= $ours)
+                  | {agent_id, branch, requested_at}]' "$QFILE" 2>/dev/null || echo "[]")
+        QUEUE_AHEAD=$(jq -c --argjson a "$QUEUE_AHEAD" --argjson b "$SLOT_AHEAD" -n '$a + $b' )
+    done
+    # Sort by requested_at ascending so the consumer sees true wallclock order.
+    QUEUE_AHEAD=$(jq -c 'sort_by(.requested_at)' <<<"$QUEUE_AHEAD")
+fi
+
+audit::log claim queued "$(jq -nc --arg agent "$RL_AGENT_ID" --argjson slot "$ENQUEUE_SLOT" --argjson pos "$POSITION" '{agent:$agent, slot:$slot, position:$pos}')"
+# ROK-1331 M11 — perf event for enqueue.
+RL_BRANCH="$BRANCH" perf::emit "claim.queued" \
+    "$(jq -nc --argjson slot "$ENQUEUE_SLOT" --argjson pos "$POSITION" --argjson ql "$QUEUE_LEN" '{slot:$slot, position:$pos, queue_length:$ql}')"
 
 jq -nc \
     --arg agent "$RL_AGENT_ID" \
     --arg branch "$BRANCH" \
+    --argjson slot "$ENQUEUE_SLOT" \
     --argjson position "$POSITION" \
     --argjson queue_length "$QUEUE_LEN" \
+    --argjson queue_ahead "$QUEUE_AHEAD" \
     '{
         ok: true,
+        enqueued: true,
         queued: true,
         agent_id: $agent,
         branch: $branch,
+        enqueued_slot: $slot,
+        queue_position: $position,
         position: $position,
         queue_length: $queue_length,
-        message: "All slots busy. Position \($position) in queue (length \($queue_length)). Poll claim again to recheck — head of queue gets the next freed slot."
+        queue_ahead: $queue_ahead,
+        expires_at: null,
+        message: "All slots busy. Queued on slot \($slot) at position \($position) (queue length \($queue_length)). Poll claim again to recheck — head of queue gets the next freed slot."
     }'

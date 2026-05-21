@@ -34,15 +34,50 @@ if [[ -z "${DOCKER_HOST:-}" && "${RL_USE_DOCKER_SOCKET:-0}" != "1" ]]; then
 fi
 
 RL_STATE_DIR="${RL_STATE_DIR:-/srv/rl-infra/state}"
-RL_CLAIMS_FILE="${RL_STATE_DIR}/claims.json"
-RL_ENVS_FILE="${RL_STATE_DIR}/env-registry.json"
-RL_QUEUE_FILE="${RL_STATE_DIR}/queue.json"
-RL_AUDIT_LOG="${RL_STATE_DIR}/audit.log"
+# Honor explicit overrides so test fixtures can redirect to non-canonical
+# paths (mirrors the `RL_TASKS_DIR` + `RL_LEASE_QUEUE_DIR` pattern below).
+# Production unaffected — these env vars are never set on the VM.
+RL_CLAIMS_FILE="${RL_CLAIMS_FILE:-${RL_STATE_DIR}/claims.json}"
+RL_ENVS_FILE="${RL_ENVS_FILE:-${RL_STATE_DIR}/env-registry.json}"
+RL_QUEUE_FILE="${RL_QUEUE_FILE:-${RL_STATE_DIR}/queue.json}"
+RL_AUDIT_LOG="${RL_AUDIT_LOG:-${RL_STATE_DIR}/audit.log}"
+# ROK-1331 M11 — perf log: sibling of audit.log. Append-only, one JSON
+# object per line. Rotated daily by logrotate (cloud-init.yaml) with
+# copytruncate — perf::emit opens+appends+closes per call so the rotation
+# is safe (no long-lived FD).
+RL_PERF_LOG="${RL_PERF_LOG:-${RL_STATE_DIR}/perf.log}"
 RL_LOCK_DIR="${RL_STATE_DIR}/locks"
+RL_TASKS_DIR="${RL_TASKS_DIR:-${RL_STATE_DIR}/tasks}"
+# ROK-1331 M5a — per-slot lease-queue dir. Each slot owns a FIFO array file
+# at $RL_LEASE_QUEUE_DIR/<slot>.json. The legacy global queue.json is still
+# written to for one transition cycle so the dashboard keeps rendering until
+# M5b rewires; the per-slot files are the source of truth for lease-advance.
+RL_LEASE_QUEUE_DIR="${RL_LEASE_QUEUE_DIR:-${RL_STATE_DIR}/lease-queue}"
+# Stale-head eviction threshold: queue entries whose last_heartbeat is older
+# than this are evicted by lease-advance before granting. Mirrors the
+# sweeper's CLAIM_HEARTBEAT_TIMEOUT_SECONDS shape but for queue waiters.
+RL_LEASE_HEAD_TIMEOUT_SECONDS="${RL_LEASE_HEAD_TIMEOUT_SECONDS:-300}"
+# Default claim duration when a slot is granted (lease TTL). M5a's claim
+# expiry reaper drives lifecycle once `expires_at` is populated.
+RL_CLAIM_DURATION_SECONDS="${RL_CLAIM_DURATION_SECONDS:-86400}"
 # Default matches the docker-compose.yml default profile (2 runners). Override
 # via .env to 4 when the `extra-slots` compose profile is enabled.
 RUNNER_SLOTS="${RUNNER_SLOTS:-2}"
-mkdir -p "$RL_LOCK_DIR"
+mkdir -p "$RL_LOCK_DIR" "$RL_TASKS_DIR" "$RL_LEASE_QUEUE_DIR"
+
+# Portability shim: flock(1) lives in util-linux on the VM, but macOS test
+# runners don't ship it. When absent we fall back to a no-op (tests are
+# sequential; production runs on Linux where the real binary serializes
+# under contention). Defining the shim once here keeps callers
+# (state::mutate, state::mutate_with_precondition) unchanged.
+if ! command -v flock >/dev/null 2>&1; then
+    flock() {
+        # Accept any combination of `-x`, `-s`, `-n`, `-w <sec>`, `<fd>`.
+        # We only care that the function returns 0 so the surrounding subshell
+        # continues to the jq + mv. No real locking happens.
+        return 0
+    }
+fi
 
 # Initialize state files if missing. Safe to call repeatedly.
 state::init() {
@@ -59,7 +94,156 @@ state::init() {
     if [[ ! -s "$RL_QUEUE_FILE" ]]; then
         echo "[]" > "$RL_QUEUE_FILE"
     fi
+    mkdir -p "$RL_TASKS_DIR"
+    chmod 2775 "$RL_TASKS_DIR" 2>/dev/null || true
+    mkdir -p "$RL_LEASE_QUEUE_DIR"
+    chmod 2775 "$RL_LEASE_QUEUE_DIR" 2>/dev/null || true
     touch "$RL_AUDIT_LOG"
+}
+
+# ROK-1331 M5a — per-slot lease-queue helpers. Each slot has its own
+# FIFO file (lease-queue/<slot>.json) so inotifywait on the directory
+# can detect any slot's mutation in one watcher process.
+#
+# Lock ordering (STRICT): when an op touches BOTH claims.json AND a
+# lease-queue/<slot>.json, ALWAYS lock the queue FIRST then claims.
+# Reverse-order callers could deadlock against lease-advance, which
+# acquires queue → claims inside `lease::advance`.
+lease::file_for_slot() {
+    local slot="$1"
+    printf '%s/%s.json' "$RL_LEASE_QUEUE_DIR" "$slot"
+}
+
+# Ensure the per-slot queue file exists with `[]` initial content. Safe to
+# call repeatedly; idempotent under concurrent callers (atomic touch).
+lease::ensure_file() {
+    local slot="$1"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    if [[ ! -s "$f" ]]; then
+        echo "[]" > "$f.init.$$"
+        mv -n "$f.init.$$" "$f" 2>/dev/null || rm -f "$f.init.$$"
+        chmod 664 "$f" 2>/dev/null || true
+    fi
+}
+
+# Echo the agent_id at the head of the slot's queue, or empty.
+lease::head_agent() {
+    local slot="$1"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || { echo ""; return 0; }
+    jq -r '.[0].agent_id // empty' "$f" 2>/dev/null || true
+}
+
+# 0-based position of agent in the slot's queue (or empty if absent).
+lease::position() {
+    local slot="$1" agent="$2"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || { echo ""; return 0; }
+    jq -r --arg a "$agent" \
+        '[.[] | .agent_id] | index($a) // empty' "$f" 2>/dev/null || true
+}
+
+# Length of the slot's queue.
+lease::length() {
+    local slot="$1"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || { echo 0; return 0; }
+    jq 'length' "$f" 2>/dev/null || echo 0
+}
+
+# Append an entry (idempotent on agent_id). Updates last_heartbeat if the
+# agent is already queued — heartbeat refresh on poll.
+lease::add() {
+    local slot="$1" agent="$2" branch="$3" ts="$4"
+    lease::ensure_file "$slot"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    state::mutate "$f" \
+        --arg a "$agent" --arg b "$branch" --arg t "$ts" \
+        'if any(.[]; .agent_id == $a)
+         then map(if .agent_id == $a then .last_heartbeat = $t else . end)
+         else . + [{agent_id: $a, branch: $b, requested_at: $t, preempt: false, last_heartbeat: $t}]
+         end'
+}
+
+# Remove an entry from the slot's queue (idempotent).
+lease::remove() {
+    local slot="$1" agent="$2"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || return 0
+    state::mutate "$f" --arg a "$agent" 'map(select(.agent_id != $a))'
+}
+
+# Pick the slot to enqueue against when all slots are busy:
+# smallest queue wins; lowest slot id on tie. Echoes a slot number.
+lease::pick_enqueue_slot() {
+    local best_slot="" best_len=""
+    local slot len
+    for slot in $(seq 1 "$RUNNER_SLOTS"); do
+        len=$(lease::length "$slot")
+        if [[ -z "$best_slot" || "$len" -lt "$best_len" ]]; then
+            best_slot="$slot"
+            best_len="$len"
+        fi
+    done
+    echo "$best_slot"
+}
+
+# Read queue entries BEFORE a given agent (the "queue_ahead" slice). JSON
+# array; empty array when agent is head or not queued.
+lease::ahead_of() {
+    local slot="$1" agent="$2"
+    local f
+    f=$(lease::file_for_slot "$slot")
+    [[ -f "$f" ]] || { echo "[]"; return 0; }
+    jq --arg a "$agent" \
+        '. as $q
+         | ([.[] | .agent_id] | index($a)) as $pos
+         | if $pos == null or $pos == 0 then []
+           else $q[0:$pos] | map({agent_id, branch, requested_at})
+           end' "$f" 2>/dev/null || echo "[]"
+}
+
+# ROK-1331 M5a — env-registry pinned/claimable helpers. Default missing
+# fields to safe values via // false / // "" so legacy entries without the
+# M5a additions don't break callers.
+env_registry::set_pinned() {
+    local slug="$1" pinned="$2"
+    state::mutate "$RL_ENVS_FILE" --arg slug "$slug" --argjson p "$pinned" \
+        'map(if .slug == $slug then .pinned = ($p == true) else . end)'
+}
+
+env_registry::mark_claimable_by_next() {
+    local slot="$1" branch="$2"
+    state::mutate "$RL_ENVS_FILE" --argjson s "$slot" --arg b "$branch" \
+        'map(if .slot == $s
+             then .claimable_by_next = true
+                | .created_for_branch = $b
+             else . end)'
+}
+
+env_registry::clear_claimable_for_slot() {
+    local slot="$1"
+    state::mutate "$RL_ENVS_FILE" --argjson s "$slot" \
+        'map(if .slot == $s then .claimable_by_next = false else . end)'
+}
+
+# ROK-1331 M1: thin audit wrapper for task-* commands. Folds the task_id into
+# the extra-json payload so downstream filtering can `jq 'select(.task_id ...)'`.
+task::audit() {
+    local task_id="$1"
+    local cmd="$2"
+    local outcome="$3"
+    local extra="${4-}"
+    [[ -z "$extra" ]] && extra='{}'
+    local merged
+    merged=$(jq -nc --arg t "$task_id" --argjson e "$extra" '{task_id: $t} + $e')
+    audit::log "task-$cmd" "$outcome" "$merged"
 }
 
 # Queue helpers. The queue is an ordered array of {agent_id, branch, queued_at}.
@@ -73,7 +257,15 @@ queue::position() {
 }
 
 queue::head_agent() {
-    state::query "$RL_QUEUE_FILE" '.[0].agent_id // empty'
+    # LEGACY — pre-M5a global queue. Now superseded by `lease::head_agent <slot>`
+    # in M5a's per-slot lease-queue model. Retained for any code path that still
+    # reads the global queue.json mirror.
+    #
+    # NOTE (ROK-1331 dogfood-discovery 2026-05-20): added `-r` so the returned
+    # agent_id strips JSON quotes. Without `-r`, the value comes back as
+    # `"sdodge-xxxx"` with literal quote chars, breaking bash string comparisons
+    # like `[[ "$QUEUE_HEAD" == "$RL_AGENT_ID" ]]` in old-flow callers.
+    state::query "$RL_QUEUE_FILE" -r '.[0].agent_id // empty'
 }
 
 queue::add() {
@@ -183,11 +375,111 @@ audit::log() {
         >> "$RL_AUDIT_LOG"
 }
 
+# ROK-1331 M11 — millisecond-precision timer + ISO-8601-ms timestamp.
+# bash 5+ provides EPOCHREALTIME ("1234567890.123456"); older bash (incl.
+# macOS default 3.2) does not. Fall back to python3 for portability. The
+# VM ships bash 5 so this fast-path uses EPOCHREALTIME there; the local
+# test runner uses python3 transparently.
+perf::_now_ms() {
+    if [[ -n "${EPOCHREALTIME:-}" && "$EPOCHREALTIME" == *.* ]]; then
+        # secs.usec → ms
+        local secs="${EPOCHREALTIME%.*}" frac="${EPOCHREALTIME#*.}"
+        frac="${frac}000"
+        frac="${frac:0:3}"
+        echo "${secs}${frac}"
+        return
+    fi
+    python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null \
+        || echo "$(($(date +%s) * 1000))"
+}
+
+# ROK-1331 M11 — perf logging helpers.
+#
+# perf::emit <event> [extra-json]
+#   Append one JSON object to RL_PERF_LOG. Required fields are merged with
+#   the caller's `extra` object (flat snake_case). Open+append+close per
+#   call so logrotate's copytruncate is safe (no long-lived FD).
+#
+# perf::start <key> / perf::end <key> <event> [extra-json]
+#   Paired timing helpers. perf::start stashes EPOCHREALTIME under
+#   /tmp/.rl-perf-<key>.<pid>; perf::end reads it, computes duration_ms,
+#   merges into `extra`, and calls perf::emit. EPOCHREALTIME is bash 5+
+#   (VM has it); the awk fallback uses second-resolution and still emits
+#   so callers don't break on older bash.
+#
+# Best-effort by design — every call routes through a `|| true`-ish guard
+# at the perf::emit boundary so an emit failure (disk full, jq missing on
+# a hostile path) never breaks the calling control flow.
+perf::emit() {
+    local event="$1"
+    local extra="${2-}"
+    [[ -z "$extra" ]] && extra='{}'
+    # ISO-8601 with ms precision. python3 path is portable across macOS
+    # (BSD date lacks %3N) and the Linux VM (GNU date supports %3N but the
+    # python3 path is just as cheap when bash 3.2 is the runtime).
+    local ts
+    ts=$(date -u +%FT%T.%3NZ 2>/dev/null || true)
+    if [[ -z "$ts" || "$ts" == *N* ]]; then
+        ts=$(python3 -c "import datetime; print(datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.') + ('%03d' % (datetime.datetime.utcnow().microsecond // 1000)) + 'Z')" 2>/dev/null \
+            || date -u +%FT%TZ)
+    fi
+    local agent="${RL_AGENT_ID:-unknown}"
+    local branch="${RL_BRANCH:-unknown}"
+    # jq -c (compact) + append. Errors are swallowed — perf logging never
+    # blocks the caller.
+    jq -nc \
+        --arg ts "$ts" \
+        --arg ev "$event" \
+        --arg agent "$agent" \
+        --arg branch "$branch" \
+        --argjson extra "$extra" \
+        '{ts:$ts, event:$ev, source:"orchestrator", agent_id:$agent, branch:$branch} + $extra' \
+        >> "$RL_PERF_LOG" 2>/dev/null || true
+}
+
+# Stash a millisecond timestamp under a per-pid sentinel file so multiple
+# parallel timers can coexist in the same shell.
+perf::start() {
+    local key="$1"
+    perf::_now_ms > "/tmp/.rl-perf-${key}.$$" 2>/dev/null || true
+}
+
+# Compute duration_ms from the matching perf::start and emit.
+perf::end() {
+    local key="$1" event="$2" extra="${3-}"
+    [[ -z "$extra" ]] && extra='{}'
+    local sentinel="/tmp/.rl-perf-${key}.$$"
+    local start_ms="0" end_ms dur=0
+    if [[ -r "$sentinel" ]]; then
+        start_ms=$(cat "$sentinel" 2>/dev/null || echo 0)
+    fi
+    end_ms=$(perf::_now_ms)
+    if [[ "$start_ms" != "0" ]]; then
+        dur=$(( end_ms - start_ms ))
+        (( dur < 0 )) && dur=0
+    fi
+    rm -f "$sentinel" 2>/dev/null || true
+    # Merge duration_ms into extra so it's a first-class field.
+    local merged
+    merged=$(jq -c --argjson d "$dur" --argjson e "$extra" -n '$e + {duration_ms:$d}' 2>/dev/null || echo "{\"duration_ms\":$dur}")
+    perf::emit "$event" "$merged"
+}
+
 # Resolve the slot belonging to an agent. Echoes slot number or empty.
 state::slot_for_agent() {
     local agent="$1"
     state::query "$RL_CLAIMS_FILE" --arg a "$agent" \
         '[.[] | select(.agent_id == $a and .claimed == true) | .slot] | first // empty'
+}
+
+# ROK-1331 M4 — resolve the branch persisted alongside this agent's claim.
+# Mirrors state::slot_for_agent. Echoes branch label or empty when no claim
+# exists. Used by `claim`'s idempotent path to preserve the original branch
+# label when the caller didn't pass --branch (or passed the literal "unknown").
+state::branch_for_agent() {
+    local agent="$1"
+    state::query "$RL_CLAIMS_FILE" -r --arg a "$agent" \
+        '[.[] | select(.agent_id == $a and .claimed == true) | .branch] | first // empty'
 }
 
 state::init

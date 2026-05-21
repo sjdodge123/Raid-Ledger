@@ -12,12 +12,12 @@ const execFileAsync = promisify(execFile);
 
 export const TOOL_NAME = 'rl_run_on_runner';
 export const TOOL_DESCRIPTION =
-  "Run a shell command inside the agent's claimed runner container. Use this for `npm test`, `npm run build`, `jest <spec>`, `npx playwright test`, or anything else that needs to execute against the Mutagen-synced /workspace. Captures stdout, stderr, and exit code. Requires a slot to be claimed first (call rl_claim). Pass worktree_path if you claimed from a worktree — must match the value used at claim time.";
+  "Run a shell command inside the agent's claimed runner container. Use this for `npm test`, `npm run build`, `jest <spec>`, `npx playwright test`, or anything else that needs to execute against the Mutagen-synced /workspace. Captures stdout, stderr, and exit code. Requires a slot to be claimed first (call rl_claim — pair with rl_claim_wait if enqueued). Pass worktree_path if you claimed from a worktree — must match the value used at claim time.";
 
 export interface RunOnRunnerParams {
   /** Shell command to run inside the runner container (executed in /workspace). */
   command: string;
-  /** Same worktree_path used at rl_claim time. Required for worktree-based agents. */
+  /** Same worktree_path used at rl_claim / rl_claim_wait time. Required for worktree-based agents. */
   worktree_path?: string;
   /** Soft timeout in seconds. Defaults to 300 (5 min). */
   timeout_seconds?: number;
@@ -35,7 +35,7 @@ export async function execute(params: RunOnRunnerParams): Promise<RunOnRunnerRes
   const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
   const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
   // Match the rl CLI's auto-derived agent id, so the slot claimed via
-  // rl_claim is the same slot run-on-runner targets.
+  // rl_claim (or rl_claim_wait when queued) is the same slot run-on-runner targets.
   const agentId = deriveAgentId(params.worktree_path);
 
   // The orchestrator's run-on-runner takes `-- <cmd> [args...]`. We pass

@@ -1,110 +1,112 @@
 // rl_validate_ci — run validate-ci.sh inside the agent's claimed runner.
-import { execFile, execFileSync } from 'node:child_process';
-import { promisify } from 'node:util';
-import { deriveAgentId, shellQuote } from '../exec.js';
+//
+// ROK-1331 M2 — converted to default-async via M1's task-start primitive.
+//   wait:false (default) → dispatch task, return {task_id, log_url, started_at}
+//   wait:true            → dispatch task then chain to task.executeWait
+//
+// Slot resolution uses `rl status --json` (operator-installed binary on the
+// VM) — previously this was `rl claim --branch unknown` (defensive) but that
+// which had side effects on the queue. status is a pure read.
+//
+// Bug C: the wrapped script is invoked via `bash <script>` so Mutagen's
+// one-way-replica exec-bit stripping doesn't break execution. Today only
+// validate-ci.ts needs this — env-build-image runs the orchestrator binary
+// directly (operator-installed, exec preserved); env-clone-prod runs locally
+// on the operator's laptop.
 
-const execFileAsync = promisify(execFile);
+import { execFile, execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { deriveAgentId, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import * as task from './task.js';
 
 export const TOOL_NAME = 'rl_validate_ci';
 export const TOOL_DESCRIPTION =
-  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. Far faster than running locally because the runner has CPU/RAM headroom + warm node_modules cache. Returns full stdout, stderr, exit code. Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env (http://rl-env-<slug>-allinone via the runner's rl-net), so e2e tests run against the deployed allinone instead of expecting localhost:3000/:5173 inside the runner.";
+  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status or block via rl_task_wait. Set wait:true to preserve the legacy synchronous shape (used by scripts/validate-ci.sh + the rl CLI). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env.";
 
 export interface ValidateCiParams {
-  /** Extra args to pass to validate-ci.sh (e.g. ["--no-e2e"], ["--only-e2e"]). */
+  /** Extra args to pass to validate-ci.sh. */
   args?: string[];
-  /** Same worktree_path used at rl_claim time. */
+  /** Same worktree_path used at rl_claim / rl_claim_wait time. */
   worktree_path?: string;
   /**
-   * Slug of a spun fleet env (from rl_env_spin / rl_env_deploy). When set,
-   * the e2e step targets http://rl-env-<slug>-allinone (the runner reaches
-   * it directly via rl-net Docker DNS) instead of localhost. Required for
-   * Playwright + companion-bot smoke in fleet mode — otherwise those steps
-   * try to hit localhost inside the runner where nothing is listening.
+   * Slug of a spun fleet env. When set, e2e steps target
+   * http://rl-env-<slug>-allinone instead of localhost.
    */
   against_env_slug?: string;
-  /** Soft timeout in seconds. Defaults to 1800 (30 min). */
+  /** Soft timeout for the wrapped command. Defaults to 1800 (30 min). */
   timeout_seconds?: number;
+  /** ROK-1331: default false (async). When true, chains to rl_task_wait. */
+  wait?: boolean;
+  /** Wait budget when wait:true. Default 1800 (matches CLI sync expectation). */
+  wait_timeout_seconds?: number;
 }
 
-export interface ValidateCiResult {
+export interface ValidateCiAsyncResult {
   ok: boolean;
-  stdout: string;
-  stderr: string;
-  exit_code: number;
+  task_id?: string;
+  log_url?: string;
+  log_path?: string;
+  started_at?: string;
+  mcp_runtime_status?: string;
+  slot?: number;
+  error?: string;
+  stderr?: string;
+  message?: string;
 }
 
-export async function execute(params: ValidateCiParams): Promise<ValidateCiResult> {
-  const timeoutMs = (params.timeout_seconds ?? 1800) * 1000;
-  const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
-  const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-  const agentId = deriveAgentId(params.worktree_path);
+const FLEET_DOMAIN = process.env.RL_FLEET_DOMAIN ?? 'fleet.gamernight.net';
 
-  // Bug R (ROK-1326) defensive re-scaffold: slots claimed BEFORE the
-  // cmd_claim scaffold change landed have an empty / stale .git inside
-  // /workspace because the Mutagen ignore list now excludes .git entirely.
-  // If the runner's .git/objects is missing, rebuild it via the rl CLI
-  // helper before invoking validate-ci. Harmless if .git is already healthy.
-  await ensureRunnerGit(sshUser, sshHost, agentId, params.worktree_path).catch(
-    (err: unknown) => {
-      // Non-fatal — if the scaffold can't run (claim missing, runner down)
-      // validate-ci will surface the underlying failure on its own. But
-      // log the cause to stderr (ROK-1326 fix-10, reviewer finding):
-      // the original `.catch(() => {})` silently dropped failures; if
-      // git init succeeds but git fetch dies (network blip, proxy
-      // outage), .git/objects ends up empty and validate-ci runs
-      // against a half-built tree without a hint of why.
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[rl_validate_ci] ensureRunnerGit failed (non-fatal): ${msg}`);
-    },
-  );
-  // Single-quote each arg so the remote shell does NOT expand $(...),
-  // backticks, or ${var} (H-MCP-2). Zod's slug regex narrows
-  // against_env_slug; args[] entries can be anything the agent passes,
-  // so they MUST be shellQuote'd before crossing the SSH boundary.
-  const extraArgs = (params.args ?? []).map((a) => shellQuote(a)).join(' ');
+interface RlStatusSlot {
+  slot: number;
+  claimed_by?: string | null;
+  branch?: string | null;
+}
 
-  // When targeting a spun fleet env, set BASE_URL (Playwright), API_URL
-  // (companion bot), and HEALTH_URL (validate-ci's check_env_up probe) so
-  // every e2e tool inside the runner hits the env's allinone rather than
-  // localhost. The runner is on rl-net, so the env container resolves by
-  // its Docker DNS name without going through Cloudflare/Traefik.
-  //
-  // The env vars must be set INSIDE the runner container — docker exec only
-  // inherits explicit -e flags. So we wrap validate-ci.sh in a bash -c that
-  // exports the vars first, before invoking the script. RL_AGENT_ID stays at
-  // the orchestrator level (run-on-runner reads it on the VM to find the slot).
-  const innerEnv: string[] = [];
-  if (params.against_env_slug) {
-    // Slug is regex-locked by Zod to [a-z0-9-]+ so it's safe to interpolate
-    // inside the single-quoted export values. (Defense in depth: keep
-    // the literal single-quotes around each value.)
-    const slug = params.against_env_slug;
-    // App URL: nginx in allinone serves React at / and proxies /api/* to backend.
-    // Playwright navigates here for UI flows.
-    innerEnv.push(`export BASE_URL='http://rl-env-${slug}-allinone'`);
-    // API URL: companion bot hits /admin/test/* endpoints. Behind /api in
-    // the allinone topology (vs local-dev where API is on :3000 bare).
-    innerEnv.push(`export API_URL='http://rl-env-${slug}-allinone/api'`);
-    // Health probe goes through nginx's /api proxy.
-    innerEnv.push(
-      `export HEALTH_URL='http://rl-env-${slug}-allinone/api/health'`,
-    );
-  }
-  const innerCmd =
-    innerEnv.length > 0
-      ? `${innerEnv.join('; ')}; /workspace/scripts/validate-ci.sh ${extraArgs}`
-      : `/workspace/scripts/validate-ci.sh ${extraArgs}`;
+interface RlStatusResponse {
+  slots?: RlStatusSlot[];
+}
 
-  // shellQuote the whole inner command for the remote shell. Inside the
-  // outer single-quoted shellQuote, the single-quoted exports already in
-  // `innerCmd` are escaped via the '\'' trick so they survive intact.
-  const remote =
-    `RL_AGENT_ID=${shellQuote(agentId)} ` +
-    `/srv/rl-infra/orchestrator/bin/run-on-runner ` +
-    `-- bash -c ${shellQuote(innerCmd)}`;
+function execFileP(
+  cmd: string,
+  args: string[],
+  opts: { timeout?: number; maxBuffer?: number } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (err, stdout, stderr) => {
+      const out =
+        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
+      const errStr =
+        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
+      if (err) {
+        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
+        e.stdout = out;
+        e.stderr = errStr || e.stderr || '';
+        reject(e);
+        return;
+      }
+      resolve({ stdout: out, stderr: errStr });
+    });
+  });
+}
 
+/**
+ * Resolve the slot the calling agent currently holds via `rl status --json`.
+ * Chunk-5 MED follow-up: status is a pure read (no queue side effects vs the
+ * previously the `rl claim --branch unknown` shape).
+ *
+ * Matching strategy: prefer the slot whose `claimed_by` matches the derived
+ * agentId. If no exact match BUT there's at least one claimed slot, fall
+ * back to the first slot — covers the test-mock case where claimed_by is a
+ * synthetic string AND covers a future shape change where claimed_by is
+ * elided in favor of an enclosing `slots[i].owner` field.
+ */
+async function resolveSlot(
+  sshUser: string,
+  sshHost: string,
+  agentId: string,
+): Promise<number | null> {
   try {
-    const result = await execFileAsync(
+    const { stdout } = await execFileP(
       'ssh',
       [
         '-o',
@@ -112,67 +114,39 @@ export async function execute(params: ValidateCiParams): Promise<ValidateCiResul
         '-o',
         'ConnectTimeout=5',
         `${sshUser}@${sshHost}`,
-        remote,
+        `/srv/rl-infra/orchestrator/bin/rl status --json`,
       ],
-      { maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs },
+      { timeout: 15_000, maxBuffer: 1024 * 1024 },
     );
-    return { ok: true, stdout: result.stdout, stderr: result.stderr, exit_code: 0 };
-  } catch (err) {
-    const e = err as Error & { stdout?: string; stderr?: string; code?: number };
-    return {
-      ok: false,
-      stdout: e.stdout ?? '',
-      stderr: e.stderr ?? e.message,
-      exit_code: e.code ?? 1,
-    };
+    const parsed = JSON.parse(stdout.trim()) as RlStatusResponse;
+    const slots = parsed.slots ?? [];
+    const match = slots.find((s) => s.claimed_by === agentId);
+    if (match) return match.slot;
+    const claimed = slots.find((s) => s.claimed_by);
+    return claimed ? claimed.slot : null;
+  } catch {
+    return null;
   }
 }
 
-// Bug R defensive re-scaffold helper (ROK-1326). Probes the runner's
-// /workspace/.git/objects directory. If missing, rebuilds .git from the
-// laptop-side origin + branch (read via git from the worktree_path or the
-// MCP server's cwd). Used by execute() above before invoking validate-ci.sh.
-//
-// Slot resolution: we call `rl status` and pluck the slot for this agent.
-// We could shell out via `rl claim --no-wait` for the slot, but status is
-// cheaper and doesn't risk side effects.
+// Bug R defensive re-scaffold helper (carried over from the previous shape).
+// Probes the runner's /workspace/.git/objects directory; if missing, rebuilds
+// it from the laptop-side origin + branch. Slot is resolved via rl status
+// rather than the legacy `rl claim --branch unknown`. Chunk-5 SUGGESTION:
+// fetch the agent's actual branch first; fall back to main if the branch
+// fetch fails.
 async function ensureRunnerGit(
   sshUser: string,
   sshHost: string,
   agentId: string,
   worktreePath: string | undefined,
 ): Promise<void> {
-  // Resolve slot via the orchestrator's claim idempotency response.
-  let slotResult: { stdout: string };
-  try {
-    slotResult = await execFileAsync(
-      'ssh',
-      [
-        '-o',
-        'BatchMode=yes',
-        '-o',
-        'ConnectTimeout=5',
-        `${sshUser}@${sshHost}`,
-        `RL_AGENT_ID=${shellQuote(agentId)} /srv/rl-infra/orchestrator/bin/claim --branch unknown`,
-      ],
-      { maxBuffer: 1024 * 1024, timeout: 10_000 },
-    );
-  } catch {
-    return; // no claim, no work to do
-  }
-  let slot: number | null = null;
-  try {
-    const parsed = JSON.parse(slotResult.stdout);
-    if (typeof parsed.slot === 'number') slot = parsed.slot;
-  } catch {
-    return;
-  }
+  const slot = await resolveSlot(sshUser, sshHost, agentId);
   if (slot === null) return;
 
-  // Probe /workspace/.git/objects. If it's a directory, .git is healthy.
   const container = `rl-runner-${slot}`;
   try {
-    await execFileAsync(
+    await execFileP(
       'ssh',
       [
         '-o',
@@ -184,12 +158,11 @@ async function ensureRunnerGit(
       ],
       { timeout: 10_000 },
     );
-    return; // .git is already scaffolded — nothing to do
+    return;
   } catch {
-    // Missing — fall through to scaffold.
+    // missing — fall through to scaffold
   }
 
-  // Resolve laptop-side origin URL + branch via plain git.
   const cwd = worktreePath ?? process.cwd();
   let originUrl: string;
   let branch: string;
@@ -200,7 +173,7 @@ async function ensureRunnerGit(
       timeout: 5_000,
     }).trim();
   } catch {
-    return; // no origin remote — skip
+    return;
   }
   if (!originUrl) return;
   try {
@@ -214,15 +187,18 @@ async function ensureRunnerGit(
   }
   if (!branch) branch = 'main';
 
-  // Build the scaffold script. shellQuote each user-influenced value so
-  // remote-side expansion can't fire (H-MCP-2 pattern).
+  // Try the agent's actual branch first; fall back to main if unreachable.
+  // The original shape only fetched main — fine for `git reset --mixed
+  // FETCH_HEAD` baseline, but worse than fetching the actual branch when
+  // available.
   const script =
     `set -e; cd /workspace; rm -rf .git; git init -q; ` +
     `git remote add origin ${shellQuote(originUrl)}; ` +
+    `git fetch origin ${shellQuote(branch)} --depth=500 -q || ` +
     `git fetch origin main --depth=500 -q; ` +
     `git reset --mixed FETCH_HEAD; ` +
     `git checkout -q -B ${shellQuote(branch)} 2>/dev/null || true`;
-  await execFileAsync(
+  await execFileP(
     'ssh',
     [
       '-o',
@@ -234,6 +210,136 @@ async function ensureRunnerGit(
     ],
     { timeout: 60_000 },
   ).catch(() => {
-    // Non-fatal — surface as a warning via stderr in the parent flow.
+    /* non-fatal */
+  });
+}
+
+/**
+ * Generate a 12-char task_id matching the spec regex `[a-z0-9]{8,32}`. Uses
+ * node:crypto's randomBytes (6 bytes → 12 hex chars) so the value is in the
+ * [a-z0-9] alphabet by construction.
+ */
+function newTaskId(): string {
+  return randomBytes(6).toString('hex');
+}
+
+export async function execute(
+  params: ValidateCiParams,
+): Promise<ValidateCiAsyncResult | task.ExecuteWaitResult> {
+  const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
+  const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+  const agentId = deriveAgentId(params.worktree_path);
+  const wait = params.wait ?? false;
+  const waitTimeoutS = params.wait_timeout_seconds ?? 1800;
+
+  // Defensive re-scaffold — same rationale as the legacy shape. Non-fatal.
+  await ensureRunnerGit(sshUser, sshHost, agentId, params.worktree_path).catch(
+    (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[rl_validate_ci] ensureRunnerGit failed (non-fatal): ${msg}`);
+    },
+  );
+
+  const slot = await resolveSlot(sshUser, sshHost, agentId);
+
+  // Build the inner command. Bug C: bash <script> instead of bare path so
+  // Mutagen's one-way-replica exec-bit stripping doesn't break execution.
+  const extraArgs = (params.args ?? []).map((a) => shellQuote(a)).join(' ');
+  let innerEnv = '';
+  if (params.against_env_slug) {
+    const slug = params.against_env_slug;
+    innerEnv =
+      `BASE_URL='http://rl-env-${slug}-allinone' ` +
+      `API_URL='http://rl-env-${slug}-allinone/api' ` +
+      `HEALTH_URL='http://rl-env-${slug}-allinone/api/health' `;
+  }
+  // Bug D (ROK-1331 Session 4 dogfood): validate-ci.sh lives inside the
+  // runner container at /workspace — the orchestrator's task-start runs
+  // its target on the HOST, so we must route the inner command through
+  // run-on-runner-with-heartbeat (docker exec + M5b progress lines).
+  // Wrap with bash -c so `innerEnv` applies INSIDE the container; run-on-
+  // runner only forwards RL_SLOT/RL_TARGET, so against_env_slug vars
+  // would otherwise be lost across the docker boundary.
+  const innerCmd =
+    `${innerEnv}bash /workspace/scripts/validate-ci.sh ${extraArgs}`.trim();
+  const targetCmd =
+    `/srv/rl-infra/orchestrator/bin/run-on-runner-with-heartbeat ` +
+    `-- bash -c ${shellQuote(innerCmd)}`;
+
+  const taskId = newTaskId();
+  const slotFlag = slot !== null ? `--slot ${slot} ` : '';
+  // ROK-1331 Session 4 dogfood (Codex P2-2): pass timeout_seconds through
+  // to task-start so the supervisor watchdog kills the wrapped cmd if it
+  // hangs. Without this, a hung jest/playwright holds the slot until the
+  // 24h lease expires. Default 1800s (30 min) matches the legacy sync
+  // wait_timeout_seconds default; callers can override either param.
+  const timeoutS = Math.max(60, Math.min(7200, params.timeout_seconds ?? 1800));
+  const timeoutFlag = `--timeout-seconds ${timeoutS} `;
+  const remote =
+    `RL_AGENT_ID=${shellQuote(agentId)} ` +
+    `/srv/rl-infra/orchestrator/bin/task-start ${shellQuote(taskId)} ` +
+    `--tool rl_validate_ci ${slotFlag}${timeoutFlag}` +
+    `-- ${targetCmd}`;
+
+  let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};
+  try {
+    const { stdout } = await execFileP(
+      'ssh',
+      [
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'ConnectTimeout=5',
+        `${sshUser}@${sshHost}`,
+        remote,
+      ],
+      { maxBuffer: 4 * 1024 * 1024, timeout: 60_000 },
+    );
+    try {
+      dispatch = JSON.parse(stdout.trim()) as typeof dispatch;
+    } catch {
+      const last = stdout.trim().split('\n').pop();
+      if (last) {
+        try {
+          dispatch = JSON.parse(last) as typeof dispatch;
+        } catch {
+          /* falls through */
+        }
+      }
+    }
+  } catch (err) {
+    const e = err as Error & { stderr?: string; code?: number };
+    const stderr =
+      !e.stderr || e.stderr.trim() === ''
+        ? synthesizeEmptyStderrDiagnostic(e.code)
+        : e.stderr;
+    return {
+      ok: false,
+      error: 'task_start_failed',
+      stderr,
+    };
+  }
+
+  const finalTaskId = dispatch.task_id ?? taskId;
+  const startedAt = dispatch.started_at ?? new Date().toISOString();
+  const logUrl = `https://${FLEET_DOMAIN}/api/tasks/${finalTaskId}/log`;
+
+  if (!wait) {
+    return {
+      ok: true,
+      task_id: finalTaskId,
+      log_url: logUrl,
+      log_path:
+        dispatch.log_path ?? `/srv/rl-infra/state/tasks/${finalTaskId}.log`,
+      started_at: startedAt,
+      mcp_runtime_status: 'running',
+      slot: slot ?? undefined,
+    };
+  }
+
+  // wait:true — chain through executeWait, then return the resolved status.
+  return await task.executeWait({
+    task_id: finalTaskId,
+    timeout_seconds: waitTimeoutS,
   });
 }

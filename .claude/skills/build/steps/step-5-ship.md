@@ -95,6 +95,9 @@ At the END of the batch (after ALL stories in the batch are shipped), release th
 
 ```
 mcp__mcp-rl-fleet__rl_release({ worktree_path: "<main repo or last worktree>" })
+// preserve-envs defaults to true (M5a) — the slot's child envs are kept and
+// inherited by the next queued agent on the same branch. Pass
+// `{destroy_envs: true}` (MCP) or `--destroy-envs` (CLI) to nuke instead.
 ```
 
 If you forget, the sweeper handles it: 5-min heartbeat timeout if the session crashed, 8-hour hoarded-slot reaper otherwise. Both safety nets — explicit release is the polite path.

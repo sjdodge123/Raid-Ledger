@@ -10,7 +10,7 @@ const CLONE_SCRIPT = resolve(__dirname, '../../../../scripts/clone-prod-to-env.s
 
 export const TOOL_NAME = 'rl_env_clone_prod';
 export const TOOL_DESCRIPTION =
-  "Clone production data into a test env. Two-step: (1) refreshes the operator's local DB from prod via the existing clone-prod-to-local.sh path (sanitized backup; app_settings preserved), (2) pushes that snapshot into the test env via rl_env_sync_from_local in `full` mode. Result: tester sees realistic prod-shaped data in their test env. Requires .env.clone at repo root with PROD_URL + auth creds. The destructive `--fresh` flag is used implicitly — operator's LOCAL DB gets overwritten by prod data. Set skip_local_refresh=true to skip the prod→local step if you've recently cloned (much faster).";
+  "Clone production data into a test env. Two-step: (1) refreshes the operator's local DB from prod via the existing clone-prod-to-local.sh path (sanitized backup; app_settings preserved), (2) pushes that snapshot into the test env via rl_env_sync_from_local in `full` mode. Result: tester sees realistic prod-shaped data in their test env. Requires .env.clone at repo root with PROD_URL + auth creds. The destructive `--fresh` flag is used implicitly — operator's LOCAL DB gets overwritten by prod data. Set skip_local_refresh=true to skip the prod→local step if you've recently cloned (much faster). NOTE: this tool runs synchronously today — the wait / wait_timeout_seconds params exist for shape symmetry with rl_validate_ci + rl_env_build_image_from_runner but currently have no effect (clone-prod-to-env.sh runs on the operator laptop, not the VM, so task-start dispatch doesn't apply). Async dispatch is a follow-up; for now treat this as SYNC.";
 
 export interface EnvCloneProdParams {
   slug: string;
@@ -18,6 +18,15 @@ export interface EnvCloneProdParams {
   skip_local_refresh?: boolean;
   /** Soft timeout. Defaults to 1200 (20 min) — prod backup + download + restore can be slow. */
   timeout_seconds?: number;
+  /**
+   * ROK-1331 M2: schema-symmetric with rl_validate_ci / rl_env_build_image_from_runner.
+   * Currently advisory only — clone-prod-to-env.sh runs on the operator's
+   * laptop, not the VM, so task-start dispatch doesn't apply. Sync execution
+   * is the only path today. Tracked as a follow-up: laptop-side task tracker.
+   */
+  wait?: boolean;
+  /** Advisory — see `wait` above. Default 1800. */
+  wait_timeout_seconds?: number;
 }
 
 export interface EnvCloneProdResult {

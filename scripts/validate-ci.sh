@@ -69,8 +69,17 @@ fi
 # Default behavior unchanged. Opt in by exporting RL_TARGET=remote or by
 # passing through rl-infra/cli/rl, which sets it on your behalf.
 # ---------------------------------------------------------------------------
-if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1" ]; then
+if [ "${RL_TARGET:-local}" = "remote" ] && [ "${RL_TARGET_DISPATCHED:-0}" != "1" ] && [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
   export RL_TARGET_DISPATCHED=1   # prevent loop if rl re-execs us inside the runner
+  # ROK-1331 M2: the rl CLI is SYNC by default (its rl_validate_ci MCP
+  # surface is wait:true under the hood), so this exec preserves the
+  # operator's terminal-attached output expectation. If the CLI ever grows
+  # an async dispatch flag, this caller must keep passing the equivalent
+  # of wait=true (or this script's stdout/stderr surfaces will return
+  # immediately with a task_id instead of streaming the run).
+  # ROK-1331 M6b: the dry-run guard (RL_VALIDATE_CI_DRY=1) lets bash test
+  # harnesses source the script with RL_TARGET=remote to exercise the
+  # fallback chain WITHOUT actually shipping execution to the rl CLI.
   exec "$REPO_ROOT/rl-infra/cli/rl" validate-ci "$@"
 fi
 
@@ -110,13 +119,91 @@ record_result() {
   fi
 }
 
+# ROK-1331 M11 — local perf emit. Inside the fleet runner the orchestrator's
+# perf.log isn't writable, so we append to a runner-local file that release
+# flushes back to /srv/rl-infra/state/perf.log. Local laptop runs land in
+# the worktree's .rl-perf.log (cheap to inspect, gitignored).
+PERF_LOG_LOCAL="${PERF_LOG_LOCAL:-${REPO_ROOT}/.rl-perf.log}"
+if [ -d /workspace ]; then
+  PERF_LOG_LOCAL="/workspace/.rl-perf.log"
+fi
+
+# perf_emit_local <event> <extra-json>
+# Best-effort — never fails the calling step. Writes one compact JSON
+# object per call (open+append+close so logrotate is safe). Inside-runner
+# events get source=runner; everything else (laptop runs) is source=mcp.
+#
+# ROK-1336 diagnostic (2026-05-21): the original implementation swallowed
+# all errors via `2>/dev/null || true`, so the runner-side perf log silently
+# fails to materialize on real fleet runs (function reproduces correctly in
+# isolation — bug is in the runtime context, theory undetermined). Capture
+# python3's stderr to `${PERF_LOG_LOCAL}.errors` so the next failed run
+# leaves behind a JSON-line trace of WHY each call failed. Best-effort
+# posture preserved — the function still returns 0 on disk-side errors so
+# the calling step never aborts.
+perf_emit_local() {
+  local event="$1"
+  local extra="${2-}"
+  [ -z "$extra" ] && extra='{}'
+  local source_label="runner"
+  [ ! -d /workspace ] && source_label="mcp"
+  local ts
+  ts=$(python3 -c "import datetime; print(datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.') + ('%03d' % (datetime.datetime.utcnow().microsecond // 1000)) + 'Z')" 2>/dev/null \
+    || date -u +%FT%TZ)
+  local slot="${RL_SLOT:-}" branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+  local emit_out emit_rc
+  emit_out=$(python3 -c "
+import json, sys
+extra = json.loads(sys.argv[5])
+extra.update({'ts': sys.argv[1], 'event': sys.argv[2], 'source': sys.argv[3], 'branch': sys.argv[4]})
+if sys.argv[6]:
+    try: extra['slot'] = int(sys.argv[6])
+    except ValueError: pass
+print(json.dumps(extra, separators=(',', ':')))
+" "$ts" "$event" "$source_label" "$branch" "$extra" "$slot" 2>&1)
+  emit_rc=$?
+  if [ "$emit_rc" -eq 0 ]; then
+    # Happy path — append to perf log. Silent ignore on disk errors so the
+    # function preserves its best-effort contract.
+    printf '%s\n' "$emit_out" >> "$PERF_LOG_LOCAL" 2>/dev/null || true
+  else
+    # Failure path — log the python3 rc + captured stderr to a sibling
+    # `.errors` file. Operators tail this after a fleet run to debug why
+    # validate.start / validate.step.end / validate.end never landed.
+    python3 -c "
+import json, sys
+print(json.dumps({'ts': sys.argv[1], 'event': sys.argv[2], 'rc': int(sys.argv[3]), 'stderr': sys.argv[4], 'PERF_LOG_LOCAL': sys.argv[5]}))
+" "$ts" "$event" "$emit_rc" "$emit_out" "$PERF_LOG_LOCAL" 2>/dev/null \
+      >> "${PERF_LOG_LOCAL}.errors" 2>/dev/null || true
+  fi
+}
+
+# perf_now_ms — millisecond timestamp via python3 (portable).
+perf_now_ms() {
+  python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$(( $(date -u +%s) * 1000 ))"
+}
+
 run_step() {
   local name="$1"
   shift
   echo ""
   echo -e "${YELLOW}========== $name ==========${NC}"
+  local step_start_ms
+  step_start_ms=$(perf_now_ms)
   local rc=0
   "$@" || rc=$?
+  local step_end_ms step_dur
+  step_end_ms=$(perf_now_ms)
+  step_dur=$(( step_end_ms - step_start_ms ))
+  # ROK-1331 M11 — emit validate.step.end per AC2.
+  local step_extra
+  step_extra=$(python3 -c "
+import json, sys
+print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_code': int(sys.argv[3])}))
+" "$name" "$step_dur" "$rc" 2>/dev/null || echo '{}')
+  perf_emit_local "validate.step.end" "$step_extra"
+
   if [ "$rc" -eq 0 ]; then
     echo -e "${GREEN}$name: PASS${NC}"
     record_result "$name" "PASS"
@@ -273,8 +360,30 @@ run_lint() {
 }
 
 run_unit_tests() {
-  npm run test:cov -w api -- --passWithNoTests \
-    && (cd "$REPO_ROOT/web" && npx vitest run --coverage)
+  npm run test:cov -w api -- --passWithNoTests || return $?
+  # ROK-1331 M6b MED-5: vitest coverage race on fleet runners. When
+  # RL_TARGET=remote, fall through a three-step chain before declaring
+  # failure. Step (a) is the normal attempt; (b) retries (relies on the
+  # mutagen recursive **/coverage/** ignore in rl-infra/cli/rl /
+  # mutagen/sync-template.yml to break the race); (c) re-runs with
+  # --pool=forks --poolOptions.forks.singleFork=true. If all three fail,
+  # exit non-zero with an explicit PAUSED message — never silently drop
+  # --coverage. Operator approval is required to ship a no-coverage
+  # workaround for the fleet only.
+  if [ "${RL_TARGET:-local}" = "remote" ]; then
+    (
+      cd "$REPO_ROOT/web"
+      if npx vitest run --coverage; then exit 0; fi
+      echo "[validate-ci] vitest coverage race detected (step a); retrying (step b — relies on mutagen **/coverage/** recursive ignore)" >&2
+      if npx vitest run --coverage; then exit 0; fi
+      echo "[validate-ci] step (b) still failing; falling back to step (c) — --pool=forks --poolOptions.forks.singleFork=true" >&2
+      if npx vitest run --coverage --pool=forks --poolOptions.forks.singleFork=true; then exit 0; fi
+      echo "[validate-ci] PAUSED awaiting operator approval — all three remote fallback steps failed for the vitest coverage run. Refusing to silently degrade to a no-coverage run; the operator must explicitly authorize that workaround for the fleet only." >&2
+      exit 1
+    )
+  else
+    (cd "$REPO_ROOT/web" && npx vitest run --coverage)
+  fi
 }
 
 check_backup_prereqs() {
@@ -304,7 +413,130 @@ run_integration_tests() {
   # run_step calls us with `"$@" || rc=$?`, so a bare check_backup_prereqs
   # would not halt this function on failure.
   check_backup_prereqs || return $?
-  npm run test:integration -w api
+
+  # ROK-1331 M9: per-slot Redis sidecar for fleet integration tests.
+  # The fleet runner image ships only redis-tools (CLI), not redis-server,
+  # so any integration spec that boots a BullMQ worker (which spawns its
+  # own ioredis to the configured REDIS_URL) hits ECONNREFUSED on
+  # localhost:6379. We spawn an ephemeral sidecar on rl-net so the runner
+  # can reach it by DNS, then point REDIS_URL at it. Per-slot naming keeps
+  # concurrent slots isolated. Skipped in local mode — laptop
+  # deploy_dev.sh already manages Redis on localhost:6379.
+  _spawn_redis_sidecar_if_remote || return $?
+
+  # ROK-1331 M5b — when validate-ci runs inside the fleet runner, surface
+  # per-test progress via jest --verbose. Otherwise a 12-min silent
+  # window during the integration suite looks like the run is hung
+  # (comment 23:21 B). Local runs stay quiet.
+  #
+  # ROK-1331 dogfood fix (2026-05-20): the inner script (running INSIDE the
+  # runner via ssh-dispatched run-on-runner) does NOT inherit the laptop's
+  # RL_TARGET=remote env. Detect "inside runner" via /workspace existing —
+  # that's the orchestrator's bind-mount and is the canonical marker.
+  #
+  # ROK-1331 M10 (scope-add, 2026-05-20): on the fleet runner, jest
+  # --runInBand accumulates ~98 integration suites' module state in one
+  # Node process; V8 heap hit 3 GB and SIGABRT'd ~50 suites in (Probe 1
+  # attempt 5). Split the run into $INTEGRATION_SHARDS shards (default 4)
+  # so each shard is its own Node process; heap frees between shards.
+  # Local laptop path stays single-process (more RAM headroom).
+  if [ -d /workspace ] || [ "${RL_TARGET:-local}" = "remote" ]; then
+    local shards="${INTEGRATION_SHARDS:-4}"
+    local shard_results=()
+    local i
+    for i in $(seq 1 "$shards"); do
+      echo "=== Integration shard ${i}/${shards} ==="
+      # `npx jest` directly so each shard is its own Node process. We `cd api`
+      # FIRST so the jest config's relative paths (rootDir, transforms,
+      # ts-jest's tsconfig resolution) match what `npm run test:integration
+      # -w api` would produce. Without cd, jest loads config from repo root
+      # and ts-jest mis-resolves --ignoreDeprecations to an empty value
+      # (TS5103). Discovered ROK-1331 Probe 1 attempt 6 (2026-05-20).
+      #
+      # NODE_OPTIONS=--max-old-space-size=3072 gives V8 a 3 GB heap ceiling
+      # per shard (vs 1.4 GB default) which is ample headroom for ~25 suites
+      # per shard.
+      # ROK-1331 M11 — JEST_SHARD_ID + JEST_TOTAL_SHARDS feed the perf
+       # reporter so jest.suite.end events carry shard labels.
+       # --logHeapUsage feeds the reporter's heap_used_mb sample.
+      if (cd api && NODE_OPTIONS="--max-old-space-size=3072" \
+         JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${shards}" \
+         npx jest --config ./jest.integration.config.js \
+                  --runInBand --verbose --logHeapUsage --shard="${i}/${shards}"); then
+        shard_results+=("PASS")
+      else
+        shard_results+=("FAIL")
+        echo "Shard ${i}/${shards} FAILED — stopping early"
+        break
+      fi
+    done
+    echo "=== Shard results: ${shard_results[*]} ==="
+    local r
+    for r in "${shard_results[@]}"; do
+      if [ "$r" = "FAIL" ]; then return 1; fi
+    done
+  else
+    npm run test:integration -w api
+  fi
+}
+
+# ROK-1331 M9 — per-slot Redis sidecar for fleet integration tests.
+# Idempotent (docker rm -f any stale container first), bounded ping-wait
+# (30s), trap-cleaned on EXIT. Local mode is a no-op so deploy_dev.sh's
+# Redis on localhost:6379 stays authoritative.
+#
+# ROK-1331 dogfood fix (2026-05-20): when validate-ci.sh runs INSIDE the
+# fleet runner (post-ssh-dispatch), the runner does NOT inherit the laptop's
+# RL_TARGET=remote. Detect "am I in the runner that should spawn a sidecar?"
+# via /workspace bind-mount + RL_SLOT (both set by the orchestrator's
+# docker-compose runner config). Local laptop runs lack both → no-op.
+_spawn_redis_sidecar_if_remote() {
+  # Skip if NEITHER inside-runner signals nor explicit remote flag are present.
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  local slot="${RL_SLOT:-}"
+  if [ -z "$slot" ]; then
+    echo -e "${YELLOW}[rl-test-redis] inside-runner detected but RL_SLOT unset — skipping sidecar spawn${NC}" >&2
+    return 0
+  fi
+
+  local cname="rl-test-redis-${slot}"
+  echo "[rl-test-redis] spawning sidecar ${cname} on rl-net (slot=${slot})"
+
+  # Idempotency: clear any stale container by that name (previous crash, etc.).
+  docker rm -f "$cname" >/dev/null 2>&1 || true
+
+  # Teardown on EXIT — even on jest panic / set -e abort. --rm on the run
+  # call means `docker stop` removes the container too, but we also issue
+  # an explicit `docker rm -f` for the rare case where stop times out.
+  # Container name pattern: rl-test-redis-${slot}
+  trap "docker stop 'rl-test-redis-${slot}' >/dev/null 2>&1 || true; docker rm -f 'rl-test-redis-${slot}' >/dev/null 2>&1 || true" EXIT
+
+  docker run -d --rm \
+    --name "$cname" \
+    --network rl-net \
+    --label "rl.role=test-redis" \
+    --label "rl.slot=${slot}" \
+    redis:7-alpine \
+    redis-server --save "" --appendonly no >/dev/null
+
+  # Bounded ping-wait (30s). The sidecar typically answers within 1s, but
+  # cold image pulls can stretch this to ~10s on a freshly-claimed slot.
+  local elapsed=0
+  while ! docker exec "$cname" redis-cli ping 2>/dev/null | grep -q PONG; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    if [ "$elapsed" -ge 30 ]; then
+      echo -e "${RED}[rl-test-redis] sidecar ${cname} failed PING after 30s${NC}" >&2
+      docker logs "$cname" --tail 30 >&2 || true
+      return 1
+    fi
+  done
+
+  # REDIS_URL=redis://rl-test-redis-${slot}:6379
+  export REDIS_URL="redis://rl-test-redis-${slot}:6379"
+  echo "[rl-test-redis] ${cname} ready after ${elapsed}s — REDIS_URL=${REDIS_URL}"
 }
 
 run_migration_validation() {
@@ -325,18 +557,33 @@ run_container_validation() {
   # Ensure cleanup on any exit path
   trap "docker stop '$cname' >/dev/null 2>&1 || true" RETURN
 
+  # ROK-1331 M13: choose a non-conflicting host port for the allinone container.
+  # The fleet VM's rl-dashboard service permanently occupies :8080, so the
+  # legacy `docker run -p 8080:80` fails with "port is already allocated".
+  # Resolution order: explicit RL_CONTAINER_STARTUP_PORT > fleet default 8090
+  # (detected via /workspace mount) > laptop default 8080.
+  local host_port="${RL_CONTAINER_STARTUP_PORT:-}"
+  if [ -z "$host_port" ]; then
+    if [ -d /workspace ]; then
+      host_port=8090
+    else
+      host_port=8080
+    fi
+  fi
+
   docker build -f Dockerfile.allinone -t rl:ci-test .
   docker run --rm -d \
     --name "$cname" \
-    -p 8080:80 \
+    -p ${host_port}:80 \
     -e ADMIN_PASSWORD=ci-test \
     rl:ci-test
 
-  _wait_for_container_health "$cname"
+  _wait_for_container_health "$cname" "$host_port"
 }
 
 _wait_for_container_health() {
   local cname="$1"
+  local host_port="${2:-8080}"
   local elapsed=0
 
   # Wait for API health (port 3000 direct — matches GitHub CI)
@@ -361,10 +608,24 @@ _wait_for_container_health() {
   fi
   echo -e "${GREEN}Redis: PONG${NC}"
 
-  # Verify nginx proxy (from host, matches GitHub CI)
+  # Verify nginx proxy.
+  # Laptop path: curl from host, the `-p 8080:80` mapping is visible on
+  # localhost. Github CI same shape.
+  # ROK-1331 dogfood fix (2026-05-20): on the fleet, validate-ci.sh runs
+  # INSIDE the runner container. The host port mapping is bound on the VM
+  # host, not on runner-1's localhost — curl-from-runner-1 returns HTTP
+  # 000. Docker-exec into the test container itself and curl nginx on
+  # its internal port 80 to validate the proxy without depending on
+  # cross-container port visibility.
   local http_code
-  http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-    http://127.0.0.1:8080/api/health)
+  if [ -d /workspace ]; then
+    http_code=$(docker exec "$cname" sh -c \
+      "wget -qS -O /dev/null http://127.0.0.1:80/api/health 2>&1 | awk '/HTTP/{print \$2; exit}'" \
+      2>/dev/null || echo 000)
+  else
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+      http://127.0.0.1:${host_port}/api/health)
+  fi
   if [ "$http_code" != "200" ]; then
     echo -e "${RED}Nginx proxy returned $http_code${NC}"
     return 1
@@ -394,7 +655,7 @@ _wait_for_container_health() {
   fi
   echo -e "${GREEN}pg_stat_statements: loaded${NC}"
 
-  _check_container_security_headers || return 1
+  _check_container_security_headers "$host_port" "$cname" || return 1
 }
 
 # ROK-1158: verify the 6 security headers are present on every response surface
@@ -402,23 +663,55 @@ _wait_for_container_health() {
 # guards against the nginx `add_header` inheritance trap — the static-asset
 # location block defines its own `add_header Cache-Control`, which kills
 # parent-scope inheritance, so the snippet must be `include`d there too.
+#
+# ROK-1331 dogfood fix (2026-05-21): on the fleet, validate-ci.sh runs INSIDE
+# the runner container. `-p ${host_port}:80` binds the test container's port
+# on the VM HOST, not on runner-1's localhost — `curl -sI http://127.0.0.1:8090/`
+# from inside runner-1 hits the runner's own loopback and returns empty. Use
+# docker-exec-into-cname-and-curl-port-80 (the same shape as the API proxy
+# check in _wait_for_container_health) when /workspace is mounted (i.e. inside
+# a fleet runner).
 _check_container_security_headers() {
-  local headers index_url='http://127.0.0.1:8080/' health_url='http://127.0.0.1:8080/api/health'
+  local host_port="${1:-8080}" cname="${2-}"
+  local headers
+  local index_url="http://127.0.0.1:${host_port}/"
+  local health_url="http://127.0.0.1:${host_port}/api/health"
+
+  _fetch_headers() {
+    local url="$1" path
+    if [ -d /workspace ] && [ -n "$cname" ]; then
+      path="${url#http://127.0.0.1:${host_port}}"
+      docker exec "$cname" wget -qS -O /dev/null "http://127.0.0.1:80${path}" 2>&1 \
+        | sed -E 's/^[[:space:]]+//' \
+        | grep -E '^(HTTP|[A-Za-z][A-Za-z0-9-]+:)'
+    else
+      curl -sI "$url"
+    fi
+  }
+  _fetch_body() {
+    local url="$1" path
+    if [ -d /workspace ] && [ -n "$cname" ]; then
+      path="${url#http://127.0.0.1:${host_port}}"
+      docker exec "$cname" wget -qO- "http://127.0.0.1:80${path}" 2>/dev/null
+    else
+      curl -s "$url"
+    fi
+  }
 
   for url in "$index_url" "$health_url"; do
-    headers=$(curl -sI "$url")
+    headers=$(_fetch_headers "$url")
     _assert_security_headers "$headers" "$url" || return 1
   done
 
   local html bundle_path bundle_url
-  html=$(curl -s "$index_url")
+  html=$(_fetch_body "$index_url")
   bundle_path=$(echo "$html" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | head -1)
   if [ -z "$bundle_path" ]; then
     echo -e "${RED}Could not locate /assets/*.js bundle URL in index.html${NC}"
     return 1
   fi
-  bundle_url="http://127.0.0.1:8080${bundle_path}"
-  headers=$(curl -sI "$bundle_url")
+  bundle_url="http://127.0.0.1:${host_port}${bundle_path}"
+  headers=$(_fetch_headers "$bundle_url")
   _assert_security_headers "$headers" "$bundle_url" || return 1
 
   if echo "$headers" | grep -qi '^x-xss-protection:'; then
@@ -623,6 +916,35 @@ main() {
   echo -e "${GREEN}Starting local CI validation...${NC}"
   detect_scope
 
+  # ROK-1331 M11 — bookend the full validate-ci run with paired events so
+  # dashboards can show "last validate-ci on branch X took T seconds, exit
+  # code C". validate.end fires from an EXIT trap so abort paths (set -e,
+  # ctrl-C, run_step's fail-fast exit) still produce a terminal event.
+  #
+  # ROK-1336 fix: validate_start_ms + ci_flags must be SCRIPT-SCOPE, not
+  # `local` to main(). The EXIT trap fires AFTER main() returns, at which
+  # point locals are out of scope — under set -u the trap aborted with
+  # `validate_start_ms: unbound variable` and validate.end never landed
+  # in the perf log. (Discovered by running validate-ci --only-e2e directly
+  # on the runner and reading the trap's error to stderr.)
+  validate_start_ms=$(perf_now_ms)
+  validate_ci_flags="$*"
+  perf_emit_local "validate.start" "$(python3 -c "
+import json, sys
+print(json.dumps({'ci_flags': sys.argv[1]}))
+" "$validate_ci_flags" 2>/dev/null || echo '{}')"
+  _perf_validate_end() {
+    local rc="$?"
+    local end_ms dur
+    end_ms=$(perf_now_ms)
+    dur=$(( end_ms - validate_start_ms ))
+    perf_emit_local "validate.end" "$(python3 -c "
+import json, sys
+print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2]), 'ci_flags': sys.argv[3]}))
+" "$dur" "$rc" "$validate_ci_flags" 2>/dev/null || echo '{}')"
+  }
+  trap _perf_validate_end EXIT
+
   if ! $only_e2e; then
     run_step "Build (all workspaces)" run_build
     run_step "TypeScript (all)" run_typecheck
@@ -644,4 +966,11 @@ main() {
   echo -e "${GREEN}All checks passed!${NC}"
 }
 
-main "$@"
+# ROK-1331 M6b: when sourced with RL_VALIDATE_CI_DRY=1, expose all
+# functions without auto-running the main pipeline. Lets bash test
+# harnesses source the script and invoke `run_unit_tests` directly with
+# stubbed npm/npx in PATH. Production callers (operators, /push, CI) do
+# NOT set this var so the existing behavior is unchanged.
+if [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
+  main "$@"
+fi

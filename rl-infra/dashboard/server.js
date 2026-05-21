@@ -11,7 +11,7 @@
 
 import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
-import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, readdir, open } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -19,8 +19,23 @@ const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
 const TEST_PLANS_DIR = process.env.TEST_PLANS_DIR || join(STATE_DIR, 'test-plans');
 const ATTACHMENTS_DIR = process.env.ATTACHMENTS_DIR || join(STATE_DIR, 'test-plan-attachments');
+const TASKS_DIR = process.env.TASKS_DIR || join(STATE_DIR, 'tasks');
+const LEASE_QUEUE_DIR = process.env.LEASE_QUEUE_DIR || join(STATE_DIR, 'lease-queue');
+const TASK_LOG_TAIL_BYTES = parseInt(process.env.TASK_LOG_TAIL_BYTES || '51200', 10);
+const TERMINAL_WINDOW_MS = parseInt(process.env.TASK_TERMINAL_WINDOW_MS || '3600000', 10);
+const MAX_ACTIVE_TASKS = 200;
+const KNOWN_TASK_STATUSES = new Set(['running', 'succeeded', 'failed', 'cancelled']);
+const TASK_ID_RE = /^[a-z0-9]{8,32}$/;
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB; phone screenshots are typically <2 MB.
+
+// ROK-1331 M7 — fleet-health thresholds. Match the gc-sweeper's heartbeat
+// timeout (5min) + the M5a lease queue TTL (30min) so a single dial moves
+// both monitor + reaper. Audit-log tail size caps the classifier's work.
+const HEARTBEAT_STALE_SECONDS = parseInt(process.env.HEARTBEAT_STALE_SECONDS || '300', 10);
+const QUEUE_TTL_SECONDS = parseInt(process.env.QUEUE_TTL_SECONDS || '1800', 10);
+const FLEET_HEALTH_AUDIT_TAIL_LINES = parseInt(process.env.FLEET_HEALTH_AUDIT_TAIL_LINES || '200', 10);
+const FLEET_HEALTH_AUDIT_TAIL_BYTES = 256 * 1024; // 256 KiB — enough for 200 audit lines
 // When set, the dashboard renders BOTH http://{slug}.rl.lan (internal) AND
 // http://{slug}.${PUBLIC_DOMAIN} (external, for testers behind your proxy)
 // as links per env. env-spin already writes Traefik routes for both.
@@ -243,6 +258,92 @@ const collectPlanSummaries = async () => {
   }
 };
 
+// Read per-task summaries from `<STATE_DIR>/tasks/*.json` for the dashboard.
+// Strict projection (strips pid/log_path/cmd/agent_id and step/heartbeat
+// details from M1's writer) so /api/state never leaks absolute VM paths or
+// shell args to the public host. M1 writes the files; M3 only reads.
+const collectActiveTasks = async () => {
+  let files;
+  try {
+    files = await readdir(TASKS_DIR);
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const now = Date.now();
+  const out = [];
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    let doc;
+    try {
+      doc = JSON.parse(await readFile(join(TASKS_DIR, f), 'utf-8'));
+    } catch { continue; }
+    if (!doc || typeof doc !== 'object') continue;
+    const { task_id, tool, status, started_at } = doc;
+    if (!task_id || !tool || !started_at) continue;
+    if (!KNOWN_TASK_STATUSES.has(status)) continue;
+    const startedMs = Date.parse(started_at);
+    if (!Number.isFinite(startedMs)) continue;
+    const finished_at = doc.finished_at ?? null;
+    const finishedMs = finished_at ? Date.parse(finished_at) : null;
+    if (status !== 'running') {
+      if (!Number.isFinite(finishedMs)) continue;
+      if (now - finishedMs > TERMINAL_WINDOW_MS) continue;
+    }
+    const elapsedMs = status === 'running'
+      ? now - startedMs
+      : finishedMs - startedMs;
+    out.push({
+      task_id,
+      tool,
+      slot: doc.slot ?? null,
+      args_summary: typeof doc.args_summary === 'string' ? doc.args_summary : '',
+      status,
+      started_at,
+      elapsed_seconds: Math.max(0, Math.floor(elapsedMs / 1000)),
+      finished_at: status === 'running' ? null : finished_at,
+    });
+  }
+  out.sort((a, b) => (Date.parse(b.started_at) || 0) - (Date.parse(a.started_at) || 0));
+  return out.slice(0, MAX_ACTIVE_TASKS);
+};
+
+// ROK-1331 M5b — read per-slot lease-queue/<slot>.json files (M5a writer)
+// and emit one entry per known slot. Slots are taken from the claims array
+// so the dashboard projection stays consistent with whatever the
+// orchestrator considers a valid slot. Missing file → empty queue; bad
+// JSON → empty queue + warn (do NOT 500 the whole /api/state).
+const collectLeaseQueues = async (slots) => {
+  const out = [];
+  for (const s of slots) {
+    if (typeof s.slot !== 'number') continue;
+    const file = join(LEASE_QUEUE_DIR, `${s.slot}.json`);
+    let entry = { slot: s.slot, current_holder: null, queue: [] };
+    try {
+      const raw = await readFile(file, 'utf-8');
+      const parsed = JSON.parse(raw);
+      // M5a's lease-queue file may be either an array (legacy queue-only
+      // shape) or {slot, current_holder, queue} (current shape). Normalize.
+      if (Array.isArray(parsed)) {
+        entry = { slot: s.slot, current_holder: null, queue: parsed };
+      } else if (parsed && typeof parsed === 'object') {
+        entry = {
+          slot: typeof parsed.slot === 'number' ? parsed.slot : s.slot,
+          current_holder: parsed.current_holder ?? null,
+          queue: Array.isArray(parsed.queue) ? parsed.queue : [],
+        };
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        // eslint-disable-next-line no-console
+        console.warn(`[rl-dashboard] lease-queue/${s.slot}.json unreadable: ${err.message}`);
+      }
+    }
+    out.push(entry);
+  }
+  return out;
+};
+
 const handleApiState = async (res) => {
   try {
     const [claims, envs] = await Promise.all([
@@ -250,9 +351,11 @@ const handleApiState = async (res) => {
       readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8'),
     ]);
     const slots = JSON.parse(claims);
-    const [probedSlots, planSummaries] = await Promise.all([
+    const [probedSlots, planSummaries, activeTasks, leaseQueues] = await Promise.all([
       enrichSlotsWithProbes(slots),
       collectPlanSummaries(),
+      collectActiveTasks(),
+      collectLeaseQueues(slots),
     ]);
     // Attach per-env plan summaries to each env entry so the client
     // doesn't need a separate fetch per card.
@@ -265,6 +368,8 @@ const handleApiState = async (res) => {
       ok: true,
       slots: probedSlots,
       envs: enrichedEnvs,
+      active_tasks: activeTasks,
+      lease_queues: leaseQueues,
       public_domain: PUBLIC_DOMAIN || null,
       generated_at: new Date().toISOString(),
     });
@@ -384,6 +489,7 @@ const summarizePlan = (plan) => {
   }
   return {
     total, ...counts,
+    title: stripWrapMaybe(plan.title) ?? null,
     pending_resets: pendingResets,
     comment_count: commentCount,
     last_updated_at: lastUpdated,
@@ -542,43 +648,75 @@ const handleTestPlanGet = async (slug, req, res) => {
   }
 };
 
-// ROK-1326 fix-5: refuse plan creation when no env exists for the slug.
-// Previously the dashboard would happily accept a plan POST for a non-
-// existent slug, the agent would see ok:true and tell the operator the
-// plan was ready, the operator would open the dashboard and find no env
-// AND no plan to interact with. Now: 409 with the available envs in the
-// body so the agent can self-correct (call rl_env_spin/rl_env_deploy
-// first or pick a different slug).
-const envExistsForSlug = async (slug) => {
+// ROK-1326 fix-5 / ROK-1331 M6b chunk-3: refuse plan creation when no env
+// exists for the slug. M6b consolidates the previous two-read pattern
+// (envExistsForSlug + listEnvSlugs each read env-registry.json
+// independently) into a SINGLE loadEnvRegistry call that returns full
+// entries — so the 409 path's `available_envs` and the existence check
+// share ONE filesystem read. Also returns full entries so M5b (Wave 7)
+// can layer lease-queue state on top.
+//
+// ENOENT → empty registry (normal "no envs yet" state).
+// JSON parse error / EACCES / EISDIR → re-throws. Handler boundary
+// converts these to HTTP 500 env_registry_unreadable so the request
+// socket doesn't hang.
+//
+// Malformed entries (missing `slug`) are dropped + console.warn'd so
+// the operator notices corrupt rows in journalctl without the dashboard
+// failing the whole request.
+const loadEnvRegistry = async () => {
+  let raw;
   try {
-    const raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
-    const envs = JSON.parse(raw);
-    return Array.isArray(envs) && envs.some((e) => e && e.slug === slug);
+    raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
   } catch (err) {
-    if (err.code === 'ENOENT') return false;
+    if (err.code === 'ENOENT') return { slugs: [], byId: new Map(), entries: [] };
     throw err;
   }
-};
-
-const listEnvSlugs = async () => {
-  try {
-    const raw = await readFile(join(STATE_DIR, 'env-registry.json'), 'utf-8');
-    const envs = JSON.parse(raw);
-    return Array.isArray(envs) ? envs.map((e) => e && e.slug).filter(Boolean) : [];
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
-  }
+  const envs = JSON.parse(raw);
+  if (!Array.isArray(envs)) return { slugs: [], byId: new Map(), entries: [] };
+  const byId = new Map();
+  const slugs = [];
+  const entries = [];
+  envs.forEach((entry, idx) => {
+    if (!entry || typeof entry !== 'object') {
+      console.warn(`[dashboard] env-registry entry ${idx} is not an object — skipping (got ${typeof entry})`);
+      return;
+    }
+    if (typeof entry.slug !== 'string' || entry.slug.length === 0) {
+      console.warn(`[dashboard] env-registry entry ${idx} missing slug field (malformed/invalid registry entry) — skipping`);
+      return;
+    }
+    if (byId.has(entry.slug)) {
+      console.warn(`[dashboard] env-registry has duplicate slug '${entry.slug}' (entry ${idx} overwrites prior); investigate`);
+    }
+    byId.set(entry.slug, entry);
+    slugs.push(entry.slug);
+    entries.push(entry);
+  });
+  return { slugs, byId, entries };
 };
 
 const handleTestPlanPut = async (slug, req, res) => {
   if (!validSlug(slug)) return sendJson(res, 400, { ok: false, error: 'invalid slug' });
-  if (!(await envExistsForSlug(slug))) {
+  // ROK-1331 M6b chunk-3: wrap the registry read so non-ENOENT errors
+  // (EACCES, EISDIR, JSON parse) produce a 500 response instead of
+  // propagating up and hanging the HTTP socket.
+  let registry;
+  try {
+    registry = await loadEnvRegistry();
+  } catch (err) {
+    return sendJson(res, 500, {
+      ok: false,
+      error: 'env_registry_unreadable',
+      detail: err && typeof err.message === 'string' ? err.message : String(err),
+    });
+  }
+  if (!registry.byId.has(slug)) {
     return sendJson(res, 409, {
       ok: false,
       error: 'env_not_found',
       slug,
-      available_envs: await listEnvSlugs(),
+      available_envs: registry.slugs,
       hint: 'No env exists for this slug. Call rl_env_spin or rl_env_deploy first, then post the plan.',
     });
   }
@@ -797,6 +935,478 @@ const handleAttachmentGet = async (slug, filename, res) => {
   }
 };
 
+// GET /api/tasks/<task_id>/log
+// Returns the last TASK_LOG_TAIL_BYTES (50 KiB default) of the task's append-
+// only log file. No auth — same trust model as the dashboard itself
+// (operator LAN + Cloudflare). 50 KiB caps the response so a 5+ MiB log
+// can't blow up a phone's memory; operators wanting more SSH to the VM.
+const handleTaskLog = async (taskId, req, res) => {
+  if (!TASK_ID_RE.test(taskId)) {
+    return sendJson(res, 400, { ok: false, error: 'invalid task_id' });
+  }
+  let handle = null;
+  try {
+    handle = await open(join(TASKS_DIR, `${taskId}.log`), 'r');
+    const stat = await handle.stat();
+    const size = stat.size;
+    const tail = Math.min(size, TASK_LOG_TAIL_BYTES);
+    const buf = Buffer.alloc(tail);
+    const start = size - tail;
+    const { bytesRead } = await handle.read(buf, 0, tail, start);
+    res.writeHead(200, {
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+    });
+    res.end(buf.subarray(0, bytesRead));
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Not Found');
+      return;
+    }
+    res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('Server Error');
+  } finally {
+    if (handle) { try { await handle.close(); } catch { /* ignore */ } }
+  }
+};
+
+// ----- ROK-1331 M7: GET /api/fleet-health --------------------------------
+//
+// Aggregate fleet-health snapshot for agent monitors. One cheap read covers
+// (a) stale-heartbeat slots (claim's last_heartbeat > HEARTBEAT_STALE_SECONDS),
+// (b) queue-stuck waiters (lease-queue requested_at age > QUEUE_TTL_SECONDS),
+// (c) recent audit-log error categories (tail + regex classify), and
+// (d) per-runner warnings (mem >90% — best-effort; v1 stub).
+//
+// No auth — same trust model as the rest of the dashboard (operator LAN +
+// Cloudflare). The endpoint is read-only and aggregates state the dashboard
+// already shows, so leakage surface is no broader than /api/state.
+//
+// Used by the rl_fleet_health MCP tool so agents can self-diagnose flakes
+// (e.g. "did my socket-hang-up count just spike?") without SSH access.
+
+const AUDIT_ERROR_CATEGORIES = [
+  { name: 'permission_denied', pattern: /permission\s+denied/i },
+  { name: 'exit_255', pattern: /\bexit(?:ed)?\s*(?:code\s*)?255\b/i },
+  { name: 'oom', pattern: /\b(?:OOM|out of memory|oomkilled)\b/i },
+  { name: 'socket_hang_up', pattern: /socket\s+hang\s+up/i },
+  { name: 'inotify_missing', pattern: /\binotify(?:wait)?[^a-z]?\s*(?:not\s+(?:installed|found)|missing|command\s+not\s+found)/i },
+  { name: 'dubious_ownership', pattern: /dubious\s+ownership/i },
+  { name: 'illegal_instruction', pattern: /illegal\s+instruction/i },
+];
+
+// ROK-1331 M11 — perf.log tail + summarisation.
+//
+// Surfaces fleet-wide perf signals on the same /api/fleet-health endpoint
+// the agent monitor already polls. Tail-bounded (256 KiB) so the
+// classifier can never DoS the dashboard regardless of perf.log size; the
+// LOGROTATE daily rotation keeps the file under that cap in practice.
+//
+// MUST NEVER 500 — every read path is wrapped in try/catch and falls
+// through to safe defaults. Same posture as classifyAuditLines.
+const FLEET_HEALTH_PERF_TAIL_BYTES = 256 * 1024;
+const PERF_SUMMARY_WINDOW_MINUTES = parseInt(process.env.PERF_SUMMARY_WINDOW_MINUTES || '15', 10);
+
+const tailPerfLog = async () => {
+  let handle = null;
+  try {
+    handle = await open(join(STATE_DIR, 'perf.log'), 'r');
+    const stat = await handle.stat();
+    const size = stat.size;
+    const tail = Math.min(size, FLEET_HEALTH_PERF_TAIL_BYTES);
+    const buf = Buffer.alloc(tail);
+    const start = size - tail;
+    const { bytesRead } = await handle.read(buf, 0, tail, start);
+    const text = buf.subarray(0, bytesRead).toString('utf-8');
+    const lines = text.split('\n').filter((l) => l.length > 0);
+    if (start > 0 && lines.length > 0) lines.shift(); // drop partial leading line
+    const events = [];
+    for (const line of lines) {
+      try {
+        const ev = JSON.parse(line);
+        if (ev && typeof ev === 'object' && typeof ev.event === 'string') {
+          events.push(ev);
+        }
+      } catch {
+        // Malformed line — skip. perf::emit shouldn't produce these, but a
+        // mid-write crash or hand-edit could leave one behind. Skipping is
+        // the right posture — never 500 the endpoint.
+      }
+    }
+    return events;
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    return [];
+  } finally {
+    if (handle) { try { await handle.close(); } catch { /* ignore */ } }
+  }
+};
+
+const summarisePerfEvents = (events, claims, nowMs) => {
+  const windowMs = PERF_SUMMARY_WINDOW_MINUTES * 60_000;
+  const cutoff = nowMs - windowMs;
+  let lastValidate = null;
+  const stepBuckets = new Map(); // step -> [ms, ms, ...]
+  let lastPkillSurvivors = 0;
+  let lastPkillTs = 0;
+  let lastGcCycleMs = null;
+  let lastGcTs = 0;
+  for (const ev of events) {
+    const tsMs = Date.parse(ev.ts);
+    if (!Number.isFinite(tsMs)) continue;
+    if (ev.event === 'validate.end' && typeof ev.duration_ms === 'number') {
+      if (!lastValidate || tsMs > Date.parse(lastValidate.ts)) {
+        lastValidate = {
+          ts: ev.ts,
+          branch: ev.branch ?? null,
+          duration_ms: ev.duration_ms,
+          exit_code: typeof ev.exit_code === 'number' ? ev.exit_code : null,
+          slot: typeof ev.slot === 'number' ? ev.slot : null,
+        };
+      }
+    } else if (ev.event === 'validate.step.end' && typeof ev.duration_ms === 'number' && typeof ev.step === 'string') {
+      if (tsMs >= cutoff) {
+        const arr = stepBuckets.get(ev.step) ?? [];
+        arr.push(ev.duration_ms);
+        stepBuckets.set(ev.step, arr);
+      }
+    } else if (ev.event === 'release.pkill_audit' && typeof ev.surviving_count === 'number') {
+      if (tsMs >= lastPkillTs) {
+        lastPkillTs = tsMs;
+        lastPkillSurvivors = ev.surviving_count;
+      }
+    } else if (ev.event === 'gc.sweep.cycle' && typeof ev.duration_ms === 'number') {
+      if (tsMs >= lastGcTs) {
+        lastGcTs = tsMs;
+        lastGcCycleMs = ev.duration_ms;
+      }
+    }
+  }
+  const p50 = {};
+  for (const [step, samples] of stepBuckets) {
+    samples.sort((a, b) => a - b);
+    p50[step] = samples[Math.floor(samples.length / 2)];
+  }
+  const claimsHeldMinutes = [];
+  if (Array.isArray(claims)) {
+    for (const c of claims) {
+      if (!c || c.claimed !== true || !c.started_at) continue;
+      const startedMs = Date.parse(c.started_at);
+      if (!Number.isFinite(startedMs)) continue;
+      claimsHeldMinutes.push({
+        slot: c.slot,
+        agent_id: c.agent_id ?? null,
+        held_for_ms: Math.max(0, nowMs - startedMs),
+      });
+    }
+  }
+  return {
+    window_minutes: PERF_SUMMARY_WINDOW_MINUTES,
+    last_validate_ci: lastValidate,
+    p50_validate_step_ms: p50,
+    claims_held_minutes: claimsHeldMinutes,
+    pkill_survivors_last_release: lastPkillSurvivors,
+    gc_sweep_last_cycle_ms: lastGcCycleMs,
+  };
+};
+
+const tailAuditLog = async () => {
+  let handle = null;
+  try {
+    handle = await open(join(STATE_DIR, 'audit.log'), 'r');
+    const stat = await handle.stat();
+    const size = stat.size;
+    const tail = Math.min(size, FLEET_HEALTH_AUDIT_TAIL_BYTES);
+    const buf = Buffer.alloc(tail);
+    const start = size - tail;
+    const { bytesRead } = await handle.read(buf, 0, tail, start);
+    const text = buf.subarray(0, bytesRead).toString('utf-8');
+    // Drop the first (potentially partial) line when we didn't read from
+    // byte 0 — keeps the classifier from matching across line boundaries.
+    const lines = text.split('\n').filter((l) => l.length > 0);
+    if (start > 0 && lines.length > 0) lines.shift();
+    return lines.slice(-FLEET_HEALTH_AUDIT_TAIL_LINES);
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    // Surface as empty — fleet-health must NEVER 500 on audit.log issues.
+    return [];
+  } finally {
+    if (handle) { try { await handle.close(); } catch { /* ignore */ } }
+  }
+};
+
+const classifyAuditLines = (lines) => {
+  // Build the result skeleton FIRST so empty categories still appear with
+  // count:0 — matches the response shape contract.
+  const out = AUDIT_ERROR_CATEGORIES.map((c) => ({
+    category: c.name, count: 0, last_seen: null, sample: '',
+  }));
+  for (const line of lines) {
+    // The classifier reads the raw line — audit.log entries are JSON, but
+    // the patterns above match substrings (error messages, exit codes) that
+    // live anywhere in the line. We don't parse the JSON since malformed
+    // lines should still be classifiable; the `ts` field is extracted
+    // best-effort for last_seen.
+    let ts = null;
+    const tsMatch = line.match(/"ts"\s*:\s*"([^"]+)"/);
+    if (tsMatch) ts = tsMatch[1];
+    for (let i = 0; i < AUDIT_ERROR_CATEGORIES.length; i++) {
+      if (AUDIT_ERROR_CATEGORIES[i].pattern.test(line)) {
+        out[i].count += 1;
+        if (ts && (!out[i].last_seen || ts > out[i].last_seen)) {
+          out[i].last_seen = ts;
+        }
+        if (!out[i].sample) {
+          // Sample is the first 200 chars of the matching line — enough to
+          // recognize the failure shape without leaking giant tracebacks.
+          out[i].sample = line.slice(0, 200);
+        }
+      }
+    }
+  }
+  return out;
+};
+
+const collectStaleSlots = async (nowMs) => {
+  let claimsRaw;
+  try {
+    claimsRaw = await readFile(join(STATE_DIR, 'claims.json'), 'utf-8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  let claims;
+  try { claims = JSON.parse(claimsRaw); } catch { return []; }
+  if (!Array.isArray(claims)) return [];
+  const out = [];
+  for (const c of claims) {
+    if (!c || c.claimed !== true) continue;
+    if (!c.last_heartbeat) continue;
+    const hbMs = Date.parse(c.last_heartbeat);
+    if (!Number.isFinite(hbMs)) continue;
+    const age = Math.floor((nowMs - hbMs) / 1000);
+    if (age > HEARTBEAT_STALE_SECONDS) {
+      out.push({
+        slot: c.slot,
+        agent_id: c.agent_id ?? null,
+        branch: c.branch ?? null,
+        heartbeat_age_seconds: age,
+      });
+    }
+  }
+  return out;
+};
+
+const collectQueueStuck = async (nowMs) => {
+  let files;
+  try { files = await readdir(LEASE_QUEUE_DIR); } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const out = [];
+  for (const f of files) {
+    if (!f.endsWith('.json')) continue;
+    let entries;
+    try {
+      const raw = await readFile(join(LEASE_QUEUE_DIR, f), 'utf-8');
+      const parsed = JSON.parse(raw);
+      entries = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.queue) ? parsed.queue : [];
+    } catch { continue; }
+    for (const e of entries) {
+      if (!e || !e.requested_at) continue;
+      const reqMs = Date.parse(e.requested_at);
+      if (!Number.isFinite(reqMs)) continue;
+      const queued_for_seconds = Math.floor((nowMs - reqMs) / 1000);
+      if (queued_for_seconds > QUEUE_TTL_SECONDS) {
+        out.push({
+          agent_id: e.agent_id ?? null,
+          branch: e.branch ?? null,
+          queued_for_seconds,
+          exceeds_ttl: true,
+        });
+      }
+    }
+  }
+  return out;
+};
+
+// ROK-1336 — derive "slots still claimed by an agent whose last validate-ci
+// exited non-zero" from the same audit tail the classifier uses. Mitigates
+// the rl-CLI-no-auto-release-on-failure UX gap: callers polling fleet-health
+// can spot leaked slots (where the heartbeat daemon is keeping the lease
+// alive but the agent's actual work errored out and they may have walked
+// away). Cross-refs audit.log validate-ci end events with current claims;
+// only surfaces overlap, never standalone history.
+const collectHeldSlotsWithFailedValidateCi = (auditLines, claims) => {
+  if (!Array.isArray(claims) || claims.length === 0) return [];
+  const claimByAgent = new Map();
+  for (const c of claims) {
+    if (c && c.claimed === true && c.agent_id) {
+      claimByAgent.set(c.agent_id, c);
+    }
+  }
+  if (claimByAgent.size === 0) return [];
+  const latestFailedByAgent = new Map();
+  for (const line of auditLines) {
+    let ev;
+    try { ev = JSON.parse(line); } catch { continue; }
+    if (!ev || typeof ev !== 'object') continue;
+    if (ev.outcome !== 'end') continue;
+    if (typeof ev.cmd !== 'string' || !ev.cmd.includes('/workspace/scripts/validate-ci.sh')) continue;
+    const rc = typeof ev.rc === 'number' ? ev.rc : null;
+    if (rc === null || rc === 0) continue;
+    if (!ev.agent || !claimByAgent.has(ev.agent)) continue;
+    const tsMs = Date.parse(ev.ts);
+    if (!Number.isFinite(tsMs)) continue;
+    const existing = latestFailedByAgent.get(ev.agent);
+    if (!existing || tsMs > existing.tsMs) {
+      latestFailedByAgent.set(ev.agent, {
+        tsMs,
+        agent_id: ev.agent,
+        slot: typeof ev.slot === 'number' ? ev.slot : claimByAgent.get(ev.agent).slot,
+        last_failed_at: ev.ts,
+        exit_code: rc,
+      });
+    }
+  }
+  return [...latestFailedByAgent.values()]
+    .sort((a, b) => b.tsMs - a.tsMs)
+    .map(({ tsMs: _omit, ...rest }) => rest);
+};
+
+const handleFleetHealth = async (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('Method Not Allowed');
+    return;
+  }
+  try {
+    const nowMs = Date.now();
+    // ROK-1331 M11 — read claims for both stale-slot detection AND
+    // claims_held_minutes derivation; tail perf.log alongside audit.log.
+    const claimsP = readFile(join(STATE_DIR, 'claims.json'), 'utf-8')
+      .then((raw) => { try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; } })
+      .catch(() => []);
+    const [stale_heartbeat_slots, queue_stuck, audit_lines, perf_events, claims] = await Promise.all([
+      collectStaleSlots(nowMs).catch(() => []),
+      collectQueueStuck(nowMs).catch(() => []),
+      tailAuditLog(),
+      tailPerfLog().catch(() => []),
+      claimsP,
+    ]);
+    const recent_audit_errors = classifyAuditLines(audit_lines);
+    // v1 stub — runner warnings come from docker stats and require a host
+    // shell-out. Leave the field present so MCP clients can iterate; the
+    // sweeper / operator can wire real signals later.
+    const runner_warnings = [];
+
+    // ROK-1331 M11 — additive perf_summary field. Defaults are safe (null /
+    // empty / 0) when perf.log is missing, so MCP clients can iterate the
+    // shape unconditionally.
+    let perf_summary;
+    try {
+      perf_summary = summarisePerfEvents(perf_events, claims, nowMs);
+    } catch {
+      perf_summary = {
+        window_minutes: PERF_SUMMARY_WINDOW_MINUTES,
+        last_validate_ci: null,
+        p50_validate_step_ms: {},
+        claims_held_minutes: [],
+        pkill_survivors_last_release: 0,
+        gc_sweep_last_cycle_ms: null,
+      };
+    }
+
+    // ROK-1336 — held slots whose last validate-ci exited non-zero. Cheap
+    // derivation from already-tailed audit lines + claims snapshot. Empty
+    // array is the happy path. Doesn't contribute to warning_count (slots
+    // are valid leases, just dirty — caller decides).
+    let held_slots_with_failed_validate_ci = [];
+    try {
+      held_slots_with_failed_validate_ci = collectHeldSlotsWithFailedValidateCi(audit_lines, claims);
+    } catch { /* keep default empty */ }
+
+    const stuck_queue_entries = queue_stuck.length;
+    const stale_slots = stale_heartbeat_slots.length;
+    const audit_error_total = recent_audit_errors.reduce((acc, c) => acc + c.count, 0);
+    const warning_count = stale_slots + stuck_queue_entries + audit_error_total + runner_warnings.length;
+    sendJson(res, 200, {
+      generated_at: new Date(nowMs).toISOString(),
+      stale_heartbeat_slots,
+      queue_stuck,
+      runner_warnings,
+      recent_audit_errors,
+      perf_summary,
+      held_slots_with_failed_validate_ci,
+      summary: {
+        ok: warning_count === 0,
+        warning_count,
+        stale_slots,
+        stuck_queue_entries,
+        held_slots_with_failed_validate_ci: held_slots_with_failed_validate_ci.length,
+      },
+    });
+  } catch (err) {
+    sendJson(res, 500, { ok: false, error: err.message });
+  }
+};
+
+// ROK-1331 M11 — POST /api/perf-emit
+//
+// MCP clients call this from their per-tool finally{} blocks to surface
+// mcp.tool.call latency events into the same perf.log the orchestrator
+// writes to. Body shape:
+//   { event, source, tool_name, agent_id, latency_ms, status }
+//
+// No auth — same trust model as the rest of the dashboard (operator LAN +
+// Cloudflare). Body fields are whitelisted to a fixed shape so a hostile
+// caller can't inject arbitrary keys into the log. Rate-limited by the
+// existing POST handler (30/min/IP).
+const PERF_EMIT_ALLOWED_EVENTS = new Set([
+  'mcp.tool.call', 'mcp.task.status.poll', 'mcp.claim.decision',
+]);
+const handlePerfEmit = async (req, res) => {
+  if (req.method !== 'POST') {
+    res.writeHead(405); res.end('Method Not Allowed'); return;
+  }
+  let body;
+  try { body = await readJsonBody(req, 4 * 1024); }
+  catch (err) { return sendBodyError(res, err); }
+
+  const event = typeof body.event === 'string' && PERF_EMIT_ALLOWED_EVENTS.has(body.event)
+    ? body.event : null;
+  if (!event) return sendJson(res, 400, { ok: false, error: 'event must be one of: ' + [...PERF_EMIT_ALLOWED_EVENTS].join(', ') });
+  const toolName = typeof body.tool_name === 'string'
+    ? body.tool_name.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 60) : null;
+  const agentId = typeof body.agent_id === 'string'
+    ? body.agent_id.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 60) : null;
+  const latencyMs = Number.isFinite(body.latency_ms) ? Math.max(0, Math.floor(body.latency_ms)) : null;
+  const status = body.status === 'ok' || body.status === 'error' ? body.status : 'ok';
+
+  const line = JSON.stringify({
+    ts: new Date().toISOString(),
+    event,
+    source: 'mcp',
+    agent_id: agentId,
+    branch: typeof body.branch === 'string' ? body.branch.slice(0, 100) : 'unknown',
+    tool_name: toolName,
+    latency_ms: latencyMs,
+    status,
+  });
+  try {
+    const { appendFile } = await import('node:fs/promises');
+    await appendFile(join(STATE_DIR, 'perf.log'), line + '\n');
+  } catch (err) {
+    // Mirror perf::emit's posture — never 500 on disk-side issues. Log to
+    // stderr so the operator notices via journalctl but the caller (MCP
+    // client) still gets a 202.
+    // eslint-disable-next-line no-console
+    console.warn(`[dashboard] perf-emit write failed: ${err.message}`);
+  }
+  sendJson(res, 202, { ok: true });
+};
+
 // POST /api/test-plans/<slug>/step/<id>/comment
 // Tester free-form comment per step. CRITICAL: this body is NOT
 // surfaced to the LLM via rl_test_plan_status / rl_test_plan_wait
@@ -1012,6 +1622,13 @@ const RE_COMMENT = /^\/api\/test-plans\/([a-z0-9-]+)\/step\/(\d+)\/comment$/;
 const RE_SUBMIT = /^\/api\/test-plans\/([a-z0-9-]+)\/submit$/;
 const RE_ATTACH_POST = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment$/;
 const RE_ATTACH_GET = /^\/api\/test-plans\/([a-z0-9-]+)\/attachment\/([A-Za-z0-9.-]+)$/;
+// Route regex is permissive (alphanumeric + underscore) so the handler can
+// emit a 400 with a clear error body for shape-valid-but-strict-invalid ids
+// (uppercase, too short, too long). The handler then enforces the canonical
+// `[a-z0-9]{8,32}` shape via TASK_ID_RE before any filesystem touch.
+// Path-traversal-shaped ids (containing `/`) don't match this route at all
+// and fall through to the static 404 — by design.
+const RE_TASK_LOG = /^\/api\/tasks\/([A-Za-z0-9_]+)\/log$/;
 
 const server = createServer(async (req, res) => {
   // Split path from query so the route regexes (which use $) still match
@@ -1034,6 +1651,14 @@ const server = createServer(async (req, res) => {
   }
   if (pathOnly === '/api/state') {
     await handleApiState(res);
+    return;
+  }
+  if (pathOnly === '/api/fleet-health') {
+    await handleFleetHealth(req, res);
+    return;
+  }
+  if (pathOnly === '/api/perf-emit') {
+    await handlePerfEmit(req, res);
     return;
   }
   if (pathOnly === '/api/test-plans' && req.method === 'GET') {
@@ -1080,10 +1705,21 @@ const server = createServer(async (req, res) => {
     }
     return handleAttachmentGet(attachGetMatch[1], attachGetMatch[2], res);
   }
+  const taskLogMatch = RE_TASK_LOG.exec(pathOnly);
+  if (taskLogMatch) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405); res.end('Method Not Allowed'); return;
+    }
+    return handleTaskLog(taskLogMatch[1], req, res);
+  }
   await serveStatic(req, res);
 });
 
 server.listen(PORT, '0.0.0.0', () => {
+  // Read the actual bound port from server.address() so PORT=0 (random
+  // port for tests) prints a real :<n> the test harness can parse.
+  const addr = server.address();
+  const boundPort = addr && typeof addr === 'object' ? addr.port : PORT;
   // eslint-disable-next-line no-console
-  console.log(`rl-dashboard listening on :${PORT}, state=${STATE_DIR}, public=${PUBLIC_DIR}`);
+  console.log(`rl-dashboard listening on :${boundPort}, state=${STATE_DIR}, public=${PUBLIC_DIR}`);
 });

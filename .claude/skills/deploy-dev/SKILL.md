@@ -13,7 +13,9 @@ unix-socket Redis) stack instead of the dev watch-mode loop and offloads CPU/RAM
 from the laptop:
 
 ```bash
-rl claim --branch $(git branch --show-current)
+rl claim --branch $(git branch --show-current)   # may enqueue with queue_position=N
+# If the CLI prints `enqueued queue_position=N`, fleet contention is real —
+# call `rl_claim_wait` (MCP) until head, OR run locally via `RL_TARGET=local ./scripts/deploy_dev.sh --ci`.
 rl env spin $(git branch --show-current | tr / -)
 ```
 

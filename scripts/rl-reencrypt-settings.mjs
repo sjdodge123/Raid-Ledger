@@ -144,8 +144,19 @@ function encryptWithKey(text, key) {
   return `${iv.toString('hex')}:${auth.toString('hex')}:${enc.toString('hex')}`;
 }
 
-function sqlSingleQuote(s) {
-  return s.replace(/'/g, "''");
+const DOLLAR_TAG = '$rl$';
+function sqlDollarQuote(s) {
+  // Postgres dollar-quoted literal. The parser treats the first matching
+  // tag as the close, so we refuse to emit if the input ever contains the
+  // tag. For today's data (alphanumeric keys + iv:authTag:cipher hex
+  // triplets) collision is impossible; the assertion documents the
+  // precondition so a future caller can't silently break the round-trip.
+  if (s.includes(DOLLAR_TAG)) {
+    throw new Error(
+      `rl-reencrypt: value contains ${DOLLAR_TAG} delimiter; refusing to emit`,
+    );
+  }
+  return `${DOLLAR_TAG}${s}${DOLLAR_TAG}`;
 }
 
 function buildUpsert(key, encrypted) {
@@ -154,7 +165,7 @@ function buildUpsert(key, encrypted) {
   // idempotency on repeat runs.
   return (
     `INSERT INTO app_settings (key, encrypted_value, created_at, updated_at) ` +
-    `VALUES ('${sqlSingleQuote(key)}', '${sqlSingleQuote(encrypted)}', now(), now()) ` +
+    `VALUES (${sqlDollarQuote(key)}, ${sqlDollarQuote(encrypted)}, now(), now()) ` +
     `ON CONFLICT (key) DO UPDATE ` +
     `SET encrypted_value = EXCLUDED.encrypted_value, updated_at = now();`
   );
@@ -175,6 +186,7 @@ async function main() {
   const lines = input.split(/\r?\n/).filter((l) => l.length > 0);
   const seenKeys = new Set();
   const out = [];
+  let substitutedFromSource = 0;
 
   if (args.truncate) out.push('TRUNCATE app_settings CASCADE;');
 
@@ -195,6 +207,7 @@ async function main() {
     let plaintext;
     if (args.substitutes.has(key)) {
       plaintext = args.substitutes.get(key);
+      substitutedFromSource++;
     } else {
       try {
         plaintext = decryptWithKey(encrypted, srcKey);
@@ -221,8 +234,14 @@ async function main() {
   }
 
   process.stdout.write(out.join('\n') + '\n');
+  // End-of-run summary: `decrypted N, substituted M from source + K synthetic`.
+  // When every input row was substitute-overridden, decrypted = 0 — a loud
+  // canary that the source secret didn't actually exercise the decrypt path.
+  const decryptedCount = lines.length - substitutedFromSource;
   console.error(
-    `re-encrypted ${lines.length} row(s); added ${inserted} substitute(s) not present in source`,
+    `re-encrypted ${lines.length} row(s); ` +
+      `decrypted ${decryptedCount}, ` +
+      `substituted ${substitutedFromSource} from source + ${inserted} synthetic`,
   );
 }
 

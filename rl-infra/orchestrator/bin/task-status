@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# ROK-1331 M1 — task-status
+# Usage: task-status <task_id> [--log-tail-bytes <N>]
+#
+# Reads /srv/rl-infra/state/tasks/<task_id>.json, appends log_tail (last N
+# bytes of <task_id>.log, default 51200), and an elapsed_seconds field computed
+# at read time. Pure reader — no flock required.
+set -uo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+
+LOG_TAIL_BYTES=51200
+TASK_ID=""
+
+if [[ $# -lt 1 ]]; then
+    echo '{"ok":false,"error":"missing_task_id"}' >&2
+    exit 2
+fi
+TASK_ID="$1"
+shift
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --log-tail-bytes) LOG_TAIL_BYTES="$2"; shift 2 ;;
+        *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
+    esac
+done
+
+if ! [[ "$TASK_ID" =~ ^[a-z0-9]{8,32}$ ]]; then
+    echo '{"ok":false,"error":"invalid_task_id"}' >&2
+    exit 2
+fi
+
+JSON_PATH="$RL_TASKS_DIR/$TASK_ID.json"
+LOG_PATH="$RL_TASKS_DIR/$TASK_ID.log"
+
+if [[ ! -f "$JSON_PATH" ]]; then
+    echo '{"ok":false,"error":"not_found"}' >&2
+    exit 2
+fi
+
+# Compute log_tail. tail -c N + cat-on-empty for portability.
+LOG_TAIL=""
+if [[ -f "$LOG_PATH" ]]; then
+    LOG_TAIL=$(tail -c "$LOG_TAIL_BYTES" "$LOG_PATH" 2>/dev/null || true)
+fi
+
+# elapsed_seconds computed at read time. Started_at is ISO-8601; we coerce both
+# date(1) flavors (BSD on macOS, GNU on Linux) via parallel parses.
+NOW_EPOCH=$(date -u +%s)
+to_epoch() {
+    local iso="$1"
+    if [[ -z "$iso" || "$iso" == "null" ]]; then
+        echo "$NOW_EPOCH"
+        return
+    fi
+    local clean="${iso%Z}"
+    # Try GNU date first, then BSD date.
+    date -u -d "$iso" +%s 2>/dev/null || \
+        date -u -j -f "%Y-%m-%dT%H:%M:%S" "$clean" +%s 2>/dev/null || \
+        echo "$NOW_EPOCH"
+}
+
+STARTED_AT=$(jq -r '.started_at // ""' "$JSON_PATH" 2>/dev/null)
+FINISHED_AT=$(jq -r '.finished_at // ""' "$JSON_PATH" 2>/dev/null)
+START_EPOCH=$(to_epoch "$STARTED_AT")
+if [[ -n "$FINISHED_AT" && "$FINISHED_AT" != "null" ]]; then
+    END_EPOCH=$(to_epoch "$FINISHED_AT")
+else
+    END_EPOCH="$NOW_EPOCH"
+fi
+ELAPSED=$(( END_EPOCH - START_EPOCH ))
+(( ELAPSED < 0 )) && ELAPSED=0
+
+# Merge log_tail + elapsed into the JSON output, plus the MCP success
+# envelope fields. ROK-1331 Session 4 dogfood (Codex P1-1): MCP callers
+# expect `ok: true` + `mcp_runtime_status` (mirror of `.status`) + `log_url`
+# on every successful read. Without them, `executeStatus` parsing leaves
+# `ok=undefined` and the wait-chain treats successful reads as failures.
+RL_FLEET_DOMAIN="${RL_FLEET_DOMAIN:-fleet.gamernight.net}"
+LOG_URL="https://${RL_FLEET_DOMAIN}/api/tasks/${TASK_ID}/log"
+jq --rawfile tail <(printf '%s' "$LOG_TAIL") \
+   --argjson elapsed "$ELAPSED" \
+   --arg log_url "$LOG_URL" \
+   '. + {ok: true, mcp_runtime_status: .status, log_url: $log_url, log_tail: $tail, elapsed_seconds: $elapsed}' \
+   "$JSON_PATH"

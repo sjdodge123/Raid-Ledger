@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# ROK-1331 M1 — task-cancel
+# Usage: task-cancel <task_id> <reason>
+#
+# SIGTERM the pid recorded in <task_id>.json, SIGKILL after 10s grace, flip JSON
+# status to "cancelled". Already-terminal tasks are a noop.
+set -uo pipefail
+BIN_DIR_SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$BIN_DIR_SELF/_state.sh"
+# _state.sh enables `set -e`. task-cancel needs to tolerate transient failures
+# in state::mutate (flock missing on macOS test runners; race between cancel
+# and the supervisor's finalize block on Linux) and continue to the kill loop.
+set +e
+
+if [[ $# -lt 2 ]]; then
+    echo '{"ok":false,"error":"missing_args"}' >&2
+    exit 2
+fi
+TASK_ID="$1"
+REASON="$2"
+
+if ! [[ "$TASK_ID" =~ ^[a-z0-9]{8,32}$ ]]; then
+    echo '{"ok":false,"error":"invalid_task_id"}' >&2
+    exit 2
+fi
+if (( ${#REASON} > 256 )); then
+    REASON="${REASON:0:256}"
+fi
+
+JSON_PATH="$RL_TASKS_DIR/$TASK_ID.json"
+if [[ ! -f "$JSON_PATH" ]]; then
+    echo '{"ok":false,"error":"not_found"}' >&2
+    exit 2
+fi
+
+PREV_STATUS=$(jq -r '.status // "unknown"' "$JSON_PATH" 2>/dev/null || echo "unknown")
+
+# Noop path: already terminal. Return killed:false without state mutation.
+if [[ "$PREV_STATUS" != "running" ]]; then
+    jq -nc --arg t "$TASK_ID" --arg ps "$PREV_STATUS" \
+        '{ok: true, task_id: $t, previous_status: $ps, killed: false}'
+    task::audit "$TASK_ID" "cancel" "noop" \
+        "$(jq -nc --arg ps "$PREV_STATUS" --arg r "$REASON" '{previous_status: $ps, reason: $r}')"
+    exit 0
+fi
+
+# Wait briefly for pid to populate if the supervisor is still booting.
+PID=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    PID=$(jq -r '.pid // "null"' "$JSON_PATH" 2>/dev/null || echo "null")
+    [[ -n "$PID" && "$PID" != "null" ]] && break
+    sleep 0.1
+done
+
+FINISHED_AT=$(date -u +%FT%TZ)
+
+# Flip the JSON BEFORE killing so the supervisor's exit hook sees "cancelled"
+# and won't overwrite to "failed". This ordering is per spec §task-cancel item 1.
+state::mutate "$JSON_PATH" --arg r "$REASON" --arg f "$FINISHED_AT" \
+    '.status = "cancelled" | .cancel_reason = $r | (if .finished_at == null then .finished_at = $f else . end)'
+
+KILLED="false"
+NOTE=""
+if [[ -n "$PID" && "$PID" != "null" ]]; then
+    # Target the process group (kill -<pgid>). Process groups under `set -m`
+    # share pgid == pid, so this kills the wrapped cmd + any children.
+    kill -TERM -- "-$PID" 2>/dev/null || kill -TERM "$PID" 2>/dev/null || true
+    KILLED="true"
+
+    # Wait up to 10s for graceful exit (spec §task-cancel item 2).
+    waited=0
+    while (( waited < 100 )); do
+        if ! kill -0 "$PID" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    if kill -0 "$PID" 2>/dev/null; then
+        kill -KILL -- "-$PID" 2>/dev/null || kill -KILL "$PID" 2>/dev/null || true
+    fi
+else
+    NOTE="no_pid_recorded"
+fi
+
+task::audit "$TASK_ID" "cancel" "ok" \
+    "$(jq -nc --arg r "$REASON" --argjson k "$([[ $KILLED == true ]] && echo true || echo false)" \
+        '{reason: $r, killed: $k}')"
+
+if [[ -n "$NOTE" ]]; then
+    jq -nc --arg t "$TASK_ID" --argjson k "$([[ $KILLED == true ]] && echo true || echo false)" \
+        --arg n "$NOTE" \
+        '{ok: true, task_id: $t, previous_status: "running", killed: $k, note: $n}'
+else
+    jq -nc --arg t "$TASK_ID" --argjson k "$([[ $KILLED == true ]] && echo true || echo false)" \
+        '{ok: true, task_id: $t, previous_status: "running", killed: $k}'
+fi

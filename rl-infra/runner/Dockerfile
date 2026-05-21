@@ -15,8 +15,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # the dev/CI scripts expect plus debugging niceties.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg jq tmux htop tcpdump strace lsof \
-        postgresql-client redis-tools rsync git unzip make build-essential \
-        netcat-openbsd iproute2 dnsutils && \
+        redis-tools rsync git unzip make build-essential \
+        netcat-openbsd iproute2 dnsutils inotify-tools \
+        lsb-release && \
+    # ROK-1331 dogfood (2026-05-20): install postgresql-client-16 specifically
+    # so pg_dump matches the postgres testcontainers' server version (pg 16.x
+    # via pgvector/pgvector:pg16). Default Ubuntu repo's `postgresql-client`
+    # pulls v14, which can't dump from a v16 server (server version mismatch).
+    # The official postgresql apt repo provides version-specific packages.
+    install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
+        gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] \
+        http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        postgresql-client-16 && \
     # Docker CLI (no daemon — uses the host docker.sock).
     install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \

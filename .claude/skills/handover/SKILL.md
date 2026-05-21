@@ -8,7 +8,7 @@ allowed-tools: "Bash(git *), Bash(gh *), Bash(./scripts/deploy_dev.sh*), Bash(./
 
 End-of-session cleanup: shut down agent teams, manage open PRs, clean up worktrees, sync Linear, rebuild for manual testing, and capture session context for the next `/init`.
 
-**rl-infra fleet:** When `RL_TARGET=remote`, also `rl release` for every slot this session claimed before exiting. The gc-sweeper will auto-reclaim within ~20min anyway, but explicit release frees the slot immediately for the next agent. The "rebuild for testing" step becomes `rl env spin <slug>` (prod-like allinone) rather than `deploy_dev.sh`. See `.claude/skills/_shared/rl-infra-fleet.md`.
+**rl-infra fleet:** When `RL_TARGET=remote`, also `rl release` for every slot this session claimed (or for any `rl_claim`/`rl_claim_wait` that landed) before exiting. **As of M5a, `rl_release` defaults to preserve-envs** — the slot's child envs are marked claimable_by_next so the next queued agent inherits them (skip-deploy fast path). Pass `--destroy-envs` (CLI) or `{destroy_envs: true}` (MCP) when you intentionally want a clean slate. The gc-sweeper will auto-reclaim a missed release within ~20min anyway, but explicit release frees the slot immediately for the next agent. The "rebuild for testing" step becomes `rl env spin <slug>` (prod-like allinone) rather than `deploy_dev.sh`. See `.claude/skills/_shared/rl-infra-fleet.md`.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 

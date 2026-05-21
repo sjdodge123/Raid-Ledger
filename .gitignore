@@ -50,6 +50,7 @@ scripts/*
 !scripts/rl-encrypt-setting.mjs
 !scripts/rl-reencrypt-settings.mjs
 !scripts/test-plan-comments.sh
+!scripts/test/
 !/api/scripts/
 implementation_plan.md
 walkthrough.md
@@ -102,3 +103,9 @@ bmb-creations/
 # Fetched Linear stories
 .stories/
 build-state.yaml
+
+# ROK-1331 M11 — local perf log emitted by validate-ci.sh perf_emit_local
+# helper. Laptop runs write to ${REPO_ROOT}/.rl-perf.log; fleet runs write
+# to /workspace/.rl-perf.log. Diagnostic sibling file (.errors) similarly.
+.rl-perf.log
+.rl-perf.log.errors

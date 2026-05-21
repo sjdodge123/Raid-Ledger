@@ -33,23 +33,36 @@ const el = (tag, opts = {}, ...children) => {
 // rendering only — the agent authors those, so the URLs are trusted. Tester-
 // authored comment bodies are NOT auto-linkified (they're wrapped in
 // <untrusted-tester-comment> tags and base64-encoded for the agent).
-const URL_RE = /(https?:\/\/[^\s<>'"`)]+)/g;
+// ROK-1331 M6b chunk-4: match the URL non-greedily and use a lookahead so
+// trailing sentence punctuation (`.,;:!?)`) and the optional terminator
+// (whitespace, end-of-string, quote) stay OUTSIDE the captured URL. Plain
+// `.` inside the URL ("example.com") still matches because the lookahead
+// only fires when the next non-punct char IS a terminator. The follow-up
+// URL_TRAILING_PUNCT_RE trim below remains as belt-and-suspenders.
+const URL_RE = /(https?:\/\/[^\s<>'"`)]+?)(?=[).,;:!?]*(?:[\s<>'"`]|$))/g;
 const URL_TEST = /^https?:\/\//;
+// Trailing sentence punctuation should not become part of the link target
+// (`http://x.com/foo.` → href `http://x.com/foo`, then a "." text node).
+const URL_TRAILING_PUNCT_RE = /^(.*?)([).,;:!?]*)$/;
 const appendWithLinks = (parent, text) => {
   if (!text) return;
   const parts = String(text).split(URL_RE);
   for (const part of parts) {
     if (!part) continue;
     if (URL_TEST.test(part)) {
+      const m = part.match(URL_TRAILING_PUNCT_RE);
+      const cleanUrl = m ? m[1] : part;
+      const tail = m ? m[2] : '';
       parent.appendChild(
         el('a', {
-          href: part,
+          href: cleanUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
           class: 'step-inline-link',
-          text: part,
+          text: cleanUrl,
         }),
       );
+      if (tail) parent.appendChild(document.createTextNode(tail));
     } else {
       parent.appendChild(document.createTextNode(part));
     }
@@ -78,7 +91,66 @@ const fmtTime = (iso) => {
 // (the slot hostnames have no public DNS), which is acceptable feedback.
 const isLan = window.location.hostname.endsWith('.rl.lan');
 
-const renderSlot = (s) => {
+const fmtElapsed = (seconds) => {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+};
+
+// ROK-1331 M5b — TTL countdown from an ISO 8601 expires_at. Returns
+// "Nd Mh" / "Nh Mm" / "Nm Ms" / "Ns" depending on magnitude; once <= 0
+// returns the sentinel "expired" so callers can branch on the className.
+const fmtCountdown = (isoExpiresAt) => {
+  if (!isoExpiresAt) return '—';
+  const ms = Date.parse(isoExpiresAt) - Date.now();
+  if (!Number.isFinite(ms)) return '—';
+  if (ms <= 0) return 'expired';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+};
+
+const TASK_MARKERS = { running: '▶', succeeded: '✓', failed: '✗', cancelled: '⊘' };
+
+const renderTaskRow = (task) => {
+  const status = TASK_MARKERS[task.status] ? task.status : 'running';
+  const row = el('li', { class: `task-row task-row-${status}` });
+  if (status === 'running') row.setAttribute('data-started-at', task.started_at);
+
+  row.appendChild(el('span', { class: 'task-marker', text: TASK_MARKERS[status] }));
+
+  const fullLabel = task.args_summary
+    ? `${task.tool} ${task.args_summary}`
+    : task.tool;
+  const trimmed = fullLabel.length > 64 ? fullLabel.slice(0, 63) + '…' : fullLabel;
+  const tool = el('span', { class: 'task-tool', text: trimmed });
+  tool.title = fullLabel;
+  row.appendChild(tool);
+
+  row.appendChild(el('span', { class: 'task-elapsed', text: `(${fmtElapsed(task.elapsed_seconds)})` }));
+
+  row.appendChild(document.createTextNode(' · '));
+  row.appendChild(el('a', {
+    class: 'task-log-link',
+    href: `/api/tasks/${task.task_id}/log`,
+    target: '_blank',
+    rel: 'noopener',
+    text: 'log',
+  }));
+  return row;
+};
+
+// Sort: running first, then by started_at desc.
+const sortTasksForSlot = (tasks) => [...tasks].sort((a, b) => {
+  if (a.status === 'running' && b.status !== 'running') return -1;
+  if (a.status !== 'running' && b.status === 'running') return 1;
+  return (Date.parse(b.started_at) || 0) - (Date.parse(a.started_at) || 0);
+});
+
+const renderSlot = (s, activeTasks = [], leaseQueues = []) => {
   const card = el('div', { class: 'card' });
   card.appendChild(
     el('div', { class: 'card-title' }, `Slot ${s.slot}`, ' ',
@@ -97,6 +169,30 @@ const renderSlot = (s) => {
     card.appendChild(el('div', { class: 'card-row' },
       el('span', { class: 'key', text: 'heartbeat' }),
       el('span', { class: 'val', text: fmtTime(s.last_heartbeat) }),
+    ));
+    // ROK-1331 M5b — claim TTL countdown. expires_at lands on the claim
+    // entry via M5a's claim-duration writer; we read it through to the
+    // dashboard render with NO middle-layer strip. data-expires-at lets
+    // the 1s tick re-render only the TTL text without refetching state.
+    if (s.expires_at) {
+      const countdown = fmtCountdown(s.expires_at);
+      const ttlClass = countdown === 'expired' ? 'val claim-ttl expired' : 'val claim-ttl';
+      const ttlNode = el('span', { class: ttlClass, text: countdown });
+      ttlNode.setAttribute('data-expires-at', s.expires_at);
+      card.appendChild(el('div', { class: 'card-row' },
+        el('span', { class: 'key', text: 'expires' }),
+        ttlNode,
+      ));
+    }
+  }
+  // ROK-1331 M5b — lease queue depth. Render whenever the slot has any
+  // waiters, regardless of claim state (a freshly-released slot with a
+  // queue is the most interesting case to surface).
+  const slotQueue = leaseQueues.find((q) => q.slot === s.slot);
+  if (slotQueue && slotQueue.queue.length > 0) {
+    card.appendChild(el('div', { class: 'card-row' },
+      el('span', { class: 'key', text: 'queue' }),
+      el('span', { class: 'val lease-queue', text: `Queue: ${slotQueue.queue.length}` }),
     ));
   }
   const actions = el('div', { class: 'actions' });
@@ -120,6 +216,18 @@ const renderSlot = (s) => {
     actions.appendChild(span);
   }
   card.appendChild(actions);
+
+  // Per-slot task list (ROK-1331 M3). Renders running + 1h-window terminal
+  // rows that ride along /api/state. Empty placeholder only for claimed slots.
+  const slotTasks = (activeTasks || []).filter((t) => t.slot === s.slot);
+  if (slotTasks.length) {
+    const ul = el('ul', { class: 'slot-tasks' });
+    sortTasksForSlot(slotTasks).forEach((t) => ul.appendChild(renderTaskRow(t)));
+    card.appendChild(ul);
+  } else if (s.claimed) {
+    card.appendChild(el('div', { class: 'slot-tasks-empty', text: 'idle (no tasks)' }));
+  }
+
   return card;
 };
 
@@ -139,9 +247,18 @@ const renderEnv = (e, publicDomain) => {
   const slotUrl = envPublic && e.slot ? `https://slot-${e.slot}.${envPublic}` : null;
 
   const card = el('div', { class: 'card' });
-  card.appendChild(el('div', { class: 'card-title' }, slug, ' ',
+  const titleNode = el('div', { class: 'card-title' }, slug, ' ',
     el('span', { class: 'badge ready', text: 'live' }),
-  ));
+  );
+  // ROK-1331 M5b — pin badge (📌) rides along env-registry's `pinned` field
+  // (M5a writer). The gc-sweeper skips pinned envs; this surfaces that to
+  // the operator at a glance. Tooltip explains the semantic.
+  if (e.pinned === true) {
+    const pinBadge = el('span', { class: 'pin-badge', text: '📌' });
+    pinBadge.title = 'Pinned — gc-sweeper will not reap this env even if unhealthy';
+    titleNode.appendChild(pinBadge);
+  }
+  card.appendChild(titleNode);
   card.appendChild(el('div', { class: 'card-row' },
     el('span', { class: 'key', text: 'slot' }),
     el('span', { class: 'val', text: e.slot ?? '—' }),
@@ -215,40 +332,94 @@ const setCookie = (name, value, days) => {
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${secure}`;
 };
 
-const getTesterName = () => {
-  // Prefer cookie (more persistent), fall back to localStorage.
-  let name = getCookie(TESTER_COOKIE) || localStorage.getItem(TESTER_LS);
-  if (!name) {
-    name = prompt('Your name (so the agent + operator can see who reported what):', '') || '';
-    name = name.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50).trim();
-    if (name) {
-      try { localStorage.setItem(TESTER_LS, name); } catch {}
-      setCookie(TESTER_COOKIE, name, 365);
-    }
-  } else {
+// Read the stored tester name without prompting. Returns '' if unset.
+// ROK-1336 #4: separated from the modal flow so callers can branch on
+// "do we already have a name?" instead of being forced through prompt().
+const getStoredTesterName = () => {
+  const name = getCookie(TESTER_COOKIE) || localStorage.getItem(TESTER_LS) || '';
+  if (name) {
     // Mirror to both stores so future reads work even if one gets nuked.
     try { localStorage.setItem(TESTER_LS, name); } catch {}
     if (!getCookie(TESTER_COOKIE)) setCookie(TESTER_COOKIE, name, 365);
   }
-  return name || 'anon';
+  return name;
 };
 
-const verdictBadge = (counts) => {
-  // Small badge that summarizes the plan's verdict counts at a glance.
-  const parts = [];
-  if (counts.pass) parts.push(`${counts.pass}✓`);
-  if (counts.fail) parts.push(`${counts.fail}✗`);
-  if (counts.skip) parts.push(`${counts.skip}~`);
-  if (counts.pending) parts.push(`${counts.pending}?`);
-  return parts.join(' ') || '0 steps';
+// Persist a freshly-entered tester name to both stores. Sanitises same as
+// the old prompt() path.
+const setTesterName = (raw) => {
+  const name = (raw || '').replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 50).trim();
+  if (name) {
+    try { localStorage.setItem(TESTER_LS, name); } catch {}
+    setCookie(TESTER_COOKIE, name, 365);
+  }
+  return name;
+};
+
+// Backwards-compat shim — older callers expect a sync name. Returns the
+// stored value or 'anon' (NEVER fires the prompt). Submit/comment paths
+// should call askTesterNameModal() first to ensure a real name is set.
+const getTesterName = () => getStoredTesterName() || 'anon';
+
+// ROK-1336 #4 — replace window.prompt() with an inline modal so mobile
+// Safari / Chrome iOS don't silently swallow the request. Returns a Promise
+// that resolves to the entered name (string) or null (user cancelled).
+// Cancel keeps the existing stored name unchanged.
+const askTesterNameModal = () => new Promise((resolve) => {
+  document.querySelectorAll('.rl-modal-backdrop').forEach((n) => n.remove());
+  const backdrop = el('div', { class: 'rl-modal-backdrop' });
+  const modal = el('div', { class: 'rl-modal' });
+  modal.appendChild(el('h3', { class: 'rl-modal-title', text: 'Your name' }));
+  modal.appendChild(el('p', { class: 'rl-modal-sub',
+    text: 'So the agent + operator can see who reported what. Saved on this device for next time.' }));
+  const input = el('input', { class: 'rl-modal-input' });
+  input.type = 'text';
+  input.placeholder = 'e.g. Jake, alice, mobile-tester';
+  input.maxLength = 50;
+  input.value = getStoredTesterName();
+  modal.appendChild(input);
+  const actions = el('div', { class: 'rl-modal-actions' });
+  const cancelBtn = el('button', { class: 'btn-cancel', text: 'Cancel' });
+  const saveBtn = el('button', { class: 'btn-submit', text: 'Save' });
+  const close = (val) => { backdrop.remove(); resolve(val); };
+  cancelBtn.addEventListener('click', () => close(null));
+  saveBtn.addEventListener('click', () => {
+    const saved = setTesterName(input.value);
+    if (!saved) { input.focus(); return; } // empty/invalid → keep modal open
+    close(saved);
+  });
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') saveBtn.click(); });
+  backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) close(null); });
+  actions.append(cancelBtn, saveBtn);
+  modal.appendChild(actions);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+  setTimeout(() => input.focus(), 50);
+});
+
+// Convenience: returns a name, opening the modal if none is stored. Used
+// by submit/comment paths. Resolves to null if user cancels — caller should
+// abort the action.
+const ensureTesterName = async () => {
+  const stored = getStoredTesterName();
+  if (stored) return stored;
+  const entered = await askTesterNameModal();
+  return entered;
 };
 
 const renderTestPlanSection = (slug, summary) => {
+  // data-slug lets the auto-reset-on-submit helper scope its DOM rewrite to
+  // THIS plan's card only. A prior version used document.querySelectorAll
+  // unscoped and bled the reset across every env card on the page.
   const section = el('div', { class: 'plan-section' });
+  section.dataset.slug = slug;
   const header = el('div', { class: 'plan-header' });
-  const totalLabel = `Test plan (${summary.total})`;
-  header.appendChild(el('span', { class: 'plan-title', text: totalLabel }));
-  header.appendChild(el('span', { class: 'plan-counts', text: verdictBadge(summary) }));
+  // Operator preference (2026-05-21): show the plan's actual title here, not
+  // the step total + pending counts. Footer already surfaces "N of M drafted"
+  // for at-a-glance progress, so the counts in the header were redundant +
+  // distracting. Fallback to a step-count line if title is missing.
+  const headerText = summary.title || `Test plan (${summary.total} step${summary.total === 1 ? '' : 's'})`;
+  header.appendChild(el('span', { class: 'plan-title', text: headerText }));
   section.appendChild(header);
 
   const stepsDiv = el('div', { class: 'plan-steps', text: 'Loading…' });
@@ -283,6 +454,18 @@ const clearDraft = (slug, planCreatedAt) => {
   try { localStorage.removeItem(draftKey(slug, planCreatedAt)); } catch {}
 };
 
+const renderClearFormHeader = (slug, plan) => {
+  const header = el('div', { class: 'plan-top-actions' });
+  const btn = el('button', { class: 'btn-clear-form', text: '🧹 Clear form' });
+  btn.title = 'Wipe your local draft verdicts on this plan. Server data and previous submissions are not affected.';
+  btn.addEventListener('click', () => {
+    clearDraft(slug, plan.created_at);
+    tick({ force: true });
+  });
+  header.appendChild(btn);
+  return header;
+};
+
 const loadTestPlanInto = async (slug, container) => {
   try {
     const r = await fetch(`/api/test-plans/${slug}`, { cache: 'no-store' });
@@ -294,6 +477,12 @@ const loadTestPlanInto = async (slug, container) => {
     container.replaceChildren();
     // Load any in-progress draft for THIS plan version.
     const draft = loadDraft(slug, plan.created_at);
+    // Mobile-friendly always-visible "clear my form" affordance at the top
+    // of the plan. Operator-requested explicitly over the rejected
+    // auto-reset-on-submit approach: tester wants control, not surprise.
+    // Clicking wipes the local draft only — server verdicts/submissions
+    // are not touched; tick({force:true}) re-renders against fresh state.
+    container.appendChild(renderClearFormHeader(slug, plan));
     plan.steps.forEach((step) => {
       container.appendChild(renderStep(slug, plan, step, draft));
     });
@@ -346,20 +535,23 @@ const renderStep = (slug, plan, step, draft) => {
   // auto-linkified (they're wrapped <untrusted-tester-comment> + base64,
   // never trust untrusted-source URLs).
   appendWithLinks(textRow, step.description);
-  if (step.test_url) {
-    const link = el('a', {
-      href: step.test_url, target: '_blank', rel: 'noopener',
-      class: 'step-link', text: ' ↗',
-    });
-    link.title = `Open: ${step.test_url}`;
-    textRow.appendChild(link);
-  }
   desc.appendChild(textRow);
   if (step.expected) {
     const expectedRow = el('div', { class: 'step-expected' });
     expectedRow.appendChild(document.createTextNode('expected: '));
     appendWithLinks(expectedRow, step.expected);
     desc.appendChild(expectedRow);
+  }
+  if (step.test_url) {
+    // Explicit "Link to test" affordance on its own line below the step
+    // description. Inline "↗" was hard to spot on mobile + had a tiny tap
+    // target wedged into the text flow. Block-level button is unambiguous.
+    const link = el('a', {
+      href: step.test_url, target: '_blank', rel: 'noopener',
+      class: 'step-link', text: '🔗 Link to test',
+    });
+    link.title = `Open: ${step.test_url}`;
+    desc.appendChild(link);
   }
   if (pendingReset) {
     desc.appendChild(el('div', { class: 'step-reset-banner',
@@ -384,16 +576,26 @@ const renderStep = (slug, plan, step, draft) => {
     }
   }
 
-  // ROK-1326 fix-9: ALWAYS attach click listeners regardless of lock
-  // state. The disabled attribute alone prevents interaction; this lets
-  // bufferVerdict patch the DOM in-place (toggle .disabled, .locked, .selected)
-  // without needing to re-render to attach listeners to newly-unlocked
-  // buttons. The OLD path called tick({force:true}) which rebuilt the
-  // whole DOM via replaceChildren — visible as scroll-jump-to-top on
-  // mobile (operator-flagged 2026-05-19). In-place patch avoids the rebuild.
-  passBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'pass'));
-  failBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'fail'));
-  skipBtn.addEventListener('click', () => bufferVerdict(slug, plan, step.id, 'skip'));
+  // ROK-1326 fix-9 / ROK-1331 M6b chunk-4: ALWAYS attach click listeners
+  // regardless of lock state. The disabled attribute alone prevents
+  // interaction; this lets bufferVerdict patch the DOM in-place
+  // (toggle .disabled, .locked, .selected) without needing to re-render
+  // to attach listeners to newly-unlocked buttons. Full re-render (via
+  // tick({force:true}) → replaceChildren) DOES discard prior nodes —
+  // GC handles those orphaned listeners — but we avoid that path on the
+  // common verdict-buffer route because replaceChildren scroll-jumps to
+  // top on mobile (operator-flagged 2026-05-19). In-place patch keeps
+  // the existing DOM nodes + listeners; re-render is the safety net.
+  // Belt-and-suspenders for mobile sticky-state: blur the button after click
+  // so it doesn't carry :focus into the post-tap render. The hover state is
+  // gated separately via @media (hover: hover) in style.css.
+  const onVerdict = (verdict) => (ev) => {
+    ev.currentTarget?.blur();
+    bufferVerdict(slug, plan, step.id, verdict);
+  };
+  passBtn.addEventListener('click', onVerdict('pass'));
+  failBtn.addEventListener('click', onVerdict('fail'));
+  skipBtn.addEventListener('click', onVerdict('skip'));
   if (locked || pendingReset) {
     passBtn.disabled = true; failBtn.disabled = true; skipBtn.disabled = true;
     const reason = pendingReset
@@ -401,9 +603,6 @@ const renderStep = (slug, plan, step, draft) => {
       : 'Complete the prior steps first (set a verdict in the draft).';
     passBtn.title = failBtn.title = skipBtn.title = reason;
   }
-  // Store back-refs so patchPlanInPlace can find this row + its plan
-  // context without walking the DOM repeatedly.
-  row.dataset.stepId = String(step.id);
   buttons.append(passBtn, failBtn, skipBtn);
   if (resetBtn) buttons.appendChild(resetBtn);
 
@@ -480,6 +679,14 @@ const patchPlanInPlace = (slug, plan, draft) => {
     row.classList.add(effective ? `verdict-${effective}` : 'verdict-pending');
     row.classList.toggle('has-draft', !!draftVerdict);
     // pendingReset stays as the server told us — patch shouldn't touch it.
+    // ROK-1331 M6b chunk-4: WHY read pendingReset from the CSS class
+    // instead of plan.steps[i].reset_requests? The patch path runs on
+    // every verdict tick to keep DOM/data in sync without a full re-
+    // render. Server-pushed reset signals only arrive via a fresh plan
+    // payload (re-render) or a reset-toggle tick that ALREADY flipped
+    // .reset-pending on the row. Reading the class keeps patchPlanInPlace
+    // pure-DOM with no plan-data lookup. Accurate today; revisit when/if
+    // reset signals become live-pushed without a re-render.
     const pendingReset = row.classList.contains('reset-pending');
     const locked = i > firstUnsetIdx || pendingReset;
     row.classList.toggle('locked', locked);
@@ -545,7 +752,17 @@ const renderSubmitFooter = (slug, plan, draft) => {
   const submitBtn = el('button', { class: 'btn-submit', text: 'Submit test results' });
   submitBtn.disabled = draftCount === 0;
   if (draftCount === 0) submitBtn.title = 'No draft verdicts yet — tap a step button first';
-  submitBtn.addEventListener('click', () => submitDraft(slug, plan, draft));
+  // ROK-1336 #4 follow-up — always read draft FRESH from localStorage at
+  // click time, not the closure-captured one from footer-render time. The
+  // patchPlanInPlace DOM patcher updates localStorage on every bufferVerdict
+  // but does NOT re-bind this listener, so without the fresh load the submit
+  // fires with the stale empty draft → verdicts.length === 0 → silent return.
+  // (Bug existed pre-1336 — surfaced once item #4's prompt() fix let the
+  // submit path actually run end-to-end on mobile.)
+  submitBtn.addEventListener('click', () => {
+    const freshDraft = loadDraft(slug, plan.created_at);
+    submitDraft(slug, plan, freshDraft);
+  });
   actions.appendChild(submitBtn);
   if (draftCount > 0) {
     const clearBtn = el('button', { class: 'btn-clear-draft', text: 'Clear draft' });
@@ -570,12 +787,57 @@ const renderSubmitFooter = (slug, plan, draft) => {
   return footer;
 };
 
+// Auto-reset a single plan card after a successful submit. Scoped by slug
+// via the [data-slug] attribute on .plan-section — a prior un-scoped version
+// of this helper bled its DOM rewrite across every env card on the page,
+// which is the buggy build the operator had reverted. Re-rendering through
+// loadTestPlanInto here keeps the lock/verdict logic in one place (renderStep)
+// instead of duplicating it in a DOM patcher.
+const resetPlanCardVisuals = (slug) => {
+  const section = document.querySelector(`.plan-section[data-slug="${CSS.escape(slug)}"]`);
+  if (!section) return;
+  const stepsDiv = section.querySelector('.plan-steps');
+  if (!stepsDiv) return;
+  loadTestPlanInto(slug, stepsDiv);
+};
+
+// ROK-1336 #4 follow-up — top-of-viewport toast helper. 3s self-dismiss.
+// Reused for the post-submit success ack so testers + operator see "yep,
+// it went". No framework, no audio, just a styled div.
+const showToast = (message, kind = 'success') => {
+  document.querySelectorAll('.rl-toast').forEach((n) => n.remove());
+  const toast = el('div', { class: `rl-toast rl-toast-${kind}`, text: message });
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add('rl-toast-fade'), 2700);
+  setTimeout(() => toast.remove(), 3300);
+};
+
 const submitDraft = async (slug, plan, draft) => {
-  const tester = getTesterName();
+  // ROK-1336 #4 — ensure a real tester name (opens in-page modal, not
+  // window.prompt). If user cancels the modal, abort the submit silently —
+  // they explicitly chose not to identify and we don't want a phantom
+  // 'anon' verdict landing on the plan.
+  const tester = await ensureTesterName();
+  if (!tester) return;
   const verdicts = Object.entries(draft).map(([stepId, verdict]) => ({
     step_id: parseInt(stepId, 10), verdict,
   }));
-  if (verdicts.length === 0) return;
+  if (verdicts.length === 0) {
+    // Caller had a stale closure with empty draft AND localStorage was also
+    // empty. Surface this loudly instead of the old silent-return.
+    showToast('No verdicts drafted yet — tap pass/fail/skip on a step first.', 'warn');
+    return;
+  }
+  // ROK-1336 #4 follow-up — loading state on the submit button so testers
+  // see immediate feedback their tap registered. Pre-fix this was silent
+  // until the fetch resolved, which on mobile + slow LTE looked like a
+  // dead tap → multiple frantic re-taps (each fires another fetch).
+  const submitBtn = document.querySelector('.btn-submit');
+  const origLabel = submitBtn?.textContent;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting…';
+  }
   try {
     const r = await fetch(`/api/test-plans/${slug}/submit`, {
       method: 'POST',
@@ -585,21 +847,35 @@ const submitDraft = async (slug, plan, draft) => {
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       if (r.status === 404 && (j.error || '').includes('no plan')) {
-        alert('This test env was reaped — your draft can no longer be submitted. Clearing draft + refreshing.');
+        showToast('This test env was reaped — draft cleared.', 'error');
         clearDraft(slug, plan.created_at);
         tick({ force: true });
         return;
       }
-      alert(`Submit failed: ${j.error || `HTTP ${r.status}`}`);
+      showToast(`Submit failed: ${j.error || `HTTP ${r.status}`}`, 'error');
       return;
     }
-    // Clear local draft + refresh. Plan stays on server until agent
-    // posts a replacement (which they may do automatically based on
-    // the verdicts they just received).
+    // Clear local draft + auto-reset this plan's card + refresh fleet state.
+    // resetPlanCardVisuals re-renders THIS section only so the form snaps
+    // back to neutral immediately; tick({force:true}) re-polls /api/state
+    // so the env card's counts + recent-submissions row update too.
     clearDraft(slug, plan.created_at);
+    resetPlanCardVisuals(slug);
     tick({ force: true });
+    showToast(`Submitted ${verdicts.length} verdict${verdicts.length === 1 ? '' : 's'} as ${tester}.`, 'success');
   } catch (err) {
-    alert(`Network error: ${(err && (err.message || err.toString())) || 'unknown (no message)'}. The env or dashboard may be down. Try refreshing.`);
+    showToast(`Network error: ${(err && (err.message || err.toString())) || 'unknown'}.`, 'error');
+  } finally {
+    // Restore button state regardless of outcome. If the fetch succeeded,
+    // tick({force:true}) above re-rendered the footer (button replaced
+    // entirely) so this is a no-op; if we hit a non-tick path (early
+    // 404-reap / generic error / network error) the button stays in the
+    // DOM and we need to un-disable it so the user can retry.
+    const stillThere = document.querySelector('.btn-submit');
+    if (stillThere && stillThere === submitBtn) {
+      stillThere.disabled = false;
+      if (origLabel) stillThere.textContent = origLabel;
+    }
   }
 };
 
@@ -781,7 +1057,9 @@ const render = (data) => {
   slotsDiv.style.minHeight = slotsH + 'px';
   envsDiv.style.minHeight = envsH + 'px';
 
-  const slotCards = (data.slots ?? []).map(renderSlot);
+  const activeTasks = data.active_tasks ?? [];
+  const leaseQueues = data.lease_queues ?? [];
+  const slotCards = (data.slots ?? []).map((s) => renderSlot(s, activeTasks, leaseQueues));
   if (!slotCards.length) slotCards.push(renderEmpty('No slots configured.'));
   slotsDiv.replaceChildren(...slotCards);
 
@@ -920,3 +1198,51 @@ window.addEventListener('pageshow', (ev) => {
 // page reload instead — drafts in localStorage survive a reload, so
 // nothing's lost. The header refresh dot is also tappable as the
 // explicit one-tap alternative.
+
+// Relabel running-task elapsed every second WITHOUT re-fetching /api/state.
+// Auto-refresh is disabled, so without this the elapsed text would freeze
+// between manual ticks. Only touches .task-elapsed text under running rows.
+const updateElapsedLabels = () => {
+  const rows = document.querySelectorAll('.task-row.task-row-running');
+  rows.forEach((row) => {
+    const startedAt = row.getAttribute('data-started-at');
+    if (!startedAt) return;
+    const startedMs = Date.parse(startedAt);
+    if (!Number.isFinite(startedMs)) return;
+    const seconds = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
+    const elapsedEl = row.querySelector('.task-elapsed');
+    if (elapsedEl) elapsedEl.textContent = `(${fmtElapsed(seconds)})`;
+  });
+};
+
+// ROK-1331 M5b — re-render TTL countdown text every second on the spans
+// emitted by renderSlot. Auto-refresh of /api/state is disabled, so without
+// this the countdown would freeze between manual ticks. Only touches the
+// text of `.claim-ttl[data-expires-at]` spans; no fetch, no replaceChildren.
+const updateTtlLabels = () => {
+  const nodes = document.querySelectorAll('.claim-ttl[data-expires-at]');
+  nodes.forEach((node) => {
+    const expiresAt = node.getAttribute('data-expires-at');
+    const next = fmtCountdown(expiresAt);
+    if (node.textContent !== next) node.textContent = next;
+    if (next === 'expired') node.classList.add('expired');
+    else node.classList.remove('expired');
+  });
+};
+// Skip the 1s tick under jsdom — without this guard, the Node test runner
+// stays alive past assertion completion because jsdom-backed setInterval
+// keeps a real Node Timeout for each loaded fixture.
+const isJsdom = typeof navigator !== 'undefined'
+  && typeof navigator.userAgent === 'string'
+  && navigator.userAgent.includes('jsdom');
+if (!isJsdom) {
+  setInterval(updateElapsedLabels, 1000);
+  setInterval(updateTtlLabels, 1000);
+}
+
+// Test surface — expose internal helpers under window.__rlTest so the
+// jsdom-driven test harness can drive renderSlot / appendWithLinks /
+// fmtElapsed without a build step. No behavior change for prod.
+if (typeof window !== 'undefined') {
+  window.__rlTest = { renderSlot, appendWithLinks, fmtElapsed };
+}

@@ -28,7 +28,10 @@ Every step that touches the test infra reads `pipeline.test_infra_mode` from `bu
 
 ```
 if MODE=fleet:
-  use rl_claim / rl_env_deploy / rl_env_destroy / rl_release
+  use rl_claim (may enqueue with queue_position N — see rl_claim_wait) / rl_env_deploy / rl_env_destroy / rl_release
+  # When all slots are held, rl_claim returns {enqueued, queue_position} —
+  # use rl_claim_wait to block on queue head OR proceed with non-env work
+  # and retry. inherited_envs[] surface child envs from the previous holder.
   cleanup urgency: release at session end (Step 5 cleanup)
   spun env auto-reaps at TTL (24h default) if not destroyed manually
 
@@ -44,7 +47,7 @@ Both paths' shell-script calls (`validate-ci.sh --full`, `validate-ci.sh --only-
 
 - **Never call `rl_status` per step.** The preflight result is the source of truth for the session. Re-probing per step burns SSH RTTs and risks getting a different answer mid-session.
 - **Never `try fleet → except → local` cascade silently.** That's the silent failover trap. Either honor the session's mode or fail loud.
-- **Never mix `rl_claim` with `env_lock_acquire` in the same session.** Each is its own lock-discipline universe; the cleanup rules are different. Pick one at preflight time and stick with it.
+- **Never mix `rl_claim` (which may return `enqueued queue_position=N`) with `env_lock_acquire` in the same session.** Each is its own lock-discipline universe; the cleanup rules are different. Pick one at preflight time and stick with it.
 
 ## State file shape
 
@@ -64,7 +67,7 @@ Subsequent steps can read this with a single yaml-fetch — no re-probe.
 
 | Today's local step | Fleet-mode equivalent | Shared shell entrypoint |
 |---|---|---|
-| `mcp__mcp-env__env_lock_acquire` | `mcp__mcp-rl-fleet__rl_claim({ worktree_path })` | n/a |
+| `mcp__mcp-env__env_lock_acquire` | `mcp__mcp-rl-fleet__rl_claim({ worktree_path })` — may return `{enqueued, queue_position}`; use `rl_claim_wait({ slot, timeout_seconds })` to block on queue head | n/a |
 | `./scripts/deploy_dev.sh --ci --rebuild` | `mcp__mcp-rl-fleet__rl_env_deploy({ slug, worktree_path, clone_prod? })` | n/a |
 | Chrome MCP nav to `localhost:5173` | Chrome MCP nav to `https://<slug>test.gamernight.net` | n/a |
 | `./scripts/validate-ci.sh --full` | (same — script self-dispatches) | `RL_TARGET=auto ./scripts/validate-ci.sh --full` |
