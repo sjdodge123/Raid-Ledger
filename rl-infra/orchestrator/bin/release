@@ -32,6 +32,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ROK-1336 #11 — gate `--force`. Until this commit the flag was parsed +
+# audit-logged but never actually enforced; any rl-agent on the VM could
+# `release --slot N --force --destroy-envs` to nuke another agent's slot.
+# Now: only the operator identity (RL_PROXMOX_USER=rl, matched by the MCP
+# wrapper's intentional refusal to expose --force / --slot) may pass --force.
+# The MCP boundary in tools/mcp-rl-fleet/src/tools/release.ts hardcodes
+# `runRl(['release', '--preserve-envs'])` so MCP callers never reach this
+# branch; the gate closes the agent→agent shared-UID gap.
+if [[ "$FORCE" == "1" && "${RL_PROXMOX_USER:-}" != "rl" ]]; then
+    echo '{"ok":false,"error":"force_requires_operator","hint":"--force is operator-only (RL_PROXMOX_USER=rl). Drop the flag or run as operator."}' >&2
+    exit 2
+fi
+
 # Default to preserve for agents, destroy for operator.
 if [[ -z "$PRESERVE_ENVS" ]]; then
     if [[ "${RL_PROXMOX_USER:-}" == "rl" ]]; then

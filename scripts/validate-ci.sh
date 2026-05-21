@@ -349,8 +349,13 @@ run_build() {
 }
 
 run_typecheck() {
-  npx tsc --noEmit -p api/tsconfig.json
-  npx tsc --noEmit -p web/tsconfig.json
+  # ROK-1336 #5 — propagate failure of the FIRST tsc invocation. The script
+  # doesn't set -e, so without `|| return $?` the function reports the exit
+  # code of the LAST command only. With this missing, api/ TS2741 errors
+  # printed to stderr but the step's outer `$?` capture (run_step:195) saw
+  # rc=0 from the web/ check and stamped "TypeScript (all): PASS".
+  npx tsc --noEmit -p api/tsconfig.json || return $?
+  npx tsc --noEmit -p web/tsconfig.json || return $?
 }
 
 run_lint() {
