@@ -233,6 +233,12 @@ services:
       # Tester screenshots upload here (POST /api/test-plans/<slug>/attachment).
       # 5 MB cap per file; agent reads them via /api/test-plans/<slug>/attachment/<file>.
       - ./state/test-plan-attachments:/state/test-plan-attachments:rw
+      # ROK-1331 M11: /api/perf-emit appends mcp.* events to /state/perf.log.
+      # The /state mount above is RO so MCP-side writes silently EROFS'd
+      # (handler swallowed the error per design — never 500 on disk issues).
+      # Single-file RW override keeps the rest of /state RO. Safe with
+      # logrotate copytruncate (inode preserved across rotation).
+      - ./state/perf.log:/state/perf.log:rw
       # Bind-mount public/ + server.js so operator edits to either land
       # immediately without rebuilding the image. The Dockerfile still
       # COPY's both as a fallback for fresh-deploy scenarios where the

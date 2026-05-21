@@ -630,7 +630,7 @@ _wait_for_container_health() {
   fi
   echo -e "${GREEN}pg_stat_statements: loaded${NC}"
 
-  _check_container_security_headers "$host_port" || return 1
+  _check_container_security_headers "$host_port" "$cname" || return 1
 }
 
 # ROK-1158: verify the 6 security headers are present on every response surface
@@ -638,26 +638,55 @@ _wait_for_container_health() {
 # guards against the nginx `add_header` inheritance trap — the static-asset
 # location block defines its own `add_header Cache-Control`, which kills
 # parent-scope inheritance, so the snippet must be `include`d there too.
+#
+# ROK-1331 dogfood fix (2026-05-21): on the fleet, validate-ci.sh runs INSIDE
+# the runner container. `-p ${host_port}:80` binds the test container's port
+# on the VM HOST, not on runner-1's localhost — `curl -sI http://127.0.0.1:8090/`
+# from inside runner-1 hits the runner's own loopback and returns empty. Use
+# docker-exec-into-cname-and-curl-port-80 (the same shape as the API proxy
+# check in _wait_for_container_health) when /workspace is mounted (i.e. inside
+# a fleet runner).
 _check_container_security_headers() {
-  local host_port="${1:-8080}"
+  local host_port="${1:-8080}" cname="${2-}"
   local headers
   local index_url="http://127.0.0.1:${host_port}/"
   local health_url="http://127.0.0.1:${host_port}/api/health"
 
+  _fetch_headers() {
+    local url="$1" path
+    if [ -d /workspace ] && [ -n "$cname" ]; then
+      path="${url#http://127.0.0.1:${host_port}}"
+      docker exec "$cname" wget -qS -O /dev/null "http://127.0.0.1:80${path}" 2>&1 \
+        | sed -E 's/^[[:space:]]+//' \
+        | grep -E '^(HTTP|[A-Za-z][A-Za-z0-9-]+:)'
+    else
+      curl -sI "$url"
+    fi
+  }
+  _fetch_body() {
+    local url="$1" path
+    if [ -d /workspace ] && [ -n "$cname" ]; then
+      path="${url#http://127.0.0.1:${host_port}}"
+      docker exec "$cname" wget -qO- "http://127.0.0.1:80${path}" 2>/dev/null
+    else
+      curl -s "$url"
+    fi
+  }
+
   for url in "$index_url" "$health_url"; do
-    headers=$(curl -sI "$url")
+    headers=$(_fetch_headers "$url")
     _assert_security_headers "$headers" "$url" || return 1
   done
 
   local html bundle_path bundle_url
-  html=$(curl -s "$index_url")
+  html=$(_fetch_body "$index_url")
   bundle_path=$(echo "$html" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | head -1)
   if [ -z "$bundle_path" ]; then
     echo -e "${RED}Could not locate /assets/*.js bundle URL in index.html${NC}"
     return 1
   fi
   bundle_url="http://127.0.0.1:${host_port}${bundle_path}"
-  headers=$(curl -sI "$bundle_url")
+  headers=$(_fetch_headers "$bundle_url")
   _assert_security_headers "$headers" "$bundle_url" || return 1
 
   if echo "$headers" | grep -qi '^x-xss-protection:'; then
