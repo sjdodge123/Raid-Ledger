@@ -167,10 +167,17 @@ export async function execute(params: InfraLogsParams): Promise<InfraLogsResult>
         truncated: true,
       };
     }
+    // ROK-1338 PR-1 codex P2 (2026-05-21): with the remote command using
+    // `2>&1`, docker's own error text (e.g. "Error: No such container") now
+    // arrives via stdout, not stderr. Read from BOTH streams when classifying
+    // the failure so the structured error keeps its specificity. Without
+    // this, "container not found" would silently degrade to the generic
+    // infra_logs_failed bucket and lose actionable info for the caller.
+    const captured = ((e.stdout ?? '') + '\n' + (e.stderr ?? '')).trim();
     const stderr =
-      !e.stderr || e.stderr.trim() === ''
+      captured === ''
         ? synthesizeEmptyStderrDiagnostic(typeof e.code === 'number' ? e.code : undefined)
-        : e.stderr;
+        : captured;
     // Common case: container missing → "Error: No such container: rl-foo".
     if (/No such container/i.test(stderr)) {
       return {
@@ -178,7 +185,7 @@ export async function execute(params: InfraLogsParams): Promise<InfraLogsResult>
         service,
         container,
         error: 'container_not_found',
-        message: stderr.trim(),
+        message: stderr,
       };
     }
     return {
