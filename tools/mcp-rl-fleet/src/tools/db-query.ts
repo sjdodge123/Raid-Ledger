@@ -51,6 +51,14 @@
 // like tests + dogfood scripts also get the strict treatment).
 
 import { z } from 'zod';
+// Round-4 #2 — JSON.parse clips integers > 2^53 to JS Number precision,
+// silently corrupting bigserial PKs / large counters. json-bigint with
+// `storeAsString:true` returns those values as strings (consumers can
+// `BigInt(s)` for arithmetic OR string-compare for IDs) while regular
+// safe integers stay as JS Number. Tiny dep, no native code.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import JSONbigFactory from 'json-bigint';
+const JSONbig = JSONbigFactory({ storeAsString: true });
 import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
 
 export const TOOL_NAME = 'rl_db_query';
@@ -162,12 +170,19 @@ function buildRemoteCommand(slug: string, sql: string): string {
   // The user's SQL goes inside a sub-subquery so the LIMIT applies BEFORE
   // json_agg builds the array (bounded memory). The outer COALESCE handles
   // the zero-row case (json_agg returns NULL → we want `[]`).
+  //
+  // Round-4 #1 — the outer table alias used to be `t`. If a user query
+  // SELECTed a column AS `t`, Postgres preferred the column reference over
+  // the table reference inside `row_to_json(t)` and resolved as
+  // `row_to_json(<col_type>)` (no such overload) — db_query_failed for the
+  // common `SELECT ... AS t FROM ...` idiom. Renamed to a `__rl_`-prefixed
+  // alias that's extremely unlikely to collide with a user column name.
   const wrappedSql =
     `BEGIN; ` +
     `SET TRANSACTION READ ONLY; ` +
     `SET LOCAL statement_timeout = '5s'; ` +
-    `SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json)::text ` +
-    `FROM (SELECT * FROM (${stripped}) AS rl_inner LIMIT ${FETCH_LIMIT}) AS t; ` +
+    `SELECT COALESCE(json_agg(row_to_json(__rl_q_row__)), '[]'::json)::text ` +
+    `FROM (SELECT * FROM (${stripped}) AS rl_inner LIMIT ${FETCH_LIMIT}) AS __rl_q_row__; ` +
     `ROLLBACK;`;
   // `-A -t` (unaligned + tuples-only) emits just the cell value — no
   // header, no padding. For our single-row, single-cell SELECT, that's
@@ -202,7 +217,10 @@ function parseJsonResponse(
   if (trimmed.length === 0) return { columns: [], rows: [] };
   let parsed: unknown;
   try {
-    parsed = JSON.parse(trimmed);
+    // Round-4 #2 — JSONbig (with storeAsString:true) preserves bigint /
+    // large-numeric values as JS strings instead of clipping to Number
+    // precision. Safe integers (|n| <= 2^53) stay as JS Number.
+    parsed = JSONbig.parse(trimmed);
   } catch (e) {
     throw new Error(
       `failed to parse json from psql stdout: ${(e as Error).message}; ` +
@@ -247,13 +265,15 @@ function classifyError(
     };
   }
   // BEGIN/SET TRANSACTION READ ONLY catches smuggled writes. Pattern matches
-  // any DML/DDL rejection in a read-only transaction. (Round-3 dogfood
-  // corrected a stale comment that credited PGOPTIONS — PGOPTIONS was
-  // removed; the BEGIN-wrapped transaction is the actual rejector.)
+  // any "cannot execute X in a read-only transaction" message Postgres emits.
+  //
+  // Round-4 #4 — verb whitelist was too narrow (caught DML/DDL keywords but
+  // missed function-form writes like `nextval()`, `setval()`, `pg_advisory_lock()`).
+  // Broadened to any token + optional parens before the read-only-transaction
+  // suffix. Postgres's actual error text is `cannot execute X in a read-only
+  // transaction` where X is the statement / function name.
   if (
-    /cannot execute (INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|GRANT|REVOKE|MERGE)\b.*read-only transaction/i.test(
-      stderr,
-    )
+    /cannot execute [\w()*]+\b.*read-only transaction/i.test(stderr)
   ) {
     return {
       ok: false,
@@ -261,8 +281,8 @@ function classifyError(
       error: 'read_only_violation',
       message: stderr.trim(),
       hint:
-        'rl_db_query enforces read-only. Detected an attempt to write via DML/DDL — ' +
-        'the BEGIN/SET TRANSACTION READ ONLY wrapper rejected it.',
+        'rl_db_query enforces read-only. Detected an attempt to write via DML/DDL/ ' +
+        'side-effecting function — the BEGIN/SET TRANSACTION READ ONLY wrapper rejected it.',
     };
   }
   // statement_timeout (5s) from SET LOCAL inside the read-only transaction.
@@ -413,6 +433,26 @@ export async function execute(params: DbQueryParams): Promise<DbQueryResult> {
     };
   } catch (err) {
     const e = err as Error & { stdout?: string; stderr?: string; code?: number | string };
+    // Round-4 #3 — maxBuffer overflow used to fall through to the generic
+    // "empty stderr → synth diagnostic" path with an unhelpful "command not
+    // found / shell init failure" hint. Detect the specific Node code +
+    // surface a structured `response_too_large` envelope BEFORE the generic
+    // classifier sees it.
+    if (
+      e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ||
+      /maxBuffer/i.test(e.message)
+    ) {
+      return {
+        ok: false,
+        slug,
+        error: 'response_too_large',
+        message: 'psql output exceeded the 16MB stdout cap.',
+        hint:
+          'The JSON-serialized result set is larger than 16MB. Narrow the SELECT to fewer ' +
+          'columns, add a more selective WHERE clause, or rely on the built-in LIMIT 1001 ' +
+          '(some single rows can still be megabytes if they include large text/jsonb fields).',
+      };
+    }
     const stderr =
       !e.stderr || e.stderr.trim() === ''
         ? synthesizeEmptyStderrDiagnostic(

@@ -292,11 +292,15 @@ describe('rl_db_query — SSH invocation shape (JSON-mode, round-3 corrected)', 
     expect(remote).toContain('SET TRANSACTION READ ONLY;');
     expect(remote).toContain('ROLLBACK;');
     // JSON-aggregation wrap with COALESCE for the empty-result case.
-    expect(remote).toContain('json_agg(row_to_json(t))');
+    // Round-4 #1 — outer alias renamed from `t` to `__rl_q_row__` to avoid
+    // collision with user columns aliased as `t`.
+    expect(remote).toContain('json_agg(row_to_json(__rl_q_row__))');
+    expect(remote).not.toContain('json_agg(row_to_json(t))');
     expect(remote).toContain("COALESCE");
     expect(remote).toContain("'[]'");
     // Inner subquery wrap with LIMIT 1001 (1000 + 1 truncation sentinel).
     expect(remote).toContain('SELECT * FROM (SELECT count(*) FROM users) AS rl_inner LIMIT 1001');
+    expect(remote).toContain('AS __rl_q_row__;');
   });
 
   it('strips a trailing semicolon from user SQL before wrapping', async () => {
@@ -525,5 +529,98 @@ describe('rl_db_query — error classification (architect §D layers + spec §6)
     expect(result.ok).toBe(false);
     expect(result.error).toBe('db_query_failed');
     expect(result.message).toContain('novel postgres error');
+  });
+});
+
+describe('rl_db_query — round-4 fixes', () => {
+  // Round-4 #2 — bigint precision. json-bigint (storeAsString:true) keeps
+  // numbers > 2^53 as JS strings so consumers can BigInt() them or
+  // string-compare; safe integers stay as JS Number.
+  it('preserves bigint precision for values > 2^53 (returns as string)', async () => {
+    // 2^53 + 1 = 9007199254740993 (would clip to ...992 under bare JSON.parse)
+    execFileOk('[{"big": 9007199254740993, "safe": 42}]\n');
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SELECT 1',
+      read_only: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.rows?.[0]).toEqual({ big: '9007199254740993', safe: 42 });
+  });
+
+  it('preserves numeric precision for 16-digit values', async () => {
+    execFileOk('[{"n": 9999999999999999}]\n');
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SELECT 1',
+      read_only: true,
+    });
+    expect(result.ok).toBe(true);
+    // String form preserves the original 9999999999999999 (would clip to
+    // 10000000000000000 under bare JSON.parse).
+    expect(result.rows?.[0]).toEqual({ n: '9999999999999999' });
+  });
+
+  // Round-4 #3 — maxBuffer overflow used to fall through to the generic
+  // "ssh returned exit unknown" diagnostic. Now produces response_too_large.
+  it('returns response_too_large on ERR_CHILD_PROCESS_STDIO_MAXBUFFER', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: unknown,
+        cb: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+        const err = Object.assign(new Error('stdout maxBuffer length exceeded'), {
+          code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+        });
+        callback(err, '', '');
+      },
+    );
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SELECT repeat(\'x\', 20000000) AS huge',
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('response_too_large');
+    expect(result.hint).toMatch(/16MB/);
+  });
+
+  // Round-4 #4 — read_only_violation regex used to require a hard-coded
+  // verb (INSERT|UPDATE|...). Function-form writes (nextval, setval,
+  // pg_advisory_lock) fell through to db_query_failed. Now broadened to
+  // any token + optional parens.
+  it('classifies function-form writes (nextval) as read_only_violation', async () => {
+    execFileFail(
+      1,
+      'ERROR:  cannot execute nextval() in a read-only transaction',
+    );
+    const result = await execute({
+      slug: 'myslug',
+      sql: "SELECT nextval('public.users_id_seq')",
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('read_only_violation');
+    expect(result.hint).toContain('BEGIN/SET TRANSACTION READ ONLY');
+  });
+
+  // Round-4 #1 — alias `t` collided with user columns aliased as `t`.
+  // The SSH-shape test (above) asserts the new alias `__rl_q_row__` is
+  // used. This test confirms a user column named `t` doesn't break the
+  // happy-path flow now.
+  it('handles user query with column aliased `t` (round-4 #1 regression test)', async () => {
+    // psql executes `row_to_json(__rl_q_row__)` which no longer collides
+    // with the user's `t` column inside the inner SELECT.
+    execFileOk('[{"t": "hello"}]\n');
+    const result = await execute({
+      slug: 'myslug',
+      sql: "SELECT 'hello' AS t",
+      read_only: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.rows?.[0]).toEqual({ t: 'hello' });
   });
 });
