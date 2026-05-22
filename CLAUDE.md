@@ -79,6 +79,8 @@ Playwright-over-CDP tools for UI-level verification: `discord_screenshot`, `disc
 
 ### `mcp-rl-fleet` — rl-infra Remote Test Fleet (`tools/mcp-rl-fleet/`)
 
+**STRICT — agent-side SSH to the rl-infra VM as `rl-agent` is closed (ROK-1338 PR-3).** Agents reach the fleet only through the `mcp__mcp-rl-fleet__*` tools below. The operator's `rl` CLI (which SSHes as the operator user) is operator-only and is NOT an agent fallback. If a debug path requires direct SSH, that's an agent-side capability gap — append it to the no-SSH umbrella list (see [[project_rok_1338_no_ssh_umbrella]]) rather than asking the operator to re-open SSH.
+
 **STRICT — worktree_path:** every rl_* tool that touches a claimed slot (`rl_claim`, `rl_release`, `rl_env_spin`, `rl_env_destroy`, `rl_env_deploy`, `rl_env_build_image_from_runner`, `rl_run_on_runner`, `rl_validate_ci`) accepts a `worktree_path` parameter. **If you're operating from a git worktree, you MUST pass `worktree_path: "<absolute path to your worktree>"` on every call.** Without it, the MCP server uses its own cwd (where Claude was started — usually the main repo) which (a) Mutagen-syncs the wrong branch's files and (b) hashes to a different `RL_AGENT_ID` so subsequent calls can't find your slot. Use the same value on every call — e.g. `/Users/sdodge/Documents/Projects/Raid-Ledger--rok-1297`.
 
 | Tool | Use When |
@@ -182,7 +184,7 @@ This rule exists because parallel agents kept seeing these commits, assuming "no
 
 The `rl-infra` Proxmox VM hosts a 4-slot runner fleet so heavy compute (build, jest, vitest, playwright, allinone builds, per-env stacks) runs on the VM instead of the laptop, and multiple agents work in parallel without env-lock contention. Full design + runbook: `rl-infra/README.md`. Operator-facing summary: `.claude/skills/_shared/rl-infra-fleet.md`.
 
-**Default behavior:** `RL_TARGET=auto` (the default) probes `RL_PROXMOX_HOST` over SSH. Reachable → remote mode. Unreachable / `RL_TARGET=local` → fall through to the legacy local section below.
+**Default behavior:** `RL_TARGET=auto` (the default — operator CLI only; agents don't probe SSH) makes the `rl` CLI probe `RL_PROXMOX_HOST` over SSH. Reachable → remote mode. Unreachable / `RL_TARGET=local` → fall through to the legacy local section below.
 
 In remote mode, prefer the `rl` CLI over today's equivalents:
 

@@ -52,8 +52,10 @@ rl release                                        # destroy child envs, prune, d
 2. **Don't `cd` into the worktree manually** — Mutagen mirrors files into the
    runner's `/workspace`. Edit on the laptop, the runner sees changes within ~1s.
 3. **Shell out to the runner for compute-heavy commands**:
-   - `npm run build -w api` → `rl validate-ci` (or
-     `ssh proxmox-vm /srv/rl-infra/orchestrator/bin/run-on-runner -- npm run build -w api`)
+   - `npm run build -w api` → `rl validate-ci`, or
+     `mcp__mcp-rl-fleet__rl_run_on_runner({ command: 'npm run build -w api', worktree_path: '<abs>' })`
+     for a single targeted invocation. Agents MUST use the MCP path — direct
+     SSH as `rl-agent` is closed (ROK-1338 PR-3).
    - `./scripts/deploy_dev.sh` → `rl env spin <slug>` (built artifacts, prod-like)
    - `npm run test:integration` → wrap with `rl validate-ci --no-e2e`
    - `npx playwright test` → wrap with `rl validate-ci --only-e2e`

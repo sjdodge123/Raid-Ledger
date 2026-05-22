@@ -69,9 +69,14 @@ the operator laptop or when external chain is broken.
 
 ## The CLI
 
+> **Agents:** prefer the `mcp__mcp-rl-fleet__*` MCP tools (see CLAUDE.md
+> "`mcp-rl-fleet`"). Direct SSH as `rl-agent` is closed (ROK-1338 PR-3); the
+> CLI below is the operator-facing path that uses the operator SSH user.
+
 All operator interaction goes through `rl-infra/cli/rl` on the laptop. It SSHes
-to the VM and dispatches to shell scripts in `/srv/rl-infra/orchestrator/bin/`. There is no daemon,
-no HTTP service — just SSH + flock + jq.
+to the VM as the operator user (`rl`) and dispatches to shell scripts in
+`/srv/rl-infra/orchestrator/bin/`. There is no daemon, no HTTP service — just
+SSH + flock + jq.
 
 ```bash
 rl claim [--branch foo]          # acquire a runner slot
@@ -98,7 +103,8 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
    `dist`, `coverage`, `.git/objects`.
 3. Operator/agent works on the laptop. Saves trigger Mutagen → ~1s to runner.
 4. Heavy commands (`validate-ci`, `env spin`, jest) ship to the runner via
-   `rl <cmd>` or VSCode Remote-SSH terminal.
+   `rl <cmd>` or operator-only VSCode Remote-SSH terminal. Agents use
+   `mcp__mcp-rl-fleet__rl_run_on_runner` / `rl_validate_ci` instead.
 5. Local CLI heartbeats every 60s. Missed for 5min → slot auto-released.
 6. `rl release` → destroys child envs, prunes scoped to slot label, resets
    worktree dir, drops the claim.
@@ -122,7 +128,10 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
 
 Long-running orchestrator commands (validate-ci, image builds, env spins) are
 tracked as **tasks** with persistent VM-side state. State survives MCP-server
-restart on the laptop and is independently observable via SSH.
+restart on the laptop and is independently observable by the operator via
+SSH. Agents observe task state via `mcp__mcp-rl-fleet__rl_task_inspect` /
+`rl_task_status` / `rl_task_logs` — direct SSH as `rl-agent` is closed
+(ROK-1338 PR-3).
 
 **Directory layout** — `/srv/rl-infra/state/tasks/`:
 
@@ -188,18 +197,27 @@ sweeper handles size at end-of-life. `task-status` caps its returned `log_tail`
 
 ## Strong debugging
 
-| Need                        | How                                                       |
-| --------------------------- | --------------------------------------------------------- |
-| Live log search             | Grafana → Loki: `{slot="1"} \|= "ECONNRESET"`             |
-| VSCode debugger from laptop | Remote-SSH into runner, `launch.json` attaches to 9229    |
-| Live REPL                   | `rl shell` → tmux session, persists across disconnects    |
-| Postgres                    | `rl db <slug>` (psql) or `rl db <slug> --web` (pgweb)     |
-| Resource live view          | `rl top` → ctop inside the VM                             |
-| Profiling                   | `clinic doctor` etc. pre-installed in runner image        |
-| Network capture             | `rl tcpdump <slot>` → tcpdump in the runner               |
-| Stack-trace clickable paths | VSCode Remote-SSH session uses the runner's filesystem    |
-| "What did agent X do?"      | `cat /srv/rl-infra/state/audit.log \| grep <agent-id>`    |
-| Snapshot before risky run   | `rl snapshot create pre-experiment` → ZFS-backed          |
+Agent-side paths first, operator-only paths labelled. Direct SSH as `rl-agent`
+is closed (ROK-1338 PR-3) — anything below that requires an SSH session is
+intentionally operator-only.
+
+| Need                        | How                                                                          |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| Live log search (agents)    | `mcp__mcp-rl-fleet__rl_logs_url` → Grafana/Loki link (`{slot="1"} \|= "..."`) |
+| Read service logs (agents)  | `mcp__mcp-rl-fleet__rl_infra_logs` (`gc-sweeper`, `dashboard`, `traefik`, `loki`, `registry`, `promtail`, `docker-proxy`) |
+| Read task log (agents)      | `mcp__mcp-rl-fleet__rl_task_logs` (full ANSI-stripped stdout/stderr)         |
+| Read task JSON (agents)     | `mcp__mcp-rl-fleet__rl_task_inspect`                                         |
+| Read env config (agents)    | `mcp__mcp-rl-fleet__rl_env_inspect` (nginx-conf / supervisor-conf)           |
+| Run query against env DB    | `mcp__mcp-rl-fleet__rl_db_query` (read-only, JSON-mode, 5s timeout)          |
+| Postgres (operator-only)    | `rl db <slug>` (psql) or `rl db <slug> --web` (pgweb)                        |
+| Live REPL (operator-only)   | `rl shell` → tmux session, persists across disconnects                       |
+| Resource live view (op.)    | `rl top` → ctop inside the VM                                                |
+| VSCode debugger (operator-only) | Remote-SSH into runner, `launch.json` attaches to 9229                   |
+| Profiling (operator-only)   | `clinic doctor` etc. pre-installed in runner image                           |
+| Network capture (op.)       | `rl tcpdump <slot>` → tcpdump in the runner                                  |
+| Stack-trace clickable paths (op.) | VSCode Remote-SSH session uses the runner's filesystem                 |
+| "What did agent X do?" (op.)| `cat /srv/rl-infra/state/audit.log \| grep <agent-id>`                       |
+| Snapshot before risky run (op.) | `rl snapshot create pre-experiment` → ZFS-backed                         |
 
 ## DR — airplane mode
 
@@ -215,19 +233,21 @@ not the daily flow.
 
 ## What stays on the laptop
 
-- VSCode editor (connects to the runner via Remote-SSH for terminal/debugger).
+- VSCode editor — operator only, connects to the runner via Remote-SSH for
+  terminal/debugger using the operator SSH user.
 - Mutagen daemon (file sync agent).
-- The `rl-infra/cli/rl` CLI.
+- The `rl-infra/cli/rl` CLI (operator-only; agents use the MCP tools instead).
 - `git` operations on the worktree (refs/HEAD sync, but objects stay local).
 - Discord MCP + Chrome MCP (need local Electron / Chrome with CDP).
 - Sentry, Linear, GitHub clients (network, not compute-heavy).
 
-## First-time setup
+## First-time setup (operator-only)
 
-See `proxmox/cloud-init.yaml` for VM provisioning. After the VM is up:
+See `proxmox/cloud-init.yaml` for VM provisioning. After the VM is up, the
+operator (NOT an agent) runs:
 
 ```bash
-ssh proxmox-vm
+ssh proxmox-vm    # operator-only SSH as the `rl` user
 cd /srv/rl-infra
 docker compose up -d
 ./bin/init-state    # creates claims.json, env-registry.json, audit.log
@@ -237,11 +257,14 @@ From the laptop:
 
 ```bash
 echo 'export RL_PROXMOX_HOST=rl-infra.lan' >> ~/.zshrc
-echo 'export RL_PROXMOX_USER=rl' >> ~/.zshrc
+echo 'export RL_PROXMOX_USER=rl' >> ~/.zshrc                # operator user
 ln -s "$PWD/rl-infra/cli/rl" /usr/local/bin/rl   # or add rl-infra/cli to PATH
 rl doctor                                    # verifies SSH, Mutagen, orchestrator
 rl claim --branch $(git branch --show-current)
 ```
+
+Agents do not bootstrap the fleet — they use `mcp__mcp-rl-fleet__*` against
+the already-running stack.
 
 ## VM dependencies
 
@@ -271,3 +294,200 @@ docker compose up -d
 
 (This is an operator-action: agents don't have permission to restart
 compose-managed services.)
+
+## Operator override — temporarily enabling rl-agent SSH
+
+> **Audience:** operator only. This runbook is informational for agents but
+> not actionable by them — there is no agent path back to direct SSH and
+> there shouldn't be. Per ROK-1338 PR-3, agent-side SSH as `rl-agent` is
+> closed by default; the full agent surface lives in `mcp__mcp-rl-fleet__*`.
+
+### Why this exists
+
+Closing direct SSH for `rl-agent` removes a lateral-movement vector but also
+removes a break-glass debug path the operator may occasionally need (e.g. to
+investigate why an MCP tool is itself broken, or to interactively inspect
+fleet state during a postmortem). The mechanism below is an **operator-side
+toggle**: SSH is denied by default; a single operator command flips it back
+on; another command re-locks.
+
+The toggle is a file on the VM, not a config edit, so:
+
+- Re-locking after debugging is one command — hard to leave it open by mistake.
+- Auditing "was rl-agent SSH on?" is `ls -l /etc/ssh/.agent-allow` plus the
+  sshd_config audit trail.
+- Re-running provisioning won't accidentally re-enable SSH.
+
+### Mechanism (A — toggle file + AuthorizedKeysCommand gate)
+
+The lockdown sources rl-agent's authorized keys from a small script that
+returns empty unless a toggle file exists. sshd has no key to match against,
+so authentication fails — no `DenyUsers`/`AllowUsers` juggling needed, and
+`~rl-agent/.ssh/authorized_keys` becomes irrelevant (sshd ignores it inside
+the Match block).
+
+**The escrow file `/etc/ssh/rl-agent.authorized_keys.escrow` is the
+canonical source of truth for the laptop-side public key.** It stays in
+place permanently; only the `/etc/ssh/.agent-allow` toggle gates whether
+the key is offered to sshd. Mode `0644 root:root` — public keys are not
+secret data, and the `AuthorizedKeysCommand` runs as `nobody` which must be
+able to read it.
+
+#### Files to create on the VM
+
+`/etc/ssh/rl-agent-gated-keys.sh` (mode 0755, root:root):
+
+```bash
+#!/bin/bash
+# Returns the rl-agent authorized_keys ONLY when the toggle file exists.
+# Toggle file: /etc/ssh/.agent-allow (operator creates to break-glass).
+# Escrow:      /etc/ssh/rl-agent.authorized_keys.escrow (canonical key,
+#              0644 root:root — public key is not secret data; runs as nobody).
+set -euo pipefail
+if [ -f /etc/ssh/.agent-allow ] && [ -r /etc/ssh/rl-agent.authorized_keys.escrow ]; then
+    cat /etc/ssh/rl-agent.authorized_keys.escrow
+fi
+exit 0
+```
+
+Append to `/etc/ssh/sshd_config` (after the global `AuthorizedKeysFile`
+directive, NOT replacing it — the Match block is scoped to rl-agent only):
+
+```
+# ROK-1338 PR-3: rl-agent SSH gated on /etc/ssh/.agent-allow toggle.
+# When the file is absent the key lookup script returns empty and auth fails.
+Match User rl-agent
+    AuthorizedKeysFile none
+    AuthorizedKeysCommand /etc/ssh/rl-agent-gated-keys.sh
+    AuthorizedKeysCommandUser nobody
+```
+
+`AuthorizedKeysCommand` is re-executed per connection, so flipping the toggle
+takes effect on the next ssh attempt — no sshd reload required AFTER the
+initial sshd_config edit.
+
+### Apply the lockdown (post-merge, operator-only)
+
+1. **Back up the existing sshd_config:**
+   ```bash
+   sudo cp /etc/ssh/sshd_config /root/sshd_config.pre-rok-1338-pr3
+   ```
+2. **Escrow the rl-agent public key** (canonical store; never deleted while
+   the lockdown is in force — mode 0644 because public keys are not secret
+   and `nobody` must read it). Guard against an empty source — without a
+   non-empty escrow, break-glass would silently fail later:
+   ```bash
+   sudo test -s ~rl-agent/.ssh/authorized_keys || \
+       { echo "ABORT: ~rl-agent/.ssh/authorized_keys is missing or empty — escrow would be a no-op"; exit 1; }
+   sudo install -m 0644 -o root -g root ~rl-agent/.ssh/authorized_keys \
+        /etc/ssh/rl-agent.authorized_keys.escrow
+   ```
+3. **Install the gated-keys script:**
+   ```bash
+   sudo tee /etc/ssh/rl-agent-gated-keys.sh > /dev/null <<'SH'
+   #!/bin/bash
+   set -euo pipefail
+   if [ -f /etc/ssh/.agent-allow ] && [ -r /etc/ssh/rl-agent.authorized_keys.escrow ]; then
+       cat /etc/ssh/rl-agent.authorized_keys.escrow
+   fi
+   exit 0
+   SH
+   sudo chown root:root /etc/ssh/rl-agent-gated-keys.sh
+   sudo chmod 0755 /etc/ssh/rl-agent-gated-keys.sh
+   ```
+4. **Append the Match block** to `/etc/ssh/sshd_config` (copy-paste verbatim):
+   ```bash
+   sudo tee -a /etc/ssh/sshd_config > /dev/null <<'CFG'
+
+   # ROK-1338 PR-3: rl-agent SSH gated on /etc/ssh/.agent-allow toggle.
+   # When the file is absent the key lookup script returns empty and auth fails.
+   Match User rl-agent
+       AuthorizedKeysFile none
+       AuthorizedKeysCommand /etc/ssh/rl-agent-gated-keys.sh
+       AuthorizedKeysCommandUser nobody
+   CFG
+   ```
+5. **Validate the syntax before reloading** — a broken sshd_config will lock
+   the operator out too if the active session drops:
+   ```bash
+   sudo sshd -t      # exits 0 silent on success, prints offending line on failure
+   ```
+6. **Clear `~rl-agent/.ssh/authorized_keys`** so even the legacy path is empty
+   (defense-in-depth — `AuthorizedKeysFile none` in the Match block already
+   means sshd won't read it, but an empty file rules out accidental rollback
+   via `cp escrow ~/.ssh/authorized_keys`):
+   ```bash
+   sudo truncate -s 0 ~rl-agent/.ssh/authorized_keys
+   ```
+7. **Confirm the toggle file is absent** (lockdown active by default):
+   ```bash
+   ls -l /etc/ssh/.agent-allow   # expect: No such file or directory
+   ```
+8. **Reload sshd** (do NOT restart — reload preserves the current operator
+   session):
+   ```bash
+   sudo systemctl reload sshd
+   ```
+9. **Confirm from the laptop:**
+   ```bash
+   ssh rl-agent@rl-infra echo ok      # expect: Permission denied (publickey)
+   ```
+
+### Break-glass — re-open rl-agent SSH temporarily
+
+```bash
+# On the VM, as operator:
+sudo touch /etc/ssh/.agent-allow
+
+# That's it. Next ssh attempt as rl-agent succeeds.
+# No sshd reload needed (AuthorizedKeysCommand is per-connection).
+```
+
+### Re-lock after debugging
+
+```bash
+sudo rm -f /etc/ssh/.agent-allow
+
+# Verify from the laptop:
+ssh rl-agent@rl-infra echo ok      # expect: Permission denied (publickey)
+```
+
+### Full revert (if PR-3's premise turns out wrong)
+
+```bash
+sudo cp /root/sshd_config.pre-rok-1338-pr3 /etc/ssh/sshd_config
+sudo install -m 0600 -o rl-agent -g rl-agent \
+     /etc/ssh/rl-agent.authorized_keys.escrow \
+     ~rl-agent/.ssh/authorized_keys
+sudo systemctl reload sshd
+```
+
+Then file a follow-up explaining which agent debug path forced the revert —
+the right answer is almost always "add an MCP tool", not "permanently
+re-open SSH". The umbrella prerequisite-list in [[project-rok-1338-no-ssh-umbrella]]
+is the catch-all for those gaps.
+
+### Audit checklist
+
+- `ls -l /etc/ssh/.agent-allow` — present only during a break-glass window;
+  absent in steady state.
+- `ls -l /etc/ssh/rl-agent.authorized_keys.escrow` — must exist
+  (mode 0644 root:root, world-readable so `nobody` can serve it via the
+  AuthorizedKeysCommand). If missing, even break-glass won't work — the
+  key was never escrowed.
+- `wc -l ~rl-agent/.ssh/authorized_keys` — should always be 0 lines. Non-zero
+  is a defense-in-depth violation (it doesn't itself open SSH — `AuthorizedKeysFile none`
+  in the Match block neutralizes this file — but it suggests someone reverted
+  step 6 by hand).
+- `sudo journalctl -u sshd --since '1 hour ago' | grep rl-agent` — every
+  rl-agent SSH attempt (allowed or denied) lands in the systemd journal.
+- `sudo grep -c '/etc/ssh/.agent-allow' /var/log/auth.log` — count of recent
+  toggle-gate evaluations (every connection attempt triggers the script).
+
+### Out of scope
+
+- This runbook does NOT manage the operator (`rl`/`sdodge`) SSH user.
+  Operator SSH stays open by design — it's the legitimate path for
+  break-glass and for the `rl-infra/cli/rl` CLI's own SSH calls.
+- The runner-internal SSH path (`docker exec runner-N sshd`) is not affected;
+  agents reach runners via Mutagen + the MCP tools, not direct SSH.
