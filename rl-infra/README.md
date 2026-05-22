@@ -297,6 +297,35 @@ compose-managed services.)
 
 ## Operator override — temporarily enabling rl-agent SSH
 
+> ⛔ **BLOCKED — DO NOT APPLY YET (2026-05-22).** The Codex `/security-review`
+> on ROK-1338 PR-3 (`planning-artifacts/security-review-223dfedd.md`) caught
+> a design gap: the MCP server itself authenticates to the VM **as
+> `rl-agent`** via `buildSshArgs` in `tools/mcp-rl-fleet/src/exec.ts:199`.
+> Same key, same user, same authentication path as the agent ad-hoc SSH this
+> runbook intends to deny. **Applying the apply sequence below would brick
+> the MCP transport for every tool** (`rl_claim`, `rl_status`, `rl_env_spin`,
+> `rl_db_query`, …) and leave agents with no remaining path to the fleet.
+>
+> The runbook is preserved as the *target end-state*. Before it can be
+> applied, one of these must land:
+>
+> 1. **MCP transport identity separation.** Issue a separate SSH user (e.g.
+>    `rl-mcp`) for the MCP server, with its own authorized_keys and its own
+>    sudoers/docker-group memberships that mirror today's `rl-agent`. Wire
+>    `buildSshArgs` to use the new user. Then this lockdown only denies
+>    `rl-agent` interactive SSH — MCP keeps working.
+> 2. **MCP transport off SSH.** Replace the SSH-based transport with an
+>    HTTPS service running on the VM (mTLS or HMAC-authenticated). The MCP
+>    server calls that service; the orchestrator binaries become handlers
+>    instead of SSH targets. No `rl-agent` SSH at all.
+>
+> Either path is a meaningful piece of work — tracked as a new prerequisite
+> on ROK-1338's umbrella checklist.
+>
+> Below this callout, every step is correct for the *post-fix* state. Leaving
+> it in place so the work is ready to apply the moment the design gap is
+> closed.
+
 > **Audience:** operator only. This runbook is informational for agents but
 > not actionable by them — there is no agent path back to direct SSH and
 > there shouldn't be. Per ROK-1338 PR-3, agent-side SSH as `rl-agent` is
