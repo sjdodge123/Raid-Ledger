@@ -1,6 +1,6 @@
 {
-  "id": "4eadcfbc-d2aa-49f4-ac3c-807a1e7839fa",
-  "prevId": "d7997945-3783-448e-aec8-fb94154db0c2",
+  "id": "8c631a11-e147-4dc6-913f-1ae89849af6f",
+  "prevId": "109fe2ec-1ec5-4c4d-88c8-eef3323ddc49",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2671,6 +2671,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "client_logs": {
+          "name": "client_logs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3132,6 +3138,12 @@
         },
         "bump_message_id": {
           "name": "bump_message_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bump_channel_id": {
+          "name": "bump_channel_id",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false
