@@ -2,8 +2,16 @@
 # =============================================================================
 # validate-migrations.sh - Validate Drizzle Migrations Against Real Postgres
 # =============================================================================
-# Spins up a temporary Postgres container, runs all Drizzle migrations, and
-# reports success or failure. Used by validate-ci.sh and can be run standalone.
+# Spins up a temporary Postgres container, applies every migration listed in
+# drizzle/migrations/meta/_journal.json in journal order via psql, and reports
+# success or failure. Used by validate-ci.sh and can be run standalone.
+#
+# Why psql instead of `drizzle-kit migrate`? The CLI silently swallows its own
+# errors via the hanji spinner UX — when it fails, no message reaches stdout/
+# stderr (verified 2026-05-22 with --no-color, TERM=dumb, script -qec, raw fd
+# capture). Applying SQL files directly with `psql -v ON_ERROR_STOP=1` gives a
+# real error message on failure and matches what GitHub CI does at boot time
+# via `api/scripts/run-migrations-with-sentry.ts`. ROK-1335.
 #
 # Usage:
 #   ./scripts/validate-migrations.sh
@@ -69,10 +77,35 @@ wait_for_postgres() {
 }
 
 run_migrations() {
-  local port="$1"
-  local db_url="postgresql://user:password@localhost:${port}/raid_ledger"
-  echo -e "${YELLOW}Running Drizzle migrations...${NC}"
-  (cd "$REPO_ROOT/api" && DATABASE_URL="$db_url" npx drizzle-kit migrate)
+  local journal="$REPO_ROOT/api/src/drizzle/migrations/meta/_journal.json"
+  local migrations_dir="$REPO_ROOT/api/src/drizzle/migrations"
+  echo -e "${YELLOW}Applying migrations via psql in journal order...${NC}"
+  if [ ! -f "$journal" ]; then
+    echo -e "${RED}Journal not found at $journal${NC}"
+    return 1
+  fi
+  local applied=0 missing=0
+  while IFS= read -r tag; do
+    local sql_file="$migrations_dir/${tag}.sql"
+    if [ ! -f "$sql_file" ]; then
+      echo -e "${RED}Missing migration file: ${tag}.sql${NC}"
+      missing=$((missing + 1))
+      continue
+    fi
+    if ! docker exec -i "$CONTAINER_NAME" \
+      psql -U user -d raid_ledger -v ON_ERROR_STOP=1 -q < "$sql_file" \
+      > /dev/null 2> /tmp/rl-mig-psql-err.log; then
+      echo -e "${RED}Migration ${tag} FAILED:${NC}"
+      cat /tmp/rl-mig-psql-err.log >&2
+      return 1
+    fi
+    applied=$((applied + 1))
+  done < <(jq -r '.entries[].tag' "$journal")
+  if [ "$missing" -gt 0 ]; then
+    echo -e "${RED}${missing} migration file(s) missing — see above${NC}"
+    return 1
+  fi
+  echo -e "${GREEN}Applied ${applied} migration(s) cleanly${NC}"
 }
 
 # ---------------------------------------------------------------------------
