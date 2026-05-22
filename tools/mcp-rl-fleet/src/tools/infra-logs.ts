@@ -4,9 +4,8 @@
 // docker-proxy logs without needing SSH access or docker-socket-proxy POST.
 // Strict service enum + tail cap. SSH via execFile argv-array.
 
-import { execFile } from 'node:child_process';
 import { z } from 'zod';
-import { synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import { execFileP, synthesizeEmptyStderrDiagnostic } from '../exec.js';
 
 export const TOOL_NAME = 'rl_infra_logs';
 export const TOOL_DESCRIPTION =
@@ -60,29 +59,6 @@ export interface InfraLogsResult {
 
 const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
 const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-
-function execFileP(
-  cmd: string,
-  args: string[],
-  opts: { timeout?: number; maxBuffer?: number } = {},
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    execFile(cmd, args, opts, (err, stdout, stderr) => {
-      const out =
-        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
-      const errStr =
-        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
-      if (err) {
-        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
-        e.stdout = out;
-        e.stderr = errStr || e.stderr || '';
-        reject(e);
-        return;
-      }
-      resolve({ stdout: out, stderr: errStr });
-    });
-  });
-}
 
 export async function execute(params: InfraLogsParams): Promise<InfraLogsResult> {
   // Defense-in-depth: re-validate at the executor boundary. Zod at the MCP

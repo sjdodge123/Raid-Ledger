@@ -31,7 +31,7 @@ import { z } from 'zod';
  * Reading `result.stdout` on the resolved value here ALWAYS works in both
  * real-runtime and test-mocked environments.
  */
-function execFileP(
+export function execFileP(
   cmd: string,
   args: string[],
   opts: { env?: NodeJS.ProcessEnv; cwd?: string; maxBuffer?: number; timeout?: number } = {},

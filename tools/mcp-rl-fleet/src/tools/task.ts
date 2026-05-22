@@ -13,9 +13,8 @@
 // long progress lines and we want a deterministic cap on payload size.
 // `steps[]` comes from M1's PASS/FAIL parser running over the log.
 
-import { execFile } from 'node:child_process';
 import { z } from 'zod';
-import { shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
 
 export const TASK_ID_RE = /^[a-z0-9]{8,32}$/;
 export const taskIdSchema = z.string().regex(TASK_ID_RE);
@@ -89,30 +88,6 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
 
 const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
 const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-
-/** Promisified execFile that doesn't trip Vitest's vi.mock on node:util. */
-function execFileP(
-  cmd: string,
-  args: string[],
-  opts: { timeout?: number; maxBuffer?: number } = {},
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    execFile(cmd, args, opts, (err, stdout, stderr) => {
-      const out =
-        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
-      const errStr =
-        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
-      if (err) {
-        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
-        e.stdout = out;
-        e.stderr = errStr || e.stderr || '';
-        reject(e);
-        return;
-      }
-      resolve({ stdout: out, stderr: errStr });
-    });
-  });
-}
 
 function sshArgs(remote: string): [string, string[]] {
   return [

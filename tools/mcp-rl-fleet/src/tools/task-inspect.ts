@@ -6,8 +6,7 @@
 // or agent can pull fields that status doesn't surface (env block, exact
 // command argv, internal state — whatever the orchestrator wrote).
 
-import { execFile } from 'node:child_process';
-import { shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
 import { TASK_ID_RE } from './task.js';
 
 export const TOOL_NAME = 'rl_task_inspect';
@@ -28,29 +27,6 @@ export interface ExecuteInspectResult {
 
 const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
 const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-
-function execFileP(
-  cmd: string,
-  args: string[],
-  opts: { timeout?: number; maxBuffer?: number } = {},
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    execFile(cmd, args, opts, (err, stdout, stderr) => {
-      const out =
-        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
-      const errStr =
-        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
-      if (err) {
-        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
-        e.stdout = out;
-        e.stderr = errStr || e.stderr || '';
-        reject(e);
-        return;
-      }
-      resolve({ stdout: out, stderr: errStr });
-    });
-  });
-}
 
 function sshArgs(remote: string): [string, string[]] {
   return [
