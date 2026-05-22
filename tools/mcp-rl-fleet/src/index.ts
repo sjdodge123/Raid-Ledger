@@ -302,7 +302,7 @@ registerTool('rl_task_status', TASK_STATUS_DESC, taskStatusSchema, async (p) =>
 );
 
 const TASK_WAIT_DESC =
-  "Long-poll via SSH inotifywait on the task's JSON file. Blocks until the task transitions to a terminal state OR the timeout expires (default 600s). Returns the same shape as rl_task_status on transition; returns {ok:false, error:'timed_out', task_id, waited_seconds} on timeout (resume polling via rl_task_status or another rl_task_wait). Returns {ok:false, error:'inotifywait_not_installed'} when the VM doesn't have inotify-tools.";
+  "Long-poll via SSH inotifywait on the task's JSON file. Blocks until the task transitions to a terminal state OR the timeout expires (default 600s). Returns the same shape as rl_task_status on transition; returns {ok:false, error:'timed_out', task_id, waited_seconds} on timeout (resume polling via rl_task_status or another rl_task_wait). Returns {ok:false, error:'inotifywait_not_installed', operator_only:true} when the VM is missing inotify-tools (operator-only to install). Returns {ok:false, error:'ssh_denied'|'ssh_unreachable', hint:...} when the SSH transport itself fails (e.g. post-ROK-1338 lockdown).";
 const taskWaitSchema: Shape = {
   task_id: taskIdSchema,
   timeout_seconds: z.number().int().min(5).max(3600).optional(),
