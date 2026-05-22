@@ -47,10 +47,13 @@ export const TARGET_TO_PATH: Record<EnvInspectTarget, string> = {
 // quotes for it to break out of.
 const SLUG_RE = /^[a-z0-9-]+$/;
 
-export const EnvInspectParamsSchema = z.object({
-  slug: z.string().min(1).max(63).regex(SLUG_RE),
-  what: EnvInspectTargetSchema,
-});
+export const EnvInspectParamsSchema = z
+  .object({
+    slug: z.string().min(1).max(63).regex(SLUG_RE),
+    what: EnvInspectTargetSchema,
+  })
+  .strict(); // dogfood #4 — reject unknown keys
+const ALLOWED_PARAM_KEYS = new Set(['slug', 'what']);
 
 export type EnvInspectParams = z.infer<typeof EnvInspectParamsSchema>;
 
@@ -64,6 +67,7 @@ export interface EnvInspectResult {
   truncated?: boolean;
   bytes?: number;
   error?: string;
+  hint?: string;
   message?: string;
 }
 
@@ -80,6 +84,20 @@ const MAX_BUFFER = 64 * 1024;
  * other SSH/docker failure).
  */
 export async function execute(params: EnvInspectParams): Promise<EnvInspectResult> {
+  // Dogfood #4 — reject unknown keys explicitly (MCP SDK strips silently;
+  // direct callers see this instead).
+  if (params && typeof params === 'object') {
+    for (const k of Object.keys(params)) {
+      if (!ALLOWED_PARAM_KEYS.has(k)) {
+        return {
+          ok: false,
+          error: 'unknown_param',
+          message: `unknown parameter: ${k}`,
+          hint: `rl_env_inspect accepts only: ${[...ALLOWED_PARAM_KEYS].join(', ')}`,
+        };
+      }
+    }
+  }
   // Defense-in-depth: re-validate at the executor boundary even though the
   // MCP server's Zod layer already guards. Executors don't trust callers.
   const validated = EnvInspectParamsSchema.safeParse(params);

@@ -256,3 +256,17 @@ describe('rl_env_inspect — execute()', () => {
     expect(result.message).toContain('Connection refused');
   });
 });
+
+describe('rl_env_inspect — dogfood #4 unknown-key rejection', () => {
+  it('rejects worktree_path (silent-strip would otherwise hide it)', async () => {
+    const result = await execute({
+      slug: 'myslug',
+      what: 'nginx-conf',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      worktree_path: '/Users/sdodge/foo',
+    } as any);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('unknown_param');
+    expect(result.message).toContain('worktree_path');
+  });
+});

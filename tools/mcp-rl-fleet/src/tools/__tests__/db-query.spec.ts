@@ -175,10 +175,61 @@ describe('rl_db_query — FORBIDDEN_KEYWORDS pre-check', () => {
     expect(result.error).toBe('blocked_keyword');
     expect(mockExecFile).not.toHaveBeenCalled();
   });
+
+  // Dogfood #2 — validator showed string-concat bypass:
+  // SELECT pg_catalog.set_config('default'||'_transaction_read_only', 'off', false)
+  // The set_config() function family is now blocked entirely.
+  it('rejects set_config(...) (the string-concat bypass vector)', async () => {
+    const result = await execute({
+      slug: 'myslug',
+      sql: "SELECT set_config('default'||'_transaction_read_only', 'off', false)",
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('blocked_keyword');
+    expect(result.hint).toMatch(/set_config/i);
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects pg_catalog.set_config(...) (the catalog-prefixed form)', async () => {
+    const result = await execute({
+      slug: 'myslug',
+      sql: "SELECT pg_catalog.set_config('default'||'_transaction_read_only', 'off', false)",
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('blocked_keyword');
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
+
+  it('allows current_setting() (read-only, legitimate)', async () => {
+    execFileOk('current_setting\nUTC\n');
+    const result = await execute({
+      slug: 'myslug',
+      sql: "SELECT current_setting('TimeZone')",
+      read_only: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('rl_db_query — dogfood #4 unknown-key rejection', () => {
+  it('rejects worktree_path (silent-strip behavior would otherwise hide it)', async () => {
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SELECT 1',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      worktree_path: '/Users/sdodge/foo',
+    } as any);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('unknown_param');
+    expect(result.message).toContain('worktree_path');
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
 });
 
 describe('rl_db_query — SSH invocation shape (hardened per architect)', () => {
-  it('builds the architect-locked PGOPTIONS + subquery-wrap remote command', async () => {
+  it('builds the dogfood-corrected hardened remote command (SET LOCAL timeout + opaque NULL sentinel + no PGOPTIONS)', async () => {
     execFileOk('count\n42\n');
     await execute({
       slug: 'myslug',
@@ -188,27 +239,30 @@ describe('rl_db_query — SSH invocation shape (hardened per architect)', () => 
     const call = mockExecFile.mock.calls[0];
     expect(call[0]).toBe('ssh');
     const remote = String(call[1].at(-1));
-    // Layer 1 — PGOPTIONS connect-time GUC (the chokepoint).
-    expect(remote).toContain(
-      "PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=5000'",
-    );
+    // Dogfood #1 — PGOPTIONS proven dead (env-psql `docker exec` drops the
+    // env var); REPLACED with SET LOCAL inside the transaction.
+    expect(remote).not.toContain('PGOPTIONS');
+    // SET LOCAL is inside the outer single-quoted -c argument, so the `'5s'`
+    // single quotes are POSIX-escaped to `'\''5s'\''`. Match the keyword
+    // sequence + the timeout value without re-asserting the exact quoting.
+    expect(remote).toMatch(/SET LOCAL statement_timeout\s*=\s*'\\''5s'\\''/);
     // env-psql orchestrator binary path.
     expect(remote).toContain('/srv/rl-infra/orchestrator/bin/env-psql');
     // Slug shellQuoted.
     expect(remote).toContain("'myslug'");
-    // psql flags — CSV, quiet (suppress BEGIN/SET/ROLLBACK command-tag echo —
-    // dogfood-surfaced; without `-q`, those echoes poison CSV parsing),
-    // ON_ERROR_STOP, NULL sentinel double-escape, FETCH_COUNT.
+    // psql flags — CSV, quiet (suppress BEGIN/SET/ROLLBACK command-tag echo),
+    // ON_ERROR_STOP, opaque NULL sentinel (dogfood #3 — `\N` collided with
+    // real data), FETCH_COUNT.
     expect(remote).toContain('--csv');
     expect(remote).toContain('-q ');
     expect(remote).toContain('-v ON_ERROR_STOP=1');
-    expect(remote).toContain('-P null=\\\\N');
+    expect(remote).toContain('null=__RL_NULL_e8f3a4__');
     expect(remote).toContain('--set=FETCH_COUNT=1001');
-    // Layer 2 — BEGIN/SET TRANSACTION READ ONLY/ROLLBACK wrapper.
+    // BEGIN/SET TRANSACTION READ ONLY/ROLLBACK wrapper.
     expect(remote).toContain('BEGIN;');
     expect(remote).toContain('SET TRANSACTION READ ONLY;');
     expect(remote).toContain('ROLLBACK;');
-    // Layer 4 — subquery wrap with LIMIT 1001 (1000 + 1 sentinel for truncation).
+    // Subquery wrap with LIMIT 1001 (1000 + 1 sentinel for truncation).
     expect(remote).toContain('SELECT * FROM (SELECT count(*) FROM users) AS rl_user_query LIMIT 1001');
   });
 
@@ -265,20 +319,27 @@ describe('rl_db_query — happy path CSV parsing', () => {
     expect(typeof result.elapsed_ms).toBe('number');
   });
 
-  it('maps unquoted \\N to JS null; quoted "" stays empty string; quoted "\\N" stays literal', async () => {
-    // Architect §C — NULL vs empty string vs literal `\N` distinguishable.
-    const csv = 'id,name,deleted_at\n1,Alice,\\N\n2,"",2026-01-01\n3,"\\N",NULL\n';
+  it('maps unquoted opaque-sentinel to JS null; quoted "" stays empty string; literal `\\N` round-trips (dogfood #3)', async () => {
+    // Dogfood #3 — psql's default `\N` NULL marker collided with real data
+    // (`SELECT E'\\N'` round-tripped as null under `-P null=\N`). Switched
+    // to an opaque hex-tagged sentinel that cannot occur in legitimate data.
+    // Now `\N` literals in real columns round-trip as the string `\N`.
+    const csv =
+      'id,name,deleted_at,raw_backslash_n\n' +
+      '1,Alice,__RL_NULL_e8f3a4__,foo\n' +
+      '2,"",2026-01-01,bar\n' +
+      '3,Bob,2026-02-01,"\\N"\n';
     execFileOk(csv);
     const result = await execute({
       slug: 'myslug',
-      sql: 'SELECT id, name, deleted_at FROM users',
+      sql: 'SELECT id, name, deleted_at, raw_backslash_n FROM users',
       read_only: true,
     });
     expect(result.ok).toBe(true);
     expect(result.rows).toEqual([
-      { id: '1', name: 'Alice', deleted_at: null },
-      { id: '2', name: '', deleted_at: '2026-01-01' },
-      { id: '3', name: '\\N', deleted_at: 'NULL' },
+      { id: '1', name: 'Alice', deleted_at: null, raw_backslash_n: 'foo' },
+      { id: '2', name: '', deleted_at: '2026-01-01', raw_backslash_n: 'bar' },
+      { id: '3', name: 'Bob', deleted_at: '2026-02-01', raw_backslash_n: '\\N' },
     ]);
   });
 

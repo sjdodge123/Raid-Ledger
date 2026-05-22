@@ -368,6 +368,7 @@ const taskLogsSchema: Shape = {
   task_id: taskIdSchema,
   lines: z.number().int().positive().max(5000).optional(),
   follow: z.boolean().optional(),
+  strip_ansi: z.boolean().optional(),
 };
 registerTool(
   taskLogs.TOOL_NAME,

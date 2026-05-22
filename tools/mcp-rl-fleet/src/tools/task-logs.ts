@@ -15,16 +15,23 @@ import { TASK_ID_RE } from './task.js';
 
 export const TOOL_NAME = 'rl_task_logs';
 export const TOOL_DESCRIPTION =
-  'Tail the supervisor stdout+stderr log for a task: returns the last N lines of /srv/rl-infra/state/tasks/<id>.log. Companion to rl_task_inspect (forensic JSON state) and rl_task_status (summarized status with capped log_tail). Use when you want a fresh, configurably-deep slice of the real log file. lines defaults to 100, max 5000. follow:true is deferred in v1 — poll rl_task_status instead.';
+  'Tail the supervisor stdout+stderr log for a task: returns the last N lines of /srv/rl-infra/state/tasks/<id>.log. Companion to rl_task_inspect (forensic JSON state) and rl_task_status (summarized status with capped log_tail). Use when you want a fresh, configurably-deep slice of the real log file. lines defaults to 100, max 5000. strip_ansi:true (default false) strips ANSI color/style escapes from each line so log output is plain text. follow:true is deferred in v1 — poll rl_task_status instead.';
 
 const LINES_MAX = 5000;
 const LINES_DEFAULT = 100;
 
-export const TaskLogsParamsSchema = z.object({
-  task_id: z.string().regex(TASK_ID_RE),
-  lines: z.number().int().positive().max(LINES_MAX).optional(),
-  follow: z.boolean().optional(),
-});
+export const TaskLogsParamsSchema = z
+  .object({
+    task_id: z.string().regex(TASK_ID_RE),
+    lines: z.number().int().positive().max(LINES_MAX).optional(),
+    follow: z.boolean().optional(),
+    // Dogfood #5: validate-ci + many fleet tools color their output via ANSI
+    // escapes. The raw bytes are useful for some consumers; opt-in stripping
+    // is useful for agents grep-ing or parsing line content.
+    strip_ansi: z.boolean().optional(),
+  })
+  .strict(); // dogfood #4 — reject unknown keys
+const ALLOWED_PARAM_KEYS = new Set(['task_id', 'lines', 'follow', 'strip_ansi']);
 
 export type TaskLogsParams = z.infer<typeof TaskLogsParamsSchema>;
 
@@ -70,6 +77,20 @@ function logPathFor(taskId: string): string {
  *     task.ts::executeWait is ported. Direct tail is sufficient for v1.
  */
 export async function execute(params: TaskLogsParams): Promise<TaskLogsResult> {
+  // Dogfood #4 — reject unknown keys explicitly (MCP SDK strips silently;
+  // direct callers see this instead).
+  if (params && typeof params === 'object') {
+    for (const k of Object.keys(params)) {
+      if (!ALLOWED_PARAM_KEYS.has(k)) {
+        return {
+          ok: false,
+          error: 'unknown_param',
+          message: `unknown parameter: ${k}`,
+          hint: `rl_task_logs accepts only: ${[...ALLOWED_PARAM_KEYS].join(', ')}`,
+        };
+      }
+    }
+  }
   const validated = TaskLogsParamsSchema.safeParse(params);
   if (!validated.success) {
     return {
@@ -81,6 +102,7 @@ export async function execute(params: TaskLogsParams): Promise<TaskLogsResult> {
   const { task_id } = validated.data;
   const lines = validated.data.lines ?? LINES_DEFAULT;
   const follow = validated.data.follow ?? false;
+  const stripAnsi = validated.data.strip_ansi ?? false;
 
   if (follow) {
     return {
@@ -115,17 +137,31 @@ export async function execute(params: TaskLogsParams): Promise<TaskLogsResult> {
       ok: true,
       task_id,
       log_path: logPath,
-      lines: splitNonEmpty(stdout),
+      lines: maybeStripAnsi(splitNonEmpty(stdout), stripAnsi),
       truncated: false,
     };
   } catch (err) {
-    return classifyError(err, task_id, logPath);
+    return classifyError(err, task_id, logPath, stripAnsi);
   }
 }
 
 /** Split a tail blob on \n and drop empty entries. */
 function splitNonEmpty(blob: string): string[] {
   return blob.split('\n').filter((l) => l.length > 0);
+}
+
+// ANSI CSI / OSC / SGR escape pattern. Matches `ESC[...m`, `ESC[?h`, etc.
+// Pulled from the well-known regex; safe — no catastrophic backtracking.
+// Reference: ansi-regex npm package, vendored to avoid the dep.
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /[][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-PRZcf-ntqry=><]/g;
+
+function stripAnsiCodes(s: string): string {
+  return s.replace(ANSI_RE, '');
+}
+
+function maybeStripAnsi(lines: string[], on: boolean): string[] {
+  return on ? lines.map(stripAnsiCodes) : lines;
 }
 
 /**
@@ -142,6 +178,7 @@ function classifyError(
   err: unknown,
   taskId: string,
   logPath: string,
+  stripAnsi: boolean,
 ): TaskLogsResult {
   const e = err as Error & {
     stdout?: string;
@@ -158,7 +195,7 @@ function classifyError(
       ok: true,
       task_id: taskId,
       log_path: logPath,
-      lines: splitNonEmpty(captured),
+      lines: maybeStripAnsi(splitNonEmpty(captured), stripAnsi),
       truncated: true,
     };
   }

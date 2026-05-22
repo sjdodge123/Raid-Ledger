@@ -286,3 +286,53 @@ describe('rl_task_logs — follow:true v1 deferral', () => {
     expect(result.lines).toEqual(['content']);
   });
 });
+
+describe('rl_task_logs — dogfood #5 ANSI strip', () => {
+  // Validate-ci colors its output. Without strip_ansi:true, agents see
+  // `[0;32mPASS[0m` mixed into the line content.
+  const ANSI_LINE = '[0;32mAll checks passed![0m';
+  const PLAIN = 'All checks passed!';
+
+  it('default (strip_ansi unset) leaves ANSI escapes verbatim', async () => {
+    execFileOk(`${ANSI_LINE}\n`);
+    const result = await execute({ task_id: 'abc123def', lines: 5 });
+    expect(result.ok).toBe(true);
+    expect(result.lines).toEqual([ANSI_LINE]);
+  });
+
+  it('strip_ansi:true strips SGR escapes from each line', async () => {
+    execFileOk(`${ANSI_LINE}\n[1;33mSKIPPED[0m\nplain\n`);
+    const result = await execute({ task_id: 'abc123def', strip_ansi: true });
+    expect(result.ok).toBe(true);
+    expect(result.lines).toEqual([PLAIN, 'SKIPPED', 'plain']);
+  });
+
+  it('strip_ansi:false is explicit no-op (parity with default)', async () => {
+    execFileOk(`${ANSI_LINE}\n`);
+    const result = await execute({ task_id: 'abc123def', strip_ansi: false });
+    expect(result.lines).toEqual([ANSI_LINE]);
+  });
+});
+
+describe('rl_task_logs — dogfood #4 unknown-key rejection', () => {
+  it('rejects worktree_path (silent-strip would otherwise hide it)', async () => {
+    const result = await execute({
+      task_id: 'abc123def',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      worktree_path: '/Users/sdodge/foo',
+    } as any);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('unknown_param');
+    expect(result.message).toContain('worktree_path');
+  });
+
+  it('rejects arbitrary extra keys', async () => {
+    const result = await execute({
+      task_id: 'abc123def',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      typo_param: true,
+    } as any);
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('unknown_param');
+  });
+});

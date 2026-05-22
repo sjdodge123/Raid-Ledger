@@ -5,27 +5,45 @@
 // write mode is NOT shipped in v1; when needed it gets its own MCP tool
 // with its own threat model.
 //
-// SAFETY MODEL (architect-locked, planning-artifacts/architect-ROK-1338-pr2.md
-// §"Belt-and-suspenders defence layers"):
+// SAFETY MODEL (architect-locked + dogfood-corrected):
 //
-//   1. PGOPTIONS connect-time GUC (the chokepoint) —
-//      `-c default_transaction_read_only=on -c statement_timeout=5000`
-//      makes EVERY implicit/explicit transaction read-only by default.
-//      `SET LOCAL` mid-session cannot unset GUCs received via PGOPTIONS.
-//   2. BEGIN; SET TRANSACTION READ ONLY; ...; ROLLBACK; wrapper —
-//      redundant defence + keeps logs readable.
-//   3. FORBIDDEN_KEYWORDS pre-check — string-rejects the four known knobs
-//      that flip the GUC mid-session (default_transaction_read_only,
-//      SET SESSION AUTHORIZATION, RESET ALL, \connect).
-//   4. SELECT * FROM (<user-sql>) AS rl_user_query LIMIT 1001 —
+// The architect-locked design originally pinned PGOPTIONS as the primary
+// "chokepoint" — but independent dogfood (2026-05-22) proved env-psql does
+// `exec docker exec -i $PG ... "$@"` with NO `-e` flag, so the SSH-side
+// PGOPTIONS environment never reaches the container. statement_timeout
+// stayed at 0 (queries ran 10+ seconds); default_transaction_read_only
+// stayed at 'off' at session level. PGOPTIONS was dead defence. Replaced
+// with SET LOCAL inside the explicit transaction (which DOES bind to the
+// running txn). The real layered defence is:
+//
+//   1. BEGIN; SET TRANSACTION READ ONLY; SET LOCAL statement_timeout='5s';
+//      ...; ROLLBACK; wrapper — **THE** read-only + timeout chokepoint.
+//      SET LOCAL is bound to the current explicit transaction; both ON_ERROR_STOP
+//      and ROLLBACK ensure we never escape it.
+//   2. FORBIDDEN_KEYWORDS pre-check — string-rejects known knobs that
+//      could flip the read-only GUC. Surface-level pre-filter; NOT the
+//      primary defender. Catches plain-text attempts (`SET default_transaction_read_only`,
+//      `SET SESSION AUTHORIZATION`, `RESET ALL`, `\connect`, and the
+//      `set_config(...)` function family that string-concat bypass uses).
+//   3. SELECT * FROM (<user-sql>) AS rl_user_query LIMIT 1001 —
 //      forces user input to be a single SELECT-able expression at the
-//      SQL-syntax layer; doubles as the row-limit (truncate to 1000).
-//   5. `-v ON_ERROR_STOP=1` — psql aborts on first error instead of
+//      SQL-syntax layer; semicolons + DDL + BEGIN/COMMIT inside the subquery
+//      are syntax errors at the Postgres parser. Doubles as the row-limit.
+//   4. `-v ON_ERROR_STOP=1` — psql aborts on first error instead of
 //      running subsequent statements with relaxed state.
+//   5. `-q` (--quiet) — suppresses BEGIN/SET/ROLLBACK command-tag echoes
+//      that would otherwise poison CSV parsing (dogfood-found).
+//
+// NULL sentinel: we use an unguessable opaque marker (`__RL_NULL_e8f3a4__`)
+// rather than psql's default `\N` because real data CAN contain the 2-char
+// `\N` literal (verified — `SELECT E'\\N'` round-tripped as null under the
+// `\N` sentinel, silent data corruption). The opaque marker can't collide.
 //
 // NO `worktree_path` param — interactive read-only-by-default query tool,
 // no Mutagen sync needed. Consistent with PR-1 rl_task_inspect /
-// rl_infra_logs. Intentional omission, do not add for parity.
+// rl_infra_logs. Intentional omission. Executor REJECTS unknown keys
+// (defense in depth — the MCP SDK strips at boundary, but direct callers
+// like tests + dogfood scripts also get the strict treatment).
 
 import { z } from 'zod';
 import { parse as parseCsv } from 'csv-parse/sync';
@@ -33,7 +51,7 @@ import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.
 
 export const TOOL_NAME = 'rl_db_query';
 export const TOOL_DESCRIPTION =
-  'Run a one-shot read-only SQL query against a fleet env Postgres via env-psql. Defends against write-attempts and DDL via PGOPTIONS GUC + transaction wrapper + subquery wrap + ON_ERROR_STOP. Returns rows as [{col: val,...}] parsed from CSV. NULL distinguishable from empty string. Caps at 1000 rows (truncated:true flag). 5s statement timeout. v1 is read_only:true only — write-mode is a separate future tool.';
+  'Run a one-shot read-only SQL query against a fleet env Postgres via env-psql. Defends against writes/DDL via BEGIN/SET TRANSACTION READ ONLY/ROLLBACK wrapper + SET LOCAL statement_timeout=5s + FORBIDDEN_KEYWORDS pre-check + subquery LIMIT 1001 wrap + ON_ERROR_STOP. Returns rows as [{col: val,...}] parsed from CSV with opaque-marker NULL sentinel (NULL distinguishable from empty string AND from literal `\\N` data). Caps at 1000 rows (truncated:true flag). v1 is read_only:true only — write-mode is a separate future tool.';
 
 // ---------------------------------------------------------------------------
 // Zod schema (MCP boundary)
@@ -52,11 +70,14 @@ const slugSchema = z
  * it gets its OWN MCP tool with its own threat model — keep this surface
  * narrow.
  */
-export const DbQueryParamsSchema = z.object({
-  slug: slugSchema,
-  sql: z.string().min(1).max(10000),
-  read_only: z.literal(true).optional().default(true),
-});
+export const DbQueryParamsSchema = z
+  .object({
+    slug: slugSchema,
+    sql: z.string().min(1).max(10000),
+    read_only: z.literal(true).optional().default(true),
+  })
+  .strict(); // dogfood #4 — reject unknown keys at executor boundary
+const ALLOWED_PARAM_KEYS = new Set(['slug', 'sql', 'read_only']);
 
 export type DbQueryParams = z.infer<typeof DbQueryParamsSchema>;
 
@@ -88,38 +109,57 @@ const FETCH_LIMIT = ROW_LIMIT + 1; // 1001 — the truncation sentinel
 // blocked attempt costs no network round-trip and produces a clear error
 // envelope. False-positive risk minimal — no legitimate read-only query
 // needs to mention these tokens.
+// Dogfood #2: validator showed `set_config('default'||'_transaction_read_only', 'off', false)`
+// bypasses a regex looking for the literal token. Block the `set_config(` function
+// family entirely — no legitimate read-only query needs to MUTATE a GUC, only read.
+// `current_setting()` remains allowed (read-only).
 const FORBIDDEN_KEYWORDS: RegExp[] = [
   /default_transaction_read_only/i,
   /set\s+session\s+authorization/i,
   /reset\s+all/i,
   /\\connect/i,
+  /\bset_config\s*\(/i,
+  /\bpg_catalog\.set_config\s*\(/i,
 ];
 
+// Dogfood #3: psql's default `\N` NULL sentinel collides with real data
+// (`SELECT E'\\N'` round-trips as null under `-P null=\N`). Use an
+// opaque hex-tagged marker that cannot occur in legitimate data unless
+// someone is actively trying to spoof — and even then the parser only
+// converts it to null when csv-parse reports the cell was UNQUOTED in
+// the source CSV (which a real cell containing this string would never be).
+export const NULL_SENTINEL = '__RL_NULL_e8f3a4__';
+
 /**
- * Build the architect-locked hardened remote command. The `params.sql` has
- * been pre-stripped of trailing semicolons. All layers (PGOPTIONS, subquery
- * wrap, psql flags) assembled here in one place for auditability.
+ * Build the hardened remote command. The `params.sql` has been pre-stripped
+ * of trailing semicolons. All defense layers assembled here in one place.
+ *
+ * Dogfood #1 fix: PGOPTIONS env var does NOT propagate through env-psql's
+ * `docker exec` boundary (no `-e` flag), so PGOPTIONS-set statement_timeout
+ * stayed at 0 in practice. Replaced with `SET LOCAL statement_timeout='5s'`
+ * INSIDE the explicit transaction — SET LOCAL is txn-scoped, ROLLBACK ends
+ * it, and ON_ERROR_STOP guarantees we never leave the SET LOCAL state.
  */
 function buildRemoteCommand(slug: string, sql: string): string {
   const stripped = sql.trim().replace(/;\s*$/, '');
   const wrappedSql =
-    `BEGIN; SET TRANSACTION READ ONLY; ` +
+    `BEGIN; ` +
+    `SET TRANSACTION READ ONLY; ` +
+    `SET LOCAL statement_timeout = '5s'; ` +
     `SELECT * FROM (${stripped}) AS rl_user_query LIMIT ${FETCH_LIMIT}; ` +
     `ROLLBACK;`;
-  // `-P null=\\\\N`: in JS string `\\\\N` is the 4-char sequence `\\N`,
-  // which the SSH shell collapses to `\N`, which psql reads as the NULL
-  // sentinel. The CSV parser then maps unquoted `\N` to JS null.
+  // `-P null=<sentinel>`: psql emits this literal string for NULL cells in
+  // CSV output. csv-parse then maps unquoted occurrences back to JS null.
+  // The opaque sentinel can't collide with real data (cf. dogfood #3).
   //
   // `-q` (--quiet) suppresses the command-tag echoes that psql writes to
   // stdout when running BEGIN / SET / ROLLBACK statements. Without -q, the
   // multi-statement -c string sends `BEGIN\nSET\n<csv-header>\n<csv-row>\nROLLBACK`
-  // to stdout — the CSV parser then treats `BEGIN` as the header row, which
-  // shifts every column name + data cell. Dogfood-surfaced bug — the in-vitro
-  // tests with pre-cleaned stdout fixtures missed it.
+  // to stdout — the CSV parser then treats `BEGIN` as the header row.
   return (
-    `PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=5000' ` +
     `/srv/rl-infra/orchestrator/bin/env-psql ${shellQuote(slug)} -- ` +
-    `--csv -q -v ON_ERROR_STOP=1 -P null=\\\\N --set=FETCH_COUNT=${FETCH_LIMIT} ` +
+    `--csv -q -v ON_ERROR_STOP=1 -P ${shellQuote(`null=${NULL_SENTINEL}`)} ` +
+    `--set=FETCH_COUNT=${FETCH_LIMIT} ` +
     `-c ${shellQuote(wrappedSql)}`
   );
 }
@@ -142,7 +182,11 @@ function parseCsvResponse(
     columns: true,
     skip_empty_lines: true,
     cast: (value: string, ctx: { quoting: boolean }) => {
-      if (!ctx.quoting && value === '\\N') return null;
+      // Only treat the sentinel as NULL when csv-parse reports the source
+      // cell was UNQUOTED (i.e. psql emitted it from a real NULL, not a
+      // user data row that happens to contain the same string). Even with
+      // the opaque marker this guards against an attacker-spoofed row.
+      if (!ctx.quoting && value === NULL_SENTINEL) return null;
       return value;
     },
   }) as Array<Record<string, string | null>>;
@@ -257,6 +301,23 @@ function classifyError(
  * @param params - slug + sql + read_only:true (write-mode not in v1).
  */
 export async function execute(params: DbQueryParams): Promise<DbQueryResult> {
+  // Dogfood #4 — explicit unknown-key reject. The MCP SDK strips unknown
+  // keys at its boundary (silent), so a direct executor caller (tests,
+  // dogfood scripts, future non-MCP transport) would otherwise also see
+  // silent strip. With the strict() schema below, unknown keys here become
+  // a structured error envelope instead.
+  if (params && typeof params === 'object') {
+    for (const k of Object.keys(params)) {
+      if (!ALLOWED_PARAM_KEYS.has(k)) {
+        return {
+          ok: false,
+          error: 'unknown_param',
+          message: `unknown parameter: ${k}`,
+          hint: `rl_db_query accepts only: ${[...ALLOWED_PARAM_KEYS].join(', ')}`,
+        };
+      }
+    }
+  }
   // Defense-in-depth: re-validate at the executor boundary. Zod at the MCP
   // layer already guards, but executors don't trust that.
   const validated = DbQueryParamsSchema.safeParse(params);
