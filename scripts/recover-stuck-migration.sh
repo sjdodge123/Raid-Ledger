@@ -157,13 +157,28 @@ fi
 # grep — works for the canonical compact-pretty journal format drizzle emits.
 JOURNAL_HAS_TAG=""
 if command -v python3 >/dev/null 2>&1; then
-  JOURNAL_HAS_TAG="$(python3 -c "
+  # 2>&1 captures Python's traceback inside the assignment so we can re-emit
+  # it in our own ERROR: style instead of leaking it to the operator. `set -e`
+  # does not abort on $(...) failures, so the explicit `if !` is mandatory.
+  if ! JOURNAL_HAS_TAG="$(python3 -c "
 import json, sys
-with open('$JOURNAL_PATH') as f:
-    data = json.load(f)
+try:
+    with open('$JOURNAL_PATH') as f:
+        data = json.load(f)
+except json.JSONDecodeError as e:
+    print(f'__PARSE_ERROR__: {e}', file=sys.stderr)
+    sys.exit(2)
 tags = [e.get('tag') for e in data.get('entries', [])]
 print('yes' if '$TAG' in tags else 'no')
-")"
+" 2>&1)"; then
+    # Extract the parse error line if we tagged it, otherwise show the
+    # raw stderr without the traceback noise.
+    detail="$(echo "$JOURNAL_HAS_TAG" | grep '^__PARSE_ERROR__:' | sed 's/^__PARSE_ERROR__: //' | head -1)"
+    if [[ -z "$detail" ]]; then
+      detail="$(echo "$JOURNAL_HAS_TAG" | tail -1)"
+    fi
+    die "could not parse $JOURNAL_PATH — is it valid JSON? ($detail)"
+  fi
 else
   if grep -q "\"tag\": \"$TAG\"" "$JOURNAL_PATH"; then
     JOURNAL_HAS_TAG="yes"
