@@ -157,20 +157,29 @@ fi
 # grep — works for the canonical compact-pretty journal format drizzle emits.
 JOURNAL_HAS_TAG=""
 if command -v python3 >/dev/null 2>&1; then
+  # SECURITY: pass TAG + JOURNAL_PATH via env vars, NEVER via string
+  # interpolation into the python source — a tag containing `'` would otherwise
+  # break out of the string literal and execute arbitrary Python (Codex
+  # security review, ROK-1343 follow-up).
+  #
   # 2>&1 captures Python's traceback inside the assignment so we can re-emit
   # it in our own ERROR: style instead of leaking it to the operator. `set -e`
   # does not abort on $(...) failures, so the explicit `if !` is mandatory.
-  if ! JOURNAL_HAS_TAG="$(python3 -c "
-import json, sys
+  if ! JOURNAL_HAS_TAG="$(
+    _RECOVER_TAG="$TAG" _RECOVER_JOURNAL="$JOURNAL_PATH" python3 -c "
+import json, os, sys
+journal_path = os.environ['_RECOVER_JOURNAL']
+tag = os.environ['_RECOVER_TAG']
 try:
-    with open('$JOURNAL_PATH') as f:
+    with open(journal_path) as f:
         data = json.load(f)
 except json.JSONDecodeError as e:
     print(f'__PARSE_ERROR__: {e}', file=sys.stderr)
     sys.exit(2)
 tags = [e.get('tag') for e in data.get('entries', [])]
-print('yes' if '$TAG' in tags else 'no')
-" 2>&1)"; then
+print('yes' if tag in tags else 'no')
+" 2>&1
+  )"; then
     # Extract the parse error line if we tagged it, otherwise show the
     # raw stderr without the traceback noise.
     detail="$(echo "$JOURNAL_HAS_TAG" | grep '^__PARSE_ERROR__:' | sed 's/^__PARSE_ERROR__: //' | head -1)"
@@ -180,7 +189,7 @@ print('yes' if '$TAG' in tags else 'no')
     die "could not parse $JOURNAL_PATH — is it valid JSON? ($detail)"
   fi
 else
-  if grep -q "\"tag\": \"$TAG\"" "$JOURNAL_PATH"; then
+  if grep -qF "\"tag\": \"$TAG\"" "$JOURNAL_PATH"; then
     JOURNAL_HAS_TAG="yes"
   else
     JOURNAL_HAS_TAG="no"
@@ -225,6 +234,16 @@ if [[ -z "$DB_URL" && "$DRY_RUN" -eq 0 ]]; then
   die "DATABASE_URL is not set and --db-url was not passed"
 fi
 
+# SECURITY: psql treats a positional arg starting with `-` as an option
+# (e.g. `-c "DROP TABLE..."`), so a hostile DATABASE_URL could execute
+# arbitrary SQL. Require a postgres:// or postgresql:// prefix AND pass
+# the URL via `--dbname=` (which interprets the value as a connection
+# string regardless of leading characters). Codex security review,
+# ROK-1343 follow-up.
+if [[ -n "$DB_URL" && ! "$DB_URL" =~ ^postgres(ql)?:// ]]; then
+  die "DB URL must start with postgres:// or postgresql://, got: $DB_URL"
+fi
+
 if [[ "$DRY_RUN" -eq 0 ]] && ! command -v psql >/dev/null 2>&1; then
   die "psql is not on PATH (install postgresql-client)"
 fi
@@ -236,7 +255,7 @@ fi
 # Ensure the drizzle schema + metadata table exist (drizzle creates them on
 # first migrate; if we're reaching for this script that may not have happened
 # yet on a fresh DB).
-PSQL_BASE=(psql "$DB_URL" -v ON_ERROR_STOP=1 -At)
+PSQL_BASE=(psql "--dbname=$DB_URL" -v ON_ERROR_STOP=1 -At)
 
 ensure_table_sql="CREATE SCHEMA IF NOT EXISTS drizzle;
 CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
