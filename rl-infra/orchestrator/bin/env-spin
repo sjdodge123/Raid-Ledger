@@ -28,7 +28,7 @@ _env_spin_trap_on_abort() {
         jq -nc --argjson rc "$rc" --arg slug "${SLUG:-}" --arg phase "${LAST_PHASE:-unknown}" \
             '{ok:false, error:"env_spin_aborted_unexpectedly", exit_code:$rc, slug:$slug,
               last_phase:$phase,
-              hint:("env-spin aborted with rc=" + ($rc|tostring) + " after completing phase \"" + $phase + "\". The failing line is between the marker for that phase and the next. Re-run with bash -x on the VM if more detail is needed: ssh rl@vm bash -x /srv/rl-infra/orchestrator/bin/env-spin --slug " + $slug)}' \
+              hint:("env-spin aborted with rc=" + ($rc|tostring) + " after completing phase \"" + $phase + "\". The failing line is between the marker for that phase and the next. Agents: call rl_infra_logs(service=gc-sweeper, tail=200) for sweeper-side context. Operator-only follow-ups (rl-agent does not have shell on the VM): read /srv/rl-infra/audit.log for the matching env-spin err entry; run bash -x for deeper tracing.")}' \
         2>/dev/null || echo '{"ok":false,"error":"env_spin_aborted_unexpectedly","exit_code":'"$rc"',"last_phase":"'"${LAST_PHASE:-unknown}"'"}'
     fi
 }

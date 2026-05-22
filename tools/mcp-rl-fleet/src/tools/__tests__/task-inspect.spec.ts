@@ -141,11 +141,18 @@ describe('rl_task_inspect — execute()', () => {
     expect(result.message).toContain('not json');
   });
 
-  it('surfaces SSH failure stderr verbatim under task_inspect_failed', async () => {
+  it('returns ssh_unreachable on Connection refused (ROK-1338 PR-3)', async () => {
     execFileFail(255, 'ssh: connect to host rl-infra port 22: Connection refused');
     const result = await execute({ task_id: 'abc123def' });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe('task_inspect_failed');
+    expect(result.error).toBe('ssh_unreachable');
     expect(result.message).toContain('Connection refused');
+  });
+
+  it('returns ssh_denied on Permission denied (publickey) (ROK-1338 PR-3)', async () => {
+    execFileFail(255, 'rl-agent@rl-infra: Permission denied (publickey).');
+    const result = await execute({ task_id: 'abc123def' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
   });
 });

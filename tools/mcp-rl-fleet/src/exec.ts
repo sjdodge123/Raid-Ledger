@@ -409,11 +409,103 @@ function sanitizeExtra(opts: RlEnv): Record<string, string> {
  */
 export function synthesizeEmptyStderrDiagnostic(exitCode: number | undefined): string {
   const code = typeof exitCode === 'number' ? String(exitCode) : 'unknown';
+  // ROK-1338 PR-3 (C1): include `permission denied (publickey, post-ROK-1338
+  // lockdown)` in the causes list so an agent who hits the empty-stderr fall-
+  // through path knows the lockdown is a plausible cause. The wording is
+  // INFORMATIONAL — the classifier's DENIED_RE matches the literal
+  // `Permission denied (publickey)` form (capitalized + uppercase regex),
+  // not this lowercase variant, so the synth string never accidentally
+  // re-enters the classifier as a false positive.
   return (
     `[mcp-rl-fleet: ssh returned exit ${code} with no output — ` +
-    `possible causes: command not found, shell init failure, ` +
-    `git dubious-ownership, stdin pipeline error, ssh connection drop]`
+    `possible causes: permission denied (publickey, post-ROK-1338 lockdown), ` +
+    `command not found, shell init failure, git dubious-ownership, ` +
+    `stdin pipeline error, ssh connection drop]`
   );
+}
+
+/**
+ * Classify an OpenSSH-client-level failure (auth denied, host unreachable)
+ * from the (exitCode, stderr) pair of a failed `execFile('ssh', ...)` call.
+ *
+ * Returns:
+ *   - `{error: 'ssh_denied', hint: <text>}` when sshd rejected the identity.
+ *     Expected post-ROK-1338 lockdown for rl-agent; agents should STOP
+ *     retrying and surface the structured envelope so the operator triages.
+ *   - `{error: 'ssh_unreachable', hint: <text>}` when the SSH client could
+ *     not reach sshd at all (network down, fleet VM off, DNS, fail2ban).
+ *   - `null` when stderr is not recognizably an SSH-client error. The
+ *     caller falls through to its own classifier (postgres syntax, docker
+ *     "no such container", etc).
+ *
+ * Pure: no side effects, no async, no I/O. Trivial to unit test.
+ *
+ * Exit codes: OpenSSH uses 255 as the catch-all "ssh itself failed" code.
+ * We accept any exit code — the stderr regex is the source of truth (many
+ * real failures land on exit 1/2 when wrapped via `timeout` or `Promise.race`).
+ */
+export function classifySshFailure(
+  exitCode: number | undefined,
+  stderr: string,
+):
+  | { error: 'ssh_denied'; hint: string }
+  | { error: 'ssh_unreachable'; hint: string }
+  | null {
+  // exitCode currently unused for classification (the stderr regex is
+  // authoritative); kept in the signature so callers can pass it without
+  // a discard variable, and so future heuristics can add code-aware logic.
+  void exitCode;
+
+  // Empty stderr → caller already substituted synthesized diagnostic.
+  // Don't try to classify from synth text; let the caller's existing
+  // logic handle it (the *_unreachable / exit-code fall-through paths).
+  if (!stderr) return null;
+
+  // Synth diagnostic (C1) is informational only — it lists "permission denied
+  // (publickey, post-ROK-1338 lockdown)" as a *possible cause*, not real
+  // OpenSSH output. Skip classification so the caller's exit-code fall-
+  // through (`*_unreachable` on exit 255 + empty stderr) keeps its
+  // pre-PR-3 semantics. AC-C1 + the db-query "exit-255 with empty stderr
+  // as db_unreachable" regression test pin this contract.
+  if (stderr.startsWith('[mcp-rl-fleet:')) return null;
+
+  // Denied patterns. Host-key verification failure is classified as DENIED
+  // (not unreachable) — it's a sshd-side identity decision; "retry won't
+  // help" matches the ssh_denied UX.
+  const DENIED_RE =
+    /(?:Permission denied(?:,? please try again| \([^)]+\))|Host key verification failed)/i;
+  if (DENIED_RE.test(stderr)) {
+    return {
+      error: 'ssh_denied',
+      hint:
+        'MCP transport failed at sshd: rl-agent SSH is denied. This is the ' +
+        'expected post-ROK-1338 behavior — use the MCP tools (which run ' +
+        "inside the server's already-authenticated transport) rather than " +
+        "retrying. If you're an operator, see the rl-agent break-glass " +
+        'runbook in rl-infra/README.md.',
+    };
+  }
+
+  // Unreachable patterns. `Connection closed by ... port 22` (sshd hung up
+  // before banner) is treated as unreachable — it usually means sshd is up
+  // but refused before authentication started (fail2ban, MaxStartups).
+  const UNREACHABLE_RE =
+    /(?:Connection refused|Connection timed out|Connection closed by [^\n]* port 22|No route to host|ssh: connect to host [^\s]+ port \d+:|ssh: Could not resolve hostname)/i;
+  if (UNREACHABLE_RE.test(stderr)) {
+    return {
+      error: 'ssh_unreachable',
+      hint:
+        'MCP transport failed: the rl-infra VM is not reachable. Check ' +
+        "rl_status first; if that also fails, the fleet is down or you're " +
+        'off the network.',
+    };
+  }
+
+  // Exit 255 with stderr that doesn't match either bucket — usually a local
+  // SSH config issue (`unknown option`, `bad configuration`) or signal-on-
+  // shutdown. Don't claim either bucket; let the caller's existing path
+  // classify so message context is preserved.
+  return null;
 }
 
 /**

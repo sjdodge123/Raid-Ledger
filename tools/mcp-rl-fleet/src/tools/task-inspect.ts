@@ -8,6 +8,7 @@
 
 import {
   buildSshArgs,
+  classifySshFailure,
   execFileP,
   shellQuote,
   synthesizeEmptyStderrDiagnostic,
@@ -28,6 +29,8 @@ export interface ExecuteInspectResult {
   task?: Record<string, unknown>;
   error?: string;
   message?: string;
+  /** ROK-1338 PR-3: populated when classifySshFailure returns ssh_denied/ssh_unreachable. */
+  hint?: string;
 }
 
 export async function execute(params: ExecuteInspectParams): Promise<ExecuteInspectResult> {
@@ -93,6 +96,20 @@ export async function execute(params: ExecuteInspectParams): Promise<ExecuteInsp
       !e.stderr || e.stderr.trim() === ''
         ? synthesizeEmptyStderrDiagnostic(e.code)
         : e.stderr;
+    // ROK-1338 PR-3: shared SSH classifier — symmetric with rl_db_query /
+    // rl_env_inspect / rl_task_logs / rl_task_* per spec §589 (operator-
+    // approved symmetry wiring). Splits sshd-denied (post-lockdown) from
+    // network-unreachable so agents don't mis-treat either as the
+    // not-found path below.
+    const sshClass = classifySshFailure(e.code, stderr);
+    if (sshClass) {
+      return {
+        ok: false,
+        task_id: params.task_id,
+        ...sshClass,
+        message: stderr,
+      };
+    }
     // Common case: file doesn't exist — `cat` exits 1 with "No such file…".
     // Surface as a structured not-found.
     if (/No such file or directory/i.test(stderr)) {

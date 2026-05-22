@@ -14,7 +14,12 @@
 // `steps[]` comes from M1's PASS/FAIL parser running over the log.
 
 import { z } from 'zod';
-import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import {
+  classifySshFailure,
+  execFileP,
+  shellQuote,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
 
 export const TASK_ID_RE = /^[a-z0-9]{8,32}$/;
 export const taskIdSchema = z.string().regex(TASK_ID_RE);
@@ -79,6 +84,8 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
   task_id?: string;
   error?: string;
   message?: string;
+  /** ROK-1338 PR-3: populated when classifySshFailure returns ssh_denied/ssh_unreachable. */
+  hint?: string;
   // executeStatus normalizes `steps` to [] on success-shape responses (and
   // omits it on raw error envelopes). Declared as a non-optional array so
   // callers can write `result.steps.length` without a chain of null checks.
@@ -154,6 +161,20 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
       !e.stderr || e.stderr.trim() === ''
         ? synthesizeEmptyStderrDiagnostic(e.code)
         : e.stderr;
+    // ROK-1338 PR-3 (B4): shared SSH classifier — surfaces sshd-denied
+    // (post-lockdown) vs network-unreachable as structured errors so the
+    // agent sees what kind of transport failure happened rather than a
+    // generic task_status_failed envelope.
+    const sshClass = classifySshFailure(e.code, stderr);
+    if (sshClass) {
+      return {
+        ok: false,
+        task_id: params.task_id,
+        ...sshClass,
+        message: stderr,
+        steps: [],
+      };
+    }
     return {
       ok: false,
       error: 'task_status_failed',
@@ -183,6 +204,13 @@ export interface ExecuteWaitResult extends Partial<TaskStatusResult> {
   task_id?: string;
   error?: string;
   hint?: string;
+  /**
+   * ROK-1338 PR-3 (A3): true when the hint describes a step only the operator
+   * can take (e.g. `apt-get install inotify-tools` on the VM). rl-agent
+   * cannot act on it; the flag is a machine-readable marker for the
+   * dashboard / MCP layer / agents to route the failure correctly.
+   */
+  operator_only?: boolean;
   waited_seconds?: number;
   message?: string;
   /** Mirrors the executeStatus-side normalization to make property access ergonomic. */
@@ -203,11 +231,37 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
   const [probeCmd, probeArgs] = sshArgs(probeRemote);
   try {
     await execFileP(probeCmd, probeArgs, { timeout: 10_000 });
-  } catch {
+  } catch (probeErr) {
+    const e = probeErr as Error & { stderr?: string; code?: number };
+    const probeStderr =
+      !e.stderr || e.stderr.trim() === ''
+        ? synthesizeEmptyStderrDiagnostic(e.code)
+        : e.stderr;
+    // ROK-1338 PR-3 (B4): if the probe failed at the SSH transport (denied
+    // or unreachable), surface that — not the misleading "inotify is
+    // missing" envelope. Post-lockdown, the probe SSH call is the FIRST
+    // SSH call this tool makes; a ssh_denied here would otherwise pin the
+    // entire wait loop on a retry that can never succeed.
+    const sshClass = classifySshFailure(e.code, probeStderr);
+    if (sshClass) {
+      return {
+        ok: false,
+        task_id: params.task_id,
+        ...sshClass,
+        message: probeStderr,
+      };
+    }
     return {
       ok: false,
       error: 'inotifywait_not_installed',
-      hint: 'apt-get install inotify-tools on the VM (or whatever the runner image uses)',
+      // ROK-1338 PR-3 (A3): the operator installs inotify-tools; rl-agent
+      // cannot sudo. operator_only flags this as a machine-readable
+      // "escalate" signal so dashboards / agents don't show a self-fix path.
+      operator_only: true,
+      hint:
+        'inotify-tools is missing on the rl-infra VM. This is operator-only ' +
+        'to install (apt-get install -y inotify-tools); agents cannot ' +
+        'self-remediate.',
     };
   }
 
@@ -276,7 +330,11 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
         ),
       ]);
     } catch (err) {
-      const e = err as Error & { code?: string | number; signal?: string };
+      const e = err as Error & {
+        code?: string | number;
+        signal?: string;
+        stderr?: string;
+      };
       const overallElapsed = Math.round((Date.now() - (overallDeadlineMs - timeoutS * 1000)) / 1000);
       const cycleElapsedMs = Date.now() - cycleStartedMs;
       // Local-timer / SIGTERM / exceeded remaining budget → overall timeout.
@@ -298,6 +356,29 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
           error: 'timed_out',
           task_id: params.task_id,
           waited_seconds: overallElapsed,
+        };
+      }
+      // ROK-1338 PR-3 (B4): if the inotifywait SSH call hit sshd-denied or
+      // host-unreachable, RETURN IMMEDIATELY rather than re-looping. Without
+      // this, a Permission denied (publickey) at the watch SSH would pin
+      // the entire loop on a retry that can never succeed until the
+      // overall timeout fires.
+      const watchStderr =
+        !e.stderr || e.stderr.trim() === ''
+          ? synthesizeEmptyStderrDiagnostic(
+              typeof e.code === 'number' ? e.code : undefined,
+            )
+          : e.stderr;
+      const sshClass = classifySshFailure(
+        typeof e.code === 'number' ? e.code : undefined,
+        watchStderr,
+      );
+      if (sshClass) {
+        return {
+          ok: false,
+          task_id: params.task_id,
+          ...sshClass,
+          message: watchStderr,
         };
       }
       // Some other failure (SSH drop, grep nomatch, etc.) — surface current state.
@@ -340,12 +421,18 @@ export interface ExecuteCancelResult {
   mcp_runtime_status?: string;
   error?: string;
   message?: string;
+  /** ROK-1338 PR-3: populated when classifySshFailure returns ssh_denied/ssh_unreachable. */
+  hint?: string;
 }
 
 export async function executeCancel(params: ExecuteCancelParams): Promise<ExecuteCancelResult> {
+  // task-cancel takes positional args: <task_id> <reason>. Earlier versions of
+  // this shim passed `--reason <reason>` which the binary recorded as
+  // cancel_reason: "--reason" (the flag literal, not the value). Caught by the
+  // ROK-1338 PR-3 zero-SSH dogfood.
   const remote =
     `/srv/rl-infra/orchestrator/bin/task-cancel ` +
-    `${shellQuote(params.task_id)} --reason ${shellQuote(params.reason)}`;
+    `${shellQuote(params.task_id)} ${shellQuote(params.reason)}`;
   const [cmd, args] = sshArgs(remote);
   try {
     const { stdout } = await execFileP(cmd, args, {
@@ -373,6 +460,17 @@ export async function executeCancel(params: ExecuteCancelParams): Promise<Execut
       !e.stderr || e.stderr.trim() === ''
         ? synthesizeEmptyStderrDiagnostic(e.code)
         : e.stderr;
+    // ROK-1338 PR-3 (B4): shared SSH classifier — surface ssh_denied /
+    // ssh_unreachable before falling back to task_cancel_failed.
+    const sshClass = classifySshFailure(e.code, stderr);
+    if (sshClass) {
+      return {
+        ok: false,
+        task_id: params.task_id,
+        ...sshClass,
+        message: stderr,
+      };
+    }
     return {
       ok: false,
       error: 'task_cancel_failed',
@@ -397,6 +495,8 @@ export interface ExecuteListResult {
   tasks?: Array<Omit<TaskStatusResult, 'log_tail'>>;
   error?: string;
   message?: string;
+  /** ROK-1338 PR-3: populated when classifySshFailure returns ssh_denied/ssh_unreachable. */
+  hint?: string;
 }
 
 export async function executeList(params: ExecuteListParams): Promise<ExecuteListResult> {
@@ -426,6 +526,16 @@ export async function executeList(params: ExecuteListParams): Promise<ExecuteLis
       !e.stderr || e.stderr.trim() === ''
         ? synthesizeEmptyStderrDiagnostic(e.code)
         : e.stderr;
+    // ROK-1338 PR-3 (B4): shared SSH classifier — surface ssh_denied /
+    // ssh_unreachable before falling back to task_list_failed.
+    const sshClass = classifySshFailure(e.code, stderr);
+    if (sshClass) {
+      return {
+        ok: false,
+        ...sshClass,
+        message: stderr,
+      };
+    }
     return {
       ok: false,
       error: 'task_list_failed',

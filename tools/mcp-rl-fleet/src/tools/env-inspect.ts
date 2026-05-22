@@ -12,7 +12,12 @@
 // intentional omission.
 
 import { z } from 'zod';
-import { buildSshArgs, execFileP, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import {
+  buildSshArgs,
+  classifySshFailure,
+  execFileP,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
 
 export const TOOL_NAME = 'rl_env_inspect';
 export const TOOL_DESCRIPTION =
@@ -198,6 +203,25 @@ function classifyError(err: unknown, ctx: ErrCtx): EnvInspectResult {
     captured === ''
       ? synthesizeEmptyStderrDiagnostic(typeof e.code === 'number' ? e.code : undefined)
       : captured;
+  // ROK-1338 PR-3 (B2): shared SSH classifier — must precede docker-side
+  // checks. An `ssh_denied` failure produces empty stdout+stderr like
+  // `Permission denied (publickey)` — neither No-such-container nor
+  // No-such-file matchers fire on it, so without this branch the agent
+  // sees env_inspect_failed with a generic synth message.
+  const sshClass = classifySshFailure(
+    typeof e.code === 'number' ? e.code : undefined,
+    stderr,
+  );
+  if (sshClass) {
+    return {
+      ok: false,
+      slug: ctx.slug,
+      what: ctx.what,
+      container: ctx.container,
+      ...sshClass,
+      message: stderr,
+    };
+  }
   if (/No such container/i.test(stderr)) {
     return {
       ok: false,

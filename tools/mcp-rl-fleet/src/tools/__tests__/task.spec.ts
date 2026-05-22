@@ -260,6 +260,146 @@ describe('rl_task_cancel — executeCancel()', () => {
     const result = await executeCancel({ task_id: 'abc123def', reason: 'cleanup' });
     expect(result.ok).toBe(true);
   });
+
+  // Regression: ROK-1338 PR-3 dogfood caught this shim passing `--reason <r>`
+  // which task-cancel (positional <task_id> <reason>) recorded as the literal
+  // string "--reason" in cancel_reason. Lock the positional contract.
+  it('passes task_id + reason as positional argv to the orchestrator binary (no --reason flag)', async () => {
+    execFileOk({ ok: true, task_id: 'abc123def', mcp_runtime_status: 'cancelled' });
+    await executeCancel({ task_id: 'abc123def', reason: 'dogfood done' });
+    const firstCall = mockExecFile.mock.calls[0];
+    const argv = JSON.stringify(firstCall.slice(0, 2));
+    expect(argv).toContain('/srv/rl-infra/orchestrator/bin/task-cancel');
+    expect(argv).toContain('abc123def');
+    expect(argv).toContain('dogfood done');
+    expect(argv).not.toContain('--reason');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1338 PR-3 — shared SSH classifier wiring for the four task tools.
+// ---------------------------------------------------------------------------
+//
+// Each catch-block in task.ts now routes through classifySshFailure BEFORE
+// falling back to its generic *_failed envelope. Tests pin both buckets
+// (denied + unreachable) for status / cancel / list, plus the executeWait
+// inotifywait-probe guard that stops a tight retry loop on ssh_denied.
+
+describe('rl_task_status — ROK-1338 PR-3 SSH classifier', () => {
+  it('returns ssh_denied on Permission denied (publickey)', async () => {
+    execFileFail(255, 'rl-agent@rl-infra: Permission denied (publickey).');
+    const result = await executeStatus({ task_id: 'abc123def' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
+    expect((result as { hint?: string }).hint).toMatch(/post-ROK-1338|MCP tools/);
+  });
+
+  it('returns ssh_unreachable on Connection refused', async () => {
+    execFileFail(
+      255,
+      'ssh: connect to host rl-infra port 22: Connection refused',
+    );
+    const result = await executeStatus({ task_id: 'abc123def' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_unreachable');
+  });
+});
+
+describe('rl_task_cancel — ROK-1338 PR-3 SSH classifier', () => {
+  it('returns ssh_denied on Permission denied (publickey)', async () => {
+    execFileFail(255, 'rl-agent@rl-infra: Permission denied (publickey).');
+    const result = await executeCancel({
+      task_id: 'abc123def',
+      reason: 'test',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
+  });
+
+  it('returns ssh_unreachable on Connection refused', async () => {
+    execFileFail(
+      255,
+      'ssh: connect to host rl-infra port 22: Connection refused',
+    );
+    const result = await executeCancel({
+      task_id: 'abc123def',
+      reason: 'test',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_unreachable');
+  });
+});
+
+describe('rl_task_wait — ROK-1338 PR-3 SSH classifier', () => {
+  // Without the probe-side classifier, a Permission denied (publickey) at the
+  // inotifywait `command -v` probe would mis-classify as inotifywait_not_installed.
+  it('returns ssh_denied immediately when inotifywait probe gets Permission denied', async () => {
+    // Probe call returns Permission denied — must short-circuit BEFORE
+    // status pre-check, BEFORE attaching inotifywait. ssh_denied
+    // envelope returned to caller; the otherwise-misleading
+    // inotifywait_not_installed envelope is NOT returned.
+    execFileFail(255, 'rl-agent@rl-infra: Permission denied (publickey).');
+    const result = await executeWait({
+      task_id: 'abc123def',
+      timeout_seconds: 5,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
+    // No follow-on status/inotify calls — single probe + immediate return.
+    expect(mockExecFile.mock.calls.length).toBe(1);
+  });
+
+  it('returns ssh_unreachable when inotifywait probe gets Connection refused', async () => {
+    execFileFail(
+      255,
+      'ssh: connect to host rl-infra port 22: Connection refused',
+    );
+    const result = await executeWait({
+      task_id: 'abc123def',
+      timeout_seconds: 5,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_unreachable');
+    expect(mockExecFile.mock.calls.length).toBe(1);
+  });
+});
+
+describe('rl_task_wait — ROK-1338 PR-3 A3 hint rewrite', () => {
+  it('returns operator_only:true with operator-only hint on inotifywait_not_installed', async () => {
+    // Probe fails with a non-SSH reason (e.g. command not found inside the
+    // shell session). The classifier returns null → fall through to the
+    // inotifywait_not_installed envelope, now decorated with operator_only.
+    execFileFail(127, 'bash: inotifywait: command not found');
+    const result = await executeWait({
+      task_id: 'abc123def',
+      timeout_seconds: 5,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('inotifywait_not_installed');
+    expect((result as { operator_only?: boolean }).operator_only).toBe(true);
+    expect(result.hint).toMatch(/operator-only/);
+    // The pre-PR-3 `apt-get install inotify-tools on the VM` literal is gone.
+    expect(result.hint).not.toContain('apt-get install inotify-tools on the VM');
+  });
+});
+
+describe('rl_task_list — ROK-1338 PR-3 SSH classifier', () => {
+  it('returns ssh_denied on Permission denied (publickey)', async () => {
+    execFileFail(255, 'rl-agent@rl-infra: Permission denied (publickey).');
+    const result = await executeList({});
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
+  });
+
+  it('returns ssh_unreachable on Connection refused', async () => {
+    execFileFail(
+      255,
+      'ssh: connect to host rl-infra port 22: Connection refused',
+    );
+    const result = await executeList({});
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_unreachable');
+  });
 });
 
 describe('rl_task_list — executeList()', () => {

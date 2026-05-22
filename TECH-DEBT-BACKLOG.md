@@ -642,3 +642,14 @@ Six failures resolved by ROK-1298's fixes (AC3 a11y, AC9 keyboard, vote-toggle k
 
 - **[low]** `tools/mcp-rl-fleet/src/tools/__tests__/test-plan.spec.ts:112` — `AC6 — curlOnVM rejects CR/LF/NUL in header values > throws when a header value contains \0 (NUL byte)` fails on this branch's base (confirmed via `git stash && npx vitest run src/tools/__tests__/test-plan.spec.ts` from a clean tree — 1 failed, 4 passed). The test calls `executeStatus({ slug: 'aaa' })` and expects `{ok: false}` to be returned, but gets `{}` instead. Likely the `executeStatus` function in `test-plan.ts` short-circuits on a missing curl-on-vm path and returns `{}` rather than an error envelope. Not caused by PR-2 — db-query.ts is a brand-new file with no shared state with test-plan.ts. Pre-existing.
   Suggested: read `test-plan.ts::executeStatus` against the AC6 assertions; either the executor needs to surface `{ok: false, error: 'invalid_header'}` for NUL-byte rejection, OR the test should assert on whatever shape is actually returned (likely an unhandled-rejection path).
+
+### 2026-05-22 — rok-1338-pr3-ssh-lockdown (reviewer follow-ups for next cycle)
+
+- **[low]** `tools/mcp-rl-fleet/src/exec.ts:492-501` — `UNREACHABLE_RE` would false-positive on psql-side `Connection refused` if a future write-mode `rl_db_query` (or similar) emits psql stderr that reaches the classifier. Today's tools' postgres-specific matchers run first in `db-query.ts::classifyError`, so this is latent.
+  Suggested: anchor unreachable patterns with an `ssh:` prefix where feasible — `(?:ssh:\s+connect to host \S+ port \d+:\s+)?(?:Connection refused|Connection timed out|...)`. OR add a `psql:` head-exclusion in `classifySshFailure`. Reviewer flagged 2026-05-22; defer to a hardening cycle.
+- **[low]** `tools/mcp-rl-fleet/src/exec.ts:475-486` — `DENIED_RE` could theoretically match `permission denied (some context)` postgres errors. Real-world postgres uses `permission denied for <object>` (no parens) so collision is unlikely; consumer-side classifier ordering keeps it safe today.
+  Suggested: tighten to require a publickey/password/gssapi/hostbased context inside the parens — `\bPermission denied \([^)]*(?:publickey|password|gssapi|hostbased|keyboard-interactive)`. Reviewer flagged 2026-05-22.
+- **[low]** `tools/mcp-rl-fleet/src/tools/__tests__/task.spec.ts` — `executeWait` watch-side classifier (inside the wait loop, not the probe-side branch) has no direct test. Probe-side is tested; in-loop is covered indirectly.
+  Suggested: add `execFileOk(probe-success), execFileOk(status-running), execFileFail(255, 'Permission denied (publickey)')` test asserting immediate `ssh_denied` return.
+- **[nit]** `tools/mcp-rl-fleet/src/tools/db-url.ts` — `psql_exec_cmd` alias kept for one cycle (`@deprecated`); needs a removal tracked.
+  Suggested: add to the next cycle's removal list. Look for callers via grep before dropping.

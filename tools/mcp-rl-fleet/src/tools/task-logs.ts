@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import {
   buildSshArgs,
+  classifySshFailure,
   execFileP,
   shellQuote,
   synthesizeEmptyStderrDiagnostic,
@@ -208,6 +209,23 @@ function classifyError(
     captured === ''
       ? synthesizeEmptyStderrDiagnostic(typeof e.code === 'number' ? e.code : undefined)
       : captured;
+  // ROK-1338 PR-3 (B3): shared SSH classifier — runs BEFORE the No-such-
+  // file matcher so a `ssh_denied` failure is reported as the lockdown
+  // shape rather than masquerading as task_logs_failed with the synth
+  // diagnostic.
+  const sshClass = classifySshFailure(
+    typeof e.code === 'number' ? e.code : undefined,
+    message,
+  );
+  if (sshClass) {
+    return {
+      ok: false,
+      task_id: taskId,
+      log_path: logPath,
+      ...sshClass,
+      message,
+    };
+  }
   if (/No such file or directory/i.test(message)) {
     return {
       ok: false,

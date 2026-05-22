@@ -61,6 +61,7 @@ import JSONbigFactory from 'json-bigint';
 const JSONbig = JSONbigFactory({ storeAsString: true });
 import {
   buildSshArgs,
+  classifySshFailure,
   execFileP,
   shellQuote,
   synthesizeEmptyStderrDiagnostic,
@@ -113,6 +114,13 @@ export interface DbQueryResult {
   row_count?: number;
   truncated?: boolean;
   elapsed_ms?: number;
+  /**
+   * Tool-specific codes: env_not_found | read_only_violation |
+   * statement_timeout | syntax_error | db_unreachable | db_query_failed |
+   * response_too_large | blocked_keyword | unknown_param | invalid_params.
+   * SSH-transport codes (shared classifier, ROK-1338 PR-3):
+   *   ssh_denied | ssh_unreachable.
+   */
   error?: string;
   message?: string;
   hint?: string;
@@ -317,15 +325,24 @@ function classifyError(
         'Multi-statement queries, DDL, and explicit BEGIN/COMMIT/ROLLBACK are rejected.',
     };
   }
-  // SSH-level failures (host unreachable, auth refused, etc.) — exitCode
-  // 255 is ssh's standard "connection failed" code, but also catch the
-  // common "Connection refused" / "connect to host" patterns regardless
-  // of code.
-  if (
-    exitCode === 255 ||
-    /ssh:.*connect/i.test(stderr) ||
-    /Connection refused/i.test(stderr)
-  ) {
+  // ROK-1338 PR-3 (B1): shared SSH classifier — split sshd-side auth refusal
+  // (`ssh_denied`, the expected post-lockdown shape) from network failure
+  // (`ssh_unreachable`, fleet down). Postgres-specific classifiers above
+  // win when stderr contains BOTH an ssh:connect line AND a postgres error
+  // — pinned by the `read_only_violation when stderr contains BOTH …` test.
+  const sshClass = classifySshFailure(
+    typeof exitCode === 'number' ? exitCode : undefined,
+    stderr,
+  );
+  if (sshClass) {
+    return { ok: false, slug, ...sshClass, message: stderr.trim() };
+  }
+  // Exit 255 with stderr the classifier didn't bucket (e.g. empty stderr →
+  // synth diagnostic, which is informational only): preserve the original
+  // db_unreachable behavior so the `classifies exit-255 with empty stderr
+  // as db_unreachable via the exit-code branch` regression test keeps
+  // passing.
+  if (exitCode === 255) {
     return {
       ok: false,
       slug,
