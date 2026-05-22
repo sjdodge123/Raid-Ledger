@@ -1,6 +1,6 @@
 {
-  "id": "aec8decb-0993-47dd-95d8-116046cc5728",
-  "prevId": "eb6febd0-2072-456d-9903-358296a90fb5",
+  "id": "109fe2ec-1ec5-4c4d-88c8-eef3323ddc49",
+  "prevId": "4eadcfbc-d2aa-49f4-ac3c-807a1e7839fa",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -6001,6 +6001,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "scheduling_submitted_at": {
+          "name": "scheduling_submitted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -6340,6 +6346,99 @@
           "nullsNotDistinct": false,
           "columns": [
             "slot_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.community_lineup_user_submissions": {
+      "name": "community_lineup_user_submissions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lineup_id": {
+          "name": "lineup_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nominations_submitted_at": {
+          "name": "nominations_submitted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "votes_submitted_at": {
+          "name": "votes_submitted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "community_lineup_user_submissions_lineup_id_community_lineups_id_fk": {
+          "name": "community_lineup_user_submissions_lineup_id_community_lineups_id_fk",
+          "tableFrom": "community_lineup_user_submissions",
+          "tableTo": "community_lineups",
+          "columnsFrom": [
+            "lineup_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "community_lineup_user_submissions_user_id_users_id_fk": {
+          "name": "community_lineup_user_submissions_user_id_users_id_fk",
+          "tableFrom": "community_lineup_user_submissions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_lineup_user_submission": {
+          "name": "uq_lineup_user_submission",
+          "nullsNotDistinct": false,
+          "columns": [
+            "lineup_id",
             "user_id"
           ]
         }
