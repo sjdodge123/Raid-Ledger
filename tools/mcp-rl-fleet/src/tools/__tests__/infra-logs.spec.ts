@@ -203,12 +203,22 @@ describe('rl_infra_logs — execute()', () => {
     expect(result.lines).toEqual(['partial-line1', 'partial-line2']);
   });
 
-  it('surfaces other SSH failure stderr under infra_logs_failed', async () => {
-    execFileFail('ssh: connect to host rl-infra: Connection refused', 255);
+  it('returns ssh_unreachable on Connection refused (ROK-1338 PR-3)', async () => {
+    execFileFail(
+      'ssh: connect to host rl-infra port 22: Connection refused',
+      255,
+    );
     const result = await execute({ service: 'registry', tail: 50 });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe('infra_logs_failed');
+    expect(result.error).toBe('ssh_unreachable');
     expect(result.message).toContain('Connection refused');
+  });
+
+  it('returns ssh_denied on Permission denied (publickey) (ROK-1338 PR-3)', async () => {
+    execFileFail('rl-agent@rl-infra: Permission denied (publickey).', 255);
+    const result = await execute({ service: 'registry', tail: 50 });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
   });
 
   it('maps docker-proxy → rl-docker-proxy (the dashed name)', async () => {

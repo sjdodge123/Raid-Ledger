@@ -505,7 +505,7 @@ describe('rl_db_query — error classification (architect §D layers + spec §6)
     expect(result.error).toBe('statement_timeout');
   });
 
-  it('returns db_unreachable on ssh connection refused', async () => {
+  it('returns ssh_unreachable on ssh connection refused (ROK-1338 PR-3)', async () => {
     execFileFail(
       255,
       'ssh: connect to host rl-infra port 22: Connection refused',
@@ -516,7 +516,25 @@ describe('rl_db_query — error classification (architect §D layers + spec §6)
       read_only: true,
     });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe('db_unreachable');
+    expect(result.error).toBe('ssh_unreachable');
+  });
+
+  // ROK-1338 PR-3: shared classifier — Permission denied (publickey) is the
+  // expected post-lockdown shape. Distinguished from db_unreachable so
+  // agents stop retrying and surface the lockdown context to operators.
+  it('returns ssh_denied on Permission denied (publickey) (ROK-1338 PR-3)', async () => {
+    execFileFail(
+      255,
+      'rl-agent@rl-infra: Permission denied (publickey).',
+    );
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SELECT 1',
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
+    expect(result.hint).toMatch(/post-ROK-1338|MCP tools/);
   });
 
   it('returns db_query_failed for unknown errors with stderr verbatim', async () => {

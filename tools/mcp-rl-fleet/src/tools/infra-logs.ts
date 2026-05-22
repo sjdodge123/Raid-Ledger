@@ -5,7 +5,12 @@
 // Strict service enum + tail cap. SSH via execFile argv-array.
 
 import { z } from 'zod';
-import { buildSshArgs, execFileP, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import {
+  buildSshArgs,
+  classifySshFailure,
+  execFileP,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
 
 export const TOOL_NAME = 'rl_infra_logs';
 export const TOOL_DESCRIPTION =
@@ -55,6 +60,8 @@ export interface InfraLogsResult {
   truncated?: boolean;
   error?: string;
   message?: string;
+  /** ROK-1338 PR-3: populated when classifySshFailure returns ssh_denied/ssh_unreachable. */
+  hint?: string;
 }
 
 export async function execute(params: InfraLogsParams): Promise<InfraLogsResult> {
@@ -146,6 +153,24 @@ export async function execute(params: InfraLogsParams): Promise<InfraLogsResult>
       captured === ''
         ? synthesizeEmptyStderrDiagnostic(typeof e.code === 'number' ? e.code : undefined)
         : captured;
+    // ROK-1338 PR-3: shared SSH classifier — symmetric with rl_db_query /
+    // rl_env_inspect / rl_task_* per spec §589 (operator-approved symmetry).
+    // Runs BEFORE the No-such-container matcher so a sshd-denied response
+    // (post-lockdown) is surfaced correctly rather than mis-classified as
+    // a missing-container envelope.
+    const sshClass = classifySshFailure(
+      typeof e.code === 'number' ? e.code : undefined,
+      stderr,
+    );
+    if (sshClass) {
+      return {
+        ok: false,
+        service,
+        container,
+        ...sshClass,
+        message: stderr,
+      };
+    }
     // Common case: container missing → "Error: No such container: rl-foo".
     if (/No such container/i.test(stderr)) {
       return {

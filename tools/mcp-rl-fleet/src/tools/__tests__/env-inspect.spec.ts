@@ -248,12 +248,20 @@ describe('rl_env_inspect — execute()', () => {
     expect(result.message).toContain('255');
   });
 
-  it('surfaces generic SSH failure stderr verbatim under env_inspect_failed', async () => {
+  it('returns ssh_unreachable on Connection refused (ROK-1338 PR-3)', async () => {
     execFileFail('ssh: connect to host rl-infra port 22: Connection refused', 255);
     const result = await execute({ slug: 'myenv', what: 'supervisor-conf' });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe('env_inspect_failed');
+    expect(result.error).toBe('ssh_unreachable');
     expect(result.message).toContain('Connection refused');
+  });
+
+  it('returns ssh_denied on Permission denied (publickey) (ROK-1338 PR-3)', async () => {
+    execFileFail('rl-agent@rl-infra: Permission denied (publickey).', 255);
+    const result = await execute({ slug: 'myenv', what: 'supervisor-conf' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
+    expect(result.hint).toMatch(/post-ROK-1338|MCP tools/);
   });
 });
 

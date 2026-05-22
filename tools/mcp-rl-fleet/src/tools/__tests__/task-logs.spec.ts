@@ -224,12 +224,23 @@ describe('rl_task_logs — structural error paths', () => {
     expect(result.error).toBe('task_log_not_found');
   });
 
-  it('surfaces other SSH failure stderr under task_logs_failed', async () => {
-    execFileFail('ssh: connect to host rl-infra: Connection refused', 255);
+  it('returns ssh_unreachable on Connection refused (ROK-1338 PR-3)', async () => {
+    execFileFail(
+      'ssh: connect to host rl-infra port 22: Connection refused',
+      255,
+    );
     const result = await execute({ task_id: 'abc123def', lines: 100 });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe('task_logs_failed');
+    expect(result.error).toBe('ssh_unreachable');
     expect(result.message).toContain('Connection refused');
+  });
+
+  it('returns ssh_denied on Permission denied (publickey) (ROK-1338 PR-3)', async () => {
+    execFileFail('rl-agent@rl-infra: Permission denied (publickey).', 255);
+    const result = await execute({ task_id: 'abc123def', lines: 100 });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
+    expect(result.hint).toMatch(/post-ROK-1338|MCP tools/);
   });
 
   it('synthesizes a diagnostic when SSH exits non-zero with empty stderr', async () => {
