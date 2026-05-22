@@ -1,12 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -14,8 +8,8 @@ import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import {
   type EligibleEvent,
   findEligibleEvents,
@@ -24,7 +18,9 @@ import {
   buildSignupSummary,
   buildDiscordUrl,
   isWithinGracePeriod,
-  formatRelativeTimeLabel,
+  resolveBumpChannel,
+  formatBumpLog,
+  buildBumpEmbed,
 } from './recruitment-reminder.helpers';
 
 /** TTL for recruitment-reminder dedup keys: 48 hours in seconds */
@@ -45,6 +41,7 @@ export class RecruitmentReminderService {
     private readonly settingsService: SettingsService,
     private readonly discordBotClient: DiscordBotClientService,
     private readonly cronJobService: CronJobService,
+    private readonly channelResolver: ChannelResolverService,
   ) {}
 
   @Cron('45 */15 * * * *', {
@@ -251,7 +248,7 @@ export class RecruitmentReminderService {
     return false;
   }
 
-  /** Post a bump message in the event's Discord channel. */
+  /** Post a recruitment bump to the event's currently-bound channel (ROK-1335). */
   private async postChannelBump(event: EligibleEvent): Promise<void> {
     if (this.shouldSkipBump(event)) return;
     try {
@@ -259,83 +256,44 @@ export class RecruitmentReminderService {
         this.settingsService.getClientUrl(),
         this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
       ]);
-      const { embed, row } = this.buildBumpEmbed(
+      const { embed, row } = buildBumpEmbed(event, clientUrl, defaultTimezone);
+      const targetChannelId = await resolveBumpChannel(
+        this.channelResolver,
         event,
-        clientUrl,
-        defaultTimezone,
       );
       const message = await this.discordBotClient.sendEmbed(
-        event.channelId,
+        targetChannelId,
         embed,
         row,
       );
-      await this.persistBumpMessageId(event, message.id);
-      this.logger.log(
-        `Posted recruitment bump for event ${event.id} in channel ${event.channelId}`,
-      );
+      await this.persistBumpMessageId(event, message.id, targetChannelId);
+      this.logger.log(formatBumpLog(event, targetChannelId));
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.warn(
-        `Failed to post channel bump for event ${event.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to post channel bump for event ${event.id}: ${msg}`,
       );
     }
   }
 
-  /** Persist the bump message ID on the discord_event_messages record. */
+  /**
+   * Persist the bump message ID. WHERE clause stays on ORIGINAL event.channelId
+   * (row identity); bumpChannelId column records the actual bump target for
+   * cleanup after a rebind. ROK-1335.
+   */
   private async persistBumpMessageId(
     event: EligibleEvent,
     bumpMessageId: string,
+    bumpChannelId: string,
   ): Promise<void> {
     await this.db
       .update(schema.discordEventMessages)
-      .set({ bumpMessageId, updatedAt: new Date() })
+      .set({ bumpMessageId, bumpChannelId, updatedAt: new Date() })
       .where(
         and(
           eq(schema.discordEventMessages.eventId, event.id),
           eq(schema.discordEventMessages.channelId, event.channelId),
         ),
       );
-  }
-
-  /** Build the bump embed and action row. */
-  private buildBumpEmbed(
-    event: EligibleEvent,
-    clientUrl: string,
-    defaultTimezone: string,
-  ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
-    const signupSummary = buildSignupSummary(event);
-    // ROK-1240: TZ-aware "today"/"tomorrow"/"in Xh" label — fixes
-    // same-day events being labeled "tomorrow".
-    const timeLabel = formatRelativeTimeLabel(
-      event.startTime,
-      Date.now(),
-      defaultTimezone,
-    );
-
-    const embed = new EmbedBuilder()
-      .setTitle(`\uD83D\uDCE2 Spots still available — event ${timeLabel}!`)
-      .setDescription(
-        `**${event.title}** — ${event.gameName}\n${signupSummary}`,
-      )
-      .setColor(EMBED_COLORS.ANNOUNCEMENT)
-      .setTimestamp(new Date(event.startTime));
-
-    return { embed, row: this.buildBumpRow(event, clientUrl) };
-  }
-
-  /** Build the action row (View Event + View in Discord buttons). */
-  private buildBumpRow(
-    event: EligibleEvent,
-    clientUrl: string,
-  ): ActionRowBuilder<ButtonBuilder> {
-    return new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setLabel('View Event')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/events/${event.id}`),
-      new ButtonBuilder()
-        .setLabel('View in Discord')
-        .setStyle(ButtonStyle.Link)
-        .setURL(buildDiscordUrl(event)),
-    );
   }
 }

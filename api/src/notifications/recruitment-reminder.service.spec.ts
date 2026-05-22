@@ -655,7 +655,51 @@ describe('RecruitmentReminderService', () => {
 
       expect(mocks.mockDb.update).toHaveBeenCalled();
       expect(mocks.mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ bumpMessageId: 'bump-msg-999' }),
+        expect.objectContaining({
+          bumpMessageId: 'bump-msg-999',
+          // When resolver returns null (default mock), targetChannelId
+          // falls back to event.channelId, so bumpChannelId === channelId.
+          bumpChannelId: 'channel-abc',
+        }),
+      );
+    });
+
+    it('routes bump to resolver-chosen channel and persists bumpChannelId when bindings changed (ROK-1335)', async () => {
+      const event = makeEventRow({
+        id: 42,
+        channel_id: 'channel-OLD',
+        game_id: 7,
+        recurrence_group_id: 'series-xyz',
+        notification_channel_override: null,
+      });
+      mocks.mockDb.execute
+        .mockResolvedValueOnce([event])
+        .mockResolvedValueOnce([]);
+      mocks.mockChannelResolver.resolveChannelForEvent.mockResolvedValueOnce(
+        'channel-NEW',
+      );
+      mocks.mockDiscordBotClient.sendEmbed.mockResolvedValue({
+        id: 'bump-msg-777',
+      });
+
+      await service.checkAndSendReminders();
+
+      // Resolver was called with the event's binding-resolution coordinates.
+      expect(
+        mocks.mockChannelResolver.resolveChannelForEvent,
+      ).toHaveBeenCalledWith(7, 'series-xyz', null);
+      // sendEmbed was targeted at the resolver's choice, not the cached channel.
+      expect(mocks.mockDiscordBotClient.sendEmbed).toHaveBeenCalledWith(
+        'channel-NEW',
+        expect.anything(),
+        expect.anything(),
+      );
+      // Persistence records the actual bump channel for cleanup later.
+      expect(mocks.mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bumpMessageId: 'bump-msg-777',
+          bumpChannelId: 'channel-NEW',
+        }),
       );
     });
 

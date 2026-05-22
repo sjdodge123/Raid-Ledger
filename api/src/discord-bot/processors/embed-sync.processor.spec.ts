@@ -538,6 +538,37 @@ describe('EmbedSyncProcessor — bump message cleanup (ROK-728)', () => {
     );
   });
 
+  it('targets bumpChannelId (not channelId) when a rebind moved the bump (ROK-1335)', async () => {
+    // The original embed is in channel-789, but channel bindings changed
+    // between initial-post and bump-post, so the bump actually lives in
+    // channel-NEW. Cleanup must target channel-NEW, not channel-789.
+    setupDbForFullSync({ ...recordWithBump, bumpChannelId: 'channel-NEW' });
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(clientService.deleteMessage).toHaveBeenCalledWith(
+      'channel-NEW',
+      'bump-msg-001',
+    );
+  });
+
+  it('falls back to channelId when bumpChannelId is null (legacy rows pre-ROK-1335)', async () => {
+    setupDbForFullSync({ ...recordWithBump, bumpChannelId: null });
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(clientService.deleteMessage).toHaveBeenCalledWith(
+      'channel-789',
+      'bump-msg-001',
+    );
+  });
+
   it('clears bumpMessageId in DB after deleting from Discord', async () => {
     setupDbForFullSync(recordWithBump);
 

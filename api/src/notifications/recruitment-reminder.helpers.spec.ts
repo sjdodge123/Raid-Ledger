@@ -158,6 +158,8 @@ function makeGraceEvent(createdAt: string, startTime: string) {
     guildId: 'g',
     messageId: 'm',
     createdAt,
+    recurrenceGroupId: null,
+    notificationChannelOverride: null,
   };
 }
 
