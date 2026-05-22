@@ -284,7 +284,7 @@ export class RecruitmentReminderService {
         embed,
         row,
       );
-      await this.persistBumpMessageId(event, message.id);
+      await this.persistBumpMessageId(event, message.id, targetChannelId);
       this.logger.log(
         `Posted recruitment bump for event ${event.id} in channel ${targetChannelId}` +
           (targetChannelId !== event.channelId
@@ -311,14 +311,23 @@ export class RecruitmentReminderService {
     return resolved ?? event.channelId;
   }
 
-  /** Persist the bump message ID on the discord_event_messages record. */
+  /**
+   * Persist the bump message ID on the discord_event_messages record.
+   *
+   * The WHERE clause still keys on the ORIGINAL `event.channelId` because
+   * that's the row's identity (where the original embed went). The new
+   * `bumpChannelId` column records where the bump was actually posted so
+   * `EmbedSyncProcessor.maybeDeleteBumpMessage` can target the right channel
+   * for cleanup when bindings changed between initial-post and bump. ROK-1335.
+   */
   private async persistBumpMessageId(
     event: EligibleEvent,
     bumpMessageId: string,
+    bumpChannelId: string,
   ): Promise<void> {
     await this.db
       .update(schema.discordEventMessages)
-      .set({ bumpMessageId, updatedAt: new Date() })
+      .set({ bumpMessageId, bumpChannelId, updatedAt: new Date() })
       .where(
         and(
           eq(schema.discordEventMessages.eventId, event.id),

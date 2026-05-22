@@ -29,6 +29,14 @@ export const discordEventMessages = pgTable(
       .default('posted'),
     /** Discord message ID of the recruitment bump message (ROK-728). Nullable — only set when a bump has been posted. */
     bumpMessageId: varchar('bump_message_id', { length: 255 }),
+    /**
+     * Discord channel ID where the recruitment bump was actually posted (ROK-1335).
+     * Differs from `channelId` when channel bindings changed between initial-embed-post and bump-post:
+     * the bump goes to the current resolver-chosen channel, but `channelId` stays on the original
+     * embed channel (still the source of truth for editing the original embed).
+     * Nullable — only set when a bump has been posted; legacy rows fall back to `channelId` for cleanup.
+     */
+    bumpChannelId: varchar('bump_channel_id', { length: 255 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

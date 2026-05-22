@@ -214,26 +214,34 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       .where(eq(schema.discordEventMessages.id, recordId));
   }
 
-  /** Delete the recruitment bump message when the event becomes full (ROK-728). */
+  /**
+   * Delete the recruitment bump message when the event becomes full (ROK-728).
+   *
+   * Targets `record.bumpChannelId` (the channel the bump was actually posted to)
+   * when present, falling back to `record.channelId` for legacy rows that
+   * predate the column (ROK-1335). The two diverge when channel bindings
+   * changed between initial-embed-post and bump-post.
+   */
   private async maybeDeleteBumpMessage(
     record: typeof schema.discordEventMessages.$inferSelect,
     newState: EmbedState,
     eventId: number,
   ): Promise<void> {
     if (newState !== EMBED_STATES.FULL || !record.bumpMessageId) return;
+    const bumpChannelId = record.bumpChannelId ?? record.channelId;
     try {
       await this.clientService.deleteMessage(
-        record.channelId,
+        bumpChannelId,
         record.bumpMessageId,
       );
       await this.db
         .update(schema.discordEventMessages)
-        .set({ bumpMessageId: null, updatedAt: new Date() })
+        .set({ bumpMessageId: null, bumpChannelId: null, updatedAt: new Date() })
         .where(eq(schema.discordEventMessages.id, record.id));
       this.logger.log(`Deleted recruitment bump message for event ${eventId}`);
     } catch (err) {
       this.logger.warn(
-        `Failed to delete bump message for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+        `Failed to delete bump message for event ${eventId} in channel ${bumpChannelId}: ${err instanceof Error ? err.message : 'Unknown'}`,
       );
     }
   }

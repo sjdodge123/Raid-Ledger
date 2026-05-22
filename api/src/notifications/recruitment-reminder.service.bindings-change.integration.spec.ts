@@ -137,5 +137,10 @@ describe('RecruitmentReminderService — bindings-change channel routing (ROK-13
       .from(schema.discordEventMessages);
     expect(demRow.eventId).toBe(eventId);
     expect(demRow.channelId).toBe(CHANNEL_A);
+    // The bumpChannelId column records the channel the bump was ACTUALLY
+    // posted to so EmbedSyncProcessor.maybeDeleteBumpMessage can target the
+    // right channel for cleanup when bindings changed (Codex P2 follow-up).
+    expect(demRow.bumpMessageId).toBe('bump-msg-001');
+    expect(demRow.bumpChannelId).toBe(CHANNEL_B);
   });
 });
