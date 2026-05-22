@@ -50,6 +50,7 @@ scripts/*
 !scripts/rl-encrypt-setting.mjs
 !scripts/rl-reencrypt-settings.mjs
 !scripts/test-plan-comments.sh
+!scripts/recover-stuck-migration.sh
 !scripts/test/
 !/api/scripts/
 implementation_plan.md
