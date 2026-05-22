@@ -42,7 +42,7 @@ fi
 
 # Step 2 — long-poll. Pre-flight: inotifywait must be installed.
 if ! command -v inotifywait >/dev/null 2>&1; then
-    jq -nc '{ok:false, error:"inotifywait_not_installed", hint:"sudo apt-get install -y inotify-tools"}'
+    jq -nc '{ok:false, error:"inotifywait_not_installed", operator_only:true, hint:"inotify-tools is missing on the rl-infra VM. This is operator-only to install (apt-get install -y inotify-tools); agents cannot self-remediate. File a ticket or message the operator."}'
     exit 0
 fi
 
