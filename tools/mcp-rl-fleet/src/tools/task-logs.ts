@@ -150,11 +150,14 @@ function splitNonEmpty(blob: string): string[] {
   return blob.split('\n').filter((l) => l.length > 0);
 }
 
-// ANSI CSI / OSC / SGR escape pattern. Matches `ESC[...m`, `ESC[?h`, etc.
-// Pulled from the well-known regex; safe — no catastrophic backtracking.
-// Reference: ansi-regex npm package, vendored to avoid the dep.
+// ANSI escape pattern. Two branches:
+//   1. CSI / SGR — `ESC[<params><cmd>` (e.g. `ESC[0;32m`, `ESC[2J`, `ESC[?25h`)
+//   2. OSC — `ESC]<payload>BEL` or `ESC]<payload>ESC\\` (window title, hyperlink)
+//
+// Vendored from the canonical ansi-regex npm package. Round-3 dogfood
+// found the CSI-only version missed OSC sequences like `ESC]0;title\\x07`.
 // eslint-disable-next-line no-control-regex
-const ANSI_RE = /[][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-PRZcf-ntqry=><]/g;
+const ANSI_RE = /(?:\x1b[[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-PRZcf-ntqry=><]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
 
 function stripAnsiCodes(s: string): string {
   return s.replace(ANSI_RE, '');

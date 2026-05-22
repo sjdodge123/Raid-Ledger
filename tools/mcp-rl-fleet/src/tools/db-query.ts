@@ -34,10 +34,15 @@
 //   5. `-q` (--quiet) — suppresses BEGIN/SET/ROLLBACK command-tag echoes
 //      that would otherwise poison CSV parsing (dogfood-found).
 //
-// NULL sentinel: we use an unguessable opaque marker (`__RL_NULL_e8f3a4__`)
-// rather than psql's default `\N` because real data CAN contain the 2-char
-// `\N` literal (verified — `SELECT E'\\N'` round-tripped as null under the
-// `\N` sentinel, silent data corruption). The opaque marker can't collide.
+// Output format: psql emits a single text cell containing a JSON array
+// produced by `json_agg(row_to_json(t))`. JSON has unambiguous NULL
+// (`null` keyword), distinguishable from empty string and from any text
+// sentinel — so no sentinel collision class exists by construction. Round
+// 2 + round 3 dogfood proved that ANY string-based sentinel (`\N` or
+// opaque marker) collides with real data because psql `--csv` only quotes
+// values containing the delimiter / quote char / newline; plain-ASCII
+// values emit unquoted and the cast hook eats them. JSON sidesteps the
+// problem entirely.
 //
 // NO `worktree_path` param — interactive read-only-by-default query tool,
 // no Mutagen sync needed. Consistent with PR-1 rl_task_inspect /
@@ -46,7 +51,6 @@
 // like tests + dogfood scripts also get the strict treatment).
 
 import { z } from 'zod';
-import { parse as parseCsv } from 'csv-parse/sync';
 import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
 
 export const TOOL_NAME = 'rl_db_query';
@@ -84,7 +88,14 @@ export type DbQueryParams = z.infer<typeof DbQueryParamsSchema>;
 export interface DbQueryResult {
   ok: boolean;
   slug?: string;
-  rows?: Array<Record<string, string | null>>;
+  /**
+   * Row objects with column names as keys. Values are JSON-native types
+   * (null, string, number, boolean, object, array) as produced by
+   * `row_to_json` server-side. Postgres NULL → JS null; numerics → JS
+   * number (bigint > 2^53 risks precision loss — same as any JSON-over-
+   * the-wire shape); text → string.
+   */
+  rows?: Array<Record<string, unknown>>;
   columns?: string[];
   row_count?: number;
   truncated?: boolean;
@@ -104,105 +115,112 @@ const FETCH_LIMIT = ROW_LIMIT + 1; // 1001 — the truncation sentinel
 // FORBIDDEN_KEYWORDS (architect §D layer 3)
 // ---------------------------------------------------------------------------
 //
-// The four known knobs that flip the PGOPTIONS-set read-only GUC mid-session.
 // String-matched (case-insensitive) BEFORE the SQL ever reaches psql, so the
 // blocked attempt costs no network round-trip and produces a clear error
-// envelope. False-positive risk minimal — no legitimate read-only query
-// needs to mention these tokens.
-// Dogfood #2: validator showed `set_config('default'||'_transaction_read_only', 'off', false)`
-// bypasses a regex looking for the literal token. Block the `set_config(` function
-// family entirely — no legitimate read-only query needs to MUTATE a GUC, only read.
-// `current_setting()` remains allowed (read-only).
+// envelope. The keyword set targets the only known knobs that flip read-only
+// enforcement mid-session.
+//
+// Round-3 dogfood narrowed the `default_transaction_read_only` matcher: it
+// used to fire on ANY mention of the string (including `SELECT
+// current_setting('default_transaction_read_only')`, which is a legitimate
+// read). Now it only matches the SET / SET LOCAL assignment form.
+// Equivalent narrowing on the other GUC-flip strings would be welcome but
+// they have no read-form ambiguity today.
+//
+// Round-2 dogfood added the `set_config()` function family to block the
+// `set_config('default'||'_transaction_read_only', ...)` string-concat
+// bypass. `current_setting()` (read-only counterpart) is NOT blocked.
 const FORBIDDEN_KEYWORDS: RegExp[] = [
-  /default_transaction_read_only/i,
-  /set\s+session\s+authorization/i,
-  /reset\s+all/i,
+  /\bset\s+(local\s+)?default_transaction_read_only\b/i,
+  /\bset\s+session\s+authorization\b/i,
+  /\breset\s+all\b/i,
   /\\connect/i,
   /\bset_config\s*\(/i,
   /\bpg_catalog\.set_config\s*\(/i,
 ];
 
-// Dogfood #3: psql's default `\N` NULL sentinel collides with real data
-// (`SELECT E'\\N'` round-trips as null under `-P null=\N`). Use an
-// opaque hex-tagged marker that cannot occur in legitimate data unless
-// someone is actively trying to spoof — and even then the parser only
-// converts it to null when csv-parse reports the cell was UNQUOTED in
-// the source CSV (which a real cell containing this string would never be).
-export const NULL_SENTINEL = '__RL_NULL_e8f3a4__';
-
 /**
  * Build the hardened remote command. The `params.sql` has been pre-stripped
  * of trailing semicolons. All defense layers assembled here in one place.
  *
- * Dogfood #1 fix: PGOPTIONS env var does NOT propagate through env-psql's
- * `docker exec` boundary (no `-e` flag), so PGOPTIONS-set statement_timeout
- * stayed at 0 in practice. Replaced with `SET LOCAL statement_timeout='5s'`
- * INSIDE the explicit transaction — SET LOCAL is txn-scoped, ROLLBACK ends
- * it, and ON_ERROR_STOP guarantees we never leave the SET LOCAL state.
+ * Layers:
+ *   1. BEGIN; SET TRANSACTION READ ONLY; SET LOCAL statement_timeout='5s'
+ *      — the actual read-only + timeout chokepoint. SET LOCAL is bound to
+ *      the current explicit transaction; ROLLBACK ends it cleanly.
+ *   2. SELECT * FROM (<user-sql>) AS rl_inner LIMIT 1001 — forces a single
+ *      SELECT-able expression at the SQL-syntax layer (semicolons, DDL,
+ *      multi-statement reject as Postgres syntax errors).
+ *   3. SELECT json_agg(row_to_json(t)) wrap — output is one text cell
+ *      with a JSON array. NULL is `null` (unambiguous), no sentinel-vs-
+ *      data collision possible (round-3 dogfood proved string sentinels
+ *      ALWAYS collide because psql `--csv` only quotes values with
+ *      delimiter / quote / newline chars).
+ *   4. COALESCE(..., '[]') — empty result is `[]`, not psql's empty-cell.
  */
 function buildRemoteCommand(slug: string, sql: string): string {
   const stripped = sql.trim().replace(/;\s*$/, '');
+  // The user's SQL goes inside a sub-subquery so the LIMIT applies BEFORE
+  // json_agg builds the array (bounded memory). The outer COALESCE handles
+  // the zero-row case (json_agg returns NULL → we want `[]`).
   const wrappedSql =
     `BEGIN; ` +
     `SET TRANSACTION READ ONLY; ` +
     `SET LOCAL statement_timeout = '5s'; ` +
-    `SELECT * FROM (${stripped}) AS rl_user_query LIMIT ${FETCH_LIMIT}; ` +
+    `SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json)::text ` +
+    `FROM (SELECT * FROM (${stripped}) AS rl_inner LIMIT ${FETCH_LIMIT}) AS t; ` +
     `ROLLBACK;`;
-  // `-P null=<sentinel>`: psql emits this literal string for NULL cells in
-  // CSV output. csv-parse then maps unquoted occurrences back to JS null.
-  // The opaque sentinel can't collide with real data (cf. dogfood #3).
+  // `-A -t` (unaligned + tuples-only) emits just the cell value — no
+  // header, no padding. For our single-row, single-cell SELECT, that's
+  // exactly the JSON text we want to parse.
   //
-  // `-q` (--quiet) suppresses the command-tag echoes that psql writes to
-  // stdout when running BEGIN / SET / ROLLBACK statements. Without -q, the
-  // multi-statement -c string sends `BEGIN\nSET\n<csv-header>\n<csv-row>\nROLLBACK`
-  // to stdout — the CSV parser then treats `BEGIN` as the header row.
+  // `-q` (--quiet) suppresses the BEGIN / SET / ROLLBACK command-tag echo
+  // that would otherwise prepend `BEGIN\nSET\n...` to our JSON cell.
+  //
+  // No `-P null=...` needed — JSON is the canonical null encoding now.
+  // No `--csv` — we use tuples-only text output.
   return (
     `/srv/rl-infra/orchestrator/bin/env-psql ${shellQuote(slug)} -- ` +
-    `--csv -q -v ON_ERROR_STOP=1 -P ${shellQuote(`null=${NULL_SENTINEL}`)} ` +
-    `--set=FETCH_COUNT=${FETCH_LIMIT} ` +
+    `-A -t -q -v ON_ERROR_STOP=1 ` +
     `-c ${shellQuote(wrappedSql)}`
   );
 }
 
 /**
- * Parse psql --csv stdout. Header row → columns[]; data rows →
- * Array<Record<col, val>>. Unquoted `\N` (the NULL sentinel set via
- * `-P null='\N'`) → JS null; quoted values pass through as strings.
+ * Parse the JSON-array stdout from `json_agg(row_to_json(t))`. Returns
+ * `{columns, rows}` where columns are derived from the first row's object
+ * keys (which preserve SELECT column order via row_to_json's contract).
+ *
+ * Postgres + JSON guarantee unambiguous NULLs — no sentinel parsing, no
+ * quote-vs-not heuristics. A cell that's literally the string `"null"`
+ * arrives as JSON `"null"` (quoted); a real SQL NULL arrives as JSON `null`
+ * (no quotes). JSON.parse handles the distinction.
  */
-function parseCsvResponse(
+function parseJsonResponse(
   stdout: string,
-): { columns: string[]; rows: Array<Record<string, string | null>> } {
-  const trimmed = stdout.replace(/\r/g, '');
+): { columns: string[]; rows: Array<Record<string, unknown>> } {
+  const trimmed = stdout.trim();
   if (trimmed.length === 0) return { columns: [], rows: [] };
-  // csv-parse handles RFC 4180 quoting + embedded newlines correctly.
-  // The `cast` hook fires once per cell; `ctx.quoting` is true iff the
-  // source cell was wrapped in double-quotes. Unquoted `\N` → null;
-  // a literal quoted `"\N"` stays the string `\N`.
-  const records = parseCsv(trimmed, {
-    columns: true,
-    skip_empty_lines: true,
-    cast: (value: string, ctx: { quoting: boolean }) => {
-      // Only treat the sentinel as NULL when csv-parse reports the source
-      // cell was UNQUOTED (i.e. psql emitted it from a real NULL, not a
-      // user data row that happens to contain the same string). Even with
-      // the opaque marker this guards against an attacker-spoofed row.
-      if (!ctx.quoting && value === NULL_SENTINEL) return null;
-      return value;
-    },
-  }) as Array<Record<string, string | null>>;
-  // csv-parse's `columns: true` produces objects but doesn't expose the
-  // header order directly — re-derive from the first line of the CSV so
-  // callers get ordered columns alongside row objects.
-  const firstNewline = trimmed.indexOf('\n');
-  const headerLine = firstNewline >= 0 ? trimmed.slice(0, firstNewline) : trimmed;
-  const columns = parseCsv(headerLine + '\n', {
-    columns: false,
-    skip_empty_lines: true,
-  }) as string[][];
-  return {
-    columns: columns[0] ?? [],
-    rows: records,
-  };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (e) {
+    throw new Error(
+      `failed to parse json from psql stdout: ${(e as Error).message}; ` +
+        `first 200 chars: ${trimmed.slice(0, 200)}`,
+    );
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `expected JSON array from json_agg, got ${typeof parsed}: ${trimmed.slice(0, 200)}`,
+    );
+  }
+  const rows = parsed as Array<Record<string, unknown>>;
+  // row_to_json preserves SELECT column order — Object.keys on the first
+  // row's object gives us that order back. Empty result → empty columns.
+  const columns = rows.length > 0 && rows[0] && typeof rows[0] === 'object'
+    ? Object.keys(rows[0])
+    : [];
+  return { columns, rows };
 }
 
 /**
@@ -228,8 +246,10 @@ function classifyError(
       message: stderr.trim(),
     };
   }
-  // PGOPTIONS GUC catches smuggled writes. Pattern matches any DML/DDL
-  // rejection in a read-only transaction.
+  // BEGIN/SET TRANSACTION READ ONLY catches smuggled writes. Pattern matches
+  // any DML/DDL rejection in a read-only transaction. (Round-3 dogfood
+  // corrected a stale comment that credited PGOPTIONS — PGOPTIONS was
+  // removed; the BEGIN-wrapped transaction is the actual rejector.)
   if (
     /cannot execute (INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TRUNCATE|GRANT|REVOKE|MERGE)\b.*read-only transaction/i.test(
       stderr,
@@ -242,10 +262,10 @@ function classifyError(
       message: stderr.trim(),
       hint:
         'rl_db_query enforces read-only. Detected an attempt to write via DML/DDL — ' +
-        'the PGOPTIONS connect-time GUC rejected it.',
+        'the BEGIN/SET TRANSACTION READ ONLY wrapper rejected it.',
     };
   }
-  // statement_timeout (5s) from PGOPTIONS.
+  // statement_timeout (5s) from SET LOCAL inside the read-only transaction.
   if (/canceling statement due to statement timeout/i.test(stderr)) {
     return {
       ok: false,
@@ -361,14 +381,32 @@ export async function execute(params: DbQueryParams): Promise<DbQueryResult> {
       maxBuffer: 16 * 1024 * 1024,
       timeout: 30_000,
     });
-    const { columns, rows } = parseCsvResponse(stdout);
+    let columns: string[];
+    let rows: Array<Record<string, unknown>>;
+    try {
+      const parsed = parseJsonResponse(stdout);
+      columns = parsed.columns;
+      rows = parsed.rows;
+    } catch (parseErr) {
+      return {
+        ok: false,
+        slug,
+        error: 'db_query_failed',
+        message: (parseErr as Error).message,
+        hint: 'psql produced output that was not parseable as the expected JSON array.',
+      };
+    }
     const truncated = rows.length >= FETCH_LIMIT;
     const kept = truncated ? rows.slice(0, ROW_LIMIT) : rows;
     return {
       ok: true,
       slug,
       columns,
-      rows: kept,
+      // Cast the row shape from Record<string, unknown> → DbQueryResult's
+      // narrower row type. JSON values are JS-native (null|string|number|
+      // boolean|object|array); the public type widens to `unknown` so
+      // consumers branch on actual value type.
+      rows: kept as Array<Record<string, unknown>>,
       row_count: kept.length,
       truncated,
       elapsed_ms: Date.now() - startMs,

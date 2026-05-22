@@ -203,13 +203,46 @@ describe('rl_db_query — FORBIDDEN_KEYWORDS pre-check', () => {
   });
 
   it('allows current_setting() (read-only, legitimate)', async () => {
-    execFileOk('current_setting\nUTC\n');
+    execFileOk('[{"current_setting":"UTC"}]\n');
     const result = await execute({
       slug: 'myslug',
       sql: "SELECT current_setting('TimeZone')",
       read_only: true,
     });
     expect(result.ok).toBe(true);
+  });
+
+  // Round-3 #2 — the over-broad /default_transaction_read_only/i regex used
+  // to reject ANY mention of the GUC name (including legitimate reads via
+  // current_setting). Narrowed to /\bset\s+(local\s+)?default_transaction_read_only\b/i.
+  it('allows current_setting(default_transaction_read_only) — narrowed regex (round-3 #2)', async () => {
+    execFileOk('[{"current_setting":"on"}]\n');
+    const result = await execute({
+      slug: 'myslug',
+      sql: "SELECT current_setting('default_transaction_read_only')",
+      read_only: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('still rejects SET default_transaction_read_only (the actual GUC-flip)', async () => {
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SET default_transaction_read_only = off',
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('blocked_keyword');
+  });
+
+  it('rejects SET LOCAL default_transaction_read_only too', async () => {
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SET LOCAL default_transaction_read_only = off',
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('blocked_keyword');
   });
 });
 
@@ -228,9 +261,9 @@ describe('rl_db_query — dogfood #4 unknown-key rejection', () => {
   });
 });
 
-describe('rl_db_query — SSH invocation shape (hardened per architect)', () => {
-  it('builds the dogfood-corrected hardened remote command (SET LOCAL timeout + opaque NULL sentinel + no PGOPTIONS)', async () => {
-    execFileOk('count\n42\n');
+describe('rl_db_query — SSH invocation shape (JSON-mode, round-3 corrected)', () => {
+  it('builds the JSON-aggregation remote command (no PGOPTIONS, no CSV, no sentinel)', async () => {
+    execFileOk('[{"count":42}]\n');
     await execute({
       slug: 'myslug',
       sql: 'SELECT count(*) FROM users',
@@ -239,35 +272,35 @@ describe('rl_db_query — SSH invocation shape (hardened per architect)', () => 
     const call = mockExecFile.mock.calls[0];
     expect(call[0]).toBe('ssh');
     const remote = String(call[1].at(-1));
-    // Dogfood #1 — PGOPTIONS proven dead (env-psql `docker exec` drops the
-    // env var); REPLACED with SET LOCAL inside the transaction.
+    // Round-2 #1 — PGOPTIONS proven dead. SET LOCAL inside the txn is the
+    // actual timeout chokepoint.
     expect(remote).not.toContain('PGOPTIONS');
-    // SET LOCAL is inside the outer single-quoted -c argument, so the `'5s'`
-    // single quotes are POSIX-escaped to `'\''5s'\''`. Match the keyword
-    // sequence + the timeout value without re-asserting the exact quoting.
     expect(remote).toMatch(/SET LOCAL statement_timeout\s*=\s*'\\''5s'\\''/);
+    // Round-3 #3 — CSV mode dropped; switched to JSON-aggregation. No
+    // --csv, no -P null=..., no --set=FETCH_COUNT.
+    expect(remote).not.toContain('--csv');
+    expect(remote).not.toContain('--set=FETCH_COUNT');
+    expect(remote).not.toContain('null=');
+    // psql flags — -A -t for raw-cell output, -q for quiet, ON_ERROR_STOP.
+    expect(remote).toContain('-A -t -q -v ON_ERROR_STOP=1');
     // env-psql orchestrator binary path.
     expect(remote).toContain('/srv/rl-infra/orchestrator/bin/env-psql');
     // Slug shellQuoted.
     expect(remote).toContain("'myslug'");
-    // psql flags — CSV, quiet (suppress BEGIN/SET/ROLLBACK command-tag echo),
-    // ON_ERROR_STOP, opaque NULL sentinel (dogfood #3 — `\N` collided with
-    // real data), FETCH_COUNT.
-    expect(remote).toContain('--csv');
-    expect(remote).toContain('-q ');
-    expect(remote).toContain('-v ON_ERROR_STOP=1');
-    expect(remote).toContain('null=__RL_NULL_e8f3a4__');
-    expect(remote).toContain('--set=FETCH_COUNT=1001');
     // BEGIN/SET TRANSACTION READ ONLY/ROLLBACK wrapper.
     expect(remote).toContain('BEGIN;');
     expect(remote).toContain('SET TRANSACTION READ ONLY;');
     expect(remote).toContain('ROLLBACK;');
-    // Subquery wrap with LIMIT 1001 (1000 + 1 sentinel for truncation).
-    expect(remote).toContain('SELECT * FROM (SELECT count(*) FROM users) AS rl_user_query LIMIT 1001');
+    // JSON-aggregation wrap with COALESCE for the empty-result case.
+    expect(remote).toContain('json_agg(row_to_json(t))');
+    expect(remote).toContain("COALESCE");
+    expect(remote).toContain("'[]'");
+    // Inner subquery wrap with LIMIT 1001 (1000 + 1 truncation sentinel).
+    expect(remote).toContain('SELECT * FROM (SELECT count(*) FROM users) AS rl_inner LIMIT 1001');
   });
 
   it('strips a trailing semicolon from user SQL before wrapping', async () => {
-    execFileOk('id\n1\n');
+    execFileOk('[{"id":1}]\n');
     await execute({
       slug: 'myslug',
       sql: 'SELECT id FROM users;',
@@ -276,7 +309,7 @@ describe('rl_db_query — SSH invocation shape (hardened per architect)', () => 
     const remote = String(mockExecFile.mock.calls[0][1].at(-1));
     // Should wrap `SELECT id FROM users` (no trailing semicolon) so the
     // subquery is syntactically valid.
-    expect(remote).toContain('(SELECT id FROM users) AS rl_user_query');
+    expect(remote).toContain('(SELECT id FROM users) AS rl_inner');
   });
 
   it('shellQuotes the wrapped SQL — single quotes in user data round-trip (architect case 4)', async () => {
@@ -284,14 +317,14 @@ describe('rl_db_query — SSH invocation shape (hardened per architect)', () => 
     // for "O'Brien"). The shellQuote at the SSH boundary wraps the whole
     // psql -c argument in single quotes and escapes embedded ones via
     // `'\''`. Postgres sees the original `'O''Brien'` byte-for-byte.
-    execFileOk('id,name\n7,O\'Brien\n');
+    execFileOk('[{"id":7,"name":"O\'Brien"}]\n');
     const result = await execute({
       slug: 'myslug',
       sql: "SELECT id, name FROM users WHERE name = 'O''Brien'",
       read_only: true,
     });
     expect(result.ok).toBe(true);
-    expect(result.rows).toEqual([{ id: '7', name: "O'Brien" }]);
+    expect(result.rows).toEqual([{ id: 7, name: "O'Brien" }]);
     // Inspect the shell-quoted argv: every literal single quote in the
     // user SQL becomes '\'' inside the outer single-quoted argument.
     const remote = String(mockExecFile.mock.calls[0][1].at(-1));
@@ -299,10 +332,14 @@ describe('rl_db_query — SSH invocation shape (hardened per architect)', () => 
   });
 });
 
-describe('rl_db_query — happy path CSV parsing', () => {
-  it('parses a basic header + 2-row CSV result with columns + rows', async () => {
-    const csv = 'id,name\n1,Alice\n2,Bob\n';
-    execFileOk(csv);
+describe('rl_db_query — happy path JSON parsing', () => {
+  it('parses a basic 2-row JSON result with columns + rows', async () => {
+    // psql -At returns just the cell text — the JSON array verbatim.
+    const json = JSON.stringify([
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' },
+    ]);
+    execFileOk(json + '\n');
     const result = await execute({
       slug: 'myslug',
       sql: 'SELECT id, name FROM users LIMIT 2',
@@ -311,60 +348,59 @@ describe('rl_db_query — happy path CSV parsing', () => {
     expect(result.ok).toBe(true);
     expect(result.columns).toEqual(['id', 'name']);
     expect(result.rows).toEqual([
-      { id: '1', name: 'Alice' },
-      { id: '2', name: 'Bob' },
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' },
     ]);
     expect(result.row_count).toBe(2);
     expect(result.truncated).toBe(false);
     expect(typeof result.elapsed_ms).toBe('number');
   });
 
-  it('maps unquoted opaque-sentinel to JS null; quoted "" stays empty string; literal `\\N` round-trips (dogfood #3)', async () => {
-    // Dogfood #3 — psql's default `\N` NULL marker collided with real data
-    // (`SELECT E'\\N'` round-tripped as null under `-P null=\N`). Switched
-    // to an opaque hex-tagged sentinel that cannot occur in legitimate data.
-    // Now `\N` literals in real columns round-trip as the string `\N`.
-    const csv =
-      'id,name,deleted_at,raw_backslash_n\n' +
-      '1,Alice,__RL_NULL_e8f3a4__,foo\n' +
-      '2,"",2026-01-01,bar\n' +
-      '3,Bob,2026-02-01,"\\N"\n';
-    execFileOk(csv);
+  it('preserves SQL types (number, string, boolean, null) via JSON encoding (round-3 #3 fix)', async () => {
+    // Round-3 dogfood proved string-based sentinels ALWAYS collide because
+    // psql --csv only quotes values with delimiter/quote/newline chars. JSON
+    // sidesteps the entire class — null is `null` (no quotes), string is
+    // `"..."` (always quoted), number is bare. A user value of the literal
+    // string `"null"` round-trips as the string, not as null.
+    const json = JSON.stringify([
+      { s: 'null', real_null: null, n: 42, b: true, opaque_lookalike: '__RL_NULL_e8f3a4__' },
+      { s: '', real_null: null, n: 0, b: false, opaque_lookalike: '\\N' },
+    ]);
+    execFileOk(json + '\n');
     const result = await execute({
       slug: 'myslug',
-      sql: 'SELECT id, name, deleted_at, raw_backslash_n FROM users',
+      sql: 'SELECT 1',
       read_only: true,
     });
     expect(result.ok).toBe(true);
     expect(result.rows).toEqual([
-      { id: '1', name: 'Alice', deleted_at: null, raw_backslash_n: 'foo' },
-      { id: '2', name: '', deleted_at: '2026-01-01', raw_backslash_n: 'bar' },
-      { id: '3', name: 'Bob', deleted_at: '2026-02-01', raw_backslash_n: '\\N' },
+      { s: 'null', real_null: null, n: 42, b: true, opaque_lookalike: '__RL_NULL_e8f3a4__' },
+      { s: '', real_null: null, n: 0, b: false, opaque_lookalike: '\\N' },
     ]);
   });
 
-  it('returns empty rows array for a header-only CSV (zero result rows)', async () => {
-    execFileOk('id,name\n');
+  it('returns empty rows + columns for a zero-row result (json_agg → COALESCE [])', async () => {
+    // COALESCE(json_agg(...), '[]'::json) — when no rows match, json_agg
+    // returns NULL and COALESCE substitutes the empty array.
+    execFileOk('[]\n');
     const result = await execute({
       slug: 'myslug',
-      sql: 'SELECT id, name FROM users WHERE id = -1',
+      sql: 'SELECT id FROM users WHERE id = -1',
       read_only: true,
     });
     expect(result.ok).toBe(true);
-    expect(result.columns).toEqual(['id', 'name']);
+    expect(result.columns).toEqual([]);
     expect(result.rows).toEqual([]);
     expect(result.row_count).toBe(0);
     expect(result.truncated).toBe(false);
   });
 
-  it('truncates at 1000 rows when psql returns the 1001 sentinel (architect case 5)', async () => {
-    // generate_series(1, 100000) would normally return 100k rows; the subquery
-    // LIMIT 1001 caps the response at 1001. Build a fake 1001-row CSV.
-    const header = 'n';
-    const dataRows: string[] = [];
-    for (let i = 1; i <= 1001; i++) dataRows.push(String(i));
-    const csv = [header, ...dataRows].join('\n') + '\n';
-    execFileOk(csv);
+  it('truncates at 1000 rows when the JSON array has the 1001 sentinel (architect case 5)', async () => {
+    // generate_series(1, 100000) → subquery LIMIT 1001 caps at 1001 rows in
+    // the json_agg input. Build a fake 1001-element JSON array.
+    const arr: Array<Record<string, number>> = [];
+    for (let i = 1; i <= 1001; i++) arr.push({ n: i });
+    execFileOk(JSON.stringify(arr) + '\n');
     const result = await execute({
       slug: 'myslug',
       sql: 'SELECT generate_series(1, 100000) AS n',
@@ -375,7 +411,19 @@ describe('rl_db_query — happy path CSV parsing', () => {
     expect(result.rows?.length).toBe(1000);
     expect(result.truncated).toBe(true);
     // Last kept row is the 1000th, NOT the 1001st sentinel.
-    expect(result.rows?.[999]).toEqual({ n: '1000' });
+    expect(result.rows?.[999]).toEqual({ n: 1000 });
+  });
+
+  it('surfaces parse errors when psql output is not valid JSON', async () => {
+    execFileOk('not json at all\n');
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SELECT 1',
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('db_query_failed');
+    expect(result.message).toMatch(/failed to parse json/i);
   });
 });
 

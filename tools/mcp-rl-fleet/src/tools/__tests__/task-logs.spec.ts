@@ -312,6 +312,30 @@ describe('rl_task_logs — dogfood #5 ANSI strip', () => {
     const result = await execute({ task_id: 'abc123def', strip_ansi: false });
     expect(result.lines).toEqual([ANSI_LINE]);
   });
+
+  // Round-3 #5 — original CSI-only regex missed OSC (`ESC]…BEL`) sequences
+  // (window-title, hyperlinks). Vendored regex now has the OSC branch.
+  it('strips OSC window-title sequences (round-3 #5)', async () => {
+    // ESC]0;some-title BEL
+    execFileOk('\x1b]0;some-title\x07hello world\n');
+    const result = await execute({ task_id: 'abc123def', strip_ansi: true });
+    expect(result.ok).toBe(true);
+    expect(result.lines).toEqual(['hello world']);
+  });
+
+  it('strips OSC sequence terminated by ESC \\ (the ST alternative)', async () => {
+    // ESC]8;;https://example.com ESC\ followed by plain text
+    execFileOk('\x1b]8;;https://example.com\x1b\\link text\n');
+    const result = await execute({ task_id: 'abc123def', strip_ansi: true });
+    expect(result.lines).toEqual(['link text']);
+  });
+
+  it('preserves user-typed `[31m` literal text (no ESC prefix — not an escape)', async () => {
+    // Round-3 brief: confirm the regex doesn't strip user-typed brackets.
+    execFileOk('user typed [31m manually\n');
+    const result = await execute({ task_id: 'abc123def', strip_ansi: true });
+    expect(result.lines).toEqual(['user typed [31m manually']);
+  });
 });
 
 describe('rl_task_logs — dogfood #4 unknown-key rejection', () => {
