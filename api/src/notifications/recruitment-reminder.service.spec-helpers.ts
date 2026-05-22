@@ -5,6 +5,7 @@ import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
 /**
@@ -25,6 +26,8 @@ export function makeEventRow(
     guild_id: string;
     message_id: string;
     created_at: string;
+    recurrence_group_id: string | null;
+    notification_channel_override: string | null;
   }> = {},
 ) {
   return {
@@ -40,6 +43,8 @@ export function makeEventRow(
     guild_id: 'guild-xyz',
     message_id: 'msg-123',
     created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    recurrence_group_id: null,
+    notification_channel_override: null,
     ...overrides,
   };
 }
@@ -62,6 +67,7 @@ export interface RecruitmentReminderTestMocks {
   };
   mockDiscordBotClient: { isConnected: jest.Mock; sendEmbed: jest.Mock };
   mockCronJobService: { executeWithTracking: jest.Mock };
+  mockChannelResolver: { resolveChannelForEvent: jest.Mock };
 }
 
 export async function createRecruitmentReminderTestModule(): Promise<{
@@ -95,6 +101,13 @@ export async function createRecruitmentReminderTestModule(): Promise<{
         fn(),
       ),
     },
+    // Default: resolver returns null so existing tests fall through to
+    // `event.channelId`, preserving their prior assertions. Per-test
+    // overrides can call mocks.mockChannelResolver.resolveChannelForEvent
+    // .mockResolvedValueOnce('some-channel') to exercise the new wiring.
+    mockChannelResolver: {
+      resolveChannelForEvent: jest.fn().mockResolvedValue(null),
+    },
   };
 
   const module: TestingModule = await Test.createTestingModule({
@@ -112,6 +125,7 @@ export async function createRecruitmentReminderTestModule(): Promise<{
         useValue: mocks.mockDiscordBotClient,
       },
       { provide: CronJobService, useValue: mocks.mockCronJobService },
+      { provide: ChannelResolverService, useValue: mocks.mockChannelResolver },
     ],
   }).compile();
 

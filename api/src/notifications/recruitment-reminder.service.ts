@@ -14,6 +14,7 @@ import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import {
@@ -45,6 +46,7 @@ export class RecruitmentReminderService {
     private readonly settingsService: SettingsService,
     private readonly discordBotClient: DiscordBotClientService,
     private readonly cronJobService: CronJobService,
+    private readonly channelResolver: ChannelResolverService,
   ) {}
 
   @Cron('45 */15 * * * *', {
@@ -251,7 +253,19 @@ export class RecruitmentReminderService {
     return false;
   }
 
-  /** Post a bump message in the event's Discord channel. */
+  /**
+   * Post a bump message in the event's currently-bound Discord channel.
+   *
+   * Channel resolution mirrors the initial-embed path: walk
+   * `ChannelResolverService.resolveChannelForEvent` (override → series →
+   * game → default). Falls back to the stored `event.channelId` only when
+   * the resolver returns null so a misconfigured guild still gets the bump
+   * somewhere visible. ROK-1335.
+   *
+   * Note: the persistence write below intentionally keeps matching on the
+   * ORIGINAL `event.channelId` — `discord_event_messages` is keyed by where
+   * the original embed went and remains the source of truth for editing it.
+   */
   private async postChannelBump(event: EligibleEvent): Promise<void> {
     if (this.shouldSkipBump(event)) return;
     try {
@@ -264,20 +278,37 @@ export class RecruitmentReminderService {
         clientUrl,
         defaultTimezone,
       );
+      const targetChannelId = await this.resolveBumpChannel(event);
       const message = await this.discordBotClient.sendEmbed(
-        event.channelId,
+        targetChannelId,
         embed,
         row,
       );
       await this.persistBumpMessageId(event, message.id);
       this.logger.log(
-        `Posted recruitment bump for event ${event.id} in channel ${event.channelId}`,
+        `Posted recruitment bump for event ${event.id} in channel ${targetChannelId}` +
+          (targetChannelId !== event.channelId
+            ? ` (rebound from ${event.channelId})`
+            : ''),
       );
     } catch (error) {
       this.logger.warn(
         `Failed to post channel bump for event ${event.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  /**
+   * Resolve the target channel for the bump using current bindings.
+   * Falls back to `event.channelId` when the resolver yields null. ROK-1335.
+   */
+  private async resolveBumpChannel(event: EligibleEvent): Promise<string> {
+    const resolved = await this.channelResolver.resolveChannelForEvent(
+      event.gameId,
+      event.recurrenceGroupId,
+      event.notificationChannelOverride,
+    );
+    return resolved ?? event.channelId;
   }
 
   /** Persist the bump message ID on the discord_event_messages record. */

@@ -19,6 +19,10 @@ export interface EligibleEvent {
   guildId: string;
   messageId: string;
   createdAt: string;
+  /** Needed by ChannelResolverService to walk the series-binding tier (ROK-1335). */
+  recurrenceGroupId: string | null;
+  /** Per-event override that short-circuits the resolver (ROK-1335). */
+  notificationChannelOverride: string | null;
 }
 
 /** Raw row shape returned by the eligible events query. */
@@ -35,6 +39,8 @@ interface EligibleEventRow {
   guild_id: string;
   message_id: string;
   created_at: string;
+  recurrence_group_id: string | null;
+  notification_channel_override: string | null;
   [key: string]: unknown;
 }
 
@@ -53,6 +59,8 @@ function mapEligibleRow(r: EligibleEventRow): EligibleEvent {
     guildId: r.guild_id,
     messageId: r.message_id,
     createdAt: r.created_at,
+    recurrenceGroupId: r.recurrence_group_id ?? null,
+    notificationChannelOverride: r.notification_channel_override ?? null,
   };
 }
 
@@ -66,6 +74,8 @@ export async function findEligibleEvents(
   const rows = await db.execute<EligibleEventRow>(sql`
     SELECT e.id, e.title, e.game_id, g.name AS game_name, e.creator_id,
       lower(e.duration)::text AS start_time, e.max_attendees, e.created_at::text AS created_at,
+      e.recurrence_group_id::text AS recurrence_group_id,
+      e.notification_channel_override,
       (SELECT count(*) FROM event_signups es WHERE es.event_id = e.id AND es.status NOT IN ('roached_out', 'departed', 'declined'))::text AS signup_count,
       dem.channel_id, dem.guild_id, dem.message_id
     FROM events e
