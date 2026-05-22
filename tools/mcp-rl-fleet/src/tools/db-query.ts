@@ -59,7 +59,12 @@ import { z } from 'zod';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import JSONbigFactory from 'json-bigint';
 const JSONbig = JSONbigFactory({ storeAsString: true });
-import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import {
+  buildSshArgs,
+  execFileP,
+  shellQuote,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
 
 export const TOOL_NAME = 'rl_db_query';
 export const TOOL_DESCRIPTION =
@@ -112,9 +117,6 @@ export interface DbQueryResult {
   message?: string;
   hint?: string;
 }
-
-const sshUser = (): string => process.env.RL_PROXMOX_USER ?? 'rl-agent';
-const sshHost = (): string => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
 
 const ROW_LIMIT = 1000; // hard cap returned to caller
 const FETCH_LIMIT = ROW_LIMIT + 1; // 1001 — the truncation sentinel
@@ -389,14 +391,9 @@ export async function execute(params: DbQueryParams): Promise<DbQueryResult> {
   }
 
   const remote = buildRemoteCommand(slug, sql);
-  const sshArgs = [
-    '-o',
-    'BatchMode=yes',
-    '-o',
-    'ConnectTimeout=5',
-    `${sshUser()}@${sshHost()}`,
-    remote,
-  ];
+  // buildSshArgs forces user=rl-agent (closes operator-env-inheritance hole)
+  // + DNS-resolves RL_PROXMOX_HOST with .env fallback. See exec.ts comment.
+  const sshArgs = await buildSshArgs(remote);
 
   const startMs = Date.now();
   try {

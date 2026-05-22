@@ -10,7 +10,12 @@
 // it for parity (PR-1 codex [nit] feedback, already in TECH-DEBT-BACKLOG.md).
 
 import { z } from 'zod';
-import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import {
+  buildSshArgs,
+  execFileP,
+  shellQuote,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
 import { TASK_ID_RE } from './task.js';
 
 export const TOOL_NAME = 'rl_task_logs';
@@ -54,17 +59,6 @@ export interface TaskLogsResult {
   error?: string;
   message?: string;
   hint?: string;
-}
-
-const sshUser = (): string => process.env.RL_PROXMOX_USER ?? 'rl-agent';
-const sshHost = (): string => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-
-/** Build the canonical ssh argv-array. Never `bash -c`. */
-function sshArgs(remote: string): [string, string[]] {
-  return [
-    'ssh',
-    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
-  ];
 }
 
 /** Returns the VM-side log path for a task_id. Single source of truth. */
@@ -128,9 +122,11 @@ export async function execute(params: TaskLogsParams): Promise<TaskLogsResult> {
   // 2>&1 merges tail's own stderr ("No such file") into stdout so a single
   // capture sees the whole picture. Mirrors infra-logs.ts pattern.
   const remote = `tail -n ${lines} ${shellQuote(logPath)} 2>&1`;
-  const [cmd, args] = sshArgs(remote);
+  // buildSshArgs forces user=rl-agent + DNS-resolves host with .env fallback
+  // (closes Codex round-5 P1 holes shared by all direct-SSH tools).
+  const args = await buildSshArgs(remote);
   try {
-    const { stdout } = await execFileP(cmd, args, {
+    const { stdout } = await execFileP('ssh', args, {
       maxBuffer: MAX_BUFFER,
       timeout: 30_000,
     });

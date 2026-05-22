@@ -134,6 +134,74 @@ export async function resolveProxmoxHost(opts?: {
 }
 
 /**
+ * Resolve the SSH target {user, host} for direct-SSH tool invocations
+ * (rl_task_logs / rl_task_inspect / rl_env_inspect / rl_infra_logs /
+ * rl_db_query — anything that calls `execFile('ssh', [...])` directly
+ * instead of going through `runRl()`).
+ *
+ * Codex security review (2026-05-22, PR-2 round 5) flagged that the
+ * previous per-tool `sshUser() = process.env.RL_PROXMOX_USER ?? 'rl-agent'`
+ * + `sshHost() = process.env.RL_PROXMOX_HOST ?? 'rl-infra'` inline helpers
+ * left two real holes:
+ *
+ *   P1.1 — INHERITED `RL_PROXMOX_USER`. If the MCP server is launched from
+ *   an operator shell that exported `RL_PROXMOX_USER=rl` (the privileged
+ *   account), the direct-SSH tools would SSH as `rl` instead of `rl-agent`.
+ *   `runRl()` already defends with `RL_PROXMOX_USER: opts.user ?? 'rl-agent'`
+ *   + sanitizeExtra; direct-SSH tools must do the same.
+ *
+ *   P1.2 — NO DNS FALLBACK. In sandboxed Claude sessions where
+ *   `RL_PROXMOX_HOST` is unset and `rl-infra` doesn't resolve via DNS, the
+ *   direct-SSH tools failed with `Could not resolve hostname`. `runRl()`
+ *   already calls `resolveProxmoxHost(loadRlInfraIp())` to fall back to the
+ *   IP literal in repo-root `.env`. Direct-SSH tools must do the same.
+ *
+ * This helper closes both gaps in ONE place. All direct-SSH tools call it
+ * + use the returned `{user, host}` for SSH argv construction.
+ *
+ * Implementation notes:
+ *   - `user` is HARD-CODED to `'rl-agent'`. NO env-var override path — this
+ *     surface is for agents only; if the operator wants to SSH directly,
+ *     they use the rl CLI (which goes through runRl with proper gates).
+ *   - `host` is `resolveProxmoxHost()`-resolved (memoized for MCP server
+ *     lifetime). Operator can still set `RL_PROXMOX_HOST` to a non-default
+ *     value for testing — only the literal `rl-infra` / `rl-infra.lan`
+ *     candidates trigger DNS+fallback.
+ */
+export async function getSshTarget(): Promise<{ user: string; host: string }> {
+  const user = 'rl-agent';
+  let host: string;
+  try {
+    const resolved = await resolveProxmoxHost({
+      envHost: process.env.RL_PROXMOX_HOST,
+      fallbackIp: loadRlInfraIp(),
+    });
+    host = resolved.host;
+  } catch {
+    // resolveProxmoxHost throws only when BOTH DNS lookup AND fallbackIp
+    // fail. Fall through to the literal env-or-default — the SSH call
+    // will then surface the real connection error rather than masking it.
+    host = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+  }
+  return { user, host };
+}
+
+/**
+ * Build the canonical SSH argv-array for a direct-SSH tool invocation.
+ * Includes the resolved + forced-identity target from `getSshTarget()`.
+ * Always uses BatchMode=yes (no interactive password prompt) and a 5s
+ * ConnectTimeout (so a wedged VM doesn't pin the tool indefinitely).
+ *
+ * Returns the argv to pass to `execFile('ssh', argv)`. NEVER pass to
+ * `spawn('sh', ['-c', ...])` — the argv form ensures the user-controlled
+ * `remote` string reaches the local SSH client as ONE arg.
+ */
+export async function buildSshArgs(remote: string): Promise<string[]> {
+  const { user, host } = await getSshTarget();
+  return ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${user}@${host}`, remote];
+}
+
+/**
  * Walk process.cwd() upward looking for a sibling `.git` directory; that's
  * the repo root. Parse a `RL_INFRA_IP=...` line out of `<repo-root>/.env`.
  * Returns undefined when no `.git` ancestor exists, no `.env` is present,

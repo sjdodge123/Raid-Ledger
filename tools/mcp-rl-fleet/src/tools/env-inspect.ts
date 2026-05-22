@@ -12,7 +12,7 @@
 // intentional omission.
 
 import { z } from 'zod';
-import { execFileP, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import { buildSshArgs, execFileP, synthesizeEmptyStderrDiagnostic } from '../exec.js';
 
 export const TOOL_NAME = 'rl_env_inspect';
 export const TOOL_DESCRIPTION =
@@ -79,8 +79,6 @@ export interface EnvInspectResult {
   message?: string;
 }
 
-const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
-const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
 
 const MAX_BUFFER = 64 * 1024;
 
@@ -130,14 +128,9 @@ export async function execute(params: EnvInspectParams): Promise<EnvInspectResul
   // gets a unified stream to classify regardless of which side cat or
   // docker emitted on. The catch-block reads both streams anyway.
   const remote = `DOCKER_HOST=tcp://127.0.0.1:2375 docker exec ${container} cat ${path} 2>&1`;
-  const args = [
-    '-o',
-    'BatchMode=yes',
-    '-o',
-    'ConnectTimeout=5',
-    `${sshUser()}@${sshHost()}`,
-    remote,
-  ];
+  // buildSshArgs forces user=rl-agent + DNS-resolves host with .env fallback
+  // (closes Codex round-5 P1 holes shared by all direct-SSH tools).
+  const args = await buildSshArgs(remote);
   try {
     const { stdout, stderr } = await execFileP('ssh', args, {
       maxBuffer: MAX_BUFFER,
