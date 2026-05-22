@@ -109,10 +109,17 @@ function buildRemoteCommand(slug: string, sql: string): string {
   // `-P null=\\\\N`: in JS string `\\\\N` is the 4-char sequence `\\N`,
   // which the SSH shell collapses to `\N`, which psql reads as the NULL
   // sentinel. The CSV parser then maps unquoted `\N` to JS null.
+  //
+  // `-q` (--quiet) suppresses the command-tag echoes that psql writes to
+  // stdout when running BEGIN / SET / ROLLBACK statements. Without -q, the
+  // multi-statement -c string sends `BEGIN\nSET\n<csv-header>\n<csv-row>\nROLLBACK`
+  // to stdout — the CSV parser then treats `BEGIN` as the header row, which
+  // shifts every column name + data cell. Dogfood-surfaced bug — the in-vitro
+  // tests with pre-cleaned stdout fixtures missed it.
   return (
     `PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=5000' ` +
     `/srv/rl-infra/orchestrator/bin/env-psql ${shellQuote(slug)} -- ` +
-    `--csv -v ON_ERROR_STOP=1 -P null=\\\\N --set=FETCH_COUNT=${FETCH_LIMIT} ` +
+    `--csv -q -v ON_ERROR_STOP=1 -P null=\\\\N --set=FETCH_COUNT=${FETCH_LIMIT} ` +
     `-c ${shellQuote(wrappedSql)}`
   );
 }

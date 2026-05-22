@@ -196,8 +196,11 @@ describe('rl_db_query — SSH invocation shape (hardened per architect)', () => 
     expect(remote).toContain('/srv/rl-infra/orchestrator/bin/env-psql');
     // Slug shellQuoted.
     expect(remote).toContain("'myslug'");
-    // psql flags — CSV, ON_ERROR_STOP, NULL sentinel double-escape, FETCH_COUNT.
+    // psql flags — CSV, quiet (suppress BEGIN/SET/ROLLBACK command-tag echo —
+    // dogfood-surfaced; without `-q`, those echoes poison CSV parsing),
+    // ON_ERROR_STOP, NULL sentinel double-escape, FETCH_COUNT.
     expect(remote).toContain('--csv');
+    expect(remote).toContain('-q ');
     expect(remote).toContain('-v ON_ERROR_STOP=1');
     expect(remote).toContain('-P null=\\\\N');
     expect(remote).toContain('--set=FETCH_COUNT=1001');
