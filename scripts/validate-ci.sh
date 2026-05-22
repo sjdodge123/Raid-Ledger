@@ -549,6 +549,12 @@ run_migration_validation() {
     echo -e "No migration files changed — skipping"
     return 2  # SKIPPED
   fi
+  # ROK-1343: Mutagen sync on the rl-infra fleet runner strips POSIX exec
+  # bits even though git stores `scripts/validate-migrations.sh` as 100755.
+  # GitHub CI honors the git mode; the fleet does not. Re-assert +x defensively
+  # so the step survives both environments. See TECH-DEBT-BACKLOG.md 2026-05-22
+  # for the upstream Mutagen-side fix tracking.
+  chmod +x "$REPO_ROOT/scripts/validate-migrations.sh"
   "$REPO_ROOT/scripts/validate-migrations.sh"
 }
 
