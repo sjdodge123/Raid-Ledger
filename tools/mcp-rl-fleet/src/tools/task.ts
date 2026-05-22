@@ -343,9 +343,13 @@ export interface ExecuteCancelResult {
 }
 
 export async function executeCancel(params: ExecuteCancelParams): Promise<ExecuteCancelResult> {
+  // task-cancel takes positional args: <task_id> <reason>. Earlier versions of
+  // this shim passed `--reason <reason>` which the binary recorded as
+  // cancel_reason: "--reason" (the flag literal, not the value). Caught by the
+  // ROK-1338 PR-3 zero-SSH dogfood.
   const remote =
     `/srv/rl-infra/orchestrator/bin/task-cancel ` +
-    `${shellQuote(params.task_id)} --reason ${shellQuote(params.reason)}`;
+    `${shellQuote(params.task_id)} ${shellQuote(params.reason)}`;
   const [cmd, args] = sshArgs(remote);
   try {
     const { stdout } = await execFileP(cmd, args, {

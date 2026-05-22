@@ -260,6 +260,20 @@ describe('rl_task_cancel — executeCancel()', () => {
     const result = await executeCancel({ task_id: 'abc123def', reason: 'cleanup' });
     expect(result.ok).toBe(true);
   });
+
+  // Regression: ROK-1338 PR-3 dogfood caught this shim passing `--reason <r>`
+  // which task-cancel (positional <task_id> <reason>) recorded as the literal
+  // string "--reason" in cancel_reason. Lock the positional contract.
+  it('passes task_id + reason as positional argv to the orchestrator binary (no --reason flag)', async () => {
+    execFileOk({ ok: true, task_id: 'abc123def', mcp_runtime_status: 'cancelled' });
+    await executeCancel({ task_id: 'abc123def', reason: 'dogfood done' });
+    const firstCall = mockExecFile.mock.calls[0];
+    const argv = JSON.stringify(firstCall.slice(0, 2));
+    expect(argv).toContain('/srv/rl-infra/orchestrator/bin/task-cancel');
+    expect(argv).toContain('abc123def');
+    expect(argv).toContain('dogfood done');
+    expect(argv).not.toContain('--reason');
+  });
 });
 
 describe('rl_task_list — executeList()', () => {

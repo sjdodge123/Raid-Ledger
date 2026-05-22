@@ -368,6 +368,33 @@ initial sshd_config edit.
 
 ### Apply the lockdown (post-merge, operator-only)
 
+**Step 0 (preflight — DO NOT skip).** Confirm every agent that will work the
+fleet has a fresh MCP surface that includes the PR-2 tools (`rl_task_logs`,
+`rl_env_inspect`, `rl_db_query`). Two parts:
+
+   1. **From the main repo (laptop):**
+      ```bash
+      cd /Users/sdodge/Documents/Projects/Raid-Ledger
+      git pull --rebase origin main
+      npm install        # MANDATORY — PR-2 added json-bigint; without npm install the MCP server fails to load at all
+      ```
+      Verify: `ls node_modules/json-bigint/package.json` exists. Without this,
+      ANY Claude session will start with a dead `mcp-rl-fleet` server (module
+      load error) and the lockdown becomes unrecoverable for agents.
+   2. **Restart any open Claude sessions.** MCP servers load their tool
+      registry at session start; sessions that predate PR-2's merge will be
+      missing `rl_task_logs` / `rl_env_inspect` / `rl_db_query` even after
+      step 1. Restart fully (exit Claude and relaunch — `/exit` from inside a
+      session is sufficient for the interactive client; background agents
+      must be stopped from the agents panel).
+   3. **Verify** by asking the agent to call `mcp__mcp-rl-fleet__rl_status`
+      and then `ToolSearch select:mcp__mcp-rl-fleet__rl_task_logs`. If the
+      latter returns "No matching deferred tools found", the agent is still
+      stale — DO NOT proceed with the lockdown. Loop back to step 2.
+
+Only proceed once every active agent session reports `rl_task_logs` /
+`rl_env_inspect` / `rl_db_query` as PRESENT in its MCP surface.
+
 1. **Back up the existing sshd_config:**
    ```bash
    sudo cp /etc/ssh/sshd_config /root/sshd_config.pre-rok-1338-pr3
