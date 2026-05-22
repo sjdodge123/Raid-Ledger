@@ -9,6 +9,15 @@ import * as childProcess from 'node:child_process';
 jest.mock('node:fs');
 jest.mock('node:child_process');
 
+// ROK-1343: backup.helpers::runMigrations now routes through the in-process
+// programmatic migrator (drizzle-orm/postgres-js/migrator) instead of shelling
+// out to `npx drizzle-kit migrate`. The unit suite doesn't carry a live
+// Postgres, so stub the wrapper to a no-op. The loud-failure behavior is
+// covered by `backup.helpers.loud-failure.integration.spec.ts`.
+jest.mock('../scripts/run-migrations', () => ({
+  runMigrations: jest.fn(() => Promise.resolve()),
+}));
+
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockChildProcess = childProcess as jest.Mocked<typeof childProcess>;
 

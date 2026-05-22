@@ -8,7 +8,7 @@
   "scripts": {
     "build": "nest build",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "ts-node src/scripts/run-migrations.ts",
     "db:seed:games": "ts-node scripts/seed-games.ts",
     "db:seed:admin": "ts-node scripts/seed-admin.ts",
     "backfill:game-vectors": "ts-node scripts/backfill-game-vectors.ts",

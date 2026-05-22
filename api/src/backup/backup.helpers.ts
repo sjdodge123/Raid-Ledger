@@ -7,6 +7,8 @@ import { InternalServerErrorException } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { runMigrations as runMigrationsInProcess } from '../scripts/run-migrations';
+
 const execFileAsync = promisify(execFile);
 
 /** Build `--exclude-table-data=<t>` flags for each sanitized table. */
@@ -120,14 +122,35 @@ export function isRestoreFatal(error: unknown): boolean {
   );
 }
 
-/** Run post-restore database migrations. */
+/**
+ * Run post-restore database migrations.
+ *
+ * Routes through the programmatic `migrate()` API (via run-migrations.ts) on
+ * BOTH the dev and production branches. The drizzle-kit CLI silently swallows
+ * SQL errors (upstream drizzle-team/drizzle-orm#5601), which would mask a
+ * broken restore — see ROK-1343.
+ *
+ * Migrations folder resolution (precedence):
+ *   1. `MIGRATIONS_FOLDER` env var if set (operator override / boot script).
+ *   2. `${apiRoot}/src/drizzle/migrations` (source tree — dev, tests, runner).
+ *   3. `${apiRoot}/drizzle/migrations` (allinone production image — see
+ *      Dockerfile.allinone line 165 which copies migrations to /app/drizzle).
+ */
 export async function runMigrations(apiRoot: string): Promise<void> {
-  const isDocker = process.env.NODE_ENV === 'production';
-  if (isDocker) {
-    await execFileAsync('node', [path.resolve('drizzle/run-migrations.js')]);
-  } else {
-    await execFileAsync('npx', ['drizzle-kit', 'migrate'], { cwd: apiRoot });
+  const candidates = [
+    process.env.MIGRATIONS_FOLDER,
+    path.resolve(apiRoot, 'src/drizzle/migrations'),
+    path.resolve(apiRoot, 'drizzle/migrations'),
+  ].filter((p): p is string => typeof p === 'string' && p.length > 0);
+  const migrationsFolder = candidates.find((p) =>
+    fs.existsSync(path.join(p, 'meta', '_journal.json')),
+  );
+  if (!migrationsFolder) {
+    throw new Error(
+      `Could not locate drizzle migrations folder (searched: ${candidates.join(', ')})`,
+    );
   }
+  await runMigrationsInProcess(migrationsFolder);
 }
 
 /** Run bootstrap-admin script and extract password. */
