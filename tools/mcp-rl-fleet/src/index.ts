@@ -34,13 +34,18 @@ import * as forceRelease from './tools/force-release.js';
 import * as testPlan from './tools/test-plan.js';
 import * as task from './tools/task.js';
 import * as taskInspect from './tools/task-inspect.js';
+import * as taskLogs from './tools/task-logs.js';
 import * as infraLogs from './tools/infra-logs.js';
+import * as envInspect from './tools/env-inspect.js';
+import * as dbQuery from './tools/db-query.js';
 import * as lease from './tools/lease.js';
 import * as fleetHealth from './tools/fleet-health.js';
 
+// 0.5.0 — ROK-1338 PR-2: interactive MCP tools (rl_task_logs, rl_env_inspect,
+//   rl_db_query) + execFileP dedup into exec.ts.
 // 0.4.0 — ROK-1331 M7: rl_fleet_health agent-side monitor tool.
 // 0.3.0 — ROK-1331 M5a: lease queue + claim duration + pin/unpin.
-const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.4.0' });
+const server = new McpServer({ name: 'mcp-rl-fleet', version: '0.5.0' });
 
 const jsonResult = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
@@ -356,6 +361,44 @@ registerTool(
   infraLogs.TOOL_DESCRIPTION,
   infraLogsSchema,
   async (p) => jsonResult(await infraLogs.execute(p as infraLogs.InfraLogsParams)),
+);
+
+// ----- Task logs (ROK-1338 PR-2) -----
+const taskLogsSchema: Shape = {
+  task_id: taskIdSchema,
+  lines: z.number().int().positive().max(5000).optional(),
+  follow: z.boolean().optional(),
+};
+registerTool(
+  taskLogs.TOOL_NAME,
+  taskLogs.TOOL_DESCRIPTION,
+  taskLogsSchema,
+  async (p) => jsonResult(await taskLogs.execute(p as taskLogs.TaskLogsParams)),
+);
+
+// ----- Env inspect (ROK-1338 PR-2) -----
+const envInspectSchema: Shape = {
+  slug: slugSchema,
+  what: envInspect.EnvInspectTargetSchema,
+};
+registerTool(
+  envInspect.TOOL_NAME,
+  envInspect.TOOL_DESCRIPTION,
+  envInspectSchema,
+  async (p) => jsonResult(await envInspect.execute(p as envInspect.EnvInspectParams)),
+);
+
+// ----- DB query (ROK-1338 PR-2 — architect-hardened, read-only v1) -----
+const dbQuerySchema: Shape = {
+  slug: slugSchema,
+  sql: z.string().min(1).max(10000),
+  read_only: z.literal(true).optional().default(true),
+};
+registerTool(
+  dbQuery.TOOL_NAME,
+  dbQuery.TOOL_DESCRIPTION,
+  dbQuerySchema,
+  async (p) => jsonResult(await dbQuery.execute(p as dbQuery.DbQueryParams)),
 );
 
 // ----- Lease tools (ROK-1331 M5a) -----
