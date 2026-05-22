@@ -7,6 +7,8 @@ import { InternalServerErrorException } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { runMigrations as runMigrationsInProcess } from '../scripts/run-migrations';
+
 const execFileAsync = promisify(execFile);
 
 /** Build `--exclude-table-data=<t>` flags for each sanitized table. */
@@ -120,14 +122,22 @@ export function isRestoreFatal(error: unknown): boolean {
   );
 }
 
-/** Run post-restore database migrations. */
+/**
+ * Run post-restore database migrations.
+ *
+ * Routes through the programmatic `migrate()` API (via run-migrations.ts) on
+ * BOTH the dev and production branches. The drizzle-kit CLI silently swallows
+ * SQL errors (upstream drizzle-team/drizzle-orm#5601), which would mask a
+ * broken restore — see ROK-1343.
+ *
+ * `apiRoot` is retained in the signature for backward compat but is no longer
+ * used at the migration step; the in-process migrator resolves
+ * `MIGRATIONS_FOLDER` from env or from its built-in default
+ * (`./drizzle/migrations`, relative to the api workspace cwd).
+ */
 export async function runMigrations(apiRoot: string): Promise<void> {
-  const isDocker = process.env.NODE_ENV === 'production';
-  if (isDocker) {
-    await execFileAsync('node', [path.resolve('drizzle/run-migrations.js')]);
-  } else {
-    await execFileAsync('npx', ['drizzle-kit', 'migrate'], { cwd: apiRoot });
-  }
+  void apiRoot;
+  await runMigrationsInProcess();
 }
 
 /** Run bootstrap-admin script and extract password. */
