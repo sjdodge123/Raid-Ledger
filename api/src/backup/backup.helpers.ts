@@ -130,14 +130,27 @@ export function isRestoreFatal(error: unknown): boolean {
  * SQL errors (upstream drizzle-team/drizzle-orm#5601), which would mask a
  * broken restore — see ROK-1343.
  *
- * `apiRoot` is retained in the signature for backward compat but is no longer
- * used at the migration step; the in-process migrator resolves
- * `MIGRATIONS_FOLDER` from env or from its built-in default
- * (`./drizzle/migrations`, relative to the api workspace cwd).
+ * Migrations folder resolution (precedence):
+ *   1. `MIGRATIONS_FOLDER` env var if set (operator override / boot script).
+ *   2. `${apiRoot}/src/drizzle/migrations` (source tree — dev, tests, runner).
+ *   3. `${apiRoot}/drizzle/migrations` (allinone production image — see
+ *      Dockerfile.allinone line 165 which copies migrations to /app/drizzle).
  */
 export async function runMigrations(apiRoot: string): Promise<void> {
-  void apiRoot;
-  await runMigrationsInProcess();
+  const candidates = [
+    process.env.MIGRATIONS_FOLDER,
+    path.resolve(apiRoot, 'src/drizzle/migrations'),
+    path.resolve(apiRoot, 'drizzle/migrations'),
+  ].filter((p): p is string => typeof p === 'string' && p.length > 0);
+  const migrationsFolder = candidates.find((p) =>
+    fs.existsSync(path.join(p, 'meta', '_journal.json')),
+  );
+  if (!migrationsFolder) {
+    throw new Error(
+      `Could not locate drizzle migrations folder (searched: ${candidates.join(', ')})`,
+    );
+  }
+  await runMigrationsInProcess(migrationsFolder);
 }
 
 /** Run bootstrap-admin script and extract password. */

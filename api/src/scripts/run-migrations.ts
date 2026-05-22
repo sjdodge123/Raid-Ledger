@@ -27,8 +27,14 @@ export async function runMigrations(migrationsFolder?: string): Promise<void> {
     throw new Error('DATABASE_URL environment variable is required');
   }
 
+  // Default matches `api/drizzle.config.ts` `out:` — migrations live at
+  // `api/src/drizzle/migrations` in source. The allinone image overrides this
+  // to `/app/drizzle/migrations` via the MIGRATIONS_FOLDER env var (see
+  // docker-entrypoint.sh).
   const folder =
-    migrationsFolder ?? process.env.MIGRATIONS_FOLDER ?? './drizzle/migrations';
+    migrationsFolder ??
+    process.env.MIGRATIONS_FOLDER ??
+    './src/drizzle/migrations';
 
   console.log('📦 Connecting to database...');
 
