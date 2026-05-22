@@ -19,6 +19,11 @@ export const TOOL_DESCRIPTION =
 
 const LINES_MAX = 5000;
 const LINES_DEFAULT = 100;
+// 64KB stdout cap — matches rl_infra_logs precedent. Hoisted to module
+// level (reviewer feedback: env-inspect.ts + infra-logs.ts both module-hoist;
+// pure consistency nit). Each tail line is normally small; the cap is the
+// runaway-line escape valve.
+const MAX_BUFFER = 64 * 1024;
 
 export const TaskLogsParamsSchema = z
   .object({
@@ -124,10 +129,6 @@ export async function execute(params: TaskLogsParams): Promise<TaskLogsResult> {
   // capture sees the whole picture. Mirrors infra-logs.ts pattern.
   const remote = `tail -n ${lines} ${shellQuote(logPath)} 2>&1`;
   const [cmd, args] = sshArgs(remote);
-
-  // 64KB cap — matches rl_infra_logs precedent. Each tail line is normally
-  // small; ERR_CHILD_PROCESS_STDIO_MAXBUFFER is the runaway-line escape valve.
-  const MAX_BUFFER = 64 * 1024;
   try {
     const { stdout } = await execFileP(cmd, args, {
       maxBuffer: MAX_BUFFER,
@@ -154,8 +155,11 @@ function splitNonEmpty(blob: string): string[] {
 //   1. CSI / SGR — `ESC[<params><cmd>` (e.g. `ESC[0;32m`, `ESC[2J`, `ESC[?25h`)
 //   2. OSC — `ESC]<payload>BEL` or `ESC]<payload>ESC\\` (window title, hyperlink)
 //
-// Vendored from the canonical ansi-regex npm package. Round-3 dogfood
-// found the CSI-only version missed OSC sequences like `ESC]0;title\\x07`.
+// Vendored from the canonical `ansi-regex` npm package (v6.x — Chalk
+// project, MIT). Inlined rather than dep-pulled because the regex is one
+// line and the package's only export. Round-3 dogfood found the CSI-only
+// version missed OSC sequences like `ESC]0;title\\x07`; round-5 sign-off
+// verified the OSC + CSI branches both strip on real validate-ci output.
 // eslint-disable-next-line no-control-regex
 const ANSI_RE = /(?:\x1b[[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-PRZcf-ntqry=><]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/g;
 

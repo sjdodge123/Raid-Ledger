@@ -63,6 +63,14 @@ export interface EnvInspectResult {
   what?: EnvInspectTarget;
   container?: string;
   path?: string;
+  /**
+   * File content cat'd from the container. The remote command uses `2>&1`,
+   * so on the happy path this is the file bytes verbatim AND any docker
+   * exec warnings (e.g. TTY notices) merged in. nginx-conf and supervisor-conf
+   * don't produce stderr warnings in practice, so consumers can treat
+   * `content` as the file bytes. Future enum values that wrap noisier docker
+   * binaries should split stdout from stderr explicitly.
+   */
   content?: string;
   truncated?: boolean;
   bytes?: number;

@@ -63,7 +63,7 @@ import { execFileP, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.
 
 export const TOOL_NAME = 'rl_db_query';
 export const TOOL_DESCRIPTION =
-  'Run a one-shot read-only SQL query against a fleet env Postgres via env-psql. Defends against writes/DDL via BEGIN/SET TRANSACTION READ ONLY/ROLLBACK wrapper + SET LOCAL statement_timeout=5s + FORBIDDEN_KEYWORDS pre-check + subquery LIMIT 1001 wrap + ON_ERROR_STOP. Returns rows as [{col: val,...}] parsed from CSV with opaque-marker NULL sentinel (NULL distinguishable from empty string AND from literal `\\N` data). Caps at 1000 rows (truncated:true flag). v1 is read_only:true only — write-mode is a separate future tool.';
+  'Run a one-shot read-only SQL query against a fleet env Postgres via env-psql. Defends against writes/DDL via BEGIN/SET TRANSACTION READ ONLY/ROLLBACK wrapper + SET LOCAL statement_timeout=5s + FORBIDDEN_KEYWORDS pre-check + subquery LIMIT 1001 wrap + ON_ERROR_STOP. Returns rows as [{col: val,...}] parsed from JSON via `json_agg(row_to_json(...))` — JSON-native NULL encoding (unambiguous; no sentinel-vs-data collision possible). Integers >= Number.MAX_SAFE_INTEGER (2^53−1) come back as JS strings via json-bigint to preserve bigint/numeric precision; safe values stay as JS Number. Caps at 1000 rows (truncated:true flag). v1 is read_only:true only — write-mode is a separate future tool.';
 
 // ---------------------------------------------------------------------------
 // Zod schema (MCP boundary)
@@ -166,7 +166,12 @@ const FORBIDDEN_KEYWORDS: RegExp[] = [
  *   4. COALESCE(..., '[]') — empty result is `[]`, not psql's empty-cell.
  */
 function buildRemoteCommand(slug: string, sql: string): string {
-  const stripped = sql.trim().replace(/;\s*$/, '');
+  // Strip any combination of trailing semicolons + whitespace (e.g. `;`,
+  // `;  `, `;;`, `; ;`). Reviewer feedback: the single-semicolon strip used
+  // to leave `SELECT 1; ;` with a stray `;` inside the subquery wrap, which
+  // produced a confusing syntax_error. Now the syntax_error path is reserved
+  // for genuine multi-statement attempts.
+  const stripped = sql.trim().replace(/[;\s]+$/, '');
   // The user's SQL goes inside a sub-subquery so the LIMIT applies BEFORE
   // json_agg builds the array (bounded memory). The outer COALESCE handles
   // the zero-row case (json_agg returns NULL → we want `[]`).

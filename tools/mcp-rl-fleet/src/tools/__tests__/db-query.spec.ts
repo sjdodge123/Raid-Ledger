@@ -530,6 +530,55 @@ describe('rl_db_query — error classification (architect §D layers + spec §6)
     expect(result.error).toBe('db_query_failed');
     expect(result.message).toContain('novel postgres error');
   });
+
+  // Reviewer feedback: pin the classification order. If a future hop adds
+  // `2>&1` to the db-query remote command (mirroring task-logs/infra-logs),
+  // a stderr blob containing both `ssh: connect` AND a postgres "cannot
+  // execute INSERT" line should still classify as `read_only_violation`
+  // (the more specific match wins).
+  it('classifies as read_only_violation when stderr contains BOTH ssh:connect AND a write rejection', async () => {
+    execFileFail(
+      1,
+      'ssh: connect to host 192.168.0.132 port 22: Connection refused\n' +
+        'ERROR:  cannot execute INSERT in a read-only transaction',
+    );
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SELECT 1',
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('read_only_violation');
+  });
+
+  // Reviewer feedback: SSH-exit-255 with EMPTY stderr falls back to the
+  // synthesized diagnostic, which doesn't match the `ssh:.*connect` regex
+  // and therefore lands in `db_query_failed` rather than `db_unreachable`.
+  // Pin the behavior so a future regex change doesn't surprise consumers.
+  it('classifies exit-255 with empty stderr as db_unreachable via the exit-code branch', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _cmd: string,
+        _args: string[],
+        _opts: unknown,
+        cb: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+        // Empty stderr + exit 255 — the classic ssh-host-unreachable shape.
+        const err = Object.assign(new Error(''), { code: 255 });
+        callback(err, '', '');
+      },
+    );
+    const result = await execute({
+      slug: 'myslug',
+      sql: 'SELECT 1',
+      read_only: true,
+    });
+    expect(result.ok).toBe(false);
+    // exitCode === 255 triggers the db_unreachable branch even though stderr
+    // was synthesized (the synth diagnostic doesn't contain `ssh:` literally).
+    expect(result.error).toBe('db_unreachable');
+  });
 });
 
 describe('rl_db_query — round-4 fixes', () => {
