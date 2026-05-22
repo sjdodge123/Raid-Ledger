@@ -1,12 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -16,7 +10,6 @@ import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import {
   type EligibleEvent,
   findEligibleEvents,
@@ -25,7 +18,9 @@ import {
   buildSignupSummary,
   buildDiscordUrl,
   isWithinGracePeriod,
-  formatRelativeTimeLabel,
+  resolveBumpChannel,
+  formatBumpLog,
+  buildBumpEmbed,
 } from './recruitment-reminder.helpers';
 
 /** TTL for recruitment-reminder dedup keys: 48 hours in seconds */
@@ -253,19 +248,7 @@ export class RecruitmentReminderService {
     return false;
   }
 
-  /**
-   * Post a bump message in the event's currently-bound Discord channel.
-   *
-   * Channel resolution mirrors the initial-embed path: walk
-   * `ChannelResolverService.resolveChannelForEvent` (override → series →
-   * game → default). Falls back to the stored `event.channelId` only when
-   * the resolver returns null so a misconfigured guild still gets the bump
-   * somewhere visible. ROK-1335.
-   *
-   * Note: the persistence write below intentionally keeps matching on the
-   * ORIGINAL `event.channelId` — `discord_event_messages` is keyed by where
-   * the original embed went and remains the source of truth for editing it.
-   */
+  /** Post a recruitment bump to the event's currently-bound channel (ROK-1335). */
   private async postChannelBump(event: EligibleEvent): Promise<void> {
     if (this.shouldSkipBump(event)) return;
     try {
@@ -273,52 +256,30 @@ export class RecruitmentReminderService {
         this.settingsService.getClientUrl(),
         this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
       ]);
-      const { embed, row } = this.buildBumpEmbed(
+      const { embed, row } = buildBumpEmbed(event, clientUrl, defaultTimezone);
+      const targetChannelId = await resolveBumpChannel(
+        this.channelResolver,
         event,
-        clientUrl,
-        defaultTimezone,
       );
-      const targetChannelId = await this.resolveBumpChannel(event);
       const message = await this.discordBotClient.sendEmbed(
         targetChannelId,
         embed,
         row,
       );
       await this.persistBumpMessageId(event, message.id, targetChannelId);
-      this.logger.log(
-        `Posted recruitment bump for event ${event.id} in channel ${targetChannelId}` +
-          (targetChannelId !== event.channelId
-            ? ` (rebound from ${event.channelId})`
-            : ''),
-      );
+      this.logger.log(formatBumpLog(event, targetChannelId));
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.warn(
-        `Failed to post channel bump for event ${event.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to post channel bump for event ${event.id}: ${msg}`,
       );
     }
   }
 
   /**
-   * Resolve the target channel for the bump using current bindings.
-   * Falls back to `event.channelId` when the resolver yields null. ROK-1335.
-   */
-  private async resolveBumpChannel(event: EligibleEvent): Promise<string> {
-    const resolved = await this.channelResolver.resolveChannelForEvent(
-      event.gameId,
-      event.recurrenceGroupId,
-      event.notificationChannelOverride,
-    );
-    return resolved ?? event.channelId;
-  }
-
-  /**
-   * Persist the bump message ID on the discord_event_messages record.
-   *
-   * The WHERE clause still keys on the ORIGINAL `event.channelId` because
-   * that's the row's identity (where the original embed went). The new
-   * `bumpChannelId` column records where the bump was actually posted so
-   * `EmbedSyncProcessor.maybeDeleteBumpMessage` can target the right channel
-   * for cleanup when bindings changed between initial-post and bump. ROK-1335.
+   * Persist the bump message ID. WHERE clause stays on ORIGINAL event.channelId
+   * (row identity); bumpChannelId column records the actual bump target for
+   * cleanup after a rebind. ROK-1335.
    */
   private async persistBumpMessageId(
     event: EligibleEvent,
@@ -334,48 +295,5 @@ export class RecruitmentReminderService {
           eq(schema.discordEventMessages.channelId, event.channelId),
         ),
       );
-  }
-
-  /** Build the bump embed and action row. */
-  private buildBumpEmbed(
-    event: EligibleEvent,
-    clientUrl: string,
-    defaultTimezone: string,
-  ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
-    const signupSummary = buildSignupSummary(event);
-    // ROK-1240: TZ-aware "today"/"tomorrow"/"in Xh" label — fixes
-    // same-day events being labeled "tomorrow".
-    const timeLabel = formatRelativeTimeLabel(
-      event.startTime,
-      Date.now(),
-      defaultTimezone,
-    );
-
-    const embed = new EmbedBuilder()
-      .setTitle(`\uD83D\uDCE2 Spots still available — event ${timeLabel}!`)
-      .setDescription(
-        `**${event.title}** — ${event.gameName}\n${signupSummary}`,
-      )
-      .setColor(EMBED_COLORS.ANNOUNCEMENT)
-      .setTimestamp(new Date(event.startTime));
-
-    return { embed, row: this.buildBumpRow(event, clientUrl) };
-  }
-
-  /** Build the action row (View Event + View in Discord buttons). */
-  private buildBumpRow(
-    event: EligibleEvent,
-    clientUrl: string,
-  ): ActionRowBuilder<ButtonBuilder> {
-    return new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setLabel('View Event')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/events/${event.id}`),
-      new ButtonBuilder()
-        .setLabel('View in Discord')
-        .setStyle(ButtonStyle.Link)
-        .setURL(buildDiscordUrl(event)),
-    );
   }
 }

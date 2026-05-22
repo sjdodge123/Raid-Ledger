@@ -4,7 +4,15 @@
  */
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import * as schema from '../drizzle/schema';
+import type { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
+import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 
 export interface EligibleEvent {
   id: number;
@@ -279,4 +287,70 @@ export function isWithinGracePeriod(
   if (gracePeriodMs === 0) return false;
   const currentTime = now ?? Date.now();
   return currentTime < new Date(event.createdAt).getTime() + gracePeriodMs;
+}
+
+/**
+ * Resolve the target channel for a recruitment bump using current bindings.
+ * Falls back to `event.channelId` when the resolver yields null. ROK-1335.
+ */
+export async function resolveBumpChannel(
+  channelResolver: ChannelResolverService,
+  event: EligibleEvent,
+): Promise<string> {
+  const resolved = await channelResolver.resolveChannelForEvent(
+    event.gameId,
+    event.recurrenceGroupId,
+    event.notificationChannelOverride,
+  );
+  return resolved ?? event.channelId;
+}
+
+/** Build the "Posted bump … (rebound from …)" log line. ROK-1335. */
+export function formatBumpLog(
+  event: EligibleEvent,
+  targetChannelId: string,
+): string {
+  const rebound =
+    targetChannelId !== event.channelId
+      ? ` (rebound from ${event.channelId})`
+      : '';
+  return `Posted recruitment bump for event ${event.id} in channel ${targetChannelId}${rebound}`;
+}
+
+/** Build the bump embed and action row for a recruitment reminder. ROK-1335. */
+export function buildBumpEmbed(
+  event: EligibleEvent,
+  clientUrl: string,
+  defaultTimezone: string,
+): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
+  const signupSummary = buildSignupSummary(event);
+  // ROK-1240: TZ-aware "today"/"tomorrow"/"in Xh" label.
+  const timeLabel = formatRelativeTimeLabel(
+    event.startTime,
+    Date.now(),
+    defaultTimezone,
+  );
+  const embed = new EmbedBuilder()
+    .setTitle(`📢 Spots still available — event ${timeLabel}!`)
+    .setDescription(`**${event.title}** — ${event.gameName}\n${signupSummary}`)
+    .setColor(EMBED_COLORS.ANNOUNCEMENT)
+    .setTimestamp(new Date(event.startTime));
+  return { embed, row: buildBumpRow(event, clientUrl) };
+}
+
+/** Build the action row (View Event + View in Discord buttons). */
+export function buildBumpRow(
+  event: EligibleEvent,
+  clientUrl: string,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setLabel('View Event')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/events/${event.id}`),
+    new ButtonBuilder()
+      .setLabel('View in Discord')
+      .setStyle(ButtonStyle.Link)
+      .setURL(buildDiscordUrl(event)),
+  );
 }
