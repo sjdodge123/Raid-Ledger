@@ -6,8 +6,12 @@
 // or agent can pull fields that status doesn't surface (env block, exact
 // command argv, internal state — whatever the orchestrator wrote).
 
-import { execFile } from 'node:child_process';
-import { shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import {
+  buildSshArgs,
+  execFileP,
+  shellQuote,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
 import { TASK_ID_RE } from './task.js';
 
 export const TOOL_NAME = 'rl_task_inspect';
@@ -24,39 +28,6 @@ export interface ExecuteInspectResult {
   task?: Record<string, unknown>;
   error?: string;
   message?: string;
-}
-
-const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
-const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-
-function execFileP(
-  cmd: string,
-  args: string[],
-  opts: { timeout?: number; maxBuffer?: number } = {},
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    execFile(cmd, args, opts, (err, stdout, stderr) => {
-      const out =
-        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
-      const errStr =
-        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
-      if (err) {
-        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
-        e.stdout = out;
-        e.stderr = errStr || e.stderr || '';
-        reject(e);
-        return;
-      }
-      resolve({ stdout: out, stderr: errStr });
-    });
-  });
-}
-
-function sshArgs(remote: string): [string, string[]] {
-  return [
-    'ssh',
-    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
-  ];
 }
 
 export async function execute(params: ExecuteInspectParams): Promise<ExecuteInspectResult> {
@@ -76,9 +47,11 @@ export async function execute(params: ExecuteInspectParams): Promise<ExecuteInsp
   const remote =
     `/srv/rl-infra/orchestrator/bin/task-inspect ${shellQuote(params.task_id)} ` +
     `2>/dev/null || cat /srv/rl-infra/state/tasks/${shellQuote(params.task_id)}.json`;
-  const [cmd, args] = sshArgs(remote);
+  // buildSshArgs forces user=rl-agent + DNS-resolves host with .env fallback
+  // (closes Codex round-5 P1 holes shared by all direct-SSH tools).
+  const args = await buildSshArgs(remote);
   try {
-    const { stdout } = await execFileP(cmd, args, {
+    const { stdout } = await execFileP('ssh', args, {
       maxBuffer: 16 * 1024 * 1024,
       timeout: 15_000,
     });

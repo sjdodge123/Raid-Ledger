@@ -4,9 +4,8 @@
 // docker-proxy logs without needing SSH access or docker-socket-proxy POST.
 // Strict service enum + tail cap. SSH via execFile argv-array.
 
-import { execFile } from 'node:child_process';
 import { z } from 'zod';
-import { synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import { buildSshArgs, execFileP, synthesizeEmptyStderrDiagnostic } from '../exec.js';
 
 export const TOOL_NAME = 'rl_infra_logs';
 export const TOOL_DESCRIPTION =
@@ -58,32 +57,6 @@ export interface InfraLogsResult {
   message?: string;
 }
 
-const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
-const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-
-function execFileP(
-  cmd: string,
-  args: string[],
-  opts: { timeout?: number; maxBuffer?: number } = {},
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    execFile(cmd, args, opts, (err, stdout, stderr) => {
-      const out =
-        typeof stdout === 'string' ? stdout : (stdout as unknown as Buffer | undefined)?.toString() ?? '';
-      const errStr =
-        typeof stderr === 'string' ? stderr : (stderr as unknown as Buffer | undefined)?.toString() ?? '';
-      if (err) {
-        const e = err as Error & { stdout?: string; stderr?: string; code?: number };
-        e.stdout = out;
-        e.stderr = errStr || e.stderr || '';
-        reject(e);
-        return;
-      }
-      resolve({ stdout: out, stderr: errStr });
-    });
-  });
-}
-
 export async function execute(params: InfraLogsParams): Promise<InfraLogsResult> {
   // Defense-in-depth: re-validate at the executor boundary. Zod at the MCP
   // layer already guards, but executors don't trust that.
@@ -116,14 +89,9 @@ export async function execute(params: InfraLogsParams): Promise<InfraLogsResult>
   // already-buffered streams in the wrong order). `--timestamps` keeps each
   // line individually datable if a consumer needs to re-sort.
   const remote = `DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail ${tail} --timestamps ${container} 2>&1`;
-  const args = [
-    '-o',
-    'BatchMode=yes',
-    '-o',
-    'ConnectTimeout=5',
-    `${sshUser()}@${sshHost()}`,
-    remote,
-  ];
+  // buildSshArgs forces user=rl-agent + DNS-resolves host with .env fallback
+  // (closes Codex round-5 P1 holes shared by all direct-SSH tools).
+  const args = await buildSshArgs(remote);
   // 64KB buffer cap per spec — protects against runaway container output
   // even when tail is small (each "line" can be megabytes for badly-behaved
   // services).
