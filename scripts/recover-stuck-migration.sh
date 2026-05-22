@@ -155,18 +155,27 @@ fi
 # Use python3 (always present on macOS + most linux distros) to parse JSON
 # without taking a node/jq dependency. If python3 is missing we fall back to
 # grep — works for the canonical compact-pretty journal format drizzle emits.
-JOURNAL_HAS_TAG=""
-if command -v python3 >/dev/null 2>&1; then
-  # SECURITY: pass TAG + JOURNAL_PATH via env vars, NEVER via string
-  # interpolation into the python source — a tag containing `'` would otherwise
-  # break out of the string literal and execute arbitrary Python (Codex
-  # security review, ROK-1343 follow-up).
-  #
-  # 2>&1 captures Python's traceback inside the assignment so we can re-emit
-  # it in our own ERROR: style instead of leaking it to the operator. `set -e`
-  # does not abort on $(...) failures, so the explicit `if !` is mandatory.
-  if ! JOURNAL_HAS_TAG="$(
-    _RECOVER_TAG="$TAG" _RECOVER_JOURNAL="$JOURNAL_PATH" python3 -c "
+if ! command -v python3 >/dev/null 2>&1; then
+  die "python3 is required (used to parse $JOURNAL_PATH safely)"
+fi
+
+# SECURITY: pass TAG + JOURNAL_PATH via env vars, NEVER via string
+# interpolation into the python source — a tag containing `'` would otherwise
+# break out of the string literal and execute arbitrary Python (Codex
+# security review, ROK-1343 follow-up).
+#
+# Emits "<status>\t<when>" where <status> is yes|no and <when> is the journal
+# entry's `when` field (millisecond epoch) when found. We MUST insert that
+# value as `created_at` — drizzle's migrate() picks pending migrations by
+# comparing each journal entry's `when` against MAX(created_at) and would
+# silently skip every later migration if we inserted wall-clock time instead
+# (Codex correctness review, ROK-1343).
+#
+# 2>&1 captures Python's traceback inside the assignment so we can re-emit
+# it in our own ERROR: style. `set -e` does not abort on $(...) failures,
+# so the explicit `if !` is mandatory.
+if ! JOURNAL_LOOKUP="$(
+  _RECOVER_TAG="$TAG" _RECOVER_JOURNAL="$JOURNAL_PATH" python3 -c "
 import json, os, sys
 journal_path = os.environ['_RECOVER_JOURNAL']
 tag = os.environ['_RECOVER_TAG']
@@ -176,28 +185,37 @@ try:
 except json.JSONDecodeError as e:
     print(f'__PARSE_ERROR__: {e}', file=sys.stderr)
     sys.exit(2)
-tags = [e.get('tag') for e in data.get('entries', [])]
-print('yes' if tag in tags else 'no')
+for entry in data.get('entries', []):
+    if entry.get('tag') == tag:
+        when = entry.get('when')
+        if not isinstance(when, int):
+            print(f'__SCHEMA_ERROR__: entry for {tag} has non-int when={when!r}', file=sys.stderr)
+            sys.exit(2)
+        print(f'yes\t{when}')
+        break
+else:
+    print('no')
 " 2>&1
-  )"; then
-    # Extract the parse error line if we tagged it, otherwise show the
-    # raw stderr without the traceback noise.
-    detail="$(echo "$JOURNAL_HAS_TAG" | grep '^__PARSE_ERROR__:' | sed 's/^__PARSE_ERROR__: //' | head -1)"
-    if [[ -z "$detail" ]]; then
-      detail="$(echo "$JOURNAL_HAS_TAG" | tail -1)"
-    fi
-    die "could not parse $JOURNAL_PATH — is it valid JSON? ($detail)"
+)"; then
+  detail="$(echo "$JOURNAL_LOOKUP" | grep -E '^__(PARSE|SCHEMA)_ERROR__:' | sed 's/^__[A-Z_]*__: //' | head -1)"
+  if [[ -z "$detail" ]]; then
+    detail="$(echo "$JOURNAL_LOOKUP" | tail -1)"
   fi
-else
-  if grep -qF "\"tag\": \"$TAG\"" "$JOURNAL_PATH"; then
-    JOURNAL_HAS_TAG="yes"
-  else
-    JOURNAL_HAS_TAG="no"
-  fi
+  die "could not parse $JOURNAL_PATH — ($detail)"
 fi
 
-if [[ "$JOURNAL_HAS_TAG" != "yes" ]]; then
+JOURNAL_STATUS="${JOURNAL_LOOKUP%%$'\t'*}"
+JOURNAL_WHEN=""
+if [[ "$JOURNAL_LOOKUP" == *$'\t'* ]]; then
+  JOURNAL_WHEN="${JOURNAL_LOOKUP#*$'\t'}"
+fi
+
+if [[ "$JOURNAL_STATUS" != "yes" ]]; then
   die "tag '$TAG' not found in $JOURNAL_PATH"
+fi
+
+if [[ -z "$JOURNAL_WHEN" || ! "$JOURNAL_WHEN" =~ ^[0-9]+$ ]]; then
+  die "internal: failed to read journal 'when' for tag '$TAG' (got '$JOURNAL_WHEN')"
 fi
 
 SQL_FILE="$MIGRATIONS_DIR/${TAG}.sql"
@@ -266,9 +284,12 @@ CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
 
 select_sql="SELECT created_at FROM drizzle.__drizzle_migrations WHERE hash = '$HASH' LIMIT 1;"
 
-# created_at is a millisecond epoch (matches drizzle's own writes).
-NOW_MS="$(date +%s)000"
-insert_sql="INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('$HASH', $NOW_MS);"
+# created_at MUST be the journal entry's `when` (millisecond epoch from
+# meta/_journal.json), NOT the current wall clock. drizzle's migrate() picks
+# pending migrations by comparing each journal entry's `when` against the row's
+# created_at; inserting NOW_MS would make the next migrate() run silently
+# skip every later migration (Codex correctness review, ROK-1343).
+insert_sql="INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('$HASH', $JOURNAL_WHEN);"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo -e "${YELLOW}--dry-run: SQL that would execute:${NC}"
