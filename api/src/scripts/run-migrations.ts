@@ -1,40 +1,65 @@
 /**
- * Production Migration Runner
+ * Restore-time Migration Runner
  *
- * This script runs Drizzle migrations in production without requiring
- * drizzle-kit or ts-node as runtime dependencies.
+ * Runs Drizzle migrations programmatically via `drizzle-orm/postgres-js/migrator`
+ * (NOT the drizzle-kit CLI — that path silently swallows errors per upstream
+ * issues drizzle-team/drizzle-orm#5601, #5521, #5520).
+ *
+ * Used by:
+ *   - `api/package.json` -> `db:migrate` (local dev / operator-driven)
+ *   - `scripts/validate-migrations.sh` (local CI gate)
+ *   - `api/src/backup/backup.helpers.ts::runMigrations` (post-restore)
+ *
+ * ROK-1343: Sentry-instrumented + safe-to-import (`require.main === module`
+ * guard) so the unit test can verify the capture contract without forking.
  */
+import '../sentry/instrument'; // MUST be first — installs Sentry handlers
+import * as Sentry from '@sentry/nestjs';
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 
-async function runMigrations() {
+export async function runMigrations(migrationsFolder?: string): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!databaseUrl) {
-    console.error('❌ DATABASE_URL environment variable is required');
-    process.exit(1);
+    throw new Error('DATABASE_URL environment variable is required');
   }
+
+  const folder =
+    migrationsFolder ?? process.env.MIGRATIONS_FOLDER ?? './drizzle/migrations';
 
   console.log('📦 Connecting to database...');
 
-  // Create a connection for migrations (max 1 connection)
   const migrationClient = postgres(databaseUrl, { max: 1 });
   const db = drizzle(migrationClient);
 
   try {
-    console.log('🔄 Running migrations...');
-    await migrate(db, { migrationsFolder: './drizzle/migrations' });
+    console.log(`🔄 Running migrations from ${folder}...`);
+    await migrate(db, { migrationsFolder: folder });
     console.log('✅ Migrations completed successfully');
-  } catch (error) {
-    console.error('❌ Migration failed:', error);
-    throw error;
   } finally {
     await migrationClient.end();
   }
 }
 
-runMigrations()
-  .then(() => process.exit(0))
-  .catch(() => process.exit(1));
+/**
+ * Capture a restore-time migration failure to Sentry, wait for the event to
+ * flush, then return. Extracted from the script's catch handler so the
+ * Sentry-capture contract is unit-testable without forking a Node process.
+ */
+export async function reportMigrationFailure(err: unknown): Promise<void> {
+  console.error('❌ Migration failed:', err);
+  Sentry.captureException(err, { tags: { context: 'restore-migration' } });
+  await Sentry.flush(2000);
+}
+
+if (require.main === module) {
+  runMigrations()
+    .then(() => process.exit(0))
+    .catch(async (err) => {
+      await reportMigrationFailure(err);
+      process.exit(1);
+    });
+}
