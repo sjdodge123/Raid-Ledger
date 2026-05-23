@@ -206,6 +206,10 @@ describe('executeAcquire', () => {
 
 describe('executeRelease', () => {
   it('passes branch and worktree through, returns parsed JSON', async () => {
+    // ENV-4 fix: executeRelease now calls executeStatus first to read the
+    // holder's stamped agent_id. Tests must mock BOTH calls in order:
+    // status first, then the release.
+    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null });
     queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
 
     const result = (await executeRelease({ branch: 'b', worktree: '/wt' })) as {
@@ -219,6 +223,7 @@ describe('executeRelease', () => {
   });
 
   it('reports was_holder:false when caller was only queued', async () => {
+    queueShellJson({ holder: { branch: 'other' }, queue: [], free: false, stale_cleared: null });
     queueShellJson({ released: true, was_holder: false, holder: { branch: 'other' }, queue: [] });
 
     const result = (await executeRelease({ branch: 'queued-one', worktree: '/wt' })) as {
@@ -229,13 +234,15 @@ describe('executeRelease', () => {
   });
 
   it('auto-defaults branch + worktree when omitted', async () => {
-    queueShellRaw('current-branch');
-    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+    queueShellRaw('current-branch'); // git branch --show-current
+    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null }); // executeStatus
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] }); // release
 
     await executeRelease({});
 
-    expect(mockShell.mock.calls[1]?.[0]).toContain("'current-branch'");
-    expect(mockShell.mock.calls[1]?.[0]).toContain(`'${process.cwd()}'`);
+    // call[0]=git, call[1]=status, call[2]=release
+    expect(mockShell.mock.calls[2]?.[0]).toContain("'current-branch'");
+    expect(mockShell.mock.calls[2]?.[0]).toContain(`'${process.cwd()}'`);
   });
 });
 
@@ -314,6 +321,8 @@ describe('executeAcquire — agent_id plumbing (ROK-1318)', () => {
 
 describe('executeRelease — agent_id plumbing (ROK-1318)', () => {
   it('passes --agent-id derived from branch+worktree on release', async () => {
+    // ENV-4: status call first (no holder → fall through to computed id), then release.
+    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null });
     queueShellJson({
       released: true,
       was_holder: true,
@@ -332,12 +341,14 @@ describe('executeRelease — agent_id plumbing (ROK-1318)', () => {
 
   it('release auto-detect uses derived agent_id from cwd + git branch', async () => {
     queueShellRaw('detected'); // git branch
-    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null }); // status
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] }); // release
 
     await executeRelease({});
 
     const expectedId = getAgentId('detected', process.cwd());
-    expect(mockShell.mock.calls[1]?.[0]).toContain(`--agent-id '${expectedId}'`);
+    // call[0]=git, call[1]=status, call[2]=release
+    expect(mockShell.mock.calls[2]?.[0]).toContain(`--agent-id '${expectedId}'`);
   });
 
   it('acquire + release produce the same agent_id for the same (branch, worktree)', async () => {
@@ -345,6 +356,8 @@ describe('executeRelease — agent_id plumbing (ROK-1318)', () => {
     await executeAcquire({ branch: 'rok-1318', worktree: '/wt', purpose: 'p' });
     const acquireCmd = lastCommand();
 
+    // ENV-4: release calls status first (no holder → use computed id).
+    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null });
     queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
     await executeRelease({ branch: 'rok-1318', worktree: '/wt' });
     const releaseCmd = lastCommand();
@@ -355,6 +368,98 @@ describe('executeRelease — agent_id plumbing (ROK-1318)', () => {
     const extract = (cmd: string): string | null => cmd.match(/--agent-id '([a-f0-9]+)'/)?.[1] ?? null;
     expect(extract(acquireCmd)).not.toBeNull();
     expect(extract(acquireCmd)).toBe(extract(releaseCmd));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ENV-4 — executeRelease reuses holder's stamped agent_id (post-c774fc44)
+// ---------------------------------------------------------------------------
+
+describe('executeRelease — reuses holder.agent_id (ENV-4 fix)', () => {
+  it('reuses the holder\'s stamped agent_id when holder.worktree matches ours', async () => {
+    // Status returns a holder whose worktree matches the caller's worktree
+    // but whose stamped agent_id is DIFFERENT from what we'd compute fresh
+    // (simulating a git-checkout-mid-lease scenario where the branch changed
+    // between acquire and release).
+    const stampedAgentId = 'stamped1234567a';
+    queueShellJson({
+      holder: {
+        branch: 'rok-1318',
+        worktree: '/wt',
+        purpose: 'p',
+        pid: 1,
+        priority: 'normal',
+        acquired_at: '2026-05-23T00:00:00Z',
+        heartbeat_at: '2026-05-23T00:00:00Z',
+        ttl_minutes: 60,
+        preempted_from: null,
+        agent_id: stampedAgentId,
+      },
+      queue: [],
+      free: false,
+      stale_cleared: null,
+    });
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [], matched_by: 'agent_id' });
+
+    // Caller releases with a DIFFERENT branch (post-checkout) but same worktree.
+    await executeRelease({ branch: 'main', worktree: '/wt' });
+
+    // The release command should carry the HOLDER's stamped agent_id, not
+    // the fresh sha1('main', '/wt') that would otherwise be computed.
+    const cmd = lastCommand();
+    expect(cmd).toContain(`--agent-id '${stampedAgentId}'`);
+    const computed = getAgentId('main', '/wt');
+    expect(cmd).not.toContain(`--agent-id '${computed}'`);
+  });
+
+  it('falls back to computed agent_id when status returns no holder', async () => {
+    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null });
+    queueShellJson({ released: true, was_holder: false, holder: null, queue: [], matched_by: null });
+
+    await executeRelease({ branch: 'b', worktree: '/wt' });
+
+    const expectedId = getAgentId('b', '/wt');
+    expect(lastCommand()).toContain(`--agent-id '${expectedId}'`);
+  });
+
+  it('falls back to computed agent_id when holder.worktree does NOT match', async () => {
+    // Holder is in a different worktree — we should NOT reuse its agent_id
+    // (that would steal its identity).
+    queueShellJson({
+      holder: {
+        branch: 'other',
+        worktree: '/other-wt',
+        purpose: 'p',
+        pid: 1,
+        priority: 'normal',
+        acquired_at: '2026-05-23T00:00:00Z',
+        heartbeat_at: '2026-05-23T00:00:00Z',
+        ttl_minutes: 60,
+        preempted_from: null,
+        agent_id: 'someoneelseagent',
+      },
+      queue: [],
+      free: false,
+      stale_cleared: null,
+    });
+    queueShellJson({ released: true, was_holder: false, holder: null, queue: [], matched_by: null });
+
+    await executeRelease({ branch: 'b', worktree: '/wt' });
+
+    const expectedId = getAgentId('b', '/wt');
+    expect(lastCommand()).toContain(`--agent-id '${expectedId}'`);
+    expect(lastCommand()).not.toContain("'someoneelseagent'");
+  });
+
+  it('falls back to computed agent_id when status query returns an error envelope', async () => {
+    // Status shell call returns non-JSON; parseJson returns { error, raw }.
+    mockShell.mockResolvedValueOnce({ stdout: 'oops not json', stderr: '', exitCode: 1 });
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+
+    await executeRelease({ branch: 'b', worktree: '/wt' });
+
+    const expectedId = getAgentId('b', '/wt');
+    expect(lastCommand()).toContain(`--agent-id '${expectedId}'`);
   });
 });
 
