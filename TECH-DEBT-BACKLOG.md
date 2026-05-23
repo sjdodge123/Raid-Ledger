@@ -40,6 +40,19 @@ A skill's job is typically: parse → group duplicates by file path → propose 
 
 <!-- agents append below this line -->
 
+### 2026-05-23 — fix/batch-2026-05-22 (PR pending — Phase B: ROK-1317/1333/1318)
+
+- **[med]** `web/src/hooks/use-ai-suggestions-available.ts:29` — non-admin AI surfaces silently depend on the contract that `useAiFeatures` returns `data === undefined` → `data?.aiSuggestionsEnabled !== false` evaluates as true. No test pins this. A defensible tightening to `=== true` would silently disable ✨ AI Pick badges, CommonGround banner, Nominate modal, and lineup-detail AI prefetch for every non-admin user — admin view stays fine because data is populated.
+  Suggested: add `web/src/hooks/use-ai-suggestions-available.test.ts` with two cases: (a) plugin active + `useAiFeatures = undefined` (non-admin) → returns true; (b) plugin active + `useAiFeatures = { aiSuggestionsEnabled: false }` → returns false. Pins the contract so a future tightening triggers a test failure.
+- **[low]** `Dockerfile.allinone:430, 545` — Both GRANT install points run under `set -e` / `ON_ERROR_STOP=1` with no DO/EXCEPTION wrapper, unlike migration 0144 which guards with `WHEN undefined_function / undefined_object / insufficient_privilege`. A future contrib bump that renames or drops the `pg_stat_statements_reset(oid, oid, bigint)` signature crashes the container at startup (docker-entrypoint dies → restart loop) instead of degrading gracefully.
+  Suggested: wrap both Dockerfile GRANTs in a DO block identical to migration 0144's defensive shape.
+- **[low]** `api/src/drizzle/migrations/0144_grant_pg_stat_statements_reset_execute.sql:28` — Migration is a permanent no-op in prod (raid_ledger can't GRANT on a function it doesn't own; `insufficient_privilege` is swallowed). Real prod fix lives in Dockerfile.allinone. Maintenance trap: a future maintainer might delete the Dockerfile install points thinking the migration covers them.
+  Suggested: add header comment `-- INTENTIONAL NO-OP IN PROD: real GRANT lives in Dockerfile.allinone (init-db.sh + entrypoint ensure-block, run as postgres superuser). This DO-block exists for Render preview / dev environments where the migration runner IS superuser.`
+- **[low]** `scripts/env-lock.sh:434` — Release with a WRONG (non-matching) `--agent-id` silently falls through to branch+worktree match — wrong-id is treated identically to missing-id. Comment claims agent_id is "primary" but implementation makes it advisory. The bash integration test scenario 2 implicitly documents the fallback as intentional but the wrong-id case is not exercised separately.
+  Suggested: either (a) document agent_id as advisory in the script header (cheap), or (b) when `--agent-id` is supplied AND non-empty AND doesn't match, refuse to fall through (require explicit `--match-by branch_worktree` opt-in).
+- **[low]** `scripts/env-lock.sh:452` — `cmd_heartbeat` is dead code: comment claims `deploy_dev.sh` sends periodic heartbeats, but zero callers exist anywhere in the repo (deploy_dev.sh, MCP wrapper, crons). Future agent might trust the comment and skip adding heartbeat calls when needed.
+  Suggested: either (a) wire a `deploy_dev.sh` background heartbeat (`while sleep 300; do env-lock.sh heartbeat ...; done &`), or (b) delete `cmd_heartbeat` + its dispatch case (cheaper).
+
 ### 2026-05-03 — rok-1067-public-shareable-lineup (ROK-1067)
 
 - **[low]** `api/src/drizzle/migrations/0135_lineup_public_share.sql:6-14` — Migration is unsafe under rolling/blue-green deploys: ADD COLUMN nullable → backfill → SET NOT NULL has a window where old app instances can insert NULL slugs and trip the `SET NOT NULL` step. Not applicable to RL's current single-instance Synology Docker topology (Watchtower stops old container before starting new), but worth documenting if we ever move to multi-instance / k8s.

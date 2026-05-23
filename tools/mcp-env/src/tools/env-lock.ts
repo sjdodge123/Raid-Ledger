@@ -153,7 +153,35 @@ export interface ReleaseParams {
 export async function executeRelease(params: ReleaseParams): Promise<unknown> {
   const worktree = params.worktree ?? process.cwd();
   const branch = params.branch ?? (await detectBranch(worktree));
-  const agentId = getAgentId(branch, worktree);
+  // Prefer the holder's stamped agent_id over a fresh derivation: a
+  // branch rename (or any other branch drift) between acquire and release
+  // would otherwise yield a different sha1(branch, worktree) and miss
+  // the holder via is_holder_by_agent AND is_holder_self (holder.branch
+  // would still be the OLD branch). Worktree path is the immutable
+  // anchor — if the holder's worktree matches ours, treat the holder as
+  // us and reuse its stamped agent_id. Edge case: two distinct MCP
+  // servers sharing the same worktree would cross-release; that
+  // pathological case is no worse than today's (branch, worktree)
+  // fallback already in place.
+  let agentId = getAgentId(branch, worktree);
+  try {
+    const status = await executeStatus();
+    if (
+      status &&
+      typeof status === 'object' &&
+      !('error' in status) &&
+      status.holder &&
+      status.holder.worktree === worktree &&
+      typeof status.holder.agent_id === 'string' &&
+      status.holder.agent_id.length > 0
+    ) {
+      agentId = status.holder.agent_id;
+    }
+  } catch {
+    // Status query failed for any reason — fall through with the
+    // computed agent_id. Release will still attempt is_holder_self
+    // fallback in the bash script.
+  }
   const cmd = `bash ${q(SCRIPT_PATH)} release ${q(branch)} ${q(worktree)} --agent-id ${q(agentId)}`;
   const result = await shell(cmd);
   return parseJson(result.stdout, 'release');

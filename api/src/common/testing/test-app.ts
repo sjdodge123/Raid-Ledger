@@ -122,10 +122,22 @@ async function provisionDatabase(): Promise<{
   if (process.env.CI === 'true' && process.env.DATABASE_URL) {
     return { connectionString: process.env.DATABASE_URL, container: null };
   }
+  // Preload pg_stat_statements so the ROK-1333 + ROK-1156 regression
+  // specs can exercise the EXECUTE-grant path instead of self-skipping
+  // via isPgStatStatementsAvailable. The extension is preloaded in prod
+  // (Dockerfile.allinone:226) and the test container must mirror that
+  // shape to be a true regression guard.
   const container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
     .withDatabase('raid_ledger_test')
     .withUsername('test')
     .withPassword('test')
+    .withCommand([
+      'postgres',
+      '-c',
+      'shared_preload_libraries=pg_stat_statements',
+      '-c',
+      'pg_stat_statements.track=all',
+    ])
     .withStartupTimeout(60_000)
     .start();
   return { connectionString: container.getConnectionUri(), container };

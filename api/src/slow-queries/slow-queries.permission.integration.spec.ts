@@ -144,10 +144,16 @@ function describeReset() {
 
   it('grants raid_ledger EXECUTE on pg_stat_statements_reset()', async () => {
     if (!extensionAvailable || !raidLedgerDb) return;
+    // has_function_privilege uses regprocedure-style text-form lookup,
+    // which is strict about declared arity (does NOT apply DEFAULT
+    // substitution like runtime SELECT does). The only signature shipping
+    // with pg_stat_statements 1.7+ on PG 12+ is (oid, oid, bigint); using
+    // the 0-arg form 'pg_stat_statements_reset()' throws
+    // `function ... does not exist`. Match the exact form the GRANT uses.
     const rows = await raidLedgerDb.execute<HasPrivilegeRow>(
       sql`SELECT has_function_privilege(
             current_user,
-            'pg_stat_statements_reset()',
+            'pg_stat_statements_reset(oid, oid, bigint)',
             'EXECUTE'
           ) AS has_privilege`,
     );
