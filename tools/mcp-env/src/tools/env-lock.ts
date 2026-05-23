@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { MAIN_REPO, PROJECT_DIR } from '../config.js';
 import { shell } from '../shell.js';
@@ -27,6 +28,7 @@ interface HolderRecord {
   heartbeat_at: string;
   ttl_minutes: number;
   preempted_from: { branch: string; worktree: string; purpose: string } | null;
+  agent_id?: string;
 }
 
 interface QueueEntry {
@@ -53,6 +55,27 @@ function q(s: string): string {
 async function detectBranch(worktree: string): Promise<string> {
   const result = await shell(`git -C ${q(worktree)} branch --show-current`, 5_000);
   return result.stdout.trim() || 'unknown';
+}
+
+/** Sentinel string that cannot appear in any git branch name or filesystem path. */
+const AGENT_ID_SEPARATOR = '|>>>|';
+
+/**
+ * Stable identity for an agent's lease, hashed from (branch, worktree). Used as
+ * the primary match predicate on release / heartbeat / refresh-self so we
+ * survive cwd or branch-name drift between the MCP server and the bash script
+ * (e.g. deploy_dev.sh re-anchoring under a different cwd than the caller).
+ *
+ * Pure-deterministic SHA1 of `branch<sep>worktree`, truncated to 16 hex chars
+ * (~64 bits of entropy) — collision-resistant for the small N of concurrent
+ * worktrees on a single machine, short enough to fit cleanly in JSON / logs.
+ * Separator is a multi-char ASCII sentinel that's invalid in git branch names
+ * (which forbid `>`) and unlikely in any filesystem path, so it cannot
+ * accidentally appear in either input. Avoids NUL so the source file stays
+ * git-text (not binary).
+ */
+export function getAgentId(branch: string, worktree: string): string {
+  return createHash('sha1').update(`${branch}${AGENT_ID_SEPARATOR}${worktree}`).digest('hex').slice(0, 16);
 }
 
 /** Parse JSON; on parse failure return an error envelope so MCP doesn't crash. */
@@ -103,9 +126,10 @@ export async function executeAcquire(params: AcquireParams): Promise<unknown> {
   const ttl = params.ttl_minutes ?? 60;
   const priority = params.priority ?? 'normal';
   const pidPart = params.pid !== undefined ? ` --pid ${params.pid}` : '';
+  const agentId = getAgentId(branch, worktree);
   const cmd =
     `bash ${q(SCRIPT_PATH)} acquire ${q(branch)} ${q(worktree)} ${q(params.purpose)}` +
-    `${pidPart} --ttl-minutes ${ttl} --priority ${priority}`;
+    `${pidPart} --ttl-minutes ${ttl} --priority ${priority} --agent-id ${q(agentId)}`;
   const result = await shell(cmd);
   return parseJson(result.stdout, 'acquire');
 }
@@ -117,7 +141,9 @@ export async function executeAcquire(params: AcquireParams): Promise<unknown> {
 export const RELEASE_TOOL_NAME = 'env_lock_release';
 export const RELEASE_TOOL_DESCRIPTION =
   'Release the local dev env lease (or remove yourself from the queue). Auto-defaults branch ' +
-  'via git and worktree to the MCP server cwd. Always call this when you are done with env-needing work.';
+  'via git and worktree to the MCP server cwd. Always call this when you are done with env-needing work. ' +
+  "Matches by agent_id (primary, stable across deploy_dev.sh's PID re-anchor under a different cwd) and " +
+  'falls back to (branch, worktree) match for compatibility with the bare CLI.';
 
 export interface ReleaseParams {
   branch?: string;
@@ -127,7 +153,8 @@ export interface ReleaseParams {
 export async function executeRelease(params: ReleaseParams): Promise<unknown> {
   const worktree = params.worktree ?? process.cwd();
   const branch = params.branch ?? (await detectBranch(worktree));
-  const cmd = `bash ${q(SCRIPT_PATH)} release ${q(branch)} ${q(worktree)}`;
+  const agentId = getAgentId(branch, worktree);
+  const cmd = `bash ${q(SCRIPT_PATH)} release ${q(branch)} ${q(worktree)} --agent-id ${q(agentId)}`;
   const result = await shell(cmd);
   return parseJson(result.stdout, 'release');
 }

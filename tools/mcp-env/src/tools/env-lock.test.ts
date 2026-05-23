@@ -22,6 +22,7 @@ import {
   executeAcquire,
   executeRelease,
   executeForceRelease,
+  getAgentId,
   STATUS_TOOL_NAME,
   ACQUIRE_TOOL_NAME,
   RELEASE_TOOL_NAME,
@@ -258,6 +259,102 @@ describe('executeForceRelease', () => {
     const result = (await executeForceRelease()) as { cleared_holder: null };
 
     expect(result.cleared_holder).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// agent_id (ROK-1318)
+// ---------------------------------------------------------------------------
+
+describe('getAgentId', () => {
+  it('is deterministic for the same (branch, worktree)', () => {
+    expect(getAgentId('rok-1318', '/Users/x/Projects/Raid-Ledger--rok-1318')).toBe(
+      getAgentId('rok-1318', '/Users/x/Projects/Raid-Ledger--rok-1318'),
+    );
+  });
+
+  it('changes when branch changes', () => {
+    expect(getAgentId('rok-1318', '/wt')).not.toBe(getAgentId('rok-1319', '/wt'));
+  });
+
+  it('changes when worktree changes', () => {
+    expect(getAgentId('rok-1318', '/wt-a')).not.toBe(getAgentId('rok-1318', '/wt-b'));
+  });
+
+  it('returns a 16-char lowercase hex string', () => {
+    expect(getAgentId('rok-1318', '/wt')).toMatch(/^[a-f0-9]{16}$/);
+  });
+
+  it('uses a sentinel separator so branch/worktree boundary is unambiguous', () => {
+    // Without a delimiter, hash("ab", "c") === hash("a", "bc") would collide.
+    expect(getAgentId('ab', 'c')).not.toBe(getAgentId('a', 'bc'));
+  });
+});
+
+describe('executeAcquire — agent_id plumbing (ROK-1318)', () => {
+  it('passes --agent-id derived from branch+worktree on every acquire', async () => {
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+
+    await executeAcquire({ branch: 'rok-1318', worktree: '/wt', purpose: 'p' });
+
+    const expectedId = getAgentId('rok-1318', '/wt');
+    expect(lastCommand()).toContain(`--agent-id '${expectedId}'`);
+  });
+
+  it('derives agent_id from auto-detected branch + cwd when neither is provided', async () => {
+    queueShellRaw('auto-branch'); // git branch --show-current
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+
+    await executeAcquire({ purpose: 'auto-detect-agent' });
+
+    const expectedId = getAgentId('auto-branch', process.cwd());
+    expect(mockShell.mock.calls[1]?.[0]).toContain(`--agent-id '${expectedId}'`);
+  });
+});
+
+describe('executeRelease — agent_id plumbing (ROK-1318)', () => {
+  it('passes --agent-id derived from branch+worktree on release', async () => {
+    queueShellJson({
+      released: true,
+      was_holder: true,
+      holder: null,
+      queue: [],
+      matched_by: 'agent_id',
+    });
+
+    await executeRelease({ branch: 'rok-1318', worktree: '/wt' });
+
+    const expectedId = getAgentId('rok-1318', '/wt');
+    const cmd = lastCommand();
+    expect(cmd).toContain("release 'rok-1318' '/wt'");
+    expect(cmd).toContain(`--agent-id '${expectedId}'`);
+  });
+
+  it('release auto-detect uses derived agent_id from cwd + git branch', async () => {
+    queueShellRaw('detected'); // git branch
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+
+    await executeRelease({});
+
+    const expectedId = getAgentId('detected', process.cwd());
+    expect(mockShell.mock.calls[1]?.[0]).toContain(`--agent-id '${expectedId}'`);
+  });
+
+  it('acquire + release produce the same agent_id for the same (branch, worktree)', async () => {
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+    await executeAcquire({ branch: 'rok-1318', worktree: '/wt', purpose: 'p' });
+    const acquireCmd = lastCommand();
+
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+    await executeRelease({ branch: 'rok-1318', worktree: '/wt' });
+    const releaseCmd = lastCommand();
+
+    // Extract the agent_id token from each command and confirm equality. This
+    // is the invariant the bug fix turns on: bash's is_holder_by_agent on the
+    // release side has to match what acquire stamped.
+    const extract = (cmd: string): string | null => cmd.match(/--agent-id '([a-f0-9]+)'/)?.[1] ?? null;
+    expect(extract(acquireCmd)).not.toBeNull();
+    expect(extract(acquireCmd)).toBe(extract(releaseCmd));
   });
 });
 
