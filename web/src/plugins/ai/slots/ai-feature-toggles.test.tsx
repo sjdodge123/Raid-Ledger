@@ -18,6 +18,8 @@ import { AiFeatureToggles } from './ai-feature-toggles';
 
 vi.mock('../../../hooks/use-auth', () => ({
     getAuthToken: vi.fn(() => 'test-token'),
+    useAuth: () => ({ user: { id: 1, username: 'admin', role: 'admin' } }),
+    isAdmin: (user: { role?: string } | null | undefined) => user?.role === 'admin',
 }));
 
 const API = 'http://localhost:3000';

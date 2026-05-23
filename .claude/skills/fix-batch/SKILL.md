@@ -6,7 +6,7 @@ argument-hint: "[ROK-XXX ROK-YYY | all]"
 
 # Fix-Batch — Fast Fix Pipeline
 
-Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linear, batches them, spawns parallel dev agents in worktrees, merges all into a single batch branch, validates, and ships one PR. **No operator review gate, no test agents, no architect checks.** A code-review agent runs in parallel with the env-bound browser-validation track so it adds minimal wall time. The quality gate is: integration tests + full CI + reviewer pass on the merged batch branch.
+Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linear, batches them, spawns parallel dev agents in worktrees, merges all into a single batch branch, validates, and ships one PR. **No operator review gate, no test agents, no architect checks.** **Code review is MANDATORY** — one reviewer agent per story runs in parallel with the env-bound browser-validation track so it adds minimal wall time. The quality gate is: integration tests + full CI + per-story reviewer pass on the merged batch branch.
 
 **rl-infra fleet (preferred when Proxmox is reachable):** Lead runs the preflight at session start (`.claude/skills/_shared/rl-fleet-preflight.md`) to pick MODE=fleet vs MODE=local. Fleet has 2 slots default (4 with the `extra-slots` compose profile). Use `rl_env_deploy({ slug, worktree_path })` for the browser-validation env, `rl_validate_ci({ args, worktree_path })` for the quality gate. **Every rl_* MCP call MUST pass `worktree_path: "<absolute path to worktree>"`** (see `feedback_rl_fleet_worktree_path.md`). Falls back to local model when `RL_TARGET=local` or VM unreachable. Command translations: `.claude/skills/_shared/rl-infra-fleet.md`.
 
@@ -35,7 +35,7 @@ Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linea
 ```
 Step 1: Gather    → Linear search by label, profile (incl. root cause + planner assessment), present, operator approves
 Step 2: Implement → Batch branch, worktrees, spike unknown bugs, plan complex stories, parallel devs, merge into batch branch
-Step 3: Validate  → CI (build/ts/lint/unit/integration) → PARALLEL { Track A: deploy + Playwright + Chrome MCP | Track B: reviewer agent } → test gaps → regression → push
+Step 3: Validate  → CI (build/ts/lint/unit/integration) → PARALLEL { Track A: deploy + Playwright + Chrome MCP | Track B: ONE reviewer per story (MANDATORY) } → test gaps → regression → push
 Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 ```
 
@@ -51,17 +51,17 @@ Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 4. **Playwright smoke** — desktop + mobile, automated regression sweep
 5. **Chrome MCP e2e** — Lead drives the *changed user flows* on the deployed batch branch via `mcp__claude-in-chrome__*`; captures screenshots / GIFs / console / network and produces an operator-facing summary. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 
-   **Track B (Reviewer agent, no env):**
-6. **Code review** — reviewer agent (sonnet) checks correctness, security, performance, contract integrity. Runs against the merged batch diff; does NOT depend on Chrome MCP output. If a critical/high finding requires browser re-verification, Lead reruns the affected flow after Track A releases the env lock.
+   **Track B (Per-story reviewer agents, no env):**
+6. **Code review (one agent per story, MANDATORY)** — spawn N reviewer agents (`devedup-rl:reviewer`, sonnet) in parallel, where N = number of stories merged into the batch (excluding any that shipped via a separate mid-batch PR). Each reviewer scopes itself to ONE story's commit range, not the whole batch diff — per-story scoping produces sharper, less-noisy findings. Reviewers do NOT depend on Chrome MCP output. If a critical/high finding requires browser re-verification, Lead reruns the affected flow after Track A releases the env lock. If the operator separately invokes `/code-review` (broader harness review), treat it as a SUPPLEMENT, not a replacement.
 
    → tracks converge ↓
 
 7. **Test gap analysis** — reviewer identifies untested changes; lead adds missing tests before proceeding
 8. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
 
-**Env-lock rule:** the env lock (`mcp__mcp-env__env_lock_acquire`) is held only for Track A (Playwright + Chrome MCP). Lead releases the lock immediately after the Chrome MCP summary is written. Reviewer (Track B), push, PR creation, and auto-merge do NOT need the env.
+**Env-lock rule:** the env lock (`mcp__mcp-env__env_lock_acquire`) is held only for Track A (Playwright + Chrome MCP). Lead releases the lock immediately after the Chrome MCP summary is written. Reviewers (Track B), push, PR creation, and auto-merge do NOT need the env.
 
-**Parallelization rule:** spawn the reviewer agent at the same moment Lead acquires the env lock for Track A. Both tracks must complete before gates 7+8 run. If reviewer finishes first, Lead checks Track A progress; if Track A finishes first, wait on the reviewer mailbox before proceeding.
+**Parallelization rule:** spawn ALL per-story reviewer agents in a single message at the same moment Lead acquires the env lock for Track A. Both tracks must complete before gates 7+8 run. `gates.review: PASS` only when EVERY per-story reviewer returns green (no unfixed critical/high findings). If reviewers finish first, Lead checks Track A progress; if Track A finishes first, wait on the reviewer mailbox(es) before proceeding.
 
 ---
 
@@ -175,7 +175,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 |------|------|-------------|
 | 1 | `steps/step-1-gather.md` | Cleanup, fetch stories by label, profile, present batch, init state |
 | 2 | `steps/step-2-implement.md` | Batch branch, worktrees, spawn devs, merge into batch branch |
-| 3 | `steps/step-3-validate.md` | CI (build/ts/lint/unit/integration) → PARALLEL { deploy + Playwright + Chrome MCP \| reviewer agent } → test gaps → regression → push |
+| 3 | `steps/step-3-validate.md` | CI (build/ts/lint/unit/integration) → PARALLEL { deploy + Playwright + Chrome MCP \| ONE reviewer per story } → test gaps → regression → push |
 | 4 | `steps/step-4-ship.md` | Single PR, auto-merge, Linear "Done", cleanup, summary, wiki sync (4f) |
 
 ---
@@ -187,6 +187,6 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 | Spike | Explore subagent | Step 2c (unknown root cause bugs only) | opus | Per-story |
 | Planner | Plan subagent | Step 2c½ (standard stories needing plan) | opus | Per-story |
 | Dev | `templates/dev-fix.md` | Step 2d (one per story) | opus | Per-story |
-| Reviewer | `devedup-rl:reviewer` subagent | Step 3 (parallel with Track A) | sonnet | Once per batch |
+| Reviewer | `devedup-rl:reviewer` subagent | Step 3 (parallel with Track A) | sonnet | **One per merged story (MANDATORY)** |
 
-5 agent types total: Lead + Spike (conditional) + Planner (conditional) + Dev + Reviewer.
+5 agent types total: Lead + Spike (conditional) + Planner (conditional) + Dev + Reviewer (one per merged story).
