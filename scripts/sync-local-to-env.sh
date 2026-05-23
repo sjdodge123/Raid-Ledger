@@ -205,12 +205,17 @@ dump_discord_identity() {
 
     # Postgres single-quote escape: double any literal single quotes.
     # Then wrap in single quotes. Empty source -> SQL NULL.
+    # NOTE: uses sed instead of bash parameter-substitution because
+    # macOS bash 3.2 mis-parses the alternative (`s slash slash escape`
+    # form) inside the surrounding double quotes. Sed is portable.
     sql_lit() {
         local s="$1"
+        local escaped
         if [[ -z "$s" ]]; then
             printf 'NULL'
         else
-            printf "'%s'" "${s//\'/\'\'}"
+            escaped=$(printf '%s' "$s" | sed "s/'/''/g")
+            printf "'%s'" "$escaped"
         fi
     }
     local sql_discord_id sql_steam_id sql_username sql_display_name sql_avatar sql_custom_avatar_url sql_role
@@ -231,8 +236,11 @@ BEGIN;
 -- local_credentials → users.id; clear creds first to satisfy FK).
 DELETE FROM local_credentials WHERE email = 'admin@local';
 DELETE FROM users WHERE discord_id = 'local:admin@local';
--- UPSERT the operator's identity. ON CONFLICT (discord_id) handles
--- repeat syncs idempotently. `username` is NOT NULL per schema.
+-- UPSERT the operator identity. ON CONFLICT (discord_id) handles
+-- repeat syncs idempotently (apostrophe-in-word avoided because
+-- macOS bash 3.2 mis-balances single quotes inside heredocs nested
+-- in command substitution; works fine on bash 4+ but breaks parse
+-- on operator laptops without homebrew bash). username NOT NULL.
 INSERT INTO users (discord_id, steam_id, username, display_name, avatar, custom_avatar_url, role, created_at, updated_at)
 VALUES (${sql_discord_id}, ${sql_steam_id}, ${sql_username}, ${sql_display_name}, ${sql_avatar}, ${sql_custom_avatar_url}, ${sql_role}, now(), now())
 ON CONFLICT (discord_id) DO UPDATE SET
