@@ -10,6 +10,8 @@ const API_BASE = 'http://localhost:3000';
 
 vi.mock('../../hooks/use-auth', () => ({
     getAuthToken: () => 'test-token',
+    useAuth: () => ({ user: { id: 1, username: 'admin', role: 'admin' } }),
+    isAdmin: (user: { role?: string } | null | undefined) => user?.role === 'admin',
 }));
 
 const mockToastSuccess = vi.fn();
