@@ -8,23 +8,10 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { resolveProxmoxHost, loadRlInfraIp } from '../exec.js';
+import { buildSshArgs } from '../exec.js';
 
 const execFileAsync = promisify(execFile);
 const RUN_ON_VM_TIMEOUT_MS = 15_000;
-
-const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
-const sshHost = async (): Promise<string> => {
-  try {
-    const resolved = await resolveProxmoxHost({
-      envHost: process.env.RL_PROXMOX_HOST,
-      fallbackIp: loadRlInfraIp(),
-    });
-    return resolved.host;
-  } catch {
-    return process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-  }
-};
 
 export const TOOL_NAME = 'rl_fleet_health';
 export const TOOL_DESC =
@@ -105,14 +92,12 @@ export async function execute(_p: FleetHealthParams = {}): Promise<FleetHealthRe
   const remote =
     `docker run --rm --network rl-net curlimages/curl:8.10.1 ` +
     `curl -s -X GET -w '\\nRL_STATUS:%{http_code}' '${url}'`;
-  let host: string;
-  try { host = await sshHost(); } catch { host = process.env.RL_PROXMOX_HOST ?? 'rl-infra'; }
   let stdout = '';
   try {
+    const sshArgs = await buildSshArgs(`DOCKER_HOST=tcp://127.0.0.1:2375 ${remote}`);
     const r = await execFileAsync(
       'ssh',
-      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${host}`,
-       `DOCKER_HOST=tcp://127.0.0.1:2375 ${remote}`],
+      sshArgs,
       { timeout: RUN_ON_VM_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
     );
     stdout = r.stdout;

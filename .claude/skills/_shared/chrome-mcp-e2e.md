@@ -1,6 +1,6 @@
 # Chrome MCP e2e Gate (shared)
 
-This playbook is the **mandatory pre-review browser validation** referenced by `/fix-batch`, `/build`, and `/bulk`. The agent drives the changed user flows against the locally-deployed dev env via `mcp__claude-in-chrome__*` and produces an operator-facing summary BEFORE any reviewer agent / Codex run, PR creation, or auto-merge.
+This playbook is the **mandatory pre-review browser validation** referenced by `/fix-batch`, `/build`, and `/bulk`. The agent drives the changed user flows against the deployed review env via `mcp__claude-in-chrome__*` and produces an operator-facing summary BEFORE any reviewer agent / Codex run, PR creation, or auto-merge.
 
 **Source of truth for the rule:** `~/.claude/projects/-Users-sdodge-Documents-Projects-Raid-Ledger/memory/feedback_chrome_mcp_e2e_before_review.md`. Caught 2026-05-12 during fix-batch ROK-1237+1271+1267.
 
@@ -19,6 +19,7 @@ The caller (Lead in fix-batch / build / bulk) must provide:
 - **Changed flows:** a list of user-visible flows touched by the batch. Derive from `git diff origin/main..HEAD --name-only` plus the story ACs. Example: `["Event detail page (signup, role-fill)", "Admin dedup audit", "Lineup viewer-filter"]`.
 - **Story IDs:** the `ROK-###` set covered by this run, for the summary table and screenshot naming.
 - **Per-story AC links:** each story's acceptance criteria as Lead understands them — Chrome MCP must exercise each AC, not just "the page loads."
+- **Base URL:** the deployed app URL. Fleet mode uses the `url` returned by `rl_env_deploy`; local mode uses the URL printed by the local deploy script.
 
 If the batch is API-only with NO UI surface, the gate still runs but is scoped to: (1) verify no upstream UI regressions on the affected feature area, and (2) verify the API endpoint via the in-app surface that uses it (admin page, settings panel, etc.). Pure-internal endpoints that no UI consumes can record `gates.chrome_mcp_e2e: N/A — api-internal-only` with a one-line justification.
 
@@ -26,14 +27,18 @@ If the batch is API-only with NO UI surface, the gate still runs but is scoped t
 
 ## Procedure
 
-### 0. Env-lock discipline (STRICT — hold for minimum time)
+### 0. Review-env discipline
 
-The dev env (`:3000`, `:5173`, Docker DB) is a single shared resource. Multiple agents / worktrees / operator sessions queue on it. **Hold the lock only for the work that needs the env** — that means: deploy + Playwright + Chrome MCP. **Release the lock immediately after Chrome MCP completes.** Do NOT keep it through reviewer, push, PR creation, auto-merge, Linear flips, or summary writing — those don't touch the env.
+Use the same review env that Step 3 deployed.
 
-Order:
+**Fleet mode:** do not acquire a local env lock. Use the fleet URL returned by `rl_env_deploy`; keep the env alive for the operator review window.
+
+**Local mode:** the dev env (`:3000`, `:5173`, Docker DB) is a single shared resource. Multiple agents / worktrees / operator sessions queue on it. The caller should already hold the env lock from deploy; keep it through Chrome MCP and operator review.
+
+Local order:
 
 1. **Right before deploy:** `env_lock_acquire`.
-2. **Right after Chrome MCP summary is written:** `env_lock_release`.
+2. **After operator verdict:** `env_lock_release`.
 3. **Re-acquire** if a later step (rare — e.g. reviewer finding requires fix + re-verify) needs the env again. Don't pre-emptively hold "just in case."
 
 If you're queued and need to wait, do non-env work in the meantime (PR draft, spec reconcile). Don't bypass.
@@ -63,10 +68,10 @@ Wait for the script to report API + web healthy. If deploy fails, the gate is `F
 mcp__claude-in-chrome__tabs_context_mcp
 ```
 
-Use the existing dev tab if one is already pointed at `http://localhost:5173`. Otherwise:
+Use the existing dev tab if one is already pointed at `<BASE_URL>`. Otherwise:
 
 ```
-mcp__claude-in-chrome__tabs_create_mcp({ url: "http://localhost:5173" })
+mcp__claude-in-chrome__tabs_create_mcp({ url: "<BASE_URL>" })
 ```
 
 Never reuse a tab ID from a prior session — IDs are session-scoped.
@@ -76,7 +81,7 @@ Never reuse a tab ID from a prior session — IDs are session-scoped.
 For every flow in the Inputs list, exercise the full happy path AND at least one failure / edge case the AC mentions. Recommended pattern per flow:
 
 ```
-mcp__claude-in-chrome__navigate({ url: "http://localhost:5173/<route>" })
+mcp__claude-in-chrome__navigate({ url: "<BASE_URL>/<route>" })
 mcp__claude-in-chrome__read_page                            # snapshot DOM state
 mcp__claude-in-chrome__find({ ... }) / form_input / computer  # interact
 mcp__claude-in-chrome__read_console_messages({ pattern: "error|warn|Sentry" })

@@ -9,6 +9,7 @@ import * as buildImage from './env-build-image.js';
 import * as envSpin from './env-spin.js';
 import * as envSync from './env-sync.js';
 import * as envCloneProd from './env-clone-prod.js';
+import { buildSshArgs } from '../exec.js';
 
 export const TOOL_NAME = 'rl_env_deploy';
 export const TOOL_DESCRIPTION =
@@ -181,8 +182,6 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     const { execFile } = await import('node:child_process');
     const { promisify } = await import('node:util');
     const execFileAsync = promisify(execFile);
-    const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
-    const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
     try {
       // rl-agent has no docker group membership (intentional — see the
       // hardening commit). docker CLI must go through the path-filtered
@@ -190,10 +189,12 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
       // The proxy allowlist permits POST /containers/rl-env-*/restart, so
       // this works once DOCKER_HOST points at the proxy. Without it, the
       // CLI tries the unix socket and gets "permission denied" (Bug G).
+      const sshArgs = await buildSshArgs(
+        `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${params.slug}-allinone && sleep 6`,
+      );
       await execFileAsync(
         'ssh',
-        ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`,
-         `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${params.slug}-allinone && sleep 6`],
+        sshArgs,
         { timeout: 60_000 },
       );
       log('restart_for_settings', true, t);

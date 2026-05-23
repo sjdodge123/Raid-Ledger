@@ -61,11 +61,13 @@ If you find real complexity mid-implementation (≥3 files, cross-workspace, rea
 
 ---
 
-## 2a. Bring Up Environment (once per batch) and Create Worktrees
+## 2a. Prepare Test Infra and Create Worktrees
 
-**Lead owns Docker. Devs never touch it.** This step has two parts.
+Read `pipeline.test_infra_mode` from `<worktree>/build-state.yaml`.
 
-### Once per batch — start the environment (Lead runs in main repo):
+**MODE=fleet:** no local Docker/Vite deploy is needed here. The fleet slot/env is claimed and deployed later by Step 3, after dev is complete. Dev/test agents run targeted commands through the runner only when their template explicitly asks them to.
+
+**MODE=local:** Lead owns Docker. Devs never touch it. Start the local environment once per batch from the main repo:
 
 ```bash
 ./scripts/deploy_dev.sh --ci --rebuild

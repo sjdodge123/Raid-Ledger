@@ -67,7 +67,7 @@ gh pr merge rok-<num>-<short-name> --auto --squash
 ## 5d. Linear → Done
 
 ```
-mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "Done" })
+mcp__linear__save_issue({ id: "<linear_id>", state: "Done" })
 ```
 
 ---

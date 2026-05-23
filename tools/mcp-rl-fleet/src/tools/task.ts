@@ -15,6 +15,7 @@
 
 import { z } from 'zod';
 import {
+  buildSshArgs,
   classifySshFailure,
   execFileP,
   shellQuote,
@@ -93,14 +94,8 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
   steps: TaskStatusResult['steps'];
 }
 
-const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
-const sshHost = () => process.env.RL_PROXMOX_HOST ?? 'rl-infra';
-
-function sshArgs(remote: string): [string, string[]] {
-  return [
-    'ssh',
-    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser()}@${sshHost()}`, remote],
-  ];
+async function sshArgs(remote: string): Promise<[string, string[]]> {
+  return ['ssh', await buildSshArgs(remote)];
 }
 
 /**
@@ -137,7 +132,7 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
   const remote =
     `/srv/rl-infra/orchestrator/bin/task-status ` +
     `${shellQuote(params.task_id)} --log-tail-bytes ${tail}`;
-  const [cmd, args] = sshArgs(remote);
+  const [cmd, args] = await sshArgs(remote);
   try {
     const { stdout } = await execFileP(cmd, args, {
       maxBuffer: 16 * 1024 * 1024,
@@ -228,7 +223,7 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
 
   // Preflight: probe inotifywait availability. Mirrors test-plan's pattern.
   const probeRemote = 'command -v inotifywait';
-  const [probeCmd, probeArgs] = sshArgs(probeRemote);
+  const [probeCmd, probeArgs] = await sshArgs(probeRemote);
   try {
     await execFileP(probeCmd, probeArgs, { timeout: 10_000 });
   } catch (probeErr) {
@@ -296,7 +291,7 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
   // so we wouldn't reach this loop if the file were missing).
   const taskJsonPath = `/srv/rl-infra/state/tasks/${shellQuote(params.task_id)}.json`;
   const watchRemote = `inotifywait -q -e close_write,move_self,delete_self ${taskJsonPath}`;
-  const [watchCmd, watchArgs] = sshArgs(watchRemote);
+  const [watchCmd, watchArgs] = await sshArgs(watchRemote);
 
   let lastStatus: ExecuteWaitResult = initial;
 
@@ -433,7 +428,7 @@ export async function executeCancel(params: ExecuteCancelParams): Promise<Execut
   const remote =
     `/srv/rl-infra/orchestrator/bin/task-cancel ` +
     `${shellQuote(params.task_id)} ${shellQuote(params.reason)}`;
-  const [cmd, args] = sshArgs(remote);
+  const [cmd, args] = await sshArgs(remote);
   try {
     const { stdout } = await execFileP(cmd, args, {
       maxBuffer: 1024 * 1024,
@@ -506,7 +501,7 @@ export async function executeList(params: ExecuteListParams): Promise<ExecuteLis
   if (typeof params.limit === 'number') flags.push(`--limit ${params.limit}`);
   const remote =
     `/srv/rl-infra/orchestrator/bin/task-list${flags.length ? ' ' + flags.join(' ') : ''}`;
-  const [cmd, args] = sshArgs(remote);
+  const [cmd, args] = await sshArgs(remote);
   try {
     const { stdout } = await execFileP(cmd, args, {
       maxBuffer: 16 * 1024 * 1024,

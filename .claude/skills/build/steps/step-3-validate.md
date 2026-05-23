@@ -9,7 +9,7 @@ Fast CI already passed in Step 2-light-c. No worktree to deploy. No Playwright.
 ### 3-light-a. Linear → "In Review"
 
 ```
-mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "In Review" })
+mcp__linear__save_issue({ id: "<linear_id>", state: "In Review" })
 ```
 
 ### 3-light-b. Present to operator (compact)
@@ -104,13 +104,29 @@ cd -
 
 ---
 
-## 3c. Acquire Env Lock + Deploy Locally
+## 3c. Deploy Review Environment
 
-**Env-lock discipline (STRICT):** the env (`:3000`, `:5173`, Docker DB) is a shared resource. Acquire **right before** deploy. Hold through the operator's browser-test window (operator literally needs the env to test). Release when the operator gives their verdict (Step 4a). Reviewer (4b Codex), architect (4c), and most of Lead smoke (4d) do NOT need the env — re-acquire ONLY if 4d's Playwright pass is needed for UI changes.
+Read `pipeline.test_infra_mode` from `<worktree>/build-state.yaml` and follow exactly one branch.
+
+**MODE=fleet:** deploy a per-story env through rl-infra. The runner slot + env stay alive through the operator review window.
 
 ```
-mcp__mcp-env__env_lock_status                                                              # see who holds it
-mcp__mcp-env__env_lock_acquire({ purpose: "build ROK-XXX operator-review deploy" })        # acquire or queue
+mcp__mcp-rl-fleet__rl_env_deploy({
+  slug: "rok-<num>",
+  worktree_path: "<absolute story worktree>",
+  clone_prod: false
+})
+```
+
+Persist the returned `url`, `admin_email`, and `admin_password` in the state file under `stories.ROK-XXX.review_env`. Use the returned `url` for Playwright, Chrome MCP, test-plan deep-links, and the operator handoff. If the tool reports a queued claim, do non-env work until `rl_claim_wait` grants the slot, then retry deploy. If a fleet call fails after preflight selected fleet mode, fail loud; do not silently fall back mid-step.
+
+**MODE=local:** use the local env lock and `deploy_dev.sh`. This is still required when the fleet is unreachable or `RL_TARGET=local` is set.
+
+**Env-lock discipline (local only, STRICT):** the local env (`:3000`, `:5173`, Docker DB) is a shared resource. Acquire **right before** deploy. Hold through the operator's browser-test window (operator literally needs the env to test). Release when the operator gives their verdict (Step 4a). Reviewer (4b Codex), architect (4c), and most of Lead smoke (4d) do NOT need the env — re-acquire ONLY if 4d's Playwright pass is needed for UI changes.
+
+```
+mcp__mcp-env__env_lock_status
+mcp__mcp-env__env_lock_acquire({ purpose: "build ROK-XXX operator-review deploy" })
 ```
 
 If queued, do non-env work (write the dev brief, reconcile spec) until the lock returns.
@@ -128,6 +144,22 @@ If deploy needs `--fresh` (DB wipe), get operator approval (destructive).
 ## 3c.5. Post-Deploy E2E Gate (diff-gated)
 
 After deploy, run the e2e portion of validate-ci. The script auto-skips Playwright if no UI/auth/demo-test files changed and auto-skips Discord smoke if no bot/notification files changed — so backend-only stories pass through this gate in seconds.
+
+**MODE=fleet:**
+
+```
+mcp__mcp-rl-fleet__rl_validate_ci({
+  worktree_path: "<absolute story worktree>",
+  args: ["--only-e2e"],
+  against_env_slug: "rok-<num>",
+  wait: true,
+  wait_timeout_seconds: 1800
+})
+```
+
+If you suspect the gate's scope is wrong for this story, pass `args: ["--only-e2e", "--with-e2e"]`.
+
+**MODE=local:**
 
 ```bash
 cd ../Raid-Ledger--rok-<num> && ./scripts/validate-ci.sh --only-e2e && cd -
@@ -152,7 +184,10 @@ Gates: `gates.playwright: PASS` / `FAIL` / `SKIPPED`; `gates.discord_smoke: PASS
 
 The Lead drives the *changed user flows* via `mcp__claude-in-chrome__*` on the deployed app — captures screenshots / GIFs, audits console + network, and produces an operator-facing summary BEFORE flipping Linear to "In Review". **Must complete before the operator FULL STOP (3e), before the Codex reviewer (4b), and before any push or PR work.**
 
-Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
+Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. Pass the browser base URL from the mode branch:
+
+- **MODE=fleet:** `stories.ROK-XXX.review_env.url` from `rl_env_deploy`.
+- **MODE=local:** `http://localhost:5173` from `deploy_dev.sh`.
 
 **What Lead does here (per-story):**
 
@@ -160,7 +195,7 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 2. Pass the flow list + the story ID as inputs to the shared playbook.
 3. Execute it. Do NOT skim it; the anti-pattern section catches the failure modes that triggered this gate's creation (ROK-1237).
 4. Write the summary to `planning-artifacts/chrome-mcp-summary-ROK-XXX.md`. Save captures under `planning-artifacts/chrome-mcp-screenshots/ROK-XXX/`.
-5. **Keep the env lock** — the operator will browser-test on the same deploy in the FULL STOP window. Don't release until 4a (operator verdict).
+5. **Keep the review env available** — in fleet mode, keep the slot/env alive; in local mode, keep the env lock. The operator will browser-test on the same deploy in the FULL STOP window. Cleanup/release happens in 4a/5e depending on mode.
 
 **Gate outcomes:**
 
@@ -177,7 +212,7 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 ## 3d. Update Linear to "In Review"
 
 ```
-mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "In Review" })
+mcp__linear__save_issue({ id: "<linear_id>", state: "In Review" })
 ```
 
 ---
