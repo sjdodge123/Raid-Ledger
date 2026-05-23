@@ -11,11 +11,17 @@
 #
 # Usage:
 #   env-lock.sh status
-#   env-lock.sh acquire <branch> <worktree> <purpose> [--pid N] [--ttl-minutes N] [--priority normal|operator]
-#   env-lock.sh release <branch> <worktree>
-#   env-lock.sh heartbeat <branch> <worktree>
-#   env-lock.sh wait <branch> <worktree> <purpose> [--timeout-seconds N] [--pid N] [--ttl-minutes N] [--priority ...]
+#   env-lock.sh acquire <branch> <worktree> <purpose> [--pid N] [--ttl-minutes N] [--priority normal|operator] [--agent-id ID]
+#   env-lock.sh release <branch> <worktree> [--agent-id ID]
+#   env-lock.sh heartbeat <branch> <worktree> [--agent-id ID]
+#   env-lock.sh wait <branch> <worktree> <purpose> [--timeout-seconds N] [--pid N] [--ttl-minutes N] [--priority ...] [--agent-id ID]
 #   env-lock.sh force-release
+#
+# --agent-id is the primary match predicate for release / heartbeat / refresh-self.
+# When supplied, it identifies a holder across renames of branch or worktree path
+# (e.g. deploy_dev.sh re-anchoring under a different cwd than the MCP server).
+# When omitted on release, falls back to matching by (branch, worktree) — the
+# legacy behavior — so bare CLI use (`env-lock.sh release <b> <w>`) keeps working.
 #
 # Subcommands always print a JSON result on stdout. Exit codes:
 #   0  - operation succeeded (or env was free / lock acquired)
@@ -160,11 +166,21 @@ now_iso() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
-# True if (branch, worktree) matches the current holder.
+# True if (branch, worktree) matches the current holder. Legacy / fallback match.
 is_holder_self() {
     local state="$1" branch="$2" worktree="$3"
     echo "$state" | jq -e --arg b "$branch" --arg w "$worktree" \
         '.holder != null and .holder.branch == $b and .holder.worktree == $w' >/dev/null
+}
+
+# True if agent_id (non-empty) matches the current holder's agent_id. Primary
+# match predicate when both sides plumb --agent-id. Returns false (non-zero) when
+# the supplied agent_id is empty so callers can fall through to is_holder_self.
+is_holder_by_agent() {
+    local state="$1" agent_id="$2"
+    [ -z "$agent_id" ] && return 1
+    echo "$state" | jq -e --arg a "$agent_id" \
+        '.holder != null and (.holder.agent_id // "") != "" and .holder.agent_id == $a' >/dev/null
 }
 
 # True if (branch, worktree) is already in the queue.
@@ -208,12 +224,13 @@ cmd_acquire() {
     fi
     local branch="$1" worktree="$2" purpose="$3"
     shift 3
-    local pid="" ttl_minutes=60 priority="normal"
+    local pid="" ttl_minutes=60 priority="normal" agent_id=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --pid)         pid="$2"; shift 2 ;;
             --ttl-minutes) ttl_minutes="$2"; shift 2 ;;
             --priority)    priority="$2"; shift 2 ;;
+            --agent-id)    agent_id="$2"; shift 2 ;;
             *) echo "{\"error\": \"unknown_flag\", \"flag\": \"$1\"}" >&2; exit 64 ;;
         esac
     done
@@ -232,9 +249,12 @@ cmd_acquire() {
     local now
     now=$(now_iso)
     local new_holder
-    new_holder=$(build_holder_fragment "$branch" "$worktree" "$purpose" "$pid" "$ttl_minutes" "$priority" "$now")
+    new_holder=$(build_holder_fragment "$branch" "$worktree" "$purpose" "$pid" "$ttl_minutes" "$priority" "$now" "$agent_id")
 
-    if is_holder_self "$state" "$branch" "$worktree"; then
+    # Idempotent re-acquire matches by agent_id (primary) OR branch+worktree
+    # (fallback). The fallback covers deploy_dev.sh's re-anchor path, which
+    # currently calls acquire without an --agent-id.
+    if is_holder_by_agent "$state" "$agent_id" || is_holder_self "$state" "$branch" "$worktree"; then
         acquire_refresh_self "$state" "$new_holder"
         return 0
     fi
@@ -254,13 +274,16 @@ cmd_acquire() {
 }
 
 # Build a JSON fragment representing the proposed new holder. Reused across
-# all acquire branches so the shape stays consistent.
+# all acquire branches so the shape stays consistent. agent_id is optional —
+# empty string is normalized to "" in the JSON so downstream jq matches stay
+# simple.
 build_holder_fragment() {
-    local branch="$1" worktree="$2" purpose="$3" pid="$4" ttl="$5" priority="$6" now="$7"
+    local branch="$1" worktree="$2" purpose="$3" pid="$4" ttl="$5" priority="$6" now="$7" agent_id="${8:-}"
     jq -n \
         --arg b "$branch" --arg w "$worktree" --arg p "$purpose" \
         --arg pid "$pid" --argjson ttl "$ttl" \
         --arg priority "$priority" --arg now "$now" \
+        --arg agent_id "$agent_id" \
         '{
             branch: $b, worktree: $w, purpose: $p,
             pid: ($pid | if . == "" then 0 else (tonumber? // 0) end),
@@ -268,16 +291,27 @@ build_holder_fragment() {
             acquired_at: $now,
             heartbeat_at: $now,
             ttl_minutes: $ttl,
-            preempted_from: null
+            preempted_from: null,
+            agent_id: $agent_id
         }'
 }
 
 # Idempotent re-acquire by the current holder: refresh PID/purpose/ttl/heartbeat
-# but preserve the original acquired_at and any preempted_from marker.
+# but preserve the original acquired_at and any preempted_from marker. If the
+# caller didn't supply an agent_id, preserve the existing one (covers
+# deploy_dev.sh's bare-CLI re-anchor — without this it would wipe the agent_id
+# the MCP server stamped on initial acquire, defeating the whole point of
+# adding agent_id-based release matching).
 acquire_refresh_self() {
     local state="$1" new_holder="$2"
     state=$(echo "$state" | jq --argjson h "$new_holder" '
-        .holder = ($h + { acquired_at: .holder.acquired_at, preempted_from: .holder.preempted_from })
+        ($h.agent_id // "") as $incoming_aid
+        | (.holder.agent_id // "") as $existing_aid
+        | .holder = ($h + {
+            acquired_at: .holder.acquired_at,
+            preempted_from: .holder.preempted_from,
+            agent_id: (if $incoming_aid == "" then $existing_aid else $incoming_aid end)
+          })
     ')
     write_state "$state"
     mutex_unlock
@@ -369,18 +403,37 @@ emit_acquire_result() {
 # -----------------------------------------------------------------------------
 # Subcommand: release
 # -----------------------------------------------------------------------------
+# Match order: --agent-id (primary, identity-stable across branch/worktree
+# renames) → (branch, worktree) (fallback, preserves bare-CLI behavior). We
+# always remove our queue entry by (branch, worktree) because the queue records
+# the requester's branch+worktree at enqueue time and is unaffected by holder
+# identity drift.
 cmd_release() {
-    local branch="$1" worktree="$2"
-    if [ -z "$branch" ] || [ -z "$worktree" ]; then
-        echo '{"error": "missing_required_args"}' >&2
+    if [ $# -lt 2 ] || [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+        echo '{"error": "missing_required_args", "expected": "<branch> <worktree> [--agent-id ID]"}' >&2
         exit 64
     fi
+    local branch="$1" worktree="$2"
+    shift 2
+    local agent_id=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --agent-id) agent_id="$2"; shift 2 ;;
+            *) echo "{\"error\": \"unknown_flag\", \"flag\": \"$1\"}" >&2; exit 64 ;;
+        esac
+    done
+
     init_state
     mutex_lock
-    local state was_holder=false
+    local state was_holder=false matched_by=""
     state=$(read_state)
-    if is_holder_self "$state" "$branch" "$worktree"; then
+    if is_holder_by_agent "$state" "$agent_id"; then
         was_holder=true
+        matched_by="agent_id"
+        state=$(echo "$state" | jq '.holder = null')
+    elif is_holder_self "$state" "$branch" "$worktree"; then
+        was_holder=true
+        matched_by="branch_worktree"
         state=$(echo "$state" | jq '.holder = null')
     fi
     # Always also remove from queue (covers "I was queued and now I'm leaving").
@@ -388,25 +441,36 @@ cmd_release() {
         '.queue = [.queue[] | select(.branch != $b or .worktree != $w)]')
     write_state "$state"
     mutex_unlock
-    echo "$state" | jq --argjson wh "$was_holder" \
-        '. + { released: true, was_holder: $wh }'
+    echo "$state" | jq --argjson wh "$was_holder" --arg mb "$matched_by" \
+        '. + { released: true, was_holder: $wh, matched_by: (if $mb == "" then null else $mb end) }'
 }
 
 # -----------------------------------------------------------------------------
 # Subcommand: heartbeat
 # -----------------------------------------------------------------------------
+# Same match-order as cmd_release: agent_id (if provided) primary, branch+worktree
+# fallback. Keeps deploy_dev.sh's periodic heartbeat working under either
+# identity scheme.
 cmd_heartbeat() {
-    local branch="$1" worktree="$2"
-    if [ -z "$branch" ] || [ -z "$worktree" ]; then
-        echo '{"error": "missing_required_args"}' >&2
+    if [ $# -lt 2 ] || [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+        echo '{"error": "missing_required_args", "expected": "<branch> <worktree> [--agent-id ID]"}' >&2
         exit 64
     fi
+    local branch="$1" worktree="$2"
+    shift 2
+    local agent_id=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --agent-id) agent_id="$2"; shift 2 ;;
+            *) echo "{\"error\": \"unknown_flag\", \"flag\": \"$1\"}" >&2; exit 64 ;;
+        esac
+    done
     init_state
     mutex_lock
     local state refreshed=false now
     now=$(now_iso)
     state=$(read_state)
-    if is_holder_self "$state" "$branch" "$worktree"; then
+    if is_holder_by_agent "$state" "$agent_id" || is_holder_self "$state" "$branch" "$worktree"; then
         refreshed=true
         state=$(echo "$state" | jq --arg now "$now" '.holder.heartbeat_at = $now')
         write_state "$state"
