@@ -113,43 +113,61 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 
 ---
 
-## 3i. [Track B] Code Review (Reviewer Agent)
+## 3i. [Track B] Code Review (MANDATORY — one reviewer per story)
 
-**Spawn at the same moment Track A acquires the env lock (3f).** The reviewer runs in parallel with Playwright + Chrome MCP — it reviews the merged batch diff and does not need the deployed env or the browser summary. Use `run_in_background: true` so Lead can drive Track A while the reviewer works.
+**Spawn at the same moment Track A acquires the env lock (3f).** Reviewers run in parallel with Playwright + Chrome MCP — they review the per-story diff and do not need the deployed env or the browser summary. Use `run_in_background: true` so Lead can drive Track A while the reviewers work.
+
+**Reviewer rule (STRICT):** spawn **one reviewer agent per story merged into the batch** (excluding any story that shipped via a separate PR mid-batch — e.g. Phase A that was squash-merged to main while the batch was running). Each reviewer scopes itself to ONE story's commit range, not the whole batch diff. Rationale: per-story scoping produces sharper, less-noisy findings; cross-story interactions are caught at the test-gap (3j) and Chrome MCP (3h) stages.
+
+For each story `ROK-XXX` in `pipeline.stories` with `status: "merged_to_batch"`, spawn:
 
 ```
 Agent(subagent_type: "devedup-rl:reviewer", model: "sonnet",
       run_in_background: true,
-      description: "Review batch diff",
+      description: "Review ROK-XXX",
+      name: "reviewer-rok-XXX",
       prompt: """
-      Review the changes on branch fix/batch-YYYY-MM-DD compared to origin/main.
+      Review the changes for ROK-XXX merged into branch fix/batch-YYYY-MM-DD.
 
-      This is a fix-batch containing the following stories:
-      <list each ROK-### with title and label>
+      Scope: ONLY the commits authored for ROK-XXX. Use the merge_commit_sha from
+      pipeline.stories['ROK-XXX'] to bound your diff:
+        git log --format=%H <merge_commit_sha>^..<merge_commit_sha> -- <files>
+        git diff <merge_commit_sha>^..<merge_commit_sha>
+      (Or simpler: diff the dev_commit_sha against its parent.)
 
-      Run your full review checklist:
-      1. Correctness — logic bugs, edge cases, error handling
-      2. Security — injection, auth bypass, data exposure
-      3. Performance — N+1 queries, unnecessary allocations, missing indexes
-      4. Contract integrity — if any shared types changed, are consumers updated?
-      5. Standards — ESLint compliance, file/function size limits, naming conventions
+      Story details:
+        Title: <story title from Linear>
+        Label: <Bug | Tech Debt | Chore | Performance | Spike>
+        Linear AC: <bullet list of acceptance criteria from the spec or Linear issue>
+        Spec path: planning-artifacts/specs/ROK-XXX.md (if present)
 
-      For each finding, classify severity: [critical], [high], [medium], [low].
+      Run your full review checklist on the per-story diff ONLY:
+      1. Correctness — logic bugs, edge cases, error handling, off-by-one, null/undefined deref
+      2. Security — injection, auth bypass, data exposure, secret handling
+      3. Performance — N+1 queries, unnecessary allocations, missing indexes, blocking I/O
+      4. Contract integrity — if shared types changed, are consumers updated?
+      5. Standards — ESLint compliance, file/function size limits (CLAUDE.md), naming conventions
+      6. Acceptance criteria coverage — did the dev actually deliver each AC?
+      7. Regression test quality (Bug label only) — is the test comprehensive, not just happy-path? Does it actually fail without the fix?
+
+      For each finding, classify severity: [critical], [high], [medium], [low], [nit].
       Critical/high findings MUST be fixed before shipping.
 
-      You are running in parallel with browser validation (Chrome MCP) — focus on code-level
-      concerns. If you spot a UI behavior risk that would benefit from manual verification,
-      flag it explicitly so the lead can re-run the browser flow after the env lock returns.
+      You are running in parallel with N other per-story reviewers and (separately) browser
+      validation via Chrome MCP. Focus on YOUR story's diff only — do NOT flag findings about
+      sibling stories in the same batch. Cross-story interactions are caught elsewhere.
       """)
 ```
 
-When the reviewer completes:
+Spawn ALL per-story reviewers in a single message (parallel). When each completes:
 
-1. **Critical/high findings:** Lead fixes directly on the batch branch, or re-spawns a dev if the fix is non-trivial. If a fix touches a changed UI flow, re-run 3h Chrome MCP scoped to that flow (this requires re-acquiring the env lock).
-2. **Medium/low findings:** append to **`TECH-DEBT-BACKLOG.md`** at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Do NOT auto-file Linear tech-debt; the operator triages the file.
-3. **Update state:** `gates.review: PASS` (or `FAIL` if critical/high findings remain unfixed)
+1. **Critical/high findings:** Lead fixes directly on the batch branch, or re-spawns the originating dev if the fix is non-trivial. If a fix touches a changed UI flow, re-run 3h Chrome MCP scoped to that flow (this requires re-acquiring the env lock).
+2. **Medium/low/nit findings:** append to **`TECH-DEBT-BACKLOG.md`** at the repo root using the dated-section + `- **[sev]**` bullet format (single canonical location parsed by `/readlogs`). Do NOT auto-file Linear tech-debt; the operator triages the file.
+3. **Update state:** `gates.review: PASS` only when ALL per-story reviewers complete with no unfixed critical/high findings. Track per-story state under `pipeline.stories['ROK-XXX'].review_status: PASS | FAIL`.
 
-**Convergence rule:** do not proceed to 3j until BOTH tracks have completed (`gates.chrome_mcp_e2e: PASS` AND `gates.review: PASS`).
+**`/code-review` substitution rule:** if the operator explicitly invokes `/code-review` (harness-native finder+verifier review) before or during Step 3i, treat it as a SUPPLEMENT to the per-story reviewers, not a replacement. `/code-review` produces broader-scope findings across the whole batch diff; per-story reviewers produce focused, AC-traced findings per story. Both signals are useful.
+
+**Convergence rule:** do not proceed to 3j until BOTH tracks have completed (`gates.chrome_mcp_e2e: PASS` AND `gates.review: PASS` with all per-story reviewers green).
 
 ---
 
