@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getAuthToken } from '../use-auth';
+import { getAuthToken, useAuth, isAdmin } from '../use-auth';
 import { adminFetch } from './admin-fetch';
 import type {
     AiStatusDto, AiModelDto, AiUsageDto, AiTestConnectionDto,
@@ -118,12 +118,18 @@ export interface AiFeaturesResponse {
     aiSuggestionsEnabled: boolean;
 }
 
-/** Query AI feature toggle states. */
+/** Query AI feature toggle states. Admin-only — endpoint is guarded by AdminGuard. */
 export function useAiFeatures() {
+    const { user } = useAuth();
     return useQuery<AiFeaturesResponse>({
         queryKey: [...AI_KEY, 'features'],
         queryFn: () => adminFetch('/admin/ai/features'),
-        enabled: !!getAuthToken(),
+        // ROK-1317: also gate on admin role. Non-admins receive 403 from
+        // AdminGuard, so polling them is pure noise. Non-admin consumers
+        // (useAiSuggestionsAvailable) already treat `data === undefined`
+        // as "enabled" by design, so disabling the query for non-admins
+        // does not regress any user-facing feature.
+        enabled: !!getAuthToken() && isAdmin(user),
         staleTime: 30_000,
     });
 }
