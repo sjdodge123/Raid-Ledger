@@ -1,4 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 // Mock config so PROJECT_DIR / MAIN_REPO are deterministic and the script path
 // resolves predictably.
@@ -27,10 +31,25 @@ import {
   ACQUIRE_TOOL_NAME,
   RELEASE_TOOL_NAME,
   FORCE_RELEASE_TOOL_NAME,
+  _setAgentIdFilePathForTesting,
 } from './env-lock.js';
+
+// Per-test isolated persisted-agent-id file. Override before each test so
+// fs.readFile/writeFile in the production code can't bleed across tests or
+// touch the operator's real ~/.raid-ledger/mcp-agent-id.
+let agentIdFile: string;
 
 beforeEach(() => {
   mockShell.mockReset();
+  agentIdFile = join(tmpdir(), `env-lock-test-${randomBytes(6).toString('hex')}.id`);
+  _setAgentIdFilePathForTesting(agentIdFile);
+});
+
+afterEach(async () => {
+  _setAgentIdFilePathForTesting(null);
+  await fs.unlink(agentIdFile).catch(() => {
+    /* fine if it didn't exist */
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -356,8 +375,8 @@ describe('executeRelease — agent_id plumbing (ROK-1318)', () => {
     await executeAcquire({ branch: 'rok-1318', worktree: '/wt', purpose: 'p' });
     const acquireCmd = lastCommand();
 
-    // ENV-4: release calls status first (no holder → use computed id).
-    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null });
+    // ENV-4 persist-to-file: release reads the agent_id stamped by acquire
+    // directly from the persisted file — no status call, no fresh derivation.
     queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
     await executeRelease({ branch: 'rok-1318', worktree: '/wt' });
     const releaseCmd = lastCommand();
@@ -372,15 +391,72 @@ describe('executeRelease — agent_id plumbing (ROK-1318)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ENV-4 — executeRelease reuses holder's stamped agent_id (post-c774fc44)
+// ENV-4 — three-tier agent_id resolution (persist-to-file primary)
+// Codex pre-push review 2026-05-23 flagged the cwd-drift scenario; the fix
+// stamps the agent_id ONCE on acquire to a stable on-disk path and reads it
+// back on release. Status-based fallback handles fresh-MCP-install cases;
+// fresh derivation is the last-resort same-as-pre-ENV-4 path.
 // ---------------------------------------------------------------------------
 
-describe('executeRelease — reuses holder.agent_id (ENV-4 fix)', () => {
-  it('reuses the holder\'s stamped agent_id when holder.worktree matches ours', async () => {
-    // Status returns a holder whose worktree matches the caller's worktree
-    // but whose stamped agent_id is DIFFERENT from what we'd compute fresh
-    // (simulating a git-checkout-mid-lease scenario where the branch changed
-    // between acquire and release).
+describe('executeRelease — Tier 1: persisted-file path (ENV-4 fix)', () => {
+  it('uses the persisted agent_id from acquire, even when release cwd drifts to a different (branch, worktree)', async () => {
+    // Acquire stamps an agent_id derived from (branch='rok-1318', worktree='/wt-a').
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+    await executeAcquire({ branch: 'rok-1318', worktree: '/wt-a', purpose: 'p' });
+    const stampedAgentId = getAgentId('rok-1318', '/wt-a');
+
+    // Release is called from a TOTALLY DIFFERENT cwd context (operator's
+    // MCP server now in main repo, releasing a sibling worktree's lease).
+    // Without the persist-to-file fix, the wrapper would compute sha1('main',
+    // '/main-repo') ≠ stamped, AND bash's is_holder_self would miss because
+    // holder.worktree='/wt-a' ≠ '/main-repo'. The persisted file ensures
+    // the wrapper uses the stamped id regardless of cwd drift.
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [], matched_by: 'agent_id' });
+    await executeRelease({ branch: 'main', worktree: '/main-repo' });
+
+    expect(lastCommand()).toContain(`--agent-id '${stampedAgentId}'`);
+    // Make doubly sure: the release should NOT carry the freshly-derived
+    // (main, /main-repo) id — that's the bug shape Codex caught.
+    const wrongId = getAgentId('main', '/main-repo');
+    expect(lastCommand()).not.toContain(`--agent-id '${wrongId}'`);
+  });
+
+  it('persisted path bypasses the status-call fallback entirely', async () => {
+    // Pre-write a persisted agent_id (simulating a prior acquire).
+    await fs.writeFile(agentIdFile, 'persisted-from-prior-acquire-id');
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+
+    await executeRelease({ branch: 'any', worktree: '/any' });
+
+    // Only ONE shell call should have happened (the release). No status call.
+    expect(mockShell.mock.calls.length).toBe(1);
+    expect(lastCommand()).toContain("--agent-id 'persisted-from-prior-acquire-id'");
+  });
+
+  it('clears the persisted file on a successful release (was_holder=true)', async () => {
+    await fs.writeFile(agentIdFile, 'will-be-cleared');
+    queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
+
+    await executeRelease({ branch: 'b', worktree: '/wt' });
+
+    await expect(fs.readFile(agentIdFile, 'utf8')).rejects.toThrow(/ENOENT/);
+  });
+
+  it('keeps the persisted file on a no-op release (was_holder=false)', async () => {
+    await fs.writeFile(agentIdFile, 'still-our-stake');
+    queueShellJson({ released: true, was_holder: false, holder: { branch: 'other' }, queue: [] });
+
+    await executeRelease({ branch: 'b', worktree: '/wt' });
+
+    const contents = await fs.readFile(agentIdFile, 'utf8');
+    expect(contents).toBe('still-our-stake');
+  });
+});
+
+describe('executeRelease — Tier 2: status-based fallback', () => {
+  it('reuses the holder\'s stamped agent_id when holder.worktree matches ours AND no persisted file', async () => {
+    // No persisted file (fresh MCP install, /tmp wiped, etc.) but a holder
+    // exists with a stamped agent_id and matching worktree.
     const stampedAgentId = 'stamped1234567a';
     queueShellJson({
       holder: {
@@ -404,27 +480,11 @@ describe('executeRelease — reuses holder.agent_id (ENV-4 fix)', () => {
     // Caller releases with a DIFFERENT branch (post-checkout) but same worktree.
     await executeRelease({ branch: 'main', worktree: '/wt' });
 
-    // The release command should carry the HOLDER's stamped agent_id, not
-    // the fresh sha1('main', '/wt') that would otherwise be computed.
     const cmd = lastCommand();
     expect(cmd).toContain(`--agent-id '${stampedAgentId}'`);
-    const computed = getAgentId('main', '/wt');
-    expect(cmd).not.toContain(`--agent-id '${computed}'`);
   });
 
-  it('falls back to computed agent_id when status returns no holder', async () => {
-    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null });
-    queueShellJson({ released: true, was_holder: false, holder: null, queue: [], matched_by: null });
-
-    await executeRelease({ branch: 'b', worktree: '/wt' });
-
-    const expectedId = getAgentId('b', '/wt');
-    expect(lastCommand()).toContain(`--agent-id '${expectedId}'`);
-  });
-
-  it('falls back to computed agent_id when holder.worktree does NOT match', async () => {
-    // Holder is in a different worktree — we should NOT reuse its agent_id
-    // (that would steal its identity).
+  it('does NOT use holder.agent_id when holder.worktree does NOT match (no identity theft)', async () => {
     queueShellJson({
       holder: {
         branch: 'other',
@@ -451,8 +511,17 @@ describe('executeRelease — reuses holder.agent_id (ENV-4 fix)', () => {
     expect(lastCommand()).not.toContain("'someoneelseagent'");
   });
 
+  it('falls back to computed agent_id when status returns no holder', async () => {
+    queueShellJson({ holder: null, queue: [], free: true, stale_cleared: null });
+    queueShellJson({ released: true, was_holder: false, holder: null, queue: [], matched_by: null });
+
+    await executeRelease({ branch: 'b', worktree: '/wt' });
+
+    const expectedId = getAgentId('b', '/wt');
+    expect(lastCommand()).toContain(`--agent-id '${expectedId}'`);
+  });
+
   it('falls back to computed agent_id when status query returns an error envelope', async () => {
-    // Status shell call returns non-JSON; parseJson returns { error, raw }.
     mockShell.mockResolvedValueOnce({ stdout: 'oops not json', stderr: '', exitCode: 1 });
     queueShellJson({ released: true, was_holder: true, holder: null, queue: [] });
 
@@ -460,6 +529,41 @@ describe('executeRelease — reuses holder.agent_id (ENV-4 fix)', () => {
 
     const expectedId = getAgentId('b', '/wt');
     expect(lastCommand()).toContain(`--agent-id '${expectedId}'`);
+  });
+});
+
+describe('executeForceRelease — clears the persisted file', () => {
+  it('drops the local agent_id stamp so the next acquire starts clean', async () => {
+    await fs.writeFile(agentIdFile, 'wedged-stamp');
+    queueShellJson({ cleared_holder: { branch: 'stuck' }, holder: null, queue: [] });
+
+    await executeForceRelease();
+
+    await expect(fs.readFile(agentIdFile, 'utf8')).rejects.toThrow(/ENOENT/);
+  });
+});
+
+describe('executeAcquire — persists agent_id to disk (ENV-4)', () => {
+  it('writes the stamped agent_id to the on-disk file before the shell call', async () => {
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+
+    await executeAcquire({ branch: 'rok-1318', worktree: '/wt', purpose: 'p' });
+
+    const expectedId = getAgentId('rok-1318', '/wt');
+    const persisted = await fs.readFile(agentIdFile, 'utf8');
+    expect(persisted).toBe(expectedId);
+  });
+
+  it('overwrites an existing persisted stamp on each acquire (no stale-stamp bleed)', async () => {
+    await fs.writeFile(agentIdFile, 'stale-from-prior-test');
+    queueShellJson({ acquired: true, holder: {}, queue: [] });
+
+    await executeAcquire({ branch: 'rok-1318', worktree: '/wt', purpose: 'p' });
+
+    const expectedId = getAgentId('rok-1318', '/wt');
+    const persisted = await fs.readFile(agentIdFile, 'utf8');
+    expect(persisted).toBe(expectedId);
+    expect(persisted).not.toBe('stale-from-prior-test');
   });
 });
 
