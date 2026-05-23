@@ -48,10 +48,10 @@ Only claim state files for stories YOU are building — other sessions may own t
 ## 1c. Fetch Stories from Linear
 
 ```
-mcp__linear__list_issues({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386", statusName: "Dispatch Ready", first: 20 })
+mcp__linear__list_issues({ team: "0728c19f-5268-4e16-aa45-c944349ce386", state: "Dispatch Ready", limit: 20 })
 ```
 
-For rework: `statusName: "Changes Requested"`. For specific story: `mcp__linear__get_issue({ issueId: "ROK-XXX" })`.
+For rework: `state: "Changes Requested"`. For specific story: `mcp__linear__get_issue({ id: "ROK-XXX" })`.
 
 ### 1c.1 Read latest comments for every fetched story (STRICT)
 
@@ -207,7 +207,7 @@ pipeline:
 
 Mandatory before Step 2. For each story:
 ```
-mcp__linear__save_issue({ issueId: "<linear_id>", statusName: "In Progress" })
+mcp__linear__save_issue({ id: "<linear_id>", state: "In Progress" })
 ```
 
 Proceed to **Step 2**.

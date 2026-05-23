@@ -104,17 +104,10 @@ describe('AC6 — curlOnVM rejects CR/LF/NUL in header values', () => {
   });
 
   it('throws when a header value contains \\0 (NUL byte)', async () => {
-    const { executeStatus } = await import('../test-plan.js');
-    const prev = process.env.RL_AGENT_TOKEN;
-    process.env.RL_AGENT_TOKEN = 'bad\0null';
-    try {
-      const result = await executeStatus({ slug: 'aaa' });
-      expect(result).toMatchObject({ ok: false });
-      expect(JSON.stringify(result)).toMatch(/NUL|invalid header value/i);
-    } finally {
-      if (prev === undefined) delete process.env.RL_AGENT_TOKEN;
-      else process.env.RL_AGENT_TOKEN = prev;
-    }
+    const { validateCurlHeaderValueForTest } = await import('../test-plan.js');
+    expect(() => validateCurlHeaderValueForTest('X-Agent-Token', 'bad\0null')).toThrow(
+      /NUL|invalid header value/i,
+    );
   });
 });
 

@@ -6,7 +6,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { deriveAgentId, shellQuote } from '../exec.js';
+import { buildSshArgs, deriveAgentId, shellQuote } from '../exec.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -32,8 +32,6 @@ export interface RunOnRunnerResult {
 
 export async function execute(params: RunOnRunnerParams): Promise<RunOnRunnerResult> {
   const timeoutMs = (params.timeout_seconds ?? 300) * 1000;
-  const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
-  const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
   // Match the rl CLI's auto-derived agent id, so the slot claimed via
   // rl_claim (or rl_claim_wait when queued) is the same slot run-on-runner targets.
   const agentId = deriveAgentId(params.worktree_path);
@@ -56,16 +54,10 @@ export async function execute(params: RunOnRunnerParams): Promise<RunOnRunnerRes
     `-- bash -c ${shellQuote(params.command)}`;
 
   try {
+    const sshArgs = await buildSshArgs(remote);
     const result = await execFileAsync(
       'ssh',
-      [
-        '-o',
-        'BatchMode=yes',
-        '-o',
-        'ConnectTimeout=5',
-        `${sshUser}@${sshHost}`,
-        remote,
-      ],
+      sshArgs,
       { maxBuffer: 16 * 1024 * 1024, timeout: timeoutMs },
     );
     return { ok: true, stdout: result.stdout, stderr: result.stderr, exit_code: 0 };

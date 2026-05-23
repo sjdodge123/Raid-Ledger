@@ -101,7 +101,7 @@ function runSshWithStdin(args: string[], stdinPayload: string): Promise<string> 
 // implementation simple and avoids opening any inbound dashboard ports.
 const RUN_ON_VM_TIMEOUT_MS = 30_000;
 
-const sshUser = () => process.env.RL_PROXMOX_USER ?? 'rl-agent';
+const sshUser = () => 'rl-agent';
 // ROK-1331 M6b HIGH-3: share the cached DNS-fallback verdict with runRl so
 // SSH calls from test-plan.ts also tolerate `rl-infra.lan` not resolving.
 const sshHost = async (): Promise<string> => {
@@ -145,6 +145,14 @@ function assertValidSlug(slug: string): void {
 // can't smuggle shell metacharacters via the method arg.
 const ALLOWED_METHODS = new Set(['GET', 'POST', 'DELETE', 'PUT', 'PATCH']);
 
+export function validateCurlHeaderValueForTest(name: string, value: string): void {
+  if (/[\r\n\x00]/.test(value)) {
+    throw new Error(
+      `curlOnVM: invalid header value (contains CR/LF/NUL) for ${JSON.stringify(name)}`,
+    );
+  }
+}
+
 const curlOnVM = async (
   method: string,
   path: string,
@@ -184,11 +192,7 @@ const curlOnVM = async (
       // Belt-and-suspenders: libcurl already strips CR/LF from header
       // values, but reject explicitly so the failure surfaces in the MCP
       // error envelope instead of becoming a silent header drop.
-      if (/[\r\n\0]/.test(value)) {
-        throw new Error(
-          `curlOnVM: invalid header value (contains CR/LF/NUL) for ${JSON.stringify(name)}`,
-        );
-      }
+      validateCurlHeaderValueForTest(name, value);
       const envVar = ENV_INJECTED_HEADERS[name];
       if (envVar !== undefined) {
         // Env-name-only: docker inherits the value from the bash env set

@@ -16,7 +16,12 @@
 
 import { execFile, execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { deriveAgentId, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import {
+  deriveAgentId,
+  getSshTarget,
+  shellQuote,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
 import * as task from './task.js';
 
 export const TOOL_NAME = 'rl_validate_ci';
@@ -226,8 +231,7 @@ function newTaskId(): string {
 export async function execute(
   params: ValidateCiParams,
 ): Promise<ValidateCiAsyncResult | task.ExecuteWaitResult> {
-  const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
-  const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
+  const { user: sshUser, host: sshHost } = await getSshTarget();
   const agentId = deriveAgentId(params.worktree_path);
   const wait = params.wait ?? false;
   const waitTimeoutS = params.wait_timeout_seconds ?? 1800;

@@ -13,7 +13,12 @@
 
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { deriveAgentId, shellQuote, synthesizeEmptyStderrDiagnostic } from '../exec.js';
+import {
+  buildSshArgs,
+  deriveAgentId,
+  shellQuote,
+  synthesizeEmptyStderrDiagnostic,
+} from '../exec.js';
 import * as claim from './claim.js';
 import * as task from './task.js';
 
@@ -99,8 +104,6 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
     /* ignore */
   }
 
-  const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
-  const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
   const agentId = deriveAgentId(params.worktree_path);
   const wait = params.wait ?? false;
   const waitTimeoutS = params.wait_timeout_seconds ?? 1800;
@@ -131,9 +134,10 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
 
   let dispatch: { task_id?: string; log_path?: string; started_at?: string } = {};
   try {
+    const sshArgs = await buildSshArgs(remote);
     const { stdout } = await execFileP(
       'ssh',
-      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`, remote],
+      sshArgs,
       { maxBuffer: 4 * 1024 * 1024, timeout: 60_000 },
     );
     try {

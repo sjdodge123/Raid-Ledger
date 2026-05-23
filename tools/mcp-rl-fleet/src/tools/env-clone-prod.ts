@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { buildSshArgs } from '../exec.js';
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,16 +66,16 @@ export async function execute(params: EnvCloneProdParams): Promise<EnvCloneProdR
   // Restart allinone so SettingsService re-reads + re-caches the new
   // app_settings rows. Without this, the 30-min boot cache holds the
   // pre-clone state and integrations look broken until TTL.
-  const sshUser = process.env.RL_PROXMOX_USER ?? 'rl-agent';
-  const sshHost = process.env.RL_PROXMOX_HOST ?? 'rl-infra';
   let restartedForSettings = false;
   let restartError: string | undefined;
   try {
+    const sshArgs = await buildSshArgs(
+      // DOCKER_HOST→wollomatic proxy (rl-agent has no docker group; Bug G).
+      `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${params.slug}-allinone && sleep 6`,
+    );
     await execFileAsync(
       'ssh',
-      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`,
-       // DOCKER_HOST→wollomatic proxy (rl-agent has no docker group; Bug G).
-       `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${params.slug}-allinone && sleep 6`],
+      sshArgs,
       { timeout: 60_000 },
     );
     restartedForSettings = true;
