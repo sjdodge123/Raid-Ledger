@@ -230,7 +230,7 @@ State lives at `~/.raid-ledger/env-lock.json` (outside any worktree). The lease 
 
 ## Code Size Limits (STRICT — enforced by ESLint)
 
-- **Max 300 lines per file** (`max-lines: error`, skipBlankLines + skipComments) — CI lint fails on violations. Run `npm run lint -w api` AND `npm run lint -w web` locally before pushing; `./scripts/validate-ci.sh --full` runs both. Note: line counts are after stripping blanks + comments, so the raw file may exceed 300 (e.g. `wc -l` 360 → counted 295 is fine).
+- **Max 300 lines per file** (`max-lines: error`, skipBlankLines + skipComments) — CI lint fails on violations. Run `npm run lint -w api` AND `npm run lint -w web` locally before pushing; both the lite `./scripts/validate-ci.sh --static` gate and `--full` run both. Note: line counts are after stripping blanks + comments, so the raw file may exceed 300 (e.g. `wc -l` 360 → counted 295 is fine).
 - **Max 30 lines per function** (`max-lines-per-function: warn`, skipBlankLines + skipComments) — will be upgraded to `error` once existing violations are resolved
 - **Design small from the start** — do not write large files and refactor after. Plan focused modules, extract helpers/sub-services/child components proactively.
 - Test files (`*.spec.ts`, `*.test.tsx`) have a relaxed **750-line** file limit (not 300).
@@ -333,9 +333,16 @@ For ANY change presented as a fix for a flaky, intermittent, or non-deterministi
 
 In ambiguous cases: run the protocol anyway. The cost is 7 minutes; the rework cost when skipped is days.
 
-### Local CI
+### Local CI — lite gate by default (STRICT)
 
-Run `./scripts/validate-ci.sh --full` before pushing any branch. This replaces manual per-step checks.
+**For most stories, run the lite gate before pushing: `./scripts/validate-ci.sh --static`.** It runs build + typecheck + lint plus the conditional migration/container checks (~3–4 min), and **defers unit, integration, Playwright, and Discord smoke to GitHub CI**, which runs them sharded + randomized on every PR. GitHub is the real gate — auto-merge-squash blocks the merge until it's green. The local gate exists to catch the cheap, deterministic failures (compile/type/lint breaks) that would otherwise waste a whole GitHub cycle and leave a red PR to babysit.
+
+**Escalate to `./scripts/validate-ci.sh --full`** (the complete local suite) only when:
+- The diff touches `drizzle/migrations/**` or container/infra (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — high blast radius; `--static` already runs the migration + allinone validation for these, `--full` adds local unit/integration/e2e on top.
+- It's a `packages/contract/**` change or a large cross-workspace refactor where a post-push behavioral break would be costly.
+- The operator explicitly asks for a full local run.
+
+Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self-escalate to `--full` on the risk signals above. A `--static` run that shows `Unit/Integration/Playwright: DEFERRED` is the gate working as intended — do NOT treat deferred behavioral checks as a skipped step to "fix."
 
 | GitHub CI Job | Local Equivalent | Script |
 |---------------|------------------|--------|
@@ -356,10 +363,12 @@ Run `./scripts/validate-ci.sh --full` before pushing any branch. This replaces m
 - **Playwright:** run iff diff touches `web/**`, `api/src/auth/**`, `api/src/admin/demo-test*`, `playwright.config.*`, or `scripts/smoke/**` AND `:3000/health` + `:5173` both answer. SKIPPED otherwise (with a clear reason in the summary).
 - **Discord smoke:** run iff diff touches `api/src/discord-bot/**`, `api/src/notifications/**`, `api/src/events/signups*`, `api/src/events/event-lifecycle*`, `api/src/admin/demo-test*`, `tools/test-bot/src/smoke/**`, or `tools/test-bot/src/helpers/polling.ts` AND env is up.
 
-**E2E flags:**
+**Gate / E2E flags:**
 
-- Default (auto): diff + env gated as above. Backend-only branches pass through in seconds; UI/bot branches get the right coverage automatically.
-- `--no-e2e`: skip Playwright + smoke (use for pre-deploy static checks where you'll run e2e separately).
+- `--static`: **lite gate (default for most stories)** — build + typecheck + lint + conditional migration/container only. Defers unit, integration, Playwright, and Discord smoke to GitHub CI. ~3–4 min.
+- `--full` (or no flag): complete local suite — adds unit, integration, and auto-scoped e2e on top of `--static`. Use for migration/infra/contract/large changes (see escalation list above).
+- Default (auto, when running `--full`): e2e is diff + env gated. Backend-only branches pass through in seconds; UI/bot branches get the right coverage automatically.
+- `--no-e2e`: run build/tsc/lint/unit/integration but skip Playwright + smoke (use for pre-deploy static checks where you'll run e2e separately).
 - `--with-e2e`: force-run e2e even if diff detector says no triggering files changed (paranoid pre-push, or shared-component changes the detector won't flag).
 - `--only-e2e`: skip everything except the e2e steps (use in post-deploy gates where static checks already ran upstream).
 
@@ -384,11 +393,15 @@ npx playwright test
 ./scripts/validate-ci.sh --only-e2e
 ```
 
-**Before pushing ANY branch with UI changes:**
-1. Deploy locally (`./scripts/deploy_dev.sh --ci`), then run `./scripts/validate-ci.sh --full` — it includes both desktop + mobile Playwright when web/auth/demo-test files changed.
-2. If the validate-ci summary shows `Playwright: SKIPPED — Dev env not responding`, you skipped the deploy or the env is partly down. Bring it up and re-run.
+**Before pushing a branch with UI changes (lite-gate policy):**
+
+GitHub CI runs the full Playwright suite (desktop + mobile, 5-shard) on every PR and blocks the merge until it's green — so for most UI stories you push on the `--static` gate and let GitHub catch selector/flake breaks. Running Playwright locally is **optional**, reserved for risky or shared-component UI flows you'd rather verify before push. In the `/build` and `/fix-batch`/`/bulk` pipelines, the mandatory operator-facing browser check is the **Chrome MCP e2e gate** (against the deployed dev env), not scripted Playwright.
+
+**If you DO run Playwright locally** (optional pre-push, or because the operator asked):
+1. Deploy locally (`./scripts/deploy_dev.sh --ci`), then run `./scripts/validate-ci.sh --only-e2e` (or `--with-e2e` to force it for a shared-component change the diff detector won't flag).
+2. If the summary shows `Playwright: SKIPPED — Dev env not responding`, the env is down — bring it up and re-run.
 3. If any test fails, fix it BEFORE pushing — do NOT use CI as a debugger.
-4. New components on shared pages (layout, nav, Games page) break selectors in OTHER test files — run the FULL suite, not just your feature's tests. If your diff is in a shared component the auto-scope might miss, force-run with `--with-e2e`.
+4. Run the FULL suite (both desktop + mobile — never narrow with `--project=desktop`). New components on shared pages (layout, nav, Games page) break selectors in OTHER test files.
 
 **When smoke tests fail in CI:**
 1. Check the ACTUAL error message — is it "element not found", "strict mode", or "timeout"?

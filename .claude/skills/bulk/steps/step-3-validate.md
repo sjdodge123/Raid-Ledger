@@ -21,17 +21,19 @@ State: `gates.test_gaps: PASS` (or `FAIL`).
 
 ---
 
-## 3b. Static CI (one command)
+## 3b. Static CI (lite gate — one command)
 
 ```bash
-./scripts/validate-ci.sh --no-e2e
+./scripts/validate-ci.sh --static
 ```
 
-Covers build, TypeScript, lint, unit + coverage, integration, and conditional migration / container checks across all workspaces. `--no-e2e` defers Playwright + Discord smoke to 3g (after env verification).
+`--static` covers build, TypeScript, lint, and conditional migration / container checks across all workspaces (the latter two auto-skip unless the batch touched `drizzle/migrations/**` or infra files). Unit, integration, Playwright, and Discord smoke are **deferred to GitHub CI** (sharded + randomized on every PR; auto-merge-squash blocks until green). This is the lite gate by operator policy.
+
+**Escalate to `./scripts/validate-ci.sh --no-e2e`** (adds local unit + integration) only for large/cross-workspace batches where a post-push behavioral break would be costly, or when the operator asks.
 
 Fix failures directly on the batch branch (`fix: resolve <issue>`). If substantive (logic bug from a story), diagnose which story, fix or respawn dev.
 
-State: `gates.ci: PASS`, `gates.integration: PASS` (or FAIL) — map from the validate-ci summary table.
+State: `gates.ci: PASS` — map from the validate-ci summary table. `gates.integration` is `DEFERRED_TO_GITHUB` under the lite gate.
 
 ---
 

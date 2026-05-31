@@ -77,12 +77,12 @@ Dev agents self-scope CI based on what they touched (see `dev.md` CI Scope table
    - Both `api/src/**` and `web/src/**` changed
    - Any `tools/**` or `scripts/**` file
 
-3. Decide:
+The default gate is `--static` (build + tsc + lint); unit/integration/e2e defer to GitHub CI. `full` is reserved for the risk signals above. Decide:
    - **`ci_scope: full` and proof table all PASS** → accept. `gates.ci: PASS`.
    - **`ci_scope: full` but any FAIL** → respawn dev with failure context.
-   - **`ci_scope: api | web | tests | docs` and no risk signal** → accept. `gates.ci: PASS`.
-   - **Scope under-selected** (risk signal present but dev ran narrow) → run `RL_TARGET=remote ./rl-infra/cli/rl validate-ci --full` yourself (fleet path — offloads CPU+memory from laptop). Fall back to `./scripts/validate-ci.sh --full` only if fleet unreachable. Fix failures or respawn.
-   - **Scope unclear or dev output malformed** → run `RL_TARGET=remote ./rl-infra/cli/rl validate-ci --full` (fleet) or `./scripts/validate-ci.sh --full` (local fallback).
+   - **`ci_scope: static | docs` and no risk signal** → accept. `gates.ci: PASS`. (Behavioral coverage rides on GitHub — that is the policy, not a gap.)
+   - **Scope under-selected** (risk signal present but dev ran `--static`) → run `RL_TARGET=remote ./rl-infra/cli/rl validate-ci --full` yourself (fleet path — offloads CPU+memory from laptop). Fall back to `./scripts/validate-ci.sh --full` only if fleet unreachable. Fix failures or respawn.
+   - **Scope unclear or dev output malformed** → run `RL_TARGET=remote ./rl-infra/cli/rl validate-ci --static` (fleet) or `./scripts/validate-ci.sh --static` (local fallback); escalate to `--full` only if the diff shows a risk signal.
 
 On Lead-driven failure: lint/type errors → fix directly, commit `fix: resolve CI issues (ROK-XXX)`. Test failures → respawn dev. Never push with known failures.
 

@@ -3,7 +3,7 @@
 **Lead runs validation directly on the batch branch.**
 
 Order:
-1. Cheap static gates in one pass: `validate-ci.sh --no-e2e` covers build → ts → lint → unit → integration (3a).
+1. Lite static gate in one pass: `validate-ci.sh --static` covers build → ts → lint, plus conditional migration/container checks (3a). Unit + integration are deferred to GitHub CI (sharded + randomized on every PR).
 2. **Then fork into two parallel tracks**:
    - **Track A (Lead, env-bound):** acquire env lock (3f) → deploy → diff-gated e2e (3g) → Chrome MCP e2e (3h) → release env lock.
    - **Track B (Reviewer agent, no env):** spawn reviewer in background (3i) reviewing the merged batch diff.
@@ -18,25 +18,27 @@ git checkout fix/batch-YYYY-MM-DD
 
 ---
 
-## 3a. Static CI (one command)
+## 3a. Static CI (lite gate — one command)
 
 ```bash
-./scripts/validate-ci.sh --no-e2e
+./scripts/validate-ci.sh --static
 ```
 
-`validate-ci.sh` runs build (all workspaces), TypeScript, lint, unit + coverage, integration, and conditional migration / container checks. `--no-e2e` defers Playwright + Discord smoke to step 3g (after deploy).
+`--static` runs build (all workspaces), TypeScript, lint, and conditional migration / container checks (the latter two auto-skip unless the batch touched `drizzle/migrations/**` or infra files). Unit, integration, Playwright, and Discord smoke are **deferred to GitHub CI**, which runs them sharded + randomized on every PR — GitHub is the real gate (auto-merge-squash blocks until green). This is the lite gate by operator policy: catch the cheap deterministic breaks locally, let GitHub catch behavioral regressions.
+
+**Escalate to `./scripts/validate-ci.sh --no-e2e`** (adds local unit + integration) only when the batch is a large/cross-workspace refactor where you'd rather not discover a behavioral break post-push, or when the operator asks.
 
 On failure (script stops at first FAIL — read its summary table):
-- **Trivial** (lint, type error, test setup, import path): fix directly, commit `fix: resolve <issue>`.
+- **Trivial** (lint, type error, import path): fix directly, commit `fix: resolve <issue>`.
 - **Substantive** (logic bug introduced by a story): diagnose which story, fix directly on the batch branch if possible, otherwise create a new worktree from the batch branch and re-spawn the dev with failure context.
 
-Update state: `gates.ci: PASS` (or `FAIL`). Map the validate-ci summary rows onto `gates.ci` (build/tsc/lint/unit) and `gates.integration` (integration row).
+Update state: `gates.ci: PASS` (or `FAIL`). Map the validate-ci summary rows onto `gates.ci` (build/tsc/lint). `gates.integration` is `DEFERRED_TO_GITHUB` under the lite gate.
 
 ---
 
 ## Fork: Track A + Track B start in parallel
 
-After 3a (validate-ci --no-e2e) passes, kick off BOTH tracks in the same message — Track A (env-bound, Lead-driven) and Track B (reviewer agent, no env).
+After 3a (validate-ci --static) passes, kick off BOTH tracks in the same message — Track A (env-bound, Lead-driven) and Track B (reviewer agent, no env).
 
 **Track A** runs 3f → 3g → 3h sequentially (Lead actions).
 **Track B** runs 3i once (reviewer agent invocation).

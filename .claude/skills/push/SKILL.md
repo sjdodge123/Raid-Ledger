@@ -134,6 +134,22 @@ fi
 
 The marker is invalidated automatically by HEAD changing — any new commit produces a different SHA and forces a re-run. Skip is purely time-based on the same commit.
 
+#### Pick the gate tier (STRICT — default is the lite `--static` gate)
+
+GitHub CI runs the full suite (build, tsc, lint, unit, integration sharded 3×3 + randomized, Playwright 5-shard desktop+mobile, Discord smoke) on **every** PR, and auto-merge-squash blocks the merge until it's green. GitHub *is* the real gate. The local run exists only to catch the cheap, deterministic failures that would otherwise waste a whole GitHub cycle and leave a red PR to babysit.
+
+So for **most stories**, run the **lite gate** — `--static`: build + typecheck + lint, plus the conditional migration/container checks (which auto-skip when no migration/infra files changed). It defers unit/integration/Playwright/Discord smoke to GitHub. ~3–4 min vs ~20+ for `--full`.
+
+Use `GATE=--static` by default. Escalate to `GATE=--full` only when:
+- The diff touches **`drizzle/migrations/**`** or **container/infra** (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — note `--static` already runs the migration + allinone validation for these; `--full` additionally adds local unit/integration/e2e, worth it for these high-blast-radius changes.
+- It's a **large/cross-workspace refactor** where you'd rather not discover a behavioral break on GitHub after the fact.
+- The operator explicitly asks for a full local run.
+
+```bash
+# Default: lite gate. Override to --full for the cases above.
+GATE="${GATE:---static}"
+```
+
 #### Run validate-ci on the FLEET (or skip)
 
 **STRICT — fleet by default.** The whole purpose of the rl-infra fleet is to offload CI runs from the operator's laptop. Local CI pins CPU + memory for minutes and blocks the operator from doing anything else. Run validate-ci on the fleet runner instead:
@@ -144,21 +160,21 @@ if [ "$SKIP_VALIDATE_CI" = "0" ]; then
   # zero CPU/memory pressure on the laptop.
   if [ -x "./rl-infra/cli/rl" ] && ssh -o BatchMode=yes -o ConnectTimeout=3 \
        "${RL_PROXMOX_HOST:-rl-infra}" 'true' 2>/dev/null; then
-    RL_TARGET=remote ./rl-infra/cli/rl validate-ci --full \
+    RL_TARGET=remote ./rl-infra/cli/rl validate-ci "$GATE" \
       > /tmp/vci-$(git rev-parse --short HEAD).log 2>&1 \
       && touch "$MARKER"
   else
     # Fallback: fleet unreachable (laptop offline, slot full, infra down).
     # Run locally so the push isn't blocked. Note in Step 12 report.
     echo "[push] fleet unreachable — falling back to local validate-ci.sh"
-    ./scripts/validate-ci.sh --full && touch "$MARKER"
+    ./scripts/validate-ci.sh "$GATE" && touch "$MARKER"
   fi
 fi
 ```
 
 **STOP** and fix any failures before continuing. **NEVER dismiss failures as "pre-existing"** — investigate and fix them, or create a Linear story with root cause. On failure, do NOT touch the marker.
 
-The script auto-detects scope (migration files, Dockerfile changes) and runs the appropriate conditional checks. You do NOT need to manually decide which checks to run — the script handles it. The fleet path uses the same `validate-ci.sh` invocation, just inside the runner.
+The script auto-detects scope (migration files, Dockerfile changes) and runs the appropriate conditional checks. You do NOT need to manually decide which checks to run — the script handles it. The fleet path uses the same `validate-ci.sh` invocation, just inside the runner. With `--static`, unit/integration/e2e are deferred to GitHub by design — that is not a skipped check to "fix," it's the lite gate working as intended.
 
 **Fleet-only quirks to be aware of (ROK-1331 follow-ups):**
 - The web vitest step may trip on `/workspace/web/coverage/.tmp` getting deleted mid-run (Mutagen-vs-vitest race). Doesn't reproduce locally. If you hit it on a backend-only diff, the fleet api result is still authoritative.
@@ -169,14 +185,16 @@ The script auto-detects scope (migration files, Dockerfile changes) and runs the
 
 ### Step 8: E2E Verification (diff-gated, env-gated)
 
-`validate-ci.sh --full` in Step 7 already auto-runs Playwright + Discord smoke when the diff touches their surface AND the dev env is up (`:3000/health` + `:5173`). What you do here depends on what Step 7 produced:
+**Lite gate (`--static`, the default):** Playwright + Discord smoke are NOT run locally — they're deferred to GitHub CI, which runs them sharded on every PR. For most stories you skip this step entirely and let GitHub cover behavioral/e2e. This is the intended behavior, not a gap.
+
+**When you DID run `--full` (Step 7):** it auto-runs Playwright + Discord smoke when the diff touches their surface AND the dev env is up (`:3000/health` + `:5173`). What you do then depends on what Step 7 produced:
 
 1. **Step 7 summary shows `Playwright (desktop + mobile): PASS`** — e2e is already covered. Touch the sentinel and continue:
    ```bash
    touch "/tmp/.playwright-verified-$(git rev-parse --short HEAD)"
    ```
 
-2. **Step 7 summary shows `Playwright: SKIPPED — No Playwright-relevant files changed`** — the diff is backend-only. The pre-push hook accepts no sentinel for non-UI branches, so just continue.
+2. **Step 7 summary shows `Playwright: SKIPPED — No Playwright-relevant files changed`** — the diff is backend-only. Just continue.
 
 3. **Step 7 summary shows `Playwright: SKIPPED — Dev env not responding`** — the script couldn't reach `:3000/health` or `:5173`. Decide:
    - **If `web/src/` files changed:** bring the env up and re-run e2e:
@@ -188,6 +206,8 @@ The script auto-detects scope (migration files, Dockerfile changes) and runs the
    - **If branch is API-only:** continue without the sentinel.
 
 The same logic applies to the `Discord smoke` row — if it FAILED, fix; if SKIPPED-no-relevant, continue; if SKIPPED-env-down on a bot/notification branch, deploy and re-run.
+
+**Optional local e2e on the lite gate:** if you *want* to drive a risky UI flow locally before pushing even though you're on `--static`, you can still run `./scripts/validate-ci.sh --only-e2e` against a deployed env on demand. It's no longer mandatory — GitHub is the gate.
 
 **Failure handling — never circumvent:**
 - "Strict mode" = your new DOM elements collided with selectors in OTHER test files
