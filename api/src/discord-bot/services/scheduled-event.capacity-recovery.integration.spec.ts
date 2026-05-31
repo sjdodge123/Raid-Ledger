@@ -362,6 +362,40 @@ describe('ROK-1332 — capacity-recovery integration', () => {
     );
   });
 
+  it('ROK-1332 review fix — extended-but-live event (past duration, future extendedUntil) is NOT GC-deleted', async () => {
+    // Regression guard: GC staleness uses COALESCE(extended_until, upper(duration)).
+    // An auto-extended event (members still in voice past the original end) has
+    // upper(duration) in the past but extended_until in the future → still live,
+    // so its Discord SE must be preserved.
+    const now = new Date();
+    const pastStart = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+    const pastEnd = new Date(now.getTime() - 3 * 60 * 60 * 1000); // ended 3h ago
+    const futureExtension = new Date(now.getTime() + 2 * 60 * 60 * 1000); // +2h
+
+    await testApp.db.insert(schema.events).values({
+      title: 'Extended-Live',
+      creatorId: testApp.seed.adminUser.id,
+      duration: [pastStart, pastEnd] as [Date, Date],
+      extendedUntil: futureExtension,
+      discordScheduledEventId: 'extended-live-1',
+    });
+
+    mockGuild.scheduledEvents.fetch.mockResolvedValue(
+      new Map<string, { id: string }>([
+        ['extended-live-1', { id: 'extended-live-1' }],
+      ]),
+    );
+
+    const { freed, orphanCount } = await gcStaleRLScheduledEvents(
+      mockGuild as unknown as Parameters<typeof gcStaleRLScheduledEvents>[0],
+      testApp.db,
+    );
+
+    expect(freed).toBe(0);
+    expect(orphanCount).toBe(0);
+    expect(mockGuild.scheduledEvents.delete).not.toHaveBeenCalled();
+  });
+
   it('helper integration — uses DiscordAPIError instanceof for 30038 classification', () => {
     // Sanity: makeDiscordApiError must produce a true DiscordAPIError so the
     // dev's `isAtScheduledEventCapacityError` (instanceof DiscordAPIError &&

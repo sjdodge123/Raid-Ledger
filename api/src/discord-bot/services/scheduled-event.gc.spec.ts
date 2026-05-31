@@ -4,7 +4,10 @@
  * Pure-mock layer: the helper takes a Guild + a Drizzle handle. We stub the
  * guild's `scheduledEvents.fetch/delete` and the two db-helpers it calls
  * (`findRLTrackedSEs` + `clearScheduledEventId`) via jest.mock so the spec
- * stays at the unit level. The integration spec covers the real-DB path.
+ * stays at the unit level. This layer asserts GC's delete/skip dispatch on the
+ * `isStale` flag; the staleness SQL itself (cancelled / past-due ≥1h /
+ * extendedUntil / active-future) is computed in `findRLTrackedSEs` and is
+ * covered against a real DB by the capacity-recovery integration spec.
  */
 import { gcStaleRLScheduledEvents } from './scheduled-event.gc';
 import * as dbHelpers from './scheduled-event.db-helpers';
@@ -50,15 +53,10 @@ beforeEach(() => {
 });
 
 describe('gcStaleRLScheduledEvents (ROK-1332 AC2)', () => {
-  it('deletes cancelled RL-tracked SEs', async () => {
+  it('deletes stale RL-tracked SEs (isStale=true)', async () => {
     const guild = makeGuild(['se-1']);
     findRLTrackedSEs.mockResolvedValue([
-      {
-        id: 101,
-        discordScheduledEventId: 'se-1',
-        cancelledAt: new Date(Date.now() - 30 * 60 * 1000),
-        durationUpper: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      },
+      { id: 101, discordScheduledEventId: 'se-1', isStale: true },
     ]);
 
     const result = await gcStaleRLScheduledEvents(guild, db);
@@ -69,15 +67,10 @@ describe('gcStaleRLScheduledEvents (ROK-1332 AC2)', () => {
     expect(clearScheduledEventId).toHaveBeenCalledWith(db, 101);
   });
 
-  it('deletes past-due (>1h) RL-tracked SEs', async () => {
+  it('deletes a second stale RL-tracked SE', async () => {
     const guild = makeGuild(['se-pastdue']);
     findRLTrackedSEs.mockResolvedValue([
-      {
-        id: 202,
-        discordScheduledEventId: 'se-pastdue',
-        cancelledAt: null,
-        durationUpper: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2h ago
-      },
+      { id: 202, discordScheduledEventId: 'se-pastdue', isStale: true },
     ]);
 
     const result = await gcStaleRLScheduledEvents(guild, db);
@@ -86,15 +79,10 @@ describe('gcStaleRLScheduledEvents (ROK-1332 AC2)', () => {
     expect(tryDeleteEvent).toHaveBeenCalledWith(guild, 202, 'se-pastdue');
   });
 
-  it('skips active+future RL-tracked SEs (not stale)', async () => {
+  it('skips non-stale RL-tracked SEs (isStale=false)', async () => {
     const guild = makeGuild(['se-active']);
     findRLTrackedSEs.mockResolvedValue([
-      {
-        id: 303,
-        discordScheduledEventId: 'se-active',
-        cancelledAt: null,
-        durationUpper: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      },
+      { id: 303, discordScheduledEventId: 'se-active', isStale: false },
     ]);
 
     const result = await gcStaleRLScheduledEvents(guild, db);
@@ -107,12 +95,7 @@ describe('gcStaleRLScheduledEvents (ROK-1332 AC2)', () => {
   it('counts operator-owned SEs (not in DB) as orphans and never deletes them', async () => {
     const guild = makeGuild(['se-rl', 'op-orphan-1', 'op-orphan-2']);
     findRLTrackedSEs.mockResolvedValue([
-      {
-        id: 404,
-        discordScheduledEventId: 'se-rl',
-        cancelledAt: new Date(Date.now() - 60 * 60 * 1000),
-        durationUpper: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      },
+      { id: 404, discordScheduledEventId: 'se-rl', isStale: true },
     ]);
 
     const result = await gcStaleRLScheduledEvents(guild, db);

@@ -189,8 +189,10 @@ export async function findReconciliationCandidates(
 export interface RLTrackedSERow {
   id: number;
   discordScheduledEventId: string;
-  cancelledAt: Date | null;
-  durationUpper: Date;
+  /** True when the SE should have been cleaned up already: the RL row is
+   *  cancelled OR its effective end (extendedUntil ?? upper(duration)) is more
+   *  than 1h in the past. Computed server-side to avoid timezone skew. */
+  isStale: boolean;
 }
 
 /**
@@ -198,9 +200,14 @@ export interface RLTrackedSERow {
  * seIds list. Used by gcStaleRLScheduledEvents to decide which guild SEs are
  * candidates for stale-deletion vs operator-orphans (ROK-1332).
  *
- * Returns id + seId + cancelledAt + the upper bound of the duration tsrange.
- * `durationUpper` is extracted via `upper()` so callers can compare against
- * wall-clock without parsing the postgres range string in JS.
+ * Staleness is computed IN SQL (not JS) for two reasons:
+ *   1. The `duration` tsrange and `extended_until` columns are timezone-less;
+ *      pulling `upper(duration)` as a string and `new Date()`-parsing it in JS
+ *      interprets it as local time → a multi-hour skew on the 1h comparison.
+ *   2. It mirrors the sibling reconciliation/completion queries by using
+ *      `COALESCE(extended_until, upper(duration))` so an auto-extended event
+ *      that is still live (members in voice past the original end) is NOT
+ *      treated as stale and its Discord SE is preserved.
  */
 export async function findRLTrackedSEs(
   db: PostgresJsDatabase<typeof schema>,
@@ -211,8 +218,11 @@ export async function findRLTrackedSEs(
     .select({
       id: schema.events.id,
       discordScheduledEventId: schema.events.discordScheduledEventId,
-      cancelledAt: schema.events.cancelledAt,
-      durationUpper: sql<Date>`upper(${schema.events.duration})`,
+      isStale: sql<boolean>`(
+        ${schema.events.cancelledAt} IS NOT NULL
+        OR COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))
+             < NOW() - INTERVAL '1 hour'
+      )`,
     })
     .from(schema.events)
     .where(
@@ -221,17 +231,10 @@ export async function findRLTrackedSEs(
         inArray(schema.events.discordScheduledEventId, seIds),
       ),
     );
-  // Drizzle returns durationUpper as a string under postgres-js — coerce to Date.
-  // The schema typing above documents intent; the runtime value is the raw
-  // postgres timestamptz string when read via `sql<Date>`.
   return rows.map((r) => ({
     id: r.id,
     discordScheduledEventId: r.discordScheduledEventId!,
-    cancelledAt: r.cancelledAt,
-    durationUpper:
-      r.durationUpper instanceof Date
-        ? r.durationUpper
-        : new Date(r.durationUpper as unknown as string),
+    isStale: r.isStale,
   }));
 }
 

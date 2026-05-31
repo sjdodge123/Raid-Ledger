@@ -9,10 +9,6 @@ import { tryDeleteEvent } from './scheduled-event.discord-ops';
 
 type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
-/** Grace window before a past-due (but never cancelled) event is considered stale.
- *  Matches the `completeScheduledEvents` cron's 5-min cadence × buffer (ROK-1332). */
-const STALE_PAST_DUE_GRACE_MS = 60 * 60 * 1000;
-
 /**
  * Sweep the guild's uncompleted scheduled events looking for RL-tracked rows
  * that should have been deleted/completed already (cancelled or >1h past
@@ -36,12 +32,9 @@ export async function gcStaleRLScheduledEvents(
   const rlIds = new Set(rlRows.map((r) => r.discordScheduledEventId));
   const orphanCount = seIds.length - rlIds.size;
 
-  const staleThreshold = new Date(Date.now() - STALE_PAST_DUE_GRACE_MS);
   let freed = 0;
   for (const row of rlRows) {
-    const isStale =
-      row.cancelledAt !== null || row.durationUpper < staleThreshold;
-    if (!isStale) continue;
+    if (!row.isStale) continue;
     await tryDeleteEvent(guild, row.id, row.discordScheduledEventId);
     await clearScheduledEventId(db, row.id);
     freed++;

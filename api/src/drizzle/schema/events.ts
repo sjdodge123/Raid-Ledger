@@ -132,7 +132,7 @@ export const events = pgTable(
       table.discordScheduledEventId,
     ),
     // ROK-1332: Actual DB index is partial (WHERE scheduled_event_reconcile_backoff_until
-    // IS NOT NULL) via migration 0143. Drizzle DSL doesn't support partial indexes natively.
+    // IS NOT NULL) via migration 0145. Drizzle DSL doesn't support partial indexes natively.
     index('idx_events_se_reconcile_backoff').on(
       table.scheduledEventReconcileBackoffUntil,
     ),
