@@ -9,6 +9,24 @@
 # Usage:
 #   ./scripts/validate-ci.sh             # Run all checks (e2e auto-scoped)
 #   ./scripts/validate-ci.sh --full      # Same (accepted for explicitness)
+#   ./scripts/validate-ci.sh --static    # FAST LITE GATE (default for most
+#                                        # stories): build + typecheck + lint
+#                                        # only, PLUS the conditional migration
+#                                        # and container checks (which auto-skip
+#                                        # when no migration/infra files
+#                                        # changed). Skips unit, integration,
+#                                        # Playwright, and Discord smoke —
+#                                        # those are deferred to GitHub CI,
+#                                        # which runs them sharded + randomized
+#                                        # on every PR. ~3-4 min vs ~20+ for
+#                                        # --full. Use when you want the cheap
+#                                        # deterministic gate that catches
+#                                        # compile/type/lint breaks (the
+#                                        # failures that waste a whole GitHub
+#                                        # cycle) and lets behavioral coverage
+#                                        # ride on GitHub. Migration/infra
+#                                        # changes still get full local
+#                                        # validation automatically.
 #   ./scripts/validate-ci.sh --ci        # Hard-fail on missing local prereqs
 #                                        # (e.g. pg_dump). Use in CI to ensure
 #                                        # backup integration tests never silently
@@ -106,6 +124,10 @@ ci_mode=false
 e2e_mode="auto"
 # only_e2e: when true, skip everything except the e2e steps
 only_e2e=false
+# static_mode (--static): lite gate — build + typecheck + lint + conditional
+# migration/container checks only. Skips unit, integration, and all e2e.
+# Behavioral coverage is deferred to GitHub CI. See the usage header.
+static_mode=false
 
 # ---------------------------------------------------------------------------
 # Result tracking helpers
@@ -911,6 +933,7 @@ main() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --full) shift ;;
+      --static) static_mode=true; shift ;;
       --ci) ci_mode=true; shift ;;
       --no-e2e) e2e_mode="off"; shift ;;
       --with-e2e) e2e_mode="on"; shift ;;
@@ -921,6 +944,16 @@ main() {
 
   if $only_e2e && [ "$e2e_mode" = "off" ]; then
     echo -e "${RED}--only-e2e and --no-e2e are mutually exclusive.${NC}"
+    exit 1
+  fi
+
+  if $static_mode && $only_e2e; then
+    echo -e "${RED}--static and --only-e2e are mutually exclusive (static skips all e2e).${NC}"
+    exit 1
+  fi
+
+  if $static_mode && [ "$e2e_mode" = "on" ]; then
+    echo -e "${RED}--static and --with-e2e are mutually exclusive (static skips all e2e).${NC}"
     exit 1
   fi
 
@@ -960,18 +993,31 @@ print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2])
     run_step "Build (all workspaces)" run_build
     run_step "TypeScript (all)" run_typecheck
     run_step "Lint (all)" run_lint
-    run_step "Unit tests + coverage" run_unit_tests
-    run_step "Integration tests (api)" run_integration_tests
 
-    # Migration and container checks handle their own SKIPPED/PASS/FAIL recording
+    # Unit + integration are the slow, behavioral checks. In --static (lite
+    # gate) mode they're deferred to GitHub CI, which runs them sharded +
+    # randomized on every PR. Full mode keeps them local.
+    if ! $static_mode; then
+      run_step "Unit tests + coverage" run_unit_tests
+      run_step "Integration tests (api)" run_integration_tests
+    fi
+
+    # Migration and container checks handle their own SKIPPED/PASS/FAIL
+    # recording. They run in BOTH static and full modes: cheap (auto-SKIP)
+    # when no migration/infra files changed, and critical local-validation
+    # carve-outs when they DID change — a bad migration can wedge a deploy
+    # and a bad allinone image caused a prod outage (CLAUDE.md STRICT).
     run_step "Migration validation" run_migration_validation
     run_step "Container startup" run_container_validation
   fi
 
   # E2E checks are auto-scoped (diff + env gated). They SKIP cleanly when the
   # diff doesn't touch their surface or when the dev env isn't running.
-  run_step "Playwright (desktop + mobile)" run_playwright_e2e
-  run_step "Discord smoke (companion bot)" run_discord_smoke
+  # In --static mode they're skipped entirely (deferred to GitHub CI).
+  if ! $static_mode; then
+    run_step "Playwright (desktop + mobile)" run_playwright_e2e
+    run_step "Discord smoke (companion bot)" run_discord_smoke
+  fi
 
   print_summary
   echo -e "${GREEN}All checks passed!${NC}"

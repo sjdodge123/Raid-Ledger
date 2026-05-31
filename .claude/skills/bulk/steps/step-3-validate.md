@@ -21,17 +21,19 @@ State: `gates.test_gaps: PASS` (or `FAIL`).
 
 ---
 
-## 3b. Static CI (one command)
+## 3b. Static CI (lite gate — one command)
 
 ```bash
-./scripts/validate-ci.sh --no-e2e
+./scripts/validate-ci.sh --static
 ```
 
-Covers build, TypeScript, lint, unit + coverage, integration, and conditional migration / container checks across all workspaces. `--no-e2e` defers Playwright + Discord smoke to 3g (after env verification).
+`--static` covers build, TypeScript, lint, and conditional migration / container checks across all workspaces (the latter two auto-skip unless the batch touched `drizzle/migrations/**` or infra files). Unit, integration, Playwright, and Discord smoke are **deferred to GitHub CI** (sharded + randomized on every PR; auto-merge-squash blocks until green). This is the lite gate by operator policy.
+
+**Escalate to `./scripts/validate-ci.sh --full`** (adds local unit + integration + auto-scoped e2e) when the batch touches `package.json`/`package-lock.json` (GitHub skips unit + integration for deps-only diffs), `packages/contract/**`, migrations, or container/infra — or is a large/cross-workspace batch where a post-push behavioral break would be costly, or when the operator asks.
 
 Fix failures directly on the batch branch (`fix: resolve <issue>`). If substantive (logic bug from a story), diagnose which story, fix or respawn dev.
 
-State: `gates.ci: PASS`, `gates.integration: PASS` (or FAIL) — map from the validate-ci summary table.
+State: `gates.ci: PASS` — map from the validate-ci summary table. `gates.integration` is `DEFERRED_TO_GITHUB` under the lite gate.
 
 ---
 
@@ -114,10 +116,10 @@ Batch of <N> stories: <list ROK-### with labels>.
 ## Validation
 - Per-story code review: PASS
 - Test gap analysis: PASS
-- Build / TypeScript / Lint: PASS
-- Unit tests: PASS
-- Integration tests: PASS
-- Playwright smoke (desktop + mobile): PASS
+- Build / TypeScript / Lint: PASS (local lite gate)
+- Unit tests: DEFERRED → GitHub CI (or PASS if `--full` was run locally)
+- Integration tests: DEFERRED → GitHub CI (or PASS if `--full` was run locally)
+- Playwright smoke (desktop + mobile): DEFERRED → GitHub CI (Chrome MCP e2e is the local browser gate below)
 - Chrome MCP e2e: PASS — see `planning-artifacts/chrome-mcp-summary-batch-YYYY-MM-DD.md`
 
 ## Stories
@@ -138,9 +140,9 @@ pipeline:
   next_action: "PR created. Read step-4-ship.md."
   gates:
     test_gaps: PASS
-    ci: PASS
-    integration: PASS
-    smoke: PASS
+    ci: PASS                      # build/tsc/lint (lite --static gate)
+    integration: DEFERRED_TO_GITHUB   # or PASS if --full was run locally
+    smoke: DEFERRED_TO_GITHUB         # Playwright/Discord; Chrome MCP is the local browser gate
     chrome_mcp_e2e: PASS   # or "N/A — api-internal-only"
     pr: PENDING
 ```

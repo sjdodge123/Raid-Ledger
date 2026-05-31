@@ -26,21 +26,24 @@ A failing test exists per the brief. Your primary job: make it pass. Do not cons
 
 ### CI Scope — pick based on what you touched
 
-Determine `ci_scope` from the files you actually modified:
+Determine `ci_scope` from the files you actually modified. **The default is the lite `--static` gate** (build + typecheck + lint, ~3–4 min). Unit, integration, Playwright, and Discord smoke are deferred to GitHub CI, which runs them sharded + randomized on every PR — GitHub is the real gate (auto-merge-squash blocks the merge until green). Only the high-blast-radius carve-outs below run `--full` locally:
 
 | Touched | ci_scope | Commands |
 |---------|----------|----------|
-| `packages/contract/**` | `full` | `./scripts/validate-ci.sh --full` |
+| `packages/contract/**` | `full` | `./scripts/validate-ci.sh --full` (cross-workspace blast radius) |
+| `package.json` / `package-lock.json` (any workspace/root) | `full` | `./scripts/validate-ci.sh --full` (GitHub skips unit + integration for deps-only diffs) |
 | `Dockerfile*`, `docker-entrypoint.sh`, `nginx/**` | `full` | `./scripts/validate-ci.sh --full` (runs container-startup) |
 | DB migration added (`api/src/drizzle/migrations/**`) | `full` | `./scripts/validate-ci.sh --full` (runs validate-migrations) |
 | `tools/**` or `scripts/**` | `full` | `./scripts/validate-ci.sh --full` |
 | Both `api/` and `web/` source | `full` | `./scripts/validate-ci.sh --full` |
-| `api/` source only | `api` | `npm run build -w api && npx tsc --noEmit -p api/tsconfig.json && npm run lint -w api && npm run test -w api && npm run test:integration -w api` |
-| `web/` source only | `web` | `npm run build -w web && npx tsc --noEmit -p web/tsconfig.json && npm run lint -w web && npm run test -w web` |
-| Test files only | `tests` | `npm run test -w <workspace>` for the affected workspace |
+| `api/` source only | `static` | `./scripts/validate-ci.sh --static` |
+| `web/` source only | `static` | `./scripts/validate-ci.sh --static` |
+| Test files only | `static` | `./scripts/validate-ci.sh --static` |
 | Docs only (`*.md`) | `docs` | lint (if any lint rule covers md) |
 
-**When in doubt, run `full`.** The scope is your judgment — Lead will verify. If you ran `full`, Lead trusts and skips re-running CI. If you ran a narrower scope, Lead may run `full` anyway if risk signals appear (contract touched but not listed, migration file in diff, etc.).
+Note: `--static` already runs the conditional migration + container checks, so even an `api`-only diff that happens to touch a migration gets that validation — but adding a migration is itself a `full` row above, so prefer `full` when you authored one.
+
+**When in doubt, run `--static`.** The scope is your judgment — Lead will verify. Escalate to `full` only on a risk signal (contract, `package.json`/`package-lock.json`, migration, container/infra, tools/scripts, or both api+web changed). If you ran the appropriate scope, Lead trusts it; Lead may still run `--full` if a risk signal appears that you didn't flag (contract touched but not listed, migration file in diff, etc.).
 
 ### Workflow
 
@@ -68,7 +71,7 @@ Send this short report via `SendMessage` to `team-lead`. Detailed output (full r
 ```
 ## ROK-XXX dev complete
 
-ci_scope: <full | api | web | tests | docs>
+ci_scope: <full | static | docs>
 rework_scope: <trivial | material | N/A>
 
 CI: <one line — "all PASS" or list failures>

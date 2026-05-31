@@ -127,9 +127,9 @@ Present to the operator:
 - Build: PASS
 - TypeScript: PASS
 - Lint: PASS
-- Unit tests: PASS
-- Integration tests: PASS
-- Playwright smoke (desktop + mobile): PASS
+- Unit tests: DEFERRED → GitHub CI (or PASS if `--full` was run locally)
+- Integration tests: DEFERRED → GitHub CI (or PASS if `--full` was run locally)
+- Playwright smoke (desktop + mobile): DEFERRED → GitHub CI
 - **Chrome MCP e2e:** PASS — `planning-artifacts/chrome-mcp-summary-fix-batch-YYYY-MM-DD.md` (N flows exercised, M screenshots)
 - Reviewer (sonnet): APPROVED
 
