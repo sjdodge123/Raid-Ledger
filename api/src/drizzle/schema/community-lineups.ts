@@ -108,6 +108,16 @@ export const communityLineups = pgTable('community_lineups', {
    * so a flip of `publicShareEnabled` restores access via the same URL.
    */
   publicSlug: varchar('public_slug', { length: 16 }).notNull().unique(),
+  /**
+   * Whether the lineup advances into a scheduling poll after Decided
+   * (ROK-1302). Default true preserves the original behavior and backfills
+   * existing rows. When false, the matching algorithm never promotes a match
+   * to 'scheduling', the bandwagon/advance paths refuse promotion, the
+   * scheduling poll page 404s, and the decided UI hides the "Pick a time" CTA.
+   */
+  includeSchedulingPhase: boolean('include_scheduling_phase')
+    .notNull()
+    .default(true),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
