@@ -3,8 +3,29 @@ import { perfLog } from '../../common/perf-logger';
 /** Discord API error code for "Unknown Scheduled Event" (manually deleted). */
 export const UNKNOWN_SCHEDULED_EVENT = 10070;
 
+/** Discord API error code 30038 — guild has hit its 100 uncompleted scheduled
+ *  events cap (ROK-1332). */
+export const MAX_SCHEDULED_EVENTS_REACHED = 30038;
+
 /** Maximum description length for Discord Scheduled Events. */
 export const MAX_DESCRIPTION_LENGTH = 1000;
+
+/**
+ * Thrown by `withCapacityRecovery` when GC ran but freed 0 stale RL-tracked
+ * scheduled events — the cap is held by operator-owned SEs that RL can't
+ * touch. The reconciliation cron catches this to apply per-event backoff
+ * and emit a single WARN per tick instead of one per candidate (ROK-1332).
+ */
+export class CapacityStillSaturatedError extends Error {
+  readonly orphanCount: number;
+  constructor(orphanCount: number) {
+    super(
+      `Discord scheduled-event capacity still saturated after GC (orphanCount=${orphanCount})`,
+    );
+    this.name = 'CapacityStillSaturatedError';
+    this.orphanCount = orphanCount;
+  }
+}
 
 /** Timeout (ms) for individual Discord API calls (ROK-685, ROK-969). */
 const parsed = parseInt(process.env.DISCORD_API_TIMEOUT_MS ?? '5000', 10);

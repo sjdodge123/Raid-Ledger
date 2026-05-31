@@ -36,6 +36,7 @@ import {
   tryEditFullEvent,
   resolveVoiceForEdit,
 } from './scheduled-event.discord-ops';
+import { withCapacityRecovery } from './scheduled-event.capacity';
 
 async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
   return buildDescriptionText(id, d, await s.getClientUrl());
@@ -294,8 +295,13 @@ export class ScheduledEventService {
       return;
     }
     const d = await desc(this.settingsService, eventId, eventData);
-    const se = await tryCreateNewEvent(guild, eventId, eventData, vc, d);
-    await saveScheduledEventId(this.db, eventId, se.id);
+    // ROK-1332: wrap the API-create + DB-save pair so a 30038 triggers a
+    // single GC sweep + retry. Preamble (voice channel, description) is
+    // outside the wrapper so GC doesn't re-run if the retry succeeds.
+    await withCapacityRecovery(guild, this.db, this.logger, async () => {
+      const se = await tryCreateNewEvent(guild, eventId, eventData, vc, d);
+      await saveScheduledEventId(this.db, eventId, se.id);
+    });
   }
 
   private async tryEdit(
