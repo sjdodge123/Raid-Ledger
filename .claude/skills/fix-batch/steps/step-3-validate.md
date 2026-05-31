@@ -26,7 +26,7 @@ git checkout fix/batch-YYYY-MM-DD
 
 `--static` runs build (all workspaces), TypeScript, lint, and conditional migration / container checks (the latter two auto-skip unless the batch touched `drizzle/migrations/**` or infra files). Unit, integration, Playwright, and Discord smoke are **deferred to GitHub CI**, which runs them sharded + randomized on every PR — GitHub is the real gate (auto-merge-squash blocks until green). This is the lite gate by operator policy: catch the cheap deterministic breaks locally, let GitHub catch behavioral regressions.
 
-**Escalate to `./scripts/validate-ci.sh --no-e2e`** (adds local unit + integration) only when the batch is a large/cross-workspace refactor where you'd rather not discover a behavioral break post-push, or when the operator asks.
+**Escalate to `./scripts/validate-ci.sh --full`** (adds local unit + integration + auto-scoped e2e) when the batch touches `package.json`/`package-lock.json` (GitHub skips unit + integration for deps-only diffs), `packages/contract/**`, migrations, or container/infra — or is a large/cross-workspace refactor where you'd rather not discover a behavioral break post-push, or when the operator asks.
 
 On failure (script stops at first FAIL — read its summary table):
 - **Trivial** (lint, type error, import path): fix directly, commit `fix: resolve <issue>`.
@@ -229,9 +229,9 @@ pipeline:
     All validation passed on batch branch. Read steps/step-4-ship.md.
     Create PR, enable auto-merge, sync Linear, cleanup.
   gates:
-    ci: PASS
-    integration: PASS
-    playwright: PASS
+    ci: PASS                          # build/tsc/lint (lite --static gate)
+    integration: DEFERRED_TO_GITHUB   # or PASS if --full was run locally
+    playwright: DEFERRED_TO_GITHUB    # Chrome MCP is the local browser gate
     chrome_mcp_e2e: PASS
     review: PASS
     test_gaps: PASS

@@ -339,6 +339,7 @@ In ambiguous cases: run the protocol anyway. The cost is 7 minutes; the rework c
 
 **Escalate to `./scripts/validate-ci.sh --full`** (the complete local suite) only when:
 - The diff touches `drizzle/migrations/**` or container/infra (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — high blast radius; `--static` already runs the migration + allinone validation for these, `--full` adds local unit/integration/e2e on top.
+- The diff touches `package.json` / `package-lock.json` (any workspace or root). GitHub's path filter treats dependency files as `code` (lint) but NOT `api`/`web`, so GitHub **skips unit + integration** for a deps-only change. `--static` would defer behavioral coverage to a job that never runs and auto-merge could land a dependency regression untested — run `--full` so unit + integration execute locally.
 - It's a `packages/contract/**` change or a large cross-workspace refactor where a post-push behavioral break would be costly.
 - The operator explicitly asks for a full local run.
 

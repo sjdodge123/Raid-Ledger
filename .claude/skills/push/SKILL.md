@@ -117,38 +117,53 @@ If Step 1.5 determined "docs-only" → skip steps 4–8, jump to Step 9.
 
 ### Steps 4–7: Build, Typecheck, Lint, Tests, Migration & Container Validation
 
-#### Cache check — skip if validate-ci passed in the last 5 min on this commit
+#### Pick the gate tier first (STRICT — default is the lite `--static` gate)
 
-Before running, check for a fresh marker:
+GitHub CI runs the full suite (build, tsc, lint, unit, integration sharded 3×3 + randomized, Playwright 5-shard desktop+mobile, Discord smoke) on **every** PR, and auto-merge-squash blocks the merge until it's green. GitHub *is* the real gate. The local run exists only to catch the cheap, deterministic failures that would otherwise waste a whole GitHub cycle and leave a red PR to babysit.
+
+So for **most stories**, run the **lite gate** — `--static`: build + typecheck + lint, plus the conditional migration/container checks (which auto-skip when no migration/infra files changed). It defers unit/integration/Playwright/Discord smoke to GitHub. ~3–4 min vs ~20+ for `--full`.
+
+Use `--static` by default. Escalate to `--full` only when:
+- The diff touches **`drizzle/migrations/**`** or **container/infra** (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — note `--static` already runs the migration + allinone validation for these; `--full` additionally adds local unit/integration/e2e, worth it for these high-blast-radius changes.
+- The diff touches **`package.json` / `package-lock.json`** (any workspace, or root). GitHub's path filter classifies dependency files as `code` (lint runs) but NOT `api`/`web`, so GitHub **skips both unit and integration suites** for a deps-only change — `--static` would defer behavioral coverage to a job that never runs, and auto-merge could land a dependency regression untested. `--full` runs unit + integration locally to close that gap.
+- It's a **large/cross-workspace refactor** where you'd rather not discover a behavioral break on GitHub after the fact.
+- The operator explicitly asks for a full local run.
+
+```bash
+# Auto-detect the deps/migration/infra/contract risk signals against origin/main.
+CHANGED="$(git diff --name-only origin/main...HEAD)"
+if echo "$CHANGED" | grep -qE '(^|/)package(-lock)?\.json$|drizzle/migrations/|Dockerfile|nginx/|docker-entrypoint|^packages/contract/'; then
+  GATE_DEFAULT="--full"
+else
+  GATE_DEFAULT="--static"
+fi
+# An explicit GATE env always wins (operator forces --full, or --static on a
+# large refactor they accept). Otherwise use the auto-detected tier.
+GATE="${GATE:-$GATE_DEFAULT}"
+TIER="${GATE#--}"   # "static" | "full"
+```
+
+#### Cache check — skip if validate-ci passed in the last 5 min on this commit AT THIS TIER OR HIGHER
 
 ```bash
 HEAD_SHA=$(git rev-parse HEAD)
-MARKER="/tmp/.validate-ci-pass-${HEAD_SHA}"
-if [ -f "$MARKER" ] && [ $(( $(date +%s) - $(stat -f %m "$MARKER" 2>/dev/null || stat -c %Y "$MARKER") )) -lt 300 ]; then
-  echo "✓ validate-ci.sh passed <5min ago for HEAD=${HEAD_SHA:0:7}; skipping re-run"
+MARKER="/tmp/.validate-ci-pass-${HEAD_SHA}-${TIER}"        # tier-specific marker we'll write on success
+FULL_MARKER="/tmp/.validate-ci-pass-${HEAD_SHA}-full"      # a --full pass is a superset of --static
+
+_fresh() { [ -f "$1" ] && [ $(( $(date +%s) - $(stat -f %m "$1" 2>/dev/null || stat -c %Y "$1") )) -lt 300 ]; }
+
+# A --full pass satisfies BOTH a later --full and --static request (it's a superset).
+# A --static pass satisfies ONLY a later --static request — it must NOT short-circuit
+# a --full request, or unit/integration/e2e would never run. (Codex P2 fix.)
+if _fresh "$FULL_MARKER" || { [ "$TIER" = "static" ] && _fresh "$MARKER"; }; then
+  echo "✓ validate-ci.sh (≥${TIER}) passed <5min ago for HEAD=${HEAD_SHA:0:7}; skipping re-run"
   SKIP_VALIDATE_CI=1
 else
   SKIP_VALIDATE_CI=0
 fi
 ```
 
-The marker is invalidated automatically by HEAD changing — any new commit produces a different SHA and forces a re-run. Skip is purely time-based on the same commit.
-
-#### Pick the gate tier (STRICT — default is the lite `--static` gate)
-
-GitHub CI runs the full suite (build, tsc, lint, unit, integration sharded 3×3 + randomized, Playwright 5-shard desktop+mobile, Discord smoke) on **every** PR, and auto-merge-squash blocks the merge until it's green. GitHub *is* the real gate. The local run exists only to catch the cheap, deterministic failures that would otherwise waste a whole GitHub cycle and leave a red PR to babysit.
-
-So for **most stories**, run the **lite gate** — `--static`: build + typecheck + lint, plus the conditional migration/container checks (which auto-skip when no migration/infra files changed). It defers unit/integration/Playwright/Discord smoke to GitHub. ~3–4 min vs ~20+ for `--full`.
-
-Use `GATE=--static` by default. Escalate to `GATE=--full` only when:
-- The diff touches **`drizzle/migrations/**`** or **container/infra** (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — note `--static` already runs the migration + allinone validation for these; `--full` additionally adds local unit/integration/e2e, worth it for these high-blast-radius changes.
-- It's a **large/cross-workspace refactor** where you'd rather not discover a behavioral break on GitHub after the fact.
-- The operator explicitly asks for a full local run.
-
-```bash
-# Default: lite gate. Override to --full for the cases above.
-GATE="${GATE:---static}"
-```
+The marker is invalidated automatically by HEAD changing — any new commit produces a different SHA and forces a re-run. Skip is time-based AND tier-aware: a prior `--static` pass never satisfies a `--full` request.
 
 #### Run validate-ci on the FLEET (or skip)
 
@@ -280,10 +295,13 @@ gh pr create \
 ROK-<num>
 
 ## Test plan
-- [x] `validate-ci.sh --full` passes (build, typecheck, lint, tests+coverage, integration)
+<!-- Fill from the ACTUAL gate you ran ($GATE). Do NOT check off what you didn't run. -->
+<!-- Lite gate (--static): only build/tsc/lint ran locally; behavioral coverage is GitHub's job. -->
+- [x] `validate-ci.sh <GATE>` passes locally (build, typecheck, lint)
+- [ ] Unit + integration: run via `--full` locally, else **deferred to GitHub CI** (check the box only if `--full` was run)
 - [x] Migration validation passes (if applicable)
 - [x] Container startup passes (if applicable)
-- [x] Playwright smoke tests pass (if applicable)
+- [ ] Playwright smoke: run via `--full` locally, else **deferred to GitHub CI**
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 PREOF

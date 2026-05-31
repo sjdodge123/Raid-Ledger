@@ -31,6 +31,7 @@ Determine `ci_scope` from the files you actually modified. **The default is the 
 | Touched | ci_scope | Commands |
 |---------|----------|----------|
 | `packages/contract/**` | `full` | `./scripts/validate-ci.sh --full` (cross-workspace blast radius) |
+| `package.json` / `package-lock.json` (any workspace/root) | `full` | `./scripts/validate-ci.sh --full` (GitHub skips unit + integration for deps-only diffs) |
 | `Dockerfile*`, `docker-entrypoint.sh`, `nginx/**` | `full` | `./scripts/validate-ci.sh --full` (runs container-startup) |
 | DB migration added (`api/src/drizzle/migrations/**`) | `full` | `./scripts/validate-ci.sh --full` (runs validate-migrations) |
 | `tools/**` or `scripts/**` | `full` | `./scripts/validate-ci.sh --full` |
@@ -42,7 +43,7 @@ Determine `ci_scope` from the files you actually modified. **The default is the 
 
 Note: `--static` already runs the conditional migration + container checks, so even an `api`-only diff that happens to touch a migration gets that validation — but adding a migration is itself a `full` row above, so prefer `full` when you authored one.
 
-**When in doubt, run `--static`.** The scope is your judgment — Lead will verify. Escalate to `full` only on a risk signal (contract, migration, container/infra, tools/scripts, or both api+web changed). If you ran the appropriate scope, Lead trusts it; Lead may still run `--full` if a risk signal appears that you didn't flag (contract touched but not listed, migration file in diff, etc.).
+**When in doubt, run `--static`.** The scope is your judgment — Lead will verify. Escalate to `full` only on a risk signal (contract, `package.json`/`package-lock.json`, migration, container/infra, tools/scripts, or both api+web changed). If you ran the appropriate scope, Lead trusts it; Lead may still run `--full` if a risk signal appears that you didn't flag (contract touched but not listed, migration file in diff, etc.).
 
 ### Workflow
 

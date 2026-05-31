@@ -72,6 +72,7 @@ Dev agents self-scope CI based on what they touched (see `dev.md` CI Scope table
 1. Read the dev's "CI Scope" output: `ci_scope` value and reason.
 2. Cross-check `ci_scope` against the actual diff: `cd <worktree> && git diff main..HEAD --name-only`. Risk signals that demand `full`:
    - Any `packages/contract/**` file
+   - Any `package.json` / `package-lock.json` (GitHub skips unit + integration for deps-only diffs — must run `--full` locally)
    - Any `Dockerfile*`, `docker-entrypoint.sh`, `nginx/**`
    - New migration file in `api/src/drizzle/migrations/`
    - Both `api/src/**` and `web/src/**` changed
