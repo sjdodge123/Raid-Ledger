@@ -86,9 +86,11 @@ function buildHeroProps(
 function YourMatches({
   matches,
   lineupId,
+  schedulingEnabled,
 }: {
   matches: MatchDetailResponseDto[];
   lineupId: number;
+  schedulingEnabled: boolean;
 }): JSX.Element | null {
   if (matches.length === 0) return null;
   return (
@@ -97,7 +99,13 @@ function YourMatches({
         Your matches ({matches.length})
       </div>
       {matches.map((m) => (
-        <MatchCard key={m.id} match={m} lineupId={lineupId} isPersonal />
+        <MatchCard
+          key={m.id}
+          match={m}
+          lineupId={lineupId}
+          isPersonal
+          schedulingEnabled={schedulingEnabled}
+        />
       ))}
     </section>
   );
@@ -106,9 +114,11 @@ function YourMatches({
 function OtherMatches({
   matches,
   lineupId,
+  schedulingEnabled,
 }: {
   matches: MatchDetailResponseDto[];
   lineupId: number;
+  schedulingEnabled: boolean;
 }): JSX.Element | null {
   if (matches.length === 0) return null;
   return (
@@ -122,6 +132,7 @@ function OtherMatches({
           match={m}
           lineupId={lineupId}
           isPersonal={false}
+          schedulingEnabled={schedulingEnabled}
         />
       ))}
     </section>
@@ -166,8 +177,16 @@ export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
         sub={hero.sub}
         hint="Tap any game to learn more before scheduling."
       />
-      <YourMatches matches={mine} lineupId={lineup.id} />
-      <OtherMatches matches={others} lineupId={lineup.id} />
+      <YourMatches
+        matches={mine}
+        lineupId={lineup.id}
+        schedulingEnabled={lineup.includeSchedulingPhase}
+      />
+      <OtherMatches
+        matches={others}
+        lineupId={lineup.id}
+        schedulingEnabled={lineup.includeSchedulingPhase}
+      />
       <LeftoverVotersRow leftoverCount={leftover} />
       <CarriedForwardSection entries={carriedForward} />
     </div>

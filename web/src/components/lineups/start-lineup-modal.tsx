@@ -1,7 +1,12 @@
 /**
- * Start Lineup modal with configurable duration fields (ROK-946),
- * per-lineup title + description (ROK-1063),
- * and optional per-lineup Discord channel override (ROK-1064).
+ * Start Lineup modal (ROK-946 / 1063 / 1064).
+ *
+ * ROK-1302 (S4): collapsed from 10 visible controls to 5 — Title + Preset
+ * chooser + Match Threshold + Votes per Player + Include-scheduling toggle.
+ * The other 6 (description, visibility, share link, channel, phase durations,
+ * tiebreaker) live behind a "More options" expander. The preset chooser writes
+ * canonical match-shape + phase-duration values; the scheduling toggle controls
+ * whether the lineup advances into a scheduling poll after Decided.
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +25,13 @@ import {
   DescriptionField,
   TiebreakerPicker,
 } from './start-lineup-sliders';
+import {
+  PresetChooser,
+  SchedulingPhaseToggle,
+  PlayerCapsNote,
+  MoreOptions,
+} from './start-lineup-presets';
+import { LINEUP_PRESETS, type PresetKey } from './start-lineup-config';
 
 interface Props {
   isOpen: boolean;
@@ -59,6 +71,43 @@ function useDurationState() {
   };
 }
 
+/** Build the create-lineup mutation payload from the modal's form state. */
+function buildCreatePayload(state: {
+  title: string;
+  description: string;
+  durations: ReturnType<typeof useDurationState>;
+  channelOverrideId: string;
+  visibility: 'public' | 'private';
+  inviteeUserIds: number[];
+  publicShareEnabled: boolean;
+  includeSchedulingPhase: boolean;
+}) {
+  const { durations } = state;
+  return {
+    title: state.title.trim(),
+    description: state.description.trim() === '' ? null : state.description,
+    buildingDurationHours: durations.building,
+    votingDurationHours: durations.voting,
+    matchThreshold: durations.matchThreshold,
+    votesPerPlayer: durations.votesPerPlayer,
+    defaultTiebreakerMode: durations.tiebreakerMode,
+    // ROK-1302: always sent so the toggle's state is explicit server-side.
+    includeSchedulingPhase: state.includeSchedulingPhase,
+    // ROK-1064: empty string → omit (use community default).
+    ...(state.channelOverrideId
+      ? { channelOverrideId: state.channelOverrideId }
+      : {}),
+    // ROK-1065: only send when non-default.
+    ...(state.visibility === 'private'
+      ? { visibility: state.visibility, inviteeUserIds: state.inviteeUserIds }
+      : {}),
+    // ROK-1067: send the toggle so a public lineup can opt out at create.
+    ...(state.visibility === 'public'
+      ? { publicShareEnabled: state.publicShareEnabled }
+      : { publicShareEnabled: false }),
+  };
+}
+
 export function StartLineupModal({ isOpen, onClose }: Props) {
   const navigate = useNavigate();
   const createLineup = useCreateLineup();
@@ -69,10 +118,40 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
   // ROK-1065: visibility + invitees.
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [inviteeUserIds, setInviteeUserIds] = useState<number[]>([]);
-  // ROK-1067: public-share toggle. Default ON for public lineups; the
-  // server force-disables the field for private lineups, but we hide it
-  // in the UI so an operator can't toggle into the rejected combo.
+  // ROK-1067: public-share toggle (default ON; forced false for private).
   const [publicShareEnabled, setPublicShareEnabled] = useState<boolean>(true);
+  // ROK-1302: preset selection + scheduling-phase opt-in (default ON).
+  const [preset, setPreset] = useState<PresetKey>('custom');
+  const [includeSchedulingPhase, setIncludeSchedulingPhase] =
+    useState<boolean>(true);
+
+  function applyPreset(key: PresetKey): void {
+    setPreset(key);
+    if (key === 'custom') return;
+    const p = LINEUP_PRESETS[key];
+    durations.setMatchThreshold(p.matchThreshold);
+    durations.setVotesPerPlayer(p.votesPerPlayer);
+    durations.setBuilding(p.buildingDurationHours);
+    durations.setVoting(p.votingDurationHours);
+  }
+
+  // Any manual match-shape / duration edit drops the preset back to Custom.
+  function onThreshold(v: number): void {
+    durations.setMatchThreshold(v);
+    setPreset('custom');
+  }
+  function onVotes(v: number): void {
+    durations.setVotesPerPlayer(v);
+    setPreset('custom');
+  }
+  function onBuilding(v: number | ''): void {
+    durations.setBuilding(v);
+    setPreset('custom');
+  }
+  function onVoting(v: number | ''): void {
+    durations.setVoting(v);
+    setPreset('custom');
+  }
 
   const canSubmit =
     title.trim() !== '' &&
@@ -89,29 +168,24 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
       return;
     }
     try {
-      const result = await createLineup.mutateAsync({
-        title: trimmed,
-        description: description.trim() === '' ? null : description,
-        buildingDurationHours: durations.building,
-        votingDurationHours: durations.voting,
-        matchThreshold: durations.matchThreshold,
-        votesPerPlayer: durations.votesPerPlayer,
-        defaultTiebreakerMode: durations.tiebreakerMode,
-        // ROK-1064: empty string → omit the field (use community default).
-        ...(channelOverrideId ? { channelOverrideId } : {}),
-        // ROK-1065: only send when non-default.
-        ...(visibility === 'private'
-          ? { visibility, inviteeUserIds }
-          : {}),
-        // ROK-1067: send the toggle so a public lineup can opt out at create.
-        ...(visibility === 'public'
-          ? { publicShareEnabled }
-          : { publicShareEnabled: false }),
-      });
+      const result = await createLineup.mutateAsync(
+        buildCreatePayload({
+          title,
+          description,
+          durations,
+          channelOverrideId,
+          visibility,
+          inviteeUserIds,
+          publicShareEnabled,
+          includeSchedulingPhase,
+        }),
+      );
       onClose();
       navigate(`/community-lineup/${result.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create lineup');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to create lineup',
+      );
     }
   }
 
@@ -119,56 +193,64 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
     <Modal isOpen={isOpen} onClose={onClose} title="Start Community Lineup">
       <div className="space-y-4">
         <TitleField value={title} onChange={setTitle} />
-        <DescriptionField value={description} onChange={setDescription} />
-        <VisibilityToggle value={visibility} onChange={setVisibility} />
-        {visibility === 'public' && (
-          <PublicShareToggle
-            enabled={publicShareEnabled}
-            onChange={setPublicShareEnabled}
-          />
-        )}
-        {visibility === 'private' && (
-          <InviteeMultiSelect
-            value={inviteeUserIds}
-            onChange={setInviteeUserIds}
-          />
-        )}
-        <LineupChannelOverrideSelect
-          value={channelOverrideId}
-          onChange={setChannelOverrideId}
-        />
-        <p className="text-sm text-muted">
-          Configure the duration for each phase. The lineup will automatically
-          advance through phases when time expires.
-        </p>
-        <DurationSlider
-          label="Building Phase"
-          name="buildingDurationHours"
-          testId="building-duration"
-          value={durations.building}
-          onChange={durations.setBuilding}
-        />
-        <DurationSlider
-          label="Voting Phase"
-          name="votingDurationHours"
-          testId="voting-duration"
-          value={durations.voting}
-          onChange={durations.setVoting}
-        />
+        <PresetChooser value={preset} onChange={applyPreset} />
         <div className="border-t border-edge/30 pt-4">
           <ThresholdSlider
             value={durations.matchThreshold}
-            onChange={durations.setMatchThreshold}
+            onChange={onThreshold}
           />
         </div>
         <VotesPerPlayerSlider
           value={durations.votesPerPlayer}
-          onChange={durations.setVotesPerPlayer}
+          onChange={onVotes}
         />
-        <TiebreakerPicker
-          value={durations.tiebreakerMode}
-          onChange={durations.setTiebreakerMode}
+        <PlayerCapsNote />
+        <SchedulingPhaseToggle
+          enabled={includeSchedulingPhase}
+          onChange={setIncludeSchedulingPhase}
         />
+        <MoreOptions>
+          <DescriptionField value={description} onChange={setDescription} />
+          <VisibilityToggle value={visibility} onChange={setVisibility} />
+          {visibility === 'public' && (
+            <PublicShareToggle
+              enabled={publicShareEnabled}
+              onChange={setPublicShareEnabled}
+            />
+          )}
+          {visibility === 'private' && (
+            <InviteeMultiSelect
+              value={inviteeUserIds}
+              onChange={setInviteeUserIds}
+            />
+          )}
+          <LineupChannelOverrideSelect
+            value={channelOverrideId}
+            onChange={setChannelOverrideId}
+          />
+          <p className="text-sm text-muted">
+            Configure the duration for each phase. The lineup automatically
+            advances through phases when time expires.
+          </p>
+          <DurationSlider
+            label="Building Phase"
+            name="buildingDurationHours"
+            testId="building-duration"
+            value={durations.building}
+            onChange={onBuilding}
+          />
+          <DurationSlider
+            label="Voting Phase"
+            name="votingDurationHours"
+            testId="voting-duration"
+            value={durations.voting}
+            onChange={onVoting}
+          />
+          <TiebreakerPicker
+            value={durations.tiebreakerMode}
+            onChange={durations.setTiebreakerMode}
+          />
+        </MoreOptions>
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"

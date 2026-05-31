@@ -14,6 +14,11 @@ interface MatchCardProps {
   lineupId: number;
   /** True if the authenticated user is a member of this match. */
   isPersonal: boolean;
+  /**
+   * ROK-1302: false when the lineup opted out of the scheduling phase — the
+   * "Pick a time →" CTA is hidden because no scheduling poll exists.
+   */
+  schedulingEnabled: boolean;
 }
 
 // Sub-line emits "personal context only" — the decided-view data does not carry
@@ -52,6 +57,7 @@ export function MatchCard({
   match,
   lineupId,
   isPersonal,
+  schedulingEnabled,
 }: MatchCardProps): JSX.Element {
   return (
     <div data-testid="decided-match-card" className="mb-2">
@@ -62,7 +68,9 @@ export function MatchCard({
         coverUrl={match.gameCoverUrl}
         sub={matchSubLine(match.members.length, isPersonal)}
       />
-      {isPersonal && <PickATimeCta lineupId={lineupId} matchId={match.id} />}
+      {isPersonal && schedulingEnabled && (
+        <PickATimeCta lineupId={lineupId} matchId={match.id} />
+      )}
     </div>
   );
 }
