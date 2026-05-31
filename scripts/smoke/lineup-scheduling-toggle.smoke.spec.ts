@@ -55,7 +55,12 @@ async function setupDecidedLineup(
     includeSchedulingPhase: boolean,
     label: string,
 ): Promise<number> {
-    const gameIds = await fetchGameIds(token, 2);
+    // Fetch a handful and dedupe — this DB can contain duplicate game rows that
+    // share an id-collision class, so slice(0,2) occasionally yields the same id
+    // twice (→ 409 "already nominated"). One distinct game is enough to form a
+    // single decided match for the CTA assertion.
+    const allIds = await fetchGameIds(token, 6);
+    const gameId = [...new Set(allIds)][0];
     const { id: lineupId } = await createLineupOrRetry(
         token,
         {
@@ -68,16 +73,17 @@ async function setupDecidedLineup(
         },
         workerPrefix,
     );
-    await Promise.all(
-        gameIds.map((gid) =>
-            apiPost(token, `/lineups/${lineupId}/nominate`, { gameId: gid }),
-        ),
-    );
+    // Tolerate a 409 (already nominated) so a flaky duplicate can't break setup.
+    try {
+        await apiPost(token, `/lineups/${lineupId}/nominate`, { gameId });
+    } catch (err) {
+        if (!String(err).includes('409')) throw err;
+    }
     await apiPatch(token, `/lineups/${lineupId}/status`, { status: 'voting' });
-    await apiPost(token, `/lineups/${lineupId}/vote`, { gameId: gameIds[0] });
+    await apiPost(token, `/lineups/${lineupId}/vote`, { gameId });
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'decided',
-        decidedGameId: gameIds[0],
+        decidedGameId: gameId,
     });
     return lineupId;
 }
