@@ -44,8 +44,7 @@ export async function buildMatchesForLineup(
   const [lineup] = await db
     .select({
       matchThreshold: schema.communityLineups.matchThreshold,
-      includeSchedulingPhase:
-        schema.communityLineups.includeSchedulingPhase,
+      includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))

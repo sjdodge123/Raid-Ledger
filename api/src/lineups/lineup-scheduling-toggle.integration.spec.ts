@@ -153,9 +153,9 @@ function describeSchedulingToggle() {
       includeSchedulingPhase: false,
     });
     const matches = await matchesFor(lineupId);
-    const slots = await testApp.db.select().from(
-      schema.communityLineupScheduleSlots,
-    );
+    const slots = await testApp.db
+      .select()
+      .from(schema.communityLineupScheduleSlots);
     const matchIds = new Set(matches.map((m) => m.id));
     expect(slots.filter((s) => matchIds.has(s.matchId))).toHaveLength(0);
   });
