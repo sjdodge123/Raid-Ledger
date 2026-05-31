@@ -91,6 +91,8 @@ export class SchedulingService {
           status: schema.communityLineups.status,
           createdBy: schema.communityLineups.createdBy,
           phaseDeadline: schema.communityLineups.phaseDeadline,
+          includeSchedulingPhase:
+            schema.communityLineups.includeSchedulingPhase,
         })
         .from(schema.communityLineups)
         .where(eq(schema.communityLineups.id, match.lineupId))
@@ -99,6 +101,12 @@ export class SchedulingService {
       findScheduleSlots(this.db, matchId),
       countUniqueVoters(this.db, matchId),
     ]);
+    // ROK-1302: a lineup that opted out of the scheduling phase has no poll —
+    // 404 the page (the decided UI already hides the CTA; this guards a
+    // hand-crafted URL or the lazy slot-create path).
+    if (lineup && lineup.includeSchedulingPhase === false) {
+      throw new NotFoundException('Scheduling is disabled for this lineup');
+    }
     const slotIds = slots.map((s) => s.id);
     const votes = await findScheduleVotes(this.db, slotIds);
     const conflictingSlotIds = userId

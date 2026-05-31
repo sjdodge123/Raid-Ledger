@@ -61,11 +61,18 @@ function deriveOriginalTotal(
   return Math.round((match.voteCount * 100) / pct);
 }
 
-/** Check and apply auto-promotion if threshold is reached. */
+/**
+ * Check and apply auto-promotion if threshold is reached.
+ *
+ * ROK-1302: `canSchedule` gates promotion — a lineup with the scheduling
+ * phase disabled must never auto-promote a late bandwagon join into
+ * 'scheduling'. The member still joins; the match just stays 'suggested'.
+ */
 async function checkAutoPromote(
   db: Db,
   match: typeof schema.communityLineupMatches.$inferSelect,
   threshold: number,
+  canSchedule: boolean,
 ): Promise<{ promoted: boolean; newMemberCount: number }> {
   const [countRow] = await countMatchMembers(db, match.id);
   const newMemberCount = countRow?.count ?? 0;
@@ -73,7 +80,8 @@ async function checkAutoPromote(
 
   if (totalVoters === 0) return { promoted: false, newMemberCount };
   const pct = (newMemberCount / totalVoters) * 100;
-  const shouldPromote = pct >= threshold && match.status === 'suggested';
+  const shouldPromote =
+    canSchedule && pct >= threshold && match.status === 'suggested';
 
   if (shouldPromote) {
     await promoteMatch(db, match.id);
@@ -107,21 +115,36 @@ export async function executeBandwagonJoin(
 
   await insertBandwagonMember(db, matchId, userId);
   const threshold = lineup.matchThreshold ?? 35;
+  // ROK-1302: respect the lineup's scheduling-phase opt-out.
   const { promoted, newMemberCount } = await checkAutoPromote(
     db,
     match,
     threshold,
+    lineup.includeSchedulingPhase ?? true,
   );
 
   return { matchId, promoted, newMemberCount };
 }
 
-/** Advance a suggested match to scheduling (operator action). */
+/**
+ * Advance a suggested match to scheduling (operator action).
+ *
+ * ROK-1302: refuses when the parent lineup disabled the scheduling phase —
+ * there is no scheduling poll to advance into, so promotion would strand a
+ * 'scheduling' match the UI never surfaces a CTA for.
+ */
 export async function advanceMatch(
   db: Db,
   lineupId: number,
   matchId: number,
 ): Promise<{ promoted: boolean }> {
+  const [lineup] = await findLineupById(db, lineupId);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  if (!(lineup.includeSchedulingPhase ?? true)) {
+    throw new BadRequestException(
+      'Scheduling phase is disabled for this lineup',
+    );
+  }
   const match = await validateMatchBelongsToLineup(db, matchId, lineupId);
   if (match.status !== 'suggested') {
     throw new BadRequestException('Match must be in suggested status');
