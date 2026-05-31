@@ -300,3 +300,103 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
         expect('inviteeUserIds' in body).toBe(false);
     });
 });
+
+// ROK-1302 (S4) — collapsed modal: 5 visible controls + preset chooser +
+// scheduling toggle, the other 6 behind a "More options" expander.
+describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
+    it('renders the 5 visible controls by default', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Title + Preset chooser + Match Threshold + Votes per Player + toggle.
+        expect(screen.getByLabelText(/title/i)).toBeInTheDocument();
+        expect(
+            screen.getByRole('radiogroup', { name: /lineup preset/i }),
+        ).toBeInTheDocument();
+        expect(screen.getByTestId('match-threshold')).toBeInTheDocument();
+        expect(screen.getByTestId('votes-per-player')).toBeInTheDocument();
+        expect(
+            screen.getByTestId('include-scheduling-phase'),
+        ).toBeInTheDocument();
+    });
+
+    it('keeps the other 6 controls hidden behind a collapsed expander', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Description lives inside the collapsed <details> → not visible.
+        const description = screen.getByLabelText(/description/i);
+        expect(description).not.toBeVisible();
+        // The expander summary is present.
+        expect(screen.getByText(/more options/i)).toBeInTheDocument();
+    });
+
+    it('reveals the hidden controls when "More options" is expanded', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        expect(screen.getByLabelText(/description/i)).toBeVisible();
+        expect(screen.getByTestId('building-duration')).toBeVisible();
+    });
+
+    it('include-scheduling toggle defaults to checked', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const toggle = screen.getByTestId(
+            'include-scheduling-phase',
+        ) as HTMLInputElement;
+        expect(toggle.checked).toBe(true);
+    });
+
+    it('sends includeSchedulingPhase=false when the toggle is unchecked', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('include-scheduling-phase'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            includeSchedulingPhase: false,
+        });
+    });
+
+    it('applies the Tonight preset to match-shape + durations', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('preset-tonight'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        // Tonight = 100% threshold / 3 votes / 0.25h building / 0.25h voting.
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            matchThreshold: 100,
+            votesPerPlayer: 3,
+            buildingDurationHours: 0.25,
+            votingDurationHours: 0.25,
+        });
+    });
+
+    it('applies the Series preset values', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('preset-series'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            matchThreshold: 20,
+            votesPerPlayer: 5,
+            buildingDurationHours: 96,
+            votingDurationHours: 72,
+        });
+    });
+});

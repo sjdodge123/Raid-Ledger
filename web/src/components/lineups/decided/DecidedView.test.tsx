@@ -506,6 +506,66 @@ describe('DecidedView — drawer interactions (AC6)', () => {
 
     expect(screen.queryByTestId('game-research-drawer')).toBeNull();
   });
+
+  // ROK-1302: scheduling-phase opt-out hides the "Pick a time" CTA.
+  it('hides the "Pick a time" CTA when includeSchedulingPhase is false', () => {
+    const lineup = createMockLineupDetail({
+      id: 1,
+      status: 'decided',
+      includeSchedulingPhase: false,
+    });
+    useLineupMatchesMock.mockReturnValue({
+      data: makeMatches({
+        scheduling: [
+          makeMatch({
+            id: 7,
+            lineupId: 1,
+            gameId: 42,
+            gameName: 'Valheim',
+            members: [makeMember({ id: 1, userId: 99 })],
+          }),
+        ],
+      }),
+      isLoading: false,
+    });
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    // The match still renders (personal section present) but no schedule CTA.
+    expect(
+      screen.getByTestId('decided-your-matches-section'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /pick a time/i }),
+    ).toBeNull();
+  });
+
+  // ROK-1302: default (true) still shows the CTA — guards against over-gating.
+  it('shows the "Pick a time" CTA when includeSchedulingPhase is true', () => {
+    const lineup = createMockLineupDetail({
+      id: 1,
+      status: 'decided',
+      includeSchedulingPhase: true,
+    });
+    useLineupMatchesMock.mockReturnValue({
+      data: makeMatches({
+        scheduling: [
+          makeMatch({
+            id: 7,
+            lineupId: 1,
+            gameId: 42,
+            gameName: 'Valheim',
+            members: [makeMember({ id: 1, userId: 99 })],
+          }),
+        ],
+      }),
+      isLoading: false,
+    });
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    expect(
+      screen.getByRole('link', { name: /pick a time/i }),
+    ).toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
