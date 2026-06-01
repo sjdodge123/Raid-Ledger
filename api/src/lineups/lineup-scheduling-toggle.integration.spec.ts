@@ -220,6 +220,59 @@ function describeSchedulingToggle() {
     expect(res.status).toBe(404);
   });
 
+  // -- Mutation gating (Codex P1: matches stay 'suggested' for opted-out) -----
+
+  it('refuses POST .../suggest for an opted-out lineup (no slot created)', async () => {
+    const { lineupId, gameA } = await buildDecidedLineup({
+      includeSchedulingPhase: false,
+    });
+    const [match] = (await matchesFor(lineupId)).filter(
+      (m) => m.gameId === gameA.id,
+    );
+    const future = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/schedule/${match.id}/suggest`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ proposedTime: future });
+    expect(res.status).toBe(404);
+    const slots = await testApp.db.select().from(
+      schema.communityLineupScheduleSlots,
+    );
+    expect(slots.filter((s) => s.matchId === match.id)).toHaveLength(0);
+  });
+
+  it('allows POST .../suggest for a scheduling-enabled lineup (control)', async () => {
+    const { lineupId, gameA } = await buildDecidedLineup();
+    const [match] = (await matchesFor(lineupId)).filter(
+      (m) => m.gameId === gameA.id,
+    );
+    const future = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/schedule/${match.id}/suggest`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ proposedTime: future });
+    expect(res.status).toBeLessThan(400);
+  });
+
+  // -- Carryover (Codex P2: terminal winners must not roll over) -------------
+
+  it('does NOT carry a terminal winner into the next public lineup', async () => {
+    const { gameA } = await buildDecidedLineup({
+      includeSchedulingPhase: false,
+    });
+    // Creating the next PUBLIC lineup triggers carryOverFromLastDecided.
+    const nextRes = await createLineup({ title: 'carryover-next' });
+    const nextId = nextRes.body.id as number;
+    const detail = await testApp.request
+      .get(`/lineups/${nextId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    const carriedGameIds = (detail.body.entries as { gameId: number }[]).map(
+      (e) => e.gameId,
+    );
+    // gameA was the terminal winner (suggested + thresholdMet) — must NOT roll.
+    expect(carriedGameIds).not.toContain(gameA.id);
+  });
+
   // -- Sub-hour duration round-trip -----------------------------------------
 
   it('persists a sub-hour building duration (Tonight = 0.25h)', async () => {
