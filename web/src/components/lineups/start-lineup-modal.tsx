@@ -192,25 +192,13 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Start Community Lineup">
       <div className="space-y-4">
+        {/* ROK-1302 (operator review): top-level = Title, Preset chooser,
+            Description, Visibility + audience. The Preset chooser is the visible
+            match-shape control; the raw Threshold/Votes sliders + scheduling
+            toggle live under "More options" for advanced tweaking. */}
         <TitleField value={title} onChange={setTitle} />
         <PresetChooser value={preset} onChange={applyPreset} />
-        <div className="border-t border-edge/30 pt-4">
-          <ThresholdSlider
-            value={durations.matchThreshold}
-            onChange={onThreshold}
-          />
-        </div>
-        <VotesPerPlayerSlider
-          value={durations.votesPerPlayer}
-          onChange={onVotes}
-        />
-        <PlayerCapsNote />
-        <SchedulingPhaseToggle
-          enabled={includeSchedulingPhase}
-          onChange={setIncludeSchedulingPhase}
-        />
-        {/* ROK-1302: visibility + invitees stay top-level (operator request) —
-            they decide WHO participates, same class as the scheduling toggle. */}
+        <DescriptionField value={description} onChange={setDescription} />
         <VisibilityToggle value={visibility} onChange={setVisibility} />
         {visibility === 'public' && (
           <PublicShareToggle
@@ -225,7 +213,21 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
           />
         )}
         <MoreOptions>
-          <DescriptionField value={description} onChange={setDescription} />
+          <div className="border-t border-edge/30 pt-4">
+            <ThresholdSlider
+              value={durations.matchThreshold}
+              onChange={onThreshold}
+            />
+          </div>
+          <VotesPerPlayerSlider
+            value={durations.votesPerPlayer}
+            onChange={onVotes}
+          />
+          <PlayerCapsNote />
+          <SchedulingPhaseToggle
+            enabled={includeSchedulingPhase}
+            onChange={setIncludeSchedulingPhase}
+          />
           <LineupChannelOverrideSelect
             value={channelOverrideId}
             onChange={setChannelOverrideId}

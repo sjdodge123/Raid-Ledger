@@ -158,14 +158,14 @@ test.describe('Lineup creation modal', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 15_000 });
 
-        // Match threshold slider is one of the 5 always-visible controls (ROK-1302).
+        // ROK-1302 (operator review): the Preset chooser is the visible
+        // match-shape control; Match Threshold + Votes per Player + phase
+        // durations moved behind "More options". Expand before asserting them.
+        await modal.getByText(/more options/i).click();
+
+        // Match threshold slider lives under the expander now.
         const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
         await expect(thresholdSlider).toBeVisible({ timeout: 5_000 });
-
-        // ROK-1302 (S4): the modal collapsed to 5 visible controls; phase
-        // durations now live behind the "More options" expander. Expand it
-        // before asserting the duration sliders are present.
-        await modal.getByText(/more options/i).click();
 
         // Duration sliders for building and voting should be present
         const buildingDuration = modal.locator('[data-testid="building-duration"]');

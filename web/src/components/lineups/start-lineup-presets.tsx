@@ -105,7 +105,8 @@ export function MoreOptions({ children }: { children: ReactNode }): JSX.Element 
       <summary className="cursor-pointer text-sm font-medium text-emerald-300 list-none flex items-center gap-1">
         <span aria-hidden>▶</span> More options
         <span className="text-xs text-muted font-normal">
-          (description, channel, phase durations, tiebreaker)
+          (match threshold, votes per player, scheduling, channel, phase
+          durations, tiebreaker)
         </span>
       </summary>
       <div className="space-y-4 pt-4">{children}</div>

@@ -301,43 +301,44 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
     });
 });
 
-// ROK-1302 (S4) — collapsed modal: 5 visible controls + preset chooser +
-// scheduling toggle, the other 6 behind a "More options" expander.
+// ROK-1302 (operator review) — top-level: Title, Preset chooser, Description,
+// Visibility + audience. Match Threshold / Votes per Player / scheduling toggle
+// + channel / durations / tiebreaker live behind a "More options" expander.
 describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
-    it('renders the 5 visible controls by default', () => {
+    it('renders the top-level controls by default', () => {
         renderWithProviders(
             <StartLineupModal isOpen={true} onClose={vi.fn()} />,
         );
-        // Title + Preset chooser + Match Threshold + Votes per Player + toggle.
-        expect(screen.getByLabelText(/title/i)).toBeInTheDocument();
+        // Title + Preset chooser + Description + Visibility are top-level.
+        expect(screen.getByLabelText(/title/i)).toBeVisible();
         expect(
             screen.getByRole('radiogroup', { name: /lineup preset/i }),
-        ).toBeInTheDocument();
-        expect(screen.getByTestId('match-threshold')).toBeInTheDocument();
-        expect(screen.getByTestId('votes-per-player')).toBeInTheDocument();
-        expect(
-            screen.getByTestId('include-scheduling-phase'),
-        ).toBeInTheDocument();
+        ).toBeVisible();
+        expect(screen.getByLabelText(/description/i)).toBeVisible();
+        expect(screen.getByTestId('visibility-public')).toBeVisible();
     });
 
-    it('keeps the other 6 controls hidden behind a collapsed expander', () => {
+    it('keeps match-shape + scheduling behind a collapsed expander', () => {
         renderWithProviders(
             <StartLineupModal isOpen={true} onClose={vi.fn()} />,
         );
-        // Description lives inside the collapsed <details> → not visible.
-        const description = screen.getByLabelText(/description/i);
-        expect(description).not.toBeVisible();
-        // The expander summary is present.
+        // Match Threshold + scheduling toggle now live in the collapsed
+        // <details> → present in the DOM but not visible until expanded.
+        expect(screen.getByTestId('match-threshold')).not.toBeVisible();
+        expect(
+            screen.getByTestId('include-scheduling-phase'),
+        ).not.toBeVisible();
         expect(screen.getByText(/more options/i)).toBeInTheDocument();
     });
 
-    it('reveals the hidden controls when "More options" is expanded', async () => {
+    it('reveals match-shape + duration controls when "More options" is expanded', async () => {
         const user = userEvent.setup();
         renderWithProviders(
             <StartLineupModal isOpen={true} onClose={vi.fn()} />,
         );
         await user.click(screen.getByText(/more options/i));
-        expect(screen.getByLabelText(/description/i)).toBeVisible();
+        expect(screen.getByTestId('match-threshold')).toBeVisible();
+        expect(screen.getByTestId('votes-per-player')).toBeVisible();
         expect(screen.getByTestId('building-duration')).toBeVisible();
     });
 
@@ -356,6 +357,8 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         renderWithProviders(
             <StartLineupModal isOpen={true} onClose={vi.fn()} />,
         );
+        // Toggle now lives under "More options" — expand before interacting.
+        await user.click(screen.getByText(/more options/i));
         await user.click(screen.getByTestId('include-scheduling-phase'));
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
