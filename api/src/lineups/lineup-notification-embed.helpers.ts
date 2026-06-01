@@ -16,6 +16,7 @@ import {
   resolveEmbedTitle,
   applyChrome,
 } from './lineup-notification-embed-chrome.helpers';
+import { decidedEmbedCopy } from './lineup-notification-decided-copy.helpers';
 
 /** Lineup phase for breadcrumb rendering. */
 export type LineupPhase = 'nominations' | 'voting' | 'decided';
@@ -30,6 +31,12 @@ export interface EmbedContext {
   lineupTitle?: string;
   /** Operator-authored markdown description (ROK-1063). */
   lineupDescription?: string | null;
+  /**
+   * ROK-1302: false when the lineup opted out of the scheduling phase — the
+   * decided embed uses terminal "results are in" copy instead of
+   * "ready to schedule". Defaults to true (undefined → scheduling enabled).
+   */
+  schedulingEnabled?: boolean;
 }
 
 /** Nomination entry for milestone embeds. */
@@ -173,29 +180,26 @@ export function buildDecidedEmbed(
   const scheduling = matches.filter((m) => m.thresholdMet);
   const rally = matches.filter((m) => !m.thresholdMet);
 
+  // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
+  const copy = decidedEmbedCopy(ctx.schedulingEnabled !== false);
   const descIntro = ctx.lineupDescription ? `${ctx.lineupDescription}\n\n` : '';
   const embed = new EmbedBuilder()
     .setTitle(resolveEmbedTitle(ctx, '\u{1F3AF}', 'Results Are In!'))
-    .setDescription(
-      descIntro +
-        'Voting is closed. Games that hit the vote threshold are ' +
-        '**ready to schedule** — pick a time and play. Games still short ' +
-        'on votes can rally more players and join the schedule.',
-    )
+    .setDescription(descIntro + copy.body)
     .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION);
 
   addPodiumField(embed, sorted, ctx);
   if (scheduling.length > 0) {
     const lines = scheduling.map((m) => gameLink(m, ctx));
     embed.addFields({
-      name: '\u2705 Ready to Schedule',
+      name: copy.schedulingFieldName,
       value: lines.join('\n'),
     });
   }
   if (rally.length > 0) {
     const lines = rally.map((m) => gameLink(m, ctx));
     embed.addFields({
-      name: '\u{1F91D} Almost There — Rally More Players',
+      name: copy.rallyFieldName,
       value: lines.join('\n'),
     });
   }

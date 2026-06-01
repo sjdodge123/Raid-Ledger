@@ -84,15 +84,21 @@ export async function sendMatchesFoundDM(
   const key = `lineup-decided-dm:${lineup.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
   const titleSuffix = lineup.title ? ` — ${lineup.title}` : '';
+  // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
+  const plural = matchCount === 1 ? '' : 'es';
+  const message =
+    lineup.includeSchedulingPhase === false
+      ? `Voting is closed on your private lineup. **${matchCount}** match` +
+        `${plural} decided — this lineup just picks the game, so there is ` +
+        'no scheduling poll.'
+      : `Voting is closed on your private lineup. **${matchCount}** match` +
+        `${plural} ready to schedule. Top picks will move into scheduling next.`;
 
   await notificationService.create({
     userId: member.userId,
     type: 'community_lineup',
     title: `Results are in${titleSuffix}`,
-    message:
-      `Voting is closed on your private lineup. **${matchCount}** match` +
-      `${matchCount === 1 ? '' : 'es'} ready to schedule. ` +
-      'Top picks will move into scheduling next.',
+    message,
     payload: {
       subtype: 'lineup_matches_found',
       lineupId: lineup.id,
