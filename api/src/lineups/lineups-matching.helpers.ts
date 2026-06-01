@@ -42,13 +42,19 @@ export async function buildMatchesForLineup(
   lineupId: number,
 ): Promise<void> {
   const [lineup] = await db
-    .select({ matchThreshold: schema.communityLineups.matchThreshold })
+    .select({
+      matchThreshold: schema.communityLineups.matchThreshold,
+      includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
+    })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
     .limit(1);
   if (!lineup) return;
 
   const threshold = lineup.matchThreshold ?? 35;
+  // ROK-1302: when scheduling is disabled, threshold-met matches must NOT
+  // enter 'scheduling' status — the lineup terminates at Decided.
+  const canSchedule = lineup.includeSchedulingPhase ?? true;
   const [voteCounts, voterRows] = await Promise.all([
     countVotesPerGame(db, lineupId),
     countDistinctVoters(db, lineupId),
@@ -66,7 +72,7 @@ export async function buildMatchesForLineup(
     if (totalVoters === 0) return;
     for (const vc of voteCounts) {
       if (vc.voteCount === 0) continue;
-      await insertMatch(tx, lineupId, vc, totalVoters, threshold);
+      await insertMatch(tx, lineupId, vc, totalVoters, threshold, canSchedule);
     }
   });
 }
@@ -98,10 +104,15 @@ async function insertMatch(
   vc: { gameId: number; voteCount: number },
   totalVoters: number,
   threshold: number,
+  canSchedule: boolean,
 ): Promise<void> {
   const pct = (vc.voteCount / totalVoters) * 100;
+  const thresholdMet = pct >= threshold;
+  // ROK-1302: `thresholdMet` always reflects the vote math so the info isn't
+  // lost; `status` only reaches 'scheduling' when the lineup opted into the
+  // scheduling phase. Flag OFF → every match stays 'suggested' (terminal).
   const status: 'scheduling' | 'suggested' =
-    pct >= threshold ? 'scheduling' : 'suggested';
+    canSchedule && thresholdMet ? 'scheduling' : 'suggested';
   const fitCategory = await computeFitCategory(tx, vc.gameId, vc.voteCount);
 
   // ROK-1306: with the wipe above, the unique (lineupId, gameId) constraint
@@ -114,7 +125,7 @@ async function insertMatch(
       lineupId,
       gameId: vc.gameId,
       status,
-      thresholdMet: status === 'scheduling',
+      thresholdMet,
       voteCount: vc.voteCount,
       votePercentage: pct.toFixed(2),
       fitType: fitCategory,

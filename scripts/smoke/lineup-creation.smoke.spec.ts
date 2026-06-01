@@ -158,16 +158,21 @@ test.describe('Lineup creation modal', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 15_000 });
 
+        // ROK-1302 (operator review): the Preset chooser is the visible
+        // match-shape control; Match Threshold + Votes per Player + phase
+        // durations moved behind "More options". Expand before asserting them.
+        await modal.getByText(/more options/i).click();
+
+        // Match threshold slider lives under the expander now.
+        const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
+        await expect(thresholdSlider).toBeVisible({ timeout: 5_000 });
+
         // Duration sliders for building and voting should be present
         const buildingDuration = modal.locator('[data-testid="building-duration"]');
         await expect(buildingDuration).toBeVisible({ timeout: 5_000 });
 
         const votingDuration = modal.locator('[data-testid="voting-duration"]');
         await expect(votingDuration).toBeVisible({ timeout: 5_000 });
-
-        // Match threshold slider (10%–75%) should be present
-        const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
-        await expect(thresholdSlider).toBeVisible({ timeout: 5_000 });
 
         // Verify slider labels
         await expect(modal.getByText('More matches')).toBeVisible();

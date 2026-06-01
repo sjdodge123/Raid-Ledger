@@ -147,3 +147,37 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         expect(toast.success).not.toHaveBeenCalled();
     });
 });
+
+// ROK-1302: the game-detail decided banner drops scheduling copy when the
+// lineup opted out of the scheduling phase.
+describe('LineupVoteBanner — DecidedBanner scheduling opt-out (ROK-1302)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    function setupDecidedBanner(includeSchedulingPhase: boolean) {
+        mockUseLineupBanner.mockReturnValue({
+            data: {
+                id: LINEUP_ID,
+                status: 'decided',
+                tiebreakerActive: false,
+                includeSchedulingPhase,
+                entries: [{ gameId: GAME_ID, gameName: 'Lethal Company' }],
+            },
+        } as unknown as ReturnType<typeof useLineupBanner>);
+        mockUseTiebreakerDetail.mockReturnValue({
+            data: null,
+        } as unknown as ReturnType<typeof useTiebreakerDetail>);
+    }
+
+    it('shows "schedule a time" copy when scheduling is enabled', () => {
+        setupDecidedBanner(true);
+        renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
+        expect(screen.getByText(/schedule a time to play/i)).toBeInTheDocument();
+    });
+
+    it('drops "schedule a time" copy when scheduling is disabled', () => {
+        setupDecidedBanner(false);
+        renderWithProviders(<LineupVoteBanner gameId={GAME_ID} />);
+        expect(screen.queryByText(/schedule a time/i)).toBeNull();
+        expect(screen.getByText(/won this lineup/i)).toBeInTheDocument();
+    });
+});

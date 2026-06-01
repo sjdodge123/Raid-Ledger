@@ -3,12 +3,18 @@
  * the main file under the 300-line limit (ROK-1064).
  */
 import type { JSX } from 'react';
+import { formatDurationHours } from './start-lineup-config';
 
 const MIN_DAYS = 1;
 const MAX_DAYS = 30;
 const DESCRIPTION_MAX = 500;
 
-/** A range slider measured in whole days (1-30). */
+/**
+ * A duration slider. The slider track is day-granular (1-30) for manual
+ * Custom tweaking, but the readout reflects the TRUE current value — so a
+ * sub-day preset value renders accurately (e.g. "15 min") and is not clobbered
+ * unless the user actually drags the slider (which is a deliberate Custom edit).
+ */
 export function DurationSlider({
   label,
   name,
@@ -28,7 +34,7 @@ export function DurationSlider({
       <div className="flex items-center justify-between mb-2">
         <label className="text-sm font-medium text-secondary">{label}</label>
         <span className="text-sm text-muted tabular-nums">
-          {days} {days === 1 ? 'day' : 'days'}
+          {formatDurationHours(value)}
         </span>
       </div>
       <input

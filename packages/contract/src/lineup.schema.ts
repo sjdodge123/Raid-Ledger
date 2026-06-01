@@ -44,10 +44,17 @@ export const CreateLineupSchema = z
         /** Optional operator-authored markdown description (<=500 chars, ROK-1063). */
         description: z.string().max(500).nullable().optional(),
         targetDate: z.string().datetime({ offset: true }).nullable().optional(),
-        /** Hours for the building phase (1-720, default from admin settings). */
-        buildingDurationHours: z.number().int().min(1).max(720).optional(),
-        /** Hours for the voting phase (1-720, default from admin settings). */
-        votingDurationHours: z.number().int().min(1).max(720).optional(),
+        /**
+         * Hours for the building phase. Sub-hour values are allowed (ROK-1302
+         * "Tonight" preset = 0.25h = 15 min); `.int()` was dropped and the
+         * floor lowered to 0.25h. Durations persist in the
+         * `phase_duration_override` jsonb and all deadline math is
+         * `hours * 3_600_000`, so fractional hours round-trip cleanly
+         * (0.25 → 900_000 ms).
+         */
+        buildingDurationHours: z.number().min(0.25).max(720).optional(),
+        /** Hours for the voting phase. Sub-hour allowed (ROK-1302); see buildingDurationHours. */
+        votingDurationHours: z.number().min(0.25).max(720).optional(),
         /** Hours for the decided phase (1-720, default from admin settings). */
         decidedDurationHours: z.number().int().min(1).max(720).optional(),
         /** Match threshold percentage for grouping algorithm (0–100, default 35). */
@@ -82,6 +89,14 @@ export const CreateLineupSchema = z
          * private + true combo so the operator gets a 400).
          */
         publicShareEnabled: z.boolean().optional(),
+        /**
+         * Whether the lineup advances into a scheduling poll after Decided
+         * (ROK-1302). Default ON preserves existing behavior. When false, the
+         * lineup terminates at Decided: no match is promoted to 'scheduling',
+         * no scheduling poll/slots are created, and the decided-page
+         * "Pick a time" CTA is hidden.
+         */
+        includeSchedulingPhase: z.boolean().default(true).optional(),
     })
     .refine(
         (d) =>
@@ -248,6 +263,13 @@ export const LineupDetailResponseSchema = z.object({
     /** URL-safe slug used for the public share link (ROK-1067). */
     publicSlug: z.string(),
     /**
+     * Whether this lineup advances into a scheduling poll after Decided
+     * (ROK-1302). When false, the decided page hides the per-match
+     * "Pick a time" CTA and no scheduling poll exists. Pre-ROK-1302 rows
+     * backfill to true (existing behavior).
+     */
+    includeSchedulingPhase: z.boolean(),
+    /**
      * Viewer's per-phase submission timestamps (ROK-1296, U4 SubmitBar).
      * Both fields are ISO 8601 UTC strings or null. Populated for the
      * authenticated caller from the `community_lineup_user_submissions` row
@@ -299,6 +321,12 @@ export const LineupBannerResponseSchema = z.object({
     tiebreakerActive: z.boolean().optional(),
     /** Lineup visibility (ROK-1065). */
     visibility: LineupVisibilitySchema,
+    /**
+     * ROK-1302: whether the lineup advances into a scheduling poll after
+     * Decided. Lets the game-detail decided banner drop "schedule a time"
+     * copy for terminal lineups. Optional + defaults true for back-compat.
+     */
+    includeSchedulingPhase: z.boolean().optional(),
 });
 
 export type LineupBannerResponseDto = z.infer<typeof LineupBannerResponseSchema>;

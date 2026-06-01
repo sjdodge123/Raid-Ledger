@@ -167,6 +167,8 @@ export async function fanOutMatchMemberDMs(
   dedupService: NotificationDedupService,
   lineupId: number,
   matches: ReadonlyArray<MatchInfo>,
+  // ROK-1302: false → the per-member DM omits the "Schedule a time!" CTA.
+  schedulingEnabled: boolean = true,
 ): Promise<void> {
   for (const match of matches) {
     const members = await findMatchMemberUsers(db, match.id);
@@ -179,6 +181,7 @@ export async function fanOutMatchMemberDMs(
         gameName: match.gameName,
         coPlayers,
         lineupId,
+        schedulingEnabled,
       });
     }
   }

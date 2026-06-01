@@ -30,7 +30,18 @@ async function findPreviousLineup(db: Db, excludeId: number) {
     .limit(1);
 }
 
-/** Find all suggested matches for a lineup. */
+/**
+ * Find below-threshold suggested matches for a lineup (the "didn't make it"
+ * games eligible for another shot next cycle).
+ *
+ * ROK-1302: filter on `thresholdMet=false`. For a scheduling-opted-out lineup,
+ * threshold-clearing WINNERS are stored as `suggested` (instead of
+ * `scheduling`) but carry `thresholdMet=true` — those are terminal results and
+ * must NOT roll over. Scheduling-enabled lineups are unaffected: their
+ * threshold-met matches are `scheduling` (never selected here), and their
+ * below-threshold matches are `suggested` + `thresholdMet=false` (still
+ * carried over as before).
+ */
 async function findSuggestedMatches(db: Db, lineupId: number) {
   return db
     .select({
@@ -42,6 +53,7 @@ async function findSuggestedMatches(db: Db, lineupId: number) {
       and(
         eq(schema.communityLineupMatches.lineupId, lineupId),
         eq(schema.communityLineupMatches.status, 'suggested'),
+        eq(schema.communityLineupMatches.thresholdMet, false),
       ),
     );
 }

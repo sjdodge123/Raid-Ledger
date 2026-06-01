@@ -44,6 +44,8 @@ function baseLineup(): Record<string, unknown> {
     stillWaitingOnVoters: [],
     publicShareEnabled: true,
     publicSlug: 'test-lineup',
+    // ROK-1302: scheduling-phase flag (required on the response schema).
+    includeSchedulingPhase: true,
     viewerSubmissions: {
       nominationsSubmittedAt: null,
       votesSubmittedAt: null,

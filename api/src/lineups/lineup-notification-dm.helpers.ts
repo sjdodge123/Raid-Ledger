@@ -32,6 +32,11 @@ export interface LineupDmInfo {
   targetDate?: Date;
   /** Optional voting deadline, shown in the voting-open DM. */
   votingDeadline?: Date;
+  /**
+   * ROK-1302: false → the decided (matches-found) DM uses terminal copy
+   * instead of "ready to schedule / move into scheduling next".
+   */
+  includeSchedulingPhase?: boolean;
 }
 
 /** Format a Date as a Discord-native relative+absolute timestamp. */

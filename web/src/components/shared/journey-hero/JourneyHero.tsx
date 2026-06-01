@@ -45,10 +45,18 @@ function PhaseDot({ state, label }: { state: StepState; label: string }): JSX.El
   );
 }
 
-function PhaseRibbon({ active }: { active: HeroActive }): JSX.Element {
+function PhaseRibbon({
+  active,
+  hideSchedulePhase,
+}: {
+  active: HeroActive;
+  hideSchedulePhase?: boolean;
+}): JSX.Element {
+  // ROK-1302: drop the trailing "Schedule" step for terminal (opted-out) lineups.
+  const labels = hideSchedulePhase ? PHASE_LABELS.slice(0, 3) : PHASE_LABELS;
   return (
     <ol aria-label="Lineup progress" className="flex items-center gap-1 mb-3 list-none p-0">
-      {PHASE_LABELS.map((label, i) => {
+      {labels.map((label, i) => {
         const state: StepState = i < active ? 'done' : i === active ? 'current' : 'future';
         const isCurrent = state === 'current';
         return (
@@ -58,7 +66,7 @@ function PhaseRibbon({ active }: { active: HeroActive }): JSX.Element {
             {...(isCurrent ? { 'aria-current': 'step' as const } : {})}
           >
             <PhaseDot state={state} label={label} />
-            {i < PHASE_LABELS.length - 1 && (
+            {i < labels.length - 1 && (
               <div className={`h-px flex-1 ${i < active ? 'bg-emerald-500/60' : 'bg-edge'}`} />
             )}
           </li>
@@ -99,14 +107,16 @@ function HeroCta({ cta, onCtaClick, tone }: { cta: string; onCtaClick?: () => vo
 }
 
 export function JourneyHero(props: JourneyHeroProps): JSX.Element {
-  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon } = props;
+  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase } = props;
   const badgeId = useId();
   const computedActive: HeroActive = active ?? PHASE_TO_ACTIVE[phase ?? 'nominating'];
   const taskCls = tone === 'action' ? 'text-foreground' : 'text-secondary';
   const pillLabel = pillLabelFor(tone, donePillLabel);
   return (
     <div role="region" aria-labelledby={badgeId} className={`border rounded-lg p-3 ${BORDER_CLS[tone]}`}>
-      {!noRibbon && <PhaseRibbon active={computedActive} />}
+      {!noRibbon && (
+        <PhaseRibbon active={computedActive} hideSchedulePhase={hideSchedulePhase} />
+      )}
       <HeroHeader badgeId={badgeId} badge={badge} tone={tone} pillLabel={pillLabel} />
       <div className={`text-sm font-semibold mb-1 ${taskCls}`}>{task}</div>
       {sub && <div className="text-[11px] text-muted mb-1">{sub}</div>}

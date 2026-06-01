@@ -300,3 +300,106 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
         expect('inviteeUserIds' in body).toBe(false);
     });
 });
+
+// ROK-1302 (operator review) — top-level: Title, Preset chooser, Description,
+// Visibility + audience. Match Threshold / Votes per Player / scheduling toggle
+// + channel / durations / tiebreaker live behind a "More options" expander.
+describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
+    it('renders the top-level controls by default', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Title + Preset chooser + Description + Visibility are top-level.
+        expect(screen.getByLabelText(/title/i)).toBeVisible();
+        expect(
+            screen.getByRole('radiogroup', { name: /lineup preset/i }),
+        ).toBeVisible();
+        expect(screen.getByLabelText(/description/i)).toBeVisible();
+        expect(screen.getByTestId('visibility-public')).toBeVisible();
+    });
+
+    it('keeps match-shape + scheduling behind a collapsed expander', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Match Threshold + scheduling toggle now live in the collapsed
+        // <details> → present in the DOM but not visible until expanded.
+        expect(screen.getByTestId('match-threshold')).not.toBeVisible();
+        expect(
+            screen.getByTestId('include-scheduling-phase'),
+        ).not.toBeVisible();
+        expect(screen.getByText(/more options/i)).toBeInTheDocument();
+    });
+
+    it('reveals match-shape + duration controls when "More options" is expanded', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        expect(screen.getByTestId('match-threshold')).toBeVisible();
+        expect(screen.getByTestId('votes-per-player')).toBeVisible();
+        expect(screen.getByTestId('building-duration')).toBeVisible();
+    });
+
+    it('include-scheduling toggle defaults to checked', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        const toggle = screen.getByTestId(
+            'include-scheduling-phase',
+        ) as HTMLInputElement;
+        expect(toggle.checked).toBe(true);
+    });
+
+    it('sends includeSchedulingPhase=false when the toggle is unchecked', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Toggle now lives under "More options" — expand before interacting.
+        await user.click(screen.getByText(/more options/i));
+        await user.click(screen.getByTestId('include-scheduling-phase'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            includeSchedulingPhase: false,
+        });
+    });
+
+    it('applies the Tonight preset to match-shape + durations', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('preset-tonight'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        // Tonight = 100% threshold / 3 votes / 0.25h building / 0.25h voting.
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            matchThreshold: 100,
+            votesPerPlayer: 3,
+            buildingDurationHours: 0.25,
+            votingDurationHours: 0.25,
+        });
+    });
+
+    it('applies the Series preset values', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('preset-series'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            matchThreshold: 20,
+            votesPerPlayer: 5,
+            buildingDurationHours: 96,
+            votingDurationHours: 72,
+        });
+    });
+});

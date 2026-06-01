@@ -116,6 +116,8 @@ function mapLineupCore(
     // ROK-1067: public-share toggle + URL-safe slug for the share URL.
     publicShareEnabled: lineup.publicShareEnabled,
     publicSlug: lineup.publicSlug,
+    // ROK-1302: whether the decided lineup advances into a scheduling poll.
+    includeSchedulingPhase: lineup.includeSchedulingPhase,
   };
 }
 

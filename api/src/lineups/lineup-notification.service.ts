@@ -67,6 +67,12 @@ export interface LineupInfo {
   visibility?: 'public' | 'private';
   /** Pre-abort status, consumed only by `notifyLineupAborted` (ROK-1062). */
   preAbortStatus?: 'building' | 'voting' | 'decided' | 'archived';
+  /**
+   * ROK-1302: when false, the lineup terminates at Decided — decided
+   * notifications use terminal "results are in" copy instead of
+   * "ready to schedule / pick a time". Defaults to true (scheduling enabled).
+   */
+  includeSchedulingPhase?: boolean;
 }
 
 /** Shape of a match passed to notification methods. */

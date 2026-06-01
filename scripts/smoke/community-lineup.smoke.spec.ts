@@ -578,6 +578,9 @@ test.describe('Voting phase', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 30_000 });
 
+        // ROK-1302: Match Threshold moved behind "More options" — expand first.
+        await modal.getByText(/more options/i).click();
+
         // Match threshold slider should be present with correct labels
         const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
         await expect(thresholdSlider).toBeVisible({ timeout: 5_000 });

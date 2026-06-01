@@ -118,6 +118,9 @@ test.describe('Votes-per-player slider on create modal', () => {
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 15_000 });
 
+        // ROK-1302: votes-per-player moved behind "More options" — expand it.
+        await modal.getByText(/more options/i).click();
+
         // AC: slider with data-testid="votes-per-player" must exist
         const votesSlider = modal.locator('[data-testid="votes-per-player"]');
         await expect(votesSlider).toBeVisible({ timeout: 5_000 });
@@ -129,6 +132,9 @@ test.describe('Votes-per-player slider on create modal', () => {
         await page.goto('/games?test=open-lineup-modal');
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 15_000 });
+
+        // ROK-1302: votes-per-player moved behind "More options" — expand it.
+        await modal.getByText(/more options/i).click();
 
         const votesSlider = modal.locator('[data-testid="votes-per-player"]');
         await expect(votesSlider).toBeVisible({ timeout: 5_000 });
