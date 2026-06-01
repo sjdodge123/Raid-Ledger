@@ -235,9 +235,9 @@ function describeSchedulingToggle() {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ proposedTime: future });
     expect(res.status).toBe(404);
-    const slots = await testApp.db.select().from(
-      schema.communityLineupScheduleSlots,
-    );
+    const slots = await testApp.db
+      .select()
+      .from(schema.communityLineupScheduleSlots);
     expect(slots.filter((s) => s.matchId === match.id)).toHaveLength(0);
   });
 

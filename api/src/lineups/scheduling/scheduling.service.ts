@@ -140,7 +140,7 @@ export class SchedulingService {
     userId?: number,
   ): Promise<{ id: number }> {
     const match = await this.findMatchOrThrow(matchId);
-    await assertSchedulingEnabled(this.db, match.lineupId);
+    assertSchedulingEnabled(match);
     assertSchedulable(match);
     const proposed = new Date(proposedTime);
     if (proposed < new Date()) {
@@ -178,7 +178,7 @@ export class SchedulingService {
     matchId: number,
   ): Promise<{ voted: boolean }> {
     const match = await this.findMatchOrThrow(matchId);
-    await assertSchedulingEnabled(this.db, match.lineupId);
+    assertSchedulingEnabled(match);
     assertSchedulable(match);
     const inserted = await insertScheduleVote(this.db, slotId, userId);
     if (inserted.length > 0) {
@@ -193,7 +193,7 @@ export class SchedulingService {
   /** Retract all votes by a user for slots belonging to a match. */
   async retractAllVotes(matchId: number, userId: number): Promise<void> {
     const match = await this.findMatchOrThrow(matchId);
-    await assertSchedulingEnabled(this.db, match.lineupId);
+    assertSchedulingEnabled(match);
     assertSchedulable(match);
     await deleteAllUserVotesForMatch(this.db, matchId, userId);
     this.pollEmbed.fireUpdateEmbed(matchId);
@@ -207,7 +207,7 @@ export class SchedulingService {
     recurring: boolean = false,
   ): Promise<{ eventId: number }> {
     const match = await this.findMatchOrThrow(matchId);
-    await assertSchedulingEnabled(this.db, match.lineupId);
+    assertSchedulingEnabled(match);
     if (match.linkedEventId) {
       throw new BadRequestException('Event already created for this match');
     }
@@ -281,7 +281,7 @@ export class SchedulingService {
   /** Cancel/archive a scheduling poll (operator). */
   async cancelPoll(matchId: number): Promise<void> {
     const match = await this.findMatchOrThrow(matchId);
-    await assertSchedulingEnabled(this.db, match.lineupId);
+    assertSchedulingEnabled(match);
     assertSchedulable(match);
     await this.db
       .update(schema.communityLineupMatches)
