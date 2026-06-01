@@ -1023,6 +1023,13 @@
       "when": 1779400000000,
       "tag": "0145_scheduled_event_reconcile_backoff",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1779500000000,
+      "tag": "0146_lineup_include_scheduling_phase",
+      "breakpoints": true
     }
   ]
 }

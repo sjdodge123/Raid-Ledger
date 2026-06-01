@@ -53,4 +53,9 @@ export interface JourneyHeroProps {
   cue?: string;
   donePillLabel?: string;
   noRibbon?: boolean;
+  /**
+   * ROK-1302: drop the trailing "Schedule" step from the phase ribbon for
+   * lineups that opted out of the scheduling phase (terminal at Decided).
+   */
+  hideSchedulePhase?: boolean;
 }

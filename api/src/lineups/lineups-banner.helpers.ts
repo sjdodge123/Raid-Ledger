@@ -43,6 +43,8 @@ interface BannerLineup {
   decidedGameId: number | null;
   decidedGameName: string | null;
   visibility: 'public' | 'private';
+  /** ROK-1302: terminal-at-decided flag for the game-detail banner copy. */
+  includeSchedulingPhase?: boolean;
 }
 
 /**
@@ -142,5 +144,7 @@ export function buildBannerResponse(
     // ROK-1065: visibility surfaced to the banner so the UI can render a
     // private badge.
     visibility: lineup.visibility,
+    // ROK-1302: lets the game-detail decided banner drop scheduling copy.
+    includeSchedulingPhase: lineup.includeSchedulingPhase ?? true,
   };
 }

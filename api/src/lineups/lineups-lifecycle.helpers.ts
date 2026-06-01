@@ -72,6 +72,8 @@ export function insertLineup(
           // ROK-1067: public-share defaults true; forced false for private.
           publicShareEnabled,
           publicSlug: slug,
+          // ROK-1302: scheduling-phase opt-in; defaults true (existing behavior).
+          includeSchedulingPhase: dto.includeSchedulingPhase ?? true,
         })
         .returning();
       const [row] = rows;

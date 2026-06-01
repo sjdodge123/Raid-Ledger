@@ -104,12 +104,14 @@ async function loadLineupForHook(
   id: number;
   title: string;
   visibility: 'public' | 'private';
+  includeSchedulingPhase: boolean;
 } | null> {
   const [row] = await db
     .select({
       id: schema.communityLineups.id,
       title: schema.communityLineups.title,
       visibility: schema.communityLineups.visibility,
+      includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
@@ -133,6 +135,8 @@ export function fireDecidedNotifications(
         id: row.id,
         title: row.title,
         visibility: row.visibility,
+        // ROK-1302: opted-out lineups must not announce "ready to schedule".
+        includeSchedulingPhase: row.includeSchedulingPhase,
       });
     })
     .catch(logError(logger, 'decided'));

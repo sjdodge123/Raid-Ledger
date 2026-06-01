@@ -2,7 +2,7 @@
  * Match query helpers for community lineup decided view (ROK-937).
  * Provides database queries for match data retrieval.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql, getTableColumns } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
@@ -80,11 +80,23 @@ export function findMatchMembers(
     .where(inArray(schema.communityLineupMatchMembers.matchId, matchIds));
 }
 
-/** Find a single match by ID. */
+/**
+ * Find a single match by ID, with the parent lineup's scheduling opt-out flag
+ * joined in (ROK-1302) so callers can gate scheduling mutations without a
+ * second query. The flat shape preserves every match column for existing
+ * callers and adds `includeSchedulingPhase`.
+ */
 export function findMatchById(db: Db, matchId: number) {
   return db
-    .select()
+    .select({
+      ...getTableColumns(schema.communityLineupMatches),
+      includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
+    })
     .from(schema.communityLineupMatches)
+    .leftJoin(
+      schema.communityLineups,
+      eq(schema.communityLineupMatches.lineupId, schema.communityLineups.id),
+    )
     .where(eq(schema.communityLineupMatches.id, matchId))
     .limit(1);
 }

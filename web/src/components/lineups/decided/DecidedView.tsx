@@ -86,9 +86,11 @@ function buildHeroProps(
 function YourMatches({
   matches,
   lineupId,
+  schedulingEnabled,
 }: {
   matches: MatchDetailResponseDto[];
   lineupId: number;
+  schedulingEnabled: boolean;
 }): JSX.Element | null {
   if (matches.length === 0) return null;
   return (
@@ -97,7 +99,13 @@ function YourMatches({
         Your matches ({matches.length})
       </div>
       {matches.map((m) => (
-        <MatchCard key={m.id} match={m} lineupId={lineupId} isPersonal />
+        <MatchCard
+          key={m.id}
+          match={m}
+          lineupId={lineupId}
+          isPersonal
+          schedulingEnabled={schedulingEnabled}
+        />
       ))}
     </section>
   );
@@ -106,9 +114,11 @@ function YourMatches({
 function OtherMatches({
   matches,
   lineupId,
+  schedulingEnabled,
 }: {
   matches: MatchDetailResponseDto[];
   lineupId: number;
+  schedulingEnabled: boolean;
 }): JSX.Element | null {
   if (matches.length === 0) return null;
   return (
@@ -122,6 +132,7 @@ function OtherMatches({
           match={m}
           lineupId={lineupId}
           isPersonal={false}
+          schedulingEnabled={schedulingEnabled}
         />
       ))}
     </section>
@@ -156,18 +167,35 @@ function useDecidedState(lineup: LineupDetailResponseDto) {
 export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
   const { mine, others, leftover, hero, carriedForward } =
     useDecidedState(lineup);
+  // ROK-1302: a scheduling-opted-out lineup terminates at Decided — drop the
+  // 4-step framing + "before scheduling" copy so it doesn't read as a broken
+  // scheduling phase.
+  const terminal = lineup.includeSchedulingPhase === false;
   return (
     <div data-testid="decided-composite-view">
       <JourneyHero
         phase="decided"
         tone="action"
-        badge="Step 3 of 4 · Decided"
+        badge={terminal ? 'Decided' : 'Step 3 of 4 · Decided'}
         task={hero.task}
         sub={hero.sub}
-        hint="Tap any game to learn more before scheduling."
+        hint={
+          terminal
+            ? 'Tap any game to learn more.'
+            : 'Tap any game to learn more before scheduling.'
+        }
+        hideSchedulePhase={terminal}
       />
-      <YourMatches matches={mine} lineupId={lineup.id} />
-      <OtherMatches matches={others} lineupId={lineup.id} />
+      <YourMatches
+        matches={mine}
+        lineupId={lineup.id}
+        schedulingEnabled={lineup.includeSchedulingPhase}
+      />
+      <OtherMatches
+        matches={others}
+        lineupId={lineup.id}
+        schedulingEnabled={lineup.includeSchedulingPhase}
+      />
       <LeftoverVotersRow leftoverCount={leftover} />
       <CarriedForwardSection entries={carriedForward} />
     </div>

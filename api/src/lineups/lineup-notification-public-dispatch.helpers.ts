@@ -124,7 +124,12 @@ export async function orchestrateMatchesFound(
     matches.length,
   );
   if (routedPrivate) return;
-  const ctx = await resolveEmbedCtx(dispatchDeps(deps), lineupId, 'decided');
+  // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
+  const schedulingEnabled = lineup.includeSchedulingPhase !== false;
+  const ctx = {
+    ...(await resolveEmbedCtx(dispatchDeps(deps), lineupId, 'decided')),
+    schedulingEnabled,
+  };
   await postEmbed(
     deps,
     `lineup-decided:${lineupId}`,
@@ -137,6 +142,7 @@ export async function orchestrateMatchesFound(
     deps.dedupService,
     lineupId,
     matches,
+    schedulingEnabled,
   );
 }
 

@@ -60,6 +60,8 @@ const SCHEDULING_MATCH = {
   gameId: 5,
   status: 'scheduling',
   linkedEventId: null,
+  // ROK-1302: findMatchById joins the parent lineup's scheduling opt-out flag.
+  includeSchedulingPhase: true,
 };
 const SLOT_TIME = '2099-04-01T19:00:00.000Z';
 const GAME_ROW = { name: 'Test Game', coverUrl: null };

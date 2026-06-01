@@ -52,6 +52,10 @@ import {
   resolveGameInfo,
   buildCreateEventDto,
 } from './scheduling-event.helpers';
+import {
+  assertSchedulingEnabled,
+  assertSchedulable,
+} from './scheduling-guard.helpers';
 
 const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -91,6 +95,8 @@ export class SchedulingService {
           status: schema.communityLineups.status,
           createdBy: schema.communityLineups.createdBy,
           phaseDeadline: schema.communityLineups.phaseDeadline,
+          includeSchedulingPhase:
+            schema.communityLineups.includeSchedulingPhase,
         })
         .from(schema.communityLineups)
         .where(eq(schema.communityLineups.id, match.lineupId))
@@ -99,6 +105,12 @@ export class SchedulingService {
       findScheduleSlots(this.db, matchId),
       countUniqueVoters(this.db, matchId),
     ]);
+    // ROK-1302: a lineup that opted out of the scheduling phase has no poll —
+    // 404 the page (the decided UI already hides the CTA; this guards a
+    // hand-crafted URL or the lazy slot-create path).
+    if (lineup && lineup.includeSchedulingPhase === false) {
+      throw new NotFoundException('Scheduling is disabled for this lineup');
+    }
     const slotIds = slots.map((s) => s.id);
     const votes = await findScheduleVotes(this.db, slotIds);
     const conflictingSlotIds = userId
@@ -128,7 +140,8 @@ export class SchedulingService {
     userId?: number,
   ): Promise<{ id: number }> {
     const match = await this.findMatchOrThrow(matchId);
-    this.assertSchedulable(match);
+    assertSchedulingEnabled(match);
+    assertSchedulable(match);
     const proposed = new Date(proposedTime);
     if (proposed < new Date()) {
       throw new BadRequestException('Cannot suggest a time in the past');
@@ -165,7 +178,8 @@ export class SchedulingService {
     matchId: number,
   ): Promise<{ voted: boolean }> {
     const match = await this.findMatchOrThrow(matchId);
-    this.assertSchedulable(match);
+    assertSchedulingEnabled(match);
+    assertSchedulable(match);
     const inserted = await insertScheduleVote(this.db, slotId, userId);
     if (inserted.length > 0) {
       this.pollEmbed.fireUpdateEmbed(matchId);
@@ -179,7 +193,8 @@ export class SchedulingService {
   /** Retract all votes by a user for slots belonging to a match. */
   async retractAllVotes(matchId: number, userId: number): Promise<void> {
     const match = await this.findMatchOrThrow(matchId);
-    this.assertSchedulable(match);
+    assertSchedulingEnabled(match);
+    assertSchedulable(match);
     await deleteAllUserVotesForMatch(this.db, matchId, userId);
     this.pollEmbed.fireUpdateEmbed(matchId);
   }
@@ -192,6 +207,7 @@ export class SchedulingService {
     recurring: boolean = false,
   ): Promise<{ eventId: number }> {
     const match = await this.findMatchOrThrow(matchId);
+    assertSchedulingEnabled(match);
     if (match.linkedEventId) {
       throw new BadRequestException('Event already created for this match');
     }
@@ -265,7 +281,8 @@ export class SchedulingService {
   /** Cancel/archive a scheduling poll (operator). */
   async cancelPoll(matchId: number): Promise<void> {
     const match = await this.findMatchOrThrow(matchId);
-    this.assertSchedulable(match);
+    assertSchedulingEnabled(match);
+    assertSchedulable(match);
     await this.db
       .update(schema.communityLineupMatches)
       .set({ status: 'archived', updatedAt: new Date() })
@@ -289,14 +306,6 @@ export class SchedulingService {
     const [match] = await findMatchById(this.db, matchId);
     if (!match) throw new NotFoundException('Match not found');
     return match;
-  }
-
-  private assertSchedulable(match: { status: string }): void {
-    if (match.status !== 'scheduling' && match.status !== 'suggested') {
-      throw new BadRequestException(
-        'This match is no longer accepting changes',
-      );
-    }
   }
 
   private async assertUserHasVoted(

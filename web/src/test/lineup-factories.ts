@@ -90,6 +90,8 @@ export function createMockLineupDetail(
         // ROK-1067: public-share toggle + slug.
         publicShareEnabled: true,
         publicSlug: 'aBcDeFgHiJ12',
+        // ROK-1302: scheduling phase enabled by default (pre-migration parity).
+        includeSchedulingPhase: true,
         // ROK-1296: per-viewer submission timestamps for the U4 SubmitBar.
         viewerSubmissions: {
             nominationsSubmittedAt: null,

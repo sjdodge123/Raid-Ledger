@@ -27,11 +27,15 @@ export async function dispatchMatchMemberDM(
     gameName: string;
     coPlayers: string[];
     lineupId: number;
+    /** ROK-1302: false → omit the "Schedule a time!" CTA (terminal lineup). */
+    schedulingEnabled?: boolean;
   },
 ): Promise<void> {
   const coList = args.coPlayers.length
     ? args.coPlayers.join(', ')
     : 'your group';
+  const callToAction =
+    args.schedulingEnabled === false ? '' : ' Schedule a time!';
   await sendDedupedDM(
     dedupService,
     notificationService,
@@ -40,7 +44,7 @@ export async function dispatchMatchMemberDM(
       userId: args.userId,
       type: 'community_lineup',
       title: `You're matched for ${args.gameName}!`,
-      message: `You're in a match for ${args.gameName} with ${coList}. Schedule a time!`,
+      message: `You're in a match for ${args.gameName} with ${coList}.${callToAction}`,
       payload: {
         subtype: 'lineup_match_member',
         matchId: args.matchId,
