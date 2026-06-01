@@ -47,7 +47,13 @@ export function LineupVoteBanner({ gameId }: Props): JSX.Element | null {
   }
 
   if (banner.status === 'decided') {
-    return <DecidedBanner lineupId={banner.id} gameName={entry.gameName} />;
+    return (
+      <DecidedBanner
+        lineupId={banner.id}
+        gameName={entry.gameName}
+        schedulingEnabled={banner.includeSchedulingPhase !== false}
+      />
+    );
   }
 
   return null;
@@ -252,16 +258,33 @@ function TiebreakerBanner({ lineupId, gameName, mode, hasEngaged }: {
   );
 }
 
-function DecidedBanner({ lineupId, gameName }: { lineupId: number; gameName: string }): JSX.Element {
+function DecidedBanner({
+  lineupId,
+  gameName,
+  schedulingEnabled,
+}: {
+  lineupId: number;
+  gameName: string;
+  schedulingEnabled: boolean;
+}): JSX.Element {
   const navigate = useNavigate();
+  // ROK-1302: terminal copy when the lineup opted out of the scheduling phase.
   return (
     <BannerHero
       phase="decided"
       active={2}
       tone="set"
       badge="Community Lineup · Decided"
-      task={`${gameName} matched — schedule a time to play.`}
-      sub="View the lineup to lock in a time."
+      task={
+        schedulingEnabled
+          ? `${gameName} matched — schedule a time to play.`
+          : `${gameName} won this lineup.`
+      }
+      sub={
+        schedulingEnabled
+          ? 'View the lineup to lock in a time.'
+          : 'View the lineup for the full results.'
+      }
       secondaryLabel="View Lineup →"
       onSecondaryClick={() => navigate(`/community-lineup/${lineupId}`)}
     />

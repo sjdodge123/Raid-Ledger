@@ -321,6 +321,12 @@ export const LineupBannerResponseSchema = z.object({
     tiebreakerActive: z.boolean().optional(),
     /** Lineup visibility (ROK-1065). */
     visibility: LineupVisibilitySchema,
+    /**
+     * ROK-1302: whether the lineup advances into a scheduling poll after
+     * Decided. Lets the game-detail decided banner drop "schedule a time"
+     * copy for terminal lineups. Optional + defaults true for back-compat.
+     */
+    includeSchedulingPhase: z.boolean().optional(),
 });
 
 export type LineupBannerResponseDto = z.infer<typeof LineupBannerResponseSchema>;
