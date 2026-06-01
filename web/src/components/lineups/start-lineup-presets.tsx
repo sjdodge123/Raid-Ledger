@@ -98,15 +98,14 @@ export function SchedulingPhaseToggle({
   );
 }
 
-/** Collapsed "More options" expander wrapping the six secondary controls. */
+/** Collapsed "More options" expander wrapping the secondary controls. */
 export function MoreOptions({ children }: { children: ReactNode }): JSX.Element {
   return (
     <details className="border-t border-edge/30 pt-2">
       <summary className="cursor-pointer text-sm font-medium text-emerald-300 list-none flex items-center gap-1">
         <span aria-hidden>▶</span> More options
         <span className="text-xs text-muted font-normal">
-          (description, visibility, share link, channel, phase durations,
-          tiebreaker)
+          (description, channel, phase durations, tiebreaker)
         </span>
       </summary>
       <div className="space-y-4 pt-4">{children}</div>

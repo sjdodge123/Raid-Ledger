@@ -209,21 +209,23 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
           enabled={includeSchedulingPhase}
           onChange={setIncludeSchedulingPhase}
         />
+        {/* ROK-1302: visibility + invitees stay top-level (operator request) —
+            they decide WHO participates, same class as the scheduling toggle. */}
+        <VisibilityToggle value={visibility} onChange={setVisibility} />
+        {visibility === 'public' && (
+          <PublicShareToggle
+            enabled={publicShareEnabled}
+            onChange={setPublicShareEnabled}
+          />
+        )}
+        {visibility === 'private' && (
+          <InviteeMultiSelect
+            value={inviteeUserIds}
+            onChange={setInviteeUserIds}
+          />
+        )}
         <MoreOptions>
           <DescriptionField value={description} onChange={setDescription} />
-          <VisibilityToggle value={visibility} onChange={setVisibility} />
-          {visibility === 'public' && (
-            <PublicShareToggle
-              enabled={publicShareEnabled}
-              onChange={setPublicShareEnabled}
-            />
-          )}
-          {visibility === 'private' && (
-            <InviteeMultiSelect
-              value={inviteeUserIds}
-              onChange={setInviteeUserIds}
-            />
-          )}
           <LineupChannelOverrideSelect
             value={channelOverrideId}
             onChange={setChannelOverrideId}
