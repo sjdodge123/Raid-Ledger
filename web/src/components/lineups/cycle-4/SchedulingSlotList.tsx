@@ -17,6 +17,8 @@ export interface SchedulingSlotListProps {
   readOnly: boolean;
   canLock: boolean;
   isSuggesting: boolean;
+  /** Datetime-local prefill from a heatmap cell click. */
+  prefillTime?: string;
   onToggleVote: (slotId: number) => void;
   onLock: (slot: ScheduleSlotWithVotesDto) => void;
   onSuggest: (proposedTime: string) => void;
@@ -64,6 +66,7 @@ export function SchedulingSlotList(props: SchedulingSlotListProps): JSX.Element 
       {!props.readOnly && (
         <SchedulingSuggestForm
           isSuggesting={props.isSuggesting}
+          prefillTime={props.prefillTime}
           onSuggest={props.onSuggest}
         />
       )}

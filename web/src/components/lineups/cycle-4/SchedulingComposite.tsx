@@ -1,5 +1,5 @@
 /**
- * Sx/Ss Scheduling composite (ROK-1300) — top-level component for the
+ * Sx/Ss Scheduling composite (ROK-1300) — the FULL page body for the
  * scheduling phase of a lineup poll. ONE component, TWO modes driven by
  * `poll.isStandalone`:
  *   - from-match (Ss, false): 4-phase ribbon JourneyHero + "Match N of M" +
@@ -7,13 +7,16 @@
  *   - standalone (Sx, true): noRibbon hero, "🗓 Scheduling Poll · started by
  *     you", no cross-match refs.
  *
- * Replaces the legacy `HeroNextStep`/`useLineupHero` hero + the 345-line
- * `CreateEventSection` lock surface. Mirrors the shipped sibling composites
- * (`VotingComposite`, `NominatingComposite`): the submit ritual lives in a
- * sticky, scroll-aware JourneyHero toolbar (NOT a bottom `<SubmitBar>`); the
- * per-row "Lock this time →" affordance is operator/creator-gated.
+ * Owns the page body per the Sx/Ss wireframe (rework round 1): one sticky hero
+ * at top, then a U2 game-ref banner (replaces the legacy MatchContextCard) +
+ * operator Cancel, the phase-deadline banner, the group-availability heatmap,
+ * and the suggested-times list. Replaces the legacy HeroNextStep/useLineupHero
+ * hero, the SchedulingWizard stepper, and the 345-line CreateEventSection.
+ * Mirrors the shipped siblings (VotingComposite, NominatingComposite): the
+ * submit ritual lives in a sticky, scroll-aware JourneyHero toolbar (NOT a
+ * bottom <SubmitBar>); per-row "Lock this time →" is operator/creator-gated.
  */
-import { useMemo, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import {
   useToggleScheduleVote,
@@ -23,6 +26,9 @@ import { useSubmitScheduling } from '../../../hooks/use-lineup-submit';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
+import { PollDeadlineBanner } from '../../../pages/scheduling/PollDeadlineBanner';
+import { EarlyCreateConfirmModal } from '../../../pages/scheduling/EarlyCreateConfirmModal';
+import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 import { toast } from '../../../lib/toast';
 import { buildSchedulingHero } from './scheduling-hero';
 import { deriveCrossRefs } from './scheduling-crossrefs';
@@ -34,8 +40,10 @@ import {
 import { useScheduleSubmitState } from './use-schedule-submit-state';
 import { useSchedulingLock } from './use-scheduling-lock';
 import { SchedulingToolbar } from './SchedulingToolbar';
+import { SchedulingGameRefBanner } from './SchedulingGameRefBanner';
+import { SchedulingCancelAction } from './SchedulingCancelAction';
+import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
-import { EarlyCreateConfirmModal } from '../../../pages/scheduling/EarlyCreateConfirmModal';
 
 export interface SchedulingCompositeProps {
   poll: SchedulePollPageResponseDto;
@@ -61,18 +69,22 @@ export function SchedulingComposite(
   const toggleVote = useToggleScheduleVote();
   const suggest = useSuggestSlot();
   const submitScheduling = useSubmitScheduling();
-  const { data: matches } = useLineupMatches(poll.isStandalone ? undefined : lineupId);
+  const { data: matches } = useLineupMatches(
+    poll.isStandalone ? undefined : lineupId,
+  );
   const lock = useSchedulingLock(poll.match, matchId);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [prefillTime, setPrefillTime] = useState<string | undefined>();
 
   const mySubmittedAt = useMemo(
-    () => poll.match.members.find((m) => m.userId === me)?.schedulingSubmittedAt ?? null,
+    () =>
+      poll.match.members.find((m) => m.userId === me)?.schedulingSubmittedAt ??
+      null,
     [poll.match.members, me],
   );
   const submitState = useScheduleSubmitState(mySubmittedAt, poll.myVotedSlotIds);
 
-  const crossRefs = poll.isStandalone
-    ? null
-    : deriveCrossRefs(matchId, matches);
+  const crossRefs = poll.isStandalone ? null : deriveCrossRefs(matchId, matches);
   const hero = buildSchedulingHero({
     mode,
     submitted: submitState.submitted,
@@ -117,6 +129,36 @@ export function SchedulingComposite(
         nudge={submitNudge(submitState.kind)}
         onSubmit={handleSubmit}
       />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <SchedulingGameRefBanner
+            match={poll.match}
+            mode={mode}
+            onResearch={() => setDrawerOpen(true)}
+          />
+        </div>
+        <SchedulingCancelAction
+          lineupId={lineupId}
+          matchId={matchId}
+          readOnly={readOnly}
+        />
+      </div>
+      <PollDeadlineBanner phaseDeadline={poll.phaseDeadline} />
+      {readOnly && (
+        <div
+          data-testid="read-only-banner"
+          className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300"
+        >
+          This poll is read-only. Voting is closed.
+        </div>
+      )}
+      <SchedulingAvailability
+        lineupId={lineupId}
+        matchId={matchId}
+        slots={poll.slots}
+        readOnly={readOnly}
+        onPrefill={setPrefillTime}
+      />
       <SchedulingSlotList
         slots={poll.slots}
         myVotedSlotIds={poll.myVotedSlotIds}
@@ -124,10 +166,18 @@ export function SchedulingComposite(
         readOnly={readOnly}
         canLock={canLock}
         isSuggesting={suggest.isPending}
+        prefillTime={prefillTime}
         onToggleVote={handleToggleVote}
         onLock={lock.requestLock}
         onSuggest={(t) => suggest.mutate({ lineupId, matchId, proposedTime: t })}
       />
+      {drawerOpen && (
+        <GameResearchDrawer
+          isOpen={true}
+          gameId={poll.match.gameId}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
       {lock.pendingSlot && (
         <EarlyCreateConfirmModal
           distinctVoters={lock.pendingDistinctVoters}

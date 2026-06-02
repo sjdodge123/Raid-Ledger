@@ -246,9 +246,10 @@ test.describe('Events page poll creation navigates to scheduling poll', () => {
             `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
         );
 
-        // AC9: Poll page should render
+        // AC9: Poll page should render. ROK-1300 — the composite owns the body
+        // (no separate "Scheduling Poll" h1 for an active poll).
         await expect(
-            page.locator('h1', { hasText: 'Scheduling Poll' }),
+            page.locator('[data-testid="scheduling-composite"]'),
         ).toBeVisible({ timeout: 15_000 });
         await expect(page.locator('body')).not.toHaveText(
             /something went wrong/i,
@@ -412,10 +413,9 @@ test.describe('Standalone poll — scheduling poll page', () => {
         };
 
         try {
-            // ROK-1247: poll until the API surfaces the new standalone poll.
-            // Without this, [data-testid="match-context-card"] can fail to
-            // render within the test window because useQuery returns a stale
-            // empty cache for the lineup/match endpoint.
+            // ROK-1247: poll until the API surfaces the new standalone poll so
+            // the composite renders within the test window (useQuery would
+            // otherwise serve a stale empty cache for the lineup/match endpoint).
             await pollPollPageHasMatch(token, poll.lineupId, poll.id);
 
             // Navigate to the scheduling poll page
@@ -423,31 +423,14 @@ test.describe('Standalone poll — scheduling poll page', () => {
                 `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
             );
 
-            // AC12: The scheduling poll page should render for standalone polls
-            const pollHeading = page.locator('h1', {
-                hasText: 'Scheduling Poll',
-            });
+            // AC12 + ROK-1300: the composite body renders directly (no wizard).
+            const composite = page.locator('[data-testid="scheduling-composite"]');
+            await expect(composite).toBeVisible({ timeout: 15_000 });
 
-            // Handle wizard steps if present
-            await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-            for (let i = 0; i < 5; i++) {
-                if (await pollHeading.isVisible({ timeout: 3_000 }).catch(() => false)) break;
-                for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
-                    const btn = page.locator('button', { hasText: label }).first();
-                    if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-                        await btn.click();
-                        await page.waitForLoadState('domcontentloaded');
-                        break;
-                    }
-                }
-            }
-
-            await expect(pollHeading).toBeVisible({ timeout: 15_000 });
-
-            // Core scheduling poll UI should work for standalone polls
-            // Match context card should show the game
-            const contextCard = page.locator('[data-testid="match-context-card"]');
-            await expect(contextCard).toBeVisible({ timeout: 10_000 });
+            // U2 game-ref banner replaces the legacy MatchContextCard.
+            await expect(
+                page.locator('[data-testid="scheduling-game-ref"]'),
+            ).toBeVisible({ timeout: 10_000 });
 
             // Suggest slot input should be present
             const dateTimeInput = page.locator(
@@ -515,19 +498,10 @@ test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
             );
 
             // Skip wizard steps if they appear.
-            await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-            for (let i = 0; i < 5; i++) {
-                const heading = page.locator('h1', { hasText: 'Scheduling Poll' });
-                if (await heading.isVisible({ timeout: 2_000 }).catch(() => false)) break;
-                for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
-                    const btn = page.locator('button', { hasText: label }).first();
-                    if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-                        await btn.click();
-                        await page.waitForLoadState('domcontentloaded');
-                        break;
-                    }
-                }
-            }
+            // ROK-1300: composite owns the body — wait for it directly.
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
 
             // The deadline banner must be visible at the top of the page.
             const banner = page.locator('[data-testid="poll-deadline-banner"]');
@@ -569,19 +543,10 @@ test.describe('Regression: ROK-1217 — standalone poll deadline', () => {
                 `/community-lineup/${poll.lineupId}/schedule/${poll.id}`,
             );
 
-            await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-            for (let i = 0; i < 5; i++) {
-                const heading = page.locator('h1', { hasText: 'Scheduling Poll' });
-                if (await heading.isVisible({ timeout: 2_000 }).catch(() => false)) break;
-                for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
-                    const btn = page.locator('button', { hasText: label }).first();
-                    if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-                        await btn.click();
-                        await page.waitForLoadState('domcontentloaded');
-                        break;
-                    }
-                }
-            }
+            // ROK-1300: composite owns the body — wait for it directly.
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
 
             const banner = page.locator('[data-testid="poll-deadline-banner"]');
             await expect(banner).toBeVisible({ timeout: 10_000 });

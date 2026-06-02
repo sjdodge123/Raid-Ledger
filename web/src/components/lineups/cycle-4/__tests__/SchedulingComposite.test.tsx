@@ -41,11 +41,27 @@ import { renderWithProviders } from '../../../../test/render-helpers';
 const toggleVoteMutate = vi.fn();
 const suggestSlotMutate = vi.fn();
 const submitSchedulingMutate = vi.fn();
+const cancelPollMutate = vi.fn();
 
+// ROK-1300 rework round 1: the composite now owns the heatmap
+// (useMatchAvailability), the operator Cancel (useCancelSchedulePoll), and the
+// game-ref drawer. Mock the full hook set it consumes.
 vi.mock('../../../../hooks/use-scheduling', () => ({
     useToggleScheduleVote: () => ({ mutate: toggleVoteMutate, isPending: false }),
     useSuggestSlot: () => ({ mutate: suggestSlotMutate, isPending: false }),
-    useMatchAvailability: () => ({ data: undefined, isLoading: false }),
+    // One availability cell so AvailabilityHeatmapSection renders (it returns
+    // null on empty data) → the in-composite heatmap test can assert it.
+    useMatchAvailability: () => ({
+        data: {
+            eventId: 0,
+            totalUsers: 2,
+            cells: [
+                { dayOfWeek: 1, hour: 19, availableCount: 2, totalCount: 2 },
+            ],
+        },
+        isLoading: false,
+    }),
+    useCancelSchedulePoll: () => ({ mutate: cancelPollMutate, isPending: false }),
 }));
 
 vi.mock('../../../../hooks/use-lineup-submit', () => ({
@@ -62,8 +78,20 @@ vi.mock('../../../../hooks/use-lineup-matches', () => ({
 const authUser = vi.fn<[], { id: number; role?: string } | null>(() => ({
     id: 99,
 }));
+// Preserve isOperatorOrAdmin (SchedulingCancelAction gates on it) while
+// stubbing the user; mirror the real predicate.
 vi.mock('../../../../hooks/use-auth', () => ({
     useAuth: () => ({ user: authUser(), isAuthenticated: true }),
+    isOperatorOrAdmin: (u: { role?: string } | null) =>
+        u?.role === 'operator' || u?.role === 'admin',
+}));
+
+// The game-ref ⓘ opens GameResearchDrawer, which self-fetches game data.
+// Stub it to a presence marker so the test asserts the open/close wiring
+// without a live API.
+vi.mock('../../../games/GameResearchDrawer', () => ({
+    GameResearchDrawer: ({ isOpen }: { isOpen: boolean }) =>
+        isOpen ? <div data-testid="game-research-drawer" /> : null,
 }));
 
 // Import AFTER vi.mock so the mocks are in place. The module does not yet
@@ -419,5 +447,87 @@ describe('SchedulingComposite — sticky-toolbar submit (AC5)', () => {
         expect(
             screen.getByRole('button', { name: /change my times/i }),
         ).toBeInTheDocument();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// AC6 (rework round 1) — composite OWNS the page body: single hero at top,
+// in-composite game-ref banner (+ drawer), heatmap, deadline, operator
+// Cancel; NO wizard stepper, NO separate "Scheduling Poll" h1.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
+    it('renders the U2 game-ref banner with an ⓘ research trigger that opens the drawer', async () => {
+        const user = userEvent.setup();
+        const poll = buildPoll({ isStandalone: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+
+        const research = await screen.findByTestId('scheduling-game-research');
+        expect(research).toBeInTheDocument();
+        // Game name shows in the banner (replaces the legacy MatchContextCard).
+        expect(screen.getByTestId('scheduling-game-ref')).toHaveTextContent(
+            /valheim/i,
+        );
+        // Drawer is closed until ⓘ is clicked.
+        expect(
+            screen.queryByTestId('game-research-drawer'),
+        ).not.toBeInTheDocument();
+        await user.click(research);
+        await waitFor(() => {
+            expect(
+                screen.getByTestId('game-research-drawer'),
+            ).toBeInTheDocument();
+        });
+    });
+
+    it('renders the group-availability heatmap inside the composite', async () => {
+        const poll = buildPoll({ isStandalone: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        // The heatmap grid renders below the hero/banner.
+        expect(
+            await screen.findByTestId('heatmap-grid'),
+        ).toBeInTheDocument();
+    });
+
+    it('does NOT render the SchedulingWizard stepper or a separate "Scheduling Poll" h1', async () => {
+        const poll = buildPoll({ isStandalone: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByRole('region', { name: /scheduling/i });
+        // The legacy wizard stepper + duplicated page h1 are gone.
+        expect(
+            screen.queryByTestId('scheduling-wizard-step-1'),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole('heading', { level: 1, name: /^scheduling poll$/i }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('operator sees an in-composite "Cancel Poll" affordance; a plain member does not', async () => {
+        authUser.mockReturnValue({ id: ME, role: 'operator' });
+        const poll = buildPoll({ isStandalone: true });
+        const { unmount } = renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: /cancel poll/i }),
+            ).toBeInTheDocument();
+        });
+        unmount();
+
+        authUser.mockReturnValue({ id: ME }); // plain member
+        renderWithProviders(
+            <SchedulingComposite poll={buildPoll({ isStandalone: true })} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-game-ref');
+        expect(
+            screen.queryByRole('button', { name: /cancel poll/i }),
+        ).not.toBeInTheDocument();
     });
 });
