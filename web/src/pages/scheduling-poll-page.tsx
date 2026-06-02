@@ -29,7 +29,7 @@ import { CreateEventSection } from './scheduling/CreateEventSection';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
 import { PollDeadlineBanner } from './scheduling/PollDeadlineBanner';
 import { SchedulingWizard } from './scheduling/SchedulingWizard';
-import { isWizardSkipped } from './scheduling/scheduling-wizard-utils';
+import { GameTimeRefreshModal } from './scheduling/GameTimeRefreshModal';
 
 /** Loading skeleton for the scheduling poll page. */
 function SchedulePollSkeleton(): JSX.Element {
@@ -282,16 +282,20 @@ function SchedulePollContent({ lineupId, matchId }: {
   lineupId: number; matchId: number;
 }): JSX.Element {
   const { data: poll, isLoading, error } = useSchedulePoll(lineupId, matchId);
-  const { data: gameTime, isLoading: gtLoading } = useGameTime();
+  // Keep the loading gate so the wizard/modal don't flash before game-time is
+  // known; the modal self-fetches the same cached query for its staleness gate.
+  const { isLoading: gtLoading } = useGameTime();
 
   if (isLoading || gtLoading) return <SchedulePollSkeleton />;
   if (error || !poll) return <SchedulePollNotFound />;
 
-  const stale = !!gameTime?.gameTimeStale && !isWizardSkipped();
   return (
-    <SchedulingWizard poll={poll} lineupId={lineupId} matchId={matchId} gameTimeStale={stale}>
-      <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />
-    </SchedulingWizard>
+    <>
+      <GameTimeRefreshModal />
+      <SchedulingWizard poll={poll} lineupId={lineupId} matchId={matchId}>
+        <PollSections lineupId={lineupId} matchId={matchId} poll={poll} />
+      </SchedulingWizard>
+    </>
   );
 }
 
