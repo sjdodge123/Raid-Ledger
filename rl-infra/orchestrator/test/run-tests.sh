@@ -44,6 +44,9 @@ else
         "$TEST_DIR/pin-env.test.sh"
         "$TEST_DIR/release-preserve-envs.test.sh"
         "$TEST_DIR/sweeper-pin-safety.test.sh"
+        # Fleet sync_settings RL_ENV_JWT_SECRET false-"missing" root-cause fix.
+        "$TEST_DIR/sync-local-to-env-rl-agent.test.sh"
+        "$TEST_DIR/sync-local-to-env-infra-read.test.sh"
     )
 fi
 
