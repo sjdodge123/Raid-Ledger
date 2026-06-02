@@ -13,7 +13,12 @@ import {
   createFutureEvent,
   createPastEvent,
   signupViaDb,
+  getAllRosterAssignments,
 } from './signups.integration.spec-helpers';
+import { SignupsService } from './signups.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -210,8 +215,107 @@ async function testAttendanceAuthRequired() {
   ).toBe(401);
 }
 
+// ─── Regression: ROK-1345 — concurrent slot race ────────────────────────────
+
+/**
+ * Two signups racing for the same player slot used to both compute the same
+ * `findNextPosition`, collide on `unique_slot_per_event` (PG 23505), and the
+ * loser returned a 500. The bounded-retry insert must now place the loser in
+ * the next free slot. Drives the real service signup path concurrently.
+ */
+async function testConcurrentSignupsNoDuplicateKey() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    maxAttendees: 5,
+  });
+  const { userId: u1 } = await createMemberAndLogin(
+    testApp,
+    'race1',
+    'race1@test.local',
+  );
+  const { userId: u2 } = await createMemberAndLogin(
+    testApp,
+    'race2',
+    'race2@test.local',
+  );
+  const service = testApp.app.get(SignupsService, { strict: false });
+  // Fire both signups concurrently — neither should reject with a 23505.
+  const [r1, r2] = await Promise.all([
+    service.signup(eventId, u1, {}),
+    service.signup(eventId, u2, {}),
+  ]);
+  // Both racers must hold a distinct player slot (the event creator is
+  // auto-signed-up too, so there are 3 player rows in total).
+  const assignments = await getAllRosterAssignments(testApp, eventId);
+  const players = assignments.filter((a) => a.role === 'player');
+  const racerRows = players.filter((p) => [r1.id, r2.id].includes(p.signupId));
+  expect(racerRows).toHaveLength(2);
+  // No two player rows share a position (no duplicate slot survived).
+  const positions = players.map((p) => p.position);
+  expect(new Set(positions).size).toBe(positions.length);
+}
+
+/**
+ * Deterministic retry proof: drive insertRosterSlotWithRetry directly with an
+ * explicit position that is already taken. The first attempt hits the
+ * unique_slot_per_event 23505, the helper recomputes the next free position
+ * and retries — returning a distinct slot instead of throwing.
+ */
+async function testRetryHelperRecoversFromTakenSlot() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    maxAttendees: 5,
+  });
+  const { userId: occupantId } = await createMemberAndLogin(
+    testApp,
+    'occupant2',
+    'occupant2@test.local',
+  );
+  const { userId: latecomerId } = await createMemberAndLogin(
+    testApp,
+    'latecomer2',
+    'latecomer2@test.local',
+  );
+  const occupant = await signupViaDb(testApp, eventId, occupantId);
+  const latecomer = await signupViaDb(testApp, eventId, latecomerId);
+  // Occupy tank position 1 outright (distinct role keeps the auto-signed-up
+  // creator's player rows from interfering with the assertion).
+  await testApp.db.insert(schema.rosterAssignments).values({
+    eventId,
+    signupId: occupant.id,
+    role: 'tank',
+    position: 1,
+    isOverride: 0,
+  });
+  const db = testApp.app.get<PostgresJsDatabase<typeof schema>>(
+    DrizzleAsyncProvider,
+    { strict: false },
+  );
+  // explicitPosition: 1 is taken → must retry into the next free slot.
+  const placed = await db.transaction((tx) =>
+    insertRosterSlotWithRetry(tx, {
+      eventId,
+      signupId: latecomer.id,
+      slotRole: 'tank',
+      explicitPosition: 1,
+      autoBench: false,
+    }),
+  );
+  expect(placed).not.toBe(1);
+  const tanks = (await getAllRosterAssignments(testApp, eventId)).filter(
+    (a) => a.role === 'tank',
+  );
+  expect(tanks).toHaveLength(2);
+  expect(new Set(tanks.map((t) => t.position)).size).toBe(2);
+}
+
 beforeAll(() => setupAll());
 afterEach(() => resetAfterEach());
+
+describe('Signups — Regression: ROK-1345 concurrent slot race', () => {
+  it('places both concurrent signups in distinct slots without 500', () =>
+    testConcurrentSignupsNoDuplicateKey());
+  it('retries into the next free slot when the target is taken', () =>
+    testRetryHelperRecoversFromTakenSlot());
+});
 
 describe('Signups — admin remove', () => {
   it('should allow admin to remove a signup', () => testAdminRemove());
