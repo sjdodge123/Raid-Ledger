@@ -23,13 +23,17 @@ export function splitVotersBySlot<T extends { userId: number; slotId: number }>(
   return { selectedVoters, otherVoters };
 }
 
-/** Format a time for DM display. */
-export function formatPollTime(isoTime: string): string {
+/**
+ * Format a time for DM display in the recipient's timezone (ROK-1112).
+ * `timeZone` is an IANA string (recipient pref → guild default → 'UTC').
+ */
+export function formatPollTime(isoTime: string, timeZone: string): string {
   return new Date(isoTime).toLocaleString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZone,
   });
 }
