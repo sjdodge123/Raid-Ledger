@@ -408,6 +408,197 @@ validate_db_data() {
     fi
 }
 
+# =============================================================================
+# Migration drift probe (ROK-1320)
+# =============================================================================
+# `npm run db:migrate` runs soft-fail above (`|| print_warning`). When the
+# worktree's drizzle journal has migrations the local DB hasn't applied (e.g.
+# after rebasing onto a newer main that landed migrations, or restoring an old
+# backup), the soft-fail let the API boot "healthy" on new code against a
+# drift-stricken DB — every runtime request touching the missing schema 500s
+# with no boot-time signal. The probe below compares the journal against the
+# DB's applied set BEFORE the API starts and aborts loudly on unresolved drift.
+#
+# Matching key: drizzle stores sha256(<tag>.sql contents) in
+# drizzle.__drizzle_migrations.hash. We compute the same per journal entry and
+# diff the two hash sets. (The journal's `when` maps to the table's created_at;
+# we key on hash since that's the table's only stable migration identifier.)
+
+# Canonical journal location for THIS repo (confirmed via filesystem inspect).
+MIGRATIONS_DIR="$PROJECT_DIR/api/src/drizzle/migrations"
+JOURNAL_PATH="$MIGRATIONS_DIR/meta/_journal.json"
+
+# Pure diff logic, factored out so the regression test can exercise it with
+# stubbed inputs (no live Postgres required). Reads two newline-separated hash
+# lists on FDs — journal hashes ($1) and db hashes ($2) — and prints:
+#   missing:<hash>   for each journal hash absent from the DB (DB behind)
+#   phantom:<hash>   for each DB hash absent from the journal (orphan rows)
+# Returns 0 always; the caller interprets the printed lines.
+compute_migration_drift() {
+    local journal_hashes="$1"
+    local db_hashes="$2"
+    local sorted_journal sorted_db
+    sorted_journal=$(printf '%s\n' "$journal_hashes" | grep -v '^$' | sort -u)
+    sorted_db=$(printf '%s\n' "$db_hashes" | grep -v '^$' | sort -u)
+
+    # journal − db  → DB is missing these migrations.
+    comm -23 <(printf '%s\n' "$sorted_journal") <(printf '%s\n' "$sorted_db") \
+        | sed 's/^/missing:/'
+    # db − journal  → phantom rows (the ROK-1319 corruption pattern).
+    comm -13 <(printf '%s\n' "$sorted_journal") <(printf '%s\n' "$sorted_db") \
+        | sed 's/^/phantom:/'
+}
+
+# Read the journal and emit, per entry, "<hash> <tag>" (sha256 of the tag's
+# .sql file + the tag, for human-readable error messages). Uses jq when
+# available, with a portable grep/sed fallback for parsing tags.
+gather_journal_hashes() {
+    [ -f "$JOURNAL_PATH" ] || return 0
+    local tags
+    if command -v jq >/dev/null 2>&1; then
+        tags=$(jq -r '.entries[].tag' "$JOURNAL_PATH")
+    else
+        # Portable fallback: pull "tag": "..." values in journal order.
+        tags=$(grep -o '"tag"[[:space:]]*:[[:space:]]*"[^"]*"' "$JOURNAL_PATH" \
+            | sed 's/.*"tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    fi
+    local tag sqlfile hash
+    while IFS= read -r tag; do
+        [ -z "$tag" ] && continue
+        sqlfile="$MIGRATIONS_DIR/$tag.sql"
+        if [ ! -f "$sqlfile" ]; then
+            # A journal entry with no .sql file is itself a corruption — surface
+            # it rather than silently dropping the entry from the diff.
+            echo "MISSING_SQL $tag"
+            continue
+        fi
+        hash=$(shasum -a 256 "$sqlfile" 2>/dev/null | awk '{print $1}')
+        [ -z "$hash" ] && hash=$(sha256sum "$sqlfile" 2>/dev/null | awk '{print $1}')
+        echo "$hash $tag"
+    done <<< "$tags"
+}
+
+# Query the applied hash set from Postgres using the same docker exec / psql
+# invocation the rest of the script uses (validate_db_data). Emits one hash per
+# line. Returns non-zero (and emits nothing) when the DB / table isn't queryable
+# yet, so the caller can treat "no DB to probe" as not-a-drift.
+gather_db_hashes() {
+    local out
+    out=$(docker exec raid-ledger-db psql -U user -d raid_ledger -tAc \
+        "SELECT hash FROM drizzle.__drizzle_migrations" 2>/dev/null) || return 1
+    # An empty result on a brand-new DB (table absent) yields empty string;
+    # the caller distinguishes that from a query failure via our exit code.
+    printf '%s\n' "$out" | grep -v '^$' || true
+}
+
+# Orchestrator: gather journal + db hash sets, diff them, and act:
+#   • journal − db ≠ ∅ → run db:migrate; on failure ABORT (no API start);
+#     on success re-probe to confirm parity, then continue.
+#   • db − journal ≠ ∅ → phantom rows → ABORT pointing at scripts/reconcile-migrations.mjs.
+#   • no drift → silent, continue.
+# Aborts via `exit 3` (distinct from the lease's exit 2) so callers/CI can tell
+# a drift abort from a lease-contention abort.
+check_migration_drift() {
+    # Guard: if the DB container/table isn't queryable yet, there's nothing to
+    # compare against (fresh DB, first migration). Skip — db:migrate above will
+    # have built the table, and a truly fresh DB has no drift.
+    local db_hashes
+    if ! db_hashes=$(gather_db_hashes); then
+        print_warning "Migration drift probe skipped: DB not queryable yet (fresh/first-run)."
+        return 0
+    fi
+
+    _run_drift_probe "$db_hashes" "first"
+}
+
+# Inner probe, separated so the post-migrate re-probe can reuse it without
+# re-running migrations on the recursion. $2 = "first" | "reprobe".
+_run_drift_probe() {
+    local db_hashes="$1"
+    local phase="$2"
+    local journal_raw journal_hashes drift
+
+    journal_raw=$(gather_journal_hashes)
+    if echo "$journal_raw" | grep -q '^MISSING_SQL '; then
+        print_error "Migration journal references .sql files that don't exist:"
+        echo "$journal_raw" | grep '^MISSING_SQL ' | sed 's/^MISSING_SQL /    - /'
+        print_error "The journal is corrupt for this worktree. Fix the journal/migrations before deploying."
+        exit 3
+    fi
+    journal_hashes=$(echo "$journal_raw" | awk '{print $1}')
+
+    drift=$(compute_migration_drift "$journal_hashes" "$db_hashes")
+    local missing phantom
+    missing=$(echo "$drift" | grep '^missing:' | sed 's/^missing://' | grep -v '^$' || true)
+    phantom=$(echo "$drift" | grep '^phantom:' | sed 's/^phantom://' | grep -v '^$' || true)
+
+    # Phantom rows first: the DB has migration hashes the journal doesn't. This
+    # is the ROK-1319 corruption pattern — running migrate won't fix it.
+    if [ -n "$phantom" ]; then
+        print_error "Migration drift: DB has migration(s) NOT in this branch's journal (orphan rows):"
+        while IFS= read -r h; do
+            [ -z "$h" ] && continue
+            local tag
+            tag=$(echo "$journal_raw" | awk -v hh="$h" '$1==hh {print $2}')
+            echo "    - hash ${h:0:16}…${tag:+ (tag $tag)}"
+        done <<< "$phantom"
+        print_error "These rows have no matching journal entry on branch '$(get_current_branch)'."
+        print_error "Likely cause: the local DB carries migrations from another branch/main this worktree hasn't rebased onto, or __drizzle_migrations is corrupt."
+        print_error "Fix: rebase this branch onto the main carrying those migrations, OR run:"
+        print_error "    DATABASE_URL=\"\$DATABASE_URL\" node scripts/reconcile-migrations.mjs"
+        print_error "    (do NOT trust blindly — verify the orphan hashes are legitimately applied first)"
+        print_error "NOT starting the API against a drifted DB."
+        exit 3
+    fi
+
+    if [ -n "$missing" ]; then
+        if [ "$phase" = "reprobe" ]; then
+            # We already ran migrate once and drift persists — migrate did not
+            # close the gap. Abort rather than loop.
+            print_error "Migration drift persists after running db:migrate. The journal still has migration(s) the DB lacks:"
+            _print_missing_tags "$missing" "$journal_raw"
+            print_error "db:migrate did not apply them (it may have errored silently). NOT starting the API."
+            exit 3
+        fi
+        print_warning "Migration drift detected: DB is missing migration(s) present in the journal:"
+        _print_missing_tags "$missing" "$journal_raw"
+        echo "Applying missing migrations via 'npm run db:migrate -w api'..."
+        if ! npm run db:migrate -w api 2>&1; then
+            print_error "db:migrate FAILED while applying drifted migrations. NOT starting the API."
+            print_error "The DB is missing schema the new code expects — booting now would 500 on every request touching it."
+            print_error "Resolve the migration failure above, then re-run deploy."
+            exit 3
+        fi
+        # Re-probe to confirm parity. Re-query the DB (migrate just changed it).
+        local new_db_hashes
+        if ! new_db_hashes=$(gather_db_hashes); then
+            print_error "Could not re-query the DB after db:migrate to confirm parity. NOT starting the API."
+            exit 3
+        fi
+        _run_drift_probe "$new_db_hashes" "reprobe"
+        return 0
+    fi
+
+    # No drift.
+    if [ "$phase" = "first" ]; then
+        print_success "Migration state in sync with journal — no drift."
+    else
+        print_success "Migration drift resolved — DB now in sync with journal."
+    fi
+}
+
+# Helper: print "missing" hashes with their journal tags for readable errors.
+_print_missing_tags() {
+    local missing="$1"
+    local journal_raw="$2"
+    while IFS= read -r h; do
+        [ -z "$h" ] && continue
+        local tag
+        tag=$(echo "$journal_raw" | awk -v hh="$h" '$1==hh {print $2}')
+        echo "    - ${tag:-<unknown>} (hash ${h:0:16}…)"
+    done <<< "$missing"
+}
+
 show_status() {
     print_header "Dev Environment Status"
 
@@ -622,6 +813,14 @@ start_dev() {
     echo "Running database migrations..."
     npm run db:migrate -w api 2>&1 || print_warning "Migrations may have already been applied"
 
+    # Drift probe (ROK-1320): compare the journal against the DB's applied set
+    # BEFORE the API starts. The soft-fail above means a failed/partial migrate
+    # would otherwise let the API boot on new code against a drifted DB (every
+    # request touching the missing schema 500s with no boot-time signal). This
+    # re-runs migrate on detected drift and ABORTS (exit 3) if it can't close
+    # the gap or finds phantom rows.
+    check_migration_drift
+
     # Validate DB has real data — if empty and not --fresh, something went wrong
     validate_db_data "$fresh"
 
@@ -703,6 +902,19 @@ start_dev() {
     echo "    ./scripts/deploy_dev.sh --down            # Stop everything"
     echo ""
 }
+
+# Sourcing guard (ROK-1320): when this file is `source`d instead of executed
+# (e.g. by scripts/test-migration-drift-probe.sh to unit-test the drift-probe
+# functions in isolation), return here so we define the functions WITHOUT
+# parsing args or dispatching an action. Direct execution falls through.
+if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
+    # SC2317: shellcheck analyzes this file as executed (where `return` outside a
+    # function is reachable only when sourced) and flags the line unreachable —
+    # false positive for a sourcing guard. The redirect+|| keeps it a no-op if
+    # somehow reached during direct execution.
+    # shellcheck disable=SC2317
+    return 0 2>/dev/null || true
+fi
 
 # Parse arguments — supports combining flags (e.g., --ci --rebuild)
 ARG_REBUILD=false
