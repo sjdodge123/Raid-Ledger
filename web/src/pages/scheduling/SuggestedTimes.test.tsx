@@ -254,21 +254,25 @@ describe('VoteStep — AC2: buttons disabled while vote is in-flight', () => {
         poll={poll}
         lineupId={1}
         matchId={10}
-        gameTimeStale={false}
       >
-        <div>Step 3 content</div>
+        <div>Suggest step content</div>
       </SchedulingWizard>,
     );
 
-    // Wizard should start on step 1 (VoteStep) since gameTimeStale=false and slots exist
-    const step2 = screen.getByTestId('scheduling-wizard-step-2');
-    expect(step2).toBeInTheDocument();
+    // ROK-1301: wizard collapsed 3 → 2 steps. Vote is now step 1 of 2.
+    expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
 
-    // Find the first vote button
-    const voteButtons = step2.querySelectorAll('button[type="button"]');
-    // Filter to only the slot vote buttons (not the "Continue" nav button)
-    const slotButtons = Array.from(voteButtons).filter(
-      (btn) => !btn.textContent?.includes('Continue'),
+    // ROK-1301: VoteStep is now the first step and carries the inline
+    // "Using your saved Game Time" notice above the vote slots.
+    expect(screen.getByText(/vote on suggested times/i)).toBeInTheDocument();
+    expect(screen.getByText(/using your saved game time/i)).toBeInTheDocument();
+
+    // Find the first vote button (anchor on the slot-time text, not a testid,
+    // so this doesn't over-constrain the step container markup).
+    const voteButtons = screen.getAllByRole('button');
+    // Filter to only the slot vote buttons (not the nav / notice link buttons).
+    const slotButtons = voteButtons.filter((btn) =>
+      /\d{1,2}:\d{2}/.test(btn.textContent ?? ''),
     );
     expect(slotButtons.length).toBeGreaterThan(0);
     const firstSlotBtn = slotButtons[0] as HTMLButtonElement;

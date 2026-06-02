@@ -1,0 +1,128 @@
+/**
+ * Game Time Refresh Modal (ROK-1301).
+ *
+ * The weekly-availability painter moved out of SchedulingWizard Step 1 into this
+ * self-gating modal, mounted on the scheduling poll page. It auto-opens iff
+ * `gameTimeStale === true` AND the wizard isn't session-skipped, lets the user
+ * repaint their Game Time, and on Save invalidates both ['scheduling'] (so the
+ * group heatmap on the same page refreshes) and GAME_TIME_QUERY_KEY.
+ *
+ * Copy (operator-locked 2026-06-02, simplified web-only — no contract change):
+ *   - Fresh user proxy (no saved slots) → "Set your Game Time so the group can
+ *     plan with you".
+ *   - Stale returning user (has saved slots) → "Refresh your Game Time" +
+ *     sub-line "It's been a while — please update your weekly availability."
+ * The DTO carries only `gameTimeStale` — there is no `gameTimeConfirmedAt`, so we
+ * never show "Last set N days ago".
+ */
+import { useState } from 'react';
+import type { JSX } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Modal } from '../../components/ui/modal';
+import { GameTimeGrid } from '../../components/features/game-time/GameTimeGrid';
+import { AbsenceSection } from '../../components/features/game-time/game-time-absence';
+import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
+import { useGameTime, GAME_TIME_QUERY_KEY } from '../../hooks/use-game-time';
+import { useMediaQuery } from '../../hooks/use-media-query';
+import { isWizardSkipped, setWizardSkipped } from './scheduling-wizard-utils';
+
+const FRESH_TITLE = 'Set your Game Time so the group can plan with you';
+const STALE_TITLE = 'Refresh your Game Time';
+const STALE_SUBLINE = "It's been a while — please update your weekly availability.";
+
+/** Loading spinner shown while the editor hydrates saved slots. */
+function ModalSpinner(): JSX.Element {
+  return (
+    <div className="text-center py-8">
+      <div className="w-8 h-8 mx-auto border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+/** Save / Skip footer (Modal has no footer slot, so it lives in the body). */
+function ModalFooter({ onSave, onSkip, isSaving }: {
+  onSave: () => void; onSkip: () => void; isSaving: boolean;
+}): JSX.Element {
+  return (
+    <div className="shrink-0 flex flex-col items-center gap-2 pt-2">
+      <button type="button" onClick={onSave} disabled={isSaving}
+        className="w-full md:w-auto px-6 py-2.5 min-h-[44px] text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50">
+        {isSaving ? 'Saving...' : 'Save & Close'}
+      </button>
+      <button type="button" onClick={onSkip}
+        className="min-h-[44px] px-4 py-2 text-sm text-muted hover:text-foreground transition-colors">
+        Skip
+      </button>
+    </div>
+  );
+}
+
+/** Inner body: spinner while loading, otherwise the painter + absence + footer. */
+function RefreshModalBody({ isStaleReturning, onSaved, onSkip }: {
+  isStaleReturning: boolean; onSaved: () => void; onSkip: () => void;
+}): JSX.Element {
+  const editor = useGameTimeEditor();
+  const isMobile = useMediaQuery('(max-width: 767px)');
+
+  if (editor.isLoading) return <ModalSpinner />;
+
+  // editor.save() swallows save errors (toasts on failure, resolves either way),
+  // so we never force-close here. onSaved() invalidates the game-time query; a
+  // SUCCESSFUL save also bumped game_time_confirmed_at server-side, so the
+  // refetch returns gameTimeStale=false and the parent closes the modal. A FAILED
+  // save leaves staleness true, so the modal stays open for retry.
+  const handleSave = async () => { await editor.save(); onSaved(); };
+
+  // Fragment children become flex items of the Modal body (flex-col, see the
+  // bodyClassName below). The grid is the only scroll region (flex-1), so the
+  // footer stays pinned and visible instead of falling below an outer scroll.
+  return (
+    <>
+      {isStaleReturning && <p className="shrink-0 text-muted text-sm text-center">{STALE_SUBLINE}</p>}
+      <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
+        <GameTimeGrid slots={editor.slots} onChange={editor.handleChange} tzLabel={editor.tzLabel}
+          hourRange={[6, 24]} compact noStickyOffset fullDayNames={!isMobile} />
+      </div>
+      <div className="shrink-0"><AbsenceSection /></div>
+      <ModalFooter onSave={handleSave} onSkip={onSkip} isSaving={editor.isSaving} />
+    </>
+  );
+}
+
+/**
+ * Self-gating modal. The open state is DERIVED (`stale && !dismissed`), not a
+ * once-initialized boolean — so if `gameTimeStale` flips to true after mount
+ * (e.g. a cached-fresh query refetches to stale) the modal still appears. The
+ * user's explicit Skip / close is tracked separately as `dismissed` so it does
+ * NOT reopen this session. A successful Save clears staleness (the editor
+ * refetches game time after the server bumps confirmed_at) → the modal closes
+ * on its own; a failed Save leaves staleness true → it stays open for retry.
+ */
+export function GameTimeRefreshModal(): JSX.Element | null {
+  const { data: gameTime } = useGameTime();
+  const qc = useQueryClient();
+  const [dismissed, setDismissed] = useState(false);
+
+  const stale = !!gameTime?.gameTimeStale && !isWizardSkipped();
+  const open = stale && !dismissed;
+
+  if (!open) return null;
+
+  const hasSlots = (gameTime?.slots?.length ?? 0) > 0;
+  const title = hasSlots ? STALE_TITLE : FRESH_TITLE;
+
+  // Refresh the group heatmap + game-time query after a save attempt. On success
+  // the game-time refetch clears `stale` and the modal closes via `open` above.
+  const handleSaved = () => {
+    qc.invalidateQueries({ queryKey: ['scheduling'] });
+    qc.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+  };
+  const handleSkip = () => { setWizardSkipped(); setDismissed(true); };
+
+  return (
+    <Modal isOpen onClose={handleSkip} title={title} maxWidth="max-w-2xl"
+      bodyClassName="p-4 flex flex-col gap-4 max-h-[calc(90vh-8rem)]">
+      <RefreshModalBody isStaleReturning={hasSlots} onSaved={handleSaved} onSkip={handleSkip} />
+    </Modal>
+  );
+}

@@ -1,27 +1,23 @@
 /**
- * Scheduling Wizard (ROK-999).
- * 3-step inline wizard guiding users through the scheduling poll flow.
- * Step 1: Set Gametime (auto-skipped if fresh)
- * Step 2: Vote on Times (auto-skipped if no slots exist)
- * Step 3: Suggest a Time (user-skipped by not adding one)
+ * Scheduling Wizard (ROK-999, collapsed to 2 steps in ROK-1301).
+ * 2-step inline wizard guiding users through the scheduling poll flow.
+ * Step 1: Vote on Times (auto-skipped if no slots exist)
+ * Step 2: Suggest a Time (user-skipped by not adding one)
+ *
+ * The former Step 1 "Set Gametime" painter moved into GameTimeRefreshModal,
+ * mounted on the poll page — weekly availability is now a profile setting, not a
+ * per-poll wizard step.
  */
 import { useState } from 'react';
 import type { JSX, ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
-import { GameTimeGrid } from '../../components/features/game-time/GameTimeGrid';
-import { AbsenceSection } from '../../components/features/game-time/game-time-absence';
-import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
-import { GAME_TIME_QUERY_KEY } from '../../hooks/use-game-time';
-import { useMediaQuery } from '../../hooks/use-media-query';
 import { useToggleScheduleVote } from '../../hooks/use-scheduling';
 import { MemberAvatarGroup } from '../../components/lineups/decided/MemberAvatarGroup';
-import { setWizardSkipped } from './scheduling-wizard-utils';
 
 const STEPS = [
-  { key: 'gametime', label: 'Set Gametime', number: 1 },
-  { key: 'vote', label: 'Vote on Times', number: 2 },
-  { key: 'suggest', label: 'Suggest a Time', number: 3 },
+  { key: 'vote', label: 'Vote on Times', number: 1 },
+  { key: 'suggest', label: 'Suggest a Time', number: 2 },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -97,41 +93,27 @@ function WizardNav({ onContinue, onSkip, continueLabel, skipLabel, disabled, isP
 }
 
 // ---------------------------------------------------------------------------
-// Step 1: Set Gametime
-// ---------------------------------------------------------------------------
-
-function GameTimeWizardStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }): JSX.Element {
-  const editor = useGameTimeEditor();
-  const qc = useQueryClient();
-  const isMobile = useMediaQuery('(max-width: 767px)');
-  const handleSave = async () => {
-    await editor.save();
-    qc.invalidateQueries({ queryKey: ['scheduling'] });
-    qc.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
-    onNext();
-  };
-  if (editor.isLoading) return <div className="text-center py-8"><div className="w-8 h-8 mx-auto mb-2 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" /></div>;
-  return (
-    <div data-testid="scheduling-wizard-step-1" className="space-y-4">
-      <div className="text-center">
-        <h2 className="text-lg font-bold text-foreground">When Do You Play?</h2>
-        <p className="text-muted text-sm mt-1">Paint your weekly availability so the group can find the best time.</p>
-      </div>
-      <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
-        <GameTimeGrid slots={editor.slots} onChange={editor.handleChange} tzLabel={editor.tzLabel} hourRange={[6, 24]} compact noStickyOffset fullDayNames={!isMobile} />
-      </div>
-      <AbsenceSection />
-      <WizardNav onContinue={handleSave} onSkip={onSkip} continueLabel="Save & Continue" skipLabel="Skip" isPending={editor.isSaving} disabled={editor.isSaving || (!editor.isDirty && editor.slots.length === 0)} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Step 2: Vote on existing slots
+// Step 1: Vote on existing slots
 // ---------------------------------------------------------------------------
 
 function formatSlotTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** Stripe-card notice: weekly availability is now a profile setting (ROK-1301). */
+function SavedGameTimeNotice(): JSX.Element {
+  return (
+    <div className="p-3 rounded-lg bg-panel/50 border border-edge text-sm">
+      <p className="text-foreground">
+        Using your saved Game Time — edit anytime in{' '}
+        <Link to="/profile/gaming/game-time" className="text-emerald-300 underline hover:text-emerald-200">
+          profile settings
+        </Link>
+        .
+      </p>
+      <p className="text-xs text-muted mt-1">Update once, applies to every lineup.</p>
+    </div>
+  );
 }
 
 function VoteStep({ poll, lineupId, matchId, onNext }: {
@@ -149,11 +131,12 @@ function VoteStep({ poll, lineupId, matchId, onNext }: {
   };
   const pending = toggle.isPending;
   return (
-    <div data-testid="scheduling-wizard-step-2" className="space-y-4">
+    <div data-testid="scheduling-wizard-step-1" className="space-y-4">
       <div className="text-center">
         <h2 className="text-lg font-bold text-foreground">Vote on Suggested Times</h2>
         <p className="text-muted text-sm mt-1">Tap the times that work for you.</p>
       </div>
+      <SavedGameTimeNotice />
       <div className="space-y-2">
         {poll.slots.map((slot) => {
           const slotVoted = isVoted(slot.id);
@@ -188,35 +171,25 @@ export interface SchedulingWizardProps {
   poll: SchedulePollPageResponseDto;
   lineupId: number;
   matchId: number;
-  /** true when game time is stale / needs refresh. */
-  gameTimeStale: boolean;
 }
 
-function computeInitialStep(gameTimeStale: boolean, hasSlots: boolean): number {
-  if (gameTimeStale) return 0;
-  if (hasSlots) return 1;
-  return 2;
+/** Vote (step 0) when slots exist, else jump straight to Suggest (step 1). */
+function computeInitialStep(hasSlots: boolean): number {
+  return hasSlots ? 0 : 1;
 }
 
-export function SchedulingWizard({ children, poll, lineupId, matchId, gameTimeStale }: SchedulingWizardProps): JSX.Element {
+export function SchedulingWizard({ children, poll, lineupId, matchId }: SchedulingWizardProps): JSX.Element {
   const hasSlots = poll.slots.length > 0;
-  const [step, setStep] = useState(() => computeInitialStep(gameTimeStale, hasSlots));
+  const [step, setStep] = useState(() => computeInitialStep(hasSlots));
 
-  const advance = () => {
-    const next = step + 1;
-    if (next === 1 && !hasSlots) { setStep(2); return; }
-    setStep(Math.min(next, STEPS.length - 1));
-  };
-
+  const advance = () => setStep(Math.min(step + 1, STEPS.length - 1));
   const goTo = (target: number) => { if (target !== step) setStep(target); };
-  const skipStep1 = () => { setWizardSkipped(); advance(); };
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-0 space-y-6">
       <WizardStepIndicator currentStep={step} onGoTo={goTo} />
-      {step === 0 && <GameTimeWizardStep onNext={advance} onSkip={skipStep1} />}
-      {step === 1 && <VoteStep poll={poll} lineupId={lineupId} matchId={matchId} onNext={advance} />}
-      {step === 2 && children}
+      {step === 0 && <VoteStep poll={poll} lineupId={lineupId} matchId={matchId} onNext={advance} />}
+      {step === 1 && children}
     </div>
   );
 }
