@@ -11,6 +11,10 @@ import {
   CORE_JOB_METADATA,
   MAX_EXECUTIONS_PER_JOB,
 } from './cron-job.constants';
+import {
+  insertExecutionRow,
+  type ReresolveJob,
+} from './cron-job.fk-recovery.helpers';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
 type Db = PostgresJsDatabase<typeof schema>;
@@ -89,24 +93,27 @@ async function recordExecution(
   startedAt: Date,
   finishedAt: Date,
   error?: string,
+  reresolve?: ReresolveJob,
+  logger?: Logger,
 ): Promise<void> {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
-  await db.insert(schema.cronJobExecutions).values({
-    cronJobId: job.id,
-    status,
-    startedAt,
-    finishedAt,
-    durationMs,
-    error,
-  });
+  const inserted = await insertExecutionRow(
+    db,
+    job,
+    jobName,
+    { status, startedAt, finishedAt, durationMs, error },
+    reresolve,
+    logger,
+  );
   perfLog('CRON', jobName, durationMs, { status });
-  const nextRunAt = computeNextRun(job.cronExpression);
+  if (!inserted) return;
+  const nextRunAt = computeNextRun(inserted.cronExpression);
   await db
     .update(schema.cronJobs)
     .set({ lastRunAt: finishedAt, nextRunAt, updatedAt: new Date() })
-    .where(eq(schema.cronJobs.id, job.id));
-  job.lastRunAt = finishedAt;
-  if (nextRunAt) job.nextRunAt = nextRunAt;
+    .where(eq(schema.cronJobs.id, inserted.id));
+  inserted.lastRunAt = finishedAt;
+  if (nextRunAt) inserted.nextRunAt = nextRunAt;
 }
 
 /** Record a no-op execution (handler ran but found nothing to do). */
@@ -133,15 +140,18 @@ export async function recordSkipped(
   db: Db,
   job: CronJobRow,
   jobName: string,
+  reresolve?: ReresolveJob,
+  logger?: Logger,
 ): Promise<void> {
   const now = new Date();
-  await db.insert(schema.cronJobExecutions).values({
-    cronJobId: job.id,
-    status: 'skipped',
-    startedAt: now,
-    finishedAt: now,
-    durationMs: 0,
-  });
+  await insertExecutionRow(
+    db,
+    job,
+    jobName,
+    { status: 'skipped', startedAt: now, finishedAt: now, durationMs: 0 },
+    reresolve,
+    logger,
+  );
   perfLog('CRON', jobName, 0, { status: 'skipped' });
 }
 
@@ -152,8 +162,20 @@ export async function recordCompleted(
   jobName: string,
   startedAt: Date,
   finishedAt: Date,
+  reresolve?: ReresolveJob,
+  logger?: Logger,
 ): Promise<void> {
-  await recordExecution(db, job, jobName, 'completed', startedAt, finishedAt);
+  await recordExecution(
+    db,
+    job,
+    jobName,
+    'completed',
+    startedAt,
+    finishedAt,
+    undefined,
+    reresolve,
+    logger,
+  );
 }
 
 /**
@@ -168,8 +190,20 @@ export async function recordDegraded(
   jobName: string,
   startedAt: Date,
   finishedAt: Date,
+  reresolve?: ReresolveJob,
+  logger?: Logger,
 ): Promise<void> {
-  await recordExecution(db, job, jobName, 'degraded', startedAt, finishedAt);
+  await recordExecution(
+    db,
+    job,
+    jobName,
+    'degraded',
+    startedAt,
+    finishedAt,
+    undefined,
+    reresolve,
+    logger,
+  );
 }
 
 /** Record a failed execution and update job timestamps. */
@@ -181,6 +215,7 @@ export async function recordFailed(
   finishedAt: Date,
   errorMessage: string,
   logger: Logger,
+  reresolve?: ReresolveJob,
 ): Promise<void> {
   await recordExecution(
     db,
@@ -190,6 +225,8 @@ export async function recordFailed(
     startedAt,
     finishedAt,
     errorMessage,
+    reresolve,
+    logger,
   );
   logger.error(`Cron job "${jobName}" failed: ${errorMessage}`);
 }

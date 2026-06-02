@@ -566,6 +566,67 @@ function describeSentryInstrumentTs() {
         });
       });
 
+      // ── ROK-1328: drop cron_jobs FK violations (23503) ──
+      //
+      // The primary fix self-heals CronJobService.jobCache so a stale cached
+      // job.id no longer re-throws the FK on every cron tick (~2 events/min,
+      // 1348 in 11h). This beforeSend branch is the second line of defense —
+      // if any path ever re-throws the FK error, Sentry MUST still drop it.
+      // Match on the constraint name embedded in the VALUE, not the type, since
+      // the error reaches Sentry as a bare Error/PostgresError from cron paths.
+      describe('ROK-1328: cron_job_executions FK drop', () => {
+        it('drops events whose value contains the FK constraint name', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'Error',
+                  value:
+                    'insert or update on table "cron_job_executions" violates ' +
+                    'foreign key constraint ' +
+                    '"cron_job_executions_cron_job_id_fkey"',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops the FK error regardless of exception type', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'PostgresError',
+                  value:
+                    'Key (cron_job_id)=(42) is not present in table ' +
+                    '"cron_jobs" — cron_job_executions_cron_job_id_fkey',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('does NOT drop unrelated FK violations on other tables', () => {
+          // A different constraint name (e.g. a real data-integrity bug
+          // elsewhere) must still reach Sentry.
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'Error',
+                  value:
+                    'insert or update violates foreign key constraint ' +
+                    '"signups_event_id_fkey"',
+                },
+              ],
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
+      });
+
       describe('ROK-1162: malformed OAuth state (already covered by ROK-668)', () => {
         it('drops InternalOAuthError whose value indicates a state mismatch', () => {
           // The ROK-668 filter already drops by type alone, so any value

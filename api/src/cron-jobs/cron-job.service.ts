@@ -29,15 +29,16 @@ import {
   upsertJob,
   pruneExecutions,
   recordSkipped,
-  recordCompleted,
-  recordDegraded,
-  recordFailed,
-  recordNoOp,
   shouldUpdateLiveness,
   extractRegistryJobMeta,
   flushPendingUpdates,
   recordSkippedTrigger,
 } from './cron-job.helpers';
+import { selectJobByName } from './cron-job.fk-recovery.helpers';
+import {
+  runHandlerTracked,
+  type RecordDeps,
+} from './cron-job.execution.helpers';
 import {
   getCronJobSafe,
   setPaused,
@@ -89,9 +90,15 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       );
     }, 2_000);
     this.flushInterval = setInterval(() => {
-      this.flushLastRunUpdates().catch((err) =>
-        this.logger.error(`Failed to flush last_run_at updates: ${err}`),
-      );
+      // Flush-then-refresh in the same tick (ROK-1328): flush first so we
+      // don't race pendingLastRunUpdates, then re-pull the cache so a deleted
+      // or newly-added cron_jobs row can't leave a stale `job.id` wedged in
+      // the cache forever (the dead FK → 23503 → Sentry-spam loop).
+      this.flushLastRunUpdates()
+        .catch((err) =>
+          this.logger.error(`Failed to flush last_run_at updates: ${err}`),
+        )
+        .finally(() => void this.refreshJobCache());
     }, FLUSH_INTERVAL_MS);
   }
 
@@ -160,12 +167,38 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  /** Populate the in-memory job cache from DB. */
-  private async refreshJobCache(): Promise<void> {
-    const allJobs = await this.db.select().from(schema.cronJobs);
-    this.jobCache.clear();
-    for (const j of allJobs) this.jobCache.set(j.name, j);
+  /**
+   * Populate the in-memory job cache from DB. Public so the periodic flush
+   * interval and tests can invoke it deterministically (ROK-1328). Resilient:
+   * a transient SELECT failure is logged, not thrown, so it can't kill the
+   * flush interval that calls it.
+   */
+  async refreshJobCache(): Promise<void> {
+    try {
+      const allJobs = await this.db.select().from(schema.cronJobs);
+      this.jobCache.clear();
+      for (const j of allJobs) this.jobCache.set(j.name, j);
+    } catch (err) {
+      this.logger.warn(`Failed to refresh cron job cache: ${err}`);
+    }
   }
+
+  /**
+   * Re-resolve a job by name from the DB after a stale-cache FK violation
+   * (ROK-1328). Atomically invalidates + re-selects: drops the dead cache
+   * entry, re-SELECTs by name, and either re-caches the fresh row (new id) or
+   * leaves the entry deleted when the job is genuinely gone. Bound arrow so it
+   * can be passed as a callback into the DI-free record* helpers without
+   * importing the service (avoids the circular dep).
+   */
+  private reresolveJob = async (
+    jobName: string,
+  ): Promise<CronJobRow | null> => {
+    this.jobCache.delete(jobName);
+    const row = await selectJobByName(this.db, jobName);
+    if (row) this.jobCache.set(jobName, row);
+    return row;
+  };
 
   // ─── Execution tracking ─────────────────────────────────────────
 
@@ -180,7 +213,13 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       return;
     }
     if (job.paused) {
-      await recordSkipped(this.db, job, jobName);
+      await recordSkipped(
+        this.db,
+        job,
+        jobName,
+        this.reresolveJob,
+        this.logger,
+      );
       return;
     }
     await this.runTracked(job, jobName, fn);
@@ -190,13 +229,19 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   private async resolveJob(jobName: string): Promise<CronJobRow | null> {
     const cached = this.jobCache.get(jobName);
     if (cached) return cached;
-    const [row] = await this.db
-      .select()
-      .from(schema.cronJobs)
-      .where(eq(schema.cronJobs.name, jobName))
-      .limit(1);
+    const row = await selectJobByName(this.db, jobName);
     if (row) this.jobCache.set(jobName, row);
-    return row ?? null;
+    return row;
+  }
+
+  /** Deps bundle threaded into the FK-aware outcome recorders (ROK-1328). */
+  private get recordDeps(): RecordDeps {
+    return {
+      db: this.db,
+      logger: this.logger,
+      reresolve: this.reresolveJob,
+      onNoOp: (job) => this.queueLivenessIfStale(job),
+    };
   }
 
   /** Run tracked execution with timing, recording, and pruning. */
@@ -205,40 +250,13 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     jobName: string,
     fn: () => Promise<void | boolean | { degraded: true }>,
   ): Promise<void> {
-    const startedAt = new Date();
-    let didInsertRow = false;
-    try {
-      const result = await fn();
-      const finishedAt = new Date();
-      if (result === false) {
-        recordNoOp(jobName, startedAt, finishedAt);
-        this.queueLivenessIfStale(job);
-      } else if (
-        typeof result === 'object' &&
-        result !== null &&
-        result.degraded === true
-      ) {
-        await recordDegraded(this.db, job, jobName, startedAt, finishedAt);
-        didInsertRow = true;
-      } else {
-        await recordCompleted(this.db, job, jobName, startedAt, finishedAt);
-        didInsertRow = true;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await recordFailed(
-        this.db,
-        job,
-        jobName,
-        startedAt,
-        new Date(),
-        msg,
-        this.logger,
-      );
-      didInsertRow = true;
-    } finally {
-      if (didInsertRow) await this.maybePrune(job, jobName);
-    }
+    const didInsertRow = await runHandlerTracked(
+      this.recordDeps,
+      job,
+      jobName,
+      fn,
+    );
+    if (didInsertRow) await this.maybePrune(job, jobName);
   }
 
   /** Queue a liveness heartbeat if enough time has elapsed since last update. */
