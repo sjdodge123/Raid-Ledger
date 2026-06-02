@@ -79,13 +79,16 @@ describe('Regression: ROK-1342 — badge placement + no (i) marker', () => {
         const ratingBadge = screen.getByLabelText('Rating 95');
         const priceWrapper = screen.getByText('On Sale').closest('div')!;
 
-        // Rating sits top-right; the price badge wrapper must NOT also be
-        // top-2 right-2 (that was the overlap bug). It must use bottom-2.
+        // Rating sits top-RIGHT; the On Sale badge sits in the freed top-LEFT
+        // corner (the (i) marker was removed). Same top edge, opposite
+        // horizontal corners -> no overlap, and clear of the bottom title strip
+        // (Codex P2: bottom-2 right-2 could clip a long 2-line title).
         expect(ratingBadge.className).toContain('top-2');
         expect(ratingBadge.className).toContain('right-2');
 
-        expect(priceWrapper.className).toContain('bottom-2');
-        expect(priceWrapper.className).not.toContain('top-2');
+        expect(priceWrapper.className).toContain('top-2');
+        expect(priceWrapper.className).toContain('left-2');
+        expect(priceWrapper.className).not.toContain('right-2');
 
         // The two badges must not share identical positioning classes.
         expect(priceWrapper.className).not.toBe(ratingBadge.className);

@@ -66,7 +66,7 @@ export function DrawerCard({ game, pricing }: DrawerCardProps): JSX.Element {
             >
                 <CoverContent game={game} rating={rating && rating > 0 ? rating : null} />
                 {pricing && (
-                    <div className="absolute bottom-2 right-2">
+                    <div className="absolute top-2 left-2">
                         <PriceBadge pricing={pricing} />
                     </div>
                 )}
