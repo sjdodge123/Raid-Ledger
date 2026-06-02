@@ -124,7 +124,10 @@ builds are covered. Before dispatching the build it writes a per-call sentinel
 (`.rl-sync-probe-<hex>`) into the worktree, does a CHECKED `mutagen sync flush`,
 and reads it back out of `/workspace` through the runner. A probe is accepted only
 when the sentinel matches AND the flush reported in-sync (a sentinel that landed
-before a halted flush does NOT authorize a build). Otherwise it force-resyncs once
+before a halted flush does NOT authorize a build) AND `mutagen sync list` reports
+the session healthy (no conflicts, no last-error, status not halted/errored) — so
+a tree that's in-sync on the probed file but wedged on a conflict elsewhere is
+rejected too (Gap-B defense-in-depth). Otherwise it force-resyncs once
 and re-checks; if it still can't confirm, it returns `error: "sync_stuck"` and
 builds nothing rather than building stale source. Results carry `expected_head`
 (laptop HEAD) and `synced_head` (HEAD confirmed on the runner) — equal on success.

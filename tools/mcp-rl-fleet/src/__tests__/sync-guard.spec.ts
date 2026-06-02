@@ -43,11 +43,22 @@ import { ensureSyncedHead, SENTINEL_PREFIX } from '../sync-guard.js';
 const HEAD = 'e9995e61aabbccddeeff00112233445566778899';
 const OLD_HEAD = '776527b0000000000000000000000000000000aa';
 
-/** Default: git resolves to HEAD; mutagen flush succeeds. */
+/** A `mutagen sync list` body for a healthy, watching session. */
+function healthyListBody(args: unknown[]): string {
+  return `Name: ${args[2]}\nStatus: Watching for changes\n`;
+}
+
+/**
+ * Default: git resolves to HEAD; mutagen `sync flush` succeeds and `sync list`
+ * reports a healthy watching session. The guard now calls BOTH subcommands, so
+ * the mock branches on args[1] ('flush' vs 'list').
+ */
 function wireGitAndFlush(opts: { flushRejects?: boolean } = {}): void {
-  execFileP.mockImplementation((cmd: string) => {
+  execFileP.mockImplementation((cmd: string, args: unknown[]) => {
     if (cmd === 'git') return Promise.resolve({ stdout: `${HEAD}\n`, stderr: '' });
     if (cmd === 'mutagen') {
+      if (args[1] === 'list') return Promise.resolve({ stdout: healthyListBody(args), stderr: '' });
+      // args[1] === 'flush'
       if (opts.flushRejects) {
         const e = new Error('flush failed') as Error & { stderr?: string };
         e.stderr = 'unable to flush session: session is halted';
@@ -164,12 +175,13 @@ describe('ensureSyncedHead', () => {
     // Codex high-2: a sentinel that landed before the session halted must not
     // authorize a build. Probe 1 matches but flush fails => not good => resync.
     // After resync, flush succeeds + matches => ok.
-    let call = 0;
-    execFileP.mockImplementation((cmd: string) => {
+    let flushCall = 0;
+    execFileP.mockImplementation((cmd: string, args: unknown[]) => {
       if (cmd === 'git') return Promise.resolve({ stdout: `${HEAD}\n`, stderr: '' });
       if (cmd === 'mutagen') {
-        call++;
-        if (call === 1) {
+        if (args[1] === 'list') return Promise.resolve({ stdout: healthyListBody(args), stderr: '' });
+        flushCall++; // args[1] === 'flush'
+        if (flushCall === 1) {
           const e = new Error('flush failed') as Error & { stderr?: string };
           e.stderr = 'session is halted';
           return Promise.reject(e);
@@ -215,5 +227,67 @@ describe('ensureSyncedHead', () => {
     await ensureSyncedHead({ slot: 1, worktree_path: '/wt', resync_timeout_ms: 99_000 });
 
     expect(runRl).toHaveBeenCalledWith(['resync'], { cwd: '/wt', timeoutMs: 99_000 });
+  });
+
+  it('session-health (Gap B): sentinel matches + clean flush but list shows conflicts → fail loud', async () => {
+    // A single sentinel can land cleanly while the rest of the tree is wedged on
+    // a conflict. Content matches and flush drains on BOTH probes, but `mutagen
+    // sync list` reports conflicts each time → never good → sync_stuck.
+    execFileP.mockImplementation((cmd: string, args: unknown[]) => {
+      if (cmd === 'git') return Promise.resolve({ stdout: `${HEAD}\n`, stderr: '' });
+      if (cmd === 'mutagen') {
+        if (args[1] === 'list')
+          return Promise.resolve({
+            stdout: `Name: ${args[2]}\nStatus: Watching for changes\nConflicts:\n  workspace/foo.ts (alpha) vs (beta)\n`,
+            stderr: '',
+          });
+        return Promise.resolve({ stdout: '', stderr: '' }); // flush ok
+      }
+      return Promise.resolve({ stdout: '', stderr: '' });
+    });
+    runnerEchoesToken(); // content always matches
+
+    const res = await ensureSyncedHead({ slot: 5, worktree_path: '/wt' });
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('sync_stuck');
+    expect(res.synced_head).toBeNull();
+    expect(res.message).toMatch(/conflict/i);
+    // A resync was attempted before giving up.
+    expect(res.resynced).toBe(true);
+    expect(runRl).toHaveBeenCalledTimes(1);
+    expect(unlink).toHaveBeenCalledTimes(1);
+  });
+
+  it('session-health (Gap B): transient conflict clears after resync → ok, resynced, 2 probes', async () => {
+    // First list reports conflicts (probe 1 not good); after the force-resync the
+    // session is healthy again (probe 2 good). Content + flush are fine throughout.
+    let listCall = 0;
+    execFileP.mockImplementation((cmd: string, args: unknown[]) => {
+      if (cmd === 'git') return Promise.resolve({ stdout: `${HEAD}\n`, stderr: '' });
+      if (cmd === 'mutagen') {
+        if (args[1] === 'list') {
+          listCall++;
+          return Promise.resolve({
+            stdout:
+              listCall === 1
+                ? `Name: ${args[2]}\nStatus: Halted on root deletion\nConflicts:\n  workspace/bar.ts\n`
+                : `Name: ${args[2]}\nStatus: Watching for changes\n`,
+            stderr: '',
+          });
+        }
+        return Promise.resolve({ stdout: '', stderr: '' }); // flush ok
+      }
+      return Promise.resolve({ stdout: '', stderr: '' });
+    });
+    runnerEchoesToken(); // content always matches
+
+    const res = await ensureSyncedHead({ slot: 6, worktree_path: '/wt' });
+
+    expect(res.ok).toBe(true);
+    expect(res.resynced).toBe(true);
+    expect(res.attempts).toBe(2);
+    expect(res.synced_head).toBe(HEAD);
+    expect(runRl).toHaveBeenCalledTimes(1);
   });
 });

@@ -26,6 +26,13 @@
 //   source. If it doesn't, the session is wedged — we force a resync (terminate
 //   + recreate + flush + re-scaffold) and re-probe; if it STILL doesn't match,
 //   we fail loud so the caller never builds stale source.
+//
+//   Gap B (defense-in-depth): a single sentinel proves ONE path round-tripped,
+//   not that the WHOLE tree did. Once the sentinel matches AND the flush drains,
+//   we also run `mutagen sync list` and reject the probe if the session reports
+//   conflicts, a non-empty last error, or a halted/errored status — so a tree
+//   that's in-sync on the probed file but wedged on a conflict elsewhere can't
+//   authorize a build either.
 
 import { randomBytes } from 'node:crypto';
 import { writeFile, unlink } from 'node:fs/promises';
@@ -86,10 +93,54 @@ interface ProbeOutcome {
   matched: boolean;
   /** `mutagen sync flush` returned cleanly. */
   flushOk: boolean;
-  /** A probe is trustworthy only when the content matched AND the flush succeeded. */
+  /**
+   * `mutagen sync list` reports the session present and healthy (no conflicts,
+   * no last-error, status not halted/errored). Gap-B defense-in-depth: a single
+   * sentinel proves ONE path round-tripped, but a session that is in-sync on
+   * that file yet carrying conflicts on others must not authorize a build.
+   * Only meaningful when `matched && flushOk` — otherwise left false.
+   */
+  sessionOk: boolean;
+  /** Why the session was judged unhealthy (for the fail-loud message). */
+  sessionDetail?: string;
+  /** A probe is trustworthy only when content matched AND flush succeeded AND the session is healthy. */
   good: boolean;
   read: string;
   flushErr?: string;
+}
+
+/**
+ * Gap-B health gate: inspect the Mutagen session via `mutagen sync list` and
+ * reject it if the session is missing, reports conflicts, carries a non-empty
+ * last error, or sits in a halted/errored status. The single-sentinel probe
+ * confirms ONE path drained; this confirms the WHOLE tree isn't wedged on a
+ * conflict that the sentinel happened to dodge. Never throws — any failure to
+ * read the session maps to `healthy:false` so it can only ever block a build,
+ * never wave a bad one through.
+ */
+async function inspectSession(
+  slot: number,
+  timeoutMs: number,
+): Promise<{ healthy: boolean; detail?: string }> {
+  let out: string;
+  try {
+    const res = await execFileP('mutagen', ['sync', 'list', `rl-slot-${slot}`], {
+      timeout: timeoutMs,
+    });
+    out = res.stdout ?? '';
+  } catch (err) {
+    return { healthy: false, detail: `mutagen sync list failed: ${(err as Error).message}` };
+  }
+  if (!new RegExp(`name:\\s*rl-slot-${slot}\\b`, 'i').test(out))
+    return { healthy: false, detail: `session rl-slot-${slot} not found in mutagen sync list` };
+  if (/^[ \t]*conflicts:/im.test(out)) return { healthy: false, detail: 'session reports conflicts' };
+  const errMatch = out.match(/last error:[ \t]*(.*)/i);
+  if (errMatch && errMatch[1].trim() && !/^<?none>?$/i.test(errMatch[1].trim()))
+    return { healthy: false, detail: `session reports last error: ${errMatch[1].trim().slice(0, 120)}` };
+  const statusMatch = out.match(/status:[ \t]*(.*)/i);
+  if (statusMatch && /halt|error|problem/i.test(statusMatch[1]))
+    return { healthy: false, detail: `unhealthy status: ${statusMatch[1].trim().slice(0, 120)}` };
+  return { healthy: true };
 }
 
 /**
@@ -133,7 +184,27 @@ async function probeOnce(
   });
   const read = (ror.stdout ?? '').trim();
   const matched = read === token;
-  return { matched, flushOk, good: matched && flushOk, read, flushErr };
+
+  // Gap-B: only bother inspecting the session once the cheap signals already
+  // agree (content present + flush drained). A health check on a session we've
+  // already rejected for staleness/flush-failure adds nothing.
+  let sessionOk = false;
+  let sessionDetail: string | undefined;
+  if (matched && flushOk) {
+    const health = await inspectSession(slot, flushTimeoutMs);
+    sessionOk = health.healthy;
+    sessionDetail = health.detail;
+  }
+
+  return {
+    matched,
+    flushOk,
+    sessionOk,
+    sessionDetail,
+    good: matched && flushOk && sessionOk,
+    read,
+    flushErr,
+  };
 }
 
 function makeToken(head: string): string {
@@ -265,13 +336,20 @@ export async function ensureSyncedHead(
 
   // Still not good after a resync — fail loud. The caller MUST NOT build.
   const detail = last
-    ? `flush_ok=${last.flushOk}; matched=${last.matched}; runner returned ${JSON.stringify(last.read).slice(0, 200)}${last.flushErr ? `; flush_err=${last.flushErr.slice(0, 200)}` : ''}`
+    ? `flush_ok=${last.flushOk}; matched=${last.matched}; session_ok=${last.sessionOk}${last.sessionDetail ? ` (${last.sessionDetail})` : ''}; runner returned ${JSON.stringify(last.read).slice(0, 200)}${last.flushErr ? `; flush_err=${last.flushErr.slice(0, 200)}` : ''}`
     : 'no probe completed';
-  // Distinguish the two failure modes so the operator knows where to look.
-  const reason =
-    last && last.matched && !last.flushOk
-      ? `the sentinel matched but 'mutagen sync flush' kept failing (session halted — other source edits may not be applied)`
-      : `/workspace did not reflect laptop HEAD ${short(expected)}`;
+  // Distinguish the three failure modes so the operator knows where to look.
+  let reason: string;
+  if (last && last.matched && last.flushOk && !last.sessionOk) {
+    // Gap-B: the sentinel round-tripped and the flush drained, but `mutagen
+    // sync list` says the session itself is wedged (conflicts/halted) — the
+    // rest of the tree may not be applied even though our one probe landed.
+    reason = `the sentinel round-tripped but 'mutagen sync list' reports the session has conflicts/problems (${last.sessionDetail ?? 'unhealthy session'})`;
+  } else if (last && last.matched && !last.flushOk) {
+    reason = `the sentinel matched but 'mutagen sync flush' kept failing (session halted — other source edits may not be applied)`;
+  } else {
+    reason = `/workspace did not reflect laptop HEAD ${short(expected)}`;
+  }
   return {
     ok: false,
     error: 'sync_stuck',
