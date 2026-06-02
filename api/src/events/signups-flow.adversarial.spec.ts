@@ -6,7 +6,7 @@ import { assignDirectSlot, assignBenchFallback } from './signups-flow.helpers';
 import type { FlowDeps } from './signups-flow.helpers';
 
 function createMockTx() {
-  return {
+  const tx: Record<string, unknown> = {
     select: jest.fn().mockReturnValue({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockResolvedValue([]),
@@ -20,7 +20,11 @@ function createMockTx() {
         where: jest.fn().mockResolvedValue(undefined),
       }),
     }),
-  } as unknown as Parameters<typeof assignDirectSlot>[1]['tx'];
+  };
+  // ROK-1345: roster inserts now run inside a SAVEPOINT (nested tx). Mock it by
+  // invoking the callback against the same mock so insert/update assertions hold.
+  tx.transaction = jest.fn((cb: (sp: unknown) => unknown) => cb(tx));
+  return tx as unknown as Parameters<typeof assignDirectSlot>[1]['tx'];
 }
 
 function createMockDeps(overrides?: Partial<FlowDeps>): FlowDeps {
@@ -198,7 +202,7 @@ describe('assignBenchFallback', () => {
   it('increments position when bench already has entries', async () => {
     const deps = createMockDeps();
     const insertValues = jest.fn().mockResolvedValue(undefined);
-    const tx = {
+    const tx: Record<string, unknown> = {
       select: jest.fn().mockReturnValue({
         from: jest.fn().mockReturnValue({
           where: jest
@@ -209,9 +213,16 @@ describe('assignBenchFallback', () => {
       insert: jest.fn().mockReturnValue({
         values: insertValues,
       }),
-    } as unknown as Parameters<typeof assignBenchFallback>[1];
+    };
+    // ROK-1345: roster insert runs inside a SAVEPOINT (nested tx).
+    tx.transaction = jest.fn((cb: (sp: unknown) => unknown) => cb(tx));
 
-    await assignBenchFallback(deps, tx, 1, 42);
+    await assignBenchFallback(
+      deps,
+      tx as unknown as Parameters<typeof assignBenchFallback>[1],
+      1,
+      42,
+    );
 
     // position should be max(1,3) + 1 = 4
     expect(insertValues).toHaveBeenCalledWith(

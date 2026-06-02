@@ -21,6 +21,7 @@ import * as discordH from './signups-discord.helpers';
 import { getCharacterById } from './signups-cancel.helpers';
 import { buildSignupResponseDto } from './signups-roster.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
+import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 
@@ -159,16 +160,13 @@ export async function assignDirectSlot(
     : (dto?.slotRole ??
       (await rosterQH.resolveGenericSlotRole(tx, eventRow, eventId)));
   if (!slotRole) return false;
-  const position = await rosterQH.findNextPosition(
-    tx,
+  const position = await insertRosterSlotWithRetry(tx, {
     eventId,
+    signupId,
     slotRole,
-    dto?.slotPosition,
+    explicitPosition: dto?.slotPosition,
     autoBench,
-  );
-  await tx
-    .insert(schema.rosterAssignments)
-    .values({ eventId, signupId, role: slotRole, position, isOverride: 0 });
+  });
   if (slotRole !== 'bench') {
     await tx
       .update(schema.eventSignups)
@@ -255,16 +253,12 @@ export async function assignBenchFallback(
   signupId: number,
   label = 'signup',
 ): Promise<void> {
-  const position = await rosterQH.findNextPosition(
-    tx,
+  const position = await insertRosterSlotWithRetry(tx, {
     eventId,
-    'bench',
-    undefined,
-    true,
-  );
-  await tx
-    .insert(schema.rosterAssignments)
-    .values({ eventId, signupId, role: 'bench', position, isOverride: 0 });
+    signupId,
+    slotRole: 'bench',
+    autoBench: true,
+  });
   deps.logger.log(
     `Auto-benched ${label} ${signupId} at bench position ${position}`,
   );

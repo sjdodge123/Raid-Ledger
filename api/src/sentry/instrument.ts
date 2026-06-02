@@ -58,6 +58,21 @@ if (!telemetryDisabled && isProduction) {
       ) {
         return null;
       }
+      // ROK-1328: defense-in-depth — drop cron_jobs FK violations (23503).
+      // The primary fix self-heals CronJobService.jobCache (re-resolve the
+      // job by name + retry the insert once) so a stale cached job.id after a
+      // cron_jobs row deletion no longer re-throws the FK on every tick. This
+      // filter is the second line of defense: if any path ever re-throws the
+      // FK error, Sentry MUST still drop it so the ~2-events/min burst (1348
+      // events in 11h) can't come back. Match on VALUE (the constraint name)
+      // not type — the error reaches Sentry as a bare Error/PostgresError from
+      // the cron tick, with the constraint name embedded in the message.
+      if (
+        typeof exceptionValue === 'string' &&
+        /cron_job_executions_cron_job_id_fkey/.test(exceptionValue)
+      ) {
+        return null;
+      }
       // ROK-1260: defense-in-depth — drop DiscordAPIError 50278/50007
       // events. The primary fix is in the processor (it catches these
       // before Sentry's auto-instrumentation), but if anything ever
