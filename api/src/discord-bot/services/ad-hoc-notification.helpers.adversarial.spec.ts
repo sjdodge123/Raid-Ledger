@@ -189,8 +189,10 @@ describe('buildEmbedEventData — edge cases (ROK-680)', () => {
       { discordUserId: 'third', discordUsername: 'P3', isActive: true },
     ];
     const result = await buildEmbedEventData(deps, 1, participants);
-    const ids = result!.signupMentions!.map((m) => m.discordId);
-    expect(ids).toEqual(['first', 'second', 'third']);
+    // Ad-hoc rosters drop discordId and render the stored username (ROK), so
+    // ordering is asserted on usernames rather than ids.
+    const names = result!.signupMentions!.map((m) => m.username);
+    expect(names).toEqual(['P1', 'P2', 'P3']);
   });
 
   it('maps role and preferredRoles to null for all participants', async () => {

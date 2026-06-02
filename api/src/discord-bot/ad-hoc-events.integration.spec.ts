@@ -696,12 +696,13 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
       const description = embed.data?.description ?? '';
       // ROSTER header reflects cumulative participation.
       expect(description).toMatch(/ROSTER:\s*3\s+signed up/);
-      // All three mentions present and struck through.
-      expect(description).toContain('~~<@disc-A>~~');
-      expect(description).toContain('~~<@disc-B>~~');
-      expect(description).toContain('~~<@disc-C>~~');
-      // No un-struck mention for any of the three (regression guard).
-      expect(description).not.toMatch(/(?<!~~)<@disc-[ABC]>(?!~~)/);
+      // Quick-play rosters render stored usernames (not <@id> mentions) so
+      // ex-guild participants don't leak raw IDs (ROK). All three struck through.
+      expect(description).toContain('~~Aery~~');
+      expect(description).toContain('~~Belle~~');
+      expect(description).toContain('~~Cassie~~');
+      // No raw mention token should leak for any participant (regression guard).
+      expect(description).not.toContain('<@disc-');
     } finally {
       sendSpy.mockRestore();
       editSpy.mockRestore();

@@ -193,10 +193,12 @@ describe('buildAdHocUpdateEmbed — active/left fields (ROK-680)', () => {
     const leftField = json.fields?.find((f) => f.name.includes('Left'));
     expect(activeField).toBeDefined();
     expect(activeField!.name).toContain('1');
-    expect(activeField!.value).toContain('<@u1>');
+    // Ad-hoc embeds render stored usernames, not <@id> mentions, so ex-guild
+    // participants don't leak raw IDs (ROK).
+    expect(activeField!.value).toContain('P1');
     expect(leftField).toBeDefined();
     expect(leftField!.name).toContain('1');
-    expect(leftField!.value).toContain('~~<@u2>~~');
+    expect(leftField!.value).toContain('~~P2~~');
   });
 
   it('omits left field when no participants have left', () => {
@@ -297,9 +299,10 @@ describe('buildAdHocCompletedEmbed — participant listing', () => {
       f.name.includes('Participants'),
     );
     expect(participantField!.name).toContain('2');
-    expect(participantField!.value).toContain('<@u1>');
+    // Ad-hoc embeds render stored usernames, not <@id> mentions (ROK).
+    expect(participantField!.value).toContain('P1');
     expect(participantField!.value).toContain('(60m)');
-    expect(participantField!.value).toContain('<@u2>');
+    expect(participantField!.value).toContain('P2');
   });
 
   it('shows "None" when no participants', () => {
