@@ -104,6 +104,14 @@ jobs:
       - name: Build web
         run: npm run build -w web
 
+      # ROK-1136: `nest build` uses api/tsconfig.build.json, which EXCLUDES
+      # **/*.spec*.ts and src/common/testing/**, so type errors inside test
+      # files (e.g. against the shared drizzle-mock) slip past the build step.
+      # Run the full-project typecheck — same command validate-ci.sh uses —
+      # so test-file tsc errors fail the PR instead of leaking to main.
+      - name: Typecheck (full project, incl. tests)
+        run: npx tsc --noEmit -p api/tsconfig.json
+
       - name: Lint
         run: npm run lint --workspaces
 
