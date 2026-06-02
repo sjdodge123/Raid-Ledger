@@ -155,3 +155,39 @@ describe('PublicLineupPage (ROK-1067)', () => {
         ).not.toBeInTheDocument();
     });
 });
+
+/**
+ * ROK-1341: the public lineup page lives on the chromeless `/p/*` route. Its
+ * own <main> containers must use min-h-dvh (not min-h-screen) so the themed
+ * background covers the full mobile scroll area — otherwise the inner main
+ * re-locks to one viewport height and reinstates the bottom-band gap that the
+ * Layout-root fix addresses for the rest of the app.
+ */
+describe('Regression: ROK-1341 — public lineup page main uses min-h-dvh', () => {
+    beforeEach(() => {
+        mockPublicLineupResult = { data: null, isLoading: false, error: null };
+    });
+
+    it('content page <main> uses min-h-dvh and not min-h-screen', () => {
+        mockPublicLineupResult = {
+            data: makePayload({
+                status: 'decided',
+                decision: { gameName: 'Rocket League', coverUrl: null },
+            }),
+            isLoading: false,
+            error: null,
+        };
+        const { container } = renderPage();
+        const main = container.querySelector('main')!;
+        expect(main.className).toContain('min-h-dvh');
+        expect(main.className).not.toContain('min-h-screen');
+    });
+
+    it('not-found <main> uses min-h-dvh and not min-h-screen', () => {
+        mockPublicLineupResult = { data: null, isLoading: false, error: { status: 404 } };
+        const { container } = renderPage();
+        const main = container.querySelector('main')!;
+        expect(main.className).toContain('min-h-dvh');
+        expect(main.className).not.toContain('min-h-screen');
+    });
+});

@@ -11,12 +11,12 @@ interface GameCarouselProps {
     /** ROK-565: Optional per-game stats keyed by stringified game id. Renders a "N played" overlay badge. */
     metadata?: Record<string, { playerCount: number; totalSeconds: number }>;
     /**
-     * ROK-1295: when 'drawer', wraps each card in <GameDiscoverCard /> which
-     * overlays an ⓘ research-trigger button on top of the normal Link card.
-     * The card body still navigates to /games/:id (preserving heart + detail
-     * UX); only the ⓘ button opens the research drawer in-place. Default
-     * 'navigate' preserves the existing behaviour for callers that didn't
-     * opt in (no ⓘ overlay).
+     * ROK-1295 / ROK-1342: when 'drawer', wraps each card in <GameDiscoverCard />.
+     * The card body navigates to /games/:id (heart + detail UX). The inline
+     * ⓘ research-trigger button was REMOVED in ROK-1342 — discover cards carry
+     * no (i) affordance and desktop research is the full /games/:id page.
+     * Default 'navigate' preserves the existing behaviour for callers that
+     * didn't opt in.
      */
     clickMode?: 'navigate' | 'drawer';
 }

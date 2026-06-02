@@ -87,7 +87,7 @@ function DecisionBlock({ gameName, coverUrl }: DecisionBlockProps) {
 
 function NotFoundPanel() {
     return (
-        <main className="min-h-screen flex items-center justify-center px-4 bg-bg text-foreground">
+        <main className="min-h-dvh flex items-center justify-center px-4 bg-bg text-foreground">
             <div className="max-w-lg w-full text-center">
                 <h1 className="text-2xl font-display font-bold mb-3">
                     This lineup is no longer available
@@ -106,7 +106,7 @@ function ErrorPanel() {
     return (
         <main
             data-testid="public-lineup-error"
-            className="min-h-screen flex items-center justify-center px-4 bg-bg text-foreground"
+            className="min-h-dvh flex items-center justify-center px-4 bg-bg text-foreground"
         >
             <div className="max-w-lg w-full text-center">
                 <h1 className="text-2xl font-display font-bold mb-3">
@@ -131,7 +131,7 @@ function ErrorPanel() {
 
 function LoadingPanel() {
     return (
-        <main className="min-h-screen flex items-center justify-center px-4 bg-bg text-foreground">
+        <main className="min-h-dvh flex items-center justify-center px-4 bg-bg text-foreground">
             <p className="text-muted">Loading…</p>
         </main>
     );
@@ -147,7 +147,7 @@ export function PublicLineupPage(): JSX.Element {
     if (!data) return <NotFoundPanel />;
 
     return (
-        <main className="min-h-screen px-4 py-8 bg-bg text-foreground">
+        <main className="min-h-dvh px-4 py-8 bg-bg text-foreground">
             <article className="max-w-2xl mx-auto">
                 <header className="mb-4">
                     <div className="flex items-center gap-3 flex-wrap mb-3">
