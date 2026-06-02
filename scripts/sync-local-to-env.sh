@@ -352,12 +352,68 @@ fi
 # sanitization, so the env had no admin at all.)
 
 # Pull the inputs we need from the VM-side .env + container labels.
-REMOTE_ENV_JWT_SECRET=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-    "sudo grep -E '^RL_ENV_JWT_SECRET=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
-REMOTE_PUBLIC_DOMAIN=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-    "sudo grep -E '^RL_PUBLIC_DOMAIN=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
-REMOTE_ADMIN_PASSWORD=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$RL_PROXMOX_USER@$RL_PROXMOX_HOST" \
-    "sudo grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2- || true")
+#
+# >>> read_infra_env BEGIN  (extracted verbatim by the unit test — keep markers)
+# Read RL_ENV_JWT_SECRET / RL_PUBLIC_DOMAIN / RL_ADMIN_PASSWORD from the VM's
+# /srv/rl-infra/.env by SOURCING it as rl-agent over SSH — the SAME non-sudo
+# path every orchestrator binary already uses (`_state.sh` does `set -a; .
+# /srv/rl-infra/.env` and documents it as "read-only to rl-agent"). This is
+# the exact value env-spin injected as JWT_SECRET, so re-encryption can never
+# drift from what the container decrypts with.
+#
+# The OLD implementation ran `sudo grep ... /srv/rl-infra/.env` over a
+# BatchMode SSH session. The MCP server forces RL_PROXMOX_USER=rl-agent, which
+# has NO passwordless sudo (ROK-1338 closed that surface) — so the sudo failed,
+# `2>/dev/null || true` swallowed the error, and an empty result was reported
+# as "RL_ENV_JWT_SECRET missing" even when the value was present. Recurring
+# false alarm: TECH-DEBT-BACKLOG.md 2026-05-22 (x2) + 2026-06-02.
+#
+# Diagnosability contract (sets globals):
+#   INFRA_ENV_READ_RC      0 = remote read SUCCEEDED (values may be empty —
+#                              that means GENUINELY ABSENT in the file)
+#                          7 = .env not readable by rl-agent on the VM
+#                          8 = truncated/garbled payload (sentinel mismatch)
+#                          else = ssh transport error (255 etc.)
+#   INFRA_ENV_READ_STDERR  remote/ssh stderr, surfaced on failure
+#   REMOTE_ENV_JWT_SECRET / REMOTE_PUBLIC_DOMAIN / REMOTE_ADMIN_PASSWORD
+read_infra_env() {
+    local snippet err_file out sentinel
+    # POSIX-sh remote snippet (rl-agent's login shell). Sources .env exactly
+    # like _state.sh, then prints the three values + a sentinel so trailing
+    # empty fields survive command-substitution's trailing-newline stripping.
+    snippet='
+f=/srv/rl-infra/.env
+if [ ! -r "$f" ]; then
+  echo "RL_INFRA_ENV_UNREADABLE: $f not readable by $(id -un 2>/dev/null)" >&2
+  exit 7
+fi
+set -a; . "$f"; set +a
+printf "%s\n" "${RL_ENV_JWT_SECRET:-}" "${RL_PUBLIC_DOMAIN:-}" "${RL_ADMIN_PASSWORD:-}" "__RL_EOF__"
+'
+    err_file=$(mktemp)
+    set +e
+    out=$("${SSH_TO_VM[@]}" "$snippet" 2>"$err_file")
+    INFRA_ENV_READ_RC=$?
+    set -e
+    INFRA_ENV_READ_STDERR=$(cat "$err_file" 2>/dev/null || true); rm -f "$err_file"
+    REMOTE_ENV_JWT_SECRET=""; REMOTE_PUBLIC_DOMAIN=""; REMOTE_ADMIN_PASSWORD=""; sentinel=""
+    if (( INFRA_ENV_READ_RC == 0 )); then
+        # `|| true` on each read: a short payload must not trip `set -e` via
+        # read's EOF non-zero exit; the sentinel check below catches truncation.
+        { IFS= read -r REMOTE_ENV_JWT_SECRET || true
+          IFS= read -r REMOTE_PUBLIC_DOMAIN || true
+          IFS= read -r REMOTE_ADMIN_PASSWORD || true
+          IFS= read -r sentinel || true; } <<EOF
+$out
+EOF
+        if [[ "$sentinel" != "__RL_EOF__" ]]; then
+            INFRA_ENV_READ_RC=8
+            INFRA_ENV_READ_STDERR="truncated/garbled remote payload (sentinel='${sentinel}')"
+        fi
+    fi
+}
+read_infra_env
+# <<< read_infra_env END
 # Look up the env's slot via env-inspect (which reads env-registry.json on
 # the VM — authoritative slot source, not the container label which can drift
 # on older envs). We capture rc separately so "env-inspect couldn't reach
@@ -386,9 +442,27 @@ fi
 # URL substitutions are required (Discord login won't accept localhost-shaped
 # redirect_uri). When unset (LAN-only), we still re-encrypt but skip URL
 # substitutes — Discord OAuth wouldn't work LAN-only anyway.
+# Distinguish "remote read FAILED" from "var genuinely absent". A failed read
+# (SSH/permission/truncation) is NOT a missing var — telling the operator to
+# set a var that's already set is the exact wild-goose-chase this fix kills.
+if (( INFRA_ENV_READ_RC != 0 )); then
+    echo "ERROR: failed to READ /srv/rl-infra/.env on $RL_PROXMOX_HOST (exit ${INFRA_ENV_READ_RC})." >&2
+    echo "       This is a remote-read failure, NOT a missing variable — do not just re-set the var." >&2
+    [[ -n "${INFRA_ENV_READ_STDERR:-}" ]] && echo "       remote/ssh stderr: ${INFRA_ENV_READ_STDERR}" >&2
+    case "$INFRA_ENV_READ_RC" in
+        7) echo "       /srv/rl-infra/.env is not readable by rl-agent on the VM. It must be (every" >&2
+           echo "       orchestrator binary sources it via _state.sh). Operator fix: 'chmod 0640 /srv/rl-infra/.env" >&2
+           echo "       && chgrp rl-fleet /srv/rl-infra/.env' (or whatever group rl-agent shares with rl)." >&2 ;;
+        8) echo "       Remote payload was truncated/garbled — check rl-agent's login shell isn't emitting MOTD/banner noise on non-interactive SSH." >&2 ;;
+        *) echo "       Check rl-agent SSH reachability to $RL_PROXMOX_HOST (BatchMode, key, ConnectTimeout)." >&2 ;;
+    esac
+    exit 6
+fi
 if [[ -z "$REMOTE_ENV_JWT_SECRET" ]]; then
-    echo "ERROR: RL_ENV_JWT_SECRET missing in /srv/rl-infra/.env on $RL_PROXMOX_HOST." >&2
+    echo "ERROR: RL_ENV_JWT_SECRET is genuinely ABSENT in /srv/rl-infra/.env on $RL_PROXMOX_HOST." >&2
+    echo "       (Remote read SUCCEEDED — the file is readable, the variable is just not set.)" >&2
     echo "       Cannot re-encrypt app_settings for the env." >&2
+    echo "       Fix: add 'RL_ENV_JWT_SECRET=<operator's local JWT_SECRET>' to /srv/rl-infra/.env on the VM." >&2
     exit 4
 fi
 
