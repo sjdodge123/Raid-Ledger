@@ -62,6 +62,15 @@ export const SchedulePollPageResponseSchema = z.object({
   conflictingSlotIds: z.array(z.number()).optional(),
   /** Lineup phase deadline (ISO). Null when no deadline configured (ROK-1217). */
   phaseDeadline: z.string().nullable().optional(),
+  /**
+   * True when this poll belongs to a standalone scheduling lineup (started
+   * via the /events "Schedule a Game" flow, marked by
+   * `phaseDurationOverride.standalone === true`) rather than a from-match
+   * lineup (ROK-1300). Drives the composite's mode: standalone → noRibbon
+   * hero + "started by you" badge with no cross-match refs; from-match →
+   * 4-phase ribbon + "Match N of M". Server always sets it.
+   */
+  isStandalone: z.boolean(),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;
