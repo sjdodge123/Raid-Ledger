@@ -24,6 +24,13 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Fleet sync-guard probe sentinels (mcp-rl-fleet). Written transiently into the
+# worktree + Mutagen-synced /workspace; the guard unlinks them, but if a build
+# races the runner-side unlink the leftover file would change `COPY . .`'s
+# checksum every deploy and bust the cached contract/API/web layers (Codex P2,
+# 2026-06-02). Gitignored too (`.rl-sync-probe-*`).
+.rl-sync-probe-*
+
 # Git
 .git
 .gitignore

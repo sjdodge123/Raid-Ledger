@@ -405,8 +405,16 @@ cmd_resync() {
         jq -nc '{ok:false, error:"mutagen_not_installed", resynced:false, message:"mutagen CLI not found on this host — cannot resync. Install from https://mutagen.io/"}'
         exit 1
     fi
-    # ensure_claim sets the global SLOT (or exits 1 when no slot is held).
-    ensure_claim
+    # Resync requires an ALREADY-held slot. Do NOT use ensure_claim/current_slot
+    # here — they run `claim` and would ACQUIRE a slot as a side effect (Codex
+    # review 2026-06-02, P2): a standalone recovery call must never mutate lease
+    # state (it could branch-mismatch-destroy a preserved env or leak a queue
+    # entry). Look the slot up read-only and fail loud if none is held.
+    SLOT=$(lookup_held_slot)
+    if [[ -z "$SLOT" ]]; then
+        jq -nc '{ok:false, error:"no_active_claim", resynced:false, message:"rl resync needs a slot you already hold — none found for this agent. Run `rl claim` first (it grants a slot or enqueues you; poll rl_claim_wait to block until granted). resync recovers a wedged sync without dropping the claim; it must never acquire one."}'
+        exit 1
+    fi
     local branch
     branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo main)"
     echo "[rl] force-resyncing Mutagen session for slot $SLOT (branch $branch)" >&2
@@ -826,6 +834,17 @@ cmd_doctor() {
 }
 
 # --- helpers --------------------------------------------------------------
+
+# Read-only lookup of the slot this agent currently holds, straight from
+# claims.json — NO side effects. Unlike current_slot()/ensure_claim (which run
+# `claim` and would ACQUIRE a slot as a side effect), this never mutates lease
+# state, so a caller that must not claim (e.g. the standalone `rl resync`
+# recovery tool) can ask "do I already hold a slot?" without risking a
+# branch-mismatch env destroy or a stray queue entry (Codex review 2026-06-02, P2).
+lookup_held_slot() {
+    ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "jq -r --arg a $(printf '%q' "$RL_AGENT_ID") '[.[] | select(.agent_id == \$a and .claimed == true) | .slot] | first // empty' /srv/rl-infra/state/claims.json" 2>/dev/null || true
+}
 
 current_slot() {
     ssh_run claim --branch unknown | jq -r '.slot // empty'
