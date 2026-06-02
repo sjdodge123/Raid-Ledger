@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { GameDiscoverCard } from './GameDiscoverCard';
 import type { GameDetailDto } from '@raid-ledger/contract';
 
@@ -29,7 +30,9 @@ function createGame(overrides: Partial<GameDetailDto> = {}): GameDetailDto {
 describe('Regression: ROK-1342 — desktop discover card has no (i) affordance', () => {
     it('renders the unified card without a research (i) trigger', () => {
         const { container, getByTestId } = render(
-            <GameDiscoverCard game={createGame()} pricing={null} />,
+            <MemoryRouter>
+                <GameDiscoverCard game={createGame()} pricing={null} />
+            </MemoryRouter>,
         );
         getByTestId('unified-game-card-stub');
         expect(container.querySelector('[data-testid="game-ref-info-affordance"]')).toBeNull();
