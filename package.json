@@ -27,6 +27,6 @@
         "@playwright/test": "^1.60.0"
     },
     "dependencies": {
-        "chrono-node": "^2.9.0"
+        "chrono-node": "^2.9.1"
     }
 }
