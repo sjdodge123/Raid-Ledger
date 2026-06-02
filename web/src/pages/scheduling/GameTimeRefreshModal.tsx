@@ -44,7 +44,7 @@ function ModalFooter({ onSave, onSkip, isSaving }: {
   onSave: () => void; onSkip: () => void; isSaving: boolean;
 }): JSX.Element {
   return (
-    <div className="flex flex-col items-center gap-2 pt-2">
+    <div className="shrink-0 flex flex-col items-center gap-2 pt-2">
       <button type="button" onClick={onSave} disabled={isSaving}
         className="w-full md:w-auto px-6 py-2.5 min-h-[44px] text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50">
         {isSaving ? 'Saving...' : 'Save & Close'}
@@ -68,16 +68,19 @@ function RefreshModalBody({ isStaleReturning, onSave, onSkip }: {
 
   const handleSave = async () => { await editor.save(); onSave(); };
 
+  // Fragment children become flex items of the Modal body (flex-col, see the
+  // bodyClassName below). The grid is the only scroll region (flex-1), so the
+  // footer stays pinned and visible instead of falling below an outer scroll.
   return (
-    <div className="space-y-4">
-      {isStaleReturning && <p className="text-muted text-sm text-center">{STALE_SUBLINE}</p>}
+    <>
+      {isStaleReturning && <p className="shrink-0 text-muted text-sm text-center">{STALE_SUBLINE}</p>}
       <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
         <GameTimeGrid slots={editor.slots} onChange={editor.handleChange} tzLabel={editor.tzLabel}
           hourRange={[6, 24]} compact noStickyOffset fullDayNames={!isMobile} />
       </div>
-      <AbsenceSection />
+      <div className="shrink-0"><AbsenceSection /></div>
       <ModalFooter onSave={handleSave} onSkip={onSkip} isSaving={editor.isSaving} />
-    </div>
+    </>
   );
 }
 
@@ -105,7 +108,8 @@ export function GameTimeRefreshModal(): JSX.Element | null {
   const handleSkip = () => { setWizardSkipped(); setOpen(false); };
 
   return (
-    <Modal isOpen onClose={handleSkip} title={title} maxWidth="max-w-2xl">
+    <Modal isOpen onClose={handleSkip} title={title} maxWidth="max-w-2xl"
+      bodyClassName="p-4 flex flex-col gap-4 max-h-[calc(90vh-8rem)]">
       <RefreshModalBody isStaleReturning={hasSlots} onSave={handleSave} onSkip={handleSkip} />
     </Modal>
   );
