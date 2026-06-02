@@ -34,7 +34,12 @@ const REPO_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
   '..',
 );
-const MIGRATIONS_DIR = path.join(REPO_ROOT, 'api/src/drizzle/migrations');
+// RL_MIGRATIONS_DIR override exists so the regression test can point the
+// reconciler at a throwaway fixture journal/migrations set instead of the
+// real one. Defaults to the canonical in-repo location.
+const MIGRATIONS_DIR =
+  process.env.RL_MIGRATIONS_DIR ||
+  path.join(REPO_ROOT, 'api/src/drizzle/migrations');
 const JOURNAL_PATH = path.join(MIGRATIONS_DIR, 'meta/_journal.json');
 
 /** Postgres error codes we treat as idempotent "effect already present". */
@@ -109,23 +114,64 @@ async function detectRestoredSchema(sql) {
   return count > 0;
 }
 
-async function applyStatement(sql, stmt) {
-  await sql.begin(async (tx) => {
-    await tx.savepoint('stmt', async (sp) => {
-      await sp.unsafe(stmt);
+/**
+ * Probe whether a migration's effect is already present WITHOUT mutating the
+ * DB. Runs the migration's first DDL statement inside a transaction-scoped
+ * savepoint and always rolls it back. We classify by the result:
+ *
+ *   - statement errors with an idempotent "already exists" code → the effect
+ *     is genuinely present (e.g. `CREATE TABLE x` → 42P07). `exists: true`.
+ *   - statement succeeds → the effect was NOT present (we just created it
+ *     inside the savepoint, which we discard). `exists: false`.
+ *   - statement errors with any other code → ambiguous; don't trust it.
+ *     `exists: false` so the caller demotes to an actual run that surfaces
+ *     the real error instead of silently recording a phantom hash row.
+ *
+ * Reuses the same savepoint pattern + IDEMPOTENT_CODES set as the apply path,
+ * so the trust decision and the apply decision agree on what "already exists"
+ * means.
+ */
+async function probeEffectExists(sql, stmt) {
+  let sawError;
+  try {
+    await sql.begin(async (tx) => {
+      try {
+        await tx.savepoint('probe', async (sp) => {
+          await sp.unsafe(stmt);
+        });
+      } catch (err) {
+        sawError = err;
+      }
+      // Never persist the probe — fail the outer txn to force a rollback.
+      throw new Error('__rl_probe_rollback__');
     });
-  });
+  } catch (err) {
+    if (err.message !== '__rl_probe_rollback__') sawError = err;
+  }
+  if (sawError) return { exists: IDEMPOTENT_CODES.has(sawError.code) };
+  // Statement applied cleanly inside the savepoint → effect was absent.
+  return { exists: false };
 }
 
 async function runMigration(sql, entry, { dryRun, trustAsApplied }) {
   const outcome = { tag: entry.tag, ran: 0, skipped: 0, trusted: 0 };
   if (trustAsApplied) {
-    // The DB schema has evolved past this migration (later migrations are
-    // applied). Re-running this SQL would fail against the evolved schema.
-    // Treat every statement as trusted-already-applied and just record the
-    // hash so drizzle-kit migrate sees the full chain.
-    outcome.trusted = entry.statements.length;
-    return outcome;
+    // The DB has application data, so the schema was historically built up
+    // through migrations — BUT we must not blindly trust that THIS migration's
+    // effect is present (the DB may be merely out of date, e.g. restored from
+    // an older backup missing newer migrations). Probe the first DDL effect:
+    //   • present  → safe to trust; record the hash only.
+    //   • absent   → demote to a real run so the missing schema actually lands
+    //     instead of being silently marked applied (ROK-1319).
+    const firstStmt = entry.statements[0];
+    const probe = firstStmt
+      ? await probeEffectExists(sql, firstStmt)
+      : { exists: true }; // no DDL to verify — nothing to run, trust the hash.
+    if (probe.exists) {
+      outcome.trusted = entry.statements.length;
+      return outcome;
+    }
+    // Fall through to the apply path below — the effect is genuinely missing.
   }
   for (const stmt of entry.statements) {
     if (dryRun) {
