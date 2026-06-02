@@ -19,8 +19,9 @@ function buildEventBullet(
   suffix = '',
 ): string {
   const date = formatEventDate(event.startTime, deps.viewerTimezone);
+  // Escape `]` so a title containing one can't break out of the markdown link.
   const label = deps.clientUrl
-    ? `[${event.title}](${deps.clientUrl}/events/${event.id})`
+    ? `[${event.title.replace(/\]/g, '\\]')}](${deps.clientUrl}/events/${event.id})`
     : event.title;
   return `• ${label} — ${date}${suffix}`;
 }

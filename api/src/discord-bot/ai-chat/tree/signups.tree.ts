@@ -29,8 +29,9 @@ function buildSignupBullet(
   const date = new Date(event.startTime).toLocaleDateString('en-US', {
     timeZone: deps.viewerTimezone,
   });
+  // Escape `]` so a title containing one can't break out of the markdown link.
   const label = deps.clientUrl
-    ? `[${event.title}](${deps.clientUrl}/events/${event.id})`
+    ? `[${event.title.replace(/\]/g, '\\]')}](${deps.clientUrl}/events/${event.id})`
     : event.title;
   return `• ${label} — ${date}`;
 }

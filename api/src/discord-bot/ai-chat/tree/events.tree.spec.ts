@@ -268,4 +268,25 @@ describe('events.tree — markdown event links (ROK-1112)', () => {
     expect(body).not.toContain('](null');
     expect(body).not.toContain('[No Link Run]');
   });
+
+  it('escapes `]` in the title so it cannot break out of the markdown link', async () => {
+    const findAll = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 7777,
+          title: 'Raid ] Night',
+          startTime: '2026-05-01T20:00:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+    const deps = makeDeps({ findAll });
+
+    const result = await handleEvents('events:this-week', deps, makeSession());
+
+    const body = bodyOf(result);
+    expect(body).toContain(
+      '• [Raid \\] Night](https://test.example.com/events/7777) —',
+    );
+  });
 });

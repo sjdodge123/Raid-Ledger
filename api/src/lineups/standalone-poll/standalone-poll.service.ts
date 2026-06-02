@@ -41,7 +41,7 @@ import {
   splitVotersBySlot,
   formatPollTime,
 } from './standalone-poll-voter.helpers';
-import { resolveUserTimezone } from '../../notifications/timezone.helpers';
+import { resolveUserTimezones } from '../../notifications/timezone.helpers';
 import { SettingsService } from '../../settings/settings.service';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
@@ -164,20 +164,22 @@ export class StandalonePollService {
   ): Promise<void> {
     const guildDefault =
       (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-    for (const uid of [...new Set(selected.map((v) => v.userId))]) {
-      const at = formatPollTime(
-        chosenTime,
-        await resolveUserTimezone(this.db, uid, guildDefault),
-      );
+    const selectedIds = [...new Set(selected.map((v) => v.userId))];
+    const otherIds = [...new Set(others.map((v) => v.userId))];
+    // One batch query for every recipient's timezone — no per-voter N+1.
+    const tz = await resolveUserTimezones(
+      this.db,
+      [...selectedIds, ...otherIds],
+      guildDefault,
+    );
+    for (const uid of selectedIds) {
+      const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
       this.notifications
         .notifyAutoSignup(uid, gameName, at, eventId)
         .catch(noop);
     }
-    for (const uid of [...new Set(others.map((v) => v.userId))]) {
-      const at = formatPollTime(
-        chosenTime,
-        await resolveUserTimezone(this.db, uid, guildDefault),
-      );
+    for (const uid of otherIds) {
+      const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
       this.notifications.notifyPollOutcome(uid, at, eventId).catch(noop);
     }
   }

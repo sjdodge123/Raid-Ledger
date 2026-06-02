@@ -17,15 +17,16 @@ interface NotifyMock {
 }
 
 /**
- * Build a DB mock whose `select().from().where()` chain resolves the
- * `user_preferences.timezone` rows queued in `tzByCall`, in call order.
+ * Build a DB mock whose `select().from().where()` chain resolves the BATCHED
+ * `user_preferences.timezone` lookup (one `inArray` query per fan-out).
+ * `tzByUser` maps a userId to its stored tz value; a `null` value (or an
+ * omitted userId) means no preference row exists for that user.
  */
-function makeTzDb(tzByCall: (string | null)[]) {
-  let call = 0;
-  const where = jest.fn().mockImplementation(() => {
-    const tz = tzByCall[call++];
-    return Promise.resolve(tz === null ? [] : [{ value: tz }]);
-  });
+function makeTzDb(tzByUser: Record<number, string | null>) {
+  const rows = Object.entries(tzByUser)
+    .filter(([, tz]) => tz !== null)
+    .map(([userId, tz]) => ({ userId: Number(userId), value: tz }));
+  const where = jest.fn().mockResolvedValue(rows);
   const from = jest.fn().mockReturnValue({ where });
   const select = jest.fn().mockReturnValue({ from });
   return { select } as unknown as ConstructorParameters<
@@ -88,7 +89,7 @@ describe('StandalonePollService.notifyVoters timezone (ROK-1112)', () => {
   it('DMs each auto-signed-up voter the time in their own timezone', async () => {
     const notifications = makeNotifications();
     // User A (selected) → America/New_York, User B (selected) → America/Los_Angeles.
-    const db = makeTzDb(['America/New_York', 'America/Los_Angeles']);
+    const db = makeTzDb({ 1: 'America/New_York', 2: 'America/Los_Angeles' });
     const service = makeService(db, notifications);
 
     await callNotifyVoters(service, {
@@ -112,7 +113,7 @@ describe('StandalonePollService.notifyVoters timezone (ROK-1112)', () => {
   it('falls back to the guild default timezone when a voter has no preference', async () => {
     const notifications = makeNotifications();
     // No pref row → falls through to guild default America/New_York.
-    const db = makeTzDb([null]);
+    const db = makeTzDb({ 7: null });
     const service = makeService(db, notifications, 'America/New_York');
 
     await callNotifyVoters(service, {
@@ -128,7 +129,7 @@ describe('StandalonePollService.notifyVoters timezone (ROK-1112)', () => {
 
   it('formats other-slot voters in their own timezone too', async () => {
     const notifications = makeNotifications();
-    const db = makeTzDb(['America/New_York']);
+    const db = makeTzDb({ 3: 'America/New_York' });
     const service = makeService(db, notifications);
 
     await callNotifyVoters(service, {
