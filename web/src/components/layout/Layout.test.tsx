@@ -22,9 +22,9 @@ vi.mock('../../hooks/use-theme-sync', () => ({ useThemeSync: () => undefined }))
 vi.mock('../../hooks/use-plugins', () => ({ usePluginHydration: () => undefined }));
 vi.mock('../../hooks/use-media-query', () => ({ useMediaQuery: () => false }));
 
-function renderLayout() {
+function renderLayout(path = '/') {
     return render(
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[path]}>
             <Layout>
                 <p>scrolling content</p>
             </Layout>
@@ -38,20 +38,29 @@ function renderLayout() {
  * (`min-height: 100vh`), which locks to a single viewport height. When content
  * scrolls beyond it the background cut off, revealing an unthemed band.
  * The fix swaps to `min-h-dvh` (dynamic viewport height) so the themed
- * container grows with content. This guards against a regression to
- * `min-h-screen`.
+ * container grows with content. BOTH layout root containers are covered: the
+ * standard chrome path AND the chromeless (`/p/*` share-link) path, which is a
+ * separate root `<div>` that carried the same bug.
  */
 describe('Regression: ROK-1341 — mobile themed background covers full scroll height', () => {
-    it('root container uses min-h-dvh so bg-backdrop grows with scroll height', () => {
-        const { container } = renderLayout();
+    it('standard-path root container uses min-h-dvh so bg-backdrop grows with scroll height', () => {
+        const { container } = renderLayout('/');
         const root = container.firstElementChild as HTMLElement;
         expect(root).toHaveClass('min-h-dvh');
         expect(root).toHaveClass('bg-backdrop');
     });
 
-    it('root container does NOT use min-h-screen (locks background to one viewport)', () => {
-        const { container } = renderLayout();
+    it('standard-path root container does NOT use min-h-screen (locks background to one viewport)', () => {
+        const { container } = renderLayout('/');
         const root = container.firstElementChild as HTMLElement;
+        expect(root).not.toHaveClass('min-h-screen');
+    });
+
+    it('chromeless-path (/p/*) root container also uses min-h-dvh and not min-h-screen', () => {
+        const { container } = renderLayout('/p/test-event');
+        const root = container.firstElementChild as HTMLElement;
+        expect(root).toHaveClass('min-h-dvh');
+        expect(root).toHaveClass('bg-backdrop');
         expect(root).not.toHaveClass('min-h-screen');
     });
 });

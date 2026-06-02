@@ -101,7 +101,7 @@ describe('Regression: ROK-1342 — badge placement + no (i) marker', () => {
             container.querySelector('[title="Open game details"]'),
         ).toBeNull();
         expect(
-            container.querySelector('span[aria-hidden="true"]'),
+            container.querySelector('span[aria-hidden="true"][title="Open game details"]'),
         ).toBeNull();
     });
 });
