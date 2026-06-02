@@ -110,3 +110,12 @@ build-state.yaml
 # to /workspace/.rl-perf.log. Diagnostic sibling file (.errors) similarly.
 .rl-perf.log
 .rl-perf.log.errors
+
+# Sync sentinel written by the mcp-rl-fleet pre-build sync guard
+# (tools/mcp-rl-fleet/src/sync-guard.ts). A transient per-deploy marker
+# (`.rl-sync-probe-<hex>`, one unique name per guard call so concurrent runs
+# don't clobber each other) written into the worktree root, flushed through
+# Mutagen, read back out of the runner's /workspace to prove the synced source
+# matches laptop HEAD, then deleted. Gitignored so it never dirties git status
+# or gets committed.
+.rl-sync-probe-*
