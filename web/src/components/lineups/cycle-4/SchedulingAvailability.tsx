@@ -56,17 +56,23 @@ export function SchedulingAvailability(
   };
 
   return (
-    <AvailabilityHeatmapSection
-      data={data}
-      isLoading={isLoading}
-      readOnly={readOnly}
-      weekStart={weekStart}
-      onWeekChange={handleWeekChange}
-      previewBlocks={[
-        ...slotsToPreviewBlocks(slots, weekStart),
-        ...(previewBlock ? [previewBlock] : []),
-      ]}
-      onCellClick={readOnly ? undefined : handleCellClick}
-    />
+    // `isolate` contains the heatmap's internal overlay z-indexes (preview
+    // blocks z-[21], current-time z-[25], hover tooltip z-30) in their own
+    // stacking context so they can't paint above the sticky hero toolbar
+    // (z-20) when the page is scrolled (ROK-1300 review finding).
+    <div className="isolate">
+      <AvailabilityHeatmapSection
+        data={data}
+        isLoading={isLoading}
+        readOnly={readOnly}
+        weekStart={weekStart}
+        onWeekChange={handleWeekChange}
+        previewBlocks={[
+          ...slotsToPreviewBlocks(slots, weekStart),
+          ...(previewBlock ? [previewBlock] : []),
+        ]}
+        onCellClick={readOnly ? undefined : handleCellClick}
+      />
+    </div>
   );
 }
