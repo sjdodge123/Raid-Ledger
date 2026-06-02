@@ -38,6 +38,8 @@ else
         "$TEST_DIR/test_concurrent_steps.sh"
         # ROK-1331 M5a — lease queue + claim duration + pin/unpin + sweeper safety.
         "$TEST_DIR/lease-enqueue.test.sh"
+        # --slot targeting (avoids evicting a preserved env on a lower slot).
+        "$TEST_DIR/claim-slot-target.test.sh"
         "$TEST_DIR/lease-advance.test.sh"
         "$TEST_DIR/lease-status.test.sh"
         "$TEST_DIR/extend-claim.test.sh"

@@ -24,10 +24,12 @@ source "$(dirname "$0")/_state.sh"
 
 BRANCH=""
 KEEP_ALIVE=0
+REQUESTED_SLOT=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --branch) BRANCH="$2"; shift 2 ;;
         --keep-alive) KEEP_ALIVE=1; shift ;;
+        --slot) REQUESTED_SLOT="$2"; shift 2 ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
@@ -35,6 +37,28 @@ done
 if [[ -z "${RL_AGENT_ID:-}" ]]; then
     echo "RL_AGENT_ID is required" >&2
     exit 2
+fi
+
+# --slot pins the claim to ONE specific slot. The default picker takes the
+# lowest free slot, which silently branch-mismatch-destroys any preserved env
+# parked on a lower-numbered slot (the rok-1208 hazard, 2026-06-02). A caller
+# that wants slot N to leave such an env alone passes --slot N: the claim then
+# ONLY ever lands on (or enqueues for) slot N, never another slot. Validate the
+# range up front so a typo fails loud instead of enqueueing on a nonexistent slot.
+if [[ -n "$REQUESTED_SLOT" ]]; then
+    # `10#` forces base-10 so a zero-padded value (e.g. 08/09) can't trip bash's
+    # invalid-octal arithmetic error; the regex already guarantees digits-only.
+    if ! [[ "$REQUESTED_SLOT" =~ ^[0-9]+$ ]] || (( 10#$REQUESTED_SLOT < 1 || 10#$REQUESTED_SLOT > RUNNER_SLOTS )); then
+        jq -nc --arg s "$REQUESTED_SLOT" --argjson max "$RUNNER_SLOTS" \
+            '{ok:false, error:"invalid_slot", requested_slot:$s, message:"--slot must be an integer in 1..\($max)"}'
+        exit 2
+    fi
+    # Canonicalize to the bare base-10 form the free-slot list + lease-queue
+    # filenames use ("2", never "02"). Without this a valid zero-padded request
+    # (--slot 02) fails the `"$slot" != "$REQUESTED_SLOT"` match, skips the free
+    # slot, and the enqueue path writes lease-queue/02.json while releases only
+    # advance lease-queue/2.json — stranding the waiter (Codex P2, 2026-06-02).
+    REQUESTED_SLOT=$((10#$REQUESTED_SLOT))
 fi
 
 NOW=$(date -u +%FT%TZ)
@@ -96,7 +120,9 @@ emit_slot_result() {
         }'
 }
 
-# Idempotent: if this agent already has a slot, return it.
+# Idempotent: if this agent already has a slot, return it. An agent can only
+# hold one slot, so a --slot request that names a DIFFERENT slot is ignored here
+# (you already hold one) — release first if you need to move to a specific slot.
 EXISTING=$(state::slot_for_agent "$RL_AGENT_ID")
 if [[ -n "$EXISTING" ]]; then
     # ROK-1331 M4 LOW #7 — preserve the persisted branch when the caller
@@ -146,6 +172,12 @@ fi
 TARGET_SLOT=""
 FREE_SLOTS=$(jq -r '.[] | select(.claimed == false) | .slot' "$RL_CLAIMS_FILE" 2>/dev/null | sort -n)
 for slot in $FREE_SLOTS; do
+    # --slot pins selection: a requested slot makes every other slot ineligible,
+    # so the claim never lands on (and never branch-mismatch-destroys envs on) a
+    # slot the caller didn't ask for. Without it, lowest-free-first as before.
+    if [[ -n "$REQUESTED_SLOT" && "$slot" != "$REQUESTED_SLOT" ]]; then
+        continue
+    fi
     HEAD=$(lease::head_agent "$slot")
     if [[ -z "$HEAD" || "$HEAD" == "$RL_AGENT_ID" ]]; then
         TARGET_SLOT="$slot"
@@ -236,7 +268,14 @@ if [[ -n "$TARGET_SLOT" ]]; then
 fi
 
 # Enqueue path (M5a hard cutover — no legacy busy-error response shape).
-ENQUEUE_SLOT=$(lease::pick_enqueue_slot)
+# Honor --slot: queue on the requested slot specifically (the caller is willing
+# to wait for THAT slot rather than take whatever frees first); otherwise pick
+# the shortest queue as before.
+if [[ -n "$REQUESTED_SLOT" ]]; then
+    ENQUEUE_SLOT="$REQUESTED_SLOT"
+else
+    ENQUEUE_SLOT=$(lease::pick_enqueue_slot)
+fi
 lease::add "$ENQUEUE_SLOT" "$RL_AGENT_ID" "$BRANCH" "$NOW"
 # Legacy global queue mirror for the dashboard transition window.
 queue::add "$RL_AGENT_ID" "$BRANCH" "$NOW"

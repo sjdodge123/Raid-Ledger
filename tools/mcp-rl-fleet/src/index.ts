@@ -91,6 +91,7 @@ const claimSchema: Shape = {
   wait: z.boolean().optional(),
   wait_timeout_seconds: z.number().int().min(5).max(3600).optional(),
   poll_interval_seconds: z.number().int().min(2).max(60).optional(),
+  slot: z.number().int().min(1).max(64).optional(),
 };
 registerTool(claim.TOOL_NAME, claim.TOOL_DESCRIPTION, claimSchema, async (p) =>
   jsonResult(await claim.execute(p as claim.ClaimParams)),
@@ -421,6 +422,7 @@ registerTool(lease.STATUS_TOOL, lease.STATUS_DESC, leaseStatusSchema, async (p) 
 const claimWaitSchema: Shape = {
   timeout_seconds: z.number().int().min(5).max(3600).optional(),
   worktree_path: worktreePathSchema,
+  slot: z.number().int().min(1).max(64).optional(),
 };
 registerTool(lease.WAIT_TOOL, lease.WAIT_DESC, claimWaitSchema, async (p) =>
   jsonResult(await lease.executeWait(p as lease.ClaimWaitParams)),

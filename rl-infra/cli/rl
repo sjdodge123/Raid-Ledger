@@ -243,7 +243,22 @@ cmd_claim() {
         # on macOS bash 3.2 ("unbound variable"). The `:+` form expands to
         # the array's elements when non-empty, and to nothing when empty —
         # so the ssh_run call gets the right argv either way. Bug T 2026-05-19.
-        RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]:+${extra_args[@]}}")
+        # Capture the exit code without letting `set -e` abort us: a non-zero
+        # exit from the orchestrator (invalid_slot exit 2, queue_corrupt /
+        # claims_corrupt exit 1) STILL carries a JSON error body on stdout. If
+        # we let `set -euo` kill the function on the failing command sub, RESULT
+        # is captured but never printed, so the MCP layer sees empty stdout and
+        # reports `failed_to_parse_response` instead of the real error code.
+        local claim_rc=0
+        RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]:+${extra_args[@]}}") || claim_rc=$?
+        if (( claim_rc != 0 )); then
+            # Surface the JSON error body (pretty if it parses, raw otherwise)
+            # and propagate the real exit code rather than dying silently.
+            if [[ -n "$RESULT" ]]; then
+                echo "$RESULT" | jq . 2>/dev/null || echo "$RESULT"
+            fi
+            return "$claim_rc"
+        fi
         SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
         # ROK-1331 M5a — orchestrator emits both legacy `queued:true` and the
         # new `enqueued:true` during the transition window. Either signals a
@@ -538,13 +553,17 @@ cmd_claim_wait() {
     local timeout=600
     local branch
     branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo unknown)"
+    local extra=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --timeout) timeout="$2"; shift 2 ;;
+            # Forward --slot so a slot-pinned wait stays pinned through every
+            # re-claim the orchestrator performs (Codex P1, 2026-06-02).
+            --slot) extra+=(--slot "$2"); shift 2 ;;
             *) shift ;;
         esac
     done
-    ssh_run claim-wait --timeout "$timeout" --branch "$branch" | jq .
+    ssh_run claim-wait --timeout "$timeout" --branch "$branch" "${extra[@]:+${extra[@]}}" | jq .
 }
 
 cmd_db() {

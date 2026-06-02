@@ -33,16 +33,24 @@ export async function executeStatus(p: LeaseStatusParams = {}) {
 // ----- rl_claim_wait -----
 export const WAIT_TOOL = 'rl_claim_wait';
 export const WAIT_DESC =
-  "Long-poll: block until this agent's queued claim is granted OR until the timeout expires (default 600s). Implemented via inotifywait on the lease-queue dir on the VM (push-like UX). On grant: returns the same shape as rl_claim ({slot, agent_id, branch, hostnames, expires_at, inherited_envs?, ...}). On timeout: returns the last-seen queued response with wait_timed_out:true + waited_seconds. Returns {ok:false, error:'inotifywait_not_installed'} if the runner image is missing inotify-tools. The CLI wraps this — agents can also spawn `rl claim-wait --timeout N` via Bash to get the harness's auto-background + task-notification on wake (mirrors rl test-plan wait).";
+  "Long-poll: block until this agent's queued claim is granted OR until the timeout expires (default 600s). Implemented via inotifywait on the lease-queue dir on the VM (push-like UX). On grant: returns the same shape as rl_claim ({slot, agent_id, branch, hostnames, expires_at, inherited_envs?, ...}). On timeout: returns the last-seen queued response with wait_timed_out:true + waited_seconds. Returns {ok:false, error:'inotifywait_not_installed'} if the runner image is missing inotify-tools. If you enqueued via rl_claim({slot:N}), pass the same slot here so the wait stays pinned to that slot. The CLI wraps this — agents can also spawn `rl claim-wait --timeout N` via Bash to get the harness's auto-background + task-notification on wake (mirrors rl test-plan wait).";
 
 export interface ClaimWaitParams {
   timeout_seconds?: number;
   worktree_path?: string;
+  /**
+   * Pin the wait to a specific slot (1..N). MUST match the slot the agent
+   * enqueued on via rl_claim({slot}) — forwarding it keeps every re-claim the
+   * orchestrator performs pinned to that slot instead of grabbing whatever frees
+   * first (which would strand the original queue entry and risk a double grant).
+   */
+  slot?: number;
 }
 
 export async function executeWait(p: ClaimWaitParams = {}) {
   const timeout = Math.max(5, Math.min(3600, p.timeout_seconds ?? 600));
   const args = ['claim-wait', '--timeout', String(timeout)];
+  if (p.slot !== undefined) args.push('--slot', String(p.slot));
   const { stdout, stderr, exitCode } = await runRl(args, { cwd: p.worktree_path });
   const parsed = parseJsonFromStdout<unknown>(stdout);
   if (parsed) return parsed;
