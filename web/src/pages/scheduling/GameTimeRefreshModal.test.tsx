@@ -146,12 +146,12 @@ describe('GameTimeRefreshModal — Save', () => {
     mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
   });
 
-  it('Save closes the modal and invalidates both ["scheduling"] and GAME_TIME_QUERY_KEY', async () => {
+  it('Save invalidates both ["scheduling"] and GAME_TIME_QUERY_KEY, then closes once staleness clears', async () => {
     const user = userEvent.setup();
     const queryClient = createTestQueryClient();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-    renderWithProviders(<GameTimeRefreshModal />, { queryClient });
+    const { rerender } = renderWithProviders(<GameTimeRefreshModal />, { queryClient });
 
     const saveBtn = screen.getByRole('button', { name: /save/i });
     await user.click(saveBtn);
@@ -164,10 +164,44 @@ describe('GameTimeRefreshModal — Save', () => {
     expect(invalidatedKeys).toContain(JSON.stringify(['scheduling']));
     expect(invalidatedKeys).toContain(JSON.stringify(['me', 'game-time']));
 
-    // Modal closes after a successful save.
-    await vi.waitFor(() => {
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+    // A successful save bumps confirmed_at server-side → the game-time refetch
+    // returns gameTimeStale=false → the modal closes on its own (derived `open`).
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: false, slots: SAVED_SLOTS }));
+    rerender(<GameTimeRefreshModal />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('stays OPEN when a save does not clear staleness (failed save → retry on the page)', async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<GameTimeRefreshModal />);
+
+    await user.click(screen.getByRole('button', { name: /save/i }));
+    expect(mockSave).toHaveBeenCalled();
+
+    // editor.save() swallows the error and resolves; staleness is unchanged, so
+    // the modal must NOT force-close — it stays open for another attempt.
+    rerender(<GameTimeRefreshModal />);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+describe('GameTimeRefreshModal — staleness arriving after mount', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsWizardSkipped.mockReturnValue(false);
+  });
+
+  it('opens when gameTimeStale flips true after mount (cached-fresh → refetch to stale)', () => {
+    // Mount with fresh cached data: no modal.
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: false, slots: SAVED_SLOTS }));
+    const { rerender } = renderWithProviders(<GameTimeRefreshModal />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // Background refetch reports staleness — derived `open` must surface the modal
+    // (a once-initialized open boolean would miss this transition).
+    mockUseGameTime.mockReturnValue(gameTimeQuery({ stale: true, slots: SAVED_SLOTS }));
+    rerender(<GameTimeRefreshModal />);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });
 

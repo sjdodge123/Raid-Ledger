@@ -58,15 +58,20 @@ function ModalFooter({ onSave, onSkip, isSaving }: {
 }
 
 /** Inner body: spinner while loading, otherwise the painter + absence + footer. */
-function RefreshModalBody({ isStaleReturning, onSave, onSkip }: {
-  isStaleReturning: boolean; onSave: () => void; onSkip: () => void;
+function RefreshModalBody({ isStaleReturning, onSaved, onSkip }: {
+  isStaleReturning: boolean; onSaved: () => void; onSkip: () => void;
 }): JSX.Element {
   const editor = useGameTimeEditor();
   const isMobile = useMediaQuery('(max-width: 767px)');
 
   if (editor.isLoading) return <ModalSpinner />;
 
-  const handleSave = async () => { await editor.save(); onSave(); };
+  // editor.save() swallows save errors (toasts on failure, resolves either way),
+  // so we never force-close here. onSaved() invalidates the game-time query; a
+  // SUCCESSFUL save also bumped game_time_confirmed_at server-side, so the
+  // refetch returns gameTimeStale=false and the parent closes the modal. A FAILED
+  // save leaves staleness true, so the modal stays open for retry.
+  const handleSave = async () => { await editor.save(); onSaved(); };
 
   // Fragment children become flex items of the Modal body (flex-col, see the
   // bodyClassName below). The grid is the only scroll region (flex-1), so the
@@ -85,32 +90,39 @@ function RefreshModalBody({ isStaleReturning, onSave, onSkip }: {
 }
 
 /**
- * Self-gating modal. Renders nothing unless game time is stale and the wizard
- * hasn't been session-skipped. Once closed or skipped, never auto-reopens this
- * session (tracked via local `open` state + the sessionStorage skip flag).
+ * Self-gating modal. The open state is DERIVED (`stale && !dismissed`), not a
+ * once-initialized boolean — so if `gameTimeStale` flips to true after mount
+ * (e.g. a cached-fresh query refetches to stale) the modal still appears. The
+ * user's explicit Skip / close is tracked separately as `dismissed` so it does
+ * NOT reopen this session. A successful Save clears staleness (the editor
+ * refetches game time after the server bumps confirmed_at) → the modal closes
+ * on its own; a failed Save leaves staleness true → it stays open for retry.
  */
 export function GameTimeRefreshModal(): JSX.Element | null {
   const { data: gameTime } = useGameTime();
   const qc = useQueryClient();
-  const shouldOpen = !!gameTime?.gameTimeStale && !isWizardSkipped();
-  const [open, setOpen] = useState(shouldOpen);
+  const [dismissed, setDismissed] = useState(false);
 
-  if (!shouldOpen || !open) return null;
+  const stale = !!gameTime?.gameTimeStale && !isWizardSkipped();
+  const open = stale && !dismissed;
+
+  if (!open) return null;
 
   const hasSlots = (gameTime?.slots?.length ?? 0) > 0;
   const title = hasSlots ? STALE_TITLE : FRESH_TITLE;
 
-  const handleSave = () => {
+  // Refresh the group heatmap + game-time query after a save attempt. On success
+  // the game-time refetch clears `stale` and the modal closes via `open` above.
+  const handleSaved = () => {
     qc.invalidateQueries({ queryKey: ['scheduling'] });
     qc.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
-    setOpen(false);
   };
-  const handleSkip = () => { setWizardSkipped(); setOpen(false); };
+  const handleSkip = () => { setWizardSkipped(); setDismissed(true); };
 
   return (
     <Modal isOpen onClose={handleSkip} title={title} maxWidth="max-w-2xl"
       bodyClassName="p-4 flex flex-col gap-4 max-h-[calc(90vh-8rem)]">
-      <RefreshModalBody isStaleReturning={hasSlots} onSave={handleSave} onSkip={handleSkip} />
+      <RefreshModalBody isStaleReturning={hasSlots} onSaved={handleSaved} onSkip={handleSkip} />
     </Modal>
   );
 }
