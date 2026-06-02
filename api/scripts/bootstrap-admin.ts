@@ -76,45 +76,70 @@ async function bootstrapAdmin() {
         const existingCred = existingCreds[0];
 
         if (linkedUser) {
-            // linked-user mode — operator's real users row is present in
-            // the env. Make sure local_credentials.user_id points at it.
-            console.log(
-                `bootstrap-admin: linked-user mode → binding local_credentials.user_id = ${linkedUser.id}`,
-            );
+            const credAlreadyBound =
+                !!existingCred && existingCred.userId === linkedUser.id;
 
-            if (existingCred && existingCred.userId === linkedUser.id) {
-                // Cred already on the right user; just refresh the password.
-                await db
-                    .update(schema.localCredentials)
-                    .set({ passwordHash })
-                    .where(eq(schema.localCredentials.email, DEFAULT_EMAIL));
+            // Idempotency guard: once the credential is already bound to the
+            // linked admin and this isn't an explicit reset, leave it untouched.
+            // Do NOT re-hash the password on every boot — that would rotate a
+            // fresh random password each restart when ADMIN_PASSWORD is unset.
+            // Mirrors legacy-mode's "skip if exists". The orphan purge below
+            // still runs (it's idempotent).
+            if (credAlreadyBound && !resetMode) {
+                console.log(
+                    'bootstrap-admin: linked-user mode → credential already bound to linked admin, leaving password unchanged',
+                );
             } else {
-                // Either a stale cred lives on the local:admin@local placeholder,
-                // or no cred exists yet. Clear the cred (if any), purge the
-                // orphan local: placeholder user (cascade-safe now that cred
-                // is gone), then INSERT a fresh cred bound to linkedUser.
-                if (existingCred) {
-                    await db
-                        .delete(schema.localCredentials)
-                        .where(eq(schema.localCredentials.email, DEFAULT_EMAIL));
-                }
-                // Literal 'local:admin@local' (not interpolated) so the orphan
-                // purge is greppable in the source — the linked-user contract
-                // test asserts on this exact byte sequence.
+                console.log(
+                    `bootstrap-admin: linked-user mode → binding local_credentials.user_id = ${linkedUser.id}`,
+                );
+                // Idempotent bind: INSERT the credential, or UPDATE it in place
+                // when a row already exists (first creation, a rebind from the
+                // local: placeholder, or an explicit reset). Done before the
+                // orphan purge so /auth/local login works even if that purge
+                // can't run. Replaces the old delete-cred → delete-user →
+                // insert-cred cycle, which aborted the whole bootstrap when the
+                // placeholder owned FK-referencing rows (community_lineups.created_by).
+                await db
+                    .insert(schema.localCredentials)
+                    .values({
+                        email: DEFAULT_EMAIL,
+                        passwordHash,
+                        userId: linkedUser.id,
+                    })
+                    .onConflictDoUpdate({
+                        target: schema.localCredentials.email,
+                        set: { passwordHash, userId: linkedUser.id },
+                    });
+            }
+
+            // Best-effort purge of the orphan `local:admin@local` placeholder
+            // user. Literal (not interpolated) so it stays greppable — the
+            // linked-user contract test asserts on this exact byte sequence.
+            // The placeholder may still own FK-referencing rows from an earlier
+            // local-admin-mode run; if the delete trips that FK, leave the
+            // orphan in place rather than aborting — the credential above
+            // already resolves to the real linked user, so login works.
+            try {
                 await db
                     .delete(schema.users)
                     .where(eq(schema.users.discordId, 'local:admin@local'));
-                await db.insert(schema.localCredentials).values({
-                    email: DEFAULT_EMAIL,
-                    passwordHash,
-                    userId: linkedUser.id,
-                });
+            } catch (purgeErr) {
+                console.warn(
+                    `bootstrap-admin: orphan local:admin@local placeholder not purged (likely owns FK-referenced rows); leaving in place — ${(purgeErr as Error).message}`,
+                );
             }
 
-            printAdminBanner(
-                existingCred ? 'ADMIN PASSWORD RESET' : 'INITIAL ADMIN CREDENTIALS',
-                password,
-            );
+            if (credAlreadyBound && !resetMode) {
+                console.log(
+                    'bootstrap-admin: existing linked admin credential left unchanged',
+                );
+            } else {
+                printAdminBanner(
+                    existingCred ? 'ADMIN PASSWORD RESET' : 'INITIAL ADMIN CREDENTIALS',
+                    password,
+                );
+            }
             await sql.end();
             return;
         }
