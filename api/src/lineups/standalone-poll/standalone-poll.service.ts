@@ -41,6 +41,11 @@ import {
   splitVotersBySlot,
   formatPollTime,
 } from './standalone-poll-voter.helpers';
+import { resolveUserTimezone } from '../../notifications/timezone.helpers';
+import { SettingsService } from '../../settings/settings.service';
+
+/** No-op rejection swallower for fire-and-forget DMs. */
+const noop = (): void => {};
 
 /** Input DTO after Zod validation. */
 export interface CreatePollInput {
@@ -63,6 +68,7 @@ export class StandalonePollService {
     private readonly notifications: StandalonePollNotificationService,
     private readonly schedulingPollEmbed: SchedulingPollEmbedService,
     private readonly signupsService: SignupsService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /** List all active standalone scheduling polls. */
@@ -134,7 +140,7 @@ export class StandalonePollService {
       });
     }
     if (startTime) {
-      this.notifyVoters(
+      await this.notifyVoters(
         selectedVoters,
         otherVoters,
         startTime,
@@ -144,28 +150,35 @@ export class StandalonePollService {
     }
   }
 
-  /** Fire-and-forget DMs to all poll voters (ROK-1031). */
-  private notifyVoters(
+  /**
+   * Fire-and-forget DMs to all poll voters (ROK-1031). The chosen time is
+   * formatted PER RECIPIENT in their own timezone (ROK-1112) — preference →
+   * guild default → 'UTC' — so a 9 PM EDT slot never renders as next-day UTC.
+   */
+  private async notifyVoters(
     selected: { userId: number }[],
     others: { userId: number }[],
     chosenTime: string,
     eventId: number,
     gameName: string,
-  ): void {
-    const formatted = formatPollTime(chosenTime);
+  ): Promise<void> {
+    const guildDefault =
+      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
     for (const uid of [...new Set(selected.map((v) => v.userId))]) {
+      const at = formatPollTime(
+        chosenTime,
+        await resolveUserTimezone(this.db, uid, guildDefault),
+      );
       this.notifications
-        .notifyAutoSignup(uid, gameName, formatted, eventId)
-        .catch(() => {
-          /* swallow */
-        });
+        .notifyAutoSignup(uid, gameName, at, eventId)
+        .catch(noop);
     }
     for (const uid of [...new Set(others.map((v) => v.userId))]) {
-      this.notifications
-        .notifyPollOutcome(uid, formatted, eventId)
-        .catch(() => {
-          /* swallow */
-        });
+      const at = formatPollTime(
+        chosenTime,
+        await resolveUserTimezone(this.db, uid, guildDefault),
+      );
+      this.notifications.notifyPollOutcome(uid, at, eventId).catch(noop);
     }
   }
 

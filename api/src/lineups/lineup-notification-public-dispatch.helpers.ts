@@ -220,6 +220,8 @@ export async function orchestrateEventCreated(
   lineupInfo?: Partial<LineupInfo>,
 ): Promise<void> {
   const lineup: LineupInfo = { id: match.lineupId, ...lineupInfo };
+  const defaultTimezone =
+    (await deps.settingsService.getDefaultTimezone()) ?? 'UTC';
   const routedPrivate = await routeEventCreatedIfPrivate(
     deps.db,
     deps.notificationService,
@@ -228,6 +230,7 @@ export async function orchestrateEventCreated(
     match,
     eventDate,
     eventId,
+    defaultTimezone,
   );
   if (routedPrivate) return;
   const members = await findMatchMemberUsers(deps.db, match.id);
@@ -243,11 +246,13 @@ export async function orchestrateEventCreated(
     ctx,
   );
   await fanOutEventCreatedDMs(
+    deps.db,
     deps.notificationService,
     deps.dedupService,
     match,
     eventDate,
     eventId,
     members,
+    defaultTimezone,
   );
 }

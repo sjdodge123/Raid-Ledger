@@ -7,6 +7,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { NotificationModule } from '../../notifications/notification.module';
+import { SettingsModule } from '../../settings/settings.module';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { LINEUP_PHASE_QUEUE } from '../queue/lineup-phase.constants';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
@@ -21,6 +22,7 @@ import { StandalonePollReminderService } from './standalone-poll-reminder.servic
   imports: [
     DrizzleModule,
     NotificationModule,
+    SettingsModule,
     SchedulingModule,
     EventsModule,
     CronJobModule,

@@ -27,24 +27,32 @@ interface FindAllArgs {
 
 /** Build a minimal AiChatDeps with only the services exercised by this path. */
 function makeDeps(opts: {
-  searchLocalGames: jest.Mock;
-  findAll: jest.Mock;
+  searchLocalGames?: jest.Mock;
+  findAll?: jest.Mock;
+  viewerTimezone?: string;
+  clientUrl?: string | null;
 }): AiChatDeps {
   return {
     logger: new Logger('events.tree.spec'),
     eventsService: {
-      findAll: opts.findAll,
+      findAll: opts.findAll ?? jest.fn(),
     } as unknown as AiChatDeps['eventsService'],
     usersService: {} as AiChatDeps['usersService'],
     llmService: {} as AiChatDeps['llmService'],
-    settingsService: {} as AiChatDeps['settingsService'],
+    settingsService: {
+      getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+    } as unknown as AiChatDeps['settingsService'],
     igdbService: {
-      searchLocalGames: opts.searchLocalGames,
+      searchLocalGames: opts.searchLocalGames ?? jest.fn(),
     } as unknown as AiChatDeps['igdbService'],
     lineupsService: {} as AiChatDeps['lineupsService'],
     schedulingService: {} as AiChatDeps['schedulingService'],
     analyticsService: {} as AiChatDeps['analyticsService'],
-    clientUrl: 'https://test.example.com',
+    clientUrl:
+      opts.clientUrl === undefined
+        ? 'https://test.example.com'
+        : opts.clientUrl,
+    viewerTimezone: opts.viewerTimezone ?? 'UTC',
   };
 }
 
@@ -156,5 +164,108 @@ describe('events.tree — searchEventsByGame fan-out (ROK-1084)', () => {
       'No upcoming events for any game matching "world of warcraft".',
     );
     expect(result.isLeaf).toBe(true);
+  });
+});
+
+/** Read the rendered list body from either leaf field. */
+function bodyOf(result: { emptyMessage: string | null; data: string | null }) {
+  return result.emptyMessage ?? result.data ?? '';
+}
+
+describe('events.tree — recipient timezone rendering (ROK-1112)', () => {
+  /**
+   * 9 PM EDT on 2026-04-23 is 2026-04-24T01:00:00Z. Rendered in the
+   * server's UTC default it leaks as 4/24; in America/New_York it must
+   * render 4/23 — the date the operator actually scheduled.
+   */
+  it('renders this-week event dates in the viewer timezone, not UTC', async () => {
+    const findAll = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 42,
+          title: 'EDT Late Night',
+          startTime: '2026-04-24T01:00:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+    const deps = makeDeps({ findAll, viewerTimezone: 'America/New_York' });
+
+    const result = await handleEvents('events:this-week', deps, makeSession());
+
+    const body = bodyOf(result);
+    expect(body).toContain('4/23/2026');
+    expect(body).not.toContain('4/24/2026');
+  });
+
+  it("rolls a 9 PM EDT slot back to the prior day's UTC-crossing date", async () => {
+    const findAll = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 43,
+          title: 'EDT Edge',
+          startTime: '2026-04-23T01:00:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+    const deps = makeDeps({ findAll, viewerTimezone: 'America/New_York' });
+
+    const result = await handleEvents('events:this-week', deps, makeSession());
+
+    expect(bodyOf(result)).toContain('4/22/2026');
+  });
+});
+
+describe('events.tree — markdown event links (ROK-1112)', () => {
+  it('emits a markdown bullet that deep-links the event title', async () => {
+    const searchLocalGames = jest.fn().mockResolvedValue({
+      games: [{ id: 101, name: 'World of Warcraft' }],
+      cached: true,
+      source: 'local',
+    });
+    const findAll = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 7777,
+          title: 'BRD Anniversary Run',
+          startTime: '2026-05-01T20:00:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+    const deps = makeDeps({ searchLocalGames, findAll });
+
+    const result = await handleEvents(
+      'events:search:world of warcraft',
+      deps,
+      makeSession(),
+    );
+
+    const body = bodyOf(result);
+    expect(body).toContain(
+      '• [BRD Anniversary Run](https://test.example.com/events/7777) —',
+    );
+  });
+
+  it('falls back to plain text bullets when clientUrl is null', async () => {
+    const findAll = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 7777,
+          title: 'No Link Run',
+          startTime: '2026-05-01T20:00:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+    const deps = makeDeps({ findAll, clientUrl: null });
+
+    const result = await handleEvents('events:this-week', deps, makeSession());
+
+    const body = bodyOf(result);
+    expect(body).toContain('• No Link Run —');
+    expect(body).not.toContain('](null');
+    expect(body).not.toContain('[No Link Run]');
   });
 });

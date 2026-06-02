@@ -27,6 +27,7 @@ import {
   findMatchMemberUsers,
 } from './lineup-notification-targets.helpers';
 import { eq } from 'drizzle-orm';
+import { resolveUserTimezones } from '../notifications/timezone.helpers';
 import { loadExpectedVoters } from './quorum/quorum-voters.helpers';
 import {
   sendTiebreakerOpenDM,
@@ -187,15 +188,26 @@ export async function fanOutMatchMemberDMs(
   }
 }
 
-/** Fan-out event-created DMs to prefetched match members. */
+/**
+ * Fan-out event-created DMs to prefetched match members. Each DM renders the
+ * locked-in date in the recipient's timezone (ROK-1112) — resolved once for
+ * the whole batch via `resolveUserTimezones` (pref → guild default → UTC).
+ */
 export async function fanOutEventCreatedDMs(
+  db: Db,
   notificationService: NotificationService,
   dedupService: NotificationDedupService,
   match: MatchInfo,
   eventDate: Date,
   eventId: number | undefined,
   members: Awaited<ReturnType<typeof findMatchMemberUsers>>,
+  defaultTimezone: string,
 ): Promise<void> {
+  const tzByUser = await resolveUserTimezones(
+    db,
+    members.map((m) => m.userId),
+    defaultTimezone,
+  );
   for (const member of members) {
     await sendEventCreatedDM(
       notificationService,
@@ -204,6 +216,7 @@ export async function fanOutEventCreatedDMs(
       member,
       eventDate,
       eventId,
+      tzByUser.get(member.userId) ?? defaultTimezone,
     );
   }
 }
@@ -288,8 +301,14 @@ export async function fanOutEventCreatedDMsToInvitees(
   match: MatchInfo,
   eventDate: Date,
   eventId: number | undefined,
+  defaultTimezone: string,
 ): Promise<void> {
   const members = await findInviteeDiscordMembers(db, match.lineupId);
+  const tzByUser = await resolveUserTimezones(
+    db,
+    members.map((m) => m.userId),
+    defaultTimezone,
+  );
   for (const member of members) {
     await sendPrivateEventCreatedDM(
       notificationService,
@@ -298,6 +317,7 @@ export async function fanOutEventCreatedDMsToInvitees(
       member,
       eventDate,
       eventId,
+      tzByUser.get(member.userId) ?? defaultTimezone,
     );
   }
 }

@@ -186,6 +186,7 @@ export async function routeEventCreatedIfPrivate(
   match: MatchInfo,
   eventDate: Date,
   eventId: number | undefined,
+  defaultTimezone: string,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
   if (visibility === null) return true;
@@ -197,6 +198,7 @@ export async function routeEventCreatedIfPrivate(
     match,
     eventDate,
     eventId,
+    defaultTimezone,
   );
   return true;
 }
