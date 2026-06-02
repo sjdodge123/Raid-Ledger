@@ -26,7 +26,7 @@ function createMockDeps(): FlowDeps {
 }
 
 function createMockTx() {
-  return {
+  const tx: Record<string, unknown> = {
     select: jest.fn().mockReturnValue({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue({
@@ -37,7 +37,11 @@ function createMockTx() {
     insert: jest.fn().mockReturnValue({
       values: jest.fn().mockResolvedValue(undefined),
     }),
-  } as unknown as Parameters<typeof discordSignupTxBody>[1];
+  };
+  // ROK-1345: roster inserts now run inside a SAVEPOINT (nested tx). Mock it by
+  // invoking the callback against the same mock so insert assertions hold.
+  tx.transaction = jest.fn((cb: (sp: unknown) => unknown) => cb(tx));
+  return tx as unknown as Parameters<typeof discordSignupTxBody>[1];
 }
 
 const mockEvent = {
