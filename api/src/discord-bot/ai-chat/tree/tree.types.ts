@@ -54,6 +54,11 @@ export interface AiChatDeps {
   schedulingService: SchedulingService;
   analyticsService: AnalyticsService;
   clientUrl: string | null;
+  /**
+   * IANA timezone for rendering event dates in DM/ephemeral replies (ROK-1112).
+   * Resolved per interaction: viewer's user preference → guild default → 'UTC'.
+   */
+  viewerTimezone: string;
 }
 
 /** Handler function signature for tree branches. */
