@@ -243,7 +243,22 @@ cmd_claim() {
         # on macOS bash 3.2 ("unbound variable"). The `:+` form expands to
         # the array's elements when non-empty, and to nothing when empty —
         # so the ssh_run call gets the right argv either way. Bug T 2026-05-19.
-        RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]:+${extra_args[@]}}")
+        # Capture the exit code without letting `set -e` abort us: a non-zero
+        # exit from the orchestrator (invalid_slot exit 2, queue_corrupt /
+        # claims_corrupt exit 1) STILL carries a JSON error body on stdout. If
+        # we let `set -euo` kill the function on the failing command sub, RESULT
+        # is captured but never printed, so the MCP layer sees empty stdout and
+        # reports `failed_to_parse_response` instead of the real error code.
+        local claim_rc=0
+        RESULT=$(ssh_run claim --branch "$branch" "${extra_args[@]:+${extra_args[@]}}") || claim_rc=$?
+        if (( claim_rc != 0 )); then
+            # Surface the JSON error body (pretty if it parses, raw otherwise)
+            # and propagate the real exit code rather than dying silently.
+            if [[ -n "$RESULT" ]]; then
+                echo "$RESULT" | jq . 2>/dev/null || echo "$RESULT"
+            fi
+            return "$claim_rc"
+        fi
         SLOT=$(jq -r '.slot // empty' <<<"$RESULT")
         # ROK-1331 M5a — orchestrator emits both legacy `queued:true` and the
         # new `enqueued:true` during the transition window. Either signals a
@@ -360,6 +375,78 @@ cmd_release() {
     stop_mutagen_sync "$slot_for_mutagen"
 }
 
+# rl resync — force-recreate the Mutagen sync session for the agent's slot.
+#
+# Recovers a WEDGED sync without a full release/reclaim dance. After a rapid
+# sequence of history-rewriting rebases in the synced worktree (or a
+# concurrent job churning the same tree), Mutagen's one-way-replica session
+# can stall in a halted/errored state. The hazard: `flush_mutagen` swallows
+# the error (`mutagen sync flush ... 2>/dev/null || true`), so a subsequent
+# `build-image-on-runner` reads STALE /workspace files yet reports success —
+# the env then serves pre-change code while build_image looks green
+# (TECH-DEBT 2026-06-02). This command tears the session down and recreates
+# it from scratch, blocks until the first sync round drains (flush), and
+# re-scaffolds the runner-side .git so worktree_head tracks the branch again.
+#
+# Idempotent + safe to call mid-claim — it never drops the slot claim.
+# Used by the rl_force_resync MCP tool and auto-invoked by rl_env_deploy's
+# pre-build sync guard when it detects /workspace is stale.
+cmd_resync() {
+    if [[ "$TARGET" == "local" ]]; then
+        echo '{"ok":false,"error":"resync_remote_only","message":"rl resync only applies to the remote fleet (Mutagen one-way-replica). No-op in local mode."}'
+        exit 0
+    fi
+    require_repo_root
+    # Mutagen is the whole point of a resync — if it's absent, say so and FAIL
+    # rather than emitting resynced:true (Codex review 2026-06-02, med). The
+    # best-effort helpers (stop/ensure/flush_mutagen) all `|| true` or no-op
+    # without mutagen, which would otherwise produce a misleading success.
+    if ! command -v mutagen >/dev/null 2>&1; then
+        jq -nc '{ok:false, error:"mutagen_not_installed", resynced:false, message:"mutagen CLI not found on this host — cannot resync. Install from https://mutagen.io/"}'
+        exit 1
+    fi
+    # Resync requires an ALREADY-held slot. Do NOT use ensure_claim/current_slot
+    # here — they run `claim` and would ACQUIRE a slot as a side effect (Codex
+    # review 2026-06-02, P2): a standalone recovery call must never mutate lease
+    # state (it could branch-mismatch-destroy a preserved env or leak a queue
+    # entry). Look the slot up read-only and fail loud if none is held.
+    SLOT=$(lookup_held_slot)
+    if [[ -z "$SLOT" ]]; then
+        jq -nc '{ok:false, error:"no_active_claim", resynced:false, message:"rl resync needs a slot you already hold — none found for this agent. Run `rl claim` first (it grants a slot or enqueues you; poll rl_claim_wait to block until granted). resync recovers a wedged sync without dropping the claim; it must never acquire one."}'
+        exit 1
+    fi
+    local branch
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo main)"
+    echo "[rl] force-resyncing Mutagen session for slot $SLOT (branch $branch)" >&2
+    # Redirect each helper's stdout to stderr: `mutagen sync create` prints
+    # the new session id to stdout, which would otherwise pollute the single
+    # JSON line this command emits. (parseJsonFromStdout would still recover
+    # it, but a clean single-line stdout is friendlier to operators piping
+    # through jq.)
+    stop_mutagen_sync "$SLOT" >&2 || true
+    # Recreate the session — CHECKED. ensure_mutagen_sync's last command is
+    # `mutagen sync create`; a non-zero exit here means the session could not
+    # be re-established, so we must not claim success.
+    if ! ensure_mutagen_sync "$SLOT" >&2; then
+        jq -nc --argjson slot "$SLOT" \
+            '{ok:false, error:"resync_create_failed", slot:$slot, resynced:false, message:"failed to (re)create the Mutagen sync session — check `mutagen sync list` / daemon, then retry or release + re-claim the slot."}'
+        exit 1
+    fi
+    # Flush — CHECKED, NOT the error-swallowing flush_mutagen helper. A resync
+    # that can't reach in-sync is exactly the wedged state we're recovering
+    # from; reporting it as success would re-introduce the original bug.
+    if ! mutagen sync flush "rl-slot-$SLOT" >&2; then
+        jq -nc --argjson slot "$SLOT" \
+            '{ok:false, error:"resync_flush_failed", slot:$slot, resynced:false, message:"recreated the session but `mutagen sync flush` did not reach in-sync — it may still be wedged. Retry, or release + re-claim the slot."}'
+        exit 1
+    fi
+    # .git scaffold is best-effort (a slot without .git is still buildable —
+    # the build reads /workspace file contents, not the scaffold).
+    scaffold_runner_git "$SLOT" "$branch" >&2 || true
+    jq -nc --argjson slot "$SLOT" --arg branch "$branch" \
+        '{ok:true, slot:$slot, branch:$branch, resynced:true, message:"Mutagen session terminated + recreated, flushed to in-sync, and runner .git re-scaffolded."}'
+}
+
 # force-release — operator-only: clear a stuck slot regardless of holder.
 # Requires RL_OPERATOR=1 in the caller's shell (so the rl CLI SSHes as the
 # privileged `rl` user; the orchestrator script also re-checks the gate).
@@ -474,13 +561,17 @@ cmd_claim_wait() {
     local timeout=600
     local branch
     branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo unknown)"
+    local extra=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --timeout) timeout="$2"; shift 2 ;;
+            # Forward --slot so a slot-pinned wait stays pinned through every
+            # re-claim the orchestrator performs (Codex P1, 2026-06-02).
+            --slot) extra+=(--slot "$2"); shift 2 ;;
             *) shift ;;
         esac
     done
-    ssh_run claim-wait --timeout "$timeout" --branch "$branch" | jq .
+    ssh_run claim-wait --timeout "$timeout" --branch "$branch" "${extra[@]:+${extra[@]}}" | jq .
 }
 
 cmd_db() {
@@ -743,6 +834,17 @@ cmd_doctor() {
 }
 
 # --- helpers --------------------------------------------------------------
+
+# Read-only lookup of the slot this agent currently holds, straight from
+# claims.json — NO side effects. Unlike current_slot()/ensure_claim (which run
+# `claim` and would ACQUIRE a slot as a side effect), this never mutates lease
+# state, so a caller that must not claim (e.g. the standalone `rl resync`
+# recovery tool) can ask "do I already hold a slot?" without risking a
+# branch-mismatch env destroy or a stray queue entry (Codex review 2026-06-02, P2).
+lookup_held_slot() {
+    ssh -o ConnectTimeout=3 -o BatchMode=yes "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}" \
+        "jq -r --arg a $(printf '%q' "$RL_AGENT_ID") '[.[] | select(.agent_id == \$a and .claimed == true) | .slot] | first // empty' /srv/rl-infra/state/claims.json" 2>/dev/null || true
+}
 
 current_slot() {
     ssh_run claim --branch unknown | jq -r '.slot // empty'
@@ -1075,6 +1177,10 @@ rl — remote runner CLI (target: $TARGET)
   rl claim [--no-wait] [--wait-timeout N] [--poll-interval N]   # enqueues with queue_position=N when contended
                              acquire a slot (waits + polls if all busy; enqueues with queue_position=N when contended)
   rl release                 release slot + clean up
+  rl resync                  force-recreate a WEDGED Mutagen sync for your
+                             slot (terminate + recreate + flush + re-scaffold
+                             .git) without releasing. Use when a redeploy
+                             serves stale code / worktree is behind the laptop.
   rl force-release --slot N --reason '...' [--no-destroy]
                              operator-only: clear stuck slot (requires RL_OPERATOR=1)
   rl status [--pretty]       global view (JSON by default; --pretty for human table)
@@ -1111,6 +1217,7 @@ case "${1:-}" in
     claim)        shift; cmd_claim "$@" ;;
     claim-wait)   shift; cmd_claim_wait "$@" ;;
     release)      shift; cmd_release "$@" ;;
+    resync)       shift; cmd_resync "$@" ;;
     force-release) shift; cmd_force_release "$@" ;;
     extend)       shift; cmd_extend "$@" ;;
     lease-status) shift; cmd_lease_status "$@" ;;

@@ -13,10 +13,12 @@ source "$(dirname "$0")/_state.sh"
 
 TIMEOUT=600
 BRANCH=""
+REQUESTED_SLOT=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --timeout) TIMEOUT="$2"; shift 2 ;;
         --branch)  BRANCH="$2"; shift 2 ;;
+        --slot)    REQUESTED_SLOT="$2"; shift 2 ;;
         *) echo "{\"ok\":false,\"error\":\"unknown_arg\",\"arg\":\"$1\"}" >&2; exit 2 ;;
     esac
 done
@@ -29,6 +31,11 @@ CLAIM_BIN="$(dirname "$0")/claim"
 run_claim() {
     local args=()
     [[ -n "$BRANCH" ]] && args+=(--branch "$BRANCH")
+    # Forward --slot on EVERY poll so a slot-pinned wait stays pinned. Without
+    # this the re-claims drop the pin, grab whatever slot frees first, and leave
+    # the original queue entry on the requested slot — risking a double grant
+    # when it later frees (Codex P1, 2026-06-02).
+    [[ -n "$REQUESTED_SLOT" ]] && args+=(--slot "$REQUESTED_SLOT")
     "$CLAIM_BIN" "${args[@]+"${args[@]}"}"
 }
 
@@ -38,6 +45,15 @@ GRANTED_SLOT=$(jq -r '.slot // empty' <<<"$FIRST" 2>/dev/null || echo "")
 if [[ -n "$GRANTED_SLOT" ]]; then
     echo "$FIRST"
     exit 0
+fi
+
+# A hard error from claim (e.g. invalid_slot from a bad --slot) must NOT enter
+# the long-poll — it would never resolve. Surface it and stop. Enqueued
+# responses (ok:true, no .slot) fall through to the poll below.
+FIRST_ERR=$(jq -r 'if (.ok == false) and (.error != null) then .error else empty end' <<<"$FIRST" 2>/dev/null || echo "")
+if [[ -n "$FIRST_ERR" ]]; then
+    echo "$FIRST"
+    exit 2
 fi
 
 # Step 2 — long-poll. Pre-flight: inotifywait must be installed.

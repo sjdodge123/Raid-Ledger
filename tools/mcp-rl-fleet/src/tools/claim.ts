@@ -12,7 +12,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_claim';
 export const TOOL_DESCRIPTION =
-  "Acquire a runner slot on the rl-infra fleet. Starts a Mutagen sync from the operator laptop to the runner worktree. Returns the slot number, runner container name, slot/debug hostnames, and the shell command to attach. Idempotent: if this agent already holds a slot, returns that one. If all slots are busy, this agent is enqueued automatically — by default the tool then POLLS the queue (default 600s / 10min wait_timeout) until a slot frees or it times out. Pass wait=false for a single-shot call and handle polling yourself. CRITICAL when working in a git worktree: pass worktree_path with the absolute path to your worktree. Without it, the MCP server defaults to where Claude was started (usually the main repo) and Mutagen syncs the WRONG branch.";
+  "Acquire a runner slot on the rl-infra fleet. Starts a Mutagen sync from the operator laptop to the runner worktree. Returns the slot number, runner container name, slot/debug hostnames, and the shell command to attach. Idempotent: if this agent already holds a slot, returns that one. If all slots are busy, this agent is enqueued automatically — by default the tool then POLLS the queue (default 600s / 10min wait_timeout) until a slot frees or it times out. Pass wait=false for a single-shot call and handle polling yourself. Pass slot=N to pin the claim to a SPECIFIC slot (1..N): the claim then only ever grabs that slot — enqueuing on it if busy — instead of taking the lowest free slot. Use this to avoid landing on a slot that holds a preserved env you don't want branch-mismatch-destroyed. CRITICAL when working in a git worktree: pass worktree_path with the absolute path to your worktree. Without it, the MCP server defaults to where Claude was started (usually the main repo) and Mutagen syncs the WRONG branch.";
 
 export interface ClaimResult {
   ok: boolean;
@@ -63,13 +63,22 @@ export interface ClaimParams {
   wait_timeout_seconds?: number;
   /** Poll interval. Default 10s. Min 2, max 60. */
   poll_interval_seconds?: number;
+  /**
+   * Pin the claim to a specific slot number (1..N). When set, the claim ONLY
+   * grabs that slot — if it's busy, the agent enqueues on THAT slot rather than
+   * taking the lowest free one. Use to avoid landing on (and branch-mismatch-
+   * destroying a preserved env on) a slot you didn't ask for. Omit to take the
+   * lowest available slot (default).
+   */
+  slot?: number;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function singleClaim(branch?: string, cwd?: string): Promise<ClaimResult> {
+async function singleClaim(branch?: string, cwd?: string, slot?: number): Promise<ClaimResult> {
   const args = ['claim'];
   if (branch) args.push('--branch', branch);
+  if (slot !== undefined) args.push('--slot', String(slot));
   const { stdout, stderr, exitCode } = await runRl(args, { cwd });
   const parsed = parseJsonFromStdout<ClaimResult>(stdout);
   if (parsed) return parsed;
@@ -89,7 +98,7 @@ export async function execute(params: ClaimParams): Promise<ClaimResult> {
   // one transition cycle. Treat either as the wait-and-retry signal.
   const isQueued = (r: ClaimResult): boolean => Boolean(r.queued || r.enqueued);
 
-  const first = await singleClaim(params.branch, params.worktree_path);
+  const first = await singleClaim(params.branch, params.worktree_path, params.slot);
   if (!wait || !isQueued(first)) return first;
 
   // Poll the queue (queue_position decrements as we advance). Each
@@ -99,7 +108,7 @@ export async function execute(params: ClaimParams): Promise<ClaimResult> {
   let last = first;
   while ((Date.now() - startedAt) / 1000 < timeoutS) {
     await sleep(intervalS * 1000);
-    last = await singleClaim(params.branch, params.worktree_path);
+    last = await singleClaim(params.branch, params.worktree_path, params.slot);
     if (!isQueued(last)) return last;
   }
 

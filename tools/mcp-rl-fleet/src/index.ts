@@ -31,6 +31,7 @@ import * as envCloneProd from './tools/env-clone-prod.js';
 import * as envBuildImage from './tools/env-build-image.js';
 import * as envDeploy from './tools/env-deploy.js';
 import * as forceRelease from './tools/force-release.js';
+import * as forceResync from './tools/force-resync.js';
 import * as testPlan from './tools/test-plan.js';
 import * as task from './tools/task.js';
 import * as taskInspect from './tools/task-inspect.js';
@@ -90,6 +91,7 @@ const claimSchema: Shape = {
   wait: z.boolean().optional(),
   wait_timeout_seconds: z.number().int().min(5).max(3600).optional(),
   poll_interval_seconds: z.number().int().min(2).max(60).optional(),
+  slot: z.number().int().min(1).max(64).optional(),
 };
 registerTool(claim.TOOL_NAME, claim.TOOL_DESCRIPTION, claimSchema, async (p) =>
   jsonResult(await claim.execute(p as claim.ClaimParams)),
@@ -217,6 +219,13 @@ const forceReleaseSchema: Shape = {
 };
 registerTool(forceRelease.TOOL_NAME, forceRelease.TOOL_DESCRIPTION, forceReleaseSchema, async (p) =>
   jsonResult(await forceRelease.execute(p as forceRelease.ForceReleaseParams)),
+);
+
+const forceResyncSchema: Shape = {
+  worktree_path: worktreePathSchema,
+};
+registerTool(forceResync.TOOL_NAME, forceResync.TOOL_DESCRIPTION, forceResyncSchema, async (p) =>
+  jsonResult(await forceResync.execute(p as forceResync.ForceResyncParams)),
 );
 
 // ----- Test plans -----
@@ -413,6 +422,7 @@ registerTool(lease.STATUS_TOOL, lease.STATUS_DESC, leaseStatusSchema, async (p) 
 const claimWaitSchema: Shape = {
   timeout_seconds: z.number().int().min(5).max(3600).optional(),
   worktree_path: worktreePathSchema,
+  slot: z.number().int().min(1).max(64).optional(),
 };
 registerTool(lease.WAIT_TOOL, lease.WAIT_DESC, claimWaitSchema, async (p) =>
   jsonResult(await lease.executeWait(p as lease.ClaimWaitParams)),

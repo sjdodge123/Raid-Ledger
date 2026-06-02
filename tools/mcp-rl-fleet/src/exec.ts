@@ -253,6 +253,13 @@ interface RlEnv {
    * main repo, NOT the agent's worktree). Defaults to process.cwd().
    */
   cwd?: string;
+  /**
+   * Child-process timeout (ms). When set, the rl CLI invocation is killed if
+   * it exceeds this — bounds long-running subcommands (e.g. `rl resync`, whose
+   * Mutagen flush is otherwise unbounded) so a stuck VM can't pin the caller.
+   * Unset = no timeout (legacy behavior for fast subcommands).
+   */
+  timeoutMs?: number;
 }
 
 // ROK-1331 M11 — per-tool perf instrumentation. Wraps runRl with a
@@ -358,6 +365,7 @@ export async function runRl(
       env,
       cwd: opts.cwd,
       maxBuffer: 16 * 1024 * 1024, // 16 MB — enough for validate-ci output
+      ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}),
     });
     return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
   } catch (err) {

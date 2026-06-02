@@ -21,10 +21,11 @@ import {
 } from '../exec.js';
 import * as claim from './claim.js';
 import * as task from './task.js';
+import { ensureSyncedHead } from '../sync-guard.js';
 
 export const TOOL_NAME = 'rl_env_build_image_from_runner';
 export const TOOL_DESCRIPTION =
-  "Build an allinone Docker image from the agent's CURRENT BRANCH code (the Mutagen-synced /workspace inside the runner), tag it, and push to the local registry. ASYNC BY DEFAULT (wait:false) — returns {task_id, log_url, started_at} within 1s; poll via rl_task_status or block via rl_task_wait. Set wait:true to preserve the legacy synchronous shape. Build is 5–15 minutes on first run; subsequent rebuilds of the same branch are fast (Docker layer cache). Requires rl_claim first. When called from a worktree, pass worktree_path so the agent_id matches the slot you claimed.";
+  "Build an allinone Docker image from the agent's CURRENT BRANCH code (the Mutagen-synced /workspace inside the runner), tag it, and push to the local registry. ASYNC BY DEFAULT (wait:false) — returns {task_id, log_url, started_at} within 1s; poll via rl_task_status or block via rl_task_wait. Set wait:true to preserve the legacy synchronous shape. Build is 5–15 minutes on first run; subsequent rebuilds of the same branch are fast (Docker layer cache). Requires rl_claim first. When called from a worktree, pass worktree_path so the agent_id matches the slot you claimed. Before dispatching, a sync guard verifies the runner's /workspace actually reflects your laptop HEAD (force-resyncing a wedged Mutagen session once); if it can't confirm a current sync it returns error=\"sync_stuck\" and builds nothing rather than building stale source. The result includes expected_head + synced_head.";
 
 export interface BuildImageParams {
   tag: string;
@@ -50,6 +51,10 @@ export interface BuildImageResult {
   log_path?: string;
   started_at?: string;
   mcp_runtime_status?: string;
+  /** Laptop HEAD the build intends to use (sync guard). null for non-git worktrees. */
+  expected_head?: string | null;
+  /** HEAD confirmed present in the runner's /workspace (sync guard). Equals expected_head on a healthy build. */
+  synced_head?: string | null;
   error?: string;
   stderr?: string;
   message?: string;
@@ -94,15 +99,31 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
       stderr: cl.error || cl.message || 'pre-build claim returned no slot',
     };
   }
-  // Flush Mutagen so any pending edits land on the runner BEFORE the build
-  // context is read. Best-effort.
-  try {
-    await execFileP('mutagen', ['sync', 'flush', `rl-slot-${cl.slot}`], {
-      timeout: 30_000,
-    });
-  } catch {
-    /* ignore */
+  // SYNC GUARD (TECH-DEBT 2026-06-02). Verify the runner's Mutagen-synced
+  // /workspace actually reflects the laptop's current HEAD BEFORE dispatching
+  // the build. This replaces the old best-effort `mutagen sync flush` (which
+  // swallowed errors and let a wedged session build stale source while
+  // reporting ok). Lives in THIS primitive — not just rl_env_deploy — so the
+  // standalone rl_env_build_image_from_runner + parallel-deploy paths are
+  // covered too (Codex review 2026-06-02, high). On an unrecoverable stale/
+  // wedged sync the guard force-resyncs once and, if still bad, we FAIL LOUD
+  // here rather than building+pushing stale source.
+  const guard = await ensureSyncedHead({
+    slot: cl.slot as number,
+    worktree_path: params.worktree_path,
+  });
+  if (!guard.ok) {
+    return {
+      ok: false,
+      error: guard.error ?? 'sync_stuck',
+      stderr: guard.message,
+      expected_head: guard.expected_head,
+      synced_head: guard.synced_head,
+      slot: typeof cl.slot === 'number' ? cl.slot : undefined,
+    };
   }
+  const expectedHead = guard.expected_head;
+  const syncedHead = guard.synced_head;
 
   const agentId = deriveAgentId(params.worktree_path);
   const wait = params.wait ?? false;
@@ -162,6 +183,8 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
       ok: false,
       error: 'task_start_failed',
       stderr,
+      expected_head: expectedHead,
+      synced_head: syncedHead,
     };
   }
 
@@ -178,6 +201,8 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
       started_at: startedAt,
       mcp_runtime_status: 'running',
       slot: slot ?? undefined,
+      expected_head: expectedHead,
+      synced_head: syncedHead,
     };
   }
 
@@ -200,6 +225,8 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
       log_url: logUrl,
       started_at: startedAt,
       mcp_runtime_status: status.mcp_runtime_status,
+      expected_head: expectedHead,
+      synced_head: syncedHead,
     };
   }
   return {
@@ -209,5 +236,7 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
     log_url: logUrl,
     mcp_runtime_status: status.mcp_runtime_status ?? 'failed',
     stderr: status.message ?? status.error ?? 'build failed',
+    expected_head: expectedHead,
+    synced_head: syncedHead,
   };
 }

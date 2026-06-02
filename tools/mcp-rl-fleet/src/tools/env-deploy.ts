@@ -65,8 +65,21 @@ export interface EnvDeployResult {
    * is set in /srv/rl-infra/.env; random per-call otherwise.
    */
   admin_password?: string | null;
+  /**
+   * Laptop branch HEAD the build INTENDED to use (`git rev-parse HEAD` in the
+   * worktree). null when the worktree isn't a git repo. Surfaced so the caller
+   * can confirm what was deployed and detect staleness (TECH-DEBT 2026-06-02).
+   */
+  expected_head?: string | null;
+  /**
+   * HEAD the pre-build sync guard CONFIRMED is present in the runner's
+   * Mutagen-synced /workspace. Equals expected_head on a healthy deploy. null
+   * when the guard couldn't confirm a current sync (failure surfaces via
+   * error="sync_stuck").
+   */
+  synced_head?: string | null;
   steps: Record<string, { ok: boolean; took_s?: number; detail?: string; error?: string }>;
-  /** Set when top-level ok=false. Short machine-readable code: "sync_settings_failed" | "clone_prod_failed". */
+  /** Set when top-level ok=false. Short machine-readable code: "sync_stuck" | "sync_settings_failed" | "clone_prod_failed". */
   error?: string;
   message: string;
 }
@@ -94,6 +107,18 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
   log('claim', true, t, `slot ${cl.slot}`);
 
   // 2. Build image from /workspace (the agent's branch).
+  //
+  // The pre-build SYNC GUARD (TECH-DEBT 2026-06-02) now lives INSIDE
+  // buildImage.execute — it verifies the runner's Mutagen-synced /workspace
+  // reflects the laptop's current HEAD before dispatching the build, force-
+  // resyncs once on a wedged sync, and returns error="sync_stuck" (without
+  // building) if it can't confirm a current sync. Keeping it in the primitive
+  // means the standalone rl_env_build_image_from_runner path is guarded too
+  // (Codex review 2026-06-02). We surface the guard's expected_head/synced_head
+  // on the deploy result and map a sync_stuck build failure to a clear,
+  // top-level error so a stale tree is NEVER built or deployed.
+  let expectedHead: string | null | undefined;
+  let syncedHead: string | null | undefined;
   if (!params.skip_build) {
     t = now();
     // env-deploy is the SYNC wrapper — inner buildImage is now async-by-
@@ -106,13 +131,28 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
       wait: true,
       wait_timeout_seconds: params.timeout_seconds,
     });
+    expectedHead = bi.expected_head;
+    syncedHead = bi.synced_head;
     if (!bi.ok) {
-      log('build_image', false, t, undefined, bi.error || bi.stderr || 'build failed');
+      const syncFailed = bi.error === 'sync_stuck' || bi.error === 'probe_failed';
+      log(
+        syncFailed ? 'sync_guard' : 'build_image',
+        false,
+        t,
+        undefined,
+        bi.error || bi.stderr || 'build failed',
+      );
       return {
         ok: false,
         slug: params.slug,
+        expected_head: expectedHead,
+        synced_head: syncedHead,
         steps,
-        message: `build_image step failed: ${bi.error || bi.stderr || 'unknown'}`,
+        error: syncFailed ? bi.error : undefined,
+        message: syncFailed
+          ? // The guard's own message already explains the stale/wedged sync.
+            bi.stderr || 'sync guard refused to build — runner /workspace is stale'
+          : `build_image step failed: ${bi.error || bi.stderr || 'unknown'}`,
       };
     }
     log('build_image', true, t, `${bi.image} (${bi.duration_s}s)`);
@@ -269,6 +309,8 @@ export async function execute(params: EnvDeployParams): Promise<EnvDeployResult>
     slot_url: sp.slot_url ?? null,
     admin_email: sp.admin_email,
     admin_password: sp.admin_password ?? null,
+    expected_head: expectedHead,
+    synced_head: syncedHead,
     steps,
     error: errorCode,
     message,
