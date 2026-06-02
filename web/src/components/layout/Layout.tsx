@@ -62,7 +62,7 @@ export function Layout({ children }: LayoutProps) {
 
     if (isChromelessPath(pathname)) {
         return (
-            <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
+            <div className="min-h-dvh flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
                 <main id="main-content" className="flex-1">{children}</main>
                 <LiveRegionProvider />
             </div>
@@ -70,7 +70,7 @@ export function Layout({ children }: LayoutProps) {
     }
 
     return (
-        <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
+        <div className="min-h-dvh flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
             <CurrentUserAvatarSync />
             {showAmbientEffects && <SpaceEffects />}
             {showAmbientEffects && <UnderwaterAmbience />}

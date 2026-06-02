@@ -37,7 +37,6 @@ function CoverContent({
         <div className="relative aspect-[3/4] bg-panel">
             {game.coverUrl ? <CoverImage src={game.coverUrl} alt={game.name} /> : <CoverPlaceholder />}
             {rating != null && <RatingBadge rating={rating} />}
-            <CoverInfoAffordance />
             <GradientOverlay />
             <div className="absolute bottom-0 left-0 right-0 p-3">
                 <CardTitle name={game.name} />
@@ -48,24 +47,6 @@ function CoverContent({
                 )}
             </div>
         </div>
-    );
-}
-
-function CoverInfoAffordance(): JSX.Element {
-    // Mobile bottom-sheet trigger lives on the whole card (the outer button
-    // carries `data-testid="game-ref-row"`); this icon is purely a visual
-    // signifier. Sized for mobile touch / iPad ergonomics (~36px square) and
-    // always visible so the affordance reads without hover state. Not a
-    // separate test target — keep the `game-ref-info-affordance` testid
-    // reserved for the desktop ⓘ-only trigger (GameDiscoverCard).
-    return (
-        <span
-            aria-hidden="true"
-            title="Open game details"
-            className="absolute top-2 left-2 inline-flex items-center justify-center w-9 h-9 rounded-full bg-black/65 text-white text-sm font-semibold ring-1 ring-white/15"
-        >
-            i
-        </span>
     );
 }
 
@@ -85,7 +66,7 @@ export function DrawerCard({ game, pricing }: DrawerCardProps): JSX.Element {
             >
                 <CoverContent game={game} rating={rating && rating > 0 ? rating : null} />
                 {pricing && (
-                    <div className="absolute top-2 right-2">
+                    <div className="absolute top-2 left-2">
                         <PriceBadge pricing={pricing} />
                     </div>
                 )}
