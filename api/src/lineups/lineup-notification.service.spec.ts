@@ -17,13 +17,19 @@ import { SettingsService } from '../settings/settings.service';
 // ---------------------------------------------------------------------------
 
 function makeMockDb() {
+  // `where` must serve two query shapes: the embed lookup terminates at
+  // `.limit()`, while resolveUserTimezones (ROK-1112) awaits `.where()`
+  // directly. Returning an empty rows array that ALSO carries a `.limit`
+  // method satisfies both — `for...of` iterates the array (no tz prefs),
+  // `.limit()` resolves the embed row.
+  const whereResult = Object.assign([] as unknown[], {
+    limit: jest.fn().mockResolvedValue([{ embedMessageId: null }]),
+  });
   return {
     execute: jest.fn().mockResolvedValue([]),
     select: jest.fn().mockReturnValue({
       from: jest.fn().mockReturnValue({
-        where: jest.fn().mockReturnValue({
-          limit: jest.fn().mockResolvedValue([{ embedMessageId: null }]),
-        }),
+        where: jest.fn().mockReturnValue(whereResult),
       }),
     }),
     update: jest.fn().mockReturnValue({
@@ -55,6 +61,9 @@ function makeMockSettingsService() {
     get: jest.fn().mockResolvedValue(null),
     getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
     getDiscordBotDefaultChannel: jest.fn().mockResolvedValue('chan-default'),
+    // ROK-1112: orchestrateEventCreated resolves the guild default tz for
+    // per-recipient DM date rendering.
+    getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
   };
 }
 

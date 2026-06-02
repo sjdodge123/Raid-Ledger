@@ -187,6 +187,22 @@ export async function sendSchedulingDM(
   });
 }
 
+/**
+ * Format an event start date for a lineup DM in the recipient's timezone
+ * (ROK-1112). `timeZone` is an IANA string (recipient pref → guild default →
+ * 'UTC'); omitting it renders in the server TZ — only acceptable in tests.
+ */
+function formatLockedInWhen(eventDate: Date, timeZone?: string): string {
+  return eventDate.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
+  });
+}
+
 /** Send a single event-created DM to a match member. */
 export async function sendEventCreatedDM(
   notificationService: NotificationService,
@@ -195,6 +211,7 @@ export async function sendEventCreatedDM(
   member: DiscordMember,
   eventDate: Date,
   eventId?: number,
+  timeZone?: string,
 ): Promise<void> {
   const key = `lineup-event-dm:${match.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
@@ -203,7 +220,7 @@ export async function sendEventCreatedDM(
     userId: member.userId,
     type: 'community_lineup',
     title: `${match.gameName} is happening!`,
-    message: `${match.gameName} is locked in for ${eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. Sign up!`,
+    message: `${match.gameName} is locked in for ${formatLockedInWhen(eventDate, timeZone)}. Sign up!`,
     payload: {
       subtype: 'lineup_event_created',
       matchId: match.id,
