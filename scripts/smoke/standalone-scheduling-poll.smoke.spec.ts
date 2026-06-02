@@ -455,6 +455,18 @@ test.describe('Standalone poll — scheduling poll page', () => {
             );
             await expect(dateTimeInput).toBeVisible({ timeout: 10_000 });
 
+            // ROK-1300: standalone composite — "started by you" hero badge,
+            // sticky-toolbar submit, and NO 4-phase progress ribbon.
+            await expect(
+                page.getByText(/Scheduling Poll · started by you/i),
+            ).toBeVisible({ timeout: 10_000 });
+            await expect(
+                page.locator('[data-testid="sticky-hero-schedule-submit"]'),
+            ).toBeVisible({ timeout: 10_000 });
+            await expect(
+                page.getByRole('list', { name: /lineup progress/i }),
+            ).toHaveCount(0);
+
             // Page should not show errors
             await expect(page.locator('body')).not.toHaveText(
                 /something went wrong/i,

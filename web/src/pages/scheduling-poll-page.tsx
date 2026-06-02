@@ -4,28 +4,22 @@
  * Composes match context, suggested times, availability heatmap,
  * event creation, and other polls sections.
  */
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
-import { HeroNextStep } from '../components/common/HeroNextStep';
-import { useLineupHero } from '../hooks/use-lineup-hero';
-import { useLineupDetail } from '../hooks/use-lineups';
 import type { GameTimePreviewBlock } from '../components/features/game-time/game-time-grid.types';
 import {
   useSchedulePoll,
   useMatchAvailability,
-  useToggleScheduleVote,
-  useSuggestSlot,
   useOtherPolls,
   useCancelSchedulePoll,
 } from '../hooks/use-scheduling';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useGameTime } from '../hooks/use-game-time';
 import { MatchContextCard } from './scheduling/MatchContextCard';
-import { SuggestedTimes } from './scheduling/SuggestedTimes';
 import { AvailabilityHeatmapSection } from './scheduling/AvailabilityHeatmapSection';
-import { CreateEventSection } from './scheduling/CreateEventSection';
+import { SchedulingComposite } from '../components/lineups/cycle-4/SchedulingComposite';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
 import { PollDeadlineBanner } from './scheduling/PollDeadlineBanner';
 import { SchedulingWizard } from './scheduling/SchedulingWizard';
@@ -64,16 +58,6 @@ function ReadOnlyBanner(): JSX.Element {
   );
 }
 
-/** Convert a dayOfWeek (0=Sun) + hour to a datetime-local in the given week. */
-function toDatetimeLocal(dayOfWeek: number, hour: number, weekStart: Date): string {
-  const target = new Date(weekStart);
-  // weekStart is a Sunday — add dayOfWeek offset
-  target.setDate(target.getDate() + dayOfWeek);
-  target.setHours(hour, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}T${pad(hour)}:00`;
-}
-
 /** Get the Sunday that starts the week containing the given date. */
 function getWeekStart(date: Date): Date {
   const d = new Date(date);
@@ -109,21 +93,10 @@ function slotsToPreviewBlocks(
     });
 }
 
-/** Derive read-only status and vote state from poll data. */
+/** Derive read-only status from poll data. */
 function derivePollState(poll: SchedulePollPageResponseDto) {
   const isActive = poll.match.status === 'scheduling' || poll.match.status === 'suggested';
-  return { readOnly: !isActive, hasVoted: poll.myVotedSlotIds.length > 0 };
-}
-
-/** Aggregate mutation hooks for poll interactions. */
-function usePollMutations(lineupId: number, matchId: number) {
-  const toggleVote = useToggleScheduleVote();
-  const suggest = useSuggestSlot();
-  return {
-    toggleVote: (slotId: number) => toggleVote.mutate({ lineupId, matchId, slotId }),
-    suggest: (t: string) => suggest.mutate({ lineupId, matchId, proposedTime: t }),
-    isSuggesting: suggest.isPending,
-  };
+  return { readOnly: !isActive };
 }
 
 /** Completed poll state — shown when the match is scheduled and has a linked event. */
@@ -163,59 +136,48 @@ function PollSections({ lineupId, matchId, poll }: {
   return <ActivePollSections lineupId={lineupId} matchId={matchId} poll={poll} />;
 }
 
-/** Render the standalone-poll hero, given a loaded lineup. */
-function StandalonePollHero({
-  lineup,
-  myVotedSlotCount,
-}: {
-  lineup: NonNullable<ReturnType<typeof useLineupDetail>['data']>;
-  myVotedSlotCount: number;
+/** Operator-only header row with the Cancel Poll action. */
+function PollHeader({ lineupId, matchId, readOnly }: {
+  lineupId: number; matchId: number; readOnly: boolean;
 }): JSX.Element {
-  const slotGridRef = useRef<HTMLElement | null>(null);
-  const leaderboardRef = useRef<HTMLElement | null>(null);
-  const bracketRef = useRef<HTMLElement | null>(null);
-  const heroProps = useLineupHero({
-    lineup,
-    tiebreaker: null,
-    scrollTargets: { leaderboard: leaderboardRef, slotGrid: slotGridRef, bracket: bracketRef },
-    pageId: 'standalone-poll',
-    myVotedSlotCount,
-  });
-  return <HeroNextStep {...heroProps} />;
-}
-
-/** Wrapper that fetches lineup detail and only renders hero when ready.
- *  Takes `myVotedSlotCount` from the parent (poll context) so the standalone
- *  hero copy reflects this poll's vote state, not the lineup's vote state.
- */
-function StandalonePollHeroOrNothing({
-  lineupId,
-  myVotedSlotCount,
-}: { lineupId: number; myVotedSlotCount: number }): JSX.Element | null {
-  const { data: lineup } = useLineupDetail(lineupId);
-  if (!lineup) return null;
-  return <StandalonePollHero lineup={lineup} myVotedSlotCount={myVotedSlotCount} />;
-}
-
-/** Active poll — hooks live here to avoid conditional hook calls in PollSections. */
-function ActivePollSections({ lineupId, matchId, poll }: {
-  lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
-}): JSX.Element {
-  const slotGridRef = useRef<HTMLElement | null>(null);
-  const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
-  const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
-  const { toggleVote, suggest, isSuggesting } = usePollMutations(lineupId, matchId);
   const cancelPoll = useCancelSchedulePoll();
   const { user } = useAuth();
   const navigate = useNavigate();
-  /* linkedEventId is a back-reference to the rescheduled event, NOT a newly
-     created event. Only set createdEventId when the user creates from this poll. */
-  const [createdEventId] = useState<number | null>(null);
-  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
-  const [prefillTime, setPrefillTime] = useState<string | undefined>();
-  const [previewBlock, setPreviewBlock] = useState<GameTimePreviewBlock | undefined>();
-  const { readOnly, hasVoted } = derivePollState(poll);
   const canCancel = isOperatorOrAdmin(user) && !readOnly;
+  const handleCancel = () => {
+    cancelPoll.mutate({ lineupId, matchId }, { onSuccess: () => navigate('/events') });
+  };
+  return (
+    <div className="flex items-center justify-between">
+      <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
+      {canCancel && (
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={cancelPoll.isPending}
+          className="px-3 py-1.5 text-xs font-medium text-red-400 border border-red-400/30 rounded-lg hover:bg-red-400/10 transition-colors disabled:opacity-50"
+        >
+          {cancelPoll.isPending ? 'Cancelling...' : 'Cancel Poll'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Active poll — ROK-1300 unifies the from-match (Ss) + standalone (Sx) views
+ * into `<SchedulingComposite>` (sticky JourneyHero + slot rows + sticky-toolbar
+ * submit + operator-gated lock). The page retains the operator Cancel header,
+ * deadline banner, read-only banner, the availability heatmap (read-only
+ * context), and the other-polls section.
+ */
+function ActivePollSections({ lineupId, matchId, poll }: {
+  lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
+}): JSX.Element {
+  const { data: availability, isLoading: availLoading } = useMatchAvailability(lineupId, matchId);
+  const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  const { readOnly } = derivePollState(poll);
 
   const handleWeekChange = (delta: number): void => {
     const next = new Date(weekStart);
@@ -223,55 +185,19 @@ function ActivePollSections({ lineupId, matchId, poll }: {
     setWeekStart(next);
   };
 
-  const handleCancel = () => {
-    cancelPoll.mutate({ lineupId, matchId }, { onSuccess: () => navigate('/events') });
-  };
+  const previewBlocks: GameTimePreviewBlock[] = slotsToPreviewBlocks(poll.slots, weekStart);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
-      <StandalonePollHeroOrNothing
-        lineupId={lineupId}
-        myVotedSlotCount={poll.myVotedSlotIds.length}
-      />
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
-        {canCancel && (
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={cancelPoll.isPending}
-            className="px-3 py-1.5 text-xs font-medium text-red-400 border border-red-400/30 rounded-lg hover:bg-red-400/10 transition-colors disabled:opacity-50"
-          >
-            {cancelPoll.isPending ? 'Cancelling...' : 'Cancel Poll'}
-          </button>
-        )}
-      </div>
+      <PollHeader lineupId={lineupId} matchId={matchId} readOnly={readOnly} />
       <PollDeadlineBanner phaseDeadline={poll.phaseDeadline} />
       {readOnly && <ReadOnlyBanner />}
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       <AvailabilityHeatmapSection data={availability} isLoading={availLoading}
         readOnly={readOnly}
         weekStart={weekStart} onWeekChange={handleWeekChange}
-        previewBlocks={[
-          ...slotsToPreviewBlocks(poll.slots, weekStart),
-          ...(previewBlock ? [previewBlock] : []),
-        ]}
-        onCellClick={(day, hour) => {
-          setPrefillTime(toDatetimeLocal(day, hour, weekStart));
-          setPreviewBlock({ dayOfWeek: day, startHour: hour, endHour: hour + 2, label: 'Suggested Time', title: 'Suggested Time', variant: 'selected' });
-        }} />
-      {/* ROK-1253 fix: wire slotGridRef so the hero's "Pick a slot" CTA
-          scrolls here. ROK-1209 created the ref but never attached it. */}
-      <section ref={slotGridRef}>
-        <SuggestedTimes slots={poll.slots} myVotedSlotIds={poll.myVotedSlotIds}
-          readOnly={readOnly} onToggleVote={toggleVote} onSuggestSlot={suggest}
-          isSuggesting={isSuggesting} prefillTime={prefillTime}
-          conflictingSlotIds={poll.conflictingSlotIds} />
-      </section>
-      <CreateEventSection slots={poll.slots} match={poll.match} matchId={matchId}
-        hasVoted={hasVoted} readOnly={readOnly}
-        createdEventId={createdEventId} linkedEventId={poll.match.linkedEventId ?? null}
-        matchStatus={poll.match.status} />
+        previewBlocks={previewBlocks} />
+      <SchedulingComposite poll={poll} lineupId={lineupId} matchId={matchId} />
       <OtherPollsSection lineupId={lineupId} data={otherPolls} isLoading={otherLoading} />
     </div>
   );

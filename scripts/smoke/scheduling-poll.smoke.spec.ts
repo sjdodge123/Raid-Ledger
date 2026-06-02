@@ -517,7 +517,9 @@ test.describe('Scheduling poll vote toggling', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC4: Time slot cards/rows are visible and clickable
+        // AC4: ROK-1300 — slot rows carry the `+ Vote` toggle (the legacy
+        // whole-card click target was replaced by the per-row vote button in
+        // the SchedulingComposite). The card keeps `data-voted` for state.
         const slotCards = page.locator(
             '[data-testid="schedule-slot"]',
         );
@@ -525,13 +527,16 @@ test.describe('Scheduling poll vote toggling', () => {
 
         // Check initial voted state (may be pre-voted from beforeAll)
         const initialVoted = await slotCards.first().getAttribute('data-voted');
+        const voteToggle = slotCards
+            .first()
+            .getByRole('button', { name: /vote/i });
 
-        // Click to toggle — wait for API round-trip
+        // Click the vote toggle — wait for API round-trip
         await Promise.all([
             page.waitForResponse(
                 (r) => r.url().includes('/vote') && r.request().method() === 'POST',
             ).catch(() => null),
-            slotCards.first().click(),
+            voteToggle.click(),
         ]);
 
         // After click, state should be the OPPOSITE of initial
@@ -547,7 +552,7 @@ test.describe('Scheduling poll vote toggling', () => {
             page.waitForResponse(
                 (r) => r.url().includes('/vote') && r.request().method() === 'POST',
             ).catch(() => null),
-            slotCards.first().click(),
+            slotCards.first().getByRole('button', { name: /vote/i }).click(),
         ]);
 
         await expect(slotCards.first()).toHaveAttribute(
@@ -637,32 +642,23 @@ test.describe('Scheduling poll heatmap', () => {
 // AC7: "Create Event" button enabled only after voting
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll Create Event button', () => {
-    test('"Create Event" button exists and is enabled (admin/operator bypasses vote-gate)', async ({
+test.describe('Scheduling poll operator lock affordance (ROK-1300)', () => {
+    test('"Lock this time →" appears per row for operators/creator', async ({
         page,
     }) => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC7: "Create Event" button should be present.
-        // Scope to the page-level Create Event button, NOT the hero CTA — the
-        // hero ships an "Open events page from hero" CTA on standalone-poll
-        // (ROK-1209) whose text reads "Create event"; using `exact: true`
-        // forces a match against the page-level button's exact "Create Event"
-        // accessible name (capital E) and avoids strict-mode collisions.
-        const createEventBtn = page.getByRole('button', {
-            name: 'Create Event',
-            exact: true,
-        });
-        await expect(createEventBtn).toBeVisible({ timeout: 15_000 });
-
-        // The smoke harness logs in as `admin` — `canBypassThreshold(user,
-        // match)` returns true for operators/admins (per
-        // `web/src/pages/scheduling/CreateEventSection.tsx:113`), so the
-        // button is enabled without requiring the user to vote. Member-side
-        // disabled-until-voted behavior is exhaustively covered by vitest
-        // (`web/src/pages/scheduling/CreateEventSection.test.tsx`).
-        await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
+        // ROK-1300: the legacy CreateEventSection dropdown + "Create Event"
+        // button is retired. The lock action now lives per-row as
+        // "Lock this time →", operator/creator-gated via canBypassThreshold.
+        // The smoke harness logs in as `admin` (operator), so the affordance
+        // renders. Member-side gating is covered by the vitest composite test.
+        const lockBtn = page
+            .getByRole('button', { name: /lock this time/i })
+            .first();
+        await expect(lockBtn).toBeVisible({ timeout: 15_000 });
+        await expect(lockBtn).toBeEnabled({ timeout: 15_000 });
     });
 });
 
@@ -670,15 +666,21 @@ test.describe('Scheduling poll Create Event button', () => {
 // Recurring event checkbox (ROK-965 coverage gap)
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll create event button', () => {
-    test('Create Event button navigates to create-event page with game and time pre-filled', async ({
+test.describe('Scheduling poll sticky-toolbar submit (ROK-1300)', () => {
+    test('sticky toolbar exposes the schedule-submit affordance', async ({
         page,
     }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // The Create Event button should navigate to /events/new with query params
-        const createEventBtn = page.getByRole('button', { name: /Create Event/i });
-        await expect(createEventBtn).toBeVisible({ timeout: 15_000 });
+        // ROK-1300: the submit ritual lives in the sticky JourneyHero toolbar
+        // (NOT a bottom SubmitBar). Its testid is pinned by the composite.
+        const submit = page.locator(
+            '[data-testid="sticky-hero-schedule-submit"]',
+        );
+        await expect(submit).toBeVisible({ timeout: 15_000 });
+        // No bottom SubmitBar is rendered for the scheduling phase.
+        await expect(page.locator('[data-testid="submit-bar"]')).toHaveCount(0);
     });
 });
 
