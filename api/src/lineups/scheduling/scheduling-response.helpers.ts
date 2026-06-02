@@ -101,6 +101,26 @@ function mapSlotsWithVotes(
   });
 }
 
+/**
+ * Derive whether a lineup is a standalone scheduling poll (ROK-1300).
+ *
+ * Standalone lineups are created by the /events "Schedule a Game" flow and
+ * carry `phaseDurationOverride.standalone === true` (same marker the events
+ * banner excludes on — see `lineups-banner.helpers.ts::findBannerLineup`).
+ * From-match lineups have a null override or no `standalone` key.
+ */
+export function deriveIsStandalone(phaseDurationOverride: unknown): boolean {
+  if (
+    phaseDurationOverride == null ||
+    typeof phaseDurationOverride !== 'object'
+  ) {
+    return false;
+  }
+  return (
+    (phaseDurationOverride as { standalone?: unknown }).standalone === true
+  );
+}
+
 /** Extract slot IDs the user has voted on. */
 function extractMyVotedSlotIds(
   votes: ScheduleVoteRow[],
@@ -122,6 +142,7 @@ export function buildPollResponse(
   votes: ScheduleVoteRow[],
   userId: number | null,
   lineupStatus: string,
+  isStandalone: boolean,
 ): SchedulePollPageResponseDto {
   const gameName = match.gameName ?? 'Unknown';
   const gameCoverUrl = match.gameCoverUrl ?? null;
@@ -138,5 +159,6 @@ export function buildPollResponse(
     slots: mapSlotsWithVotes(slots, votes),
     myVotedSlotIds: extractMyVotedSlotIds(votes, userId),
     lineupStatus,
+    isStandalone,
   };
 }
