@@ -29,10 +29,25 @@ async function queryRoleCounts(
   return result;
 }
 
+/**
+ * Class column for the signup query. Characters are game-specific, so only
+ * surface a class (and therefore a class emoji) when the event has a game AND
+ * the signed-up character belongs to it; otherwise a gameless event would show
+ * the user's WoW class symbol (ROK).
+ */
+function classNameColumn(gameId: number | null) {
+  return gameId
+    ? sql<
+        string | null
+      >`CASE WHEN ${schema.characters.gameId} = ${gameId} THEN ${schema.characters.class} ELSE NULL END`
+    : sql<string | null>`NULL`;
+}
+
 /** Queries signup rows with joined user/roster/character data. */
 async function querySignupRows(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
+  gameId: number | null,
 ) {
   return db
     .select({
@@ -43,7 +58,7 @@ async function querySignupRows(
       role: schema.rosterAssignments.role,
       status: schema.eventSignups.status,
       preferredRoles: schema.eventSignups.preferredRoles,
-      className: schema.characters.class,
+      className: classNameColumn(gameId),
     })
     .from(schema.eventSignups)
     .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
@@ -83,7 +98,7 @@ export async function buildEmbedEventData(
 ): Promise<EmbedEventData> {
   const [roleCounts, signupRows] = await Promise.all([
     queryRoleCounts(db, eventId),
-    querySignupRows(db, eventId),
+    querySignupRows(db, eventId, event.game?.id ?? null),
   ]);
   const activeRows = signupRows.filter(
     (r) => !INACTIVE_STATUSES.includes(r.status ?? ''),

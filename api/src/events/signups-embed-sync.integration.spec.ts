@@ -10,8 +10,14 @@ import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
+import { eq } from 'drizzle-orm';
 import { buildEmbedEventData } from './event-response-embed.helpers';
-import { resolveCharacterClass } from '../discord-bot/processors/embed-sync.helpers';
+import {
+  buildEventData,
+  resolveCharacterClass,
+} from '../discord-bot/processors/embed-sync.helpers';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
+import * as schema from '../drizzle/schema';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import {
   createMemberAndLogin,
@@ -209,6 +215,48 @@ function testMainCharClassFallbackViaEmbedSync() {
   ).toBeNull();
 }
 
+// ─── E5c: No-game event must not borrow main character class (ROK) ───────
+// Regression: a gameless event rendered the signed-up user's WoW class emoji
+// because the embed-sync main-character fallback (and the event-response join)
+// surfaced a class regardless of whether the event had a game.
+
+async function testNoGameEventOmitsClassEmoji() {
+  // The user HAS a WoW main character...
+  const wow = await createMmoGame(testApp, 'WoW NoGame', 'wow-nogame');
+  const { token, userId } = await createMemberAndLogin(
+    testApp,
+    'nogame_user',
+    'nogame@test.local',
+  );
+  await createMainCharacter(testApp, userId, wow.id, 'Warlock');
+  // ...but the event itself has NO game associated.
+  const eventId = await createMmoEvent(testApp, adminToken);
+  await signupWithPrefs(testApp, token, eventId, ['dps']);
+
+  // Path B — embed-sync buildEventData (the live re-render path from the report,
+  // which applies the main-character class fallback).
+  const [eventRow] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+  const channelResolver = testApp.app.get(ChannelResolverService);
+  const syncData = await buildEventData(testApp.db, eventRow, channelResolver);
+  const syncMention = syncData.signupMentions?.find(
+    (m) => m.username === 'nogame_user',
+  );
+  expect(syncMention).toBeDefined();
+  expect(syncMention!.className ?? null).toBeNull();
+
+  // Path A — event-response buildEmbedEventData (signup-interaction embed).
+  const eventDto = await fetchEventDto(eventId);
+  const respData = await buildEmbedEventData(testApp.db, eventDto, eventId);
+  const respMention = respData.signupMentions?.find(
+    (m) => m.username === 'nogame_user',
+  );
+  expect(respMention).toBeDefined();
+  expect(respMention!.className ?? null).toBeNull();
+}
+
 // ─── E6: Embed freshness after transaction ───────────────────────────────
 
 async function testEmbedFreshnessAfterUpdate() {
@@ -270,6 +318,8 @@ describe('Embed sync — character class fallback (ROK-824)', () => {
     testMainCharClassFallback());
   it('resolveCharacterClass falls back to main char class (E5b)', () =>
     testMainCharClassFallbackViaEmbedSync());
+  it('omits class emoji for a no-game event (E5c)', () =>
+    testNoGameEventOmitsClassEmoji());
 });
 
 describe('Embed sync — data freshness', () => {

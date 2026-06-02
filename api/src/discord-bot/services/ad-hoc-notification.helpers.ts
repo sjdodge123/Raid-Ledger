@@ -120,8 +120,14 @@ function assembleEmbedData(
     maxAttendees: event.maxAttendees,
     slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
     game: game ?? undefined,
+    // Quick-play rosters render the stored username as plain text rather than a
+    // <@id> mention: ad-hoc participants are voice-presence based and frequently
+    // include users Discord can't resolve in the embed (left the guild / not
+    // cached), which leaked literal "<@1234>" tokens — especially on the COMPLETED
+    // embed re-rendered hours after the session ended (ROK). discordId is dropped
+    // here (render-only field) so the shared roster layout falls back to username.
     signupMentions: participants.map((p) => ({
-      discordId: p.discordUserId,
+      discordId: null,
       username: p.discordUsername,
       role: null,
       preferredRoles: null,

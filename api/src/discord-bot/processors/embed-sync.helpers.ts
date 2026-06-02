@@ -81,32 +81,28 @@ export function resolveCharacterClass(row: {
   return null;
 }
 
-/** Subquery: resolve main character class for a user, optionally filtered by game (ROK-824, ROK-918). */
+/** Subquery: resolve main character class for a user, filtered by game (ROK-824, ROK-918). */
 function mainCharClassSubquery(gameId?: number | null) {
-  if (gameId) {
-    return sql<string | null>`(
+  // No game on the event -> no class emoji. A gameless event must not borrow the
+  // user's main character (WoW class) symbol (ROK).
+  if (!gameId) return sql<string | null>`NULL`;
+  return sql<string | null>`(
       SELECT c2.class FROM characters c2
       WHERE c2.user_id = ${schema.eventSignups.userId}
         AND c2.is_main = true
         AND c2.game_id = ${gameId}
       LIMIT 1
     )`;
-  }
-  return sql<string | null>`(
-    SELECT c2.class FROM characters c2
-    WHERE c2.user_id = ${schema.eventSignups.userId}
-      AND c2.is_main = true
-    LIMIT 1
-  )`;
 }
 
 /** Build the column selection for signup row queries (ROK-918: game-filtered classes). */
 function signupRowColumns(gameId?: number | null) {
+  // Gameless events surface no class (ELSE NULL); see mainCharClassSubquery (ROK).
   const charClass = gameId
     ? sql<
         string | null
       >`CASE WHEN ${schema.characters.gameId} = ${gameId} THEN ${schema.characters.class} ELSE NULL END`
-    : schema.characters.class;
+    : sql<string | null>`NULL`;
   return {
     discordId: sql<
       string | null

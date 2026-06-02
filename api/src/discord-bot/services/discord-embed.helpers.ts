@@ -181,10 +181,14 @@ export function buildAdHocUpdateEmbed(
 
 function buildAdHocUpdateEmbedCore(
   event: { title: string; gameName?: string },
-  active: Array<{ discordUserId: string }>,
-  left: Array<{ discordUserId: string }>,
+  active: Array<{ discordUserId: string; discordUsername?: string }>,
+  left: Array<{ discordUserId: string; discordUsername?: string }>,
   context: EmbedContext,
 ): EmbedBuilder {
+  // Render stored usernames rather than <@id> mentions so ex-guild members don't
+  // leak a literal "<@1234>" token (same rationale as formatMentionLine, ROK).
+  const nameOf = (p: { discordUserId: string; discordUsername?: string }) =>
+    p.discordUsername ?? `<@${p.discordUserId}>`;
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.LIVE_EVENT)
     .setTitle(`\uD83C\uDFAE ${event.title}`)
@@ -194,13 +198,13 @@ function buildAdHocUpdateEmbedCore(
     )
     .addFields({
       name: `\uD83D\uDC65 Active (${active.length})`,
-      value: active.map((p) => `<@${p.discordUserId}>`).join(', ') || 'None',
+      value: active.map(nameOf).join(', ') || 'None',
     });
 
   if (left.length > 0) {
     embed.addFields({
       name: `\uD83D\uDCE4 Left (${left.length})`,
-      value: left.map((p) => `~~<@${p.discordUserId}>~~`).join(', '),
+      value: left.map((p) => `~~${nameOf(p)}~~`).join(', '),
     });
   }
 
@@ -243,12 +247,15 @@ function formatDuration(startTime: string, endTime: string): string {
 
 function formatParticipantLine(p: {
   discordUserId: string;
+  discordUsername?: string;
   totalDurationSeconds: number | null;
 }): string {
   const dur = p.totalDurationSeconds
     ? ` (${Math.round(p.totalDurationSeconds / 60)}m)`
     : '';
-  return `<@${p.discordUserId}>${dur}`;
+  // Prefer stored username over <@id> so ex-guild members don't leak raw IDs (ROK).
+  const name = p.discordUsername ?? `<@${p.discordUserId}>`;
+  return `${name}${dur}`;
 }
 
 function buildCompletedEmbedCore(
@@ -260,6 +267,7 @@ function buildCompletedEmbedCore(
   },
   participants: Array<{
     discordUserId: string;
+    discordUsername?: string;
     totalDurationSeconds: number | null;
   }>,
   context: EmbedContext,

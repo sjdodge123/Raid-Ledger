@@ -381,12 +381,12 @@ describe('AdHocNotificationService', () => {
           signupCount: 2,
           signupMentions: expect.arrayContaining([
             expect.objectContaining({
-              discordId: 'user-A',
+              discordId: null,
               username: 'Aery',
               status: 'left',
             }),
             expect.objectContaining({
-              discordId: 'user-B',
+              discordId: null,
               username: 'Belle',
               status: 'left',
             }),
@@ -457,8 +457,8 @@ describe('AdHocNotificationService', () => {
       expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
         expect.objectContaining({
           signupMentions: expect.arrayContaining([
-            expect.objectContaining({ discordId: 'u1' }),
-            expect.objectContaining({ discordId: 'u2', status: 'left' }),
+            expect.objectContaining({ username: 'P1', discordId: null }),
+            expect.objectContaining({ username: 'P2', status: 'left' }),
           ]),
         }),
         expect.any(Object),
@@ -485,7 +485,7 @@ describe('AdHocNotificationService', () => {
           signupCount: 1,
           signupMentions: [
             expect.objectContaining({
-              discordId: 'u1',
+              username: 'P1',
               status: 'left',
             }),
           ],
@@ -513,7 +513,7 @@ describe('AdHocNotificationService', () => {
       expect(embedFactory.buildEventEmbed).toHaveBeenLastCalledWith(
         expect.objectContaining({
           signupMentions: [
-            expect.objectContaining({ discordId: 'u1', status: 'left' }),
+            expect.objectContaining({ username: 'P1', status: 'left' }),
           ],
         }),
         expect.any(Object),
@@ -533,11 +533,11 @@ describe('AdHocNotificationService', () => {
       expect(lastCall).toBeDefined();
       const lastMentions = (
         lastCall![0] as {
-          signupMentions: Array<{ discordId: string; status?: string }>;
+          signupMentions: Array<{ username: string; status?: string }>;
         }
       ).signupMentions;
       expect(lastMentions).toHaveLength(1);
-      expect(lastMentions[0].discordId).toBe('u1');
+      expect(lastMentions[0].username).toBe('P1');
       expect(lastMentions[0].status).toBeUndefined();
     });
 

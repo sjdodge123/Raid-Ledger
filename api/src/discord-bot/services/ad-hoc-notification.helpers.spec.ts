@@ -71,8 +71,10 @@ describe('buildEmbedEventData — participant inclusion (ROK-680)', () => {
     ];
     const result = await buildEmbedEventData(deps, 1, participants);
     expect(result).not.toBeNull();
+    // Ad-hoc rosters render the stored username and drop discordId so ex-guild
+    // members don't leak raw <@id> tokens in the embed (ROK).
     expect(result!.signupMentions).toEqual([
-      expect.objectContaining({ discordId: 'u1', username: 'Player1' }),
+      expect.objectContaining({ discordId: null, username: 'Player1' }),
     ]);
   });
 
@@ -85,7 +87,7 @@ describe('buildEmbedEventData — participant inclusion (ROK-680)', () => {
     expect(result).not.toBeNull();
     expect(result!.signupMentions).toEqual([
       expect.objectContaining({
-        discordId: 'u1',
+        discordId: null,
         username: 'Player1',
         status: 'left',
       }),
@@ -102,9 +104,11 @@ describe('buildEmbedEventData — participant inclusion (ROK-680)', () => {
     expect(result).not.toBeNull();
     expect(result!.signupMentions).toHaveLength(2);
     const activeEntry = result!.signupMentions!.find(
-      (m) => m.discordId === 'u1',
+      (m) => m.username === 'ActiveP',
     );
-    const leftEntry = result!.signupMentions!.find((m) => m.discordId === 'u2');
+    const leftEntry = result!.signupMentions!.find(
+      (m) => m.username === 'LeftP',
+    );
     expect(activeEntry).toBeDefined();
     expect(activeEntry!.status).toBeUndefined();
     expect(leftEntry).toBeDefined();
@@ -153,9 +157,9 @@ describe('buildEmbedEventData — participant inclusion (ROK-680)', () => {
     ];
     const result = await buildEmbedEventData(deps, 1, participants);
     expect(result).not.toBeNull();
-    const byId = new Map(result!.signupMentions!.map((m) => [m.discordId, m]));
-    expect(byId.get('u1')!.status).toBeUndefined();
-    expect(byId.get('u2')!.status).toBe('left');
+    const byName = new Map(result!.signupMentions!.map((m) => [m.username, m]));
+    expect(byName.get('A')!.status).toBeUndefined();
+    expect(byName.get('B')!.status).toBe('left');
   });
 });
 
