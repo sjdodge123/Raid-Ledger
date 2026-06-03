@@ -83,11 +83,7 @@ async function seedPublicVotingLineup(
   users: User[],
   games: Game[],
 ): Promise<void> {
-  const lineupId = await createDemoLineup(
-    db,
-    DEMO_LINEUP_TITLES[0],
-    creator,
-  );
+  const lineupId = await createDemoLineup(db, DEMO_LINEUP_TITLES[0], creator);
   const nominators = [users[1], users[2], users[3], users[4]];
   for (let i = 0; i < nominators.length; i++) {
     await nominateGameForTest(db, lineupId, games[i].id, nominators[i].id);
@@ -111,11 +107,7 @@ async function seedPrivateBuildingLineup(
   users: User[],
   games: Game[],
 ): Promise<void> {
-  const lineupId = await createDemoLineup(
-    db,
-    DEMO_LINEUP_TITLES[1],
-    creator,
-  );
+  const lineupId = await createDemoLineup(db, DEMO_LINEUP_TITLES[1], creator);
   await db
     .update(schema.communityLineups)
     .set({ visibility: 'private', updatedAt: new Date() })
@@ -142,11 +134,7 @@ async function seedDecidedLineup(
   users: User[],
   games: Game[],
 ): Promise<void> {
-  const lineupId = await createDemoLineup(
-    db,
-    DEMO_LINEUP_TITLES[2],
-    creator,
-  );
+  const lineupId = await createDemoLineup(db, DEMO_LINEUP_TITLES[2], creator);
   await nominateGameForTest(db, lineupId, games[6].id, users[9].id);
   await nominateGameForTest(db, lineupId, games[7].id, users[10].id);
   await advanceLineupToVotingForTest(db, lineupId);
@@ -173,11 +161,7 @@ async function seedArchivedLineup(
   users: User[],
   games: Game[],
 ): Promise<void> {
-  const lineupId = await createDemoLineup(
-    db,
-    DEMO_LINEUP_TITLES[3],
-    creator,
-  );
+  const lineupId = await createDemoLineup(db, DEMO_LINEUP_TITLES[3], creator);
   await nominateGameForTest(db, lineupId, games[8].id, users[12].id);
   await db
     .update(schema.communityLineups)
@@ -190,9 +174,7 @@ async function demoLineupsExist(db: Db): Promise<boolean> {
   const existing = await db
     .select({ id: schema.communityLineups.id })
     .from(schema.communityLineups)
-    .where(
-      inArray(schema.communityLineups.title, [...DEMO_LINEUP_TITLES]),
-    )
+    .where(inArray(schema.communityLineups.title, [...DEMO_LINEUP_TITLES]))
     .limit(1);
   return existing.length > 0;
 }
