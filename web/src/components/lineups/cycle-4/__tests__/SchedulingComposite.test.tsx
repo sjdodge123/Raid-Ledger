@@ -537,4 +537,31 @@ describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
             screen.queryByRole('button', { name: /cancel poll/i }),
         ).not.toBeInTheDocument();
     });
+
+    it('renders the compact vote-progress bar when minVoteThreshold is set', async () => {
+        // Fixture default: minVoteThreshold=2, uniqueVoterCount=2 → "2/2 voted".
+        const poll = buildPoll({ isStandalone: false });
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        expect(
+            await screen.findByTestId('vote-progress-bar'),
+        ).toBeInTheDocument();
+        expect(screen.getByTestId('vote-progress-text')).toHaveTextContent(
+            /\d+\/\d+ voted/i,
+        );
+    });
+
+    it('does NOT render the vote-progress bar when minVoteThreshold is null', async () => {
+        const poll = buildPoll({ isStandalone: false });
+        // Standalone polls created without a threshold (AC5 null-threshold case).
+        poll.match.minVoteThreshold = null;
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+        );
+        await screen.findByTestId('scheduling-game-ref');
+        expect(
+            screen.queryByTestId('vote-progress-bar'),
+        ).not.toBeInTheDocument();
+    });
 });

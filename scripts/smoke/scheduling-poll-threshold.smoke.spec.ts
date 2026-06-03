@@ -243,19 +243,10 @@ test.describe('Scheduling poll page — Vote progress bar (AC5)', () => {
             );
             await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
-            // Advance past wizard steps if present
-            const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-            for (let i = 0; i < 5; i++) {
-                if (await pollHeading.isVisible({ timeout: 3_000 }).catch(() => false)) break;
-                for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
-                    const btn = page.locator('button', { hasText: label }).first();
-                    if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-                        await btn.click();
-                        await page.waitForLoadState('domcontentloaded');
-                        break;
-                    }
-                }
-            }
+            // ROK-1300: the composite owns the page body (no wizard stepper).
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
 
             // AC5: Progress bar should be visible on the poll page
             const progressBar = page.locator(
@@ -309,21 +300,10 @@ test.describe('Scheduling poll page — Vote progress bar (AC5)', () => {
             );
             await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
-            // Advance past wizard steps if present
-            const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-            for (let i = 0; i < 5; i++) {
-                if (await pollHeading.isVisible({ timeout: 3_000 }).catch(() => false)) break;
-                for (const label of ['Skip', 'Continue', 'Save & Continue', 'Done']) {
-                    const btn = page.locator('button', { hasText: label }).first();
-                    if (await btn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-                        await btn.click();
-                        await page.waitForLoadState('domcontentloaded');
-                        break;
-                    }
-                }
-            }
-
-            await expect(pollHeading).toBeVisible({ timeout: 15_000 });
+            // ROK-1300: the composite owns the page body (no wizard stepper).
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
 
             // AC5: Progress bar should NOT be visible when no threshold is set
             const progressBar = page.locator(

@@ -16,6 +16,7 @@ import { StickyHeroScheduleSubmitButton } from './sticky-hero-buttons';
 import { useSchedulingSticky } from './use-scheduling-sticky';
 import { SchedulingGameRefBanner } from './SchedulingGameRefBanner';
 import { SchedulingCancelAction } from './SchedulingCancelAction';
+import { SchedulingVoteProgress } from './SchedulingVoteProgress';
 import type { SchedulingMode } from './scheduling-submit-copy';
 
 export interface SchedulingToolbarProps {
@@ -25,6 +26,8 @@ export interface SchedulingToolbarProps {
   lineupId: number;
   matchId: number;
   readOnly: boolean;
+  /** Distinct voters so far (poll.uniqueVoterCount) — drives the progress bar. */
+  uniqueVoterCount: number | undefined;
   submitLabel: string;
   submitted: boolean;
   submitDisabled: boolean;
@@ -33,7 +36,7 @@ export interface SchedulingToolbarProps {
   onSubmit: () => void;
 }
 
-/** Sticky toolbar: hero + Cancel + game-ref/submit row — see docstring. */
+/** Sticky toolbar: hero + Cancel + game-ref/submit row + progress — see docstring. */
 export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
   const { hero, match, mode, lineupId, matchId, readOnly } = props;
   const { sentinelRef, isHidden } = useSchedulingSticky();
@@ -71,6 +74,12 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
             />
           </div>
         </div>
+        {/* Compact vote-progress bar (ROK-1015/1121) — only when a threshold
+            is set. Sits under the game-ref/submit row. */}
+        <SchedulingVoteProgress
+          match={match}
+          uniqueVoterCount={props.uniqueVoterCount}
+        />
         {props.nudge && (
           <p className="mt-1 px-1 text-[11px] text-muted italic">
             {props.nudge}

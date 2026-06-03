@@ -132,6 +132,7 @@ export function SchedulingComposite(
         lineupId={lineupId}
         matchId={matchId}
         readOnly={readOnly}
+        uniqueVoterCount={poll.uniqueVoterCount}
         submitLabel={submitCopy(submitState.kind, mode)}
         submitted={submitState.submitted}
         submitDisabled={submitState.kind === 'empty' || readOnly}
