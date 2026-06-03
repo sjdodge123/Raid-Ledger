@@ -29,6 +29,7 @@ import {
   AddInviteesSchema,
   TogglePublicShareSchema,
   type LineupDetailResponseDto,
+  type LineupParticipantsResponseDto,
   type LineupBannerResponseDto,
   type LineupSummaryResponseDto,
   type CommonGroundResponseDto,
@@ -102,6 +103,18 @@ export class LineupsController {
     @Req() req: AuthRequest,
   ): Promise<LineupDetailResponseDto> {
     return this.lineupsService.findById(id, req.user.id);
+  }
+
+  /**
+   * GET /lineups/:id/participants — roster for the hero button + modal
+   * (ROK-1346). Read-open, same auth as `GET /lineups/:id`. 404 if the
+   * lineup id doesn't exist.
+   */
+  @Get(':id/participants')
+  async getParticipants(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<LineupParticipantsResponseDto> {
+    return this.lineupsService.getParticipants(id);
   }
 
   /** POST /lineups/:id/vote — toggle a vote on a game (ROK-936). */

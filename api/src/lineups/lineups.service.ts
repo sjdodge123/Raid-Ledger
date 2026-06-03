@@ -30,6 +30,7 @@ import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
 import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
+import { getParticipantsResponse } from './lineups-participants.helpers';
 import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
 import { buildActiveLineupSummaries } from './lineups-summary.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
@@ -37,10 +38,8 @@ import { runMetadataUpdate } from './lineups-metadata.helpers';
 import { runStatusTransition } from './lineups-transition.helpers';
 import { runLineupAbort } from './lineups-abort.helpers';
 import { TiebreakerService } from './tiebreaker/tiebreaker.service';
-import {
-  runBandwagonJoin,
-  runAdvanceMatch,
-} from './lineups-match-actions.helpers';
+// prettier-ignore
+import { runBandwagonJoin, runAdvanceMatch } from './lineups-match-actions.helpers';
 import {
   runCreateLineup,
   runToggleVote,
@@ -142,6 +141,15 @@ export class LineupsService {
   ): Promise<LineupDetailResponseDto> {
     return buildDetailResponse(this.db, id, userId, this.resolveChannelName);
   }
+
+  /**
+   * Get the participant roster for a lineup (ROK-1346).
+   *
+   * Read-open, mirroring `findById`: any authenticated viewer may read the
+   * roster (private participation is gated at mutation time, not read time).
+   * 404 only when the lineup id does not exist.
+   */
+  getParticipants = (id: number) => getParticipantsResponse(this.db, id);
 
   /** Toggle a vote for a game in a lineup (ROK-936). */
   async toggleVote(
