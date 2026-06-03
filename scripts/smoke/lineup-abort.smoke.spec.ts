@@ -107,6 +107,9 @@ test.describe('Abort Lineup — admin/operator flow', () => {
     test('admin sees abort button, opens modal, confirms abort, status flips to Archived', async ({
         page,
     }) => {
+        // The abort POST + refetch can run long under heavy parallel mobile
+        // load; give the outcome assertions headroom.
+        test.setTimeout(60_000);
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(
             /something went wrong/i,
@@ -115,15 +118,17 @@ test.describe('Abort Lineup — admin/operator flow', () => {
 
         // Wait for the detail header to render.
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
-        // ── Abort button should be visible to admin/operator ──
-        const abortButton = page.getByRole('button', { name: /Abort Lineup/i });
-        await expect(abortButton).toBeVisible({ timeout: 10_000 });
+        // ROK-1323: Abort moved into the operator ⋮ menu. Open it and click
+        // the Abort item (operator-only, non-archived).
+        await page.getByTestId('lineup-operator-menu-trigger').click();
+        const abortItem = page.getByTestId('lineup-operator-menu-abort');
+        await expect(abortItem).toBeVisible({ timeout: 10_000 });
 
         // Click opens the modal.
-        await abortButton.click();
+        await abortItem.click();
 
         const modal = page.locator('[role="dialog"]');
         await expect(modal).toBeVisible({ timeout: 10_000 });
@@ -136,29 +141,26 @@ test.describe('Abort Lineup — admin/operator flow', () => {
         await expect(reasonField).toBeVisible({ timeout: 5_000 });
         await reasonField.fill('Smoke test abort — wrong scope.');
 
-        // Watch for the abort POST while submitting.
-        const [apiResponse] = await Promise.all([
-            page.waitForResponse(
-                (r) =>
-                    r.url().includes(`/lineups/${lineupId}/abort`) &&
-                    r.request().method() === 'POST',
-                { timeout: 15_000 },
-            ),
-            modal
-                .getByRole('button', { name: /Abort Lineup|Confirm/i })
-                .last()
-                .click(),
-        ]);
-        expect(apiResponse.status()).toBe(200);
+        // Submit. Assert the OUTCOME (modal closes + aborted state) rather than
+        // racing page.waitForResponse — under heavy parallel mobile load the
+        // abort POST can take >15s, which made the waitForResponse race flaky
+        // even though the mutation fired (button stuck on "Aborting…").
+        await modal
+            .getByRole('button', { name: /Abort lineup|Confirm/i })
+            .last()
+            .click();
 
-        // Modal closes; status badge flips to Archived.
-        await expect(modal).toBeHidden({ timeout: 10_000 });
+        // Modal closes once the abort resolves; the page flips to the aborted
+        // read-only state.
+        await expect(modal).toBeHidden({ timeout: 25_000 });
 
-        const archivedBadge = page.locator('span').filter({ hasText: /Archived/i });
-        await expect(archivedBadge.first()).toBeVisible({ timeout: 10_000 });
-
-        // Abort button disappears once the lineup is archived.
-        await expect(abortButton).toBeHidden({ timeout: 10_000 });
+        // ROK-1323: status badge removed. The aborted banner is the post-abort
+        // signal, and the Abort menu item disappears once archived.
+        await expect(page.getByTestId('lineup-aborted-banner')).toBeVisible({
+            timeout: 25_000,
+        });
+        await page.getByTestId('lineup-operator-menu-trigger').click();
+        await expect(page.getByTestId('lineup-operator-menu-abort')).toHaveCount(0);
     });
 
     test('already-archived lineup hides the abort button', async ({ page }) => {
@@ -184,11 +186,13 @@ test.describe('Abort Lineup — admin/operator flow', () => {
         );
 
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
-        const abortButton = page.getByRole('button', { name: /Abort Lineup/i });
-        await expect(abortButton).toHaveCount(0);
+        // ROK-1323: the operator ⋮ menu still renders for an operator, but the
+        // Abort item is gated out once the lineup is archived.
+        await page.getByTestId('lineup-operator-menu-trigger').click();
+        await expect(page.getByTestId('lineup-operator-menu-abort')).toHaveCount(0);
     });
 });
 
@@ -240,7 +244,7 @@ test.describe('Regression: ROK-1207 — aborted-lineup detail page banner + read
         );
 
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         // Banner present + carries the operator-submitted reason.
@@ -368,7 +372,7 @@ test.describe('Abort Lineup — member visibility', () => {
         );
 
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         const abortButton = page.getByRole('button', { name: /Abort Lineup/i });

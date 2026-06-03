@@ -118,12 +118,10 @@ test.describe('Lineup live UI refresh (ROK-1118)', () => {
             { timeout: 10_000 },
         );
 
-        // The badge must be in Voting state initially.
-        const votingBadge = page
-            .locator('span')
-            .filter({ hasText: /^Voting$/ })
-            .first();
-        await expect(votingBadge).toBeVisible({ timeout: 15_000 });
+        // ROK-1323: the status badge was removed. The per-phase composite is
+        // the live phase indicator — voting renders VotingComposite.
+        const votingComposite = page.getByTestId('voting-composite');
+        await expect(votingComposite).toBeVisible({ timeout: 15_000 });
 
         // User A advances the phase via REST. User B does NOT navigate.
         await apiPatch(adminToken, `/lineups/${lineupId}/status`, {
@@ -132,16 +130,13 @@ test.describe('Lineup live UI refresh (ROK-1118)', () => {
         });
 
         // User B's still-open page should reflect the new status within 5s
-        // courtesy of the `lineup:status` socket event + query invalidation.
-        // NOTE: 'decided' renders as label "Scheduling" — see
-        // web/src/components/lineups/LineupStatusBadge.tsx.
-        const scheduledBadge = page
-            .locator('span')
-            .filter({ hasText: /^Scheduling$/ })
-            .first();
-        await expect(scheduledBadge).toBeVisible({ timeout: 5_000 });
+        // courtesy of the `lineup:status` socket event + query invalidation:
+        // the voting composite swaps to the decided composite without a reload.
+        await expect(
+            page.getByTestId('decided-composite-view'),
+        ).toBeVisible({ timeout: 5_000 });
 
-        // And the old badge must be gone.
-        await expect(votingBadge).not.toBeVisible({ timeout: 1_000 });
+        // And the old voting composite must be gone.
+        await expect(votingComposite).not.toBeVisible({ timeout: 2_000 });
     });
 });

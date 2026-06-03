@@ -139,22 +139,20 @@ for (const phase of ['building', 'voting', 'decided'] as const) {
                 { timeout: 10_000 },
             );
             await expect(
-                page.getByRole('heading', {
-                    level: 1,
-                    name: /Abort Phases|Lineup — /,
-                }),
+                page.getByText(/Abort Phases|Lineup — /).first(),
             ).toBeVisible({ timeout: 15_000 });
 
-            const abortButton = page.getByRole('button', {
-                name: /Abort Lineup/i,
-            });
-            await expect(abortButton).toHaveCount(0);
-
-            const archivedBadge = page
-                .locator('span')
-                .filter({ hasText: /Archived/i })
-                .first();
-            await expect(archivedBadge).toBeVisible({ timeout: 10_000 });
+            // ROK-1323: Abort moved into the operator ⋮ menu and the legacy
+            // status badge was removed. On an archived lineup the operator menu
+            // still opens but the Abort item is gated out — that absence is the
+            // post-archive signal (status already asserted via API above).
+            await expect(
+                page.getByRole('button', { name: /Abort Lineup/i }),
+            ).toHaveCount(0);
+            await page.getByTestId('lineup-operator-menu-trigger').click();
+            await expect(
+                page.getByTestId('lineup-operator-menu-abort'),
+            ).toHaveCount(0);
         });
     });
 }

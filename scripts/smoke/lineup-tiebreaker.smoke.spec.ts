@@ -237,7 +237,11 @@ test.describe('Tiebreaker prompt modal', () => {
         // AC: When operator tries to advance to decided with tied games,
         // the TIEBREAKER_REQUIRED error triggers the prompt modal.
         // Click "Scheduling" in the breadcrumb (first click shows confirmation).
-        const advanceBtn = page.getByRole('button', { name: 'Scheduling' });
+        // ROK-1323: advance moved from the 4-phase breadcrumb into the
+        // operator ⋮ menu. Open it and click the Advance item (voting → decided
+        // is labelled "Advance to Scheduling").
+        await page.getByTestId('lineup-operator-menu-trigger').click();
+        const advanceBtn = page.getByTestId('lineup-operator-menu-advance');
         await expect(advanceBtn).toBeVisible({ timeout: 10_000 });
         await advanceBtn.click();
         // Second click confirms the transition attempt.
@@ -264,7 +268,11 @@ test.describe('Tiebreaker prompt modal', () => {
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         // Trigger the modal via breadcrumb advance attempt
-        const advanceBtn = page.getByRole('button', { name: 'Scheduling' });
+        // ROK-1323: advance moved from the 4-phase breadcrumb into the
+        // operator ⋮ menu. Open it and click the Advance item (voting → decided
+        // is labelled "Advance to Scheduling").
+        await page.getByTestId('lineup-operator-menu-trigger').click();
+        const advanceBtn = page.getByTestId('lineup-operator-menu-advance');
         await expect(advanceBtn).toBeVisible({ timeout: 10_000 });
         await advanceBtn.click();
         const confirmBtn = page.getByRole('button', { name: /advance/i });
@@ -540,7 +548,11 @@ test.describe('Dismiss tiebreaker', () => {
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         // Trigger TIEBREAKER_REQUIRED → prompt modal via the breadcrumb advance.
-        const advanceBtn = page.getByRole('button', { name: 'Scheduling' });
+        // ROK-1323: advance moved from the 4-phase breadcrumb into the
+        // operator ⋮ menu. Open it and click the Advance item (voting → decided
+        // is labelled "Advance to Scheduling").
+        await page.getByTestId('lineup-operator-menu-trigger').click();
+        const advanceBtn = page.getByTestId('lineup-operator-menu-advance');
         await expect(advanceBtn).toBeVisible({ timeout: 10_000 });
         await advanceBtn.click();
         const confirmBtn = page.getByRole('button', { name: /advance/i });

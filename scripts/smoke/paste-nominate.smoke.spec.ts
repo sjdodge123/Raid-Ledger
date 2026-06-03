@@ -141,7 +141,7 @@ test.describe('Paste Steam URL opens NominateModal (AC1, AC2, AC7)', () => {
     test('pasting Steam URL opens modal in preview state', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         await dispatchPaste(page, STEAM_URL);
@@ -160,7 +160,7 @@ test.describe('Paste Steam URL opens NominateModal (AC1, AC2, AC7)', () => {
     test('preview state shows game name and cover art or placeholder', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         await dispatchPaste(page, STEAM_URL);
@@ -191,7 +191,7 @@ test.describe('Unknown game shows toast (AC3)', () => {
     test('toast "Game not found in library" appears for unknown Steam app ID', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByTestId('community-lineup-title'),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         await dispatchPaste(page, UNKNOWN_STEAM_URL);
@@ -230,7 +230,7 @@ test.describe('Input focus suppresses detection (AC4)', () => {
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         // Open NominateModal manually to get an input on the page
@@ -278,7 +278,7 @@ test.describe('Non-Steam URLs ignored (AC5)', () => {
     test('pasting a non-Steam URL does not open modal or show toast', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         await dispatchPaste(page, 'https://www.example.com/some/page');
@@ -293,7 +293,7 @@ test.describe('Non-Steam URLs ignored (AC5)', () => {
     test('pasting plain text does not trigger detection', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         await dispatchPaste(page, 'just some random text with no URL');
@@ -342,7 +342,7 @@ test.describe('Paste disabled in non-building phases (AC6)', () => {
 
         // Wait for the page to fully load (heading visible, no error)
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         await dispatchPaste(page, STEAM_URL);

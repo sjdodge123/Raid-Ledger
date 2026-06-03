@@ -214,7 +214,7 @@ test.describe('Lineup creation modal', () => {
         }
 
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 10_000 });
     });
 });
@@ -280,7 +280,9 @@ test.describe('Phase countdown display', () => {
 // Phase breadcrumb transitions (advance + revert)
 // ---------------------------------------------------------------------------
 
-test.describe('Phase breadcrumb transitions', () => {
+// ROK-1323: the 4-phase breadcrumb was removed; advance/revert moved into the
+// operator ⋮ menu (LineupOperatorMenu). These tests drive that menu.
+test.describe('Operator ⋮ menu — phase transitions', () => {
     let adminToken: string;
     let lineupId: number;
 
@@ -289,68 +291,70 @@ test.describe('Phase breadcrumb transitions', () => {
         lineupId = await ensureActiveLineup(adminToken);
     });
 
-    test('breadcrumb shows clickable next phase for operators', async ({ page }) => {
+    async function openMenu(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
+        await page.getByTestId('lineup-operator-menu-trigger').click();
+        await expect(page.getByTestId('lineup-operator-menu')).toBeVisible({ timeout: 5_000 });
+    }
+
+    test('menu offers Advance to Voting for operators', async ({ page }) => {
         await expect(async () => {
             lineupId = await ensureActiveLineup(adminToken);
             await page.goto(`/community-lineup/${lineupId}`);
             await expect(
-                page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+                page.getByText(/Smoke Lineup|Lineup — /).first(),
             ).toBeVisible({ timeout: 5_000 });
-            // "Voting" should be a clickable button (next phase from building)
-            const votingBtn = page.getByRole('button', { name: 'Voting' });
-            await expect(votingBtn).toBeVisible({ timeout: 5_000 });
+            await openMenu(page);
+            const advance = page.getByTestId('lineup-operator-menu-advance');
+            await expect(advance).toBeVisible({ timeout: 5_000 });
+            await expect(advance).toContainText(/Advance to Voting/i);
         }).toPass({ timeout: 30_000 });
     });
 
-    test('clicking next phase opens modal and confirming advances the lineup', async ({ page }) => {
-        // ROK-1123: replaced two-click pattern with confirm/cancel modal.
+    test('Advance item opens modal and confirming advances the lineup', async ({ page }) => {
         await expect(async () => {
             lineupId = await ensureActiveLineup(adminToken);
             await page.goto(`/community-lineup/${lineupId}`);
             await expect(
-                page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+                page.getByText(/Smoke Lineup|Lineup — /).first(),
             ).toBeVisible({ timeout: 5_000 });
 
-            // Click pill — opens confirm modal with target phase title
-            const votingBtn = page.getByRole('button', { name: 'Voting' }).first();
-            await expect(votingBtn).toBeVisible({ timeout: 3_000 });
-            await votingBtn.click();
+            await openMenu(page);
+            await page.getByTestId('lineup-operator-menu-advance').click();
             await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
             await expect(page.getByRole('heading', { name: /Advance to Voting/ })).toBeVisible({ timeout: 5_000 });
-            // Confirm button fires the transition
             await page.getByRole('button', { name: /^Advance to Voting$/ }).click();
+            await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10_000 });
         }).toPass({ timeout: 30_000 });
 
-        // Status badge should update to Voting
-        const votingBadge = page.locator('span').filter({ hasText: /Voting/ });
-        await expect(votingBadge.first()).toBeVisible({ timeout: 10_000 });
+        // Status persisted to voting (badge removed with the legacy chrome).
+        await expect(async () => {
+            const detail = await apiGet(adminToken, `/lineups/${lineupId}`);
+            expect(detail?.status).toBe('voting');
+        }).toPass({ timeout: 10_000 });
     });
 
-    test('clicking previous phase opens modal and confirming reverts the lineup', async ({ page }) => {
-        // ROK-1123: replaced two-click pattern with confirm/cancel modal.
-        // Retry — parallel workers may archive our lineup between setup and navigation
+    test('Revert item opens modal and confirming reverts the lineup', async ({ page }) => {
         await expect(async () => {
-            // Ensure lineup is in voting phase
             lineupId = await ensureActiveLineup(adminToken);
             await apiPatch(adminToken, `/lineups/${lineupId}/status`, { status: 'voting' });
 
             await page.goto(`/community-lineup/${lineupId}`);
             await expect(
-                page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+                page.getByText(/Smoke Lineup|Lineup — /).first(),
             ).toBeVisible({ timeout: 5_000 });
 
-            // "Nominating" should be a clickable button (previous phase from voting)
-            const nominatingBtn = page.getByRole('button', { name: 'Nominating' }).first();
-            await expect(nominatingBtn).toBeVisible({ timeout: 3_000 });
-            await nominatingBtn.click();
+            await openMenu(page);
+            await page.getByTestId('lineup-operator-menu-revert').click();
             await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
             await expect(page.getByRole('heading', { name: /Revert to Nominating/ })).toBeVisible({ timeout: 5_000 });
             await page.getByRole('button', { name: /^Revert to Nominating$/ }).click();
+            await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10_000 });
         }).toPass({ timeout: 30_000 });
 
-        // Status badge should update back to building/Nominating
-        const buildingBadge = page.locator('span').filter({ hasText: /Nominating/ });
-        await expect(buildingBadge.first()).toBeVisible({ timeout: 10_000 });
+        await expect(async () => {
+            const detail = await apiGet(adminToken, `/lineups/${lineupId}`);
+            expect(detail?.status).toBe('building');
+        }).toPass({ timeout: 10_000 });
     });
 });
 

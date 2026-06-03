@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useLineupDetail, useTransitionLineupStatus } from '../hooks/use-lineups';
-import { toast } from '../lib/toast';
+import { useLineupDetail } from '../hooks/use-lineups';
 import { useLineupRealtime } from '../hooks/use-lineup-realtime';
 import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
+import { MarkdownText } from '../components/ui/markdown-text';
 import { InviteeList } from '../components/lineups/InviteeList';
 import { AddInviteesButton } from '../components/lineups/AddInviteesButton';
 import { StillWaitingPanel } from '../components/lineups/StillWaitingPanel';
@@ -23,8 +23,6 @@ import { useAiSuggestions } from '../hooks/use-ai-suggestions';
 import { useAiSuggestionsAvailable } from '../hooks/use-ai-suggestions-available';
 import { useSteamPasteDetection } from '../hooks/use-steam-paste';
 import { canParticipateInLineup } from '../lib/lineup-eligibility';
-import { HeroNextStep } from '../components/common/HeroNextStep';
-import { useLineupHero } from '../hooks/use-lineup-hero';
 import { GraceCountdownBanner } from '../components/lineups/grace-countdown-banner';
 import { LineupAbortedBanner } from '../components/lineups/LineupAbortedBanner';
 import { useLineupAbortedAt } from '../lib/lineup-aborted';
@@ -166,45 +164,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
   const canParticipate = !isAborted && rawCanParticipate;
   const { user } = useAuth();
   const leaderboardRef = useRef<HTMLElement | null>(null);
-  const slotGridRef = useRef<HTMLElement | null>(null);
   const bracketRef = useRef<HTMLElement | null>(null);
-  // ROK-1253: shared advance handler — wires the hero's
-  // "Advance to {phase}" CTA to the same `useTransitionLineupStatus`
-  // mutation the breadcrumb pill uses, including the TIEBREAKER_REQUIRED
-  // intercept that opens the tiebreaker prompt instead of toasting.
-  const transition = useTransitionLineupStatus();
-  const onAdvance = useCallback(
-    (targetStatus: 'voting' | 'decided') => {
-      transition.mutate(
-        { lineupId: lineup.id, body: { status: targetStatus } },
-        {
-          onSuccess: () => toast.success(`Moved to ${targetStatus}`),
-          onError: (err) => {
-            const msg = err instanceof Error ? err.message : '';
-            if (msg.includes('TIEBREAKER_REQUIRED')) {
-              setPromptDismissed(false);
-              setTiebreakerPromptOpen(true);
-            } else {
-              toast.error(msg || 'Transition failed');
-            }
-          },
-        },
-      );
-    },
-    [transition, lineup.id, setPromptDismissed, setTiebreakerPromptOpen],
-  );
-
-  const heroProps = useLineupHero({
-    lineup,
-    tiebreaker: tiebreaker ?? null,
-    scrollTargets: {
-      leaderboard: leaderboardRef,
-      slotGrid: slotGridRef,
-      bracket: bracketRef,
-    },
-    onOpenNominate: () => setModalOpen(true),
-    onAdvance,
-  });
 
   // `hasTiebreaker` still needed here for the operator-only "show tiebreaker
   // prompt" branch below; the body switch derives its own copy in
@@ -231,23 +191,11 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         pendingAdvanceAt={lineup.pendingAdvanceAt}
         status={lineup.status}
       />
-      {/* ROK-1297 round 5ae: HeroNextStep is the legacy "NEXT: …
-          Advance to Voting" banner that ROK-1323 will fully retire
-          once every phase has a composite. During building the
-          NominatingComposite's U1 JourneyHero + U4 SubmitBar already
-          carry the next-step copy + advance affordance, so showing
-          this banner ON TOP duplicates the message and confuses
-          testers.
-
-          ROK-1298 round 6 2026-05-20: voting now has the Sv composite
-          with its own sticky JourneyHero — HeroNextStep (also sticky
-          top-0 z-30 on mobile) created a flicker collision with the
-          Sv hero (sticky top-14 z-20). Suppress for voting too. Other
-          phases (decided / archived) keep it until their composites
-          ship. */}
-      {!isBuilding && lineup.status !== 'voting' && <HeroNextStep {...heroProps} />}
+      {/* ROK-1323: the legacy HeroNextStep banner is fully retired now that
+          every phase has a composite whose JourneyHero carries the next-step
+          copy + advance affordance. */}
       <LineupAbortedBanner abortedAt={abortedAt} reason={abortReason} />
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+      <div className="mb-4">
         <LineupDetailHeader
           lineup={lineup}
           isAborted={isAborted}
@@ -256,6 +204,14 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
             setTiebreakerPromptOpen(true);
           }}
         />
+        {/* ROK-1323: the title + "Started by…" meta moved into the composite
+            hero, but the markdown description is kept as a small block beneath
+            the compact bar rather than dropped (spec edge-case). */}
+        {lineup.description && (
+          <div className="mt-2">
+            <MarkdownText text={lineup.description} />
+          </div>
+        )}
       </div>
 
       {lineup.visibility === 'private' && (
@@ -306,7 +262,13 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
       />
 
       <div className="mt-6">
-        <ActivityTimeline entityType="lineup" entityId={lineup.id} collapsible maxVisible={5} />
+        <ActivityTimeline
+          entityType="lineup"
+          entityId={lineup.id}
+          collapsible
+          maxVisible={5}
+          storageKey={`lineup-activity-expanded-${lineup.id}`}
+        />
       </div>
 
       <PastLineups />

@@ -50,7 +50,12 @@ export interface JourneyHeroProps {
   active?: HeroActive;
   badge: string;
   task: string;
-  sub?: string;
+  /**
+   * ROK-1323: now a ReactNode so the lineup composites can fold the title +
+   * "Started by…" meta (and an operator ⓘ hover) into the hero sub slot,
+   * making the hero the sole top-of-page surface.
+   */
+  sub?: import('react').ReactNode;
   cta?: string;
   /** Real button handler — wired by consumers. When omitted with `cta` set, button renders disabled. */
   onCtaClick?: () => void;
