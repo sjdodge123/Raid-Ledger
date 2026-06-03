@@ -102,6 +102,19 @@ function describeParticipants() {
       });
   }
 
+  /**
+   * Insert a fresh game and return its id. `uq_lineup_entry_game` forbids two
+   * nominations of the SAME game in one lineup, so distinct nominators must
+   * nominate distinct games.
+   */
+  async function createGame(slug: string): Promise<number> {
+    const [game] = await testApp.db
+      .insert(schema.games)
+      .values({ name: slug, slug, coverUrl: null, igdbId: null })
+      .returning();
+    return game.id;
+  }
+
   async function nominate(lineupId: number, gameId: number, userId: number) {
     await testApp.db.insert(schema.communityLineupEntries).values({
       lineupId,
@@ -135,10 +148,13 @@ function describeParticipants() {
     expect(createRes.status).toBe(201);
     const lineupId = createRes.body.id as number;
     const gameId = testApp.seed.game.id;
+    // Distinct games per nominator: `uq_lineup_entry_game` is unique on
+    // (lineup_id, game_id), so two nominators cannot nominate the same game.
+    const gameId2 = await createGame('roster-union-g2');
 
     // nominator-only nominates; voter-only votes; bothUser does both.
     await nominate(lineupId, gameId, nominator.id);
-    await nominate(lineupId, gameId, bothUser.id);
+    await nominate(lineupId, gameId2, bothUser.id);
     await castVote(lineupId, gameId, voter.id);
     await castVote(lineupId, gameId, bothUser.id);
 
@@ -157,7 +173,9 @@ function describeParticipants() {
     expect(ids).toEqual(expected);
 
     // Dedup: bothUser appears exactly once.
-    expect(participants.filter((p) => p.userId === bothUser.id)).toHaveLength(1);
+    expect(participants.filter((p) => p.userId === bothUser.id)).toHaveLength(
+      1,
+    );
   });
 
   it('derives status: voted > nominated > waiting (AC4)', async () => {
@@ -168,9 +186,11 @@ function describeParticipants() {
     const createRes = await createPublicLineup(adminToken);
     const lineupId = createRes.body.id as number;
     const gameId = testApp.seed.game.id;
+    // Distinct games per nominator (see `uq_lineup_entry_game`).
+    const gameId2 = await createGame('roster-status-g2');
 
     await nominate(lineupId, gameId, nominator.id);
-    await nominate(lineupId, gameId, bothUser.id);
+    await nominate(lineupId, gameId2, bothUser.id);
     await castVote(lineupId, gameId, voter.id);
     await castVote(lineupId, gameId, bothUser.id);
 
