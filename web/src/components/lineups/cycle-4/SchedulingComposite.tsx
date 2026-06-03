@@ -113,6 +113,16 @@ export function SchedulingComposite(
     );
   };
 
+  // Suggesting a slot auto-votes for it (server-side), so it changes the
+  // viewer's scheduling choices — re-arm the SubmitBar like a vote toggle
+  // does, otherwise a post-submit suggest leaves the toolbar falsely in the
+  // "submitted" state (Codex review ROK-1300).
+  const handleSuggest = (proposedTime: string): void => {
+    if (readOnly) return;
+    submitState.markDirty();
+    suggest.mutate({ lineupId, matchId, proposedTime });
+  };
+
   return (
     <section data-testid="scheduling-composite" className="space-y-3">
       <SchedulingToolbar
@@ -157,7 +167,7 @@ export function SchedulingComposite(
         prefillTime={prefillTime}
         onToggleVote={handleToggleVote}
         onLock={lock.requestLock}
-        onSuggest={(t) => suggest.mutate({ lineupId, matchId, proposedTime: t })}
+        onSuggest={handleSuggest}
       />
       {lock.pendingSlot && (
         <EarlyCreateConfirmModal
