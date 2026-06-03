@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLineupDetail } from '../hooks/use-lineups';
