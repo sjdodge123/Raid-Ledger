@@ -28,6 +28,7 @@ import {
   StickyHeroBackButton,
 } from './sticky-hero-buttons';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
+import { LineupHeroMeta } from '../LineupHeroMeta';
 
 type CommonGroundMode = 'suggestions' | 'search';
 
@@ -210,7 +211,9 @@ export function NominatingComposite(
           tone={journey.tone}
           badge={journey.badge}
           task={journey.task}
-          sub={journey.sub}
+          sub={
+            <LineupHeroMeta lineup={lineup} phaseContext={journey.sub} />
+          }
         />
         <div className="flex items-center gap-2 mt-2 px-1">
           {commonGroundMode === 'search' ? (

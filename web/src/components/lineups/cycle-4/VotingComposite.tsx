@@ -34,6 +34,7 @@ import { toast } from '../../../lib/toast';
 import { VotesUsedPill } from './VotesUsedPill';
 import { VotingLeaderboardV2 } from './VotingLeaderboardV2';
 import { StickyHeroSubmitButton } from './sticky-hero-buttons';
+import { LineupHeroMeta } from '../LineupHeroMeta';
 
 /** Props for {@link VotingComposite}. */
 export interface VotingCompositeProps {
@@ -232,7 +233,7 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
           tone={hero.tone}
           badge={hero.badge}
           task={hero.task}
-          sub={hero.sub}
+          sub={<LineupHeroMeta lineup={lineup} phaseContext={hero.sub} />}
         />
         <div className="flex items-center gap-2 mt-2 px-1">
           <div className="flex-shrink-0">
