@@ -7,14 +7,15 @@
  *   - standalone (Sx, true): noRibbon hero, "🗓 Scheduling Poll · started by
  *     you", no cross-match refs.
  *
- * Owns the page body per the Sx/Ss wireframe (rework round 1): one sticky hero
- * at top, then a U2 game-ref banner (replaces the legacy MatchContextCard) +
- * operator Cancel, the phase-deadline banner, the group-availability heatmap,
- * and the suggested-times list. Replaces the legacy HeroNextStep/useLineupHero
- * hero, the SchedulingWizard stepper, and the 345-line CreateEventSection.
- * Mirrors the shipped siblings (VotingComposite, NominatingComposite): the
- * submit ritual lives in a sticky, scroll-aware JourneyHero toolbar (NOT a
- * bottom <SubmitBar>); per-row "Lock this time →" is operator/creator-gated.
+ * Owns the page body per the Sx/Ss wireframe. Rework round 2: the sticky hero
+ * card now hosts, on ONE row, the clickable U2 game-ref (left, → /games/:id)
+ * and the submit button (right); operator Cancel sits at the card's top-right
+ * — all inside `SchedulingToolbar`. Below the card: phase-deadline banner,
+ * read-only banner, group-availability heatmap, suggested-times list. Replaces
+ * the legacy HeroNextStep/useLineupHero hero, the SchedulingWizard stepper, and
+ * the 345-line CreateEventSection. Mirrors the shipped siblings (VotingComposite,
+ * NominatingComposite): submit lives in the sticky toolbar (NOT a bottom
+ * <SubmitBar>); per-row "Lock this time →" is operator/creator-gated.
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
@@ -28,7 +29,6 @@ import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
 import { PollDeadlineBanner } from '../../../pages/scheduling/PollDeadlineBanner';
 import { EarlyCreateConfirmModal } from '../../../pages/scheduling/EarlyCreateConfirmModal';
-import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 import { toast } from '../../../lib/toast';
 import { buildSchedulingHero } from './scheduling-hero';
 import { deriveCrossRefs } from './scheduling-crossrefs';
@@ -40,8 +40,6 @@ import {
 import { useScheduleSubmitState } from './use-schedule-submit-state';
 import { useSchedulingLock } from './use-scheduling-lock';
 import { SchedulingToolbar } from './SchedulingToolbar';
-import { SchedulingGameRefBanner } from './SchedulingGameRefBanner';
-import { SchedulingCancelAction } from './SchedulingCancelAction';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
 
@@ -73,7 +71,6 @@ export function SchedulingComposite(
     poll.isStandalone ? undefined : lineupId,
   );
   const lock = useSchedulingLock(poll.match, matchId);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [prefillTime, setPrefillTime] = useState<string | undefined>();
 
   const mySubmittedAt = useMemo(
@@ -120,6 +117,11 @@ export function SchedulingComposite(
     <section data-testid="scheduling-composite" className="space-y-3">
       <SchedulingToolbar
         hero={hero}
+        match={poll.match}
+        mode={mode}
+        lineupId={lineupId}
+        matchId={matchId}
+        readOnly={readOnly}
         submitLabel={submitCopy(submitState.kind, mode)}
         submitted={submitState.submitted}
         submitDisabled={submitState.kind === 'empty' || readOnly}
@@ -129,20 +131,6 @@ export function SchedulingComposite(
         nudge={submitNudge(submitState.kind)}
         onSubmit={handleSubmit}
       />
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <SchedulingGameRefBanner
-            match={poll.match}
-            mode={mode}
-            onResearch={() => setDrawerOpen(true)}
-          />
-        </div>
-        <SchedulingCancelAction
-          lineupId={lineupId}
-          matchId={matchId}
-          readOnly={readOnly}
-        />
-      </div>
       <PollDeadlineBanner phaseDeadline={poll.phaseDeadline} />
       {readOnly && (
         <div
@@ -171,13 +159,6 @@ export function SchedulingComposite(
         onLock={lock.requestLock}
         onSuggest={(t) => suggest.mutate({ lineupId, matchId, proposedTime: t })}
       />
-      {drawerOpen && (
-        <GameResearchDrawer
-          isOpen={true}
-          gameId={poll.match.gameId}
-          onClose={() => setDrawerOpen(false)}
-        />
-      )}
       {lock.pendingSlot && (
         <EarlyCreateConfirmModal
           distinctVoters={lock.pendingDistinctVoters}

@@ -27,12 +27,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useLocation } from 'react-router-dom';
+import type { JSX } from 'react';
 import type {
     SchedulePollPageResponseDto,
     MatchDetailResponseDto,
     GroupedMatchesResponseDto,
 } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
+
+/** Renders the current MemoryRouter path so nav targets can be asserted. */
+function LocationProbe(): JSX.Element {
+    const { pathname } = useLocation();
+    return <div data-testid="location-probe">{pathname}</div>;
+}
 
 // ── Hook mocks ────────────────────────────────────────────────────────
 // The composite consumes these hooks directly; mock them so the test
@@ -84,14 +92,6 @@ vi.mock('../../../../hooks/use-auth', () => ({
     useAuth: () => ({ user: authUser(), isAuthenticated: true }),
     isOperatorOrAdmin: (u: { role?: string } | null) =>
         u?.role === 'operator' || u?.role === 'admin',
-}));
-
-// The game-ref ⓘ opens GameResearchDrawer, which self-fetches game data.
-// Stub it to a presence marker so the test asserts the open/close wiring
-// without a live API.
-vi.mock('../../../games/GameResearchDrawer', () => ({
-    GameResearchDrawer: ({ isOpen }: { isOpen: boolean }) =>
-        isOpen ? <div data-testid="game-research-drawer" /> : null,
 }));
 
 // Import AFTER vi.mock so the mocks are in place. The module does not yet
@@ -451,34 +451,41 @@ describe('SchedulingComposite — sticky-toolbar submit (AC5)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// AC6 (rework round 1) — composite OWNS the page body: single hero at top,
-// in-composite game-ref banner (+ drawer), heatmap, deadline, operator
-// Cancel; NO wizard stepper, NO separate "Scheduling Poll" h1.
+// AC6 (rework round 1+2) — composite OWNS the page body: single hero at top,
+// game-ref merged INTO the sticky toolbar on the submit row, clickable →
+// /games/:id; heatmap, deadline, operator Cancel; NO wizard stepper, NO
+// separate "Scheduling Poll" h1.
 // ─────────────────────────────────────────────────────────────────────
 
 describe('SchedulingComposite — owns the page body (AC6 rework)', () => {
-    it('renders the U2 game-ref banner with an ⓘ research trigger that opens the drawer', async () => {
+    it('game-ref lives in the toolbar on the submit row and navigates to /games/:id when clicked', async () => {
         const user = userEvent.setup();
         const poll = buildPoll({ isStandalone: false });
         renderWithProviders(
-            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+            <>
+                <SchedulingComposite poll={poll} lineupId={7} matchId={500} />
+                <LocationProbe />
+            </>,
         );
 
-        const research = await screen.findByTestId('scheduling-game-research');
-        expect(research).toBeInTheDocument();
-        // Game name shows in the banner (replaces the legacy MatchContextCard).
-        expect(screen.getByTestId('scheduling-game-ref')).toHaveTextContent(
-            /valheim/i,
-        );
-        // Drawer is closed until ⓘ is clicked.
+        // The clickable game-ref carries an accessible name + game name + ⓘ.
+        const gameRef = await screen.findByRole('button', {
+            name: /view valheim details/i,
+        });
+        expect(gameRef).toHaveTextContent(/valheim/i);
         expect(
-            screen.queryByTestId('game-research-drawer'),
-        ).not.toBeInTheDocument();
-        await user.click(research);
+            screen.getByTestId('scheduling-game-research'),
+        ).toBeInTheDocument();
+        // It sits on the same row as the sticky submit button (both in toolbar).
+        expect(
+            screen.getByTestId('sticky-hero-schedule-submit'),
+        ).toBeInTheDocument();
+
+        await user.click(gameRef);
         await waitFor(() => {
-            expect(
-                screen.getByTestId('game-research-drawer'),
-            ).toBeInTheDocument();
+            expect(screen.getByTestId('location-probe')).toHaveTextContent(
+                '/games/42',
+            );
         });
     });
 

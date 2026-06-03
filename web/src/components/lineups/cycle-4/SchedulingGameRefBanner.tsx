@@ -1,13 +1,14 @@
 /**
- * U2 game-reference banner for the ROK-1300 Scheduling composite.
+ * U2 game-reference for the ROK-1300 Scheduling composite (rework round 2).
  *
- * Replaces the legacy standalone `MatchContextCard` on the poll page: game
- * cover + name with an `ⓘ` affordance that opens the `GameResearchDrawer`
- * (mounted by the composite), plus a member/match context line + avatar stack.
- * Mode-aware copy: standalone → "You + N invited members"; from-match →
- * "Match: You + N others".
+ * Lives INLINE inside the sticky hero toolbar, on the submit row (game-ref
+ * left, submit button right). The whole control (cover + name) is clickable
+ * and navigates to the game-detail page `/games/:id` — `GameResearchDrawer`
+ * already just navigates there (ROK-1297), so we navigate directly. The `ⓘ`
+ * is the hover affordance signalling the row is clickable.
  */
 import type { JSX } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
 import type { SchedulingMode } from './scheduling-submit-copy';
@@ -15,15 +16,10 @@ import type { SchedulingMode } from './scheduling-submit-copy';
 export interface SchedulingGameRefBannerProps {
   match: MatchDetailResponseDto;
   mode: SchedulingMode;
-  /** Open the GameResearchDrawer for this match's game. */
-  onResearch: () => void;
 }
 
 /** Member/match context line copy. */
-function contextLine(
-  mode: SchedulingMode,
-  memberCount: number,
-): string {
+function contextLine(mode: SchedulingMode, memberCount: number): string {
   const others = Math.max(0, memberCount - 1);
   if (mode === 'standalone') {
     return others === 0
@@ -33,43 +29,47 @@ function contextLine(
   return others === 0 ? 'Match: just you' : `Match: You + ${others} others`;
 }
 
-/** Game-ref banner — see file-level docstring. */
+/** Clickable game-ref → /games/:id — see file-level docstring. */
 export function SchedulingGameRefBanner(
   props: SchedulingGameRefBannerProps,
 ): JSX.Element {
-  const { match, mode, onResearch } = props;
+  const { match, mode } = props;
+  const navigate = useNavigate();
   return (
-    <div
+    <button
+      type="button"
+      onClick={() => navigate(`/games/${match.gameId}`)}
+      aria-label={`View ${match.gameName} details`}
       data-testid="scheduling-game-ref"
-      className="flex items-center gap-3 p-3 rounded-xl bg-panel border border-edge"
+      className="group flex min-w-0 items-center gap-3 rounded-lg p-1 text-left transition-colors hover:bg-overlay/40 cursor-pointer"
     >
       {match.gameCoverUrl && (
         <img
           src={match.gameCoverUrl}
           alt={match.gameName}
-          className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
+          className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
         />
       )}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <div className="flex items-center gap-1.5">
-          <h2
+          <span
             data-testid="match-game-name"
-            className="text-base font-semibold text-foreground truncate"
+            className="text-sm font-semibold text-foreground truncate group-hover:text-emerald-300"
           >
             {match.gameName}
-          </h2>
-          <button
-            type="button"
-            onClick={onResearch}
-            aria-label={`Research ${match.gameName}`}
+          </span>
+          <span
+            aria-hidden="true"
             data-testid="scheduling-game-research"
-            className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full border border-edge text-[11px] text-muted hover:text-foreground hover:border-emerald-500/60 transition-colors"
+            className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full border border-edge text-[10px] text-muted group-hover:text-emerald-300 group-hover:border-emerald-500/60 transition-colors"
           >
             ⓘ
-          </button>
+          </span>
         </div>
-        <p className="text-xs text-muted">{contextLine(mode, match.members.length)}</p>
-        <div className="mt-1.5">
+        <p className="text-[11px] text-muted">
+          {contextLine(mode, match.members.length)}
+        </p>
+        <div className="mt-1">
           <MemberAvatarGroup
             members={match.members.map((m) => ({
               userId: m.userId,
@@ -82,6 +82,6 @@ export function SchedulingGameRefBanner(
           />
         </div>
       </div>
-    </div>
+    </button>
   );
 }

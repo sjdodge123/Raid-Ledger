@@ -344,24 +344,30 @@ test.describe('Scheduling poll single-hero layout (ROK-1300)', () => {
         ).toHaveCount(0);
     });
 
-    test('U2 game-ref banner shows game name + research trigger + member context', async ({
+    test('U2 game-ref (in toolbar) shows game name + ⓘ; clicking navigates to /games/:id', async ({
         page,
     }) => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // The game-ref banner replaces the legacy MatchContextCard.
+        // ROK-1300 round 2: the game-ref lives in the sticky toolbar, on the
+        // same row as the submit button, and is itself clickable.
         const banner = page.locator('[data-testid="scheduling-game-ref"]');
         await expect(banner).toBeVisible({ timeout: 15_000 });
         await expect(
             banner.locator('[data-testid="match-game-name"]'),
         ).toBeVisible({ timeout: 5_000 });
-        // Research affordance opens the GameResearchDrawer.
+        // ⓘ hover affordance is present.
         await expect(
             banner.locator('[data-testid="scheduling-game-research"]'),
         ).toBeVisible({ timeout: 5_000 });
         // Member/match context line.
         await expect(banner).toContainText(/you|member|match/i);
+
+        // Clicking the game-ref navigates to the game-detail page.
+        await banner.click();
+        await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
+        expect(page.url()).toMatch(/\/games\/\d+/);
     });
 });
 
