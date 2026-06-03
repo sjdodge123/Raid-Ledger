@@ -16,6 +16,7 @@ import {
   makeBatchInsertReturning,
 } from './demo-data-batch.utils';
 import * as orchH from './demo-data-install-orchestrate.helpers';
+import { installCommunityLineups } from './demo-data-install-lineups.helpers';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { CommunityInsightsService } from '../community-insights/community-insights.service';
 
@@ -129,6 +130,10 @@ export class DemoDataService {
       allGames,
       gen,
     );
+    // ROK-1346: seed community lineups across phases + visibilities so the
+    // lineup surfaces (Participants button, voting, decided) are testable in
+    // any seeded env. Needs the seeded users + games above.
+    await installCommunityLineups(this.db, allUsers, allGames);
     await this.settingsService.setDemoMode(true);
     await orchH.runTasteProfileAggregation(
       this.db,
