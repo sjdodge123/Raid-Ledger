@@ -34,9 +34,9 @@ export function SchedulingCancelAction(
         )
       }
       disabled={cancelPoll.isPending}
-      className="px-3 py-1.5 text-xs font-medium text-red-400 border border-red-400/30 rounded-lg hover:bg-red-400/10 transition-colors disabled:opacity-50"
+      className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-red-400/90 border border-red-400/30 rounded hover:bg-red-400/10 transition-colors disabled:opacity-50 whitespace-nowrap"
     >
-      {cancelPoll.isPending ? 'Cancelling...' : 'Cancel Poll'}
+      {cancelPoll.isPending ? 'Cancelling…' : 'Cancel Poll'}
     </button>
   );
 }

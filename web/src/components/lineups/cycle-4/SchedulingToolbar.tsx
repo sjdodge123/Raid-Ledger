@@ -46,16 +46,18 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
         }`}
         style={{ transition: 'transform 300ms ease-in-out' }}
       >
-        <div className="relative">
-          <JourneyHero {...hero} />
-          <div className="absolute top-2 right-2 z-10">
+        {/* Cancel rides the badge row (below the ribbon) via headerAction so it
+            never collides with the rightmost "Schedule" ribbon node (round 3). */}
+        <JourneyHero
+          {...hero}
+          headerAction={
             <SchedulingCancelAction
               lineupId={lineupId}
               matchId={matchId}
               readOnly={readOnly}
             />
-          </div>
-        </div>
+          }
+        />
         {/* Game-ref (left) + submit (right) on one row; stacks on mobile. */}
         <div className="mt-2 px-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <SchedulingGameRefBanner match={match} mode={mode} />
