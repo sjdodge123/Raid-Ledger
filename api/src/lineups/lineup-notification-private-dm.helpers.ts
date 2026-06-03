@@ -131,13 +131,19 @@ export async function sendPrivateSchedulingDM(
   });
 }
 
-function formatEventWhen(eventDate: Date): string {
+/**
+ * Format an event start date for a private-lineup DM in the recipient's
+ * timezone (ROK-1112). `timeZone` is an IANA string (recipient pref → guild
+ * default → 'UTC'); omitting it renders in the server TZ — tests only.
+ */
+function formatEventWhen(eventDate: Date, timeZone?: string): string {
   return eventDate.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 
@@ -203,10 +209,11 @@ export async function sendPrivateEventCreatedDM(
   member: DiscordMember,
   eventDate: Date,
   eventId: number | undefined,
+  timeZone?: string,
 ): Promise<void> {
   const key = `lineup-event-invitee-dm:${match.id}:${member.userId}`;
   if (await dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-  const when = formatEventWhen(eventDate);
+  const when = formatEventWhen(eventDate, timeZone);
 
   await notificationService.create({
     userId: member.userId,

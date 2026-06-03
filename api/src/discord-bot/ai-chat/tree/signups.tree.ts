@@ -18,6 +18,24 @@ function buildLinkPrompt(clientUrl: string | null): string {
   return clientUrl ? `${base} Visit ${clientUrl}/profile` : base;
 }
 
+/**
+ * Build a markdown bullet for a signed-up event, deep-linking the title when a
+ * clientUrl is configured and rendering the date in the viewer TZ (ROK-1112).
+ */
+function buildSignupBullet(
+  event: { id: number; title: string; startTime: string },
+  deps: AiChatDeps,
+): string {
+  const date = new Date(event.startTime).toLocaleDateString('en-US', {
+    timeZone: deps.viewerTimezone,
+  });
+  // Escape `]` so a title containing one can't break out of the markdown link.
+  const label = deps.clientUrl
+    ? `[${event.title.replace(/\]/g, '\\]')}](${deps.clientUrl}/events/${event.id})`
+    : event.title;
+  return `• ${label} — ${date}`;
+}
+
 /** Fetch upcoming signups for a linked user. */
 async function fetchUserSignups(
   deps: AiChatDeps,
@@ -29,19 +47,14 @@ async function fetchUserSignups(
     if (events.length === 0) {
       return leaf(null, 'You have no upcoming signups.', deps);
     }
+    // Render deterministically as markdown bullets (ROK-1112): dates in the
+    // viewer's timezone, titles deep-linked — no LLM round-trip.
     const list = events
-      .map(
-        (e: { title: string; startTime: string }) =>
-          `${e.title} — ${new Date(e.startTime).toLocaleDateString()}`,
+      .map((e: { id: number; title: string; startTime: string }) =>
+        buildSignupBullet(e, deps),
       )
       .join('\n');
-    const context = `Question: What events am I signed up for?\nData:\n${list}`;
-    return leaf(
-      context,
-      null,
-      deps,
-      'List the events the user is signed up for with dates.',
-    );
+    return leaf(null, list, deps);
   } catch {
     return leaf(null, 'You have no upcoming signups.', deps);
   }

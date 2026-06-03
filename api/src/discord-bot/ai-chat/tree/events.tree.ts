@@ -4,6 +4,28 @@ import type { TreeResult, AiChatDeps, TreeSession } from './tree.types';
 const TOP_RANKED_GAME_FANOUT = 5;
 const MERGED_EVENT_CAP = 10;
 
+/** Render an event's start date in the viewer's timezone (ROK-1112). */
+function formatEventDate(startTime: string, timeZone: string): string {
+  return new Date(startTime).toLocaleDateString('en-US', { timeZone });
+}
+
+/**
+ * Build a markdown bullet for an event, deep-linking the title when a
+ * clientUrl is configured (falls back to plain text otherwise, ROK-1112).
+ */
+function buildEventBullet(
+  event: { id: number; title: string; startTime: string },
+  deps: AiChatDeps,
+  suffix = '',
+): string {
+  const date = formatEventDate(event.startTime, deps.viewerTimezone);
+  // Escape `]` so a title containing one can't break out of the markdown link.
+  const label = deps.clientUrl
+    ? `[${event.title.replace(/\]/g, '\\]')}](${deps.clientUrl}/events/${event.id})`
+    : event.title;
+  return `• ${label} — ${date}${suffix}`;
+}
+
 const SUB_BUTTONS = [
   { customId: aiCustomId('events:this-week'), label: 'This Week' },
   { customId: aiCustomId('events:next-week'), label: 'Next Week' },
@@ -37,27 +59,10 @@ async function eventsForRange(
   if (events.length === 0) {
     return { data: null, emptyMessage: emptyMsg, buttons: [], isLeaf: true };
   }
-  const list = events
-    .map((e) => `${e.title} — ${new Date(e.startTime).toLocaleDateString()}`)
-    .join('\n');
-  const context = `Question: What events are coming up?\nData:\n${list}`;
-  const buttons = deps.clientUrl
-    ? [
-        {
-          customId: 'noop',
-          label: 'View Events',
-          style: 'link' as const,
-          url: `${deps.clientUrl}/events`,
-        },
-      ]
-    : [];
-  return {
-    data: context,
-    emptyMessage: null,
-    buttons,
-    isLeaf: true,
-    systemHint: 'List the upcoming events with their dates.',
-  };
+  // Render the list deterministically as markdown bullets (ROK-1112) — no LLM
+  // round-trip — so dates render in the viewer's timezone and titles deep-link.
+  const list = events.map((e) => buildEventBullet(e, deps)).join('\n');
+  return staticLeaf(list, deps);
 }
 
 /** Build date range for "this week" (today through end of Sunday). */
@@ -142,21 +147,18 @@ async function fetchEventsForTopGames(
 }
 
 /** Format the merged event list, using single- or multi-game header. */
-function formatMergedEvents(events: RankedEvent[], query: string): string {
+function formatMergedEvents(
+  events: RankedEvent[],
+  query: string,
+  deps: AiChatDeps,
+): string {
   const uniqueNames = new Set(events.map((e) => e.gameName));
   if (uniqueNames.size === 1) {
-    const list = events
-      .map(
-        (e) => `• ${e.title} — ${new Date(e.startTime).toLocaleDateString()}`,
-      )
-      .join('\n');
+    const list = events.map((e) => buildEventBullet(e, deps)).join('\n');
     return `**Upcoming events for ${events[0].gameName}:**\n${list}`;
   }
   const list = events
-    .map(
-      (e) =>
-        `• ${e.title} — ${new Date(e.startTime).toLocaleDateString()} (${e.gameName})`,
-    )
+    .map((e) => buildEventBullet(e, deps, ` (${e.gameName})`))
     .join('\n');
   return `**Upcoming events matching "${query}":**\n${list}`;
 }
@@ -178,7 +180,7 @@ async function searchEventsByGame(
         deps,
       );
     }
-    return staticLeaf(formatMergedEvents(merged, query), deps);
+    return staticLeaf(formatMergedEvents(merged, query, deps), deps);
   } catch {
     return staticLeaf('Unable to search events right now.', deps);
   }

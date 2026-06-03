@@ -1,5 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
 import { SETTING_KEYS } from '../../drizzle/schema';
+import { resolveUserTimezone } from '../../notifications/timezone.helpers';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { LlmService } from '../../ai/llm.service';
@@ -50,6 +54,8 @@ export class AiChatService {
     private readonly lineupsService: LineupsService,
     private readonly schedulingService: SchedulingService,
     private readonly analyticsService: AnalyticsService,
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
 
   onModuleInit(): void {
@@ -158,7 +164,7 @@ export class AiChatService {
     }
     session.currentPath = path;
     this.sessionStore.set(discordUserId, session);
-    const deps = this.buildDeps();
+    const deps = await this.buildDeps(session);
     const result = await node.handler(path, deps, session);
     return this.buildResponse(result, discordUserId);
   }
@@ -222,7 +228,7 @@ export class AiChatService {
   }
 
   /** Build the dependency bag for tree handlers. */
-  private buildDeps(): AiChatDeps {
+  private async buildDeps(session: TreeSession): Promise<AiChatDeps> {
     return {
       logger: this.logger,
       eventsService: this.eventsService,
@@ -234,6 +240,19 @@ export class AiChatService {
       schedulingService: this.schedulingService,
       analyticsService: this.analyticsService,
       clientUrl: process.env.CLIENT_URL ?? null,
+      viewerTimezone: await this.resolveViewerTimezone(session.userId),
     };
+  }
+
+  /**
+   * Resolve the viewer's IANA timezone for event-date rendering (ROK-1112):
+   * linked-user preference → guild default → 'UTC'. Unlinked viewers
+   * (userId === null) fall straight through to the guild default.
+   */
+  private async resolveViewerTimezone(userId: number | null): Promise<string> {
+    const guildDefault =
+      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
+    if (userId === null) return guildDefault;
+    return resolveUserTimezone(this.db, userId, guildDefault);
   }
 }
