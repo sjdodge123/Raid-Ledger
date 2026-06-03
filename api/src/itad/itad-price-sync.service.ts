@@ -162,7 +162,9 @@ export class ItadPriceSyncService
     this.logSyncSummary(succeeded, failed, games.length);
 
     const earlyResult = await this.syncEarlyAccess(games);
-    if (earlyResult.failed > 0) return { degraded: true };
+    // A pricing chunk that exhausts ITAD retries (processChunk returns false)
+    // must flag the run degraded too — not just earlyAccess failures (ROK-1103).
+    if (failed > 0 || earlyResult.failed > 0) return { degraded: true };
   }
 
   /**

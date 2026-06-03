@@ -12,6 +12,22 @@ import type {
 } from './itad-price.types';
 import { getCachedPrice, setCachedPrice } from './itad-cache.util';
 
+/**
+ * Thrown when the ITAD overview API call itself fails after the HTTP util has
+ * exhausted its retries (itadPost returns null — e.g. Cloudflare 521 bursts).
+ * Distinct from a successful response that simply carries no price entries.
+ * The pricing-sync chunk loop catches this to count the chunk as `failed` so
+ * the run reports `status=degraded` instead of a silent "0 failed" (ROK-1103).
+ */
+export class ItadOverviewFetchError extends Error {
+  constructor(idCount: number) {
+    super(
+      `ITAD overview fetch failed for ${idCount} games (retries exhausted)`,
+    );
+    this.name = 'ItadOverviewFetchError';
+  }
+}
+
 @Injectable()
 export class ItadPriceService {
   private readonly logger = new Logger(ItadPriceService.name);
@@ -87,7 +103,12 @@ export class ItadPriceService {
     return { cached, missingIds };
   }
 
-  /** Fetch missing IDs from ITAD API and cache each result. */
+  /**
+   * Fetch missing IDs from ITAD API and cache each result.
+   * @throws ItadOverviewFetchError when the API call fails after the HTTP
+   *   util exhausts retries (null response). A successful response with no
+   *   price entries is NOT a failure — it returns [] (ROK-1103).
+   */
   private async fetchBatchFromItad(
     apiKey: string,
     ids: string[],
@@ -97,7 +118,8 @@ export class ItadPriceService {
       { key: apiKey },
       ids,
     );
-    if (!response?.prices?.length) return [];
+    if (response === null) throw new ItadOverviewFetchError(ids.length);
+    if (!response.prices?.length) return [];
     await Promise.all(
       response.prices.map((e) => setCachedPrice(this.redis, e.id, e)),
     );

@@ -348,4 +348,48 @@ describe('ItadPriceSyncService', () => {
       expect(fnSignaledDegraded || perfLoggedDegraded).toBe(true);
     });
   });
+
+  // ─── ROK-1103: pricing-phase retry exhaustion → degraded ─────────────────
+  describe('ROK-1103: pricing-phase failure flags degraded', () => {
+    beforeEach(() => {
+      (perfLog as jest.Mock).mockClear();
+    });
+
+    it('returns degraded when a pricing chunk exhausts ITAD retries', async () => {
+      // One chunk of games. getOverviewBatch throws (ItadPriceService now
+      // throws ItadOverviewFetchError when itadPost returns null after the
+      // HTTP util exhausts retries) → processChunk counts the chunk failed.
+      const games = Array.from({ length: 10 }, (_, i) => ({
+        id: i + 1,
+        itadGameId: `game-uuid-${i + 1}`,
+      }));
+      mockDb.where.mockResolvedValueOnce(games);
+      mockDb.returning.mockResolvedValue([]);
+      mockItadPriceService.getOverviewBatch.mockRejectedValue(
+        new Error('ITAD overview fetch failed (retries exhausted)'),
+      );
+      // earlyAccess phase must NOT be the source of degraded here.
+      mockItadService.getGameInfo.mockResolvedValue({ earlyAccess: false });
+
+      const result = await service.syncPricing();
+
+      expect(result).toEqual({ degraded: true });
+    });
+
+    it('does NOT flag degraded when every pricing chunk succeeds', async () => {
+      const games = Array.from({ length: 10 }, (_, i) => ({
+        id: i + 1,
+        itadGameId: `game-uuid-${i + 1}`,
+      }));
+      mockDb.where.mockResolvedValueOnce(games);
+      mockDb.returning.mockResolvedValue([]);
+      // Empty-but-valid response (no deals) is a success, not a failure.
+      mockItadPriceService.getOverviewBatch.mockResolvedValue([]);
+      mockItadService.getGameInfo.mockResolvedValue({ earlyAccess: false });
+
+      const result = await service.syncPricing();
+
+      expect(result).toBeUndefined();
+    });
+  });
 });
