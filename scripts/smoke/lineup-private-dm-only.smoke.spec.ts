@@ -102,11 +102,10 @@ test.describe('Private lineup — DM-only behaviour', () => {
             /something went wrong/i,
             { timeout: 10_000 },
         );
+        // ROK-1323: legacy H1 title removed — title now renders in the composite
+        // JourneyHero (or the fallback header for no-composite states).
         await expect(
-            page.getByRole('heading', {
-                level: 1,
-                name: /Private DM Only|Lineup — /,
-            }),
+            page.getByText(/Private DM Only|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
     });
 
