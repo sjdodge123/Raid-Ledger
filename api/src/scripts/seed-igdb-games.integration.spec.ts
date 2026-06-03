@@ -137,6 +137,75 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     expect(orphanRow?.steamAppId).toBe(1086940);
   });
 
+  // ROK-1334: the per-row loop was replaced with a batched path (one name
+  // lookup + chunked multi-row INSERT ... ON CONFLICT + batched merges). These
+  // cases assert the batch handles a mixed insert/merge call in one shot.
+  it('batches a mixed call: inserts new rows and merges a null-igdb_id orphan in one pass', async () => {
+    // One pre-existing orphan that should MERGE; two fresh names that INSERT.
+    const [orphan] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Hades',
+        slug: 'hades-orphan',
+        steamAppId: 1145360,
+        igdbId: null,
+      })
+      .returning();
+
+    const seeds: GameSeed[] = [
+      { igdbId: 113112, name: 'Hades', slug: 'hades', coverUrl: null },
+      {
+        igdbId: 300001,
+        name: 'Stardew Valley',
+        slug: 'stardew',
+        coverUrl: null,
+      },
+      { igdbId: 300002, name: 'Celeste', slug: 'celeste', coverUrl: null },
+    ];
+    const touched = await upsertSeedGames(testApp.db, seeds);
+    expect(touched).toBe(3);
+
+    const rows = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG))
+      .orderBy(schema.games.igdbId);
+    // Three rows total — the orphan was back-filled (merge), not duplicated.
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.igdbId)).toEqual([113112, 300001, 300002]);
+    // The merged row is the original orphan (same id), now carrying the seed
+    // igdb_id while retaining its upstream steam_app_id.
+    const hades = rows.find((r) => r.igdbId === 113112);
+    expect(hades?.id).toBe(orphan.id);
+    expect(hades?.steamAppId).toBe(1145360);
+  });
+
+  it('seeds a fresh (empty) table fully via the batch INSERT path', async () => {
+    const seeds: GameSeed[] = [
+      {
+        igdbId: 400001,
+        name: 'Hollow Knight',
+        slug: 'hollow-knight',
+        coverUrl: null,
+      },
+      {
+        igdbId: 400002,
+        name: 'Dead Cells',
+        slug: 'dead-cells',
+        coverUrl: null,
+      },
+    ];
+    const touched = await upsertSeedGames(testApp.db, seeds);
+    expect(touched).toBe(2);
+
+    const rows = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG))
+      .orderBy(schema.games.igdbId);
+    expect(rows.map((r) => r.igdbId)).toEqual([400001, 400002]);
+  });
+
   it('does NOT collapse sequels: existing row with different non-null igdb_id is left alone', async () => {
     // A row that legitimately represents a different IGDB entity. A
     // normalize() collision (e.g. unusual title) must not overwrite it.
