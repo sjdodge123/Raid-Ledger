@@ -15,7 +15,11 @@ const telemetryDisabled = process.env.DISABLE_TELEMETRY === 'true';
 if (!telemetryDisabled && isProduction) {
   Sentry.init({
     dsn: SENTRY_DSN,
-    environment: 'production',
+    // ROK-1329: default stays 'production' so the Synology NAS keeps reporting
+    // as prod with zero config change, but the rl-infra fleet (and any other
+    // non-prod deploy of the allinone image) can set SENTRY_ENVIRONMENT to land
+    // its events in a separate Sentry bucket instead of polluting the prod inbox.
+    environment: process.env.SENTRY_ENVIRONMENT ?? 'production',
     tracesSampleRate: isProduction ? 0.1 : 1.0,
     beforeSend(event) {
       const exceptionType = event.exception?.values?.[0]?.type;

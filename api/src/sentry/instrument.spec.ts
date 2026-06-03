@@ -12,7 +12,7 @@ async function loadInstrument(
 }> {
   // Save and restore env
   const saved: Record<string, string | undefined> = {};
-  for (const key of ['NODE_ENV', 'DISABLE_TELEMETRY']) {
+  for (const key of ['NODE_ENV', 'DISABLE_TELEMETRY', 'SENTRY_ENVIRONMENT']) {
     saved[key] = process.env[key];
     if (key in env) {
       if (env[key] === undefined) {
@@ -97,6 +97,33 @@ function describeSentryInstrumentTs() {
     it('sets environment tag to production', () => {
       const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
       expect(config['environment']).toBe('production');
+    });
+
+    // ── ROK-1329: honor SENTRY_ENVIRONMENT so fleet runners don't pollute
+    // the prod Sentry inbox. The allinone image bakes NODE_ENV=production, so
+    // Sentry.init still fires for fleet envs; the environment tag is what keeps
+    // their events in a separate bucket. Default stays 'production' so the
+    // Synology NAS keeps reporting as prod with zero config change.
+    describe('ROK-1329: SENTRY_ENVIRONMENT override', () => {
+      it('defaults environment to production when SENTRY_ENVIRONMENT is unset', async () => {
+        const { sentryInitMock: mock } = await loadInstrument({
+          NODE_ENV: 'production',
+          DISABLE_TELEMETRY: undefined,
+          SENTRY_ENVIRONMENT: undefined,
+        });
+        const config = mock.mock.calls[0][0] as Record<string, unknown>;
+        expect(config['environment']).toBe('production');
+      });
+
+      it('uses SENTRY_ENVIRONMENT when set (fleet per-slot bucket)', async () => {
+        const { sentryInitMock: mock } = await loadInstrument({
+          NODE_ENV: 'production',
+          DISABLE_TELEMETRY: undefined,
+          SENTRY_ENVIRONMENT: 'fleet-slot-2',
+        });
+        const config = mock.mock.calls[0][0] as Record<string, unknown>;
+        expect(config['environment']).toBe('fleet-slot-2');
+      });
     });
 
     it('includes ignoreSpans with pg_catalog filter', () => {
