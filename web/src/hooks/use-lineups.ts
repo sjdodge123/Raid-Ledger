@@ -4,6 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   LineupDetailResponseDto,
+  LineupParticipantsResponseDto,
   LineupBannerResponseDto,
   LineupSummaryResponseDto,
   CommonGroundResponseDto,
@@ -18,6 +19,7 @@ import {
   nominateGame,
   getLineupBanner,
   getLineupById,
+  getLineupParticipants,
   removeNomination,
   createLineup,
   transitionLineupStatus,
@@ -103,6 +105,25 @@ export function useLineupDetail(id: number | undefined) {
   return useQuery<LineupDetailResponseDto>({
     queryKey: [...DETAIL_KEY, id],
     queryFn: () => getLineupById(id!),
+    enabled: !!id,
+    staleTime: 30_000,
+  });
+}
+
+/** Query key prefix for participant roster queries (ROK-1346). */
+export const PARTICIPANTS_KEY = ['lineups', 'participants'] as const;
+
+/**
+ * Hook for fetching a lineup's participant roster (ROK-1346).
+ *
+ * Enabled on the detail page so the hero button always has the count + avatar
+ * stack up front; the modal reuses the same cached query. Invalidated by the
+ * existing `LINEUPS_PREFIX` cascade on nominate/vote/invitee mutations.
+ */
+export function useLineupParticipants(id: number | undefined) {
+  return useQuery<LineupParticipantsResponseDto>({
+    queryKey: [...PARTICIPANTS_KEY, id],
+    queryFn: () => getLineupParticipants(id!),
     enabled: !!id,
     staleTime: 30_000,
   });

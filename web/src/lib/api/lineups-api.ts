@@ -4,6 +4,7 @@
  */
 import type {
   LineupDetailResponseDto,
+  LineupParticipantsResponseDto,
   LineupBannerResponseDto,
   LineupSummaryResponseDto,
   CommonGroundResponseDto,
@@ -70,6 +71,13 @@ export async function getLineupBanner(): Promise<LineupBannerResponseDto | null>
 /** Fetch full lineup detail by ID. */
 export async function getLineupById(id: number): Promise<LineupDetailResponseDto> {
   return fetchApi(`/lineups/${id}`);
+}
+
+/** Fetch the participant roster for a lineup (ROK-1346). Read-open. */
+export async function getLineupParticipants(
+  id: number,
+): Promise<LineupParticipantsResponseDto> {
+  return fetchApi(`/lineups/${id}/participants`);
 }
 
 /** Remove a nomination from a lineup. */

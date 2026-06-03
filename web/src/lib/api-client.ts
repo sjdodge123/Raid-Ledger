@@ -180,6 +180,7 @@ export {
     nominateGame,
     getLineupBanner,
     getLineupById,
+    getLineupParticipants,
     removeNomination,
     createLineup,
     transitionLineupStatus,
