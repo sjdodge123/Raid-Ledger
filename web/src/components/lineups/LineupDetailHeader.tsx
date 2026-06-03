@@ -17,6 +17,7 @@ import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { LineupOperatorMenu } from './LineupOperatorMenu';
 import { LineupShareCopy } from './LineupShareCopy';
 import { LineupHeroMeta } from './LineupHeroMeta';
+import { LineupParticipantsButton } from './LineupParticipantsButton';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -79,6 +80,13 @@ export function LineupDetailHeader({
         )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
+        {/* ROK-1346: phases that render a composite JourneyHero host the
+            Participants button in the hero `action` slot; the fallback states
+            (archived / aborted / empty-voting) have no hero, so surface it
+            here so the roster button is present across every lineup state. */}
+        {showFallbackTitle && (
+          <LineupParticipantsButton lineupId={lineup.id} />
+        )}
         {showMemberCopy && <LineupShareCopy slug={lineup.publicSlug} variant="icon" />}
         <LineupOperatorMenu
           lineup={lineup}
