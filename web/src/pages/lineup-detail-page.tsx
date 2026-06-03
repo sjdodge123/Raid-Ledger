@@ -5,6 +5,7 @@ import { useLineupDetail } from '../hooks/use-lineups';
 import { useLineupRealtime } from '../hooks/use-lineup-realtime';
 import { useTiebreakerDetail } from '../hooks/use-tiebreaker';
 import { LineupDetailHeader } from '../components/lineups/LineupDetailHeader';
+import { MarkdownText } from '../components/ui/markdown-text';
 import { InviteeList } from '../components/lineups/InviteeList';
 import { AddInviteesButton } from '../components/lineups/AddInviteesButton';
 import { StillWaitingPanel } from '../components/lineups/StillWaitingPanel';
@@ -203,6 +204,14 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
             setTiebreakerPromptOpen(true);
           }}
         />
+        {/* ROK-1323: the title + "Started by…" meta moved into the composite
+            hero, but the markdown description is kept as a small block beneath
+            the compact bar rather than dropped (spec edge-case). */}
+        {lineup.description && (
+          <div className="mt-2">
+            <MarkdownText text={lineup.description} />
+          </div>
+        )}
       </div>
 
       {lineup.visibility === 'private' && (
