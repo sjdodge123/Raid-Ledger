@@ -1,17 +1,14 @@
 /**
- * Scheduling Poll page smoke tests (ROK-965, ROK-999, ROK-1301).
+ * Scheduling Poll page smoke tests (ROK-965, ROK-999, ROK-1300).
  * Route: /community-lineup/:lineupId/schedule/:matchId
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  *
- * ROK-1301 collapsed the wizard from 3 steps to 2 and moved the weekly
- * availability painter out of the wizard into a self-gating modal:
- *   Step 1 (Vote on Times) — vote on existing suggested time slots; carries the
- *     inline "Using your saved Game Time" notice (availability is now a profile
- *     setting, not a per-poll step).
- *   Step 2 (Full poll view) — suggest times, heatmap, create event.
- * The former "Set Gametime" wizard step is gone — its painter now lives in
- * GameTimeRefreshModal, which auto-opens on the poll page only when game time is
- * stale (`gameTimeStale === true`) and the wizard hasn't been session-skipped.
+ * ROK-1300: the SchedulingWizard stepper is gone — `<SchedulingComposite>`
+ * owns the page body with a single sticky JourneyHero at top, an in-composite
+ * U2 game-ref banner (replaces MatchContextCard), the group-availability
+ * heatmap, per-row +Vote / operator Lock, and the sticky-toolbar submit. The
+ * GameTimeRefreshModal stays — it self-gates on stale game time, independent
+ * of the composite.
  */
 import { test, expect } from './base';
 import {
@@ -189,7 +186,7 @@ async function createSchedulingLineupWithMatch(token: string): Promise<{
  * poll page only when game time is stale. In these smoke fixtures the beforeAll
  * PUTs slots → `game_time_confirmed_at = now` → game time is fresh, so the modal
  * normally does NOT appear. We still defensively dismiss it (via its Skip button)
- * so a stale state from an earlier test or seed data can't block the wizard. Skip
+ * so a stale state from an earlier test or seed data can't block the page. Skip
  * persists to sessionStorage, so it won't re-fire later in the same page session.
  */
 async function dismissGameTimeModalIfPresent(
@@ -204,17 +201,10 @@ async function dismissGameTimeModalIfPresent(
 }
 
 /**
- * Navigate to the scheduling poll and advance past the 2-step wizard to the
- * full poll view (ROK-1301 rewrite — wizard collapsed 3 → 2 steps).
- *
- * The 2-step wizard renders one step at a time:
- *   step 0 → [data-testid="scheduling-wizard-step-1"] (Vote on Times)
- *   step 1 → children (the "Scheduling Poll" h1 + full poll body)
- *
- * `computeInitialStep` jumps straight to step 1 (the poll body) when no slots
- * exist, so this helper only clicks Continue when the Vote step is actually
- * rendered. The former gametime step (and its Skip button) are gone — only the
- * GameTimeRefreshModal has a Skip, handled by `dismissGameTimeModalIfPresent`.
+ * Navigate to the scheduling poll and wait for the SchedulingComposite to
+ * render (ROK-1300 — the wizard stepper + separate "Scheduling Poll" h1 are
+ * gone; the composite owns the page body with a single sticky hero at top).
+ * The composite's region is the JourneyHero (role="region" named /scheduling/i).
  */
 async function goToPoll(
     page: import('@playwright/test').Page,
@@ -222,31 +212,20 @@ async function goToPoll(
     mid: number,
 ): Promise<void> {
     await page.goto(`/community-lineup/${lid}/schedule/${mid}`);
-
-    // Dismiss the game-time modal first so it can't sit over the wizard.
+    // Dismiss the game-time modal first so it can't sit over the composite.
     await dismissGameTimeModalIfPresent(page);
 
-    const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-    const voteStep = page.locator('[data-testid="scheduling-wizard-step-1"]');
-
-    // Wait for *some* wizard surface to render (spinner gone, dom mounted).
+    const composite = page.locator('[data-testid="scheduling-composite"]');
+    const completed = page.locator('[data-testid="match-status-badge"]');
+    // The active composite OR the scheduled/completed terminal state.
     await expect
         .poll(
             async () =>
-                (await voteStep.isVisible().catch(() => false)) ||
-                (await pollHeading.isVisible().catch(() => false)),
-            { timeout: 20_000, message: 'wizard surface never rendered' },
+                (await composite.isVisible().catch(() => false)) ||
+                (await completed.isVisible().catch(() => false)),
+            { timeout: 20_000, message: 'scheduling composite never rendered' },
         )
         .toBe(true);
-
-    // Step 0 (Vote on Times). Click Continue to advance to the poll body.
-    if (await voteStep.isVisible().catch(() => false)) {
-        await page.getByRole('button', { name: /^Continue$/i }).click();
-        await expect(voteStep).toBeHidden({ timeout: 10_000 });
-    }
-
-    // Step 1 — full poll body should now be rendered.
-    await expect(pollHeading).toBeVisible({ timeout: 15_000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -312,14 +291,13 @@ test.describe('Scheduling poll page route', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Scheduling poll game-time modal (ROK-1301)', () => {
-    test('returning user with fresh game time → NO modal, lands on Vote step', async ({
+    test('returning user with fresh game time → NO modal, composite renders directly', async ({
         page,
     }) => {
         // The beforeAll PUT to /users/me/game-time set confirmed_at = now, so the
         // authenticated admin's game time is fresh → the stale-gated modal must
         // NOT auto-open. (The positive stale-title case is covered deterministically
-        // by the Vitest unit test web/src/pages/scheduling/GameTimeRefreshModal.test.tsx;
-        // forcing stale here would require per-run DB mutation that's too flaky for smoke.)
+        // by the Vitest unit test web/src/pages/scheduling/GameTimeRefreshModal.test.tsx.)
         await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
 
         // No dialog titled with the modal copy should appear within a short window.
@@ -328,160 +306,68 @@ test.describe('Scheduling poll game-time modal (ROK-1301)', () => {
             .getByText(/Set your Game Time|Refresh your Game Time/i);
         await expect(modalTitle).toHaveCount(0, { timeout: 5_000 });
 
-        // The poll surface (Vote step or poll body) renders directly.
-        const voteStep = page.locator('[data-testid="scheduling-wizard-step-1"]');
-        const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-        await expect
-            .poll(
-                async () =>
-                    (await voteStep.isVisible().catch(() => false)) ||
-                    (await pollHeading.isVisible().catch(() => false)),
-                { timeout: 15_000, message: 'poll surface never rendered without modal' },
-            )
-            .toBe(true);
+        // ROK-1300: the composite body renders directly (no wizard stepper).
+        await expect(
+            page.locator('[data-testid="scheduling-composite"]'),
+        ).toBeVisible({ timeout: 15_000 });
     });
 });
 
 // ---------------------------------------------------------------------------
-// Wizard Step 1: Vote on Times (ROK-1301 — Vote is now the first step)
+// ROK-1300 single-hero layout — composite owns the page body; no wizard
+// stepper, no separate "Scheduling Poll" h1; U2 game-ref banner replaces the
+// standalone MatchContextCard.
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling wizard Step 1 — Vote on Times', () => {
-    test('Step 1 renders vote UI + inline "Using your saved Game Time" notice', async ({
+test.describe('Scheduling poll single-hero layout (ROK-1300)', () => {
+    test('hero at top, NO wizard stepper, NO separate "Scheduling Poll" h1', async ({
         page,
     }) => {
-        await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
-        await dismissGameTimeModalIfPresent(page);
-        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-
-        // Vote is the FIRST step now (shown when slots exist — seeded in beforeAll).
-        const voteStep = page.locator('[data-testid="scheduling-wizard-step-1"]');
-        const isVoteVisible = await voteStep.isVisible({ timeout: 5_000 }).catch(() => false);
-
-        if (isVoteVisible) {
-            // Vote step heading.
-            await expect(page.getByText('Vote on Suggested Times')).toBeVisible({ timeout: 5_000 });
-
-            // ROK-1301: inline notice that availability is now a profile setting.
-            await expect(
-                page.getByText(/Using your saved Game Time/i),
-            ).toBeVisible({ timeout: 5_000 });
-
-            // Continue button advances to the poll body.
-            const continueBtn = page.getByRole('button', { name: /^Continue$/i });
-            await expect(continueBtn).toBeVisible({ timeout: 5_000 });
-        }
-        // If auto-skipped (no slots), the wizard jumps straight to the poll body — valid.
-    });
-
-    test('mobile: wizard step indicator shows "Step N of 2"', async ({
-        page,
-    }) => {
-        test.skip(
-            test.info().project.name === 'desktop',
-            'Mobile-only test — step indicator text only shown on mobile',
-        );
-
-        await page.goto(`/community-lineup/${lineupId}/schedule/${matchId}`);
-        await dismissGameTimeModalIfPresent(page);
-        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-
-        const indicator = page.locator('[data-testid="wizard-step-indicator"]');
-        const isVisible = await indicator.isVisible({ timeout: 5_000 }).catch(() => false);
-
-        if (isVisible) {
-            // Mobile indicator should show "Step N of 2" (2-step wizard now).
-            await expect(indicator.getByText(/Step \d of 2/)).toBeVisible({ timeout: 5_000 });
-        }
-    });
-});
-
-// ---------------------------------------------------------------------------
-// Wizard Step 2: Full poll view (ROK-1301 — only 2 steps now)
-// ---------------------------------------------------------------------------
-
-test.describe('Scheduling wizard Step 2 — Full poll view', () => {
-    test('advancing through wizard reaches the full poll with Scheduling Poll heading', async ({
-        page,
-    }) => {
-        await goToPoll(page, lineupId, matchId);
-
-        // Step 2 is the full poll view — verified by the goToPoll helper which
-        // asserts the "Scheduling Poll" h1 heading is visible.
-        const indicator = page.locator('[data-testid="wizard-step-indicator"]');
-        const isVisible = await indicator.isVisible({ timeout: 5_000 }).catch(() => false);
-
-        if (isVisible) {
-            // Desktop: the second (final) step indicator should be active.
-            const step2 = page.locator('[data-testid="wizard-step-2"]');
-            if (await step2.isVisible({ timeout: 3_000 }).catch(() => false)) {
-                await expect(step2).toHaveAttribute('data-status', 'active', { timeout: 5_000 });
-            }
-            // There is no third step indicator anymore.
-            await expect(page.locator('[data-testid="wizard-step-3"]')).toHaveCount(0);
-        }
-    });
-
-    test('mobile: final step indicator shows "Step 2 of 2"', async ({
-        page,
-    }) => {
-        test.skip(
-            test.info().project.name === 'desktop',
-            'Mobile-only test — step indicator text only shown on mobile',
-        );
-
-        await goToPoll(page, lineupId, matchId);
-
-        const indicator = page.locator('[data-testid="wizard-step-indicator"]');
-        const isVisible = await indicator.isVisible({ timeout: 5_000 }).catch(() => false);
-
-        if (isVisible) {
-            await expect(indicator.getByText('Step 2 of 2')).toBeVisible({ timeout: 5_000 });
-        }
-    });
-});
-
-// ---------------------------------------------------------------------------
-// AC2: Match context card — game thumbnail, name, member count, avatars
-// ---------------------------------------------------------------------------
-
-test.describe('Scheduling poll match context card', () => {
-    test('displays game thumbnail, name, member count, and member avatars', async ({
-        page,
-    }) => {
-        // ROK-1247: ensure server reflects the seeded slot before nav.
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC2: Match context card shows game details
-        const contextCard = page.locator(
-            '[data-testid="match-context-card"]',
-        );
-        await expect(contextCard).toBeVisible({ timeout: 15_000 });
+        // The morphing JourneyHero region is present (role=region named /scheduling/i).
+        await expect(
+            page.getByRole('region', { name: /scheduling/i }).first(),
+        ).toBeVisible({ timeout: 15_000 });
+        // Wizard stepper is gone.
+        await expect(
+            page.locator('[data-testid="scheduling-wizard-step-1"]'),
+        ).toHaveCount(0);
+        await expect(
+            page.locator('[data-testid="wizard-step-indicator"]'),
+        ).toHaveCount(0);
+        // The active poll has no separate "Scheduling Poll" h1 (only the
+        // scheduled/completed terminal state renders one).
+        await expect(
+            page.getByRole('heading', { level: 1, name: /^scheduling poll$/i }),
+        ).toHaveCount(0);
+    });
 
-        // Game thumbnail or fallback (img may be hidden if cover URL fails to load)
-        const hasImage = await contextCard.locator('img').first().isVisible().catch(() => false);
-        if (!hasImage) {
-            // Fallback: at least the game name must be visible
-            await expect(contextCard).toBeVisible();
-        }
+    test('U2 game-ref (in toolbar) shows game name + ⓘ; clicking navigates to /games/:id', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
 
-        // Game name text should be present
-        const gameName = contextCard.locator(
-            '[data-testid="match-game-name"]',
-        );
-        await expect(gameName).toBeVisible({ timeout: 5_000 });
+        // ROK-1300 round 2: the game-ref lives in the sticky toolbar, on the
+        // same row as the submit button, and is itself clickable.
+        const banner = page.locator('[data-testid="scheduling-game-ref"]');
+        await expect(banner).toBeVisible({ timeout: 15_000 });
+        await expect(
+            banner.locator('[data-testid="match-game-name"]'),
+        ).toBeVisible({ timeout: 5_000 });
+        // ⓘ hover affordance is present.
+        await expect(
+            banner.locator('[data-testid="scheduling-game-research"]'),
+        ).toBeVisible({ timeout: 5_000 });
+        // Member/match context line.
+        await expect(banner).toContainText(/you|member|match/i);
 
-        // Member count text (e.g., "3 members")
-        const memberCount = contextCard.getByText(/\d+\s*members?/i);
-        await expect(memberCount).toBeVisible({ timeout: 5_000 });
-
-        // Member avatars container (may be hidden if avatars fail to load in test env)
-        const avatarStack = contextCard.locator(
-            '[data-testid="member-avatars"]',
-        );
-        // Just verify the element exists in the DOM (it may not be visible if avatar images fail)
-        await expect(avatarStack).toBeAttached({ timeout: 5_000 });
+        // Clicking the game-ref navigates to the game-detail page.
+        await banner.click();
+        await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
+        expect(page.url()).toMatch(/\/games\/\d+/);
     });
 });
 
@@ -517,7 +403,9 @@ test.describe('Scheduling poll vote toggling', () => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC4: Time slot cards/rows are visible and clickable
+        // AC4: ROK-1300 — slot rows carry the `+ Vote` toggle (the legacy
+        // whole-card click target was replaced by the per-row vote button in
+        // the SchedulingComposite). The card keeps `data-voted` for state.
         const slotCards = page.locator(
             '[data-testid="schedule-slot"]',
         );
@@ -525,13 +413,16 @@ test.describe('Scheduling poll vote toggling', () => {
 
         // Check initial voted state (may be pre-voted from beforeAll)
         const initialVoted = await slotCards.first().getAttribute('data-voted');
+        const voteToggle = slotCards
+            .first()
+            .getByRole('button', { name: /vote/i });
 
-        // Click to toggle — wait for API round-trip
+        // Click the vote toggle — wait for API round-trip
         await Promise.all([
             page.waitForResponse(
                 (r) => r.url().includes('/vote') && r.request().method() === 'POST',
             ).catch(() => null),
-            slotCards.first().click(),
+            voteToggle.click(),
         ]);
 
         // After click, state should be the OPPOSITE of initial
@@ -547,7 +438,7 @@ test.describe('Scheduling poll vote toggling', () => {
             page.waitForResponse(
                 (r) => r.url().includes('/vote') && r.request().method() === 'POST',
             ).catch(() => null),
-            slotCards.first().click(),
+            slotCards.first().getByRole('button', { name: /vote/i }).click(),
         ]);
 
         await expect(slotCards.first()).toHaveAttribute(
@@ -579,20 +470,22 @@ test.describe('Scheduling poll "You voted" indicator', () => {
         const initialVoted = await slotCards.first().getAttribute('data-voted');
 
         if (initialVoted === 'true') {
-            // Already voted — indicator should be visible. ROK-1209 reduced
-            // the visible text "You voted" to a `✓` glyph with
-            // `aria-label="You voted"` (consistent with the per-row ✓ on
-            // `LeaderboardRow` for voting phase, and per AC-8 spec). Match
-            // by accessible label rather than visible text.
+            // Already voted — the ✓ glyph (aria-label="You voted") renders in
+            // the row. Match by accessible label rather than visible text.
             const youVotedIndicator = slotCards.first().getByLabel('You voted');
             await expect(youVotedIndicator).toBeVisible({ timeout: 10_000 });
         } else {
-            // Not voted — click to vote, then check indicator
+            // ROK-1300: the row is a <div>; the vote toggle is a separate
+            // <button aria-label="Vote for <time>">. Click the button (not the
+            // card) to cast the vote, then assert the ✓ indicator.
             await Promise.all([
                 page.waitForResponse(
                     (r) => r.url().includes('/vote') && r.request().method() === 'POST',
                 ).catch(() => null),
-                slotCards.first().click(),
+                slotCards
+                    .first()
+                    .getByRole('button', { name: /vote for/i })
+                    .click(),
             ]);
             const youVotedIndicator = slotCards.first().getByLabel('You voted');
             await expect(youVotedIndicator).toBeVisible({ timeout: 10_000 });
@@ -637,32 +530,23 @@ test.describe('Scheduling poll heatmap', () => {
 // AC7: "Create Event" button enabled only after voting
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll Create Event button', () => {
-    test('"Create Event" button exists and is enabled (admin/operator bypasses vote-gate)', async ({
+test.describe('Scheduling poll operator lock affordance (ROK-1300)', () => {
+    test('"Lock this time →" appears per row for operators/creator', async ({
         page,
     }) => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // AC7: "Create Event" button should be present.
-        // Scope to the page-level Create Event button, NOT the hero CTA — the
-        // hero ships an "Open events page from hero" CTA on standalone-poll
-        // (ROK-1209) whose text reads "Create event"; using `exact: true`
-        // forces a match against the page-level button's exact "Create Event"
-        // accessible name (capital E) and avoids strict-mode collisions.
-        const createEventBtn = page.getByRole('button', {
-            name: 'Create Event',
-            exact: true,
-        });
-        await expect(createEventBtn).toBeVisible({ timeout: 15_000 });
-
-        // The smoke harness logs in as `admin` — `canBypassThreshold(user,
-        // match)` returns true for operators/admins (per
-        // `web/src/pages/scheduling/CreateEventSection.tsx:113`), so the
-        // button is enabled without requiring the user to vote. Member-side
-        // disabled-until-voted behavior is exhaustively covered by vitest
-        // (`web/src/pages/scheduling/CreateEventSection.test.tsx`).
-        await expect(createEventBtn).toBeEnabled({ timeout: 15_000 });
+        // ROK-1300: the legacy CreateEventSection dropdown + "Create Event"
+        // button is retired. The lock action now lives per-row as
+        // "Lock this time →", operator/creator-gated via canBypassThreshold.
+        // The smoke harness logs in as `admin` (operator), so the affordance
+        // renders. Member-side gating is covered by the vitest composite test.
+        const lockBtn = page
+            .getByRole('button', { name: /lock this time/i })
+            .first();
+        await expect(lockBtn).toBeVisible({ timeout: 15_000 });
+        await expect(lockBtn).toBeEnabled({ timeout: 15_000 });
     });
 });
 
@@ -670,15 +554,21 @@ test.describe('Scheduling poll Create Event button', () => {
 // Recurring event checkbox (ROK-965 coverage gap)
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling poll create event button', () => {
-    test('Create Event button navigates to create-event page with game and time pre-filled', async ({
+test.describe('Scheduling poll sticky-toolbar submit (ROK-1300)', () => {
+    test('sticky toolbar exposes the schedule-submit affordance', async ({
         page,
     }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
 
-        // The Create Event button should navigate to /events/new with query params
-        const createEventBtn = page.getByRole('button', { name: /Create Event/i });
-        await expect(createEventBtn).toBeVisible({ timeout: 15_000 });
+        // ROK-1300: the submit ritual lives in the sticky JourneyHero toolbar
+        // (NOT a bottom SubmitBar). Its testid is pinned by the composite.
+        const submit = page.locator(
+            '[data-testid="sticky-hero-schedule-submit"]',
+        );
+        await expect(submit).toBeVisible({ timeout: 15_000 });
+        // No bottom SubmitBar is rendered for the scheduling phase.
+        await expect(page.locator('[data-testid="submit-bar"]')).toHaveCount(0);
     });
 });
 
@@ -733,6 +623,11 @@ test.describe('Scheduling poll event creation and post-creation status', () => {
         await goToPoll(page, lineupId, matchId);
 
         if (eventCreated) {
+            // Scheduled terminal state → CompletedPollState renders (it KEEPS
+            // the "Scheduling Poll" h1 + badge + event link).
+            await expect(
+                page.getByRole('heading', { level: 1, name: /^scheduling poll$/i }),
+            ).toBeVisible({ timeout: 15_000 });
             const completedBadge = page.locator('[data-testid="match-status-badge"]');
             await expect(completedBadge).toBeVisible({ timeout: 15_000 });
             await expect(completedBadge).toHaveText(/Poll Complete|Scheduled/i);
@@ -740,9 +635,12 @@ test.describe('Scheduling poll event creation and post-creation status', () => {
             const eventLink = page.getByRole('link', { name: /View Event/i });
             await expect(eventLink).toBeVisible({ timeout: 5_000 });
         } else {
-            // Event creation wasn't possible — verify poll page loads cleanly
-            const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-            await expect(pollHeading).toBeVisible({ timeout: 15_000 });
+            // Event creation wasn't possible — verify the active-poll composite
+            // loads cleanly (ROK-1300: the active poll has no separate h1; the
+            // h1 only exists in the scheduled/completed terminal state above).
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
         }
     });
 });
@@ -832,7 +730,7 @@ test.describe('Scheduling poll other polls section', () => {
 // ROK-1014 AC1/AC2: GameTimeGrid shows abbreviated day names on mobile, full on desktop
 // ---------------------------------------------------------------------------
 
-test.describe('Scheduling wizard GameTimeGrid day name abbreviation (ROK-1014)', () => {
+test.describe('Scheduling poll GameTimeGrid day name abbreviation (ROK-1014)', () => {
     test('mobile: GameTimeGrid shows abbreviated day names (Sun, Mon)', async ({
         page,
     }) => {
@@ -963,24 +861,24 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
 
         // ROK-1247: poll until the API observes the vote. Without this, the
         // page's useQuery can serve a cached "no votes" payload and the
-        // [data-voted="true"] slot never renders within the test window.
+        // voted slot row never renders its avatar group within the window.
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId, {
             withVote: true,
         });
         await goToPoll(page, lineupId, matchId);
 
-        // AC12: voted slot cards show stacked voter avatars. The AC's
-        // subject is the avatar group itself rendering on the page when a
-        // vote exists. The page can route through two slot-card surfaces:
-        // `SuggestedTimes` (carries `data-testid="schedule-slot"` on each
-        // SlotCard) and `SchedulingWizard`'s step-2 (plain buttons, no
-        // schedule-slot testid). Asserting on `MemberAvatarGroup`
-        // (`data-testid="member-avatar-group"`) directly is the stable
-        // contract that holds across both surfaces — and it's exactly
-        // what the AC asks for. Pre-existing TECH-DEBT-BACKLOG 2026-05-09
-        // entry on the brittle `[data-voted="true"]` form addressed.
-        const avatarGroup = page.locator('[data-testid="member-avatar-group"]').first();
-        await expect(avatarGroup).toBeVisible({ timeout: 15_000 });
+        // AC12 (ROK-1300): voted slot ROWS render a stacked voter avatar group.
+        // SchedulingSlotRow mounts MemberAvatarGroup only when the slot has
+        // votes — so a voted row (data-voted="true") MUST contain one. Scope
+        // the assertion to a voted row (not page-wide .first(), which could
+        // match the hero game-ref's member stack and mask a row regression).
+        const votedRow = page
+            .locator('[data-testid="schedule-slot"][data-voted="true"]')
+            .first();
+        await expect(votedRow).toBeVisible({ timeout: 15_000 });
+        await expect(
+            votedRow.locator('[data-testid="member-avatar-group"]'),
+        ).toBeVisible({ timeout: 10_000 });
     });
 
     test('slots with 0 votes show no avatar row', async ({

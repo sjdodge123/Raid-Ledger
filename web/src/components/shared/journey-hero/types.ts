@@ -37,6 +37,13 @@ export interface HeroState {
 }
 
 export interface JourneyHeroProps {
+  /**
+   * Optional element rendered on the RIGHT of the badge row (below the phase
+   * ribbon), next to the done-pill. ROK-1300 uses it for the operator
+   * "Cancel Poll" affordance so it sits below the ribbon instead of colliding
+   * with the rightmost "Schedule" ribbon node. Coexists with the done-pill.
+   */
+  headerAction?: import('react').ReactNode;
   /** Primary input — drives `active` internally if `active` not supplied */
   phase?: JourneyPhase;
   /** Explicit override / Sx escape hatch — derived from `phase` when omitted */

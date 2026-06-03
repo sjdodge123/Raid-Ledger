@@ -69,6 +69,34 @@ describe('JourneyHero — pill override', () => {
     });
 });
 
+describe('JourneyHero — headerAction (ROK-1300)', () => {
+    it('renders headerAction on the badge row alongside the done-pill', () => {
+        renderWithProviders(
+            <JourneyHero
+                phase="scheduling"
+                tone="waiting"
+                badge="Step 4 of 4 · Scheduling"
+                task="t"
+                headerAction={<button type="button">Cancel Poll</button>}
+            />,
+        );
+        // Both the tone-derived done-pill and the action render.
+        expect(screen.getByText("✓ You're done here")).toBeInTheDocument();
+        expect(
+            screen.getByRole('button', { name: 'Cancel Poll' }),
+        ).toBeInTheDocument();
+    });
+
+    it('omits the right-side wrapper when neither pill nor headerAction is present', () => {
+        renderWithProviders(
+            <JourneyHero phase="nominating" badge="b" task="t" />,
+        );
+        expect(
+            screen.queryByRole('button', { name: 'Cancel Poll' }),
+        ).not.toBeInTheDocument();
+    });
+});
+
 describe('JourneyHero — CTA', () => {
     it('renders a real <button>; clicking calls onCtaClick', async () => {
         const onCtaClick = vi.fn();

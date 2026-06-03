@@ -20,6 +20,25 @@ export interface ScheduleVoteRow {
   createdAt: Date;
 }
 
+/**
+ * Fetch the parent lineup's poll-page metadata (ROK-1300): status, creator,
+ * deadline, the scheduling opt-out flag, and `phaseDurationOverride` (which
+ * carries the standalone marker). Returns a single-row array.
+ */
+export function findLineupPollMeta(db: Db, lineupId: number) {
+  return db
+    .select({
+      status: schema.communityLineups.status,
+      createdBy: schema.communityLineups.createdBy,
+      phaseDeadline: schema.communityLineups.phaseDeadline,
+      includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
+      phaseDurationOverride: schema.communityLineups.phaseDurationOverride,
+    })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+}
+
 /** Find all schedule slots for a given match. */
 export function findScheduleSlots(db: Db, matchId: number) {
   return db

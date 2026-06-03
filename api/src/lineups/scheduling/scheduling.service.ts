@@ -33,13 +33,17 @@ import {
   deleteAllUserVotesForMatch,
   findUserSchedulingMatches,
   countUniqueVoters,
+  findLineupPollMeta,
 } from './scheduling-query.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
   findMatchById,
   findMatchMembers,
 } from '../lineups-match-query.helpers';
-import { buildPollResponse } from './scheduling-response.helpers';
+import {
+  buildPollResponse,
+  deriveIsStandalone,
+} from './scheduling-response.helpers';
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { fireEventCreated } from '../lineups-notify-hooks.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
@@ -90,17 +94,7 @@ export class SchedulingService {
     }
     const [gameInfo, [lineup], members, slots, voterCount] = await Promise.all([
       resolveGameInfo(this.db, match.gameId),
-      this.db
-        .select({
-          status: schema.communityLineups.status,
-          createdBy: schema.communityLineups.createdBy,
-          phaseDeadline: schema.communityLineups.phaseDeadline,
-          includeSchedulingPhase:
-            schema.communityLineups.includeSchedulingPhase,
-        })
-        .from(schema.communityLineups)
-        .where(eq(schema.communityLineups.id, match.lineupId))
-        .limit(1),
+      findLineupPollMeta(this.db, match.lineupId),
       findMatchMembers(this.db, [matchId]),
       findScheduleSlots(this.db, matchId),
       countUniqueVoters(this.db, matchId),
@@ -124,6 +118,7 @@ export class SchedulingService {
         votes,
         userId,
         lineup?.status ?? 'decided',
+        deriveIsStandalone(lineup?.phaseDurationOverride),
       ),
       uniqueVoterCount: voterCount,
       conflictingSlotIds,

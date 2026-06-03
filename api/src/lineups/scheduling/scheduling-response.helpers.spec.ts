@@ -4,6 +4,7 @@
 import {
   buildPollResponse,
   buildMatchDetailDto,
+  deriveIsStandalone,
 } from './scheduling-response.helpers';
 
 const baseMatch = {
@@ -95,6 +96,7 @@ describe('buildPollResponse', () => {
       baseVotes,
       100,
       'decided',
+      false,
     );
 
     expect(result.match.gameName).toBe('Elden Ring');
@@ -113,6 +115,7 @@ describe('buildPollResponse', () => {
       baseVotes,
       null,
       'decided',
+      false,
     );
 
     expect(result.myVotedSlotIds).toEqual([]);
@@ -132,6 +135,7 @@ describe('buildPollResponse — avatar fields in votes (ROK-1014)', () => {
       votesWithAvatars,
       100,
       'decided',
+      false,
     );
 
     const aliceVote = result.slots[0].votes.find((v) => v.userId === 100);
@@ -152,6 +156,7 @@ describe('buildPollResponse — avatar fields in votes (ROK-1014)', () => {
       votesWithAvatars,
       100,
       'decided',
+      false,
     );
 
     const bobVote = result.slots[0].votes.find((v) => v.userId === 101);
@@ -226,6 +231,7 @@ describe('buildPollResponse — lineupCreatedById (ROK-1121)', () => {
       baseVotes,
       100,
       'decided',
+      false,
     );
 
     expect(result.match.lineupCreatedById).toBe(77);
@@ -239,8 +245,60 @@ describe('buildPollResponse — lineupCreatedById (ROK-1121)', () => {
       baseVotes,
       100,
       'decided',
+      false,
     );
 
     expect(result.match.lineupCreatedById).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1300: isStandalone derivation + passthrough
+// ---------------------------------------------------------------------------
+
+describe('deriveIsStandalone (ROK-1300)', () => {
+  it('returns true when phaseDurationOverride.standalone === true', () => {
+    expect(deriveIsStandalone({ standalone: true })).toBe(true);
+  });
+
+  it('returns false for a from-match lineup (null override)', () => {
+    expect(deriveIsStandalone(null)).toBe(false);
+    expect(deriveIsStandalone(undefined)).toBe(false);
+  });
+
+  it('returns false when standalone key is absent or not strictly true', () => {
+    expect(deriveIsStandalone({})).toBe(false);
+    expect(deriveIsStandalone({ standalone: false })).toBe(false);
+    expect(deriveIsStandalone({ standalone: 'true' })).toBe(false);
+  });
+});
+
+describe('buildPollResponse — isStandalone (ROK-1300)', () => {
+  it('emits isStandalone=true for a standalone poll', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+      true,
+    );
+
+    expect(result.isStandalone).toBe(true);
+  });
+
+  it('emits isStandalone=false for a from-match poll', () => {
+    const result = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      baseVotes,
+      100,
+      'decided',
+      false,
+    );
+
+    expect(result.isStandalone).toBe(false);
   });
 });

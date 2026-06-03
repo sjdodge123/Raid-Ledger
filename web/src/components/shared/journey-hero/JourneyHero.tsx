@@ -83,13 +83,18 @@ function pillLabelFor(tone: HeroTone, override?: string): string | null {
   return null;
 }
 
-function HeroHeader({ badgeId, badge, tone, pillLabel }: { badgeId: string; badge: string; tone: HeroTone; pillLabel: string | null }): JSX.Element {
+function HeroHeader({ badgeId, badge, tone, pillLabel, headerAction }: { badgeId: string; badge: string; tone: HeroTone; pillLabel: string | null; headerAction?: import('react').ReactNode }): JSX.Element {
   const pillCls = tone === 'set' ? PILL_CLS.set : PILL_CLS.default;
   return (
-    <div className="flex items-baseline justify-between mb-1">
+    <div className="flex items-baseline justify-between gap-2 mb-1">
       <span id={badgeId} className={`text-[10px] uppercase tracking-wider ${BADGE_CLS[tone]}`}>{badge}</span>
-      {pillLabel && (
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full border ${pillCls}`}>{pillLabel}</span>
+      {(pillLabel || headerAction) && (
+        <span className="flex items-center gap-2 flex-shrink-0">
+          {pillLabel && (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-full border ${pillCls}`}>{pillLabel}</span>
+          )}
+          {headerAction}
+        </span>
       )}
     </div>
   );
@@ -107,7 +112,7 @@ function HeroCta({ cta, onCtaClick, tone }: { cta: string; onCtaClick?: () => vo
 }
 
 export function JourneyHero(props: JourneyHeroProps): JSX.Element {
-  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase } = props;
+  const { phase, active, badge, task, sub, cta, onCtaClick, hint, tone = 'action', exitCondition, cue, donePillLabel, noRibbon, hideSchedulePhase, headerAction } = props;
   const badgeId = useId();
   const computedActive: HeroActive = active ?? PHASE_TO_ACTIVE[phase ?? 'nominating'];
   const taskCls = tone === 'action' ? 'text-foreground' : 'text-secondary';
@@ -117,7 +122,7 @@ export function JourneyHero(props: JourneyHeroProps): JSX.Element {
       {!noRibbon && (
         <PhaseRibbon active={computedActive} hideSchedulePhase={hideSchedulePhase} />
       )}
-      <HeroHeader badgeId={badgeId} badge={badge} tone={tone} pillLabel={pillLabel} />
+      <HeroHeader badgeId={badgeId} badge={badge} tone={tone} pillLabel={pillLabel} headerAction={headerAction} />
       <div className={`text-sm font-semibold mb-1 ${taskCls}`}>{task}</div>
       {sub && <div className="text-[11px] text-muted mb-1">{sub}</div>}
       {exitCondition && <div className="text-[10px] text-amber-300/80 mb-2 italic">⏱ {exitCondition}</div>}
