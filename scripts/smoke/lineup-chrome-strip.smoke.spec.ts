@@ -89,6 +89,13 @@ async function setupLineupInPhase(
     opts: { publicShareEnabled?: boolean } = {},
 ): Promise<number> {
     await resetWorkerLineups(token);
+    // The operator-menu Sharing section gates on `lineup.visibility !==
+    // 'private'` (mirrors the legacy PublicShareRow — private lineups never
+    // expose public-share). `CreateLineupSchema.visibility` is
+    // `.default('public').optional()`: the Zod default()+optional() combo
+    // yields `undefined` (NOT 'public') when the key is OMITTED, so a
+    // publicShareEnabled lineup must ALSO send `visibility: 'public'`
+    // explicitly or the Sharing section is (correctly) hidden.
     const { id } = await createLineupOrRetry(
         token,
         {
@@ -97,7 +104,9 @@ async function setupLineupInPhase(
             votingDurationHours: 720,
             decidedDurationHours: 720,
             matchThreshold: 10,
-            ...(opts.publicShareEnabled ? { publicShareEnabled: true } : {}),
+            ...(opts.publicShareEnabled
+                ? { publicShareEnabled: true, visibility: 'public' }
+                : {}),
         },
         workerPrefix,
     );
@@ -288,7 +297,9 @@ test.describe('Operator ⋮ menu — operator persona', () => {
         await expect(menu.getByTestId('lineup-operator-menu-abort')).toBeVisible();
 
         // AC 5 — public-share toggle lives inside the menu's Sharing section.
-        await expect(menu.getByRole('button', { name: /public link/i })).toBeVisible();
+        // The toggle renders as a `role="menuitem"` (explicit role overrides
+        // the implicit button role) named "Public link On/Off".
+        await expect(menu.getByRole('menuitem', { name: /public link/i })).toBeVisible();
     });
 });
 
@@ -375,6 +386,10 @@ test.describe('Public lineup page — no operator chrome (AC 7)', () => {
         const created = (await apiPost(adminToken, '/lineups', {
             title: lineupTitle,
             publicShareEnabled: true,
+            // Explicit 'public' — CreateLineupSchema.visibility is
+            // `.default('public').optional()`, which yields `undefined` (not
+            // 'public') when omitted, and a private lineup can't be shared.
+            visibility: 'public',
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
