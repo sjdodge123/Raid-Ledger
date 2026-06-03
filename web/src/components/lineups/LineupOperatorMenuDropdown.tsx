@@ -126,6 +126,7 @@ function PhaseItems({
 export function OperatorMenuDropdown({
   lineup,
   isOperator,
+  canEdit,
   canAdvanceRevert,
   next,
   prev,
@@ -136,6 +137,9 @@ export function OperatorMenuDropdown({
 }: {
   lineup: LineupDetailResponseDto;
   isOperator: boolean;
+  /** Follows the legacy useCanEdit rule — false for archived lineups (the
+   *  API rejects metadata edits with 409), so the Edit item is suppressed. */
+  canEdit: boolean;
   canAdvanceRevert: boolean;
   next: AdjacentPhase | null;
   prev: AdjacentPhase | null;
@@ -153,9 +157,11 @@ export function OperatorMenuDropdown({
       className="absolute right-0 mt-1 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50 py-1"
     >
       <MenuHeading>Operator</MenuHeading>
-      <MenuItem testId="lineup-operator-menu-edit" onClick={onEdit}>
-        Edit lineup
-      </MenuItem>
+      {canEdit && (
+        <MenuItem testId="lineup-operator-menu-edit" onClick={onEdit}>
+          Edit lineup
+        </MenuItem>
+      )}
       {isOperator && (
         <PhaseItems
           canAdvanceRevert={canAdvanceRevert}

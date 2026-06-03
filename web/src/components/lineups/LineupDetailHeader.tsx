@@ -16,6 +16,7 @@ import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { LineupOperatorMenu } from './LineupOperatorMenu';
 import { LineupShareCopy } from './LineupShareCopy';
+import { LineupHeroMeta } from './LineupHeroMeta';
 
 interface Props {
   lineup: LineupDetailResponseDto;
@@ -36,6 +37,11 @@ export function LineupDetailHeader({
   // sharing is open; operators reach the same copy inside the `⋮` menu.
   const showMemberCopy =
     !isOperator && lineup.visibility !== 'private' && lineup.publicShareEnabled;
+  // ROK-1323 (Codex review): archived → NominationGrid and aborted →
+  // AbortedReadOnlySnapshot mount no composite, so the JourneyHero/LineupHeroMeta
+  // title+creator surface is absent on those terminal pages. Render a fallback
+  // title/meta inline here so the lineup is still identifiable.
+  const showFallbackTitle = isAborted || lineup.status === 'archived';
 
   return (
     <div className="flex w-full items-center justify-between gap-2">
@@ -57,6 +63,11 @@ export function LineupDetailHeader({
             className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-600/20 text-amber-400 border border-amber-500/40"
           >
             Private
+          </span>
+        )}
+        {showFallbackTitle && (
+          <span className="min-w-0 flex-1" data-testid="lineup-fallback-title">
+            <LineupHeroMeta lineup={lineup} />
           </span>
         )}
       </div>

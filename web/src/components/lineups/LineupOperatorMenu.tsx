@@ -169,6 +169,7 @@ export function LineupOperatorMenu({
         <OperatorMenuDropdown
           lineup={lineup}
           isOperator={isOperator}
+          canEdit={canEdit}
           canAdvanceRevert={canAdvanceRevert}
           next={nextPhase(lineup.status as LineupStatusDto)}
           prev={prevPhase(lineup.status as LineupStatusDto)}
