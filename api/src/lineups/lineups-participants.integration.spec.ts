@@ -18,8 +18,10 @@
  *    (`creator` > `invitee` > `participant`).
  *  - Private: creator + invitees, statuses derived.
  *  - Deactivated users excluded.
- *  - Visibility guard: a non-member viewer of a private lineup cannot read
- *    the roster (mirrors `GET /lineups/:id` access intent per the spec).
+ *  - Visibility: read-open (mirrors `GET /lineups/:id`, which is "never
+ *    filtered by viewer"); any authenticated viewer — including a non-member
+ *    — can read a private lineup's roster (200, no leak guard). 404 only for
+ *    a nonexistent lineup id.
  *  - Response item shape: userId, displayName, avatar, customAvatarUrl,
  *    discordId, role, status, steamLinked.
  */
