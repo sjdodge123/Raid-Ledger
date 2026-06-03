@@ -379,6 +379,7 @@ if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
         -e "BASE_URL=${PUBLIC_URL}"
         -e "PUBLIC_DOMAIN=${PUBLIC_HOST}"
         -e "DISCORD_CALLBACK_URL=https://${SLOT_HOST}/api/auth/discord/callback"
+        -e "CLIENT_URL=https://${SLOT_HOST}"
     )
 fi
 
