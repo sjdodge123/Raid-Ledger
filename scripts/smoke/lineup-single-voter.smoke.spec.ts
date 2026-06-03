@@ -113,18 +113,15 @@ test.describe('Lineup single-voter edge case', () => {
             { timeout: 10_000 },
         );
 
+        // ROK-1323: legacy H1 title + status badge removed. A single-voter
+        // voting lineup has 1 entry → VotingComposite renders, so the title
+        // lives in the JourneyHero and the ribbon is the phase indicator.
         await expect(
-            page.getByRole('heading', {
-                level: 1,
-                name: /Single Voter|Lineup — /,
-            }),
+            page.getByText(/Single Voter|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
-
-        const votingBadge = page
-            .locator('span')
-            .filter({ hasText: /^Voting$/ })
-            .first();
-        await expect(votingBadge).toBeVisible({ timeout: 10_000 });
+        await expect(
+            page.getByRole('list', { name: 'Lineup progress' }).first(),
+        ).toBeVisible({ timeout: 10_000 });
 
         // No NaN percentages, no infinity glyph anywhere on the page.
         await expect(page.locator('body')).not.toHaveText(/NaN|Infinity/, {

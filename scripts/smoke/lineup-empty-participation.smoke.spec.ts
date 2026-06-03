@@ -83,22 +83,18 @@ test.describe('Lineup empty-participation edge case', () => {
             { timeout: 10_000 },
         );
 
+        // ROK-1323: an empty voting lineup renders LineupEmptyState (no
+        // composite hero), so the title comes from the fallback LineupHeroMeta
+        // in the compact header.
         await expect(
-            page.getByRole('heading', {
-                level: 1,
-                name: /Empty Participation|Lineup — /,
-            }),
+            page.getByText(/Empty Participation|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         const detail = await apiGet(adminToken, `/lineups/${lineupId}`);
         expect(detail?.status).toBe('voting');
         expect(detail?.entries).toEqual([]);
-
-        const votingBadge = page
-            .locator('span')
-            .filter({ hasText: /^Voting$/ })
-            .first();
-        await expect(votingBadge).toBeVisible({ timeout: 10_000 });
+        // Status badge was removed with the legacy chrome; phase is asserted via
+        // the API above (no UI badge on an empty-voting lineup).
     });
 
     test('admin abort button remains available on empty voting lineup', async ({
@@ -110,7 +106,11 @@ test.describe('Lineup empty-participation edge case', () => {
             { timeout: 10_000 },
         );
 
-        const abortButton = page.getByRole('button', { name: /Abort Lineup/i });
-        await expect(abortButton).toBeVisible({ timeout: 15_000 });
+        // ROK-1323: Abort moved into the operator ⋮ menu; still available to
+        // an operator on a non-archived (voting) lineup.
+        await page.getByTestId('lineup-operator-menu-trigger').click();
+        await expect(
+            page.getByTestId('lineup-operator-menu-abort'),
+        ).toBeVisible({ timeout: 15_000 });
     });
 });

@@ -37,11 +37,18 @@ export function LineupDetailHeader({
   // sharing is open; operators reach the same copy inside the `⋮` menu.
   const showMemberCopy =
     !isOperator && lineup.visibility !== 'private' && lineup.publicShareEnabled;
-  // ROK-1323 (Codex review): archived → NominationGrid and aborted →
-  // AbortedReadOnlySnapshot mount no composite, so the JourneyHero/LineupHeroMeta
-  // title+creator surface is absent on those terminal pages. Render a fallback
-  // title/meta inline here so the lineup is still identifiable.
-  const showFallbackTitle = isAborted || lineup.status === 'archived';
+  // ROK-1323 (Codex review): the title+creator now live in the per-phase
+  // composite's JourneyHero. But several states render NO composite hero —
+  // aborted → AbortedReadOnlySnapshot, archived/other → NominationGrid, and
+  // voting with zero entries → LineupEmptyState. Render a fallback title/meta
+  // inline whenever the composite hero is absent so the lineup stays
+  // identifiable. (Mirrors LineupDetailBody's branch logic.)
+  const hasCompositeHero =
+    !isAborted &&
+    (lineup.status === 'building' ||
+      (lineup.status === 'voting' && lineup.entries.length > 0) ||
+      lineup.status === 'decided');
+  const showFallbackTitle = !hasCompositeHero;
 
   return (
     <div className="flex w-full items-center justify-between gap-2">

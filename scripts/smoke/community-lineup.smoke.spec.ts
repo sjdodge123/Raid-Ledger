@@ -265,18 +265,19 @@ test.describe('Community Lineup detail page', () => {
         lineupId = await ensureActiveLineupInBuildingPhase(adminToken);
     });
 
-    test('renders header with title and status badge', async ({ page }) => {
+    test('renders title in the hero and the JourneyHero phase ribbon', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        // Header shows "Community Lineup" title
+        // ROK-1323: the legacy H1 title + status badge were stripped. The title
+        // now lives in the composite JourneyHero, and the ribbon (role=list
+        // "Lineup progress") is the canonical phase indicator.
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
-
-        // Status badge shows one of the valid statuses
-        const badge = page.locator('span').filter({ hasText: /Building|Nominating|Voting|Scheduling|Archived/ });
-        await expect(badge.first()).toBeVisible({ timeout: 5_000 });
+        await expect(
+            page.getByRole('list', { name: 'Lineup progress' }).first(),
+        ).toBeVisible({ timeout: 5_000 });
     });
 
     test('progress bar shows nomination count with max', async ({ page }) => {
@@ -289,20 +290,21 @@ test.describe('Community Lineup detail page', () => {
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
-        // Phase breadcrumb shows "Nominating" in the header
-        await expect(page.getByText('Nominating').first()).toBeVisible({ timeout: 5_000 });
-
-        // "X/20 nominated" text in the subheader context info (testid: nomination-count)
-        await expect(page.getByTestId('nomination-count').first()).toBeVisible({ timeout: 5_000 });
+        // ROK-1323: phase + nomination count moved into the composite
+        // JourneyHero. The badge reads "Step … · Nominating" and the hero sub
+        // carries "N of M nominated by M voters." (replaces the old
+        // breadcrumb + nomination-count testid).
+        await expect(page.getByText(/Nominating/i).first()).toBeVisible({ timeout: 5_000 });
+        await expect(page.getByText(/nominated by .* voters/i).first()).toBeVisible({ timeout: 5_000 });
     });
 
     test('activity timeline section is present', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         // Activity heading (testid: activity-section-heading) -- timeline may have
@@ -326,7 +328,7 @@ test.describe('Community Lineup detail page', () => {
     test.skip('shows nomination grid or empty state', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         // Either "Nominated Games" heading (has entries) or empty state text
@@ -349,11 +351,12 @@ test.describe('Community Lineup detail page', () => {
         await viewLink.click();
         await page.waitForURL(/\/community-lineup\/\d+/, { timeout: 10_000 });
 
-        // Title testid waits for the detail-query mount; absorbs the fixture
-        // render race without relying on networkidle (which never fires when
-        // the page has long-poll subscriptions open).
+        // ROK-1323: title testid removed with the legacy header. The JourneyHero
+        // ribbon waits for the detail-query mount; absorbs the fixture render
+        // race without relying on networkidle (which never fires when the page
+        // has long-poll subscriptions open).
         await expect(
-            page.getByTestId('community-lineup-title'),
+            page.getByRole('list', { name: 'Lineup progress' }).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         // Click back button (aria-label="Go back")
@@ -380,7 +383,7 @@ test.describe('Community Lineup responsive layout', () => {
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         // If there are nominated games, the grid container uses sm:grid-cols-2
@@ -402,7 +405,7 @@ test.describe('Community Lineup responsive layout', () => {
 
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(
-            page.getByRole('heading', { level: 1, name: /Smoke Lineup|Lineup — / }),
+            page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         const nominatedHeading = page.getByRole('heading', { name: 'Nominated Games' });
