@@ -74,13 +74,18 @@ async function resetWorkerLineups(token: string): Promise<void> {
  * Create a fresh `building` lineup for this worker, optionally
  * public-share-enabled, and walk it to `targetPhase`. Returns the id.
  *
- * Phase walk mirrors lineup-phase-breadcrumb.smoke.spec.ts: building →
- * voting → decided → scheduling. `decided` needs a `decidedGameId`, so we
- * seed nominations first for any phase past building.
+ * The lineup state machine terminates at `decided` — `LineupStatusSchema`
+ * (packages/contract/src/lineup.schema.ts) is building | voting | decided |
+ * archived; there is NO `scheduling` status. Scheduling is a per-match route
+ * (`/community-lineup/:id/schedule/:matchId`, ROK-1300's separate composite),
+ * not a detail-page phase, so the detail-page walk stops at `decided`. AC 8's
+ * "Scheduling" coverage is satisfied via the ribbon's Schedule step (see the
+ * dedicated test below). `decided` needs a `decidedGameId`, so we seed
+ * nominations first for any phase past building.
  */
 async function setupLineupInPhase(
     token: string,
-    targetPhase: 'building' | 'voting' | 'decided' | 'scheduling',
+    targetPhase: 'building' | 'voting' | 'decided',
     opts: { publicShareEnabled?: boolean } = {},
 ): Promise<number> {
     await resetWorkerLineups(token);
@@ -109,7 +114,6 @@ async function setupLineupInPhase(
         building: [],
         voting: ['voting'],
         decided: ['voting', 'decided'],
-        scheduling: ['voting', 'decided', 'scheduling'],
     };
     for (const status of walk[targetPhase]) {
         const body: Record<string, unknown> = { status };
@@ -150,9 +154,10 @@ async function expectLegacyChromeAbsent(page: Page): Promise<void> {
     await expect(page.getByTestId('community-lineup-title')).toHaveCount(0);
 
     // AC 2 — 4-phase breadcrumb strip gone. The breadcrumb rendered the
-    // phase labels as clickable buttons for operators; none of those phase
-    // buttons should remain.
-    for (const label of ['Nominating', 'Voting', 'Decided', 'Scheduling', 'Archived']) {
+    // PHASE_LABELS (lineup-phases.ts) as clickable buttons for operators:
+    // building→"Nominating", voting→"Voting", decided→"Scheduling",
+    // archived→"Archived". None of those phase buttons should remain.
+    for (const label of ['Nominating', 'Voting', 'Scheduling', 'Archived']) {
         await expect(page.getByRole('button', { name: new RegExp(`^${label}$`) })).toHaveCount(0);
     }
 
@@ -175,7 +180,10 @@ test.beforeAll(async ({}, testInfo) => {
 // ---------------------------------------------------------------------------
 
 test.describe('Legacy chrome stripped — per phase', () => {
-    for (const phase of ['building', 'voting', 'decided', 'scheduling'] as const) {
+    // The three real detail-page phases that ever carried the legacy chrome.
+    // `scheduling` is NOT a lineup status (the state machine terminates at
+    // `decided`) — its AC-8 coverage is the Schedule-ribbon-step test below.
+    for (const phase of ['building', 'voting', 'decided'] as const) {
         test(`${phase}: legacy chrome absent, JourneyHero ribbon is sole phase indicator`, async ({
             page,
         }) => {
@@ -190,6 +198,37 @@ test.describe('Legacy chrome stripped — per phase', () => {
             await expectLegacyChromeAbsent(page);
         });
     }
+
+    test('scheduling indicator is the JourneyHero ribbon Schedule step (not detail chrome) — AC 8', async ({
+        page,
+    }) => {
+        test.setTimeout(HOOK_TIMEOUT_MS);
+        // AC 8 lists "Scheduling" among the phases that must show no legacy
+        // chrome. There is no `scheduling` lineup status — the scheduling poll
+        // is a SEPARATE per-match route/composite
+        // (`/community-lineup/:id/schedule/:matchId`, ROK-1300) that never
+        // carried this detail-page chrome. On the decided detail page, the
+        // scheduling phase is represented by the JourneyHero ribbon's
+        // "Schedule" step, which is the canonical indicator after the strip.
+        const lineupId = await setupLineupInPhase(adminToken, 'decided');
+
+        await page.goto(`/community-lineup/${lineupId}`);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, {
+            timeout: 10_000,
+        });
+
+        // Legacy chrome still absent on the decided page (no breadcrumb to
+        // carry a clickable "Scheduling" pill).
+        await expectLegacyChromeAbsent(page);
+
+        // The ribbon (`role=list` "Lineup progress") owns the Schedule step —
+        // rendered as the 4th PhaseDot label in JourneyHero (PHASE_LABELS =
+        // Nominate / Vote / Decide / Schedule). Its presence inside the ribbon
+        // is the scheduling indicator.
+        const ribbon = page.getByRole('list', { name: 'Lineup progress' }).first();
+        await expect(ribbon).toBeVisible({ timeout: 15_000 });
+        await expect(ribbon).toContainText(/Schedule/i, { timeout: 5_000 });
+    });
 
     test('lineup title + "Started by…" meta render inside the composite hero (sub), not a header (AC 3)', async ({
         page,
