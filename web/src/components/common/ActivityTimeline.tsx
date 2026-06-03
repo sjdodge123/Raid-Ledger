@@ -8,6 +8,32 @@ interface ActivityTimelineProps {
   entityId: number;
   collapsible?: boolean;
   maxVisible?: number;
+  /**
+   * ROK-1323: when set, the expanded/collapsed state is remembered per session
+   * under this sessionStorage key so the operator's choice survives realtime
+   * refetches and intra-session navigation (but resets on a fresh session).
+   */
+  storageKey?: string;
+}
+
+/** Read the remembered open state for a sessionStorage key (collapsed default). */
+function readStoredOpen(storageKey: string | undefined, fallback: boolean): boolean {
+  if (!storageKey || typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    return raw == null ? fallback : raw === '1';
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredOpen(storageKey: string | undefined, open: boolean): void {
+  if (!storageKey || typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(storageKey, open ? '1' : '0');
+  } catch {
+    // sessionStorage can throw in private mode — degrade silently.
+  }
 }
 
 /** Vertical line connecting timeline dots. left: half of w-8 (32px) minus half of line width. */
@@ -74,10 +100,17 @@ export function ActivityTimeline({
   entityId,
   collapsible = true,
   maxVisible = 5,
+  storageKey,
 }: ActivityTimelineProps) {
   const { data, isLoading } = useActivityTimeline(entityType, entityId);
-  const [open, setOpen] = useState(!collapsible);
+  const [open, setOpen] = useState(() => readStoredOpen(storageKey, !collapsible));
   const [showAll, setShowAll] = useState(false);
+  const toggleOpen = (): void =>
+    setOpen((v) => {
+      const next = !v;
+      writeStoredOpen(storageKey, next);
+      return next;
+    });
 
   if (isLoading) return <TimelineSkeleton />;
 
@@ -91,7 +124,7 @@ export function ActivityTimeline({
     <div className="rounded-lg border border-edge bg-surface overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-panel/50 transition"
       >
         <span
