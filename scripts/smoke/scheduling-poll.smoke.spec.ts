@@ -470,20 +470,22 @@ test.describe('Scheduling poll "You voted" indicator', () => {
         const initialVoted = await slotCards.first().getAttribute('data-voted');
 
         if (initialVoted === 'true') {
-            // Already voted — indicator should be visible. ROK-1209 reduced
-            // the visible text "You voted" to a `✓` glyph with
-            // `aria-label="You voted"` (consistent with the per-row ✓ on
-            // `LeaderboardRow` for voting phase, and per AC-8 spec). Match
-            // by accessible label rather than visible text.
+            // Already voted — the ✓ glyph (aria-label="You voted") renders in
+            // the row. Match by accessible label rather than visible text.
             const youVotedIndicator = slotCards.first().getByLabel('You voted');
             await expect(youVotedIndicator).toBeVisible({ timeout: 10_000 });
         } else {
-            // Not voted — click to vote, then check indicator
+            // ROK-1300: the row is a <div>; the vote toggle is a separate
+            // <button aria-label="Vote for <time>">. Click the button (not the
+            // card) to cast the vote, then assert the ✓ indicator.
             await Promise.all([
                 page.waitForResponse(
                     (r) => r.url().includes('/vote') && r.request().method() === 'POST',
                 ).catch(() => null),
-                slotCards.first().click(),
+                slotCards
+                    .first()
+                    .getByRole('button', { name: /vote for/i })
+                    .click(),
             ]);
             const youVotedIndicator = slotCards.first().getByLabel('You voted');
             await expect(youVotedIndicator).toBeVisible({ timeout: 10_000 });
@@ -621,6 +623,11 @@ test.describe('Scheduling poll event creation and post-creation status', () => {
         await goToPoll(page, lineupId, matchId);
 
         if (eventCreated) {
+            // Scheduled terminal state → CompletedPollState renders (it KEEPS
+            // the "Scheduling Poll" h1 + badge + event link).
+            await expect(
+                page.getByRole('heading', { level: 1, name: /^scheduling poll$/i }),
+            ).toBeVisible({ timeout: 15_000 });
             const completedBadge = page.locator('[data-testid="match-status-badge"]');
             await expect(completedBadge).toBeVisible({ timeout: 15_000 });
             await expect(completedBadge).toHaveText(/Poll Complete|Scheduled/i);
@@ -628,9 +635,12 @@ test.describe('Scheduling poll event creation and post-creation status', () => {
             const eventLink = page.getByRole('link', { name: /View Event/i });
             await expect(eventLink).toBeVisible({ timeout: 5_000 });
         } else {
-            // Event creation wasn't possible — verify poll page loads cleanly
-            const pollHeading = page.locator('h1', { hasText: 'Scheduling Poll' });
-            await expect(pollHeading).toBeVisible({ timeout: 15_000 });
+            // Event creation wasn't possible — verify the active-poll composite
+            // loads cleanly (ROK-1300: the active poll has no separate h1; the
+            // h1 only exists in the scheduled/completed terminal state above).
+            await expect(
+                page.locator('[data-testid="scheduling-composite"]'),
+            ).toBeVisible({ timeout: 15_000 });
         }
     });
 });
@@ -851,24 +861,24 @@ test.describe('Scheduling poll voter avatars (ROK-1014)', () => {
 
         // ROK-1247: poll until the API observes the vote. Without this, the
         // page's useQuery can serve a cached "no votes" payload and the
-        // [data-voted="true"] slot never renders within the test window.
+        // voted slot row never renders its avatar group within the window.
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId, {
             withVote: true,
         });
         await goToPoll(page, lineupId, matchId);
 
-        // AC12: voted slot cards show stacked voter avatars. The AC's
-        // subject is the avatar group itself rendering on the page when a
-        // vote exists. The page can route through two slot-card surfaces:
-        // `SuggestedTimes` (carries `data-testid="schedule-slot"` on each
-        // SlotCard) and `SchedulingWizard`'s step-2 (plain buttons, no
-        // schedule-slot testid). Asserting on `MemberAvatarGroup`
-        // (`data-testid="member-avatar-group"`) directly is the stable
-        // contract that holds across both surfaces — and it's exactly
-        // what the AC asks for. Pre-existing TECH-DEBT-BACKLOG 2026-05-09
-        // entry on the brittle `[data-voted="true"]` form addressed.
-        const avatarGroup = page.locator('[data-testid="member-avatar-group"]').first();
-        await expect(avatarGroup).toBeVisible({ timeout: 15_000 });
+        // AC12 (ROK-1300): voted slot ROWS render a stacked voter avatar group.
+        // SchedulingSlotRow mounts MemberAvatarGroup only when the slot has
+        // votes — so a voted row (data-voted="true") MUST contain one. Scope
+        // the assertion to a voted row (not page-wide .first(), which could
+        // match the hero game-ref's member stack and mask a row regression).
+        const votedRow = page
+            .locator('[data-testid="schedule-slot"][data-voted="true"]')
+            .first();
+        await expect(votedRow).toBeVisible({ timeout: 15_000 });
+        await expect(
+            votedRow.locator('[data-testid="member-avatar-group"]'),
+        ).toBeVisible({ timeout: 10_000 });
     });
 
     test('slots with 0 votes show no avatar row', async ({
