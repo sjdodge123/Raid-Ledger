@@ -16,6 +16,10 @@ import type {
   CommonGroundTheme,
 } from '@raid-ledger/contract';
 import { CommonGroundGameCard } from '../CommonGroundGameCard';
+import {
+  nominateButtonState,
+  VIEW_ONLY_LABEL,
+} from '../nominate-button-state';
 
 export interface CommonGroundThemedRowProps {
   theme: CommonGroundTheme;
@@ -127,6 +131,11 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
   // has no role/tabIndex — keyboard users already reach the same drawer via
   // the inner card-button; a separate tab stop on the same target would be
   // noise.
+  // ROK-1349: `disabled` carries the view-only (non-invitee) state; the
+  // shared helper renders a "View only" label distinct from the cap copy.
+  const btn = nominateButtonState(atCap, disabled, isNominating, {
+    compact: true,
+  });
   return (
     <div
       data-testid="common-ground-tile"
@@ -152,7 +161,8 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
             onNominate(gameId);
           }}
           isNominating={isNominating}
-          atCap={atCap || disabled}
+          atCap={atCap}
+          viewOnly={disabled}
           aiSuggested={aiSuggested}
           hideOverlay
           fluid
@@ -160,8 +170,9 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
       </div>
       <button
         type="button"
-        disabled={disabled || atCap || isNominating}
+        disabled={btn.disabled}
         aria-label={`Nominate ${tile.gameName}`}
+        title={disabled ? VIEW_ONLY_LABEL : undefined}
         data-testid="common-ground-tile-nominate"
         onClick={(e) => {
           e.stopPropagation();
@@ -174,7 +185,7 @@ export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {
         // on every breakpoint; mobile keeps 44px tap target, desktop 32px.
         className="w-full min-h-[44px] sm:min-h-[32px] px-4 py-2 sm:py-1 text-sm rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 transition-colors"
       >
-        {isNominating ? 'Adding…' : atCap ? 'Lineup full' : '+ Nominate'}
+        {btn.label}
       </button>
       {(() => {
         // ROK-1297 round 5z: when this tile is AI-suggested, the badge's

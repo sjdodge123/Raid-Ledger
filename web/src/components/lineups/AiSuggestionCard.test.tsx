@@ -2,8 +2,9 @@
  * Tests for AiSuggestionCard (ROK-931, ROK-1114).
  *
  * Verifies:
- *   - `mode='nominate'` renders a Nominate button that becomes "At cap"
- *     when `atCap` is true.
+ *   - `mode='nominate'` renders a Nominate button that becomes
+ *     "Nomination cap reached" when `atCap` is true, and "View only"
+ *     when `viewOnly` is true (ROK-1349).
  *   - `mode='pick'` renders a Pick button that fires `onPick` with the
  *     suggestion DTO.
  *   - Ownership pill only renders when voterTotal > 0.
@@ -69,7 +70,7 @@ describe('AiSuggestionCard (ROK-931)', () => {
         expect(screen.queryByText(/own/)).not.toBeInTheDocument();
     });
 
-    it('shows "At cap" when atCap is true in nominate mode', () => {
+    it('shows "Nomination cap reached" when atCap is true in nominate mode', () => {
         renderWithProviders(
             <AiSuggestionCard
                 suggestion={buildSuggestion()}
@@ -78,7 +79,21 @@ describe('AiSuggestionCard (ROK-931)', () => {
                 atCap
             />,
         );
-        const btn = screen.getByRole('button', { name: /at cap/i });
+        const btn = screen.getByRole('button', { name: /nomination cap reached/i });
+        expect(btn).toBeDisabled();
+    });
+
+    // ROK-1349: a non-invitee viewer gets a distinct "View only" label.
+    it('shows "View only" when viewOnly is true in nominate mode', () => {
+        renderWithProviders(
+            <AiSuggestionCard
+                suggestion={buildSuggestion()}
+                lineupId={7}
+                mode="nominate"
+                viewOnly
+            />,
+        );
+        const btn = screen.getByRole('button', { name: /view only/i });
         expect(btn).toBeDisabled();
     });
 

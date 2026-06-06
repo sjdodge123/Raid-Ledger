@@ -118,12 +118,13 @@ interface GameGridProps {
     onNominate: (id: number) => void;
     nominatingId: number | null;
     atCap: boolean;
+    viewOnly: boolean;
     aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
 }
 
 /** Game card grid — horizontal scroll with arrow navigation. */
 function GameGrid(props: GameGridProps): JSX.Element {
-    const { games, onNominate, nominatingId, atCap, aiSuggestionsByGameId } = props;
+    const { games, onNominate, nominatingId, atCap, viewOnly, aiSuggestionsByGameId } = props;
     const scrollRef = useRef<HTMLDivElement>(null);
     const { canLeft, canRight, scroll } = useArrowNav(scrollRef, [games]);
     return (
@@ -139,6 +140,7 @@ function GameGrid(props: GameGridProps): JSX.Element {
                             onNominate={onNominate}
                             isNominating={nominatingId === g.gameId}
                             atCap={atCap}
+                            viewOnly={viewOnly}
                             aiSuggested={!!ai}
                         />
                     );
@@ -161,6 +163,7 @@ function PanelContent({
     onNominate,
     nominatingId,
     atCap,
+    viewOnly,
     search,
     setSearch,
     aiSuggestionsByGameId,
@@ -175,6 +178,7 @@ function PanelContent({
     onNominate: (id: number) => void;
     nominatingId: number | null;
     atCap: boolean;
+    viewOnly: boolean;
     search: string;
     setSearch: (v: string) => void;
     aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
@@ -197,6 +201,7 @@ function PanelContent({
                     onNominate={onNominate}
                     nominatingId={nominatingId}
                     atCap={atCap}
+                    viewOnly={viewOnly}
                     aiSuggestionsByGameId={aiSuggestionsByGameId}
                 />
             )}

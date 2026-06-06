@@ -10,12 +10,18 @@ import {
     GradientOverlay,
     CardTitle,
 } from '../games/game-card-parts';
+import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
 
 interface Props {
     game: CommonGroundGameDto;
     onNominate: (gameId: number) => void;
     isNominating: boolean;
     atCap: boolean;
+    /**
+     * ROK-1349: viewer cannot participate (private-lineup non-invitee).
+     * Renders a distinct "View only" label instead of "Lineup full".
+     */
+    viewOnly?: boolean;
     /** ROK-931: mark this card as LLM-suggested with the ✨ AI Pick badge.
      *  The reasoning text is rendered OUTSIDE the card by callers — see the
      *  ★ whyReason line in CommonGroundThemedRow (round 5z). */
@@ -129,22 +135,27 @@ function NominateOverlay({
     onNominate,
     isNominating,
     atCap,
+    viewOnly,
 }: {
     onNominate: () => void;
     isNominating: boolean;
     atCap: boolean;
+    viewOnly: boolean;
 }): JSX.Element {
-    const disabled = isNominating || atCap;
-    const label = atCap ? 'Lineup full' : '+ Nominate';
+    const { label, disabled } = nominateButtonState(atCap, viewOnly, isNominating, {
+        compact: true,
+        addingLabel: 'Adding...',
+    });
 
     return (
         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
             <button
                 onClick={(e) => { e.stopPropagation(); onNominate(); }}
                 disabled={disabled}
+                title={viewOnly ? VIEW_ONLY_LABEL : undefined}
                 className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors pointer-events-auto"
             >
-                {isNominating ? 'Adding...' : label}
+                {label}
             </button>
         </div>
     );
@@ -168,7 +179,7 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
 }
 
 /** Game card for the Common Ground panel. */
-export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, aiSuggested, hideOverlay, fluid }: Props): JSX.Element {
+export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, viewOnly = false, aiSuggested, hideOverlay, fluid }: Props): JSX.Element {
     const borderCls = aiSuggested
         ? 'border-violet-500/50 hover:border-violet-400/80'
         : 'border-edge/50 hover:border-emerald-500/50';
@@ -190,6 +201,7 @@ export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, ai
                         onNominate={() => onNominate(game.gameId)}
                         isNominating={isNominating}
                         atCap={atCap}
+                        viewOnly={viewOnly}
                     />
                 )}
             </div>

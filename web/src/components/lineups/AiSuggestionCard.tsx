@@ -12,6 +12,7 @@
 import { type JSX } from 'react';
 import type { AiSuggestionDto } from '@raid-ledger/contract';
 import { useNominateGame } from '../../hooks/use-lineups';
+import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
 
 export type AiSuggestionCardMode = 'nominate' | 'pick';
 
@@ -20,6 +21,8 @@ export interface AiSuggestionCardProps {
     lineupId: number;
     mode?: AiSuggestionCardMode;
     atCap?: boolean;
+    /** ROK-1349: non-invitee viewer — renders "View only" instead of "At cap". */
+    viewOnly?: boolean;
     onPick?: (suggestion: AiSuggestionDto) => void;
 }
 
@@ -72,20 +75,33 @@ const ACTION_BTN_CLS =
 function CardActions({
     mode,
     atCap,
+    viewOnly,
     isNominating,
     onNominate,
     onPick,
 }: {
     mode: AiSuggestionCardMode;
     atCap: boolean;
+    viewOnly: boolean;
     isNominating: boolean;
     onNominate: () => void;
     onPick: () => void;
 }): JSX.Element {
     if (mode === 'nominate') {
+        const { label, disabled } = nominateButtonState(atCap, viewOnly, isNominating, {
+            compact: true,
+            addingLabel: 'Nominating…',
+            nominateLabel: 'Nominate',
+        });
         return (
-            <button type="button" onClick={onNominate} disabled={atCap || isNominating} className={ACTION_BTN_CLS}>
-                {isNominating ? 'Nominating…' : atCap ? 'At cap' : 'Nominate'}
+            <button
+                type="button"
+                onClick={onNominate}
+                disabled={disabled}
+                title={viewOnly ? VIEW_ONLY_LABEL : undefined}
+                className={ACTION_BTN_CLS}
+            >
+                {label}
             </button>
         );
     }
@@ -98,7 +114,7 @@ function CardActions({
 
 /** Single suggestion card — cover + name + reasoning + ownership + action button. */
 export function AiSuggestionCard(props: AiSuggestionCardProps): JSX.Element {
-    const { suggestion, lineupId, mode = 'nominate', atCap = false, onPick } = props;
+    const { suggestion, lineupId, mode = 'nominate', atCap = false, viewOnly = false, onPick } = props;
     const nominate = useNominateGame();
     const isNominating = nominate.isPending && nominate.variables?.body.gameId === suggestion.gameId;
     const handleNominate = (): void => {
@@ -116,6 +132,7 @@ export function AiSuggestionCard(props: AiSuggestionCardProps): JSX.Element {
                 <CardActions
                     mode={mode}
                     atCap={atCap}
+                    viewOnly={viewOnly}
                     isNominating={isNominating}
                     onNominate={handleNominate}
                     onPick={handlePick}
