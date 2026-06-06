@@ -223,7 +223,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
       {lineup.visibility === 'private' && (
         <PrivateInviteesSection
           lineupId={lineup.id}
-          invitees={lineup.invitees ?? []}
+          invitees={lineup.invitees}
           canManage={isOperator || user?.id === lineup.createdBy.id}
         />
       )}

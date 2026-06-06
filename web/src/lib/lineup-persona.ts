@@ -36,7 +36,7 @@ export function getLineupPersona(
     user: PersonaUser | null | undefined,
     hasActed: boolean,
 ): Persona {
-    if (user && isOpRole(user) && lineup.createdBy?.id === user.id) {
+    if (user && isOpRole(user) && lineup.createdBy.id === user.id) {
         return 'organizer';
     }
     if (user && isOpRole(user)) return 'admin';

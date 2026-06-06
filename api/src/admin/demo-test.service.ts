@@ -226,11 +226,13 @@ export class DemoTestService {
     return cleanupSE(this.moduleRef);
   }
 
-  /** Pause / run-once the reconciliation cron — DEMO_MODE only (ROK-969/1347). */
+  /** Pause the reconciliation cron — DEMO_MODE only (ROK-969/1347). */
   async pauseReconciliationForTest(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
     return pauseRecon(this.moduleRef);
   }
+
+  /** Run the reconciliation cron once — DEMO_MODE only (ROK-1347). */
   async triggerReconciliationForTest(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
     return triggerRecon(this.moduleRef);

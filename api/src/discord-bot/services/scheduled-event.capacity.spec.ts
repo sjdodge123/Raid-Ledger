@@ -59,6 +59,35 @@ describe('withCapacityRecovery', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it('invokes onBeforeRetry AFTER a freeing GC and BEFORE the retry (cache invalidation hook)', async () => {
+    gcMock.mockResolvedValue({ freed: 1, orphanCount: 0, deleteFailures: [] });
+    const calls: string[] = [];
+    const fn = jest
+      .fn()
+      .mockImplementationOnce(() => Promise.reject(capError()))
+      .mockImplementationOnce(() => {
+        calls.push('retry');
+        return Promise.resolve();
+      });
+    const onBeforeRetry = jest.fn(() => calls.push('invalidate'));
+
+    await withCapacityRecovery(guild, db, logger, fn, onBeforeRetry);
+
+    expect(onBeforeRetry).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['invalidate', 'retry']);
+  });
+
+  it('does NOT invoke onBeforeRetry when GC freed 0 (no retry happens)', async () => {
+    gcMock.mockResolvedValue({ freed: 0, orphanCount: 5, deleteFailures: [] });
+    const fn = jest.fn().mockRejectedValue(capError());
+    const onBeforeRetry = jest.fn();
+
+    await expect(
+      withCapacityRecovery(guild, db, logger, fn, onBeforeRetry),
+    ).rejects.toThrow(CapacityStillSaturatedError);
+    expect(onBeforeRetry).not.toHaveBeenCalled();
+  });
+
   it('throws CapacityStillSaturatedError when GC freed 0 (only operator orphans)', async () => {
     gcMock.mockResolvedValue({ freed: 0, orphanCount: 80, deleteFailures: [] });
     const fn = jest.fn().mockRejectedValue(capError());

@@ -57,19 +57,34 @@ export function findExistingGuildSE(
   return null;
 }
 
+interface LiveEventIndexEntry {
+  eventId: number;
+  boundSeId: string | null;
+  /** Two live events collided on the same title+start key — never delete. */
+  ambiguous?: boolean;
+}
+
 /** Build a lookup of live RL events by SE match key, recording the SE id each
- *  event is currently bound to (so we never delete the bound copy). */
+ *  event is currently bound to (so we never delete the bound copy).
+ *
+ *  `row.title` is raw DB casing — `seMatchKey` lowercases internally so both
+ *  sides normalise identically. Two live events sharing title+start collide on
+ *  one key; the entry is marked `ambiguous` so the classifier treats matching
+ *  SEs as operator orphans (never delete on ambiguity) instead of silently
+ *  letting the last row win. */
 function indexLiveEvents(
   rows: LiveRLEventMatch[],
-): Map<string, { eventId: number; boundSeId: string | null }> {
-  const index = new Map<
-    string,
-    { eventId: number; boundSeId: string | null }
-  >();
+): Map<string, LiveEventIndexEntry> {
+  const index = new Map<string, LiveEventIndexEntry>();
   for (const row of rows) {
     const startMs = new Date(row.startIso).getTime();
     if (Number.isNaN(startMs)) continue;
-    index.set(seMatchKey(row.title, startMs), {
+    const key = seMatchKey(row.title, startMs);
+    if (index.has(key)) {
+      index.set(key, { eventId: row.id, boundSeId: null, ambiguous: true });
+      continue;
+    }
+    index.set(key, {
       eventId: row.id,
       boundSeId: row.discordScheduledEventId,
     });
@@ -114,10 +129,18 @@ export async function classifyUntrackedSEs(
     const name = se.name ?? '';
     const match =
       startMs != null ? index.get(seMatchKey(name, startMs)) : undefined;
-    // RL duplicate only when a live event matches AND this SE is not the copy
-    // the event is currently bound to. If boundSeId === se.id it's tracked
-    // elsewhere (shouldn't land here) — guard anyway.
-    if (match && match.boundSeId !== se.id) {
+    // RL duplicate only when a live event matches AND that event is bound to
+    // a DIFFERENT SE. boundSeId === null means the event has no SE yet
+    // (creation in-flight / first reconcile tick) — a matching guild SE could
+    // be a legitimate operator event and must NOT be deleted (review critical,
+    // fix/batch-2026-06-06). Ambiguous title+start collisions likewise. If
+    // boundSeId === se.id it's tracked elsewhere — guard anyway.
+    if (
+      match &&
+      !match.ambiguous &&
+      match.boundSeId !== null &&
+      match.boundSeId !== se.id
+    ) {
       reclaimable.push({ eventId: match.eventId, seId: se.id });
     } else {
       operatorOrphanCount++;

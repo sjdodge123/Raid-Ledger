@@ -154,6 +154,59 @@ describe('gcStaleRLScheduledEvents — duplicate reclassification (ROK-1347)', (
     expect(result.orphanCount).toBe(1);
     expect(tryDeleteEvent).not.toHaveBeenCalled();
   });
+
+  it('NEVER deletes a matching guild SE when the live RL event has no bound SE yet (boundSeId=null — review critical)', async () => {
+    // An RL event whose SE creation is in-flight (discordScheduledEventId NULL)
+    // title+start-matches an operator's guild SE. Pre-fix, `null !== se.id`
+    // classified the operator SE as a reclaimable duplicate and DELETED it.
+    const guild = makeGuild([
+      { id: 'op-se', name: 'Game Night', scheduledStartTimestamp: START },
+    ]);
+    findRLTrackedSEs.mockResolvedValue([]);
+    findLiveRLEventsForDedup.mockResolvedValue([
+      {
+        id: 12,
+        discordScheduledEventId: null,
+        title: 'Game Night',
+        startIso: new Date(START).toISOString(),
+      },
+    ]);
+
+    const result = await gcStaleRLScheduledEvents(guild, db);
+
+    expect(result.freed).toBe(0);
+    expect(result.orphanCount).toBe(1);
+    expect(tryDeleteEvent).not.toHaveBeenCalled();
+  });
+
+  it('treats title+start collisions between two live RL events as ambiguous and never deletes (review high)', async () => {
+    // Two live events share the exact title+start; an untracked guild SE
+    // matching that key cannot be safely attributed → operator orphan.
+    const guild = makeGuild([
+      { id: 'dup?', name: 'Same Slot', scheduledStartTimestamp: START },
+    ]);
+    findRLTrackedSEs.mockResolvedValue([]);
+    findLiveRLEventsForDedup.mockResolvedValue([
+      {
+        id: 21,
+        discordScheduledEventId: 'se-21',
+        title: 'Same Slot',
+        startIso: new Date(START).toISOString(),
+      },
+      {
+        id: 22,
+        discordScheduledEventId: 'se-22',
+        title: 'Same Slot',
+        startIso: new Date(START).toISOString(),
+      },
+    ]);
+
+    const result = await gcStaleRLScheduledEvents(guild, db);
+
+    expect(result.freed).toBe(0);
+    expect(result.orphanCount).toBe(1);
+    expect(tryDeleteEvent).not.toHaveBeenCalled();
+  });
 });
 
 describe('gcStaleRLScheduledEvents — per-orphan failure logging (ROK-1347 invariant)', () => {
@@ -196,5 +249,32 @@ describe('gcStaleRLScheduledEvents — per-orphan failure logging (ROK-1347 inva
     expect(result.freed).toBe(0);
     expect(result.orphanCount).toBe(2);
     expect(tryDeleteEvent).not.toHaveBeenCalled();
+  });
+
+  it('invariant: when ALL reclaimable duplicate deletes fail, freed=0 and every failure is recorded (review low)', async () => {
+    const START = Date.parse('2026-07-01T20:00:00.000Z');
+    const guild = makeGuild([
+      { id: 'bound-se', name: 'Raid', scheduledStartTimestamp: START },
+      { id: 'dup-1', name: 'Raid', scheduledStartTimestamp: START },
+    ]);
+    findRLTrackedSEs.mockResolvedValue([
+      { id: 31, discordScheduledEventId: 'bound-se', isStale: false },
+    ]);
+    findLiveRLEventsForDedup.mockResolvedValue([
+      {
+        id: 31,
+        discordScheduledEventId: 'bound-se',
+        title: 'Raid',
+        startIso: new Date(START).toISOString(),
+      },
+    ]);
+    tryDeleteEvent.mockResolvedValue({ deleted: false, code: 429 });
+
+    const result = await gcStaleRLScheduledEvents(guild, db);
+
+    expect(result.freed).toBe(0);
+    expect(result.deleteFailures).toEqual([
+      { eventId: 31, seId: 'dup-1', code: 429 },
+    ]);
   });
 });

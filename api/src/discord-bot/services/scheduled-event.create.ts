@@ -97,17 +97,24 @@ export async function createScheduledEventIdempotent(
     return;
   }
 
-  await withCapacityRecovery(guild, db, logger, () =>
-    createOrAdoptOnTimeout({
-      guild,
-      db,
-      logger,
-      eventId,
-      eventData,
-      vc,
-      description,
-      seCache,
-    }),
+  await withCapacityRecovery(
+    guild,
+    db,
+    logger,
+    () =>
+      createOrAdoptOnTimeout({
+        guild,
+        db,
+        logger,
+        eventId,
+        eventData,
+        vc,
+        description,
+        seCache,
+      }),
+    // GC inside capacity recovery deletes guild SEs — drop the cached snapshot
+    // so the retry's adopt path re-fetches live state (review medium).
+    () => seCache.invalidate(),
   );
 }
 
