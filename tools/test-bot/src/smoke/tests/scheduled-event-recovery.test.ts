@@ -76,11 +76,14 @@ const reconciliationIsIdempotent: SmokeTest = {
     const ev = await createEvent(ctx.api, "se-idem");
     try {
       await awaitProcessing(ctx.api);
-      // Wait for the initial SE to appear.
+      // Wait for the initial SE to appear. 2× the default timeout: SE creation
+      // traverses reconciliation trigger → BullMQ → Discord API, and remote
+      // envs (rl-infra fleet) need the headroom — 60s flaked 1-of-2 dogfood
+      // runs while the assertion itself was sound (fix-batch 2026-06-06).
       await pollForCondition(
         async () =>
           (await countScheduledEventsByTitle(ev.title)) >= 1 ? true : null,
-        ctx.config.timeoutMs,
+        ctx.config.timeoutMs * 2,
         { intervalMs: 2000 },
       );
 
@@ -115,7 +118,9 @@ const recoveryDeletesDuplicateKeepsBound: SmokeTest = {
       await awaitProcessing(ctx.api);
       const bound = await pollForCondition(
         () => findOneByTitle(ev.title),
-        ctx.config.timeoutMs,
+        // 2× default — same remote-env headroom rationale as the idempotency
+        // test's initial-SE poll above.
+        ctx.config.timeoutMs * 2,
         { intervalMs: 2000 },
       );
       if (bound.start == null) {
