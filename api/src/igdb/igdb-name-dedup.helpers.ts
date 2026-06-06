@@ -11,7 +11,7 @@
  * "Doom" from colliding with "Doom: Eternal" (1 vs 2 tokens) while still
  * allowing "Slay the Spire 2" / "Slay the Spire II" (3 tokens each).
  */
-import { sql, ilike } from 'drizzle-orm';
+import { or, ilike } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { normalizeForDedup } from './igdb-search-dedup.helpers';
@@ -147,19 +147,25 @@ function collectTokens(normalizedNames: Iterable<string>): Set<string> {
   return tokens;
 }
 
-/** Coarse SQL prefilter for the batch path: any row containing any token. */
+/**
+ * Coarse SQL prefilter for the batch path: any row whose name contains any
+ * token (case-insensitive).
+ *
+ * Built from PARAMETERIZED `ilike` predicates OR'd together — NOT `sql.raw`.
+ * The previous `sql.raw` interpolation only escaped `\ % _` and broke on an
+ * apostrophe in a token (e.g. "baldur's" → `LIKE '%baldur's%'` syntax error),
+ * which is a quote-injection class bug for any game name with an apostrophe
+ * ("Assassin's Creed", "Tom Clancy's …"). ROK-1334.
+ */
 async function selectCandidatesByTokenSet(
   db: Db,
   tokens: string[],
 ): Promise<NameDedupRow[]> {
   const g = schema.games;
-  // Use a single SQL OR chain: lower(name) LIKE '%t1%' OR lower(name) LIKE '%t2%'
-  const escaped = tokens.map((t) =>
-    t.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`),
-  );
-  const pattern = sql.raw(
-    escaped.map((t) => `lower(name) LIKE '%${t}%'`).join(' OR '),
-  );
+  const clauses = tokens.map((t) => {
+    const escaped = t.replace(/[\\%_]/g, (c) => `\\${c}`);
+    return ilike(g.name, `%${escaped}%`);
+  });
   return db
     .select({
       id: g.id,
@@ -169,7 +175,7 @@ async function selectCandidatesByTokenSet(
       itadGameId: g.itadGameId,
     })
     .from(g)
-    .where(pattern);
+    .where(or(...clauses));
 }
 
 /** A name-keyed duplicate group with all member rows (winner not yet picked). */

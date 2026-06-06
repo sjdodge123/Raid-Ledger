@@ -14,6 +14,8 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { upsertSeedGames, type GameSeed } from '../../scripts/seed-igdb-games';
+import { findGameIdsByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
+import { normalizeForDedup } from '../igdb/igdb-search-dedup.helpers';
 
 const FIXTURE_GAME_SLUG = 'test-game';
 
@@ -135,6 +137,100 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     expect(canonicalRow?.igdbId).toBe(119171);
     expect(orphanRow?.igdbId).toBeNull();
     expect(orphanRow?.steamAppId).toBe(1086940);
+  });
+
+  // ROK-1334: the per-row loop was replaced with a batched path (one name
+  // lookup + chunked multi-row INSERT ... ON CONFLICT + batched merges). These
+  // cases assert the batch handles a mixed insert/merge call in one shot.
+  it('batches a mixed call: inserts new rows and merges a null-igdb_id orphan in one pass', async () => {
+    // One pre-existing orphan that should MERGE; two fresh names that INSERT.
+    const [orphan] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Hades',
+        slug: 'hades-orphan',
+        steamAppId: 1145360,
+        igdbId: null,
+      })
+      .returning();
+
+    const seeds: GameSeed[] = [
+      { igdbId: 113112, name: 'Hades', slug: 'hades', coverUrl: null },
+      {
+        igdbId: 300001,
+        name: 'Stardew Valley',
+        slug: 'stardew',
+        coverUrl: null,
+      },
+      { igdbId: 300002, name: 'Celeste', slug: 'celeste', coverUrl: null },
+    ];
+    const touched = await upsertSeedGames(testApp.db, seeds);
+    expect(touched).toBe(3);
+
+    const rows = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG))
+      .orderBy(schema.games.igdbId);
+    // Three rows total — the orphan was back-filled (merge), not duplicated.
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.igdbId)).toEqual([113112, 300001, 300002]);
+    // The merged row is the original orphan (same id), now carrying the seed
+    // igdb_id while retaining its upstream steam_app_id.
+    const hades = rows.find((r) => r.igdbId === 113112);
+    expect(hades?.id).toBe(orphan.id);
+    expect(hades?.steamAppId).toBe(1145360);
+  });
+
+  it('seeds a fresh (empty) table fully via the batch INSERT path', async () => {
+    const seeds: GameSeed[] = [
+      {
+        igdbId: 400001,
+        name: 'Hollow Knight',
+        slug: 'hollow-knight',
+        coverUrl: null,
+      },
+      {
+        igdbId: 400002,
+        name: 'Dead Cells',
+        slug: 'dead-cells',
+        coverUrl: null,
+      },
+    ];
+    const touched = await upsertSeedGames(testApp.db, seeds);
+    expect(touched).toBe(2);
+
+    const rows = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(ne(schema.games.slug, FIXTURE_GAME_SLUG))
+      .orderBy(schema.games.igdbId);
+    expect(rows.map((r) => r.igdbId)).toEqual([400001, 400002]);
+  });
+
+  // ROK-1334 (low finding): the batch name lookup used to build its ILIKE
+  // prefilter via sql.raw, which only escaped `\ % _` and broke on an
+  // apostrophe in the first significant token (e.g. "assassin's" →
+  // `LIKE '%assassin's%'` syntax error). The parameterized `ilike` rewrite in
+  // selectCandidatesByTokenSet fixes it — this asserts a name with an
+  // apostrophe round-trips through the batch matcher.
+  it('matches a name containing an apostrophe via findGameIdsByNormalizedName', async () => {
+    const [existing] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: "Assassin's Creed",
+        slug: 'assassins-creed',
+        igdbId: 500001,
+      })
+      .returning();
+
+    const map = await findGameIdsByNormalizedName(testApp.db, [
+      "Assassin's Creed",
+    ]);
+    const match = map.get(normalizeForDedup("Assassin's Creed"));
+    expect(match).toBeDefined();
+    expect(match?.id).toBe(existing.id);
+    expect(match?.igdbId).toBe(500001);
   });
 
   it('does NOT collapse sequels: existing row with different non-null igdb_id is left alone', async () => {
