@@ -14,6 +14,8 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { upsertSeedGames, type GameSeed } from '../../scripts/seed-igdb-games';
+import { findGameIdsByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
+import { normalizeForDedup } from '../igdb/igdb-search-dedup.helpers';
 
 const FIXTURE_GAME_SLUG = 'test-game';
 
@@ -204,6 +206,31 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
       .where(ne(schema.games.slug, FIXTURE_GAME_SLUG))
       .orderBy(schema.games.igdbId);
     expect(rows.map((r) => r.igdbId)).toEqual([400001, 400002]);
+  });
+
+  // ROK-1334 (low finding): the batch name lookup used to build its ILIKE
+  // prefilter via sql.raw, which only escaped `\ % _` and broke on an
+  // apostrophe in the first significant token (e.g. "assassin's" →
+  // `LIKE '%assassin's%'` syntax error). The parameterized `ilike` rewrite in
+  // selectCandidatesByTokenSet fixes it — this asserts a name with an
+  // apostrophe round-trips through the batch matcher.
+  it('matches a name containing an apostrophe via findGameIdsByNormalizedName', async () => {
+    const [existing] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: "Assassin's Creed",
+        slug: 'assassins-creed',
+        igdbId: 500001,
+      })
+      .returning();
+
+    const map = await findGameIdsByNormalizedName(testApp.db, [
+      "Assassin's Creed",
+    ]);
+    const match = map.get(normalizeForDedup("Assassin's Creed"));
+    expect(match).toBeDefined();
+    expect(match?.id).toBe(existing.id);
+    expect(match?.igdbId).toBe(500001);
   });
 
   it('does NOT collapse sequels: existing row with different non-null igdb_id is left alone', async () => {

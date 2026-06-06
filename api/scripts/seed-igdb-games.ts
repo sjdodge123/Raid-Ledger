@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import {
   DrizzleModule,
   DrizzleAsyncProvider,
@@ -127,30 +127,51 @@ function loadSeedData(): GamesSeedFile {
 }
 
 /**
- * Apply seed data onto an existing row identified by id. Mirrors
- * `applyIgdbMergeToRow` in `igdb-upsert.helpers.ts`: writes seed columns,
- * sets igdbId from the seed, marks the row enriched. Does NOT touch
- * `steamAppId` / `itadGameId` — those were set by upstream discovery and
- * the seed bundle has no values for them.
+ * Apply seed data onto a set of existing rows in ONE batched statement
+ * (ROK-1334). Mirrors `applyIgdbMergeToRow` in `igdb-upsert.helpers.ts`:
+ * writes seed columns, sets igdbId from the seed, marks each row enriched.
+ * Does NOT touch `steamAppId` / `itadGameId` — those were set by upstream
+ * discovery and the seed bundle has no values for them.
+ *
+ * Implemented as a chunked multi-row INSERT ... ON CONFLICT (id) DO UPDATE:
+ * each merge row is inserted with its known primary key, so the conflict on
+ * `games.id` always fires and the DO UPDATE rewrites exactly the same columns
+ * the old per-row UPDATE did (value columns from `excluded.*`, plus the literal
+ * `cachedAt = now()`, status `enriched`, retry-count 0). Fully parameterized —
+ * drizzle binds every value; no `sql.raw` interpolation of data.
+ *
+ * Steady state (every boot after the first seed) ALL seed rows already exist and
+ * name-match, so EVERY seed partitions into this merge set. The old per-row loop
+ * issued ~49 SERIAL UPDATEs here (prod: avg 378ms, max 977ms, 22.3s total). This
+ * collapses them into ~1 statement (one per 100-row chunk).
  */
-async function mergeSeedIntoExistingRow(
+async function mergeSeedBatch(
   db: Db,
-  existingId: number,
-  values: GameValues,
+  merges: Array<{ id: number; values: GameValues }>,
 ): Promise<void> {
-  await db
-    .update(schema.games)
-    .set({
-      ...values,
-      cachedAt: new Date(),
-      igdbEnrichmentStatus: 'enriched',
-      igdbEnrichmentRetryCount: 0,
-    })
-    .where(eq(schema.games.id, existingId));
+  for (let i = 0; i < merges.length; i += MERGE_CHUNK_SIZE) {
+    const chunk = merges.slice(i, i + MERGE_CHUNK_SIZE);
+    const rows = chunk.map(({ id, values }) => ({ id, ...values }));
+    await db
+      .insert(schema.games)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: schema.games.id,
+        set: {
+          ...excludedCol,
+          cachedAt: sql`now()`,
+          igdbEnrichmentStatus: sql`'enriched'`,
+          igdbEnrichmentRetryCount: sql`0`,
+        },
+      });
+  }
 }
 
 /** Chunk size for the batched multi-row INSERT (49 seeds fit one statement; guard for growth). */
 const INSERT_CHUNK_SIZE = 200;
+
+/** Chunk size for the batched merge UPDATE-via-upsert (steady state is all-merges). */
+const MERGE_CHUNK_SIZE = 100;
 
 /**
  * ROK-1334: the set of seed igdb_ids that already own a row. Used for the
@@ -241,7 +262,14 @@ async function insertSeedBatch(db: Db, inserts: GameValues[]): Promise<void> {
  *      reused from the live-sync path) to find existing rows by canonical name.
  *   3. Partition into merges (existing row to UPDATE) vs inserts, then a
  *      chunked multi-row INSERT ... ON CONFLICT (igdb_id) DO UPDATE for the
- *      inserts plus per-id UPDATEs for the (rare) merges.
+ *      inserts and a chunked multi-row INSERT ... ON CONFLICT (id) DO UPDATE
+ *      for the merges.
+ *
+ * Steady state (every boot after the first seed) is ALL-merges: every seed row
+ * already exists and name-matches, so the whole batch partitions into the merge
+ * set. That path is now ~1 chunked statement instead of the ~49 SERIAL UPDATEs
+ * the original per-row loop issued (prod evidence: avg 378ms / max 977ms / 22.3s
+ * total) — keeping the seed phase under the boot budget.
  *
  * Keeps the original signature and returns the count of rows touched.
  */
@@ -260,9 +288,7 @@ export async function upsertSeedGames(
   );
   const { merges, inserts } = partitionSeeds(seeds, nameMap, present);
 
-  for (const { id, values } of merges) {
-    await mergeSeedIntoExistingRow(db, id, values);
-  }
+  await mergeSeedBatch(db, merges);
   await insertSeedBatch(db, inserts);
 
   return merges.length + inserts.length;
