@@ -159,6 +159,10 @@ async function mergeSeedBatch(
         target: schema.games.id,
         set: {
           ...excludedCol,
+          // Backfill the seed igdb_id onto the matched (orphan) row — the core
+          // merge semantic. Safe: partitionSeeds guarantees no other row owns
+          // this igdb_id (Codex-P1 guard), so the UNIQUE index can't trip.
+          igdbId: sql`excluded.igdb_id`,
           cachedAt: sql`now()`,
           igdbEnrichmentStatus: sql`'enriched'`,
           igdbEnrichmentRetryCount: sql`0`,
