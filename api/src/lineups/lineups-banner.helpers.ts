@@ -91,8 +91,11 @@ export async function buildBannerData(
         ? findGameName(db, lineup.decidedGameId)
         : Promise.resolve([]),
       // ROK-1348: private lineups must use the creator+invitees pool, not
-      // the whole community, as the people-denominator.
-      loadInvitees(db, lineup.id),
+      // the whole community, as the people-denominator. Public lineups never
+      // need the invitee rows — skip the query on this hot path (reviewer low).
+      lineup.visibility === 'private'
+        ? loadInvitees(db, lineup.id)
+        : Promise.resolve([]),
     ]);
   const vMap = new Map(voteMap.map((v) => [v.gameId, v.voteCount]));
   const votingEligibleCount = computeVotingEligibleCount(

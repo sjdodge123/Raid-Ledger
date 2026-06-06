@@ -225,6 +225,25 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         expect(screen.getByText('Any')).toBeInTheDocument();
     });
 
+    // ROK-1348 reviewer [low]: pin the <=1 guard's boundary — 2 is the
+    // smallest count that still auto-sets (a 2-person lineup IS meaningful).
+    it('auto-sets at the participantCount=2 boundary', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                onChange={onChange}
+                search=""
+                onSearchChange={vi.fn()}
+                participantCount={2}
+            />,
+        );
+        expect(onChange).toHaveBeenCalledWith({
+            ...defaultFilters,
+            maxPlayers: 2,
+        });
+    });
+
     // ROK-1348: a brand-new lineup has participantCount === 1 (creator only).
     // Auto-pinning maxPlayers to 1 would filter out every multiplayer game,
     // so <= 1 must be treated as "no auto-set".

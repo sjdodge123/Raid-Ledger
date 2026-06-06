@@ -56,12 +56,12 @@ export async function buildScoringContext(
   lineupId: number,
   tasteProfile: TasteProfileService,
   settings: SettingsService,
-  // ROK-1348: voterIds is fetched once by the caller and shared with
-  // resolveParticipantCount (public branch) to avoid a duplicate query.
-  voterIds: number[],
+  // ROK-1348: pre-fetched ONCE by the caller (fresh from findLineupVoterIds)
+  // and shared with resolveParticipantCount to avoid a duplicate query.
+  preloadedVoterIds: number[],
 ): Promise<ScoringContext> {
   const weights = await settings.getCommonGroundWeights();
-  if (voterIds.length === 0) {
+  if (preloadedVoterIds.length === 0) {
     return {
       voterVector: null,
       coPlayPartnerIds: new Set(),
@@ -69,11 +69,13 @@ export async function buildScoringContext(
       weights,
     };
   }
-  const vectorMap = await tasteProfile.getTasteVectorsForUsers(voterIds);
+  const vectorMap = await tasteProfile.getTasteVectorsForUsers(
+    preloadedVoterIds,
+  );
   const vectors = [...vectorMap.values()].map((v) => v.vector);
   const voterVector = computeCombinedVoterVector(vectors);
   const voterIntensity = averageIntensityBucket(vectorMap);
-  const coPlayPartnerIds = await findCoPlayPartnerIds(db, voterIds);
+  const coPlayPartnerIds = await findCoPlayPartnerIds(db, preloadedVoterIds);
   return { voterVector, coPlayPartnerIds, voterIntensity, weights };
 }
 
