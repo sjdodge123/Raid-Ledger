@@ -28,10 +28,19 @@ export async function withCapacityRecovery(
     await fn();
   } catch (err) {
     if (!isAtScheduledEventCapacityError(err)) throw err;
-    const { freed, orphanCount } = await gcStaleRLScheduledEvents(guild, db);
-    logger.log(
-      `Discord SE capacity GC freed=${freed} orphanCount=${orphanCount}`,
+    const { freed, orphanCount, deleteFailures } = await gcStaleRLScheduledEvents(
+      guild,
+      db,
     );
+    logger.log(
+      `Discord SE capacity GC freed=${freed} orphanCount=${orphanCount} deleteFailures=${deleteFailures.length}`,
+    );
+    if (deleteFailures.length > 0) {
+      const codes = deleteFailures.map((f) => f.code ?? 'unknown').join(',');
+      logger.warn(`GC delete failures by Discord code: ${codes}`);
+    }
+    // freed now includes reclaimed RL duplicates (ROK-1347). Only back off when
+    // GC truly couldn't free anything — the remaining cap is operator-owned.
     if (freed === 0) throw new CapacityStillSaturatedError(orphanCount);
     await fn();
   }
