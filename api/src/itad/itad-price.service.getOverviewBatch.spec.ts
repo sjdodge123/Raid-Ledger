@@ -3,7 +3,7 @@
  * Verifies batch cache logic, API call patterns, and graceful degradation.
  */
 import { Test } from '@nestjs/testing';
-import { ItadPriceService } from './itad-price.service';
+import { ItadPriceService, ItadOverviewFetchError } from './itad-price.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
 import type {
@@ -107,14 +107,18 @@ describe('ItadPriceService.getOverviewBatch', () => {
       expect(itadPost).not.toHaveBeenCalled();
     });
 
-    it('returns empty array when itadPost returns null for all missing IDs', async () => {
+    it('throws ItadOverviewFetchError when itadPost returns null (retries exhausted)', async () => {
+      // ROK-1103: a null itadPost result means the API call failed after the
+      // HTTP util exhausted retries. Surfacing it as a throw (instead of the
+      // old silent []) lets the pricing-sync chunk loop count the chunk failed
+      // → status=degraded, rather than reporting a silent "0 failed".
       mockSettings.getItadApiKey.mockResolvedValue('test-key');
       cacheUtil.getCachedPrice.mockResolvedValue(null);
       itadPost.mockResolvedValue(null);
 
-      const result = await service.getOverviewBatch(['itad-a']);
-
-      expect(result).toEqual([]);
+      await expect(service.getOverviewBatch(['itad-a'])).rejects.toThrow(
+        ItadOverviewFetchError,
+      );
     });
 
     it('returns empty array when itadPost returns empty prices', async () => {
