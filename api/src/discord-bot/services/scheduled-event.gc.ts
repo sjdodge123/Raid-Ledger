@@ -65,23 +65,9 @@ export async function gcStaleRLScheduledEvents(
   const rlIds = new Set(rlRows.map((r) => r.discordScheduledEventId));
 
   const deleteFailures: DeleteFailure[] = [];
-  let freed = 0;
 
   // Path 1: stale RL-tracked SEs.
-  for (const row of rlRows) {
-    if (!row.isStale) continue;
-    if (
-      await deleteOrRecord(
-        guild,
-        row.id,
-        row.discordScheduledEventId,
-        deleteFailures,
-      )
-    ) {
-      await clearScheduledEventId(db, row.id);
-      freed++;
-    }
-  }
+  const freedStale = await sweepStaleRLRows(guild, db, rlRows, deleteFailures);
 
   // Path 2: untracked guild SEs → reclassify RL duplicates vs operator orphans.
   const untracked = seValues.filter((s) => !rlIds.has(s.id));
@@ -89,13 +75,50 @@ export async function gcStaleRLScheduledEvents(
     db,
     untracked,
   );
-  for (const dup of reclaimable) {
-    if (await deleteOrRecord(guild, dup.eventId, dup.seId, deleteFailures)) {
+  const freedDup = await sweepReclaimableDuplicates(
+    guild,
+    reclaimable,
+    deleteFailures,
+  );
+
+  return {
+    freed: freedStale + freedDup,
+    orphanCount: operatorOrphanCount,
+    deleteFailures,
+  };
+}
+
+/** Delete stale RL-tracked SEs, clearing each row's binding. Returns count freed. */
+async function sweepStaleRLRows(
+  guild: Guild,
+  db: PostgresJsDatabase<typeof schema>,
+  rlRows: Awaited<ReturnType<typeof findRLTrackedSEs>>,
+  failures: DeleteFailure[],
+): Promise<number> {
+  let freed = 0;
+  for (const row of rlRows) {
+    if (!row.isStale) continue;
+    if (
+      await deleteOrRecord(guild, row.id, row.discordScheduledEventId, failures)
+    ) {
+      await clearScheduledEventId(db, row.id);
       freed++;
     }
   }
+  return freed;
+}
 
-  return { freed, orphanCount: operatorOrphanCount, deleteFailures };
+/** Delete RL-created duplicate SEs (untracked but matching a live event). */
+async function sweepReclaimableDuplicates(
+  guild: Guild,
+  reclaimable: Array<{ eventId: number; seId: string }>,
+  failures: DeleteFailure[],
+): Promise<number> {
+  let freed = 0;
+  for (const dup of reclaimable) {
+    if (await deleteOrRecord(guild, dup.eventId, dup.seId, failures)) freed++;
+  }
+  return freed;
 }
 
 /** Delete one SE; on failure record + log the Discord code. Returns whether
