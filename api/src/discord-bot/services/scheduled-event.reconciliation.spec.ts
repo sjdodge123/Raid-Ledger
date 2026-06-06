@@ -165,14 +165,7 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
     ).toHaveBeenCalledTimes(2);
     expect(
       mocks.scheduledEventService.createScheduledEvent,
-    ).toHaveBeenCalledWith(
-      2,
-      candidates[1],
-      2,
-      false,
-      null,
-      expect.anything(),
-    );
+    ).toHaveBeenCalledWith(2, candidates[1], 2, false, null, expect.anything());
   });
 
   describe('ROK-1332 capacity-saturated path', () => {

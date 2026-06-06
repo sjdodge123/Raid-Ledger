@@ -28,10 +28,8 @@ export async function withCapacityRecovery(
     await fn();
   } catch (err) {
     if (!isAtScheduledEventCapacityError(err)) throw err;
-    const { freed, orphanCount, deleteFailures } = await gcStaleRLScheduledEvents(
-      guild,
-      db,
-    );
+    const { freed, orphanCount, deleteFailures } =
+      await gcStaleRLScheduledEvents(guild, db);
     logger.log(
       `Discord SE capacity GC freed=${freed} orphanCount=${orphanCount} deleteFailures=${deleteFailures.length}`,
     );
