@@ -89,13 +89,20 @@ describe('canParticipateInLineup', () => {
     );
   });
 
-  it('treats an absent invitees list as an empty list', () => {
-    const lineup = {
-      visibility: 'private',
+  // ROK-1349 Part B hardening: a private-lineup invitee with NO platform tag
+  // (steamLinked false) is still recognised by id. This is the exact viewer
+  // (helkth) the prod incident showed disabled on every card — the block was
+  // the summary/auth-load data path feeding eligibility, never this logic.
+  // (The summary-shape gap itself is now a COMPILE error: EligibilityLineup
+  // requires createdBy + invitees, which LineupSummaryResponseDto lacks, so
+  // a summary can't reach this function from any typechecked call site.)
+  it('recognises a no-platform-tag invitee by id on a private lineup', () => {
+    const lineup = makePrivateLineup({
       createdBy: { id: 1, displayName: 'Op' },
-    } as unknown as LineupShape;
-    expect(canParticipateInLineup(lineup, { id: 7, role: 'member' })).toBe(
-      false,
+      invitees: [{ id: 5, displayName: 'helkth', steamLinked: false }],
+    });
+    expect(canParticipateInLineup(lineup, { id: 5, role: 'member' })).toBe(
+      true,
     );
   });
 });
