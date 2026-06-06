@@ -207,8 +207,20 @@ export class ScheduledEventService {
       const seId = await getScheduledEventId(this.db, eventId);
       if (!seId) return;
 
-      await tryDeleteEvent(guild, eventId, seId);
-      await clearScheduledEventId(this.db, eventId);
+      // ROK-1347: tryDeleteEvent now returns an outcome instead of throwing on
+      // non-10070. Only clear the DB binding when Discord confirmed the delete
+      // (or the SE was already gone) so a transient 429/50013 leaves the id in
+      // place for the next attempt.
+      const outcome = await tryDeleteEvent(guild, eventId, seId);
+      if (outcome.deleted) {
+        await clearScheduledEventId(this.db, eventId);
+      } else {
+        this.logger.warn(
+          `Delete SE ${eventId} (${seId}) failed: code=${outcome.code ?? 'unknown'}${
+            outcome.retryAfter ? ` retryAfter=${outcome.retryAfter}s` : ''
+          }`,
+        );
+      }
     } catch (error) {
       this.logger.error(formatApiError('delete', eventId, error));
     }

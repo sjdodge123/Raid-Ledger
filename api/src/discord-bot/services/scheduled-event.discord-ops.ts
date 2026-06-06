@@ -76,19 +76,51 @@ export async function tryStartEvent(
   }
 }
 
+/**
+ * Outcome of a single SE delete attempt. `deleted` is true on a confirmed
+ * Discord delete OR when 10070 (UNKNOWN_SCHEDULED_EVENT) is swallowed — the SE
+ * is gone either way. On any other failure `deleted` is false and `code`
+ * carries the Discord error code (50013 Missing Perms, 429 rate-limit, …) plus
+ * `retryAfter` (seconds) when Discord supplied one, so GC logs a reason per
+ * orphan instead of aborting the sweep (ROK-1347).
+ */
+export interface DeleteOutcome {
+  deleted: boolean;
+  code?: number;
+  retryAfter?: number;
+}
+
+function discordErrorCode(error: unknown): number | undefined {
+  return error instanceof DiscordAPIError && typeof error.code === 'number'
+    ? error.code
+    : undefined;
+}
+
+function discordRetryAfter(error: unknown): number | undefined {
+  const ra = (error as { retryAfter?: unknown })?.retryAfter;
+  return typeof ra === 'number' ? ra : undefined;
+}
+
 export async function tryDeleteEvent(
   guild: Guild,
   eventId: number,
   seId: string,
-): Promise<void> {
+): Promise<DeleteOutcome> {
   try {
     await timedDiscordCall(
       'scheduledEvents.delete',
       () => guild.scheduledEvents.delete(seId),
       { eventId },
     );
+    return { deleted: true };
   } catch (error) {
-    if (!isUnknownEventError(error)) throw error;
+    // 10070 = the SE is already gone in Discord — treat as a successful free.
+    if (isUnknownEventError(error)) return { deleted: true };
+    return {
+      deleted: false,
+      code: discordErrorCode(error),
+      retryAfter: discordRetryAfter(error),
+    };
   }
 }
 
