@@ -4,11 +4,20 @@ import { eq, sql } from 'drizzle-orm';
 import type * as schema from '../drizzle/schema';
 import * as tables from '../drizzle/schema';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
+import { ScheduledEventReconciliationService } from '../discord-bot/services/scheduled-event.reconciliation';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
 /** Reconciliation cron job name used for pause lookup. */
 const RECONCILIATION_JOB_NAME = 'ScheduledEventReconciliation_reconcileMissing';
+
+/** Result of cleanupScheduledEventsForTest. */
+export interface CleanupSEResult {
+  success: boolean;
+  deleted: number;
+  failed: number;
+  total: number;
+}
 
 /** Enable Discord scheduled event creation (ROK-969). */
 export function enableScheduledEventsForTest(moduleRef: ModuleRef): {
@@ -31,12 +40,7 @@ export function disableScheduledEventsForTest(moduleRef: ModuleRef): {
 /** Delete all Discord scheduled events in the guild (ROK-969). */
 export async function cleanupScheduledEventsForTest(
   moduleRef: ModuleRef,
-): Promise<{
-  success: boolean;
-  deleted: number;
-  failed: number;
-  total: number;
-}> {
+): Promise<CleanupSEResult> {
   const client = moduleRef.get(DiscordBotClientService, { strict: false });
   const guild = client.getGuild();
   if (!guild) return { success: true, deleted: 0, failed: 0, total: 0 };
@@ -65,6 +69,18 @@ export async function pauseReconciliationForTest(
     (j: { name: string }) => j.name === RECONCILIATION_JOB_NAME,
   );
   if (job && !job.paused) await cron.pauseJob(job.id);
+  return { success: true };
+}
+
+/** Run the reconciliation cron once on demand — for idempotency smoke tests
+ *  (ROK-1347). Returns success regardless of whether candidates existed. */
+export async function triggerReconciliationForTest(
+  moduleRef: ModuleRef,
+): Promise<{ success: boolean }> {
+  const svc = moduleRef.get(ScheduledEventReconciliationService, {
+    strict: false,
+  });
+  await svc.reconcileMissingScheduledEvents();
   return { success: true };
 }
 

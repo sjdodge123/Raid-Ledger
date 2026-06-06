@@ -60,6 +60,13 @@ export class DemoTestScheduledEventsController {
     return this.demoTestService.pauseReconciliationForTest();
   }
 
+  /** Run the reconciliation cron once — DEMO_MODE only (ROK-1347 idempotency smoke). */
+  @Post('trigger-reconciliation')
+  @HttpCode(HttpStatus.OK)
+  async triggerReconciliationForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.triggerReconciliationForTest();
+  }
+
   /** Enable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
   @Post('enable-scheduled-events')
   @HttpCode(HttpStatus.OK)

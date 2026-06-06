@@ -243,7 +243,12 @@ export interface LiveRLEventMatch {
   id: number;
   discordScheduledEventId: string | null;
   title: string;
-  /** lower(duration) as ISO text — the event's scheduled start. */
+  /** `lower(duration)` as text — the event's scheduled start. Parsed to epoch
+   *  via `new Date(startIso)` by the matcher. This MUST mirror how the Discord
+   *  SE start was set at create time (`new Date(eventData.startTime)` where
+   *  startTime is the SAME `lower(duration)::text`) so the dedup match key and
+   *  the create-path key collapse identically regardless of session tz — both
+   *  sides apply the identical `new Date(text)` transform (ROK-1347). */
   startIso: string;
 }
 

@@ -15,7 +15,7 @@
  *      bubbles up unhandled and the retry call never fires.
  */
 import { DiscordAPIError } from 'discord.js';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -394,6 +394,93 @@ describe('ROK-1332 — capacity-recovery integration', () => {
     expect(freed).toBe(0);
     expect(orphanCount).toBe(0);
     expect(mockGuild.scheduledEvents.delete).not.toHaveBeenCalled();
+  });
+
+  it('ROK-1347 — GC reclaims an RL-created duplicate SE, leaves the bound copy + operator SE', async () => {
+    // Seed a LIVE (future, non-cancelled) RL event bound to `bound-se`.
+    const now = new Date();
+    const futureStart = new Date(now.getTime() + FUTURE_MS);
+    const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
+    const [evt] = await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Palworld Event',
+        creatorId: testApp.seed.adminUser.id,
+        gameId: testApp.seed.game.id,
+        duration: [futureStart, futureEnd] as [Date, Date],
+        discordScheduledEventId: 'bound-se',
+        isAdHoc: false,
+      })
+      .returning({ id: schema.events.id });
+
+    // Guild shows: the bound SE, an unbound DUPLICATE (same title+start, the
+    // timeout-after-success orphan), and a genuine operator SE. The guild SE
+    // start mirrors how Discord stores it in prod: new Date(lower(duration)
+    // ::text) — the SAME transform the matcher applies — so the key collapses
+    // regardless of the test container's session tz.
+    const [startRow] = await testApp.db
+      .select({ startIso: sql<string>`lower(${schema.events.duration})::text` })
+      .from(schema.events)
+      .where(eq(schema.events.id, evt.id))
+      .limit(1);
+    const startMs = new Date(startRow.startIso).getTime();
+    mockGuild.scheduledEvents.fetch.mockResolvedValue(
+      new Map<string, { id: string }>([
+        [
+          'bound-se',
+          {
+            id: 'bound-se',
+            name: 'Palworld Event',
+            scheduledStartTimestamp: startMs,
+          } as unknown as { id: string },
+        ],
+        [
+          'dup-se',
+          {
+            id: 'dup-se',
+            name: 'Palworld Event',
+            scheduledStartTimestamp: startMs,
+          } as unknown as { id: string },
+        ],
+        [
+          'operator-se',
+          {
+            id: 'operator-se',
+            name: 'Operator Meetup',
+            scheduledStartTimestamp: startMs,
+          } as unknown as { id: string },
+        ],
+      ]),
+    );
+
+    const { freed, orphanCount, deleteFailures } =
+      await gcStaleRLScheduledEvents(
+        mockGuild as unknown as Parameters<typeof gcStaleRLScheduledEvents>[0],
+        testApp.db,
+      );
+
+    // The duplicate is freed; the operator SE is the lone orphan.
+    expect(freed).toBe(1);
+    expect(orphanCount).toBe(1);
+    expect(deleteFailures).toEqual([]);
+    expect(mockGuild.scheduledEvents.delete).toHaveBeenCalledTimes(1);
+    expect(mockGuild.scheduledEvents.delete).toHaveBeenCalledWith('dup-se');
+    expect(mockGuild.scheduledEvents.delete).not.toHaveBeenCalledWith(
+      'bound-se',
+    );
+    expect(mockGuild.scheduledEvents.delete).not.toHaveBeenCalledWith(
+      'operator-se',
+    );
+
+    // The bound event row keeps its binding — only the duplicate was deleted.
+    const [row] = await testApp.db
+      .select({
+        discordScheduledEventId: schema.events.discordScheduledEventId,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.id, evt.id))
+      .limit(1);
+    expect(row.discordScheduledEventId).toBe('bound-se');
   });
 
   it('helper integration — uses DiscordAPIError instanceof for 30038 classification', () => {

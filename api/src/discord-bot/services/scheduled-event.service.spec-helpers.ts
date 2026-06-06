@@ -93,16 +93,23 @@ export function createUpdateChain(): Record<string, jest.Mock> {
 
 /** Create the mock guild with scheduled event operations. */
 export function createMockGuild() {
+  const singleSE = {
+    id: 'discord-se-id-1',
+    status: GuildScheduledEventStatus.Active,
+    setStatus: jest.fn().mockResolvedValue(undefined),
+  };
   return {
     scheduledEvents: {
       create: jest.fn().mockResolvedValue({ id: 'discord-se-id-1' }),
       edit: jest.fn().mockResolvedValue({ id: 'discord-se-id-1' }),
       delete: jest.fn().mockResolvedValue(undefined),
-      fetch: jest.fn().mockResolvedValue({
-        id: 'discord-se-id-1',
-        status: GuildScheduledEventStatus.Active,
-        setStatus: jest.fn().mockResolvedValue(undefined),
-      }),
+      // ROK-1347: the idempotent create path calls fetch() with NO args and
+      // expects a Collection (Map-shaped). Start/complete paths call
+      // fetch(seId) and expect the single SE object. Disambiguate by arity:
+      // no-arg → empty Map (no matching guild SE → create proceeds).
+      fetch: jest.fn((seId?: string) =>
+        Promise.resolve(seId === undefined ? new Map() : singleSE),
+      ),
     },
   };
 }
