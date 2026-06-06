@@ -1,14 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { eq, sql } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import {
   DrizzleModule,
   DrizzleAsyncProvider,
 } from '../src/drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/drizzle/schema';
-import { findGameByNormalizedName } from '../src/igdb/igdb-name-dedup.helpers';
+import {
+  findGameIdsByNormalizedName,
+  type NameMatch,
+} from '../src/igdb/igdb-name-dedup.helpers';
+import { normalizeForDedup } from '../src/igdb/igdb-search-dedup.helpers';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -123,85 +127,175 @@ function loadSeedData(): GamesSeedFile {
 }
 
 /**
- * Apply seed data onto an existing row identified by id. Mirrors
- * `applyIgdbMergeToRow` in `igdb-upsert.helpers.ts`: writes seed columns,
- * sets igdbId from the seed, marks the row enriched. Does NOT touch
- * `steamAppId` / `itadGameId` — those were set by upstream discovery and
- * the seed bundle has no values for them.
+ * Apply seed data onto a set of existing rows in ONE batched statement
+ * (ROK-1334). Mirrors `applyIgdbMergeToRow` in `igdb-upsert.helpers.ts`:
+ * writes seed columns, sets igdbId from the seed, marks each row enriched.
+ * Does NOT touch `steamAppId` / `itadGameId` — those were set by upstream
+ * discovery and the seed bundle has no values for them.
+ *
+ * Implemented as a chunked multi-row INSERT ... ON CONFLICT (id) DO UPDATE:
+ * each merge row is inserted with its known primary key, so the conflict on
+ * `games.id` always fires and the DO UPDATE rewrites exactly the same columns
+ * the old per-row UPDATE did (value columns from `excluded.*`, plus the literal
+ * `cachedAt = now()`, status `enriched`, retry-count 0). Fully parameterized —
+ * drizzle binds every value; no `sql.raw` interpolation of data.
+ *
+ * Steady state (every boot after the first seed) ALL seed rows already exist and
+ * name-match, so EVERY seed partitions into this merge set. The old per-row loop
+ * issued ~49 SERIAL UPDATEs here (prod: avg 378ms, max 977ms, 22.3s total). This
+ * collapses them into ~1 statement (one per 100-row chunk).
  */
-async function mergeSeedIntoExistingRow(
+async function mergeSeedBatch(
   db: Db,
-  existingId: number,
-  values: GameValues,
+  merges: Array<{ id: number; values: GameValues }>,
 ): Promise<void> {
-  await db
-    .update(schema.games)
-    .set({
-      ...values,
-      cachedAt: new Date(),
-      igdbEnrichmentStatus: 'enriched',
-      igdbEnrichmentRetryCount: 0,
-    })
-    .where(eq(schema.games.id, existingId));
+  for (let i = 0; i < merges.length; i += MERGE_CHUNK_SIZE) {
+    const chunk = merges.slice(i, i + MERGE_CHUNK_SIZE);
+    const rows = chunk.map(({ id, values }) => ({ id, ...values }));
+    await db
+      .insert(schema.games)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: schema.games.id,
+        set: {
+          ...excludedCol,
+          // Backfill the seed igdb_id onto the matched (orphan) row — the core
+          // merge semantic. Safe: partitionSeeds guarantees no other row owns
+          // this igdb_id (Codex-P1 guard), so the UNIQUE index can't trip.
+          igdbId: sql`excluded.igdb_id`,
+          cachedAt: sql`now()`,
+          igdbEnrichmentStatus: sql`'enriched'`,
+          igdbEnrichmentRetryCount: sql`0`,
+        },
+      });
+  }
 }
 
-/** Does any row already own this igdb_id? Codex P1 (2026-05-14) guard. */
-async function rowExistsWithIgdbId(
+/** Chunk size for the batched multi-row INSERT (49 seeds fit one statement; guard for growth). */
+const INSERT_CHUNK_SIZE = 200;
+
+/** Chunk size for the batched merge UPDATE-via-upsert (steady state is all-merges). */
+const MERGE_CHUNK_SIZE = 100;
+
+/**
+ * ROK-1334: the set of seed igdb_ids that already own a row. Used for the
+ * Codex-P1 orphan-safety check (don't UPDATE a null-igdb_id orphan to an
+ * igdb_id another row already holds — that would hit the UNIQUE index and abort
+ * boot). ONE `IN (...)` query replaces the old per-row `rowExistsWithIgdbId`
+ * SELECT.
+ *
+ * NOTE: a `cachedAt`-based freshness short-circuit was considered (skip seeds
+ * whose row was cached < 7 days ago) but REJECTED — it conflicts with the
+ * load-bearing Case 4 spec (`touched === 1` while a fresh canonical row is
+ * present). The batching below already removes the ~147 serial roundtrips, so
+ * the freshness skip is an unnecessary secondary win. See ROK-1334 notes.
+ */
+async function selectPresentIgdbIds(
   db: Db,
-  igdbId: number,
-): Promise<boolean> {
+  igdbIds: number[],
+): Promise<Set<number>> {
+  const present = new Set<number>();
+  if (igdbIds.length === 0) return present;
   const rows = await db
-    .select({ id: schema.games.id })
+    .select({ igdbId: schema.games.igdbId })
     .from(schema.games)
-    .where(eq(schema.games.igdbId, igdbId))
-    .limit(1);
-  return rows.length > 0;
+    .where(inArray(schema.games.igdbId, igdbIds));
+  for (const row of rows) {
+    if (row.igdbId != null) present.add(row.igdbId);
+  }
+  return present;
 }
 
 /**
- * Upsert a batch of seed rows into `games`. For each row:
- *   1. Look up an existing row by normalized name (ROK-1113 guard).
- *      Two safe-merge cases:
- *        (a) Existing row's igdbId already matches the seed → idempotent merge.
- *        (b) Existing row's igdbId is null AND no other row already owns the
- *            seed's igdbId → safe merge (back-fills the orphan).
- *      Codex P1 (2026-05-14): merging a null-igdb_id orphan when a canonical
- *      row already owns the seed's igdb_id would crash on the UNIQUE index,
- *      aborting boot. In that case, fall through to ON CONFLICT (igdb_id) so
- *      the canonical row is updated and the orphan is left for the next
- *      dedup audit (ROK-1277/1278) to merge.
- *   2. Otherwise INSERT ... ON CONFLICT (igdb_id) DO UPDATE.
- * Returns the count of rows touched.
+ * Decide how each seed should be applied, using the batched name-match map and
+ * the present-igdb_id set. Mirrors the per-row decision the old loop made:
+ *   - sameIgdbId match → merge into that row (idempotent).
+ *   - null-igdb_id orphan AND no row already owns the seed's igdb_id → merge.
+ *   - everything else (no match, sequel collision, or orphan whose igdb_id is
+ *     already owned by a canonical row — Codex P1 2026-05-14) → batch INSERT
+ *     ... ON CONFLICT (igdb_id), which updates the canonical row and leaves the
+ *     orphan for the dedup audit (ROK-1277/1278).
+ */
+function partitionSeeds(
+  seeds: GameSeed[],
+  nameMap: Map<string, NameMatch>,
+  present: Set<number>,
+): {
+  merges: Array<{ id: number; values: GameValues }>;
+  inserts: GameValues[];
+} {
+  const merges: Array<{ id: number; values: GameValues }> = [];
+  const inserts: GameValues[] = [];
+  for (const seed of seeds) {
+    const values = mapGameToValues(seed);
+    const match = nameMap.get(normalizeForDedup(seed.name));
+    const sameIgdbId = match?.igdbId === seed.igdbId;
+    const orphanSafe = match?.igdbId == null && !present.has(seed.igdbId);
+    if (match && (sameIgdbId || orphanSafe)) {
+      merges.push({ id: match.id, values });
+    } else {
+      inserts.push(values);
+    }
+  }
+  return { merges, inserts };
+}
+
+/** Batched multi-row INSERT ... ON CONFLICT (igdb_id) DO UPDATE, chunked for growth. */
+async function insertSeedBatch(db: Db, inserts: GameValues[]): Promise<void> {
+  for (let i = 0; i < inserts.length; i += INSERT_CHUNK_SIZE) {
+    const chunk = inserts.slice(i, i + INSERT_CHUNK_SIZE);
+    await db
+      .insert(schema.games)
+      .values(chunk)
+      .onConflictDoUpdate({
+        target: schema.games.igdbId,
+        set: { ...excludedCol, cachedAt: sql`now()` },
+      });
+  }
+}
+
+/**
+ * Upsert a batch of seed rows into `games` (ROK-1334 — batched).
+ *
+ * Replaces the old per-row loop (up to 3 SERIAL roundtrips/row: a leading-
+ * wildcard `findGameByNormalizedName` SELECT, a `rowExistsWithIgdbId` SELECT,
+ * then the write) with a handful of batched statements:
+ *   1. ONE `IN (...)` SELECT for which seed igdb_ids already own a row
+ *      (orphan-safety, Codex P1 2026-05-14).
+ *   2. ONE `findGameIdsByNormalizedName` SELECT (ROK-1113 name-dedup guard,
+ *      reused from the live-sync path) to find existing rows by canonical name.
+ *   3. Partition into merges (existing row to UPDATE) vs inserts, then a
+ *      chunked multi-row INSERT ... ON CONFLICT (igdb_id) DO UPDATE for the
+ *      inserts and a chunked multi-row INSERT ... ON CONFLICT (id) DO UPDATE
+ *      for the merges.
+ *
+ * Steady state (every boot after the first seed) is ALL-merges: every seed row
+ * already exists and name-matches, so the whole batch partitions into the merge
+ * set. That path is now ~1 chunked statement instead of the ~49 SERIAL UPDATEs
+ * the original per-row loop issued (prod evidence: avg 378ms / max 977ms / 22.3s
+ * total) — keeping the seed phase under the boot budget.
+ *
+ * Keeps the original signature and returns the count of rows touched.
  */
 export async function upsertSeedGames(
   db: Db,
   seeds: GameSeed[],
 ): Promise<number> {
-  let touched = 0;
-  for (const seed of seeds) {
-    const values = mapGameToValues(seed);
-    const nameMatch = await findGameByNormalizedName(db, seed.name);
-    if (nameMatch) {
-      const sameIgdbId = nameMatch.igdbId === seed.igdbId;
-      const orphanSafe =
-        nameMatch.igdbId == null &&
-        !(await rowExistsWithIgdbId(db, seed.igdbId));
-      if (sameIgdbId || orphanSafe) {
-        await mergeSeedIntoExistingRow(db, nameMatch.id, values);
-        touched++;
-        continue;
-      }
-    }
-    await db
-      .insert(schema.games)
-      .values(values)
-      .onConflictDoUpdate({
-        target: schema.games.igdbId,
-        set: { ...excludedCol, cachedAt: new Date() },
-      });
-    touched++;
-  }
-  return touched;
+  if (seeds.length === 0) return 0;
+  const present = await selectPresentIgdbIds(
+    db,
+    seeds.map((s) => s.igdbId),
+  );
+  const nameMap = await findGameIdsByNormalizedName(
+    db,
+    seeds.map((s) => s.name),
+  );
+  const { merges, inserts } = partitionSeeds(seeds, nameMap, present);
+
+  await mergeSeedBatch(db, merges);
+  await insertSeedBatch(db, inserts);
+
+  return merges.length + inserts.length;
 }
 
 async function bootstrap() {

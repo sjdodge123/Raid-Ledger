@@ -20,6 +20,21 @@ function redactUrl(url: string): string {
   return url.replace(/key=[^&]+/, 'key=***');
 }
 
+/**
+ * True for upstream statuses worth retrying: 429 (rate limit) and any 5xx.
+ * The 5xx range covers Cloudflare 521/522/524 which prod exports show ITAD
+ * returning in bursts at the 4AM sync window (ROK-1103).
+ */
+function isRetriableStatus(status: number): boolean {
+  return status === 429 || (status >= 500 && status < 600);
+}
+
+/** Sleep for the exponential-backoff window for the given attempt. */
+function backoffDelay(attempt: number): Promise<void> {
+  const ms = ITAD_BACKOFF_INITIAL_MS * 2 ** attempt;
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /** Timestamp of the last ITAD API call for rate limiting */
 let lastCallAt = 0;
 
@@ -106,12 +121,11 @@ async function attemptPost<T>(
 ): Promise<FetchResult<T>> {
   try {
     const response = await fetch(url, buildPostOptions(body));
-    if (response.status === 429) {
-      const backoff = ITAD_BACKOFF_INITIAL_MS * 2 ** attempt;
+    if (isRetriableStatus(response.status)) {
       logger.warn(
-        `ITAD POST 429 — retrying in ${backoff}ms (attempt ${attempt + 1})`,
+        `ITAD POST ${response.status} — retrying in ${ITAD_BACKOFF_INITIAL_MS * 2 ** attempt}ms (attempt ${attempt + 1})`,
       );
-      await new Promise((r) => setTimeout(r, backoff));
+      await backoffDelay(attempt);
       return { data: null, retry: true };
     }
     if (!response.ok) {
@@ -120,8 +134,12 @@ async function attemptPost<T>(
     }
     return { data: (await response.json()) as T, retry: false };
   } catch (error) {
-    logger.error(`ITAD POST fetch error: ${redactUrl(url)}`, error);
-    return { data: null, retry: false };
+    logger.warn(
+      `ITAD POST network error: ${redactUrl(url)} — retrying in ${ITAD_BACKOFF_INITIAL_MS * 2 ** attempt}ms (attempt ${attempt + 1})`,
+      error,
+    );
+    await backoffDelay(attempt);
+    return { data: null, retry: true };
   }
 }
 
@@ -134,12 +152,11 @@ async function attemptFetch<T>(
       headers: { 'User-Agent': USER_AGENT },
     });
 
-    if (response.status === 429) {
-      const backoff = ITAD_BACKOFF_INITIAL_MS * 2 ** attempt;
+    if (isRetriableStatus(response.status)) {
       logger.warn(
-        `ITAD 429 — retrying in ${backoff}ms (attempt ${attempt + 1})`,
+        `ITAD ${response.status} — retrying in ${ITAD_BACKOFF_INITIAL_MS * 2 ** attempt}ms (attempt ${attempt + 1})`,
       );
-      await new Promise((r) => setTimeout(r, backoff));
+      await backoffDelay(attempt);
       return { data: null, retry: true };
     }
 
@@ -150,7 +167,11 @@ async function attemptFetch<T>(
 
     return { data: (await response.json()) as T, retry: false };
   } catch (error) {
-    logger.error(`ITAD fetch error: ${redactUrl(url)}`, error);
-    return { data: null, retry: false };
+    logger.warn(
+      `ITAD fetch network error: ${redactUrl(url)} — retrying in ${ITAD_BACKOFF_INITIAL_MS * 2 ** attempt}ms (attempt ${attempt + 1})`,
+      error,
+    );
+    await backoffDelay(attempt);
+    return { data: null, retry: true };
   }
 }
