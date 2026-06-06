@@ -225,6 +225,24 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         expect(screen.getByText('Any')).toBeInTheDocument();
     });
 
+    // ROK-1348: a brand-new lineup has participantCount === 1 (creator only).
+    // Auto-pinning maxPlayers to 1 would filter out every multiplayer game,
+    // so <= 1 must be treated as "no auto-set".
+    it('does NOT auto-set when participantCount is 1 (creator-only new lineup)', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                onChange={onChange}
+                search=""
+                onSearchChange={vi.fn()}
+                participantCount={1}
+            />,
+        );
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByText('Any')).toBeInTheDocument();
+    });
+
     it('does not auto-set when maxPlayers is already set (e.g. URL/state hydration)', () => {
         const onChange = vi.fn();
         render(

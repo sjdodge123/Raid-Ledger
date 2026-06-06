@@ -21,6 +21,8 @@ export function createMockBanner(
         entryCount: 3,
         totalVoters: 5,
         totalMembers: 10,
+        // ROK-1348: eligible voter pool — public lineups mirror totalMembers.
+        votingEligibleCount: 10,
         decidedGameName: null,
         entries: [
             { gameId: 1, gameName: 'Valheim', gameCoverUrl: '/cover1.jpg', ownerCount: 6, voteCount: 3 },

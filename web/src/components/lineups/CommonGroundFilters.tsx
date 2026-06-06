@@ -97,7 +97,12 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
     const didInitPlayersRef = useRef(false);
     useEffect(() => {
         if (didInitPlayersRef.current) return;
-        if (!participantCount || participantCount <= 0) return;
+        // ROK-1348: a brand-new lineup has participantCount === 1 (creator
+        // only). Auto-pinning maxPlayers to 1 would filter out every
+        // multiplayer game, which is pathological for a co-op nomination
+        // panel. Treat <= 1 as "no auto-set" so the slider stays open until
+        // there are at least 2 eligible players.
+        if (!participantCount || participantCount <= 1) return;
         didInitPlayersRef.current = true;
         if (filters.maxPlayers != null) return;
         onChange({ ...filters, maxPlayers: participantCount });

@@ -42,6 +42,7 @@ function buildBuildingLineup(
         entries: [],
         totalVoters: 5,
         totalMembers: 5,
+        votingEligibleCount: 5,
         myVotes: [],
         unlinkedSteamCount: 0,
         unlinkedSteamMembers: [],
@@ -116,6 +117,50 @@ describe('NominatingComposite — JourneyHero wiring (ROK-1297)', () => {
             screen.queryByText(/You're done here/i),
         ).not.toBeInTheDocument();
         expect(screen.queryByText(/You're set/i)).not.toBeInTheDocument();
+    });
+
+    // ROK-1348: the people-denominator in the hero sub-copy uses
+    // votingEligibleCount (private = creator + invitees), NOT the
+    // community-wide totalMembers, and no longer pairs the entry count
+    // with the voter count.
+    it('renders the eligible voter count in the hero copy for a private lineup', async () => {
+        const lineup = buildBuildingLineup({
+            visibility: 'private',
+            totalMembers: 13,
+            totalVoters: 0,
+            votingEligibleCount: 3,
+            entries: [],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.getByText(/0 nominated by 3 voters/i),
+            ).toBeInTheDocument();
+        });
+        // The community-wide count must NOT leak into the copy.
+        expect(screen.queryByText(/by 13 voters/i)).not.toBeInTheDocument();
+    });
+
+    it('uses the singular "voter" when only one is eligible', async () => {
+        const lineup = buildBuildingLineup({
+            visibility: 'private',
+            votingEligibleCount: 1,
+            entries: [],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await waitFor(() => {
+            expect(
+                screen.getByText(/0 nominated by 1 voter\b/i),
+            ).toBeInTheDocument();
+        });
     });
 
     it('shifts JourneyHero tone to "waiting" when nominationsSubmittedAt is set', async () => {

@@ -75,11 +75,14 @@ function BannerHeading({ banner }: { banner: LineupBannerResponseDto }): JSX.Ele
 
 /** Subtitle with entry count and voter stats. */
 function BannerSubtitle({ banner }: { banner: LineupBannerResponseDto }): JSX.Element {
+    // ROK-1348: the voter denominator is the eligible pool (private =
+    // creator + invitees; public = members), not the whole community — a
+    // private lineup no longer reads "0 of 13 members voted".
     return (
         <p className="text-sm text-muted mb-4" data-testid="lineup-banner-subtitle">
             {banner.entryCount} games nominated{' '}
             <span className="text-dim">
-                &middot; {banner.totalVoters} of {banner.totalMembers} members voted
+                &middot; {banner.totalVoters} of {banner.votingEligibleCount} members voted
             </span>
         </p>
     );

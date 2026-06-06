@@ -17,6 +17,8 @@ import {
   countOwnersPerGame,
   countTotalMembers,
 } from './lineups-enrichment.helpers';
+import { loadInvitees } from './lineups-eligibility.helpers';
+import { computeVotingEligibleCount } from './voting-eligibility.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -79,7 +81,7 @@ export async function buildBannerData(
 ): Promise<LineupBannerResponseDto | null> {
   const entries = await findEntriesWithGames(db, lineup.id);
   const gameIds = entries.map((e) => e.gameId);
-  const [ownerMap, voteMap, voterCount, totalMembers, decidedGame] =
+  const [ownerMap, voteMap, voterCount, totalMembers, decidedGame, invitees] =
     await Promise.all([
       countOwnersPerGame(db, gameIds),
       countVotesPerGame(db, lineup.id),
@@ -88,8 +90,16 @@ export async function buildBannerData(
       lineup.decidedGameId
         ? findGameName(db, lineup.decidedGameId)
         : Promise.resolve([]),
+      // ROK-1348: private lineups must use the creator+invitees pool, not
+      // the whole community, as the people-denominator.
+      loadInvitees(db, lineup.id),
     ]);
   const vMap = new Map(voteMap.map((v) => [v.gameId, v.voteCount]));
+  const votingEligibleCount = computeVotingEligibleCount(
+    { createdBy: lineup.createdBy, visibility: lineup.visibility },
+    invitees.map((id) => ({ id })),
+    totalMembers,
+  );
   const bannerEntries = entries.map((e) => ({
     gameId: e.gameId,
     gameName: e.gameName,
@@ -102,6 +112,7 @@ export async function buildBannerData(
     vMap,
     voterCount[0]?.total ?? 0,
     totalMembers,
+    votingEligibleCount,
   );
   if (result) {
     result.tiebreakerActive = !!lineup.activeTiebreakerId;
@@ -116,6 +127,7 @@ export function buildBannerResponse(
   voteMap: Map<number, number>,
   totalVoters: number,
   totalMembers: number,
+  votingEligibleCount: number,
 ): LineupBannerResponseDto | null {
   if (lineup.status === 'archived') return null;
 
@@ -132,6 +144,8 @@ export function buildBannerResponse(
     entryCount: entries.length,
     totalVoters,
     totalMembers,
+    // ROK-1348: people-denominator scoped to the lineup audience.
+    votingEligibleCount,
     decidedGameName: lineup.decidedGameName ?? null,
     entries: entries.map((e) => ({
       gameId: e.gameId,

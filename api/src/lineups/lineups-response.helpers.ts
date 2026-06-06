@@ -46,6 +46,12 @@ interface EnrichmentMaps {
   wishlistMap: Map<number, number>;
   pricingMap: Map<number, GamePricing>;
   totalMembers: number;
+  /**
+   * ROK-1348: voter-eligible pool size (private = creator + invitees;
+   * public = totalMembers). Used as the non-owner denominator so private
+   * lineups stop borrowing the whole community's count.
+   */
+  eligibleCount: number;
   unlinkedSteamCount: number;
   unlinkedSteamMembers: UnlinkedSteamMember[];
 }
@@ -71,7 +77,10 @@ function mapEntry(
     createdAt: e.createdAt.toISOString(),
     ownerCount,
     totalMembers: enrichment.totalMembers,
-    nonOwnerCount: enrichment.totalMembers - ownerCount,
+    // ROK-1348: non-owners measured against the eligible pool, not the
+    // whole community. Clamp at 0 (eligibleCount floors at 1, but an
+    // owner count can transiently exceed the pool mid-write).
+    nonOwnerCount: Math.max(0, enrichment.eligibleCount - ownerCount),
     wishlistCount: enrichment.wishlistMap.get(e.gameId) ?? 0,
     itadCurrentPrice: pricing?.itadCurrentPrice ?? null,
     itadCurrentCut: pricing?.itadCurrentCut ?? null,
@@ -216,11 +225,20 @@ async function fetchEnrichment(
       countUnlinkedSteamMembers(db, audience),
       findUnlinkedSteamMembers(db, audience),
     ]);
+  // ROK-1348: eligible pool = creator + invitees (private) or totalMembers
+  // (public). Computed here so `mapEntry` can use it as the non-owner
+  // denominator. Floors at 1 (creator always counts).
+  const eligibleCount = computeVotingEligibleCount(
+    { createdBy: audience.createdBy, visibility: audience.visibility },
+    audience.inviteeUserIds.map((id) => ({ id })),
+    totalMembers,
+  );
   return {
     ownerMap,
     wishlistMap,
     pricingMap,
     totalMembers,
+    eligibleCount,
     unlinkedSteamCount: uc,
     unlinkedSteamMembers: um,
   };
@@ -303,13 +321,11 @@ export async function buildDetailResponse(
   // ROK-1296: replace the stub from mapToDetailResponse with the real
   // viewer-scoped row. Both fields are null when userId is undefined.
   detail.viewerSubmissions = viewerSubmissions;
-  // ROK-1298: voter-pool denominator for Sv vote bars. Private =
-  // creator + invitees (deduped); public = totalMembers; floor at 1.
-  detail.votingEligibleCount = computeVotingEligibleCount(
-    { createdBy: lineup.createdBy, visibility: lineup.visibility },
-    invitees.map((i) => ({ id: i.id })),
-    enrichment.totalMembers,
-  );
+  // ROK-1298 / ROK-1348: voter-pool denominator for Sv vote bars. Reuse the
+  // eligible count fetchEnrichment already computed from the same inputs
+  // (audience invitees == listInviteesWithProfile invitees) instead of
+  // recomputing it.
+  detail.votingEligibleCount = enrichment.eligibleCount;
 
   // Attach tiebreaker detail if one exists (ROK-938)
   if (lineup.activeTiebreakerId) {

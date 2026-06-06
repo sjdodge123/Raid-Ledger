@@ -48,7 +48,10 @@ function deriveJourneyState(
   lineup: LineupDetailResponseDto,
   myNominatedCount: number,
 ): JourneyState {
-  const totalVoters = lineup.totalVoters || lineup.totalMembers || 0;
+  // ROK-1348: the people-denominator is the eligible voter pool (private =
+  // creator + invitees; public = totalMembers), NOT the community-wide
+  // totalMembers — a 3-invitee private lineup no longer reads "by 13 voters".
+  const eligible = lineup.votingEligibleCount;
   const submitted =
     lineup.viewerSubmissions?.nominationsSubmittedAt != null;
   const badge = 'Step 1 of 4 · Nominating';
@@ -63,7 +66,10 @@ function deriveJourneyState(
   return {
     badge,
     task: 'Add games to the running.',
-    sub: `${lineup.entries.length} of ${totalVoters || '?'} nominated by ${totalVoters} voters.`,
+    // ROK-1348: the entry count is no longer paired with the voter count
+    // (the old "X of Y nominated by Y voters" wrongly used the same Y for
+    // both the nomination target and the voter pool).
+    sub: `${lineup.entries.length} nominated by ${eligible} ${eligible === 1 ? 'voter' : 'voters'}`,
     tone: 'action',
   };
 }
