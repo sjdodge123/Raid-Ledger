@@ -113,6 +113,110 @@ describe('recoverOrphanScheduledEvents', () => {
     return guild;
   }
 
+  describe('includeStale (ROK-1355)', () => {
+    const CLIENT_URL = 'https://rl.example';
+
+    it('classifies a fingerprinted SE with NO live match as staleReclaimable (dry-run)', async () => {
+      // Event 77 has ended — no live row, no tracked binding. Its duplicate
+      // outlived it but still carries the RL /events/77 fingerprint.
+      const guild = makeGuild([
+        { id: 'stale-se', name: 'Old Gamernight', ts: START, desc: rlDesc(77) },
+        { id: 'op-se', name: 'Operator Party', ts: START, desc: 'hand-made' },
+      ]);
+
+      const result = await recoverOrphanScheduledEvents(
+        guild,
+        makeDb(),
+        logger,
+        { dryRun: true, staleClientUrl: CLIENT_URL },
+      );
+
+      expect(result.staleReclaimable).toEqual([
+        {
+          eventId: 77,
+          seId: 'stale-se',
+          title: 'Old Gamernight',
+          start: new Date(START).toISOString(),
+        },
+      ]);
+      // The hand-made SE stays an operator orphan; the stale one moved out.
+      expect(result.operatorOrphans).toBe(1);
+      expect(tryDeleteEvent).not.toHaveBeenCalled();
+    });
+
+    it('returns empty staleReclaimable and unchanged counts when staleClientUrl is not provided', async () => {
+      const guild = makeGuild([
+        { id: 'stale-se', name: 'Old Gamernight', ts: START, desc: rlDesc(77) },
+      ]);
+
+      const result = await recoverOrphanScheduledEvents(
+        guild,
+        makeDb(),
+        logger,
+        { dryRun: true },
+      );
+
+      expect(result.staleReclaimable).toEqual([]);
+      expect(result.operatorOrphans).toBe(1);
+    });
+
+    it('requires the CONFIGURED client url — a foreign /events/ URL is never reclaimed', async () => {
+      const guild = makeGuild([
+        {
+          id: 'foreign-se',
+          name: 'Other Community Event',
+          ts: START,
+          desc: 'View event: https://other.example/events/123',
+        },
+      ]);
+
+      const result = await recoverOrphanScheduledEvents(
+        guild,
+        makeDb(),
+        logger,
+        { dryRun: true, staleClientUrl: CLIENT_URL },
+      );
+
+      expect(result.staleReclaimable).toEqual([]);
+      expect(result.operatorOrphans).toBe(1);
+    });
+
+    it('dryRun=false deletes stale SEs alongside live duplicates', async () => {
+      const guild = makeGuild([
+        { id: 'bound-se', name: 'Palworld Event', ts: START },
+        { id: 'dup-se', name: 'Palworld Event', ts: START, desc: rlDesc(9) },
+        { id: 'stale-se', name: 'Old Gamernight', ts: START, desc: rlDesc(77) },
+      ]);
+      findRLTrackedSEs.mockResolvedValue([
+        { id: 9, discordScheduledEventId: 'bound-se', isStale: false },
+      ]);
+      findLiveRLEventsForDedup.mockResolvedValue([
+        {
+          id: 9,
+          discordScheduledEventId: 'bound-se',
+          title: 'Palworld Event',
+          startIso: new Date(START).toISOString(),
+        },
+      ]);
+
+      const result = await recoverOrphanScheduledEvents(
+        guild,
+        makeDb(),
+        logger,
+        { dryRun: false, staleClientUrl: CLIENT_URL },
+      );
+
+      expect(result.deleted).toBe(2);
+      expect(tryDeleteEvent).toHaveBeenCalledWith(guild, 9, 'dup-se');
+      expect(tryDeleteEvent).toHaveBeenCalledWith(guild, 77, 'stale-se');
+      expect(tryDeleteEvent).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'bound-se',
+      );
+    });
+  });
+
   it('dry-run returns reclaimable duplicates and deletes nothing', async () => {
     const guild = withOneDuplicate();
 
