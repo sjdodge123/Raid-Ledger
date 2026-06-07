@@ -21,14 +21,17 @@ interface AuthRequest extends Request {
 /**
  * GET /lineups/:id/suggestions — AI-generated nomination suggestions.
  *
- * `?personalize=me` narrows the voter set to the requesting user so
- * the LLM tailors suggestions to their individual taste vector.
- * Otherwise the server uses the lineup's invitee/nominator set (private
- * lineup → invitees, public → distinct nominators, fallback → recent
- * active community per architect Decision A).
+ * ROK-1316: serve-stale-while-revalidate. The request thread NEVER awaits
+ * the LLM — it returns the cached payload (fresh / stale / `pending` cold)
+ * and warms the cache via a background pre-gen job.
+ *
+ * `?personalize=me` is still accepted (legacy NominateModal sends it) but
+ * the per-user LLM path is DELETED — it serves identical base suggestions
+ * and emits a `served-from-base` telemetry line.
  *
  * Response statuses:
- *   200 — fresh or cached suggestions (see `cached` flag)
+ *   200 — fresh / stale / pending suggestions (see `cached` / `stale` /
+ *         `pending` flags)
  *   404 — lineup missing
  *   409 — lineup not in `building` status
  *   503 — no LLM provider configured (or circuit breaker open)
@@ -42,12 +45,11 @@ export class AiSuggestionsController {
   async getSuggestions(
     @Param('id', ParseIntPipe) id: number,
     @Query('personalize') personalize: string | undefined,
-    @Req() req: AuthRequest,
+    @Req() _req: AuthRequest,
   ): Promise<AiSuggestionsResponseDto> {
-    const personalizeUserId = personalize === 'me' ? req.user.id : undefined;
     try {
       return await this.aiSuggestions.getSuggestions(id, {
-        personalizeUserId,
+        personalize: personalize === 'me',
       });
     } catch (err) {
       throw mapLlmError(err);

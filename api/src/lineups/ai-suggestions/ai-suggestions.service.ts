@@ -10,9 +10,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
-import { LlmService } from '../../ai/llm.service';
-import { AI_DEFAULTS, AI_SETTING_KEYS } from '../../ai/llm.constants';
-import { GameTasteService } from '../../game-taste/game-taste.service';
+import { AI_SETTING_KEYS } from '../../ai/llm.constants';
 import * as schema from '../../drizzle/schema';
 import {
   resolveVoterScope,
@@ -20,74 +18,107 @@ import {
   type VoterScopeLineup,
 } from './voter-scope.helpers';
 import {
-  buildCandidatePool,
-  loadCandidateContext,
-  minimumPlayerCount,
-  type CandidateContext,
-} from './candidate-pool.helpers';
-import { buildSuggestionPrompt } from './prompt-builder.helpers';
-import { loadVoterProfiles } from './voter-profile.helpers';
-import { loadRecentWinners } from './recent-winners.helpers';
-import { callAndParseLlmOutput, LLM_FEATURE_TAG } from './llm-output.helpers';
-import { enrichSuggestions } from './enrichment.helpers';
-import {
   findLatestByHash,
-  upsertSuggestion,
+  findLatestForLineup,
   isFresh,
   FRESH_TTL_MS,
   EMPTY_TTL_MS,
 } from './cache.helpers';
+import {
+  AiSuggestionsPreGenQueueService,
+  PREGEN_REQUEST_DELAY_MS,
+} from './pre-gen.queue';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Options passed from the controller. */
 export interface GetSuggestionsOpts {
-  personalizeUserId?: number;
+  /**
+   * ROK-1316: legacy NominateModal still sends `?personalize=me`. The
+   * per-user LLM path is DELETED — this flag now only drives a telemetry
+   * line proving the path is served from base suggestions.
+   */
+  personalize?: boolean;
 }
 
+/**
+ * Serve-stale-while-revalidate read service (ROK-1316).
+ *
+ * The request thread NEVER awaits the LLM. It returns whatever the cache
+ * holds — fresh hit, stale older-hash row, or an empty `pending` payload —
+ * and enqueues a debounced background pre-gen job to warm/refresh the
+ * cache. The 60s Gemini round-trip only ever runs inside the BullMQ
+ * processor.
+ */
 @Injectable()
 export class AiSuggestionsService {
   private readonly logger = new Logger(AiSuggestionsService.name);
-  private readonly inFlight = new Map<
-    string,
-    Promise<AiSuggestionsResponseDto>
-  >();
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly settings: SettingsService,
-    private readonly llmService: LlmService,
-    private readonly gameTaste: GameTasteService,
+    private readonly preGen: AiSuggestionsPreGenQueueService,
   ) {}
 
   /**
-   * Public entry point called from the controller. Delegates to
-   * `getOrGenerate` with stampede dedupe keyed on lineupId + hash.
-   *
-   * Returns an empty payload (without calling the LLM) when admins have
-   * disabled the feature via `ai_suggestions_enabled = 'false'`. The UI
-   * collapses on empty success, hiding the section entirely (ROK-1114
-   * round 3).
+   * Public entry point called from the controller. Returns an empty payload
+   * (no enqueue) when admins have disabled the feature via
+   * `ai_suggestions_enabled = 'false'`.
    */
   async getSuggestions(
     lineupId: number,
     opts: GetSuggestionsOpts = {},
   ): Promise<AiSuggestionsResponseDto> {
     const lineup = await this.loadLineup(lineupId);
+    if (opts.personalize) {
+      this.logger.log(
+        `AI suggestions personalize=me served-from-base | lineup=${lineupId}`,
+      );
+    }
     if (await this.isFeatureDisabled()) {
       return this.emptyResponse();
     }
-    const scope = await resolveVoterScope(this.db, lineup, {
-      personalizeUserId: opts.personalizeUserId,
-    });
-    const key = `${lineupId}:${scope.hash}`;
-    const existing = this.inFlight.get(key);
-    if (existing) return existing;
-    const promise = this.getOrGenerate(lineup, scope).finally(() => {
-      this.inFlight.delete(key);
-    });
-    this.inFlight.set(key, promise);
-    return promise;
+    const scope = await resolveVoterScope(this.db, lineup);
+    return this.serveFromCache(lineup, scope);
+  }
+
+  /** SWR read: fresh hit → stale row → cold. Never awaits the LLM. */
+  private async serveFromCache(
+    lineup: VoterScopeLineup,
+    scope: ResolvedVoterScope,
+  ): Promise<AiSuggestionsResponseDto> {
+    const fresh = await this.findFresh(lineup.id, scope.hash);
+    if (fresh) {
+      this.logTelemetry(lineup.id, 'hit');
+      return { ...fresh.payload, cached: true };
+    }
+    const latest = await findLatestForLineup(this.db, lineup.id);
+    if (latest) {
+      this.logTelemetry(lineup.id, 'stale_served');
+      await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS);
+      return { ...latest.payload, cached: true, stale: true };
+    }
+    this.logTelemetry(lineup.id, 'miss_cold');
+    await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS);
+    return { ...this.emptyResponse(), pending: true };
+  }
+
+  /** Latest row for the current hash, only if still within its TTL. */
+  private async findFresh(lineupId: number, hash: string) {
+    const cached = await findLatestByHash(this.db, lineupId, hash);
+    if (!cached) return null;
+    const ttl =
+      (cached.payload.suggestions ?? []).length > 0
+        ? FRESH_TTL_MS
+        : EMPTY_TTL_MS;
+    return isFresh(cached.generatedAt, ttl) ? cached : null;
+  }
+
+  private logTelemetry(
+    lineupId: number,
+    result: 'hit' | 'stale_served' | 'miss_cold',
+  ): void {
+    this.logger.log(`AI suggestions cache | lineup=${lineupId} result=${result}`);
   }
 
   private async isFeatureDisabled(): Promise<boolean> {
@@ -105,11 +136,7 @@ export class AiSuggestionsService {
     } satisfies AiSuggestionsResponseDto;
   }
 
-  private async loadLineup(lineupId: number): Promise<
-    VoterScopeLineup & {
-      status: string;
-    }
-  > {
+  private async loadLineup(lineupId: number): Promise<VoterScopeLineup> {
     const [row] = await this.db
       .select({
         id: schema.communityLineups.id,
@@ -125,119 +152,6 @@ export class AiSuggestionsService {
         `Lineup ${lineupId} is not in building status (status=${row.status})`,
       );
     }
-    return row;
-  }
-
-  private async getOrGenerate(
-    lineup: VoterScopeLineup,
-    scope: ResolvedVoterScope,
-  ): Promise<AiSuggestionsResponseDto> {
-    const cached = await findLatestByHash(this.db, lineup.id, scope.hash);
-    if (cached) {
-      const ttl =
-        (cached.payload.suggestions ?? []).length > 0
-          ? FRESH_TTL_MS
-          : EMPTY_TTL_MS;
-      if (isFresh(cached.generatedAt, ttl)) {
-        return { ...cached.payload, cached: true };
-      }
-    }
-    return this.generateFresh(lineup, scope);
-  }
-
-  private async generateFresh(
-    lineup: VoterScopeLineup,
-    scope: ResolvedVoterScope,
-  ): Promise<AiSuggestionsResponseDto> {
-    const { provider, model } = await this.activeProviderInfo();
-    const candidates = await buildCandidatePool(
-      this.db,
-      this.gameTaste,
-      scope.userIds,
-      lineup.id,
-      scope.strategy,
-    );
-    if (candidates.length === 0) {
-      return this.persistAndReturn(lineup.id, scope, [], provider, model);
-    }
-    const context = await loadCandidateContext(
-      this.db,
-      candidates,
-      scope.userIds,
-    );
-    const suggestions = await this.runLlmPass(scope, context);
-    const enriched = await enrichSuggestions(
-      this.db,
-      suggestions,
-      new Set(context.map((c) => c.gameId)),
-      scope.userIds,
-    );
-    return this.persistAndReturn(lineup.id, scope, enriched, provider, model);
-  }
-
-  private async runLlmPass(
-    scope: ResolvedVoterScope,
-    candidates: CandidateContext[],
-  ): ReturnType<typeof callAndParseLlmOutput> {
-    // Option E (2026-04-22): feed the curator per-voter profiles and
-    // recent winners instead of just a centroid, so the LLM can reason
-    // about individuals + history rather than rubber-stamping the
-    // vector-ranked order.
-    const [voterProfiles, recentWinners] = await Promise.all([
-      loadVoterProfiles(this.db, scope.userIds),
-      loadRecentWinners(this.db),
-    ]);
-    const options = buildSuggestionPrompt({
-      strategy: scope.strategy,
-      voterCount: scope.userIds.length,
-      minPlayerCount: minimumPlayerCount(scope.userIds.length, scope.strategy),
-      voterProfiles,
-      recentWinners,
-      candidates,
-    });
-    return callAndParseLlmOutput(this.llmService, options, {
-      feature: LLM_FEATURE_TAG,
-    });
-  }
-
-  private async persistAndReturn(
-    lineupId: number,
-    scope: ResolvedVoterScope,
-    suggestions: AiSuggestionsResponseDto['suggestions'],
-    provider: string,
-    model: string,
-  ): Promise<AiSuggestionsResponseDto> {
-    const payload = {
-      suggestions,
-      generatedAt: new Date().toISOString(),
-      voterCount: scope.userIds.length,
-      voterScopeStrategy: scope.strategy,
-    };
-    try {
-      await upsertSuggestion(this.db, {
-        lineupId,
-        voterSetHash: scope.hash,
-        payload,
-        provider,
-        model,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Failed to persist suggestions for ${lineupId}: ${msg}`);
-    }
-    return { ...payload, cached: false };
-  }
-
-  private async activeProviderInfo(): Promise<{
-    provider: string;
-    model: string;
-  }> {
-    const provider =
-      (await this.settings.get(AI_SETTING_KEYS.PROVIDER)) ??
-      (await this.llmService.getActiveProviderKey()) ??
-      'unknown';
-    const model =
-      (await this.settings.get(AI_SETTING_KEYS.MODEL)) ?? AI_DEFAULTS.model;
-    return { provider, model };
+    return { id: row.id, visibility: row.visibility };
   }
 }
