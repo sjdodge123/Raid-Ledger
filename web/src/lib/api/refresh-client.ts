@@ -12,6 +12,8 @@ import { RefreshResponseSchema } from '@raid-ledger/contract';
  */
 
 const TOKEN_KEY = 'raid_ledger_token';
+/** Set while an admin is impersonating — the cookie belongs to the ADMIN. */
+const ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';
 
 let inFlight: Promise<string | null> | null = null;
 
@@ -42,6 +44,13 @@ async function doRefresh(): Promise<string | null> {
  * calls share one network request.
  */
 export function ensureFreshToken(): Promise<string | null> {
+  // Security gate (Codex P1, ROK-1353): during impersonation the bearer is
+  // the IMPERSONATED user's token but the refresh cookie belongs to the
+  // admin. Refreshing here would silently switch the request identity back
+  // to the admin — refuse and let the 401 surface instead.
+  if (localStorage.getItem(ORIGINAL_TOKEN_KEY)) {
+    return Promise.resolve(null);
+  }
   if (!inFlight) {
     inFlight = doRefresh().finally(() => {
       inFlight = null;
