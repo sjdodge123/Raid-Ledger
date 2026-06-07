@@ -329,9 +329,21 @@ export async function ensureSyncedHead(
     };
   } finally {
     // Don't leave the sentinel lingering in the worktree (it's gitignored, but
-    // tidy is better). The runner-side copy is harmless and gets overwritten /
-    // re-synced next round.
+    // tidy is better).
+    //
+    // TECH-DEBT 2026-06-06: after unlinking, FLUSH the deletion through to
+    // /workspace before returning. Without this, Mutagen propagates the
+    // sentinel deletion asynchronously — racing the build's
+    // `cp -a /workspace/. "$TMPDIR/"` on the runner, which dies with
+    // `cp: cannot stat '/workspace/./.rl-sync-probe-…'` when the file
+    // vanishes mid-enumeration (observed 2 of 3 build attempts during the
+    // ROK-1329 AC-6 deploy). Best-effort: a failed flush here only means the
+    // deletion lands later; the runner-side pre-clean in
+    // build-image-on-runner is the second half of the defense.
     await unlink(sentinelPath).catch(() => {});
+    await execFileP('mutagen', ['sync', 'flush', `rl-slot-${params.slot}`], {
+      timeout: flushTimeoutMs,
+    }).catch(() => {});
   }
 
   // Still not good after a resync — fail loud. The caller MUST NOT build.

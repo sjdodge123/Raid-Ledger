@@ -198,11 +198,20 @@ ping -c1 traefik.rl.lan
 From the laptop, in the repo root:
 
 ```bash
-rsync -avh --exclude='.git' rl-infra/ rl@192.168.1.50:/srv/rl-infra/
+./rl-infra/deploy.sh        # target override: RL_DEPLOY_TARGET=rl@<ip>
 ```
 
 This copies docker-compose.yml, the runner Dockerfile, orchestrator scripts,
-Traefik/Loki/Grafana configs, and the gc-sweeper.
+Traefik/Loki/Grafana configs, and the gc-sweeper — then restores exec bits,
+re-asserts the rl-fleet group perms on `traefik/conf.d`, rebuilds the
+gc-sweeper image (sweep.sh is baked in at build time), and stamps
+`.deployed_sha`.
+
+> **Do NOT use a bare `rsync -avh` here.** `-a` replicates the laptop's
+> directory permissions onto live VM dirs and strips the group-write + setgid
+> bits rl-agent needs on `traefik/conf.d` — after which every env-spin aborts
+> at the Traefik route write and `rl_env_destroy` can't remove route files
+> (observed 2026-06-06). `deploy.sh` rsyncs content-only and re-asserts perms.
 
 ### 3.2  Set the env file
 
