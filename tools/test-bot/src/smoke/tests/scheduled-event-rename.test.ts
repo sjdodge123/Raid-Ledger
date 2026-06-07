@@ -70,22 +70,37 @@ async function pollForSeName(
   );
 }
 
-/** Pick two distinct games with names from the discovered demo games. */
-function pickTwoGames(ctx: TestContext): { a: { id: number; name: string }; b: { id: number; name: string } } {
-  const games = ctx.games.filter((g) => g.name && g.name.length > 0);
-  if (games.length < 2) {
+/** Pick two distinct named games. `ctx.games` only carries the admin's
+ *  character-derived MMO game (often empty, synthetic names), so prefer the
+ *  real registry rows from /admin/games — the SE name assertions need the
+ *  exact game names the API will append to the title. */
+async function pickTwoGames(
+  ctx: TestContext,
+): Promise<{ a: { id: number; name: string }; b: { id: number; name: string } }> {
+  let games: { id: number; name: string }[] = [];
+  try {
+    const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
+      "/admin/games",
+    );
+    games = Array.isArray(res.data) ? res.data : [];
+  } catch {
+    games = [];
+  }
+  if (games.length < 2) games = ctx.games;
+  const named = games.filter((g) => g.name && g.name.length > 0);
+  if (named.length < 2) {
     throw new Error(
-      `Need ≥2 named games for rename test, found ${games.length}`,
+      `Need ≥2 named games for rename test, found ${named.length}`,
     );
   }
-  return { a: games[0], b: games[1] };
+  return { a: named[0], b: named[1] };
 }
 
 const renameOnGameSetChangeUnset: SmokeTest = {
   name: "ROK-1350: SE renamed on game set → change → unset, id stable (no duplicate)",
   category: "flow",
   async run(ctx: TestContext) {
-    const { a: gameA, b: gameB } = pickTwoGames(ctx);
+    const { a: gameA, b: gameB } = await pickTwoGames(ctx);
     await enableScheduledEvents(ctx.api);
     const ev = await createEvent(ctx.api, "se-rename");
     try {
