@@ -21,7 +21,7 @@
  * `scripts/smoke/auth-refresh.smoke.ts`).
  */
 import * as crypto from 'crypto';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
@@ -294,11 +294,13 @@ describe('Session length setting (AC5)', () => {
     const before = Date.now();
     await refreshService.issue(adminId, { authMethod: 'local' });
 
+    // The /auth/local login above also minted a (60-day default) row; read the
+    // NEWEST row so we assert against the post-PUT `issue` call, not the login.
     const [row] = await testApp.db
       .select({ expiresAt: schema.refreshTokens.expiresAt })
       .from(schema.refreshTokens)
       .where(eq(schema.refreshTokens.userId, adminId))
-      .orderBy(schema.refreshTokens.createdAt)
+      .orderBy(desc(schema.refreshTokens.createdAt))
       .limit(1);
     expect(row).toBeTruthy();
     const expiresMs = new Date(row.expiresAt).getTime();

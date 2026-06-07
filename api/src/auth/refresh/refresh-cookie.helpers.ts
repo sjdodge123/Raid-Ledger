@@ -1,4 +1,4 @@
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
 /**
  * ROK-1353: httpOnly refresh-token cookie helpers.
@@ -33,6 +33,28 @@ export function setRefreshCookie(
     path: '/',
     maxAge: maxAgeMs,
   });
+}
+
+/**
+ * Read the raw `rl_rt` cookie. Prefers cookie-parser's `req.cookies` (prod),
+ * falling back to parsing the raw `Cookie` header — the NestJS test app boots
+ * via `createNestApplication()` and never runs main.ts's `cookieParser()`
+ * middleware, so `req.cookies` is undefined there.
+ */
+export function readRefreshCookie(req: Request): string | null {
+  const parsed = (req.cookies ?? {}) as Record<string, unknown>;
+  const fromParser = parsed[REFRESH_COOKIE_NAME];
+  if (typeof fromParser === 'string') return fromParser;
+  const header = req.headers?.cookie;
+  if (typeof header !== 'string') return null;
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === REFRESH_COOKIE_NAME) {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    }
+  }
+  return null;
 }
 
 /** Clear the refresh cookie (logout). Mirrors the set attrs so the browser

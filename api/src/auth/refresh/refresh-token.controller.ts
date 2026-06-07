@@ -18,7 +18,7 @@ import { RateLimit } from '../../throttler/rate-limit.decorator';
 import { RefreshTokenService } from './refresh-token.service';
 import { TokenBlocklistService } from '../token-blocklist.service';
 import {
-  REFRESH_COOKIE_NAME,
+  readRefreshCookie,
   setRefreshCookie,
   clearRefreshCookie,
 } from './refresh-cookie.helpers';
@@ -46,7 +46,7 @@ export class RefreshTokenController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ access_token: string }> {
-    const rawToken = this.readCookie(req);
+    const rawToken = readRefreshCookie(req);
     if (!rawToken) throw new UnauthorizedException('No refresh token');
     const rotated = await this.refreshService.rotate(rawToken);
     if (!rotated) throw new UnauthorizedException('Invalid refresh token');
@@ -62,17 +62,10 @@ export class RefreshTokenController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ success: boolean }> {
-    const rawToken = this.readCookie(req);
+    const rawToken = readRefreshCookie(req);
     if (rawToken) await this.revokePresented(rawToken);
     clearRefreshCookie(res);
     return { success: true };
-  }
-
-  /** Read the raw `rl_rt` cookie value (cookie-parser populates req.cookies). */
-  private readCookie(req: Request): string | null {
-    const cookies = (req.cookies ?? {}) as Record<string, unknown>;
-    const value = cookies[REFRESH_COOKIE_NAME];
-    return typeof value === 'string' ? value : null;
   }
 
   /** Revoke the family the presented token belongs to + blocklist the user. */

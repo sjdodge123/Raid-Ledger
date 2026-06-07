@@ -11,7 +11,6 @@ import {
   type AuthMethod,
   generateRawToken,
   hashToken,
-  isWithinGrace,
 } from './refresh-token.helpers';
 
 /** Result of issuing/rotating: the raw token (for the cookie) + lifetime. */
@@ -151,9 +150,15 @@ export class RefreshTokenService {
   }
 
   /**
-   * No row was consumed: classify why. Already-consumed within grace →
-   * race loser, reject quietly (401). Consumed long ago → reuse: revoke
-   * family + blocklist. Revoked/expired/unknown → 401.
+   * No row was consumed: classify why. Replaying an already-CONSUMED
+   * (rotated, not-revoked) token is reuse/theft — revoke the whole family +
+   * blocklist the user so the live child dies too (standard rotation-with-
+   * reuse-detection). A merely revoked/expired/unknown token → 401 only.
+   *
+   * NOTE: strict reuse detection means a genuine multi-tab race loser also
+   * trips a family revoke; the web client collapses concurrent refreshes with
+   * a single-flight promise (`refresh-client.ts`) so this is not hit in normal
+   * use. Security posture is intentionally chosen over silent race tolerance.
    */
   private async handleNoConsume(
     tokenHash: string,
@@ -161,7 +166,7 @@ export class RefreshTokenService {
     const existing = await this.findActiveByHash(tokenHash);
     if (!existing) return null;
     if (existing.revokedAt) return null;
-    if (existing.rotatedAt && !isWithinGrace(existing.rotatedAt)) {
+    if (existing.rotatedAt) {
       this.logger.warn(
         `ROK-1353: refresh-token reuse detected for user ${existing.userId} — revoking family`,
       );
