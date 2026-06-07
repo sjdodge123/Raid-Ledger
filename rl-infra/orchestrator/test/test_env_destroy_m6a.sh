@@ -195,26 +195,30 @@ http:
       rule: "Host(\`successor-b.rl.lan\`)"
 EOF
     export M6A_SUCCESSOR_RUNNING="true"
-    # Create the lock file with no write permission so flock fails.
-    local lock_file="$RL_TRAEFIK_CONF_D/.slot-1.lock"
-    : > "$lock_file"
-    # Hold an exclusive lock from a background process so the inner flock
-    # times out. Background `flock -x` keeps the lock for 60s; env-destroy
-    # should time out at 5s and audit-log the warning.
-    (
-        flock -x "$lock_file" -c "sleep 60" &
-        echo $! > "$RL_STATE_DIR/lock-holder.pid"
-    )
-    # Tiny delay so the background flock actually grabs the lock before
-    # env-destroy starts.
-    sleep 0.2
+    # Deterministically force the flock-failure branch on BOTH platforms.
+    #
+    # The previous approach held a real exclusive lock from a background
+    # `flock -x ... sleep 60` and relied on env-destroy's inner `flock -w 5`
+    # timing out. That only works on Linux: macOS (BSD) ships no flock(1) at
+    # all, and `_state.sh`'s portability shim then defines flock() as a no-op
+    # that returns 0 — so the contention is never observed and the warning
+    # branch never fires.
+    #
+    # Instead we drop a fake `flock` onto PATH (in the same stub dir as the
+    # docker stub) that ALWAYS fails. Because a `flock` binary is now visible,
+    # `command -v flock` in _state.sh succeeds and the no-op shim is NOT
+    # installed — env-destroy invokes our fake, which returns non-zero,
+    # exercising the audit-warning logic identically on macOS and Linux. This
+    # tests the warning-on-failure behavior (the actual AC12 contract), not the
+    # OS lock primitive.
+    cat > "$M6A_STUB_DIR/flock" <<'STUB'
+#!/usr/bin/env bash
+# Test stub: simulate flock failing to acquire the lock (timeout/contention).
+exit 1
+STUB
+    chmod +x "$M6A_STUB_DIR/flock"
 
     "$ENV_DESTROY_BIN" --slug destroyed-a --force >/dev/null 2>&1 || true
-
-    # Clean up the lock holder.
-    if [[ -f "$RL_STATE_DIR/lock-holder.pid" ]]; then
-        kill "$(cat "$RL_STATE_DIR/lock-holder.pid")" 2>/dev/null || true
-    fi
 
     local audit_warning
     audit_warning=$(grep -E 'flock-warning|flock_warning' "$RL_AUDIT_LOG" 2>/dev/null | head -1 || true)
