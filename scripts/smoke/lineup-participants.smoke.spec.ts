@@ -265,11 +265,15 @@ test.describe('Participants modal — public lineup', () => {
         const modal = page.getByTestId('lineup-participants-modal');
         await expect(modal).toBeVisible({ timeout: 5_000 });
 
-        // Focus must live inside the modal once it opens (focus trap). Tab a
-        // few times and confirm the active element never escapes the dialog.
+        // Focus must live inside the DIALOG once it opens (focus trap). The
+        // trap ref lives on the role=dialog container (ui/modal.tsx), which
+        // also holds the header/close button — the inner testid div is only
+        // the body wrapper, so containment must be asserted on the dialog.
+        const dialog = page.getByRole('dialog', { name: /Participants/i });
+        // Tab a few times and confirm the active element never escapes.
         for (let i = 0; i < 5; i++) {
             await page.keyboard.press('Tab');
-            const focusInside = await modal.evaluate((el) =>
+            const focusInside = await dialog.evaluate((el) =>
                 el.contains(document.activeElement),
             );
             expect(focusInside).toBe(true);
