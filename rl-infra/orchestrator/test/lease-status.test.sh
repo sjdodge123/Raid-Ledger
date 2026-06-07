@@ -125,9 +125,18 @@ test_claim_wait_enqueues_when_busy() {
         ]
     ' > "$RL_STATE_DIR/claims.json"
     export RL_AGENT_ID="wait-caller"
+    # claim-wait's long-poll needs inotifywait (Linux inotify-tools). macOS
+    # (BSD userland) doesn't ship it; the binary degrades gracefully with a
+    # structured {error:"inotifywait_not_installed"} and exits 0. On such a host
+    # we can't exercise the busy-fleet long-poll, so SKIP-with-reason rather
+    # than fail. Production runs on the Linux VM where inotifywait is present.
+    if ! command -v inotifywait >/dev/null 2>&1; then
+        echo "SKIP [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] inotifywait not installed (Linux inotify-tools); long-poll path is Linux-only. Install on macOS via 'brew install inotify-tools' to exercise locally."
+        return 0
+    fi
     # Short timeout so test doesn't hang forever (the binary doesn't exist yet → test fails fast).
     local out exit_code
-    out=$(timeout 8 "$BIN_DIR/claim-wait" --timeout 5 --branch z 2>&1) || exit_code=$?
+    out=$(rl_timeout 8 "$BIN_DIR/claim-wait" --timeout 5 --branch z 2>&1) || exit_code=$?
     : "${exit_code:=0}"
     assert_exit_code "$exit_code" "0" "claim-wait must exit 0 on timeout (queued)"
     local wait_timed_out enqueued

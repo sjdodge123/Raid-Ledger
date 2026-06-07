@@ -7,7 +7,9 @@
 #   ./rl-infra/orchestrator/test/run-tests.sh test_task_start.sh   # single file
 #
 # Tests run LOCALLY (no SSH); they redirect RL_STATE_DIR to per-test temp dirs.
-# Requires: jq, bash 4+, /bin/sleep, /bin/sh.
+# Requires: jq, bash 3.2+ (macOS system bash), /bin/sleep, /bin/sh. GNU
+# coreutils (timeout/flock) and inotify-tools are optional: tests detect their
+# absence and use portable fallbacks or skip-with-reason (ROK-1361).
 
 set -uo pipefail
 
@@ -45,6 +47,11 @@ else
         "$TEST_DIR/env-spin.test.sh"
         "$TEST_DIR/lease-advance.test.sh"
         "$TEST_DIR/lease-status.test.sh"
+        # ROK-1361 — macOS/BSD coreutils compat: heartbeat clamp (timeout shim)
+        # + env-destroy flock-warning paths. Registered here so the suite gate
+        # (AC1) actually exercises the timeout/flock portability fixes.
+        "$TEST_DIR/heartbeat-emitter.test.sh"
+        "$TEST_DIR/test_env_destroy_m6a.sh"
         "$TEST_DIR/extend-claim.test.sh"
         "$TEST_DIR/pin-env.test.sh"
         "$TEST_DIR/release-preserve-envs.test.sh"
