@@ -838,6 +838,21 @@ run_discord_smoke() {
       ;;
   esac
 
+  # tools/test-bot is a standalone package, NOT an npm workspace, so the root
+  # `npm install` (and the fleet runner image's baked install) does NOT cover
+  # it. On a fresh fleet runner its node_modules are absent and the smoke
+  # harness dies at import (ERR_MODULE_NOT_FOUND: @discordjs/voice). Install
+  # them here if missing — NO-OP when node_modules already exists (laptop runs
+  # and warm runners pay nothing). Prefer `npm ci` (lockfile-exact); fall back
+  # to `npm install` if ci fails (e.g. lockfile drift).
+  if [[ ! -d "$REPO_ROOT/tools/test-bot/node_modules" ]]; then
+    echo -e "${YELLOW}tools/test-bot/node_modules missing — installing companion-bot deps before smoke...${NC}"
+    if ! (cd "$REPO_ROOT/tools/test-bot" && npm ci); then
+      echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
+      (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
+    fi
+  fi
+
   # tools/test-bot reads its own .env (companion-bot token + guild ID).
   # Missing config there surfaces as a clean failure inside `npm run smoke`,
   # not something this script needs to pre-flight.
