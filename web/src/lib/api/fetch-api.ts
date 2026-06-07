@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config';
 import { getAuthToken } from '../../hooks/use-auth';
+import { ensureFreshToken } from './refresh-client';
 import { Sentry } from '../../sentry';
 
 function buildHeaders(options: RequestInit): Record<string, string> {
@@ -45,16 +46,31 @@ export class SchemaValidationError extends Error {
  * Generic fetch wrapper with Zod validation.
  * Central HTTP layer for all API calls.
  */
+/** Issue the actual HTTP request with the current auth headers. */
+function sendRequest(endpoint: string, options: RequestInit): Promise<Response> {
+    return fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers: buildHeaders(options),
+        credentials: 'include',
+    });
+}
+
 export async function fetchApi<T>(
     endpoint: string,
     options: RequestInit = {},
     schema?: { safeParse: (data: unknown) => { success: true; data: T } | { success: false; error: { issues: unknown[] } } }
 ): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers: buildHeaders(options),
-        credentials: 'include',
-    });
+    let response = await sendRequest(endpoint, options);
+
+    // ROK-1353: on 401, attempt a single transparent refresh from the httpOnly
+    // `rl_rt` cookie (single-flight) and retry the request exactly once. The
+    // user never sees a login screen for a merely-expired access token.
+    if (response.status === 401) {
+        const refreshed = await ensureFreshToken();
+        if (refreshed) {
+            response = await sendRequest(endpoint, options);
+        }
+    }
 
     if (!response.ok) return handleErrorResponse(response);
     if (response.status === 204) return undefined as T;

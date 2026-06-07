@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
+import { ensureFreshToken } from '../lib/api/refresh-client';
+import { clearSilentGuard, clearAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
 import type { UserRole } from '@raid-ledger/contract';
 
 const TOKEN_KEY = 'raid_ledger_token';
@@ -78,19 +80,62 @@ function clearAllAuthStorage(): void {
     localStorage.removeItem(USER_CACHE_KEY);
 }
 
-export async function fetchCurrentUser(): Promise<User | null> {
-    const token = getAuthToken();
-    if (!token) return null;
+/**
+ * ROK-1353: revoke the refresh family + clear the `rl_rt` cookie server-side.
+ * Best-effort — swallows network errors so client logout always proceeds.
+ */
+async function serverLogout(): Promise<void> {
+    try {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+            method: 'POST',
+            credentials: 'include',
+        });
+    } catch {
+        // ignore — local storage is cleared regardless
+    }
+}
 
-    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+/** GET /auth/me with the current Bearer token. */
+function fetchMe(token: string): Promise<Response> {
+    return fetch(`${API_BASE_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
     });
+}
+
+/**
+ * ROK-1353: refresh failed — clear storage and, for a Discord-linked user,
+ * attempt ONE silent re-auth redirect before settling on the login screen.
+ */
+function handleRefreshFailure(): null {
+    clearAllAuthStorage();
+    attemptSilentReauth(window.location.pathname + window.location.search);
+    return null;
+}
+
+export async function fetchCurrentUser(): Promise<User | null> {
+    let token = getAuthToken();
+    if (!token) {
+        // ROK-1353: no access token but a refresh cookie may still be live —
+        // try a transparent refresh before deciding the user is logged out.
+        token = await ensureFreshToken();
+        if (!token) return handleRefreshFailure();
+    }
+
+    let response = await fetchMe(token);
+
+    // ROK-1353: a 401 means the access token expired — refresh from the
+    // httpOnly cookie and retry once before clearing storage.
+    if (response.status === 401) {
+        const refreshed = await ensureFreshToken();
+        if (refreshed) {
+            response = await fetchMe(refreshed);
+        }
+        if (response.status === 401) {
+            return handleRefreshFailure();
+        }
+    }
 
     if (!response.ok) {
-        if (response.status === 401) {
-            clearAllAuthStorage();
-            return null;
-        }
         throw new Error(`HTTP ${response.status}`);
     }
 
@@ -163,7 +208,13 @@ export function useAuth() {
     const login = useLogin(queryClient);
 
     const logout = () => {
+        // ROK-1353: revoke the refresh family + clear the cookie server-side
+        // before dropping local storage. Fire-and-forget — local logout must
+        // succeed even if the network call fails.
+        void serverLogout();
         clearAllAuthStorage();
+        clearSilentGuard();
+        clearAuthMethod();
         queryClient.setQueryData(['auth', 'me'], null);
     };
 

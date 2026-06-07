@@ -4,6 +4,7 @@ import { toast } from '../lib/toast';
 import { useAuth } from '../hooks/use-auth';
 import { consumeAuthRedirect } from '../components/auth';
 import { API_BASE_URL } from '../lib/config';
+import { setAuthMethod, clearSilentGuard } from '../lib/api/silent-reauth';
 import { TokenResponseSchema } from '@raid-ledger/contract';
 
 /**
@@ -22,21 +23,8 @@ export function AuthSuccessPage() {
 
     useEffect(() => {
         if (hasProcessedRef.current) return;
-        const code = searchParams.get('code');
-        const error = searchParams.get('error');
-
-        if (code && sessionStorage.getItem(`oauth_processed_${code}`)) { hasProcessedRef.current = true; return; }
-        if (error) { hasProcessedRef.current = true; handleOAuthError(error, navigate); return; }
-
-        if (code) {
-            hasProcessedRef.current = true;
-            sessionStorage.setItem(`oauth_processed_${code}`, '1');
-            processAuthCode(code, searchParams, login, navigate);
-        } else {
-            hasProcessedRef.current = true;
-            toast.error('Something went wrong. Please try again.');
-            navigate('/', { replace: true });
-        }
+        hasProcessedRef.current = true;
+        dispatchAuthCallback(searchParams, login, navigate);
     }, [searchParams, login, navigate]);
 
     return (
@@ -47,6 +35,41 @@ export function AuthSuccessPage() {
             </div>
         </div>
     );
+}
+
+/**
+ * Route the OAuth callback by query params: silent fall-through, error,
+ * already-consumed code, fresh code, or the missing-code fallback. Extracted
+ * from the effect to keep AuthSuccessPage under the 30-line cap (ROK-1353).
+ */
+function dispatchAuthCallback(
+    searchParams: URLSearchParams,
+    login: ReturnType<typeof useAuth>['login'],
+    navigate: ReturnType<typeof useNavigate>,
+) {
+    if (searchParams.get('silent_failed')) { handleSilentFailed(navigate); return; }
+    const error = searchParams.get('error');
+    if (error) { handleOAuthError(error, navigate); return; }
+    const code = searchParams.get('code');
+    if (code && sessionStorage.getItem(`oauth_processed_${code}`)) return;
+    if (code) {
+        sessionStorage.setItem(`oauth_processed_${code}`, '1');
+        processAuthCode(code, searchParams, login, navigate);
+        return;
+    }
+    toast.error('Something went wrong. Please try again.');
+    navigate('/', { replace: true });
+}
+
+/**
+ * ROK-1353: handle `?silent_failed=1`. Clear any stale access token, arm the
+ * one-shot silent guard so a dead cookie can't trigger another silent
+ * redirect, and route to the login screen.
+ */
+function handleSilentFailed(navigate: ReturnType<typeof useNavigate>) {
+    localStorage.removeItem('raid_ledger_token');
+    sessionStorage.setItem('raid_ledger_silent_attempted', '1');
+    navigate('/', { replace: true });
 }
 
 function handleOAuthError(error: string, navigate: ReturnType<typeof useNavigate>) {
@@ -109,6 +132,10 @@ function processAuthCode(
     void (async () => {
         try {
             const { access_token: token } = await exchangeAuthCode(code);
+            // ROK-1353: this is a Discord login — record the method (drives
+            // the silent re-auth fallback) and reset the one-shot guard.
+            setAuthMethod('discord');
+            clearSilentGuard();
             const user = await login(token);
             if (!user) throw new Error('Failed to authenticate');
 
