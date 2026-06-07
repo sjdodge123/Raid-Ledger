@@ -38,12 +38,17 @@ async function loginViaForm(page: import('@playwright/test').Page) {
     await page.locator('#username').fill(ADMIN_USER);
     await page.locator('#password').fill(ADMIN_PASS);
     await page.getByRole('button', { name: 'Sign In' }).click();
-    // Positive login evidence: the header user-menu renders only when
-    // authenticated (asserting "Sign In gone" is vacuous — the login card
-    // can collapse for other reasons).
-    await expect(page.getByTestId('user-menu-trigger')).toBeVisible({
-        timeout: 15_000,
-    });
+    // Positive login evidence, layout-agnostic: the access token is written
+    // to localStorage only on a successful login (the desktop user-menu is
+    // hidden on mobile viewports, and asserting "Sign In gone" is vacuous —
+    // the login card can collapse for other reasons).
+    await expect
+        .poll(
+            async () =>
+                page.evaluate((key) => window.localStorage.getItem(key), TOKEN_KEY),
+            { timeout: 15_000 },
+        )
+        .not.toBeNull();
 }
 
 /** True when the page is currently showing the login screen. */
@@ -99,11 +104,13 @@ test.describe('Auth refresh (ROK-1353)', () => {
         await loginViaForm(page);
 
         // Trigger the app logout (server-side revocation + cookie clear).
-        // Desktop: logout lives in the user-menu dropdown; mobile surfaces a
-        // visible Logout button (more-drawer) without the menu.
+        // Desktop: logout lives in the user-menu dropdown; mobile: behind the
+        // header hamburger ("Open menu") in the MoreDrawer.
         const userMenu = page.getByTestId('user-menu-trigger');
         if (await userMenu.isVisible({ timeout: 5_000 }).catch(() => false)) {
             await userMenu.click();
+        } else {
+            await page.getByRole('button', { name: 'Open menu' }).click();
         }
         await page
             .getByRole('button', { name: /log ?out|sign ?out/i })
