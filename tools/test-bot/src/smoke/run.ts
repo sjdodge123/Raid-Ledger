@@ -38,6 +38,7 @@ import { lineupChannelOverrideTests } from "./tests/lineup-channel-override.test
 import { lineupGraceCountdownTests } from "./tests/lineup-grace-countdown.test.js";
 import { discordDeactivationTests } from "./tests/discord-deactivation.test.js";
 import { recruitmentReminderTests } from "./tests/recruitment-reminder.test.js";
+import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
 
 /** Build a TestResult from a test, status, and timing info. */
 function buildResult(
@@ -165,6 +166,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...lineupGraceCountdownTests,
     ...discordDeactivationTests,
     ...recruitmentReminderTests,
+    ...seriesDualBindingTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 

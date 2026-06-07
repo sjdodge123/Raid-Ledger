@@ -26,6 +26,7 @@ import {
   applyEventChanges,
   findSeriesEventIds,
   findSeriesGame,
+  type OtherSlotState,
 } from './bind.helpers';
 import {
   resolveChannel,
@@ -200,14 +201,48 @@ export class BindCommand
       undefined,
       series?.id ?? null,
     );
+    // ROK-1351: surface the OTHER slot so the embed shows full dual-binding state.
+    const otherSlot = await this.resolveOtherSlot(
+      guildId,
+      ch.bindingChannelType,
+      series?.id ?? null,
+    );
     const { embed, components } = buildBindSuccessEmbed(
       ch.channelName,
       behavior,
       series?.title ?? null,
       game?.name ?? null,
       replacedChannelIds,
+      otherSlot,
     );
     await interaction.editReply({ embeds: [embed], components });
+  }
+
+  /**
+   * Look up the OTHER slot's current channel for a series bind (ROK-1351), so
+   * the success embed can show the full dual-binding state. After a voice bind
+   * we report the text announce slot; after a text bind, the voice host slot.
+   * Returns null for non-series binds (single-channel embed unchanged).
+   */
+  private async resolveOtherSlot(
+    guildId: string,
+    boundType: ResolvedChannel['bindingChannelType'],
+    seriesId: string | null,
+  ): Promise<OtherSlotState | null> {
+    if (!seriesId) return null;
+    if (boundType === 'voice') {
+      const channelId = await this.channelBindingsService.getChannelForSeries(
+        guildId,
+        seriesId,
+      );
+      return { channelType: 'text', channelId };
+    }
+    const channelId =
+      await this.channelBindingsService.getVoiceChannelForSeries(
+        guildId,
+        seriesId,
+      );
+    return { channelType: 'voice', channelId };
   }
 
   /** Re-syncs Discord embeds/scheduled events for all events in a series. */

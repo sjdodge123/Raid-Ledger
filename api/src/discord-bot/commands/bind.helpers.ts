@@ -18,6 +18,18 @@ export {
 } from './bind.autocomplete';
 
 /**
+ * The other slot's current state for a series bind (ROK-1351).
+ * After a voice bind we surface the text announce slot, and vice versa, so the
+ * success embed shows the series' full dual-binding state. Null channelId means
+ * the other slot is unbound \u2014 its line is omitted.
+ */
+export interface OtherSlotState {
+  /** 'text' when reporting the announce slot, 'voice' for the host slot. */
+  channelType: 'text' | 'voice';
+  channelId: string | null;
+}
+
+/**
  * Build the success embed for a channel binding.
  */
 export function buildBindSuccessEmbed(
@@ -26,6 +38,7 @@ export function buildBindSuccessEmbed(
   resolvedSeriesTitle: string | null,
   resolvedGameName: string | null,
   replacedChannelIds: string[],
+  otherSlot: OtherSlotState | null = null,
 ): { embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[] } {
   const description = buildBindDescription(
     channelName,
@@ -33,12 +46,21 @@ export function buildBindSuccessEmbed(
     resolvedSeriesTitle,
     resolvedGameName,
     replacedChannelIds,
+    otherSlot,
   );
   const embed = new EmbedBuilder()
     .setColor(0x34d399)
     .setTitle('Channel Bound')
     .setDescription(description);
   return { embed, components: buildAdminLinkComponents() };
+}
+
+/** Render the other slot's unchanged-state line, or null if unbound. */
+function buildOtherSlotLine(otherSlot: OtherSlotState | null): string | null {
+  if (!otherSlot?.channelId) return null;
+  const label =
+    otherSlot.channelType === 'voice' ? 'Voice host' : 'Announcements';
+  return `${label}: <#${otherSlot.channelId}> (unchanged)`;
 }
 
 /** Build the description text for a bind success embed. */
@@ -48,6 +70,7 @@ function buildBindDescription(
   seriesTitle: string | null,
   gameName: string | null,
   replacedIds: string[],
+  otherSlot: OtherSlotState | null = null,
 ): string {
   const behaviorLabels: Record<string, string> = {
     'game-announcements': 'Event Announcements',
@@ -59,6 +82,7 @@ function buildBindDescription(
     `**#${channelName}** bound for **${label}**`,
     seriesTitle ? `Series: **${seriesTitle}**` : null,
     gameName ? `Game: **${gameName}**` : null,
+    buildOtherSlotLine(otherSlot),
     replacedIds.length > 0
       ? `\n\u26A0\uFE0F Replaced previous binding from ${replacedIds.map((id) => `<#${id}>`).join(', ')}`
       : null,

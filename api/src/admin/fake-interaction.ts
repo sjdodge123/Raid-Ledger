@@ -51,8 +51,11 @@ function getIntegerOption(opts: Record<string, unknown>, name: string) {
 function getChannelOption(opts: Record<string, unknown>, name: string) {
   const val = opts[name];
   if (!val) return null;
-  const id = typeof val === 'string' ? val : (val as { id: string }).id;
-  return { id, name: `channel-${id}` };
+  if (typeof val === 'string') return { id: val, name: `channel-${val}` };
+  // Object form: pass through the Discord channel `type` so handlers that
+  // branch on voice vs text (e.g. /bind slot detection, ROK-1351) see it.
+  const obj = val as { id: string; type?: number };
+  return { id: obj.id, name: `channel-${obj.id}`, type: obj.type };
 }
 
 function getUserOption(opts: Record<string, unknown>, name: string) {
