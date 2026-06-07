@@ -207,7 +207,68 @@ const deactivationCancelsUpcomingSignups: SmokeTest = {
   },
 };
 
+// ── Test 3 (ROK-1354): 10013 Unknown User → deactivate + completed ─────────
+//
+// 10013 ("Unknown User") fires when the recipient's Discord account has been
+// deleted — `client.users.fetch(discordId)` throws BEFORE `user.send`. The
+// deleted account is gone for good, so the processor must treat it exactly
+// like 50278: deactivate the user and let the job COMPLETE (no Sentry
+// capture). Mirrors `deactivatesAndCompletesJobOn50278`, swapping the
+// simulated code to 10013.
+const deactivatesAndCompletesJobOn10013: SmokeTest = {
+  name: 'Discord 10013 (Unknown User) → user deactivated, job completed (no Sentry capture)',
+  category: 'dm',
+  async run(ctx: TestContext) {
+    const seed = await ctx.api.post<SeedNonGuildUserResponse>(
+      '/admin/test/seed-non-guild-user',
+      {},
+    );
+
+    // Trigger the dispatch — this enqueues a DM job that WILL throw
+    // DiscordAPIError[10013] on the worker (deleted account).
+    const dispatched = await ctx.api.post<DispatchResponse>(
+      '/admin/test/dispatch-discord-notification',
+      { userId: seed.userId, simulate: 10013 },
+    );
+
+    await awaitProcessing(ctx.api);
+
+    const finalState = await pollForCondition(
+      async () => {
+        const state = await ctx.api.get<UserStateResponse>(
+          `/admin/test/user-state?userId=${seed.userId}`,
+        );
+        if (state.deactivatedAt !== null) return state;
+        return null;
+      },
+      ctx.config.timeoutMs,
+      { intervalMs: 1000 },
+    );
+
+    if (finalState.deactivatedAt === null) {
+      throw new Error(
+        `Expected deactivated_at to be non-null for user ${seed.userId} after 10013`,
+      );
+    }
+    if (finalState.adminDeactivationNotificationCount < 1) {
+      throw new Error(
+        `Expected at least 1 admin "user_deactivated_discord" notification, got ${finalState.adminDeactivationNotificationCount}`,
+      );
+    }
+
+    const jobState = await ctx.api.get<JobStateResponse>(
+      `/admin/test/job-state?notificationId=${dispatched.notificationId}`,
+    );
+    if (jobState.state !== 'completed') {
+      throw new Error(
+        `Expected job to be 'completed' (no Sentry capture) on 10013, got '${jobState.state}'`,
+      );
+    }
+  },
+};
+
 export const discordDeactivationTests: SmokeTest[] = [
   deactivatesAndCompletesJobOn50278,
   deactivationCancelsUpcomingSignups,
+  deactivatesAndCompletesJobOn10013,
 ];

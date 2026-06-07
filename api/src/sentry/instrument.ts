@@ -77,14 +77,22 @@ if (!telemetryDisabled && isProduction) {
       ) {
         return null;
       }
-      // ROK-1260: defense-in-depth — drop DiscordAPIError 50278/50007
-      // events. The primary fix is in the processor (it catches these
-      // before Sentry's auto-instrumentation), but if anything ever
-      // re-throws them this filter ensures the noise can't come back.
+      // ROK-1260/ROK-1354: defense-in-depth — drop DiscordAPIError
+      // 50278/50007/10013 events. The primary fix is in the processor (it
+      // catches these before Sentry's auto-instrumentation), but if anything
+      // ever re-throws them this filter ensures the noise can't come back.
+      //
+      // ROK-1354: discord.js v14 reports the Sentry `type` as the BRACKETED
+      // name `DiscordAPIError[<code>]` (e.g. `DiscordAPIError[50007]`), never
+      // the bare string — so ROK-1260's `=== 'DiscordAPIError'` gate never
+      // fired in prod. Match with `startsWith` (bare name still matches);
+      // extend the value regex with the 10013 "Unknown User" account-deleted
+      // case.
       if (
-        exceptionType === 'DiscordAPIError' &&
+        typeof exceptionType === 'string' &&
+        exceptionType.startsWith('DiscordAPIError') &&
         typeof exceptionValue === 'string' &&
-        /code 50278|code 50007|no mutual guilds|Cannot send messages to this user/.test(
+        /code 50278|code 50007|code 10013|no mutual guilds|Cannot send messages to this user|Unknown User/.test(
           exceptionValue,
         )
       ) {
@@ -121,8 +129,16 @@ if (!telemetryDisabled && isProduction) {
       // error codes (50013 Missing Permissions, 50001 Missing Access, etc.)
       // start with `500` as a numeric prefix. Without `\b`, `/5\d\d/` would
       // mis-group those PERMANENT failures as transient network noise.
+      //
+      // ROK-1354: same dead `=== 'DiscordAPIError'` gate as the drop block —
+      // production's bracketed `DiscordAPIError[<code>]` type never matched, so
+      // transient 5xx/network failures never got the shared fingerprint. Use
+      // `startsWith`. The value regex is unchanged: the `\b5\d\d\b` word
+      // boundaries still exclude permanent codes (50013/50001), and the drop
+      // block above runs first so 50278/50007/10013 never reach here.
       if (
-        exceptionType === 'DiscordAPIError' &&
+        typeof exceptionType === 'string' &&
+        exceptionType.startsWith('DiscordAPIError') &&
         typeof exceptionValue === 'string' &&
         /\b5\d\d\b|ECONNRESET|ETIMEDOUT|getaddrinfo|fetch failed|\bnetwork\b/i.test(
           exceptionValue,

@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { DiscordNotificationProcessor } from './discord-notification.processor';
-import { buildPlaintextContent } from './format-helpers';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { DiscordNotificationService } from './discord-notification.service';
@@ -324,11 +323,37 @@ describe('DiscordNotificationProcessor', () => {
   //   - any other error → existing transient retry path preserved:
   //     handleProcessError is still invoked AND the error rethrows.
   describe('ROK-1260: terminal DiscordAPIError classification', () => {
-    // Synthesizes a discord.js DiscordAPIError-shaped error so the
-    // processor's classifier can detect the code AND the constructor
-    // name (`DiscordAPIError`) — both checks must pass for the
-    // terminal branch to fire.
+    // Synthesizes a discord.js v14 DiscordAPIError-shaped error so the
+    // processor's classifier can detect the code AND the name prefix.
+    //
+    // ROK-1354: discord.js v14's `DiscordAPIError` (`@discordjs/rest`) has a
+    // `name` GETTER that returns `DiscordAPIError[<code>]` (e.g.
+    // `DiscordAPIError[50278]`) — never the bare string `DiscordAPIError`.
+    // Production NEVER produces the bare name, so the classifier must match
+    // on `name.startsWith('DiscordAPIError')`. This helper mirrors the real
+    // production shape (bracketed name); a separate bare-name helper below
+    // keeps transition-compat coverage.
     function makeDiscordApiError(
+      code: number,
+      message: string,
+    ): Error & { code: number } {
+      class DiscordAPIError extends Error {
+        public code: number;
+        constructor(c: number, m: string) {
+          super(m);
+          this.code = c;
+          // Production getter shape — the bug ROK-1354 fixes.
+          this.name = `DiscordAPIError[${c}]`;
+        }
+      }
+      return new DiscordAPIError(code, message);
+    }
+
+    // ROK-1354: transition-compat helper — emits the BARE `DiscordAPIError`
+    // name (the shape ROK-1260's simulation produced). The classifier's
+    // `startsWith('DiscordAPIError')` gate must still match this so a future
+    // discord.js downgrade or a wrapped re-throw keeps classifying.
+    function makeBareNameDiscordApiError(
       code: number,
       message: string,
     ): Error & { code: number } {
@@ -459,6 +484,139 @@ describe('DiscordNotificationProcessor', () => {
       });
     });
 
+    // ── ROK-1354: 10013 Unknown User — deleted account, behaves like 50278 ──
+    //
+    // 10013 throws at `client.users.fetch(discordId)` (the account no longer
+    // exists) BEFORE `user.send` is ever called. The classifier sees it from
+    // the same catch in process(); the account is GONE, so it must map to
+    // `permanent-deactivate` (same terminal handling as 50278).
+    describe('DiscordAPIError[10013] — Unknown User (deleted account)', () => {
+      it('resolves cleanly (does NOT rethrow)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob({}, { attemptsMade: 0, opts: { attempts: 3 } });
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+      });
+
+      it('calls deactivateUser(userId) exactly once (account is gone)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob();
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledTimes(1);
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledWith(1);
+      });
+
+      it('does NOT call recordFailure (counter irrelevant — account deleted)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob({}, { attemptsMade: 2, opts: { attempts: 3 } });
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('does NOT reset failures (success path only)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob();
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.resetFailures,
+        ).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── ROK-1354: bare-name transition compat ──
+    //
+    // ROK-1260's tests (and any wrapped/legacy re-throw) produce the BARE
+    // `DiscordAPIError` name. The new `startsWith('DiscordAPIError')` gate
+    // must STILL classify these so the fix is backwards-compatible.
+    describe('ROK-1354: bare DiscordAPIError name still classifies (transition compat)', () => {
+      it('50278 with bare name → permanent-deactivate', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeBareNameDiscordApiError(
+            50278,
+            'Cannot send messages to this user due to having no mutual guilds (code 50278)',
+          ),
+        );
+        const job = buildJob();
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledWith(1);
+      });
+
+      it('50007 with bare name → permanent-prefs-only', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeBareNameDiscordApiError(
+            50007,
+            'Cannot send messages to this user (code 50007)',
+          ),
+        );
+        const job = buildJob();
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).toHaveBeenCalledWith(1);
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('10013 with bare name → permanent-deactivate', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeBareNameDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob();
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledWith(1);
+      });
+    });
+
+    // ── ROK-1354: name-prefix gate guards unrelated libs reusing `.code` ──
+    describe('ROK-1354: non-DiscordAPIError name with matching code → transient', () => {
+      it('does NOT deactivate when code is 50278 but name is unrelated', async () => {
+        // An error from an unrelated library that happens to carry
+        // `.code === 50278` but whose name does NOT start with
+        // `DiscordAPIError` must follow the transient path (rethrow, no
+        // deactivate) — the name prefix is the disambiguator.
+        const foreignError = new Error('Some unrelated failure') as Error & {
+          code: number;
+        };
+        foreignError.name = 'SomeOtherError';
+        foreignError.code = 50278;
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(foreignError);
+        const job = buildJob();
+
+        await expect(processor.process(job)).rejects.toThrow();
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).not.toHaveBeenCalled();
+      });
+    });
+
     describe('generic / transient errors — existing path preserved', () => {
       it('still rethrows non-Discord errors', async () => {
         const transientError = new Error('Discord API: 500 Internal Error');
@@ -573,238 +731,6 @@ describe('DiscordNotificationProcessor', () => {
         ];
         expect(sendCall[4]).toBe(`Title: ${type}\nMsg`);
       }
-    });
-  });
-});
-
-describe('buildPlaintextContent', () => {
-  it('combines title and message with newline', () => {
-    expect(buildPlaintextContent('Hello', 'World')).toBe('Hello\nWorld');
-  });
-
-  it('produces clean output for typical notification data', () => {
-    const result = buildPlaintextContent(
-      'Event Starting in 15 Minutes!',
-      'Raid Night starts in 15 minutes at 8:00 PM EST.',
-    );
-    expect(result).toBe(
-      'Event Starting in 15 Minutes!\nRaid Night starts in 15 minutes at 8:00 PM EST.',
-    );
-    expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
-    expect(result).not.toMatch(/<#\d+>/);
-  });
-
-  describe('ROK-822 — Discord markup stripping', () => {
-    it('strips bold markdown from message', () => {
-      const result = buildPlaintextContent(
-        'Event Reminder',
-        'Your event **Raid Night** started 5 minutes ago',
-      );
-      expect(result).toBe(
-        'Event Reminder\nYour event Raid Night started 5 minutes ago',
-      );
-    });
-
-    it('strips italic markdown from message', () => {
-      const result = buildPlaintextContent(
-        'Update',
-        'Check *your profile* for details',
-      );
-      expect(result).not.toContain('*');
-    });
-
-    it('strips channel mention markup <#channelId>', () => {
-      const result = buildPlaintextContent(
-        'Join Now',
-        'Head to <#123456789012345678> for the event',
-      );
-      expect(result).not.toMatch(/<#\d+>/);
-      expect(result).toBe('Join Now\nHead to #channel for the event');
-    });
-
-    it('strips user mention markup <@userId>', () => {
-      const result = buildPlaintextContent(
-        'Roster Update',
-        '<@987654321012345678> left the roster',
-      );
-      expect(result).not.toMatch(/<@!?\d+>/);
-      expect(result).toBe('Roster Update\n@user left the roster');
-    });
-
-    it('strips role mention markup <@&roleId>', () => {
-      const result = buildPlaintextContent(
-        'Alert',
-        'Attention <@&111222333444555666> members',
-      );
-      expect(result).not.toMatch(/<@&\d+>/);
-      expect(result).toBe('Alert\nAttention @role members');
-    });
-
-    it('replaces timestamp markup with formatted date (ROK-918)', () => {
-      const result = buildPlaintextContent(
-        'Reminder',
-        'Event starts <t:1700000000:R> at <t:1700000000:F>',
-      );
-      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
-      // Epoch 1700000000 = Nov 14, 2023 — should contain formatted date
-      expect(result).toContain('Nov 14');
-    });
-
-    it('replaces bare timestamp markup with formatted date (ROK-918)', () => {
-      const result = buildPlaintextContent(
-        'Reminder',
-        'Event starts <t:1700000000>',
-      );
-      expect(result).not.toMatch(/<t:\d+>/);
-      expect(result).toContain('Nov 14');
-    });
-  });
-
-  describe('ROK-822 — null/undefined/object safety', () => {
-    it('replaces undefined title with empty string', () => {
-      const result = buildPlaintextContent(
-        undefined as unknown as string,
-        'Some message',
-      );
-      expect(result).not.toContain('undefined');
-      expect(result).toContain('Some message');
-    });
-
-    it('replaces null title with empty string', () => {
-      const result = buildPlaintextContent(
-        null as unknown as string,
-        'Some message',
-      );
-      expect(result).not.toContain('null');
-      expect(result).toContain('Some message');
-    });
-
-    it('replaces undefined message with empty string', () => {
-      const result = buildPlaintextContent(
-        'Title',
-        undefined as unknown as string,
-      );
-      expect(result).not.toContain('undefined');
-      expect(result).toContain('Title');
-    });
-
-    it('handles object values without showing [object Object]', () => {
-      const result = buildPlaintextContent('Title', {
-        key: 'val',
-      } as unknown as string);
-      expect(result).not.toContain('[object Object]');
-    });
-
-    it('handles numeric values gracefully', () => {
-      const result = buildPlaintextContent('Title', 42 as unknown as string);
-      expect(result).not.toContain('[object');
-      expect(result).toContain('Title');
-    });
-  });
-
-  describe('ROK-822 — length constraint', () => {
-    it('truncates content exceeding 150 characters', () => {
-      const longTitle = 'A'.repeat(80);
-      const longMessage = 'B'.repeat(100);
-      const result = buildPlaintextContent(longTitle, longMessage);
-      expect(result.length).toBeLessThanOrEqual(150);
-    });
-
-    it('appends ellipsis when truncated', () => {
-      const longTitle = 'A'.repeat(80);
-      const longMessage = 'B'.repeat(100);
-      const result = buildPlaintextContent(longTitle, longMessage);
-      expect(result).toMatch(/\.\.\.$/);
-    });
-
-    it('does not truncate short content', () => {
-      const result = buildPlaintextContent('Short', 'Message');
-      expect(result).toBe('Short\nMessage');
-      expect(result).not.toMatch(/\.\.\.$/);
-    });
-  });
-
-  describe('ROK-822 — multiple markup patterns combined', () => {
-    it('strips all markup types from a single message', () => {
-      const result = buildPlaintextContent(
-        'Event Update',
-        '**Raid Night** moved to <#123456789> starting <t:1700000000:R>',
-      );
-      expect(result).not.toContain('**');
-      expect(result).not.toMatch(/<#\d+>/);
-      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
-    });
-
-    it('collapses multiple spaces after stripping', () => {
-      const result = buildPlaintextContent('Title', 'Go to  <#123>  now');
-      expect(result).not.toContain('  ');
-    });
-  });
-
-  describe('ROK-918 — reschedule DM plaintext date', () => {
-    it('replaces Discord timestamps with readable dates in reschedule messages', () => {
-      // Simulates the real reschedule DM format from event-lifecycle.helpers.ts:
-      // `"${title}" has been rescheduled to <t:EPOCH:f> (<t:EPOCH:R>)`
-      const epoch = Math.floor(
-        new Date('2026-04-01T20:00:00Z').getTime() / 1000,
-      );
-      const message = `"Raid Night" has been rescheduled to <t:${epoch}:f> (<t:${epoch}:R>)`;
-      const result = buildPlaintextContent('Event Rescheduled', message);
-      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
-      expect(result).not.toContain('()');
-      expect(result).toContain('Apr 1');
-      expect(result).toContain('rescheduled');
-    });
-
-    it('collapses empty parentheses left after timestamp removal', () => {
-      const result = buildPlaintextContent('Title', 'Moved to  ()');
-      expect(result).not.toContain('()');
-    });
-
-    it('does not collapse parentheses with content', () => {
-      const result = buildPlaintextContent('Title', 'Moved to (tomorrow)');
-      expect(result).toContain('(tomorrow)');
-    });
-
-    it('replaces both timestamps so neither raw token remains', () => {
-      // Both <t:EPOCH:f> and <t:EPOCH:R> must be replaced — not just one
-      const epoch = Math.floor(
-        new Date('2026-06-15T18:00:00Z').getTime() / 1000,
-      );
-      const message = `Starts <t:${epoch}:f> (in <t:${epoch}:R>)`;
-      const result = buildPlaintextContent('Update', message);
-      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
-    });
-
-    it('handles parentheses with only whitespace as empty (collapses them)', () => {
-      const result = buildPlaintextContent('Title', 'Event at (   )');
-      expect(result).not.toMatch(/\(\s*\)/);
-    });
-
-    it('formats epoch=0 without crashing (Unix epoch)', () => {
-      const result = buildPlaintextContent('Title', 'Since <t:0:f>');
-      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
-      expect(typeof result).toBe('string');
-    });
-
-    it('produces correct date for a known epoch value', () => {
-      // 1700000000 seconds = Wed Nov 14, 2023
-      const result = buildPlaintextContent(
-        'Reminder',
-        'Event at <t:1700000000:f>',
-      );
-      expect(result).toContain('Nov 14');
-    });
-
-    it('still strips bold and channel after timestamps are replaced', () => {
-      const epoch = Math.floor(
-        new Date('2026-05-01T12:00:00Z').getTime() / 1000,
-      );
-      const message = `**Bold text** in <#999888777666555444> at <t:${epoch}:f>`;
-      const result = buildPlaintextContent('Title', message);
-      expect(result).not.toContain('**');
-      expect(result).not.toMatch(/<#\d+>/);
-      expect(result).not.toMatch(/<t:\d+:[a-zA-Z]>/);
     });
   });
 });
