@@ -58,6 +58,7 @@ export class ChannelBindingsService {
     const replacedChannelIds = await this.cleanupSeriesBindings(
       guildId,
       channelId,
+      channelType,
       recurrenceGroupId,
     );
     const binding = await this.upsertBinding({
@@ -76,10 +77,17 @@ export class ChannelBindingsService {
     return { binding, replacedChannelIds };
   }
 
-  /** Remove existing series bindings, returning replaced channel IDs. */
+  /**
+   * Remove existing SAME-SLOT series bindings, returning replaced channel IDs.
+   *
+   * ROK-1351: scoped by `channelType` so a series can hold a voice (host) slot
+   * and a text (announce) slot simultaneously. Re-binding the voice slot only
+   * deletes the prior voice row; the text announce row survives (and vice versa).
+   */
   private async cleanupSeriesBindings(
     guildId: string,
     channelId: string,
+    channelType: ChannelType,
     recurrenceGroupId?: string | null,
   ): Promise<string[]> {
     if (!recurrenceGroupId) return [];
@@ -90,6 +98,7 @@ export class ChannelBindingsService {
           eq(schema.channelBindings.guildId, guildId),
           eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
           isNotNull(schema.channelBindings.recurrenceGroupId),
+          eq(schema.channelBindings.channelType, channelType),
         ),
       )
       .returning({ channelId: schema.channelBindings.channelId });
