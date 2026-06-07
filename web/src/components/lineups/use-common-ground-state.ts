@@ -160,7 +160,13 @@ export function useCommonGroundState(
     // collapse all AI status flags so CommonGroundPanel never renders
     // the AI status banner. The grid still renders normally.
     const aiIsUnavailable = aiAvailable && aiQuery.data?.kind === 'unavailable';
-    const aiIsLoading = aiAvailable && hasBuilding && aiQuery.isLoading;
+    // ROK-1316: a cold-cache read returns `pending: true` while the
+    // background pre-gen job warms; treat it as loading so the existing
+    // skeleton/loading state renders until the real payload arrives.
+    const aiIsPending =
+        aiQuery.data?.kind === 'ok' && aiQuery.data.data.pending === true;
+    const aiIsLoading =
+        aiAvailable && hasBuilding && (aiQuery.isLoading || aiIsPending);
     const aiIsError = aiAvailable && aiQuery.isError && !aiIsUnavailable;
 
     return {
