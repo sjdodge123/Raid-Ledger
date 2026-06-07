@@ -20,6 +20,12 @@ import {
 const API_BASE = 'http://localhost:3000';
 
 export const handlers = [
+    // Auth — refresh (ROK-1353): mounting useAuth with no access token probes
+    // POST /auth/refresh before settling on logged-out. Default to 401 (no
+    // refresh cookie) so component tests resolve the probe deterministically.
+    http.post(`${API_BASE}/auth/refresh`, () =>
+        HttpResponse.text('Unauthorized', { status: 401 }),
+    ),
     // Auth — profile
     http.get(`${API_BASE}/auth/profile`, () =>
         HttpResponse.json({
