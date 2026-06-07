@@ -72,14 +72,15 @@ export async function retractAllVotes(
   );
 }
 
-/** Cancel a scheduling poll (operator). */
+/** Cancel a scheduling poll (operator). Optional reason notifies voters. */
 export async function cancelSchedulePoll(
   lineupId: number,
   matchId: number,
+  reason?: string | null,
 ): Promise<{ ok: boolean }> {
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/cancel`,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
   );
 }
 

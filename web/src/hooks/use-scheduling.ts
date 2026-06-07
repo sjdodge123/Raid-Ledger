@@ -136,11 +136,11 @@ export function useOtherPolls(lineupId: number, matchId: number) {
   });
 }
 
-/** Hook for cancelling a scheduling poll (operator). */
+/** Hook for cancelling a scheduling poll (operator). Optional reason notifies voters. */
 export function useCancelSchedulePoll() {
   const qc = useQueryClient();
-  return useMutation<{ ok: boolean }, Error, { lineupId: number; matchId: number }>({
-    mutationFn: ({ lineupId, matchId }) => cancelSchedulePoll(lineupId, matchId),
+  return useMutation<{ ok: boolean }, Error, { lineupId: number; matchId: number; reason?: string | null }>({
+    mutationFn: ({ lineupId, matchId, reason }) => cancelSchedulePoll(lineupId, matchId, reason),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
       toast.success('Scheduling poll cancelled');
