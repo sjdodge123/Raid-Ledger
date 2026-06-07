@@ -21,78 +21,45 @@ import {
   shellQuote,
   synthesizeEmptyStderrDiagnostic,
 } from '../exec.js';
+import {
+  isLocalTaskId,
+  readLocalTask,
+  waitLocalTask,
+  cancelLocalTask,
+} from '../local-task.js';
+import {
+  TASK_ID_RE,
+  taskIdSchema,
+  McpRuntimeStatusSchema,
+  TaskStepSchema,
+  isoDateSchema,
+  TaskStatusResultSchema,
+  isTerminalStatus,
+  buildStillRunning,
+  STILL_RUNNING_LOG_TAIL_DEFAULT,
+  STILL_RUNNING_LOG_TAIL_MAX,
+  StillRunningResultSchema,
+  type TaskStatusResult,
+  type ExecuteStatusReturn,
+  type StillRunningResult,
+} from './task-schemas.js';
 
-export const TASK_ID_RE = /^[a-z0-9]{8,32}$/;
-export const taskIdSchema = z.string().regex(TASK_ID_RE);
-
-export const McpRuntimeStatusSchema = z.enum([
-  'running',
-  'succeeded',
-  'failed',
-  'killed_buffer_overflow',
-  'killed_timeout',
-  'cancelled',
-]);
-
-export const TaskStepSchema = z.object({
-  name: z.string(),
-  status: z.enum(['PASS', 'FAIL', 'SKIPPED']),
-  duration_s: z.number().nullable(),
-});
-
-// ISO-8601 sanity check — Zod 3 has no native datetime in our pinned slice
-// of the API, so we use a lightweight regex. Anything resembling a date
-// passes; pathological "not-a-date" strings get rejected.
-const isoDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/, 'must be ISO-8601 datetime');
-
-export const TaskStatusResultSchema = z.object({
-  ok: z.boolean(),
-  task_id: taskIdSchema,
-  tool: z.string(),
-  slot: z.number().int().nullable(),
-  args_summary: z.string(),
-  started_at: isoDateSchema,
-  finished_at: isoDateSchema.nullable(),
-  elapsed_seconds: z.number().int(),
-  mcp_runtime_status: McpRuntimeStatusSchema,
-  script_exit_code: z.number().int().nullable(),
-  steps: z.array(TaskStepSchema),
-  log_tail: z.string(),
-  log_url: z.string(),
-  log_path: z.string(),
-  // M5b extensions — appended by the orchestrator when the .log is readable.
-  // Optional + nullable so old/in-flight responses still parse.
-  last_output_at: isoDateSchema.nullable().optional(),
-  last_line: z.string().nullable().optional(),
-  current_step: z.string().nullable().optional(),
-  progress_hint: z.string().nullable().optional(),
-  error: z.string().optional(),
-  message: z.string().optional(),
-});
-
-export type TaskStatusResult = z.infer<typeof TaskStatusResultSchema>;
-
-// Wide return type for executeStatus: the orchestrator may either return a
-// full TaskStatusResult OR a `{ok:false, error, task_id}` envelope when the
-// task is missing / SSH failed. We surface either shape verbatim. Property
-// access at the call site checks `ok` first; this loose typing keeps test
-// assertions ergonomic without forcing a `'tool' in result` discriminator
-// everywhere.
-export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
-  ok: boolean;
-  task_id?: string;
-  error?: string;
-  message?: string;
-  /** ROK-1338 PR-3: populated when classifySshFailure returns ssh_denied/ssh_unreachable. */
-  hint?: string;
-  // executeStatus normalizes `steps` to [] on success-shape responses (and
-  // omits it on raw error envelopes). Declared as a non-optional array so
-  // callers can write `result.steps.length` without a chain of null checks.
-  // The runtime contract is enforced at the executeStatus exit boundary.
-  steps: TaskStatusResult['steps'];
-}
+// ROK-1362: schemas/types moved to the leaf module task-schemas.ts to break a
+// circular import (task.ts -> local-task.ts -> task-schemas.ts). Re-export so
+// existing `from '../task.js'` / `from './task.js'` importers (index.ts,
+// env-build-image.ts, validate-ci.ts, task-inspect.ts, task-logs.ts, the specs)
+// keep resolving these symbols unchanged.
+export {
+  TASK_ID_RE,
+  taskIdSchema,
+  McpRuntimeStatusSchema,
+  TaskStepSchema,
+  isoDateSchema,
+  TaskStatusResultSchema,
+  isTerminalStatus,
+  StillRunningResultSchema,
+};
+export type { TaskStatusResult, ExecuteStatusReturn, StillRunningResult };
 
 async function sshArgs(remote: string): Promise<[string, string[]]> {
   return ['ssh', await buildSshArgs(remote)];
@@ -128,6 +95,11 @@ export interface ExecuteStatusParams {
 }
 
 export async function executeStatus(params: ExecuteStatusParams): Promise<ExecuteStatusReturn> {
+  // ROK-1362: `local-` ids are laptop tasks (rl_env_deploy / rl_env_clone_prod)
+  // — read the JSON registry directly, no SSH.
+  if (isLocalTaskId(params.task_id)) {
+    return readLocalTask(params.task_id, params.log_tail_bytes);
+  }
   const tail = params.log_tail_bytes ?? 51200;
   const remote =
     `/srv/rl-infra/orchestrator/bin/task-status ` +
@@ -212,13 +184,34 @@ export interface ExecuteWaitResult extends Partial<TaskStatusResult> {
   steps?: TaskStatusResult['steps'];
 }
 
-/** True when mcp_runtime_status is anything except 'running'. */
-function isTerminalStatus(s: string | undefined | null): boolean {
-  return !!s && s !== 'running';
+// ROK-1362: the still_running log_tail byte budget. Defaults to the SMALL 6KB
+// tail (narrated to a human terminal on a loop); a caller-supplied log_tail_bytes
+// overrides, clamped to [0, 64KB] for this path (the terminal status read keeps
+// the 51200 default so a finished task returns full context).
+function stillTailBytes(logTailBytes?: number): number {
+  return logTailBytes != null
+    ? Math.max(0, Math.min(STILL_RUNNING_LOG_TAIL_MAX, logTailBytes))
+    : STILL_RUNNING_LOG_TAIL_DEFAULT;
 }
 
-export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWaitResult> {
-  const timeoutS = Math.max(5, Math.min(3600, params.timeout_seconds ?? 600));
+/** Truncate a log_tail string to its last `n` bytes (UTF-8). */
+function tailToBytes(s: string, n: number): string {
+  const b = Buffer.from(s, 'utf8');
+  return b.length <= n ? s : b.subarray(b.length - n).toString('utf8');
+}
+
+export async function executeWait(
+  params: ExecuteWaitParams,
+): Promise<ExecuteWaitResult | StillRunningResult> {
+  // ROK-1362: laptop tasks (`local-` ids) use the fs.watch-based wait — same
+  // 120s cap, same still_running envelope on cap-expiry.
+  if (isLocalTaskId(params.task_id)) {
+    return waitLocalTask(params.task_id, params.timeout_seconds, params.log_tail_bytes);
+  }
+  // ROK-1362: hard-cap every blocking wait at 120s (server-side clamp, not just
+  // the schema). On cap-expiry a still-running task returns the still_running
+  // snapshot; the caller re-calls with the same task_id to keep waiting.
+  const timeoutS = Math.max(5, Math.min(120, params.timeout_seconds ?? 120));
   const overallDeadlineMs = Date.now() + timeoutS * 1000;
 
   // Preflight: probe inotifywait availability. Mirrors test-plan's pattern.
@@ -299,12 +292,12 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
   while (true) {
     const remainingMs = overallDeadlineMs - Date.now();
     if (remainingMs <= 0) {
-      return {
-        ok: false,
-        error: 'timed_out',
+      // ROK-1362: cap reached with the task still running → progress snapshot.
+      const snap = await executeStatus({
         task_id: params.task_id,
-        waited_seconds: timeoutS,
-      };
+        log_tail_bytes: stillTailBytes(params.log_tail_bytes),
+      });
+      return buildStillRunning(snap, timeoutS);
     }
 
     const cycleStartedMs = Date.now();
@@ -346,12 +339,19 @@ export async function executeWait(params: ExecuteWaitParams): Promise<ExecuteWai
         if (finalStatus.ok && isTerminalStatus(finalStatus.mcp_runtime_status)) {
           return finalStatus;
         }
-        return {
-          ok: false,
-          error: 'timed_out',
-          task_id: params.task_id,
-          waited_seconds: overallElapsed,
-        };
+        // ROK-1362: cap-expiry → still_running progress snapshot. Re-use the
+        // status we just read, truncating its log_tail to the small still-running
+        // budget so the looped narration stays terminal-friendly.
+        return buildStillRunning(
+          {
+            ...finalStatus,
+            log_tail: tailToBytes(
+              finalStatus.log_tail ?? '',
+              stillTailBytes(params.log_tail_bytes),
+            ),
+          },
+          overallElapsed,
+        );
       }
       // ROK-1338 PR-3 (B4): if the inotifywait SSH call hit sshd-denied or
       // host-unreachable, RETURN IMMEDIATELY rather than re-looping. Without
@@ -421,6 +421,11 @@ export interface ExecuteCancelResult {
 }
 
 export async function executeCancel(params: ExecuteCancelParams): Promise<ExecuteCancelResult> {
+  // ROK-1362: laptop tasks (`local-` ids) are cancelled by signalling the
+  // recorded child pid (SIGTERM → SIGKILL) and writing terminal `cancelled`.
+  if (isLocalTaskId(params.task_id)) {
+    return cancelLocalTask(params.task_id, params.reason);
+  }
   // task-cancel takes positional args: <task_id> <reason>. Earlier versions of
   // this shim passed `--reason <reason>` which the binary recorded as
   // cancel_reason: "--reason" (the flag literal, not the value). Caught by the

@@ -72,7 +72,10 @@ describe('AC1 — rl_validate_ci async-by-default returns task_id within 1s', ()
       };
     });
     const t0 = Date.now();
-    const result = await validateCi.execute({ args: ['--no-e2e'], wait: false });
+    const result = (await validateCi.execute({
+      args: ['--no-e2e'],
+      wait: false,
+    })) as validateCi.ValidateCiAsyncResult;
     const elapsed = Date.now() - t0;
     expect(result.ok).toBe(true);
     expect(result.task_id).toMatch(/^[a-z0-9]{8,32}$/);
@@ -122,15 +125,15 @@ describe('AC9 — wait:true chains internally to executeWait (sync shape preserv
   });
 });
 
-describe('default wait_timeout_seconds is 1800', () => {
-  // ROK-1331 M2 spec update (2026-05-20) — Zod schema now has `.default(1800)`.
-  it('schema parses without wait_timeout_seconds and defaults it to 1800', () => {
+describe('default wait_timeout_seconds is 120 (ROK-1362 hard cap)', () => {
+  // ROK-1362 — the shared waitFragment now caps at 120s and defaults to 120.
+  it('schema defaults wait_timeout_seconds to 120 and rejects >120', () => {
     const schema = z.object({
       wait: z.boolean().optional(),
-      wait_timeout_seconds: z.number().int().min(5).max(3600).default(1800),
+      wait_timeout_seconds: z.number().int().min(5).max(120).default(120),
     });
-    const parsed = schema.parse({ wait: true });
-    expect(parsed.wait_timeout_seconds).toBe(1800);
+    expect(schema.parse({ wait: true }).wait_timeout_seconds).toBe(120);
+    expect(() => schema.parse({ wait: true, wait_timeout_seconds: 1800 })).toThrow();
   });
 });
 
@@ -215,26 +218,28 @@ describe('Bug D (Session 4 dogfood) — targetCmd routes through run-on-runner',
   });
 });
 
-describe('rl_env_deploy sync asymmetry — no `wait` param', () => {
-  it('TOOL_DESCRIPTION calls out the synchronous behavior (per spec AC10)', () => {
-    // Per the spec: the description must explicitly note "this tool is SYNC"
-    // so agents know it does NOT accept the wait/wait_timeout_seconds params
-    // that rl_validate_ci / rl_env_build_image_from_runner / rl_env_clone_prod
-    // have. The whole word "SYNC" or the phrase "synchronous" must appear,
-    // not the accidental substring matches in "Mutagen-synced" or "settings sync".
-    expect(envDeploy.TOOL_DESCRIPTION).toMatch(/\bSYNC\b|\bsynchronous\b/);
+describe('rl_env_deploy is now ASYNC by default (ROK-1362)', () => {
+  it('TOOL_DESCRIPTION documents the async task_id + polling pattern', () => {
+    // ROK-1362 inverted the old "this tool is SYNC" contract: env_deploy now
+    // returns a local-... task_id and the description must teach polling.
+    expect(envDeploy.TOOL_DESCRIPTION).toMatch(/ASYNC BY DEFAULT/);
+    expect(envDeploy.TOOL_DESCRIPTION).toMatch(/task_id:'local-\.\.\.'|local-\.\.\./);
+    expect(envDeploy.TOOL_DESCRIPTION).toMatch(/rl_task_status|rl_task_wait/);
+    // The old SYNC boast is gone.
+    expect(envDeploy.TOOL_DESCRIPTION).not.toMatch(/this tool is SYNC/);
   });
 
-  it('passing wait:false rejects at the zod boundary (no `wait` param exists)', () => {
-    // Mirrors what index.ts will register for rl_env_deploy. The schema must
-    // remain free of `wait` / `wait_timeout_seconds` so callers can't smuggle
-    // async semantics into a tool that doesn't support them.
+  it('accepts wait / wait_timeout_seconds (≤120) at the schema boundary', () => {
+    // Mirrors index.ts envDeploySchema's waitFragment.
     const schema = z
       .object({
         slug: z.string().regex(/^[a-z0-9-]+$/),
+        wait: z.boolean().optional(),
+        wait_timeout_seconds: z.number().int().min(5).max(120).default(120),
       })
       .strict();
-    expect(() => schema.parse({ slug: 'foo', wait: false })).toThrow();
+    expect(schema.parse({ slug: 'foo', wait: false }).wait_timeout_seconds).toBe(120);
+    expect(() => schema.parse({ slug: 'foo', wait_timeout_seconds: 1800 })).toThrow();
   });
 });
 

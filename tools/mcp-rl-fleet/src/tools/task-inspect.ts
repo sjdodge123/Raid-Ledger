@@ -14,10 +14,11 @@ import {
   synthesizeEmptyStderrDiagnostic,
 } from '../exec.js';
 import { TASK_ID_RE } from './task.js';
+import { isLocalTaskId, readRawLocalTask } from '../local-task.js';
 
 export const TOOL_NAME = 'rl_task_inspect';
 export const TOOL_DESCRIPTION =
-  'Forensic read of a task: returns the FULL /srv/rl-infra/state/tasks/<id>.json contents as a raw object, with no log_tail capping or summary shaping. Use this when rl_task_status is missing a field you need (env block, raw argv, internal state). Validates task_id strictly. Read-only.';
+  'Forensic read of a task: returns the FULL task JSON contents as a raw object, with no log_tail capping or summary shaping. Works for VM tasks (/srv/rl-infra/state/tasks/<id>.json) AND laptop `local-...` tasks (~/.raid-ledger/tasks/<id>.json). Use this when rl_task_status is missing a field you need. Validates task_id strictly. Read-only.';
 
 export interface ExecuteInspectParams {
   task_id: string;
@@ -42,6 +43,13 @@ export async function execute(params: ExecuteInspectParams): Promise<ExecuteInsp
       error: 'invalid_task_id',
       task_id: params.task_id,
     };
+  }
+  // ROK-1362: `local-` ids are laptop tasks — read the JSON registry, no SSH.
+  if (isLocalTaskId(params.task_id)) {
+    const raw = readRawLocalTask(params.task_id);
+    return raw
+      ? { ok: true, task_id: params.task_id, task: raw as unknown as Record<string, unknown> }
+      : { ok: false, task_id: params.task_id, error: 'task not found' };
   }
   // Prefer the orchestrator binary so the path layout stays a VM-side
   // concern. Falls back to a direct cat if the binary is missing on an

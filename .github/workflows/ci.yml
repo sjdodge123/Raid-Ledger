@@ -25,6 +25,7 @@ jobs:
       contract: ${{ steps.filter.outputs.contract }}
       smoke_tests: ${{ steps.filter.outputs.smoke_tests }}
       container: ${{ steps.filter.outputs.container }}
+      tools: ${{ steps.filter.outputs.tools }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -65,6 +66,8 @@ jobs:
               - 'nginx/**'
               - 'api/src/ai/providers/ollama-docker*'
               - 'api/src/ai/providers/ollama-setup*'
+            tools:
+              - 'tools/mcp-rl-fleet/**'
 
   # ─── Lint + Build ──────────────────────────────────────────────────
   # Skipped for docs/skills-only PRs (no code changes)
@@ -186,6 +189,40 @@ jobs:
       - name: Test web (with coverage)
         run: npx vitest run --coverage
         working-directory: web
+
+  # ─── Tools Unit Tests (mcp-rl-fleet — ROK-1362) ───────────────────
+  # The fleet MCP server (tools/mcp-rl-fleet) has a Vitest suite that is the
+  # behavioral gate for fleet-tooling changes, but was not run by any CI job
+  # before ROK-1362. This job closes that gap.
+  tools-tests:
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.tools == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Cache node_modules
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test mcp-rl-fleet (Vitest)
+        run: npm test -w @raid-ledger/mcp-rl-fleet
 
   # ─── Unit Tests (summary — required status check) ─────────────────
   unit-tests:

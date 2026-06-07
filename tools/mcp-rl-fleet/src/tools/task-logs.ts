@@ -9,6 +9,7 @@
 // with PR-1's rl_task_inspect + rl_infra_logs. Future maintainers: do NOT add
 // it for parity (PR-1 codex [nit] feedback, already in TECH-DEBT-BACKLOG.md).
 
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import {
   buildSshArgs,
@@ -18,6 +19,8 @@ import {
   synthesizeEmptyStderrDiagnostic,
 } from '../exec.js';
 import { TASK_ID_RE } from './task.js';
+import { isLocalTaskId, localLogPath } from '../local-task.js';
+
 
 export const TOOL_NAME = 'rl_task_logs';
 export const TOOL_DESCRIPTION =
@@ -103,6 +106,23 @@ export async function execute(params: TaskLogsParams): Promise<TaskLogsResult> {
   const lines = validated.data.lines ?? LINES_DEFAULT;
   const follow = validated.data.follow ?? false;
   const stripAnsi = validated.data.strip_ansi ?? false;
+
+  // ROK-1362: `local-` ids are laptop tasks — read ~/.raid-ledger/tasks/<id>.log
+  // directly (no SSH). follow:true is unsupported here too.
+  if (isLocalTaskId(task_id)) {
+    if (follow) {
+      return { ok: false, error: 'follow_not_implemented_in_v1', task_id, hint: 'Poll rl_task_status instead.' };
+    }
+    const logPath = localLogPath(task_id);
+    try {
+      const raw = readFileSync(logPath, 'utf8');
+      let tail = raw.split('\n').filter((l) => l.length > 0).slice(-lines);
+      if (stripAnsi) tail = tail.map((l) => stripAnsiCodes(l));
+      return { ok: true, task_id, log_path: logPath, lines: tail };
+    } catch {
+      return { ok: false, task_id, log_path: logPath, error: 'task not found' };
+    }
+  }
 
   if (follow) {
     return {

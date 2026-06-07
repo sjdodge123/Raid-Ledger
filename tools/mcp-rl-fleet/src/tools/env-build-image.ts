@@ -21,6 +21,7 @@ import {
 } from '../exec.js';
 import * as claim from './claim.js';
 import * as task from './task.js';
+import { isStillRunning } from './task-schemas.js';
 import { ensureSyncedHead } from '../sync-guard.js';
 
 export const TOOL_NAME = 'rl_env_build_image_from_runner';
@@ -127,7 +128,8 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
 
   const agentId = deriveAgentId(params.worktree_path);
   const wait = params.wait ?? false;
-  const waitTimeoutS = params.wait_timeout_seconds ?? 1800;
+  // ROK-1362: executeWait clamps to 120s regardless; the default reflects that.
+  const waitTimeoutS = params.wait_timeout_seconds ?? 120;
 
   const buildArgs = ['--tag', params.tag];
   if (params.no_push) buildArgs.push('--no-push');
@@ -207,12 +209,25 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
   }
 
   // wait:true — chain through executeWait and map TaskStatusResult fields
-  // back to the legacy BuildImageResult shape so callers like env-deploy.ts
-  // keep working without changes.
+  // back to the legacy BuildImageResult shape so callers keep working.
   const status = await task.executeWait({
     task_id: finalTaskId,
     timeout_seconds: waitTimeoutS,
   });
+  // ROK-1362: the 120s cap can expire mid-build (builds run 5–15 min). That is
+  // NOT a failure — return the still_running snapshot so the caller re-polls
+  // (rl_task_status / rl_task_wait) instead of treating the cap as a build error.
+  if (isStillRunning(status)) {
+    return {
+      ok: false,
+      task_id: finalTaskId,
+      log_url: logUrl,
+      mcp_runtime_status: 'running',
+      message: status.poll_again_hint,
+      expected_head: expectedHead,
+      synced_head: syncedHead,
+    };
+  }
   if (status.mcp_runtime_status === 'succeeded') {
     return {
       ok: true,

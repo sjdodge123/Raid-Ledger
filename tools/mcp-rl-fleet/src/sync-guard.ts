@@ -182,7 +182,9 @@ async function probeOnce(
     command: `cat ${sentinelName} 2>/dev/null || true`,
     worktree_path: worktreePath,
   });
-  const read = (ror.stdout ?? '').trim();
+  // ROK-1362: run-on-runner now returns a routed task envelope for >120s, but
+  // this probe is short (sync path), so narrow to the {stdout} shape.
+  const read = ('stdout' in ror ? ror.stdout ?? '' : '').trim();
   const matched = read === token;
 
   // Gap-B: only bother inspecting the session once the cheap signals already
