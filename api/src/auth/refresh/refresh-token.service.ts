@@ -21,6 +21,12 @@ export interface IssuedRefreshToken {
 }
 
 /**
+ * Concurrent-refresh race grace: a parent rotated within this window mints a
+ * sibling instead of tripping theft detection (multi-tab session restore).
+ */
+const RACE_GRACE_MS = 60_000;
+
+/**
  * ROK-1353: refresh-token rotation service.
  *
  * issue() mints a new family; rotate() atomically consumes the presented row
@@ -155,10 +161,13 @@ export class RefreshTokenService {
    * blocklist the user so the live child dies too (standard rotation-with-
    * reuse-detection). A merely revoked/expired/unknown token → 401 only.
    *
-   * NOTE: strict reuse detection means a genuine multi-tab race loser also
-   * trips a family revoke; the web client collapses concurrent refreshes with
-   * a single-flight promise (`refresh-client.ts`) so this is not hit in normal
-   * use. Security posture is intentionally chosen over silent race tolerance.
+   * RACE GRACE (Codex P1, 2026-06-07): tabs share ONE cookie but the web
+   * single-flight only coordinates within a single JS context — a browser
+   * session-restore can fire several refreshes with the same parent before
+   * any Set-Cookie lands. A parent rotated within the last RACE_GRACE_MS is
+   * therefore a race LOSER, not a thief: mint it a sibling child on the same
+   * family (family revoke still kills every leaf). Replays older than the
+   * grace are treated as theft.
    */
   private async handleNoConsume(
     tokenHash: string,
@@ -166,13 +175,19 @@ export class RefreshTokenService {
     const existing = await this.findActiveByHash(tokenHash);
     if (!existing) return null;
     if (existing.revokedAt) return null;
-    if (existing.rotatedAt) {
-      this.logger.warn(
-        `ROK-1353: refresh-token reuse detected for user ${existing.userId} — revoking family`,
+    if (!existing.rotatedAt) return null;
+    const rotatedAgoMs = Date.now() - existing.rotatedAt.getTime();
+    if (rotatedAgoMs <= RACE_GRACE_MS) {
+      this.logger.debug(
+        `ROK-1353: concurrent-refresh race loser for user ${existing.userId} (rotated ${rotatedAgoMs}ms ago) — minting sibling`,
       );
-      await this.revokeFamily(existing.familyId);
-      await this.blocklist.blockUser(existing.userId);
+      return this.mintChild(existing);
     }
+    this.logger.warn(
+      `ROK-1353: refresh-token reuse detected for user ${existing.userId} — revoking family`,
+    );
+    await this.revokeFamily(existing.familyId);
+    await this.blocklist.blockUser(existing.userId);
     return null;
   }
 

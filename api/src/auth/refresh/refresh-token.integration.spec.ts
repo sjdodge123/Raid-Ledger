@@ -86,6 +86,17 @@ function getDiscordNotificationService(): DiscordNotificationService {
 }
 
 /** Count un-revoked refresh-token rows for a user. */
+/**
+ * Age every consumed rotation for the user past the 60s race grace so a
+ * replay reads as theft, not as a concurrent-tab race loser (ROK-1353).
+ */
+async function backdateRotations(userId: number): Promise<void> {
+  await testApp.db
+    .update(schema.refreshTokens)
+    .set({ rotatedAt: new Date(Date.now() - 2 * 60 * 1000) })
+    .where(eq(schema.refreshTokens.userId, userId));
+}
+
 async function countActiveRefreshRows(userId: number): Promise<number> {
   const rows = await testApp.db
     .select({
@@ -160,8 +171,9 @@ describe('POST /auth/refresh rotation (AC2)', () => {
     expect(newCookie).not.toBe(oldCookie);
   });
 
-  it('invalidates the OLD token immediately after a successful rotation', async () => {
+  it('invalidates the OLD token once past the race grace', async () => {
     const login = await loginLocal();
+    const adminId = testApp.seed.adminUser.id;
     const oldCookie = extractRefreshCookie(login) as string;
 
     const first = await testApp.request
@@ -169,12 +181,52 @@ describe('POST /auth/refresh rotation (AC2)', () => {
       .set('Cookie', cookieHeader(oldCookie));
     expect(first.status).toBe(200);
 
-    // Replaying the now-consumed OLD token must NOT mint a new access token.
+    // Outside the 60s concurrent-tab grace, replaying the consumed OLD
+    // token must NOT mint a new access token.
+    await backdateRotations(adminId);
     const replay = await testApp.request
       .post('/auth/refresh')
       .set('Cookie', cookieHeader(oldCookie));
     expect(replay.status).not.toBe(200);
     expect(replay.body).not.toHaveProperty('access_token');
+  });
+
+  it('treats an immediate replay as a concurrent-tab race loser (sibling, no revoke)', async () => {
+    const login = await loginLocal();
+    const oldCookie = extractRefreshCookie(login) as string;
+    const [parentRow] = await testApp.db
+      .select()
+      .from(schema.refreshTokens)
+      .where(
+        eq(
+          schema.refreshTokens.tokenHash,
+          crypto.createHash('sha256').update(oldCookie).digest('hex'),
+        ),
+      )
+      .limit(1);
+    expect(parentRow).toBeTruthy();
+
+    const winner = await testApp.request
+      .post('/auth/refresh')
+      .set('Cookie', cookieHeader(oldCookie));
+    expect(winner.status).toBe(200);
+
+    // Same cookie again within the grace (e.g. browser session-restore with
+    // multiple tabs): the loser gets a sibling token, the family survives.
+    const loser = await testApp.request
+      .post('/auth/refresh')
+      .set('Cookie', cookieHeader(oldCookie));
+    expect(loser.status).toBe(200);
+    expect(loser.body).toMatchObject({ access_token: expect.any(String) });
+
+    // Both children remain live on the SAME family — no revocation happened.
+    const familyRows = await testApp.db
+      .select()
+      .from(schema.refreshTokens)
+      .where(eq(schema.refreshTokens.familyId, parentRow.familyId));
+    const active = familyRows.filter((r) => !r.rotatedAt && !r.revokedAt);
+    expect(active).toHaveLength(2);
+    expect(familyRows.every((r) => !r.revokedAt)).toBe(true);
   });
 
   it('reuse of a consumed token revokes the WHOLE family', async () => {
@@ -189,7 +241,9 @@ describe('POST /auth/refresh rotation (AC2)', () => {
     expect(rotated.status).toBe(200);
     const childCookie = extractRefreshCookie(rotated) as string;
 
-    // Replay the consumed OLD token → reuse detected → family revoked.
+    // Age the rotation past the race grace, then replay the consumed OLD
+    // token → theft detected → family revoked.
+    await backdateRotations(adminId);
     const reuse = await testApp.request
       .post('/auth/refresh')
       .set('Cookie', cookieHeader(oldCookie));

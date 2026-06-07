@@ -37,7 +37,7 @@ describe('TokenBlocklistService', () => {
         'jwt_block:42',
         expect.any(String),
         'EX',
-        3600,
+        86400,
       );
 
       const storedTimestamp = Number(mockRedis.set.mock.calls[0][1]);
@@ -45,14 +45,14 @@ describe('TokenBlocklistService', () => {
       expect(storedTimestamp).toBeLessThanOrEqual(after);
     });
 
-    it('should use 3600 second TTL matching the 1h access-token lifetime (ROK-1353)', async () => {
+    it('should use 86400 second TTL covering the longest-lived issued JWT (ROK-1353 keeps 24h for rollout safety)', async () => {
       await service.blockUser(1);
 
       expect(mockRedis.set).toHaveBeenCalledWith(
         'jwt_block:1',
         expect.any(String),
         'EX',
-        3600,
+        86400,
       );
     });
   });
