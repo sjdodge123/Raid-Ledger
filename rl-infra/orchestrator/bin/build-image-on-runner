@@ -42,7 +42,15 @@ FULL_TAG="registry.rl.lan:5000/rl-allinone:${TAG}"
 # through Mutagen back to operator's worktree. Once the repo-side fix
 # ships, the sed below becomes a no-op (pattern won't match).
 PATCH_SED='s|RUN npm run build -w @raid-ledger/contract|RUN cd packages/contract \&\& rm -rf dist *.tsbuildinfo \&\& npx tsc|'
+# TECH-DEBT 2026-06-06: drop sync-guard sentinels BEFORE the copy. The guard
+# unlinks its laptop-side sentinel after a good probe and Mutagen propagates
+# that deletion asynchronously — if it lands mid-`cp -a`, cp dies with
+# "cannot stat '/workspace/./.rl-sync-probe-…'" (set -e ⇒ build failed).
+# Runner-side deletes are safe: the session is one-way laptop→runner, and a
+# file that still exists laptop-side just gets re-created on the next sync.
+# Paired with the post-unlink flush in sync-guard.ts (mcp-rl-fleet).
 BUILD_CMD="set -e; \
+  find /workspace -maxdepth 1 -name '.rl-sync-probe-*' -delete 2>/dev/null || true; \
   TMPDIR=\$(mktemp -d /tmp/rl-build-XXXXXX); \
   cp -a /workspace/. \"\$TMPDIR/\"; \
   cd \"\$TMPDIR\"; \
