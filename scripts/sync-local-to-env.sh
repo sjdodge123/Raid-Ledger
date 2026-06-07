@@ -220,8 +220,12 @@ case "$MODE" in
         # host-resolution failure indistinguishable from a genuinely empty
         # schema. On failure we name the container + database we probed.
         ENV_TABLES_ERR=$(mktemp)
+        # `|| true` is load-bearing (Codex P2, fix/batch-2026-06-07): without it,
+        # `set -e` kills the script ON the failed assignment and the diagnostic
+        # block below — the entire point of the ROK-1358 capture — never runs.
+        # Mirrors the env-inspect probe in settings mode above.
         ENV_TABLES=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-psql" "$SLUG" -- -tA -c \
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>"$ENV_TABLES_ERR")
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>"$ENV_TABLES_ERR" || true)
         if [[ -z "$ENV_TABLES" ]]; then
             ENV_TABLES_STDERR=$(cat "$ENV_TABLES_ERR" 2>/dev/null || true); rm -f "$ENV_TABLES_ERR"
             echo "ERROR: env's public schema came back empty when probing container '$ENV_PG_CONTAINER'" >&2

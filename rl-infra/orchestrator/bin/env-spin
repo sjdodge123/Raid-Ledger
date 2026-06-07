@@ -136,6 +136,7 @@ TRAEFIK_CONF_D="${RL_TRAEFIK_CONF_D:-/srv/rl-infra/traefik/conf.d}"
 # matching slugs. The operator bypass (RL_OPERATOR=1) is allowed because
 # the operator legitimately reaches across slots. The MCP server forces
 # RL_OPERATOR=0 for all agents, so this is agent-only friction.
+RECLAIMED_FROM_UNCLAIMED=0
 if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     EXISTING_SLOT=$(docker inspect "$APP_CONTAINER" \
         --format '{{ index .Config.Labels "rl.slot" }}' 2>/dev/null || echo "")
@@ -161,6 +162,14 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
         fi
         audit::log env-spin slug-reclaimed-from-unclaimed-slot \
             "$(jq -nc --arg slug "$SLUG" --argjson from_slot "$EXISTING_SLOT" --argjson to_slot "$SLOT" '{slug:$slug, from_slot:$from_slot, to_slot:$to_slot}')"
+        # Codex P2 (fix/batch-2026-06-07): falling through to the IDEMPOTENT
+        # path here would only bump last_touched + rewrite the route — the
+        # docker rl.slot label (immutable) and the registry row's .slot would
+        # stay on the OLD unclaimed slot, leaving slot counts / release /
+        # destroy bookkeeping pointing at a slot nobody owns. Force the
+        # RECREATE path so the container is re-run with this slot's labels and
+        # the fresh-path UPSERT rewrites .slot.
+        RECLAIMED_FROM_UNCLAIMED=1
     fi
 fi
 
@@ -190,7 +199,31 @@ RECREATED=0
 # into the fresh path.
 TAKE_IDEMPOTENT_PATH=0
 IMAGE_MISMATCH_WARNING=""
-if docker inspect "$APP_CONTAINER" >/dev/null 2>&1 && [[ "${IMAGE_EXPLICIT}" != "1" ]]; then
+if docker inspect "$APP_CONTAINER" >/dev/null 2>&1 && (( RECLAIMED_FROM_UNCLAIMED == 1 )); then
+    # Unclaimed-slot reclaim (Codex P2): MUST recreate — the idempotent path
+    # can't fix the immutable rl.slot docker label or the registry row's
+    # .slot. On a BARE re-spin (no --image) pin the container's CURRENT image
+    # ID so the reclaim preserves the env's exact content instead of
+    # re-running the default :latest ref (which may not exist locally, or
+    # may be entirely different content).
+    if [[ "${IMAGE_EXPLICIT}" != "1" ]]; then
+        RECLAIM_IMAGE=$(docker inspect "$APP_CONTAINER" --format '{{.Image}}' 2>/dev/null || echo "")
+        if [[ -n "$RECLAIM_IMAGE" ]]; then
+            IMAGE="$RECLAIM_IMAGE"
+        fi
+    fi
+    if ! docker rm -f "$APP_CONTAINER" >/dev/null 2>&1; then
+        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg container "$APP_CONTAINER" \
+            '{ok:false, error:"recreate_rm_failed", slug:$slug, slot:$slot, container:$container,
+              hint:("Reclaiming " + $container + " from an unclaimed slot requires recreating it under this slot, but docker rm -f failed. The env is in a half-state — inspect the container manually then re-run env-spin.")}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    RECREATED=1
+    # Fall through (TAKE_IDEMPOTENT_PATH stays 0) → fresh-spin path re-runs
+    # the container with THIS slot's labels and the registry UPSERT rewrites
+    # .slot. PG + its volume are reused (exists-guard on the PG docker run).
+elif docker inspect "$APP_CONTAINER" >/dev/null 2>&1 && [[ "${IMAGE_EXPLICIT}" != "1" ]]; then
     # Bare re-spin (no --image): the caller expressed no opinion about the
     # image, so NEVER compare against the default :latest ref — take the
     # fast idempotent path unconditionally. See IMAGE_EXPLICIT note above.

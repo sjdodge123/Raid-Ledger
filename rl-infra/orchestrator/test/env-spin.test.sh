@@ -338,10 +338,18 @@ test_unclaimed_slot_reclaim_positive() {
     export ES_APP_EXISTS="true"
     export ES_PG_EXISTS="true"
     export ES_APP_SLOT="2"
-    # Force a recreate so the fresh path rewrites the slot — but even the
-    # fast path would do; the key assertion is that it does NOT refuse.
-    export ES_RUNNING_IMAGE_ID="sha256:OLD"
-    export ES_CURRENT_IMAGE_ID="sha256:NEW"
+    # Codex P2 (fix/batch-2026-06-07): a reclaim must FORCE the recreate path
+    # even on a BARE re-spin — the idempotent path can't rewrite the immutable
+    # rl.slot docker label or the registry row's .slot. Bare spin here (no
+    # --image) is the exact Codex scenario; IDs equal so the old mismatch
+    # branch can't be what triggers the recreate.
+    export ES_RUNNING_IMAGE_ID="sha256:SAME"
+    export ES_CURRENT_IMAGE_ID="sha256:SAME"
+    # Seed a STALE registry row on the old slot so the .slot rewrite is
+    # genuinely exercised (an empty registry would pass via the INSERT branch).
+    cat > "$RL_ENVS_FILE" <<'JSON'
+[{"slug": "stranded", "slot": 2, "image": "x", "ttl": "24h", "created_at": "2026-06-07T00:00:00Z", "last_touched": "2026-06-07T00:00:00Z", "public_domain": ""}]
+JSON
 
     run_env_spin stranded
 
@@ -353,12 +361,22 @@ test_unclaimed_slot_reclaim_positive() {
     local audit
     audit=$(grep 'slug-reclaimed-from-unclaimed-slot' "$RL_AUDIT_LOG" 2>/dev/null | head -1 || true)
     assert_neq "$audit" "" "audit log must record slug-reclaimed-from-unclaimed-slot"
+    # The reclaim must RECREATE: old container rm'd, recreated:true reported.
+    local recreated rm_line
+    recreated=$(jq -r '.recreated' <<<"$ES_OUT" 2>/dev/null || echo "")
+    assert_eq "$recreated" "true" "reclaim must force the recreate path (recreated:true)"
+    rm_line=$(grep -E '^rm -f rl-env-stranded-allinone' "$RL_STATE_DIR/docker-calls.log" 2>/dev/null | head -1 || true)
+    assert_neq "$rm_line" "" "reclaim must rm the stale-slot container so labels are rewritten"
+    # Bare reclaim must pin the container's CURRENT image (not default :latest).
+    local run_line
+    run_line=$(grep -E '^run .*--name rl-env-stranded-allinone' "$RL_STATE_DIR/docker-calls.log" 2>/dev/null | head -1 || true)
+    assert_contains "$run_line" "sha256:SAME" "bare reclaim must recreate from the container's pinned image ID"
     # Registry row now reflects THIS slot (1), and there's exactly one.
     local rows new_slot
     rows=$(jq --arg s "stranded" '[.[] | select(.slug == $s)] | length' "$RL_ENVS_FILE" 2>/dev/null || echo "-1")
-    assert_eq "$rows" "1" "registry must hold exactly one row for the reclaimed slug"
+    assert_eq "$rows" "1" "registry must hold exactly one row for the reclaimed slug (UPSERT, no dup)"
     new_slot=$(jq -r --arg s "stranded" '[.[] | select(.slug == $s) | .slot] | first' "$RL_ENVS_FILE" 2>/dev/null || echo "")
-    assert_eq "$new_slot" "1" "registry row must move to the reclaiming slot (1)"
+    assert_eq "$new_slot" "1" "registry row .slot must move to the reclaiming slot (1)"
     es_teardown
 }
 
