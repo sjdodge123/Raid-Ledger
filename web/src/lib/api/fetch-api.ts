@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '../config';
 import { getAuthToken } from '../../hooks/use-auth';
 import { ensureFreshToken } from './refresh-client';
+import { getAuthMethod } from './silent-reauth';
 import { Sentry } from '../../sentry';
 
 function buildHeaders(options: RequestInit): Record<string, string> {
@@ -65,7 +66,9 @@ export async function fetchApi<T>(
     // ROK-1353: on 401, attempt a single transparent refresh from the httpOnly
     // `rl_rt` cookie (single-flight) and retry the request exactly once. The
     // user never sees a login screen for a merely-expired access token.
-    if (response.status === 401) {
+    // (Gated on the prior-session marker so anonymous visitors' 401s don't
+    // emit pointless refresh probes.)
+    if (response.status === 401 && getAuthMethod()) {
         const refreshed = await ensureFreshToken();
         if (refreshed) {
             response = await sendRequest(endpoint, options);
