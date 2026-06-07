@@ -59,12 +59,25 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
   async process(job: Job<AiSuggestionsPreGenJobData>): Promise<void> {
     const { lineupId } = job.data;
     const start = Date.now();
-    const outcome = await this.run(lineupId);
-    this.logger.log(
-      `AI suggestions pre-gen | lineup=${lineupId} outcome=${outcome} elapsed=${
-        Date.now() - start
-      }`,
-    );
+    try {
+      const outcome = await this.run(lineupId);
+      this.logger.log(
+        `AI suggestions pre-gen | lineup=${lineupId} outcome=${outcome} elapsed=${
+          Date.now() - start
+        }`,
+      );
+    } catch (err) {
+      // Emit telemetry, then RE-THROW so BullMQ's attempts/backoff retries
+      // a genuine generation failure (LLM timeout, transient DB error).
+      // No-op cases (missing/inactive lineup, fresh row) never reach here —
+      // `run()` returns a skip outcome instead of throwing.
+      this.logger.warn(
+        `AI suggestions pre-gen | lineup=${lineupId} outcome=error elapsed=${
+          Date.now() - start
+        } error=${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw err;
+    }
   }
 
   /** Returns the telemetry outcome string. */
@@ -112,7 +125,9 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
     const cached = await findLatestByHash(this.db, lineupId, hash);
     if (!cached) return false;
     const ttl =
-      (cached.payload.suggestions ?? []).length > 0 ? FRESH_TTL_MS : EMPTY_TTL_MS;
+      (cached.payload.suggestions ?? []).length > 0
+        ? FRESH_TTL_MS
+        : EMPTY_TTL_MS;
     return isFresh(cached.generatedAt, ttl);
   }
 }
