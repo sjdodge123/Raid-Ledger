@@ -442,6 +442,12 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
         log "destroying expired env $SLUG (age ${AGE_HOURS}h >= ttl ${TTL_HOURS}h)"
         docker rm -f "rl-env-${SLUG}-allinone" "rl-env-${SLUG}-pg" >/dev/null 2>&1 || true
         docker volume rm "rl-data-${SLUG}" >/dev/null 2>&1 || true
+        # TECH-DEBT 2026-06-06: this was the ONLY destroy path missing the
+        # Traefik route-file cleanup — a TTL-reaped env that owned the slot
+        # rule left slot-N.gamernight.net 502'd AND unclaimable ("another env
+        # owns the slot rule"), and since the registry entry is removed below,
+        # the orphan-sweep (keyed on registry) could never catch it later.
+        rm -f "/traefik-conf.d/env-${SLUG}.yml" 2>/dev/null || true
         mutate "$ENVS" --arg slug "$SLUG" 'map(select(.slug != $slug))'
         clean_test_plan "$SLUG"
         audit env_expired "$(jq -nc --arg slug "$SLUG" --argjson age "$AGE_HOURS" --argjson ttl "$TTL_HOURS" '{slug:$slug, age_hours:$age, ttl_hours:$ttl}')"
