@@ -18,6 +18,7 @@ import { EventsService } from '../../events/events.service';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SignupsService } from '../../events/signups.service';
+import { NotificationService } from '../../notifications/notification.service';
 
 jest.mock('../lineups-notify-hooks.helpers', () => ({
   fireEventCreated: jest.fn(),
@@ -43,6 +44,8 @@ jest.mock('./scheduling-event.helpers', () => ({
   resolveGameInfo: jest
     .fn()
     .mockResolvedValue({ gameName: 'Test Game', gameCoverUrl: null }),
+  // ROK-1219: assertUserHasVoted moved out of the service into this helper.
+  assertUserHasVoted: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('./scheduling-conflict.helpers', () => ({
   ...jest.requireActual('./scheduling-conflict.helpers'),
@@ -52,6 +55,8 @@ jest.mock('./scheduling-conflict.helpers', () => ({
 /* eslint-disable @typescript-eslint/no-require-imports */
 const queryHelpers =
   require('./scheduling-query.helpers') as typeof import('./scheduling-query.helpers');
+const eventHelpers =
+  require('./scheduling-event.helpers') as typeof import('./scheduling-event.helpers');
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const SCHEDULING_MATCH = {
@@ -91,6 +96,10 @@ describe('SchedulingService', () => {
             firePostInitialEmbed: jest.fn(),
             fireUpdateEmbed: jest.fn(),
           },
+        },
+        {
+          provide: NotificationService,
+          useValue: { createMany: jest.fn().mockResolvedValue([]) },
         },
       ],
     }).compile();
@@ -203,10 +212,9 @@ describe('SchedulingService', () => {
     /** Mock the full happy-path sequence for createEventFromSlot. */
     function mockCreateEventFlow() {
       // Bypass voter check (tested separately)
-
-      jest
-        .spyOn(service as any, 'assertUserHasVoted')
-        .mockResolvedValueOnce(undefined);
+      (eventHelpers.assertUserHasVoted as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
       // 1. findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
       // 2. findSlotOrThrow
@@ -236,13 +244,11 @@ describe('SchedulingService', () => {
     });
 
     it('throws ForbiddenException when user has not voted', async () => {
-      jest
-        .spyOn(service as any, 'assertUserHasVoted')
-        .mockRejectedValueOnce(
-          new ForbiddenException(
-            'You must vote on a slot before creating an event',
-          ),
-        );
+      (eventHelpers.assertUserHasVoted as jest.Mock).mockRejectedValueOnce(
+        new ForbiddenException(
+          'You must vote on a slot before creating an event',
+        ),
+      );
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
       await expect(service.createEventFromSlot(10, 20, 1)).rejects.toThrow(
         ForbiddenException,
