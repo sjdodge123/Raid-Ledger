@@ -39,7 +39,7 @@ export class RefreshTokenController {
   ) {}
 
   /** Rotate the refresh cookie → fresh 1h access JWT + new cookie. */
-  @RateLimit('auth')
+  @RateLimit('refresh')
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(

@@ -15,6 +15,12 @@ export const RATE_LIMIT_TIERS = {
   export: { ttl: 60_000, limit: isTestEnv ? 999_999 : 5 },
   // ROK-1067: per-IP throttle for public-share lineup endpoint.
   public: { ttl: 60_000, limit: isTestEnv ? 999_999 : 60 },
+  // ROK-1353: POST /auth/refresh is browser-automatic (fires on page mounts
+  // and 401 retries, including anonymous visitors' probes), so a whole guild
+  // behind one NAT shares the bucket. The 'auth' tier's 10/min trips under
+  // normal multi-tab use and forces spurious logouts. Token brute force is
+  // not a concern (256-bit random, hash-matched), so match the global 60/min.
+  refresh: { ttl: 60_000, limit: isTestEnv ? 999_999 : 60 },
 } as const;
 
 export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;
