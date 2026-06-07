@@ -564,8 +564,8 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_env_destroy` | Tear down an env: containers + volume + Traefik route file + state entry. |
 | `mcp__mcp-rl-fleet__rl_env_list` | List active test envs (slug, slot, ttl, last_touched). |
 | `mcp__mcp-rl-fleet__rl_env_sync_from_local` | Copy data from operator's local raid-ledger-db into an env. mode=`settings` (default) syncs app_settings/local_credentials/consumed_intent_tokens. mode=`full` does full data dump. Requires `RL_ENV_JWT_SECRET` in `/srv/rl-infra/.env` for encrypted app_settings to decrypt at runtime. |
-| `mcp__mcp-rl-fleet__rl_env_clone_prod` | Two-step: refresh operator's local DB from prod (sanitized backup), then push to env. Use `skip_local_refresh=true` for subsequent envs when local DB is already fresh. |
-| `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Use for `npm test`, `jest`, `npx playwright test`, etc. Captures stdout/stderr/exit_code. Requires `rl_claim` first (or `rl_claim_wait` if you were enqueued). |
+| `mcp__mcp-rl-fleet__rl_env_clone_prod` | Two-step: refresh operator's local DB from prod (sanitized backup), then push to env. Use `skip_local_refresh=true` for subsequent envs when local DB is already fresh. **ROK-1362: now ASYNC** — runs as a detached LAPTOP task and returns `{ok:true, task_id:'local-…', started_at}` in ~1s. Poll `rl_task_status local-…` / `rl_task_wait local-…` (each wait caps at 120s). |
+| `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Requires `rl_claim` first (or `rl_claim_wait` if enqueued). **ROK-1362 bounded:** `timeout_seconds ≤ 120` (default 60) runs SYNC and returns `{stdout, stderr, exit_code}` — for short probes. `timeout_seconds > 120` is AUTO-DISPATCHED as a VM task (not rejected) and returns `{ok:true, routed:'task', task_id, log_url}` — poll it like any task. Use the `>120` form for `npm test`, `npm run build`, `npx playwright test`. |
 | `mcp__mcp-rl-fleet__rl_validate_ci` | Run the full validate-ci.sh pipeline inside the runner — far faster than running locally. Args: `["--no-e2e"]`, `["--only-e2e"]`, etc. |
 | `mcp__mcp-rl-fleet__rl_db_url` | Get psql/pgweb URLs for an env's Postgres. Pure metadata — no remote call. |
 | `mcp__mcp-rl-fleet__rl_logs_url` | Generate a Grafana Explore URL pre-filled with a Loki LogQL query (e.g. `{rl_slot="1"}` or `{rl_env="myslug"} \|= "error"`). |
@@ -578,6 +578,40 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_task_logs` | Tail the supervisor log for a task: `/srv/rl-infra/state/tasks/<id>.log` (stdout+stderr of the wrapped command). Companion to `rl_task_status` (summarized) and `rl_task_inspect` (raw JSON). `lines` defaults to 100, max 5000. `strip_ansi:true` (default false) strips ANSI color escapes for clean grep-able text. `follow:true` deferred to v2 — returns `error:"follow_not_implemented_in_v1"`; poll via `rl_task_status` if you need streaming. Rejects unknown params explicitly (`unknown_param`). Read-only. ROK-1338 PR-2. |
 | `mcp__mcp-rl-fleet__rl_env_inspect` | Render the actual contents of a config file inside a fleet env's allinone container. `what` enum: `nginx-conf` (Alpine `/etc/nginx/http.d/default.conf`) or `supervisor-conf` (`/etc/supervisor.d/raid-ledger.ini`). 64KB cap, `truncated:true` on overflow. Routes via rl-docker-proxy at 127.0.0.1:2375 (rl-agent not in docker group). Rejects unknown params explicitly. Read-only. ROK-1338 PR-2. |
 | `mcp__mcp-rl-fleet__rl_db_query` | Run a one-shot read-only SQL query against a fleet env's Postgres via `env-psql`. Layered safety: BEGIN/SET TRANSACTION READ ONLY + `SET LOCAL statement_timeout='5s'` inside the txn (PGOPTIONS does NOT propagate through env-psql's `docker exec`, dogfood-verified) + FORBIDDEN_KEYWORDS pre-check (the `set_config()` family is fully blocked; the `default_transaction_read_only` matcher is narrowed to the SET form, so `current_setting('default_transaction_read_only')` reads are allowed) + `SELECT * FROM (<your-sql>) AS rl_inner LIMIT 1001` subquery wrap + `-v ON_ERROR_STOP=1`. Output is `json_agg(row_to_json(__rl_q_row__))` — rows preserve JSON-native types (number/string/boolean/null), so NULL is unambiguous and CANNOT collide with any text data. Numbers come back as JS strings whenever JSON-text round-trip would lose precision — specifically, integers `>=` Number.MAX_SAFE_INTEGER (2^53−1) and float values whose decimal-text form doesn't round-trip cleanly (e.g. `0.1 + 0.2` arrives as the string `"0.30000000000000004"`). Safe integers + cleanly-representable floats stay as JS Number. Consumers doing arithmetic on large bigints or precise floats should `BigInt()`/parse explicitly rather than assume `typeof === "number"` (round-4 + round-5 fix via `json-bigint`, dogfood-verified). Caps at 1000 rows (`truncated:true` flag). Rejects unknown params explicitly. v1 is read-only only — write mode is a future tool. ROK-1338 PR-2. |
+
+### Bounded waits + async tasks — the 120s cap (ROK-1362)
+
+**No `mcp-rl-fleet` tool call holds the MCP channel longer than 120s.** This is a
+hard rule enforced at the tool layer (server-side clamp + schema), not agent
+discipline — a blind 20-minute wait is indistinguishable from a hang in the
+operator's terminal.
+
+- **`rl_task_wait`** blocks until the task is terminal OR 120s elapses (schema
+  `max(120)`; passing `>120` is rejected with a teaching message). On cap-expiry
+  for a still-running task it returns a PROGRESS SNAPSHOT, not a timeout:
+  `{ok:false, status:'still_running', task_id, tool, current_step, steps[],
+  log_tail (~6KB), elapsed_s, waited_s, poll_again_hint}`. Narrate it to the
+  operator, then **re-call `rl_task_wait` with the SAME `task_id`** to keep
+  waiting — each call is a fresh snapshot. (The old `{error:'timed_out'}` shape is
+  gone.) Prefer `rl_task_status` for a cheap non-blocking one-shot poll every
+  60–90s. **There is no walk-away blocking wait** — to walk away, use the
+  background push-notify pattern below (a backgrounded `rl … wait` Bash call),
+  never a blocking MCP call.
+- **`wait:true` on `rl_validate_ci` / `rl_env_build_image_from_runner` /
+  `rl_env_deploy` / `rl_env_clone_prod`** also caps at 120s (`wait_timeout_seconds`
+  `max(120)`, default 120). If the work isn't done within the budget it returns
+  the same `still_running` snapshot; re-poll to continue.
+- **Laptop tasks (`local-…` ids).** `rl_env_deploy` and `rl_env_clone_prod` read
+  the operator's LOCAL DB (settings sync / clone), so they can't be VM tasks. They
+  dispatch a detached process on the laptop and return a `local-<12 hex>` task_id;
+  their steps stream into `~/.raid-ledger/tasks/<id>.json`. `rl_task_status`,
+  `rl_task_wait`, `rl_task_logs`, `rl_task_inspect`, and `rl_task_cancel` all
+  accept BOTH VM ids and `local-…` ids (same renderer; the `local-` prefix routes
+  to the laptop registry with no SSH). If the laptop sleeps/reboots mid-chain, a
+  later status read returns a synthesized `{mcp_runtime_status:'failed',
+  error:'process_died'}` (PID-liveness check) rather than a stuck `running`.
+- **`rl_run_on_runner`** stays sync for `timeout_seconds ≤ 120` (default 60) and
+  AUTO-DISPATCHES as a VM task for `>120` (returns `{routed:'task', task_id}`).
 
 ### Stale-build sync guard + force-resync (TECH-DEBT 2026-06-02)
 
