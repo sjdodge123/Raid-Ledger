@@ -324,11 +324,37 @@ describe('DiscordNotificationProcessor', () => {
   //   - any other error → existing transient retry path preserved:
   //     handleProcessError is still invoked AND the error rethrows.
   describe('ROK-1260: terminal DiscordAPIError classification', () => {
-    // Synthesizes a discord.js DiscordAPIError-shaped error so the
-    // processor's classifier can detect the code AND the constructor
-    // name (`DiscordAPIError`) — both checks must pass for the
-    // terminal branch to fire.
+    // Synthesizes a discord.js v14 DiscordAPIError-shaped error so the
+    // processor's classifier can detect the code AND the name prefix.
+    //
+    // ROK-1354: discord.js v14's `DiscordAPIError` (`@discordjs/rest`) has a
+    // `name` GETTER that returns `DiscordAPIError[<code>]` (e.g.
+    // `DiscordAPIError[50278]`) — never the bare string `DiscordAPIError`.
+    // Production NEVER produces the bare name, so the classifier must match
+    // on `name.startsWith('DiscordAPIError')`. This helper mirrors the real
+    // production shape (bracketed name); a separate bare-name helper below
+    // keeps transition-compat coverage.
     function makeDiscordApiError(
+      code: number,
+      message: string,
+    ): Error & { code: number } {
+      class DiscordAPIError extends Error {
+        public code: number;
+        constructor(c: number, m: string) {
+          super(m);
+          this.code = c;
+          // Production getter shape — the bug ROK-1354 fixes.
+          this.name = `DiscordAPIError[${c}]`;
+        }
+      }
+      return new DiscordAPIError(code, message);
+    }
+
+    // ROK-1354: transition-compat helper — emits the BARE `DiscordAPIError`
+    // name (the shape ROK-1260's simulation produced). The classifier's
+    // `startsWith('DiscordAPIError')` gate must still match this so a future
+    // discord.js downgrade or a wrapped re-throw keeps classifying.
+    function makeBareNameDiscordApiError(
       code: number,
       message: string,
     ): Error & { code: number } {
@@ -453,6 +479,139 @@ describe('DiscordNotificationProcessor', () => {
 
         await processor.process(job);
 
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── ROK-1354: 10013 Unknown User — deleted account, behaves like 50278 ──
+    //
+    // 10013 throws at `client.users.fetch(discordId)` (the account no longer
+    // exists) BEFORE `user.send` is ever called. The classifier sees it from
+    // the same catch in process(); the account is GONE, so it must map to
+    // `permanent-deactivate` (same terminal handling as 50278).
+    describe('DiscordAPIError[10013] — Unknown User (deleted account)', () => {
+      it('resolves cleanly (does NOT rethrow)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob({}, { attemptsMade: 0, opts: { attempts: 3 } });
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+      });
+
+      it('calls deactivateUser(userId) exactly once (account is gone)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob();
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledTimes(1);
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledWith(1);
+      });
+
+      it('does NOT call recordFailure (counter irrelevant — account deleted)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob({}, { attemptsMade: 2, opts: { attempts: 3 } });
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('does NOT reset failures (success path only)', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob();
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.resetFailures,
+        ).not.toHaveBeenCalled();
+      });
+    });
+
+    // ── ROK-1354: bare-name transition compat ──
+    //
+    // ROK-1260's tests (and any wrapped/legacy re-throw) produce the BARE
+    // `DiscordAPIError` name. The new `startsWith('DiscordAPIError')` gate
+    // must STILL classify these so the fix is backwards-compatible.
+    describe('ROK-1354: bare DiscordAPIError name still classifies (transition compat)', () => {
+      it('50278 with bare name → permanent-deactivate', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeBareNameDiscordApiError(
+            50278,
+            'Cannot send messages to this user due to having no mutual guilds (code 50278)',
+          ),
+        );
+        const job = buildJob();
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledWith(1);
+      });
+
+      it('50007 with bare name → permanent-prefs-only', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeBareNameDiscordApiError(
+            50007,
+            'Cannot send messages to this user (code 50007)',
+          ),
+        );
+        const job = buildJob();
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).toHaveBeenCalledWith(1);
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('10013 with bare name → permanent-deactivate', async () => {
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeBareNameDiscordApiError(10013, 'Unknown User (code 10013)'),
+        );
+        const job = buildJob();
+
+        await expect(processor.process(job)).resolves.toBeUndefined();
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).toHaveBeenCalledWith(1);
+      });
+    });
+
+    // ── ROK-1354: name-prefix gate guards unrelated libs reusing `.code` ──
+    describe('ROK-1354: non-DiscordAPIError name with matching code → transient', () => {
+      it('does NOT deactivate when code is 50278 but name is unrelated', async () => {
+        // An error from an unrelated library that happens to carry
+        // `.code === 50278` but whose name does NOT start with
+        // `DiscordAPIError` must follow the transient path (rethrow, no
+        // deactivate) — the name prefix is the disambiguator.
+        const foreignError = new Error('Some unrelated failure') as Error & {
+          code: number;
+        };
+        foreignError.name = 'SomeOtherError';
+        foreignError.code = 50278;
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(foreignError);
+        const job = buildJob();
+
+        await expect(processor.process(job)).rejects.toThrow();
         expect(
           mockDiscordNotificationService.deactivateUser,
         ).not.toHaveBeenCalled();

@@ -287,6 +287,71 @@ function describeSentryInstrumentTs() {
           expect(getBeforeSend()(event)).toBe(event);
         });
 
+        // ── ROK-1354: production bracketed exception type ──
+        //
+        // discord.js v14's DiscordAPIError reports its Sentry `type` as the
+        // bracketed name `DiscordAPIError[<code>]` (e.g. `DiscordAPIError[50007]`),
+        // never the bare string. ROK-1260's filter compared `=== 'DiscordAPIError'`
+        // and so never fired in prod. The filter must use `startsWith` so
+        // bracketed types are dropped.
+        it('drops bracketed DiscordAPIError[50007] type (production shape)', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[50007]',
+                  value: 'Cannot send messages to this user (code 50007)',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops bracketed DiscordAPIError[50278] type (production shape)', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[50278]',
+                  value:
+                    'Cannot send messages to this user due to having no mutual guilds (code 50278)',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        // ── ROK-1354: 10013 Unknown User added to the drop filter ──
+        it('drops bracketed DiscordAPIError[10013] Unknown User type (ROK-1354)', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[10013]',
+                  value: 'Unknown User (code 10013)',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops DiscordAPIError events mentioning "Unknown User" (defense-in-depth, ROK-1354)', () => {
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[10013]',
+                  value: 'Unknown User',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
+        });
+
         it('does NOT drop events with the 50278 code but a different exception type', () => {
           // A wrapper error or unrelated exception type that happens to
           // contain "code 50278" in its message should still report — only
@@ -479,6 +544,95 @@ function describeSentryInstrumentTs() {
           expect(
             (getBeforeSend()(missingAccess) as SentryEvent).fingerprint,
           ).toBeUndefined();
+        });
+
+        // ── ROK-1354: bracketed type must still reach the fingerprint block ──
+        //
+        // The ROK-1162 transient-fingerprint block shares the same dead
+        // `=== 'DiscordAPIError'` comparison. With production's bracketed
+        // type, it never fired. After the `startsWith` fix, a transient 5xx
+        // carrying the bracketed type must still get the shared fingerprint.
+        it('fingerprints bracketed DiscordAPIError[503] transient 5xx (ROK-1354)', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[503]',
+                  value: 'Internal Server Error (HTTP 503)',
+                },
+              ],
+            },
+          };
+          const result = getBeforeSend()(event) as SentryEvent;
+          expect(result).toBe(event);
+          expect(result.fingerprint).toEqual(['discord-api-transient']);
+        });
+
+        it('fingerprints bracketed DiscordAPIError network failures (ECONNRESET, ROK-1354)', () => {
+          const event: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[0]',
+                  value: 'fetch failed: ECONNRESET',
+                },
+              ],
+            },
+          };
+          const result = getBeforeSend()(event) as SentryEvent;
+          expect(result.fingerprint).toEqual(['discord-api-transient']);
+        });
+
+        it('does NOT fingerprint bracketed permanent codes like [50013] (word-boundary regression guard, ROK-1354)', () => {
+          // 50013 Missing Permissions / 50001 Missing Access are PERMANENT.
+          // The bracketed type `DiscordAPIError[50013]` must NOT regress into
+          // the transient grouping: neither the value `\b5\d\d\b` nor the new
+          // `Unknown User|code 10013` additions may collide with these.
+          const missingPermissions: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[50013]',
+                  value: 'Missing Permissions (code 50013)',
+                },
+              ],
+            },
+          };
+          const missingAccess: SentryEvent = {
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[50001]',
+                  value: 'Missing Access (code 50001)',
+                },
+              ],
+            },
+          };
+          expect(
+            (getBeforeSend()(missingPermissions) as SentryEvent).fingerprint,
+          ).toBeUndefined();
+          expect(
+            (getBeforeSend()(missingAccess) as SentryEvent).fingerprint,
+          ).toBeUndefined();
+        });
+
+        it('drops bracketed [50278] ahead of fingerprinting when both would match (clause ordering, ROK-1354)', () => {
+          // Bracketed-type variant of the existing clause-ordering guard: a
+          // bracketed DiscordAPIError carrying BOTH "code 50278" AND a
+          // transient substring must drop on the 50278 clause, never reaching
+          // the fingerprint clause.
+          const result = getBeforeSend()({
+            exception: {
+              values: [
+                {
+                  type: 'DiscordAPIError[50278]',
+                  value:
+                    'Cannot send messages to this user (code 50278) — fetch failed',
+                },
+              ],
+            },
+          });
+          expect(result).toBeNull();
         });
 
         it('drops 50278 ahead of fingerprinting when both regexes would match (clause ordering guard)', () => {
