@@ -480,8 +480,17 @@ export function classifySshFailure(
   // Denied patterns. Host-key verification failure is classified as DENIED
   // (not unreachable) — it's a sshd-side identity decision; "retry won't
   // help" matches the ssh_denied UX.
+  //
+  // ROK-1360: the parenthesised branch REQUIRES an OpenSSH auth-method token
+  // inside the parens (publickey | password | gssapi | hostbased |
+  // keyboard-interactive). Without this, postgres-side `permission denied
+  // (...)` stderr that ever reached this classifier would be mis-bucketed as
+  // ssh_denied. Real OpenSSH always lists the attempted methods, e.g.
+  // `Permission denied (publickey,password)`, so the tightened form still
+  // matches every genuine sshd rejection. The `,? please try again` and
+  // Host-key branches are unchanged.
   const DENIED_RE =
-    /(?:Permission denied(?:,? please try again| \([^)]+\))|Host key verification failed)/i;
+    /(?:Permission denied(?:,? please try again| \([^)]*(?:publickey|password|gssapi|hostbased|keyboard-interactive)[^)]*\))|Host key verification failed)/i;
   if (DENIED_RE.test(stderr)) {
     return {
       error: 'ssh_denied',
@@ -497,8 +506,19 @@ export function classifySshFailure(
   // Unreachable patterns. `Connection closed by ... port 22` (sshd hung up
   // before banner) is treated as unreachable — it usually means sshd is up
   // but refused before authentication started (fail2ban, MaxStartups).
+  //
+  // ROK-1360: bare `Connection refused` / `Connection timed out` is anchored
+  // to OpenSSH's `ssh: connect to host <host> port <n>:` preamble. Postgres
+  // emits the SAME `Connection refused` / `Connection timed out` text in its
+  // `could not connect to server` errors; without the ssh-preamble anchor a
+  // psql stderr that ever reached this classifier would be mis-bucketed as
+  // ssh_unreachable. Every genuine OpenSSH "host down" message carries the
+  // `ssh: connect to host ... port N:` preamble, so the anchored form still
+  // matches all real cases. The `Connection closed by ... port 22`,
+  // `No route to host`, and `Could not resolve hostname` branches are
+  // OpenSSH-specific already and stay un-anchored.
   const UNREACHABLE_RE =
-    /(?:Connection refused|Connection timed out|Connection closed by [^\n]* port 22|No route to host|ssh: connect to host [^\s]+ port \d+:|ssh: Could not resolve hostname)/i;
+    /(?:ssh: connect to host \S+ port \d+:\s*(?:Connection refused|Connection timed out|No route to host)|Connection closed by [^\n]* port 22|ssh: Could not resolve hostname)/i;
   if (UNREACHABLE_RE.test(stderr)) {
     return {
       error: 'ssh_unreachable',

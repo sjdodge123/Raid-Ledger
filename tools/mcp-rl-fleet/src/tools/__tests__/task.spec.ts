@@ -362,6 +362,28 @@ describe('rl_task_wait — ROK-1338 PR-3 SSH classifier', () => {
     expect(result.error).toBe('ssh_unreachable');
     expect(mockExecFile.mock.calls.length).toBe(1);
   });
+
+  // ROK-1360: the probe-side classifier was tested above, but the IN-LOOP
+  // (watch-side) classifier path was not. When inotifywait's watch SSH call
+  // fails with Permission denied AFTER a clean probe + non-terminal status
+  // pre-check, executeWait must classify it and return ssh_denied immediately
+  // rather than re-looping until the overall timeout.
+  it('classifies a watch-side Permission denied (publickey) as ssh_denied and returns immediately', async () => {
+    // 1: probe inotifywait — succeed.
+    execFileOk({ ok: true });
+    // 2: pre-check status — still running (so we enter the watch loop).
+    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' });
+    // 3: the inotifywait watch SSH call is denied.
+    execFileFail(255, 'rl-agent@rl-infra: Permission denied (publickey).');
+    const result = await executeWait({
+      task_id: 'abc123def',
+      timeout_seconds: 30,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('ssh_denied');
+    // Probe + pre-check + the single failed watch call — no further looping.
+    expect(mockExecFile.mock.calls.length).toBe(3);
+  });
 });
 
 describe('rl_task_wait — ROK-1338 PR-3 A3 hint rewrite', () => {
