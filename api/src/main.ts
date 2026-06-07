@@ -7,6 +7,7 @@ import { Logger } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import compression from 'compression';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import * as bodyParser from 'body-parser';
 import * as path from 'path';
 import { AppModule } from './app.module';
@@ -90,6 +91,8 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '2mb' });
   app.use(helmet(buildHelmetOptions()));
   app.use(compression({ threshold: 1024 }));
+  // ROK-1353: parse the httpOnly `rl_rt` refresh cookie into req.cookies.
+  app.use(cookieParser());
   const isProduction = process.env.NODE_ENV === 'production';
   const corsOrigin = process.env.CORS_ORIGIN;
   validateCorsConfig(isProduction, corsOrigin);

@@ -2,8 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
-/** TTL in seconds — matches max JWT lifetime (24h). */
-const BLOCK_TTL_SECONDS = 86400;
+/** TTL in seconds — matches max access-JWT lifetime (1h, ROK-1353). */
+const BLOCK_TTL_SECONDS = 3600;
 
 /** Redis key prefix for user-level token blocklist entries. */
 const KEY_PREFIX = 'jwt_block:';
