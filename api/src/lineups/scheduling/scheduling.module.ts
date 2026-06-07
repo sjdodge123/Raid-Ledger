@@ -7,6 +7,7 @@ import { DrizzleModule } from '../../drizzle/drizzle.module';
 import { EventsModule } from '../../events/events.module';
 import { DiscordBotModule } from '../../discord-bot/discord-bot.module';
 import { SettingsModule } from '../../settings/settings.module';
+import { NotificationModule } from '../../notifications/notification.module';
 import { LineupsModule } from '../lineups.module';
 import { SchedulingController } from './scheduling.controller';
 import { SchedulingBannerController } from './scheduling-banner.controller';
@@ -19,6 +20,7 @@ import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
     EventsModule,
     DiscordBotModule,
     SettingsModule,
+    NotificationModule,
     forwardRef(() => LineupsModule),
   ],
   controllers: [SchedulingController, SchedulingBannerController],

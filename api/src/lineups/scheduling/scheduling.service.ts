@@ -60,6 +60,11 @@ import {
   assertSchedulingEnabled,
   assertSchedulable,
 } from './scheduling-guard.helpers';
+import {
+  buildCancelNotifications,
+  normalizeReason,
+} from './scheduling-cancel.helpers';
+import { NotificationService } from '../../notifications/notification.service';
 
 const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -74,6 +79,7 @@ export class SchedulingService {
     private readonly signupsService: SignupsService,
     private readonly lineupNotifications: LineupNotificationService,
     private readonly pollEmbed: SchedulingPollEmbedService,
+    private readonly notifications: NotificationService,
   ) {}
 
   /**
@@ -273,8 +279,16 @@ export class SchedulingService {
     return { polls };
   }
 
-  /** Cancel/archive a scheduling poll (operator). */
-  async cancelPoll(matchId: number): Promise<void> {
+  /**
+   * Cancel/archive a scheduling poll (operator). Archives first (source of
+   * truth), then notifies matched voters except the actor. Notification
+   * dispatch is fire-safe — a failure is logged, never thrown (ROK-1219).
+   */
+  async cancelPoll(
+    matchId: number,
+    actorUserId: number,
+    reason?: string | null,
+  ): Promise<void> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
@@ -282,9 +296,37 @@ export class SchedulingService {
       .update(schema.communityLineupMatches)
       .set({ status: 'archived', updatedAt: new Date() })
       .where(eq(schema.communityLineupMatches.id, matchId));
+    await this.notifyPollCancelled(match, actorUserId, normalizeReason(reason));
   }
 
   // -- Private helpers --
+
+  /** Build + dispatch cancel notifications to matched voters (fire-safe). */
+  private async notifyPollCancelled(
+    match: { id: number; lineupId: number; gameId: number },
+    actorUserId: number,
+    reason: string | null,
+  ): Promise<void> {
+    try {
+      const members = await findMatchMembers(this.db, [match.id]);
+      const recipientUserIds = members
+        .map((m) => m.userId)
+        .filter((id) => id !== actorUserId);
+      if (recipientUserIds.length === 0) return;
+      const { gameName } = await resolveGameInfo(this.db, match.gameId);
+      const inputs = buildCancelNotifications({
+        lineupId: match.lineupId,
+        matchId: match.id,
+        gameName,
+        reason,
+        recipientUserIds,
+      });
+      await this.notifications.createMany(inputs);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Poll-cancel notifications failed: ${msg}`);
+    }
+  }
 
   /** Fire-and-forget auto-heart for poll voters. */
   private fireAutoHeart(gameId: number, voters: { userId: number }[]): void {
