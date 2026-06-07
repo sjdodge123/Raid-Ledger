@@ -11,10 +11,7 @@ import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 import * as cacheHelpers from './cache.helpers';
 
 type CacheHelpersWithSwr = typeof cacheHelpers & {
-  findLatestForLineup: (
-    db: unknown,
-    lineupId: number,
-  ) => Promise<unknown | null>;
+  findLatestForLineup: (db: unknown, lineupId: number) => Promise<unknown>;
   pruneOldSuggestions: (
     db: unknown,
     lineupId: number,

@@ -10,6 +10,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SettingsService } from '../../settings/settings.service';
+import { LlmService } from '../../ai/llm.service';
 import { AI_SETTING_KEYS } from '../../ai/llm.constants';
 import * as schema from '../../drizzle/schema';
 import {
@@ -49,6 +50,11 @@ export interface GetSuggestionsOpts {
  * and enqueues a debounced background pre-gen job to warm/refresh the
  * cache. The 60s Gemini round-trip only ever runs inside the BullMQ
  * processor.
+ *
+ * `LlmService` is injected ONLY for a cheap provider-availability check
+ * (`getActiveProviderKey`, registry resolution — no network, no `chat`
+ * dispatch) so a cold read with NO provider configured surfaces the 503
+ * "unavailable" contract instead of an unwarmable infinite `pending`.
  */
 @Injectable()
 export class AiSuggestionsService {
@@ -57,6 +63,7 @@ export class AiSuggestionsService {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly settings: SettingsService,
+    private readonly llmService: LlmService,
     private readonly preGen: AiSuggestionsPreGenQueueService,
   ) {}
 
@@ -98,9 +105,26 @@ export class AiSuggestionsService {
       await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS);
       return { ...latest.payload, cached: true, stale: true };
     }
+    // Cold cache: only promise `pending` (and queue a job) if a provider
+    // can actually fulfil it. With no provider configured the job would
+    // never complete and the client would poll a skeleton forever — surface
+    // the existing 503/unavailable contract instead (NotFoundException with
+    // "ai provider" → controller maps to 503 → frontend `kind:'unavailable'`).
+    if (!(await this.hasProvider())) {
+      this.logTelemetry(lineup.id, 'miss_cold');
+      this.logger.log(
+        `AI suggestions cache | lineup=${lineup.id} cold-no-provider`,
+      );
+      throw new NotFoundException('No AI provider configured');
+    }
     this.logTelemetry(lineup.id, 'miss_cold');
     await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS);
     return { ...this.emptyResponse(), pending: true };
+  }
+
+  /** True when an AI provider is configured (registry-only, no network). */
+  private async hasProvider(): Promise<boolean> {
+    return (await this.llmService.getActiveProviderKey()) !== null;
   }
 
   /** Latest row for the current hash, only if still within its TTL. */

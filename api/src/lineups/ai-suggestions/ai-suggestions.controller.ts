@@ -4,7 +4,6 @@ import {
   Param,
   ParseIntPipe,
   Query,
-  Req,
   ServiceUnavailableException,
   UseGuards,
   NotFoundException,
@@ -13,10 +12,6 @@ import { AuthGuard } from '@nestjs/passport';
 import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
 import { AiSuggestionsService } from './ai-suggestions.service';
 import { LlmUnavailableError } from './llm-output.helpers';
-
-interface AuthRequest extends Request {
-  user: { id: number; username: string; role: string };
-}
 
 /**
  * GET /lineups/:id/suggestions — AI-generated nomination suggestions.
@@ -45,7 +40,6 @@ export class AiSuggestionsController {
   async getSuggestions(
     @Param('id', ParseIntPipe) id: number,
     @Query('personalize') personalize: string | undefined,
-    @Req() _req: AuthRequest,
   ): Promise<AiSuggestionsResponseDto> {
     try {
       return await this.aiSuggestions.getSuggestions(id, {

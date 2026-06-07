@@ -95,7 +95,18 @@ function describePreGen() {
     adminUserId = await resolveAdminUserId();
   });
 
+  // `truncateAllTables` wipes `app_settings`, so (re)configure a provider +
+  // feature flag before EACH test. A configured provider is what
+  // distinguishes the cold→`pending` happy path from cold→unavailable
+  // (ROK-1316 rework finding #2). Setting `ai_provider` resolves a real
+  // registered provider WITHOUT dispatching `chat`.
+  beforeEach(async () => {
+    await settings.set(SETTING_KEYS_AI_ENABLED, 'true');
+    await settings.set(SETTING_KEYS_AI_PROVIDER, 'google');
+  });
+
   const SETTING_KEYS_AI_ENABLED = 'ai_suggestions_enabled';
+  const SETTING_KEYS_AI_PROVIDER = 'ai_provider';
 
   async function resolveAdminUserId(): Promise<number> {
     const [row] = await testApp.db
@@ -197,6 +208,28 @@ function describePreGen() {
     expect(chatSpy).not.toHaveBeenCalled();
     // Stale read must enqueue a pre-gen job to refresh for the new hash.
     expect(await countPreGenJobs(lineupId)).toBe(1);
+    chatSpy.mockRestore();
+  });
+
+  // ── Rework finding #2: cold cache + NO provider → unavailable, not pending
+  it('cold cache with NO provider configured returns unavailable (NOT pending) and enqueues nothing', async () => {
+    // Remove the provider configured by beforeEach so resolveActive() → none.
+    await settings.set(SETTING_KEYS_AI_PROVIDER, '');
+    const lineupId = await createBuildingLineup();
+    const chatSpy = jest.spyOn(llm, 'chat');
+
+    const res = await testApp.request
+      .get(`/lineups/${lineupId}/suggestions`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    // Controller maps the "No AI provider configured" NotFoundException to
+    // 503 → frontend renders its existing `kind:'unavailable'` state. The
+    // key invariant: NOT an infinite `pending` skeleton.
+    expect(res.status).toBe(503);
+    expect(res.body.pending).toBeUndefined();
+    // No LLM dispatch and NO doomed pre-gen job.
+    expect(chatSpy).not.toHaveBeenCalled();
+    expect(await countPreGenJobs(lineupId)).toBe(0);
     chatSpy.mockRestore();
   });
 

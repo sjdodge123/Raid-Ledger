@@ -163,8 +163,13 @@ export function useCommonGroundState(
     // ROK-1316: a cold-cache read returns `pending: true` while the
     // background pre-gen job warms; treat it as loading so the existing
     // skeleton/loading state renders until the real payload arrives.
+    // Rework #3: once polling exhausts its cap and the payload is STILL
+    // pending (pre-gen never finished), stop showing the skeleton — fall
+    // back to the empty state instead of an infinite spinner.
     const aiIsPending =
-        aiQuery.data?.kind === 'ok' && aiQuery.data.data.pending === true;
+        aiQuery.data?.kind === 'ok' &&
+        aiQuery.data.data.pending === true &&
+        !aiQuery.pollExhausted;
     const aiIsLoading =
         aiAvailable && hasBuilding && (aiQuery.isLoading || aiIsPending);
     const aiIsError = aiAvailable && aiQuery.isError && !aiIsUnavailable;

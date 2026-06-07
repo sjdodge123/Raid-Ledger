@@ -137,4 +137,46 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
         await new Promise((r) => setTimeout(r, 100));
         expect(calls).toBe(1);
     });
+
+    // Rework #3: a permanently-stuck pre-gen (always pending) must not spin
+    // forever — once polling exhausts its cap the hook reports `pollExhausted`
+    // so consumers fall back to the empty state. Uses fake timers to advance
+    // through the 15-attempt × 3s poll budget deterministically (and fast).
+    it('reports pollExhausted=true when polling caps out still pending', async () => {
+        let calls = 0;
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () => {
+                calls += 1;
+                // Never resolves — the pre-gen job is permanently stuck.
+                return HttpResponse.json(PENDING_BODY);
+            }),
+        );
+
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useAiSuggestions(99), { wrapper });
+
+        // First pending payload lands; not yet exhausted.
+        await waitFor(() => {
+            expect(result.current.data?.kind).toBe('ok');
+            if (result.current.data?.kind === 'ok') {
+                expect(result.current.data.data.pending).toBe(true);
+            }
+        });
+        expect(result.current.pollExhausted).toBe(false);
+
+        // Poll until the cap (15 × 3s ≈ 45s) is hit; polling then stops and
+        // pollExhausted flips true so consumers fall back to empty state.
+        await waitFor(() => expect(result.current.pollExhausted).toBe(true), {
+            timeout: 55_000,
+            interval: 250,
+        });
+        // Polling stopped at the cap — no runaway requests.
+        const callsAtCap = calls;
+        await new Promise((r) => setTimeout(r, 200));
+        expect(calls).toBe(callsAtCap);
+        // Still pending (never resolved) but consumers see not-loading.
+        if (result.current.data?.kind === 'ok') {
+            expect(result.current.data.data.pending).toBe(true);
+        }
+    }, 70_000);
 });

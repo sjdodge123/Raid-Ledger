@@ -5,6 +5,7 @@
  * branch on `kind === 'unavailable'` to render the inline 503 state
  * without inspecting error bodies.
  */
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   getAiSuggestions,
@@ -40,7 +41,7 @@ export function useAiSuggestions(
 ) {
   const { enabled = true, personalize = false } = options;
   const aiAvailable = useAiSuggestionsAvailable();
-  return useQuery<AiSuggestionsResult>({
+  const query = useQuery<AiSuggestionsResult>({
     queryKey: [...AI_SUGGESTIONS_KEY, lineupId, { personalize }],
     queryFn: () => getAiSuggestions(lineupId as number, { personalize }),
     // ROK-1114: gate on the combined plugin+feature flag so a disabled
@@ -50,19 +51,47 @@ export function useAiSuggestions(
     // pre-gen job warms the cache. Poll until a real payload arrives, then
     // stop. Bounded so a stuck job falls back to the empty state instead of
     // a hung spinner.
-    staleTime: (query) =>
-      isPending(query.state.data) ? 0 : 5 * 60 * 1000,
-    refetchInterval: (query) => {
-      if (!isPending(query.state.data)) return false;
+    staleTime: (q) => (isPending(q.state.data) ? 0 : 5 * 60 * 1000),
+    refetchInterval: (q) => {
+      if (!isPending(q.state.data)) return false;
       // `dataUpdateCount` increments per successful fetch — cap the poll
       // attempts so a stuck pre-gen job falls back to the empty state.
-      return query.state.dataUpdateCount < PENDING_POLL_MAX_ATTEMPTS
+      return q.state.dataUpdateCount < PENDING_POLL_MAX_ATTEMPTS
         ? PENDING_POLL_INTERVAL_MS
         : false;
     },
     gcTime: 30 * 60 * 1000,
     retry: false,
   });
+
+  // ROK-1316 rework #3: when polling has exhausted its cap and the payload
+  // is STILL `pending` (pre-gen never completed), consumers must stop
+  // rendering the skeleton and fall back to the empty/unavailable state.
+  //
+  // A stuck pre-gen returns an IDENTICAL `pending` payload every poll, so
+  // React Query's structural sharing keeps the same `data` reference and the
+  // consuming component would not re-render to recompute a plain derived
+  // value. Drive `pollExhausted` through component state, bumped from an
+  // effect keyed on `dataUpdatedAt` (a fresh timestamp every fetch) so the
+  // cap is reliably observed and the UI updates even with identical data.
+  const pollCount = useRef(0);
+  const [pollExhausted, setPollExhausted] = useState(false);
+  const { dataUpdatedAt, status } = query;
+  useEffect(() => {
+    if (status !== 'success') return;
+    if (!isPending(query.data)) {
+      pollCount.current = 0;
+      setPollExhausted(false);
+      return;
+    }
+    pollCount.current += 1;
+    if (pollCount.current >= PENDING_POLL_MAX_ATTEMPTS) setPollExhausted(true);
+    // `dataUpdatedAt` changes on every fetch (even identical data), so this
+    // effect runs once per poll; `query.data` is intentionally read fresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataUpdatedAt, status]);
+
+  return Object.assign(query, { pollExhausted });
 }
 
 /** Cache key helper exported so CommonGroundPanel can invalidate after nominate. */
