@@ -9,6 +9,12 @@ import {
   PAST,
   type ScheduledEventMocks,
 } from './scheduled-event.service.spec-helpers';
+import { buildScheduledEventName } from './scheduled-event.helpers';
+
+// ROK-1350: create writes the SE under buildScheduledEventName (title + game),
+// so idempotency mocks must name the pre-existing/confirmed SE the same way —
+// adopt/confirm now match by the combined name, not the bare title.
+const SE_NAME = buildScheduledEventName(baseEventData);
 
 describe('createScheduledEvent — happy path & skip conditions', () => {
   let mocks: ScheduledEventMocks;
@@ -163,7 +169,7 @@ describe('createScheduledEvent — idempotency (ROK-1347)', () => {
                 'pre-existing-se',
                 {
                   id: 'pre-existing-se',
-                  name: baseEventData.title,
+                  name: SE_NAME,
                   scheduledStartTimestamp: start,
                   description: 'View event: https://rl.example/events/42',
                 },
@@ -195,7 +201,7 @@ describe('createScheduledEvent — idempotency (ROK-1347)', () => {
             'late-se',
             {
               id: 'late-se',
-              name: baseEventData.title,
+              name: SE_NAME,
               scheduledStartTimestamp: start,
               description: 'View event: https://rl.example/events/42',
             },
