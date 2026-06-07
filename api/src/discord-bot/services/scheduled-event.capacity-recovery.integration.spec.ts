@@ -440,6 +440,9 @@ describe('ROK-1332 — capacity-recovery integration', () => {
             id: 'dup-se',
             name: 'Palworld Event',
             scheduledStartTimestamp: startMs,
+            // RL-created duplicates carry the description fingerprint —
+            // required by the Codex P2 operator-safety guard for reclaim.
+            description: `Palworld — 2/4 signed up\n\nView event: https://rl.example/events/${evt.id}`,
           } as unknown as { id: string },
         ],
         [
