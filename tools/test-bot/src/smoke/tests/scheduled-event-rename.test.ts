@@ -40,9 +40,16 @@ async function findOneByTitle(
   return { id: match.id, name: match.name };
 }
 
-/** Fetch a single guild SE's current name by id (HTTP fetch). */
+/** Fetch a single guild SE's current name by id, FORCING a REST round-trip.
+ *  `scheduledEvents.fetch(id)` returns the cached entity when present, which
+ *  goes stale the moment the RL bot renames the SE — the rename IS persisted
+ *  in Discord but the companion bot's cache lags. `force: true` bypasses the
+ *  cache so the assertion sees Discord's real state. */
 async function fetchSeName(seId: string): Promise<string> {
-  const se = await getGuild().scheduledEvents.fetch(seId);
+  const se = await getGuild().scheduledEvents.fetch({
+    guildScheduledEvent: seId,
+    force: true,
+  });
   return se.name;
 }
 
