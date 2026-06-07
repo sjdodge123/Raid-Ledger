@@ -48,7 +48,7 @@ import { computeVoterSetHash } from './voter-scope.helpers';
  * or the queue handle is undefined), which is the TDD "fails-by-
  * construction" mode the brief allows.
  */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+
 function resolvePreGenQueueName(): string {
   try {
     // Implementation is expected to export the constant from a new module.
@@ -259,7 +259,8 @@ function describePreGen() {
     const lines = logSpy.mock.calls.map((c) => String(c[0]));
     expect(
       lines.some(
-        (l) => l.includes('AI suggestions cache') && l.includes('result=miss_cold'),
+        (l) =>
+          l.includes('AI suggestions cache') && l.includes('result=miss_cold'),
       ),
     ).toBe(true);
     logSpy.mockRestore();
@@ -278,7 +279,8 @@ function describePreGen() {
     expect(
       lines.some(
         (l) =>
-          l.includes('AI suggestions cache') && l.includes('result=stale_served'),
+          l.includes('AI suggestions cache') &&
+          l.includes('result=stale_served'),
       ),
     ).toBe(true);
     logSpy.mockRestore();

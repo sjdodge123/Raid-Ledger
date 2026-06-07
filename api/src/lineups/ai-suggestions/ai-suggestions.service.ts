@@ -118,7 +118,9 @@ export class AiSuggestionsService {
     lineupId: number,
     result: 'hit' | 'stale_served' | 'miss_cold',
   ): void {
-    this.logger.log(`AI suggestions cache | lineup=${lineupId} result=${result}`);
+    this.logger.log(
+      `AI suggestions cache | lineup=${lineupId} result=${result}`,
+    );
   }
 
   private async isFeatureDisabled(): Promise<boolean> {

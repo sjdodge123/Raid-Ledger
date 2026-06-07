@@ -109,7 +109,11 @@ export async function generateAndPersist(
   );
   let enriched: AiSuggestionsResponseDto['suggestions'] = [];
   if (candidates.length > 0) {
-    const context = await loadCandidateContext(deps.db, candidates, scope.userIds);
+    const context = await loadCandidateContext(
+      deps.db,
+      candidates,
+      scope.userIds,
+    );
     const suggestions = await runLlmPass(deps, scope, context);
     enriched = await enrichSuggestions(
       deps.db,
