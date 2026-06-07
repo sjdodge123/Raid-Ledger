@@ -336,6 +336,9 @@ export class UsersService {
   /** Delete a user and cascade all related data (ROK-405). */
   async deleteUser(userId: number, reassignToUserId: number): Promise<void> {
     await this.tokenBlocklist.blockUser(userId);
+    // ROK-1353: refresh-token rows are removed by the FK ON DELETE CASCADE in
+    // deleteUserTransaction; the orchestrated guild-leave path additionally
+    // calls revokeAllForUser (see discord-notification-deactivate.helpers).
     await deleteUserTransaction(this.db, userId, reassignToUserId);
     this.invalidateCountCache();
     this.logger.log(

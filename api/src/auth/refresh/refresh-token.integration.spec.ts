@@ -58,9 +58,7 @@ function extractRefreshCookie(res: {
   headers: Record<string, unknown>;
 }): string | null {
   for (const line of setCookieLines(res)) {
-    const match = line.match(
-      new RegExp(`${REFRESH_COOKIE_NAME}=([^;]*)`),
-    );
+    const match = line.match(new RegExp(`${REFRESH_COOKIE_NAME}=([^;]*)`));
     if (match) return match[1];
   }
   return null;
@@ -73,9 +71,10 @@ function cookieHeader(rawToken: string): string {
 
 /** Log in the seeded admin via /auth/local and return the response. */
 function loginLocal() {
-  return testApp.request
-    .post('/auth/local')
-    .send({ email: testApp.seed.adminEmail, password: testApp.seed.adminPassword });
+  return testApp.request.post('/auth/local').send({
+    email: testApp.seed.adminEmail,
+    password: testApp.seed.adminPassword,
+  });
 }
 
 function getRefreshService(): RefreshTokenService {
@@ -89,7 +88,10 @@ function getDiscordNotificationService(): DiscordNotificationService {
 /** Count un-revoked refresh-token rows for a user. */
 async function countActiveRefreshRows(userId: number): Promise<number> {
   const rows = await testApp.db
-    .select({ id: schema.refreshTokens.id, revokedAt: schema.refreshTokens.revokedAt })
+    .select({
+      id: schema.refreshTokens.id,
+      revokedAt: schema.refreshTokens.revokedAt,
+    })
     .from(schema.refreshTokens)
     .where(eq(schema.refreshTokens.userId, userId));
   return rows.filter((r) => r.revokedAt === null).length;
@@ -299,7 +301,7 @@ describe('Session length setting (AC5)', () => {
       .orderBy(schema.refreshTokens.createdAt)
       .limit(1);
     expect(row).toBeTruthy();
-    const expiresMs = new Date(row.expiresAt as unknown as string).getTime();
+    const expiresMs = new Date(row.expiresAt).getTime();
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
     // Allow a generous skew window; the point is it tracks the 7-day setting,
     // not the 60-day default (which would be ~52 days larger).
