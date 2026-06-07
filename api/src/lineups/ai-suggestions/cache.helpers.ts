@@ -1,9 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
-import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { AiSuggestionsPreGenQueueService } from './pre-gen.queue';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -91,37 +91,72 @@ export async function upsertSuggestion(
     });
 }
 
-/** Drop every cached row for a lineup. Called on nominate / invitee changes. */
-export async function deleteAllForLineup(
+/**
+ * ROK-1316 (SWR): the most-recent cached row for a lineup regardless of
+ * voter-set hash. Powers the serve-stale branch — when no row matches the
+ * current hash but rows exist, we return this one with `stale: true`.
+ */
+export async function findLatestForLineup(
   db: Db,
   lineupId: number,
-): Promise<void> {
-  await db
-    .delete(schema.lineupAiSuggestions)
-    .where(eq(schema.lineupAiSuggestions.lineupId, lineupId));
+): Promise<typeof schema.lineupAiSuggestions.$inferSelect | null> {
+  const [row] = await db
+    .select()
+    .from(schema.lineupAiSuggestions)
+    .where(eq(schema.lineupAiSuggestions.lineupId, lineupId))
+    .orderBy(desc(schema.lineupAiSuggestions.generatedAt))
+    .limit(1);
+  return row ?? null;
 }
 
 /**
- * Provider injected into `LineupsService`. Keeps the service surface
- * small — only one method to stub in tests — and breaks any potential
- * import cycle through the full orchestration service.
+ * ROK-1316: keep the newest `keep` rows per lineup, delete the rest.
+ * Bounds row growth under SWR (rows are no longer deleted on mutation).
+ * Called by the processor after a successful write.
  *
- * Failures are swallowed with a logger.warn so a stale-cache row never
- * fails a parent mutation (architect spec reconcile #4).
+ * Single statement: delete every row for the lineup whose id is NOT among
+ * the newest `keep` (by `generated_at`) — no read round-trip.
+ */
+export async function pruneOldSuggestions(
+  db: Db,
+  lineupId: number,
+  keep: number,
+): Promise<void> {
+  await db.delete(schema.lineupAiSuggestions).where(
+    and(
+      eq(schema.lineupAiSuggestions.lineupId, lineupId),
+      sql`${schema.lineupAiSuggestions.id} NOT IN (
+        SELECT id FROM ${schema.lineupAiSuggestions}
+        WHERE lineup_id = ${lineupId}
+        ORDER BY generated_at DESC
+        LIMIT ${keep}
+      )`,
+    ),
+  );
+}
+
+/**
+ * Provider injected into `LineupsService`. ROK-1316: no longer DELETES
+ * cache rows (SWR needs them to serve-stale). Instead it enqueues a
+ * debounced background pre-gen job so the cache refreshes for the new
+ * voter set without blocking the request thread.
+ *
+ * Failures are swallowed with a logger.warn so cache hygiene never fails
+ * a parent mutation (architect spec reconcile #4).
  */
 @Injectable()
 export class AiSuggestionsCacheInvalidator {
   private readonly logger = new Logger(AiSuggestionsCacheInvalidator.name);
 
-  constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
+  constructor(private readonly preGen: AiSuggestionsPreGenQueueService) {}
 
   async invalidateForLineup(lineupId: number): Promise<void> {
     try {
-      await deleteAllForLineup(this.db, lineupId);
+      await this.preGen.enqueue(lineupId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `Failed to invalidate AI suggestions cache for lineup ${lineupId}: ${message}`,
+        `Failed to enqueue AI suggestions pre-gen for lineup ${lineupId}: ${message}`,
       );
     }
   }

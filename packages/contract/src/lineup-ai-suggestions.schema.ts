@@ -51,6 +51,20 @@ export const AiSuggestionsResponseSchema = z.object({
   voterCount: z.number().int().min(0),
   voterScopeStrategy: z.enum(['community', 'partial', 'small_group']),
   cached: z.boolean(),
+  /**
+   * ROK-1316 (additive, optional). Serve-stale-while-revalidate read path.
+   *
+   * `pending: true`  — cold cache: no row exists yet, a background pre-gen
+   *   job has been queued. `suggestions` is empty; the client polls until a
+   *   real payload arrives.
+   * `stale: true`    — served from an older voter-set row while a refresh
+   *   for the current hash regenerates in the background. Intentionally
+   *   indistinguishable to the user (suggestions render immediately).
+   *
+   * Omitted on a fresh hit. Non-breaking — legacy clients ignore them.
+   */
+  pending: z.boolean().optional(),
+  stale: z.boolean().optional(),
 });
 export type AiSuggestionsResponseDto = z.infer<
   typeof AiSuggestionsResponseSchema
