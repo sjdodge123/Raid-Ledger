@@ -32,6 +32,7 @@ describe('buildBannerResponse', () => {
       new Map(),
       0,
       15,
+      15,
     );
 
     expect(result).toBeNull();
@@ -53,6 +54,7 @@ describe('buildBannerResponse', () => {
       ]),
       0,
       15,
+      15,
     );
 
     expect(result).not.toBeNull();
@@ -62,6 +64,8 @@ describe('buildBannerResponse', () => {
     expect(banner.entryCount).toBe(2);
     expect(banner.totalVoters).toBe(0);
     expect(banner.totalMembers).toBe(15);
+    // ROK-1348: public lineup — eligible pool == totalMembers.
+    expect(banner.votingEligibleCount).toBe(15);
     expect(banner.entries).toHaveLength(2);
     expect(banner.entries[0].ownerCount).toBe(3);
     expect(banner.entries[1].ownerCount).toBe(0);
@@ -77,6 +81,7 @@ describe('buildBannerResponse', () => {
       new Map(),
       voteMap,
       3,
+      15,
       15,
     );
 
@@ -98,10 +103,30 @@ describe('buildBannerResponse', () => {
       new Map(),
       0,
       15,
+      15,
     );
 
     const banner = result as LineupBannerResponseDto;
     expect(banner.status).toBe('decided');
     expect(banner.decidedGameName).toBe('Winner Game');
+  });
+
+  // ROK-1348: the people-denominator passes straight through; a private
+  // lineup's eligible count (creator + invitees) must be surfaced verbatim,
+  // distinct from the community-wide totalMembers.
+  it('surfaces a private-lineup votingEligibleCount distinct from totalMembers', () => {
+    const result = buildBannerResponse(
+      { ...mockLineup, visibility: 'private' },
+      [],
+      new Map(),
+      new Map(),
+      0,
+      15, // community totalMembers
+      4, // creator + 3 invitees
+    );
+
+    const banner = result as LineupBannerResponseDto;
+    expect(banner.totalMembers).toBe(15);
+    expect(banner.votingEligibleCount).toBe(4);
   });
 });

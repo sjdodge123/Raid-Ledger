@@ -315,6 +315,13 @@ export const LineupBannerResponseSchema = z.object({
     entryCount: z.number(),
     totalVoters: z.number(),
     totalMembers: z.number(),
+    /**
+     * ROK-1348: number of users eligible to vote on this lineup. Private =
+     * creator + invitees (deduped); public = totalMembers. Use this — not
+     * `totalMembers` — as the people-denominator so private lineups stop
+     * borrowing the whole community's count. Always `>= 1`.
+     */
+    votingEligibleCount: z.number().int().positive(),
     decidedGameName: z.string().nullable(),
     entries: z.array(LineupBannerEntrySchema),
     /** Whether a tiebreaker is active on this lineup (ROK-938). */

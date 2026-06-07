@@ -8,8 +8,8 @@
  *   4. has acted in the current phase → 'invitee-acted'
  *   5. otherwise → 'invitee-not-acted'
  */
-import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { canParticipateInLineup } from './lineup-eligibility';
+import type { EligibilityLineup } from './lineup-eligibility';
 
 export type Persona =
     | 'invitee-not-acted'
@@ -23,10 +23,9 @@ interface PersonaUser {
     role?: string;
 }
 
-type PersonaLineup = Pick<
-    LineupDetailResponseDto,
-    'visibility' | 'createdBy' | 'invitees'
->;
+// ROK-1349: share the detail-pinned eligibility shape so a summary DTO
+// (no createdBy / invitees) can't be passed into persona resolution either.
+type PersonaLineup = EligibilityLineup;
 
 function isOpRole(user: PersonaUser | null | undefined): boolean {
     return user?.role === 'operator' || user?.role === 'admin';
@@ -37,7 +36,7 @@ export function getLineupPersona(
     user: PersonaUser | null | undefined,
     hasActed: boolean,
 ): Persona {
-    if (user && isOpRole(user) && lineup.createdBy?.id === user.id) {
+    if (user && isOpRole(user) && lineup.createdBy.id === user.id) {
         return 'organizer';
     }
     if (user && isOpRole(user)) return 'admin';

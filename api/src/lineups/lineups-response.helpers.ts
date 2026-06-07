@@ -43,9 +43,23 @@ type Db = PostgresJsDatabase<typeof schema>;
 /** Enrichment maps passed through to entry mapping. */
 interface EnrichmentMaps {
   ownerMap: Map<number, number>;
+  /**
+   * ROK-1348 (Codex P2): owners counted WITHIN the eligible audience (private
+   * = creator + invitees). For public lineups this is the same map as
+   * `ownerMap`. The non-owner subtraction must use pool-consistent numbers —
+   * community owners minus a private pool would zero out "for N" even when
+   * no invitee owns the game.
+   */
+  eligibleOwnerMap: Map<number, number>;
   wishlistMap: Map<number, number>;
   pricingMap: Map<number, GamePricing>;
   totalMembers: number;
+  /**
+   * ROK-1348: voter-eligible pool size (private = creator + invitees;
+   * public = totalMembers). Used as the non-owner denominator so private
+   * lineups stop borrowing the whole community's count.
+   */
+  eligibleCount: number;
   unlinkedSteamCount: number;
   unlinkedSteamMembers: UnlinkedSteamMember[];
 }
@@ -71,7 +85,15 @@ function mapEntry(
     createdAt: e.createdAt.toISOString(),
     ownerCount,
     totalMembers: enrichment.totalMembers,
-    nonOwnerCount: enrichment.totalMembers - ownerCount,
+    // ROK-1348: non-owners measured against the eligible pool, with owners
+    // counted in the SAME pool (Codex P2 — community owners vs a private
+    // denominator would zero out "for N" even when no invitee owns it).
+    // Clamp at 0 for transient mid-write skew.
+    nonOwnerCount: Math.max(
+      0,
+      enrichment.eligibleCount -
+        (enrichment.eligibleOwnerMap.get(e.gameId) ?? 0),
+    ),
     wishlistCount: enrichment.wishlistMap.get(e.gameId) ?? 0,
     itadCurrentPrice: pricing?.itadCurrentPrice ?? null,
     itadCurrentCut: pricing?.itadCurrentCut ?? null,
@@ -207,20 +229,48 @@ async function fetchEnrichment(
   gameIds: number[],
   audience: LineupAudience,
 ): Promise<EnrichmentMaps> {
-  const [ownerMap, wishlistMap, pricingMap, totalMembers, uc, um] =
-    await Promise.all([
-      countOwnersPerGame(db, gameIds),
-      countWishlistPerGame(db, gameIds),
-      fetchPricingMetadata(db, gameIds),
-      countTotalMembers(db),
-      countUnlinkedSteamMembers(db, audience),
-      findUnlinkedSteamMembers(db, audience),
-    ]);
-  return {
+  const isPrivate = audience.visibility === 'private';
+  const audienceIds = [
+    audience.createdBy,
+    ...audience.inviteeUserIds.filter((id) => id !== audience.createdBy),
+  ];
+  const [
     ownerMap,
+    audienceOwnerMap,
     wishlistMap,
     pricingMap,
     totalMembers,
+    uc,
+    um,
+  ] = await Promise.all([
+    countOwnersPerGame(db, gameIds),
+    // ROK-1348 (Codex P2): private lineups need owners counted within the
+    // eligible pool; public lineups reuse the community map (no 2nd query).
+    isPrivate
+      ? countOwnersPerGame(db, gameIds, audienceIds)
+      : Promise.resolve<Map<number, number> | null>(null),
+    countWishlistPerGame(db, gameIds),
+    fetchPricingMetadata(db, gameIds),
+    countTotalMembers(db),
+    countUnlinkedSteamMembers(db, audience),
+    findUnlinkedSteamMembers(db, audience),
+  ]);
+  const eligibleOwnerMap = audienceOwnerMap ?? ownerMap;
+  // ROK-1348: eligible pool = creator + invitees (private) or totalMembers
+  // (public). Computed here so `mapEntry` can use it as the non-owner
+  // denominator. Floors at 1 (creator always counts).
+  const eligibleCount = computeVotingEligibleCount(
+    { createdBy: audience.createdBy, visibility: audience.visibility },
+    audience.inviteeUserIds.map((id) => ({ id })),
+    totalMembers,
+  );
+  return {
+    ownerMap,
+    eligibleOwnerMap,
+    wishlistMap,
+    pricingMap,
+    totalMembers,
+    eligibleCount,
     unlinkedSteamCount: uc,
     unlinkedSteamMembers: um,
   };
@@ -303,13 +353,11 @@ export async function buildDetailResponse(
   // ROK-1296: replace the stub from mapToDetailResponse with the real
   // viewer-scoped row. Both fields are null when userId is undefined.
   detail.viewerSubmissions = viewerSubmissions;
-  // ROK-1298: voter-pool denominator for Sv vote bars. Private =
-  // creator + invitees (deduped); public = totalMembers; floor at 1.
-  detail.votingEligibleCount = computeVotingEligibleCount(
-    { createdBy: lineup.createdBy, visibility: lineup.visibility },
-    invitees.map((i) => ({ id: i.id })),
-    enrichment.totalMembers,
-  );
+  // ROK-1298 / ROK-1348: voter-pool denominator for Sv vote bars. Reuse the
+  // eligible count fetchEnrichment already computed from the same inputs
+  // (audience invitees == listInviteesWithProfile invitees) instead of
+  // recomputing it.
+  detail.votingEligibleCount = enrichment.eligibleCount;
 
   // Attach tiebreaker detail if one exists (ROK-938)
   if (lineup.activeTiebreakerId) {

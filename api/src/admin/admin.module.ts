@@ -39,6 +39,7 @@ import { SlowQueriesModule } from '../slow-queries/slow-queries.module';
 import { AiChatTestController } from './ai-chat-test.controller';
 import { GamesDedupAuditController } from './games-dedup-audit.controller';
 import { GamesDedupAuditService } from './games-dedup-audit.service';
+import { DiscordBotModule } from '../discord-bot/discord-bot.module';
 
 @Module({
   imports: [
@@ -52,6 +53,10 @@ import { GamesDedupAuditService } from './games-dedup-audit.service';
     CommunityInsightsModule,
     SlowQueriesModule,
     forwardRef(() => NotificationModule),
+    // ROK-1347: AdminController injects DiscordBotClientService for the
+    // orphan-SE recovery endpoint. forwardRef guards the deep module cycle
+    // DiscordBotModule → NotificationModule → … → AdminModule.
+    forwardRef(() => DiscordBotModule),
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
   controllers: [

@@ -20,9 +20,7 @@ import {
   findCompletionCandidates,
   getScheduledEventId,
   getEventWithOverride,
-  saveScheduledEventId,
   clearScheduledEventId,
-  resolveVoiceForCreate,
   type ScheduledEventRecord,
 } from './scheduled-event.db-helpers';
 import {
@@ -32,11 +30,13 @@ import {
   tryCompleteEvent,
   tryEditEndTime,
   tryEditDescription,
-  tryCreateNewEvent,
   tryEditFullEvent,
   resolveVoiceForEdit,
 } from './scheduled-event.discord-ops';
-import { withCapacityRecovery } from './scheduled-event.capacity';
+import {
+  createScheduledEventIdempotent,
+  type GuildSECache,
+} from './scheduled-event.create';
 
 async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
   return buildDescriptionText(id, d, await s.getClientUrl());
@@ -125,13 +125,16 @@ export class ScheduledEventService {
     }
   }
 
-  /** Create a Discord Scheduled Event. */
+  /** Create a Discord Scheduled Event. `cache` (ROK-1347) is an optional
+   *  per-batch guild-SE cache the reconciliation cron passes so the idempotent
+   *  pre-check doesn't re-fetch all guild SEs once per candidate. */
   async createScheduledEvent(
     eventId: number,
     eventData: ScheduledEventData,
     gameId?: number | null,
     isAdHoc?: boolean,
     voiceChannelOverride?: string | null,
+    cache?: GuildSECache,
   ): Promise<void> {
     if (!this.scheduledEventsEnabled) return;
     try {
@@ -155,12 +158,22 @@ export class ScheduledEventService {
         this.logger.warn(`Skip SE ${eventId}: no guild`);
         return;
       }
-      await this.doCreate(
+      // ROK-1332/1347: idempotent create — resolve voice + description, pre-check
+      // the guild for an existing SE, wrap create in capacity-recovery (30038 →
+      // GC + retry), and adopt the SE id on a timeout-after-success.
+      await createScheduledEventIdempotent(
         guild,
+        this.db,
+        this.logger,
         eventId,
         eventData,
-        gameId,
-        voiceChannelOverride,
+        {
+          gameId,
+          voiceChannelOverride,
+          channelResolver: this.channelResolver,
+          describe: (id, data) => desc(this.settingsService, id, data),
+        },
+        cache,
       );
     } catch (error) {
       this.logger.error(formatApiError('create', eventId, error));
@@ -207,8 +220,20 @@ export class ScheduledEventService {
       const seId = await getScheduledEventId(this.db, eventId);
       if (!seId) return;
 
-      await tryDeleteEvent(guild, eventId, seId);
-      await clearScheduledEventId(this.db, eventId);
+      // ROK-1347: tryDeleteEvent now returns an outcome instead of throwing on
+      // non-10070. Only clear the DB binding when Discord confirmed the delete
+      // (or the SE was already gone) so a transient 429/50013 leaves the id in
+      // place for the next attempt.
+      const outcome = await tryDeleteEvent(guild, eventId, seId);
+      if (outcome.deleted) {
+        await clearScheduledEventId(this.db, eventId);
+      } else {
+        this.logger.warn(
+          `Delete SE ${eventId} (${seId}) failed: code=${outcome.code ?? 'unknown'}${
+            outcome.retryAfter ? ` retryAfter=${outcome.retryAfter}s` : ''
+          }`,
+        );
+      }
     } catch (error) {
       this.logger.error(formatApiError('delete', eventId, error));
     }
@@ -275,34 +300,6 @@ export class ScheduledEventService {
   }
 
   // ─── Private helpers ──────────────────────────────────────
-
-  private async doCreate(
-    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
-    eventId: number,
-    eventData: ScheduledEventData,
-    gameId?: number | null,
-    voiceChannelOverride?: string | null,
-  ): Promise<void> {
-    const vc = await resolveVoiceForCreate(
-      this.db,
-      eventId,
-      gameId,
-      voiceChannelOverride,
-      this.channelResolver,
-    );
-    if (!vc) {
-      this.logger.warn(`Skip SE ${eventId}: no voice channel`);
-      return;
-    }
-    const d = await desc(this.settingsService, eventId, eventData);
-    // ROK-1332: wrap the API-create + DB-save pair so a 30038 triggers a
-    // single GC sweep + retry. Preamble (voice channel, description) is
-    // outside the wrapper so GC doesn't re-run if the retry succeeds.
-    await withCapacityRecovery(guild, this.db, this.logger, async () => {
-      const se = await tryCreateNewEvent(guild, eventId, eventData, vc, d);
-      await saveScheduledEventId(this.db, eventId, se.id);
-    });
-  }
 
   private async tryEdit(
     guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,

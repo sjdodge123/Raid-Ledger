@@ -50,7 +50,18 @@ export interface UseCommonGroundStateResult {
     refetch: () => void;
     onNominate: (gameId: number) => void;
     nominatingId: number | null;
+    /**
+     * True only when the lineup has reached its NOMINATION cap (ROK-1349).
+     * No longer conflated with the view-only permission state — see
+     * `viewOnly`.
+     */
     atCap: boolean;
+    /**
+     * True when the viewer cannot participate (private-lineup non-invitee).
+     * Drives the "View only" button copy, separate from `atCap` so the two
+     * disabled reasons render distinct labels (ROK-1349).
+     */
+    viewOnly: boolean;
     aiSuggestionsByGameId: Map<number, AiSuggestionDto>;
     /** AI suggestions query is in flight (and the panel actually has a lineup). */
     aiIsLoading: boolean;
@@ -113,9 +124,12 @@ export function useCommonGroundState(
         [data, aiSuggestionsByGameId, filters, search],
     );
 
-    const rawAtCap =
+    const atCap =
         (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
-    const atCap = rawAtCap || !canParticipate;
+    // ROK-1349: view-only is a permission state, kept distinct from atCap so
+    // non-invitees get an "ask the creator for an invite" label instead of
+    // the misleading "Lineup full" the conflated flag produced.
+    const viewOnly = !canParticipate;
 
     const rawMeta = useMemo(
         () => ({
@@ -164,6 +178,7 @@ export function useCommonGroundState(
         onNominate,
         nominatingId,
         atCap,
+        viewOnly,
         aiSuggestionsByGameId,
         aiIsLoading,
         aiIsUnavailable,

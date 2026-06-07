@@ -1,6 +1,6 @@
-import { pollForCondition } from '../helpers/polling.js';
-import type { ApiClient } from './api.js';
-import type { DiscordChannel, TestContext } from './types.js';
+import { pollForCondition } from "../helpers/polling.js";
+import type { ApiClient } from "./api.js";
+import type { DiscordChannel, TestContext } from "./types.js";
 
 let counter = 0;
 function uid(prefix: string) {
@@ -14,7 +14,7 @@ export function futureTime(minutesFromNow: number): string {
 
 /** Pick a channel from the pool, rotating through to avoid collisions. */
 export function pickChannel(channels: DiscordChannel[], index: number) {
-  if (channels.length === 0) throw new Error('No channels available');
+  if (channels.length === 0) throw new Error("No channels available");
   return channels[index % channels.length];
 }
 
@@ -23,7 +23,7 @@ export function pickChannel(channels: DiscordChannel[], index: number) {
  * Falls back to defaultChannelId when no pool is configured.
  */
 export function channelForTest(
-  ctx: Pick<TestContext, 'defaultChannelId' | 'channelPool'>,
+  ctx: Pick<TestContext, "defaultChannelId" | "channelPool">,
   index: number,
 ): { channelId: string; gameId?: number } {
   if (!ctx.channelPool?.length) {
@@ -38,7 +38,7 @@ export function channelForTest(
  * Falls back to defaultChannelId if the game isn't in the pool.
  */
 export function channelForGame(
-  ctx: Pick<TestContext, 'defaultChannelId' | 'channelPool'>,
+  ctx: Pick<TestContext, "defaultChannelId" | "channelPool">,
   gameId: number | undefined,
 ): string {
   if (!gameId || !ctx.channelPool?.length) return ctx.defaultChannelId;
@@ -60,7 +60,7 @@ export async function createEvent(
     maxAttendees: 10,
     ...overrides,
   };
-  const event = await api.post<Record<string, unknown>>('/events', body);
+  const event = await api.post<Record<string, unknown>>("/events", body);
   return { ...event, title } as {
     id: number;
     title: string;
@@ -73,14 +73,14 @@ export async function createBinding(
   api: ApiClient,
   opts: {
     channelId: string;
-    channelType: 'text' | 'voice';
+    channelType: "text" | "voice";
     purpose: string;
     gameId?: number;
     config?: Record<string, unknown>;
   },
 ) {
   const res = await api.post<{ data: { id: string } }>(
-    '/admin/discord/bindings',
+    "/admin/discord/bindings",
     {
       channelId: opts.channelId,
       channelType: opts.channelType,
@@ -130,7 +130,7 @@ export async function linkDiscord(
   discordId: string,
   username: string,
 ) {
-  return api.post('/admin/test/link-discord', {
+  return api.post("/admin/test/link-discord", {
     userId,
     discordId,
     username,
@@ -145,7 +145,7 @@ export async function signupAs(
   preferredRoles?: string[],
   opts?: { characterId?: string; status?: string },
 ) {
-  return api.post('/admin/test/signup', {
+  return api.post("/admin/test/signup", {
     eventId,
     userId,
     preferredRoles,
@@ -172,7 +172,7 @@ export async function createPugInvite(
 ) {
   return api.post(`/events/${eventId}/pugs`, {
     discordUsername,
-    role: role ?? 'dps',
+    role: role ?? "dps",
   });
 }
 
@@ -200,7 +200,7 @@ export async function addGameInterest(
   userId: number,
   gameId: number,
 ) {
-  return api.post('/admin/test/add-game-interest', { userId, gameId });
+  return api.post("/admin/test/add-game-interest", { userId, gameId });
 }
 
 /** Trigger a departure grace expiry (0ms delay) — DEMO_MODE only. */
@@ -210,7 +210,7 @@ export async function triggerDeparture(
   signupId: number,
   discordUserId: string,
 ) {
-  return api.post('/admin/test/trigger-departure', {
+  return api.post("/admin/test/trigger-departure", {
     eventId,
     signupId,
     discordUserId,
@@ -231,7 +231,7 @@ export async function cancelSignupAs(
   eventId: number,
   userId: number,
 ) {
-  return api.post('/admin/test/cancel-signup', { eventId, userId });
+  return api.post("/admin/test/cancel-signup", { eventId, userId });
 }
 
 /** Query a user's notifications — DEMO_MODE only (smoke tests). */
@@ -241,8 +241,11 @@ export async function getNotificationsFor(
   type?: string,
   limit = 20,
 ) {
-  const params = new URLSearchParams({ userId: String(userId), limit: String(limit) });
-  if (type) params.set('type', type);
+  const params = new URLSearchParams({
+    userId: String(userId),
+    limit: String(limit),
+  });
+  if (type) params.set("type", type);
   return api.get<{ type: string; payload?: Record<string, unknown> }[]>(
     `/admin/test/notifications?${params}`,
   );
@@ -251,21 +254,19 @@ export async function getNotificationsFor(
 /** Flush the roster notification buffer immediately — DEMO_MODE only. */
 export async function flushNotificationBuffer(api: ApiClient) {
   return api.post<{ flushed: number }>(
-    '/admin/test/flush-notification-buffer',
+    "/admin/test/flush-notification-buffer",
     {},
   );
 }
 
 /** Flush voice attendance sessions to the DB — DEMO_MODE only. */
-export async function flushVoiceSessions(
-  api: ApiClient,
-): Promise<void> {
-  await api.post('/admin/test/flush-voice-sessions', {});
+export async function flushVoiceSessions(api: ApiClient): Promise<void> {
+  await api.post("/admin/test/flush-voice-sessions", {});
 }
 
 /** Drain the embed sync BullMQ queue — DEMO_MODE only. */
 export async function flushEmbedQueue(api: ApiClient): Promise<void> {
-  await api.post('/admin/test/flush-embed-queue', {});
+  await api.post("/admin/test/flush-embed-queue", {});
 }
 
 /** Wait for all BullMQ queues to finish processing — DEMO_MODE only. */
@@ -273,7 +274,7 @@ export async function awaitProcessing(
   api: ApiClient,
   timeoutMs = 10_000,
 ): Promise<void> {
-  await api.post('/admin/test/await-processing', { timeoutMs });
+  await api.post("/admin/test/await-processing", { timeoutMs });
 }
 
 /** Trigger voice classification for a specific event — DEMO_MODE only (ROK-943). */
@@ -281,34 +282,65 @@ export async function triggerClassify(
   api: ApiClient,
   eventId: number,
 ): Promise<void> {
-  await api.post('/admin/test/trigger-classify', { eventId });
+  await api.post("/admin/test/trigger-classify", { eventId });
 }
 
 /** Delete all Discord scheduled events in the guild — prevents 100-event limit (ROK-969). */
 export async function cleanupScheduledEvents(api: ApiClient): Promise<void> {
   // Bulk-deleting many events can exceed the default HTTP timeout, so use a generous limit
-  const res = await api.post<{ deleted: number; failed: number; total: number }>(
-    '/admin/test/cleanup-scheduled-events',
-    {},
-  ).catch(() => null);
+  const res = await api
+    .post<{
+      deleted: number;
+      failed: number;
+      total: number;
+    }>("/admin/test/cleanup-scheduled-events", {})
+    .catch(() => null);
   if (res && res.total > 0) {
-    console.log(`  Cleaned up ${res.deleted}/${res.total} scheduled events (${res.failed} failed)`);
+    console.log(
+      `  Cleaned up ${res.deleted}/${res.total} scheduled events (${res.failed} failed)`,
+    );
   }
 }
 
 /** Pause reconciliation cron to prevent Discord API queue flooding (ROK-969). */
 export async function pauseReconciliation(api: ApiClient): Promise<void> {
-  await api.post('/admin/test/pause-reconciliation', {}).catch(() => null);
+  await api.post("/admin/test/pause-reconciliation", {}).catch(() => null);
 }
 
 /** Disable Discord scheduled event creation for non-SE tests (ROK-969). */
 export async function disableScheduledEvents(api: ApiClient): Promise<void> {
-  await api.post('/admin/test/disable-scheduled-events', {}).catch(() => null);
+  await api.post("/admin/test/disable-scheduled-events", {}).catch(() => null);
+}
+
+/** Run the SE reconciliation cron once on demand (ROK-1347). */
+export async function triggerReconciliation(api: ApiClient): Promise<void> {
+  await api.post("/admin/test/trigger-reconciliation", {});
+}
+
+/** Call the operator orphan-SE recovery endpoint (ROK-1347). */
+export async function recoverOrphanScheduledEvents(
+  api: ApiClient,
+  dryRun: boolean,
+): Promise<{
+  dryRun: boolean;
+  guildSeCount: number;
+  reclaimableDuplicates: Array<{
+    eventId: number;
+    seId: string;
+    title: string;
+  }>;
+  operatorOrphans: number;
+  deleted: number;
+}> {
+  return api.post(
+    `/admin/scheduled-events/recover-orphans?dryRun=${dryRun}`,
+    {},
+  );
 }
 
 /** Re-enable Discord scheduled event creation for SE tests (ROK-969). */
 export async function enableScheduledEvents(api: ApiClient): Promise<void> {
-  await api.post('/admin/test/enable-scheduled-events', {}).catch(() => null);
+  await api.post("/admin/test/enable-scheduled-events", {}).catch(() => null);
 }
 
 /**
@@ -324,14 +356,14 @@ export async function enableScheduledEvents(api: ApiClient): Promise<void> {
  */
 export async function resetToSeed(api: ApiClient): Promise<void> {
   try {
-    await api.post('/admin/test/reset-to-seed', {});
+    await api.post("/admin/test/reset-to-seed", {});
     return;
   } catch (err) {
     console.warn(
       `  reset-to-seed failed (${err}) — falling back to demo/install`,
     );
   }
-  await api.post('/admin/settings/demo/install', {}).catch((err) => {
+  await api.post("/admin/settings/demo/install", {}).catch((err) => {
     console.warn(`  demo/install fallback also failed: ${err}`);
   });
 }
@@ -348,7 +380,7 @@ export async function injectVoiceSession(
     lastLeaveAt?: string;
   },
 ): Promise<void> {
-  await api.post('/admin/test/inject-voice-session', p);
+  await api.post("/admin/test/inject-voice-session", p);
 }
 
 /**
@@ -375,7 +407,7 @@ export async function assertConditionNeverMet(
     throw new Error(errorMsg);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('pollForCondition timed out')) return;
+    if (msg.includes("pollForCondition timed out")) return;
     throw err;
   }
 }

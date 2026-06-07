@@ -142,6 +142,80 @@ describe('createScheduledEvent — DB persistence & edge cases', () => {
   });
 });
 
+describe('createScheduledEvent — idempotency (ROK-1347)', () => {
+  let mocks: ScheduledEventMocks;
+
+  beforeEach(async () => {
+    mocks = await setupScheduledEventTestModule();
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('adopts an existing matching guild SE instead of creating a duplicate', async () => {
+    // Guild already holds an SE with this event's title + start.
+    const start = new Date(baseEventData.startTime).getTime();
+    mocks.mockGuild.scheduledEvents.fetch.mockImplementation((seId?: string) =>
+      Promise.resolve(
+        seId === undefined
+          ? new Map([
+              [
+                'pre-existing-se',
+                {
+                  id: 'pre-existing-se',
+                  name: baseEventData.title,
+                  scheduledStartTimestamp: start,
+                  description: 'View event: https://rl.example/events/42',
+                },
+              ],
+            ])
+          : { id: 'pre-existing-se' },
+      ),
+    );
+    const updateChain = mocks.createUpdateChain();
+    mocks.mockDb.update.mockReturnValue(updateChain);
+
+    await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
+
+    expect(mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
+    expect(updateChain.set).toHaveBeenCalledWith({
+      discordScheduledEventId: 'pre-existing-se',
+    });
+  });
+
+  it('adopts the SE id on a create timeout when Discord actually created it', async () => {
+    const start = new Date(baseEventData.startTime).getTime();
+    // Pre-check: empty. After the create times out, the confirmation fetch
+    // returns the SE Discord created despite the slow response.
+    mocks.mockGuild.scheduledEvents.fetch
+      .mockResolvedValueOnce(new Map())
+      .mockResolvedValue(
+        new Map([
+          [
+            'late-se',
+            {
+              id: 'late-se',
+              name: baseEventData.title,
+              scheduledStartTimestamp: start,
+              description: 'View event: https://rl.example/events/42',
+            },
+          ],
+        ]),
+      );
+    mocks.mockGuild.scheduledEvents.create.mockRejectedValue(
+      new Error('Discord API timeout: scheduledEvents.create exceeded 5000ms'),
+    );
+    const updateChain = mocks.createUpdateChain();
+    mocks.mockDb.update.mockReturnValue(updateChain);
+
+    await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
+
+    expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalledTimes(1);
+    expect(updateChain.set).toHaveBeenCalledWith({
+      discordScheduledEventId: 'late-se',
+    });
+  });
+});
+
 describe('updateScheduledEvent', () => {
   let mocks: ScheduledEventMocks;
 

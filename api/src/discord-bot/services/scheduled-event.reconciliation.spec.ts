@@ -100,7 +100,7 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
     await mocks.service.reconcileMissingScheduledEvents();
     expect(
       mocks.scheduledEventService.createScheduledEvent,
-    ).toHaveBeenCalledWith(42, candidate, 1, false, null);
+    ).toHaveBeenCalledWith(42, candidate, 1, false, null, expect.anything());
   });
 
   it('skips when bot is not connected', async () => {
@@ -165,7 +165,7 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
     ).toHaveBeenCalledTimes(2);
     expect(
       mocks.scheduledEventService.createScheduledEvent,
-    ).toHaveBeenCalledWith(2, candidates[1], 2, false, null);
+    ).toHaveBeenCalledWith(2, candidates[1], 2, false, null, expect.anything());
   });
 
   describe('ROK-1332 capacity-saturated path', () => {

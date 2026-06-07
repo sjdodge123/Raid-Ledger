@@ -56,10 +56,12 @@ export async function buildScoringContext(
   lineupId: number,
   tasteProfile: TasteProfileService,
   settings: SettingsService,
+  // ROK-1348: pre-fetched ONCE by the caller (fresh from findLineupVoterIds)
+  // and shared with resolveParticipantCount to avoid a duplicate query.
+  preloadedVoterIds: number[],
 ): Promise<ScoringContext> {
   const weights = await settings.getCommonGroundWeights();
-  const voterIds = await findLineupVoterIds(db, lineupId);
-  if (voterIds.length === 0) {
+  if (preloadedVoterIds.length === 0) {
     return {
       voterVector: null,
       coPlayPartnerIds: new Set(),
@@ -67,11 +69,12 @@ export async function buildScoringContext(
       weights,
     };
   }
-  const vectorMap = await tasteProfile.getTasteVectorsForUsers(voterIds);
+  const vectorMap =
+    await tasteProfile.getTasteVectorsForUsers(preloadedVoterIds);
   const vectors = [...vectorMap.values()].map((v) => v.vector);
   const voterVector = computeCombinedVoterVector(vectors);
   const voterIntensity = averageIntensityBucket(vectorMap);
-  const coPlayPartnerIds = await findCoPlayPartnerIds(db, voterIds);
+  const coPlayPartnerIds = await findCoPlayPartnerIds(db, preloadedVoterIds);
   return { voterVector, coPlayPartnerIds, voterIntensity, weights };
 }
 
@@ -119,12 +122,14 @@ async function resolveScoringLineup(
 async function resolveParticipantCount(
   db: PostgresJsDatabase<typeof schema>,
   lineup: { id: number; visibility: 'public' | 'private' },
+  // ROK-1348: reuse the voterIds buildScoringContext already fetched for
+  // the public branch instead of querying findLineupVoterIds a second time.
+  voterIds: number[],
 ): Promise<number> {
   if (lineup.visibility === 'private') {
     const invitees = await loadInvitees(db, lineup.id);
     return invitees.length + 1;
   }
-  const voterIds = await findLineupVoterIds(db, lineup.id);
   return voterIds.length;
 }
 
@@ -143,8 +148,17 @@ export async function runCommonGroundForBuildingLineup(
   const lineup = await resolveScoringLineup(db, filters);
   const nominated = await findNominatedGameIds(db, lineup.id);
   const [nominators] = await countDistinctNominators(db, lineup.id);
-  const participantCount = await resolveParticipantCount(db, lineup);
-  const ctx = await buildScoringContext(db, lineup.id, tasteProfile, settings);
+  // ROK-1348: single voterIds fetch, shared between the scoring context and
+  // the public-branch participant count (was queried twice before).
+  const voterIds = await findLineupVoterIds(db, lineup.id);
+  const participantCount = await resolveParticipantCount(db, lineup, voterIds);
+  const ctx = await buildScoringContext(
+    db,
+    lineup.id,
+    tasteProfile,
+    settings,
+    voterIds,
+  );
   return buildCommonGroundResponse(
     db,
     lineup.id,

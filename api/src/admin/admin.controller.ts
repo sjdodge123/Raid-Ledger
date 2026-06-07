@@ -8,6 +8,7 @@ import {
   Req,
   Inject,
   Query,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -28,15 +29,23 @@ import {
   type NameDedupCommitResult,
   type NameDedupDryRunResult,
 } from '../igdb/igdb-dedup-cleanup.helpers';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import {
+  recoverOrphanScheduledEvents,
+  type RecoveryResult,
+} from '../discord-bot/services/scheduled-event.recovery';
 
 @RateLimit('admin')
 @Controller('admin')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class AdminController {
+  private readonly logger = new Logger(AdminController.name);
+
   constructor(
     private readonly queueHealth: QueueHealthService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly discordClient: DiscordBotClientService,
   ) {}
 
   @Get('check')
@@ -74,5 +83,34 @@ export class AdminController {
     const dryRun = dryRunParam !== 'false';
     if (dryRun) return dryRunNameDedup(this.db);
     return mergeNameDuplicates(this.db);
+  }
+
+  /**
+   * Operator recovery for the ROK-1347 orphan-SE freeze: delete RL-created
+   * duplicate Discord scheduled events that pin the guild at its 100-SE cap.
+   * Defaults to dry-run; pass `?dryRun=false` to execute. Never deletes
+   * operator-owned SEs. Re-runnable until `reclaimableDuplicates` is empty.
+   */
+  @Post('scheduled-events/recover-orphans')
+  @HttpCode(HttpStatus.OK)
+  async recoverOrphanScheduledEvents(
+    @Query('dryRun') dryRunParam?: string,
+  ): Promise<RecoveryResult> {
+    const dryRun = dryRunParam !== 'false';
+    const guild = this.discordClient.getGuild();
+    if (!guild) {
+      return {
+        dryRun,
+        guildSeCount: 0,
+        rlBound: 0,
+        reclaimableDuplicates: [],
+        operatorOrphans: 0,
+        deleted: 0,
+        failures: [],
+      };
+    }
+    return recoverOrphanScheduledEvents(guild, this.db, this.logger, {
+      dryRun,
+    });
   }
 }

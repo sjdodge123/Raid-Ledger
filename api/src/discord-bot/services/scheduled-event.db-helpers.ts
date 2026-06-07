@@ -238,6 +238,67 @@ export async function findRLTrackedSEs(
   }));
 }
 
+/** Live RL event keyed by SE name + start, used for duplicate-SE detection (ROK-1347). */
+export interface LiveRLEventMatch {
+  id: number;
+  discordScheduledEventId: string | null;
+  title: string;
+  /** `lower(duration)` as text — the event's scheduled start. Parsed to epoch
+   *  via `new Date(startIso)` by the matcher. This MUST mirror how the Discord
+   *  SE start was set at create time (`new Date(eventData.startTime)` where
+   *  startTime is the SAME `lower(duration)::text`) so the dedup match key and
+   *  the create-path key collapse identically regardless of session tz — both
+   *  sides apply the identical `new Date(text)` transform (ROK-1347). */
+  startIso: string;
+}
+
+/**
+ * Find live (non-cancelled, future-or-ongoing) RL events so the GC matcher can
+ * decide whether a guild SE NOT tracked in `discord_scheduled_event_id` is a
+ * mis-classified RL-created duplicate (same title + start as a live event that
+ * already has a DIFFERENT bound SE id) vs a genuine operator-owned orphan.
+ *
+ * Postgres `events.discord_scheduled_event_id` holds ONE id per row, so when a
+ * duplicate SE is created (timeout-after-success race), the older SE id falls
+ * out of the DB and the GC mis-classifies it as an operator orphan it can never
+ * delete — the 80-orphan freeze this fixes (ROK-1347).
+ *
+ * Returns rows keyed by the caller via `seMatchKey(title, startIso)`.
+ */
+export async function findLiveRLEventsForDedup(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<LiveRLEventMatch[]> {
+  const now = new Date();
+  return db
+    .select({
+      id: schema.events.id,
+      discordScheduledEventId: schema.events.discordScheduledEventId,
+      title: schema.events.title,
+      startIso: sql<string>`lower(${schema.events.duration})::text`,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        isNull(schema.events.cancelledAt),
+        sql`${schema.events.isAdHoc} = false`,
+        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
+      ),
+    );
+}
+
+/** Clear the capacity backoff flag for the given events so the next reconcile
+ *  tick recreates missing SEs immediately (ROK-1347 recovery path). */
+export async function clearReconcileBackoff(
+  db: PostgresJsDatabase<typeof schema>,
+  eventIds: number[],
+): Promise<void> {
+  if (eventIds.length === 0) return;
+  await db
+    .update(schema.events)
+    .set({ scheduledEventReconcileBackoffUntil: null })
+    .where(inArray(schema.events.id, eventIds));
+}
+
 /**
  * Set scheduled_event_reconcile_backoff_until on the given event rows. Used
  * by the reconciliation cron to pause retries when Discord's guild-wide cap

@@ -241,7 +241,7 @@ describe('CommonGroundGameCard — nominate button', () => {
         expect(onNominate).toHaveBeenCalledTimes(1);
     });
 
-    it('shows "Lineup full" and is disabled when atCap is true', () => {
+    it('shows "Nomination cap reached" and is disabled when atCap is true', () => {
         render(
             <CommonGroundGameCard
                 game={buildGame()}
@@ -250,8 +250,42 @@ describe('CommonGroundGameCard — nominate button', () => {
                 atCap={true}
             />,
         );
-        const button = screen.getByRole('button', { name: 'Lineup full' });
+        const button = screen.getByRole('button', { name: 'Nomination cap reached' });
         expect(button).toBeDisabled();
+    });
+
+    // ROK-1349: view-only (non-invitee) is a distinct disabled reason from
+    // a genuine nomination cap and must render its own label.
+    it('shows "View only" and is disabled when viewOnly is true', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={false}
+                viewOnly={true}
+            />,
+        );
+        const button = screen.getByRole('button', { name: 'View only' });
+        expect(button).toBeDisabled();
+    });
+
+    // ROK-1349: viewOnly wins over atCap — a non-invitee should never see
+    // the cap message.
+    it('prefers the view-only label over the cap label when both are set', () => {
+        render(
+            <CommonGroundGameCard
+                game={buildGame()}
+                onNominate={vi.fn()}
+                isNominating={false}
+                atCap={true}
+                viewOnly={true}
+            />,
+        );
+        expect(screen.getByRole('button', { name: 'View only' })).toBeDisabled();
+        expect(
+            screen.queryByRole('button', { name: 'Nomination cap reached' }),
+        ).toBeNull();
     });
 
     it('shows "Adding..." and is disabled when isNominating is true', () => {
@@ -278,7 +312,7 @@ describe('CommonGroundGameCard — nominate button', () => {
                 atCap={true}
             />,
         );
-        await user.click(screen.getByRole('button', { name: 'Lineup full' }));
+        await user.click(screen.getByRole('button', { name: 'Nomination cap reached' }));
         expect(onNominate).not.toHaveBeenCalled();
     });
 });

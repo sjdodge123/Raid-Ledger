@@ -18,6 +18,7 @@ import {
   type ReconciliationCandidate,
 } from './scheduled-event.db-helpers';
 import { CapacityStillSaturatedError } from './scheduled-event.helpers';
+import { GuildSECache } from './scheduled-event.create';
 
 /** ROK-1332: pause-window applied to remaining candidates when Discord's
  *  guild-wide 100-SE cap is still saturated after GC. One hour matches the
@@ -50,12 +51,16 @@ export class ScheduledEventReconciliationService {
 
   async reconcileMissingScheduledEvents(): Promise<void | false> {
     if (!this.clientService.isConnected()) return false;
-    if (!this.clientService.getGuild()) return false;
+    const guild = this.clientService.getGuild();
+    if (!guild) return false;
     const candidates = await findReconciliationCandidates(this.db);
     if (candidates.length === 0) return false;
     this.logger.log(
       `Reconciling ${candidates.length} events missing Discord scheduled events`,
     );
+    // ROK-1347: one shared guild-SE fetch for the whole batch so the idempotent
+    // pre-check doesn't re-fetch all guild SEs once per candidate.
+    const seCache = new GuildSECache(guild);
     const processed: number[] = [];
     for (const c of candidates) {
       try {
@@ -65,6 +70,7 @@ export class ScheduledEventReconciliationService {
           c.gameId,
           c.isAdHoc,
           c.notificationChannelOverride,
+          seCache,
         );
         processed.push(c.id);
       } catch (err) {

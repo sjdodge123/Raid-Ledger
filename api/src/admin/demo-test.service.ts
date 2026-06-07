@@ -21,7 +21,9 @@ import {
   disableScheduledEventsForTest as disableSE,
   cleanupScheduledEventsForTest as cleanupSE,
   pauseReconciliationForTest as pauseRecon,
+  triggerReconciliationForTest as triggerRecon,
   setEventTimesForTest as setTimes,
+  type CleanupSEResult,
 } from './demo-test-scheduled-event.helpers';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
 import {
@@ -219,20 +221,21 @@ export class DemoTestService {
   }
 
   /** Delete all Discord scheduled events in the guild — DEMO_MODE only (ROK-969). */
-  async cleanupScheduledEventsForTest(): Promise<{
-    success: boolean;
-    deleted: number;
-    failed: number;
-    total: number;
-  }> {
+  async cleanupScheduledEventsForTest(): Promise<CleanupSEResult> {
     await this.assertDemoMode();
     return cleanupSE(this.moduleRef);
   }
 
-  /** Pause the reconciliation cron — DEMO_MODE only (ROK-969). */
+  /** Pause the reconciliation cron — DEMO_MODE only (ROK-969/1347). */
   async pauseReconciliationForTest(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
     return pauseRecon(this.moduleRef);
+  }
+
+  /** Run the reconciliation cron once — DEMO_MODE only (ROK-1347). */
+  async triggerReconciliationForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    return triggerRecon(this.moduleRef);
   }
 
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
@@ -282,13 +285,9 @@ export class DemoTestService {
   }
 
   /** Force-set event times bypassing Zod validation — DEMO_MODE only (ROK-969). */
-  async setEventTimesForTest(
-    eventId: number,
-    startTime: string,
-    endTime: string,
-  ): Promise<{ success: boolean }> {
+  async setEventTimesForTest(id: number, start: string, end: string) {
     await this.assertDemoMode();
-    return setTimes(this.db, eventId, startTime, endTime);
+    return setTimes(this.db, id, start, end);
   }
 
   /** Clear game interests for a user/game — DEMO_MODE only (ROK-966 smoke test). */

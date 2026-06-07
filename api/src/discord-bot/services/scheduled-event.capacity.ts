@@ -23,16 +23,28 @@ export async function withCapacityRecovery(
   db: PostgresJsDatabase<typeof schema>,
   logger: Logger,
   fn: () => Promise<void>,
+  onBeforeRetry?: () => void,
 ): Promise<void> {
   try {
     await fn();
   } catch (err) {
     if (!isAtScheduledEventCapacityError(err)) throw err;
-    const { freed, orphanCount } = await gcStaleRLScheduledEvents(guild, db);
+    const { freed, orphanCount, deleteFailures } =
+      await gcStaleRLScheduledEvents(guild, db);
     logger.log(
-      `Discord SE capacity GC freed=${freed} orphanCount=${orphanCount}`,
+      `Discord SE capacity GC freed=${freed} orphanCount=${orphanCount} deleteFailures=${deleteFailures.length}`,
     );
+    if (deleteFailures.length > 0) {
+      const codes = deleteFailures.map((f) => f.code ?? 'unknown').join(',');
+      logger.warn(`GC delete failures by Discord code: ${codes}`);
+    }
+    // freed now includes reclaimed RL duplicates (ROK-1347). Only back off when
+    // GC truly couldn't free anything — the remaining cap is operator-owned.
     if (freed === 0) throw new CapacityStillSaturatedError(orphanCount);
+    // GC just mutated guild SE state — let the caller drop any cached guild-SE
+    // snapshot so the retry's adopt path can't resurrect a deleted SE id
+    // (review medium, fix/batch-2026-06-06).
+    onBeforeRetry?.();
     await fn();
   }
 }

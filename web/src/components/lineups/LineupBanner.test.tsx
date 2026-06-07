@@ -91,10 +91,33 @@ describe('LineupBanner — populated state', () => {
     });
 
     it('displays entry count and voter stats', () => {
-        mockHookReturn(createMockBanner({ entryCount: 5, totalVoters: 3, totalMembers: 10 }));
+        mockHookReturn(
+            createMockBanner({
+                entryCount: 5,
+                totalVoters: 3,
+                totalMembers: 10,
+                votingEligibleCount: 10,
+            }),
+        );
         renderWithProviders(<LineupBanner />);
         expect(screen.getByText(/5 games nominated/)).toBeInTheDocument();
         expect(screen.getByText(/3 of 10 members voted/)).toBeInTheDocument();
+    });
+
+    // ROK-1348: a private lineup's voter denominator is the eligible pool
+    // (creator + invitees), NOT the community-wide totalMembers.
+    it('uses votingEligibleCount (not totalMembers) as the voter denominator', () => {
+        mockHookReturn(
+            createMockBanner({
+                visibility: 'private',
+                totalVoters: 1,
+                totalMembers: 13,
+                votingEligibleCount: 3,
+            }),
+        );
+        renderWithProviders(<LineupBanner />);
+        expect(screen.getByText(/1 of 3 members voted/)).toBeInTheDocument();
+        expect(screen.queryByText(/of 13 members voted/)).not.toBeInTheDocument();
     });
 
     it('renders game thumbnail images', () => {

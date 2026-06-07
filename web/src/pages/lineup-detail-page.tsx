@@ -77,7 +77,13 @@ export function LineupDetailPage(): JSX.Element {
   const { data: lineup, isLoading, error } = useLineupDetail(lineupId);
   useLineupRealtime(lineupId);
   const { data: tiebreaker } = useTiebreakerDetail(lineupId);
-  const { user } = useAuth();
+  // ROK-1349 Part B: `user` is undefined while /auth/me is in flight. If we
+  // computed eligibility against a null user during that window, a private
+  // lineup's real invitee would be treated as a non-participant — every
+  // nominate card flips to the disabled "view only" state. Block on auth
+  // loading the same way we block on lineup loading so eligibility is only
+  // computed once the viewer's identity has settled.
+  const { user, isLoading: authLoading } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
   const [preSelectedGame, setPreSelectedGame] = useState<SelectedGame | null>(null);
   const [promptDismissed, setPromptDismissed] = useState(false);
@@ -108,7 +114,7 @@ export function LineupDetailPage(): JSX.Element {
     onGameResolved: handleGameResolved,
   });
 
-  if (isLoading) return <LineupDetailSkeleton />;
+  if (isLoading || authLoading) return <LineupDetailSkeleton />;
   if (error || !lineup) return <LineupNotFound />;
 
   return (
@@ -217,7 +223,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
       {lineup.visibility === 'private' && (
         <PrivateInviteesSection
           lineupId={lineup.id}
-          invitees={lineup.invitees ?? []}
+          invitees={lineup.invitees}
           canManage={isOperator || user?.id === lineup.createdBy.id}
         />
       )}
