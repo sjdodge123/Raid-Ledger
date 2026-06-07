@@ -10,10 +10,9 @@
  *
  * These tests are TDD-first: on origin/main the clobber bug in
  * cleanupSeriesBindings deletes the first slot when the second is bound, so
- * the dual-binding assertion FAILS. They are written against the deployed dev
- * env (real Discord channels with real voice/text types) — the slash-command
- * harness alone cannot infer a voice channel type, so real channels from the
- * guild pool are required.
+ * the dual-binding assertion FAILS. Channels are passed to the slash-command
+ * harness in object form ({ id, type }) so FakeInteraction surfaces the
+ * voice/text channel type to the /bind handler.
  *
  * Deterministic polling only — no fixed-delay waits.
  */
@@ -44,15 +43,28 @@ interface BindingRow {
   recurrenceGroupId?: string | null;
 }
 
-/** Invoke /bind via the test harness for a series + channel. */
+/** Discord channel type discriminators (discord.js ChannelType values). */
+const GUILD_TEXT = 0;
+const GUILD_VOICE = 2;
+
+/**
+ * Invoke /bind via the test harness for a series + channel. The channel is
+ * passed in object form with its Discord `type` so FakeInteraction surfaces
+ * voice vs text to the handler (the string form carries no type and always
+ * resolves as text).
+ */
 async function bindSeriesChannel(
   ctx: TestContext,
   seriesId: string,
   channelId: string,
+  channelType: typeof GUILD_TEXT | typeof GUILD_VOICE,
 ): Promise<SlashCommandResponse> {
   return ctx.api.post<SlashCommandResponse>('/admin/test/slash-command', {
     commandName: 'bind',
-    options: { series: seriesId, channel: channelId },
+    options: {
+      series: seriesId,
+      channel: { id: channelId, type: channelType },
+    },
     discordUserId: ctx.testBotDiscordId,
     guildId: ctx.config.guildId,
     channelId,
@@ -101,9 +113,19 @@ const dualBindingPersists: SmokeTest = {
     let voiceBindingId: string | undefined;
     try {
       // 1. Bind the TEXT announce channel for the series.
-      await bindSeriesChannel(ctx, series.recurrenceGroupId, textCh.id);
+      await bindSeriesChannel(
+        ctx,
+        series.recurrenceGroupId,
+        textCh.id,
+        GUILD_TEXT,
+      );
       // 2. Bind the VOICE host channel for the SAME series.
-      await bindSeriesChannel(ctx, series.recurrenceGroupId, voiceCh.id);
+      await bindSeriesChannel(
+        ctx,
+        series.recurrenceGroupId,
+        voiceCh.id,
+        GUILD_VOICE,
+      );
       await awaitProcessing(ctx.api);
 
       // 3. Both slot rows must coexist for the series. On main, the voice
@@ -164,8 +186,18 @@ const announceRoutesToTextHostsInVoice: SmokeTest = {
     const bindingIds: string[] = [];
     try {
       // Bind both slots for the series.
-      await bindSeriesChannel(ctx, series.recurrenceGroupId, textCh.id);
-      await bindSeriesChannel(ctx, series.recurrenceGroupId, voiceCh.id);
+      await bindSeriesChannel(
+        ctx,
+        series.recurrenceGroupId,
+        textCh.id,
+        GUILD_TEXT,
+      );
+      await bindSeriesChannel(
+        ctx,
+        series.recurrenceGroupId,
+        voiceCh.id,
+        GUILD_VOICE,
+      );
       await awaitProcessing(ctx.api);
 
       const seriesRows = (await listBindings(ctx.api)).filter(
