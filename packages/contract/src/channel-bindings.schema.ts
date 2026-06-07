@@ -25,6 +25,8 @@ export const ChannelBindingSchema = z.object({
   bindingPurpose: BindingPurposeEnum,
   gameId: z.number().int().nullable(),
   gameName: z.string().nullable().optional(),
+  /** Series (recurrence group) this binding scopes to; null for game/global bindings (ROK-1351). */
+  recurrenceGroupId: z.string().uuid().nullable().optional(),
   config: ChannelBindingConfigSchema.nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

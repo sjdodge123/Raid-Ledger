@@ -60,6 +60,7 @@ export class ChannelBindingsController {
       bindingPurpose: b.bindingPurpose as ChannelBindingDto['bindingPurpose'],
       gameId: b.gameId,
       gameName: b.gameName ?? null,
+      recurrenceGroupId: b.recurrenceGroupId,
       config: b.config,
       createdAt: b.createdAt.toISOString(),
       updatedAt: b.updatedAt.toISOString(),
@@ -143,6 +144,7 @@ function toBindingDto(result: {
   channelType: string;
   bindingPurpose: string;
   gameId: number | null;
+  recurrenceGroupId: string | null;
   config: unknown;
   createdAt: Date;
   updatedAt: Date;
@@ -155,6 +157,7 @@ function toBindingDto(result: {
     bindingPurpose:
       result.bindingPurpose as ChannelBindingDto['bindingPurpose'],
     gameId: result.gameId,
+    recurrenceGroupId: result.recurrenceGroupId,
     config: result.config as ChannelBindingDto['config'],
     createdAt: result.createdAt.toISOString(),
     updatedAt: result.updatedAt.toISOString(),
