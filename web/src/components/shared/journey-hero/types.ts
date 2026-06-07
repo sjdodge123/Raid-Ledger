@@ -44,6 +44,13 @@ export interface JourneyHeroProps {
    * with the rightmost "Schedule" ribbon node. Coexists with the done-pill.
    */
   headerAction?: import('react').ReactNode;
+  /**
+   * ROK-1346: optional element rendered top-right of the hero meta region
+   * (badge row), to the LEFT of any `headerAction`/done-pill. Used for the
+   * lineup "Participants · N" roster button so it sits in the hero across every
+   * phase without crowding the ribbon or CTA. Coexists with `headerAction`.
+   */
+  action?: import('react').ReactNode;
   /** Primary input — drives `active` internally if `active` not supplied */
   phase?: JourneyPhase;
   /** Explicit override / Sx escape hatch — derived from `phase` when omitted */

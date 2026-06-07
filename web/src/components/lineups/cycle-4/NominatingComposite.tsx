@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../shared/journey-hero';
+import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import { useNominateGame } from '../../../hooks/use-lineups';
 import { useAuth } from '../../../hooks/use-auth';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
@@ -217,6 +218,7 @@ export function NominatingComposite(
           tone={journey.tone}
           badge={journey.badge}
           task={journey.task}
+          action={<LineupParticipantsButton lineupId={lineup.id} />}
           sub={
             <LineupHeroMeta lineup={lineup} phaseContext={journey.sub} />
           }

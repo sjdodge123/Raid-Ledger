@@ -130,6 +130,9 @@ export * from './lineup-matches.schema.js';
 // Lineup Scheduling Poll (ROK-965)
 export * from './lineup-scheduling.schema.js';
 
+// Community Lineup Participants roster (ROK-1346)
+export * from './lineup-participants.schema.js';
+
 // Activity Log (ROK-930)
 export * from './activity-log.schema.js';
 

@@ -11,6 +11,7 @@
 import type { JSX } from 'react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../shared/journey-hero';
+import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import type { JourneyHeroProps } from '../../shared/journey-hero/types';
 import { StickyHeroScheduleSubmitButton } from './sticky-hero-buttons';
 import { useSchedulingSticky } from './use-scheduling-sticky';
@@ -53,6 +54,7 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
             never collides with the rightmost "Schedule" ribbon node (round 3). */}
         <JourneyHero
           {...hero}
+          action={<LineupParticipantsButton lineupId={lineupId} />}
           headerAction={
             <SchedulingCancelAction
               lineupId={lineupId}

@@ -83,10 +83,13 @@ export class DemoTestFixtureUserController {
       .limit(1);
     if (existing[0]) {
       // Ensure pre-existing fixture rows have onboarding completed so the
-      // wizard never blocks the lineup detail view (idempotent).
+      // wizard never blocks the lineup detail view, and are ACTIVE — the
+      // daily guild-membership cron deactivates this synthetic user (no real
+      // Discord membership), which then 404s invitee validation in
+      // `addInvitees` (activeUsersFilter). Idempotent.
       await this.db
         .update(schema.users)
-        .set({ onboardingCompletedAt: new Date() })
+        .set({ onboardingCompletedAt: new Date(), deactivatedAt: null })
         .where(eq(schema.users.id, existing[0].id));
       return existing[0];
     }

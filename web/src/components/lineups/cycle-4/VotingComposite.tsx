@@ -25,6 +25,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { JourneyHero } from '../../shared/journey-hero';
+import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import { deriveSubmitKind, type SubmitKind } from '../../shared/submit-bar/derive-kind';
 import { useToggleVote } from '../../../hooks/use-lineups';
 import { useSubmitVotes } from '../../../hooks/use-lineup-submit';
@@ -233,6 +234,7 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
           tone={hero.tone}
           badge={hero.badge}
           task={hero.task}
+          action={<LineupParticipantsButton lineupId={lineup.id} />}
           sub={<LineupHeroMeta lineup={lineup} phaseContext={hero.sub} />}
         />
         <div className="flex items-center gap-2 mt-2 px-1">

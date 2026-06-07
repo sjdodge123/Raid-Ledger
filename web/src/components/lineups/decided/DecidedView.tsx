@@ -15,6 +15,7 @@ import type {
 import { useAuth } from '../../../hooks/use-auth';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
 import { JourneyHero } from '../../shared/journey-hero/JourneyHero';
+import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import { LineupHeroMeta } from '../LineupHeroMeta';
 import { CarriedForwardSection } from './CarriedForwardSection';
 import { MatchCard } from './MatchCard';
@@ -179,6 +180,7 @@ export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
         tone="action"
         badge={terminal ? 'Decided' : 'Step 3 of 4 · Decided'}
         task={hero.task}
+        action={<LineupParticipantsButton lineupId={lineup.id} />}
         sub={<LineupHeroMeta lineup={lineup} phaseContext={hero.sub} />}
         hint={
           terminal

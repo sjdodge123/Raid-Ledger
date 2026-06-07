@@ -396,9 +396,21 @@ const handleApiState = async (res) => {
       collectActiveTasks(),
       collectLeaseQueues(slots),
     ]);
+    const parsedEnvs = JSON.parse(envs);
+    // ROK-1346: prune stale test plans when a new env has registered. Awaited
+    // so the dashboard's own tests are deterministic; on the common no-change
+    // poll this is just a Set diff (no FS work). Never throws.
+    try {
+      await pruneStaleTestPlansOnEnvAddition(
+        parsedEnvs.map((e) => e && e.slug).filter((s) => typeof s === 'string'),
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(`[rl-dashboard] plan-prune trigger failed: ${err.message}`);
+    }
     // Attach per-env plan summaries to each env entry so the client
     // doesn't need a separate fetch per card.
-    const enrichedEnvs = JSON.parse(envs).map((envEntry) =>
+    const enrichedEnvs = parsedEnvs.map((envEntry) =>
       planSummaries[envEntry.slug]
         ? { ...envEntry, _test_plan_summary: planSummaries[envEntry.slug] }
         : envEntry,
@@ -614,6 +626,66 @@ const sweepLegacyV1Plans = async () => {
     console.log(`[rl-dashboard] v1_sweeper: removed ${removed} legacy plan file(s) from ${TEST_PLANS_DIR}/`);
   }
   return removed;
+};
+
+// ROK-1346 — stale test-plan pruner.
+//
+// When a NEW env registers (the live-env slug set GAINS a member), clear test
+// plans for any slug that has NO live env. This stops testers from seeing a
+// retired story's plans once a fresh env claims a slot (e.g. slot-1 moves from
+// rok-1323 to rok-1346 — rok-1323's plans were confusing testers on the new
+// env).
+//
+// Deliberately triggers ONLY on additions, never on a bare removal:
+//   - `env-destroy` alone (registry shrinks) does NOT prune — tester progress
+//     survives a same-slug redeploy, per the rl_env_destroy "plans survive"
+//     contract (feedback_rl_fleet_destroy_preserves_plans).
+//   - The first observation (boot) only records a baseline and never prunes, so
+//     a dashboard restart can't wipe a destroyed-pending-redeploy slug.
+//   - The just-added slug (and every other currently-live slug) is always kept.
+//
+// Best-effort: never throws, never blocks /api/state on failure. Driven off the
+// /api/state poll (every ~5s) so a new env's plans settle within one poll.
+let lastLivePlanSlugs = null; // null until the first observation (baseline, no prune)
+let planPruneInFlight = false;
+
+const pruneStaleTestPlansOnEnvAddition = async (liveSlugList) => {
+  const live = new Set(liveSlugList);
+  const prev = lastLivePlanSlugs;
+  lastLivePlanSlugs = live;
+  if (prev === null) return; // boot baseline — record only, never prune
+  let gained = false;
+  for (const s of live) {
+    if (!prev.has(s)) { gained = true; break; }
+  }
+  if (!gained) return; // no new env this poll — nothing to do
+  if (planPruneInFlight) return; // serialise FS work across concurrent polls
+  planPruneInFlight = true;
+  try {
+    let dirents;
+    try {
+      dirents = await readdir(TEST_PLANS_DIR, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === 'ENOENT') return;
+      // eslint-disable-next-line no-console
+      console.warn(`[rl-dashboard] plan-prune: cannot read ${TEST_PLANS_DIR}: ${err.message}`);
+      return;
+    }
+    for (const d of dirents) {
+      if (!d.isDirectory()) continue;
+      if (live.has(d.name)) continue; // active env — keep (includes the just-added slug)
+      try {
+        await rm(join(TEST_PLANS_DIR, d.name), { recursive: true, force: true });
+        // eslint-disable-next-line no-console
+        console.log(JSON.stringify({ event: 'test_plan_prune', slug: d.name, reason: 'no_live_env' }));
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[rl-dashboard] plan-prune: failed to remove '${d.name}': ${err.message}`);
+      }
+    }
+  } finally {
+    planPruneInFlight = false;
+  }
 };
 
 const summarizePlan = (plan) => {
