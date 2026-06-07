@@ -123,6 +123,35 @@ describe('createScheduledEventIdempotent', () => {
     expect(saveScheduledEventId).toHaveBeenCalledWith(db, 42, 'existing-se');
   });
 
+  it('adopts a game-bearing event by its renamed name "<title> — <game>" (ROK-1350)', async () => {
+    // The SE was created under buildScheduledEventName, so adopt must match the
+    // combined name — matching by the bare title would miss it and duplicate.
+    const gamed: ScheduledEventData = {
+      ...eventData,
+      game: { name: 'Valheim' },
+    };
+    const guild = makeGuild([
+      {
+        id: 'renamed-se',
+        name: 'Palworld Event — Valheim',
+        ts: START_MS,
+        desc: rlDesc(42),
+      },
+    ]);
+
+    await createScheduledEventIdempotent(
+      guild,
+      db,
+      logger,
+      42,
+      gamed,
+      preamble(),
+    );
+
+    expect(tryCreateNewEvent).not.toHaveBeenCalled();
+    expect(saveScheduledEventId).toHaveBeenCalledWith(db, 42, 'renamed-se');
+  });
+
   it('does NOT adopt a title+start match lacking the RL fingerprint (operator SE, Codex P2) — creates instead', async () => {
     const guild = makeGuild([
       {

@@ -1,4 +1,5 @@
-import type { EventResponseDto, SlotConfigDto } from '@raid-ledger/contract';
+import type { CreateEventDto, UpdateEventDto, RecurrenceDto, EventResponseDto, SlotConfigDto } from '@raid-ledger/contract';
+import { TZDate } from '@date-fns/tz';
 import { DURATION_PRESETS, MMO_DEFAULTS, GENERIC_DEFAULTS } from './shared/event-form-constants';
 import type { FormState, FormErrors } from './create-event-form.types';
 
@@ -137,4 +138,47 @@ export function formatDuration(minutes: number): string {
     if (h === 0) return `${m}m`;
     if (m === 0) return `${h}h`;
     return `${h}h ${m}m`;
+}
+
+/** Build the submit DTO for create/edit. ROK-1350: edit mode must send an
+ *  explicit `gameId: null` to UNSET the game (UpdateEventDto is nullable;
+ *  omitting the field leaves it unchanged). Create keeps `undefined` —
+ *  CreateEventDto's gameId is optional, not nullable. */
+/** Resolve the gameId to submit (ROK-1350).
+ *  - Game picker cleared (`form.game` falsy) in edit mode → explicit `null` (UNSET).
+ *  - Game still selected but registry id unresolved (useGameRegistry loading or
+ *    lookup miss) → `undefined` so the field is OMITTED and the existing game is
+ *    preserved — sending `null` here would silently wipe the event's game.
+ *  - Create mode → `registryGameId ?? undefined` (CreateEventDto is not nullable). */
+function gameIdForSubmit(
+    form: FormState,
+    registryGameId: number | null | undefined,
+    isEditMode: boolean,
+): number | null | undefined {
+    if (!isEditMode) return registryGameId ?? undefined;
+    if (!form.game) return null; // user explicitly cleared the picker
+    return registryGameId ?? undefined; // selected but unresolved → preserve
+}
+
+export function buildSubmitDto(
+    form: FormState,
+    resolved: string,
+    registryGameId: number | null | undefined,
+    isEditMode: boolean,
+): CreateEventDto | UpdateEventDto {
+    const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
+    const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
+    let recurrence: RecurrenceDto | undefined;
+    if (form.recurrenceFrequency) {
+        recurrence = { frequency: form.recurrenceFrequency, until: new TZDate(`${form.recurrenceUntil}T23:59:59`, resolved).toISOString() };
+    }
+    return {
+        title: form.title.trim(), description: form.description.trim() || undefined,
+        gameId: gameIdForSubmit(form, registryGameId, isEditMode),
+        startTime: start.toISOString(), endTime: end.toISOString(),
+        slotConfig: buildSlotConfig(form), maxAttendees: form.maxAttendees ? parseInt(form.maxAttendees) : undefined,
+        autoUnbench: form.autoUnbench, recurrence,
+        contentInstances: form.selectedInstances.length > 0 ? form.selectedInstances : undefined,
+        reminder15min: form.reminder15min, reminder1hour: form.reminder1hour, reminder24hour: form.reminder24hour,
+    };
 }

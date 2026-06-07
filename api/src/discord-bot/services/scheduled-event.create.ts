@@ -13,7 +13,10 @@ import {
   hasRLFingerprint,
   type GuildSEShape,
 } from './scheduled-event.gc.helpers';
-import type { ScheduledEventData } from './scheduled-event.helpers';
+import {
+  buildScheduledEventName,
+  type ScheduledEventData,
+} from './scheduled-event.helpers';
 
 type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
@@ -128,9 +131,12 @@ async function adoptExistingGuildSE(
   eventData: ScheduledEventData,
   seCache: GuildSECache,
 ): Promise<boolean> {
+  // ROK-1350: the SE is created under buildScheduledEventName (title + game),
+  // so adopt/match by that same name — matching by the bare title would miss a
+  // renamed SE and let the next reconcile create a duplicate.
   const existing = findExistingGuildSE(
     await seCache.get(),
-    eventData.title,
+    buildScheduledEventName(eventData),
     eventData.startTime,
   );
   if (!existing) return false;
@@ -178,9 +184,13 @@ async function createOrAdoptOnTimeout(a: CreateAttempt): Promise<void> {
   } catch (err) {
     if (!isTimeoutError(err)) throw err;
     seCache.invalidate();
+    // ROK-1350: confirm by the same name tryCreateNewEvent wrote
+    // (buildScheduledEventName), not the bare title — otherwise a renamed SE
+    // created just before the timeout isn't found, the DB id stays unset, and
+    // the next reconcile duplicates it.
     const confirmed = findExistingGuildSE(
       await seCache.get(),
-      eventData.title,
+      buildScheduledEventName(eventData),
       eventData.startTime,
     );
     // Same operator-SE safety as the pre-create check: only adopt when the SE
