@@ -162,6 +162,29 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
         fi
         audit::log env-spin slug-reclaimed-from-unclaimed-slot \
             "$(jq -nc --arg slug "$SLUG" --argjson from_slot "$EXISTING_SLOT" --argjson to_slot "$SLOT" '{slug:$slug, from_slot:$from_slot, to_slot:$to_slot}')"
+        # CLAIM REGISTRY OWNERSHIP FIRST (live-dogfood incident, fix/batch-
+        # 2026-06-07): the recreate below can take 60+ seconds (health-wait)
+        # before the fresh path re-registers the env. During that window the
+        # row still said `.slot = <old>` + `.claimable_by_next = true` (from
+        # the old slot's `release --preserve-envs`), so a CONCURRENT claim on
+        # the old slot ran lease-advance's branch-mismatch destroy and killed
+        # the live env mid-recreate (observed 14:27:05Z 2026-06-07: agent
+        # e5fb1779 claimed slot 2 and destroyed fixbatch7 while it was being
+        # reclaimed onto slot 1). Move the row to THIS slot and clear the
+        # claimable mark BEFORE touching containers.
+        if ! state::mutate "$RL_ENVS_FILE" \
+                --arg slug "$SLUG" --argjson slot "$SLOT" \
+                'map(if .slug == $slug
+                     then .slot = $slot | .claimable_by_next = false
+                        | del(.created_for_branch)
+                     else . end)'; then
+            jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" \
+                '{ok:false, error:"env_registry_mutate_failed", phase:"reclaim_take_ownership",
+                  slug:$slug, slot:$slot,
+                  hint:"Could not move the env-registry row to this slot before reclaiming. Aborting BEFORE touching containers so the env is left intact on its old slot."}'
+            ENV_SPIN_HANDLED=1
+            exit 1
+        fi
         # Codex P2 (fix/batch-2026-06-07): falling through to the IDEMPOTENT
         # path here would only bump last_touched + rewrite the route — the
         # docker rl.slot label (immutable) and the registry row's .slot would

@@ -347,8 +347,12 @@ test_unclaimed_slot_reclaim_positive() {
     export ES_CURRENT_IMAGE_ID="sha256:SAME"
     # Seed a STALE registry row on the old slot so the .slot rewrite is
     # genuinely exercised (an empty registry would pass via the INSERT branch).
+    # claimable_by_next:true + created_for_branch mirror the live incident
+    # shape: the old slot's `release --preserve-envs` left the mark, and a
+    # concurrent claim on that slot would branch-mismatch-destroy the env
+    # unless the reclaim clears it FIRST.
     cat > "$RL_ENVS_FILE" <<'JSON'
-[{"slug": "stranded", "slot": 2, "image": "x", "ttl": "24h", "created_at": "2026-06-07T00:00:00Z", "last_touched": "2026-06-07T00:00:00Z", "public_domain": ""}]
+[{"slug": "stranded", "slot": 2, "image": "x", "ttl": "24h", "created_at": "2026-06-07T00:00:00Z", "last_touched": "2026-06-07T00:00:00Z", "public_domain": "", "claimable_by_next": true, "created_for_branch": "some-old-branch"}]
 JSON
 
     run_env_spin stranded
@@ -377,6 +381,12 @@ JSON
     assert_eq "$rows" "1" "registry must hold exactly one row for the reclaimed slug (UPSERT, no dup)"
     new_slot=$(jq -r --arg s "stranded" '[.[] | select(.slug == $s) | .slot] | first' "$RL_ENVS_FILE" 2>/dev/null || echo "")
     assert_eq "$new_slot" "1" "registry row .slot must move to the reclaiming slot (1)"
+    # The stale claimable mark must be CLEARED — leaving it set lets a
+    # concurrent claim on the OLD slot branch-mismatch-destroy this live env
+    # (the 2026-06-07 fixbatch7 incident).
+    local still_claimable
+    still_claimable=$(jq -r --arg s "stranded" '[.[] | select(.slug == $s) | .claimable_by_next // false] | first' "$RL_ENVS_FILE" 2>/dev/null || echo "")
+    assert_eq "$still_claimable" "false" "reclaim must clear claimable_by_next on the registry row"
     es_teardown
 }
 

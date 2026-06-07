@@ -268,11 +268,74 @@ EOF
     rm -rf "$fake_bin_dir"
 }
 
+# --- TOCTOU guard (fix/batch-2026-06-07): env moved slots mid-handoff -------
+# Extracts lease_advance::env_still_claimable_here VERBATIM from the binary
+# (sync-local-to-env test pattern — no copy that can drift) and runs it
+# against registry fixtures. The predicate is what stops a branch-mismatch
+# handoff from destroying an env that an env-spin reclaim just moved to
+# another slot (live incident 2026-06-07T14:27:05Z, fixbatch7).
+test_destroy_recheck_skips_moved_env() {
+    CURRENT_TEST_NAME="TOCTOU: destroy re-check only passes envs still claimable on THIS slot"
+    test_setup
+    # Save/restore RL_ENVS_FILE — sibling tests in this file do NOT set it and
+    # would otherwise inherit our (deleted-at-teardown) tmp path.
+    local _saved_envs_file="${RL_ENVS_FILE-__unset__}"
+    export RL_ENVS_FILE="$RL_STATE_DIR/env-registry.json"
+
+    local fn_src
+    fn_src=$(sed -n '/^lease_advance::env_still_claimable_here() {/,/^}/p' "$BIN_DIR/lease-advance")
+    if [[ -z "$fn_src" ]]; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: could not extract predicate from lease-advance")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] extraction failed"
+        if [[ "$_saved_envs_file" == "__unset__" ]]; then unset RL_ENVS_FILE; else export RL_ENVS_FILE="$_saved_envs_file"; fi
+        test_teardown
+        return
+    fi
+    eval "$fn_src"
+
+    # Case 1: still claimable on this slot → 0 (destroy proceeds).
+    echo '[{"slug":"e1","slot":2,"claimable_by_next":true,"created_for_branch":"x"}]' > "$RL_ENVS_FILE"
+    if lease_advance::env_still_claimable_here "e1" 2; then
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    else
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1)); TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: case1")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] still-claimable row must pass the re-check"
+    fi
+    # Case 2: row moved to another slot (the reclaim race) → 1 (skip).
+    echo '[{"slug":"e1","slot":1,"claimable_by_next":false}]' > "$RL_ENVS_FILE"
+    if lease_advance::env_still_claimable_here "e1" 2; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1)); TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: case2")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] moved-slot row must be SKIPPED"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+    # Case 3: row deleted entirely → 1 (skip).
+    echo '[]' > "$RL_ENVS_FILE"
+    if lease_advance::env_still_claimable_here "e1" 2; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1)); TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: case3")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] missing row must be SKIPPED"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+    # Case 4: same slot but claimable cleared (reclaim took ownership) → 1.
+    echo '[{"slug":"e1","slot":2,"claimable_by_next":false}]' > "$RL_ENVS_FILE"
+    if lease_advance::env_still_claimable_here "e1" 2; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1)); TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: case4")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] claimable-cleared row must be SKIPPED"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+    if [[ "$_saved_envs_file" == "__unset__" ]]; then unset RL_ENVS_FILE; else export RL_ENVS_FILE="$_saved_envs_file"; fi
+    test_teardown
+}
+
 run_test "ac2-preserve-marks-claimable" test_release_preserve_envs_marks_claimable
 run_test "ac2-preserve-reports-preserved" test_release_preserve_envs_reports_preserved
 run_test "ac2-branch-match-inherits" test_branch_match_handoff_inherits_env
 run_test "ac3-branch-mismatch-destroys" test_branch_mismatch_destroys_synchronously
 run_test "ac8-audit-destroy-before-grant" test_audit_log_destroy_before_grant
 run_test "strict-task-cancel-cascade" test_release_preserves_task_cancel_cascade
+run_test "toctou-destroy-recheck-moved-env" test_destroy_recheck_skips_moved_env
 
 print_test_summary
