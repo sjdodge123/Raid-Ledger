@@ -16,6 +16,25 @@ export interface GuildSEShape {
   name?: string | null;
   scheduledStartTimestamp?: number | null;
   scheduledStartAt?: Date | null;
+  description?: string | null;
+}
+
+/**
+ * RL fingerprint check (Codex P2, fix/batch-2026-06-06): RL-created SEs carry
+ * `View event: {clientUrl}/events/{eventId}` in their description
+ * (`buildDescriptionText`). Title+start alone can collide with an
+ * operator-created SE — adopting or deleting on that match alone would let RL
+ * hijack/destroy an operator's event. Requiring the `/events/<id>` URL (digit
+ * boundary so 16 ≠ 161) restricts adopt/reclaim to SEs RL itself created.
+ * Installs without CLIENT_URL configured never produce the fingerprint, so
+ * they degrade to pre-ROK-1347 behavior (no adopt, no reclaim) — safe.
+ */
+export function hasRLFingerprint(
+  se: Pick<GuildSEShape, 'description'>,
+  eventId: number,
+): boolean {
+  const desc = se.description ?? '';
+  return new RegExp(`/events/${eventId}(?!\\d)`).test(desc);
 }
 
 /**
@@ -134,12 +153,15 @@ export async function classifyUntrackedSEs(
     // (creation in-flight / first reconcile tick) — a matching guild SE could
     // be a legitimate operator event and must NOT be deleted (review critical,
     // fix/batch-2026-06-06). Ambiguous title+start collisions likewise. If
-    // boundSeId === se.id it's tracked elsewhere — guard anyway.
+    // boundSeId === se.id it's tracked elsewhere — guard anyway. The SE must
+    // ALSO carry RL's description fingerprint — title+start can collide with
+    // an operator-created SE, which GC must never delete (Codex P2).
     if (
       match &&
       !match.ambiguous &&
       match.boundSeId !== null &&
-      match.boundSeId !== se.id
+      match.boundSeId !== se.id &&
+      hasRLFingerprint(se, match.eventId)
     ) {
       reclaimable.push({ eventId: match.eventId, seId: se.id });
     } else {

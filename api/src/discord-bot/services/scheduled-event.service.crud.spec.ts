@@ -164,6 +164,7 @@ describe('createScheduledEvent — idempotency (ROK-1347)', () => {
                   id: 'pre-existing-se',
                   name: baseEventData.title,
                   scheduledStartTimestamp: start,
+                  description: 'View event: https://rl.example/events/42',
                 },
               ],
             ])
@@ -195,6 +196,7 @@ describe('createScheduledEvent — idempotency (ROK-1347)', () => {
               id: 'late-se',
               name: baseEventData.title,
               scheduledStartTimestamp: start,
+              description: 'View event: https://rl.example/events/42',
             },
           ],
         ]),

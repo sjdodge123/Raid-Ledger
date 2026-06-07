@@ -66,21 +66,31 @@ function preamble(): CreatePreamble {
   };
 }
 
-function makeGuild(ses: Array<{ id: string; name: string; ts: number }>) {
+function makeGuild(
+  ses: Array<{ id: string; name: string; ts: number; desc?: string }>,
+) {
   return {
     scheduledEvents: {
-      fetch: jest
-        .fn()
-        .mockResolvedValue(
-          new Map(
-            ses.map((s) => [
-              s.id,
-              { id: s.id, name: s.name, scheduledStartTimestamp: s.ts },
-            ]),
-          ),
+      fetch: jest.fn().mockResolvedValue(
+        new Map(
+          ses.map((s) => [
+            s.id,
+            {
+              id: s.id,
+              name: s.name,
+              scheduledStartTimestamp: s.ts,
+              description: s.desc,
+            },
+          ]),
         ),
+      ),
     },
   } as unknown as Parameters<typeof createScheduledEventIdempotent>[0];
+}
+
+/** RL fingerprint for mock SE descriptions (Codex P2 adopt guard). */
+function rlDesc(eventId: number): string {
+  return `Event\n\nView event: https://rl.example/events/${eventId}`;
 }
 
 beforeEach(() => {
@@ -92,7 +102,12 @@ beforeEach(() => {
 describe('createScheduledEventIdempotent', () => {
   it('adopts an existing live guild SE (title+start match) and skips create', async () => {
     const guild = makeGuild([
-      { id: 'existing-se', name: 'Palworld Event', ts: START_MS },
+      {
+        id: 'existing-se',
+        name: 'Palworld Event',
+        ts: START_MS,
+        desc: rlDesc(42),
+      },
     ]);
 
     await createScheduledEventIdempotent(
@@ -106,6 +121,36 @@ describe('createScheduledEventIdempotent', () => {
 
     expect(tryCreateNewEvent).not.toHaveBeenCalled();
     expect(saveScheduledEventId).toHaveBeenCalledWith(db, 42, 'existing-se');
+  });
+
+  it('does NOT adopt a title+start match lacking the RL fingerprint (operator SE, Codex P2) — creates instead', async () => {
+    const guild = makeGuild([
+      {
+        id: 'operator-se',
+        name: 'Palworld Event',
+        ts: START_MS,
+        desc: 'Hand-made by the operator',
+      },
+    ]);
+    tryCreateNewEvent.mockResolvedValue({ id: 'fresh-se' });
+
+    await createScheduledEventIdempotent(
+      guild,
+      db,
+      logger,
+      42,
+      eventData,
+      preamble(),
+    );
+
+    // The operator SE must never be bound to the RL event.
+    expect(saveScheduledEventId).not.toHaveBeenCalledWith(
+      db,
+      42,
+      'operator-se',
+    );
+    expect(tryCreateNewEvent).toHaveBeenCalledTimes(1);
+    expect(saveScheduledEventId).toHaveBeenCalledWith(db, 42, 'fresh-se');
   });
 
   it('creates a new SE when no matching guild SE exists', async () => {
@@ -141,6 +186,7 @@ describe('createScheduledEventIdempotent', () => {
                   id: 'late-se',
                   name: 'Palworld Event',
                   scheduledStartTimestamp: START_MS,
+                  description: rlDesc(42),
                 },
               ],
             ]),

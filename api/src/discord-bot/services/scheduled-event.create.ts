@@ -10,6 +10,7 @@ import { tryCreateNewEvent } from './scheduled-event.discord-ops';
 import { withCapacityRecovery } from './scheduled-event.capacity';
 import {
   findExistingGuildSE,
+  hasRLFingerprint,
   type GuildSEShape,
 } from './scheduled-event.gc.helpers';
 import type { ScheduledEventData } from './scheduled-event.helpers';
@@ -133,6 +134,16 @@ async function adoptExistingGuildSE(
     eventData.startTime,
   );
   if (!existing) return false;
+  // Title+start match alone could be an OPERATOR-created SE — adopting it
+  // would let RL edit/complete/delete someone else's event. Only adopt SEs
+  // carrying RL's own description fingerprint (Codex P2).
+  if (!hasRLFingerprint(existing, eventId)) {
+    logger.warn(
+      `SE ${existing.id} matches event ${eventId} by title+start but lacks ` +
+        `the RL fingerprint — not adopting (likely operator-created)`,
+    );
+    return false;
+  }
   logger.warn(`Skip SE ${eventId}: live guild SE ${existing.id} matches`);
   await saveScheduledEventId(db, eventId, existing.id);
   return true;
@@ -172,7 +183,10 @@ async function createOrAdoptOnTimeout(a: CreateAttempt): Promise<void> {
       eventData.title,
       eventData.startTime,
     );
-    if (!confirmed) throw err;
+    // Same operator-SE safety as the pre-create check: only adopt when the SE
+    // carries RL's description fingerprint (the SE we just created does — we
+    // wrote that description) (Codex P2).
+    if (!confirmed || !hasRLFingerprint(confirmed, eventId)) throw err;
     logger.warn(
       `Adopt SE ${confirmed.id} for event ${eventId} after create timeout`,
     );

@@ -43,6 +43,14 @@ type Db = PostgresJsDatabase<typeof schema>;
 /** Enrichment maps passed through to entry mapping. */
 interface EnrichmentMaps {
   ownerMap: Map<number, number>;
+  /**
+   * ROK-1348 (Codex P2): owners counted WITHIN the eligible audience (private
+   * = creator + invitees). For public lineups this is the same map as
+   * `ownerMap`. The non-owner subtraction must use pool-consistent numbers —
+   * community owners minus a private pool would zero out "for N" even when
+   * no invitee owns the game.
+   */
+  eligibleOwnerMap: Map<number, number>;
   wishlistMap: Map<number, number>;
   pricingMap: Map<number, GamePricing>;
   totalMembers: number;
@@ -77,10 +85,15 @@ function mapEntry(
     createdAt: e.createdAt.toISOString(),
     ownerCount,
     totalMembers: enrichment.totalMembers,
-    // ROK-1348: non-owners measured against the eligible pool, not the
-    // whole community. Clamp at 0 (eligibleCount floors at 1, but an
-    // owner count can transiently exceed the pool mid-write).
-    nonOwnerCount: Math.max(0, enrichment.eligibleCount - ownerCount),
+    // ROK-1348: non-owners measured against the eligible pool, with owners
+    // counted in the SAME pool (Codex P2 — community owners vs a private
+    // denominator would zero out "for N" even when no invitee owns it).
+    // Clamp at 0 for transient mid-write skew.
+    nonOwnerCount: Math.max(
+      0,
+      enrichment.eligibleCount -
+        (enrichment.eligibleOwnerMap.get(e.gameId) ?? 0),
+    ),
     wishlistCount: enrichment.wishlistMap.get(e.gameId) ?? 0,
     itadCurrentPrice: pricing?.itadCurrentPrice ?? null,
     itadCurrentCut: pricing?.itadCurrentCut ?? null,
@@ -216,15 +229,33 @@ async function fetchEnrichment(
   gameIds: number[],
   audience: LineupAudience,
 ): Promise<EnrichmentMaps> {
-  const [ownerMap, wishlistMap, pricingMap, totalMembers, uc, um] =
-    await Promise.all([
-      countOwnersPerGame(db, gameIds),
-      countWishlistPerGame(db, gameIds),
-      fetchPricingMetadata(db, gameIds),
-      countTotalMembers(db),
-      countUnlinkedSteamMembers(db, audience),
-      findUnlinkedSteamMembers(db, audience),
-    ]);
+  const isPrivate = audience.visibility === 'private';
+  const audienceIds = [
+    audience.createdBy,
+    ...audience.inviteeUserIds.filter((id) => id !== audience.createdBy),
+  ];
+  const [
+    ownerMap,
+    audienceOwnerMap,
+    wishlistMap,
+    pricingMap,
+    totalMembers,
+    uc,
+    um,
+  ] = await Promise.all([
+    countOwnersPerGame(db, gameIds),
+    // ROK-1348 (Codex P2): private lineups need owners counted within the
+    // eligible pool; public lineups reuse the community map (no 2nd query).
+    isPrivate
+      ? countOwnersPerGame(db, gameIds, audienceIds)
+      : Promise.resolve<Map<number, number> | null>(null),
+    countWishlistPerGame(db, gameIds),
+    fetchPricingMetadata(db, gameIds),
+    countTotalMembers(db),
+    countUnlinkedSteamMembers(db, audience),
+    findUnlinkedSteamMembers(db, audience),
+  ]);
+  const eligibleOwnerMap = audienceOwnerMap ?? ownerMap;
   // ROK-1348: eligible pool = creator + invitees (private) or totalMembers
   // (public). Computed here so `mapEntry` can use it as the non-owner
   // denominator. Floors at 1 (creator always counts).
@@ -235,6 +266,7 @@ async function fetchEnrichment(
   );
   return {
     ownerMap,
+    eligibleOwnerMap,
     wishlistMap,
     pricingMap,
     totalMembers,

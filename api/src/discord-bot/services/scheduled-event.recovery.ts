@@ -106,15 +106,22 @@ async function executeRecovery(
   duplicates: RecoveryDuplicate[],
 ): Promise<RecoveryResult> {
   const batch = duplicates.slice(0, RECOVERY_DELETE_BATCH);
-  const clearedEventIds: number[] = [];
+  const deletedDups: RecoveryDuplicate[] = [];
   for (const dup of batch) {
     if (await deleteDuplicate(guild, logger, dup, result)) {
-      clearedEventIds.push(dup.eventId);
+      deletedDups.push(dup);
     }
   }
-  await reconcileBoundIds(db, batch);
+  // Only SUCCESSFULLY deleted duplicates may clear a (flipped) binding — a
+  // failed delete means the SE is still live on Discord, and nulling its
+  // binding would make the next tick mint another duplicate (Codex P2,
+  // fix/batch-2026-06-06).
+  await reconcileBoundIds(db, deletedDups);
   // Clearing backoff lets the next reconcile recreate any genuinely missing SE.
-  await clearReconcileBackoff(db, clearedEventIds);
+  await clearReconcileBackoff(
+    db,
+    deletedDups.map((d) => d.eventId),
+  );
   return result;
 }
 

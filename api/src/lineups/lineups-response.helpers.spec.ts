@@ -270,7 +270,11 @@ describe('buildDetailResponse', () => {
         ],
       }),
     );
-    // 7. countOwnersPerGame — all 3 eligible members own it
+    // 7. countOwnersPerGame (community-wide) — 8 community members own it
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({ groupByResult: [{ gameId: 42, count: 8 }] }),
+    );
+    // 7b. countOwnersPerGame (audience-scoped, Codex P2) — all 3 eligible own
     mockDb.select.mockReturnValueOnce(
       makeSelectChain({ groupByResult: [{ gameId: 42, count: 3 }] }),
     );
@@ -294,12 +298,72 @@ describe('buildDetailResponse', () => {
     const result = await buildDetailResponse(mockDb as any, 1);
 
     const entry = result.entries[0];
-    expect(entry.ownerCount).toBe(3);
-    // eligible pool = 3 (creator + 2 invitees); all own → 0 non-owners.
+    // Displayed ownerCount stays community-wide.
+    expect(entry.ownerCount).toBe(8);
+    // eligible pool = 3 (creator + 2 invitees); all 3 own → 0 non-owners.
     expect(entry.nonOwnerCount).toBe(0);
     // votingEligibleCount reflects the eligible pool, not totalMembers.
     expect(result.votingEligibleCount).toBe(3);
     // totalMembers is still the community-wide count.
     expect(result.totalMembers).toBe(13);
+  });
+
+  // Codex P2 (fix/batch-2026-06-06): owners must be counted in the SAME pool
+  // as the denominator. 10 community members owning a game that NO invitee
+  // owns must yield nonOwnerCount = eligible pool size, not clamp to 0.
+  it('does not let community-wide owners zero out nonOwnerCount on a private lineup', async () => {
+    const mockDb = {
+      select: jest.fn(),
+      execute: jest
+        .fn()
+        .mockResolvedValue([{ count: 0, id: 1, display_name: 'User' }]),
+    };
+
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({
+        limitResult: [{ ...mockLineup, visibility: 'private' }],
+      }),
+    );
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({ whereResult: [mockEntry] }),
+    );
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ groupByResult: [] }));
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({ whereResult: [{ total: 0 }] }),
+    );
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({ limitResult: [mockUser] }),
+    );
+    // 2 invitees → eligible = 3
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({
+        whereResult: [
+          { id: 20, display_name: 'Inv A', steamId: null },
+          { id: 21, display_name: 'Inv B', steamId: 'steam:1' },
+        ],
+      }),
+    );
+    // community-wide owners: 10 (> eligible pool of 3)
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({ groupByResult: [{ gameId: 42, count: 10 }] }),
+    );
+    // audience-scoped owners: ZERO invitees own it
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ groupByResult: [] }));
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ groupByResult: [] }));
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({ whereResult: [{ count: 13 }] }),
+    );
+    mockDb.select.mockReturnValueOnce(
+      makeSelectChain({ whereResult: [{ count: 0 }] }),
+    );
+    mockDb.select.mockReturnValueOnce(makeSelectChain({ whereResult: [] }));
+
+    const result = await buildDetailResponse(mockDb as any, 1);
+
+    const entry = result.entries[0];
+    expect(entry.ownerCount).toBe(10);
+    // Pre-fix this clamped to max(0, 3 - 10) = 0; correct value is 3.
+    expect(entry.nonOwnerCount).toBe(3);
   });
 });

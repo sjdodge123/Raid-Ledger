@@ -45,6 +45,12 @@ interface SE {
   id: string;
   name?: string;
   scheduledStartTimestamp?: number;
+  description?: string;
+}
+
+/** RL fingerprint helper for mock SEs (Codex P2 guard). */
+function rlDesc(eventId: number): string {
+  return `Event — 2/4 signed up\n\nView event: https://rl.example/events/${eventId}`;
 }
 
 function makeGuild(ses: SE[]) {
@@ -105,14 +111,20 @@ describe('gcStaleRLScheduledEvents — duplicate reclassification (ROK-1347)', (
   const START = Date.parse('2026-07-01T20:00:00.000Z');
 
   it('deletes an untracked SE matching a live RL event with a different bound id (counts as freed, not orphan)', async () => {
-    // Guild has the bound SE + a duplicate with the same name+start.
+    // Guild has the bound SE + a duplicate with the same name+start. The
+    // duplicate carries RL's description fingerprint (Codex P2 guard).
     const guild = makeGuild([
       {
         id: 'bound-se',
         name: 'Palworld Event',
         scheduledStartTimestamp: START,
       },
-      { id: 'dup-se', name: 'Palworld Event', scheduledStartTimestamp: START },
+      {
+        id: 'dup-se',
+        name: 'Palworld Event',
+        scheduledStartTimestamp: START,
+        description: rlDesc(9),
+      },
     ]);
     // Only the bound copy is tracked in the DB.
     findRLTrackedSEs.mockResolvedValue([
@@ -207,6 +219,42 @@ describe('gcStaleRLScheduledEvents — duplicate reclassification (ROK-1347)', (
     expect(result.orphanCount).toBe(1);
     expect(tryDeleteEvent).not.toHaveBeenCalled();
   });
+
+  it('NEVER deletes a title+start match that lacks the RL description fingerprint (operator SE, Codex P2)', async () => {
+    // An operator manually created an SE with the same title+start as a bound
+    // RL event (e.g. covering for RL during the outage). Without RL's
+    // `/events/<id>` URL in the description it must stay an orphan.
+    const guild = makeGuild([
+      {
+        id: 'bound-se',
+        name: 'Palworld Event',
+        scheduledStartTimestamp: START,
+      },
+      {
+        id: 'operator-se',
+        name: 'Palworld Event',
+        scheduledStartTimestamp: START,
+        description: 'Hand-made by the operator',
+      },
+    ]);
+    findRLTrackedSEs.mockResolvedValue([
+      { id: 9, discordScheduledEventId: 'bound-se', isStale: false },
+    ]);
+    findLiveRLEventsForDedup.mockResolvedValue([
+      {
+        id: 9,
+        discordScheduledEventId: 'bound-se',
+        title: 'Palworld Event',
+        startIso: new Date(START).toISOString(),
+      },
+    ]);
+
+    const result = await gcStaleRLScheduledEvents(guild, db);
+
+    expect(result.freed).toBe(0);
+    expect(result.orphanCount).toBe(1);
+    expect(tryDeleteEvent).not.toHaveBeenCalled();
+  });
 });
 
 describe('gcStaleRLScheduledEvents — per-orphan failure logging (ROK-1347 invariant)', () => {
@@ -255,7 +303,12 @@ describe('gcStaleRLScheduledEvents — per-orphan failure logging (ROK-1347 inva
     const START = Date.parse('2026-07-01T20:00:00.000Z');
     const guild = makeGuild([
       { id: 'bound-se', name: 'Raid', scheduledStartTimestamp: START },
-      { id: 'dup-1', name: 'Raid', scheduledStartTimestamp: START },
+      {
+        id: 'dup-1',
+        name: 'Raid',
+        scheduledStartTimestamp: START,
+        description: rlDesc(31),
+      },
     ]);
     findRLTrackedSEs.mockResolvedValue([
       { id: 31, discordScheduledEventId: 'bound-se', isStale: false },

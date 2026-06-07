@@ -58,22 +58,32 @@ function makeDb(boundRows: Array<{ id: number; seId: string | null }> = []) {
   } as unknown as Parameters<typeof recoverOrphanScheduledEvents>[1];
 }
 
-function makeGuild(ses: Array<{ id: string; name: string; ts: number }>) {
+function makeGuild(
+  ses: Array<{ id: string; name: string; ts: number; desc?: string }>,
+) {
   return {
     scheduledEvents: {
-      fetch: jest
-        .fn()
-        .mockResolvedValue(
-          new Map(
-            ses.map((s) => [
-              s.id,
-              { id: s.id, name: s.name, scheduledStartTimestamp: s.ts },
-            ]),
-          ),
+      fetch: jest.fn().mockResolvedValue(
+        new Map(
+          ses.map((s) => [
+            s.id,
+            {
+              id: s.id,
+              name: s.name,
+              scheduledStartTimestamp: s.ts,
+              description: s.desc,
+            },
+          ]),
         ),
+      ),
       delete: jest.fn(),
     },
   } as unknown as Parameters<typeof recoverOrphanScheduledEvents>[0];
+}
+
+/** RL fingerprint for mock SE descriptions (Codex P2 guard). */
+function rlDesc(eventId: number): string {
+  return `Event\n\nView event: https://rl.example/events/${eventId}`;
 }
 
 beforeEach(() => {
@@ -87,7 +97,7 @@ describe('recoverOrphanScheduledEvents', () => {
   function withOneDuplicate() {
     const guild = makeGuild([
       { id: 'bound-se', name: 'Palworld Event', ts: START },
-      { id: 'dup-se', name: 'Palworld Event', ts: START },
+      { id: 'dup-se', name: 'Palworld Event', ts: START, desc: rlDesc(9) },
     ]);
     findRLTrackedSEs.mockResolvedValue([
       { id: 9, discordScheduledEventId: 'bound-se', isStale: false },
@@ -175,5 +185,23 @@ describe('recoverOrphanScheduledEvents', () => {
     ]);
     // No event cleared since the delete failed.
     expect(clearReconcileBackoff).toHaveBeenCalledWith(expect.anything(), []);
+  });
+
+  it('does NOT clear a flipped binding when the delete FAILED (Codex P2)', async () => {
+    // The event row became bound to the dup between classification and
+    // delete, and the Discord delete failed — the SE is still live, so the
+    // binding must survive (clearing it would mint another duplicate next
+    // tick). reconcileBoundIds must only see successfully-deleted dups.
+    const guild = withOneDuplicate();
+    tryDeleteEvent.mockResolvedValue({ deleted: false, code: 50013 });
+    const db = makeDb([{ id: 9, seId: 'dup-se' }]); // binding flipped to dup
+
+    await recoverOrphanScheduledEvents(guild, db, logger, { dryRun: false });
+
+    // select for reconcileBoundIds never runs (empty deleted set short-circuits)
+    // and no update is issued either way.
+    expect(
+      (db as unknown as { update: jest.Mock }).update,
+    ).not.toHaveBeenCalled();
   });
 });

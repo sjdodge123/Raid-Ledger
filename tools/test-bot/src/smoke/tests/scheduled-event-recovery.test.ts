@@ -55,6 +55,7 @@ async function createRawGuildSE(
   channelId: string,
   name: string,
   startMs: number,
+  description?: string,
 ): Promise<string> {
   const guild = getGuild();
   const se = await guild.scheduledEvents.create({
@@ -64,6 +65,7 @@ async function createRawGuildSE(
     privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
     entityType: GuildScheduledEventEntityType.Voice,
     channel: channelId,
+    description,
   });
   return se.id;
 }
@@ -133,7 +135,16 @@ const recoveryDeletesDuplicateKeepsBound: SmokeTest = {
       const boundSe = await guild.scheduledEvents.fetch(bound.id);
       const channelId = boundSe.channelId;
       if (!channelId) throw new Error("Bound SE has no channel to reuse");
-      dupId = await createRawGuildSE(channelId, ev.title, bound.start);
+      // Copy the bound SE's description so the duplicate carries the RL
+      // fingerprint (/events/<id>) — recovery only reclaims fingerprinted
+      // SEs (Codex P2 operator-safety guard); a real timeout-race duplicate
+      // is RL-created and always has it.
+      dupId = await createRawGuildSE(
+        channelId,
+        ev.title,
+        bound.start,
+        boundSe.description ?? undefined,
+      );
 
       // Two SEs with this title now exist.
       const before = await countScheduledEventsByTitle(ev.title);

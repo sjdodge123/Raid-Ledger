@@ -19,12 +19,18 @@ export interface GamePricing {
 /**
  * Count how many users own each game (source=steam_library).
  * Returns a Map of gameId to owner count.
+ *
+ * ROK-1348 (Codex P2): optional `userIds` restricts the count to a specific
+ * audience (private lineup = creator + invitees) so a private lineup's
+ * non-owner math never mixes community-wide owners with the private pool.
  */
 export async function countOwnersPerGame(
   db: Db,
   gameIds: number[],
+  userIds?: number[],
 ): Promise<Map<number, number>> {
   if (gameIds.length === 0) return new Map();
+  if (userIds && userIds.length === 0) return new Map();
 
   const rows = await db
     .select({
@@ -36,6 +42,7 @@ export async function countOwnersPerGame(
       and(
         inArray(schema.gameInterests.gameId, gameIds),
         eq(schema.gameInterests.source, 'steam_library'),
+        userIds ? inArray(schema.gameInterests.userId, userIds) : undefined,
       ),
     )
     .groupBy(schema.gameInterests.gameId);

@@ -69,9 +69,8 @@ export async function buildScoringContext(
       weights,
     };
   }
-  const vectorMap = await tasteProfile.getTasteVectorsForUsers(
-    preloadedVoterIds,
-  );
+  const vectorMap =
+    await tasteProfile.getTasteVectorsForUsers(preloadedVoterIds);
   const vectors = [...vectorMap.values()].map((v) => v.vector);
   const voterVector = computeCombinedVoterVector(vectors);
   const voterIntensity = averageIntensityBucket(vectorMap);
