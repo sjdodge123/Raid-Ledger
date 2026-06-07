@@ -71,16 +71,16 @@ async function pollForSeName(
 }
 
 /** Pick two distinct named games. `ctx.games` only carries the admin's
- *  character-derived MMO game (often empty, synthetic names), so prefer the
- *  real registry rows from /admin/games — the SE name assertions need the
- *  exact game names the API will append to the title. */
+ *  character-derived MMO game (often empty, synthetic names), so pull the
+ *  real registry rows from /games/configured — the SE name assertions need
+ *  the exact game names the API will append to the title. */
 async function pickTwoGames(
   ctx: TestContext,
 ): Promise<{ a: { id: number; name: string }; b: { id: number; name: string } }> {
   let games: { id: number; name: string }[] = [];
   try {
     const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
-      "/admin/games",
+      "/games/configured",
     );
     games = Array.isArray(res.data) ? res.data : [];
   } catch {
