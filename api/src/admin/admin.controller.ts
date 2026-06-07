@@ -30,6 +30,7 @@ import {
   type NameDedupDryRunResult,
 } from '../igdb/igdb-dedup-cleanup.helpers';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { SettingsService } from '../settings/settings.service';
 import {
   recoverOrphanScheduledEvents,
   type RecoveryResult,
@@ -46,6 +47,7 @@ export class AdminController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly discordClient: DiscordBotClientService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   @Get('check')
@@ -90,11 +92,16 @@ export class AdminController {
    * duplicate Discord scheduled events that pin the guild at its 100-SE cap.
    * Defaults to dry-run; pass `?dryRun=false` to execute. Never deletes
    * operator-owned SEs. Re-runnable until `reclaimableDuplicates` is empty.
+   * ROK-1355: `?includeStale=true` additionally reclaims untracked SEs whose
+   * description carries the configured CLIENT_URL `/events/<id>` fingerprint —
+   * stale RL duplicates of already-ended events that the live-match pass can
+   * never pair.
    */
   @Post('scheduled-events/recover-orphans')
   @HttpCode(HttpStatus.OK)
   async recoverOrphanScheduledEvents(
     @Query('dryRun') dryRunParam?: string,
+    @Query('includeStale') includeStaleParam?: string,
   ): Promise<RecoveryResult> {
     const dryRun = dryRunParam !== 'false';
     const guild = this.discordClient.getGuild();
@@ -104,13 +111,19 @@ export class AdminController {
         guildSeCount: 0,
         rlBound: 0,
         reclaimableDuplicates: [],
+        staleReclaimable: [],
         operatorOrphans: 0,
         deleted: 0,
         failures: [],
       };
     }
+    const staleClientUrl =
+      includeStaleParam === 'true'
+        ? await this.settingsService.getClientUrl()
+        : null;
     return recoverOrphanScheduledEvents(guild, this.db, this.logger, {
       dryRun,
+      staleClientUrl,
     });
   }
 }

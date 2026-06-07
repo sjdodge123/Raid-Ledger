@@ -31,6 +31,13 @@ export interface RecoveryResult {
   guildSeCount: number;
   rlBound: number;
   reclaimableDuplicates: RecoveryDuplicate[];
+  /**
+   * ROK-1355: untracked SEs whose description carries the configured
+   * CLIENT_URL's `/events/<id>` fingerprint but match NO live RL event —
+   * stale RL-created duplicates of already-ended events. Populated (and
+   * deleted on dryRun=false) only when `includeStale` is requested.
+   */
+  staleReclaimable: RecoveryDuplicate[];
   operatorOrphans: number;
   deleted: number;
   failures: Array<{ seId: string; code?: number; retryAfter?: number }>;
@@ -50,7 +57,7 @@ export async function recoverOrphanScheduledEvents(
   guild: Guild,
   db: PostgresJsDatabase<typeof schema>,
   logger: Logger,
-  opts: { dryRun: boolean },
+  opts: { dryRun: boolean; staleClientUrl?: string | null },
 ): Promise<RecoveryResult> {
   const all = await guild.scheduledEvents.fetch();
   const seValues = [...all.values()] as GuildSEShape[];
@@ -66,18 +73,60 @@ export async function recoverOrphanScheduledEvents(
   );
   const duplicates = toRecoveryDuplicates(reclaimable, seValues);
 
+  // ROK-1355: stale pass — fingerprint-only reclaim of RL-created SEs whose
+  // event has already ended (no live match possible). Gated on the caller
+  // providing the configured CLIENT_URL.
+  const reclaimedIds = new Set(reclaimable.map((r) => r.seId));
+  const stale = opts.staleClientUrl
+    ? classifyStaleRLSEs(untracked, reclaimedIds, opts.staleClientUrl)
+    : [];
+
   const base: RecoveryResult = {
     dryRun: opts.dryRun,
     guildSeCount: seIds.length,
     rlBound: rlIds.size,
     reclaimableDuplicates: duplicates,
-    operatorOrphans: operatorOrphanCount,
+    staleReclaimable: stale,
+    operatorOrphans: operatorOrphanCount - stale.length,
     deleted: 0,
     failures: [],
   };
   if (opts.dryRun) return base;
 
-  return executeRecovery(guild, db, logger, base, duplicates);
+  return executeRecovery(guild, db, logger, base, [...duplicates, ...stale]);
+}
+
+/**
+ * ROK-1355: classify untracked SEs (already excluded: tracked + live-match
+ * reclaimable) whose description carries `{clientUrl}/events/<id>` — the
+ * fingerprint ONLY RL-created SEs have. Operator-created Discord events never
+ * contain the app's event URL, so this is safe to delete even without a live
+ * RL event to pair against (the event ended; its duplicate outlived it).
+ */
+function classifyStaleRLSEs(
+  untracked: GuildSEShape[],
+  alreadyReclaimedIds: Set<string>,
+  clientUrl: string,
+): RecoveryDuplicate[] {
+  const prefix = `${clientUrl.replace(/\/+$/, '')}/events/`;
+  const out: RecoveryDuplicate[] = [];
+  for (const se of untracked) {
+    if (alreadyReclaimedIds.has(se.id)) continue;
+    const desc = se.description ?? '';
+    const idx = desc.indexOf(prefix);
+    if (idx === -1) continue;
+    const m = /^(\d+)/.exec(desc.slice(idx + prefix.length));
+    if (!m) continue;
+    const startMs =
+      se.scheduledStartTimestamp ?? se.scheduledStartAt?.getTime() ?? null;
+    out.push({
+      eventId: Number(m[1]),
+      seId: se.id,
+      title: se.name ?? '',
+      start: startMs != null ? new Date(startMs).toISOString() : '',
+    });
+  }
+  return out;
 }
 
 function toRecoveryDuplicates(
