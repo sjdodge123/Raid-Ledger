@@ -171,7 +171,10 @@ test_image_mismatch_recreate() {
     export ES_RUNNING_IMAGE_ID="sha256:OLD"
     export ES_CURRENT_IMAGE_ID="sha256:NEW"
 
-    run_env_spin recreate-me
+    # --image is EXPLICIT: the mismatch-recreate is armed only for explicit
+    # images (bare re-spins never compare against the default :latest ref —
+    # see test_bare_spin_never_recreates).
+    run_env_spin recreate-me --image registry.rl.lan:5000/rl-allinone:recreate-me
 
     assert_exit_code "$ES_RC" "0" "env-spin should succeed on recreate"
     local recreated
@@ -207,7 +210,7 @@ test_unchanged_image_fast_path() {
     export ES_RUNNING_IMAGE_ID="sha256:SAME"
     export ES_CURRENT_IMAGE_ID="sha256:SAME"
 
-    run_env_spin steady
+    run_env_spin steady --image registry.rl.lan:5000/rl-allinone:steady
 
     assert_exit_code "$ES_RC" "0" "env-spin should succeed on idempotent re-spin"
     local idem
@@ -233,7 +236,7 @@ test_image_unresolvable_keeps_fast_path() {
     export ES_RUNNING_IMAGE_ID="sha256:running"
     export ES_CURRENT_IMAGE_ID=""   # docker image inspect returns empty
 
-    run_env_spin orphan-tag
+    run_env_spin orphan-tag --image registry.rl.lan:5000/rl-allinone:orphan-tag
 
     assert_exit_code "$ES_RC" "0" "env-spin must NOT fail on an inspect miss"
     local idem
@@ -247,6 +250,34 @@ test_image_unresolvable_keeps_fast_path() {
     local rm_line
     rm_line=$(grep -E '^rm -f rl-env-orphan-tag-allinone' "$RL_STATE_DIR/docker-calls.log" 2>/dev/null | head -1 || true)
     assert_eq "$rm_line" "" "must NOT destroy a healthy env over an inspect miss"
+    es_teardown
+}
+
+# --- AC6.3b: bare re-spin (no --image) never arms the recreate ---------------
+
+test_bare_spin_never_recreates() {
+    CURRENT_TEST_NAME="AC6.3b: bare re-spin (no --image) never compares against the default :latest"
+    es_setup
+    export ES_APP_EXISTS="true"
+    export ES_PG_EXISTS="true"
+    # A mismatch IS visible to docker (e.g. :latest exists locally and differs)
+    # — but with no --image the caller expressed no opinion, so env-spin must
+    # NOT recreate the env onto the default ref. Fast idempotent path, no rm.
+    export ES_RUNNING_IMAGE_ID="sha256:branchbuild"
+    export ES_CURRENT_IMAGE_ID="sha256:latestlocal"
+
+    run_env_spin bare-respin
+
+    assert_exit_code "$ES_RC" "0" "bare re-spin must succeed"
+    local idem
+    idem=$(jq -r '.idempotent' <<<"$ES_OUT" 2>/dev/null || echo "")
+    assert_eq "$idem" "true" "bare re-spin must take the idempotent path"
+    local recreated
+    recreated=$(jq -r '.recreated' <<<"$ES_OUT" 2>/dev/null || echo "")
+    assert_eq "$recreated" "false" "bare re-spin must report recreated:false"
+    local rm_line
+    rm_line=$(grep -E '^rm -f rl-env-bare-respin-allinone' "$RL_STATE_DIR/docker-calls.log" 2>/dev/null | head -1 || true)
+    assert_eq "$rm_line" "" "bare re-spin must NEVER remove the running container"
     es_teardown
 }
 
@@ -359,6 +390,7 @@ JSON
 run_test "ac6.1-image-mismatch-recreate"        test_image_mismatch_recreate
 run_test "ac6.2-unchanged-image-fast-path"      test_unchanged_image_fast_path
 run_test "ac6.3-image-unresolvable-fast-path"   test_image_unresolvable_keeps_fast_path
+run_test "ac6.3b-bare-spin-never-recreates"     test_bare_spin_never_recreates
 run_test "ac6.4-fail-fast-missing-image"        test_fail_fast_missing_image
 run_test "ac6.5-trap-cleanup-after-pg"          test_trap_cleanup_after_pg
 run_test "ac6.6a-unclaimed-slot-reclaim"        test_unclaimed_slot_reclaim_positive

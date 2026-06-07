@@ -74,11 +74,18 @@ trap _env_spin_trap_on_abort EXIT
 
 SLUG=""
 IMAGE="registry.rl.lan:5000/rl-allinone:latest"
+# ROK-1357: set to 1 only when the caller passes --image. The image-ID
+# mismatch-recreate (below) is armed ONLY for explicit images — a bare
+# re-spin would otherwise compare the running container against the DEFAULT
+# :latest ref and, when :latest happens to exist locally, silently recreate
+# a branch-built env onto default-image content. Surfaced during the
+# fix/batch-2026-06-07 live dogfood.
+IMAGE_EXPLICIT=0
 TTL_HOURS="${DEFAULT_ENV_TTL_HOURS:-24}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --slug) SLUG="$2"; shift 2 ;;
-        --image) IMAGE="$2"; shift 2 ;;
+        --image) IMAGE="$2"; IMAGE_EXPLICIT=1; shift 2 ;;
         --ttl) TTL_HOURS="$2"; shift 2 ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
@@ -183,7 +190,12 @@ RECREATED=0
 # into the fresh path.
 TAKE_IDEMPOTENT_PATH=0
 IMAGE_MISMATCH_WARNING=""
-if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+if docker inspect "$APP_CONTAINER" >/dev/null 2>&1 && [[ "${IMAGE_EXPLICIT}" != "1" ]]; then
+    # Bare re-spin (no --image): the caller expressed no opinion about the
+    # image, so NEVER compare against the default :latest ref — take the
+    # fast idempotent path unconditionally. See IMAGE_EXPLICIT note above.
+    TAKE_IDEMPOTENT_PATH=1
+elif docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     RUNNING_IMAGE_ID=$(docker inspect "$APP_CONTAINER" --format '{{.Image}}' 2>/dev/null || echo "")
     CURRENT_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
     if [[ -z "$CURRENT_IMAGE_ID" ]]; then
