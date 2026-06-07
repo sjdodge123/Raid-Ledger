@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CreateEventForm } from './create-event-form';
+import type { FormState } from './create-event-form.types';
 
 // ─── jsdom does not implement scrollIntoView — suppress unhandled errors ─────
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -404,28 +405,38 @@ describe('CreateEventForm — recurrence instance count preview', () => {
 
 // ─── ROK-1350: gameId unset semantics in buildSubmitDto ───────────────────────
 describe('buildSubmitDto — gameId unset semantics (ROK-1350)', () => {
-    async function buildDto(registryGameId: number | null | undefined, isEditMode: boolean) {
-        const { buildSubmitDto } = await import('./create-event-form.utils');
-        const { getInitialState } = await import('./create-event-form.utils');
+    // `game` truthy = a game is selected in the picker; null = explicitly cleared.
+    async function buildDto(
+        opts: { registryGameId: number | null | undefined; isEditMode: boolean; gameSelected: boolean },
+    ) {
+        const { buildSubmitDto, getInitialState } = await import('./create-event-form.utils');
         const form = getInitialState(undefined, 'America/New_York');
         form.title = 'Chrome MCP Variety Night';
         form.startDate = '2026-06-08';
         form.startTime = '20:00';
-        return buildSubmitDto(form, 'America/New_York', registryGameId, isEditMode);
+        form.game = opts.gameSelected
+            ? ({ id: 10, name: 'Valheim', slug: 'valheim', coverUrl: null } as FormState['game'])
+            : null;
+        return buildSubmitDto(form, 'America/New_York', opts.registryGameId, opts.isEditMode);
     }
 
-    it('edit mode with cleared game sends explicit gameId: null (unset persists)', async () => {
-        const dto = await buildDto(null, true);
+    it('edit mode with cleared picker sends explicit gameId: null (unset persists)', async () => {
+        const dto = await buildDto({ registryGameId: null, isEditMode: true, gameSelected: false });
         expect(dto.gameId).toBeNull();
     });
 
     it('create mode with no game omits gameId (CreateEventDto is not nullable)', async () => {
-        const dto = await buildDto(null, false);
+        const dto = await buildDto({ registryGameId: null, isEditMode: false, gameSelected: false });
         expect(dto.gameId).toBeUndefined();
     });
 
-    it('edit mode with a selected game sends the numeric gameId', async () => {
-        const dto = await buildDto(10, true);
+    it('edit mode with a selected, resolved game sends the numeric gameId', async () => {
+        const dto = await buildDto({ registryGameId: 10, isEditMode: true, gameSelected: true });
         expect(dto.gameId).toBe(10);
+    });
+
+    it('edit mode with a selected game whose registry id is unresolved OMITS gameId (preserves existing, never wipes)', async () => {
+        const dto = await buildDto({ registryGameId: undefined, isEditMode: true, gameSelected: true });
+        expect(dto.gameId).toBeUndefined();
     });
 });
