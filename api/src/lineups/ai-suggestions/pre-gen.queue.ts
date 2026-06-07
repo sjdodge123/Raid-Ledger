@@ -26,8 +26,22 @@ export const PREGEN_MUTATION_DELAY_MS = 30_000;
  *  aren't stuck behind the full 30s mutation debounce. */
 export const PREGEN_REQUEST_DELAY_MS = 2_000;
 
+/**
+ * Why a pre-gen job was enqueued (ROK-1316 rework r2). The processor
+ * branches on this:
+ *   - `mutation` — a voter-set OR nomination change. The voter hash can be
+ *     unchanged (fixed invitees) yet the candidate pool changed (nominated
+ *     games are subtracted), so a fresh-row no-op would serve stale picks.
+ *     Force-regenerates IF a row already exists (the lineup has been viewed);
+ *     skips otherwise to keep volume down on unviewed lineups.
+ *   - `read` — a cold/stale request-path warm. Keeps the `noop_fresh` guard
+ *     (it only ever has no fresh row for the current hash anyway).
+ */
+export type PreGenReason = 'mutation' | 'read';
+
 export interface AiSuggestionsPreGenJobData {
   lineupId: number;
+  reason: PreGenReason;
 }
 
 /** Build the jobId used for debounce dedup. */
@@ -47,17 +61,25 @@ export class AiSuggestionsPreGenQueueService {
    * Debounced enqueue. Removes any pending job for this lineup then adds a
    * fresh one with the given delay — so repeated calls during a settle
    * window collapse to a single delayed job (last delay wins).
+   *
+   * `reason` records job intent (mutation vs read) so the processor can
+   * force-regenerate on nomination changes that leave the voter hash
+   * unchanged. A burst that mixes reasons still coalesces to ONE job
+   * (jobId dedup); the last enqueue's reason wins, which is fine — a
+   * mutation-after-read still force-regens, and a read-after-mutation just
+   * means the imminent read will generate anyway.
    */
   async enqueue(
     lineupId: number,
     delayMs: number = PREGEN_MUTATION_DELAY_MS,
+    reason: PreGenReason = 'mutation',
   ): Promise<void> {
     const jobId = preGenJobId(lineupId);
     try {
       await this.removeExisting(jobId);
       await this.queue.add(
         AI_SUGGESTIONS_PREGEN_JOB,
-        { lineupId } satisfies AiSuggestionsPreGenJobData,
+        { lineupId, reason } satisfies AiSuggestionsPreGenJobData,
         {
           jobId,
           delay: Math.max(0, delayMs),

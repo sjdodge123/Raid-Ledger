@@ -102,7 +102,7 @@ export class AiSuggestionsService {
     const latest = await findLatestForLineup(this.db, lineup.id);
     if (latest) {
       this.logTelemetry(lineup.id, 'stale_served');
-      await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS);
+      await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS, 'read');
       return { ...latest.payload, cached: true, stale: true };
     }
     // Cold cache: only promise `pending` (and queue a job) if a provider
@@ -118,7 +118,7 @@ export class AiSuggestionsService {
       throw new NotFoundException('No AI provider configured');
     }
     this.logTelemetry(lineup.id, 'miss_cold');
-    await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS);
+    await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS, 'read');
     return { ...this.emptyResponse(), pending: true };
   }
 

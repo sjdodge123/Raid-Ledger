@@ -30,7 +30,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -375,7 +375,9 @@ function describePreGen() {
   // how the grace spec drives LineupPhaseProcessor.processGraceAdvance).
   // The processor module/symbol does not exist yet → fails-by-construction.
   function getProcessor(): {
-    process(job: { data: { lineupId: number } }): Promise<unknown>;
+    process(job: {
+      data: { lineupId: number; reason?: 'mutation' | 'read' };
+    }): Promise<unknown>;
   } {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('./pre-gen.processor');
@@ -383,9 +385,8 @@ function describePreGen() {
     return testApp.app.get(ProcessorClass);
   }
 
-  it('AC5: processor NO-OPs (no LLM) when a fresh row already exists for the current hash', async () => {
-    const lineupId = await createBuildingLineup();
-    // Seed a fresh row under the current (empty) voter-set hash.
+  /** Seed a fresh suggestions row under the current (empty) voter-set hash. */
+  async function seedFreshRow(lineupId: number): Promise<void> {
     await testApp.db.insert(schema.lineupAiSuggestions).values({
       lineupId,
       voterSetHash: computeVoterSetHash([]),
@@ -398,13 +399,76 @@ function describePreGen() {
       provider: 'test-provider',
       model: 'test-model',
     });
+  }
+
+  it('AC5: processor NO-OPs (no LLM) on a READ job when a fresh row exists for the current hash', async () => {
+    const lineupId = await createBuildingLineup();
+    await seedFreshRow(lineupId);
     const chatSpy = jest.spyOn(llm, 'chat');
 
     const processor = getProcessor();
-    await processor.process({ data: { lineupId } });
+    // A racing READ enqueue must coalesce to a no-op when fresh.
+    await processor.process({ data: { lineupId, reason: 'read' } });
 
-    // Fresh row present → processor must short-circuit without an LLM call.
     expect(chatSpy).not.toHaveBeenCalled();
+    chatSpy.mockRestore();
+  });
+
+  // ── Rework r2 #1: nomination change must refresh suggestions even when
+  // the voter hash is unchanged, IF the lineup already has a cache row. ──
+  it('r2: MUTATION job force-regenerates over a fresh row when the lineup has been viewed', async () => {
+    const lineupId = await createBuildingLineup();
+    // A previously-generated (viewed) row under the CURRENT hash, but stamped
+    // in the past so a regen is detectable via generated_at advancing.
+    const oldStamp = new Date(Date.now() - 5 * 60_000);
+    await testApp.db.insert(schema.lineupAiSuggestions).values({
+      lineupId,
+      voterSetHash: computeVoterSetHash([]),
+      payload: {
+        suggestions: [],
+        generatedAt: oldStamp.toISOString(),
+        voterCount: 0,
+        voterScopeStrategy: 'community',
+      },
+      provider: 'test-provider',
+      model: 'test-model',
+    });
+    await testApp.db
+      .update(schema.lineupAiSuggestions)
+      .set({ generatedAt: oldStamp })
+      .where(eq(schema.lineupAiSuggestions.lineupId, lineupId));
+
+    const processor = getProcessor();
+    // MUTATION job: hash unchanged but a nomination set may have changed —
+    // must force-regenerate (NOT noop_fresh) because a row already exists.
+    await processor.process({ data: { lineupId, reason: 'mutation' } });
+
+    const [row] = await testApp.db
+      .select({ generatedAt: schema.lineupAiSuggestions.generatedAt })
+      .from(schema.lineupAiSuggestions)
+      .where(eq(schema.lineupAiSuggestions.lineupId, lineupId))
+      .orderBy(desc(schema.lineupAiSuggestions.generatedAt))
+      .limit(1);
+    // Regenerated → generated_at advanced past the seeded (old) timestamp.
+    expect(new Date(row.generatedAt).getTime()).toBeGreaterThan(
+      oldStamp.getTime(),
+    );
+  });
+
+  it('r2: MUTATION job SKIPS (no LLM, no row) when the lineup has NO existing cache row (unviewed)', async () => {
+    const lineupId = await createBuildingLineup();
+    const chatSpy = jest.spyOn(llm, 'chat');
+
+    const processor = getProcessor();
+    await processor.process({ data: { lineupId, reason: 'mutation' } });
+
+    // Unviewed lineup → lazy: no LLM dispatch and no row written.
+    expect(chatSpy).not.toHaveBeenCalled();
+    const rows = await testApp.db
+      .select({ id: schema.lineupAiSuggestions.id })
+      .from(schema.lineupAiSuggestions)
+      .where(eq(schema.lineupAiSuggestions.lineupId, lineupId));
+    expect(rows).toHaveLength(0);
     chatSpy.mockRestore();
   });
 

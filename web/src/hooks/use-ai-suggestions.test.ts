@@ -62,6 +62,13 @@ const RESOLVED_BODY: AiSuggestionsResponseDto = {
     cached: true,
 };
 
+// Stale SWR payload: older voter-hash row served while a refresh runs. Has
+// content (one suggestion) so it renders without the cold skeleton.
+const STALE_BODY: AiSuggestionsResponseDto = {
+    ...RESOLVED_BODY,
+    stale: true,
+};
+
 function createWrapper(): {
     wrapper: ({ children }: { children: ReactNode }) => ReactNode;
 } {
@@ -179,4 +186,62 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
             expect(result.current.data.data.pending).toBe(true);
         }
     }, 70_000);
+
+    // Rework r2 #2: a `stale` payload must keep polling (revalidate) until the
+    // background refresh lands, WITHOUT showing the cold skeleton.
+    it('polls a stale payload and renders the fresh result when refresh lands', async () => {
+        let calls = 0;
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () => {
+                calls += 1;
+                // First two reads are stale (refresh in flight); third is fresh.
+                return HttpResponse.json(calls < 3 ? STALE_BODY : RESOLVED_BODY);
+            }),
+        );
+
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useAiSuggestions(99), { wrapper });
+
+        // First payload is stale — content renders, NOT a cold skeleton.
+        await waitFor(() => {
+            expect(result.current.data?.kind).toBe('ok');
+            if (result.current.data?.kind === 'ok') {
+                expect(result.current.data.data.stale).toBe(true);
+                expect(result.current.data.data.suggestions).toHaveLength(1);
+            }
+        });
+        // Stale must NOT exhaust the cold skeleton path (it has content).
+        expect(result.current.pollExhausted).toBe(false);
+
+        // Polling revalidates until the fresh (non-stale) payload arrives.
+        await waitFor(
+            () => {
+                expect(result.current.data?.kind).toBe('ok');
+                if (result.current.data?.kind === 'ok') {
+                    expect(result.current.data.data.stale).toBeUndefined();
+                    expect(result.current.data.data.suggestions).toHaveLength(1);
+                }
+            },
+            { timeout: 15_000 },
+        );
+        expect(calls).toBeGreaterThanOrEqual(3);
+    }, 20_000);
+
+    it('does not poll a fresh (non-stale) payload', async () => {
+        let calls = 0;
+        server.use(
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () => {
+                calls += 1;
+                return HttpResponse.json(RESOLVED_BODY);
+            }),
+        );
+
+        const { wrapper } = createWrapper();
+        renderHook(() => useAiSuggestions(99), { wrapper });
+
+        await waitFor(() => expect(calls).toBe(1));
+        // No stale/pending → refetchInterval stays off.
+        await new Promise((r) => setTimeout(r, 100));
+        expect(calls).toBe(1);
+    });
 });

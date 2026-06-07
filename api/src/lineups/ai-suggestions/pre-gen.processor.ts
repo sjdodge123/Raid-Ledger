@@ -27,6 +27,7 @@ import {
 } from './voter-scope.helpers';
 import {
   findLatestByHash,
+  findLatestForLineup,
   isFresh,
   FRESH_TTL_MS,
   EMPTY_TTL_MS,
@@ -36,6 +37,7 @@ import { generateAndPersist, type GenerateDeps } from './generate.helpers';
 import {
   AI_SUGGESTIONS_PREGEN_QUEUE,
   type AiSuggestionsPreGenJobData,
+  type PreGenReason,
 } from './pre-gen.queue';
 
 /** Keep the newest N suggestion rows per lineup after a successful write. */
@@ -57,10 +59,10 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
   }
 
   async process(job: Job<AiSuggestionsPreGenJobData>): Promise<void> {
-    const { lineupId } = job.data;
+    const { lineupId, reason = 'mutation' } = job.data;
     const start = Date.now();
     try {
-      const outcome = await this.run(lineupId);
+      const outcome = await this.run(lineupId, reason);
       this.logger.log(
         `AI suggestions pre-gen | lineup=${lineupId} outcome=${outcome} elapsed=${
           Date.now() - start
@@ -81,12 +83,13 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
   }
 
   /** Returns the telemetry outcome string. */
-  private async run(lineupId: number): Promise<string> {
+  private async run(lineupId: number, reason: PreGenReason): Promise<string> {
     if (await this.isFeatureDisabled()) return 'skipped_inactive';
     const lineup = await this.loadActiveLineup(lineupId);
     if (!lineup) return 'skipped_inactive';
     const scope = await resolveVoterScope(this.db, lineup);
-    if (await this.hasFreshRow(lineupId, scope.hash)) return 'noop_fresh';
+    const skip = await this.shouldSkip(lineupId, scope.hash, reason);
+    if (skip) return skip;
     const deps: GenerateDeps = {
       db: this.db,
       settings: this.settings,
@@ -96,6 +99,28 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
     await generateAndPersist(deps, lineup, scope);
     await pruneOldSuggestions(this.db, lineupId, PRUNE_KEEP);
     return 'generated';
+  }
+
+  /**
+   * Decide whether to skip generation (returns a telemetry outcome) or
+   * proceed (returns null). ROK-1316 r2:
+   *   - `mutation` — the voter hash may be unchanged while the nominated-game
+   *     set (subtracted from the candidate pool) changed, so the
+   *     `hasFreshRow` no-op would serve stale picks. Force-regenerate IF the
+   *     lineup already has a cache row (proxy for "has been viewed"); SKIP if
+   *     not, so unviewed lineups warm lazily on first read (keeps volume down).
+   *   - `read` — keep the `hasFreshRow` no-op so racing read enqueues coalesce.
+   */
+  private async shouldSkip(
+    lineupId: number,
+    hash: string,
+    reason: PreGenReason,
+  ): Promise<string | null> {
+    if (reason === 'mutation') {
+      const existing = await findLatestForLineup(this.db, lineupId);
+      return existing ? null : 'skipped_unviewed';
+    }
+    return (await this.hasFreshRow(lineupId, hash)) ? 'noop_fresh' : null;
   }
 
   private async isFeatureDisabled(): Promise<boolean> {

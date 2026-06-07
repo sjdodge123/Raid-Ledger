@@ -35,6 +35,24 @@ function isPending(result: AiSuggestionsResult | undefined): boolean {
   return result?.kind === 'ok' && result.data.pending === true;
 }
 
+/**
+ * True when the response is a `stale` SWR payload (older voter-hash row
+ * served while a refresh regenerates in the background, ROK-1316 r2). Stale
+ * has content to render, so it polls WITHOUT the cold skeleton.
+ */
+function isStale(result: AiSuggestionsResult | undefined): boolean {
+  return result?.kind === 'ok' && result.data.stale === true;
+}
+
+/**
+ * True when the response should keep polling — either a cold `pending`
+ * warm-up OR a `stale` revalidate. Drives `refetchInterval` so the client
+ * actually observes the background refresh (the "revalidate" half of SWR).
+ */
+function isRevalidating(result: AiSuggestionsResult | undefined): boolean {
+  return isPending(result) || isStale(result);
+}
+
 export function useAiSuggestions(
   lineupId: number | null | undefined,
   options: UseAiSuggestionsOptions = {},
@@ -48,14 +66,16 @@ export function useAiSuggestions(
     // AI plugin (or admin toggle) never fires the request.
     enabled: enabled && aiAvailable && lineupId != null,
     // ROK-1316: a cold read returns `pending: true` while the background
-    // pre-gen job warms the cache. Poll until a real payload arrives, then
-    // stop. Bounded so a stuck job falls back to the empty state instead of
-    // a hung spinner.
-    staleTime: (q) => (isPending(q.state.data) ? 0 : 5 * 60 * 1000),
+    // pre-gen job warms the cache; a `stale` read serves an older voter-hash
+    // row while a refresh regenerates (r2). Poll in BOTH cases until a fresh
+    // (non-pending, non-stale) payload arrives, then stop. Bounded so a stuck
+    // job doesn't poll forever.
+    staleTime: (q) => (isRevalidating(q.state.data) ? 0 : 5 * 60 * 1000),
     refetchInterval: (q) => {
-      if (!isPending(q.state.data)) return false;
+      if (!isRevalidating(q.state.data)) return false;
       // `dataUpdateCount` increments per successful fetch — cap the poll
-      // attempts so a stuck pre-gen job falls back to the empty state.
+      // attempts so a stuck job stops polling (skeleton falls back for cold;
+      // stale just keeps its already-rendered content).
       return q.state.dataUpdateCount < PENDING_POLL_MAX_ATTEMPTS
         ? PENDING_POLL_INTERVAL_MS
         : false;
@@ -79,13 +99,22 @@ export function useAiSuggestions(
   const { dataUpdatedAt, status } = query;
   useEffect(() => {
     if (status !== 'success') return;
-    if (!isPending(query.data)) {
+    // Fresh payload (neither pending nor stale) → revalidation done, reset.
+    if (!isRevalidating(query.data)) {
       pollCount.current = 0;
       setPollExhausted(false);
       return;
     }
     pollCount.current += 1;
-    if (pollCount.current >= PENDING_POLL_MAX_ATTEMPTS) setPollExhausted(true);
+    // `pollExhausted` only gates the COLD skeleton — flip it solely for
+    // `pending`. A capped-out `stale` simply stops polling while keeping its
+    // already-rendered content (no skeleton involved).
+    if (
+      isPending(query.data) &&
+      pollCount.current >= PENDING_POLL_MAX_ATTEMPTS
+    ) {
+      setPollExhausted(true);
+    }
     // `dataUpdatedAt` changes on every fetch (even identical data), so this
     // effect runs once per poll; `query.data` is intentionally read fresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
