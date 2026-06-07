@@ -244,4 +244,43 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
         await new Promise((r) => setTimeout(r, 100));
         expect(calls).toBe(1);
     });
+
+    // Rework r3 #2: poll budget must reset when the lineupId switches in-place
+    // (no remount) — a new cold lineup must not inherit the prior lineup's
+    // exhausted state and collapse its skeleton early.
+    it('resets the poll budget when lineupId changes after exhaustion', async () => {
+        server.use(
+            // Every lineup stays pending — so exhaustion is reachable and the
+            // post-switch lineup is also cold (would inherit pollExhausted).
+            http.get(`${API_BASE}/lineups/:id/suggestions`, () =>
+                HttpResponse.json(PENDING_BODY),
+            ),
+        );
+
+        const { wrapper } = createWrapper();
+        const { result, rerender } = renderHook(
+            ({ id }: { id: number }) => useAiSuggestions(id),
+            { wrapper, initialProps: { id: 99 } },
+        );
+
+        // Exhaust the first lineup's poll budget.
+        await waitFor(() => expect(result.current.pollExhausted).toBe(true), {
+            timeout: 55_000,
+            interval: 250,
+        });
+
+        // Switch lineup in-place — budget must reset immediately.
+        rerender({ id: 100 });
+        expect(result.current.pollExhausted).toBe(false);
+
+        // And the new lineup gets its own fresh poll budget (still pending →
+        // it will exhaust again only after its OWN cap, proving no carryover).
+        await waitFor(() => {
+            expect(result.current.data?.kind).toBe('ok');
+            if (result.current.data?.kind === 'ok') {
+                expect(result.current.data.data.pending).toBe(true);
+            }
+        });
+        expect(result.current.pollExhausted).toBe(false);
+    }, 70_000);
 });

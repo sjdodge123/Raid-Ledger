@@ -99,12 +99,24 @@ export class AiSuggestionsPreGenQueueService {
     }
   }
 
-  /** Remove an existing delayed/waiting job so the debounce delay resets. */
+  /**
+   * Remove the existing job for this jobId so the next `add` always
+   * schedules fresh. ROK-1316 r3: this must clear ANY non-`active` state —
+   * not just delayed/waiting. `removeOnFail: 50` RETAINS a job that exhausts
+   * its 3 attempts in `failed` state under the same jobId; BullMQ dedups
+   * `add` on an existing jobId in any state, so a retained failed (or
+   * completed) job would permanently wedge the lineup — every later enqueue
+   * no-ops and suggestions never regenerate. Removing all non-active states
+   * guarantees recovery (e.g. transient LLM failure, or mutations queued
+   * while no provider was configured then a provider is added). An `active`
+   * job is mid-generation and locked — leave it; its own completion handles
+   * cleanup and the next enqueue after it finishes will schedule again.
+   */
   private async removeExisting(jobId: string): Promise<void> {
     const existing = await this.queue.getJob(jobId);
     if (!existing) return;
     const state = await existing.getState();
-    if (state === 'delayed' || state === 'waiting') {
+    if (state !== 'active') {
       await existing.remove();
     }
   }

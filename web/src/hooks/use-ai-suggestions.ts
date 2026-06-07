@@ -96,6 +96,17 @@ export function useAiSuggestions(
   // cap is reliably observed and the UI updates even with identical data.
   const pollCount = useRef(0);
   const [pollExhausted, setPollExhausted] = useState(false);
+
+  // ROK-1316 r3: reset the poll budget whenever the query TARGET changes
+  // (lineupId or personalize). Without this, switching lineups in-place on a
+  // mounted component carries the prior lineup's exhausted state forward — a
+  // fresh cold lineup would inherit `pollExhausted=true` and collapse its
+  // skeleton immediately with a shortened attempt budget.
+  useEffect(() => {
+    pollCount.current = 0;
+    setPollExhausted(false);
+  }, [lineupId, personalize]);
+
   const { dataUpdatedAt, status } = query;
   useEffect(() => {
     if (status !== 'success') return;
