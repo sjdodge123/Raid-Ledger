@@ -16,6 +16,16 @@ source "$(dirname "$0")/_state.sh"
 # actually failed. The explicit exit-via-emit paths below set
 # ENV_SPIN_HANDLED=1 so the trap doesn't double-report.
 ENV_SPIN_HANDLED=0
+# ROK-1357 fold-in #1 (EXIT-trap PG cleanup): markers for the fresh-path
+# rollback. Declared up here (before the trap is armed) so an early abort
+# never dereferences them unset. Armed/flipped in the fresh path: a PG/app
+# container THIS run created (vs an existing PG the recreate flow reused) gets
+# torn down on an unexpected, pre-registration abort so the next attempt
+# starts clean. Reproduced orphan: skip_build:true + missing image → exit 125.
+ENV_SPIN_PG_CREATED=0
+ENV_SPIN_PG_REUSED=0
+ENV_SPIN_APP_CREATED=0
+ENV_SPIN_REGISTERED=0
 # ROK-1338 PR-1 fold-in #2 (2026-05-21): LAST_PHASE tracks how far env-spin
 # progressed before an unexpected abort. The EXIT trap reports it so the
 # operator/agent knows WHICH step died without needing bash -x. Updated at
@@ -24,12 +34,40 @@ ENV_SPIN_HANDLED=0
 LAST_PHASE="init"
 _env_spin_trap_on_abort() {
     local rc=$?
+    # ROK-1357 fold-in #1: roll back any partially-created fresh-path
+    # containers FIRST (before the diagnostic emit) so a single shared rc
+    # drives the decision. Defined below; a no-op until the fresh path arms
+    # its markers. Passing rc explicitly avoids the chained-trap `$?`-clobber
+    # where the second function would otherwise read the emit's exit code.
+    _env_spin_rollback_partial "$rc"
     if (( rc != 0 )) && [[ "${ENV_SPIN_HANDLED:-0}" != "1" ]]; then
         jq -nc --argjson rc "$rc" --arg slug "${SLUG:-}" --arg phase "${LAST_PHASE:-unknown}" \
             '{ok:false, error:"env_spin_aborted_unexpectedly", exit_code:$rc, slug:$slug,
               last_phase:$phase,
               hint:("env-spin aborted with rc=" + ($rc|tostring) + " after completing phase \"" + $phase + "\". The failing line is between the marker for that phase and the next. Agents: call rl_infra_logs(service=gc-sweeper, tail=200) for sweeper-side context. Operator-only follow-ups (rl-agent does not have shell on the VM): read /srv/rl-infra/audit.log for the matching env-spin err entry; run bash -x for deeper tracing.")}' \
         2>/dev/null || echo '{"ok":false,"error":"env_spin_aborted_unexpectedly","exit_code":'"$rc"',"last_phase":"'"${LAST_PHASE:-unknown}"'"}'
+    fi
+}
+# ROK-1357 fold-in #1: tear down containers THIS run created in the fresh path
+# when env-spin aborts UNHANDLED before registration committed. Without this,
+# an abort after the PG `docker run` but before the allinone is healthy (e.g. a
+# bad image, a flaky network → exit 125) leaves an orphaned `rl-env-<slug>-pg`.
+# Guards (all default 0 until the fresh path arms them):
+#   - only on a non-zero rc that wasn't already handled (handled paths like the
+#     traefik/registry guards intentionally LEAVE containers up so the operator
+#     can fix perms and re-run the idempotent path);
+#   - only before registration (ENV_SPIN_REGISTERED) committed;
+#   - NEVER a PG the recreate flow reused (ENV_SPIN_PG_REUSED).
+_env_spin_rollback_partial() {
+    local rc="${1:-$?}"
+    if (( rc != 0 )) && [[ "${ENV_SPIN_HANDLED:-0}" != "1" ]] \
+       && (( ${ENV_SPIN_REGISTERED:-0} == 0 )); then
+        if (( ${ENV_SPIN_APP_CREATED:-0} == 1 )); then
+            docker rm -f "$APP_CONTAINER" >/dev/null 2>&1 || true
+        fi
+        if (( ${ENV_SPIN_PG_CREATED:-0} == 1 && ${ENV_SPIN_PG_REUSED:-0} == 0 )); then
+            docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
+        fi
     fi
 }
 trap _env_spin_trap_on_abort EXIT
@@ -72,6 +110,9 @@ if (( EXISTING_COUNT >= MAX_ENVS_PER_SLOT )) && ! grep -qFx "$SLUG" <<<"$EXISTIN
     # path (covered below) and stays within the count.
     jq -nc --argjson slot "$SLOT" --argjson count "$EXISTING_COUNT" --argjson max "$MAX_ENVS_PER_SLOT" --arg slug "$SLUG" \
         '{ok: false, error: "max_envs_per_slot_exceeded", slot: $slot, slug: $slug, current_count: $count, max: $max, message: "slot \($slot) already has \($count) envs (max \($max)). Destroy some before spinning \($slug)."}'
+    # ROK-1357: mark handled so the EXIT trap doesn't ALSO emit a duplicate
+    # env_spin_aborted_unexpectedly JSON line on top of this clean refusal.
+    ENV_SPIN_HANDLED=1
     exit 1
 fi
 
@@ -92,19 +133,92 @@ if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
     EXISTING_SLOT=$(docker inspect "$APP_CONTAINER" \
         --format '{{ index .Config.Labels "rl.slot" }}' 2>/dev/null || echo "")
     if [[ -n "$EXISTING_SLOT" && "$EXISTING_SLOT" != "$SLOT" && "${RL_OPERATOR:-0}" != "1" ]]; then
-        jq -nc --arg slug "$SLUG" --argjson existing_slot "$EXISTING_SLOT" --argjson my_slot "$SLOT" \
-            '{ok: false, error: "slug_owned_by_other_slot", slug: $slug, owned_by_slot: $existing_slot, my_slot: $my_slot, message: "Env slug \"\($slug)\" is owned by slot \($existing_slot). Pick a different slug or have its owner destroy it."}'
-        exit 1
+        # ROK-1357 fold-in #2: the owning slot may be UNCLAIMED. gc-sweeper
+        # auto-releases a claim when its heartbeat lapses, but the child env's
+        # container keeps its stale rl.slot label. A fresh `claim` then lands
+        # on a DIFFERENT slot, and this guard would refuse the re-spin even
+        # though nobody owns the original slot anymore — the env is stranded.
+        # Probe claims.json: if the owning slot is currently unclaimed, the
+        # slug is reclaimable — log an audit line and FALL THROUGH (the
+        # recreate/fresh flow rewrites the rl.slot label, Traefik rule, and
+        # registry row for THIS slot). If the owning slot is still claimed by
+        # a live agent, refuse as before.
+        OWNING_SLOT_CLAIMED=$(state::query "$RL_CLAIMS_FILE" --argjson s "$EXISTING_SLOT" \
+            '[.[] | select(.slot == $s and .claimed == true)] | length' 2>/dev/null || echo "0")
+        if [[ "$OWNING_SLOT_CLAIMED" -gt 0 ]]; then
+            jq -nc --arg slug "$SLUG" --argjson existing_slot "$EXISTING_SLOT" --argjson my_slot "$SLOT" \
+                '{ok: false, error: "slug_owned_by_other_slot", slug: $slug, owned_by_slot: $existing_slot, my_slot: $my_slot, message: "Env slug \"\($slug)\" is owned by slot \($existing_slot). Pick a different slug or have its owner destroy it."}'
+            # ROK-1357: mark handled so the EXIT trap doesn't double-report.
+            ENV_SPIN_HANDLED=1
+            exit 1
+        fi
+        audit::log env-spin slug-reclaimed-from-unclaimed-slot \
+            "$(jq -nc --arg slug "$SLUG" --argjson from_slot "$EXISTING_SLOT" --argjson to_slot "$SLOT" '{slug:$slug, from_slot:$from_slot, to_slot:$to_slot}')"
     fi
 fi
 
 LAST_PHASE="preflight_done"
 
-# Idempotent: if env already exists for this slug, refresh last_touched in
-# the state registry (NOT via docker container update --label-add — that flag
-# is swarm-mode only and errors on standalone containers). Re-write the
-# Traefik conf file too so the route survives state divergence.
+# ROK-1357 fold-in #1: track whether the idempotent block recreated the
+# allinone container from a fresh image (image-ID mismatch). Surfaced as
+# `recreated: true|false` in the final JSON emit and carried so the fresh
+# path's PG `docker run` is skipped (the existing PG + its volume — the
+# admin row — are reused).
+RECREATED=0
+
+# ROK-1357 fold-in #1: decide UP FRONT whether to take the fast idempotent
+# path or recreate from a fresh image. The container may exist but be running
+# OLD content: after a rebuild pushes a new image under the SAME slug tag, a
+# tag-string compare can't tell — only the resolved sha256 image IDs differ.
+# Compare the RUNNING container's image ID against the CURRENT image ID for
+# the tag:
+#   - both non-empty + differ  → recreate (rm -f the container, fall through
+#                                 to the fresh-spin path; PG is reused).
+#   - CURRENT_IMAGE_ID empty    → indeterminate (image not resolvable locally,
+#                                 e.g. registry-only/unpulled). NEVER destroy a
+#                                 healthy env over an inspect miss — keep the
+#                                 fast path + emit a warning (AC3).
+#   - equal (or container gone) → fast idempotent path (AC2).
+# This runs BEFORE the idempotent block's `exec 9>` so we never leak fd 9
+# into the fresh path.
+TAKE_IDEMPOTENT_PATH=0
+IMAGE_MISMATCH_WARNING=""
 if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+    RUNNING_IMAGE_ID=$(docker inspect "$APP_CONTAINER" --format '{{.Image}}' 2>/dev/null || echo "")
+    CURRENT_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
+    if [[ -z "$CURRENT_IMAGE_ID" ]]; then
+        # Indeterminate — can't resolve the tag locally. Keep the fast path.
+        TAKE_IDEMPOTENT_PATH=1
+        IMAGE_MISMATCH_WARNING="image \"${IMAGE}\" could not be resolved locally (docker image inspect returned empty); kept the existing container without verifying it matches the tag — pull the image and re-spin to force a recreate if you expect new content"
+        audit::log env-spin image-id-indeterminate \
+            "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug, slot:$slot, image:$image}')"
+    elif [[ -n "$RUNNING_IMAGE_ID" && "$RUNNING_IMAGE_ID" != "$CURRENT_IMAGE_ID" ]]; then
+        # Mismatch — the tag now resolves to a DIFFERENT image than the running
+        # container. Recreate. Fail-loud guard the rm so a stuck container
+        # surfaces a clear error instead of a silent set -e abort.
+        audit::log env-spin image-id-mismatch-recreate \
+            "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg running "$RUNNING_IMAGE_ID" --arg current "$CURRENT_IMAGE_ID" '{slug:$slug, slot:$slot, running_image_id:$running, current_image_id:$current}')"
+        if ! docker rm -f "$APP_CONTAINER" >/dev/null 2>&1; then
+            jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg container "$APP_CONTAINER" \
+                '{ok:false, error:"recreate_rm_failed", slug:$slug, slot:$slot, container:$container,
+                  hint:("Detected a stale image for " + $container + " and tried to remove it to recreate from the fresh image, but docker rm -f failed. The env is in a half-state — inspect the container manually then re-run env-spin.")}'
+            ENV_SPIN_HANDLED=1
+            exit 1
+        fi
+        RECREATED=1
+        # Fall through (TAKE_IDEMPOTENT_PATH stays 0) → fresh-spin path.
+    else
+        # Equal image ID — fast idempotent path (AC2).
+        TAKE_IDEMPOTENT_PATH=1
+    fi
+fi
+
+# Idempotent: if env already exists for this slug AND its image is current,
+# refresh last_touched in the state registry (NOT via docker container update
+# --label-add — that flag is swarm-mode only and errors on standalone
+# containers). Re-write the Traefik conf file too so the route survives state
+# divergence.
+if (( TAKE_IDEMPOTENT_PATH == 1 )); then
     LAST_PHASE="idempotent_path_entered"
     # UPSERT: if registry already has this slug, bump last_touched.
     # If not (e.g. registry was clobbered while the container kept
@@ -282,7 +396,8 @@ EOF
         --arg admin_email "admin@local" \
         --arg admin_password "$IDEM_ADMIN_PASSWORD" \
         --argjson bootstrap_warnings "$IDEM_BOOTSTRAP_WARNINGS_JSON" \
-        '{ok: true, idempotent: true, slug: $slug, url: $url, internal_url: $internal_url,
+        --arg image_warning "$IMAGE_MISMATCH_WARNING" \
+        '{ok: true, idempotent: true, recreated: false, slug: $slug, url: $url, internal_url: $internal_url,
           public_url: (if $public_url == "" then null else $public_url end),
           slot_url: (if $slot_url == "" then null else $slot_url end),
           slot: $slot,
@@ -290,29 +405,65 @@ EOF
           slot_oauth_available: $slot_oauth_available,
           admin_email: $admin_email,
           admin_password: (if $admin_password == "" then null else $admin_password end),
-          bootstrap_warnings: $bootstrap_warnings}'
+          bootstrap_warnings: $bootstrap_warnings,
+          image_warning: (if $image_warning == "" then null else $image_warning end)}'
     audit::log env-spin idempotent "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" '{slug:$slug,slot:$slot}')"
     exit 0
 fi
 
 LAST_PHASE="new_env_path_entered"
 
-# 1. Postgres (per-env, NAS-like).
+# ROK-1357 fold-in #1 (fail-fast image validation): resolve the image BEFORE
+# creating PG so a genuinely-missing image fails FAST and leaves NO orphaned
+# PG container. The recreate path already proved the image resolves locally
+# (CURRENT_IMAGE_ID was non-empty), so this only bites a true fresh spin.
+# Don't hard-fail a registry-only/unpulled image: if local inspect misses,
+# try a pull; only fail if the pull ALSO fails (the image truly doesn't
+# exist). Skip entirely on the recreate path — RECREATED=1 means the image
+# was just validated above.
+if (( RECREATED == 0 )); then
+    if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+        if ! docker pull "$IMAGE" >/dev/null 2>&1; then
+            audit::log env-spin image-not-found \
+                "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug, slot:$slot, image:$image}')"
+            jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
+                '{ok:false, error:"image_not_found", slug:$slug, slot:$slot, image:$image,
+                  hint:("Image \"" + $image + "\" is not present locally and could not be pulled from the registry. Build/push it first (rl_env_build_image_from_runner) or pass an existing --image tag. No PG container was created.")}'
+            ENV_SPIN_HANDLED=1
+            exit 1
+        fi
+    fi
+fi
+
+LAST_PHASE="image_validated"
+
+# 1. Postgres (per-env, NAS-like). The recreate flow REUSES an existing PG
+# (and its volume — the admin row persists) rather than spinning a new one;
+# the `docker inspect` guard makes the `docker run` a no-op when PG is already
+# up. The EXIT trap (armed at the top) reads ENV_SPIN_PG_CREATED to decide
+# whether to roll back — only a PG this run actually creates is torn down.
 LAST_PHASE="docker_run_pg_pending"
-docker run -d \
-    --name "$PG_CONTAINER" \
-    --network "$NET" \
-    --restart unless-stopped \
-    -v "${VOL_PG}:/var/lib/postgresql/data" \
-    -e POSTGRES_USER=user \
-    -e POSTGRES_PASSWORD=password \
-    -e POSTGRES_DB=raid_ledger \
-    --label "rl.role=env" \
-    --label "rl.env_slug=${SLUG}" \
-    --label "rl.slot=${SLOT}" \
-    --label "rl.ttl=${TTL_HOURS}h" \
-    --label "rl.last_touched=${NOW}" \
-    pgvector/pgvector:pg16 >/dev/null
+if docker inspect "$PG_CONTAINER" >/dev/null 2>&1; then
+    # Existing PG (recreate flow, or a half-spun env from a prior abort).
+    # Reuse it — never tear it down in the rollback trap.
+    ENV_SPIN_PG_REUSED=1
+else
+    docker run -d \
+        --name "$PG_CONTAINER" \
+        --network "$NET" \
+        --restart unless-stopped \
+        -v "${VOL_PG}:/var/lib/postgresql/data" \
+        -e POSTGRES_USER=user \
+        -e POSTGRES_PASSWORD=password \
+        -e POSTGRES_DB=raid_ledger \
+        --label "rl.role=env" \
+        --label "rl.env_slug=${SLUG}" \
+        --label "rl.slot=${SLOT}" \
+        --label "rl.ttl=${TTL_HOURS}h" \
+        --label "rl.last_touched=${NOW}" \
+        pgvector/pgvector:pg16 >/dev/null
+    ENV_SPIN_PG_CREATED=1
+fi
 
 LAST_PHASE="pg_run_started"
 
@@ -391,14 +542,15 @@ docker run -d \
     -e DEMO_MODE=true \
     -e NODE_ENV=production \
     -e SENTRY_ENVIRONMENT="fleet-slot-${SLOT}" \
-    "${PUBLIC_URL_FLAG[@]}" \
-    "${EXTRA_ENV[@]}" \
+    ${PUBLIC_URL_FLAG[@]+"${PUBLIC_URL_FLAG[@]}"} \
+    ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
     --label "rl.role=env" \
     --label "rl.env_slug=${SLUG}" \
     --label "rl.slot=${SLOT}" \
     --label "rl.ttl=${TTL_HOURS}h" \
     --label "rl.last_touched=${NOW}" \
     "$IMAGE" >/dev/null
+ENV_SPIN_APP_CREATED=1
 
 LAST_PHASE="allinone_running"
 
@@ -550,11 +702,25 @@ LAST_PHASE="bootstrap_done"
 # and the operator is left with running containers and no record of them.
 # Now any registry mutation failure surfaces as structured JSON on stdout so
 # the MCP layer can show the actual cause.
+#
+# ROK-1357 fold-in #1: UPSERT, not blind append. The recreate flow (image-ID
+# mismatch) and the unclaimed-slot reclaim both re-enter this fresh path for a
+# slug that ALREADY has a registry row — a blind `. += [...]` would leave a
+# DUPLICATE slug row (two entries, same slug, different/stale slot). Match the
+# idempotent path's upsert pattern: if a row for this slug exists, overwrite
+# its mutable fields (slot/image/ttl/last_touched/public_domain) in place;
+# otherwise append a fresh row.
 if ! state::mutate "$RL_ENVS_FILE" \
         --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
         --arg ttl "${TTL_HOURS}h" --arg ts "$NOW" \
         --arg public_domain "${RL_PUBLIC_DOMAIN:-}" \
-        '. += [{slug: $slug, slot: $slot, image: $image, ttl: $ttl, created_at: $ts, last_touched: $ts, public_domain: $public_domain}]'; then
+        'if any(.[]; .slug == $slug)
+         then map(if .slug == $slug
+                  then .slot = $slot | .image = $image | .ttl = $ttl
+                     | .last_touched = $ts | .public_domain = $public_domain
+                  else . end)
+         else . + [{slug: $slug, slot: $slot, image: $image, ttl: $ttl, created_at: $ts, last_touched: $ts, public_domain: $public_domain}]
+         end'; then
     audit::log env-spin err "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image,phase:"register_new"}')"
     jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" \
         '{ok:false, error:"env_registry_mutate_failed", phase:"register_new",
@@ -563,6 +729,9 @@ if ! state::mutate "$RL_ENVS_FILE" \
     ENV_SPIN_HANDLED=1
     exit 1
 fi
+# Registration committed — the EXIT-trap rollback must NOT tear down the now-
+# tracked containers from here on.
+ENV_SPIN_REGISTERED=1
 
 LAST_PHASE="registered"
 audit::log env-spin ok "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg image "$IMAGE" '{slug:$slug,slot:$slot,image:$image}')"
@@ -610,6 +779,14 @@ else
     PRIMARY_URL="http://${SLUG}.rl.lan"
 fi
 LAST_PHASE="url_computed"
+# ROK-1357 fold-in #1 + optional AC7: surface recreated + built_from_head.
+# recreated reflects the image-ID-mismatch recreate decision made up top.
+# built_from_head reads the rl.synced_head label baked into the image at
+# build time (bin/build-image-on-runner) — null when the image predates the
+# label or the inspect misses.
+RECREATED_BOOL=$([[ "$RECREATED" == "1" ]] && echo true || echo false)
+BUILT_FROM_HEAD=$(docker image inspect "$IMAGE" \
+    --format '{{ index .Config.Labels "rl.synced_head" }}' 2>/dev/null || echo "")
 # ROK-1338 PR-1 fold-in: reached the final happy-path emit, so the EXIT trap
 # should NOT also fire a duplicate error JSON.
 ENV_SPIN_HANDLED=1
@@ -622,7 +799,9 @@ jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
     --arg admin_email "$ADMIN_EMAIL_OUT" \
     --arg admin_password "$ADMIN_PASSWORD_OUT" \
     --argjson bootstrap_warnings "$BOOTSTRAP_WARNINGS_JSON" \
-    '{ok: true, slug: $slug, url: $url, internal_url: $internal_url,
+    --argjson recreated "$RECREATED_BOOL" \
+    --arg built_from_head "$BUILT_FROM_HEAD" \
+    '{ok: true, recreated: $recreated, slug: $slug, url: $url, internal_url: $internal_url,
       public_url: (if $public_url == "" then null else $public_url end),
       slot_url: (if $slot_url == "" then null else $slot_url end),
       slot: $slot,
@@ -631,4 +810,5 @@ jq -nc --arg slug "$SLUG" --arg url "$PRIMARY_URL" \
       admin_email: $admin_email,
       admin_password: (if $admin_password == "" then null else $admin_password end),
       bootstrap_warnings: $bootstrap_warnings,
+      built_from_head: (if $built_from_head == "" then null else $built_from_head end),
       app_container: "rl-env-\($slug)-allinone", pg_container: "rl-env-\($slug)-pg"}'

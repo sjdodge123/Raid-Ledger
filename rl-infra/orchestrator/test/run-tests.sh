@@ -40,6 +40,9 @@ else
         "$TEST_DIR/lease-enqueue.test.sh"
         # --slot targeting (avoids evicting a preserved env on a lower slot).
         "$TEST_DIR/claim-slot-target.test.sh"
+        # ROK-1357 — env-spin recreate-on-image-mismatch + PG rollback +
+        # unclaimed-slot reclaim.
+        "$TEST_DIR/env-spin.test.sh"
         "$TEST_DIR/lease-advance.test.sh"
         "$TEST_DIR/lease-status.test.sh"
         "$TEST_DIR/extend-claim.test.sh"

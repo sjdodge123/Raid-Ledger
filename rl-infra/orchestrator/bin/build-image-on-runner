@@ -49,14 +49,20 @@ PATCH_SED='s|RUN npm run build -w @raid-ledger/contract|RUN cd packages/contract
 # Runner-side deletes are safe: the session is one-way laptop→runner, and a
 # file that still exists laptop-side just gets re-created on the next sync.
 # Paired with the post-unlink flush in sync-guard.ts (mcp-rl-fleet).
+# ROK-1357 optional AC7: bake the synced git HEAD into the image as a label so
+# env-spin can surface `built_from_head` (which commit the running env was
+# built from). Resolved inside the runner from /workspace's checkout; empty
+# (label omitted) if /workspace isn't a git repo or rev-parse fails.
 BUILD_CMD="set -e; \
   find /workspace -maxdepth 1 -name '.rl-sync-probe-*' -delete 2>/dev/null || true; \
+  SYNCED_HEAD=\$(git -C /workspace rev-parse HEAD 2>/dev/null || echo ''); \
   TMPDIR=\$(mktemp -d /tmp/rl-build-XXXXXX); \
   cp -a /workspace/. \"\$TMPDIR/\"; \
   cd \"\$TMPDIR\"; \
   sed -i '$PATCH_SED' Dockerfile.allinone; \
   grep -q 'rm -rf dist \*.tsbuildinfo' Dockerfile.allinone || { echo 'PATCH_SED did not match — Dockerfile.allinone source drifted, expected RUN line for @raid-ledger/contract build not found' >&2; exit 3; }; \
-  docker build -f Dockerfile.allinone -t '${FULL_TAG}' ."
+  HEAD_LABEL=\$([ -n \"\$SYNCED_HEAD\" ] && echo \"--label rl.synced_head=\$SYNCED_HEAD\" || echo ''); \
+  docker build \$HEAD_LABEL -f Dockerfile.allinone -t '${FULL_TAG}' ."
 if [[ "$PUSH" == "1" ]]; then
     BUILD_CMD="${BUILD_CMD} && docker push '${FULL_TAG}'"
 fi
