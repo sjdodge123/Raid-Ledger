@@ -993,9 +993,17 @@ install_runner_deps() {
     # finished the install). `2>&1 >/dev/null` keeps the background
     # logging quiet so it doesn't tangle with the claim output the user
     # is reading.
+    #
+    # ROK-1359: tools/test-bot is a STANDALONE package (not an npm
+    # workspace), so the root `npm ci` above doesn't cover it. Pre-install
+    # its deps too so the `--full` Discord smoke step doesn't die at import
+    # (ERR_MODULE_NOT_FOUND: @discordjs/voice) on a fresh runner. Same
+    # skip-when-populated guard; validate-ci.sh has the same fallback.
     ssh_run run-on-runner -- bash -c \
-        '[ -x /workspace/node_modules/.bin/tsc ] && exit 0; \
-         cd /workspace && npm ci --silent --no-audit --no-fund' \
+        '[ -x /workspace/node_modules/.bin/tsc ] || \
+           (cd /workspace && npm ci --silent --no-audit --no-fund); \
+         [ -d /workspace/tools/test-bot/node_modules ] || \
+           (cd /workspace/tools/test-bot && npm ci --silent --no-audit --no-fund)' \
         >/dev/null 2>&1 || true
 }
 

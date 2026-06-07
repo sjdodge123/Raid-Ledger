@@ -42,14 +42,18 @@ test_task_list_status_running() {
     make_fixture_task "succ00001" 1 "succeeded" "2026-05-20T13:00:00Z"
     make_fixture_task "canc00001" 1 "cancelled" "2026-05-20T12:00:00Z"
 
-    local out len
+    # task-list emits the MCP envelope {ok:true, tasks:[...]} (ROK-1331
+    # Session 4 dogfood), NOT a bare array — assert against .tasks accordingly.
+    local out ok len
     out=$("$BIN_DIR/task-list" --slot 1 --status running 2>&1)
-    len=$(echo "$out" | jq '. | length' 2>/dev/null || echo "parse_err")
+    ok=$(echo "$out" | jq -r '.ok' 2>/dev/null || echo "parse_err")
+    assert_eq "$ok" "true" "response must be the {ok:true, tasks:[...]} envelope"
+    len=$(echo "$out" | jq '.tasks | length' 2>/dev/null || echo "parse_err")
     assert_eq "$len" "1" "should return exactly 1 running task"
 
     local first_status first_id
-    first_status=$(echo "$out" | jq -r '.[0].status' 2>/dev/null || echo "parse_err")
-    first_id=$(echo "$out" | jq -r '.[0].task_id' 2>/dev/null || echo "parse_err")
+    first_status=$(echo "$out" | jq -r '.tasks[0].status' 2>/dev/null || echo "parse_err")
+    first_id=$(echo "$out" | jq -r '.tasks[0].task_id' 2>/dev/null || echo "parse_err")
     assert_eq "$first_status" "running" "task's status should be 'running'"
     assert_eq "$first_id" "runn00001" "should be the runn00001 fixture"
 }
@@ -63,7 +67,7 @@ test_task_list_status_succeeded() {
 
     local out len
     out=$("$BIN_DIR/task-list" --slot 1 --status succeeded 2>&1)
-    len=$(echo "$out" | jq '. | length' 2>/dev/null || echo "parse_err")
+    len=$(echo "$out" | jq '.tasks | length' 2>/dev/null || echo "parse_err")
     assert_eq "$len" "1" "should return exactly 1 succeeded task"
 }
 
@@ -76,7 +80,7 @@ test_task_list_no_status_filter() {
 
     local out len
     out=$("$BIN_DIR/task-list" --slot 1 2>&1)
-    len=$(echo "$out" | jq '. | length' 2>/dev/null || echo "parse_err")
+    len=$(echo "$out" | jq '.tasks | length' 2>/dev/null || echo "parse_err")
     assert_eq "$len" "3" "should return all 3 tasks for slot 1"
 }
 
@@ -88,10 +92,10 @@ test_task_list_slot_isolation() {
     make_fixture_task "slot1cccc" 1 "succeeded" "2026-05-20T13:00:00Z"
 
     local len
-    len=$("$BIN_DIR/task-list" --slot 1 2>&1 | jq '. | length' 2>/dev/null || echo "parse_err")
+    len=$("$BIN_DIR/task-list" --slot 1 2>&1 | jq '.tasks | length' 2>/dev/null || echo "parse_err")
     assert_eq "$len" "2" "slot 1 filter should return 2 tasks (excluding slot 2)"
 
-    len=$("$BIN_DIR/task-list" --slot 2 2>&1 | jq '. | length' 2>/dev/null || echo "parse_err")
+    len=$("$BIN_DIR/task-list" --slot 2 2>&1 | jq '.tasks | length' 2>/dev/null || echo "parse_err")
     assert_eq "$len" "1" "slot 2 filter should return 1 task"
 }
 
@@ -102,7 +106,7 @@ test_task_list_limit() {
         make_fixture_task "limit000$i" 1 "succeeded" "2026-05-20T${i}0:00:00Z"
     done
     local len
-    len=$("$BIN_DIR/task-list" --slot 1 --limit 3 2>&1 | jq '. | length' 2>/dev/null || echo "parse_err")
+    len=$("$BIN_DIR/task-list" --slot 1 --limit 3 2>&1 | jq '.tasks | length' 2>/dev/null || echo "parse_err")
     assert_eq "$len" "3" "--limit 3 should return at most 3 tasks"
 }
 
@@ -114,23 +118,25 @@ test_task_list_sort_desc() {
     make_fixture_task "newest001" 1 "succeeded" "2026-05-20T14:00:00Z"
 
     local first second third
-    first=$("$BIN_DIR/task-list" --slot 1 2>&1 | jq -r '.[0].task_id' 2>/dev/null || echo "")
-    second=$("$BIN_DIR/task-list" --slot 1 2>&1 | jq -r '.[1].task_id' 2>/dev/null || echo "")
-    third=$("$BIN_DIR/task-list" --slot 1 2>&1 | jq -r '.[2].task_id' 2>/dev/null || echo "")
+    first=$("$BIN_DIR/task-list" --slot 1 2>&1 | jq -r '.tasks[0].task_id' 2>/dev/null || echo "")
+    second=$("$BIN_DIR/task-list" --slot 1 2>&1 | jq -r '.tasks[1].task_id' 2>/dev/null || echo "")
+    third=$("$BIN_DIR/task-list" --slot 1 2>&1 | jq -r '.tasks[2].task_id' 2>/dev/null || echo "")
     assert_eq "$first" "newest001" "[0] should be newest"
     assert_eq "$second" "newer0001" "[1] should be middle"
     assert_eq "$third" "old000001" "[2] should be oldest"
 }
 
-# Output is always a valid JSON array (even when empty).
+# Output is always the {ok:true, tasks:[]} envelope (even when no tasks match).
 test_task_list_empty_array() {
     CURRENT_TEST_NAME="empty result returns []"
-    local out
+    local out type len ok
     out=$("$BIN_DIR/task-list" --slot 1 2>&1)
-    local type
-    type=$(echo "$out" | jq 'type' 2>/dev/null || echo "parse_err")
-    assert_eq "$type" '"array"' "result must be a JSON array"
-    assert_eq "$out" "[]" "empty fixture set should produce []"
+    ok=$(echo "$out" | jq -r '.ok' 2>/dev/null || echo "parse_err")
+    assert_eq "$ok" "true" "empty result must still be the ok-envelope"
+    type=$(echo "$out" | jq -r '.tasks | type' 2>/dev/null || echo "parse_err")
+    assert_eq "$type" "array" ".tasks must be a JSON array"
+    len=$(echo "$out" | jq '.tasks | length' 2>/dev/null || echo "parse_err")
+    assert_eq "$len" "0" "empty fixture set should produce an empty tasks array"
 }
 
 run_test "ac-m1-9a-running" test_task_list_status_running

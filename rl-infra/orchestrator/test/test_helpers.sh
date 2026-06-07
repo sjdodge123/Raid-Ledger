@@ -121,6 +121,50 @@ assert_le() {
     fi
 }
 
+# Portability shim: GNU `timeout(1)` lives in coreutils on the VM, but macOS
+# (BSD userland) doesn't ship it. brew's coreutils installs it as `gtimeout`.
+# When neither is on PATH we fall back to a pure-bash background+kill emulation
+# so the suite stays green on a bare mac. Usage matches the GNU subset the tests
+# need: `rl_timeout <seconds> <cmd> [args...]`. Returns 124 on timeout (like GNU).
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_BIN="gtimeout"
+else
+    TIMEOUT_BIN=""
+fi
+
+rl_timeout() {
+    local secs="$1"; shift
+    if [[ -n "$TIMEOUT_BIN" ]]; then
+        "$TIMEOUT_BIN" "$secs" "$@"
+        return $?
+    fi
+    # Pure-bash fallback: run the command in the background, start a watchdog
+    # that kills it after $secs, and wait. If the watchdog fired we return 124
+    # to mirror GNU timeout's exit code.
+    "$@" &
+    local cmd_pid=$!
+    (
+        sleep "$secs"
+        kill -TERM "$cmd_pid" 2>/dev/null
+        # Grace period, then hard kill if still alive.
+        sleep 1
+        kill -KILL "$cmd_pid" 2>/dev/null
+    ) &
+    local watchdog_pid=$!
+    local rc=0
+    wait "$cmd_pid" 2>/dev/null || rc=$?
+    # Command finished on its own → cancel the watchdog.
+    kill "$watchdog_pid" 2>/dev/null
+    wait "$watchdog_pid" 2>/dev/null || true
+    # A TERM-killed command exits 143 (128+15); normalize to GNU's 124.
+    if (( rc == 143 )); then
+        rc=124
+    fi
+    return $rc
+}
+
 # Helper: time a command in whole seconds (rounded up). Used for "<1s" assertions.
 time_seconds() {
     local start_ns end_ns

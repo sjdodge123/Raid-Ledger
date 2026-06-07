@@ -66,7 +66,88 @@ LOCAL_DB_CONTAINER="${LOCAL_DB_CONTAINER:-raid-ledger-db}"
 DATABASE_URL="${DATABASE_URL:-postgresql://user:password@localhost:5432/raid_ledger}"
 RL_PROXMOX_USER="${RL_PROXMOX_USER:-rl-agent}"   # rl-agent default — orchestrator binaries on VM route docker calls via socket-proxy (no docker-group needed)
 RL_PROXMOX_HOST="${RL_PROXMOX_HOST:-rl-infra}"
+
+# =============================================================================
+# RL_PROXMOX_HOST DNS-fallback resolution (ROK-1358)
+# =============================================================================
+# ROOT CAUSE of "env's public schema is empty or pg not ready" against a
+# HEALTHY env: this script reached the VM via a RAW `ssh rl-agent@rl-infra`
+# with NO DNS fallback, while the path that WORKS (rl_db_query → exec.ts
+# getSshTarget/resolveProxmoxHost, and every `rl` CLI subcommand → cli/rl
+# resolve_proxmox_host) DNS-resolves `rl-infra` and FALLS BACK to the literal
+# RL_INFRA_IP from repo-root .env when the hostname doesn't resolve.
+#
+# In a sandboxed Claude session `rl-infra`/`rl-infra.lan` doesn't resolve
+# (the operator's Pi-hole provides it on the LAN; sandbox networking doesn't
+# forward that), so every `${SSH_TO_VM[@]} env-inspect/env-psql` here failed
+# to connect, its stderr was swallowed by `2>/dev/null`, and the empty result
+# was misreported as "env DB not running" / "schema empty" (exit 3) — even
+# though `rl_db_query` (which DOES fall back to RL_INFRA_IP) counted 67 tables
+# in the SAME env's public schema.
+#
+# DEPLOY-vs-STANDALONE divergence: `rl_env_deploy` runs claim → build → spin
+# through the `rl` CLI FIRST, all of which resolve the host the right way and
+# succeed; the standalone `rl_env_sync_from_local` jumps straight to this
+# script's raw-ssh probes with no such priming. Both ultimately invoke the
+# SAME envSync.execute → THIS script with the SAME args (env-sync.ts), so the
+# fix belongs here: resolve the host the same way the working paths do.
+#
+# This mirrors `rl-infra/cli/rl::resolve_proxmox_host` (the canonical bash
+# implementation) and exec.ts `resolveProxmoxHost`. Bash-3.2 safe (macOS
+# default) — no associative arrays, no `${var^^}`.
+is_default_proxmox_host() {
+    local h="$1"
+    [[ "$h" == "rl-infra" || "$h" == "rl-infra.lan" ]]
+}
+probe_dns_for_host() {
+    local h="$1"
+    if command -v getent >/dev/null 2>&1; then
+        getent hosts "$h" >/dev/null 2>&1
+        return $?
+    fi
+    if command -v dscacheutil >/dev/null 2>&1; then
+        # dscacheutil exits 0 even on no-match — parse stdout for an answer.
+        local out
+        out=$(dscacheutil -q host -a name "$h" 2>/dev/null)
+        if [[ -n "$out" ]] && printf '%s' "$out" | grep -q '^ip_address:'; then
+            return 0
+        fi
+        return 1
+    fi
+    if command -v host >/dev/null 2>&1; then
+        host -W 2 "$h" >/dev/null 2>&1
+        return $?
+    fi
+    # No probe tool available — assume reachable; downstream ssh surfaces the
+    # real failure if it isn't.
+    return 0
+}
+resolve_proxmox_host() {
+    local host="$1"
+    if ! is_default_proxmox_host "$host"; then
+        # Operator-explicit override — trust it without probing.
+        printf '%s' "$host"
+        return 0
+    fi
+    if probe_dns_for_host "$host"; then
+        printf '%s' "$host"
+        return 0
+    fi
+    # DNS failed — fall back to the literal IP from repo-root .env (sourced
+    # above as RL_INFRA_IP). Same value getSshTarget/resolve_proxmox_host use.
+    if [[ -n "${RL_INFRA_IP:-}" ]]; then
+        echo "  RL_PROXMOX_HOST '$host' did not resolve — falling back to RL_INFRA_IP=${RL_INFRA_IP}" >&2
+        printf '%s' "$RL_INFRA_IP"
+        return 0
+    fi
+    echo "  WARNING: cannot resolve '$host' and no RL_INFRA_IP in .env — SSH will likely fail" >&2
+    printf '%s' "$host"
+    return 0
+}
+RL_PROXMOX_HOST="$(resolve_proxmox_host "$RL_PROXMOX_HOST")"
+
 ENV_PG_CONTAINER="rl-env-${SLUG}-pg"
+ENV_PG_DATABASE="raid_ledger"   # env-psql connects -U user -d raid_ledger; named in probe failures for diagnosability (ROK-1358)
 ORCH_BIN="/srv/rl-infra/orchestrator/bin"
 SSH_TO_VM=(ssh -o BatchMode=yes -o ConnectTimeout=10 "${RL_PROXMOX_USER}@${RL_PROXMOX_HOST}")
 
@@ -79,12 +160,25 @@ fi
 
 # Verify env's PG is running on the VM via orchestrator's env-inspect binary
 # (routes through socket-proxy so rl-agent — no docker group — can probe).
-ENV_INSPECT_JSON=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-inspect" "$SLUG" 2>/dev/null || true)
+# Capture env-inspect's stderr separately (ROK-1358): swallowing it to
+# /dev/null is exactly what made an SSH-resolution / connect failure look
+# like "env not running". On a probe failure we now name the host + container
+# + database we targeted AND surface the ssh/env-inspect stderr so a future
+# mismatch is diagnosable instead of a generic "not running".
+ENV_INSPECT_ERR=$(mktemp)
+ENV_INSPECT_JSON=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-inspect" "$SLUG" 2>"$ENV_INSPECT_ERR" || true)
 if ! echo "$ENV_INSPECT_JSON" | jq -e '.pg.running == true' >/dev/null 2>&1; then
-    echo "ERROR: env DB container '$ENV_PG_CONTAINER' is not running on $RL_PROXMOX_HOST." >&2
-    echo "       Spin the env first: rl env spin --slug $SLUG" >&2
+    echo "ERROR: could not confirm env DB container '$ENV_PG_CONTAINER' (db '$ENV_PG_DATABASE') is running" >&2
+    echo "       on ${RL_PROXMOX_USER}@${RL_PROXMOX_HOST} via ${ORCH_BIN}/env-inspect $SLUG." >&2
+    INSPECT_STDERR=$(cat "$ENV_INSPECT_ERR" 2>/dev/null || true); rm -f "$ENV_INSPECT_ERR"
+    [[ -n "$INSPECT_STDERR" ]] && echo "       env-inspect/ssh stderr: ${INSPECT_STDERR}" >&2
+    echo "       If the env IS healthy (e.g. rl_db_query sees its tables), this is usually an" >&2
+    echo "       SSH-host-resolution failure — confirm RL_PROXMOX_HOST resolved to a reachable" >&2
+    echo "       host above (RL_INFRA_IP fallback applies when 'rl-infra' doesn't resolve)." >&2
+    echo "       Otherwise spin the env first: rl env spin --slug $SLUG" >&2
     exit 3
 fi
+rm -f "$ENV_INSPECT_ERR"
 
 case "$MODE" in
     settings)
@@ -122,12 +216,26 @@ case "$MODE" in
         # 1) Discover all user tables in the env's public schema. Use for
         #    BOTH the TRUNCATE pre-step AND schema-drift filtering.
         echo "  discovering env's public schema..." >&2
+        # Capture env-psql stderr (ROK-1358) — swallowing it made an SSH /
+        # host-resolution failure indistinguishable from a genuinely empty
+        # schema. On failure we name the container + database we probed.
+        ENV_TABLES_ERR=$(mktemp)
+        # `|| true` is load-bearing (Codex P2, fix/batch-2026-06-07): without it,
+        # `set -e` kills the script ON the failed assignment and the diagnostic
+        # block below — the entire point of the ROK-1358 capture — never runs.
+        # Mirrors the env-inspect probe in settings mode above.
         ENV_TABLES=$("${SSH_TO_VM[@]}" "${ORCH_BIN}/env-psql" "$SLUG" -- -tA -c \
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>/dev/null)
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>"$ENV_TABLES_ERR" || true)
         if [[ -z "$ENV_TABLES" ]]; then
-            echo "ERROR: env's public schema is empty or pg not ready." >&2
+            ENV_TABLES_STDERR=$(cat "$ENV_TABLES_ERR" 2>/dev/null || true); rm -f "$ENV_TABLES_ERR"
+            echo "ERROR: env's public schema came back empty when probing container '$ENV_PG_CONTAINER'" >&2
+            echo "       (db '$ENV_PG_DATABASE') on ${RL_PROXMOX_USER}@${RL_PROXMOX_HOST} via" >&2
+            echo "       ${ORCH_BIN}/env-psql $SLUG. Either pg is not ready, OR the SSH/host probe" >&2
+            echo "       failed (RL_INFRA_IP fallback applies when 'rl-infra' doesn't resolve)." >&2
+            [[ -n "$ENV_TABLES_STDERR" ]] && echo "       env-psql/ssh stderr: ${ENV_TABLES_STDERR}" >&2
             exit 3
         fi
+        rm -f "$ENV_TABLES_ERR"
         # 2) TRUNCATE all of them (CASCADE handles FK ordering, RESTART IDENTITY
         #    resets sequences so synced PKs don't collide with the seed nextval).
         TRUNCATE_LIST=$(echo "$ENV_TABLES" | awk '{printf "%s%s", (NR==1?"":", "), $0}')

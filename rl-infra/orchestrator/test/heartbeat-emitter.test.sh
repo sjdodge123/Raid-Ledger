@@ -171,7 +171,7 @@ heartbeat_clamps_below_one() {
     local shim_dir output rc heartbeat_count
     shim_dir="$(make_docker_shim)"
     output="$(PATH="$shim_dir:$PATH" RL_AGENT_ID=test-agent-1331 RL_STATE_DIR="$TMP_STATE" \
-        timeout 6 "$BIN_UNDER_TEST" --heartbeat-interval=0 -- sleep 3 2>&1)"
+        rl_timeout 6 "$BIN_UNDER_TEST" --heartbeat-interval=0 -- sleep 3 2>&1)"
     rc=$?
     heartbeat_count=$(echo "$output" | grep -c '^\[heartbeat\] ' || true)
     rm -rf "$shim_dir"

@@ -26,7 +26,7 @@ import * as schema from '../src/drizzle/schema';
 const SALT_ROUNDS = 12;
 const DEFAULT_EMAIL = 'admin@local';
 
-async function bootstrapAdmin() {
+export async function bootstrapAdmin() {
     const databaseUrl = process.env.DATABASE_URL;
     const resetMode =
         process.argv.includes('--reset') ||
@@ -79,6 +79,22 @@ async function bootstrapAdmin() {
             const credAlreadyBound =
                 !!existingCred && existingCred.userId === linkedUser.id;
 
+            // ROK-1356: when re-binding an EXISTING credential (rebind from the
+            // local: placeholder, or a re-anchor of an already-bound cred)
+            // WITHOUT an explicit reset and WITHOUT a fixed ADMIN_PASSWORD,
+            // carry the EXISTING password_hash forward — update userId only.
+            // Otherwise the first restart_for_settings rebind rotates a fresh
+            // random password that nobody holds (env_spin already returned the
+            // seeded password to the caller), and login breaks. A fixed
+            // ADMIN_PASSWORD (env-spin's idempotent re-seed uses RESET_PASSWORD
+            // + ADMIN_PASSWORD) and an explicit reset both still apply the new
+            // hash. First creation (no existingCred) always generates one.
+            const carryHashForward =
+                !!existingCred && !resetMode && !fixedPassword;
+            const effectiveHash = carryHashForward
+                ? existingCred.passwordHash
+                : passwordHash;
+
             // Idempotency guard: once the credential is already bound to the
             // linked admin and this isn't an explicit reset, leave it untouched.
             // Do NOT re-hash the password on every boot — that would rotate a
@@ -91,7 +107,9 @@ async function bootstrapAdmin() {
                 );
             } else {
                 console.log(
-                    `bootstrap-admin: linked-user mode → binding local_credentials.user_id = ${linkedUser.id}`,
+                    carryHashForward
+                        ? `bootstrap-admin: linked-user mode → rebinding local_credentials.user_id = ${linkedUser.id}, password unchanged`
+                        : `bootstrap-admin: linked-user mode → binding local_credentials.user_id = ${linkedUser.id}`,
                 );
                 // Idempotent bind: INSERT the credential, or UPDATE it in place
                 // when a row already exists (first creation, a rebind from the
@@ -100,16 +118,19 @@ async function bootstrapAdmin() {
                 // can't run. Replaces the old delete-cred → delete-user →
                 // insert-cred cycle, which aborted the whole bootstrap when the
                 // placeholder owned FK-referencing rows (community_lineups.created_by).
+                // ROK-1356: `effectiveHash` carries the existing hash forward on
+                // a no-reset / no-fixed-password rebind so the seeded password
+                // survives restart_for_settings.
                 await db
                     .insert(schema.localCredentials)
                     .values({
                         email: DEFAULT_EMAIL,
-                        passwordHash,
+                        passwordHash: effectiveHash,
                         userId: linkedUser.id,
                     })
                     .onConflictDoUpdate({
                         target: schema.localCredentials.email,
-                        set: { passwordHash, userId: linkedUser.id },
+                        set: { passwordHash: effectiveHash, userId: linkedUser.id },
                     });
             }
 
@@ -133,6 +154,14 @@ async function bootstrapAdmin() {
             if (credAlreadyBound && !resetMode) {
                 console.log(
                     'bootstrap-admin: existing linked admin credential left unchanged',
+                );
+            } else if (carryHashForward) {
+                // ROK-1356: rebound to the linked user but the password hash was
+                // carried forward — do NOT print a banner claiming a new
+                // password (env_spin already handed the seeded one to the
+                // caller). Keep it greppable for operators tailing stdout.
+                console.log(
+                    'bootstrap-admin: linked admin credential rebound, password unchanged',
                 );
             } else {
                 printAdminBanner(
@@ -224,4 +253,9 @@ function printAdminBanner(title: string, password: string): void {
     console.log('');
 }
 
-bootstrapAdmin();
+// Only auto-run when invoked as a script (`node dist/scripts/bootstrap-admin.js`
+// in the allinone entrypoint, or via ts-node in dev). Importing this module
+// from a unit test (ROK-1356 regression spec) must NOT trigger a DB connection.
+if (require.main === module) {
+    bootstrapAdmin();
+}
