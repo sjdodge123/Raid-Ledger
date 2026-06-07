@@ -6,6 +6,26 @@ import { Logger, ExecutionContext } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import * as crypto from 'crypto';
 import type { Response, Request } from 'express';
+import type { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
+import { setRefreshCookie } from '../../auth/refresh/refresh-cookie.helpers';
+
+/**
+ * ROK-1353: mint a Discord refresh family for `userId` and set the httpOnly
+ * `rl_rt` cookie on the OAuth-callback response. Kept here so the controller
+ * stays under the 300-line ESLint cap.
+ */
+export async function issueDiscordRefreshCookie(
+  refreshService: RefreshTokenService,
+  req: Request,
+  res: Response,
+  userId: number,
+): Promise<void> {
+  const issued = await refreshService.issue(userId, {
+    authMethod: 'discord',
+    userAgent: req.headers['user-agent'] ?? null,
+  });
+  setRefreshCookie(res, issued.rawToken, issued.maxAgeMs);
+}
 
 /**
  * Custom DiscordAuthGuard that catches OAuth errors (e.g. InternalOAuthError
@@ -42,24 +62,90 @@ export class DiscordAuthGuard extends AuthGuard('discord') {
         `Discord OAuth callback failed: [${errorName}] ${errorMessage}`,
       );
       const httpCtx = context.switchToHttp();
-      const req = httpCtx.getRequest<Request>();
-      const res = httpCtx.getResponse<Response>();
-      const errCode = (err as unknown as Record<string, unknown>)?.code;
-      if (
-        errCode === 'consent_required' ||
-        errCode === 'interaction_required'
-      ) {
-        res.redirect('/auth/discord?consent=1');
-        return undefined as unknown as TUser;
-      }
-
-      const clientUrl =
-        process.env.CLIENT_URL ||
-        `${(req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol || 'http'}://${req.headers.host || 'localhost'}`;
-      res.redirect(`${clientUrl}/login?error=oauth_failed`);
+      redirectOnOAuthFailure(
+        httpCtx.getRequest<Request>(),
+        httpCtx.getResponse<Response>(),
+        err,
+      );
       return undefined as unknown as TUser;
     }
     return user;
+  }
+}
+
+/** Resolve the external origin for OAuth-failure redirects. */
+function failureClientUrl(req: Request): string {
+  return (
+    process.env.CLIENT_URL ||
+    `${(req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol || 'http'}://${req.headers.host || 'localhost'}`
+  );
+}
+
+/**
+ * Pick the right failure redirect: silent (`prompt=none`) re-auth falls
+ * through to the one-shot client guard (ROK-1353); consent/interaction errors
+ * retry with the consent screen; everything else is a login error.
+ */
+function redirectOnOAuthFailure(
+  req: Request,
+  res: Response,
+  err: Error | null,
+): void {
+  const clientUrl = failureClientUrl(req);
+  if (isSilentOAuthState(req.query?.state)) {
+    res.redirect(`${clientUrl}/auth/success?silent_failed=1`);
+    return;
+  }
+  const errCode = (err as unknown as Record<string, unknown>)?.code;
+  if (errCode === 'consent_required' || errCode === 'interaction_required') {
+    res.redirect('/auth/discord?consent=1');
+    return;
+  }
+  res.redirect(`${clientUrl}/login?error=oauth_failed`);
+}
+
+/** Append `prompt=none` to an authorize URL for silent re-auth (ROK-1353). */
+export function buildSilentOAuthRedirect(authorizeUrl: string): string {
+  return `${authorizeUrl}&prompt=none`;
+}
+
+/**
+ * ROK-1353: build the full silent-login redirect target. Returns the Discord
+ * authorize URL (+ prompt=none) on success, or the `silent_failed` fall-through
+ * when OAuth isn't configured. Keeps the controller method thin (300-line cap).
+ */
+export function buildSilentLoginRedirect(args: {
+  oauthConfig: { clientId: string; callbackUrl: string } | null;
+  secret: string;
+  returnTo: string;
+  clientUrl: string;
+}): string {
+  if (!args.oauthConfig) {
+    return `${args.clientUrl}/auth/success?silent_failed=1`;
+  }
+  const state = signOAuthState(
+    { action: 'silent', returnTo: args.returnTo, timestamp: Date.now() },
+    args.secret,
+  );
+  const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${args.oauthConfig.clientId}&redirect_uri=${encodeURIComponent(args.oauthConfig.callbackUrl)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
+  return buildSilentOAuthRedirect(authorizeUrl);
+}
+
+/**
+ * Best-effort: is this OAuth callback part of a silent (`prompt=none`) flow?
+ * Decodes the (signed) state WITHOUT verifying — used only to choose the
+ * failure redirect target, never to grant auth. ROK-1353.
+ */
+export function isSilentOAuthState(stateParam: unknown): boolean {
+  if (typeof stateParam !== 'string' || !stateParam) return false;
+  try {
+    const { data } = JSON.parse(
+      Buffer.from(stateParam, 'base64').toString(),
+    ) as { data: string };
+    const parsed = JSON.parse(data) as { action?: string };
+    return parsed.action === 'silent';
+  } catch {
+    return false;
   }
 }
 

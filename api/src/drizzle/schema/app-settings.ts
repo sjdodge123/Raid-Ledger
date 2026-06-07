@@ -140,6 +140,8 @@ export const SETTING_KEYS = {
   /** ROK-1099: Community insights snapshot retention in days. */
   COMMUNITY_INSIGHTS_SNAPSHOT_RETENTION_DAYS:
     'community_insights_snapshot_retention_days',
+  /** ROK-1353: Refresh-token session length in days (default 60, range 1–365). */
+  SESSION_LENGTH_DAYS: 'session_length_days',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

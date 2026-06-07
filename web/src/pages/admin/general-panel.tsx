@@ -11,6 +11,7 @@ import {
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { BrandingSection } from '../../components/admin/BrandingSection';
 import { CommunityInsightsSection } from '../../components/admin/CommunityInsightsSection';
+import { SessionLengthForm } from '../../components/admin/SessionLengthForm';
 
 /**
  * General > Site Settings panel (ROK-359 consolidated).
@@ -51,6 +52,7 @@ export function GeneralPanel() {
             <div><h2 className="text-xl font-semibold text-foreground">Site Settings</h2>
                 <p className="text-sm text-muted mt-1">Configure your community timezone, branding, and general options.</p></div>
             <TimezoneSection isLoading={tz.isLoading} timezone={tz.timezone} isPending={tz.isPending} onChange={tz.handleChange} />
+            <SessionLengthSection />
             <BrandingSection />
             <CommunityInsightsSection />
             <SetupWizardSection isPending={resetOnboarding.isPending} onRerun={() => rerunWizard(resetOnboarding, queryClient, navigate)} />
@@ -85,6 +87,18 @@ function TimezoneSection({ isLoading, timezone, isPending, onChange }: {
             </div>
             {isLoading ? <div className="h-11 bg-overlay rounded-lg animate-pulse w-full sm:max-w-md" /> : <TimezoneSelect timezone={timezone} isPending={isPending} onChange={onChange} />}
             {timezone && <p className="text-xs text-muted">Current abbreviation: {getTimezoneAbbr(timezone)}</p>}
+        </div>
+    );
+}
+
+function SessionLengthSection() {
+    return (
+        <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
+            <div>
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Session Length</h3>
+                <p className="text-xs text-muted mt-1">How long a signed-in session stays valid before users must log in again (ROK-1353).</p>
+            </div>
+            <SessionLengthForm />
         </div>
     );
 }

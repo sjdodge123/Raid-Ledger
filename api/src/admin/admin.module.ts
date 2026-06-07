@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { AdminController } from './admin.controller';
 import { AdminSettingsController } from './settings.controller';
+import { AdminSessionController } from './admin-session.controller';
 import { AdminGamesController } from './settings-games.controller';
 import { BrandingController } from './branding.controller';
 import { DemoTestCoreController } from './demo-test-core.controller';
@@ -62,6 +63,7 @@ import { DiscordBotModule } from '../discord-bot/discord-bot.module';
   controllers: [
     AdminController,
     AdminSettingsController,
+    AdminSessionController,
     AdminGamesController,
     BrandingController,
     DemoTestCoreController,

@@ -57,7 +57,7 @@ function AvatarButton({ avatarUrl, username, isOpen, onClick }: {
 }) {
     return (
         <button onClick={onClick} className="flex items-center gap-2 px-2 min-h-[44px] rounded-lg hover:bg-panel transition-colors"
-            aria-expanded={isOpen} aria-haspopup="true">
+            aria-expanded={isOpen} aria-haspopup="true" data-testid="user-menu-trigger">
             {avatarUrl
                 ? <img src={avatarUrl} alt={username} className="w-8 h-8 rounded-full bg-overlay" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 : <div className="w-8 h-8 rounded-full bg-overlay flex items-center justify-center text-xs font-semibold text-muted">{username.charAt(0).toUpperCase()}</div>}

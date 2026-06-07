@@ -6,6 +6,7 @@ import { useSystemStatus } from '../hooks/use-system-status';
 import { API_BASE_URL } from '../lib/config';
 import { toast } from '../lib/toast';
 import { consumeAuthRedirect } from '../components/auth';
+import { setAuthMethod, clearSilentGuard } from '../lib/api/silent-reauth';
 import { DiscordIcon } from '../components/icons/DiscordIcon';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LocalLoginForm } from './login/LocalLoginForm';
@@ -131,9 +132,13 @@ async function performLocalLogin({ username, password, login, isFirstRun, naviga
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
+        // ROK-1353: include so the httpOnly `rl_rt` Set-Cookie is honored.
+        credentials: 'include',
     });
     const data = await response.json().catch(() => ({ message: 'Server unavailable' }));
     if (!response.ok) throw new Error(data.message || 'Invalid credentials');
+    setAuthMethod('local');
+    clearSilentGuard();
     const user = await login(data.access_token);
     if (!user) throw new Error('Failed to authenticate');
     toast.success('Logged in successfully!');

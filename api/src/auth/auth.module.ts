@@ -20,6 +20,9 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { SessionCleanupService } from './session-cleanup.service';
 import { IntentTokenCleanupService } from './intent-token-cleanup.service';
 import { TokenBlocklistService } from './token-blocklist.service';
+import { RefreshTokenService } from './refresh/refresh-token.service';
+import { RefreshTokenController } from './refresh/refresh-token.controller';
+import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.service';
 
 /**
  * Auth module — core authentication logic (JWT, local auth, intent tokens).
@@ -40,12 +43,14 @@ import { TokenBlocklistService } from './token-blocklist.service';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '24h' },
+        // ROK-1353: access JWT shortened 24h → 1h; refresh-token rotation
+        // keeps sessions long-lived without a long-lived access token.
+        signOptions: { expiresIn: '1h' },
       }),
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController, LocalAuthController],
+  controllers: [AuthController, LocalAuthController, RefreshTokenController],
   providers: [
     AuthService,
     LocalAuthService,
@@ -55,6 +60,8 @@ import { TokenBlocklistService } from './token-blocklist.service';
     SessionCleanupService,
     IntentTokenCleanupService,
     TokenBlocklistService,
+    RefreshTokenService,
+    RefreshTokenCleanupService,
   ],
   exports: [
     AuthService,
@@ -62,6 +69,7 @@ import { TokenBlocklistService } from './token-blocklist.service';
     MagicLinkService,
     IntentTokenService,
     TokenBlocklistService,
+    RefreshTokenService,
   ],
 })
 export class AuthModule {}

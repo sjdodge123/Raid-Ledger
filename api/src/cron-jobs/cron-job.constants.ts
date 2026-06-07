@@ -146,6 +146,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Purges consumed intent tokens older than 15 minutes every 5 minutes',
     category: 'Maintenance',
   },
+  RefreshTokenCleanupService_cleanupExpiredTokens: {
+    description:
+      'Deletes expired and revoked refresh-token rows daily at 3 AM (ROK-1353)',
+    category: 'Maintenance',
+  },
   SchedulingThresholdService_checkThresholds: {
     description:
       'Notifies poll organizers when unique voter count reaches the minimum vote threshold every 5 minutes',

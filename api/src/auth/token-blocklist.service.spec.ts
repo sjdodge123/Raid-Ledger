@@ -45,7 +45,7 @@ describe('TokenBlocklistService', () => {
       expect(storedTimestamp).toBeLessThanOrEqual(after);
     });
 
-    it('should use 86400 second TTL matching max token lifetime', async () => {
+    it('should use 86400 second TTL covering the longest-lived issued JWT (ROK-1353 keeps 24h for rollout safety)', async () => {
       await service.blockUser(1);
 
       expect(mockRedis.set).toHaveBeenCalledWith(

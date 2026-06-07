@@ -61,11 +61,21 @@ describe('useAuth login — events cache invalidation (ROK-691)', () => {
         // Spy on invalidateQueries to verify it's called with ['events']
         const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-        // Mock fetch to return a valid user response for /auth/me
+        // Route-aware fetch mock (ROK-1353): mounting useAuth with no access
+        // token now attempts a transparent POST /auth/refresh before settling
+        // on logged-out, so a single mockResolvedValueOnce would be consumed
+        // by that probe instead of login's /auth/me call.
         const mockUser = { id: 1, username: 'TestUser', discordId: '123', displayName: null, avatar: null, customAvatarUrl: null, onboardingCompletedAt: null };
-        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-            new Response(JSON.stringify(mockUser), { status: 200, headers: { 'Content-Type': 'application/json' } }),
-        );
+        vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+            const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+            if (url.includes('/auth/refresh')) {
+                return Promise.resolve(new Response('Unauthorized', { status: 401 }));
+            }
+            if (url.includes('/auth/me')) {
+                return Promise.resolve(new Response(JSON.stringify(mockUser), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+            }
+            return Promise.resolve(new Response('Not Found', { status: 404 }));
+        });
 
         const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 

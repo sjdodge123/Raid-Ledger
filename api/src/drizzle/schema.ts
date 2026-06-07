@@ -51,3 +51,4 @@ export * from './schema/lineup-ai-suggestions';
 export * from './schema/discovery-category-suggestions';
 export * from './schema/community-insights-snapshots';
 export * from './schema/games-dedup-audit';
+export * from './schema/refresh-tokens';

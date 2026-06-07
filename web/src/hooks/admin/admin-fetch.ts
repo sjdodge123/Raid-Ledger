@@ -3,6 +3,7 @@
  * Provides a consistent pattern for authenticated admin API calls.
  */
 import { API_BASE_URL } from '../../lib/config';
+import { ensureFreshToken } from '../../lib/api/refresh-client';
 import { getAuthToken } from '../use-auth';
 
 /** Build auth headers with current token */
@@ -25,6 +26,14 @@ export async function adminFetch<T>(
             ...options,
             headers: getHeaders(),
         });
+        // ROK-1353: expired 1h access token — transparent single-flight
+        // refresh + one retry (no-op while impersonating).
+        if (response.status === 401 && (await ensureFreshToken())) {
+            response = await fetch(`${API_BASE_URL}${path}`, {
+                ...options,
+                headers: getHeaders(),
+            });
+        }
     } catch {
         throw new Error(errorMessage);
     }

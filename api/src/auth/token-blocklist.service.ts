@@ -2,7 +2,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
-/** TTL in seconds — matches max JWT lifetime (24h). */
+/**
+ * TTL in seconds. Kept at 24h even though access JWTs are now 1h (ROK-1353):
+ * pre-rollout tokens were minted with 24h exp, and a blocklist entry that
+ * outlives every possible token costs nothing (keys self-clean) while a
+ * shorter one lets a revoked-but-unexpired token regain access (Codex P1).
+ */
 const BLOCK_TTL_SECONDS = 86400;
 
 /** Redis key prefix for user-level token blocklist entries. */
