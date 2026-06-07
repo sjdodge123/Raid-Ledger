@@ -38,10 +38,12 @@ async function loginViaForm(page: import('@playwright/test').Page) {
     await page.locator('#username').fill(ADMIN_USER);
     await page.locator('#password').fill(ADMIN_PASS);
     await page.getByRole('button', { name: 'Sign In' }).click();
-    // Left the login page — the Sign In button is gone once authenticated.
-    await expect(
-        page.getByRole('button', { name: 'Sign In' }),
-    ).not.toBeVisible({ timeout: 15_000 });
+    // Positive login evidence: the header user-menu renders only when
+    // authenticated (asserting "Sign In gone" is vacuous — the login card
+    // can collapse for other reasons).
+    await expect(page.getByTestId('user-menu-trigger')).toBeVisible({
+        timeout: 15_000,
+    });
 }
 
 /** True when the page is currently showing the login screen. */
@@ -97,9 +99,9 @@ test.describe('Auth refresh (ROK-1353)', () => {
         await loginViaForm(page);
 
         // Trigger the app logout (server-side revocation + cookie clear).
-        const userMenu = page
-            .getByRole('button', { name: /account|profile|menu|admin/i })
-            .first();
+        // Desktop: logout lives in the user-menu dropdown; mobile surfaces a
+        // visible Logout button (more-drawer) without the menu.
+        const userMenu = page.getByTestId('user-menu-trigger');
         if (await userMenu.isVisible({ timeout: 5_000 }).catch(() => false)) {
             await userMenu.click();
         }

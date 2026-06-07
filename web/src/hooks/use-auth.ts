@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { ensureFreshToken } from '../lib/api/refresh-client';
-import { clearSilentGuard, clearAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
+import { clearSilentGuard, clearAuthMethod, getAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
 import type { UserRole } from '@raid-ledger/contract';
 
 const TOKEN_KEY = 'raid_ledger_token';
@@ -117,6 +117,11 @@ export async function fetchCurrentUser(): Promise<User | null> {
     if (!token) {
         // ROK-1353: no access token but a refresh cookie may still be live —
         // try a transparent refresh before deciding the user is logged out.
+        // Only probe when a prior session left its auth-method marker:
+        // fresh anonymous visitors have no refresh cookie, and the probe's
+        // async 401 re-renders the login page mid-interaction (it collapses
+        // the username form under the user's cursor).
+        if (!getAuthMethod()) return null;
         token = await ensureFreshToken();
         if (!token) return handleRefreshFailure();
     }
