@@ -8,6 +8,7 @@ import { NotificationService } from './notification.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
+import { RefreshTokenService } from '../auth/refresh/refresh-token.service';
 
 /**
  * ModuleRef-aware entry point — resolves cross-module deps lazily to
@@ -26,26 +27,8 @@ export async function deactivateUserViaModuleRef(
     logger.warn(`ROK-1260: deactivateUser(${userId}) — no moduleRef, skipping`);
     return;
   }
-  /* eslint-disable @typescript-eslint/no-require-imports */
-  const usersModule = require('../users/users.service') as {
-    UsersService: new (...args: unknown[]) => UsersService;
-  };
-  const rosterModule = require('../events/signups-roster.service') as {
-    SignupsRosterService: new (...args: unknown[]) => SignupsRosterService;
-  };
-  const notifModule = require('./notification.service') as {
-    NotificationService: new (...args: unknown[]) => NotificationService;
-  };
-  /* eslint-enable @typescript-eslint/no-require-imports */
-  const usersService = moduleRef.get(usersModule.UsersService, {
-    strict: false,
-  });
-  const rosterService = moduleRef.get(rosterModule.SignupsRosterService, {
-    strict: false,
-  });
-  const notificationService = moduleRef.get(notifModule.NotificationService, {
-    strict: false,
-  });
+  const deps = resolveDeactivationDeps(moduleRef);
+  const { usersService, rosterService, notificationService } = deps;
   if (!usersService || !rosterService || !notificationService) {
     logger.warn(
       `ROK-1260: deactivateUser(${userId}) — deps not wired, skipping`,
@@ -53,9 +36,50 @@ export async function deactivateUserViaModuleRef(
     return;
   }
   await deactivateUserOrchestrated(
-    { db, usersService, notificationService, rosterService, logger },
+    {
+      db,
+      logger,
+      usersService,
+      rosterService,
+      notificationService,
+      refreshTokenService: deps.refreshTokenService,
+    },
     userId,
   );
+}
+
+/**
+ * Resolve the cross-module deps lazily through ModuleRef (avoids the 3-way
+ * Notification↔Users↔Events boot cycle). `refreshTokenService` is optional —
+ * an older boot graph may not have AuthModule wired (ROK-1353).
+ */
+function resolveDeactivationDeps(moduleRef: ModuleRef): {
+  usersService: UsersService | null;
+  rosterService: SignupsRosterService | null;
+  notificationService: NotificationService | null;
+  refreshTokenService: RefreshTokenService | null;
+} {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const u = require('../users/users.service') as {
+    UsersService: new (...a: unknown[]) => UsersService;
+  };
+  const r = require('../events/signups-roster.service') as {
+    SignupsRosterService: new (...a: unknown[]) => SignupsRosterService;
+  };
+  const n = require('./notification.service') as {
+    NotificationService: new (...a: unknown[]) => NotificationService;
+  };
+  const rt = require('../auth/refresh/refresh-token.service') as {
+    RefreshTokenService: new (...a: unknown[]) => RefreshTokenService;
+  };
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  const opt = { strict: false };
+  return {
+    usersService: moduleRef.get(u.UsersService, opt),
+    rosterService: moduleRef.get(r.SignupsRosterService, opt),
+    notificationService: moduleRef.get(n.NotificationService, opt),
+    refreshTokenService: moduleRef.get(rt.RefreshTokenService, opt),
+  };
 }
 
 /**
@@ -79,6 +103,7 @@ export async function deactivateUserOrchestrated(
     usersService: UsersService;
     notificationService: NotificationService;
     rosterService: SignupsRosterService;
+    refreshTokenService?: RefreshTokenService | null;
     logger: Logger;
   },
   userId: number,
@@ -97,11 +122,32 @@ export async function deactivateUserOrchestrated(
   // ROK-1275: drop the cached auth-user row so any in-flight JWT validates
   // against the fresh deactivated_at value, not the 30-second-stale cache.
   invalidateAuthUser(row.id);
+  // ROK-1353: revoke EVERY refresh family so a guild-leaver can't silently
+  // re-mint a session — this is the primary deactivation path (guild leave).
+  await revokeRefreshTokens(deps, row.id);
   deps.logger.log(
     `ROK-1260: deactivated user ${row.id} (${row.username}) — running cancel cascade`,
   );
   await runCascade(deps, row.id);
   await writeAdminNotification(deps, row);
+}
+
+/** ROK-1353: best-effort revoke of all refresh tokens for a deactivated user. */
+async function revokeRefreshTokens(
+  deps: {
+    refreshTokenService?: RefreshTokenService | null;
+    logger: Logger;
+  },
+  userId: number,
+): Promise<void> {
+  if (!deps.refreshTokenService) return;
+  try {
+    await deps.refreshTokenService.revokeAllForUser(userId);
+  } catch (err: unknown) {
+    deps.logger.warn(
+      `ROK-1353: refresh-token revoke for user ${userId} failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+    );
+  }
 }
 
 async function runCascade(

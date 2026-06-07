@@ -4,6 +4,8 @@ import {
   Get,
   Body,
   Param,
+  Req,
+  Res,
   HttpCode,
   HttpStatus,
   UnauthorizedException,
@@ -13,9 +15,12 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Request as ExpressRequest, Response } from 'express';
 import { LocalAuthService } from './local-auth.service';
 import { OperatorGuard } from './operator.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
+import { RefreshTokenService } from './refresh/refresh-token.service';
+import { setRefreshCookie } from './refresh/refresh-cookie.helpers';
 import { z } from 'zod';
 
 // Email regex that accepts local emails (admin@local) and standard emails
@@ -41,17 +46,25 @@ import type { AuthenticatedRequest } from './types';
 
 @Controller('auth')
 export class LocalAuthController {
-  constructor(private localAuthService: LocalAuthService) {}
+  constructor(
+    private localAuthService: LocalAuthService,
+    private refreshService: RefreshTokenService,
+  ) {}
 
   /**
    * POST /auth/local
    * Authenticate with email/password or username/password credentials.
    * Accepts either 'email' or 'username' field for backwards compatibility.
+   * ROK-1353: also mints a refresh family + sets the httpOnly `rl_rt` cookie.
    */
   @RateLimit('auth')
   @Post('local')
   @HttpCode(HttpStatus.OK)
-  async localLogin(@Body() body: LocalLoginDto) {
+  async localLogin(
+    @Body() body: LocalLoginDto,
+    @Req() req: ExpressRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     // Validate request body
     const result = LocalLoginSchema.safeParse(body);
     if (!result.success) {
@@ -67,6 +80,12 @@ export class LocalAuthController {
       email,
       password,
     );
+
+    const issued = await this.refreshService.issue(user.id, {
+      authMethod: 'local',
+      userAgent: req.headers['user-agent'] ?? null,
+    });
+    setRefreshCookie(res, issued.rawToken, issued.maxAgeMs);
 
     // Generate JWT
     return this.localAuthService.login(user);

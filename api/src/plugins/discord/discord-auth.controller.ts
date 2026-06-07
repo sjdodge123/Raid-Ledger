@@ -32,7 +32,10 @@ import {
   getOriginUrl,
   exchangeCodeForToken,
   fetchDiscordProfile,
+  buildSilentLoginRedirect,
+  issueDiscordRefreshCookie,
 } from './discord-auth.helpers';
+import { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
 
 interface RequestWithUser extends Request {
   user: {
@@ -58,6 +61,7 @@ export class DiscordAuthController {
     private discordNotificationService: DiscordNotificationService | null,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly eventEmitter: EventEmitter2,
+    private readonly refreshService: RefreshTokenService,
   ) {}
 
   /** Get the frontend client URL for post-auth redirects. */
@@ -89,6 +93,9 @@ export class DiscordAuthController {
     const authCode = crypto.randomBytes(32).toString('hex');
     await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
     const clientUrl = this.getClientUrl(req);
+    // ROK-1353: mint a refresh family + set the httpOnly cookie before the
+    // browser redirect so the SPA has a long-lived session post-login.
+    await issueDiscordRefreshCookie(this.refreshService, req, res, req.user.id);
 
     const stateParam = (req.query as Record<string, string>).state;
     if (stateParam) {
@@ -145,6 +152,31 @@ export class DiscordAuthController {
     state: string,
   ): string {
     return `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
+  }
+
+  /**
+   * GET /auth/discord/silent — silent re-auth (`prompt=none`, ROK-1353).
+   * Builds the authorize URL with prompt=none + a signed silent state so a
+   * returning Discord-linked user is re-authenticated without a consent
+   * screen. On no active Discord session Discord returns ?error= → the
+   * callback redirects to /auth/success?silent_failed=1 (one-shot guard
+   * lives client-side).
+   */
+  @RateLimit('auth')
+  @Get('discord/silent')
+  async discordSilentLogin(
+    @Query('returnTo') returnTo: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    res.redirect(
+      buildSilentLoginRedirect({
+        oauthConfig: await this.settingsService.getDiscordOAuthConfig(),
+        secret: this.getSecret(),
+        returnTo: returnTo ?? '/',
+        clientUrl: this.getClientUrl(req),
+      }),
+    );
   }
 
   /** Initiate the Discord link OAuth flow after validating config. */
