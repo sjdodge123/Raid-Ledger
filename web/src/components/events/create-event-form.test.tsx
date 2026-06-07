@@ -401,3 +401,31 @@ describe('CreateEventForm — recurrence instance count preview', () => {
     createeventformRecurrenceInstanceCountPreviewGroup1();
     createeventformRecurrenceInstanceCountPreviewGroup2();
 });
+
+// ─── ROK-1350: gameId unset semantics in buildSubmitDto ───────────────────────
+describe('buildSubmitDto — gameId unset semantics (ROK-1350)', () => {
+    async function buildDto(registryGameId: number | null | undefined, isEditMode: boolean) {
+        const { buildSubmitDto } = await import('./create-event-form.utils');
+        const { getInitialState } = await import('./create-event-form.utils');
+        const form = getInitialState(undefined, 'America/New_York');
+        form.title = 'Chrome MCP Variety Night';
+        form.startDate = '2026-06-08';
+        form.startTime = '20:00';
+        return buildSubmitDto(form, 'America/New_York', registryGameId, isEditMode);
+    }
+
+    it('edit mode with cleared game sends explicit gameId: null (unset persists)', async () => {
+        const dto = await buildDto(null, true);
+        expect(dto.gameId).toBeNull();
+    });
+
+    it('create mode with no game omits gameId (CreateEventDto is not nullable)', async () => {
+        const dto = await buildDto(null, false);
+        expect(dto.gameId).toBeUndefined();
+    });
+
+    it('edit mode with a selected game sends the numeric gameId', async () => {
+        const dto = await buildDto(10, true);
+        expect(dto.gameId).toBe(10);
+    });
+});
