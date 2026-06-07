@@ -4,7 +4,6 @@
  */
 import {
   BadRequestException,
-  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -28,7 +27,6 @@ import {
   insertScheduleSlot,
   insertScheduleVote,
   deleteScheduleVote,
-  findVoteBySlotAndUser,
   updateMatchLinkedEvent,
   deleteAllUserVotesForMatch,
   findUserSchedulingMatches,
@@ -55,13 +53,14 @@ import {
   findSlotOrThrow,
   resolveGameInfo,
   buildCreateEventDto,
+  assertUserHasVoted,
 } from './scheduling-event.helpers';
 import {
   assertSchedulingEnabled,
   assertSchedulable,
 } from './scheduling-guard.helpers';
 import {
-  buildCancelNotifications,
+  archiveAndNotifyCancel,
   normalizeReason,
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
@@ -212,7 +211,7 @@ export class SchedulingService {
     if (match.linkedEventId) {
       throw new BadRequestException('Event already created for this match');
     }
-    await this.assertUserHasVoted(matchId, userId);
+    await assertUserHasVoted(this.db, matchId, userId);
     const slot = await findSlotOrThrow(this.db, slotId);
     const { gameName } = await resolveGameInfo(this.db, match.gameId);
     const dto = buildCreateEventDto(
@@ -292,41 +291,15 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    await this.db
-      .update(schema.communityLineupMatches)
-      .set({ status: 'archived', updatedAt: new Date() })
-      .where(eq(schema.communityLineupMatches.id, matchId));
-    await this.notifyPollCancelled(match, actorUserId, normalizeReason(reason));
+    await archiveAndNotifyCancel(
+      { db: this.db, notifications: this.notifications, logger: this.logger },
+      match,
+      actorUserId,
+      normalizeReason(reason),
+    );
   }
 
   // -- Private helpers --
-
-  /** Build + dispatch cancel notifications to matched voters (fire-safe). */
-  private async notifyPollCancelled(
-    match: { id: number; lineupId: number; gameId: number },
-    actorUserId: number,
-    reason: string | null,
-  ): Promise<void> {
-    try {
-      const members = await findMatchMembers(this.db, [match.id]);
-      const recipientUserIds = members
-        .map((m) => m.userId)
-        .filter((id) => id !== actorUserId);
-      if (recipientUserIds.length === 0) return;
-      const { gameName } = await resolveGameInfo(this.db, match.gameId);
-      const inputs = buildCancelNotifications({
-        lineupId: match.lineupId,
-        matchId: match.id,
-        gameName,
-        reason,
-        recipientUserIds,
-      });
-      await this.notifications.createMany(inputs);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Poll-cancel notifications failed: ${msg}`);
-    }
-  }
 
   /** Fire-and-forget auto-heart for poll voters. */
   private fireAutoHeart(gameId: number, voters: { userId: number }[]): void {
@@ -343,20 +316,6 @@ export class SchedulingService {
     const [match] = await findMatchById(this.db, matchId);
     if (!match) throw new NotFoundException('Match not found');
     return match;
-  }
-
-  private async assertUserHasVoted(
-    matchId: number,
-    userId: number,
-  ): Promise<void> {
-    const slots = await findScheduleSlots(this.db, matchId);
-    for (const slot of slots) {
-      const votes = await findVoteBySlotAndUser(this.db, slot.id, userId);
-      if (votes.length > 0) return;
-    }
-    throw new ForbiddenException(
-      'You must vote on a slot before creating an event',
-    );
   }
 
   private async assertNoDuplicateSlot(
