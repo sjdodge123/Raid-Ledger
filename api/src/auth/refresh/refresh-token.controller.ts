@@ -16,7 +16,6 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { RateLimit } from '../../throttler/rate-limit.decorator';
 import { RefreshTokenService } from './refresh-token.service';
-import { TokenBlocklistService } from '../token-blocklist.service';
 import {
   readRefreshCookie,
   setRefreshCookie,
@@ -33,7 +32,6 @@ export class RefreshTokenController {
   constructor(
     private readonly refreshService: RefreshTokenService,
     private readonly jwtService: JwtService,
-    private readonly blocklist: TokenBlocklistService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -55,7 +53,7 @@ export class RefreshTokenController {
     return { access_token };
   }
 
-  /** Revoke the presented family + blocklist + clear cookie. */
+  /** Revoke the presented family + clear cookie (this device only). */
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(
@@ -68,12 +66,22 @@ export class RefreshTokenController {
     return { success: true };
   }
 
-  /** Revoke the family the presented token belongs to + blocklist the user. */
+  /**
+   * Revoke the family the presented token belongs to (this device's session).
+   *
+   * Deliberately does NOT `blockUser` (ROK-1353): blocklist is keyed on userId
+   * and kills the access token on EVERY device, which is wrong for a routine
+   * single-device logout and — because smoke tests share one admin account
+   * across parallel workers — poisons every concurrent worker's cached token
+   * ("Token has been revoked" 401s). The long-lived credential (refresh
+   * family) is revoked immediately per AC; the ≤1h access token expires
+   * naturally and cannot be renewed. blockUser stays on deactivation, the
+   * security event that SHOULD terminate all devices.
+   */
   private async revokePresented(rawToken: string): Promise<void> {
     const row = await this.refreshService.findActiveByHash(hashToken(rawToken));
     if (!row) return;
     await this.refreshService.revokeFamily(row.familyId);
-    await this.blocklist.blockUser(row.userId);
   }
 
   /** Mint a fresh 1h access JWT for the user behind a rotated token. */
