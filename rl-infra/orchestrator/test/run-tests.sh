@@ -49,6 +49,8 @@ else
         # Fleet sync_settings RL_ENV_JWT_SECRET false-"missing" root-cause fix.
         "$TEST_DIR/sync-local-to-env-rl-agent.test.sh"
         "$TEST_DIR/sync-local-to-env-infra-read.test.sh"
+        # ROK-1358 — DNS-fallback host resolution + diagnosable probe failures.
+        "$TEST_DIR/sync-local-to-env-host-resolve.test.sh"
     )
 fi
 
