@@ -10,6 +10,9 @@ export const MAX_SCHEDULED_EVENTS_REACHED = 30038;
 /** Maximum description length for Discord Scheduled Events. */
 export const MAX_DESCRIPTION_LENGTH = 1000;
 
+/** Discord hard cap on Scheduled Event names (50035 rejects names > 100). */
+export const MAX_SCHEDULED_EVENT_NAME_LENGTH = 100;
+
 /**
  * Thrown by `withCapacityRecovery` when GC ran but freed 0 stale RL-tracked
  * scheduled events — the cap is held by operator-owned SEs that RL can't
@@ -101,6 +104,24 @@ export function buildDescriptionText(
   if (full.length <= MAX_DESCRIPTION_LENGTH) return full;
 
   return truncateDescription(header, eventDesc, link);
+}
+
+/**
+ * Build the Discord Scheduled Event name (ROK-1350). Variety nights get the
+ * assigned game appended (`"<title> — <GAME>"`, em-dash matching the
+ * description). Returns the bare title when no game is set (covers unset/revert)
+ * or when the title already contains the game name (case-insensitive). Truncates
+ * to the Discord 100-char cap with an ellipsis.
+ */
+export function buildScheduledEventName(eventData: ScheduledEventData): string {
+  const gameName = eventData.game?.name;
+  if (!gameName) return eventData.title;
+  if (eventData.title.toLowerCase().includes(gameName.toLowerCase()))
+    return eventData.title;
+
+  const combined = `${eventData.title} — ${gameName}`;
+  if (combined.length <= MAX_SCHEDULED_EVENT_NAME_LENGTH) return combined;
+  return combined.slice(0, MAX_SCHEDULED_EVENT_NAME_LENGTH - 1) + '…';
 }
 
 /** Format an API error message for logging. */

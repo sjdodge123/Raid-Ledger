@@ -8,6 +8,7 @@ import {
   UNKNOWN_SCHEDULED_EVENT,
   MAX_SCHEDULED_EVENTS_REACHED,
   timedDiscordCall,
+  buildScheduledEventName,
   type ScheduledEventData,
 } from './scheduled-event.helpers';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
@@ -246,7 +247,7 @@ export async function tryCreateNewEvent(
     'scheduledEvents.create',
     () =>
       guild.scheduledEvents.create({
-        name: eventData.title,
+        name: buildScheduledEventName(eventData),
         scheduledStartTime: new Date(eventData.startTime),
         scheduledEndTime: new Date(eventData.endTime),
         privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
@@ -271,7 +272,7 @@ export async function tryEditFullEvent(
     'scheduledEvents.edit',
     () =>
       guild.scheduledEvents.edit(seId, {
-        name: eventData.title,
+        name: buildScheduledEventName(eventData),
         scheduledStartTime: new Date(eventData.startTime),
         scheduledEndTime: new Date(eventData.endTime),
         description,

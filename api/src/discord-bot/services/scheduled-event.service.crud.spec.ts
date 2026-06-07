@@ -27,7 +27,8 @@ describe('createScheduledEvent — happy path & skip conditions', () => {
     await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
     expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'Raid Night',
+        // ROK-1350: SE name now incorporates the assigned game.
+        name: 'Raid Night — World of Warcraft',
         privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
         entityType: GuildScheduledEventEntityType.Voice,
         channel: 'voice-channel-123',
@@ -234,7 +235,8 @@ describe('updateScheduledEvent', () => {
     expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
       'discord-se-id-1',
       expect.objectContaining({
-        name: 'Raid Night',
+        // ROK-1350: SE name now incorporates the assigned game.
+        name: 'Raid Night — World of Warcraft',
         scheduledStartTime: new Date(baseEventData.startTime),
         scheduledEndTime: new Date(baseEventData.endTime),
       }),
