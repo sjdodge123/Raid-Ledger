@@ -31,6 +31,17 @@ export const CreateEventFromSlotSchema = z.object({
 
 export type CreateEventFromSlotDto = z.infer<typeof CreateEventFromSlotSchema>;
 
+/**
+ * Body for cancelling a scheduling poll (ROK-1219 / F-38).
+ * Optional reason surfaced to voters in the cancellation notification.
+ * Additive — legacy no-body callers still validate via `safeParse(body ?? {})`.
+ */
+export const CancelSchedulePollSchema = z.object({
+  reason: z.string().trim().max(500).nullable().optional(),
+});
+
+export type CancelSchedulePollDto = z.infer<typeof CancelSchedulePollSchema>;
+
 // ============================================================
 // Response Schemas (ROK-965)
 // ============================================================

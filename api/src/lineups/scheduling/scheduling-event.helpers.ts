@@ -3,12 +3,36 @@
  * Extracted from scheduling.service.ts to stay within the 300-line limit.
  */
 import { eq } from 'drizzle-orm';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import {
+  findScheduleSlots,
+  findVoteBySlotAndUser,
+} from './scheduling-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * Assert the user has voted on at least one slot of the match before they may
+ * create an event from it (ROK-1031). Extracted from the service to keep it
+ * within the 300-line ESLint cap (ROK-1219).
+ */
+export async function assertUserHasVoted(
+  db: Db,
+  matchId: number,
+  userId: number,
+): Promise<void> {
+  const slots = await findScheduleSlots(db, matchId);
+  for (const slot of slots) {
+    const votes = await findVoteBySlotAndUser(db, slot.id, userId);
+    if (votes.length > 0) return;
+  }
+  throw new ForbiddenException(
+    'You must vote on a slot before creating an event',
+  );
+}
 
 const EVENT_DURATION_MS = 2 * 60 * 60 * 1000;
 const FOUR_WEEKS_MS = 4 * 7 * 24 * 60 * 60 * 1000;

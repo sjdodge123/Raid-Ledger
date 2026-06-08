@@ -21,6 +21,7 @@ import {
   SuggestSlotSchema,
   ToggleScheduleVoteSchema,
   CreateEventFromSlotSchema,
+  CancelSchedulePollSchema,
   type SchedulePollPageResponseDto,
   type OtherPollsResponseDto,
   type AggregateGameTimeResponse,
@@ -125,8 +126,18 @@ export class SchedulingController {
   @HttpCode(HttpStatus.OK)
   async cancelPoll(
     @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
   ): Promise<{ ok: boolean }> {
-    await this.schedulingService.cancelPoll(matchId);
+    const parsed = CancelSchedulePollSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    await this.schedulingService.cancelPoll(
+      matchId,
+      req.user!.id,
+      parsed.data.reason,
+    );
     return { ok: true };
   }
 
