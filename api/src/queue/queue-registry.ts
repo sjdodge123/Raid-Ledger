@@ -25,9 +25,11 @@ import { BENCH_PROMOTION_QUEUE } from '../events/bench-promotion.service';
 import { EVENT_PLANS_QUEUE } from '../events/event-plans.service';
 import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
 import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
+import { AI_SUGGESTIONS_PREGEN_QUEUE } from '../lineups/ai-suggestions/pre-gen.queue';
 
 export const ALL_QUEUE_NAMES = [
   LINEUP_PHASE_QUEUE,
+  AI_SUGGESTIONS_PREGEN_QUEUE,
   STEAM_SYNC_QUEUE,
   ENRICHMENT_QUEUE,
   EMBED_SYNC_QUEUE,

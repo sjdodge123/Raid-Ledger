@@ -63,9 +63,18 @@ function useAiSuggestionsForPersonal(lineupId: number): PersonalSuggestionsState
     const isUnavailable = result?.kind === 'unavailable';
     const suggestions =
         result && result.kind !== 'unavailable' ? result.data.suggestions : [];
+    // ROK-1316: a cold-cache read returns `pending: true` while the
+    // background pre-gen job warms — keep the skeleton up until it resolves.
+    // Rework #3: drop the skeleton once polling exhausts its cap and the
+    // payload is STILL pending (pre-gen never finished) so the row collapses
+    // to its empty state instead of spinning forever.
+    const isPending =
+        result?.kind === 'ok' &&
+        result.data.pending === true &&
+        !query.pollExhausted;
     return {
         aiAvailable,
-        isLoading: query.isLoading,
+        isLoading: query.isLoading || isPending,
         isUnavailable,
         isError: query.isError,
         suggestions,
