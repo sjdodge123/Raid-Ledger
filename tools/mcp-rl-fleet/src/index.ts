@@ -16,6 +16,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 
 import { worktreePathSchema } from './exec.js';
+import { WAIT_CAP_TEACHING_MESSAGE } from './tools/task-schemas.js';
 import * as claim from './tools/claim.js';
 import * as release from './tools/release.js';
 import * as status from './tools/status.js';
@@ -79,10 +80,14 @@ const slugSchema = z
   .regex(/^[a-z0-9-]+$/, 'slug must match [a-z0-9-]+')
   .min(1)
   .max(63);
-const taskIdSchema = z.string().regex(/^[a-z0-9]{8,32}$/);
+// ROK-1362: widened to accept the `local-` namespace (laptop tasks: rl_env_deploy
+// / rl_env_clone_prod) alongside VM task ids.
+const taskIdSchema = z.string().regex(/^(local-)?[a-z0-9]{8,32}$/);
+// ROK-1362: every blocking wait caps at 120s (no MCP call holds the channel
+// longer). On cap-expiry the tool returns a still_running progress snapshot.
 const waitFragment: Shape = {
   wait: z.boolean().optional(),
-  wait_timeout_seconds: z.number().int().min(5).max(3600).default(1800),
+  wait_timeout_seconds: z.number().int().min(5).max(120).default(120),
 };
 
 const claimSchema: Shape = {
@@ -206,7 +211,11 @@ const envDeploySchema: Shape = {
   skip_build: z.boolean().optional(),
   clone_prod: z.boolean().optional(),
   clone_prod_skip_local_refresh: z.boolean().optional(),
+  // Build-step (VM-side) watchdog budget. NOT a blocking wait on this call.
   timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  // ROK-1362: async-by-default. wait:false → {task_id} fast; wait:true blocks
+  // ≤120s on the laptop task then returns terminal status or a still_running snapshot.
+  ...waitFragment,
 };
 registerTool(envDeploy.TOOL_NAME, envDeploy.TOOL_DESCRIPTION, envDeploySchema, async (p) =>
   jsonResult(await envDeploy.execute(p as envDeploy.EnvDeployParams)),
@@ -301,7 +310,7 @@ registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, asyn
 
 // ----- Task tools (ROK-1331 M2) -----
 const TASK_STATUS_DESC =
-  "Read the current state of a task spawned by rl_validate_ci, rl_env_build_image_from_runner, or rl_env_clone_prod in async (wait:false) mode. Cheap (single VM file read). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, log_tail (last 50KB by default, configurable up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. Use rl_task_wait for push-notify shape.";
+  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call).";
 const taskStatusSchema: Shape = {
   task_id: taskIdSchema,
   log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
@@ -311,10 +320,17 @@ registerTool('rl_task_status', TASK_STATUS_DESC, taskStatusSchema, async (p) =>
 );
 
 const TASK_WAIT_DESC =
-  "Long-poll via SSH inotifywait on the task's JSON file. Blocks until the task transitions to a terminal state OR the timeout expires (default 600s). Returns the same shape as rl_task_status on transition; returns {ok:false, error:'timed_out', task_id, waited_seconds} on timeout (resume polling via rl_task_status or another rl_task_wait). Returns {ok:false, error:'inotifywait_not_installed', operator_only:true} when the VM is missing inotify-tools (operator-only to install). Returns {ok:false, error:'ssh_denied'|'ssh_unreachable', hint:...} when the SSH transport itself fails (e.g. post-ROK-1338 lockdown).";
+  "Block until a task reaches a terminal state OR 120s elapses — whichever first (ROK-1362: every wait HARD-CAPS at 120s; the old hour-long blind wait is gone). VM tasks long-poll via inotifywait; laptop `local-...` tasks via fs.watch. Terminal → same shape as rl_task_status. Cap reached with the task still running → {ok:false, status:'still_running', task_id, tool, current_step, steps[], log_tail (~6KB), elapsed_s, waited_s, poll_again_hint} — a PROGRESS SNAPSHOT you narrate to the operator, then re-call with the SAME task_id to keep waiting (each call is a fresh snapshot). To walk away, use the README background push-notify pattern (a backgrounded `rl ... wait` Bash call), never a blocking MCP wait. Also returns {error:'inotifywait_not_installed', operator_only:true} (VM missing inotify-tools) or {error:'ssh_denied'|'ssh_unreachable', hint} on transport failure.";
 const taskWaitSchema: Shape = {
   task_id: taskIdSchema,
-  timeout_seconds: z.number().int().min(5).max(3600).optional(),
+  // ROK-1362: schema-level cap with a TEACHING message — the message IS the
+  // migration path for agents habituated to 1800s blind waits.
+  timeout_seconds: z
+    .number()
+    .int()
+    .min(5)
+    .max(120, { message: WAIT_CAP_TEACHING_MESSAGE })
+    .default(120),
   log_tail_bytes: z.number().int().min(0).max(1048576).optional(),
 };
 registerTool('rl_task_wait', TASK_WAIT_DESC, taskWaitSchema, async (p) =>

@@ -15,7 +15,6 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-// NEW modules under test — DO NOT EXIST yet, so this import drives the red.
 import {
   executeStatus,
   executeWait,
@@ -23,7 +22,14 @@ import {
   executeList,
   TaskStatusResultSchema,
   McpRuntimeStatusSchema,
+  StillRunningResultSchema,
+  type ExecuteWaitResult,
 } from '../task.js';
+
+/** Cast helper — the SSH-classifier / inotify error paths return
+ *  ExecuteWaitResult; executeWait's return type is the wait | still_running
+ *  union, so these tests narrow to the error-envelope member. */
+const asWait = (r: unknown): ExecuteWaitResult => r as ExecuteWaitResult;
 
 /** Stub one execFile call with stdout JSON success. */
 function execFileOk(stdoutJson: unknown): void {
@@ -182,26 +188,59 @@ describe('rl_task_status — executeStatus()', () => {
 });
 
 describe('rl_task_wait — executeWait()', () => {
-  it('returns {ok:false, error:"timed_out", task_id} on timeout', async () => {
-    // 1: probe inotifywait availability — succeed.
-    execFileOk({ ok: true });
-    // 2: ROK-1331 Codex P1-3 pre-check status — task still running.
-    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' });
-    // 3: watcher hangs; the wrapper must enforce the timeout.
+  // ROK-1362: the timeout branch now returns a still_running PROGRESS SNAPSHOT
+  // (ok:false, status:'still_running', steps[], small log_tail, poll_again_hint)
+  // — NOT the old {error:'timed_out'} envelope.
+  it('returns a still_running snapshot (ok:false, status:"still_running") on cap-expiry', async () => {
+    execFileOk({ ok: true }); // probe inotifywait
+    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' }); // pre-check
     mockExecFile.mockImplementationOnce(() => {
-      /* never call the callback — simulate hang */
+      /* watcher hangs — wrapper must enforce the cap */
     });
-    // 4: final status read after timeout still reports running.
-    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' });
+    execFileOk({
+      ...FIXTURE_RUNNING,
+      mcp_runtime_status: 'running',
+      current_step: 'jest: suite 8 of 18',
+    }); // final read after cap
     const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 5 });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe('timed_out');
-    expect(result.task_id).toBe('abc123def');
+    const sr = result as { status?: string; task_id?: string; current_step?: string; poll_again_hint?: string };
+    expect(sr.status).toBe('still_running');
+    expect(sr.task_id).toBe('abc123def');
+    expect(sr.current_step).toBe('jest: suite 8 of 18');
+    expect(sr.poll_again_hint).toMatch(/same task_id/i);
+    // The legacy error:'timed_out' field is GONE.
+    expect('error' in result).toBe(false);
+    expect(() => StillRunningResultSchema.parse(result)).not.toThrow();
   }, 15_000);
+
+  it('still_running log_tail is truncated to the small (~6KB) default', async () => {
+    const big = 'x'.repeat(60_000);
+    execFileOk({ ok: true }); // probe
+    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' }); // pre-check
+    mockExecFile.mockImplementationOnce(() => {
+      /* hang */
+    });
+    execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running', log_tail: big }); // final
+    const result = (await executeWait({ task_id: 'abc123def', timeout_seconds: 5 })) as {
+      log_tail: string;
+    };
+    expect(Buffer.byteLength(result.log_tail, 'utf8')).toBeLessThanOrEqual(6144);
+  }, 15_000);
+
+  it('clamps a >120 timeout_seconds to 120 server-side (never blocks longer)', async () => {
+    // pre-check returns terminal so it returns immediately; we only assert the
+    // call is accepted and clamped (no throw, fast return).
+    execFileOk({ ok: true }); // probe
+    execFileOk({ ...FIXTURE_SUCCEEDED, mcp_runtime_status: 'succeeded' }); // pre-check terminal
+    const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 3600 });
+    expect(result.ok).toBe(true);
+    expect((result as { mcp_runtime_status?: string }).mcp_runtime_status).toBe('succeeded');
+  });
 
   it('returns the inotifywait_not_installed hint when the binary is missing', async () => {
     execFileFail(127, 'command not found');
-    const result = await executeWait({ task_id: 'abc123def', timeout_seconds: 5 });
+    const result = asWait(await executeWait({ task_id: 'abc123def', timeout_seconds: 5 }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe('inotifywait_not_installed');
   });
@@ -339,10 +378,10 @@ describe('rl_task_wait — ROK-1338 PR-3 SSH classifier', () => {
     // envelope returned to caller; the otherwise-misleading
     // inotifywait_not_installed envelope is NOT returned.
     execFileFail(255, 'rl-agent@rl-infra: Permission denied (publickey).');
-    const result = await executeWait({
+    const result = asWait(await executeWait({
       task_id: 'abc123def',
       timeout_seconds: 5,
-    });
+    }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe('ssh_denied');
     // No follow-on status/inotify calls — single probe + immediate return.
@@ -354,10 +393,10 @@ describe('rl_task_wait — ROK-1338 PR-3 SSH classifier', () => {
       255,
       'ssh: connect to host rl-infra port 22: Connection refused',
     );
-    const result = await executeWait({
+    const result = asWait(await executeWait({
       task_id: 'abc123def',
       timeout_seconds: 5,
-    });
+    }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe('ssh_unreachable');
     expect(mockExecFile.mock.calls.length).toBe(1);
@@ -375,10 +414,10 @@ describe('rl_task_wait — ROK-1338 PR-3 SSH classifier', () => {
     execFileOk({ ...FIXTURE_RUNNING, mcp_runtime_status: 'running' });
     // 3: the inotifywait watch SSH call is denied.
     execFileFail(255, 'rl-agent@rl-infra: Permission denied (publickey).');
-    const result = await executeWait({
+    const result = asWait(await executeWait({
       task_id: 'abc123def',
       timeout_seconds: 30,
-    });
+    }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe('ssh_denied');
     // Probe + pre-check + the single failed watch call — no further looping.
@@ -392,10 +431,10 @@ describe('rl_task_wait — ROK-1338 PR-3 A3 hint rewrite', () => {
     // shell session). The classifier returns null → fall through to the
     // inotifywait_not_installed envelope, now decorated with operator_only.
     execFileFail(127, 'bash: inotifywait: command not found');
-    const result = await executeWait({
+    const result = asWait(await executeWait({
       task_id: 'abc123def',
       timeout_seconds: 5,
-    });
+    }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe('inotifywait_not_installed');
     expect((result as { operator_only?: boolean }).operator_only).toBe(true);

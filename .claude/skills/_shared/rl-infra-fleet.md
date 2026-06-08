@@ -106,6 +106,15 @@ in CLAUDE.md under "`mcp-rl-fleet`". Common flows:
 | Open Grafana with a Loki filter | `rl_logs_url` (query) |
 | Clean up | `rl_env_destroy` (slug) → `rl_release` (default preserves child envs for next queued agent) |
 
+**Bounded waits (ROK-1362):** `rl_validate_ci`, `rl_run_on_runner` (`>120s`),
+`rl_env_deploy`, and `rl_env_clone_prod` are async — they return a `task_id`
+(VM ids for validate/run; `local-…` laptop ids for deploy/clone). Poll with
+`rl_task_status` (cheap one-shot, every 60–90s) or `rl_task_wait` (blocks ≤120s,
+then returns a `{status:'still_running', current_step, steps[]}` snapshot to
+narrate — re-call with the same `task_id` to keep waiting). No fleet MCP call
+blocks longer than 120s; walk away via the background push-notify pattern, never
+a blocking wait.
+
 The mobile dashboard at `http://fleet.rl.lan` (LAN) or
 `http://fleet.gamernight.net` (external) shows the same state visually.
 

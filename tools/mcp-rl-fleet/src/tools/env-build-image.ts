@@ -21,6 +21,7 @@ import {
 } from '../exec.js';
 import * as claim from './claim.js';
 import * as task from './task.js';
+import { isStillRunning, type StillRunningResult } from './task-schemas.js';
 import { ensureSyncedHead } from '../sync-guard.js';
 
 export const TOOL_NAME = 'rl_env_build_image_from_runner';
@@ -89,7 +90,9 @@ function newTaskId(): string {
   return randomBytes(6).toString('hex');
 }
 
-export async function execute(params: BuildImageParams): Promise<BuildImageResult> {
+export async function execute(
+  params: BuildImageParams,
+): Promise<BuildImageResult | StillRunningResult> {
   // PRE-STEP: ensure the agent's Mutagen sync session is alive.
   const cl = await claim.execute({ worktree_path: params.worktree_path, wait: false });
   if (!cl.ok || cl.queued) {
@@ -127,7 +130,8 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
 
   const agentId = deriveAgentId(params.worktree_path);
   const wait = params.wait ?? false;
-  const waitTimeoutS = params.wait_timeout_seconds ?? 1800;
+  // ROK-1362: executeWait clamps to 120s regardless; the default reflects that.
+  const waitTimeoutS = params.wait_timeout_seconds ?? 120;
 
   const buildArgs = ['--tag', params.tag];
   if (params.no_push) buildArgs.push('--no-push');
@@ -207,12 +211,18 @@ export async function execute(params: BuildImageParams): Promise<BuildImageResul
   }
 
   // wait:true — chain through executeWait and map TaskStatusResult fields
-  // back to the legacy BuildImageResult shape so callers like env-deploy.ts
-  // keep working without changes.
+  // back to the legacy BuildImageResult shape so callers keep working.
   const status = await task.executeWait({
     task_id: finalTaskId,
     timeout_seconds: waitTimeoutS,
   });
+  // ROK-1362 (Codex P2): the 120s cap can expire mid-build (builds run 5–15
+  // min). That is NOT a failure — return the still_running snapshot VERBATIM
+  // (with its `status:'still_running'` discriminator + progress fields) so the
+  // caller can tell a cap-expiry from a build failure and re-poll from it.
+  if (isStillRunning(status)) {
+    return status;
+  }
   if (status.mcp_runtime_status === 'succeeded') {
     return {
       ok: true,
