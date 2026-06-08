@@ -87,6 +87,32 @@ async function waitForPollObservable(
     );
 }
 
+/**
+ * Dismiss the GameTimeRefreshModal if it auto-opened (ROK-1301).
+ *
+ * On the scheduling poll page a `role="dialog"` from `components/ui/modal.tsx`
+ * auto-opens when the operator's game time is stale — which is exactly the
+ * fresh-DB state on CI runners (locally the dev admin already has fresh game
+ * time, so the modal never appears, which is why this only reproduced in CI).
+ * Its `fixed inset-0 z-50` backdrop intercepts pointer events and blocks the
+ * "Cancel Poll" trigger. Skip persists to sessionStorage so it won't re-fire.
+ * Mirrors `dismissGameTimeModalIfPresent` in scheduling-poll.smoke.spec.ts.
+ */
+async function dismissGameTimeModalIfPresent(
+    page: import('@playwright/test').Page,
+): Promise<void> {
+    const dialog = page.getByRole('dialog');
+    const modalTitle = dialog.getByText(
+        /Set your Game Time|Refresh your Game Time/i,
+    );
+    if (
+        await modalTitle.isVisible({ timeout: 1_500 }).catch(() => false)
+    ) {
+        await dialog.getByRole('button', { name: /^Skip$/i }).click();
+        await expect(dialog).toBeHidden({ timeout: 10_000 });
+    }
+}
+
 test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
     test.describe.configure({ timeout: 120_000 });
 
@@ -109,6 +135,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
             await expect(
                 page.locator('[data-testid="scheduling-composite"]'),
             ).toBeVisible({ timeout: 15_000 });
+            await dismissGameTimeModalIfPresent(page);
 
             // Track any call to the cancel endpoint — opening the modal must
             // not fire it.
@@ -164,6 +191,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
             await expect(
                 page.locator('[data-testid="scheduling-composite"]'),
             ).toBeVisible({ timeout: 15_000 });
+            await dismissGameTimeModalIfPresent(page);
 
             const cancelUrl = new RegExp(
                 `/lineups/${poll.lineupId}/schedule/${poll.id}/cancel`,
@@ -226,6 +254,7 @@ test.describe('Cancel Poll modal — operator flow (ROK-1219)', () => {
         await expect(
             page.locator('[data-testid="scheduling-composite"]'),
         ).toBeVisible({ timeout: 15_000 });
+        await dismissGameTimeModalIfPresent(page);
 
         await page.getByRole('button', { name: /Cancel Poll/i }).click();
 
