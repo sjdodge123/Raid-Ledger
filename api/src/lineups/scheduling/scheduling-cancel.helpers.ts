@@ -8,7 +8,7 @@
  * `notifications/scheduling-threshold.helpers.ts`).
  */
 import type { Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { CreateNotificationInput } from '../../notifications/notification.types';
@@ -85,6 +85,11 @@ export interface DispatchCancelDeps {
  * notifications to matched voters, excluding the cancelling actor. Notification
  * dispatch is fire-safe: any failure is logged (warn), never thrown, so a
  * notification problem can't undo the archive (ROK-1219).
+ *
+ * The archive UPDATE is conditional on the match still being schedulable, so a
+ * concurrent second cancel (two operators, or a rapid double-submit) loses the
+ * transition and dispatches NO notifications — only the request that actually
+ * flipped the row to `archived` notifies voters, preventing duplicate DMs.
  */
 export async function archiveAndNotifyCancel(
   deps: DispatchCancelDeps,
@@ -92,10 +97,21 @@ export async function archiveAndNotifyCancel(
   actorUserId: number,
   reason: string | null,
 ): Promise<void> {
-  await deps.db
+  const archived = await deps.db
     .update(schema.communityLineupMatches)
     .set({ status: 'archived', updatedAt: new Date() })
-    .where(eq(schema.communityLineupMatches.id, match.id));
+    .where(
+      and(
+        eq(schema.communityLineupMatches.id, match.id),
+        inArray(schema.communityLineupMatches.status, [
+          'scheduling',
+          'suggested',
+        ]),
+      ),
+    )
+    .returning({ id: schema.communityLineupMatches.id });
+  // Lost the race to a concurrent cancel — that request owns the notifications.
+  if (archived.length === 0) return;
   try {
     const members = await findMatchMembers(deps.db, [match.id]);
     const recipientUserIds = members

@@ -24,6 +24,7 @@
  *   Edge — non-operator member → 403 (existing RolesGuard, unchanged).
  */
 import { eq, and } from 'drizzle-orm';
+import { Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -31,7 +32,9 @@ import {
   loginAsAdmin,
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
+import { NotificationService } from '../../notifications/notification.service';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { archiveAndNotifyCancel } from './scheduling-cancel.helpers';
 
 describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)', () => {
   let testApp: TestApp;
@@ -58,7 +61,11 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
     const hash = await bcrypt.hash('CancelPass1!', 4);
     const [user] = await testApp.db
       .insert(schema.users)
-      .values({ discordId: `local:${email}`, username: `cancel-${suffix}`, role })
+      .values({
+        discordId: `local:${email}`,
+        username: `cancel-${suffix}`,
+        role,
+      })
       .returning();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -177,7 +184,9 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
     }
 
     // Actor (admin) is excluded — no cancel notification for them.
-    const actorNotifs = await findCancelNotifications(testApp.seed.adminUser.id);
+    const actorNotifs = await findCancelNotifications(
+      testApp.seed.adminUser.id,
+    );
     expect(
       actorNotifs.filter(
         (n) =>
@@ -264,7 +273,9 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
     expect(res.status).toBe(200);
     expect(await matchStatus(matchId)).toBe('archived');
 
-    const actorNotifs = await findCancelNotifications(testApp.seed.adminUser.id);
+    const actorNotifs = await findCancelNotifications(
+      testApp.seed.adminUser.id,
+    );
     expect(
       actorNotifs.filter(
         (n) =>
@@ -285,5 +296,47 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
     });
     expect(res.status).toBe(403);
     expect(await matchStatus(matchId)).toBe('scheduling');
+  });
+
+  // ── Concurrency — only the winning archive transition notifies ────
+  // Two cancels can both pass `assertSchedulable` before either UPDATE lands;
+  // the conditional archive means only the request that flips the row to
+  // `archived` dispatches notifications, so voters never get duplicate DMs.
+  it('a second archive attempt dispatches no duplicate notifications', async () => {
+    const voter = await createMember('race-voter');
+    const { lineupId, matchId } = await seedMatchWithMembers([voter.id]);
+
+    const notifications = testApp.app.get(NotificationService);
+    const deps = {
+      db: testApp.db,
+      notifications,
+      logger: new Logger('cancel-race-test'),
+    };
+    const match = { id: matchId, lineupId, gameId: testApp.seed.game.id };
+
+    // The loser's conditional UPDATE matches 0 rows (status already archived),
+    // so it returns before dispatching — voter gets exactly one notification.
+    await archiveAndNotifyCancel(
+      deps,
+      match,
+      testApp.seed.adminUser.id,
+      'race',
+    );
+    await archiveAndNotifyCancel(
+      deps,
+      match,
+      testApp.seed.adminUser.id,
+      'race',
+    );
+
+    expect(await matchStatus(matchId)).toBe('archived');
+    const notifs = await findCancelNotifications(voter.id);
+    expect(
+      notifs.filter(
+        (n) =>
+          (n.payload as { subtype?: string } | null)?.subtype ===
+          'scheduling_poll_cancelled',
+      ),
+    ).toHaveLength(1);
   });
 });
