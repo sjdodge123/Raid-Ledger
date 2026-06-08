@@ -71,6 +71,12 @@ async function stepBuild(
     timeout_seconds: params.timeout_seconds,
     wait: false,
   });
+  // wait:false never yields a still_running snapshot — this narrows the union
+  // (and is a safe guard if that ever changes).
+  if (isStillRunning(bi)) {
+    ctx.recordStep('build_image', false, now() - t, undefined, 'unexpected still_running on async dispatch');
+    return { ok: false, error: 'build_dispatch_failed', message: 'unexpected still_running on build dispatch' };
+  }
   if (!bi.ok || !bi.task_id) {
     const syncFailed = bi.error === 'sync_stuck' || bi.error === 'probe_failed';
     ctx.recordStep(syncFailed ? 'sync_guard' : 'build_image', false, now() - t, undefined, bi.error || bi.stderr);

@@ -11,7 +11,8 @@ vi.mock('../../sync-guard.js', () => ({
   ensureSyncedHead: (...a: unknown[]) => ensureSyncedHead(...a),
 }));
 
-vi.mock('../task.js', () => ({ executeWait: vi.fn() }));
+const executeWait = vi.fn();
+vi.mock('../task.js', () => ({ executeWait: (...a: unknown[]) => executeWait(...a) }));
 
 // Stub exec.js so the SSH-arg builders don't hit DNS, and so the only real
 // child-process boundary is execFile (mocked below) for the task dispatch.
@@ -32,7 +33,10 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-import { execute } from '../env-build-image.js';
+import { execute, type BuildImageResult } from '../env-build-image.js';
+
+// wait:false always yields BuildImageResult (never the still_running union member).
+const asBuild = (r: unknown): BuildImageResult => r as BuildImageResult;
 
 const HEAD = 'e9995e61aabbccddeeff00112233445566778899';
 
@@ -55,6 +59,7 @@ beforeEach(() => {
   claimExecute.mockReset();
   ensureSyncedHead.mockReset();
   mockExecFile.mockReset();
+  executeWait.mockReset();
   claimExecute.mockResolvedValue({ ok: true, slot: 1 });
 });
 
@@ -68,7 +73,7 @@ describe('rl_env_build_image_from_runner sync guard', () => {
       message: 'Sync STUCK: /workspace did not reflect laptop HEAD e9995e6 ...',
     });
 
-    const res = await execute({ tag: 'rok-test', worktree_path: '/wt' });
+    const res = asBuild(await execute({ tag: 'rok-test', worktree_path: '/wt' }));
 
     expect(res.ok).toBe(false);
     expect(res.error).toBe('sync_stuck');
@@ -88,7 +93,7 @@ describe('rl_env_build_image_from_runner sync guard', () => {
     });
     dispatchOk();
 
-    const res = await execute({ tag: 'rok-test', worktree_path: '/wt' }); // wait:false default
+    const res = asBuild(await execute({ tag: 'rok-test', worktree_path: '/wt' })); // wait:false default
 
     expect(ensureSyncedHead).toHaveBeenCalledWith({ slot: 1, worktree_path: '/wt' });
     expect(mockExecFile).toHaveBeenCalledTimes(1); // the SSH task dispatch
@@ -96,5 +101,28 @@ describe('rl_env_build_image_from_runner sync guard', () => {
     expect(res.task_id).toBe('abc123');
     expect(res.expected_head).toBe(HEAD);
     expect(res.synced_head).toBe(HEAD);
+  });
+
+  it('wait:true returns the still_running snapshot VERBATIM on cap-expiry (Codex P2)', async () => {
+    ensureSyncedHead.mockResolvedValue({ ok: true, expected_head: HEAD, synced_head: HEAD });
+    dispatchOk();
+    executeWait.mockResolvedValue({
+      ok: false,
+      status: 'still_running',
+      task_id: 'abc123',
+      current_step: 'docker build: step 12 of 45',
+      steps: [],
+      log_tail: '…',
+      elapsed_s: 130,
+      waited_s: 120,
+      poll_again_hint: 'Re-call rl_task_wait with the same task_id',
+    });
+    const res = (await execute({ tag: 'rok-test', worktree_path: '/wt', wait: true })) as {
+      status?: string;
+      current_step?: string;
+    };
+    // The discriminator + progress fields survive — NOT mangled into a build failure.
+    expect(res.status).toBe('still_running');
+    expect(res.current_step).toBe('docker build: step 12 of 45');
   });
 });

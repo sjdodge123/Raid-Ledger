@@ -55,6 +55,16 @@ export const LocalTaskJsonSchema = z.object({
   failed_step: z.string().nullable(),
   error: z.string().optional(),
   message: z.string().optional(),
+  // ROK-1362: rl_env_deploy result fields — persisted so a terminal
+  // `rl_task_status local-...` exposes the shareable URL + admin login the old
+  // SYNC tool used to return (Codex P1). Unset for clone tasks.
+  url: z.string().nullable().optional(),
+  internal_url: z.string().nullable().optional(),
+  slot_url: z.string().nullable().optional(),
+  admin_email: z.string().nullable().optional(),
+  admin_password: z.string().nullable().optional(),
+  expected_head: z.string().nullable().optional(),
+  synced_head: z.string().nullable().optional(),
 });
 export type LocalTaskJson = z.infer<typeof LocalTaskJsonSchema>;
 
@@ -165,6 +175,15 @@ function toStatusReturn(
     failed_step: raw.failed_step,
     error: raw.error,
     message: raw.message,
+    // ROK-1362 (Codex P1): surface the deploy result fields so a terminal
+    // status read hands testers the URL + admin login without log-parsing.
+    url: raw.url,
+    internal_url: raw.internal_url,
+    slot_url: raw.slot_url,
+    admin_email: raw.admin_email,
+    admin_password: raw.admin_password,
+    expected_head: raw.expected_head,
+    synced_head: raw.synced_head,
   } as ExecuteStatusReturn;
 }
 

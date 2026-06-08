@@ -12,7 +12,8 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { buildSshArgs } from '../exec.js';
-import { newLocalTaskId, spawnLocalRunner } from '../local-task.js';
+import { newLocalTaskId, spawnLocalRunner, waitLocalTask } from '../local-task.js';
+import type { ExecuteStatusReturn, StillRunningResult } from './task-schemas.js';
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -113,9 +114,17 @@ export async function runCloneCore(params: EnvCloneProdParams): Promise<EnvClone
  * Async dispatch: spawn a detached laptop runner that executes runCloneCore and
  * streams progress into ~/.raid-ledger/tasks/local-...json. Returns a task_id.
  */
-export async function execute(params: EnvCloneProdParams): Promise<EnvCloneProdDispatch> {
+export async function execute(
+  params: EnvCloneProdParams,
+): Promise<EnvCloneProdDispatch | ExecuteStatusReturn | StillRunningResult> {
   const taskId = newLocalTaskId();
   const { started_at } = spawnLocalRunner(taskId, 'rl_env_clone_prod', params, params.slug);
+  // ROK-1362 (Codex P2): honor wait:true — block ≤120s on the laptop task and
+  // return the terminal status OR a still_running snapshot (the destructive
+  // clone is genuinely in-flight; callers must not proceed on a bare dispatch).
+  if (params.wait) {
+    return waitLocalTask(taskId, params.wait_timeout_seconds);
+  }
   return {
     ok: true,
     task_id: taskId,

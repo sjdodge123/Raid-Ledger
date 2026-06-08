@@ -86,6 +86,31 @@ describe('write → read round-trip', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toBe('task_not_found');
   });
+
+  it('surfaces rl_env_deploy result fields (url + admin login) on a terminal read (Codex P1)', () => {
+    const t = baseTask({
+      mcp_runtime_status: 'succeeded',
+      finished_at: '2026-06-07T00:05:00.000Z',
+      current_step: null,
+      url: 'https://slot-1.gamernight.net',
+      slot_url: 'https://slot-1.gamernight.net',
+      admin_email: 'admin@local',
+      admin_password: 'hunter2',
+      expected_head: 'abc1234',
+      synced_head: 'abc1234',
+    });
+    writeLocalTask(t);
+    const r = readLocalTask(t.task_id) as {
+      url?: string;
+      admin_email?: string;
+      admin_password?: string;
+      synced_head?: string;
+    };
+    expect(r.url).toBe('https://slot-1.gamernight.net');
+    expect(r.admin_email).toBe('admin@local');
+    expect(r.admin_password).toBe('hunter2');
+    expect(r.synced_head).toBe('abc1234');
+  });
 });
 
 describe('PID-liveness synthesis', () => {
