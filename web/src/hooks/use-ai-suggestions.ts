@@ -5,7 +5,7 @@
  * branch on `kind === 'unavailable'` to render the inline 503 state
  * without inspecting error bodies.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   getAiSuggestions,
@@ -88,48 +88,41 @@ export function useAiSuggestions(
   // is STILL `pending` (pre-gen never completed), consumers must stop
   // rendering the skeleton and fall back to the empty/unavailable state.
   //
-  // A stuck pre-gen returns an IDENTICAL `pending` payload every poll, so
-  // React Query's structural sharing keeps the same `data` reference and the
-  // consuming component would not re-render to recompute a plain derived
-  // value. Drive `pollExhausted` through component state, bumped from an
-  // effect keyed on `dataUpdatedAt` (a fresh timestamp every fetch) so the
-  // cap is reliably observed and the UI updates even with identical data.
-  const pollCount = useRef(0);
-  const [pollExhausted, setPollExhausted] = useState(false);
+  // Implemented with React's documented "adjusting state when a prop
+  // changes" pattern — comparing the latest values to previous-render values
+  // held in STATE and calling setState DURING render (not in an effect, and
+  // not via refs). This satisfies the react-hooks rules (which forbid both
+  // synchronous setState in an effect AND ref access during render) while
+  // still triggering a re-render so consumers observe the change.
+  //
+  // Accessing `query.dataUpdatedAt` registers it as a tracked prop, so React
+  // Query re-renders this hook on every poll even when a stuck pre-gen
+  // returns an IDENTICAL `pending` payload. Each render: a changed target
+  // (lineupId/personalize) resets the budget (no carryover to a switched-to
+  // cold lineup); a new fetch timestamp bumps the poll count while still
+  // revalidating, or resets it once a fresh payload lands.
+  const { dataUpdatedAt } = query;
+  const targetKey = `${lineupId}:${personalize}`;
+  const [tracked, setTracked] = useState({
+    target: targetKey,
+    updatedAt: dataUpdatedAt,
+    count: 0,
+  });
 
-  // ROK-1316 r3: reset the poll budget whenever the query TARGET changes
-  // (lineupId or personalize). Without this, switching lineups in-place on a
-  // mounted component carries the prior lineup's exhausted state forward — a
-  // fresh cold lineup would inherit `pollExhausted=true` and collapse its
-  // skeleton immediately with a shortened attempt budget.
-  useEffect(() => {
-    pollCount.current = 0;
-    setPollExhausted(false);
-  }, [lineupId, personalize]);
+  let count = tracked.count;
+  if (tracked.target !== targetKey) {
+    count = 0;
+    setTracked({ target: targetKey, updatedAt: dataUpdatedAt, count: 0 });
+  } else if (tracked.updatedAt !== dataUpdatedAt) {
+    count = isRevalidating(query.data) ? tracked.count + 1 : 0;
+    setTracked({ target: targetKey, updatedAt: dataUpdatedAt, count });
+  }
 
-  const { dataUpdatedAt, status } = query;
-  useEffect(() => {
-    if (status !== 'success') return;
-    // Fresh payload (neither pending nor stale) → revalidation done, reset.
-    if (!isRevalidating(query.data)) {
-      pollCount.current = 0;
-      setPollExhausted(false);
-      return;
-    }
-    pollCount.current += 1;
-    // `pollExhausted` only gates the COLD skeleton — flip it solely for
-    // `pending`. A capped-out `stale` simply stops polling while keeping its
-    // already-rendered content (no skeleton involved).
-    if (
-      isPending(query.data) &&
-      pollCount.current >= PENDING_POLL_MAX_ATTEMPTS
-    ) {
-      setPollExhausted(true);
-    }
-    // `dataUpdatedAt` changes on every fetch (even identical data), so this
-    // effect runs once per poll; `query.data` is intentionally read fresh.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataUpdatedAt, status]);
+  // `pollExhausted` gates only the COLD skeleton — flip it solely for
+  // `pending`. A capped-out `stale` just stops polling (refetchInterval)
+  // while keeping its already-rendered content.
+  const pollExhausted =
+    isPending(query.data) && count >= PENDING_POLL_MAX_ATTEMPTS;
 
   return Object.assign(query, { pollExhausted });
 }
