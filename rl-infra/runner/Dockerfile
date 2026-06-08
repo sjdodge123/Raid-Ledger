@@ -3,7 +3,10 @@
 # Built once on the VM (docker compose build runner-1). Mutagen syncs the
 # worktree from the laptop into /workspace; node_modules + cache live in
 # named volumes that survive rebuilds.
-FROM mcr.microsoft.com/playwright:v1.50.0-jammy
+# Pin matches the repo's playwright devDependency. When package.json bumps
+# Playwright, bump this base image in lockstep and rebuild the runner image,
+# or globalSetup fails fleet-wide with a missing chromium binary.
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
