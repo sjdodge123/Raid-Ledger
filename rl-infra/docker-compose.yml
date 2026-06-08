@@ -268,7 +268,13 @@ services:
       - ./traefik/conf.d:/traefik-conf.d
     environment:
       SWEEP_INTERVAL_SECONDS: "900"   # 15min
-      CLAIM_HEARTBEAT_TIMEOUT_SECONDS: "300"  # 5min
+      # 30min — MCP agents are request-driven: the server can only heartbeat a
+      # claim while a fleet *task* runs, so legitimate local-work gaps (edits,
+      # commits, investigation) between fleet calls leave the claim un-pinged.
+      # A 5min grace reclaimed live slots mid-build; 30min covers normal gaps.
+      # Dead slots are still bounded by MAX_CLAIM_AGE (8h hoarding cap) +
+      # operator /opt preemption. (raised from 300 — fleet-grace fix)
+      CLAIM_HEARTBEAT_TIMEOUT_SECONDS: "1800"  # 30min
       DEFAULT_ENV_TTL_HOURS: "24"
     labels:
       rl.role: infra
