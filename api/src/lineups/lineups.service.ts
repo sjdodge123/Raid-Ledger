@@ -169,6 +169,8 @@ export class LineupsService {
       userId,
       callerRole,
     );
+    // ROK-1316: votes change the voter set → debounced pre-gen refresh.
+    await this.invalidateAiCache(lineupId);
     await maybeAutoAdvance(this.autoAdvanceDeps(), lineupId);
     return result;
   }

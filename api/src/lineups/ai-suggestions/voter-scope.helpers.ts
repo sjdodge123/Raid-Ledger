@@ -22,12 +22,6 @@ export interface VoterScopeLineup {
   visibility: 'public' | 'private';
 }
 
-/** Opts for `resolveVoterScope`. */
-export interface VoterScopeOpts {
-  /** When set, voter set is just this user (personalised view). */
-  personalizeUserId?: number;
-}
-
 /**
  * Deterministic voter-set hash — SHA1 of the unique, sorted user ID list.
  * Same set of users always produces the same hash regardless of insertion
@@ -113,23 +107,16 @@ async function resolveGroupUserIds(
 /**
  * Resolve the voter set + hash + strategy for an AI suggestions request.
  *
- *   `personalize=me` → single-user set (always `small_group` strategy).
- *   private lineup   → invitees filtered to users-with-vector, else fallback.
- *   public lineup    → nominators filtered to users-with-vector, else fallback.
+ *   private lineup → invitees filtered to users-with-vector, else fallback.
+ *   public lineup  → nominators filtered to users-with-vector, else fallback.
+ *
+ * ROK-1316: the single-user (`personalize=me`) branch is DELETED — the
+ * personalised LLM path no longer exists; all reads serve the base scope.
  */
 export async function resolveVoterScope(
   db: Db,
   lineup: VoterScopeLineup,
-  opts: VoterScopeOpts = {},
 ): Promise<ResolvedVoterScope> {
-  if (opts.personalizeUserId !== undefined) {
-    const ids = await filterToUsersWithVector(db, [opts.personalizeUserId]);
-    return {
-      userIds: ids,
-      hash: computeVoterSetHash(ids),
-      strategy: 'small_group',
-    };
-  }
   const userIds = await resolveGroupUserIds(db, lineup);
   return {
     userIds,

@@ -27,7 +27,10 @@ QUEUE_TTL_SECONDS="${QUEUE_TTL_SECONDS:-1800}"   # 30 min — stale waiters
 MAX_CLAIM_AGE_SECONDS="${MAX_CLAIM_AGE_SECONDS:-28800}"   # 8 hr — slot hoarding
 # ROK-1331 M1: default so the task-retention block (added below) can be
 # exercised by tests that don't supply the Dockerfile-provided env vars.
-CLAIM_HEARTBEAT_TIMEOUT_SECONDS="${CLAIM_HEARTBEAT_TIMEOUT_SECONDS:-300}"
+# Default 30min (matches docker-compose). MCP agents can't heartbeat a held
+# claim during local-work gaps between fleet tasks; a 5min grace reclaimed live
+# slots mid-build. Dead slots still bounded by MAX_CLAIM_AGE + /opt preemption.
+CLAIM_HEARTBEAT_TIMEOUT_SECONDS="${CLAIM_HEARTBEAT_TIMEOUT_SECONDS:-1800}"
 mkdir -p "$LOCK_DIR"
 NOW_EPOCH=$(date -u +%s)
 NOW_ISO=$(date -u +%FT%TZ)
