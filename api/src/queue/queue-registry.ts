@@ -26,6 +26,7 @@ import { EVENT_PLANS_QUEUE } from '../events/event-plans.service';
 import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
 import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
 import { AI_SUGGESTIONS_PREGEN_QUEUE } from '../lineups/ai-suggestions/pre-gen.queue';
+import { EPHEMERAL_VOICE_IDLE_QUEUE } from '../discord-bot/queues/ephemeral-voice-idle.queue';
 
 export const ALL_QUEUE_NAMES = [
   LINEUP_PHASE_QUEUE,
@@ -42,6 +43,7 @@ export const ALL_QUEUE_NAMES = [
   EVENT_PLANS_QUEUE,
   DISCORD_NOTIFICATION_QUEUE,
   ITAD_PRICE_SYNC_QUEUE,
+  EPHEMERAL_VOICE_IDLE_QUEUE,
 ] as const;
 
 export type RegisteredQueueName = (typeof ALL_QUEUE_NAMES)[number];
