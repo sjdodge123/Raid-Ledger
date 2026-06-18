@@ -11,11 +11,11 @@ import type {
   ImportWowCharacterDto,
 } from '@raid-ledger/contract';
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
-import type { ExternalCharacterProfessions } from '../plugins/plugin-host/extension-types';
 import { variantToNamespacePrefix } from '../plugins/wow-common/blizzard.constants';
 import {
   fetchFullProfile,
-  buildSyncUpdateFields,
+  buildSyncUpdateFieldsFromSync,
+  type OptionalSyncFields,
 } from './characters-sync.helpers';
 import {
   mapCharacterToDto,
@@ -97,18 +97,13 @@ export function buildImportInsertValues(
   gameId: number,
   profile: CharProfile,
   dto: ImportWowCharacterDto,
-  equipment: unknown,
-  talents: unknown,
-  professions: ExternalCharacterProfessions | null,
+  sync: OptionalSyncFields,
   shouldBeMain: boolean,
 ) {
-  const syncFields = buildSyncUpdateFields(
-    profile as never,
-    equipment,
-    talents,
-    professions,
-    { region: dto.region, gameVariant: dto.gameVariant },
-  );
+  const syncFields = buildSyncUpdateFieldsFromSync(profile as never, sync, {
+    region: dto.region,
+    gameVariant: dto.gameVariant,
+  });
   return {
     userId,
     gameId,
@@ -137,19 +132,37 @@ export async function resolveAndDemoteMain(
   return shouldBeMain;
 }
 
-/** Execute the import transaction body. */
-export async function executeImportTx(
+/** Insert the import values, log, and map to a DTO. */
+async function insertImportedCharacter(
+  tx: Db,
+  userId: number,
+  profile: CharProfile,
+  values: ReturnType<typeof buildImportInsertValues>,
+  shouldBeMain: boolean,
+  logger: Logger,
+): Promise<CharacterDto> {
+  const [character] = await tx
+    .insert(schema.characters)
+    .values(values)
+    .returning();
+  logger.log(
+    `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
+  );
+  return mapCharacterToDto(character);
+}
+
+/** Resolve main status then build the insert values for an import. */
+async function resolveMainAndBuildValues(
   tx: Db,
   userId: number,
   gameId: number,
   profile: CharProfile,
   dto: ImportWowCharacterDto,
-  equipment: unknown,
-  talents: unknown,
-  professions: ExternalCharacterProfessions | null,
-  logger: Logger,
-): Promise<CharacterDto> {
-  await checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
+  sync: OptionalSyncFields,
+): Promise<{
+  values: ReturnType<typeof buildImportInsertValues>;
+  shouldBeMain: boolean;
+}> {
   const shouldBeMain = await resolveAndDemoteMain(
     tx,
     userId,
@@ -161,19 +174,39 @@ export async function executeImportTx(
     gameId,
     profile,
     dto,
-    equipment,
-    talents,
-    professions,
+    sync,
     shouldBeMain,
   );
-  const [character] = await tx
-    .insert(schema.characters)
-    .values(values)
-    .returning();
-  logger.log(
-    `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
+  return { values, shouldBeMain };
+}
+
+/** Execute the import transaction body. */
+export async function executeImportTx(
+  tx: Db,
+  userId: number,
+  gameId: number,
+  profile: CharProfile,
+  dto: ImportWowCharacterDto,
+  sync: OptionalSyncFields,
+  logger: Logger,
+): Promise<CharacterDto> {
+  await checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
+  const { values, shouldBeMain } = await resolveMainAndBuildValues(
+    tx,
+    userId,
+    gameId,
+    profile,
+    dto,
+    sync,
   );
-  return mapCharacterToDto(character);
+  return insertImportedCharacter(
+    tx,
+    userId,
+    profile,
+    values,
+    shouldBeMain,
+    logger,
+  );
 }
 
 /** Find an existing character by user+game+name+realm. */
@@ -199,18 +232,13 @@ export async function findExistingByProfile(
   return existing;
 }
 
-/** Merge imported data into an existing local character. */
-export async function mergeIntoExisting(
+/** Find an existing character to merge into, or throw if none exists. */
+async function requireExistingForMerge(
   db: Db,
   userId: number,
   gameId: number,
   profile: CharProfile,
-  dto: ImportWowCharacterDto,
-  equipment: unknown,
-  talents: unknown,
-  professions: ExternalCharacterProfessions | null,
-  logger: Logger,
-): Promise<CharacterDto> {
+): Promise<typeof schema.characters.$inferSelect> {
   const existing = await findExistingByProfile(
     db,
     userId,
@@ -222,13 +250,24 @@ export async function mergeIntoExisting(
     throw new ConflictException(
       `Character ${profile.name} on ${profile.realm} already exists`,
     );
-  const fields = buildSyncUpdateFields(
-    profile as never,
-    equipment,
-    talents,
-    professions,
-    { region: dto.region, gameVariant: dto.gameVariant },
-  );
+  return existing;
+}
+
+/** Merge imported data into an existing local character. */
+export async function mergeIntoExisting(
+  db: Db,
+  userId: number,
+  gameId: number,
+  profile: CharProfile,
+  dto: ImportWowCharacterDto,
+  sync: OptionalSyncFields,
+  logger: Logger,
+): Promise<CharacterDto> {
+  const existing = await requireExistingForMerge(db, userId, gameId, profile);
+  const fields = buildSyncUpdateFieldsFromSync(profile as never, sync, {
+    region: dto.region,
+    gameVariant: dto.gameVariant,
+  });
   const [merged] = await db
     .update(schema.characters)
     .set(fields)
@@ -250,33 +289,15 @@ export async function insertOrMergeImport(
   logger: Logger,
   isUniqueViolation: (err: unknown, name: string) => boolean,
 ): Promise<CharacterDto> {
+  const { profile, equipment, talents, professions } = fetched;
+  const sync: OptionalSyncFields = { equipment, talents, professions };
   try {
     return await db.transaction((tx) =>
-      executeImportTx(
-        tx,
-        userId,
-        gameId,
-        fetched.profile,
-        dto,
-        fetched.equipment,
-        fetched.talents,
-        fetched.professions,
-        logger,
-      ),
+      executeImportTx(tx, userId, gameId, profile, dto, sync, logger),
     );
   } catch (error: unknown) {
     if (isUniqueViolation(error, 'unique_user_game_character'))
-      return mergeIntoExisting(
-        db,
-        userId,
-        gameId,
-        fetched.profile,
-        dto,
-        fetched.equipment,
-        fetched.talents,
-        fetched.professions,
-        logger,
-      );
+      return mergeIntoExisting(db, userId, gameId, profile, dto, sync, logger);
     throw error;
   }
 }

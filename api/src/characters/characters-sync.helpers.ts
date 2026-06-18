@@ -68,6 +68,37 @@ export async function fetchFullProfile(
   return { profile, talents, equipment, professions };
 }
 
+/** Optional sync fields whose presence in a record is conditional. */
+export interface OptionalSyncFields {
+  /**
+   * `null` signals a non-404 adapter failure (5xx, timeout) — the column is
+   * omitted so the prior DB value is preserved (architect §3). Otherwise spread.
+   */
+  professions: ExternalCharacterProfessions | null;
+  equipment: unknown;
+  talents: unknown;
+}
+
+/**
+ * Merge optional sync fields into a base record, centralizing the conditional
+ * spread so each new optional column is added here once instead of at every
+ * call site.
+ *
+ * `equipment` and `talents` are always applied; `professions` is applied only
+ * when non-null (a null means "leave the prior value alone").
+ */
+export function applyOptionalSyncFields(
+  record: Record<string, unknown>,
+  { professions, equipment, talents }: OptionalSyncFields,
+): Record<string, unknown> {
+  return {
+    ...record,
+    equipment,
+    talents,
+    ...(professions !== null ? { professions } : {}),
+  };
+}
+
 /**
  * Build the set fields for a character sync update.
  *
@@ -82,7 +113,7 @@ export function buildSyncUpdateFields(
   professions: ExternalCharacterProfessions | null,
   extra?: { region?: string; gameVariant?: string },
 ): Record<string, unknown> {
-  return {
+  const base = {
     class: profile.class,
     spec: profile.spec,
     role: profile.role,
@@ -94,11 +125,27 @@ export function buildSyncUpdateFields(
     faction: profile.faction,
     lastSyncedAt: new Date(),
     profileUrl: profile.profileUrl,
-    equipment,
-    talents,
-    ...(professions !== null ? { professions } : {}),
     updatedAt: new Date(),
     ...(extra?.region ? { region: extra.region } : {}),
     ...(extra?.gameVariant ? { gameVariant: extra.gameVariant } : {}),
   };
+  return applyOptionalSyncFields(base, { professions, equipment, talents });
+}
+
+/**
+ * {@link buildSyncUpdateFields} variant that takes the optional sync fields as a
+ * single bundle — keeps import/merge call sites flat as more fields are added.
+ */
+export function buildSyncUpdateFieldsFromSync(
+  profile: EnrichedProfile['profile'],
+  sync: OptionalSyncFields,
+  extra?: { region?: string; gameVariant?: string },
+): Record<string, unknown> {
+  return buildSyncUpdateFields(
+    profile,
+    sync.equipment,
+    sync.talents,
+    sync.professions,
+    extra,
+  );
 }
