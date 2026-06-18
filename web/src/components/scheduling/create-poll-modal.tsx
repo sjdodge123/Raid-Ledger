@@ -10,22 +10,14 @@ import { Modal } from '../ui/modal';
 import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 import { MemberPicker } from './member-picker-modal';
 import { PollGameSearch } from './poll-game-search';
+import { DurationPicker, DEFAULT_DURATION_HOURS } from './duration-picker';
+import { MinVoteThresholdSlider } from './min-vote-threshold-slider';
 import { getPlayers } from '../../lib/api-client';
 
 interface CreatePollModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-/** Duration options for the standalone poll picker (ROK-1192). */
-const DURATION_OPTIONS = [
-  { hours: 24, label: '24 hours' },
-  { hours: 48, label: '48 hours' },
-  { hours: 72, label: '72 hours' },
-  { hours: 168, label: '7 days' },
-] as const;
-
-const DEFAULT_DURATION_HOURS = 72;
 
 /** Form state for the create poll modal. */
 function useCreatePollForm() {
@@ -96,74 +88,6 @@ export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
         onSubmit={handleSubmit}
       />
     </Modal>
-  );
-}
-
-/** Duration picker — voting window for the poll (ROK-1192). */
-function DurationPicker({ value, onChange }: {
-  value: number; onChange: (v: number) => void;
-}) {
-  return (
-    <div
-      data-testid="poll-duration-picker"
-      className="flex items-center justify-between gap-3"
-    >
-      <label className="text-sm font-medium text-secondary shrink-0">
-        Voting window
-      </label>
-      <div className="flex gap-1">
-        {DURATION_OPTIONS.map((opt) => (
-          <label
-            key={opt.hours}
-            className={`px-2.5 py-1 rounded-md cursor-pointer text-xs border transition-colors ${
-              value === opt.hours
-                ? 'bg-emerald-600 border-emerald-500 text-foreground'
-                : 'bg-surface/50 border-surface text-muted hover:border-emerald-500/50'
-            }`}
-          >
-            <input
-              type="radio"
-              name="poll-duration"
-              value={opt.hours}
-              checked={value === opt.hours}
-              onChange={() => onChange(opt.hours)}
-              className="sr-only"
-            />
-            {opt.label}
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Minimum votes slider — always visible (ROK-1015). */
-function MinVoteThresholdSlider({ value, max, onChange }: {
-  value: number; max: number; onChange: (v: number) => void;
-}) {
-  return (
-    <div data-testid="min-vote-threshold-slider">
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-sm font-medium text-secondary">
-          Minimum Votes
-        </label>
-        <span className="text-sm text-muted tabular-nums">
-          {value} of {max}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={1}
-        max={max}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-      />
-      <p className="text-xs text-muted/60 mt-1">
-        Notify me when this many members have voted
-      </p>
-    </div>
   );
 }
 
