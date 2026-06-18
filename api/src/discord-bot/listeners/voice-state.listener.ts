@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationShutdown,
+  Optional,
+} from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
@@ -15,6 +20,7 @@ import { PresenceGameDetectorService } from '../services/presence-game-detector.
 import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { EphemeralVoiceIdleCoordinator } from '../services/ephemeral-voice-idle.coordinator';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import {
   DEBOUNCE_MS,
@@ -77,6 +83,8 @@ export class VoiceStateListener implements OnApplicationShutdown {
     private readonly gameActivityService: GameActivityService,
     private readonly usersService: UsersService,
     private readonly adHocEventsGateway: AdHocEventsGateway,
+    @Optional()
+    private readonly ephemeralIdle: EphemeralVoiceIdleCoordinator | null = null,
   ) {}
 
   private get deps(): VoiceHandlerDeps {
@@ -218,9 +226,17 @@ export class VoiceStateListener implements OnApplicationShutdown {
         this.adHocEventService,
         (ch) => this.resolveBinding(ch),
       );
+      // ROK-1352: ephemeral channel may now be empty post-event → idle-delete.
+      await this.ephemeralIdle
+        ?.onChannelLeave(oldCh)
+        .catch((e) => this.logger.warn(`Ephemeral leave hook failed: ${e}`));
     }
     if (newCh) {
       this.userChannelMap.set(userId, newCh);
+      // ROK-1352: rejoin cancels any pending ephemeral idle-delete.
+      await this.ephemeralIdle
+        ?.onChannelJoin(newCh)
+        .catch((e) => this.logger.warn(`Ephemeral join hook failed: ${e}`));
       await this.handleChannelJoin(
         newCh,
         buildDiscordMember(userId, member),

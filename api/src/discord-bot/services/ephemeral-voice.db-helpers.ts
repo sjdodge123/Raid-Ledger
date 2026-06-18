@@ -108,6 +108,42 @@ export async function clearEphemeralChannelId(
     .where(eq(schema.events.id, eventId));
 }
 
+/** Minimal ScheduledEventData for re-pointing an SE after channel create/destroy. */
+export interface RepointEventData {
+  title: string;
+  startTime: string;
+  endTime: string;
+  signupCount: number;
+  game: { name: string } | null;
+}
+
+/** Build the SE re-point payload (game name + signup count) for an event. */
+export async function buildRepointData(
+  db: PostgresJsDatabase<typeof schema>,
+  ev: EphemeralEventRow,
+): Promise<RepointEventData> {
+  let game: { name: string } | null = null;
+  if (ev.gameId !== null) {
+    const [g] = await db
+      .select({ name: schema.games.name })
+      .from(schema.games)
+      .where(eq(schema.games.id, ev.gameId))
+      .limit(1);
+    if (g) game = { name: g.name };
+  }
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.eventId, ev.id));
+  return {
+    title: ev.title,
+    startTime: ev.startTime,
+    endTime: ev.endTime,
+    signupCount: count ?? 0,
+    game,
+  };
+}
+
 /** Find the event row that currently owns a given ephemeral channel id. */
 export async function findEventByEphemeralChannel(
   db: PostgresJsDatabase<typeof schema>,
