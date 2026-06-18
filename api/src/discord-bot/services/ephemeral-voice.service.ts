@@ -114,9 +114,11 @@ export class EphemeralVoiceService {
         );
         return;
       }
-      await this.voiceAttendance?.flushToDb().catch((e) =>
-        this.logger.warn(`Voice flush before reap failed: ${String(e)}`),
-      );
+      await this.voiceAttendance
+        ?.flushToDb()
+        .catch((e) =>
+          this.logger.warn(`Voice flush before reap failed: ${String(e)}`),
+        );
       await deleteVoiceChannel(guild, channelId);
       await clearEphemeralChannelId(this.db, ev.id);
       await this.repointAndResync(ev, await buildRepointData(this.db, ev));
@@ -139,7 +141,13 @@ export class EphemeralVoiceService {
   /** Re-resolve + edit the SE channel and trigger an embed re-sync. */
   private async repointAndResync(
     ev: EphemeralEventRow,
-    data: { title: string; startTime: string; endTime: string; signupCount: number; game: { name: string } | null },
+    data: {
+      title: string;
+      startTime: string;
+      endTime: string;
+      signupCount: number;
+      game: { name: string } | null;
+    },
   ): Promise<void> {
     await this.scheduledEventService.updateScheduledEvent(
       ev.id,
@@ -149,7 +157,9 @@ export class EphemeralVoiceService {
     await this.embedSyncQueue
       ?.enqueue(ev.id, 'ephemeral-voice')
       .catch((e) =>
-        this.logger.warn(`Embed-sync enqueue failed for ${ev.id}: ${String(e)}`),
+        this.logger.warn(
+          `Embed-sync enqueue failed for ${ev.id}: ${String(e)}`,
+        ),
       );
   }
 

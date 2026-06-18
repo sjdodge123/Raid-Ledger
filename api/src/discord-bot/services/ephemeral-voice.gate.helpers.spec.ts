@@ -23,7 +23,11 @@ interface GateInput {
 }
 
 function gate({ globalEnabled, eventOverride, seriesEnabled }: GateInput) {
-  return shouldCreateEphemeralChannel(globalEnabled, eventOverride, seriesEnabled);
+  return shouldCreateEphemeralChannel(
+    globalEnabled,
+    eventOverride,
+    seriesEnabled,
+  );
 }
 
 describe('shouldCreateEphemeralChannel — master gate (ROK-1352 AC1)', () => {

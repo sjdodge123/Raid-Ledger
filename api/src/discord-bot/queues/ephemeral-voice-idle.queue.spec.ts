@@ -16,7 +16,10 @@ beforeEach(async () => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       EphemeralVoiceIdleQueueService,
-      { provide: getQueueToken(EPHEMERAL_VOICE_IDLE_QUEUE), useValue: mockQueue },
+      {
+        provide: getQueueToken(EPHEMERAL_VOICE_IDLE_QUEUE),
+        useValue: mockQueue,
+      },
     ],
   }).compile();
   service = module.get(EphemeralVoiceIdleQueueService);
@@ -30,7 +33,10 @@ describe('EphemeralVoiceIdleQueueService.enqueue (ROK-1352)', () => {
     expect(mockQueue.add).toHaveBeenCalledWith(
       'ephemeral-idle-expire',
       { eventId: 7, channelId: 'ch-7' },
-      expect.objectContaining({ jobId: 'ephemeral-idle-7', delay: 30 * 60_000 }),
+      expect.objectContaining({
+        jobId: 'ephemeral-idle-7',
+        delay: 30 * 60_000,
+      }),
     );
   });
 

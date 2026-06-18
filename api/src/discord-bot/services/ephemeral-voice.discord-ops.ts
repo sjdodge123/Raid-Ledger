@@ -42,10 +42,7 @@ export async function deleteVoiceChannel(
  * Live member count for a voice channel. Returns 0 when the channel is gone.
  * Used as the never-delete-while-occupied re-check immediately before delete.
  */
-export function getChannelMemberCount(
-  guild: Guild,
-  channelId: string,
-): number {
+export function getChannelMemberCount(guild: Guild, channelId: string): number {
   const channel = guild.channels.cache.get(channelId);
   if (!channel || !channel.isVoiceBased()) return 0;
   return channel.members.size;

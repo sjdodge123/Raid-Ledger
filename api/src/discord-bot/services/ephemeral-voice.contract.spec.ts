@@ -91,7 +91,9 @@ describe('SetEphemeralVoiceConfigSchema (ROK-1352)', () => {
   });
 
   it('still rejects an out-of-range minute value on partial update', () => {
-    const result = SetEphemeralVoiceConfigSchema.safeParse({ idleMinutes: -10 });
+    const result = SetEphemeralVoiceConfigSchema.safeParse({
+      idleMinutes: -10,
+    });
     expect(result.success).toBe(false);
   });
 });

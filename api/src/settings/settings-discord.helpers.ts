@@ -123,7 +123,10 @@ export async function setEphemeralVoiceEnabled(
   svc: SettingsCore,
   enabled: boolean,
 ): Promise<void> {
-  await svc.set(SETTING_KEYS.EPHEMERAL_VOICE_ENABLED, enabled ? 'true' : 'false');
+  await svc.set(
+    SETTING_KEYS.EPHEMERAL_VOICE_ENABLED,
+    enabled ? 'true' : 'false',
+  );
 }
 
 /** Parent category ID under which ephemeral channels are created (null = guild root). */

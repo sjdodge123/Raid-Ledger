@@ -266,7 +266,9 @@ describe('ChannelResolverService', () => {
     // ROK-1352: Tier 0 — a live ephemeral channel wins over every binding/default.
     it('returns the ephemeral channel first (Tier 0) above all bindings', async () => {
       clientService.getGuildId.mockReturnValue('guild-123');
-      bindingsService.getVoiceChannelForSeries.mockResolvedValue('series-voice');
+      bindingsService.getVoiceChannelForSeries.mockResolvedValue(
+        'series-voice',
+      );
       bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
       settingsService.getDiscordBotDefaultVoiceChannel.mockResolvedValue(
         'app-default-voice',

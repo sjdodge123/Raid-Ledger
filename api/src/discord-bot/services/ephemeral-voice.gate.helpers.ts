@@ -35,9 +35,7 @@ export async function fetchSeriesEphemeralEnabled(
   const [row] = await db
     .select({ enabled: schema.eventSeriesSettings.ephemeralVoiceEnabled })
     .from(schema.eventSeriesSettings)
-    .where(
-      eq(schema.eventSeriesSettings.recurrenceGroupId, recurrenceGroupId),
-    )
+    .where(eq(schema.eventSeriesSettings.recurrenceGroupId, recurrenceGroupId))
     .limit(1);
   return row?.enabled ?? false;
 }

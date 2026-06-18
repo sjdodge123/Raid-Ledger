@@ -37,19 +37,15 @@ async function build(memberCount: number) {
       { provide: VoiceAttendanceService, useValue: voiceAttendance },
     ],
   }).compile();
-  jest
-    .spyOn(discordOps, 'getChannelMemberCount')
-    .mockReturnValue(memberCount);
+  jest.spyOn(discordOps, 'getChannelMemberCount').mockReturnValue(memberCount);
   jest.spyOn(discordOps, 'deleteVoiceChannel').mockResolvedValue(true);
-  jest
-    .spyOn(dbHelpers, 'buildRepointData')
-    .mockResolvedValue({
-      title: 't',
-      startTime: '2026-01-01T00:00:00Z',
-      endTime: '2026-01-01T01:00:00Z',
-      signupCount: 0,
-      game: null,
-    });
+  jest.spyOn(dbHelpers, 'buildRepointData').mockResolvedValue({
+    title: 't',
+    startTime: '2026-01-01T00:00:00Z',
+    endTime: '2026-01-01T01:00:00Z',
+    signupCount: 0,
+    game: null,
+  });
   const clearSpy = jest
     .spyOn(dbHelpers, 'clearEphemeralChannelId')
     .mockResolvedValue(undefined);

@@ -68,7 +68,10 @@ describe('ephemeral-voice DB integration (ROK-1352)', () => {
   });
 
   it('create-window scan returns only in-window, channel-less, live events', async () => {
-    const inWindow = await insertEvent({ startOffsetMin: 10, endOffsetMin: 70 });
+    const inWindow = await insertEvent({
+      startOffsetMin: 10,
+      endOffsetMin: 70,
+    });
     await insertEvent({ startOffsetMin: 120, endOffsetMin: 180 }); // too far out
     await insertEvent({
       startOffsetMin: 10,
@@ -100,9 +103,9 @@ describe('ephemeral-voice DB integration (ROK-1352)', () => {
     }); // ended only 10 min ago < 30 idle
     await insertEvent({ startOffsetMin: -180, endOffsetMin: -120 }); // no channel
 
-    const ids = (
-      await findReapCandidates(app.db, new Date(), 30 * 60_000)
-    ).map((e) => e.id);
+    const ids = (await findReapCandidates(app.db, new Date(), 30 * 60_000)).map(
+      (e) => e.id,
+    );
     expect(ids).toEqual([stale]);
   });
 

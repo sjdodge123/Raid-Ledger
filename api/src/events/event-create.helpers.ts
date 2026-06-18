@@ -45,11 +45,7 @@ export async function applyEphemeralSeriesScope(
   const seriesScope =
     dto.ephemeralVoiceScope === 'all' ||
     dto.ephemeralVoiceScope === 'this_and_following';
-  if (
-    !seriesScope ||
-    !recurrenceGroupId ||
-    dto.ephemeralVoiceEnabled == null
-  ) {
+  if (!seriesScope || !recurrenceGroupId || dto.ephemeralVoiceEnabled == null) {
     return;
   }
   await db

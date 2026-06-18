@@ -213,7 +213,11 @@ export async function findActiveEventsForChannel(
   }
   // ROK-1352: ephemeral channels are neither a binding nor the default — match
   // by events.ephemeral_voice_channel_id before the unrecognized fallthrough.
-  const ephemeral = await findActiveEventsByEphemeralChannel(db, channelId, now);
+  const ephemeral = await findActiveEventsByEphemeralChannel(
+    db,
+    channelId,
+    now,
+  );
   if (ephemeral.length > 0) return ephemeral;
   logUnrecognizedChannel(channelId, bindings, voiceBindingPurposes, logger);
   return [];
