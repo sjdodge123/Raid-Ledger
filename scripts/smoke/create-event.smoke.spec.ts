@@ -121,13 +121,18 @@ test.describe('Create event form', () => {
         await expect(page.getByRole('button', { name: '3h', exact: true })).toBeVisible();
     });
 
-    test('successful event creation redirects to event detail', async ({ page }) => {
+    test('successful event creation redirects to event detail', async ({ page, world }) => {
         await waitForForm(page);
 
         const token = await getAdminToken();
 
+        // Per-test unique title — avoids the cross-project (desktop+mobile)
+        // collision the hardcoded 'PW-894 Smoke Test Event' caused when both
+        // projects raced the same detail-page text assertion.
+        const title = world.uid('event');
+
         // Fill in required fields
-        await page.getByRole('textbox', { name: 'Event Title' }).fill('PW-894 Smoke Test Event');
+        await page.getByRole('textbox', { name: 'Event Title' }).fill(title);
 
         // Set date to tomorrow (type="date" inputs need YYYY-MM-DD format)
         const tomorrow = new Date(Date.now() + 86_400_000);
@@ -154,7 +159,7 @@ test.describe('Create event form', () => {
             // Verify event detail page loaded
             await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
             // The event title should appear on the detail page
-            await expect(page.getByText('PW-894 Smoke Test Event')).toBeVisible({ timeout: 10_000 });
+            await expect(page.getByText(title)).toBeVisible({ timeout: 10_000 });
         } finally {
             // Clean up: delete the created event via API
             if (eventId) {

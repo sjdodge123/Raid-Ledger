@@ -306,6 +306,14 @@ test.describe('Bracket tiebreaker flow', () => {
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
+        // Gate on the client tiebreaker query resolving before asserting the
+        // bracket renders — avoids racing the first useQuery refetch (which can
+        // be served stale on mount). See feedback_smoke_polling_for_async_writes.
+        await page.waitForResponse(
+            (r) => r.url().includes(`/lineups/${lineupId}/tiebreaker`) && r.ok(),
+            { timeout: 15_000 },
+        );
+
         // AC: Bracket: operator starts bracket, matchups created with correct seeding
         // AC: Bracket: SVG bracket tree renders with connecting lines between rounds
         const bracketView = page.locator('[data-testid="bracket-view"]');

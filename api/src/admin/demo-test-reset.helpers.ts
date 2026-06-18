@@ -151,6 +151,7 @@ async function wipeChildren(db: Db): Promise<void> {
       community_lineup_entries,
       community_lineup_invitees,
       community_lineup_matches,
+      community_lineup_match_members,
       community_lineup_tiebreakers,
       community_lineup_tiebreaker_bracket_matchups,
       community_lineup_tiebreaker_bracket_votes,

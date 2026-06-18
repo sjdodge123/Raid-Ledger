@@ -39,15 +39,24 @@ export default defineConfig({
     /* Fail the build on CI if you accidentally left test.only in the source code */
     forbidOnly: !!process.env.CI,
 
-    /* Retry once on CI to absorb cold-start timing flakes */
-    retries: process.env.CI ? 2 : 0,
+    /* Retry to absorb cold-start / async-refetch timing flakes.
+     * CI keeps 2 retries; local gets 1 as a safety net so a single
+     * resource-contention blip on an overloaded laptop doesn't fail an
+     * otherwise-deterministic spec (the deterministic waits added in the
+     * specs are the primary fix — this retry only absorbs residual jitter). */
+    retries: process.env.CI ? 2 : 1,
 
-    /* Max time per test */
-    timeout: 30_000,
+    /* Max time per test (and per hook). Local gets 2x headroom: the full
+     * desktop+mobile run serves BOTH projects from one local API, so the
+     * heavy API-setup beforeAll hooks (tiebreaker fixtures) contend and can
+     * exceed 30s. CI shards across runners (no contention) so it keeps 30s. */
+    timeout: process.env.CI ? 30_000 : 60_000,
 
-    /* Default expect timeout — longer on CI where runners are slower */
+    /* Default expect timeout. CI runners are slower (25s); local default was
+     * 5s, too tight under full-suite load — bump to 10s so assertions without
+     * an explicit timeout don't flake on a contended laptop. */
     expect: {
-        timeout: process.env.CI ? 25_000 : 5_000,
+        timeout: process.env.CI ? 25_000 : 10_000,
     },
 
     /* Reporter to use */

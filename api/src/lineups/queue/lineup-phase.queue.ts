@@ -9,6 +9,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
 import * as schema from '../../drizzle/schema';
 import {
   LINEUP_GRACE_ADVANCE,
@@ -21,18 +22,6 @@ import {
 interface ActiveStandaloneArchiveCandidate {
   lineupId: number;
   phaseDeadline: Date | string;
-}
-
-/**
- * `phase_deadline` is a `timestamp without time zone` column. postgres-js
- * returns it as a naïve string; default `new Date()` parses in local TZ.
- * We INSERT JS Dates as UTC, so re-parse with an explicit UTC suffix.
- */
-function parsePhaseDeadlineUtc(value: Date | string): Date {
-  if (value instanceof Date) return value;
-  const s = String(value);
-  if (s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
-  return new Date(s.replace(' ', 'T') + 'Z');
 }
 
 @Injectable()
@@ -69,7 +58,7 @@ export class LineupPhaseQueueService implements OnModuleInit {
       `Reconciling ${candidates.length} standalone archive job(s)`,
     );
     for (const { lineupId, phaseDeadline } of candidates) {
-      const deadline = parsePhaseDeadlineUtc(phaseDeadline);
+      const deadline = parseTimestampUtc(phaseDeadline);
       const delayMs = deadline.getTime() - Date.now();
       if (delayMs <= 0) continue;
       await this.scheduleTransition(lineupId, 'archived', delayMs);

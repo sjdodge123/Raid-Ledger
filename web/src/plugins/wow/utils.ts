@@ -1,21 +1,18 @@
-/** Slug-to-variant mapping for all WoW game entries. */
-const SLUG_VARIANT_MAP: Record<string, string> = {
-    'world-of-warcraft': 'retail',
-    'world-of-warcraft-classic': 'classic_era',
-    'world-of-warcraft-burning-crusade-classic-anniversary-edition': 'classic_anniversary',
-    'world-of-warcraft-burning-crusade-classic': 'classic',
-    'world-of-warcraft-wrath-of-the-lich-king': 'classic',
-};
+/**
+ * Legacy WoW slug helpers (variant / namespace selection).
+ *
+ * ROK-1182: the slug → variant lookup tables (`SLUG_VARIANT_MAP`,
+ * `FIXED_CLASSIC_VARIANTS`) now live in `./lib/wow-era.ts` alongside the
+ * era lookup, derived from a single `WOW_SLUG_TABLE`. They are re-exported
+ * here so existing consumers keep importing from `../utils` unchanged —
+ * adding a new variant slug touches only `wow-era.ts`.
+ */
+import { SLUG_VARIANT_MAP, FIXED_CLASSIC_VARIANTS } from './lib/wow-era';
+
+export { FIXED_CLASSIC_VARIANTS };
 
 /** All recognized WoW game slugs (retail + all classic variants). */
 export const WOW_SLUGS: ReadonlySet<string> = new Set(Object.keys(SLUG_VARIANT_MAP));
-
-/** Classic variant game slugs that have a fixed variant (no selector needed). */
-export const FIXED_CLASSIC_VARIANTS: Readonly<Record<string, string>> = {
-    'world-of-warcraft-burning-crusade-classic-anniversary-edition': 'classic_anniversary',
-    'world-of-warcraft-burning-crusade-classic': 'classic',
-    'world-of-warcraft-wrath-of-the-lich-king': 'classic',
-};
 
 /** Check if a game slug belongs to any WoW game entry. */
 export function isWowSlug(slug: string): boolean {

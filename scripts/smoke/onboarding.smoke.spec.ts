@@ -81,23 +81,67 @@ async function skipPastSteamIfPresent(dialog: import('@playwright/test').Locator
  * Advance the wizard until the Games step ("What Do You Play?") is visible
  * (ROK-1147). Robust to whichever optional steps render first
  * (Connect/Discord, Steam) — clicks Skip up to 4 times. Conditional steps
- * also flip in/out as system status / steam status hooks settle, so we
- * use `expect.poll` to ride out the resolver instead of a fixed sleep.
+ * also flip in/out as system status / steam status hooks settle, so after
+ * landing on Games we re-confirm the step is STABLY visible (the resolver
+ * can re-insert Steam a beat later) before installing the data barrier.
  */
 async function advanceToGamesStep(
     dialog: import('@playwright/test').Locator,
 ): Promise<void> {
     const gamesHeading = dialog.getByRole('heading', { name: 'What Do You Play?' });
-    if (await gamesHeading.isVisible({ timeout: 5_000 }).catch(() => false)) return;
-
-    for (let i = 0; i < 4; i++) {
-        const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
-        const hasSkip = await skipBtn.isVisible({ timeout: 2_000 }).catch(() => false);
-        if (!hasSkip) break;
-        await skipBtn.click();
-        if (await gamesHeading.isVisible({ timeout: 3_000 }).catch(() => false)) return;
+    if (!(await gamesHeading.isVisible({ timeout: 5_000 }).catch(() => false))) {
+        for (let i = 0; i < 4; i++) {
+            const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
+            const hasSkip = await skipBtn.isVisible({ timeout: 2_000 }).catch(() => false);
+            if (!hasSkip) break;
+            await skipBtn.click();
+            if (await gamesHeading.isVisible({ timeout: 3_000 }).catch(() => false)) break;
+        }
     }
-    await expect(gamesHeading).toBeVisible({ timeout: 10_000 });
+    await waitForGamesStepData(dialog);
+}
+
+/**
+ * Data-loaded barrier for the Games step. Two distinct races motivate this:
+ *
+ *  1. The conditional-step resolver (system-status / steam-status hooks) can
+ *     re-insert the Steam step a beat AFTER we advance to Games, snapping the
+ *     dialog back. We poll the Games heading and Skip past Steam if it
+ *     reappears, so we end on a STABLE Games step.
+ *  2. Once on Games, the heading renders before the genre chips / search
+ *     input, and the games-discover query then re-renders the subtree
+ *     (Loading spinner → grid), detaching the search input mid-`fill()`.
+ *     We wait for the "All" chip AND the "Loading games..." spinner to clear.
+ */
+async function waitForGamesStepData(
+    dialog: import('@playwright/test').Locator,
+): Promise<void> {
+    const gamesHeading = dialog.getByRole('heading', { name: 'What Do You Play?' });
+    const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
+    // Ride out the conditional-step flap: keep skipping Steam until Games is
+    // the stable visible step.
+    await expect
+        .poll(
+            async () => {
+                if (await gamesHeading.isVisible().catch(() => false)) return true;
+                if (await steamHeading.isVisible().catch(() => false)) {
+                    await dialog
+                        .getByRole('button', { name: 'Skip', exact: true })
+                        .click()
+                        .catch(() => {});
+                }
+                return false;
+            },
+            { timeout: 15_000, message: 'Games step never stabilised (Steam flap)' },
+        )
+        .toBe(true);
+    // Now wait for the step's interactive content to settle.
+    await expect(
+        dialog.getByRole('button', { name: 'All', exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByText('Loading games...')).not.toBeVisible({
+        timeout: 10_000,
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +323,12 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
         test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
         const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
-        await expect(dialog.getByText(/steam/i)).toBeVisible();
+        // Assert the specific value-prop copy rather than /steam/i, which
+        // matches 4 nodes (heading, value prop, button, footer) and trips
+        // Playwright strict mode.
+        await expect(
+            dialog.getByText(/see which games your community owns/i),
+        ).toBeVisible();
         await expect(
             dialog.getByRole('button', { name: /Connect Steam/i }),
         ).toBeVisible();
@@ -316,8 +365,10 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
         test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
         const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
-        await expect(dialog.getByRole('button', { name: 'Steam' })).toBeVisible({ timeout: 5_000 });
-        await expect(dialog.getByRole('button', { name: 'Games' })).toBeVisible({ timeout: 5_000 });
+        // exact:true so the "Steam" breadcrumb step button doesn't also match
+        // the "Connect Steam" action link (role=button), which trips strict mode.
+        await expect(dialog.getByRole('button', { name: 'Steam', exact: true })).toBeVisible({ timeout: 5_000 });
+        await expect(dialog.getByRole('button', { name: 'Games', exact: true })).toBeVisible({ timeout: 5_000 });
         await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible();
     });
 });

@@ -1,7 +1,7 @@
 /**
  * Shared helpers for Playwright smoke tests.
  */
-import { expect, type TestInfo, type Page } from '@playwright/test';
+import { expect, type TestInfo, type Page, type Locator } from '@playwright/test';
 
 /** Returns true when the current project is the desktop viewport. */
 export function isDesktop(testInfo: TestInfo): boolean {
@@ -46,4 +46,24 @@ export async function navigateToFirstEvent(page: Page, testInfo: TestInfo) {
     }
 
     await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+}
+
+/**
+ * Navigate to `url`, settle the network, then wait for a real data-loaded
+ * element before returning — a deterministic alternative to navigating and
+ * immediately asserting (which races the client query's first resolve).
+ *
+ * `networkidle` is `.catch()`'d on purpose: pages with long-poll/SSE
+ * subscriptions (lineup detail, tiebreaker views) never reach networkidle,
+ * so the `readyLocator` visibility is the authoritative readiness signal.
+ */
+export async function gotoAndWaitForData(
+    page: Page,
+    url: string,
+    readyLocator: Locator,
+    timeout = 15_000,
+): Promise<void> {
+    await page.goto(url);
+    await page.waitForLoadState('networkidle', { timeout }).catch(() => {});
+    await expect(readyLocator).toBeVisible({ timeout });
 }

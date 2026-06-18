@@ -13,7 +13,9 @@ import {
     apiGet,
     apiPatch,
     createLineupOrRetry,
+    pollForCondition,
 } from './api-helpers';
+import type { Page } from '@playwright/test';
 
 /** Fetch real game IDs from the configured-games endpoint. */
 async function fetchGameIds(token: string, count: number): Promise<number[]> {
@@ -56,6 +58,24 @@ async function archiveLineup(token: string, _id: number): Promise<void> {
 }
 
 /**
+ * Navigate to /games and gate on the banner endpoint resolving before the
+ * caller asserts on banner UI. The banner is `useQuery`-backed, so asserting
+ * immediately after goto can race the first (possibly-stale) refetch. The
+ * `.catch()` keeps the call resilient if the response already landed before
+ * the listener attached — the subsequent UI assertion is still authoritative.
+ */
+async function gotoGames(page: Page): Promise<void> {
+    const bannerResolved = page
+        .waitForResponse(
+            (r) => r.url().includes('/lineups/banner') && r.ok(),
+            { timeout: 15_000 },
+        )
+        .catch(() => {});
+    await page.goto('/games');
+    await bannerResolved;
+}
+
+/**
  * Ensure an active lineup exists in building phase, creating one if needed.
  * Returns the lineup ID. Used by beforeEach hooks across describe blocks to
  * guard against cross-worker archival between tests.
@@ -75,13 +95,32 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
         votingDurationHours: 720,
         decidedDurationHours: 720,
     })) as { id?: number };
-    if (lineup?.id) {
-        return lineup.id;
-    }
-    // 409 race — another worker created one; use it
-    const reBanner = await apiGet(token, '/lineups/banner');
-    if (reBanner && typeof reBanner.id === 'number') return reBanner.id;
-    return lineupId; // fallback to last known
+    const resolvedId =
+        lineup?.id ??
+        (await (async () => {
+            // 409 race — another worker created one; use it.
+            const reBanner = await apiGet(token, '/lineups/banner');
+            return reBanner && typeof reBanner.id === 'number'
+                ? reBanner.id
+                : lineupId; // fallback to last known
+        })());
+
+    // Close the cross-worker TOCTOU gap: poll the banner endpoint until it
+    // reports our building lineup before returning, so the subsequent UI
+    // navigation can't outrun the server-side state we just created.
+    await pollForCondition(
+        async () => {
+            const b = await apiGet(token, '/lineups/banner');
+            return b &&
+                typeof b.id === 'number' &&
+                b.status === 'building'
+                ? b
+                : null;
+        },
+        { timeoutMs: 10_000, description: '/lineups/banner reports building lineup' },
+    ).catch(() => {});
+
+    return resolvedId;
 }
 
 test.beforeAll(async ({}, testInfo) => {
@@ -126,7 +165,7 @@ test.describe('Community Lineup banner on Games page', () => {
     });
 
     test('banner shows COMMUNITY LINEUP text and status badge', async ({ page }) => {
-        await page.goto('/games');
+        await gotoGames(page);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         // The banner contains the uppercase label "COMMUNITY LINEUP"
@@ -134,7 +173,7 @@ test.describe('Community Lineup banner on Games page', () => {
     });
 
     test('banner shows per-lineup title heading and vote link (ROK-1063)', async ({ page }) => {
-        await page.goto('/games');
+        await gotoGames(page);
 
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
         // Per-lineup H2 title (falls back to backfilled "Lineup — <Month YYYY>")
@@ -146,7 +185,7 @@ test.describe('Community Lineup banner on Games page', () => {
     });
 
     test('banner shows nomination count text', async ({ page }) => {
-        await page.goto('/games');
+        await gotoGames(page);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         // Subtitle shows "X games nominated" (testid: lineup-banner-subtitle)
@@ -154,7 +193,7 @@ test.describe('Community Lineup banner on Games page', () => {
     });
 
     test('Nominate button is visible on the banner', async ({ page }) => {
-        await page.goto('/games');
+        await gotoGames(page);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         const nominateBtn = page.getByRole('button', { name: 'Nominate' });
@@ -168,7 +207,7 @@ test.describe('Community Lineup banner on Games page', () => {
 
 test.describe('Nomination modal', () => {
     test('opens when clicking Nominate button on banner', async ({ page }) => {
-        await page.goto('/games');
+        await gotoGames(page);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         await page.getByRole('button', { name: 'Nominate' }).click();
@@ -182,7 +221,7 @@ test.describe('Nomination modal', () => {
     });
 
     test('search input accepts text and shows results or empty state', async ({ page }) => {
-        await page.goto('/games');
+        await gotoGames(page);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         await page.getByRole('button', { name: 'Nominate' }).click();
@@ -199,7 +238,7 @@ test.describe('Nomination modal', () => {
     });
 
     test('clicking a search result shows preview card with game name', async ({ page }) => {
-        await page.goto('/games');
+        await gotoGames(page);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         await page.getByRole('button', { name: 'Nominate' }).click();
@@ -344,7 +383,7 @@ test.describe('Community Lineup detail page', () => {
 
     test('back button navigates away from detail page', async ({ page }) => {
         // Navigate to games first, then to the detail page via the banner link
-        await page.goto('/games');
+        await gotoGames(page);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         const viewLink = page.getByRole('link', { name: /View Lineup/i });
@@ -429,7 +468,7 @@ test.describe('Community Lineup responsive layout', () => {
     test('banner is visible on mobile viewport', async ({ page }, testInfo) => {
         test.skip(testInfo.project.name === 'desktop', 'Mobile-only test -- verifies banner on mobile');
 
-        await page.goto('/games');
+        await gotoGames(page);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         // Banner should still be visible on mobile
