@@ -72,6 +72,9 @@ function mapEventFields(
     notificationChannelOverride: event.notificationChannelOverride ?? null,
     extendedUntil: event.extendedUntil?.toISOString() ?? null,
     reschedulingPollId: event.reschedulingPollId ?? null,
+    // ROK-1352: ephemeral voice override + live channel id.
+    ephemeralVoiceEnabled: event.ephemeralVoiceEnabled ?? null,
+    ephemeralVoiceChannelId: event.ephemeralVoiceChannelId ?? null,
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
   };

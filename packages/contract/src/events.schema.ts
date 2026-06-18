@@ -53,6 +53,10 @@ export const CreateEventSchema = z.object({
     reminder24hour: z.boolean().optional(),
     /** ROK-1352: Per-event ephemeral-voice override. null = inherit series/global. */
     ephemeralVoiceEnabled: z.boolean().nullable().optional(),
+    /** ROK-1352: Scope for the ephemeral toggle on a recurring create — 'this'
+     *  (default) writes only the per-event column; 'all'/'this_and_following'
+     *  also upsert event_series_settings. */
+    ephemeralVoiceScope: SeriesScopeSchema.optional(),
 }).refine(
     (data) => new Date(data.startTime) < new Date(data.endTime),
     { message: 'Start time must be before end time', path: ['endTime'] }

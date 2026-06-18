@@ -27,7 +27,44 @@ export function buildBaseValues(
     reminder15min: dto.reminder15min ?? true,
     reminder1hour: dto.reminder1hour ?? false,
     reminder24hour: dto.reminder24hour ?? false,
+    // ROK-1352: per-event ephemeral override (null = inherit series/global).
+    ephemeralVoiceEnabled: dto.ephemeralVoiceEnabled ?? null,
   };
+}
+
+/**
+ * ROK-1352: When an event opts into ephemeral voice at series scope, persist
+ * the series-level flag so every instance inherits it. Scope 'this' (or absent)
+ * relies on the per-event column written by `buildBaseValues`.
+ */
+export async function applyEphemeralSeriesScope(
+  db: PostgresJsDatabase<typeof schema>,
+  dto: CreateEventDto,
+  recurrenceGroupId: string | null,
+): Promise<void> {
+  const seriesScope =
+    dto.ephemeralVoiceScope === 'all' ||
+    dto.ephemeralVoiceScope === 'this_and_following';
+  if (
+    !seriesScope ||
+    !recurrenceGroupId ||
+    dto.ephemeralVoiceEnabled == null
+  ) {
+    return;
+  }
+  await db
+    .insert(schema.eventSeriesSettings)
+    .values({
+      recurrenceGroupId,
+      ephemeralVoiceEnabled: dto.ephemeralVoiceEnabled,
+    })
+    .onConflictDoUpdate({
+      target: schema.eventSeriesSettings.recurrenceGroupId,
+      set: {
+        ephemeralVoiceEnabled: dto.ephemeralVoiceEnabled,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 /** Inserts recurring event instances and returns their DB rows. */
