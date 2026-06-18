@@ -112,6 +112,12 @@ export const events = pgTable(
     scheduledEventReconcileBackoffUntil: timestamp(
       'scheduled_event_reconcile_backoff_until',
     ),
+    /** ROK-1352: Per-event ephemeral-voice override. null = inherit series/global;
+     *  true = force on; false = force off (single-occurrence opt-out). */
+    ephemeralVoiceEnabled: boolean('ephemeral_voice_enabled'),
+    /** ROK-1352: Live ephemeral voice channel ID. Set on create, cleared on
+     *  destroy. Non-null marks the channel as the resolver Tier 0 target. */
+    ephemeralVoiceChannelId: text('ephemeral_voice_channel_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -135,6 +141,12 @@ export const events = pgTable(
     // IS NOT NULL) via migration 0145. Drizzle DSL doesn't support partial indexes natively.
     index('idx_events_se_reconcile_backoff').on(
       table.scheduledEventReconcileBackoffUntil,
+    ),
+    // ROK-1352: Scheduler/reaper scans filter on ephemeral_voice_channel_id.
+    // Actual DB index is partial (WHERE ephemeral_voice_channel_id IS NOT NULL)
+    // via the ROK-1352 migration. Drizzle DSL doesn't support partial indexes.
+    index('idx_events_ephemeral_voice_channel_id').on(
+      table.ephemeralVoiceChannelId,
     ),
   ],
 );

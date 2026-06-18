@@ -142,6 +142,15 @@ export const SETTING_KEYS = {
     'community_insights_snapshot_retention_days',
   /** ROK-1353: Refresh-token session length in days (default 60, range 1–365). */
   SESSION_LENGTH_DAYS: 'session_length_days',
+  /** ROK-1352: Master toggle for ephemeral voice channels. */
+  EPHEMERAL_VOICE_ENABLED: 'ephemeral_voice_enabled',
+  /** ROK-1352: Parent category ID under which ephemeral channels are created. */
+  EPHEMERAL_VOICE_CATEGORY_ID: 'ephemeral_voice_category_id',
+  /** ROK-1352: Minutes before event start to create the channel (default 30). */
+  EPHEMERAL_VOICE_CREATE_BUFFER_MINUTES:
+    'ephemeral_voice_create_buffer_minutes',
+  /** ROK-1352: Minutes a channel must sit empty post-event before delete (default 30). */
+  EPHEMERAL_VOICE_IDLE_MINUTES: 'ephemeral_voice_idle_minutes',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
