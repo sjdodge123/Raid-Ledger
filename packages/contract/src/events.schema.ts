@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { SignupUserSchema, EventRosterSchema } from './signups.schema.js';
 import { RosterWithAssignmentsSchema } from './roster.schema.js';
 import { PugSlotResponseSchema } from './pug.schema.js';
-import { SeriesScopeSchema } from './event-series.schema.js';
+import { SeriesScopeSchema } from './series-scope.schema.js';
 
 // ============================================================
 // Slot Configuration Schema
