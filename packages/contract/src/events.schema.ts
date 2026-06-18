@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { SignupUserSchema, EventRosterSchema } from './signups.schema.js';
 import { RosterWithAssignmentsSchema } from './roster.schema.js';
 import { PugSlotResponseSchema } from './pug.schema.js';
+import { SeriesScopeSchema } from './event-series.schema.js';
 
 // ============================================================
 // Slot Configuration Schema
@@ -50,6 +51,8 @@ export const CreateEventSchema = z.object({
     reminder1hour: z.boolean().optional(),
     /** Send DM reminder 24 hours before event. Default false (ROK-126). */
     reminder24hour: z.boolean().optional(),
+    /** ROK-1352: Per-event ephemeral-voice override. null = inherit series/global. */
+    ephemeralVoiceEnabled: z.boolean().nullable().optional(),
 }).refine(
     (data) => new Date(data.startTime) < new Date(data.endTime),
     { message: 'Start time must be before end time', path: ['endTime'] }
@@ -74,6 +77,11 @@ export const UpdateEventSchema = z.object({
     reminder1hour: z.boolean().optional(),
     /** Send DM reminder 24 hours before event (ROK-126). */
     reminder24hour: z.boolean().optional(),
+    /** ROK-1352: Per-event ephemeral-voice override. null = inherit series/global. */
+    ephemeralVoiceEnabled: z.boolean().nullable().optional(),
+    /** ROK-1352: Scope for the ephemeral toggle — 'this' writes the event column;
+     *  'this_and_following'/'all' upsert event_series_settings. Defaults to 'this'. */
+    ephemeralVoiceScope: SeriesScopeSchema.optional(),
 }).refine(
     (data) => {
         if (data.startTime && data.endTime) {
@@ -166,6 +174,10 @@ export const EventResponseSchema = z.object({
     myConflicts: z.array(ConflictingEventSchema).optional(),
     /** ROK-1034: FK to scheduling poll match ID when event is being rescheduled */
     reschedulingPollId: z.number().nullable().optional(),
+    /** ROK-1352: Per-event ephemeral-voice override (null = inherit series/global). */
+    ephemeralVoiceEnabled: z.boolean().nullable().optional(),
+    /** ROK-1352: Live ephemeral voice channel ID (null when none). */
+    ephemeralVoiceChannelId: z.string().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });

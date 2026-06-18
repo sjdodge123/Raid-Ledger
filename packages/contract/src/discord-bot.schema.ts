@@ -101,3 +101,27 @@ export const DiscordChannelListResponseSchema = z.object({
     data: z.array(DiscordChannelSummarySchema),
 });
 export type DiscordChannelListResponseDto = z.infer<typeof DiscordChannelListResponseSchema>;
+
+/**
+ * ROK-1352: Global ephemeral-voice configuration.
+ * GET /admin/settings/discord-bot/ephemeral-voice returns this shape.
+ * Buffer/idle default to 30 minutes; both must be non-negative.
+ */
+export const EphemeralVoiceConfigSchema = z.object({
+    enabled: z.boolean(),
+    categoryId: z.string().nullable(),
+    createBufferMinutes: z.number().int().min(0).default(30),
+    idleMinutes: z.number().int().min(0).default(30),
+});
+export type EphemeralVoiceConfig = z.infer<typeof EphemeralVoiceConfigSchema>;
+
+/** ROK-1352: Body for PUT /admin/settings/discord-bot/ephemeral-voice (partial). */
+export const SetEphemeralVoiceConfigSchema = EphemeralVoiceConfigSchema.partial();
+export type SetEphemeralVoiceConfigDto = z.infer<typeof SetEphemeralVoiceConfigSchema>;
+
+/** ROK-1352: A Discord category channel surfaced by GET .../ephemeral-voice/categories. */
+export const DiscordCategorySummarySchema = z.object({
+    id: z.string(),
+    name: z.string(),
+});
+export type DiscordCategorySummaryDto = z.infer<typeof DiscordCategorySummarySchema>;
