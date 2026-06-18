@@ -279,7 +279,12 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
         test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
         const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
-        await expect(dialog.getByText(/steam/i)).toBeVisible();
+        // Assert the specific value-prop copy rather than /steam/i, which
+        // matches 4 nodes (heading, value prop, button, footer) and trips
+        // Playwright strict mode.
+        await expect(
+            dialog.getByText(/see which games your community owns/i),
+        ).toBeVisible();
         await expect(
             dialog.getByRole('button', { name: /Connect Steam/i }),
         ).toBeVisible();
@@ -316,8 +321,10 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
         test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
         const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
-        await expect(dialog.getByRole('button', { name: 'Steam' })).toBeVisible({ timeout: 5_000 });
-        await expect(dialog.getByRole('button', { name: 'Games' })).toBeVisible({ timeout: 5_000 });
+        // exact:true so the "Steam" breadcrumb step button doesn't also match
+        // the "Connect Steam" action link (role=button), which trips strict mode.
+        await expect(dialog.getByRole('button', { name: 'Steam', exact: true })).toBeVisible({ timeout: 5_000 });
+        await expect(dialog.getByRole('button', { name: 'Games', exact: true })).toBeVisible({ timeout: 5_000 });
         await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible();
     });
 });
