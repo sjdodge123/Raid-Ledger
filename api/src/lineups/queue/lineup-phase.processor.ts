@@ -16,7 +16,6 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { LineupStatus } from '../../drizzle/schema';
 import {
-  DEFAULT_DURATIONS,
   LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_QUEUE,
   LINEUP_PHASE_TRANSITION,
@@ -185,7 +184,20 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       .where(eq(schema.communityLineups.id, lineupId));
   }
 
-  /** Execute transition if lineup is in the expected pre-phase. */
+  /**
+   * Execute a deadline-driven transition through `runStatusTransition`
+   * (ROK-1363). The deadline path previously did a bare UPDATE that bypassed
+   * voting-open / decided notifications, the gateway emit, the activity-log
+   * entry, the matching algorithm, and tiebreaker detection. Routing it
+   * through the canonical orchestrator (mirroring `runGraceTransition`) fires
+   * all of them — and `applyStatusUpdate` already schedules the next phase,
+   * so we must NOT also schedule here (double-enqueue double-advances).
+   *
+   * Keep the early stale-job no-op so the common "two jobs raced, one won"
+   * case stays a quiet debug log rather than a noisy `validateTransition`
+   * throw. The try/catch additionally swallows a late CAS-race
+   * `ConflictException` (same shape as `runGraceTransition`).
+   */
   private async executeTransition(
     lineupId: number,
     targetStatus: string,
@@ -204,7 +216,26 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       return;
     }
 
-    await this.applyTransition(lineupId, targetStatus, lineup);
+    try {
+      await runStatusTransition(
+        {
+          db: this.db,
+          activityLog: this.activityLog,
+          phaseQueue: this.queueService,
+          lineupNotifications: this.lineupNotifications,
+          lineupsGateway: this.lineupsGateway,
+          logger: this.logger,
+        },
+        lineupId,
+        { status: targetStatus as LineupStatus },
+      );
+      this.logger.log(`Lineup ${lineupId} transitioned to '${targetStatus}'`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Deadline transition for lineup ${lineupId} → '${targetStatus}' failed: ${msg}`,
+      );
+    }
   }
 
   /** Find which phase we expect the lineup to currently be in. */
@@ -213,66 +244,6 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       if (to === targetStatus) return from;
     }
     return null;
-  }
-
-  /** Apply the status update and schedule next phase. */
-  private async applyTransition(
-    lineupId: number,
-    targetStatus: string,
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ): Promise<void> {
-    const nextPhase = NEXT_PHASE[targetStatus];
-    const duration = this.getDurationForPhase(targetStatus, lineup);
-    const phaseDeadline = this.computeDeadline(targetStatus, duration);
-
-    await this.updateLineupStatus(
-      lineupId,
-      targetStatus as LineupStatus,
-      phaseDeadline,
-    );
-    this.logger.log(`Lineup ${lineupId} transitioned to '${targetStatus}'`);
-
-    if (nextPhase && phaseDeadline) {
-      const delayMs = phaseDeadline.getTime() - Date.now();
-      await this.queueService.scheduleTransition(lineupId, nextPhase, delayMs);
-    }
-  }
-
-  /** Compute phase deadline, null for archived. */
-  private computeDeadline(
-    targetStatus: string,
-    durationHours: number | null,
-  ): Date | null {
-    if (targetStatus === 'archived' || !durationHours) return null;
-    return new Date(Date.now() + durationHours * 3_600_000);
-  }
-
-  /** Get duration hours for the target phase from overrides → hardcoded defaults. */
-  private getDurationForPhase(
-    targetStatus: string,
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ): number | null {
-    if (targetStatus === 'archived') return null;
-    const overrides = lineup.phaseDurationOverride;
-    if (overrides && typeof overrides === 'object') {
-      const key = targetStatus as keyof typeof overrides;
-      const val = key !== 'standalone' ? overrides[key] : undefined;
-      if (typeof val === 'number') return val;
-    }
-    const key = targetStatus as keyof typeof DEFAULT_DURATIONS;
-    return DEFAULT_DURATIONS[key] ?? 48;
-  }
-
-  /** Update lineup status and phaseDeadline in DB. */
-  private async updateLineupStatus(
-    lineupId: number,
-    status: LineupStatus,
-    phaseDeadline: Date | null,
-  ): Promise<void> {
-    await this.db
-      .update(schema.communityLineups)
-      .set({ status, phaseDeadline, updatedAt: new Date() })
-      .where(eq(schema.communityLineups.id, lineupId));
   }
 
   /** Find a lineup by ID. */

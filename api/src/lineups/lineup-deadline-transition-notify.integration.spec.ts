@@ -68,7 +68,13 @@ function describeDeadlineNotify() {
     testApp = await getTestApp();
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
     processor = testApp.app.get(LineupPhaseProcessor);
-    phaseQueue = testApp.app.get(LineupPhaseQueueService);
+    // `LineupPhaseQueueService` is provided in BOTH LineupsModule and
+    // StandalonePollModule, so `app.get()` may resolve a different instance
+    // than the one the processor injected. Spy on the processor's actual
+    // injected service so `scheduleTransition` call-counts are observed.
+    phaseQueue = (
+      processor as unknown as { queueService: LineupPhaseQueueService }
+    ).queueService;
     gateway = testApp.app.get(LineupsGateway);
     notifications = testApp.app.get(LineupNotificationService);
     activityLogSvc = testApp.app.get(ActivityLogService);
