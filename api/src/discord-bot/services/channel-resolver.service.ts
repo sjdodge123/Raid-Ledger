@@ -92,17 +92,23 @@ export class ChannelResolverService {
 
   /**
    * Resolve voice channel for Discord Scheduled Events (ROK-471, ROK-592, ROK-599).
-   * 3-tier fallback: series-specific binding -> game-specific binding -> app setting default.
+   * Tier 0 (ROK-1352): a live ephemeral channel; then 3-tier fallback:
+   * series-specific binding -> game-specific binding -> app setting default.
    * Note: Per-event overrides (notificationChannelOverride) are handled by callers
    * before invoking this method.
    * @param gameId - Games table PK (integer) for game-specific binding lookup
    * @param recurrenceGroupId - Optional recurrence group ID for series-specific binding
+   * @param ephemeralChannelId - ROK-1352 Tier 0: live ephemeral channel (wins if set)
    * @returns Voice channel ID string or null if none configured
    */
   async resolveVoiceChannelForScheduledEvent(
     gameId?: number | null,
     recurrenceGroupId?: string | null,
+    ephemeralChannelId?: string | null,
   ): Promise<string | null> {
+    // Tier 0 (ROK-1352): a live ephemeral channel overrides all static bindings.
+    if (ephemeralChannelId) return ephemeralChannelId;
+
     const guildId = this.clientService.getGuildId();
 
     // Tier 1: Series-specific voice binding (ROK-599)
