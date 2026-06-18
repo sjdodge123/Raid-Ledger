@@ -195,6 +195,45 @@ function describeReset() {
         .where(eq(schema.events.title, orphanTitle));
       expect(orphanSignups).toHaveLength(0);
     }, 120_000);
+
+    it('wipes community_lineup_match_members (ROK-1206)', async () => {
+      // Seed a lineup → match → match member chain. The wipe must clear
+      // match members directly (not rely on parent FK CASCADE) so a
+      // freshly-installed demo never inherits orphaned match-member rows.
+      const [lineup] = await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'match-member-wipe-test',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: `mm-wipe-${Date.now().toString(36)}`,
+        })
+        .returning({ id: schema.communityLineups.id });
+      const [match] = await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: false,
+          voteCount: 0,
+        })
+        .returning({ id: schema.communityLineupMatches.id });
+      await testApp.db.insert(schema.communityLineupMatchMembers).values({
+        matchId: match.id,
+        userId: testApp.seed.adminUser.id,
+        source: 'voted',
+      });
+
+      const res = await testApp.request
+        .post('/admin/test/reset-to-seed')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+
+      const remaining = await testApp.db
+        .select({ id: schema.communityLineupMatchMembers.id })
+        .from(schema.communityLineupMatchMembers);
+      expect(remaining).toHaveLength(0);
+    }, 120_000);
   });
 }
 

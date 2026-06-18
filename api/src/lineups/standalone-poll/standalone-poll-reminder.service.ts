@@ -14,6 +14,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
 import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
 import { NotificationDedupService } from '../../notifications/notification-dedup.service';
@@ -31,19 +32,6 @@ interface StandaloneNonVoter {
 }
 
 const MS_PER_HOUR = 3_600_000;
-
-/**
- * `phase_deadline` is a `timestamp without time zone` column. postgres-js
- * returns it as a naïve string ("YYYY-MM-DD HH:MM:SS.SSS") which `new Date()`
- * would parse in the runtime's local TZ, shifting the value by hours. We
- * INSERT JS Dates as UTC, so re-parse with an explicit UTC suffix.
- */
-function parseTimestampUtc(value: Date | string): Date {
-  if (value instanceof Date) return value;
-  const s = String(value);
-  if (s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
-  return new Date(s.replace(' ', 'T') + 'Z');
-}
 
 @Injectable()
 export class StandalonePollReminderService {

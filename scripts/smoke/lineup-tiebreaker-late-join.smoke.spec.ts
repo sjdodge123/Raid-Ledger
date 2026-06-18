@@ -164,6 +164,14 @@ test.describe('Late-join tiebreaker voting (ROK-1117)', () => {
             { timeout: 10_000 },
         );
 
+        // Gate on the client tiebreaker query resolving before asserting the
+        // veto form renders — avoids racing the first useQuery refetch (served
+        // stale on mount otherwise). feedback_smoke_polling_for_async_writes.
+        await page.waitForResponse(
+            (r) => r.url().includes(`/lineups/${lineupId}/tiebreaker`) && r.ok(),
+            { timeout: 15_000 },
+        );
+
         // AC: late-arriving user sees the veto form.
         const vetoView = page.locator('[data-testid="veto-view"]');
         await expect(vetoView).toBeVisible({ timeout: 15_000 });

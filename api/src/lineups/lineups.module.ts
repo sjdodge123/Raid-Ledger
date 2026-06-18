@@ -69,6 +69,7 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
     LineupSubmitService,
     LineupSteamNudgeService,
     LineupNotificationService,
+    LineupPhaseQueueService,
     LineupsGateway,
     // ROK-1363: exported so the DEMO_MODE fire-deadline-transition test hook
     // can drive the deadline phase-transition path (`executeTransition`).
