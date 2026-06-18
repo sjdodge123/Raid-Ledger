@@ -139,18 +139,9 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     const targetStatus: LineupStatus =
       lineup.status === 'building' ? 'voting' : 'decided';
     try {
-      await runStatusTransition(
-        {
-          db: this.db,
-          activityLog: this.activityLog,
-          phaseQueue: this.queueService,
-          lineupNotifications: this.lineupNotifications,
-          lineupsGateway: this.lineupsGateway,
-          logger: this.logger,
-        },
-        lineupId,
-        { status: targetStatus },
-      );
+      await runStatusTransition(this.buildTransitionDeps(), lineupId, {
+        status: targetStatus,
+      });
       this.logger.log(`Lineup ${lineupId} grace-advanced to '${targetStatus}'`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -182,6 +173,22 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       .update(schema.communityLineups)
       .set({ pendingAdvanceAt: null, updatedAt: new Date() })
       .where(eq(schema.communityLineups.id, lineupId));
+  }
+
+  /**
+   * ROK-1363: bundle the injected services into the `runStatusTransition`
+   * dependency object. Shared by the grace and deadline transition paths so
+   * the (identical) deps block isn't duplicated.
+   */
+  private buildTransitionDeps() {
+    return {
+      db: this.db,
+      activityLog: this.activityLog,
+      phaseQueue: this.queueService,
+      lineupNotifications: this.lineupNotifications,
+      lineupsGateway: this.lineupsGateway,
+      logger: this.logger,
+    };
   }
 
   /**
@@ -217,18 +224,9 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     }
 
     try {
-      await runStatusTransition(
-        {
-          db: this.db,
-          activityLog: this.activityLog,
-          phaseQueue: this.queueService,
-          lineupNotifications: this.lineupNotifications,
-          lineupsGateway: this.lineupsGateway,
-          logger: this.logger,
-        },
-        lineupId,
-        { status: targetStatus as LineupStatus },
-      );
+      await runStatusTransition(this.buildTransitionDeps(), lineupId, {
+        status: targetStatus as LineupStatus,
+      });
       this.logger.log(`Lineup ${lineupId} transitioned to '${targetStatus}'`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
