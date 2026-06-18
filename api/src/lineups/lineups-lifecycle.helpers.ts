@@ -102,7 +102,7 @@ export async function applyStatusUpdate(
   id: number,
   dto: UpdateLineupStatusDto,
   lineup: typeof schema.communityLineups.$inferSelect,
-) {
+): Promise<Date | null> {
   const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
   const values = {
     ...buildTransitionValues(dto, phaseDeadline),
@@ -143,6 +143,10 @@ export async function applyStatusUpdate(
   if (dto.status === 'archived') {
     await clearLinkedEventsByLineup(db, id);
   }
+  // ROK-1363: return the freshly-computed deadline so callers (notably
+  // `runStatusTransition`) thread the NEW voting deadline into `fireVotingOpen`
+  // instead of the stale pre-update value off the loaded row.
+  return phaseDeadline;
 }
 
 /** Run the matching algorithm (never blocks the caller). */

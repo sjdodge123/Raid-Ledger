@@ -31,6 +31,8 @@ import { AdminGuard } from '../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
+import { LineupPhaseProcessor } from '../lineups/queue/lineup-phase.processor';
+import { LINEUP_PHASE_TRANSITION } from '../lineups/queue/lineup-phase.constants';
 import {
   advanceLineupToVotingForTest,
   castVoteForTest,
@@ -42,6 +44,7 @@ import {
   SeedSingleVoterSchema,
   SetLineupPrivateSchema,
   RevokeChannelPermsSchema,
+  FireLineupDeadlineSchema,
 } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 
@@ -53,6 +56,7 @@ export class DemoTestLineupController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
+    private readonly phaseProcessor: LineupPhaseProcessor,
   ) {}
 
   private async assertDemoMode(): Promise<void> {
@@ -95,6 +99,27 @@ export class DemoTestLineupController {
       parsed.gameId,
       parsed.userId,
     );
+    return { success: true };
+  }
+
+  /**
+   * ROK-1363: Drive the deadline-driven phase-transition job directly so
+   * smoke fixtures can exercise the deadline path (`executeTransition` →
+   * `runStatusTransition`), not just the quorum/grace path. Invokes the
+   * processor's public `process` entry with a synthetic `phase-transition`
+   * job — identical to how a BullMQ-delivered deadline job is handled.
+   */
+  @Post('fire-deadline-transition')
+  @HttpCode(HttpStatus.OK)
+  async fireDeadlineTransition(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const parsed = parseDemoBody(FireLineupDeadlineSchema, body);
+    await this.phaseProcessor.process({
+      name: LINEUP_PHASE_TRANSITION,
+      data: { lineupId: parsed.lineupId, targetStatus: parsed.targetStatus },
+    } as never);
     return { success: true };
   }
 

@@ -67,7 +67,16 @@ export async function runStatusTransition(
 
   await guardTiebreakerOnTransition(deps.db, id, lineup.status, dto);
   await autoPickDecidedGameId(deps.db, id, dto);
-  await applyStatusUpdate(deps.db, deps.phaseQueue, id, dto, lineup);
+  // ROK-1363: capture the NEW phase deadline so the voting-open hook keys off
+  // the freshly-written voting deadline, not the stale pre-update one read at
+  // line 60.
+  const newPhaseDeadline = await applyStatusUpdate(
+    deps.db,
+    deps.phaseQueue,
+    id,
+    dto,
+    lineup,
+  );
   // ROK-1118: emit immediately after the conditional UPDATE succeeds so
   // subscribed clients see the phase flip without polling. The timestamp
   // matches the row's `updatedAt` we just wrote (within milliseconds).
@@ -93,7 +102,7 @@ export async function runStatusTransition(
       deps.logger,
       deps.db,
       id,
-      lineup.phaseDeadline,
+      newPhaseDeadline,
     );
   }
   if (dto.status === 'decided') {

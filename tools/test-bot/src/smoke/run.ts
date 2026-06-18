@@ -34,6 +34,7 @@ import { lineupAbortTests } from "./tests/lineup-abort.test.js";
 import { standalonePollReminderTests } from "./tests/standalone-poll-reminders.test.js";
 import { publicShareLinkTests } from "./tests/public-share-link.test.js";
 import { lineupPrivateDmTests } from "./tests/lineup-private-dm.test.js";
+import { lineupDeadlineVotingDmTests } from "./tests/lineup-deadline-voting-dm.test.js";
 import { lineupChannelOverrideTests } from "./tests/lineup-channel-override.test.js";
 import { lineupGraceCountdownTests } from "./tests/lineup-grace-countdown.test.js";
 import { discordDeactivationTests } from "./tests/discord-deactivation.test.js";
@@ -162,6 +163,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...standalonePollReminderTests,
     ...publicShareLinkTests,
     ...lineupPrivateDmTests,
+    ...lineupDeadlineVotingDmTests,
     ...lineupChannelOverrideTests,
     ...lineupGraceCountdownTests,
     ...discordDeactivationTests,
