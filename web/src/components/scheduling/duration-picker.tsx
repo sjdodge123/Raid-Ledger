@@ -2,17 +2,7 @@
  * DurationPicker — voting-window selector for standalone polls (ROK-1192).
  * Extracted from create-poll-modal.tsx (ROK-1206).
  */
-
-/** Duration options for the standalone poll picker (ROK-1192). */
-export const DURATION_OPTIONS = [
-  { hours: 24, label: '24 hours' },
-  { hours: 48, label: '48 hours' },
-  { hours: 72, label: '72 hours' },
-  { hours: 168, label: '7 days' },
-] as const;
-
-/** Default voting window applied when the modal first opens. */
-export const DEFAULT_DURATION_HOURS = 72;
+import { DURATION_OPTIONS } from './duration-options';
 
 /**
  * Radio-style picker for the poll's voting window.

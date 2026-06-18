@@ -10,7 +10,8 @@ import { Modal } from '../ui/modal';
 import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 import { MemberPicker } from './member-picker-modal';
 import { PollGameSearch } from './poll-game-search';
-import { DurationPicker, DEFAULT_DURATION_HOURS } from './duration-picker';
+import { DurationPicker } from './duration-picker';
+import { DEFAULT_DURATION_HOURS } from './duration-options';
 import { MinVoteThresholdSlider } from './min-vote-threshold-slider';
 import { getPlayers } from '../../lib/api-client';
 
