@@ -183,6 +183,16 @@ export const AdvanceLineupZeroNomsSchema = z.object({
   lineupId: z.number().int().positive(),
 });
 
+/**
+ * Body for `/admin/test/lineup/fire-deadline-transition` (ROK-1363) — drives
+ * the deadline-driven phase-transition job (`executeTransition`) directly so
+ * smoke fixtures can exercise the deadline path, not just the quorum/grace path.
+ */
+export const FireLineupDeadlineSchema = z.object({
+  lineupId: z.number().int().positive(),
+  targetStatus: z.enum(['voting', 'decided', 'archived']),
+});
+
 /** Body for `/admin/test/lineup/seed-single-voter` (ROK-1069). */
 export const SeedSingleVoterSchema = z.object({
   lineupId: z.number().int().positive(),
