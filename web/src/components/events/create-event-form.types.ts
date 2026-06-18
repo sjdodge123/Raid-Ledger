@@ -22,6 +22,8 @@ export interface FormState {
     reminder15min: boolean;
     reminder1hour: boolean;
     reminder24hour: boolean;
+    /** ROK-1352: per-event ephemeral-voice override. null = inherit series/global. */
+    ephemeralVoiceEnabled: boolean | null;
     selectedInstances: Record<string, unknown>[];
     titleIsAutoSuggested: boolean;
     descriptionIsAutoSuggested: boolean;

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { usePluginStore } from '../../stores/plugin-store';
 import { toast } from '../../lib/toast';
+import { EphemeralVoiceSection } from './ephemeral-voice-section';
 
 export function DiscordFeaturesPage() {
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
@@ -47,7 +48,10 @@ function DiscordFeaturesContent() {
                 <p className="text-sm text-muted mt-1">Toggle Discord bot features and integrations.</p>
             </div>
             {isBotConnected ? (
-                <QuickPlayToggle checked={adHocEventsStatus.data?.enabled ?? false} isPending={updateAdHocEvents.isPending} onToggle={handleToggle} />
+                <>
+                    <QuickPlayToggle checked={adHocEventsStatus.data?.enabled ?? false} isPending={updateAdHocEvents.isPending} onToggle={handleToggle} />
+                    <EphemeralVoiceSection />
+                </>
             ) : (
                 <BotNotConnectedWarning />
             )}
