@@ -6,7 +6,13 @@
  * (deadline-driven) and `grace-advance` (re-evaluate quorum after grace
  * window). The processor branches on `job.name`.
  */
-import { Inject, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Logger,
+  OnModuleInit,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { eq, inArray } from 'drizzle-orm';
@@ -16,7 +22,6 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { LineupStatus } from '../../drizzle/schema';
 import {
-  DEFAULT_DURATIONS,
   LINEUP_GRACE_ADVANCE,
   LINEUP_PHASE_QUEUE,
   LINEUP_PHASE_TRANSITION,
@@ -35,6 +40,28 @@ import {
   checkBuildingQuorum,
   checkVotingQuorum,
 } from '../quorum/quorum-check.helpers';
+
+/**
+ * ROK-1363: a deadline-driven transition error is an EXPECTED no-op (swallow,
+ * don't retry) only when:
+ *  - `ConflictException` — the conditional UPDATE lost a CAS race (another job
+ *    or the grace/operator path already advanced the row), or
+ *  - `BadRequestException` carrying `TIEBREAKER_REQUIRED` — a deadline
+ *    `voting → decided` hit a tie; the lineup stays in `voting` for operator
+ *    resolution and retrying cannot break the tie (mirrors the grace path).
+ * Any other error (transient DB, activity-log, unexpected) must propagate so
+ * BullMQ retries the job rather than dropping the transition silently.
+ */
+export function isExpectedTransitionNoop(err: unknown): boolean {
+  if (err instanceof ConflictException) return true;
+  if (err instanceof BadRequestException) {
+    const res = err.getResponse();
+    const message =
+      typeof res === 'string' ? res : (res as { message?: unknown })?.message;
+    return message === 'TIEBREAKER_REQUIRED';
+  }
+  return false;
+}
 
 @Processor(LINEUP_PHASE_QUEUE)
 export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
@@ -140,18 +167,9 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
     const targetStatus: LineupStatus =
       lineup.status === 'building' ? 'voting' : 'decided';
     try {
-      await runStatusTransition(
-        {
-          db: this.db,
-          activityLog: this.activityLog,
-          phaseQueue: this.queueService,
-          lineupNotifications: this.lineupNotifications,
-          lineupsGateway: this.lineupsGateway,
-          logger: this.logger,
-        },
-        lineupId,
-        { status: targetStatus },
-      );
+      await runStatusTransition(this.buildTransitionDeps(), lineupId, {
+        status: targetStatus,
+      });
       this.logger.log(`Lineup ${lineupId} grace-advanced to '${targetStatus}'`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -185,7 +203,36 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       .where(eq(schema.communityLineups.id, lineupId));
   }
 
-  /** Execute transition if lineup is in the expected pre-phase. */
+  /**
+   * ROK-1363: bundle the injected services into the `runStatusTransition`
+   * dependency object. Shared by the grace and deadline transition paths so
+   * the (identical) deps block isn't duplicated.
+   */
+  private buildTransitionDeps() {
+    return {
+      db: this.db,
+      activityLog: this.activityLog,
+      phaseQueue: this.queueService,
+      lineupNotifications: this.lineupNotifications,
+      lineupsGateway: this.lineupsGateway,
+      logger: this.logger,
+    };
+  }
+
+  /**
+   * Execute a deadline-driven transition through `runStatusTransition`
+   * (ROK-1363). The deadline path previously did a bare UPDATE that bypassed
+   * voting-open / decided notifications, the gateway emit, the activity-log
+   * entry, the matching algorithm, and tiebreaker detection. Routing it
+   * through the canonical orchestrator (mirroring `runGraceTransition`) fires
+   * all of them — and `applyStatusUpdate` already schedules the next phase,
+   * so we must NOT also schedule here (double-enqueue double-advances).
+   *
+   * Keep the early stale-job no-op so the common "two jobs raced, one won"
+   * case stays a quiet debug log rather than a noisy `validateTransition`
+   * throw. The try/catch additionally swallows a late CAS-race
+   * `ConflictException` (same shape as `runGraceTransition`).
+   */
   private async executeTransition(
     lineupId: number,
     targetStatus: string,
@@ -204,7 +251,24 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       return;
     }
 
-    await this.applyTransition(lineupId, targetStatus, lineup);
+    try {
+      await runStatusTransition(this.buildTransitionDeps(), lineupId, {
+        status: targetStatus as LineupStatus,
+      });
+      this.logger.log(`Lineup ${lineupId} transitioned to '${targetStatus}'`);
+    } catch (err) {
+      // ROK-1363 (Codex P1): only the EXPECTED no-op outcomes are swallowed —
+      // a CAS race (another job/path won) or a tie awaiting operator
+      // resolution. Everything else (transient DB / activity-log / unexpected)
+      // is rethrown so BullMQ retries the job instead of silently marking it
+      // complete. The bare deadline UPDATE this replaced had no catch, so
+      // swallowing all errors here would have regressed retry semantics.
+      if (!isExpectedTransitionNoop(err)) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Deadline transition for lineup ${lineupId} → '${targetStatus}' no-op: ${msg}`,
+      );
+    }
   }
 
   /** Find which phase we expect the lineup to currently be in. */
@@ -213,66 +277,6 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       if (to === targetStatus) return from;
     }
     return null;
-  }
-
-  /** Apply the status update and schedule next phase. */
-  private async applyTransition(
-    lineupId: number,
-    targetStatus: string,
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ): Promise<void> {
-    const nextPhase = NEXT_PHASE[targetStatus];
-    const duration = this.getDurationForPhase(targetStatus, lineup);
-    const phaseDeadline = this.computeDeadline(targetStatus, duration);
-
-    await this.updateLineupStatus(
-      lineupId,
-      targetStatus as LineupStatus,
-      phaseDeadline,
-    );
-    this.logger.log(`Lineup ${lineupId} transitioned to '${targetStatus}'`);
-
-    if (nextPhase && phaseDeadline) {
-      const delayMs = phaseDeadline.getTime() - Date.now();
-      await this.queueService.scheduleTransition(lineupId, nextPhase, delayMs);
-    }
-  }
-
-  /** Compute phase deadline, null for archived. */
-  private computeDeadline(
-    targetStatus: string,
-    durationHours: number | null,
-  ): Date | null {
-    if (targetStatus === 'archived' || !durationHours) return null;
-    return new Date(Date.now() + durationHours * 3_600_000);
-  }
-
-  /** Get duration hours for the target phase from overrides → hardcoded defaults. */
-  private getDurationForPhase(
-    targetStatus: string,
-    lineup: typeof schema.communityLineups.$inferSelect,
-  ): number | null {
-    if (targetStatus === 'archived') return null;
-    const overrides = lineup.phaseDurationOverride;
-    if (overrides && typeof overrides === 'object') {
-      const key = targetStatus as keyof typeof overrides;
-      const val = key !== 'standalone' ? overrides[key] : undefined;
-      if (typeof val === 'number') return val;
-    }
-    const key = targetStatus as keyof typeof DEFAULT_DURATIONS;
-    return DEFAULT_DURATIONS[key] ?? 48;
-  }
-
-  /** Update lineup status and phaseDeadline in DB. */
-  private async updateLineupStatus(
-    lineupId: number,
-    status: LineupStatus,
-    phaseDeadline: Date | null,
-  ): Promise<void> {
-    await this.db
-      .update(schema.communityLineups)
-      .set({ status, phaseDeadline, updatedAt: new Date() })
-      .where(eq(schema.communityLineups.id, lineupId));
   }
 
   /** Find a lineup by ID. */

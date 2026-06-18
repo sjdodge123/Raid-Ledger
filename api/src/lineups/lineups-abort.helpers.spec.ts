@@ -91,7 +91,9 @@ beforeEach(() => {
   mockedBuildDetailResponse.mockResolvedValue({} as never);
   mockedFindUserDisplayName.mockResolvedValue('Admin User');
   mockedLogAborted.mockResolvedValue(undefined);
-  mockedApplyStatusUpdate.mockResolvedValue(undefined);
+  // ROK-1363: applyStatusUpdate now returns the new phase deadline (Date | null).
+  // Abort transitions to 'archived', whose deadline is null.
+  mockedApplyStatusUpdate.mockResolvedValue(null);
 });
 
 describe('runLineupAbort', () => {
@@ -131,7 +133,7 @@ describe('runLineupAbort', () => {
     });
     mockedApplyStatusUpdate.mockImplementation(() => {
       calls.push('applyStatusUpdate');
-      return Promise.resolve();
+      return Promise.resolve(null);
     });
     cancelAll.mockImplementation(() => {
       calls.push('cancelAllForLineup');
