@@ -36,15 +36,11 @@ function describeLineupAbort() {
   beforeAll(async () => {
     testApp = await getTestApp();
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-    // `LineupPhaseQueueService` is registered as a provider in both
-    // `LineupsModule` and `StandalonePollModule` (latter is intentionally
-    // self-contained — see comment in `standalone-poll.module.ts`). Each
-    // module gets its own singleton in NestJS DI. We tried both
-    // `app.get(LineupPhaseQueueService)` and
-    // `app.select(LineupsModule).get(...)` — neither returned the instance
-    // wired into LineupsService (likely because BullModule.registerQueue
-    // forks the provider graph). The only reliable way to spy on the same
-    // instance the runtime uses is to read it off the LineupsService.
+    // `LineupPhaseQueueService` is now a single provider, owned + exported
+    // by `LineupsModule` and consumed by `StandalonePollModule` (ROK-1206).
+    // We still read it off `LineupsService` rather than via
+    // `app.get(LineupPhaseQueueService)` because that's the exact runtime
+    // instance wired into the service under test — the most direct ref to spy on.
     // @ts-expect-error — `phaseQueue` is private but we need the runtime ref for the spy
     phaseQueue = testApp.app.get(LineupsService).phaseQueue;
   });
