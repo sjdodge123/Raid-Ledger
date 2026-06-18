@@ -1,9 +1,16 @@
-import { Logger } from '@nestjs/common';
+import {
+  Logger,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
-import { LineupPhaseProcessor } from './lineup-phase.processor';
+import {
+  LineupPhaseProcessor,
+  isExpectedTransitionNoop,
+} from './lineup-phase.processor';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
 
 describe('LineupPhaseProcessor', () => {
@@ -81,6 +88,34 @@ describe('LineupPhaseProcessor', () => {
 
       await expect(processor.onModuleInit()).resolves.toBeUndefined();
       expect(errorSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // ROK-1363 (Codex P1): the deadline path swallows only EXPECTED no-op
+  // outcomes; every other error must propagate so BullMQ retries the job.
+  describe('isExpectedTransitionNoop', () => {
+    it('treats a CAS-race ConflictException as a no-op', () => {
+      expect(isExpectedTransitionNoop(new ConflictException('lost race'))).toBe(
+        true,
+      );
+    });
+
+    it('treats a TIEBREAKER_REQUIRED BadRequest as a no-op', () => {
+      const err = new BadRequestException({ message: 'TIEBREAKER_REQUIRED' });
+      expect(isExpectedTransitionNoop(err)).toBe(true);
+    });
+
+    it('does NOT swallow other BadRequest errors (rethrow → retry)', () => {
+      const err = new BadRequestException('Invalid transition');
+      expect(isExpectedTransitionNoop(err)).toBe(false);
+    });
+
+    it('does NOT swallow transient/unexpected errors (rethrow → retry)', () => {
+      expect(isExpectedTransitionNoop(new Error('db connection reset'))).toBe(
+        false,
+      );
+      expect(isExpectedTransitionNoop('plain string')).toBe(false);
+      expect(isExpectedTransitionNoop(undefined)).toBe(false);
     });
   });
 });

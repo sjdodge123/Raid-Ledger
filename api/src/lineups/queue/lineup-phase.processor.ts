@@ -6,7 +6,13 @@
  * (deadline-driven) and `grace-advance` (re-evaluate quorum after grace
  * window). The processor branches on `job.name`.
  */
-import { Inject, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Logger,
+  OnModuleInit,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { eq, inArray } from 'drizzle-orm';
@@ -34,6 +40,28 @@ import {
   checkBuildingQuorum,
   checkVotingQuorum,
 } from '../quorum/quorum-check.helpers';
+
+/**
+ * ROK-1363: a deadline-driven transition error is an EXPECTED no-op (swallow,
+ * don't retry) only when:
+ *  - `ConflictException` — the conditional UPDATE lost a CAS race (another job
+ *    or the grace/operator path already advanced the row), or
+ *  - `BadRequestException` carrying `TIEBREAKER_REQUIRED` — a deadline
+ *    `voting → decided` hit a tie; the lineup stays in `voting` for operator
+ *    resolution and retrying cannot break the tie (mirrors the grace path).
+ * Any other error (transient DB, activity-log, unexpected) must propagate so
+ * BullMQ retries the job rather than dropping the transition silently.
+ */
+export function isExpectedTransitionNoop(err: unknown): boolean {
+  if (err instanceof ConflictException) return true;
+  if (err instanceof BadRequestException) {
+    const res = err.getResponse();
+    const message =
+      typeof res === 'string' ? res : (res as { message?: unknown })?.message;
+    return message === 'TIEBREAKER_REQUIRED';
+  }
+  return false;
+}
 
 @Processor(LINEUP_PHASE_QUEUE)
 export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
@@ -229,9 +257,16 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       });
       this.logger.log(`Lineup ${lineupId} transitioned to '${targetStatus}'`);
     } catch (err) {
+      // ROK-1363 (Codex P1): only the EXPECTED no-op outcomes are swallowed —
+      // a CAS race (another job/path won) or a tie awaiting operator
+      // resolution. Everything else (transient DB / activity-log / unexpected)
+      // is rethrown so BullMQ retries the job instead of silently marking it
+      // complete. The bare deadline UPDATE this replaced had no catch, so
+      // swallowing all errors here would have regressed retry semantics.
+      if (!isExpectedTransitionNoop(err)) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `Deadline transition for lineup ${lineupId} → '${targetStatus}' failed: ${msg}`,
+        `Deadline transition for lineup ${lineupId} → '${targetStatus}' no-op: ${msg}`,
       );
     }
   }
