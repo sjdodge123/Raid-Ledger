@@ -43,6 +43,14 @@ import {
   setDefaultTimezone as _setDefaultTimezone,
   getDiscordBotDefaultVoiceChannel as _getDiscordBotDefaultVoiceChannel,
   setDiscordBotDefaultVoiceChannel as _setDiscordBotDefaultVoiceChannel,
+  getEphemeralVoiceEnabled as _getEphemeralVoiceEnabled,
+  setEphemeralVoiceEnabled as _setEphemeralVoiceEnabled,
+  getEphemeralVoiceCategoryId as _getEphemeralVoiceCategoryId,
+  setEphemeralVoiceCategoryId as _setEphemeralVoiceCategoryId,
+  getEphemeralVoiceCreateBufferMinutes as _getEphemeralVoiceCreateBufferMinutes,
+  setEphemeralVoiceCreateBufferMinutes as _setEphemeralVoiceCreateBufferMinutes,
+  getEphemeralVoiceIdleMinutes as _getEphemeralVoiceIdleMinutes,
+  setEphemeralVoiceIdleMinutes as _setEphemeralVoiceIdleMinutes,
 } from './settings-discord.helpers';
 
 import { SETTINGS_EVENTS } from './settings.types';
@@ -337,6 +345,29 @@ export class SettingsService implements OnModuleInit {
   /** Set the default voice channel ID for the Discord bot. */
   setDiscordBotDefaultVoiceChannel = (id: string) =>
     _setDiscordBotDefaultVoiceChannel(this, id);
+
+  // ─── ROK-1352: Ephemeral voice channels ──────────────────────
+  /** Master toggle for ephemeral voice channels. */
+  getEphemeralVoiceEnabled = () => _getEphemeralVoiceEnabled(this);
+  /** Set the ephemeral-voice master toggle. */
+  setEphemeralVoiceEnabled = (enabled: boolean) =>
+    _setEphemeralVoiceEnabled(this, enabled);
+  /** Parent category ID for ephemeral channels (null = guild root). */
+  getEphemeralVoiceCategoryId = () => _getEphemeralVoiceCategoryId(this);
+  /** Set the ephemeral-voice parent category. */
+  setEphemeralVoiceCategoryId = (id: string | null) =>
+    _setEphemeralVoiceCategoryId(this, id);
+  /** Minutes before start to create the channel (default 30). */
+  getEphemeralVoiceCreateBufferMinutes = () =>
+    _getEphemeralVoiceCreateBufferMinutes(this);
+  /** Set the create-buffer minutes. */
+  setEphemeralVoiceCreateBufferMinutes = (m: number) =>
+    _setEphemeralVoiceCreateBufferMinutes(this, m);
+  /** Minutes empty post-event before delete (default 30). */
+  getEphemeralVoiceIdleMinutes = () => _getEphemeralVoiceIdleMinutes(this);
+  /** Set the idle-window minutes. */
+  setEphemeralVoiceIdleMinutes = (m: number) =>
+    _setEphemeralVoiceIdleMinutes(this, m);
 
   // ─── Ad-hoc & Auto-extend ────────────────────────────────────
 
