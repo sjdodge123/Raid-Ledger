@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnApplicationShutdown,
@@ -84,6 +85,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
     private readonly usersService: UsersService,
     private readonly adHocEventsGateway: AdHocEventsGateway,
     @Optional()
+    @Inject(EphemeralVoiceIdleCoordinator)
     private readonly ephemeralIdle: EphemeralVoiceIdleCoordinator | null = null,
   ) {}
 

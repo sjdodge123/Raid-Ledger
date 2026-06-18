@@ -47,8 +47,11 @@ export class EphemeralVoiceService {
     private readonly clientService: DiscordBotClientService,
     private readonly settingsService: SettingsService,
     private readonly scheduledEventService: ScheduledEventService,
-    @Optional() private readonly embedSyncQueue: EmbedSyncQueueService | null,
     @Optional()
+    @Inject(EmbedSyncQueueService)
+    private readonly embedSyncQueue: EmbedSyncQueueService | null,
+    @Optional()
+    @Inject(VoiceAttendanceService)
     private readonly voiceAttendance: VoiceAttendanceService | null,
   ) {}
 
