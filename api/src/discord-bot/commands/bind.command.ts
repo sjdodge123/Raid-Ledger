@@ -26,6 +26,7 @@ import {
   applyEventChanges,
   findSeriesEventIds,
   findSeriesGame,
+  shouldDeriveSeriesGame,
   type OtherSlotState,
 } from './bind.helpers';
 import {
@@ -134,7 +135,13 @@ export class BindCommand
     if (game === false) return;
     const series = await resolveSeries(this.db, interaction);
     if (series === false) return;
-    if (!game && series) {
+    // ROK-1372: voice binds must NOT auto-derive a series game — a variety
+    // series would get locked to one arbitrary game (game-voice-monitor) and
+    // mislabel every quick-play. See shouldDeriveSeriesGame.
+    if (
+      series &&
+      shouldDeriveSeriesGame(resolved.bindingChannelType, game !== null)
+    ) {
       game = await findSeriesGame(this.db, series.id);
     }
     await this.tryBindChannel(

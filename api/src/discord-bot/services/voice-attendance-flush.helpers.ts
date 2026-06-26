@@ -281,11 +281,10 @@ function logUnrecognizedChannel(
   const voiceBindingCount = bindings.filter((b) =>
     voiceBindingPurposes.includes(b.bindingPurpose),
   ).length;
+  // NestJS Logger does not printf-substitute %s/%d — interpolate directly so the
+  // channel id + counts land on one line instead of four orphan WARN lines.
   logger.warn(
-    '[voice-pipe] findActive: unrecognized channel=%s, bindings=%d, voiceBindings=%d',
-    channelId,
-    bindings.length,
-    voiceBindingCount,
+    `[voice-pipe] findActive: unrecognized channel=${channelId}, bindings=${bindings.length}, voiceBindings=${voiceBindingCount}`,
   );
 }
 
