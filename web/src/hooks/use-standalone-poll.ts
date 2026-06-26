@@ -26,7 +26,7 @@ export function useCreateSchedulingPoll() {
     mutationFn: (dto: CreateSchedulingPollDto) => createSchedulingPoll(dto),
     onSuccess: () => {
       toast.success('Scheduling poll created!');
-      void queryClient.invalidateQueries({ queryKey: ['scheduling-banner'] });
+      void queryClient.invalidateQueries({ queryKey: ['scheduling', 'banner'] });
       void queryClient.invalidateQueries({ queryKey: ['standalone-polls'] });
       void queryClient.invalidateQueries({ queryKey: ['lineups'] });
       void queryClient.invalidateQueries({ queryKey: ['events'] });
