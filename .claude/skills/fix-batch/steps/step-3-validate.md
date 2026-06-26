@@ -2,6 +2,8 @@
 
 **Lead runs validation directly on the batch branch.**
 
+**Trivial single-story fast path (Step 2·0):** if this is a single `trivial`-tier story, Step 3 collapses — run only 3a (`--static --scope=auto`), apply 3i's reviewer skip-threshold (the Codex pre-push pass becomes the one reviewer), and treat 3f–3h (env-lock / deploy / Chrome MCP) as `N/A` for a non-UI fix (one screenshot on a running env for cosmetic-UI). **Skip the two-track fork.** Then push the `fix/rok-<num>` branch (3l). The full two-track flow below is for multi-story / standard batches.
+
 Order:
 1. Lite static gate in one pass: `validate-ci.sh --static` covers build → ts → lint, plus conditional migration/container checks (3a). Unit + integration are deferred to GitHub CI (sharded + randomized on every PR).
 2. **Then fork into two parallel tracks**:
@@ -21,10 +23,17 @@ git checkout fix/batch-YYYY-MM-DD
 ## 3a. Static CI (lite gate — one command)
 
 ```bash
-./scripts/validate-ci.sh --static
+./scripts/validate-ci.sh --static --scope=auto
 ```
 
-`--static` runs build (all workspaces), TypeScript, lint, and conditional migration / container checks (the latter two auto-skip unless the batch touched `drizzle/migrations/**` or infra files). Unit, integration, Playwright, and Discord smoke are **deferred to GitHub CI**, which runs them sharded + randomized on every PR — GitHub is the real gate (auto-merge-squash blocks until green). This is the lite gate by operator policy: catch the cheap deterministic breaks locally, let GitHub catch behavioral regressions.
+`--scope=auto` narrows build + typecheck + lint to the single changed workspace (+ contract) when the batch touched only one workspace; a mixed/contract/migration diff still validates all workspaces. `--static` runs build, TypeScript, lint, and conditional migration / container checks (the latter two auto-skip unless the batch touched `drizzle/migrations/**` or infra files). Unit, integration, Playwright, and Discord smoke are **deferred to GitHub CI**, which runs them sharded + randomized on every PR — GitHub is the real gate (auto-merge-squash blocks until green). This is the lite gate by operator policy: catch the cheap deterministic breaks locally, let GitHub catch behavioral regressions.
+
+After this passes, record a `/push`-compatible pass marker so the nested `/push` in 3l trusts this run instead of re-building. The rebase in `/push` Step 3 is a no-op when `origin/main` hasn't moved since this gate (HEAD — and the marker — stay valid); if the rebase DOES pull new commits, the marker is invalidated automatically and `/push` re-validates, which is correct:
+
+```bash
+HEAD_SHA=$(git rev-parse HEAD)
+touch "/tmp/.validate-ci-pass-${HEAD_SHA}-static"
+```
 
 **Escalate to `./scripts/validate-ci.sh --full`** (adds local unit + integration + auto-scoped e2e) when the batch touches `package.json`/`package-lock.json` (GitHub skips unit + integration for deps-only diffs), `packages/contract/**`, migrations, or container/infra — or is a large/cross-workspace refactor where you'd rather not discover a behavioral break post-push, or when the operator asks.
 
@@ -111,11 +120,18 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`.
 - `VERDICT: PASS WITH NOTES` → `gates.chrome_mcp_e2e: PASS`. Append medium/low findings to **`TECH-DEBT-BACKLOG.md`** at the repo root (single canonical location — `/readlogs` parses it; see playbook "Where candidate tech-debt goes"). Use the dated-section + `- **[sev]**` bullet format. Do NOT auto-file Linear tech-debt stories; do NOT invent runbook "Known Issues" sections. Mirror the appended block in the PR body under `## Tech debt observed (not auto-filed)`. Continue to 3i.
 - `VERDICT: FAIL` → `gates.chrome_mcp_e2e: FAIL`. Do NOT spawn the reviewer. Lead either fixes inline (1-3 lines per fix, `fix: resolve Chrome MCP finding`) or respawns the originating dev with the finding. Re-run the gate after the fix.
 
-**N/A path (rare):** If — and only if — the batch is purely API-internal with no in-app surface (no admin page, no settings panel, no Discord embed consumes it), record `gates.chrome_mcp_e2e: "N/A — api-internal-only"` with a one-line justification. Default is to run the gate.
+**N/A path (blast-radius tiered — CLAUDE.md "Trivial-fix fast lane"):**
+
+- **Trivial non-UI fix** (single-story trivial tier; no rendered flow / Discord embed / admin surface touched) → record `gates.chrome_mcp_e2e: "N/A — trivial non-UI"` and SKIP the env-lock + deploy + browser drive entirely (3f–3g are skipped too). GitHub CI + the one reviewer are the gate.
+- **Trivial cosmetic-UI fix** (color/copy/spacing/single-prop on an existing element) → one screenshot of the affected element on the already-running env (no `deploy_dev.sh --rebuild`, no full flow-drive); record `gates.chrome_mcp_e2e: "PASS — cosmetic screenshot"`.
+- **Purely API-internal batch** (no in-app surface consumes it) → `gates.chrome_mcp_e2e: "N/A — api-internal-only"` with a one-line justification.
+- **Otherwise** (any rendered flow, state change, or Discord embed/dispatch touched) → run the full gate. Default is to run it.
 
 ---
 
 ## 3i. [Track B] Code Review (MANDATORY — one reviewer per story)
+
+**Reviewer skip threshold (mirrors `/build` Step 4b).** Skip the per-story `devedup-rl:reviewer` for a story whose diff is **<300 net lines AND has no risk markers** (no `packages/contract/`, no migration, no `Dockerfile`/nginx/entrypoint, no `api/src/auth/`, no money/payments). For a `trivial`-tier single-story batch this is the common case — the Codex pre-push pass (`/push` Step 8.5) is then the **one** reviewer, and `gates.review` is satisfied by it. Record `pipeline.stories['ROK-XXX'].review_status: "SKIPPED — trivial, Codex pre-push is the reviewer"`. Any story that trips a risk marker, or a multi-story batch with cross-story interactions, still gets its per-story reviewer below.
 
 **Spawn at the same moment Track A acquires the env lock (3f).** Reviewers run in parallel with Playwright + Chrome MCP — they review the per-story diff and do not need the deployed env or the browser summary. Use `run_in_background: true` so Lead can drive Track A while the reviewers work.
 

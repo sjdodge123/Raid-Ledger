@@ -76,6 +76,8 @@ Print a one-line summary per story: `ROK-XXX: <N> comments, <0|N> triage-relevan
 
 Apply the profiling matrix from SKILL.md. Per story: scope (light/standard/full), `needs_planner` (true if full), `needs_architect` (true if full), serialization conflicts (touches `packages/contract`? migration? file overlap?).
 
+A single-file ≤30-line logic/copy/style/config fix touching no `packages/contract`/migration/infra/auth surface profiles as **light** (the `trivial` tier — Lead-direct fast path, human gates tiered by blast radius). See CLAUDE.md "Trivial-fix fast lane". Don't profile a genuine one-liner as `standard` — that's the cliff this tier exists to close. When in doubt, `standard`.
+
 Group into batches respecting serialization. Max 2-3 devs per batch.
 
 **Migration rule:** if a story adds a DB migration, it MUST be the only story in its batch. Shared Docker Postgres means deploying one worktree's migration affects all in-flight worktrees. Serialize migrations against everything — put them in their own batch.
