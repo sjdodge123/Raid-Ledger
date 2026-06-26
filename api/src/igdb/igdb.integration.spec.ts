@@ -70,6 +70,35 @@ function describeGamesIGDB() {
       expect(names).toContain('Halo Reach');
     });
 
+    it('matches an apostrophe title with or without the apostrophe in the query (ROK-1369 regression)', async () => {
+      // The stored name keeps the apostrophe; the bug stripped punctuation from
+      // the QUERY side only, so `%baldurs%` never matched the stored `Baldur's`.
+      await insertTestGame(testApp, "Baldur's Gate 3", { igdbId: 4001 });
+
+      for (const q of ["Baldur's Gate 3", 'baldurs gate']) {
+        const res = await testApp.request.get(
+          `/games/search?q=${encodeURIComponent(q)}`,
+        );
+        expect(res.status).toBe(200);
+        const names = (res.body as { data: Array<{ name: string }> }).data.map(
+          (g) => g.name,
+        );
+        expect(names).toContain("Baldur's Gate 3");
+      }
+    });
+
+    it('still matches colon/dash punctuation titles (no regression from the apostrophe fix)', async () => {
+      await insertTestGame(testApp, 'Halo: Combat Evolved', { igdbId: 4002 });
+
+      const res = await testApp.request.get('/games/search?q=Halo Combat');
+
+      expect(res.status).toBe(200);
+      const names = (res.body as { data: Array<{ name: string }> }).data.map(
+        (g) => g.name,
+      );
+      expect(names).toContain('Halo: Combat Evolved');
+    });
+
     it('should exclude hidden games from search results', async () => {
       await insertTestGame(testApp, 'Visible Game', { igdbId: 2001 });
       await insertTestGame(testApp, 'Hidden Game', {
