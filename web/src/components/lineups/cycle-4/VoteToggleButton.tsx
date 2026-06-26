@@ -45,20 +45,25 @@ function ariaLabelFor(
   return `Vote for ${gameName}`;
 }
 
-/** Accessible circular vote toggle — see file-level docstring. */
+/**
+ * Explicit labeled vote button — see file-level docstring.
+ *
+ * ROK-1373: replaced the subtle 20px outline ring (which only turned emerald
+ * AFTER voting, so the page had no green vote affordance before a vote) with a
+ * solid emerald "Vote" pill / a "✓ Voted" confirmed state. Same a11y contract.
+ */
 export function VoteToggleButton(props: VoteToggleButtonProps): JSX.Element {
   const { gameName, isVoted, disabled, onToggle } = props;
   const cls = isVoted
-    ? 'bg-emerald-500 border-emerald-500'
-    : 'border-edge hover:border-emerald-500/60';
+    ? 'bg-emerald-600/15 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600/25'
+    : 'bg-emerald-600 hover:bg-emerald-500 text-white border border-transparent';
   const handleClick = (e: MouseEvent<HTMLButtonElement>): void => {
     e.stopPropagation();
     if (disabled) return;
     onToggle();
   };
-  // Stop Enter/Space from bubbling to the row's onKeyDown handler, which
-  // would otherwise navigate to /games/:id (AC2 / AC9). Click stopPropagation
-  // covers mouse activation; keydown propagation is independent.
+  // Stop Enter/Space from bubbling to the row (legacy AC2/AC9 guard). Click
+  // stopPropagation covers mouse activation; keydown propagation is independent.
   const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>): void => {
     if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
   };
@@ -71,12 +76,12 @@ export function VoteToggleButton(props: VoteToggleButtonProps): JSX.Element {
       disabled={disabled}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${cls} disabled:opacity-40 disabled:cursor-not-allowed`}
+      className={`flex-shrink-0 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${cls} disabled:opacity-40 disabled:cursor-not-allowed`}
     >
       {isVoted && (
         <svg
           aria-hidden="true"
-          className="w-3 h-3 text-white"
+          className="w-3.5 h-3.5"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -89,6 +94,7 @@ export function VoteToggleButton(props: VoteToggleButtonProps): JSX.Element {
           />
         </svg>
       )}
+      {isVoted ? 'Voted' : 'Vote'}
     </button>
   );
 }

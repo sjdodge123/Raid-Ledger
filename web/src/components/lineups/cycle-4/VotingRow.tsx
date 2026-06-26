@@ -1,21 +1,22 @@
 /**
- * Single leaderboard row for the Sv Voting composite (ROK-1298).
+ * Single leaderboard row for the Sv Voting composite (ROK-1298 / ROK-1373).
  *
- * Per-row interaction matrix (spec §"Behavior Specifications"):
- *   - Tap the row body (cover, name, bar area)  → opens U2 drawer
- *   - Tap the vote circle                       → toggles the vote
- *   - The circle's `onClick` calls `stopPropagation()` so the two
- *     affordances never collide.
+ * Per-row interaction matrix:
+ *   - Click the green "Vote" / "Voted" button → toggles the vote.
+ *   - Click the cover thumbnail              → opens game details (/games/:id).
+ *   - The rest of the row body is NOT a navigation target (ROK-1373: desktop
+ *     users were getting yanked to /games/:id when they meant to vote).
+ *   - Both controls call `stopPropagation()` so they never collide.
  *
- * Accessibility (canonical Cycle 4 fix lives here):
- *   - Row body: `role="button"` + `tabIndex=0` + `aria-haspopup="dialog"`
- *     + `aria-label="Open details for ${gameName}"`. Enter / Space activate.
- *   - Vote circle: see {@link VoteToggleButton}.
+ * Accessibility:
+ *   - Vote button: `aria-label="Vote for ${gameName}"` + `aria-pressed`
+ *     (see {@link VoteToggleButton}).
+ *   - Cover thumbnail: `<button aria-label="View details for ${gameName}">`.
  *
  * Vote bar normalized to `voterDenominator` (always
  * `lineup.votingEligibleCount`), never derived inside the row.
  */
-import type { JSX, KeyboardEvent } from 'react';
+import type { JSX } from 'react';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { voteBarPct } from './voting-bar.helpers';
 import { VoteToggleButton } from './VoteToggleButton';
@@ -26,40 +27,54 @@ export interface VotingRowProps {
   entry: LineupEntryResponseDto;
   /** Has the current viewer voted for this entry? */
   isVoted: boolean;
-  /** Disable both vote-circle clicks AND the row body drawer trigger. */
+  /** Disable the vote button (private non-invitee, at-limit, etc). */
   disabled: boolean;
   /**
    * Bar denominator. Always `lineup.votingEligibleCount` — never derived
    * inside the row. Passed from the leaderboard parent.
    */
   voterDenominator: number;
-  /** Fires when the vote circle is activated. */
+  /** Fires when the vote button is activated. */
   onToggleVote: () => void;
-  /** Fires when the row body is activated (open the GameResearchDrawer). */
+  /** Fires when the cover thumbnail is activated (open game details). */
   onOpenDrawer: () => void;
 }
 
-/** Cover image (or placeholder) for the row. */
+/** Cover thumbnail — the explicit "view details" trigger (→ /games/:id). */
 function RowCover({
   url,
+  gameName,
+  onOpenDrawer,
 }: {
   url: string | null;
+  gameName: string;
+  onOpenDrawer: () => void;
 }): JSX.Element {
-  if (url) {
-    return (
-      <img
-        src={url}
-        alt=""
-        aria-hidden="true"
-        className="w-8 h-10 rounded bg-panel border border-edge-subtle flex-shrink-0 object-cover"
-      />
-    );
-  }
   return (
-    <div
-      aria-hidden="true"
-      className="w-8 h-10 rounded bg-panel border border-edge-subtle flex-shrink-0"
-    />
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenDrawer();
+      }}
+      aria-label={`View details for ${gameName}`}
+      aria-haspopup="dialog"
+      className="flex-shrink-0 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
+    >
+      {url ? (
+        <img
+          src={url}
+          alt=""
+          aria-hidden="true"
+          className="w-8 h-10 rounded bg-panel border border-edge-subtle object-cover"
+        />
+      ) : (
+        <div
+          aria-hidden="true"
+          className="w-8 h-10 rounded bg-panel border border-edge-subtle"
+        />
+      )}
+    </button>
   );
 }
 
@@ -95,20 +110,6 @@ function VoteBar({
   );
 }
 
-/** Activate the row body (drawer trigger) on Enter/Space. */
-function rowKeyHandler(
-  onActivate: () => void,
-  disabled: boolean,
-) {
-  return (e: KeyboardEvent<HTMLDivElement>): void => {
-    if (disabled) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onActivate();
-    }
-  };
-}
-
 /** Single Sv voting row — see file-level docstring. */
 export function VotingRow(props: VotingRowProps): JSX.Element {
   const {
@@ -119,21 +120,11 @@ export function VotingRow(props: VotingRowProps): JSX.Element {
     onToggleVote,
     onOpenDrawer,
   } = props;
-  // Row body always navigates to /games/:id — operator review r3 2026-05-19:
-  // even when at the vote cap (the legacy `disabled` semantics) the user must
-  // still be able to research a game. Only the vote-toggle button is gated by
-  // `disabled`; the row body remains clickable + keyboard-reachable.
   return (
     <div
       data-testid="voting-row"
       data-voted={isVoted ? 'true' : 'false'}
-      role="button"
-      tabIndex={0}
-      aria-label={`Open details for ${entry.gameName}`}
-      aria-haspopup="dialog"
-      onClick={onOpenDrawer}
-      onKeyDown={rowKeyHandler(onOpenDrawer, false)}
-      className={`border-b border-edge hover:bg-panel/30 transition-colors relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 cursor-pointer ${disabled ? 'opacity-80' : ''}`}
+      className={`border-b border-edge transition-colors relative ${disabled ? 'opacity-80' : ''}`}
     >
       {isVoted && (
         <div
@@ -142,7 +133,11 @@ export function VotingRow(props: VotingRowProps): JSX.Element {
         />
       )}
       <div className="px-4 py-3 flex items-center gap-3">
-        <RowCover url={entry.gameCoverUrl} />
+        <RowCover
+          url={entry.gameCoverUrl}
+          gameName={entry.gameName}
+          onOpenDrawer={onOpenDrawer}
+        />
         <div className="flex-1 min-w-0">
           <span className="text-foreground font-semibold text-sm truncate block">
             {entry.gameName}

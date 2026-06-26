@@ -92,13 +92,12 @@ describe('VotingRow — a11y vote toggle (AC3)', () => {
         ).toBeInTheDocument();
     });
 
-    it('renders the row body as an interactive control with an accessible name', () => {
-        // Per spec §Accessibility: row body is role="button" tabIndex=0 with
-        // `aria-label={"Open details for ${gameName}"}`. This is the drawer
-        // trigger; the vote toggle (above) is a separate stop.
+    it('renders the cover thumbnail as the details trigger (ROK-1373)', () => {
+        // ROK-1373: the row body no longer navigates; the cover thumbnail is
+        // the explicit "view details" control. The vote button is separate.
         renderRow({ entry: makeEntry({ gameName: 'Valheim' }) });
         const opener = screen.getByRole('button', {
-            name: /Open details for Valheim/i,
+            name: /View details for Valheim/i,
         });
         expect(opener).toBeInTheDocument();
     });
@@ -124,13 +123,13 @@ describe('VotingRow — click-bubbling guard (AC2)', () => {
         expect(onOpenDrawer).not.toHaveBeenCalled();
     });
 
-    it('clicking the row body fires onOpenDrawer and NOT onToggleVote', async () => {
+    it('clicking the cover thumbnail fires onOpenDrawer and NOT onToggleVote', async () => {
         const user = userEvent.setup();
         const onToggleVote = vi.fn();
         const onOpenDrawer = vi.fn();
         renderRow({ onToggleVote, onOpenDrawer });
 
-        const opener = screen.getByRole('button', { name: /Open details for/ });
+        const opener = screen.getByRole('button', { name: /View details for/ });
         await user.click(opener);
 
         expect(onOpenDrawer).toHaveBeenCalledTimes(1);
@@ -219,5 +218,33 @@ describe('VotingRow — normalized vote bar (AC4, canonical regression guard)', 
         // Either explicit "0%" or absent inline width — either is safe.
         const widthStr = (fill as HTMLElement | null)?.style.width ?? '';
         expect(widthStr).not.toContain('NaN');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1373 — explicit green Vote button + row body no longer navigates
+// ─────────────────────────────────────────────────────────────────────
+
+describe('VotingRow — explicit vote button (ROK-1373)', () => {
+    it('renders a labeled "Vote" button (not just an unlabeled ring)', () => {
+        renderRow({ isVoted: false });
+        expect(
+            screen.getByRole('button', { name: /Vote for/ }),
+        ).toHaveTextContent('Vote');
+    });
+
+    it('shows "Voted" once the viewer has voted', () => {
+        renderRow({ isVoted: true });
+        expect(
+            screen.getByRole('button', { name: /Vote for/ }),
+        ).toHaveTextContent('Voted');
+    });
+
+    it('clicking the row body (game name) does NOT navigate away', async () => {
+        const user = userEvent.setup();
+        const onOpenDrawer = vi.fn();
+        renderRow({ onOpenDrawer, entry: makeEntry({ gameName: 'Valheim' }) });
+        await user.click(screen.getByText('Valheim'));
+        expect(onOpenDrawer).not.toHaveBeenCalled();
     });
 });
