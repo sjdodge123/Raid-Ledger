@@ -59,9 +59,12 @@ function getLiveRelativeTime(now: Date, start: Date): string {
 
 function getEndedRelativeTime(now: Date, end: Date): string {
     const diffMs = now.getTime() - end.getTime();
-    const diffMins = Math.round(diffMs / 60000);
-    const diffHours = Math.round(diffMs / 3600000);
-    const diffDays = Math.round(diffMs / 86400000);
+    // Floor (not round) so "ended" labels don't roll the unit over early — a
+    // 13h-old event must read "13 hours ago", not "1 day ago". Matches the
+    // sibling formatters getRelativeTimeAgo (activity-feed) + formatTimelineDate.
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
     if (diffDays >= 1) return `ended ${pluralize(diffDays, 'day')} ago`;
     if (diffHours >= 1) return `ended ${pluralize(diffHours, 'hour')} ago`;
     if (diffMins < 1) return 'just ended';
