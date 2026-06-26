@@ -23,7 +23,7 @@
  *   - Create a fresh public lineup via the API.
  *   - POST the new abort endpoint.
  *   - Drain BullMQ queues with `awaitProcessing` + `flushEmbedQueue`.
- *   - Use `pollForEmbed` (NEVER `sleep()`) to look for the channel
+ *   - Use `pollForEmbed` (never a fixed delay) to look for the channel
  *     embed.
  */
 import { pollForEmbed } from '../../helpers/polling.js';

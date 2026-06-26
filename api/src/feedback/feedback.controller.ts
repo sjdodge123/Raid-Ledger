@@ -78,7 +78,11 @@ export class FeedbackController {
     this.logger.log(
       `Feedback submitted: id=${inserted.id} category=${category} user=${userId}`,
     );
-    await this.attachSlowQueryContext(inserted.id, req.user.role, clientLogs);
+    await this.attachSlowQueryContext(
+      inserted.id,
+      req.user.role,
+      truncatedClientLogs,
+    );
     return {
       id: inserted.id,
       category: inserted.category as FeedbackResponseDto['category'],
@@ -99,7 +103,7 @@ export class FeedbackController {
   private async attachSlowQueryContext(
     feedbackId: number,
     role: UserRole,
-    clientLogs: string | undefined,
+    clientLogs: string | null | undefined,
   ): Promise<void> {
     if (role !== 'admin' || !clientLogs) return;
     try {
