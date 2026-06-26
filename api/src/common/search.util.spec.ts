@@ -1,8 +1,10 @@
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   stripSearchPunctuation,
   escapeLikePattern,
   buildWordMatchFilters,
 } from './search.util';
+import * as schema from '../drizzle/schema';
 
 describe('stripSearchPunctuation', () => {
   it('removes colons, dashes, em-dashes, apostrophes, periods, and commas', () => {
@@ -105,6 +107,17 @@ function describeBuildWordMatchFilters() {
       "  Tom Clancy's:  Rainbow — Six  ",
     );
     expect(filters).toHaveLength(4); // Tom Clancys Rainbow Six
+  });
+
+  it('normalizes the COLUMN too so apostrophe titles match (ROK-1369)', () => {
+    // The bug normalized only the QUERY side: `%baldurs%` ILIKE against the raw
+    // `Baldur's Gate 3` column never matched. The rendered SQL must strip
+    // punctuation from the column with the same regexp_replace.
+    const dialect = new PgDialect();
+    const [filter] = buildWordMatchFilters(schema.games.name, "Baldur's");
+    const { sql } = dialect.sqlToQuery(filter);
+    expect(sql).toContain('regexp_replace');
+    expect(sql.toLowerCase()).toContain('ilike');
   });
 }
 describe('buildWordMatchFilters', () => describeBuildWordMatchFilters());
