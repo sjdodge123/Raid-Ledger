@@ -4,9 +4,9 @@
  * `games-dedup-audit.helpers.ts` under the 300-line ESLint cap.
  *
  * Order here is the contract: callers spread this array into
- * `buildDirectCountQueries` and destructure the result in lockstep with the
- * `extendedBlastRadiusKeys` order below. If you reorder either list, update
- * both together — the destructure swap is a silent bug.
+ * `buildDirectCountQueries`, whose combined results are destructured in
+ * lockstep at the call site (see `games-dedup-audit.helpers.ts`). If you
+ * reorder this list, update that destructure together — a swap is a silent bug.
  */
 import { count, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -18,7 +18,7 @@ function takeCount(rows: { c: number }[]): number {
   return Number(rows[0]?.c ?? 0);
 }
 
-/** 6 new direct-count promises in the same order as `extendedBlastRadiusKeys`. */
+/** 6 new direct-count promises, in the lockstep order consumed by buildDirectCountQueries. */
 export function buildExtraCountQueries(db: Db, id: number): Promise<number>[] {
   const c = () => count();
   return [
