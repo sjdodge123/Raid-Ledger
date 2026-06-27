@@ -1,6 +1,6 @@
 {
-  "id": "2b21da70-dcb1-4758-bd6d-b136c801a1fb",
-  "prevId": "9c13e8da-98fe-4d4b-99ef-92b8cd306394",
+  "id": "8f93df97-6853-46a8-9bd0-24782793a4a8",
+  "prevId": "8c631a11-e147-4dc6-913f-1ae89849af6f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -332,12 +332,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "scheduled_event_reconcile_backoff_until": {
-          "name": "scheduled_event_reconcile_backoff_until",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -440,21 +434,6 @@
           "columns": [
             {
               "expression": "discord_scheduled_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_events_se_reconcile_backoff": {
-          "name": "idx_events_se_reconcile_backoff",
-          "columns": [
-            {
-              "expression": "scheduled_event_reconcile_backoff_until",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5516,13 +5495,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "include_scheduling_phase": {
-          "name": "include_scheduling_phase",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -7569,155 +7541,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.refresh_tokens": {
-      "name": "refresh_tokens",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "family_id": {
-          "name": "family_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "rotated_at": {
-          "name": "rotated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "replaced_by": {
-          "name": "replaced_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_agent": {
-          "name": "user_agent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auth_method": {
-          "name": "auth_method",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "idx_refresh_tokens_user_id": {
-          "name": "idx_refresh_tokens_user_id",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_refresh_tokens_expires_at": {
-          "name": "idx_refresh_tokens_expires_at",
-          "columns": [
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_refresh_tokens_family_id": {
-          "name": "idx_refresh_tokens_family_id",
-          "columns": [
-            {
-              "expression": "family_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "refresh_tokens_user_id_users_id_fk": {
-          "name": "refresh_tokens_user_id_users_id_fk",
-          "tableFrom": "refresh_tokens",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "refresh_tokens_token_hash_unique": {
-          "name": "refresh_tokens_token_hash_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
