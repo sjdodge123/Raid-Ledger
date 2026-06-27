@@ -958,3 +958,117 @@ The recurring smoke flake set (community-lineup banner, create-event, navigation
 ### 2026-06-27 — fix/rok-1364-drizzle-snapshots (surfaced during ROK-1364 documented-bug batch)
 
 - **[low]** `api/src/drizzle/migrations/meta/` — **38 historical migration snapshots are missing** and one ancient prevId chain break exists at `0102_lineup_phase_scheduling` (prevId references `0101_reg` but the prior snapshot id is `b207bece…`). Missing tags (all ≤ 0137, predate ROK-1364's 0144–0146): `0011, 0040, 0054–0057, 0062, 0074, 0080–0088, 0092–0095, 0097, 0104–0106, 0108–0111, 0113, 0118, 0120, 0121, 0131, 0133, 0134, 0136, 0137`. Harmless today — `drizzle-kit generate`/`check` only diff against the HEAD snapshot (now contiguous after the ROK-1364 fix), and the runtime migrator + `validate-migrations.sh` never read snapshots (they replay `.sql` in journal order). Surfaced by the new `migration-snapshots.spec.ts` guard, which is therefore scoped to the HEAD invariant only. Suggested: a one-shot backfill (regenerate each missing snapshot by replaying the chain) if we ever want `drizzle-kit check` to validate the full history; low priority.
+
+---
+
+## Reconciliation 2026-06-27 (verify-first sweep — 12 agents)
+
+A 12-agent pass verified all 293 backlog entries against current `main` (tsc clean; PRs through #919). **95 entries (~32%) are RESOLVED** and can be archived; the remaining ~198 are genuine open items (mostly unactioned low/nit code-quality suggestions + real flakes, conservatively kept). Approx line + evidence below — safe to strike/remove the cited entries.
+
+### High confidence — shipped PRs / tsc-clean / already-struck (26)
+
+- **~L61** — fleet sync_settings sudo-grep reads /srv/rl-infra/.env via rl-agent — _already struck; read_infra_env() present sync-local-to-env.sh:487 + test sync-local-to-env-infra-read.test.sh exists (fix 2026-06-02)_
+- **~L63** — sync error can't distinguish missing-var from SSH-read-failure — _already struck; INFRA_ENV_READ_RC differentiation present in read_infra_env() + same test file (fix 2026-06-02)_
+- **~L196** — migration 0140 audit prepopulation bug (prod outage) — _fixed in ROK-1281 run-migrations-with-sentry.ts (text self-states fix)_
+- **~L417** — ROK-1319 reconcile trust-mode marks unapplied as applied — _reconcile-migrations.mjs now probeEffectExists-gated (#869)_
+- **~L418** — ROK-1320 deploy_dev.sh migration-drift probe — _shipped PR#869_
+- **~L437** — ROK-1316 lineup suggestions block on Gemini cache miss — _shipped PR#888 (commit a56be725)_
+- **~L440** — ROK-1319 reconcile trust-mode bug (dup of L417) — _probe fix in reconcile-migrations.mjs (#869)_
+- **~L441** — ROK-1320 deploy_dev.sh drift probe (dup of L418) — _shipped PR#869_
+- **~L468** — games-lookup.integration.spec:306 TS2307 missing controller — _import removed, controller present, tsc clean_
+- **~L484** — validate-ci.sh run_typecheck masks api tsc failure — _fixed with `_
+- **~L526** — common-ground spec missing itadLowestPrice (TS2741) — _tsc-clean + fixtures added at spec L60/L100 on origin/main_
+- **~L531** — invite-page test "/join event/i" button not found — _invite-page.test.tsx passes 18/18 now; renderer emits "Join Event" (invite-character-step.tsx)_
+- **~L576** — gc-sweeper jq filters missing closing paren (silent no-op reapers) — _filters present + reaper loops fire; folded into M5a, merged #832_
+- **~L596** — gc-sweeper orphan kill -0 wrong PID namespace — _switched to per-task pidfile + chmod 664; ROK-1336 #833 (61d348be)_
+- **~L622** — Mutagen sync didn't block claim return (silent hang) — _flush_mutagen added in cmd_claim; merged #834 (rl:287)_
+- **~L667** — validate-migrations.sh drizzle-kit silent-exit — _already labeled [RESOLVED] in-file — commit 9eb6a3e3 (archive whole block)_
+- **~L742** — rl_env_deploy served stale build (fix/batch-2026-06-02-ui) — _already-marked RESOLVED; sync-guard shipped PR #868 (6e78107e)_
+- **~L747** — rok-fleet-stale-build-sync-guard — _entry marked [high — FIXED]; PR #868 merged, sync-guard.ts present_
+- **~L815** — fleet admin@local 401 blocker (RL_ADMIN_PASSWORD) — _already marked RESOLVED; VM env set, confirmed_
+- **~L817** — Playwright runner image v1.50 vs project 1.60 — _rl-infra/runner/Dockerfile now `v1.60.0-jammy` (commit 8fdfa260)_
+- **~L838** — gc-sweeper PID-namespace false-orphan bug — _ROK-1336 PR #833 (pidfile contract shipped)_
+- **~L839** — validate-ci perf_emit_local silent-failure diagnostic — _fix on main (.errors append, validate-ci.sh ~191-200)_
+- **~L840** — fleet admin@local password rotation (ROK-1356) — _ROK-1356 shipped PR #884 (MERGED)_
+- **~L841** — env-spin stale-image reuse on redeploy (ROK-1357) — _shipped PR #884_
+- **~L903** — rl-infra runner Playwright v1.50 vs required v1.60 image lag — _PR #890 / 8fdfa260; runner/Dockerfile now FROM playwright:v1.60.0-jammy_
+- **~L932** — onboarding Steam selector strict-mode collision — _scripts/smoke/onboarding.smoke.spec.ts:370 now `{ name: 'Steam', exact: true }`_
+
+### Medium confidence (35)
+
+- **~L342** — community-insights operator-role 401 on GET endpoints — _controller now class-level `@Roles('operator')` (community-insights.controller.ts:46) covers all GET endpoints + CI green on main_
+- **~L374** — lineup-confirmation-pills invitee hero/checkmark selectors — _spec rewritten for new hero by ROK-1297 PR #823 (`/nominate a game/i` markup)_
+- **~L376** — events smoke attendance light-mode theme tokens — _deterministic Playwright check, CI green on main (required 5-shard suite blocks merge)_
+- **~L378** — onboarding game-time compact GameTimeGrid viewport — _smoke-flake hardening PR #900 (2026-06-18) touched spec_
+- **~L379** — community-lineup banner visible on mobile — _reworked + flake-hardened by PR #900 / #871 / #854_
+- **~L380** — lineup-carryover auto-populate from prior decided matches — _deterministic Playwright check, CI green on main_
+- **~L438** — ROK-1317 useAiFeatures polls 403 for non-admin — _shipped PR#843_
+- **~L439** — ROK-1318 env_lock_release no-ops after re-anchor — _shipped PR#843_
+- **~L462** — games-dedup-audit.integration.spec:386 TS2769 — _api tsc (spec-inclusive tsconfig.json) clean, 0 errors_
+- **~L464** — games-dedup-audit.service.spec:443 TS2502 — _api tsc clean_
+- **~L466** — games-dedup-merge.integration.spec TS2352 x3 — _api tsc clean_
+- **~L470** — lineup-deadline-vote-race.integration.spec:186 TS2345 — _api tsc clean_
+- **~L472** — lineup-notification.service.private-visibility.spec TS2556 — _file deleted + tsc clean_
+- **~L593** — NUL-byte header-injection guard regex broken — _impl regex now /[\r\n\x00]/ at test-plan.ts:149_
+- **~L609** — test_task_list.sh 12 of 13 fail on main — _now 15 pass 0 fail; fixed in #884 (ROK-1356..1361)_
+- **~L619** — env-spin failure rollback leaves orphaned PG container — _EXIT trap docker rm PG+APP added (ROK-1357, env-spin:35-73)_
+- **~L638** — .deployed_sha never written by deploy script — _deploy.sh:47 now ssh-writes /srv/rl-infra/.deployed_sha_
+- **~L641** — traefik conf.d perms not persisted in provisioning — _deploy.sh:37-38 chgrp rl-fleet + chmod 2775_
+- **~L735** — rl-infra VM missing RL_ENV_JWT_SECRET blocks sync_settings/admin-seed — _doc self-reports resolved at L766 (sync_settings ok + admin@local seeded on retry)_
+- **~L753** — orchestrator lease-status AC9 `timeout: command not found` on macOS — _test now wraps with `rl_timeout` helper (lease-status.test.sh:139), bare `timeout` gone_
+- **~L767** — fleet Playwright --only-e2e 401 admin@local random pw — _ROK-1368 commit 61722b66 threads re-seeded ADMIN_PASSWORD into rl_validate_ci --only-e2e_
+- **~L781** — env_spin aborted leaving healthy-but-unreachable env — _resolution L787 + PR #880 (85782bd7): exec 9> guards, idempotent route fail-loud_
+- **~L782** — Mutagen sync-probe re-wedge (sentinel-deletion race) — _resolution L788 + PR #880; sync-guard.ts finally-flush block (L332/L340) present_
+- **~L799** — rl_env_sync_from_local "public schema is empty" wrong probe — _regression test added: sync-local-to-env-host-resolve.test.sh covers exact exit-3 host-resolve bug_
+- **~L800** — fleet slot route file stale blocks deploy/dead-ends slot host — _PR #877 (ec0aac82) TTL-reap removes env Traefik route file; PR #880 safe deploy_
+- **~L809** — runner missing tools/test-bot deps for Discord smoke — _ROK-1359 shipped PR #884 (7827627f)_
+- **~L818** — fleet env Discord OAuth internal-hostname redirect — _already FIXED; env-spin CLIENT_URL committed, verified_
+- **~L842** — rl_env_sync_from_local false empty-schema probe (ROK-1358) — _shipped PR #884_
+- **~L843** — runner test-bot deps tracked (ROK-1359) — _shipped PR #884_
+- **~L844** — mcp-rl-fleet NUL-byte/regex guards (ROK-1360) — _shipped PR #884_
+- **~L845** — orchestrator macOS/BSD coreutils failures (ROK-1361) — _shipped PR #884_
+- **~L869** — rl_test_plan_wait/rl_task_wait long-block visibility hang — _ROK-1362 bounded waits + 120s cap, PR #889_
+- **~L907** — exec.ts:854 worktreePathSchema .refine TS2345/TS7006 — _`npx tsc --noEmit` in tools/mcp-rl-fleet now EXIT=0_
+- **~L917** — LineupPhaseQueueService registered in two modules — _single provider exported by LineupsModule, standalone-poll imports it (ROK-1206)_
+- **~L954** — test-plan-v2 executeWait directory-watch assertion fails — _`vitest run test-plan-v2.spec.ts` now 14/14 pass_
+
+### Low confidence (28)
+
+- **~L167** — use-standalone-poll queryKey mismatch ['scheduling-banner'] — _line 29 now uses correct `['scheduling','banner']` tuple; PR #910 "fix(low-hanging): banner refresh"_
+- **~L224** — seed-igdb per-row rowExistsWithIgdbId extra DB roundtrip — _function gone, replaced by batched IN query (only in comments now)_
+- **~L280** — lineups-matching `decided` preserved-list comment clarified — _comment rewritten at lineups-matching.helpers.ts:36 — now frames `decided` as the lineup-row status, preserved list is only `scheduled`/`archived`; file refactored (mtime May 31)_
+- **~L284** — stillWaitingOnVoters frontend drops optional-chaining — _page now reads `lineup.stillWaitingOnVoters.length > 0` directly (lineup-detail-page.tsx:234), contract field non-optional (lineup.schema.ts:260) — exactly the suggested fix_
+- **~L396** — 0142_snapshot.json missing community_lineup_user_submissions — _snapshot now contains the table (8 refs in api/src/drizzle/migrations/meta/0142_snapshot.json)_
+- **~L401** — feedback.controller attachSlowQueryContext untrimmed clientLogs — _now passes `truncatedClientLogs` (feedback.controller.ts), shipped via PR #910_
+- **~L409** — chrome-mcp env_lock_release no-op after deploy re-anchor (doc note) — _root-fixed by ROK-1318 PR#843, release now matches via agent_id_
+- **~L489** — vitest MSW leak invite/admin-dashboard cross-suite flake — _setup.ts has afterEach resetHandlers + admin-dashboard-page.test.tsx deleted + invite passes 18/18_
+- **~L536** — use-lineup-submit:193 isError bare-expect race flake — _waitFor wrap applied on origin/main (L196) with TECH-DEBT-2026-05-19 comment_
+- **~L563** — lease-status.test.sh bare `timeout` not on macOS — _now uses rl_timeout wrapper (test_helpers.sh:137, gtimeout-detect + pure-bash fallback) + inotifywait skip guard_
+- **~L568** — NUL-byte header test unsatisfiable via process.env — _test now calls validateCurlHeaderValueForTest helper directly; tsc-clean_
+- **~L571** — env-destroy AC12 flock test fails on macOS — _test rewritten to force flock-failure deterministically on both platforms_
+- **~L580** — heartbeat-emitter timeout test fails on macOS — _now uses portable rl_timeout shim instead of bare timeout_
+- **~L588** — rl validate-ci doesn't auto-release slot on exit — _--release-on-exit opt-in flag added (ROK-1336, rl:641-659)_
+- **~L604** — itadLowestPrice missing-in-type TS errors slip CI gate — _tsc-clean + field now present in spec (lines 60,100)_
+- **~L629** — task-inspect/infra-logs inline execFileP duplication — _both now import execFileP from '../exec.js'_
+- **~L632** — env-spin idempotent path missing LAST_PHASE markers — _three markers present (env-spin:319,396,456), commit efc42850_
+- **~L651** — test-plan.spec.ts AC6 NUL-byte header test — _rewritten to validateCurlHeaderValueForTest().toThrow, fn correct — PR #833/#842_
+- **~L705** — community-lineup banner-visibility smoke flake — _tests renamed + beforeEach lineup precondition + deep-link — PR #900 smoke-flake hardening_
+- **~L707** — bootstrap-admin FK violation on community_lineups — _idempotent upsert (onConflictDoUpdate) — PR #863 on main_
+- **~L792** — no-sleep-lint false-positive on JSDoc `sleep()` comment — _lint now exits 0 ("No sleep() calls found"); offending comment gone from lineup-abort.test.ts_
+- **~L793** — test-bot tsc `Cannot find module @discordjs/voice` — _dep added: tools/test-bot/package.json:14 `@discordjs/voice ^0.19.2`_
+- **~L810** — gc-sweeper auto-release strands child envs — _ROK-1357 shipped PR #884_
+- **~L830** — seed-fixture-user not clearing deactivated_at — _already FIXED in-branch (deactivatedAt: null)_
+- **~L887** — lineup-abort no-sleep lint false-positive on `sleep()` comment — _comment reworded to "never a fixed delay" — sleep() token gone_
+- **~L900** — api/package.json test:integration uses dead --testPathPattern flag — _script now `jest --config ./jest.integration.config.js --runInBand`, flag removed_
+- **~L901** — test-bot voice.ts TS2307 @discordjs/voice not installed — _package now present in tools/test-bot/node_modules (env/install issue)_
+- **~L909** — no GitHub job runs mcp-rl-fleet Vitest suite — _ci.yml:197 tools-tests job runs `npm test -w @raid-ledger/mcp-rl-fleet`_
+
+### Nit — comment rewrites / lint-nit fixes / already-struck (6)
+
+- **~L92** — env-lock mid-run preemption / heartbeat re-anchor (ROK-1209) — _entry's own inline note: fixed by ROK-1209 "re-anchor deploy_dev.sh lease to API PID" commit_
+- **~L146** — games-dedup doc comment references nonexistent extendedBlastRadiusKeys — _`grep extendedBlastRadiusKeys` GONE everywhere; comment rewritten to lockstep buildDirectCountQueries note_
+- **~L232** — no-sleep-lint flags lineup-abort.test.ts:26 comment — _comment rewritten + lint clean, PR #910 (6098fffc)_
+- **~L237** — no-sleep-lint nit duplicate (still-unresolved note) — _same fix, lint now "OK: No sleep() calls", PR #910_
+- **~L316** — games-dedup-union-find numeric-sort comment added — _explanatory comment present at games-dedup-union-find.helpers.ts:172 (`// igdb/steam ids are numeric strings → sort numerically; names → lex.`)_
+- **~L902** — dup lineup-abort.test.ts:26 no-sleep lint comment — _same fix as L887 — `sleep(` token removed from comment_
+
