@@ -230,4 +230,14 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Cross-references DB users against Discord guild membership and deactivates users no longer in the guild — daily at 07:00 UTC (ROK-1282)',
     category: 'Maintenance',
   },
+  EphemeralVoiceScheduler_scanCreateWindow: {
+    description:
+      'Creates ephemeral voice channels for opted-in events entering their create-buffer window every 60 seconds (ROK-1352)',
+    category: 'Events',
+  },
+  EphemeralVoiceReaper_reapIdle: {
+    description:
+      'Safety-net: deletes empty ephemeral voice channels whose event ended more than the idle window ago every 5 minutes (ROK-1352)',
+    category: 'Events',
+  },
 };
