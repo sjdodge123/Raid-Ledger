@@ -75,14 +75,34 @@ const ephemeralLifecycle: SmokeTest = {
   name: 'Ephemeral voice channel create → occupied-survives → idle destroy (ROK-1352)',
   category: 'voice',
   async run(ctx) {
-    // Parent category for the ephemeral channel — pick the first voice channel's
-    // parent, or fall back to an explicit env override for the fleet run.
-    const categoryId =
-      process.env.SMOKE_EPHEMERAL_CATEGORY_ID ?? ctx.voiceChannels[0]?.id;
+    // Parent category for the ephemeral channel. Prefer an explicit env override
+    // (fleet run); otherwise ask the feature's own categories endpoint for a real
+    // GUILD_CATEGORY and prefer the voice category. ctx.voiceChannels[0] is a
+    // voice channel, NOT a category, so it is not a valid parent. ROK-1352.
+    let categoryId = process.env.SMOKE_EPHEMERAL_CATEGORY_ID;
+    if (!categoryId) {
+      const cats = await ctx.api
+        .get<{ id: string; name: string }[]>(
+          '/admin/settings/discord-bot/ephemeral-voice/categories',
+        )
+        .catch(() => [] as { id: string; name: string }[]);
+      const list = Array.isArray(cats) ? cats : [];
+      categoryId = list.find((c) => /voice/i.test(c.name))?.id ?? list[0]?.id;
+    }
     if (!categoryId) {
       throw new Error('No ephemeral parent category available for smoke run');
     }
-    const gameId = ctx.games[0]?.id;
+    // gameId: ctx.games is derived from the logged-in admin's first character,
+    // which is empty after reset-to-seed (admin has no character). Fall back to
+    // the library games list — matches voice-activity.test.ts — so the test is
+    // seed-robust and passes in CI. ROK-1352.
+    let gameId = ctx.games[0]?.id;
+    if (!gameId) {
+      const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
+        '/admin/settings/games?limit=1',
+      );
+      gameId = gamesRes.data[0]?.id;
+    }
     if (!gameId) throw new Error('No games in DB for ROK-1352 lifecycle test');
 
     await setEphemeralVoiceConfig(ctx.api, {
@@ -143,6 +163,17 @@ const ephemeralLifecycle: SmokeTest = {
         ctx.config.timeoutMs,
         { intervalMs: 1000 },
       );
+      // Make the event "ended" so the safety-net reaper considers it:
+      // findReapCandidates only matches events whose end is > idleMinutes ago
+      // AND are empty. The event was created upcoming (required so the scheduler
+      // creates the channel in the first place), so PATCH it into the past now —
+      // endTime 40 min ago, beyond the 30-min idle window. RescheduleEventSchema
+      // forbids past times; UpdateEventSchema (PATCH /events/:id) only enforces
+      // start < end. ROK-1352.
+      await ctx.api.patch(`/events/${ev.id}`, {
+        startTime: futureTime(-90),
+        endTime: futureTime(-40),
+      });
       await forceEphemeralReap(ctx.api);
       await awaitProcessing(ctx.api);
       await pollForCondition(
