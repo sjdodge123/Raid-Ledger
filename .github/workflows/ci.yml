@@ -243,6 +243,11 @@ jobs:
   # ─── Integration Tests (sharded) ───────────────────────────────────
   integration-test-shard:
     runs-on: ubuntu-latest
+    # ROK-1352: read the CI service images from the GHCR mirror (private package);
+    # GITHUB_TOKEN needs packages:read to pull them via the service `credentials`.
+    permissions:
+      contents: read
+      packages: read
     # Fast-lane (2026-06-25): bound a hung/flaky shard. maxWorkers=1 + 108 specs
     # finish in ~6-7 min; 25 min is generous headroom. Previously unbounded
     # (GHA default 360 min), so a wedged shard could hang the required check.
@@ -270,7 +275,10 @@ jobs:
 
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
@@ -284,7 +292,10 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:alpine
+        image: ghcr.io/sjdodge123/rl-ci-redis:alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         ports:
           - 6379:6379
         options: >-
@@ -328,7 +339,7 @@ jobs:
         # and restart the postgres container in place. Default 100 is too
         # low for the shard's combined NestJS boot + parallel-query load.
         run: |
-          PG_CONTAINER=$(docker ps --filter "ancestor=pgvector/pgvector:pg16" --format "{{.ID}}" | head -1)
+          PG_CONTAINER=$(docker ps --filter "ancestor=ghcr.io/sjdodge123/rl-ci-pgvector:pg16" --format "{{.ID}}" | head -1)
           if [ -z "$PG_CONTAINER" ]; then echo "Postgres container not found"; exit 1; fi
           docker exec "$PG_CONTAINER" psql -U user -d raid_ledger_test -c "ALTER SYSTEM SET max_connections = 300;"
           docker restart "$PG_CONTAINER"
@@ -365,6 +376,10 @@ jobs:
   # Only runs when web/UI files or Playwright config changed
   smoke-test-shard:
     runs-on: ubuntu-latest
+    # ROK-1352: pull CI service images from the private GHCR mirror.
+    permissions:
+      contents: read
+      packages: read
     timeout-minutes: 20
     needs: [detect-changes, lint]
     if: >-
@@ -377,7 +392,10 @@ jobs:
 
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
@@ -391,7 +409,10 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:alpine
+        image: ghcr.io/sjdodge123/rl-ci-redis:alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         ports:
           - 6379:6379
         options: >-
@@ -471,7 +492,7 @@ jobs:
         # and restart the postgres container in place. Default 100 is too
         # low for the boot connection burst + parallel-query test load.
         run: |
-          PG_CONTAINER=$(docker ps --filter "ancestor=pgvector/pgvector:pg16" --format "{{.ID}}" | head -1)
+          PG_CONTAINER=$(docker ps --filter "ancestor=ghcr.io/sjdodge123/rl-ci-pgvector:pg16" --format "{{.ID}}" | head -1)
           if [ -z "$PG_CONTAINER" ]; then echo "Postgres container not found"; exit 1; fi
           docker exec "$PG_CONTAINER" psql -U user -d raid_ledger -c "ALTER SYSTEM SET max_connections = 300;"
           docker restart "$PG_CONTAINER"

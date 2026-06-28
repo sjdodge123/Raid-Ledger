@@ -37,6 +37,10 @@ jobs:
 
   discord-smoke:
     runs-on: ubuntu-latest
+    # ROK-1352: pull CI service images from the private GHCR mirror.
+    permissions:
+      contents: read
+      packages: read
     needs: detect-changes
     if: >-
       github.event_name == 'push' ||
@@ -45,7 +49,10 @@ jobs:
 
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
@@ -59,7 +66,10 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:alpine
+        image: ghcr.io/sjdodge123/rl-ci-redis:alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         ports:
           - 6379:6379
         options: >-
