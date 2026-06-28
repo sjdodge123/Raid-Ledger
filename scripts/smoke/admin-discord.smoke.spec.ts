@@ -227,7 +227,9 @@ test.describe('Admin Discord — Features', () => {
         const quickPlayHeading = page.getByRole('heading', { name: 'Quick Play Events' });
         if (await quickPlayHeading.isVisible({ timeout: 5_000 }).catch(() => false)) {
             await expect(quickPlayHeading).toBeVisible();
-            await expect(page.getByRole('checkbox')).toBeVisible();
+            await expect(
+                page.getByRole('checkbox', { name: 'Enable Quick Play Events' }),
+            ).toBeVisible();
         }
 
         // General Lobbies info is always present

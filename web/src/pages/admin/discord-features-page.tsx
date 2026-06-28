@@ -69,7 +69,7 @@ function QuickPlayToggle({ checked, isPending, onToggle }: { checked: boolean; i
                     <p className="text-sm text-muted mt-1">Automatically create events when members join bound voice channels.</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" checked={checked} onChange={(e) => onToggle(e.target.checked)} disabled={isPending} className="sr-only peer" />
+                    <input type="checkbox" aria-label="Enable Quick Play Events" checked={checked} onChange={(e) => onToggle(e.target.checked)} disabled={isPending} className="sr-only peer" />
                     <div className="w-11 h-6 bg-dim rounded-full peer peer-checked:bg-emerald-500 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
                 </label>
             </div>
