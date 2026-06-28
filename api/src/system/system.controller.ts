@@ -120,7 +120,7 @@ export class SystemController {
       demoMode,
       ...adapterConfigured
     ] = await this.fetchStatusData(adapterEntries);
-    return this.buildStatusDto(
+    const dto = this.buildStatusDto(
       userCount,
       discordConfigured,
       blizzardConfigured,
@@ -131,5 +131,12 @@ export class SystemController {
       adapterEntries,
       adapterConfigured,
     );
+    // ROK-1352: expose ephemeral-voice availability so the (non-admin) event-form
+    // toggle doesn't have to hit admin-only settings APIs (cached settings reads).
+    const [ephemeralVoiceEnabled, ephemeralVoiceForced] = await Promise.all([
+      this.settingsService.getEphemeralVoiceEnabled(),
+      this.settingsService.getEphemeralVoiceForced(),
+    ]);
+    return { ...dto, ephemeralVoiceEnabled, ephemeralVoiceForced };
   }
 }

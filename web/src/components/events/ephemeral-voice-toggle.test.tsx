@@ -1,26 +1,33 @@
 /**
- * ROK-1352: per-event ephemeral-voice toggle — gated on the global master flag.
+ * ROK-1352: per-event ephemeral-voice toggle — gated on the member-readable
+ * system status (master flag) with a force-ephemeral on+disabled mode.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { EphemeralVoiceToggle } from './ephemeral-voice-toggle';
 
-const ephemeralVoiceConfig = { data: { enabled: false } as { enabled: boolean } };
-vi.mock('../../hooks/use-admin-settings', () => ({
-    useAdminSettings: () => ({ ephemeralVoiceConfig }),
+const status: {
+    data: { ephemeralVoiceEnabled?: boolean; ephemeralVoiceForced?: boolean };
+} = { data: {} };
+vi.mock('../../hooks/use-system-status', () => ({
+    useSystemStatus: () => status,
 }));
 
 describe('EphemeralVoiceToggle (ROK-1352)', () => {
-    it('renders nothing when the global toggle is off', () => {
-        ephemeralVoiceConfig.data = { enabled: false };
+    beforeEach(() => {
+        status.data = {};
+    });
+
+    it('renders nothing when the master toggle is off', () => {
+        status.data = { ephemeralVoiceEnabled: false };
         const { container } = render(
             <EphemeralVoiceToggle value={null} onChange={vi.fn()} />,
         );
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('renders the toggle when the global flag is on', () => {
-        ephemeralVoiceConfig.data = { enabled: true };
+    it('renders the toggle when the master flag is on', () => {
+        status.data = { ephemeralVoiceEnabled: true };
         render(<EphemeralVoiceToggle value={null} onChange={vi.fn()} />);
         expect(
             screen.getByLabelText('Ephemeral voice channel for this event'),
@@ -28,13 +35,22 @@ describe('EphemeralVoiceToggle (ROK-1352)', () => {
     });
 
     it('emits true when checked and null when unchecked (inherit)', () => {
-        ephemeralVoiceConfig.data = { enabled: true };
+        status.data = { ephemeralVoiceEnabled: true };
         const onChange = vi.fn();
         render(<EphemeralVoiceToggle value={null} onChange={onChange} />);
+        fireEvent.click(
+            screen.getByLabelText('Ephemeral voice channel for this event'),
+        );
+        expect(onChange).toHaveBeenCalledWith(true);
+    });
+
+    it('renders on + disabled when force-ephemeral is enabled', () => {
+        status.data = { ephemeralVoiceEnabled: true, ephemeralVoiceForced: true };
+        render(<EphemeralVoiceToggle value={null} onChange={vi.fn()} />);
         const box = screen.getByLabelText(
             'Ephemeral voice channel for this event',
-        );
-        fireEvent.click(box);
-        expect(onChange).toHaveBeenCalledWith(true);
+        ) as HTMLInputElement;
+        expect(box.checked).toBe(true);
+        expect(box.disabled).toBe(true);
     });
 });

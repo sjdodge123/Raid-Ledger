@@ -43,15 +43,50 @@ export function EphemeralVoiceSection() {
                 </label>
             </div>
             {enabled && (
-                <EphemeralVoiceConfigFields
-                    categoryId={cfg?.categoryId ?? null}
-                    createBufferMinutes={cfg?.createBufferMinutes ?? 30}
-                    idleMinutes={cfg?.idleMinutes ?? 30}
-                    categories={ephemeralVoiceCategories.data ?? []}
-                    onSave={save}
-                />
+                <>
+                    <ForceEphemeralToggle forced={cfg?.forced ?? false} onSave={save} />
+                    <EphemeralVoiceConfigFields
+                        categoryId={cfg?.categoryId ?? null}
+                        createBufferMinutes={cfg?.createBufferMinutes ?? 30}
+                        idleMinutes={cfg?.idleMinutes ?? 30}
+                        categories={ephemeralVoiceCategories.data ?? []}
+                        onSave={save}
+                    />
+                </>
             )}
         </div>
+    );
+}
+
+/** ROK-1352: force-ephemeral — every event gets a channel; never reuse static. */
+function ForceEphemeralToggle({
+    forced,
+    onSave,
+}: {
+    forced: boolean;
+    onSave: (patch: Record<string, unknown>, msg: string) => void;
+}) {
+    return (
+        <label className="flex items-start gap-3 pt-2 border-t border-edge cursor-pointer">
+            <input
+                type="checkbox"
+                aria-label="Force ephemeral voice for every event"
+                checked={forced}
+                onChange={(e) =>
+                    onSave(
+                        { forced: e.target.checked },
+                        e.target.checked ? 'Force-ephemeral enabled' : 'Force-ephemeral disabled',
+                    )
+                }
+                className="h-4 w-4 mt-0.5 rounded border-edge text-emerald-500 focus:ring-emerald-500"
+            />
+            <span className="text-sm text-foreground">
+                Always create a temporary channel for every event
+                <span className="block text-muted">
+                    Raid Ledger never points events at existing/static voice channels.
+                </span>
+            </span>
+        </label>
     );
 }
 

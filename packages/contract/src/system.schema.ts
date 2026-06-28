@@ -39,6 +39,12 @@ export const SystemStatusSchema = z.object({
     onboardingCompleted: z.boolean().optional(),
     /** Available authentication providers (ROK-267) */
     authProviders: z.array(LoginMethodSchema).optional().default([]),
+    /** ROK-1352: ephemeral-voice master toggle — lets the (non-admin) event-form
+     *  toggle know whether the feature is available without hitting admin-only APIs. */
+    ephemeralVoiceEnabled: z.boolean().optional(),
+    /** ROK-1352: force-ephemeral — every event gets a channel; the per-event
+     *  toggle renders as on + disabled. */
+    ephemeralVoiceForced: z.boolean().optional(),
 });
 
 export type SystemStatusDto = z.infer<typeof SystemStatusSchema>;
