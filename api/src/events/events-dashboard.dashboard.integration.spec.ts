@@ -79,6 +79,12 @@ let adminToken: string;
 
 async function setupAll() {
   testApp = await getTestApp();
+  // Defensive clean-start under `jest --randomize`: don't trust the prior spec
+  // file (random order) to have left an empty DB. Re-seed from baseline so
+  // testEmptyDashboard (and the other order-sensitive dashboard asserts) see
+  // only this file's data. Pairs with the per-test afterEach truncate to
+  // isolate every test from both prior files and prior tests. ROK CI-flake A1/#8.
+  testApp.seed = await truncateAllTables(testApp.db);
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 }
 
