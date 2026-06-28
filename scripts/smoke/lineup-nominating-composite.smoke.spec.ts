@@ -132,18 +132,41 @@ test.describe('Nominating composite — Common Ground multi-row hero (ROK-1297)'
 // ---------------------------------------------------------------------------
 
 test.describe('Nominating composite — drawer interactions (ROK-1297)', () => {
-    // TECH-DEBT 2026-05-20 / ROK-1298: getByTestId('common-ground-tile')
-    // flakes on mobile project — 6/6 retries failed on PR #830 even after
-    // rerun. Other tests in this describe pass; only the drawer-navigation
-    // case is flaky. Hits a CI API startup race (saw "API failed to start
-    // within 60s" in the logs). The behavior is covered by the per-tile
-    // unit + Chrome MCP gate passes. Skip until the test:integration:flaky
-    // ringfence lands.
+    // LEFT SKIPPED — the data-load race named in the original note is now
+    // mitigated (see the GET /lineups/common-ground waitForResponse gate
+    // inside the test body), but a second, non-timing blocker remains:
+    // `common-ground-tile` CARDINALITY is non-deterministic on the mobile
+    // project. The smoke fixture creates a bare building lineup with zero
+    // ownership/taste signals, so classifyTheme buckets are sparse and —
+    // per the "renders the Common Ground hero" note above — the mobile
+    // project's per-worker prefix isolation can leave even the trending
+    // bucket empty (history: 6/6 mobile retries failed on PR #830).
+    // `getByTestId('common-ground-tile').first()` then resolves to zero
+    // elements, a DETERMINISTIC failure, not a flake. The waitForResponse
+    // guarantees the query resolved; it cannot guarantee a tile exists to
+    // click. Re-enabling requires a seeded-ownership fixture (taste
+    // vectors/ownership for the lineup's audience) so >=1 tile renders on
+    // BOTH desktop and mobile. Until then this stays skipped — re-enabling
+    // on the bare fixture would reintroduce the mobile failure. Behaviour
+    // is covered at the unit layer + Chrome MCP gate.
     test.skip('clicking a tile body navigates to /games/:id', async ({ page }) => {
         // ROK-1297 round 5y: GameResearchDrawer was replaced with a router
         // navigation to /games/:id. The tile body click should therefore
         // change the URL to /games/<n>, NOT mount a drawer overlay.
+        //
+        // Deterministic data-load gate: register the listener BEFORE the
+        // navigation so the debounced (~300ms) GET /lineups/common-ground
+        // fetch that backs the tile grid is captured, then await it. This
+        // removes the API-startup/render race where the tile grid was
+        // probed before its useQuery resolved (the original skip reason).
+        const cgResponse = page.waitForResponse(
+            (r) =>
+                /\/lineups\/common-ground(\?|$)/.test(r.url()) &&
+                r.request().method() === 'GET',
+            { timeout: 20_000 },
+        );
         await gotoNominating(page);
+        await cgResponse;
 
         await expect(page.getByTestId('game-research-drawer')).toHaveCount(0);
 

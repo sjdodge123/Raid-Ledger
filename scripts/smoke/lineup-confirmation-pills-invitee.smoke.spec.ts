@@ -181,12 +181,16 @@ test.describe('Voting phase — per-row checkmark for invitee', () => {
         await awaitProcessing(adminToken);
     });
 
-    // ROK-1297 round 5ae: mobile-only timing flake on the post-vote
-    // hero re-render. The assertion is correct (HeroNextStep IS still
-    // rendered during voting phase), but the mobile playwright project
-    // races the React Query refetch — observed 2026-05-19. Skip until
-    // we either ringfence into the flaky-lane or rewrite as part of
-    // ROK-1298 (Sv composite) which replaces HeroNextStep in voting too.
+    // LEFT SKIPPED — root cause is NOT the original mobile staleTime flake;
+    // the targeted element no longer exists. ROK-1298 rewrote the voting
+    // phase to the cycle-4 `VotingComposite` → `VotingLeaderboardV2`, whose
+    // rows are `data-testid="voting-row"` (VotingRow.tsx). The legacy
+    // `data-testid="leaderboard-row"` is no longer rendered anywhere in the
+    // voting flow (verified 2026-06-28). `data-voted` and the "You voted"
+    // ✓ marker now live on `voting-row`, not `leaderboard-row`, so this
+    // test's selectors resolve to zero elements regardless of timing.
+    // Re-enabling requires re-targeting the assertion at `voting-row`
+    // (a target change, out of scope for this flake-hardening pass).
     test.skip("invitee's voted row renders ✓ marker and data-voted='true'", async ({ page }) => {
         // Cast one vote AS THE INVITEE — the per-row checkmark depends on
         // `entry.myVote != null` for the requesting user, so the assertion
@@ -217,6 +221,15 @@ test.describe('Voting phase — per-row checkmark for invitee', () => {
         await expect(votedRow.getByLabel(/you voted/i)).toBeVisible();
     });
 
+    // LEFT SKIPPED — ROK-1323 retired the legacy HeroNextStep banner, so
+    // `data-testid="hero-next-step"` is no longer rendered on the lineup
+    // detail page (verified 2026-06-28). The voting phase now renders the
+    // cycle-4 VotingComposite JourneyHero (role="region", name "Step 2 of 4 ·
+    // Voting"); the waiting-tone hero data-tone attribute no longer exists
+    // here. The selector resolves to zero elements regardless of timing, so
+    // a wait fix cannot rescue it. Re-enabling requires re-targeting the
+    // assertion at the VotingComposite JourneyHero (a target change, out of
+    // scope for this flake-hardening pass).
     test.skip('invitee-acted: voting hero flips to waiting tone after one vote', async ({ page }) => {
         // The previous test cast one vote as the invitee. That alone
         // moves persona to `invitee-acted` and pushes the voting hero into
@@ -240,10 +253,16 @@ test.describe('Voting phase — per-row checkmark for invitee', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Mobile sticky hero — invitee', () => {
-    // ROK-1297 round 5ae: sticky-compact behaviour moved from the
-    // legacy HeroNextStep to the NominatingComposite's sticky
-    // JourneyHero. Re-target this assertion when ROK-1323 lands the
-    // legacy chrome teardown.
+    // LEFT SKIPPED — ROK-1323 HAS landed the legacy chrome teardown:
+    // `data-testid="hero-next-step"` (components/common/HeroNextStep.tsx) is
+    // no longer rendered on the lineup detail page (verified 2026-06-28 —
+    // only the type survives, imported by use-lineup-hero.ts). Sticky-compact
+    // behaviour moved to the cycle-4 composite JourneyHero (sticky header in
+    // NominatingComposite/VotingComposite). A dedicated decided-state
+    // lineupId in a local beforeAll would not help — the element does not
+    // exist to compact. Re-enabling requires re-targeting the scroll/compact
+    // assertion at that composite's sticky region (a target change, out of
+    // scope for this flake-hardening pass).
     test.skip('hero compacts after scrolling past sentinel on mobile', async ({ page }, testInfo) => {
         test.skip(
             testInfo.project.name === 'desktop',

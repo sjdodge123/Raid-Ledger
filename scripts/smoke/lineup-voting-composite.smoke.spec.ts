@@ -171,12 +171,28 @@ async function gotoVoting(page: import('@playwright/test').Page): Promise<void> 
         /something went wrong/i,
         { timeout: 10_000 },
     );
-    // Hero region is the readiness gate — JourneyHero exposes
+    // Hero region is the FIRST readiness gate — JourneyHero exposes
     // role="region" with aria-labelledby pointing at the "Step 2 of 4 ·
     // Voting" badge.
     await expect(
         page.getByRole('region', { name: /step 2 of 4 · voting/i }),
     ).toBeVisible({ timeout: 20_000 });
+    // K5/F3 flake fix: the JourneyHero (in the sticky header) renders
+    // before VotingLeaderboardV2 finishes mapping its rows, so asserting a
+    // game-row locator (the "Open details for {name}" opener at AC9, or any
+    // "Vote for {name}" toggle) straight after the hero raced an
+    // empty/not-yet-rendered leaderboard on slow CI runners — the opener's
+    // own 10s `toBeVisible` exhausted all 3 attempts. Gate on the
+    // leaderboard CONTAINER and its FIRST row so every row-level locator
+    // that follows resolves against a populated list. Deterministic
+    // (waits on the actual rendered list, not a fixed delay) and aligned
+    // with the 20s hero gate above.
+    await expect(page.getByTestId('voting-leaderboard-v2')).toBeVisible({
+        timeout: 20_000,
+    });
+    await expect(page.getByTestId('voting-row').first()).toBeVisible({
+        timeout: 20_000,
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────

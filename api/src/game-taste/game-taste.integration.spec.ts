@@ -51,6 +51,12 @@ describe('Game Taste Vectors (ROK-1082)', () => {
 
   beforeAll(async () => {
     testApp = await getTestApp();
+    // Defensive clean-start under `jest --randomize`: don't trust the prior
+    // spec file (random order) to have left an empty DB. Re-seed from a known
+    // baseline here so this file's first test is isolated from whatever ran
+    // before it. Combined with the per-test afterEach truncate, every test is
+    // fully isolated from both prior files and prior tests. ROK CI-flake A1/#7.
+    testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
     memberToken = await createMemberAndLogin();
     service = testApp.app.get(GameTasteService);
@@ -374,10 +380,15 @@ describe('Game Taste Vectors (ROK-1082)', () => {
     });
 
     it('POST /games/similar returns 403 for non-admin', async () => {
+      // Self-seed a real game so the request body references a current row
+      // instead of a hardcoded sentinel id (id 1 may not exist after
+      // cross-suite truncation under --randomize). AdminGuard must reject the
+      // member BEFORE the handler runs, so the status is 403 regardless.
+      const gameId = await seedGame('Similar Guard Game');
       const res = await testApp.request
         .post('/games/similar')
         .set('Authorization', `Bearer ${memberToken}`)
-        .send({ gameId: 1, limit: 3 });
+        .send({ gameId, limit: 3 });
       expect(res.status).toBe(403);
     });
 

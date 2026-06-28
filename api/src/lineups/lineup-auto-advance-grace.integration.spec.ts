@@ -410,12 +410,16 @@ function describeGrace() {
     expect(state.pendingAdvanceAt).toBeNull();
     expect(await readStatus(lineupId)).toBe('voting');
 
-    // The orphaned BullMQ grace job, if it still exists, must no-op when
-    // it fires. We assert this by giving it a moment to wake (we kept the
-    // grace at 300s so it cannot have fired naturally yet) and verifying
-    // status hasn't moved. The job *may* be cancelled eagerly — both are
-    // acceptable behaviors. We assert the OBSERVABLE outcome (status).
-    await new Promise((r) => setTimeout(r, 200));
+    // The orphaned BullMQ grace job, if it still exists, must no-op: with
+    // grace=300s it stays parked as a `delayed` BullMQ job and cannot fire
+    // within the test, so the status cannot advance. The job *may* be
+    // cancelled eagerly — both are acceptable. Assert the OBSERVABLE outcome
+    // (status) plus that any surviving job is still parked — deterministic
+    // rather than sleeping to "give it a chance to wake".
+    const orphan = await getGraceJob(lineupId);
+    if (orphan) {
+      expect(await orphan.getState()).toBe('delayed');
+    }
     expect(await readStatus(lineupId)).toBe('voting');
   });
 
@@ -489,8 +493,10 @@ function describeGrace() {
     expect(stillPaused.pendingAdvanceAt).toBeNull();
     expect(await readStatus(lineupId)).toBe('building');
 
-    // Give any erroneous BullMQ grace job a chance to fire.
-    await new Promise((r) => setTimeout(r, 1_000));
+    // A paused lineup must NOT have an erroneous grace job queued. Assert its
+    // absence directly instead of sleeping to "let it fire": with no job
+    // scheduled nothing can flip the status, so the lineup stays 'building'.
+    expect(await getGraceJob(lineupId)).toBeFalsy();
     expect(await readStatus(lineupId)).toBe('building');
   });
 
@@ -582,8 +588,15 @@ function describeGrace() {
       (await readAdvanceState(lineupId)).autoAdvancePausedAt,
     ).not.toBeNull();
 
-    // Wait past the 50ms TTL.
-    await new Promise((r) => setTimeout(r, 200));
+    // Deterministically expire the pause cool-off: push auto_advance_paused_at
+    // far enough into the past that the 50ms TTL is guaranteed elapsed, rather
+    // than sleeping for it. This puts the row in the exact "TTL elapsed" state
+    // the next mutation must observe to re-schedule grace.
+    await writeAdvanceState(
+      lineupId,
+      'auto_advance_paused_at',
+      new Date(Date.now() - 60_000),
+    );
 
     // Top up nominations to satisfy the nomination floor (default 4).
     for (let i = 0; i < 3; i++) {
@@ -676,8 +689,16 @@ function describeGrace() {
     // where the BullMQ cancel-on-revert lost.
     await writeAdvanceState(lineupId, 'auto_advance_paused_at', new Date());
 
-    // Wait long enough that the grace job's delay would normally elapse.
-    await new Promise((r) => setTimeout(r, 2_000));
+    // Wait until the delayed grace job actually fires and the processor runs
+    // to completion (job removed on complete, or a terminal state) instead of
+    // sleeping for the 500ms delay. Once it has run we can assert it no-op'd.
+    const processed = await pollForCondition(async () => {
+      const job = await getGraceJob(lineupId);
+      if (!job) return true; // removeOnComplete → processor ran and finished
+      const state = await job.getState();
+      return state === 'completed' || state === 'failed' ? true : null;
+    }, 10_000);
+    expect(processed).toBe(true);
 
     // Status must stay 'voting' — the processor saw the pause and bailed.
     expect(await readStatus(lineupId)).toBe('voting');
@@ -938,8 +959,12 @@ function describeGrace() {
       await submitAllVotes(lineupId, [v2.token]);
 
       // The fire-and-forget call inside the toggle handler races the HTTP
-      // response; give it a brief window to flush.
-      await new Promise((r) => setTimeout(r, 200));
+      // response; poll until the gateway emit has flushed instead of sleeping
+      // for a fixed window.
+      await pollForCondition(
+        () => Promise.resolve(spy.mock.calls.length > 0 ? true : null),
+        5_000,
+      );
 
       expect(spy).toHaveBeenCalledTimes(1);
       const [emittedId, emittedAt] = spy.mock.calls[0];
