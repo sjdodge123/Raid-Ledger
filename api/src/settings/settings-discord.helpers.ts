@@ -129,6 +129,21 @@ export async function setEphemeralVoiceEnabled(
   );
 }
 
+/** Force-ephemeral: every managed event gets a channel (default off). */
+export async function getEphemeralVoiceForced(
+  svc: SettingsCore,
+): Promise<boolean> {
+  return (await svc.get(SETTING_KEYS.EPHEMERAL_VOICE_FORCED)) === 'true';
+}
+
+/** Set the force-ephemeral toggle. */
+export async function setEphemeralVoiceForced(
+  svc: SettingsCore,
+  forced: boolean,
+): Promise<void> {
+  await svc.set(SETTING_KEYS.EPHEMERAL_VOICE_FORCED, forced ? 'true' : 'false');
+}
+
 /** Parent category ID under which ephemeral channels are created (null = guild root). */
 export async function getEphemeralVoiceCategoryId(
   svc: SettingsCore,

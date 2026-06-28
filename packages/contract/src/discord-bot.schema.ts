@@ -109,6 +109,10 @@ export type DiscordChannelListResponseDto = z.infer<typeof DiscordChannelListRes
  */
 export const EphemeralVoiceConfigSchema = z.object({
     enabled: z.boolean(),
+    /** ROK-1352: when true, EVERY managed event gets an ephemeral channel and
+     *  voice links never resolve to a pre-existing/static channel. Requires
+     *  `enabled`. Default off. */
+    forced: z.boolean().default(false),
     categoryId: z.string().nullable(),
     createBufferMinutes: z.number().int().min(0).default(30),
     idleMinutes: z.number().int().min(0).default(30),

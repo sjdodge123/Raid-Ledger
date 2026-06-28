@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { SignupUserSchema, EventRosterSchema } from './signups.schema.js';
 import { RosterWithAssignmentsSchema } from './roster.schema.js';
 import { PugSlotResponseSchema } from './pug.schema.js';
-import { SeriesScopeSchema } from './series-scope.schema.js';
 
 // ============================================================
 // Slot Configuration Schema
@@ -51,12 +50,10 @@ export const CreateEventSchema = z.object({
     reminder1hour: z.boolean().optional(),
     /** Send DM reminder 24 hours before event. Default false (ROK-126). */
     reminder24hour: z.boolean().optional(),
-    /** ROK-1352: Per-event ephemeral-voice override. null = inherit series/global. */
+    /** ROK-1352: Per-event ephemeral-voice opt-in. null/false = no channel
+     *  unless the admin force-ephemeral setting is on. Series-wide changes
+     *  propagate per-event via the ROK-429 scope flow (PATCH /events/:id/series). */
     ephemeralVoiceEnabled: z.boolean().nullable().optional(),
-    /** ROK-1352: Scope for the ephemeral toggle on a recurring create — 'this'
-     *  (default) writes only the per-event column; 'all'/'this_and_following'
-     *  also upsert event_series_settings. */
-    ephemeralVoiceScope: SeriesScopeSchema.optional(),
 }).refine(
     (data) => new Date(data.startTime) < new Date(data.endTime),
     { message: 'Start time must be before end time', path: ['endTime'] }
@@ -81,11 +78,9 @@ export const UpdateEventSchema = z.object({
     reminder1hour: z.boolean().optional(),
     /** Send DM reminder 24 hours before event (ROK-126). */
     reminder24hour: z.boolean().optional(),
-    /** ROK-1352: Per-event ephemeral-voice override. null = inherit series/global. */
+    /** ROK-1352: Per-event ephemeral-voice opt-in. Persisted on single + series
+     *  edits via buildUpdateData; series scope is driven by the ROK-429 modal. */
     ephemeralVoiceEnabled: z.boolean().nullable().optional(),
-    /** ROK-1352: Scope for the ephemeral toggle — 'this' writes the event column;
-     *  'this_and_following'/'all' upsert event_series_settings. Defaults to 'this'. */
-    ephemeralVoiceScope: SeriesScopeSchema.optional(),
 }).refine(
     (data) => {
         if (data.startTime && data.endTime) {

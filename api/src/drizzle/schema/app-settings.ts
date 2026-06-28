@@ -144,6 +144,9 @@ export const SETTING_KEYS = {
   SESSION_LENGTH_DAYS: 'session_length_days',
   /** ROK-1352: Master toggle for ephemeral voice channels. */
   EPHEMERAL_VOICE_ENABLED: 'ephemeral_voice_enabled',
+  /** ROK-1352: Force every managed event to use an ephemeral channel (never a
+   *  pre-existing/static channel). Requires EPHEMERAL_VOICE_ENABLED. Default off. */
+  EPHEMERAL_VOICE_FORCED: 'ephemeral_voice_forced',
   /** ROK-1352: Parent category ID under which ephemeral channels are created. */
   EPHEMERAL_VOICE_CATEGORY_ID: 'ephemeral_voice_category_id',
   /** ROK-1352: Minutes before event start to create the channel (default 30). */

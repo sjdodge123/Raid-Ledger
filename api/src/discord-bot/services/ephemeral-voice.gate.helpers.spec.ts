@@ -1,81 +1,69 @@
 /**
- * Failing-first gate-logic tests for ROK-1352 (ephemeral voice channels).
+ * Gate-logic tests for ROK-1352 (ephemeral voice channels).
  *
- * `shouldCreateEphemeralChannel` is the pure resolution gate (no DB/Redis/env)
- * the dev will add to `api/src/discord-bot/services/ephemeral-voice.gate.helpers.ts`.
- * Resolution order (spec AC2):
- *   1. Global master toggle off              → false   (master gate)
- *   2. Per-event override non-null           → use it  (override wins)
- *   3. else per-series flag true             → true
- *   4. else                                  → false   (default off)
+ * `shouldCreateEphemeralChannel` is the pure resolution gate (no DB/Redis/env).
+ * Resolution order:
+ *   1. Global master toggle off → false (master gate)
+ *   2. Force-ephemeral on        → true  (admin: always create)
+ *   3. Per-event opt-in          → use it (null/false ⇒ no channel)
+ *   4. else                      → false (default off)
  *
- * The gate takes the already-resolved inputs as arguments so it is unit-testable
- * with no infrastructure. It MUST fail today: the helper file does not exist yet,
- * so the import throws at module load.
+ * Series-wide enablement is NOT a tier — it propagates as the per-event column
+ * across instances via the ROK-429 scope flow (PATCH /events/:id/series).
  */
 import { shouldCreateEphemeralChannel } from './ephemeral-voice.gate.helpers';
 
-/** Inputs to the gate: master toggle, per-event override (null = inherit), per-series flag. */
 interface GateInput {
   globalEnabled: boolean;
+  forced: boolean;
   eventOverride: boolean | null;
-  seriesEnabled: boolean;
 }
 
-function gate({ globalEnabled, eventOverride, seriesEnabled }: GateInput) {
-  return shouldCreateEphemeralChannel(
-    globalEnabled,
-    eventOverride,
-    seriesEnabled,
-  );
+function gate({ globalEnabled, forced, eventOverride }: GateInput) {
+  return shouldCreateEphemeralChannel(globalEnabled, forced, eventOverride);
 }
 
-describe('shouldCreateEphemeralChannel — master gate (ROK-1352 AC1)', () => {
-  it('returns false when global is off, regardless of per-event override', () => {
+describe('shouldCreateEphemeralChannel — master gate (AC1)', () => {
+  it('returns false when global is off, even if forced', () => {
     expect(
-      gate({ globalEnabled: false, eventOverride: true, seriesEnabled: true }),
+      gate({ globalEnabled: false, forced: true, eventOverride: true }),
     ).toBe(false);
   });
 
-  it('returns false when global is off and series is on', () => {
+  it('returns false when global is off and per-event opted in', () => {
     expect(
-      gate({ globalEnabled: false, eventOverride: null, seriesEnabled: true }),
+      gate({ globalEnabled: false, forced: false, eventOverride: true }),
     ).toBe(false);
   });
 });
 
-describe('shouldCreateEphemeralChannel — per-event override wins (ROK-1352 AC2)', () => {
-  it('per-event true overrides series=false', () => {
+describe('shouldCreateEphemeralChannel — force-ephemeral', () => {
+  it('returns true for every event when forced (ignores per-event)', () => {
     expect(
-      gate({ globalEnabled: true, eventOverride: true, seriesEnabled: false }),
+      gate({ globalEnabled: true, forced: true, eventOverride: null }),
+    ).toBe(true);
+    expect(
+      gate({ globalEnabled: true, forced: true, eventOverride: false }),
+    ).toBe(true);
+  });
+});
+
+describe('shouldCreateEphemeralChannel — per-event opt-in', () => {
+  it('returns true when per-event opted in', () => {
+    expect(
+      gate({ globalEnabled: true, forced: false, eventOverride: true }),
     ).toBe(true);
   });
 
-  it('per-event false overrides series=true (single-occurrence opt-out)', () => {
+  it('returns false for explicit per-event false', () => {
     expect(
-      gate({ globalEnabled: true, eventOverride: false, seriesEnabled: true }),
+      gate({ globalEnabled: true, forced: false, eventOverride: false }),
     ).toBe(false);
   });
-});
 
-describe('shouldCreateEphemeralChannel — per-series fallback (ROK-1352 AC2)', () => {
-  it('returns true when no override and series flag is on', () => {
+  it('returns false (default off) when no opt-in', () => {
     expect(
-      gate({ globalEnabled: true, eventOverride: null, seriesEnabled: true }),
-    ).toBe(true);
-  });
-
-  it('returns false when no override and series flag is off', () => {
-    expect(
-      gate({ globalEnabled: true, eventOverride: null, seriesEnabled: false }),
-    ).toBe(false);
-  });
-});
-
-describe('shouldCreateEphemeralChannel — default off (ROK-1352 AC2)', () => {
-  it('returns false with global on but no opt-in anywhere', () => {
-    expect(
-      gate({ globalEnabled: true, eventOverride: null, seriesEnabled: false }),
+      gate({ globalEnabled: true, forced: false, eventOverride: null }),
     ).toBe(false);
   });
 });

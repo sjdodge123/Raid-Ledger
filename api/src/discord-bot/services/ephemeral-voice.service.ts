@@ -8,11 +8,8 @@ import { SettingsService } from '../../settings/settings.service';
 import { ScheduledEventService } from './scheduled-event.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { VoiceAttendanceService } from './voice-attendance.service';
-import { buildScheduledEventName } from './scheduled-event.helpers';
-import {
-  shouldCreateEphemeralChannel,
-  fetchSeriesEphemeralEnabled,
-} from './ephemeral-voice.gate.helpers';
+import { buildEphemeralChannelName } from './scheduled-event.helpers';
+import { shouldCreateEphemeralChannel } from './ephemeral-voice.gate.helpers';
 import {
   createVoiceChannel,
   deleteVoiceChannel,
@@ -55,18 +52,15 @@ export class EphemeralVoiceService {
     private readonly voiceAttendance: VoiceAttendanceService | null,
   ) {}
 
-  /** Resolve the effective gate for an event (global → override → series). */
+  /** Resolve the effective gate for an event (global → forced → per-event). */
   async shouldCreate(ev: EphemeralEventRow): Promise<boolean> {
     const globalEnabled = await this.settingsService.getEphemeralVoiceEnabled();
     if (!globalEnabled) return false;
-    const seriesEnabled = await fetchSeriesEphemeralEnabled(
-      this.db,
-      ev.recurrenceGroupId,
-    );
+    const forced = await this.settingsService.getEphemeralVoiceForced();
     return shouldCreateEphemeralChannel(
       globalEnabled,
+      forced,
       ev.ephemeralVoiceEnabled,
-      seriesEnabled,
     );
   }
 
@@ -82,7 +76,7 @@ export class EphemeralVoiceService {
       const categoryId =
         await this.settingsService.getEphemeralVoiceCategoryId();
       const data = await buildRepointData(this.db, ev);
-      const name = buildScheduledEventName(data);
+      const name = buildEphemeralChannelName(data);
       const channelId = await createVoiceChannel(guild, {
         name,
         parentId: categoryId,

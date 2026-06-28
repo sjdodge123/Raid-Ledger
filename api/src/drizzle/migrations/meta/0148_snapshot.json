@@ -1,5 +1,5 @@
 {
-  "id": "bd9c2767-40f6-4bf7-842d-d9a10029a26e",
+  "id": "35a54cc9-f9e5-467f-a073-c1b51713b1c5",
   "prevId": "2b21da70-dcb1-4758-bd6d-b136c801a1fb",
   "version": "7",
   "dialect": "postgresql",
@@ -488,6 +488,7 @@
             }
           ],
           "isUnique": false,
+          "where": "\"events\".\"ephemeral_voice_channel_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -7745,46 +7746,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.event_series_settings": {
-      "name": "event_series_settings",
-      "schema": "",
-      "columns": {
-        "recurrence_group_id": {
-          "name": "recurrence_group_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "ephemeral_voice_enabled": {
-          "name": "ephemeral_voice_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

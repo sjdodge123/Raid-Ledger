@@ -45,6 +45,8 @@ import {
   setDiscordBotDefaultVoiceChannel as _setDiscordBotDefaultVoiceChannel,
   getEphemeralVoiceEnabled as _getEphemeralVoiceEnabled,
   setEphemeralVoiceEnabled as _setEphemeralVoiceEnabled,
+  getEphemeralVoiceForced as _getEphemeralVoiceForced,
+  setEphemeralVoiceForced as _setEphemeralVoiceForced,
   getEphemeralVoiceCategoryId as _getEphemeralVoiceCategoryId,
   setEphemeralVoiceCategoryId as _setEphemeralVoiceCategoryId,
   getEphemeralVoiceCreateBufferMinutes as _getEphemeralVoiceCreateBufferMinutes,
@@ -352,6 +354,11 @@ export class SettingsService implements OnModuleInit {
   /** Set the ephemeral-voice master toggle. */
   setEphemeralVoiceEnabled = (enabled: boolean) =>
     _setEphemeralVoiceEnabled(this, enabled);
+  /** Force-ephemeral: always create a channel for every managed event. */
+  getEphemeralVoiceForced = () => _getEphemeralVoiceForced(this);
+  /** Set the force-ephemeral toggle. */
+  setEphemeralVoiceForced = (forced: boolean) =>
+    _setEphemeralVoiceForced(this, forced);
   /** Parent category ID for ephemeral channels (null = guild root). */
   getEphemeralVoiceCategoryId = () => _getEphemeralVoiceCategoryId(this);
   /** Set the ephemeral-voice parent category. */

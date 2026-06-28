@@ -134,7 +134,9 @@ describe('event-series.helpers', () => {
   // PATCH /events/:id/series (per resolved target). Mapping the per-event
   // ephemeral override here makes both edit + series-scope propagation work.
   describe('buildUpdateData — ephemeral voice override (ROK-1352)', () => {
-    const existing = createMockEvent({ id: 1 });
+    const existing = createMockEvent({ id: 1 }) as Parameters<
+      typeof buildUpdateData
+    >[1];
 
     it('maps ephemeralVoiceEnabled=true onto the update set', () => {
       const data = buildUpdateData({ ephemeralVoiceEnabled: true }, existing);

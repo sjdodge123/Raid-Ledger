@@ -2,7 +2,6 @@
  * Integration tests for ROK-1352 ephemeral-voice DB paths (real Postgres).
  *
  * Covers (per spec Test Strategy):
- *  - gate resolution via fetchSeriesEphemeralEnabled (series opt-in)
  *  - create-window candidate scan (in-window, no channel, not cancelled)
  *  - reaper candidate scan (past idle window, has channel)
  *  - resolver Tier 0 (ephemeral channel wins over all bindings)
@@ -11,13 +10,11 @@
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
-import { randomUUID } from 'crypto';
 import {
   findCreateCandidates,
   findReapCandidates,
   findEventByEphemeralChannel,
 } from './ephemeral-voice.db-helpers';
-import { fetchSeriesEphemeralEnabled } from './ephemeral-voice.gate.helpers';
 import { findActiveEventsByEphemeralChannel } from './voice-attendance-ephemeral.helpers';
 
 describe('ephemeral-voice DB integration (ROK-1352)', () => {
@@ -56,16 +53,6 @@ describe('ephemeral-voice DB integration (ROK-1352)', () => {
       .returning({ id: schema.events.id });
     return row.id;
   }
-
-  it('fetchSeriesEphemeralEnabled reflects the series settings row', async () => {
-    const rg = randomUUID();
-    expect(await fetchSeriesEphemeralEnabled(app.db, rg)).toBe(false);
-    await app.db
-      .insert(schema.eventSeriesSettings)
-      .values({ recurrenceGroupId: rg, ephemeralVoiceEnabled: true });
-    expect(await fetchSeriesEphemeralEnabled(app.db, rg)).toBe(true);
-    expect(await fetchSeriesEphemeralEnabled(app.db, null)).toBe(false);
-  });
 
   it('create-window scan returns only in-window, channel-less, live events', async () => {
     const inWindow = await insertEvent({

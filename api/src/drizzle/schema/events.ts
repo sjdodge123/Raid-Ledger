@@ -11,6 +11,7 @@ import {
   varchar,
   index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { users } from './users';
 import { games } from './games';
 import { channelBindings } from './channel-bindings';
@@ -142,11 +143,11 @@ export const events = pgTable(
     index('idx_events_se_reconcile_backoff').on(
       table.scheduledEventReconcileBackoffUntil,
     ),
-    // ROK-1352: Scheduler/reaper scans filter on ephemeral_voice_channel_id.
-    // Actual DB index is partial (WHERE ephemeral_voice_channel_id IS NOT NULL)
-    // via the ROK-1352 migration. Drizzle DSL doesn't support partial indexes.
-    index('idx_events_ephemeral_voice_channel_id').on(
-      table.ephemeralVoiceChannelId,
-    ),
+    // ROK-1352: Scheduler/reaper scans filter on ephemeral_voice_channel_id,
+    // which is NULL for nearly every event — so this is a PARTIAL index. The
+    // schema, snapshot, and generated SQL all agree on the partial predicate.
+    index('idx_events_ephemeral_voice_channel_id')
+      .on(table.ephemeralVoiceChannelId)
+      .where(sql`${table.ephemeralVoiceChannelId} IS NOT NULL`),
   ],
 );

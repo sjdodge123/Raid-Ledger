@@ -36,14 +36,15 @@ export class EphemeralVoiceSettingsController {
   /** Current ephemeral-voice config. */
   @Get()
   async getConfig(): Promise<EphemeralVoiceConfig> {
-    const [enabled, categoryId, createBufferMinutes, idleMinutes] =
+    const [enabled, forced, categoryId, createBufferMinutes, idleMinutes] =
       await Promise.all([
         this.settingsService.getEphemeralVoiceEnabled(),
+        this.settingsService.getEphemeralVoiceForced(),
         this.settingsService.getEphemeralVoiceCategoryId(),
         this.settingsService.getEphemeralVoiceCreateBufferMinutes(),
         this.settingsService.getEphemeralVoiceIdleMinutes(),
       ]);
-    return { enabled, categoryId, createBufferMinutes, idleMinutes };
+    return { enabled, forced, categoryId, createBufferMinutes, idleMinutes };
   }
 
   /** Partial update of the ephemeral-voice config. */
@@ -72,6 +73,8 @@ export class EphemeralVoiceSettingsController {
   private async persist(cfg: Partial<EphemeralVoiceConfig>): Promise<void> {
     if (cfg.enabled !== undefined)
       await this.settingsService.setEphemeralVoiceEnabled(cfg.enabled);
+    if (cfg.forced !== undefined)
+      await this.settingsService.setEphemeralVoiceForced(cfg.forced);
     if (cfg.categoryId !== undefined)
       await this.settingsService.setEphemeralVoiceCategoryId(cfg.categoryId);
     if (cfg.createBufferMinutes !== undefined)

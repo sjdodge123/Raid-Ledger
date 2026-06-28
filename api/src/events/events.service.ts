@@ -39,7 +39,6 @@ import {
 } from './event-lifecycle.helpers';
 import {
   buildBaseValues,
-  applyEphemeralSeriesScope,
   resolveRecurrenceGroupId,
 } from './event-create.helpers';
 import {
@@ -79,7 +78,6 @@ export class EventsService {
     const durationMs = endTime.getTime() - startTime.getTime();
     const groupId = resolveRecurrenceGroupId(dto);
     const baseValues = buildBaseValues(creatorId, dto, groupId);
-    await applyEphemeralSeriesScope(this.db, dto, groupId);
     const deps = this.createFlowDeps();
     if (dto.recurrence) {
       const result = await createRecurringFlow(
