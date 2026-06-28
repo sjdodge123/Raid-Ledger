@@ -125,6 +125,31 @@ export async function clearEphemeralChannelId(
     .where(eq(schema.events.id, eventId));
 }
 
+/**
+ * ROK-1352: atomically claim the ephemeral slot — set the channel id only if it
+ * is still null. Returns false when an overlapping scan (slow cron tick + next
+ * tick, manual scan, or a second instance) already claimed it; the caller should
+ * then delete the channel it just created. Guards against duplicate/orphan
+ * channels (Codex review).
+ */
+export async function claimEphemeralChannelId(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  channelId: string,
+): Promise<boolean> {
+  const claimed = await db
+    .update(schema.events)
+    .set({ ephemeralVoiceChannelId: channelId })
+    .where(
+      and(
+        eq(schema.events.id, eventId),
+        isNull(schema.events.ephemeralVoiceChannelId),
+      ),
+    )
+    .returning({ id: schema.events.id });
+  return claimed.length > 0;
+}
+
 /** Minimal ScheduledEventData for re-pointing an SE after channel create/destroy. */
 export interface RepointEventData {
   title: string;

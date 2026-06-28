@@ -13,6 +13,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
+import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
 import { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
 import { APP_EVENT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
 import {
@@ -67,6 +68,9 @@ export class DiscordEventListener {
     @Inject(GameAffinityNotificationService)
     private readonly gameAffinityNotificationService: GameAffinityNotificationService | null,
     private readonly eventLifecycleQueue: EventLifecycleQueueService,
+    @Optional()
+    @Inject(EphemeralVoiceService)
+    private readonly ephemeralVoice: EphemeralVoiceService | null,
   ) {}
 
   private get deps(): EventListenerDeps {
@@ -104,6 +108,9 @@ export class DiscordEventListener {
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)
   async handleEventCancelled(payload: EventPayload): Promise<void> {
     this.fireScheduledEventDelete(payload.eventId);
+    // ROK-1352: tear down the temp channel now — the event won't happen, so it
+    // must not linger for the rest of the (cancelled) event window (Codex review).
+    await this.ephemeralVoice?.destroyById(payload.eventId, { force: true });
     if (!this.clientService.isConnected()) return;
     const records = await findEventMessages(this.deps, payload.eventId);
     if (records.length === 0) return;
@@ -128,6 +135,10 @@ export class DiscordEventListener {
 
   @OnEvent(APP_EVENT_EVENTS.DELETED)
   async handleEventDeleted(payload: { eventId: number }): Promise<void> {
+    // ROK-1352: destroy the temp channel BEFORE the row is removed — DELETED is
+    // emitted (awaited) just before db.delete, so the row + its channel id are
+    // still readable here. Otherwise the channel is orphaned forever (Codex review).
+    await this.ephemeralVoice?.destroyById(payload.eventId, { force: true });
     await this.scheduledEventService.deleteScheduledEvent(payload.eventId);
     if (!this.clientService.isConnected()) return;
     const records = await findEventMessages(this.deps, payload.eventId);

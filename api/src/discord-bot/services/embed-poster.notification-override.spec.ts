@@ -67,6 +67,7 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
   /** Sets up the DB mock for a fresh embed (no existing embed record) */
   const setupEmptyRoster = () => {
     mockDb.select
+      .mockReturnValueOnce(makeSelectChain([])) // ROK-1352: getEphemeralChannelId lookup (none)
       .mockReturnValueOnce(makeSelectChain([])) // idempotency check (no existing embed)
       .mockReturnValueOnce(makeSelectChain([])) // eventSignups
       .mockReturnValueOnce(makeSelectChain([])); // rosterAssignments (groupBy terminal)
@@ -127,7 +128,10 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
   }
   async function setupBlock() {
     mockDb = {
-      select: jest.fn(),
+      // Default empty chain so the ROK-1352 getEphemeralChannelId lookup never
+      // throws in tests that don't sequence selects; ordered mockReturnValueOnce
+      // sequences still override.
+      select: jest.fn().mockReturnValue(makeSelectChain([])),
       insert: jest.fn().mockReturnValue(makeInsertChain()),
       update: jest.fn().mockReturnValue(makeUpdateChain()),
     };
@@ -244,9 +248,9 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
 
     /** Setup where an existing embed record is found, then edit fails with Unknown Message */
     const setupExistingEmbedDeleted = () => {
-      // First select call: idempotency check — returns existing record
       mockDb.select
-        .mockReturnValueOnce(makeSelectChain([existingRecord]))
+        .mockReturnValueOnce(makeSelectChain([])) // ROK-1352: getEphemeralChannelId lookup (none)
+        .mockReturnValueOnce(makeSelectChain([existingRecord])) // idempotency → existing record
         .mockReturnValueOnce(makeSelectChain([])) // eventSignups
         .mockReturnValueOnce(makeSelectChain([])); // rosterAssignments
 

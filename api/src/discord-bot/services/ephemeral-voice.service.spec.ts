@@ -26,12 +26,15 @@ async function build(memberCount: number) {
   const scheduledEvent = { updateScheduledEvent: jest.fn() };
   const voiceAttendance = { flushToDb: jest.fn().mockResolvedValue(undefined) };
   const embed = { enqueue: jest.fn().mockResolvedValue(undefined) };
+  const settings = {
+    getEphemeralVoiceCategoryId: jest.fn().mockResolvedValue(null),
+  };
   const module = await Test.createTestingModule({
     providers: [
       EphemeralVoiceService,
       { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: DiscordBotClientService, useValue: client },
-      { provide: SettingsService, useValue: {} },
+      { provide: SettingsService, useValue: settings },
       { provide: ScheduledEventService, useValue: scheduledEvent },
       { provide: EmbedSyncQueueService, useValue: embed },
       { provide: VoiceAttendanceService, useValue: voiceAttendance },
@@ -51,10 +54,18 @@ async function build(memberCount: number) {
   const clearSpy = jest
     .spyOn(dbHelpers, 'clearEphemeralChannelId')
     .mockResolvedValue(undefined);
+  const createSpy = jest
+    .spyOn(discordOps, 'createVoiceChannel')
+    .mockResolvedValue('new-ch');
+  const claimSpy = jest
+    .spyOn(dbHelpers, 'claimEphemeralChannelId')
+    .mockResolvedValue(true);
   return {
     service: module.get(EphemeralVoiceService),
     deleteSpy: discordOps.deleteVoiceChannel as jest.Mock,
     clearSpy,
+    createSpy,
+    claimSpy,
     voiceAttendance,
   };
 }
@@ -91,6 +102,35 @@ describe('destroyForEvent — never delete while occupied (AC4)', () => {
   it('does nothing when the event has no ephemeral channel', async () => {
     const { service, deleteSpy } = await build(0);
     await service.destroyForEvent({ ...row, ephemeralVoiceChannelId: null });
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  // ROK-1352 (Codex review): cancel/delete must tear down even an occupied
+  // channel, or it is orphaned once the event row is gone.
+  it('force-deletes even when the channel is occupied', async () => {
+    const { service, deleteSpy, clearSpy } = await build(3);
+    await service.destroyForEvent({ ...row }, { force: true });
+    expect(deleteSpy).toHaveBeenCalledWith(guild, 'ch-1');
+    expect(clearSpy).toHaveBeenCalledWith(expect.anything(), 1);
+  });
+});
+
+describe('createForEvent — claim guards overlapping scans (Codex review)', () => {
+  const fresh = { ...row, ephemeralVoiceChannelId: null };
+
+  it('deletes the just-created channel when another scan already claimed it', async () => {
+    const { service, createSpy, deleteSpy, claimSpy } = await build(0);
+    claimSpy.mockResolvedValue(false); // lost the race
+    await service.createForEvent({ ...fresh });
+    expect(createSpy).toHaveBeenCalled();
+    expect(deleteSpy).toHaveBeenCalledWith(guild, 'new-ch');
+  });
+
+  it('keeps the channel when the claim succeeds', async () => {
+    const { service, createSpy, deleteSpy, claimSpy } = await build(0);
+    claimSpy.mockResolvedValue(true);
+    await service.createForEvent({ ...fresh });
+    expect(createSpy).toHaveBeenCalled();
     expect(deleteSpy).not.toHaveBeenCalled();
   });
 });

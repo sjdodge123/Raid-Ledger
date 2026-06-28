@@ -18,7 +18,7 @@ import {
 import {
   type EphemeralEventRow,
   buildRepointData,
-  setEphemeralChannelId,
+  claimEphemeralChannelId,
   clearEphemeralChannelId,
   fetchEventForEphemeral,
 } from './ephemeral-voice.db-helpers';
@@ -81,8 +81,15 @@ export class EphemeralVoiceService {
         name,
         parentId: categoryId,
       });
-      // Persist BEFORE SE repoint so the reconcile cron resolves the channel.
-      await setEphemeralChannelId(this.db, ev.id, channelId);
+      // Atomically claim the slot (set id only if still null). If an overlapping
+      // scan already created a channel, delete the one we just made so we don't
+      // orphan a duplicate (Codex review). Persist BEFORE SE repoint so the
+      // reconcile cron resolves the channel.
+      const claimed = await claimEphemeralChannelId(this.db, ev.id, channelId);
+      if (!claimed) {
+        await deleteVoiceChannel(guild, channelId);
+        return;
+      }
       await this.repointAndResync(ev, data);
       this.logger.log(
         `Created ephemeral voice channel ${channelId} for event ${ev.id}`,
@@ -93,16 +100,24 @@ export class EphemeralVoiceService {
   }
 
   /**
-   * Destroy the ephemeral channel for an event IF currently empty. Never
-   * deletes while occupied (re-checks member count). Flushes attendance first.
+   * Destroy the ephemeral channel for an event. By default never deletes while
+   * occupied (re-checks member count) — the reaper/idle path. Pass `force` for
+   * cancel/delete, where the event is gone and the channel must not be orphaned
+   * even if someone is still in it. Flushes attendance first.
    */
-  async destroyForEvent(ev: EphemeralEventRow): Promise<void> {
+  async destroyForEvent(
+    ev: EphemeralEventRow,
+    opts?: { force?: boolean },
+  ): Promise<void> {
     const channelId = ev.ephemeralVoiceChannelId;
     if (!channelId) return;
     const guild = this.requireGuild();
     if (!guild) return;
     try {
-      if ((await getChannelMemberCountFresh(guild, channelId)) > 0) {
+      if (
+        !opts?.force &&
+        (await getChannelMemberCountFresh(guild, channelId)) > 0
+      ) {
         this.logger.debug(
           `Skip reap: ephemeral channel ${channelId} (event ${ev.id}) occupied`,
         );
@@ -124,10 +139,16 @@ export class EphemeralVoiceService {
     }
   }
 
-  /** Reload the row + reap if now empty (BullMQ idle processor entry point). */
-  async destroyById(eventId: number): Promise<void> {
+  /**
+   * Reload the row + destroy. Idle processor passes no opts (occupancy-safe);
+   * cancel/delete lifecycle passes `force` so the channel is never orphaned.
+   */
+  async destroyById(
+    eventId: number,
+    opts?: { force?: boolean },
+  ): Promise<void> {
     const ev = await fetchEventForEphemeral(this.db, eventId);
-    if (ev) await this.destroyForEvent(ev);
+    if (ev) await this.destroyForEvent(ev, opts);
   }
 
   // ─── Private helpers ──────────────────────────────────────
