@@ -199,6 +199,8 @@ Agents: <count> planner (opus) + <count> dev (opus)
 
 **Wait for operator approval.** If the operator approves (e.g., "go", "let's do it", "sounds good"), that IS the confirmation — do not re-ask.
 
+**Single-named-story exception:** if `/fix-batch` was invoked with exactly one explicit `ROK-XXX` argument, the invocation itself IS the approval — print the one-row table as an FYI and **proceed without waiting**. The operator already chose the story by naming it; blocking on a one-row "batch" confirmation is the kind of round-trip the trivial fast lane exists to remove. Still wait when the batch was assembled from a label search (`all` / no explicit ID), or when any story is flagged not-eligible.
+
 ---
 
 ## 1f. Initialize State File

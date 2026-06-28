@@ -10,6 +10,7 @@ import type {
 } from '../services/discord-embed.factory';
 import type { EmbedPosterService } from '../services/embed-poster.service';
 import type { ChannelResolverService } from '../services/channel-resolver.service';
+import { getEphemeralChannelId } from '../services/ephemeral-voice.db-helpers';
 import { EMBED_STATES } from '../discord-bot.constants';
 import type { EventPayload } from './event.listener';
 
@@ -100,9 +101,16 @@ export async function resolveVoiceChannel(
   if (payload.notificationChannelOverride) {
     return payload.notificationChannelOverride;
   }
+  // ROK-1352: a live ephemeral channel wins, so an embed re-render on edit
+  // doesn't rewrite the "Join Voice" link to the static/default channel.
+  const ephemeralChannelId = await getEphemeralChannelId(
+    deps.db,
+    payload.eventId,
+  );
   return deps.channelResolver.resolveVoiceChannelForScheduledEvent(
     payload.gameId,
     payload.recurrenceGroupId,
+    ephemeralChannelId,
   );
 }
 

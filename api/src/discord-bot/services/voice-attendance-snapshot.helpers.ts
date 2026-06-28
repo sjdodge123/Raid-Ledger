@@ -16,6 +16,8 @@ export interface RecentlyStartedEvent {
   id: number;
   gameId: number | null;
   recurrenceGroupId: string | null;
+  /** ROK-1352: live ephemeral channel — snapshot the right channel, not static. */
+  ephemeralVoiceChannelId?: string | null;
 }
 
 /** Member info extracted from a voice channel. */
@@ -40,6 +42,7 @@ export async function fetchRecentlyStartedEvents(
       id: schema.events.id,
       gameId: schema.events.gameId,
       recurrenceGroupId: schema.events.recurrenceGroupId,
+      ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
     })
     .from(schema.events)
     .where(
@@ -83,6 +86,7 @@ interface SnapshotDeps {
   resolveVoiceChannel: (
     gameId: number | null,
     recurrenceGroupId: string | null,
+    ephemeralChannelId: string | null,
   ) => Promise<string | null>;
   snapshotEvent: (
     eventId: number,
@@ -100,6 +104,7 @@ async function snapshotSingleEvent(
   const voiceChannelId = await deps.resolveVoiceChannel(
     event.gameId,
     event.recurrenceGroupId,
+    event.ephemeralVoiceChannelId ?? null,
   );
   if (!voiceChannelId) {
     deps.logger.log(

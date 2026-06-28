@@ -1,5 +1,7 @@
 import {
   buildScheduledEventName,
+  buildEphemeralChannelName,
+  EPHEMERAL_CHANNEL_MARKER,
   MAX_SCHEDULED_EVENT_NAME_LENGTH,
   type ScheduledEventData,
 } from './scheduled-event.helpers';
@@ -78,5 +80,30 @@ describe('buildScheduledEventName (ROK-1350)', () => {
     expect(name).toBe(`${title} — ${game}`);
     expect(name.length).toBe(100);
     expect(name.endsWith('…')).toBe(false);
+  });
+});
+
+describe('buildEphemeralChannelName (ROK-1352)', () => {
+  it('prefixes the clock marker onto the SE name', () => {
+    const name = buildEphemeralChannelName(
+      makeEventData({ title: 'Friday Raid', game: { name: 'WoW' } }),
+    );
+    expect(name).toBe(`${EPHEMERAL_CHANNEL_MARKER} Friday Raid — WoW`);
+  });
+
+  it('prefixes the marker onto a bare title (no game)', () => {
+    const name = buildEphemeralChannelName(makeEventData({ game: null }));
+    expect(name).toBe(`${EPHEMERAL_CHANNEL_MARKER} Gamernight`);
+  });
+
+  it('keeps the whole name within the Discord 100-char cap (marker included)', () => {
+    const title = 'T'.repeat(90);
+    const game = 'G'.repeat(40);
+    const name = buildEphemeralChannelName(
+      makeEventData({ title, game: { name: game } }),
+    );
+    expect(name.length).toBe(MAX_SCHEDULED_EVENT_NAME_LENGTH);
+    expect(name.startsWith(EPHEMERAL_CHANNEL_MARKER)).toBe(true);
+    expect(name.endsWith('…')).toBe(true);
   });
 });

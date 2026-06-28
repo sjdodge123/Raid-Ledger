@@ -12,6 +12,7 @@ import {
 } from './discord-embed.factory';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
+import { getEphemeralChannelId } from './ephemeral-voice.db-helpers';
 import { EMBED_STATES } from '../discord-bot.constants';
 import {
   findExistingEmbedRecord,
@@ -26,6 +27,8 @@ interface ChannelOpts {
   gameId?: number | null;
   recurrenceGroupId?: string | null;
   notificationChannelOverride?: string | null;
+  /** ROK-1352 Tier 0: a live ephemeral channel wins over static bindings. */
+  ephemeralVoiceChannelId?: string | null;
 }
 
 /**
@@ -55,10 +58,13 @@ export class EmbedPosterService {
     notificationChannelOverride?: string | null,
   ): Promise<boolean> {
     if (!this.clientService.isConnected()) return false;
+    // ROK-1352: a live ephemeral channel must win over static bindings in the
+    // embed's "Join Voice" link, or attendees get sent to the wrong channel.
     const opts: ChannelOpts = {
       gameId,
       recurrenceGroupId,
       notificationChannelOverride,
+      ephemeralVoiceChannelId: await getEphemeralChannelId(this.db, eventId),
     };
     const resolved = await this.resolvePostTargets(opts);
     if (!resolved) return false;
@@ -164,6 +170,7 @@ export class EmbedPosterService {
       (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         opts.gameId,
         opts.recurrenceGroupId,
+        opts.ephemeralVoiceChannelId,
       ));
     if (voiceChannelId) enrichedEvent.voiceChannelId = voiceChannelId;
   }

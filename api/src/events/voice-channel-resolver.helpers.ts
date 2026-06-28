@@ -21,6 +21,7 @@ export async function resolveVoiceChannelForEvent(
       (await deps.channelResolver.resolveVoiceChannelForScheduledEvent(
         event.game?.id ?? null,
         event.recurrenceGroupId ?? null,
+        event.ephemeralVoiceChannelId ?? null,
       ));
     if (!channelId) {
       return { channelId: null, channelName: null, guildId: null };

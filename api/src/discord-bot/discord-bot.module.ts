@@ -78,6 +78,17 @@ import { PresenceGameDetectorService } from './services/presence-game-detector.s
 import { VoiceAttendanceService } from './services/voice-attendance.service';
 import { EventAutoExtendService } from './services/event-auto-extend.service';
 import { AdHocReaperService } from './services/ad-hoc-reaper.service';
+import { EphemeralVoiceService } from './services/ephemeral-voice.service';
+import { EphemeralVoiceScheduler } from './services/ephemeral-voice.scheduler';
+import { EphemeralVoiceReaper } from './services/ephemeral-voice.reaper';
+import { EphemeralVoiceIdleCoordinator } from './services/ephemeral-voice-idle.coordinator';
+import {
+  EphemeralVoiceIdleQueueService,
+  EPHEMERAL_VOICE_IDLE_QUEUE,
+} from './queues/ephemeral-voice-idle.queue';
+import { EphemeralVoiceIdleProcessor } from './processors/ephemeral-voice-idle.processor';
+import { EphemeralVoiceSettingsController } from './ephemeral-voice-settings.controller';
+import { DemoTestEphemeralVoiceController } from './demo-test-ephemeral-voice.controller';
 import { PlayingCommand } from './commands/playing.command';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 
@@ -98,6 +109,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),
     BullModule.registerQueue({ name: EVENT_LIFECYCLE_QUEUE }),
+    BullModule.registerQueue({ name: EPHEMERAL_VOICE_IDLE_QUEUE }),
   ],
   controllers: [
     DiscordBotSettingsController,
@@ -106,6 +118,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     DiscordMemberController,
     DiscordUserController,
     ChannelBindingsController,
+    EphemeralVoiceSettingsController,
+    DemoTestEphemeralVoiceController,
   ],
   providers: [
     DiscordBotService,
@@ -143,6 +157,12 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     VoiceAttendanceService,
     EventAutoExtendService,
     AdHocReaperService,
+    EphemeralVoiceService,
+    EphemeralVoiceScheduler,
+    EphemeralVoiceReaper,
+    EphemeralVoiceIdleCoordinator,
+    EphemeralVoiceIdleQueueService,
+    EphemeralVoiceIdleProcessor,
     EventLinkListener,
     SteamLinkListener,
     EmbedPosterService,

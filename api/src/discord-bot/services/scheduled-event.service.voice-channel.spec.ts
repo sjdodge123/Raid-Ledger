@@ -84,7 +84,7 @@ describe('updateScheduledEvent — voice channel resolution (ROK-716)', () => {
 
     expect(
       mocks.channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(1, 'rec-group-1');
+    ).toHaveBeenCalledWith(1, 'rec-group-1', undefined);
     expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
       'discord-se-id-1',
       expect.objectContaining({ channel: 'voice-channel-123' }),
@@ -128,7 +128,7 @@ describe('updateScheduledEvent — voice channel resolution (ROK-716)', () => {
 
     expect(
       mocks.channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(5, 'rec-group-1');
+    ).toHaveBeenCalledWith(5, 'rec-group-1', undefined);
     expect(mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
       'discord-se-id-1',
       expect.objectContaining({ channel: 'voice-channel-123' }),

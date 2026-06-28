@@ -1,4 +1,4 @@
-import { ilike, or, type Column, type SQL } from 'drizzle-orm';
+import { or, sql, type Column, type SQL } from 'drizzle-orm';
 
 /**
  * Strip punctuation from a search query, leaving only alphanumeric
@@ -39,12 +39,27 @@ export function buildWordMatchFilters(column: Column, query: string): SQL[] {
   if (words.length === 0) return [];
   return words.map((word) => {
     const alt = romanArabicAlt(word);
-    if (!alt) return ilike(column, `%${escapeLikePattern(word)}%`);
-    return or(
-      ilike(column, `%${escapeLikePattern(word)}%`),
-      ilike(column, `%${escapeLikePattern(alt)}%`),
-    )!;
+    if (!alt) return normalizedIlike(column, word);
+    return or(normalizedIlike(column, word), normalizedIlike(column, alt))!;
   });
+}
+
+/**
+ * ILIKE `word` against the column with the SAME punctuation-stripping that
+ * `stripSearchPunctuation` applies to the query, so an apostrophe / colon / etc.
+ * in the stored value (e.g. "Baldur's Gate 3") does not defeat the match — the
+ * original bug (ROK-1369) stripped the query side only. ILIKE is case-insensitive
+ * so no `lower()` is needed. `word` is already punctuation-stripped + lowercased
+ * by the caller; `escapeLikePattern` neutralises LIKE metacharacters defensively.
+ *
+ * Tradeoff: wrapping the column in `regexp_replace` means the GIN trigram index
+ * `idx_games_name_trgm` (migration 0095) can't accelerate the scan — acceptable
+ * at community-library scale. The index-preserving fix (a stored normalized-name
+ * column + its own trigram index) needs a migration; tracked in TECH-DEBT-BACKLOG.md.
+ */
+function normalizedIlike(column: Column, word: string): SQL {
+  const pattern = `%${escapeLikePattern(word)}%`;
+  return sql`regexp_replace(${column}, '[^a-zA-Z0-9 ]', '', 'g') ILIKE ${pattern}`;
 }
 
 const ARABIC_TO_ROMAN: Record<string, string> = {

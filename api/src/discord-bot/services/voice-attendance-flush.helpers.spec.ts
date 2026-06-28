@@ -60,10 +60,7 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
       );
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('[voice-pipe]'),
-        'unknown-channel',
-        expect.any(Number),
-        expect.any(Number),
+        expect.stringContaining('channel=unknown-channel'),
       );
       expect(logger.debug).not.toHaveBeenCalled();
     });
@@ -84,12 +81,10 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
         logger,
       );
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.any(String),
-        'different-channel',
-        3, // total bindings
-        2, // voice bindings only (game-voice-monitor + general-lobby)
-      );
+      const warnArg = logger.warn.mock.calls[0][0] as string;
+      expect(warnArg).toContain('channel=different-channel');
+      expect(warnArg).toContain('bindings=3'); // total bindings
+      expect(warnArg).toContain('voiceBindings=2'); // game-voice-monitor + general-lobby
     });
 
     it('returns empty array for unrecognized channel', async () => {
@@ -115,12 +110,10 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
         logger,
       );
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.any(String),
-        'any-channel',
-        0,
-        0,
-      );
+      const warnArg = logger.warn.mock.calls[0][0] as string;
+      expect(warnArg).toContain('channel=any-channel');
+      expect(warnArg).toContain('bindings=0');
+      expect(warnArg).toContain('voiceBindings=0');
     });
 
     it('WARN is not emitted when defaultVoiceChannelId matches', async () => {

@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationShutdown,
+  Optional,
+} from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
@@ -15,35 +21,28 @@ import { PresenceGameDetectorService } from '../services/presence-game-detector.
 import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { EphemeralVoiceIdleCoordinator } from '../services/ephemeral-voice-idle.coordinator';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import {
   DEBOUNCE_MS,
   buildDiscordMember,
   clearTimerMap,
   resolveAllBindings,
-  trackChannelMember,
-  type DiscordMemberInfo,
   type ResolvedBinding,
 } from './voice-state.helpers';
 import {
   handlePresenceChange,
-  trackScheduledEventJoin,
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
 import {
-  handleGameBindingJoin,
-  handleGeneralLobbyJoin,
-} from './voice-state-join.handlers';
+  handleChannelJoin,
+  type JoinHandlerCtx,
+} from './voice-state-join-dispatch.handlers';
 import { recoverFromVoiceChannels } from './voice-state-recovery.handlers';
 import {
-  cancelPendingSpawn,
   handleChannelLeave,
-  scheduleDelayedSpawn,
-  schedulePresenceRecheck,
   type TimerMaps,
 } from './voice-state-leave.handlers';
-
-const SPAWN_DELAY_MS = 15 * 60 * 1000;
 
 /** Listens for Discord voiceStateUpdate and delegates ad-hoc event management. */
 @Injectable()
@@ -77,6 +76,9 @@ export class VoiceStateListener implements OnApplicationShutdown {
     private readonly gameActivityService: GameActivityService,
     private readonly usersService: UsersService,
     private readonly adHocEventsGateway: AdHocEventsGateway,
+    @Optional()
+    @Inject(EphemeralVoiceIdleCoordinator)
+    private readonly ephemeralIdle: EphemeralVoiceIdleCoordinator | null = null,
   ) {}
 
   private get deps(): VoiceHandlerDeps {
@@ -113,7 +115,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
     await recoverFromVoiceChannels(
       this.deps,
       (ch) => this.resolveBinding(ch),
-      (ch, dm, gm) => this.handleChannelJoin(ch, dm, gm),
+      (ch, dm, gm) => handleChannelJoin(this.joinCtx, ch, dm, gm),
     );
     this.startCacheSweep();
   }
@@ -218,10 +220,19 @@ export class VoiceStateListener implements OnApplicationShutdown {
         this.adHocEventService,
         (ch) => this.resolveBinding(ch),
       );
+      // ROK-1352: ephemeral channel may now be empty post-event → idle-delete.
+      await this.ephemeralIdle
+        ?.onChannelLeave(oldCh)
+        .catch((e) => this.logger.warn(`Ephemeral leave hook failed: ${e}`));
     }
     if (newCh) {
       this.userChannelMap.set(userId, newCh);
-      await this.handleChannelJoin(
+      // ROK-1352: rejoin cancels any pending ephemeral idle-delete.
+      await this.ephemeralIdle
+        ?.onChannelJoin(newCh)
+        .catch((e) => this.logger.warn(`Ephemeral join hook failed: ${e}`));
+      await handleChannelJoin(
+        this.joinCtx,
         newCh,
         buildDiscordMember(userId, member),
         member,
@@ -238,70 +249,16 @@ export class VoiceStateListener implements OnApplicationShutdown {
     await handlePresenceChange(this.deps, np.userId, binding, np.member);
   }
 
-  private async handleChannelJoin(
-    chId: string,
-    dm: DiscordMemberInfo,
-    gm?: GuildMember,
-  ): Promise<void> {
-    try {
-      await trackScheduledEventJoin(this.deps, chId, dm);
-    } catch (err) {
-      this.logger.error(`Join tracking failed for ${dm.discordUserId}: ${err}`);
-    }
-    const bindings = await this.resolveAllBindings(chId);
-    if (bindings.length === 0) return;
-    trackChannelMember(this.channelMembers, chId, dm.discordUserId);
-    for (const b of bindings) {
-      await this.dispatchBindingJoin(chId, b, dm, gm);
-    }
-  }
-
-  private async dispatchBindingJoin(
-    chId: string,
-    b: ResolvedBinding,
-    dm: DiscordMemberInfo,
-    gm?: GuildMember,
-  ): Promise<void> {
-    if (b.bindingPurpose === 'general-lobby') {
-      await this.dispatchLobbyJoin(chId, b, dm, gm);
-    } else {
-      await handleGameBindingJoin(this.deps, chId, b, dm, {
-        scheduleSpawn: () =>
-          scheduleDelayedSpawn(this.deps, chId, b, this.timers, SPAWN_DELAY_MS),
-        cancelSpawn: () => cancelPendingSpawn(this.timers, chId),
-      });
-    }
-  }
-
-  private async dispatchLobbyJoin(
-    chId: string,
-    binding: ResolvedBinding,
-    dm: DiscordMemberInfo,
-    gm?: GuildMember,
-  ): Promise<void> {
-    const fns = {
-      scheduleRecheck: () =>
-        schedulePresenceRecheck({
-          timers: this.timers,
-          dm,
-          channelId: chId,
-          guildMember: gm!,
-          userChannelMap: this.userChannelMap,
-          presenceDetector: this.presenceDetector,
-          handleJoinFn: (ch, d, g) => this.handleChannelJoin(ch, d, g),
-          logError: (m) => this.logger.error(m),
-        }),
-      scheduleSpawn: () =>
-        scheduleDelayedSpawn(
-          this.deps,
-          chId,
-          binding,
-          this.timers,
-          SPAWN_DELAY_MS,
-        ),
-      cancelSpawn: () => cancelPendingSpawn(this.timers, chId),
+  private get joinCtx(): JoinHandlerCtx {
+    return {
+      deps: this.deps,
+      timers: this.timers,
+      channelMembers: this.channelMembers,
+      userChannelMap: this.userChannelMap,
+      presenceDetector: this.presenceDetector,
+      logger: this.logger,
+      resolveAllBindings: (ch) => this.resolveAllBindings(ch),
     };
-    await handleGeneralLobbyJoin(this.deps, chId, binding, dm, gm, fns);
   }
 
   private async resolveBinding(ch: string): Promise<ResolvedBinding | null> {

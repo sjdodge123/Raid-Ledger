@@ -68,6 +68,8 @@ Checks to run: Full CI (build all, typecheck all, lint all, test all, Playwright
 - If a `.spec.ts` file changed, always run that workspace's tests even if only tests changed
 - Never skip checks for files you're unsure about
 
+**Workspace scoping is applied automatically.** Step 7 runs the gate with `--scope=auto`, so `validate-ci.sh` narrows build/typecheck/lint to the single changed workspace (+contract) for a single-workspace diff and falls back to all workspaces for mixed/contract/root-config diffs — the same logic as this table. You don't translate the table into flags by hand; `--scope=auto` does it (and GitHub CI still runs the full path-filtered suite regardless).
+
 ---
 
 ## Step 2: Check for Uncommitted Changes
@@ -175,14 +177,14 @@ if [ "$SKIP_VALIDATE_CI" = "0" ]; then
   # zero CPU/memory pressure on the laptop.
   if [ -x "./rl-infra/cli/rl" ] && ssh -o BatchMode=yes -o ConnectTimeout=3 \
        "${RL_PROXMOX_HOST:-rl-infra}" 'true' 2>/dev/null; then
-    RL_TARGET=remote ./rl-infra/cli/rl validate-ci "$GATE" \
+    RL_TARGET=remote ./rl-infra/cli/rl validate-ci "$GATE" --scope=auto \
       > /tmp/vci-$(git rev-parse --short HEAD).log 2>&1 \
       && touch "$MARKER"
   else
     # Fallback: fleet unreachable (laptop offline, slot full, infra down).
     # Run locally so the push isn't blocked. Note in Step 12 report.
     echo "[push] fleet unreachable — falling back to local validate-ci.sh"
-    ./scripts/validate-ci.sh "$GATE" && touch "$MARKER"
+    ./scripts/validate-ci.sh "$GATE" --scope=auto && touch "$MARKER"
   fi
 fi
 ```

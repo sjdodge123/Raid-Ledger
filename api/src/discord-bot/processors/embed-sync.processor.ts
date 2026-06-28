@@ -236,7 +236,11 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       );
       await this.db
         .update(schema.discordEventMessages)
-        .set({ bumpMessageId: null, bumpChannelId: null, updatedAt: new Date() })
+        .set({
+          bumpMessageId: null,
+          bumpChannelId: null,
+          updatedAt: new Date(),
+        })
         .where(eq(schema.discordEventMessages.id, record.id));
       this.logger.log(`Deleted recruitment bump message for event ${eventId}`);
     } catch (err) {

@@ -11,6 +11,7 @@ import {
   toVoiceSessionDto,
   buildAttendanceSummary,
 } from './voice-attendance.helpers';
+import { findActiveEventsByEphemeralChannel } from './voice-attendance-ephemeral.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -210,6 +211,14 @@ export async function findActiveEventsForChannel(
   if (defaultVoiceChannelId && channelId === defaultVoiceChannelId) {
     return resolveDefaultVoiceEvents(db, channelId, now, logger);
   }
+  // ROK-1352: ephemeral channels are neither a binding nor the default — match
+  // by events.ephemeral_voice_channel_id before the unrecognized fallthrough.
+  const ephemeral = await findActiveEventsByEphemeralChannel(
+    db,
+    channelId,
+    now,
+  );
+  if (ephemeral.length > 0) return ephemeral;
   logUnrecognizedChannel(channelId, bindings, voiceBindingPurposes, logger);
   return [];
 }
@@ -281,11 +290,10 @@ function logUnrecognizedChannel(
   const voiceBindingCount = bindings.filter((b) =>
     voiceBindingPurposes.includes(b.bindingPurpose),
   ).length;
+  // NestJS Logger does not printf-substitute %s/%d — interpolate directly so the
+  // channel id + counts land on one line instead of four orphan WARN lines.
   logger.warn(
-    '[voice-pipe] findActive: unrecognized channel=%s, bindings=%d, voiceBindings=%d',
-    channelId,
-    bindings.length,
-    voiceBindingCount,
+    `[voice-pipe] findActive: unrecognized channel=${channelId}, bindings=${bindings.length}, voiceBindings=${voiceBindingCount}`,
   );
 }
 

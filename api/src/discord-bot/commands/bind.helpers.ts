@@ -244,6 +244,24 @@ export async function applyGameChange(
   return { change: `Game reassigned to **${gameMatch.name}**` };
 }
 
+/**
+ * Whether a `/bind` should auto-derive the series' representative game.
+ *
+ * Voice binds must NOT derive a game: a variety series (e.g. gamernight, whose
+ * game changes each occurrence) would get locked to one arbitrary game
+ * (`findSeriesGame` is innerJoin + LIMIT 1, no ORDER BY), flipping the channel
+ * to game-voice-monitor and mislabeling every quick-play (ROK-1372). Leaving the
+ * game null makes a variety voice bind a general-lobby (presence auto-detect).
+ * Text/announce binds DO derive it (announcements route by game). An explicit
+ * `game:` option always wins and skips derivation.
+ */
+export function shouldDeriveSeriesGame(
+  bindingChannelType: 'text' | 'voice',
+  hasExplicitGame: boolean,
+): boolean {
+  return !hasExplicitGame && bindingChannelType !== 'voice';
+}
+
 /** Derives the game from the first event in a series (if any). */
 export async function findSeriesGame(
   db: PostgresJsDatabase<typeof schemaType>,
