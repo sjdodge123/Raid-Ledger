@@ -41,8 +41,6 @@ import {
   setDiscordBotTimezone as _setDiscordBotTimezone,
   getDefaultTimezone as _getDefaultTimezone,
   setDefaultTimezone as _setDefaultTimezone,
-  getDiscordBotDefaultVoiceChannel as _getDiscordBotDefaultVoiceChannel,
-  setDiscordBotDefaultVoiceChannel as _setDiscordBotDefaultVoiceChannel,
 } from './settings-discord.helpers';
 
 import { SETTINGS_EVENTS } from './settings.types';
@@ -337,12 +335,7 @@ export class SettingsService
   setDefaultTimezone = (tz: string) => _setDefaultTimezone(this, tz);
   /** Get the client URL with fallback chain. */
   getClientUrl = () => _getClientUrl(this);
-  /** Get the default voice channel ID for the Discord bot. */
-  getDiscordBotDefaultVoiceChannel = () =>
-    _getDiscordBotDefaultVoiceChannel(this);
-  /** Set the default voice channel ID for the Discord bot. */
-  setDiscordBotDefaultVoiceChannel = (id: string) =>
-    _setDiscordBotDefaultVoiceChannel(this, id);
+  // Discord default/ephemeral voice delegations live on EphemeralVoiceSettingsBase.
 
   // ─── ROK-1352: Ephemeral voice channels ──────────────────────
   // Delegations live on EphemeralVoiceSettingsBase (this class extends it) to

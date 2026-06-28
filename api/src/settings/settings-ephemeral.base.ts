@@ -9,19 +9,28 @@ import {
   setEphemeralVoiceCreateBufferMinutes as _setEphemeralVoiceCreateBufferMinutes,
   getEphemeralVoiceIdleMinutes as _getEphemeralVoiceIdleMinutes,
   setEphemeralVoiceIdleMinutes as _setEphemeralVoiceIdleMinutes,
+  getDiscordBotDefaultVoiceChannel as _getDiscordBotDefaultVoiceChannel,
+  setDiscordBotDefaultVoiceChannel as _setDiscordBotDefaultVoiceChannel,
 } from './settings-discord.helpers';
 import type { SettingsCore } from './settings-bot.helpers';
 
 /**
- * ROK-1352: ephemeral-voice settings delegations, extracted from SettingsService
- * so that file stays under the STRICT 300-line cap. SettingsService extends this;
- * at runtime `this` is the concrete service, which satisfies SettingsCore (get/set),
- * the shape the underlying helpers require.
+ * Discord voice-related settings delegations (default voice channel + ROK-1352
+ * ephemeral voice), extracted from SettingsService so that file stays under the
+ * STRICT 300-line cap. SettingsService extends this; at runtime `this` is the
+ * concrete service, which satisfies SettingsCore (get/set), the shape the
+ * underlying helpers require.
  */
 export abstract class EphemeralVoiceSettingsBase {
   private get core(): SettingsCore {
     return this as unknown as SettingsCore;
   }
+
+  /** Default voice channel for events (null = none configured). */
+  getDiscordBotDefaultVoiceChannel = () =>
+    _getDiscordBotDefaultVoiceChannel(this.core);
+  setDiscordBotDefaultVoiceChannel = (id: string) =>
+    _setDiscordBotDefaultVoiceChannel(this.core, id);
 
   /** Master toggle for ephemeral voice channels. */
   getEphemeralVoiceEnabled = () => _getEphemeralVoiceEnabled(this.core);

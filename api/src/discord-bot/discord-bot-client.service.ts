@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { isPerfEnabled, perfLog } from '../common/perf-logger';
 import {
-  ChannelType,
   type Client,
   type Guild,
   type EmbedBuilder,
@@ -241,16 +240,6 @@ export class DiscordBotClientService {
     if (!guild) return [];
     return guild.channels.cache
       .filter((ch) => ch.isVoiceBased() && !ch.isDMBased())
-      .map((ch) => ({ id: ch.id, name: ch.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  /** ROK-1352: List category channels (parents for ephemeral voice channels). */
-  getCategories(): { id: string; name: string }[] {
-    const guild = this.getGuild();
-    if (!guild) return [];
-    return guild.channels.cache
-      .filter((ch) => ch.type === ChannelType.GuildCategory)
       .map((ch) => ({ id: ch.id, name: ch.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }

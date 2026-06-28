@@ -11,6 +11,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { DiscordBotClientService } from './discord-bot-client.service';
+import { listGuildCategories } from './discord-bot-client.guild.helpers';
 import { SettingsService } from '../settings/settings.service';
 import {
   SetEphemeralVoiceConfigSchema,
@@ -66,7 +67,7 @@ export class EphemeralVoiceSettingsController {
   /** Guild categories for the parent-category picker. */
   @Get('categories')
   getCategories(): DiscordCategorySummaryDto[] {
-    return this.clientService.getCategories();
+    return listGuildCategories(this.clientService.getGuild());
   }
 
   /** Apply only the fields present in a partial update. */
