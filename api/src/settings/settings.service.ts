@@ -43,19 +43,10 @@ import {
   setDefaultTimezone as _setDefaultTimezone,
   getDiscordBotDefaultVoiceChannel as _getDiscordBotDefaultVoiceChannel,
   setDiscordBotDefaultVoiceChannel as _setDiscordBotDefaultVoiceChannel,
-  getEphemeralVoiceEnabled as _getEphemeralVoiceEnabled,
-  setEphemeralVoiceEnabled as _setEphemeralVoiceEnabled,
-  getEphemeralVoiceForced as _getEphemeralVoiceForced,
-  setEphemeralVoiceForced as _setEphemeralVoiceForced,
-  getEphemeralVoiceCategoryId as _getEphemeralVoiceCategoryId,
-  setEphemeralVoiceCategoryId as _setEphemeralVoiceCategoryId,
-  getEphemeralVoiceCreateBufferMinutes as _getEphemeralVoiceCreateBufferMinutes,
-  setEphemeralVoiceCreateBufferMinutes as _setEphemeralVoiceCreateBufferMinutes,
-  getEphemeralVoiceIdleMinutes as _getEphemeralVoiceIdleMinutes,
-  setEphemeralVoiceIdleMinutes as _setEphemeralVoiceIdleMinutes,
 } from './settings-discord.helpers';
 
 import { SETTINGS_EVENTS } from './settings.types';
+import { EphemeralVoiceSettingsBase } from './settings-ephemeral.base';
 import type {
   DiscordOAuthConfig,
   IgdbConfig,
@@ -69,7 +60,10 @@ import { resolveCommonGroundWeights } from './common-ground-weights.helpers';
 const CACHE_TTL_MS = 30 * 60_000;
 
 @Injectable()
-export class SettingsService implements OnModuleInit {
+export class SettingsService
+  extends EphemeralVoiceSettingsBase
+  implements OnModuleInit
+{
   private readonly logger = new Logger(SettingsService.name);
   private cache = new Map<string, string>();
   private cacheLoadedAt = 0;
@@ -79,7 +73,9 @@ export class SettingsService implements OnModuleInit {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private eventEmitter: EventEmitter2,
-  ) {}
+  ) {
+    super();
+  }
 
   // STARTUP-CRITICAL: Settings cache must be available for all downstream services. @see bestEffortInit
   async onModuleInit(): Promise<void> {
@@ -349,32 +345,8 @@ export class SettingsService implements OnModuleInit {
     _setDiscordBotDefaultVoiceChannel(this, id);
 
   // ─── ROK-1352: Ephemeral voice channels ──────────────────────
-  /** Master toggle for ephemeral voice channels. */
-  getEphemeralVoiceEnabled = () => _getEphemeralVoiceEnabled(this);
-  /** Set the ephemeral-voice master toggle. */
-  setEphemeralVoiceEnabled = (enabled: boolean) =>
-    _setEphemeralVoiceEnabled(this, enabled);
-  /** Force-ephemeral: always create a channel for every managed event. */
-  getEphemeralVoiceForced = () => _getEphemeralVoiceForced(this);
-  /** Set the force-ephemeral toggle. */
-  setEphemeralVoiceForced = (forced: boolean) =>
-    _setEphemeralVoiceForced(this, forced);
-  /** Parent category ID for ephemeral channels (null = guild root). */
-  getEphemeralVoiceCategoryId = () => _getEphemeralVoiceCategoryId(this);
-  /** Set the ephemeral-voice parent category. */
-  setEphemeralVoiceCategoryId = (id: string | null) =>
-    _setEphemeralVoiceCategoryId(this, id);
-  /** Minutes before start to create the channel (default 30). */
-  getEphemeralVoiceCreateBufferMinutes = () =>
-    _getEphemeralVoiceCreateBufferMinutes(this);
-  /** Set the create-buffer minutes. */
-  setEphemeralVoiceCreateBufferMinutes = (m: number) =>
-    _setEphemeralVoiceCreateBufferMinutes(this, m);
-  /** Minutes empty post-event before delete (default 30). */
-  getEphemeralVoiceIdleMinutes = () => _getEphemeralVoiceIdleMinutes(this);
-  /** Set the idle-window minutes. */
-  setEphemeralVoiceIdleMinutes = (m: number) =>
-    _setEphemeralVoiceIdleMinutes(this, m);
+  // Delegations live on EphemeralVoiceSettingsBase (this class extends it) to
+  // keep settings.service.ts under the 300-line cap.
 
   // ─── Ad-hoc & Auto-extend ────────────────────────────────────
 

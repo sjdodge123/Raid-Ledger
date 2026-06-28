@@ -2,6 +2,23 @@ import { eq, and, isNull, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
+/**
+ * Fetch an event's live ephemeral voice channel id (null when none). Shared by
+ * the voice-link resolution paths that only have an eventId (embed-poster,
+ * event-listener embed update) so they resolve Tier-0 consistently. ROK-1352.
+ */
+export async function getEphemeralChannelId(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return row?.ephemeralVoiceChannelId ?? null;
+}
+
 /** Event fields the ephemeral-voice lifecycle needs (ROK-1352). */
 export interface EphemeralEventRow {
   id: number;

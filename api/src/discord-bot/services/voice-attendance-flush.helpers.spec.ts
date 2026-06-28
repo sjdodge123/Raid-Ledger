@@ -81,7 +81,7 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
         logger,
       );
 
-      const warnArg = (logger.warn as jest.Mock).mock.calls[0][0] as string;
+      const warnArg = logger.warn.mock.calls[0][0] as string;
       expect(warnArg).toContain('channel=different-channel');
       expect(warnArg).toContain('bindings=3'); // total bindings
       expect(warnArg).toContain('voiceBindings=2'); // game-voice-monitor + general-lobby
@@ -110,7 +110,7 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
         logger,
       );
 
-      const warnArg = (logger.warn as jest.Mock).mock.calls[0][0] as string;
+      const warnArg = logger.warn.mock.calls[0][0] as string;
       expect(warnArg).toContain('channel=any-channel');
       expect(warnArg).toContain('bindings=0');
       expect(warnArg).toContain('voiceBindings=0');

@@ -86,8 +86,13 @@ export class ChannelResolverService {
   async resolveVoiceChannelForEvent(
     gameId?: number | null,
     recurrenceGroupId?: string | null,
+    ephemeralChannelId?: string | null,
   ): Promise<string | null> {
-    return this.resolveVoiceChannelForScheduledEvent(gameId, recurrenceGroupId);
+    return this.resolveVoiceChannelForScheduledEvent(
+      gameId,
+      recurrenceGroupId,
+      ephemeralChannelId,
+    );
   }
 
   /**

@@ -19,6 +19,8 @@ function describeSystemController() {
       isBlizzardConfigured: jest.fn().mockResolvedValue(false),
       isSteamConfigured: jest.fn().mockResolvedValue(false),
       getDemoMode: jest.fn().mockResolvedValue(false),
+      getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+      getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
       getBranding: jest.fn().mockResolvedValue({
         communityName: null,
         communityLogoPath: null,
