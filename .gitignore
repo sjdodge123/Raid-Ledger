@@ -52,6 +52,12 @@ scripts/*
 !scripts/test-plan-comments.sh
 !scripts/recover-stuck-migration.sh
 !scripts/test/
+# ROK-1286: keep the Playwright auth-cache DIRECTORY in the synced tree (so the
+# fleet Mutagen replica never deletes it mid-run) while still ignoring the JWT
+# token files written into it at runtime.
+!scripts/.auth/
+scripts/.auth/*
+!scripts/.auth/.gitkeep
 !/api/scripts/
 implementation_plan.md
 walkthrough.md

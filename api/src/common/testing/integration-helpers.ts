@@ -292,6 +292,15 @@ export async function waitFor(
 /**
  * Login as the seeded admin user and return a JWT access token.
  * Convenience helper for tests that need authenticated requests.
+ *
+ * ROK-1321: a non-200 here on sustained full-suite re-runs is the signature
+ * of a STALE TestApp handle — a sibling/global afterAll closed the server, or
+ * `seed` predates a mid-suite re-seed. In practice that is the residual socket
+ * carrier (ROK-1268) surfacing on the first bare request after a truncate, NOT
+ * a real auth break. We do NOT retry/self-heal here (that would mask the carrier
+ * on an unreproduced hypothesis — see TESTING.md flake-investigation protocol);
+ * instead the error names the lifecycle cause so the next investigator looks at
+ * the socket/teardown layer rather than chasing a phantom auth bug.
  */
 export async function loginAsAdmin(
   request: TestAgent<supertest.Test>,
@@ -303,7 +312,12 @@ export async function loginAsAdmin(
 
   if (res.status !== 200) {
     throw new Error(
-      `loginAsAdmin failed: expected 200 but got ${res.status} — ${JSON.stringify(res.body)}`,
+      `loginAsAdmin failed: expected 200 but got ${res.status} — ` +
+        `${JSON.stringify(res.body)}. A non-200 from /auth/local mid-suite ` +
+        `usually means the supertest agent/app handle was closed or re-seeded ` +
+        `(stale TestApp reference / residual socket carrier ROK-1268) — confirm ` +
+        `no nested describe calls closeTestApp(); rely on the global afterAll ` +
+        `in integration-setup.ts.`,
     );
   }
 

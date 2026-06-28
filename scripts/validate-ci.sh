@@ -528,13 +528,15 @@ run_integration_tests() {
       # and ts-jest mis-resolves --ignoreDeprecations to an empty value
       # (TS5103). Discovered ROK-1331 Probe 1 attempt 6 (2026-05-20).
       #
-      # NODE_OPTIONS=--max-old-space-size=3072 gives V8 a 3 GB heap ceiling
+      # NODE_OPTIONS=--max-old-space-size=4096 gives V8 a 4 GB heap ceiling
       # per shard (vs 1.4 GB default) which is ample headroom for ~25 suites
-      # per shard.
+      # per shard. Raised 3072 -> 4096 (ROK-1268): 3 GB was tripping the OOM
+      # carrier under sustained re-runs while still leaving margin on the
+      # 7 GB fleet/CI runners (one shard process runs at a time here).
       # ROK-1331 M11 — JEST_SHARD_ID + JEST_TOTAL_SHARDS feed the perf
        # reporter so jest.suite.end events carry shard labels.
        # --logHeapUsage feeds the reporter's heap_used_mb sample.
-      if (cd api && NODE_OPTIONS="--max-old-space-size=3072" \
+      if (cd api && NODE_OPTIONS="--max-old-space-size=4096" \
          JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${shards}" \
          npx jest --config ./jest.integration.config.js \
                   --runInBand --verbose --logHeapUsage --shard="${i}/${shards}"); then

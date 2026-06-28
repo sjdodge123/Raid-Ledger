@@ -117,6 +117,36 @@ async function addGameInterest(userId: number, gameId: number) {
   });
 }
 
+/**
+ * Poll the notifications table until a row with the given payload subtype
+ * lands for the user, or the deadline elapses. The poll DMs from
+ * POST /scheduling-polls are dispatched fire-and-forget (the controller
+ * `void`s notifyInterestedUsers), so the row appears asynchronously after
+ * the response returns. Returns the matching row, or `undefined` on timeout
+ * (preserving `.find()` semantics for the existing `toBeDefined()` checks).
+ * Replaces fixed `setTimeout` sleeps with a deterministic wait.
+ */
+async function waitForNotification(
+  userId: number,
+  subtype: string,
+  timeoutMs = 5000,
+): Promise<typeof schema.notifications.$inferSelect | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const rows = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, userId));
+    const match = rows.find((n) => {
+      const payload = n.payload as Record<string, unknown> | null;
+      return payload?.subtype === subtype;
+    });
+    if (match) return match;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  return undefined;
+}
+
 // ── ROK-977 AC1: POST with valid gameId creates lineup + match ───────
 
 function describeCreatePoll() {
@@ -638,19 +668,11 @@ function describeRosterNotifications() {
       linkedEventId: event.id,
     });
 
-    // Allow fire-and-forget notifications to complete
-    await new Promise((r) => setTimeout(r, 500));
-
-    // Check notification for roster member — should have reschedule subtype
-    const notifications = await testApp.db
-      .select()
-      .from(schema.notifications)
-      .where(eq(schema.notifications.userId, rosterMember.userId));
-
-    const rescheduleNotif = notifications.find((n) => {
-      const payload = n.payload as Record<string, unknown> | null;
-      return payload?.subtype === 'event_rescheduling';
-    });
+    // Poll until the fire-and-forget reschedule notification row lands.
+    const rescheduleNotif = await waitForNotification(
+      rosterMember.userId,
+      'event_rescheduling',
+    );
 
     expect(rescheduleNotif).toBeDefined();
     expect(rescheduleNotif!.title).toMatch(/reschedul/i);
@@ -677,10 +699,14 @@ function describeInterestOnlyNotifications() {
       linkedEventId: event.id,
     });
 
-    // Allow fire-and-forget notifications to complete
-    await new Promise((r) => setTimeout(r, 500));
+    // Poll until the generic scheduling-poll notification row lands, then
+    // re-read all rows for the user to run the same shape assertions.
+    const generic = await waitForNotification(
+      interestUser.userId,
+      'standalone_scheduling_poll',
+    );
+    expect(generic).toBeDefined();
 
-    // Check notification for interest-only user — should have generic subtype
     const userNotifs = await testApp.db
       .select()
       .from(schema.notifications)
@@ -724,8 +750,15 @@ function describeNotificationDedup() {
       linkedEventId: event.id,
     });
 
-    // Allow fire-and-forget notifications to complete
-    await new Promise((r) => setTimeout(r, 500));
+    // Poll until the reschedule notification row lands (the dedup logic sends
+    // a dual roster+interest user ONLY this row), then re-read all rows to
+    // assert the exact count. Mirrors the established poll-then-exact-count
+    // idiom (lineup-deadline-transition-notify.integration.spec.ts).
+    const reschedule = await waitForNotification(
+      dualUser.userId,
+      'event_rescheduling',
+    );
+    expect(reschedule).toBeDefined();
 
     // Check notifications for dual user — should have exactly 1
     const notifications = await testApp.db
