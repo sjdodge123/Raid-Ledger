@@ -234,6 +234,20 @@ test.describe('Admin Discord — Features', () => {
         await expect(page.getByRole('heading', { name: 'General Lobbies' })).toBeVisible();
     });
 
+    // ROK-1352: the ephemeral-voice admin section (master toggle; force toggle +
+    // config fields appear once enabled).
+    test('renders the ephemeral voice section + master toggle', async ({ page }) => {
+        await pollDiscordBotStatus();
+        await page.goto('/admin/settings/discord/features');
+        await expect(page.getByRole('heading', { name: 'Discord Features' })).toBeVisible({ timeout: 15_000 });
+        await expect(
+            page.getByRole('heading', { name: 'Ephemeral Voice Channels' }),
+        ).toBeVisible();
+        await expect(
+            page.getByLabel('Enable ephemeral voice channels'),
+        ).toBeVisible();
+    });
+
     test('loads without error boundary', async ({ page }) => {
         await page.goto('/admin/settings/discord/features');
         await expect(page.getByRole('heading', { name: 'Discord Features' })).toBeVisible({ timeout: 15_000 });
