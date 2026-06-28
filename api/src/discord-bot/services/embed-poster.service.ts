@@ -26,6 +26,8 @@ interface ChannelOpts {
   gameId?: number | null;
   recurrenceGroupId?: string | null;
   notificationChannelOverride?: string | null;
+  /** ROK-1352 Tier 0: a live ephemeral channel wins over static bindings. */
+  ephemeralVoiceChannelId?: string | null;
 }
 
 /**
@@ -55,10 +57,20 @@ export class EmbedPosterService {
     notificationChannelOverride?: string | null,
   ): Promise<boolean> {
     if (!this.clientService.isConnected()) return false;
+    // ROK-1352: a live ephemeral channel must win over static bindings in the
+    // embed's "Join Voice" link, or attendees get sent to the wrong channel.
+    const [evRow] = await this.db
+      .select({
+        ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
     const opts: ChannelOpts = {
       gameId,
       recurrenceGroupId,
       notificationChannelOverride,
+      ephemeralVoiceChannelId: evRow?.ephemeralVoiceChannelId ?? null,
     };
     const resolved = await this.resolvePostTargets(opts);
     if (!resolved) return false;
@@ -164,6 +176,7 @@ export class EmbedPosterService {
       (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         opts.gameId,
         opts.recurrenceGroupId,
+        opts.ephemeralVoiceChannelId,
       ));
     if (voiceChannelId) enrichedEvent.voiceChannelId = voiceChannelId;
   }

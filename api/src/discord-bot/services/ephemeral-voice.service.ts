@@ -13,7 +13,7 @@ import { shouldCreateEphemeralChannel } from './ephemeral-voice.gate.helpers';
 import {
   createVoiceChannel,
   deleteVoiceChannel,
-  getChannelMemberCount,
+  getChannelMemberCountFresh,
 } from './ephemeral-voice.discord-ops';
 import {
   type EphemeralEventRow,
@@ -102,7 +102,7 @@ export class EphemeralVoiceService {
     const guild = this.requireGuild();
     if (!guild) return;
     try {
-      if (getChannelMemberCount(guild, channelId) > 0) {
+      if ((await getChannelMemberCountFresh(guild, channelId)) > 0) {
         this.logger.debug(
           `Skip reap: ephemeral channel ${channelId} (event ${ev.id}) occupied`,
         );

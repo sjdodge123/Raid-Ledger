@@ -122,24 +122,27 @@ export async function buildRepointData(
   db: PostgresJsDatabase<typeof schema>,
   ev: EphemeralEventRow,
 ): Promise<RepointEventData> {
-  let game: { name: string } | null = null;
-  if (ev.gameId !== null) {
-    const [g] = await db
-      .select({ name: schema.games.name })
-      .from(schema.games)
-      .where(eq(schema.games.id, ev.gameId))
-      .limit(1);
-    if (g) game = { name: g.name };
-  }
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.eventSignups)
-    .where(eq(schema.eventSignups.eventId, ev.id));
+  // The game-name lookup and the signup count are independent — run concurrently
+  // (this runs per candidate in the scheduler/reaper scan loops). ROK-1352.
+  const [gameRows, countRows] = await Promise.all([
+    ev.gameId !== null
+      ? db
+          .select({ name: schema.games.name })
+          .from(schema.games)
+          .where(eq(schema.games.id, ev.gameId))
+          .limit(1)
+      : Promise.resolve([] as { name: string }[]),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, ev.id)),
+  ]);
+  const game = gameRows[0] ? { name: gameRows[0].name } : null;
   return {
     title: ev.title,
     startTime: ev.startTime,
     endTime: ev.endTime,
-    signupCount: count ?? 0,
+    signupCount: countRows[0]?.count ?? 0,
     game,
   };
 }

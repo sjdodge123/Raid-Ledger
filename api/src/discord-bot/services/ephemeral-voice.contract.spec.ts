@@ -23,6 +23,7 @@ describe('EphemeralVoiceConfigSchema (ROK-1352)', () => {
   function baseConfig() {
     return {
       enabled: true,
+      forced: false,
       categoryId: '123456789012345678',
       createBufferMinutes: 45,
       idleMinutes: 20,
@@ -50,6 +51,14 @@ describe('EphemeralVoiceConfigSchema (ROK-1352)', () => {
     });
     expect(parsed.createBufferMinutes).toBe(30);
     expect(parsed.idleMinutes).toBe(30);
+  });
+
+  it('defaults forced to false when omitted (ROK-1352 force-ephemeral)', () => {
+    const parsed = EphemeralVoiceConfigSchema.parse({
+      enabled: true,
+      categoryId: null,
+    });
+    expect(parsed.forced).toBe(false);
   });
 
   it('rejects a negative createBufferMinutes', () => {

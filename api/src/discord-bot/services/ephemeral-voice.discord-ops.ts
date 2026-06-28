@@ -47,3 +47,24 @@ export function getChannelMemberCount(guild: Guild, channelId: string): number {
   if (!channel || !channel.isVoiceBased()) return 0;
   return channel.members.size;
 }
+
+/**
+ * Like getChannelMemberCount but force-fetches the channel when it is not in
+ * cache, so a cold cache (e.g. right after a reconnect) cannot report an
+ * occupied channel as empty and trigger a wrongful delete. Used at the actual
+ * delete gate (destroyForEvent). Returns 0 only when the channel is truly gone.
+ * The residual voice-state hydration window is bounded by the caller's
+ * isConnected() guard. ROK-1352 (review finding #3).
+ */
+export async function getChannelMemberCountFresh(
+  guild: Guild,
+  channelId: string,
+): Promise<number> {
+  let channel = guild.channels.cache.get(channelId);
+  if (!channel) {
+    channel =
+      (await guild.channels.fetch(channelId).catch(() => null)) ?? undefined;
+  }
+  if (!channel || !channel.isVoiceBased()) return 0;
+  return channel.members.size;
+}

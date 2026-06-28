@@ -31,6 +31,9 @@ export class EphemeralVoiceIdleCoordinator {
   /** Member left `channelId`: if it's an ephemeral channel now empty + past end,
    *  schedule an idle-delete after `idleMinutes`. */
   async onChannelLeave(channelId: string): Promise<void> {
+    // Hot path: skip the DB lookup entirely when the feature is off (the default).
+    // getEphemeralVoiceEnabled is a cached in-memory settings read, not a query.
+    if (!(await this.settingsService.getEphemeralVoiceEnabled())) return;
     const ev = await findEventByEphemeralChannel(this.db, channelId);
     if (!ev || !this.isPastEnd(ev)) return;
     if (this.channelStillOccupied(channelId)) return;
@@ -43,6 +46,7 @@ export class EphemeralVoiceIdleCoordinator {
 
   /** Member joined `channelId`: cancel any pending idle-delete for it. */
   async onChannelJoin(channelId: string): Promise<void> {
+    if (!(await this.settingsService.getEphemeralVoiceEnabled())) return;
     const ev = await findEventByEphemeralChannel(this.db, channelId);
     if (ev) await this.idleQueue.cancel(ev.id);
   }

@@ -37,7 +37,9 @@ async function build(memberCount: number) {
       { provide: VoiceAttendanceService, useValue: voiceAttendance },
     ],
   }).compile();
-  jest.spyOn(discordOps, 'getChannelMemberCount').mockReturnValue(memberCount);
+  jest
+    .spyOn(discordOps, 'getChannelMemberCountFresh')
+    .mockResolvedValue(memberCount);
   jest.spyOn(discordOps, 'deleteVoiceChannel').mockResolvedValue(true);
   jest.spyOn(dbHelpers, 'buildRepointData').mockResolvedValue({
     title: 't',
