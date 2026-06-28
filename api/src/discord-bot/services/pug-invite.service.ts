@@ -152,6 +152,7 @@ export class PugInviteService {
       await this.channelResolver.resolveVoiceChannelForEvent(
         gameId,
         event.recurrenceGroupId,
+        event.ephemeralVoiceChannelId,
       );
     const { embed, row } = buildMemberInviteEmbed(
       eventId,
@@ -253,6 +254,7 @@ export class PugInviteService {
       await this.channelResolver.resolveVoiceChannelForEvent(
         event.gameId ?? null,
         event.recurrenceGroupId,
+        event.ephemeralVoiceChannelId,
       );
     const { embed, row } = buildPugInviteEmbed(
       pugSlotId,

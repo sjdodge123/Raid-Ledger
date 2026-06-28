@@ -2,7 +2,7 @@
  * Guild member helpers for DiscordBotClientService.
  * Extracted from discord-bot-client.service.ts for file size compliance (ROK-719).
  */
-import type { Guild } from 'discord.js';
+import { ChannelType, type Guild } from 'discord.js';
 import { isPerfEnabled, perfLog } from '../common/perf-logger';
 
 /** Search guild members by username query. */
@@ -79,4 +79,15 @@ export async function listAllGuildMemberIds(
   if (!guild) return null;
   const members = await guild.members.fetch();
   return new Set(members.map((m) => m.user.id));
+}
+
+/** ROK-1352: List category channels (parents for ephemeral voice channels). */
+export function listGuildCategories(
+  guild: Guild | null,
+): { id: string; name: string }[] {
+  if (!guild) return [];
+  return guild.channels.cache
+    .filter((ch) => ch.type === ChannelType.GuildCategory)
+    .map((ch) => ({ id: ch.id, name: ch.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

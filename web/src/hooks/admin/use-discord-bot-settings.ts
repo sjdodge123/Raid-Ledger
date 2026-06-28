@@ -9,6 +9,9 @@ import type {
     DiscordBotStatusResponse,
     DiscordBotConfigDto,
     DiscordBotTestResult,
+    EphemeralVoiceConfig,
+    SetEphemeralVoiceConfigDto,
+    DiscordCategorySummaryDto,
 } from '@raid-ledger/contract';
 import type {
     DiscordBotPermissionsResult,
@@ -191,6 +194,44 @@ function useBotAdHocEvents(botConnected: boolean) {
     return { adHocEventsStatus, updateAdHocEvents };
 }
 
+const EPHEMERAL_KEY = [...BOT_KEY, 'ephemeral-voice'] as const;
+
+/** ROK-1352: ephemeral-voice config + categories query/mutation. */
+function useBotEphemeralVoice(botConnected: boolean) {
+    const queryClient = useQueryClient();
+
+    const ephemeralVoiceConfig = useQuery<EphemeralVoiceConfig>({
+        queryKey: [...EPHEMERAL_KEY],
+        queryFn: () => adminFetch('/admin/settings/discord-bot/ephemeral-voice'),
+        enabled: !!getAuthToken() && botConnected,
+    });
+
+    const ephemeralVoiceCategories = useQuery<DiscordCategorySummaryDto[]>({
+        queryKey: [...EPHEMERAL_KEY, 'categories'],
+        queryFn: () =>
+            adminFetch('/admin/settings/discord-bot/ephemeral-voice/categories'),
+        enabled:
+            !!getAuthToken() &&
+            botConnected &&
+            (ephemeralVoiceConfig.data?.enabled ?? false),
+    });
+
+    const updateEphemeralVoice = useMutation<
+        ApiResponse,
+        Error,
+        SetEphemeralVoiceConfigDto
+    >({
+        mutationFn: (data) =>
+            adminFetch('/admin/settings/discord-bot/ephemeral-voice', {
+                method: 'PUT', body: JSON.stringify(data),
+            }, 'Failed to update ephemeral voice settings'),
+        onSuccess: () =>
+            queryClient.invalidateQueries({ queryKey: [...EPHEMERAL_KEY] }),
+    });
+
+    return { ephemeralVoiceConfig, ephemeralVoiceCategories, updateEphemeralVoice };
+}
+
 /** Discord bot settings queries and mutations */
 export function useDiscordBotSettings() {
     const botConfigSavedAtRef = useRef<number>(0);
@@ -205,5 +246,6 @@ export function useDiscordBotSettings() {
         ...useBotVoiceChannels(botConnected),
         ...useBotLineupChannel(botConnected),
         ...useBotAdHocEvents(botConnected),
+        ...useBotEphemeralVoice(botConnected),
     };
 }

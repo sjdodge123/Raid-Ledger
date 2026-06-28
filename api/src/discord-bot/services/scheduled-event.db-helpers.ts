@@ -6,6 +6,8 @@ export interface ScheduledEventRecord {
   discordScheduledEventId: string | null;
   notificationChannelOverride: string | null;
   recurrenceGroupId: string | null;
+  /** ROK-1352: live ephemeral voice channel (resolver Tier 0). */
+  ephemeralVoiceChannelId: string | null;
 }
 
 export async function findStartCandidates(
@@ -70,6 +72,7 @@ export async function getEventWithOverride(
       discordScheduledEventId: schema.events.discordScheduledEventId,
       notificationChannelOverride: schema.events.notificationChannelOverride,
       recurrenceGroupId: schema.events.recurrenceGroupId,
+      ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
     })
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
@@ -110,7 +113,31 @@ export async function getRecurrenceGroupId(
   return row?.recurrenceGroupId;
 }
 
-/** Resolve voice channel for scheduled event creation (ROK-860 extraction). */
+/** ROK-1352: recurrence group + live ephemeral channel for an event. */
+async function getRecurrenceAndEphemeral(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<{
+  recurrenceGroupId: string | null;
+  ephemeralVoiceChannelId: string | null;
+}> {
+  const [row] = await db
+    .select({
+      recurrenceGroupId: schema.events.recurrenceGroupId,
+      ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
+    })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return {
+    recurrenceGroupId: row?.recurrenceGroupId ?? null,
+    ephemeralVoiceChannelId: row?.ephemeralVoiceChannelId ?? null,
+  };
+}
+
+/** Resolve voice channel for scheduled event creation (ROK-860 extraction).
+ *  ROK-1352: passes the live ephemeral channel as resolver Tier 0. The
+ *  per-event override still wins over Tier 0 (explicit operator intent). */
 export async function resolveVoiceForCreate(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
@@ -120,15 +147,18 @@ export async function resolveVoiceForCreate(
     resolveVoiceChannelForScheduledEvent(
       gameId?: number | null,
       recurrenceGroupId?: string | null,
+      ephemeralChannelId?: string | null,
     ): Promise<string | null>;
   },
 ): Promise<string | null> {
-  const rgId = await getRecurrenceGroupId(db, eventId);
+  const { recurrenceGroupId, ephemeralVoiceChannelId } =
+    await getRecurrenceAndEphemeral(db, eventId);
   return (
     override ??
     (await channelResolver.resolveVoiceChannelForScheduledEvent(
       gameId,
-      rgId,
+      recurrenceGroupId,
+      ephemeralVoiceChannelId,
     )) ??
     null
   );

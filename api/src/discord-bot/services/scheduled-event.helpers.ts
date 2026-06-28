@@ -124,6 +124,28 @@ export function buildScheduledEventName(eventData: ScheduledEventData): string {
   return combined.slice(0, MAX_SCHEDULED_EVENT_NAME_LENGTH - 1) + '…';
 }
 
+/**
+ * ROK-1352: marker prefixed to ephemeral voice channel names so they're
+ * visually distinguishable from permanent channels in the Discord channel
+ * list. Native Unicode (renders wherever Discord does); '⏰' connotes the
+ * time-limited / transient nature of the channel.
+ */
+export const EPHEMERAL_CHANNEL_MARKER = '⏰';
+
+/**
+ * Build an ephemeral voice channel name: the standard SE name with the
+ * ephemeral marker prefixed, re-truncated to Discord's 100-char channel cap.
+ * The marker lives on the channel only — the Scheduled Event keeps the clean
+ * `buildScheduledEventName` value.
+ */
+export function buildEphemeralChannelName(
+  eventData: ScheduledEventData,
+): string {
+  const withMarker = `${EPHEMERAL_CHANNEL_MARKER} ${buildScheduledEventName(eventData)}`;
+  if (withMarker.length <= MAX_SCHEDULED_EVENT_NAME_LENGTH) return withMarker;
+  return withMarker.slice(0, MAX_SCHEDULED_EVENT_NAME_LENGTH - 1) + '…';
+}
+
 /** Format an API error message for logging. */
 export function formatApiError(
   op: string,

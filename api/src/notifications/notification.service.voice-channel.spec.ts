@@ -143,6 +143,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         gameId: 7,
         notificationChannelOverride: null,
         recurrenceGroupId: null,
+        ephemeralVoiceChannelId: null,
       };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
       mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
@@ -154,7 +155,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
       expect(mockDb.select).toHaveBeenCalled();
       expect(
         mockChannelResolver.resolveVoiceChannelForScheduledEvent,
-      ).toHaveBeenCalledWith(7, null);
+      ).toHaveBeenCalledWith(7, null, null);
       expect(result).toBe('vc-from-game-7');
     });
 
@@ -174,6 +175,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         gameId: null,
         notificationChannelOverride: null,
         recurrenceGroupId: null,
+        ephemeralVoiceChannelId: null,
       };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
       mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
@@ -184,7 +186,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
 
       expect(
         mockChannelResolver.resolveVoiceChannelForScheduledEvent,
-      ).toHaveBeenCalledWith(null, null);
+      ).toHaveBeenCalledWith(null, null, null);
       expect(result).toBeNull();
     });
 

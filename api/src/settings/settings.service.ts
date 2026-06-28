@@ -41,11 +41,10 @@ import {
   setDiscordBotTimezone as _setDiscordBotTimezone,
   getDefaultTimezone as _getDefaultTimezone,
   setDefaultTimezone as _setDefaultTimezone,
-  getDiscordBotDefaultVoiceChannel as _getDiscordBotDefaultVoiceChannel,
-  setDiscordBotDefaultVoiceChannel as _setDiscordBotDefaultVoiceChannel,
 } from './settings-discord.helpers';
 
 import { SETTINGS_EVENTS } from './settings.types';
+import { EphemeralVoiceSettingsBase } from './settings-ephemeral.base';
 import type {
   DiscordOAuthConfig,
   IgdbConfig,
@@ -59,7 +58,10 @@ import { resolveCommonGroundWeights } from './common-ground-weights.helpers';
 const CACHE_TTL_MS = 30 * 60_000;
 
 @Injectable()
-export class SettingsService implements OnModuleInit {
+export class SettingsService
+  extends EphemeralVoiceSettingsBase
+  implements OnModuleInit
+{
   private readonly logger = new Logger(SettingsService.name);
   private cache = new Map<string, string>();
   private cacheLoadedAt = 0;
@@ -69,7 +71,9 @@ export class SettingsService implements OnModuleInit {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private eventEmitter: EventEmitter2,
-  ) {}
+  ) {
+    super();
+  }
 
   // STARTUP-CRITICAL: Settings cache must be available for all downstream services. @see bestEffortInit
   async onModuleInit(): Promise<void> {
@@ -331,12 +335,11 @@ export class SettingsService implements OnModuleInit {
   setDefaultTimezone = (tz: string) => _setDefaultTimezone(this, tz);
   /** Get the client URL with fallback chain. */
   getClientUrl = () => _getClientUrl(this);
-  /** Get the default voice channel ID for the Discord bot. */
-  getDiscordBotDefaultVoiceChannel = () =>
-    _getDiscordBotDefaultVoiceChannel(this);
-  /** Set the default voice channel ID for the Discord bot. */
-  setDiscordBotDefaultVoiceChannel = (id: string) =>
-    _setDiscordBotDefaultVoiceChannel(this, id);
+  // Discord default/ephemeral voice delegations live on EphemeralVoiceSettingsBase.
+
+  // ─── ROK-1352: Ephemeral voice channels ──────────────────────
+  // Delegations live on EphemeralVoiceSettingsBase (this class extends it) to
+  // keep settings.service.ts under the 300-line cap.
 
   // ─── Ad-hoc & Auto-extend ────────────────────────────────────
 

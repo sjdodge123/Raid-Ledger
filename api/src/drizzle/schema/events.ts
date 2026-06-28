@@ -11,6 +11,7 @@ import {
   varchar,
   index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { users } from './users';
 import { games } from './games';
 import { channelBindings } from './channel-bindings';
@@ -112,6 +113,12 @@ export const events = pgTable(
     scheduledEventReconcileBackoffUntil: timestamp(
       'scheduled_event_reconcile_backoff_until',
     ),
+    /** ROK-1352: Per-event ephemeral-voice override. null = inherit series/global;
+     *  true = force on; false = force off (single-occurrence opt-out). */
+    ephemeralVoiceEnabled: boolean('ephemeral_voice_enabled'),
+    /** ROK-1352: Live ephemeral voice channel ID. Set on create, cleared on
+     *  destroy. Non-null marks the channel as the resolver Tier 0 target. */
+    ephemeralVoiceChannelId: text('ephemeral_voice_channel_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -136,5 +143,11 @@ export const events = pgTable(
     index('idx_events_se_reconcile_backoff').on(
       table.scheduledEventReconcileBackoffUntil,
     ),
+    // ROK-1352: Scheduler/reaper scans filter on ephemeral_voice_channel_id,
+    // which is NULL for nearly every event — so this is a PARTIAL index. The
+    // schema, snapshot, and generated SQL all agree on the partial predicate.
+    index('idx_events_ephemeral_voice_channel_id')
+      .on(table.ephemeralVoiceChannelId)
+      .where(sql`${table.ephemeralVoiceChannelId} IS NOT NULL`),
   ],
 );

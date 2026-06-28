@@ -98,6 +98,7 @@ async function resolveVoice(
     (await deps.channelResolver.resolveVoiceChannelForScheduledEvent(
       event.gameId,
       event.recurrenceGroupId,
+      event.ephemeralVoiceChannelId,
     ))
   );
 }

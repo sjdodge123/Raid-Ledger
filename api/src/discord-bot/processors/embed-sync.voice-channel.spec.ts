@@ -33,6 +33,7 @@ const mockEvent = {
   discordScheduledEventId: null,
   notificationChannelOverride: null,
   recurrenceGroupId: null,
+  ephemeralVoiceChannelId: null,
 };
 
 const mockRecord = {
@@ -173,7 +174,7 @@ describe('EmbedSyncProcessor voice channel — resolver calls', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(7, null);
+    ).toHaveBeenCalledWith(7, null, null);
   });
 
   it('calls resolveVoiceChannelForScheduledEvent with null when event has no gameId', async () => {
@@ -189,7 +190,7 @@ describe('EmbedSyncProcessor voice channel — resolver calls', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(null, null);
+    ).toHaveBeenCalledWith(null, null, null);
   });
 });
 
