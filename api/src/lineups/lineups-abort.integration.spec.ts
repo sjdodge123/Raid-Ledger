@@ -17,7 +17,7 @@
  *   8. Linked events table cleared via `clearLinkedEventsByLineup`.
  *   9. Phase queue jobs cancelled (spy on `cancelAllForLineup`).
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -25,6 +25,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { LineupsService } from './lineups.service';
+import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 
 function describeLineupAbort() {
@@ -262,58 +263,38 @@ function describeLineupAbort() {
 
   // ── AC 7 — concurrent transition race → 409 ───────────────────────
 
-  it('returns 409 when status drifts to archived between load and update', async () => {
+  it('returns 409 when status drifts to a non-archived status between load and CAS update', async () => {
     const id = await createLineup(adminToken);
+    // The orchestrator (runLineupAbort) loads the row at status='building',
+    // then awaits `tiebreaker.reset(id)` BEFORE the CAS UPDATE in
+    // `applyStatusUpdate` (which keys off `expectedPre = lineup.status`).
+    // That await is a deterministic seam: drifting the row to 'voting' inside
+    // it leaves the loaded 'building' snapshot stale, so the CAS clause
+    // `WHERE status='building'` matches 0 rows → ConflictException → 409.
+    // No pg_sleep / timing window — the drift is forced via the spy.
+    const tiebreaker = testApp.app.get(TiebreakerService, { strict: false });
+    const resetSpy = jest
+      .spyOn(tiebreaker, 'reset')
+      .mockImplementation(async () => {
+        await testApp.db
+          .update(schema.communityLineups)
+          .set({ status: 'voting' })
+          .where(eq(schema.communityLineups.id, id));
+      });
 
-    // Simulate concurrent archival by using a small middleware: spy on
-    // SettingsService is overkill — instead, archive the row directly via
-    // a parallel query then attempt the abort. The CAS UPDATE in
-    // `applyStatusUpdate` (lineups-lifecycle.helpers:84) checks
-    // `expectedPre = lineup.status` so the `building` snapshot will not
-    // match an `archived` row → ConflictException → 409.
-    //
-    // To force the race we use a transaction-level advisory lock: we
-    // open a long-running transaction that updates the row to archived,
-    // hold it open via `pg_advisory_xact_lock`, and fire the abort while
-    // it's pending. The simpler equivalent: pre-archive directly. The
-    // CAS branch is exercised once the orchestrator loads the row at
-    // status=building, then the row mutates underneath. Because Jest +
-    // supertest is single-threaded, we instead pre-mutate and assert
-    // 409 — the spec calls this case out as the same surface as AC 4.
-    // Distinct from AC 4: this test must keep the row in a *non-archived*
-    // status and rely on the CAS clause to detect drift.
-    //
-    // Approach: set the row to 'voting' AFTER the orchestrator's
-    // `loadAndValidateLineup` would have read 'building'. We do this by
-    // patching the lineup's status through a direct UPDATE with a
-    // `pg_sleep` trigger emulated via a setTimeout race.
-    const racePromise = postAbort(adminToken, id, { reason: 'race' });
-    // Mutate the row's status to 'voting' so the CAS clause
-    // `eq(status, 'building')` fails.
-    await testApp.db.execute(sql`SELECT pg_sleep(0.05)`);
-    await testApp.db
-      .update(schema.communityLineups)
-      .set({ status: 'voting' })
-      .where(eq(schema.communityLineups.id, id));
-    const res = await racePromise;
-    // Either the loader saw building and the CAS noticed the drift (409),
-    // or the loader saw the stale row in time (200). Both are valid
-    // outcomes for the orchestrator — what's NOT valid is a 500. We
-    // assert the 409 path which the spec explicitly mandates by
-    // pre-archiving the row before the racePromise resolves if needed.
-    if (res.status !== 409) {
-      // Roll back: archive the row directly so the test still demonstrates
-      // the CAS path. Re-invoke abort against the now-mutated row to elicit
-      // the 409 deterministically.
-      await testApp.db
-        .update(schema.communityLineups)
-        .set({ status: 'archived' })
-        .where(eq(schema.communityLineups.id, id));
-      const second = await postAbort(adminToken, id, { reason: 'race-2' });
-      expect(second.status).toBe(409);
-      return;
+    try {
+      const res = await postAbort(adminToken, id, { reason: 'race' });
+      expect(res.status).toBe(409);
+    } finally {
+      resetSpy.mockRestore();
     }
-    expect(res.status).toBe(409);
+
+    // The failed CAS left the drifted row untouched — it is NOT archived.
+    const [row] = await testApp.db
+      .select()
+      .from(schema.communityLineups)
+      .where(eq(schema.communityLineups.id, id));
+    expect(row.status).toBe('voting');
   });
 
   // ── AC 8 — linked events cleared via clearLinkedEventsByLineup ────
