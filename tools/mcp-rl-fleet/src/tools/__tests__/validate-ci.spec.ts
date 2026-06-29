@@ -218,6 +218,53 @@ describe('Bug D (Session 4 dogfood) — targetCmd routes through run-on-runner',
   });
 });
 
+describe('ROK-1368 — against_env_slug threads the re-seeded ADMIN_PASSWORD', () => {
+  it('exports ADMIN_PASSWORD matching the env-reseed output inside bash -c', async () => {
+    execFileAlwaysOk((_cmd: string, args: string[]) => {
+      const argv = args.join(' ');
+      if (argv.includes('rl status')) {
+        return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
+      }
+      // The re-seed SSH call echoes the password it set.
+      if (argv.includes('bootstrap-admin') || argv.includes('RL_SEEDED_PW')) {
+        return 'RL_SEEDED_PW=rl-ci-deadbeef';
+      }
+      return { ok: true, task_id: 'pw000001', started_at: '2026-05-20T12:00:00.000Z' };
+    });
+    await validateCi.execute({
+      args: ['--only-e2e'],
+      against_env_slug: 'demo',
+      wait: false,
+    });
+    const sshCall = mockExecFile.mock.calls.find((call: unknown[]) => {
+      const a = call[1] as string[];
+      return Array.isArray(a) && a.some((s) => typeof s === 'string' && s.includes('task-start'));
+    });
+    const argvStr = JSON.stringify(sshCall![1]);
+    expect(argvStr).toContain('ADMIN_PASSWORD=');
+    expect(argvStr).toContain('rl-ci-deadbeef');
+    const bashCIdx = argvStr.indexOf('bash -c');
+    const pwIdx = argvStr.indexOf('ADMIN_PASSWORD=');
+    expect(pwIdx).toBeGreaterThan(bashCIdx);
+  });
+
+  it('omits ADMIN_PASSWORD on the laptop-local path (no against_env_slug)', async () => {
+    execFileAlwaysOk((_cmd: string, args: string[]) => {
+      const argv = args.join(' ');
+      if (argv.includes('rl status')) {
+        return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
+      }
+      return { ok: true, task_id: 'pw000002', started_at: '2026-05-20T12:00:00.000Z' };
+    });
+    await validateCi.execute({ args: ['--only-e2e'], wait: false });
+    const sshCall = mockExecFile.mock.calls.find((call: unknown[]) => {
+      const a = call[1] as string[];
+      return Array.isArray(a) && a.some((s) => typeof s === 'string' && s.includes('task-start'));
+    });
+    expect(JSON.stringify(sshCall![1])).not.toContain('ADMIN_PASSWORD=');
+  });
+});
+
 describe('rl_env_deploy is now ASYNC by default (ROK-1362)', () => {
   it('TOOL_DESCRIPTION documents the async task_id + polling pattern', () => {
     // ROK-1362 inverted the old "this tool is SYNC" contract: env_deploy now
