@@ -113,6 +113,7 @@ export function getMentionsForRole(
     preferredRoles: string[] | null;
     status?: string | null;
     className?: string | null;
+    runningLate?: boolean | null;
   }>,
   role: string | null,
   emojiService: DiscordEmojiService,
@@ -137,12 +138,15 @@ function formatMentionLine(
     preferredRoles: string[] | null;
     status?: string | null;
     className?: string | null;
+    runningLate?: boolean | null;
   },
   emojiService: DiscordEmojiService,
 ): string {
   const rawLabel = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
   const label = m.status === 'left' ? `~~${rawLabel}~~` : rawLabel;
   const tentativePrefix = m.status === 'tentative' ? '\u23F3 ' : '';
+  // Running late is additive \u2014 composes with \u23F3 and never strikes through.
+  const latePrefix = m.runningLate ? '\u23F0 ' : '';
   const classEmoji = m.className ? emojiService.getClassEmoji(m.className) : '';
   const prefs =
     m.preferredRoles && m.preferredRoles.length > 0
@@ -154,7 +158,9 @@ function formatMentionLine(
     .map((r) => emojiService.getRoleEmoji(r))
     .filter(Boolean)
     .join('');
-  const prefix = [tentativePrefix, classEmoji].filter(Boolean).join('');
+  const prefix = [tentativePrefix, latePrefix, classEmoji]
+    .filter(Boolean)
+    .join('');
   const suffix = roleEmojis ? ` ${roleEmojis}` : '';
   return `\u2003${prefix}${prefix ? ' ' : ''}${label}${suffix}`;
 }

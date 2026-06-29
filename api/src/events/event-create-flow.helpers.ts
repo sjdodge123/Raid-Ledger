@@ -8,9 +8,12 @@ import type * as schema from '../drizzle/schema';
 import type { CreateEventDto, EventResponseDto } from '@raid-ledger/contract';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
+import type { ActivityLogService } from '../activity-log/activity-log.service';
 import {
   insertRecurringEvents,
   insertSingleEvent,
+  buildBaseValues,
+  resolveRecurrenceGroupId,
 } from './event-create.helpers';
 import { buildLifecyclePayload } from './event-response.helpers';
 
@@ -86,4 +89,54 @@ export function emitEventLifecycle(
   response: EventResponseDto,
 ): void {
   emitLifecycle(eventEmitter, eventName, response);
+}
+
+/**
+ * Service-level `create` orchestration (recurring vs single + activity log).
+ * Extracted from EventsService to keep that file under the 300-line limit.
+ */
+export async function runCreateEvent(
+  deps: CreateFlowDeps,
+  activityLog: Pick<ActivityLogService, 'log'>,
+  creatorId: number,
+  dto: CreateEventDto,
+): Promise<EventResponseDto & { allEventIds?: number[] }> {
+  const startTime = new Date(dto.startTime);
+  const endTime = new Date(dto.endTime);
+  const durationMs = endTime.getTime() - startTime.getTime();
+  const groupId = resolveRecurrenceGroupId(dto);
+  const baseValues = buildBaseValues(creatorId, dto, groupId);
+  if (dto.recurrence) {
+    const result = await createRecurringFlow(
+      deps,
+      dto,
+      baseValues,
+      startTime,
+      durationMs,
+      creatorId,
+    );
+    for (const eventId of result.allEventIds ?? []) {
+      activityLog
+        .log('event', eventId, 'event_created', creatorId, { title: dto.title })
+        .catch((err) =>
+          deps.logger.warn(
+            'Activity log failed for event %d: %s',
+            eventId,
+            err,
+          ),
+        );
+    }
+    return result;
+  }
+  const result = await createSingleFlow(
+    deps,
+    baseValues,
+    startTime,
+    endTime,
+    creatorId,
+  );
+  await activityLog.log('event', result.id, 'event_created', creatorId, {
+    title: dto.title,
+  });
+  return result;
 }

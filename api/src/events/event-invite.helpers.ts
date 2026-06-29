@@ -2,6 +2,7 @@
  * Helpers for member invitation to events.
  */
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import type { Logger } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -117,4 +118,35 @@ export async function emitMemberInvite(
       gameId: event.game?.id ?? null,
     } satisfies MemberInviteCreatedPayload);
   }
+}
+
+/**
+ * Service-level `inviteMember` orchestration (flow + success log). Extracted
+ * from EventsService to keep that file under the 300-line limit.
+ */
+export async function inviteMemberToEvent(
+  deps: {
+    db: PostgresJsDatabase<typeof schema>;
+    notificationService: NotificationService;
+    eventEmitter: EventEmitter2;
+    logger: Logger;
+  },
+  event: EventResponseDto,
+  eventId: number,
+  inviterId: number,
+  discordId: string,
+): Promise<{ message: string }> {
+  const result = await inviteMemberFlow(
+    deps.db,
+    deps.notificationService,
+    deps.eventEmitter,
+    event,
+    eventId,
+    inviterId,
+    discordId,
+  );
+  deps.logger.log(
+    `User ${inviterId} invited ${result.targetUser.username} to event ${eventId}`,
+  );
+  return { message: result.message };
 }
