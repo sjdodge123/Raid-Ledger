@@ -56,21 +56,25 @@ function buildMockSettings() {
   };
 }
 
+function buildMockRedis() {
+  return {
+    keys: jest.fn((): Promise<string[]> => Promise.resolve([])),
+    del: jest.fn(() => Promise.resolve(0)),
+  };
+}
+
 async function buildService(
   db: unknown,
   demoData: ReturnType<typeof buildMockDemoData>,
   queue: ReturnType<typeof buildMockQueue>,
   settings: ReturnType<typeof buildMockSettings> = buildMockSettings(),
+  redis: ReturnType<typeof buildMockRedis> = buildMockRedis(),
 ): Promise<DemoTestResetService> {
   const moduleRef = {
     get: jest.fn((token: unknown) => {
       if (token === QueueHealthService) return queue;
       throw new Error(`Unexpected ModuleRef.get(${String(token)})`);
     }),
-  };
-  const redis = {
-    keys: jest.fn(() => Promise.resolve([])),
-    del: jest.fn(() => Promise.resolve(0)),
   };
   const module = await Test.createTestingModule({
     providers: [
@@ -88,6 +92,22 @@ async function buildService(
 /** 12 snapshot counts — one per table in WipeCounts (matches COUNT_TABLES). */
 const POPULATED_SNAPSHOT = [5, 12, 2, 4, 6, 3, 0, 1, 7, 9, 4, 2];
 const EMPTY_SNAPSHOT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+/**
+ * Redis glob patterns flushed by flushDedupRedisCache. Must stay in lock-step
+ * with the `patterns` array in demo-test-reset.service.ts (ROK-1062 + ROK-1202:
+ * recruitment-* + game-alert* added so recruitment/game-alert specs that recycle
+ * event IDs don't inherit stale dedup keys).
+ */
+const EXPECTED_DEDUP_PATTERNS = [
+  'lineup-*',
+  'event-*',
+  'tiebreaker-*',
+  'scheduling-*',
+  'standalone-poll-*',
+  'recruitment-*',
+  'game-alert*',
+];
 
 describe('DemoTestResetService', () => {
   it('returns deleted counts and reseed=ok on a populated DB', async () => {
@@ -227,5 +247,36 @@ describe('DemoTestResetService', () => {
     await svc.resetToSeed();
 
     expect(drainOrder).toEqual(['install', 'awaitDrained']);
+  });
+
+  it('flushes every dedup pattern and deletes the matched keys', async () => {
+    const { db } = buildExecMockDb(EMPTY_SNAPSHOT);
+    const demoData = buildMockDemoData(true);
+    const queue = buildMockQueue();
+    const redis = buildMockRedis();
+    // First keys() call (pattern 'lineup-*') returns stale dedup keys; rest [].
+    redis.keys.mockResolvedValueOnce([
+      'lineup-reminder:1:99:24h',
+      'lineup-poll-closing:1',
+    ]);
+    const svc = await buildService(
+      db,
+      demoData,
+      queue,
+      buildMockSettings(),
+      redis,
+    );
+
+    await svc.resetToSeed();
+
+    expect(redis.keys).toHaveBeenCalledTimes(EXPECTED_DEDUP_PATTERNS.length);
+    for (const pattern of EXPECTED_DEDUP_PATTERNS) {
+      expect(redis.keys).toHaveBeenCalledWith(pattern);
+    }
+    expect(redis.del).toHaveBeenCalledTimes(1);
+    expect(redis.del).toHaveBeenCalledWith(
+      'lineup-reminder:1:99:24h',
+      'lineup-poll-closing:1',
+    );
   });
 });

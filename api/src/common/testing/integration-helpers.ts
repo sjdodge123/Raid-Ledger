@@ -196,7 +196,10 @@ async function obliterateAllQueues(): Promise<void> {
  * `jwt_block:` blocks token reuse after revocation; the dedup prefixes mirror
  * the Playwright reset (`demo-test-reset.service.ts:flushDedupRedisCache`) so
  * a `lineup-reminder:1:99:24h` written by spec A cannot silence a matching
- * notification expected by spec B. ROK-1059 + ROK-1232.
+ * notification expected by spec B. ROK-1059 + ROK-1232. The recruitment and
+ * game-alert groups (ROK-1202) cover `recruitment-bump:event:N` /
+ * `recruitment-dm:event:N` and `game-alert:event:N` so recruitment-reminder +
+ * game-alert specs that recycle event IDs don't inherit stale dedup keys.
  */
 const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'jwt_block:',
@@ -205,6 +208,8 @@ const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'tiebreaker-',
   'scheduling-',
   'standalone-poll-',
+  'recruitment-',
+  'game-alert',
 ];
 
 /**

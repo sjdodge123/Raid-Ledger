@@ -1,139 +1,17 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
-import * as envCheck from './tools/env-check.js';
-import * as envCopy from './tools/env-copy.js';
-import * as envLock from './tools/env-lock.js';
-import * as mcpHealth from './tools/mcp-health.js';
-import * as serviceStatus from './tools/service-status.js';
-import * as storyStatus from './tools/story-status.js';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { setupServer } from './register-tools.js';
 
-const server = new McpServer({
-  name: 'mcp-env',
-  version: '0.1.0',
-});
-
-// --- Tool registrations ---
-
-server.tool(
-  envCheck.TOOL_NAME,
-  envCheck.TOOL_DESCRIPTION,
-  {},
-  async () => {
-    const result = await envCheck.execute();
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  envCopy.TOOL_NAME,
-  envCopy.TOOL_DESCRIPTION,
-  { file: z.string().optional(), all: z.boolean().optional() },
-  async (params) => {
-    const result = await envCopy.execute(params);
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  serviceStatus.TOOL_NAME,
-  serviceStatus.TOOL_DESCRIPTION,
-  {},
-  async () => {
-    const result = await serviceStatus.execute();
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  storyStatus.TOOL_NAME,
-  storyStatus.TOOL_DESCRIPTION,
-  { stories: z.array(z.string()).min(1) },
-  async (params) => {
-    const result = await storyStatus.execute(params);
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  mcpHealth.TOOL_NAME,
-  mcpHealth.TOOL_DESCRIPTION,
-  {},
-  async () => {
-    const result = await mcpHealth.execute();
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  envLock.STATUS_TOOL_NAME,
-  envLock.STATUS_TOOL_DESCRIPTION,
-  {},
-  async () => {
-    const result = await envLock.executeStatus();
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  envLock.ACQUIRE_TOOL_NAME,
-  envLock.ACQUIRE_TOOL_DESCRIPTION,
-  {
-    branch: z.string().optional(),
-    worktree: z.string().optional(),
-    purpose: z.string(),
-    pid: z.number().int().nonnegative().optional(),
-    ttl_minutes: z.number().int().positive().optional(),
-    priority: z.enum(['normal', 'operator']).optional(),
-  },
-  async (params) => {
-    const result = await envLock.executeAcquire(params);
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  envLock.RELEASE_TOOL_NAME,
-  envLock.RELEASE_TOOL_DESCRIPTION,
-  {
-    branch: z.string().optional(),
-    worktree: z.string().optional(),
-  },
-  async (params) => {
-    const result = await envLock.executeRelease(params);
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  envLock.FORCE_RELEASE_TOOL_NAME,
-  envLock.FORCE_RELEASE_TOOL_DESCRIPTION,
-  {},
-  async () => {
-    const result = await envLock.executeForceRelease();
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  },
-);
-
-// --- Server lifecycle ---
+/** Register process-level guards so unhandled errors don't crash the server. */
+function installProcessGuards(): void {
+  process.on('uncaughtException', (err) => {
+    console.error('[mcp-env] Uncaught exception:', err);
+  });
+  process.on('unhandledRejection', (err) => {
+    console.error('[mcp-env] Unhandled rejection:', err);
+  });
+}
 
 /** Start the MCP server on stdio transport. */
 async function main(): Promise<void> {
@@ -143,11 +21,13 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  installProcessGuards();
+  const server = setupServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[mcp-env] MCP server running on stdio');
 
-  const shutdown = async () => {
+  const shutdown = async (): Promise<void> => {
     await server.close();
     process.exit(0);
   };
@@ -155,15 +35,20 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
-// Prevent unhandled errors from crashing the server
-process.on('uncaughtException', (err) => {
-  console.error('[mcp-env] Uncaught exception:', err);
-});
-process.on('unhandledRejection', (err) => {
-  console.error('[mcp-env] Unhandled rejection:', err);
-});
+/** True only when this module is the process entrypoint (not imported by a test). */
+function isEntrypoint(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
 
-main().catch((err: unknown) => {
-  console.error('[mcp-env] Fatal:', err);
-  process.exit(1);
-});
+if (isEntrypoint()) {
+  main().catch((err: unknown) => {
+    console.error('[mcp-env] Fatal:', err);
+    process.exit(1);
+  });
+}

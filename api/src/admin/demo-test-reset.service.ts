@@ -72,6 +72,10 @@ export class DemoTestResetService {
       'tiebreaker-*',
       'scheduling-*',
       'standalone-poll-*',
+      // recruitment-bump:event:N / recruitment-dm:event:N (recruitment-reminder.service)
+      'recruitment-*',
+      // game-alert:event:N (game-affinity-notification.service)
+      'game-alert*',
     ];
     for (const pattern of patterns) {
       const keys = await this.redis.keys(pattern);

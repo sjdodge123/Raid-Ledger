@@ -36,19 +36,16 @@ import { execute, TOOL_NAME, TOOL_DESCRIPTION } from './mcp-health.js';
 /** Simulate execFile invoking its callback with (err, stdout, stderr). */
 function execFileOk(stdout = 'OK', stderr = ''): void {
   mockExecFile.mockImplementationOnce((_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string, stderr: string) => void) => {
-    // Some callers pass (cmd, args, cb) without options — handle both forms.
-    const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
-    callback(null, stdout, stderr);
+    cb(null, stdout, stderr);
   });
 }
 
 /** Simulate execFile failing with a non-zero exit code. */
 function execFileFail(exitCode = 1, stderr = 'boom'): void {
   mockExecFile.mockImplementationOnce((_cmd: string, _args: string[], _opts: unknown, cb: (err: Error | null, stdout: string, stderr: string) => void) => {
-    const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
     // child_process.execFile sets `code` to the exit code on its error object.
     const err = Object.assign(new Error(stderr), { code: exitCode });
-    callback(err as Error, '', stderr);
+    cb(err as Error, '', stderr);
   });
 }
 
