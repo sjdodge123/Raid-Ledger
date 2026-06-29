@@ -434,6 +434,38 @@ run_lint() {
   fi
 }
 
+run_shell_parse_check() {
+  # bash -n parse-lint every scripts/*.sh. Bash-3.2 parse breaks have shipped
+  # before (sync-local-to-env.sh) because shell scripts were never
+  # syntax-checked. Scope is scripts/*.sh only — rl-infra/** is a larger
+  # surface, out of scope here. Mirrors the `lint` job's shell-parse step in CI.
+  local f
+  for f in "$REPO_ROOT"/scripts/*.sh; do
+    [ -e "$f" ] || continue
+    bash -n "$f" || return $?
+  done
+}
+
+# Tools MCP-server vitest suites. CI runs these via the `tools-tests` matrix
+# job; mirror it locally so a broken tools test (e.g. env-lock.test.ts) is
+# caught by the local gate too. Each suite is sub-second. test-bot is NOT a
+# workspace and has no `test` script — it's intentionally excluded (its
+# coverage is the Discord smoke suite, gated separately).
+run_tools_tests() {
+  local ws pkg
+  for ws in mcp-rl-fleet mcp-env mcp-discord; do
+    pkg="$REPO_ROOT/tools/$ws/package.json"
+    # Guard: skip any workspace lacking a `test` script so the gate never
+    # fails on a missing script (defensive — all three define one today).
+    if ! python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('scripts',{}).get('test') else 1)" "$pkg" 2>/dev/null; then
+      echo "tools/$ws has no test script — skipping"
+      continue
+    fi
+    echo "--- tools/$ws (vitest) ---"
+    npm test -w "@raid-ledger/$ws" || return $?
+  done
+}
+
 run_unit_tests() {
   npm run test:cov -w api -- --passWithNoTests || return $?
   # ROK-1331 M6b MED-5: vitest coverage race on fleet runners. When
@@ -467,7 +499,11 @@ check_backup_prereqs() {
   # and obscure real failures. CI runners install postgresql-client, so the
   # binary is always present there.
   if command -v pg_dump >/dev/null 2>&1; then
-    export SKIP_BACKUP_INTEGRATION=0
+    # ROK-1144: backup.integration.spec.ts gates on `=== '1'`, so the
+    # "no env var = run" model is the source of truth. Unset (rather than
+    # export 0) on the success path so a stale SKIP_BACKUP_INTEGRATION=1 from
+    # an earlier shell can't survive and silently skip the suite.
+    unset SKIP_BACKUP_INTEGRATION
     return 0
   fi
 
@@ -1069,12 +1105,15 @@ print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2])
     run_step "Build (all workspaces)" run_build
     run_step "TypeScript (all)" run_typecheck
     run_step "Lint (all)" run_lint
+    # Static, deterministic check — runs in BOTH static and full gates.
+    run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
 
     # Unit + integration are the slow, behavioral checks. In --static (lite
     # gate) mode they're deferred to GitHub CI, which runs them sharded +
     # randomized on every PR. Full mode keeps them local.
     if ! $static_mode; then
       run_step "Unit tests + coverage" run_unit_tests
+      run_step "Tools unit tests (mcp servers)" run_tools_tests
       run_step "Integration tests (api)" run_integration_tests
     fi
 

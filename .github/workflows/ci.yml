@@ -68,6 +68,8 @@ jobs:
               - 'api/src/ai/providers/ollama-setup*'
             tools:
               - 'tools/mcp-rl-fleet/**'
+              - 'tools/mcp-env/**'
+              - 'tools/mcp-discord/**'
 
   # ─── Lint + Build ──────────────────────────────────────────────────
   # Skipped for docs/skills-only PRs (no code changes)
@@ -120,6 +122,16 @@ jobs:
 
       - name: Prettier check (api)
         run: npm run prettier:check -w api
+
+      # Shell parse-lint: bash-3.2 parse breaks have shipped before
+      # (sync-local-to-env.sh) because shell scripts are never syntax-checked.
+      # `bash -n` parses each scripts/*.sh without executing it. Scope is
+      # scripts/*.sh only — rl-infra/** is a larger surface, out of scope here.
+      - name: Shell parse check (bash -n on scripts/*.sh)
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f" || exit 1
+          done
 
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:
@@ -190,16 +202,26 @@ jobs:
         run: npx vitest run --coverage
         working-directory: web
 
-  # ─── Tools Unit Tests (mcp-rl-fleet — ROK-1362) ───────────────────
-  # The fleet MCP server (tools/mcp-rl-fleet) has a Vitest suite that is the
-  # behavioral gate for fleet-tooling changes, but was not run by any CI job
-  # before ROK-1362. This job closes that gap.
-  tools-tests:
+  # ─── Tools Unit Tests (MCP servers) ───────────────────────────────
+  # The MCP-server workspaces under tools/ each ship a Vitest suite that is the
+  # behavioral gate for tooling changes. Before ROK-1362 only mcp-rl-fleet ran
+  # here; mcp-env + mcp-discord ran NOWHERE in CI (a broken env-lock.test.ts
+  # once shipped CI-green). The matrix runs all three so any tools-workspace
+  # regression fails the PR. test-bot is intentionally excluded — it is not an
+  # npm workspace and has no `test` script (its gate is the Discord smoke suite).
+  tools-test-shard:
     runs-on: ubuntu-latest
     needs: [detect-changes]
     if: >-
       github.event_name == 'push' ||
       needs.detect-changes.outputs.tools == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - '@raid-ledger/mcp-rl-fleet'
+          - '@raid-ledger/mcp-env'
+          - '@raid-ledger/mcp-discord'
 
     steps:
       - name: Checkout code
@@ -221,8 +243,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test mcp-rl-fleet (Vitest)
-        run: npm test -w @raid-ledger/mcp-rl-fleet
+      - name: Test ${{ matrix.workspace }} (Vitest)
+        run: npm test -w ${{ matrix.workspace }}
+
+  # ─── Tools Tests (summary — required status check) ────────────────
+  # Stable required-check context for branch protection. The matrix above
+  # (tools-test-shard) produces per-workspace contexts; this aggregator keeps
+  # the single `tools-tests` check that branch protection requires. Mirrors
+  # the unit-tests / integration-tests / smoke-tests summary pattern.
+  tools-tests:
+    runs-on: ubuntu-latest
+    needs: [tools-test-shard]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          R="${{ needs.tools-test-shard.result }}"
+          if [ "$R" = "failure" ] || [ "$R" = "cancelled" ]; then
+            echo "Tools tests failed (result=$R)"
+            exit 1
+          fi
+          echo "Tools tests passed (result=$R)"
 
   # ─── Unit Tests (summary — required status check) ─────────────────
   unit-tests:
@@ -312,6 +353,14 @@ jobs:
       CORS_ORIGIN: http://localhost:5173
 
     steps:
+      # ROK-1144: backup.integration.spec.ts shells out to pg_dump/pg_restore.
+      # Today it relies on ubuntu-latest shipping postgresql-client by default;
+      # a future runner-image change could silently drop that binary and skip
+      # all backup coverage with no signal. Install it explicitly so the
+      # dependency is documented in the workflow and pinned to the job.
+      - name: Install postgresql-client (pg_dump/pg_restore for backup tests)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Checkout code
         uses: actions/checkout@v7
 
