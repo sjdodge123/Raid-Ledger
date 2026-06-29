@@ -75,6 +75,8 @@ const insertedSignup = {
   attendanceStatus: null,
   attendanceRecordedAt: null,
   roachedOutAt: null,
+  runningLateAt: null,
+  lateMinutes: null,
 };
 
 describe('discordSignupTxBody — bench fallback (ROK-626)', () => {

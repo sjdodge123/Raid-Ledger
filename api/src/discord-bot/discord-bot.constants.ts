@@ -135,6 +135,18 @@ export const ROACH_OUT_BUTTON_IDS = {
 } as const;
 
 /**
+ * Custom IDs for "Running Late" interaction buttons on reminder DMs (ROK-1379).
+ * Attendee marker: `event_late:{eventId}` / `event_late_here:{eventId}`.
+ * Host delay flow: `event_late_delay:{eventId}:{minutes}` / `event_late_delay_cancel:{eventId}`.
+ */
+export const RUNNING_LATE_BUTTON_IDS = {
+  LATE: 'event_late',
+  HERE: 'event_late_here',
+  DELAY: 'event_late_delay',
+  DELAY_CANCEL: 'event_late_delay_cancel',
+} as const;
+
+/**
  * Custom IDs for departure promote/dismiss interaction buttons (ROK-596).
  * Format: `{action}:{eventId}:{role}:{position}` — e.g. `depart_promote:42:tank:1`
  */

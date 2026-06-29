@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import {
   RESCHEDULE_BUTTON_IDS,
   ROACH_OUT_BUTTON_IDS,
+  RUNNING_LATE_BUTTON_IDS,
   SIGNUP_BUTTON_IDS,
 } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
@@ -27,6 +28,11 @@ export function buildExtraRows(
           .setLabel('Roach Out')
           .setStyle(ButtonStyle.Danger)
           .setEmoji('\uD83E\uDEB3'),
+        new ButtonBuilder()
+          .setCustomId(`${RUNNING_LATE_BUTTON_IDS.LATE}:${eid}`)
+          .setLabel('Running Late')
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji('\u23F0'),
       ),
     ];
   if (type === 'event_rescheduled') return [buildRescheduleRow(eid)];

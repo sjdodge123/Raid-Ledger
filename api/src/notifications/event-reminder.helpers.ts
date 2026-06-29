@@ -183,6 +183,7 @@ export async function fetchCandidateEvents(
       title: schema.events.title,
       duration: schema.events.duration,
       gameId: schema.events.gameId,
+      creatorId: schema.events.creatorId,
       reminder15min: schema.events.reminder15min,
       reminder1hour: schema.events.reminder1hour,
       reminder24hour: schema.events.reminder24hour,

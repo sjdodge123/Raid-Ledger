@@ -239,6 +239,29 @@ describe('DiscordNotificationEmbedService — features', () => {
       expect(rows).toBeUndefined();
     });
 
+    it('should append a Running Late button alongside Roach Out (ROK-1379)', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-late',
+          type: 'event_reminder',
+          title: 'Reminder',
+          message: 'Your event is soon',
+          payload: { eventId: 77 },
+        },
+        'Community',
+      );
+
+      const rowJson = rows![0].toJSON() as unknown as {
+        components: Array<{ customId: string; label: string; style: number }>;
+      };
+      expect(rowJson.components).toHaveLength(2);
+      const lateBtn = rowJson.components[1];
+      expect(lateBtn.customId).toBe('event_late:77');
+      expect(lateBtn.label).toBe('Running Late');
+      // ButtonStyle.Secondary = 2
+      expect(lateBtn.style).toBe(2);
+    });
+
     it('should return undefined rows for new_event type', async () => {
       const { rows } = await service.buildNotificationEmbed(
         {

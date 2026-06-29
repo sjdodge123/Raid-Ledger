@@ -22,6 +22,8 @@ const baseSignup = {
   attendanceStatus: null,
   attendanceRecordedAt: null,
   roachedOutAt: null,
+  runningLateAt: null,
+  lateMinutes: null,
 };
 
 const baseUser = {

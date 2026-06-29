@@ -58,6 +58,7 @@ async function querySignupRows(
       role: schema.rosterAssignments.role,
       status: schema.eventSignups.status,
       preferredRoles: schema.eventSignups.preferredRoles,
+      runningLateAt: schema.eventSignups.runningLateAt,
       className: classNameColumn(gameId),
     })
     .from(schema.eventSignups)
@@ -87,6 +88,7 @@ function buildSignupMentions(
       preferredRoles: r.preferredRoles,
       status: r.status ?? null,
       className: r.className ?? null,
+      runningLate: r.runningLateAt != null,
     }));
 }
 

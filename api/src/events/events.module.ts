@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventsService } from './events.service';
 import { EventSeriesService } from './event-series.service';
 import { SignupsService } from './signups.service';
+import { RunningLateService } from './running-late.service';
 import { SignupsAllocationService } from './signups-allocation.service';
 import { SignupsRosterService } from './signups-roster.service';
 import { PugsService } from './pugs.service';
@@ -72,6 +73,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     EventsService,
     EventSeriesService,
     SignupsService,
+    RunningLateService,
     SignupsAllocationService,
     SignupsRosterService,
     AttendanceService,
@@ -92,6 +94,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
   exports: [
     EventsService,
     SignupsService,
+    RunningLateService,
     SignupsRosterService,
     AttendanceService,
     PugsService,
