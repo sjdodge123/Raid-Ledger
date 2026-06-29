@@ -78,6 +78,12 @@ export const SignupResponseSchema = z.object({
     attendanceRecordedAt: z.string().datetime().nullable().optional(),
     /** ROK-626: Assigned slot role for bench feedback (null = no assignment yet) */
     assignedSlot: z.enum(['tank', 'healer', 'dps', 'flex', 'player', 'bench']).nullable().optional(),
+    /** ROK-1379: Running-late flag (derived `runningLateAt != null`) for the ⏰ roster marker */
+    runningLate: z.boolean().optional(),
+    /** ROK-1379: Timestamp the attendee marked themselves running late (null = not late) */
+    runningLateAt: z.string().datetime().nullable().optional(),
+    /** ROK-1379: Optional ETA-late minutes (column exists for fast-follow; unset in v1) */
+    lateMinutes: z.number().int().positive().nullable().optional(),
 });
 
 export type SignupResponseDto = z.infer<typeof SignupResponseSchema>;

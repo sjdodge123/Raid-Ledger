@@ -37,13 +37,9 @@ import {
   cancelEvent,
   rescheduleEvent,
 } from './event-lifecycle.helpers';
+import { runDelayEvent } from './event-delay.helpers';
 import {
-  buildBaseValues,
-  resolveRecurrenceGroupId,
-} from './event-create.helpers';
-import {
-  createRecurringFlow,
-  createSingleFlow,
+  runCreateEvent,
   emitEventLifecycle,
 } from './event-create-flow.helpers';
 import {
@@ -51,7 +47,7 @@ import {
   assertCanUpdate,
   buildUpdateData,
 } from './event-update.helpers';
-import { inviteMemberFlow } from './event-invite.helpers';
+import { inviteMemberToEvent } from './event-invite.helpers';
 import { findOneEvent, findEventsByIds } from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 
@@ -73,47 +69,12 @@ export class EventsService {
     creatorId: number,
     dto: CreateEventDto,
   ): Promise<EventResponseDto & { allEventIds?: number[] }> {
-    const startTime = new Date(dto.startTime);
-    const endTime = new Date(dto.endTime);
-    const durationMs = endTime.getTime() - startTime.getTime();
-    const groupId = resolveRecurrenceGroupId(dto);
-    const baseValues = buildBaseValues(creatorId, dto, groupId);
-    const deps = this.createFlowDeps();
-    if (dto.recurrence) {
-      const result = await createRecurringFlow(
-        deps,
-        dto,
-        baseValues,
-        startTime,
-        durationMs,
-        creatorId,
-      );
-      for (const eventId of result.allEventIds ?? []) {
-        this.activityLog
-          .log('event', eventId, 'event_created', creatorId, {
-            title: dto.title,
-          })
-          .catch((err) =>
-            this.logger.warn(
-              'Activity log failed for event %d: %s',
-              eventId,
-              err,
-            ),
-          );
-      }
-      return result;
-    }
-    const result = await createSingleFlow(
-      deps,
-      baseValues,
-      startTime,
-      endTime,
+    return runCreateEvent(
+      this.createFlowDeps(),
+      this.activityLog,
       creatorId,
+      dto,
     );
-    await this.activityLog.log('event', result.id, 'event_created', creatorId, {
-      title: dto.title,
-    });
-    return result;
   }
 
   /** Lists events with filtering and pagination. */
@@ -268,6 +229,30 @@ export class EventsService {
     );
   }
 
+  /**
+   * Delays an event by `minutes` (host-only, ROK-1379).
+   *
+   * Lightweight vs reschedule: shifts the duration, sends an `event_delayed`
+   * notice (no confirm/decline), updates the Discord scheduled event + channel
+   * embed, and does NOT reset signup confirmations.
+   */
+  async delayEvent(
+    eventId: number,
+    minutes: number,
+    actorUserId: number,
+    isAdmin = false,
+  ): Promise<EventResponseDto> {
+    return runDelayEvent(
+      this.db,
+      this.notificationService,
+      this.postMutate.bind(this),
+      eventId,
+      minutes,
+      actorUserId,
+      isAdmin,
+    );
+  }
+
   /** Invites a registered member to an event via Discord ID. */
   async inviteMember(
     eventId: number,
@@ -276,19 +261,18 @@ export class EventsService {
     discordId: string,
   ): Promise<{ message: string }> {
     const event = await this.findOne(eventId);
-    const result = await inviteMemberFlow(
-      this.db,
-      this.notificationService,
-      this.eventEmitter,
+    return inviteMemberToEvent(
+      {
+        db: this.db,
+        notificationService: this.notificationService,
+        eventEmitter: this.eventEmitter,
+        logger: this.logger,
+      },
       event,
       eventId,
       inviterId,
       discordId,
     );
-    this.logger.log(
-      `User ${inviterId} invited ${result.targetUser.username} to event ${eventId}`,
-    );
-    return { message: result.message };
   }
 
   /** Builds embed data for Discord embed rendering. */

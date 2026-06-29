@@ -619,6 +619,81 @@ async function testEmbedCoalescesDiscordIds() {
   ).toBeDefined();
 }
 
+// ─── delay tests (ROK-1379) ─────────────────────────────────────────────────
+
+async function testDelayShiftsAndPreservesConfirmation() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Delayed Raid',
+  });
+  const { userId } = await createMemberAndLogin(
+    testApp,
+    'delay_member',
+    'delay_member@test.local',
+  );
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId,
+    userId,
+    status: 'signed_up',
+    confirmationStatus: 'confirmed',
+  });
+  const [before] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+  const oldStart = before.duration[0].getTime();
+
+  await testApp.app
+    .get(EventsService)
+    .delayEvent(eventId, 15, testApp.seed.adminUser.id);
+
+  const [after] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+  expect(after.duration[0].getTime()).toBe(oldStart + 15 * 60_000);
+
+  // Delay must NOT reset confirmations (the key difference from reschedule).
+  const [signup] = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, userId));
+  expect(signup.confirmationStatus).toBe('confirmed');
+
+  // Non-actor signed-up user gets event_delayed (NOT event_rescheduled).
+  const memberNotifs = await testApp.db
+    .select()
+    .from(schema.notifications)
+    .where(eq(schema.notifications.userId, userId));
+  expect(memberNotifs.find((n) => n.type === 'event_delayed')).toBeDefined();
+  expect(
+    memberNotifs.find((n) => n.type === 'event_rescheduled'),
+  ).toBeUndefined();
+
+  // The actor does not notify themselves.
+  const actorNotifs = await testApp.db
+    .select()
+    .from(schema.notifications)
+    .where(
+      and(
+        eq(schema.notifications.userId, testApp.seed.adminUser.id),
+        eq(schema.notifications.type, 'event_delayed'),
+      ),
+    );
+  expect(actorNotifs).toHaveLength(0);
+}
+
+async function testDelayRejectsNonHost() {
+  const eventId = await createFutureEvent(testApp, adminToken);
+  const { userId } = await createMemberAndLogin(
+    testApp,
+    'delay_nonhost',
+    'delay_nonhost@test.local',
+  );
+  await expect(
+    testApp.app.get(EventsService).delayEvent(eventId, 15, userId),
+  ).rejects.toBeDefined();
+}
+
 beforeAll(() => setupAll());
 afterEach(() => resetAfterEach());
 
@@ -649,6 +724,12 @@ describe('Events — reschedule', () => {
     testRescheduleTentativeReschedulerStaysTentative());
   it('ROK-1269: roster update logs signup_reconfirmed per flipped attendee', () =>
     testRosterUpdateLogsSignupReconfirmed());
+});
+
+describe('Events — delay (ROK-1379)', () => {
+  it('shifts start/end, preserves confirmations, sends event_delayed to non-actor', () =>
+    testDelayShiftsAndPreservesConfirmation());
+  it('rejects a non-host actor', () => testDelayRejectsNonHost());
 });
 
 describe('Events — invite member', () => {

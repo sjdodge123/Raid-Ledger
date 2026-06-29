@@ -32,6 +32,7 @@ import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
 import { RescheduleResponseListener } from './listeners/reschedule-response.listener';
 import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
+import { RunningLateInteractionListener } from './listeners/running-late-interaction.listener';
 import { DeparturePromoteListener } from './listeners/departure-promote.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
 import { GuildMemberAddListener } from './listeners/guild-member-add.listener';
@@ -147,6 +148,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     SignupInteractionListener,
     RescheduleResponseListener,
     RoachOutInteractionListener,
+    RunningLateInteractionListener,
     DeparturePromoteListener,
     PugInviteListener,
     GuildMemberAddListener,
