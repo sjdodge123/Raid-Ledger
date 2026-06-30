@@ -7,6 +7,16 @@ export default defineConfig({
         environment: 'jsdom',
         globals: true,
         setupFiles: ['./src/test/setup.ts'],
+        // ROK-1285: a full `vitest run --coverage` on a high-core dev box forks
+        // ~1 worker per core under v8 coverage, starving the event loop until
+        // unlucky specs blow the 5s testTimeout (the pool even failed to *spawn*
+        // workers — "[vitest-pool]: Failed to start forks worker"). Cap workers
+        // to half the cores (ratio scales down on low-core CI too) and give the
+        // starvation-prone async/poll specs real headroom. Not a module leak.
+        // NB: vitest 4 removed `poolOptions`; min/maxWorkers are top-level now.
+        testTimeout: 15000,
+        minWorkers: 1,
+        maxWorkers: '50%',
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
