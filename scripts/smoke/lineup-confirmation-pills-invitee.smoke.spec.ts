@@ -22,6 +22,7 @@ import {
     apiPost,
     createLineupOrRetry,
     awaitProcessing,
+    waitForLineupStatus,
 } from './api-helpers';
 
 const FILE_PREFIX = 'lineup-confirmation-pills-invitee';
@@ -179,6 +180,10 @@ test.describe('Voting phase — per-row checkmark for invitee', () => {
             status: 'voting',
         });
         await awaitProcessing(adminToken);
+        // ROK-1286: gate on the server reporting `voting` before any test in
+        // this describe navigates — same out-of-band-settle barrier as the
+        // organizer spec's voting fixture.
+        await waitForLineupStatus(adminToken, lineupId, 'voting');
     });
 
     // LEFT SKIPPED — root cause is NOT the original mobile staleTime flake;

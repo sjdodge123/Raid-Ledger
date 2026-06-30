@@ -30,6 +30,7 @@ import {
     apiPost,
     createLineupOrRetry,
     awaitProcessing,
+    waitForLineupStatus,
 } from './api-helpers';
 
 const FILE_PREFIX = 'lineup-confirmation-pills';
@@ -187,6 +188,11 @@ test.describe('Voting phase — pill variant transitions', () => {
             status: 'voting',
         });
         await awaitProcessing(adminToken);
+        // ROK-1286: gate on the server reporting `voting` before any test in
+        // this describe navigates. The PATCH + its async side-effects settle
+        // out of band; navigating too early renders the building surface and
+        // the `votes-used-pill` selector resolves to zero elements.
+        await waitForLineupStatus(adminToken, lineupId, 'voting');
     });
 
     test("pill shows 'count' variant before reaching the vote limit", async ({ page }) => {
@@ -251,6 +257,10 @@ test.describe('Decided phase — hero schedule CTA', () => {
             decidedGameId: gameIds[0],
         });
         await awaitProcessing(adminToken);
+        // ROK-1286: same out-of-band-settle barrier as the voting describe —
+        // gate on the server reporting `decided` so the decided surface is
+        // mounted before any test in this describe navigates.
+        await waitForLineupStatus(adminToken, lineupId, 'decided');
     });
 
     // LEFT SKIPPED — root cause is NOT the original staleTime/propagation
