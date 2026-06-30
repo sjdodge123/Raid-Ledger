@@ -231,14 +231,15 @@ async function testReschedulePerfBatch() {
   );
   const newStart = new Date(Date.now() + 72 * 60 * 60 * 1000);
   const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
-  const t0 = performance.now();
   const res = await testApp.request
     .patch(`/events/${eventId}/reschedule`)
     .set('Authorization', `Bearer ${adminToken}`)
     .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
-  const elapsed = performance.now() - t0;
   expect(res.status).toBe(200);
-  expect(elapsed).toBeLessThan(200);
+  // Batching (one createMany for all signups) is asserted deterministically by
+  // the ROK-1043 unit test in event-lifecycle.helpers.spec.ts. A wall-clock
+  // bound here was load-dependent and flaked under CI (ROK-1290); the
+  // end-to-end value is that ALL signups get a real notification row.
   const notifs = await testApp.db
     .select()
     .from(schema.notifications)
@@ -714,7 +715,7 @@ describe('Events — reschedule', () => {
     testRescheduleResetsTentativeStatus());
   it('should not reset declined signups on reschedule (ROK-759)', () =>
     testRescheduleDoesNotResetDeclined());
-  it('reschedule with 12 signups completes under 200ms (ROK-1043)', () =>
+  it('reschedule with 12 signups notifies every signup in one batch (ROK-1043, ROK-1290)', () =>
     testReschedulePerfBatch());
   it("ROK-1269: rescheduler's signup stays confirmed; others flip to pending", () =>
     testRescheduleStaysConfirmedForRescheduler());
