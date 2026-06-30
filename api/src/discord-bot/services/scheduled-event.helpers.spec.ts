@@ -1,5 +1,6 @@
 import {
   buildScheduledEventName,
+  buildScheduledEventNameWithTime,
   buildEphemeralChannelName,
   EPHEMERAL_CHANNEL_MARKER,
   MAX_SCHEDULED_EVENT_NAME_LENGTH,
@@ -104,6 +105,83 @@ describe('buildEphemeralChannelName (ROK-1352)', () => {
     );
     expect(name.length).toBe(MAX_SCHEDULED_EVENT_NAME_LENGTH);
     expect(name.startsWith(EPHEMERAL_CHANNEL_MARKER)).toBe(true);
+    expect(name.endsWith('…')).toBe(true);
+  });
+
+  it('does NOT include the start-time suffix — the channel stays the clean join target', () => {
+    const name = buildEphemeralChannelName(
+      makeEventData({
+        title: 'HELLCARD Event',
+        startTime: '2026-06-14T21:35:00.000Z',
+        game: null,
+      }),
+    );
+    expect(name).toBe(`${EPHEMERAL_CHANNEL_MARKER} HELLCARD Event`);
+    expect(name).not.toContain('·');
+    expect(name).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+});
+
+describe('buildScheduledEventNameWithTime (sidebar de-dupe)', () => {
+  it('appends the start time after a middot, formatted in the given timezone', () => {
+    const name = buildScheduledEventNameWithTime(
+      makeEventData({
+        title: 'HELLCARD Event',
+        startTime: '2026-06-14T21:35:00.000Z',
+        game: null,
+      }),
+      'UTC',
+    );
+    expect(name).toBe('HELLCARD Event · Sun 9:35 PM');
+  });
+
+  it('appends the time onto a variety-night base name (with game)', () => {
+    const name = buildScheduledEventNameWithTime(
+      makeEventData({
+        title: 'Gamernight',
+        startTime: '2026-06-14T21:35:00.000Z',
+        game: { name: 'HELLCARD' },
+      }),
+      'UTC',
+    );
+    expect(name).toBe('Gamernight — HELLCARD · Sun 9:35 PM');
+  });
+
+  it('uses the bare title (no game) as the base before the time', () => {
+    const name = buildScheduledEventNameWithTime(
+      makeEventData({
+        title: 'Variety Night',
+        startTime: '2026-06-14T21:35:00.000Z',
+        game: null,
+      }),
+      'UTC',
+    );
+    expect(name).toBe('Variety Night · Sun 9:35 PM');
+  });
+
+  it('honors a non-UTC configured timezone for the displayed time', () => {
+    const name = buildScheduledEventNameWithTime(
+      makeEventData({
+        title: 'Raid',
+        startTime: '2026-06-15T01:35:00.000Z',
+        game: null,
+      }),
+      'America/New_York',
+    );
+    expect(name).toBe('Raid · Sun 9:35 PM');
+  });
+
+  it('truncates a base+time name over 100 chars to 99 + ellipsis', () => {
+    const title = 'T'.repeat(100);
+    const name = buildScheduledEventNameWithTime(
+      makeEventData({
+        title,
+        startTime: '2026-06-14T21:35:00.000Z',
+        game: null,
+      }),
+      'UTC',
+    );
+    expect(name.length).toBe(MAX_SCHEDULED_EVENT_NAME_LENGTH);
     expect(name.endsWith('…')).toBe(true);
   });
 });

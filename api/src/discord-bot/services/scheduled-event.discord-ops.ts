@@ -9,6 +9,7 @@ import {
   MAX_SCHEDULED_EVENTS_REACHED,
   timedDiscordCall,
   buildScheduledEventName,
+  buildScheduledEventNameWithTime,
   type ScheduledEventData,
 } from './scheduled-event.helpers';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
@@ -237,6 +238,24 @@ export async function resolveVoiceForEdit(
   );
 }
 
+/**
+ * Resolve the SE name for an edit. Ephemeral-voice events get the start time
+ * appended (`"<base> · Sun 9:35 PM"`) so the Discord sidebar's SE line no longer
+ * duplicates the co-located `"⏰ <base>"` channel name; non-ephemeral events keep
+ * the clean game-aware name (they sit at static channels and show their time
+ * natively in the Events tab). The repoint path re-runs this on both create and
+ * destroy of the ephemeral channel, so the suffix is added/removed as the
+ * channel comes and goes. `getTimezone` is invoked only on the ephemeral path.
+ */
+export async function resolveEditedScheduledEventName(
+  event: Pick<ScheduledEventRecord, 'ephemeralVoiceChannelId'>,
+  eventData: ScheduledEventData,
+  getTimezone: () => Promise<string | null>,
+): Promise<string> {
+  if (!event.ephemeralVoiceChannelId) return buildScheduledEventName(eventData);
+  return buildScheduledEventNameWithTime(eventData, await getTimezone());
+}
+
 /** Create a new Discord Scheduled Event via the API (ROK-755 extraction). */
 export async function tryCreateNewEvent(
   guild: Guild,
@@ -261,7 +280,12 @@ export async function tryCreateNewEvent(
   );
 }
 
-/** Edit all fields of an existing Discord Scheduled Event (ROK-755 extraction). */
+/**
+ * Edit all fields of an existing Discord Scheduled Event (ROK-755 extraction).
+ * `name` lets the caller substitute a pre-resolved SE name (e.g. the
+ * time-suffixed ephemeral variant); when omitted it defaults to the clean
+ * `buildScheduledEventName`.
+ */
 export async function tryEditFullEvent(
   guild: Guild,
   eventId: number,
@@ -269,12 +293,13 @@ export async function tryEditFullEvent(
   eventData: ScheduledEventData,
   description: string,
   voiceChannelId: string | null,
+  name?: string,
 ): Promise<void> {
   await timedDiscordCall(
     'scheduledEvents.edit',
     () =>
       guild.scheduledEvents.edit(seId, {
-        name: buildScheduledEventName(eventData),
+        name: name ?? buildScheduledEventName(eventData),
         scheduledStartTime: new Date(eventData.startTime),
         scheduledEndTime: new Date(eventData.endTime),
         description,
