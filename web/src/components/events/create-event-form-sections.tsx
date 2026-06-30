@@ -99,7 +99,7 @@ export function WhenSection({ form, errors, isEditMode, tzAbbr, endTimePreview, 
             <DurationSection durationMinutes={form.durationMinutes} customDuration={form.customDuration} durationError={errors.duration} onDurationMinutesChange={(v) => updateField('durationMinutes', v)} onCustomDurationChange={(v) => updateField('customDuration', v)} onDurationErrorClear={() => setErrors((prev) => ({ ...prev, duration: undefined }))} />
             {endTimePreview && <EndTimePreview endTimePreview={endTimePreview} tzAbbr={tzAbbr} durationMinutes={form.durationMinutes} />}
             {!isEditMode && <RecurrenceFields form={form} errors={errors} recurrenceCount={recurrenceCount} updateField={updateField} setErrors={setErrors} />}
-            <EphemeralVoiceToggle value={form.ephemeralVoiceEnabled} onChange={(v) => updateField('ephemeralVoiceEnabled', v)} />
+            <EphemeralVoiceToggle value={form.ephemeralVoiceEnabled} onChange={(v) => updateField('ephemeralVoiceEnabled', v)} privateValue={form.privateVoice} onPrivateChange={(v) => updateField('privateVoice', v)} />
         </FormSection>
     );
 }

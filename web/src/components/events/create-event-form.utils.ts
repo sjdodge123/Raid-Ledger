@@ -27,6 +27,7 @@ function getEditModeState(editEvent: EventResponseDto, resolved: string): FormSt
         reminder1hour: editEvent.reminder1hour ?? false,
         reminder24hour: editEvent.reminder24hour ?? false,
         ephemeralVoiceEnabled: editEvent.ephemeralVoiceEnabled ?? null,
+        privateVoice: editEvent.privateVoice ?? null,
         selectedInstances: (editEvent.contentInstances as Record<string, unknown>[]) ?? [],
         titleIsAutoSuggested: false, descriptionIsAutoSuggested: false,
     };
@@ -43,7 +44,7 @@ function getDefaultState(): FormState {
         maxAttendees: '', autoUnbench: true,
         recurrenceFrequency: '', recurrenceUntil: '',
         reminder15min: true, reminder1hour: false, reminder24hour: false,
-        ephemeralVoiceEnabled: null,
+        ephemeralVoiceEnabled: null, privateVoice: null,
         selectedInstances: [], titleIsAutoSuggested: false, descriptionIsAutoSuggested: false,
     };
 }
@@ -183,5 +184,6 @@ export function buildSubmitDto(
         contentInstances: form.selectedInstances.length > 0 ? form.selectedInstances : undefined,
         reminder15min: form.reminder15min, reminder1hour: form.reminder1hour, reminder24hour: form.reminder24hour,
         ephemeralVoiceEnabled: form.ephemeralVoiceEnabled,
+        privateVoice: form.privateVoice,
     };
 }

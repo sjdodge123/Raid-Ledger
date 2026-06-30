@@ -42,6 +42,7 @@ const candidate = {
   recurrenceGroupId: null,
   ephemeralVoiceEnabled: null,
   ephemeralVoiceChannelId: 'ch-1',
+  privateVoice: null,
   discordScheduledEventId: 'se-1',
 };
 

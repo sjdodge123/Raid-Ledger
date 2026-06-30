@@ -31,6 +31,8 @@ export function buildBaseValues(
     // admin force-ephemeral setting is on). Recurring instances each inherit
     // this base value; later series edits propagate via PATCH /events/:id/series.
     ephemeralVoiceEnabled: dto.ephemeralVoiceEnabled ?? null,
+    // ROK-1386: lock the ephemeral channel to rostered members only.
+    privateVoice: dto.privateVoice ?? null,
   };
 }
 

@@ -1,6 +1,11 @@
-import { ChannelType } from 'discord.js';
+import {
+  ChannelType,
+  OverwriteType,
+  type OverwriteResolvable,
+} from 'discord.js';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import { timedDiscordCall } from './scheduled-event.helpers';
+import { reconcileMemberOverwrites } from './ephemeral-voice.private.helpers';
 
 type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
@@ -10,19 +15,90 @@ type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
  * `timedDiscordCall` so latency + timeouts are instrumented uniformly.
  */
 
-/** Create a public voice channel under `parentId` (guild root when null). */
+/**
+ * Create a voice channel under `parentId` (guild root when null). Pass
+ * `permissionOverwrites` to seed a private (roster-only) channel at creation
+ * time so it is locked before anyone can race in (ROK-1386).
+ */
 export async function createVoiceChannel(
   guild: Guild,
-  opts: { name: string; parentId: string | null },
+  opts: {
+    name: string;
+    parentId: string | null;
+    permissionOverwrites?: OverwriteResolvable[];
+  },
 ): Promise<string> {
   const channel = await timedDiscordCall('ephemeral.create', () =>
     guild.channels.create({
       name: opts.name,
       type: ChannelType.GuildVoice,
       parent: opts.parentId ?? undefined,
+      permissionOverwrites: opts.permissionOverwrites,
     }),
   );
   return channel.id;
+}
+
+/**
+ * Full-reconcile a private channel's permission overwrites against the desired
+ * allow-list (ROK-1386): re-assert the `@everyone` Connect-deny + bot allow,
+ * add overwrites for newly rostered members, and remove stale ones. No-op when
+ * the channel is gone. Safe to call repeatedly (idempotent).
+ */
+export async function applyPrivateVoiceOverwrites(
+  guild: Guild,
+  channelId: string,
+  desiredDiscordIds: Set<string>,
+  botId: string,
+): Promise<void> {
+  let channel = guild.channels.cache.get(channelId);
+  if (!channel) {
+    channel =
+      (await guild.channels.fetch(channelId).catch(() => null)) ?? undefined;
+  }
+  if (!channel || !channel.isVoiceBased()) return;
+  const po = channel.permissionOverwrites;
+  const currentMemberIds: string[] = [];
+  for (const ow of po.cache.values()) {
+    if (ow.type === OverwriteType.Member && ow.id !== botId)
+      currentMemberIds.push(ow.id);
+  }
+  const { toAdd, toRemove } = reconcileMemberOverwrites(
+    currentMemberIds,
+    desiredDiscordIds,
+  );
+  await timedDiscordCall('ephemeral.lock.base', async () => {
+    await po.edit(guild.id, { Connect: false, ViewChannel: true });
+    await po.edit(botId, { Connect: true, ViewChannel: true });
+  });
+  for (const id of toAdd) {
+    await timedDiscordCall('ephemeral.lock.add', () =>
+      po.edit(id, { Connect: true, ViewChannel: true }),
+    );
+  }
+  for (const id of toRemove) {
+    await timedDiscordCall('ephemeral.lock.remove', () => po.delete(id));
+  }
+}
+
+/**
+ * ROK-1386 join-guard: forcibly disconnect a member from voice. Used when a
+ * non-allow-listed member joins a private ephemeral channel. Force-fetches the
+ * member when not cached. Returns false (no-op) when the member is gone or not
+ * in voice. Instrumented like every other Discord call.
+ */
+export async function disconnectMember(
+  guild: Guild,
+  discordUserId: string,
+): Promise<boolean> {
+  const member =
+    guild.members.cache.get(discordUserId) ??
+    (await guild.members.fetch(discordUserId).catch(() => null));
+  if (!member?.voice?.channelId) return false;
+  await timedDiscordCall('ephemeral.guard.disconnect', () =>
+    member.voice.disconnect('Private event: not on the roster allow-list'),
+  );
+  return true;
 }
 
 /** Delete a voice channel. No-op (returns false) if it's already gone. */

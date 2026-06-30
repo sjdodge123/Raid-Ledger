@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import * as Sentry from '@sentry/node';
+import type { OverwriteResolvable } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -14,8 +15,10 @@ import {
 } from './scheduled-event.helpers';
 import { shouldCreateEphemeralChannel } from './ephemeral-voice.gate.helpers';
 import {
+  applyPrivateVoiceOverwrites,
   createVoiceChannel,
   deleteVoiceChannel,
+  disconnectMember,
   getChannelMemberCountFresh,
   getEphemeralChannelName,
   renameVoiceChannel,
@@ -29,7 +32,13 @@ import {
   claimEphemeralChannelId,
   clearEphemeralChannelId,
   fetchEventForEphemeral,
+  fetchRosterSignupRows,
+  findEventByEphemeralChannel,
 } from './ephemeral-voice.db-helpers';
+import {
+  buildPrivateVoiceOverwrites,
+  computeAllowedDiscordIds,
+} from './ephemeral-voice.private.helpers';
 
 type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
@@ -85,9 +94,15 @@ export class EphemeralVoiceService {
         await this.settingsService.getEphemeralVoiceCategoryId();
       const data = await buildRepointData(this.db, ev);
       const name = buildEphemeralChannelName(data);
+      // ROK-1386: seed the roster-only overwrites in the same channels.create
+      // call so a private channel is locked before anyone can race in.
+      const permissionOverwrites = ev.privateVoice
+        ? await this.buildSeedOverwrites(ev, guild.id)
+        : undefined;
       const channelId = await createVoiceChannel(guild, {
         name,
         parentId: categoryId,
+        permissionOverwrites,
       });
       // Atomically claim the slot (set id only if still null). If an overlapping
       // scan already created a channel, delete the one we just made so we don't
@@ -177,6 +192,60 @@ export class EphemeralVoiceService {
     await this.reconcileSeName(guild, ev, data);
   }
 
+  /**
+   * ROK-1386: full-reconcile a private event's channel overwrites against the
+   * current rostered allow-list (adds newly rostered, removes demoted/benched).
+   * No-op unless the event is private AND has a live channel. Hooked debounced
+   * on signup/roster fan-out so bench↔roster moves re-sync; the join-guard
+   * backstops sync lag.
+   */
+  async syncVoiceAccess(eventId: number): Promise<void> {
+    const ev = await fetchEventForEphemeral(this.db, eventId);
+    if (!ev?.privateVoice || !ev.ephemeralVoiceChannelId) return;
+    const guild = this.requireGuild();
+    const botId = this.clientService.getClientId();
+    if (!guild || !botId) return;
+    try {
+      const desired = await this.resolveAllowedIds(eventId);
+      await applyPrivateVoiceOverwrites(
+        guild,
+        ev.ephemeralVoiceChannelId,
+        desired,
+        botId,
+      );
+    } catch (err) {
+      this.captureError('sync-access', eventId, err);
+    }
+  }
+
+  /**
+   * ROK-1386 join-guard: disconnect a member who joined a private ephemeral
+   * channel without being on the roster allow-list. This is the REAL
+   * enforcement — overwrites only block future connects and a create-race
+   * window exists. Block re-entry only; only ever called on join transitions,
+   * never on demotion (so already-connected members are not kicked).
+   */
+  async enforceJoinGuard(
+    channelId: string,
+    discordUserId: string,
+  ): Promise<void> {
+    const ev = await findEventByEphemeralChannel(this.db, channelId);
+    if (!ev?.privateVoice || ev.ephemeralVoiceChannelId !== channelId) return;
+    // Never disconnect the bot itself — it joins to record voice attendance and
+    // will never be on the roster allow-list, so without this guard the join-
+    // guard would self-kick the bot (latent footgun, ROK-1386 review).
+    if (discordUserId === this.clientService.getClientId()) return;
+    const guild = this.requireGuild();
+    if (!guild) return;
+    try {
+      const allowed = await this.resolveAllowedIds(ev.id);
+      if (allowed.has(discordUserId)) return;
+      await disconnectMember(guild, discordUserId);
+    } catch (err) {
+      this.captureError('join-guard', ev.id, err);
+    }
+  }
+
   // ─── Private helpers ──────────────────────────────────────
 
   /** Rename the channel only when its current Discord name differs (no churn). */
@@ -221,6 +290,37 @@ export class EphemeralVoiceService {
         `Ephemeral SE rename skipped for event ${ev.id}: ${err instanceof Error ? err.message : 'unknown'}`,
       );
     }
+  }
+
+  /** Resolve the rostered-only Discord-id allow-list for an event (ROK-1386). */
+  private async resolveAllowedIds(eventId: number): Promise<Set<string>> {
+    const rows = await fetchRosterSignupRows(this.db, eventId);
+    return computeAllowedDiscordIds(rows);
+  }
+
+  /** Build seed overwrites for a private channel at create time (ROK-1386). */
+  private async buildSeedOverwrites(
+    ev: EphemeralEventRow,
+    guildId: string,
+  ): Promise<OverwriteResolvable[] | undefined> {
+    const botId = this.clientService.getClientId();
+    if (!botId) {
+      // Fail-open: without the bot id we cannot seed roster overwrites, so the
+      // channel is created fully OPEN. The join-guard still backstops intruders,
+      // but flag the gap loudly for observability (ROK-1386 review).
+      const message =
+        'private ephemeral channel created WITHOUT overwrites — Discord client not ready; relying on join-guard';
+      this.logger.warn(`${message} (event ${ev.id})`);
+      Sentry.addBreadcrumb({
+        category: 'ephemeral-voice',
+        level: 'warning',
+        message,
+        data: { eventId: ev.id },
+      });
+      return undefined;
+    }
+    const allowedDiscordIds = await this.resolveAllowedIds(ev.id);
+    return buildPrivateVoiceOverwrites({ guildId, botId, allowedDiscordIds });
   }
 
   /** Re-resolve + edit the SE channel and trigger an embed re-sync. */
