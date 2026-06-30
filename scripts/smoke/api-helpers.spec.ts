@@ -222,3 +222,53 @@ describe('createLineupOrRetry (ROK-1167)', () => {
         expect(fetchSpy).toHaveBeenCalledTimes(6);
     });
 });
+
+// ---------------------------------------------------------------------------
+// waitForLineupStatus (ROK-1286)
+// ---------------------------------------------------------------------------
+
+describe('waitForLineupStatus (ROK-1286)', () => {
+    let fetchSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        vi.resetModules();
+        fetchSpy = vi.fn();
+        vi.stubGlobal('fetch', fetchSpy);
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('polls GET /lineups/:id and returns the detail once status matches target', async () => {
+        fetchSpy.mockResolvedValueOnce(jsonRes({ id: 5, status: 'building' }, 200));
+        fetchSpy.mockResolvedValueOnce(jsonRes({ id: 5, status: 'voting' }, 200));
+
+        const { waitForLineupStatus } = await import('./api-helpers');
+        const result = await waitForLineupStatus('tok', 5, 'voting', {
+            intervalMs: 0,
+            timeoutMs: 2_000,
+        });
+
+        expect(result).toMatchObject({ id: 5, status: 'voting' });
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+        expect(String(url)).toContain('/lineups/5');
+    });
+
+    it('throws with the lineup id, target, and last observed status on timeout', async () => {
+        fetchSpy.mockImplementation(async () =>
+            jsonRes({ id: 9, status: 'building' }, 200),
+        );
+
+        const { waitForLineupStatus } = await import('./api-helpers');
+        const promise = waitForLineupStatus('tok', 9, 'archived', {
+            intervalMs: 1,
+            timeoutMs: 30,
+        });
+
+        await expect(promise).rejects.toThrow(/lineup 9/);
+        await expect(promise).rejects.toThrow(/archived/);
+        await expect(promise).rejects.toThrow(/building/);
+    });
+});

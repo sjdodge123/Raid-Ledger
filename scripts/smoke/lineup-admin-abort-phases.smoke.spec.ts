@@ -26,6 +26,7 @@ import {
     cancelLineupPhaseJobs,
     createLineupOrRetry,
     getAdminToken,
+    waitForLineupStatus,
 } from './api-helpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -89,6 +90,12 @@ async function createLineupInPhase(
         });
     }
     await awaitProcessing(token);
+    // ROK-1286: gate the fixture on the server actually reporting the target
+    // phase. The PATCH /status + its async side-effects settle out of band, so
+    // under full-suite latency the lineup can still read `building` when the
+    // test's `expect(before?.status).toBe(phase)` fires. Failing fast here with
+    // the observed status is far clearer than that downstream assertion.
+    await waitForLineupStatus(token, id, opts.target);
     return { id, gameId };
 }
 

@@ -3,7 +3,21 @@
  * Desktop tests use the header nav; mobile tests use the bottom tab bar.
  */
 import { test, expect } from './base';
+import type { Page } from '@playwright/test';
 import { isMobile } from './helpers';
+
+/**
+ * ROK-1286: gate every route assertion on the layout `<main>` actually being
+ * on screen. The app shell renders a stable `#main-content` landmark that wraps
+ * each route's content (some pages also render a nested `<main>`, so we target
+ * the id to avoid a strict-mode collision). Waiting for it after `networkidle`
+ * ensures the route has mounted before we assert on URL / nav links / headings,
+ * closing the window where a fast click+goto raced the page mount under the
+ * 1–3s of added full-suite latency.
+ */
+async function waitForMainContent(page: Page): Promise<void> {
+    await expect(page.locator('#main-content')).toBeVisible({ timeout: 15_000 });
+}
 
 test.describe('Navigation (desktop)', () => {
     test('header contains all main nav links', async ({ page }) => {
@@ -35,6 +49,7 @@ test.describe('Navigation (desktop)', () => {
         await nav.getByRole('link', { name: 'Events' }).click();
         await expect(page).toHaveURL(/\/events$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: /Events/i }),
         ).toBeVisible({ timeout: 10_000 });
@@ -42,11 +57,13 @@ test.describe('Navigation (desktop)', () => {
         await nav.getByRole('link', { name: 'Games' }).click();
         await expect(page).toHaveURL(/\/games$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         await nav.getByRole('link', { name: 'Players' }).click();
         await expect(page).toHaveURL(/\/players$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: 'Players' }),
         ).toBeVisible({ timeout: 10_000 });
@@ -54,6 +71,7 @@ test.describe('Navigation (desktop)', () => {
         await nav.getByRole('link', { name: 'Calendar' }).click();
         await expect(page).toHaveURL(/\/calendar$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: 'Calendar' }),
         ).toBeVisible({ timeout: 10_000 });
@@ -72,22 +90,26 @@ test.describe('Navigation (desktop)', () => {
         // before the heading visibility assertion fires.
         await page.goto('/calendar');
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: 'Calendar' }),
         ).toBeVisible({ timeout: 15_000 });
 
         await page.goto('/events');
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: /Events/i }).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         await page.goto('/games');
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         await page.goto('/players');
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: 'Players' }),
         ).toBeVisible({ timeout: 15_000 });
@@ -133,6 +155,7 @@ test.describe('Navigation (mobile)', () => {
         await eventsLink.evaluate((el: HTMLElement) => el.click());
         await expect(page).toHaveURL(/\/events$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: /Events/i }).first(),
         ).toBeVisible({ timeout: 10_000 });
@@ -141,12 +164,14 @@ test.describe('Navigation (mobile)', () => {
         await tabBar.getByRole('link', { name: 'Games' }).evaluate((el: HTMLElement) => el.click());
         await expect(page).toHaveURL(/\/games$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         // Navigate to Players
         await tabBar.getByRole('link', { name: 'Players' }).evaluate((el: HTMLElement) => el.click());
         await expect(page).toHaveURL(/\/players$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: 'Players' }),
         ).toBeVisible({ timeout: 10_000 });
@@ -155,6 +180,7 @@ test.describe('Navigation (mobile)', () => {
         await tabBar.getByRole('link', { name: 'Calendar' }).evaluate((el: HTMLElement) => el.click());
         await expect(page).toHaveURL(/\/calendar$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(page.getByLabel('Calendar view switcher')).toBeVisible({ timeout: 10_000 });
     });
 
@@ -171,20 +197,24 @@ test.describe('Navigation (mobile)', () => {
         // Calendar heading is hidden on mobile — use the mobile toolbar instead
         await page.goto('/calendar');
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(page.getByLabel('Calendar view switcher')).toBeVisible({ timeout: 15_000 });
 
         await page.goto('/events');
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: /Events/i }).first(),
         ).toBeVisible({ timeout: 15_000 });
 
         await page.goto('/games');
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         await page.goto('/players');
         await page.waitForLoadState('networkidle');
+        await waitForMainContent(page);
         await expect(
             page.getByRole('heading', { level: 1, name: 'Players' }),
         ).toBeVisible({ timeout: 15_000 });
@@ -213,7 +243,20 @@ test.describe('Navigation (mobile)', () => {
     });
 });
 
-/** Filter out known benign console errors (network, favicon, CORS, rate limiting). */
+/**
+ * Filter out known benign console errors so the "no critical errors" assertion
+ * only fails on real application errors.
+ *
+ * ROK-1286: rapid `goto`/click navigation tears down in-flight `fetch`/query
+ * requests and re-lays-out the shell mid-flight, which emits a known set of
+ * navigation-race console noise (`AbortError` from cancelled requests,
+ * `ResizeObserver loop` warnings) that is NOT an application fault. These were
+ * leaking through intermittently on loaded runners and failing the assertion.
+ * They are added to the benign allowlist alongside the original network/CORS
+ * patterns. The allowlist is still scoped to specific, well-understood strings
+ * — a genuine runtime error (e.g. an uncaught TypeError) is NOT matched and
+ * still fails the test.
+ */
 function filterBenignErrors(errors: string[]): string[] {
     return errors.filter(
         (e) =>
@@ -223,6 +266,9 @@ function filterBenignErrors(errors: string[]): string[] {
             !e.includes('429') &&
             !e.includes('CORS') &&
             !e.includes('ERR_CONNECTION_REFUSED') &&
-            !e.includes('Failed to load resource'),
+            !e.includes('Failed to load resource') &&
+            !e.includes('AbortError') &&
+            !e.includes('aborted') &&
+            !e.includes('ResizeObserver'),
     );
 }

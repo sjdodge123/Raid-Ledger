@@ -164,8 +164,27 @@ test.beforeAll(async ({}, testInfo) => {
     votingEligibleCount = result.votingEligibleCount;
 });
 
+/**
+ * ROK-1286: guard the shared voting lineup before every navigation. The
+ * file-level `beforeAll` creates it once and all tests reuse `votingLineupId`;
+ * if a cross-worker race or the auto-advance scheduler archived it in the
+ * interim, the page would render an archived surface (no leaderboard) and the
+ * downstream selectors would resolve to zero elements. Re-read the lineup and
+ * rebuild it (re-pinning the module fixtures) when it's gone or archived so the
+ * navigation always lands on a live voting surface.
+ */
+async function ensureVotingLineupLive(): Promise<void> {
+    const detail = await apiGet(adminToken, `/lineups/${votingLineupId}`);
+    if (detail && detail.status !== 'archived') return;
+    const result = await setupVotingLineup(adminToken);
+    votingLineupId = result.lineupId;
+    firstGameName = result.firstGameName;
+    votingEligibleCount = result.votingEligibleCount;
+}
+
 /** Navigate to the voting lineup and wait for the composite root. */
 async function gotoVoting(page: import('@playwright/test').Page): Promise<void> {
+    await ensureVotingLineupLive();
     await page.goto(`/community-lineup/${votingLineupId}`);
     await expect(page.locator('body')).not.toHaveText(
         /something went wrong/i,
