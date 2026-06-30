@@ -54,7 +54,21 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
             never collides with the rightmost "Schedule" ribbon node (round 3). */}
         <JourneyHero
           {...hero}
-          action={<LineupParticipantsButton lineupId={lineupId} />}
+          action={
+            <LineupParticipantsButton
+              lineupId={lineupId}
+              participantsOverride={match.members.map((m) => ({
+                userId: m.userId,
+                displayName: m.displayName,
+                avatar: m.avatar,
+                customAvatarUrl: m.customAvatarUrl,
+                discordId: m.discordId,
+                role: 'invitee' as const,
+                status: 'waiting' as const,
+                steamLinked: false,
+              }))}
+            />
+          }
           headerAction={
             <SchedulingCancelAction
               lineupId={lineupId}

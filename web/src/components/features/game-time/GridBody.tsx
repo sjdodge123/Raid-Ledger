@@ -52,10 +52,14 @@ export function GridBody({
     dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots,
     HOURS, onDayClick, isDayAllActive, ...cellProps
 }: GridBodyProps): JSX.Element {
+    // Read-only/tap grids (e.g. the scheduling availability heatmap) must let
+    // the page scroll vertically on mobile; only the interactive drag-to-paint
+    // editor needs to capture every touch gesture (touch-action: none).
+    const { isInteractive } = cellProps;
     return (
         <div
             ref={gridRef} className="grid gap-px select-none"
-            style={{ gridTemplateColumns: '52px repeat(7, 1fr)', touchAction: 'none', background: gridLineBackground }}
+            style={{ gridTemplateColumns: '52px repeat(7, 1fr)', touchAction: isInteractive ? 'none' : 'pan-y', background: gridLineBackground }}
             onPointerUp={handlePointerUp}
             onPointerLeave={() => { handlePointerUp(); setHoveredCell(null); }}
             data-testid="game-time-grid"
