@@ -249,6 +249,38 @@ describe('updateScheduledEvent', () => {
     );
   });
 
+  it('appends the start time to the SE name when the event has an ephemeral voice channel', async () => {
+    const selectChain = mocks.createSelectChain([
+      {
+        discordScheduledEventId: 'discord-se-id-1',
+        ephemeralVoiceChannelId: 'ephem-vc-1',
+      },
+    ]);
+    mocks.mockDb.select.mockReturnValue(selectChain);
+    await mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
+    const editArg = mocks.mockGuild.scheduledEvents.edit.mock.calls[0][1] as {
+      name: string;
+    };
+    expect(editArg.name).toMatch(/^Raid Night — World of Warcraft · /);
+    expect(editArg.name).toMatch(/\d{1,2}:\d{2}\s?(AM|PM)$/);
+  });
+
+  it('keeps the clean SE name (no time suffix) for a non-ephemeral event', async () => {
+    const selectChain = mocks.createSelectChain([
+      {
+        discordScheduledEventId: 'discord-se-id-1',
+        ephemeralVoiceChannelId: null,
+      },
+    ]);
+    mocks.mockDb.select.mockReturnValue(selectChain);
+    await mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
+    const editArg = mocks.mockGuild.scheduledEvents.edit.mock.calls[0][1] as {
+      name: string;
+    };
+    expect(editArg.name).toBe('Raid Night — World of Warcraft');
+    expect(editArg.name).not.toContain('·');
+  });
+
   it('creates a new scheduled event when none exists in DB', async () => {
     const selectChain = mocks.createSelectChain([
       { discordScheduledEventId: null },

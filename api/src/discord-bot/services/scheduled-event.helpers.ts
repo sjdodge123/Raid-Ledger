@@ -125,6 +125,49 @@ export function buildScheduledEventName(eventData: ScheduledEventData): string {
 }
 
 /**
+ * Format an event's start time for embedding in a Scheduled Event name, e.g.
+ * `"Sun 9:35 PM"`. Mirrors the en-US, hour12 display style the push-content
+ * formatter uses (`utils/push-content.ts`), but trimmed to weekday + time so it
+ * fits the SE-name cap. When a display timezone is configured it is honored
+ * (the same `getDefaultTimezone()` setting the embeds use); otherwise the host's
+ * local zone is used. The comma some locales insert between weekday and time is
+ * collapsed to a single space to match the `"Sun 9:35 PM"` target.
+ */
+export function formatStartTimeForName(
+  startTime: string,
+  timezone?: string | null,
+): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  };
+  if (timezone) opts.timeZone = timezone;
+  return new Date(startTime).toLocaleString('en-US', opts).replace(', ', ' ');
+}
+
+/**
+ * Build the Scheduled Event name for an ephemeral-voice event, enriched with the
+ * formatted start time (`"<base> · Sun 9:35 PM"`). Scoped to ephemeral events:
+ * their SE sits at the auto-created `"⏰ <base>"` channel, so without the time
+ * suffix the Discord sidebar shows the channel and the SE name as two identical
+ * lines. Appending the start time de-dupes the second line. The base is the
+ * unchanged `buildScheduledEventName` (game-aware); the result is truncated to
+ * the Discord 100-char cap with the same ellipsis pattern.
+ */
+export function buildScheduledEventNameWithTime(
+  eventData: ScheduledEventData,
+  timezone?: string | null,
+): string {
+  const base = buildScheduledEventName(eventData);
+  const time = formatStartTimeForName(eventData.startTime, timezone);
+  const combined = `${base} · ${time}`;
+  if (combined.length <= MAX_SCHEDULED_EVENT_NAME_LENGTH) return combined;
+  return combined.slice(0, MAX_SCHEDULED_EVENT_NAME_LENGTH - 1) + '…';
+}
+
+/**
  * ROK-1352: marker prefixed to ephemeral voice channel names so they're
  * visually distinguishable from permanent channels in the Discord channel
  * list. Native Unicode (renders wherever Discord does); '⏰' connotes the
