@@ -1,6 +1,7 @@
 import { eq, and, isNull, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { computeAllowedDiscordIds } from './ephemeral-voice.private.helpers';
 
 /**
  * Fetch an event's live ephemeral voice channel id (null when none). Shared by
@@ -29,6 +30,8 @@ export interface EphemeralEventRow {
   recurrenceGroupId: string | null;
   ephemeralVoiceEnabled: boolean | null;
   ephemeralVoiceChannelId: string | null;
+  /** ROK-1386: roster-only lock on the ephemeral channel (null = open). */
+  privateVoice: boolean | null;
 }
 
 const EVENT_FIELDS = {
@@ -40,6 +43,7 @@ const EVENT_FIELDS = {
   recurrenceGroupId: schema.events.recurrenceGroupId,
   ephemeralVoiceEnabled: schema.events.ephemeralVoiceEnabled,
   ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
+  privateVoice: schema.events.privateVoice,
 };
 
 /**

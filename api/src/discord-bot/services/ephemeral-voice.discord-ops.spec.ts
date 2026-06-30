@@ -1,14 +1,24 @@
 /**
- * Unit tests for the ephemeral-voice Discord ops added for the in-flight
- * name backfill: reading the current channel name, renaming a channel, and the
- * no-churn Scheduled-Event name reconcile (rename only when Discord's current
- * name differs).
+ * Unit tests for the ephemeral-voice Discord ops.
+ *
+ * Covers two independent op groups:
+ *  - name backfill (ROK ephemeral-name): reading the current channel name,
+ *    renaming a channel, and the no-churn Scheduled-Event name reconcile
+ *    (rename only when Discord's current name differs).
+ *  - private-event overwrites (ROK-1386): the full overwrite reconcile that
+ *    adds rostered members, removes stale ones, and re-asserts the base lock.
  */
+import { OverwriteType } from 'discord.js';
 import {
   getEphemeralChannelName,
   renameVoiceChannel,
   reconcileScheduledEventName,
+  applyPrivateVoiceOverwrites,
 } from './ephemeral-voice.discord-ops';
+
+jest.mock('./scheduled-event.helpers', () => ({
+  timedDiscordCall: (_label: string, fn: () => unknown) => fn(),
+}));
 
 interface FakeGuild {
   channels: {
@@ -112,5 +122,77 @@ describe('reconcileScheduledEventName (no-churn)', () => {
     );
     expect(renamed).toBe(false);
     expect(guild.scheduledEvents.edit).not.toHaveBeenCalled();
+  });
+});
+
+const BOT = 'bot-id';
+const GUILD = 'guild-id';
+
+function memberOverwrite(id: string) {
+  return { id, type: OverwriteType.Member };
+}
+
+function buildChannel(currentMemberIds: string[]) {
+  const cache = new Map<string, { id: string; type: number }>();
+  cache.set(GUILD, { id: GUILD, type: OverwriteType.Role });
+  cache.set(BOT, memberOverwrite(BOT));
+  for (const id of currentMemberIds) cache.set(id, memberOverwrite(id));
+  const po = {
+    cache,
+    edit: jest.fn().mockResolvedValue(undefined),
+    delete: jest.fn().mockResolvedValue(undefined),
+  };
+  const channel = { isVoiceBased: () => true, permissionOverwrites: po };
+  return { channel, po };
+}
+
+function buildGuild(channel: unknown) {
+  return {
+    id: GUILD,
+    channels: {
+      cache: { get: () => channel },
+      fetch: jest.fn(),
+    },
+  } as never;
+}
+
+describe('applyPrivateVoiceOverwrites — full reconcile (ROK-1386)', () => {
+  it('adds missing rostered members and removes stale ones', async () => {
+    const { channel, po } = buildChannel(['stay', 'stale']);
+    await applyPrivateVoiceOverwrites(
+      buildGuild(channel),
+      'ch1',
+      new Set(['stay', 'new']),
+      BOT,
+    );
+    // base lock re-asserted for @everyone + bot, plus the added member
+    expect(po.edit).toHaveBeenCalledWith(GUILD, {
+      Connect: false,
+      ViewChannel: true,
+    });
+    expect(po.edit).toHaveBeenCalledWith(BOT, {
+      Connect: true,
+      ViewChannel: true,
+    });
+    expect(po.edit).toHaveBeenCalledWith('new', {
+      Connect: true,
+      ViewChannel: true,
+    });
+    // stale member removed; 'stay' left untouched
+    expect(po.delete).toHaveBeenCalledTimes(1);
+    expect(po.delete).toHaveBeenCalledWith('stale');
+  });
+
+  it('is a no-op when the channel no longer exists', async () => {
+    const guild = {
+      id: GUILD,
+      channels: {
+        cache: { get: () => undefined },
+        fetch: jest.fn().mockResolvedValue(null),
+      },
+    } as never;
+    await expect(
+      applyPrivateVoiceOverwrites(guild, 'gone', new Set(['x']), BOT),
+    ).resolves.toBeUndefined();
   });
 });

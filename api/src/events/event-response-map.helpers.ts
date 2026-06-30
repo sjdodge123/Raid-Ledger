@@ -75,6 +75,8 @@ function mapEventFields(
     // ROK-1352: ephemeral voice override + live channel id.
     ephemeralVoiceEnabled: event.ephemeralVoiceEnabled ?? null,
     ephemeralVoiceChannelId: event.ephemeralVoiceChannelId ?? null,
+    // ROK-1386: private-voice (roster-only) override.
+    privateVoice: event.privateVoice ?? null,
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
   };

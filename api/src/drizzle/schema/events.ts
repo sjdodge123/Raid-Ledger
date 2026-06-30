@@ -119,6 +119,9 @@ export const events = pgTable(
     /** ROK-1352: Live ephemeral voice channel ID. Set on create, cleared on
      *  destroy. Non-null marks the channel as the resolver Tier 0 target. */
     ephemeralVoiceChannelId: text('ephemeral_voice_channel_id'),
+    /** ROK-1386: Lock the ephemeral voice channel to rostered members only.
+     *  null/false = open. Only meaningful when ephemeral voice is on. */
+    privateVoice: boolean('private_voice'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

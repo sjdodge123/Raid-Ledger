@@ -54,6 +54,9 @@ export const CreateEventSchema = z.object({
      *  unless the admin force-ephemeral setting is on. Series-wide changes
      *  propagate per-event via the ROK-429 scope flow (PATCH /events/:id/series). */
     ephemeralVoiceEnabled: z.boolean().nullable().optional(),
+    /** ROK-1386: Lock the ephemeral voice channel to rostered members only.
+     *  Only meaningful when ephemeral voice is effectively on. */
+    privateVoice: z.boolean().nullable().optional(),
 }).refine(
     (data) => new Date(data.startTime) < new Date(data.endTime),
     { message: 'Start time must be before end time', path: ['endTime'] }
@@ -81,6 +84,8 @@ export const UpdateEventSchema = z.object({
     /** ROK-1352: Per-event ephemeral-voice opt-in. Persisted on single + series
      *  edits via buildUpdateData; series scope is driven by the ROK-429 modal. */
     ephemeralVoiceEnabled: z.boolean().nullable().optional(),
+    /** ROK-1386: Lock the ephemeral voice channel to rostered members only. */
+    privateVoice: z.boolean().nullable().optional(),
 }).refine(
     (data) => {
         if (data.startTime && data.endTime) {
@@ -177,6 +182,8 @@ export const EventResponseSchema = z.object({
     ephemeralVoiceEnabled: z.boolean().nullable().optional(),
     /** ROK-1352: Live ephemeral voice channel ID (null when none). */
     ephemeralVoiceChannelId: z.string().nullable().optional(),
+    /** ROK-1386: Lock ephemeral voice to rostered members only (null = off). */
+    privateVoice: z.boolean().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });
