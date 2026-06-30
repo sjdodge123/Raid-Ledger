@@ -28,6 +28,7 @@ async function build(memberCount: number) {
   const embed = { enqueue: jest.fn().mockResolvedValue(undefined) };
   const settings = {
     getEphemeralVoiceCategoryId: jest.fn().mockResolvedValue(null),
+    getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
   };
   const module = await Test.createTestingModule({
     providers: [
@@ -60,12 +61,24 @@ async function build(memberCount: number) {
   const claimSpy = jest
     .spyOn(dbHelpers, 'claimEphemeralChannelId')
     .mockResolvedValue(true);
+  const getNameSpy = jest
+    .spyOn(discordOps, 'getEphemeralChannelName')
+    .mockReturnValue('stale name');
+  const renameSpy = jest
+    .spyOn(discordOps, 'renameVoiceChannel')
+    .mockResolvedValue(undefined);
+  const seReconcileSpy = jest
+    .spyOn(discordOps, 'reconcileScheduledEventName')
+    .mockResolvedValue(true);
   return {
     service: module.get(EphemeralVoiceService),
     deleteSpy: discordOps.deleteVoiceChannel as jest.Mock,
     clearSpy,
     createSpy,
     claimSpy,
+    getNameSpy,
+    renameSpy,
+    seReconcileSpy,
     voiceAttendance,
   };
 }
@@ -132,5 +145,54 @@ describe('createForEvent — claim guards overlapping scans (Codex review)', () 
     await service.createForEvent({ ...fresh });
     expect(createSpy).toHaveBeenCalled();
     expect(deleteSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('reconcileNamesForEvent — in-flight name backfill', () => {
+  const reconcileRow = { ...row, discordScheduledEventId: 'se-1' };
+
+  it('renames channel (marker, no trailing "Event") + SE (with time) when names differ', async () => {
+    const { service, getNameSpy, renameSpy, seReconcileSpy } = await build(0);
+    getNameSpy.mockReturnValue('stale name'); // != computed "⏰ t"
+    await service.reconcileNamesForEvent({ ...reconcileRow });
+    expect(renameSpy).toHaveBeenCalledWith(
+      guild,
+      'ch-1',
+      expect.stringMatching(/^⏰ t$/),
+    );
+    expect(seReconcileSpy).toHaveBeenCalledWith(
+      guild,
+      'se-1',
+      expect.stringMatching(/^t · /),
+    );
+  });
+
+  it('does NOT rename the channel when its current name already matches (no churn)', async () => {
+    const { service, getNameSpy, renameSpy, seReconcileSpy } = await build(0);
+    getNameSpy.mockReturnValue('⏰ t'); // already correct
+    seReconcileSpy.mockResolvedValue(false); // SE also already matches
+    await service.reconcileNamesForEvent({ ...reconcileRow });
+    expect(renameSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips non-ephemeral events (no channel id) without touching Discord', async () => {
+    const { service, getNameSpy, renameSpy, seReconcileSpy } = await build(0);
+    await service.reconcileNamesForEvent({
+      ...reconcileRow,
+      ephemeralVoiceChannelId: null,
+    });
+    expect(getNameSpy).not.toHaveBeenCalled();
+    expect(renameSpy).not.toHaveBeenCalled();
+    expect(seReconcileSpy).not.toHaveBeenCalled();
+  });
+
+  it('swallows a channel-rename error (rate-limit) and still reconciles the SE', async () => {
+    const { service, getNameSpy, renameSpy, seReconcileSpy } = await build(0);
+    getNameSpy.mockReturnValue('stale name');
+    renameSpy.mockRejectedValue(new Error('rate limited'));
+    await expect(
+      service.reconcileNamesForEvent({ ...reconcileRow }),
+    ).resolves.toBeUndefined();
+    expect(seReconcileSpy).toHaveBeenCalled();
   });
 });
