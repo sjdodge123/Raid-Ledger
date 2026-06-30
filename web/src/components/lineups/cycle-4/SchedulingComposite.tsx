@@ -161,7 +161,7 @@ export function SchedulingComposite(
       <SchedulingSlotList
         slots={poll.slots}
         myVotedSlotIds={poll.myVotedSlotIds}
-        conflictingSlotIds={poll.conflictingSlotIds ?? []}
+        slotConflicts={poll.slotConflicts ?? []}
         readOnly={readOnly}
         canLock={canLock}
         isSuggesting={suggest.isPending}

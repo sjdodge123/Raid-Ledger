@@ -29,8 +29,8 @@ export interface SchedulingSlotRowProps {
   slot: ScheduleSlotWithVotesDto;
   /** Viewer has voted on this slot. */
   voted: boolean;
-  /** This slot conflicts with one of the viewer's existing events. */
-  conflicting: boolean;
+  /** Titles of the viewer's existing events that conflict with this slot (ROK-1032). */
+  conflictEventNames: string[];
   /** Interactions disabled (read-only poll). */
   readOnly: boolean;
   /** Operator/creator → render the per-row Lock affordance. */
@@ -65,8 +65,15 @@ function VoteSummary({ slot }: { slot: ScheduleSlotWithVotesDto }): JSX.Element 
 
 /** Single suggested-time row — see file-level docstring. */
 export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
-  const { slot, voted, conflicting, readOnly, canLock, onToggleVote, onLock } =
-    props;
+  const {
+    slot,
+    voted,
+    conflictEventNames,
+    readOnly,
+    canLock,
+    onToggleVote,
+    onLock,
+  } = props;
   const { label, isPast } = formatSlotTime(slot.proposedTime);
 
   return (
@@ -88,8 +95,15 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
         </div>
         <div className="mt-1 flex items-center gap-2">
           <VoteSummary slot={slot} />
-          {conflicting && (
-            <span className="text-[11px] text-amber-300">⚠ conflicts</span>
+          {conflictEventNames.length > 0 && (
+            <span
+              className="text-[11px] text-amber-300"
+              title={`Conflicts with: ${conflictEventNames.join(', ')}`}
+            >
+              ⚠ Conflicts with {conflictEventNames[0]}
+              {conflictEventNames.length > 1 &&
+                ` +${conflictEventNames.length - 1}`}
+            </span>
           )}
         </div>
       </div>

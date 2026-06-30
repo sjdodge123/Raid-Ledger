@@ -48,7 +48,7 @@ import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { insertPollInterests } from './scheduling-auto-heart.helpers';
-import { findConflictingSlotIds } from './scheduling-conflict.helpers';
+import { findSlotConflicts } from './scheduling-conflict.helpers';
 import {
   findSlotOrThrow,
   resolveGameInfo,
@@ -112,9 +112,10 @@ export class SchedulingService {
     }
     const slotIds = slots.map((s) => s.id);
     const votes = await findScheduleVotes(this.db, slotIds);
-    const conflictingSlotIds = userId
-      ? await findConflictingSlotIds(this.db, userId, slots)
+    const slotConflicts = userId
+      ? await findSlotConflicts(this.db, userId, slots)
       : undefined;
+    const conflictingSlotIds = slotConflicts?.map((c) => c.slotId);
     return {
       ...buildPollResponse(
         { ...match, ...gameInfo, lineupCreatedById: lineup?.createdBy ?? null },
@@ -127,6 +128,7 @@ export class SchedulingService {
       ),
       uniqueVoterCount: voterCount,
       conflictingSlotIds,
+      slotConflicts,
       phaseDeadline: lineup?.phaseDeadline
         ? lineup.phaseDeadline.toISOString()
         : null,
