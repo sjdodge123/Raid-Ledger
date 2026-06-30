@@ -18,6 +18,16 @@
 #
 # Worktree-safe: auto-detects worktrees, uses correct Docker volumes, copies
 # .env files from the main repo, and sources env vars for NestJS.
+#
+# Durable app_settings preservation: after each healthy deploy, the local API
+# keys (the `app_settings` table — Blizzard/IGDB/ITAD/LLM/etc.) are snapshotted
+# to ~/.raid-ledger/app-settings.local.sql — OUTSIDE the repo AND outside the
+# Docker volume. Whenever a reset (--fresh, clone-prod, a `docker volume rm`, an
+# agent running --fresh) leaves app_settings empty, the snapshot is auto-restored
+# right after migrations, BEFORE the API starts. One mechanism covers every reset
+# path, so the recurring local-keys wipe stops. (app_settings is EXCLUDED from
+# all backups by design — ROK-1279 — and is NOT seeded from env, so without this
+# snapshot every reset destroys the keys with no recovery.)
 # =============================================================================
 
 set -e
@@ -42,6 +52,17 @@ COMPOSE_FILE="$MAIN_REPO/docker-compose.yml"
 ENV_FILE="$PROJECT_DIR/.env"
 LOG_DIR="$PROJECT_DIR/.dev-logs"
 PID_FILE="$PROJECT_DIR/.dev-pids"
+
+# External app_settings snapshot — the durable preservation store. Lives in the
+# same out-of-repo, out-of-volume state dir as the env lease (env-lock.sh), so it
+# survives `--fresh`, `docker volume rm`, clone-prod, and any agent DB reset.
+# Honors RAID_LEDGER_STATE_DIR like env-lock.sh for test overrides.
+RL_STATE_DIR="${RAID_LEDGER_STATE_DIR:-$HOME/.raid-ledger}"
+APP_SETTINGS_SNAPSHOT="$RL_STATE_DIR/app-settings.local.sql"
+# Tilde form used ONLY in operator-facing messages (the actual path above is
+# fully expanded for file ops). The literal ~ is intentional display text.
+# shellcheck disable=SC2088
+APP_SETTINGS_SNAPSHOT_DISPLAY="~/.raid-ledger/app-settings.local.sql"
 
 cd "$PROJECT_DIR"
 
@@ -718,6 +739,82 @@ create_safety_backup() {
     fi
 }
 
+# =============================================================================
+# Durable app_settings preservation (stop the recurring local-keys wipe)
+# =============================================================================
+# app_settings holds the local API keys (Blizzard/IGDB/ITAD/LLM/etc.). They are
+# EXCLUDED from all backups (ROK-1279) and NOT seeded from env, so every DB reset
+# wiped them with no recovery. The three helpers below implement ONE durable
+# mechanism: snapshot to an external file after a healthy deploy, auto-restore
+# whenever the table is empty after migrations.
+#
+# Encryption note: app_settings values are encrypted with a key derived from the
+# local JWT_SECRET, so a restored snapshot stays valid as long as JWT_SECRET is
+# unchanged (it's stable in .env). Rotate JWT_SECRET and the restored ciphertext
+# becomes undecryptable — re-enter the keys via /admin/settings.
+
+# Count rows in public.app_settings. Emits an integer, or "error" when the table
+# isn't queryable yet (DB down / pre-migration).
+count_app_settings_rows() {
+    docker exec raid-ledger-db psql -U user -d raid_ledger -tAc \
+        "SELECT count(*) FROM app_settings" 2>/dev/null || echo "error"
+}
+
+# Dump app_settings to the external snapshot after a healthy deploy so the
+# current keys can be auto-restored after the next reset. Only writes when the
+# table has >=1 row, and writes atomically (tmp + mv) so a failed dump never
+# clobbers a good snapshot. No-op (keeps prior snapshot) on empty/unqueryable.
+snapshot_app_settings() {
+    local rows
+    rows=$(count_app_settings_rows)
+    if ! [ "$rows" -gt 0 ] 2>/dev/null; then
+        return 0
+    fi
+    mkdir -p "$RL_STATE_DIR"
+    local tmp
+    tmp=$(mktemp -t rl-app-settings.XXXXXX)
+    if docker exec raid-ledger-db pg_dump \
+            --data-only --inserts --table=public.app_settings \
+            "$DATABASE_URL" >"$tmp" 2>/dev/null \
+       && grep -qE '^INSERT INTO ' "$tmp"; then
+        mv "$tmp" "$APP_SETTINGS_SNAPSHOT"
+        print_success "app_settings snapshot saved ($rows row(s)) → $APP_SETTINGS_SNAPSHOT_DISPLAY"
+    else
+        rm -f "$tmp"
+        print_warning "app_settings snapshot skipped — kept previous snapshot if any"
+    fi
+}
+
+# Auto-restore app_settings from the external snapshot when the table is empty
+# after a reset (--fresh / clone / volume nuke). Runs BEFORE the API starts so it
+# boots reading the restored rows — no settings-cache bounce needed. Only acts on
+# a definitively-empty table; re-counts after to confirm the restore landed.
+restore_app_settings_if_empty() {
+    [ -f "$APP_SETTINGS_SNAPSHOT" ] || return 0
+    local rows
+    rows=$(count_app_settings_rows)
+    [ "$rows" = "0" ] || return 0
+    docker exec -i raid-ledger-db psql -U user -d raid_ledger \
+        <"$APP_SETTINGS_SNAPSHOT" >/dev/null 2>&1 || true
+    local restored
+    restored=$(count_app_settings_rows)
+    if [ "$restored" -gt 0 ] 2>/dev/null; then
+        print_success "app_settings empty after reset — auto-restored ${restored} row(s) from $APP_SETTINGS_SNAPSHOT_DISPLAY"
+    else
+        print_warning "app_settings auto-restore from $APP_SETTINGS_SNAPSHOT_DISPLAY failed — re-enter API keys via /admin/settings"
+    fi
+}
+
+# Warn before a --fresh wipe that app_settings (API keys) will be cleared, and
+# whether the external snapshot can auto-restore them after migrations.
+warn_fresh_app_settings() {
+    if [ -f "$APP_SETTINGS_SNAPSHOT" ]; then
+        print_warning "--fresh will wipe app_settings (API keys) — snapshot at $APP_SETTINGS_SNAPSHOT_DISPLAY will auto-restore them after migrations."
+    else
+        print_warning "--fresh will wipe app_settings (API keys) — no snapshot exists yet, so you'll re-enter keys via /admin/settings (a snapshot is saved after each healthy deploy)."
+    fi
+}
+
 start_dev() {
     local rebuild=$1
     local fresh=$2
@@ -770,8 +867,15 @@ start_dev() {
 
     # Fresh start: wipe volumes (new admin password will be auto-generated on bootstrap)
     if [ "$fresh" = "true" ]; then
+        # Tell the operator the API keys are about to go, and whether we can
+        # auto-restore them after migrations.
+        warn_fresh_app_settings
         # Create a safety backup before wiping
         create_safety_backup
+        # Refresh the external app_settings snapshot while the DB is still up, so
+        # keys entered since the last healthy deploy survive this wipe too. No-op
+        # if the DB is already down or the table is empty.
+        snapshot_app_settings
 
         print_warning "Fresh start: wiping database volume..."
         docker compose -f "$COMPOSE_FILE" down -v 2>/dev/null || true
@@ -824,6 +928,14 @@ start_dev() {
     # Validate DB has real data — if empty and not --fresh, something went wrong
     validate_db_data "$fresh"
 
+    # Durable app_settings recovery: if a reset (--fresh / clone / volume nuke)
+    # left app_settings empty, auto-restore the external snapshot NOW — after
+    # migrations rebuilt the empty table, before the API starts — so the API
+    # boots reading the restored rows and no settings-cache bounce is needed.
+    # (Placed after validate_db_data so a full-backup restore that already
+    # repopulated app_settings is left untouched — we only act on 0 rows.)
+    restore_app_settings_if_empty
+
     # Bootstrap admin — capture output so we can show credentials
     echo "Checking admin account..."
     BOOTSTRAP_OUTPUT=$(npx ts-node api/scripts/bootstrap-admin.ts 2>&1 || true)
@@ -854,7 +966,15 @@ start_dev() {
     print_success "Web starting on http://localhost:5173 (PID: $!)"
 
     # Wait for API to be healthy (with retries)
-    wait_for_api || print_warning "API may still be starting — check logs with --logs"
+    local api_healthy=true
+    wait_for_api || { print_warning "API may still be starting — check logs with --logs"; api_healthy=false; }
+
+    # Snapshot app_settings now that the deploy is healthy, so the current API
+    # keys can be auto-restored after the next DB reset. No-op if the table is
+    # empty (never clobbers a good snapshot with an empty dump).
+    if [ "$api_healthy" = true ]; then
+        snapshot_app_settings
+    fi
 
     # Re-anchor the lease PID from $$ (this script — about to exit) to the
     # long-lived API server PID. Without this, the lease appears `pid_dead`
@@ -1007,6 +1127,13 @@ while [ $# -gt 0 ]; do
             echo ""
             echo "Worktree-safe: auto-detects worktrees, copies .env from main repo,"
             echo "and always uses correct Docker volumes."
+            echo ""
+            echo "Durable app_settings preservation: local API keys (the app_settings"
+            echo "table) are snapshotted to ~/.raid-ledger/app-settings.local.sql after"
+            echo "each healthy deploy (and before a --fresh wipe), then auto-restored"
+            echo "whenever a reset (--fresh / clone / volume nuke) leaves the table empty."
+            echo "The snapshot lives outside the repo + Docker volume; keys survive as"
+            echo "long as JWT_SECRET is unchanged."
             echo ""
             echo "Examples:"
             echo "  $0 --branch rok-123     # Switch to feature branch and deploy"

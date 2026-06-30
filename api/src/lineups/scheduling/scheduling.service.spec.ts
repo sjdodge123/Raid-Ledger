@@ -49,7 +49,7 @@ jest.mock('./scheduling-event.helpers', () => ({
 }));
 jest.mock('./scheduling-conflict.helpers', () => ({
   ...jest.requireActual('./scheduling-conflict.helpers'),
-  findConflictingSlotIds: jest.fn().mockResolvedValue([]),
+  findSlotConflicts: jest.fn().mockResolvedValue([]),
 }));
 
 /* eslint-disable @typescript-eslint/no-require-imports */

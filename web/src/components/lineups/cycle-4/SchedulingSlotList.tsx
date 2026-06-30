@@ -13,7 +13,8 @@ import { SchedulingSuggestForm } from './SchedulingSuggestForm';
 export interface SchedulingSlotListProps {
   slots: ScheduleSlotWithVotesDto[];
   myVotedSlotIds: number[];
-  conflictingSlotIds: number[];
+  /** Per-slot conflicting event titles (ROK-1032); slots absent here have no conflict. */
+  slotConflicts: { slotId: number; eventTitles: string[] }[];
   readOnly: boolean;
   canLock: boolean;
   isSuggesting: boolean;
@@ -38,7 +39,9 @@ function sortSlots(
 /** Suggested-time list + suggest form — see file-level docstring. */
 export function SchedulingSlotList(props: SchedulingSlotListProps): JSX.Element {
   const voted = new Set(props.myVotedSlotIds);
-  const conflicting = new Set(props.conflictingSlotIds);
+  const conflictMap = new Map(
+    props.slotConflicts.map((c) => [c.slotId, c.eventTitles] as const),
+  );
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground">
@@ -55,7 +58,7 @@ export function SchedulingSlotList(props: SchedulingSlotListProps): JSX.Element 
             key={slot.id}
             slot={slot}
             voted={voted.has(slot.id)}
-            conflicting={conflicting.has(slot.id)}
+            conflictEventNames={conflictMap.get(slot.id) ?? []}
             readOnly={props.readOnly}
             canLock={props.canLock}
             onToggleVote={props.onToggleVote}

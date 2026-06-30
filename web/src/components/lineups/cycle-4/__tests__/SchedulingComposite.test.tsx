@@ -190,7 +190,7 @@ function buildPoll(overrides: PollOverrides = {}): SchedulePollPageResponseDto {
         myVotedSlotIds,
         lineupStatus: 'scheduling',
         uniqueVoterCount: 2,
-        conflictingSlotIds: [],
+        slotConflicts: [],
         phaseDeadline: null,
         // ROK-1300 NEW field — cast in case the contract type hasn't been
         // rebuilt with `isStandalone` yet. The test must fail because the
