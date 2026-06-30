@@ -11,25 +11,36 @@
  * button never blocks hero render.
  */
 import { useState, type JSX } from 'react';
+import type { LineupParticipantDto } from '@raid-ledger/contract';
 import { useLineupParticipants } from '../../hooks/use-lineups';
 import { MemberAvatarGroup } from './decided/MemberAvatarGroup';
 import { LineupParticipantsModal } from './LineupParticipantsModal';
 
 interface LineupParticipantsButtonProps {
   lineupId: number;
+  /**
+   * Override the participant source. Scheduling polls pass the match's invited
+   * members — the lineup roster is just the creator there, so the roster query
+   * renders "Participants · 1". When provided, the roster query is skipped.
+   */
+  participantsOverride?: LineupParticipantDto[];
 }
 
 export function LineupParticipantsButton({
   lineupId,
+  participantsOverride,
 }: LineupParticipantsButtonProps): JSX.Element {
   const [open, setOpen] = useState(false);
-  const { data, isLoading, isError, refetch } = useLineupParticipants(lineupId);
-  const participants = data?.participants ?? [];
+  const { data, isLoading, isError, refetch } = useLineupParticipants(
+    participantsOverride ? undefined : lineupId,
+  );
+  const participants = participantsOverride ?? data?.participants ?? [];
+  const loading = participantsOverride ? false : isLoading;
   const count = participants.length;
 
   // Loading → no count yet; otherwise "Participants · N".
-  const label = isLoading ? 'Participants' : `Participants · ${count}`;
-  const accessibleName = isLoading
+  const label = loading ? 'Participants' : `Participants · ${count}`;
+  const accessibleName = loading
     ? 'Participants'
     : `Participants, ${count}`;
 
@@ -51,8 +62,8 @@ export function LineupParticipantsButton({
         isOpen={open}
         onClose={() => setOpen(false)}
         participants={participants}
-        isLoading={isLoading}
-        isError={isError}
+        isLoading={loading}
+        isError={participantsOverride ? false : isError}
         onRetry={() => void refetch()}
       />
     </>
