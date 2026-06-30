@@ -10,9 +10,9 @@
  *     cast vote when the lineup has many eligible voters (AC4 —
  *     canonical regression guard).
  *   - "X/N" label appears on the row (replaces legacy "X votes").
- *   - Keyboard navigation: Tab to row → Enter opens drawer.
- *     Tab past row to vote button → Enter toggles vote (drawer stays
- *     closed).
+ *   - Keyboard navigation: Tab to cover thumbnail → Enter opens game
+ *     details (/games/:id). Tab to vote button → Enter toggles vote
+ *     (no navigation).
  *
  * Runs in BOTH `desktop` and `mobile` Playwright projects per
  * playwright.config.ts. NEVER use `--project=desktop` locally — CLAUDE.md
@@ -198,7 +198,7 @@ async function gotoVoting(page: import('@playwright/test').Page): Promise<void> 
     ).toBeVisible({ timeout: 20_000 });
     // K5/F3 flake fix: the JourneyHero (in the sticky header) renders
     // before VotingLeaderboardV2 finishes mapping its rows, so asserting a
-    // game-row locator (the "Open details for {name}" opener at AC9, or any
+    // game-row locator (the "View details for {name}" cover at AC9, or any
     // "Vote for {name}" toggle) straight after the hero raced an
     // empty/not-yet-rendered leaderboard on slow CI runners — the opener's
     // own 10s `toBeVisible` exhausted all 3 attempts. Gate on the
@@ -321,7 +321,7 @@ test.describe('Sv composite — normalized vote bars (AC4)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// AC9 — Keyboard interaction: row Enter → drawer; vote Enter → toggle
+// AC9 — Keyboard interaction: cover Enter → game details; vote Enter → toggle
 // ─────────────────────────────────────────────────────────────────────
 
 test.describe('Sv composite — keyboard interaction (AC9)', () => {
@@ -329,12 +329,17 @@ test.describe('Sv composite — keyboard interaction (AC9)', () => {
     // `/games/:id`. The GameResearchDrawer component still exists but
     // renders no DOM — its useEffect calls navigate() instead of opening
     // an overlay. AC9 therefore asserts URL transitions, not drawer DOM.
-    test('Tab to row → Enter navigates to /games/:id', async ({ page }) => {
+    test('Cover thumbnail → Enter navigates to /games/:id', async ({ page }) => {
         await gotoVoting(page);
 
+        // ROK-1373 moved the nav affordance off the row body (desktop users
+        // were yanked to /games/:id when they meant to vote). The cover
+        // thumbnail is now the explicit "view details" trigger, labelled
+        // `View details for {gameName}`. .first() guards the pre-existing
+        // same-name seed-data dup.
         const opener = page
             .getByRole('button', {
-                name: `Open details for ${firstGameName}`,
+                name: `View details for ${firstGameName}`,
             })
             .first();
         await expect(opener).toBeVisible({ timeout: 10_000 });
@@ -362,8 +367,9 @@ test.describe('Sv composite — keyboard interaction (AC9)', () => {
         await expect(voteBtn).toBeVisible({ timeout: 10_000 });
 
         // Admin's vote is already cast (aria-pressed=true). Pressing Enter
-        // on the focused button must un-toggle it AND must NOT bubble to
-        // the row-body opener (vote-circle handler calls e.stopPropagation()).
+        // on the focused button must un-toggle it AND must NOT navigate
+        // (the vote button calls e.stopPropagation(); the row body is no
+        // longer a navigation target — ROK-1373).
         await voteBtn.focus();
         await page.keyboard.press('Enter');
 
