@@ -13,6 +13,7 @@ import * as schema from '../../drizzle/schema';
 import {
   findCreateCandidates,
   findReapCandidates,
+  findNameReconcileCandidates,
   findEventByEphemeralChannel,
 } from './ephemeral-voice.db-helpers';
 import { findActiveEventsByEphemeralChannel } from './voice-attendance-ephemeral.helpers';
@@ -94,6 +95,31 @@ describe('ephemeral-voice DB integration (ROK-1352)', () => {
       (e) => e.id,
     );
     expect(ids).toEqual([stale]);
+  });
+
+  it('name-reconcile scan returns only in-flight events that hold a channel', async () => {
+    const active = await insertEvent({
+      startOffsetMin: -5,
+      endOffsetMin: 55,
+      channelId: 'ch-live',
+    });
+    await insertEvent({
+      startOffsetMin: -180,
+      endOffsetMin: -120,
+      channelId: 'ch-ended',
+    }); // already ended → leave to the reaper
+    await insertEvent({ startOffsetMin: 10, endOffsetMin: 70 }); // no channel
+    await insertEvent({
+      startOffsetMin: 10,
+      endOffsetMin: 70,
+      channelId: 'ch-cancelled',
+      cancelled: true,
+    }); // cancelled
+
+    const ids = (await findNameReconcileCandidates(app.db, new Date())).map(
+      (e) => e.id,
+    );
+    expect(ids).toEqual([active]);
   });
 
   it('findEventByEphemeralChannel resolves the owning event', async () => {

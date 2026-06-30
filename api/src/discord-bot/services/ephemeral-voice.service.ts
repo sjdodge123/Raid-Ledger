@@ -8,15 +8,23 @@ import { SettingsService } from '../../settings/settings.service';
 import { ScheduledEventService } from './scheduled-event.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { VoiceAttendanceService } from './voice-attendance.service';
-import { buildEphemeralChannelName } from './scheduled-event.helpers';
+import {
+  buildEphemeralChannelName,
+  buildScheduledEventNameWithTime,
+} from './scheduled-event.helpers';
 import { shouldCreateEphemeralChannel } from './ephemeral-voice.gate.helpers';
 import {
   createVoiceChannel,
   deleteVoiceChannel,
   getChannelMemberCountFresh,
+  getEphemeralChannelName,
+  renameVoiceChannel,
+  reconcileScheduledEventName,
 } from './ephemeral-voice.discord-ops';
 import {
   type EphemeralEventRow,
+  type NameReconcileRow,
+  type RepointEventData,
   buildRepointData,
   claimEphemeralChannelId,
   clearEphemeralChannelId,
@@ -151,7 +159,69 @@ export class EphemeralVoiceService {
     if (ev) await this.destroyForEvent(ev, opts);
   }
 
+  /**
+   * Reconcile an in-flight ephemeral event's Discord display names (voice channel
+   * + Scheduled Event) to the current naming scheme. Backfills existing channels
+   * on the first post-deploy tick and self-heals drift. Discord-display only —
+   * the stored event title is never touched. Renames each surface ONLY when its
+   * current Discord name differs, so it fires once then settles (channel renames
+   * are rate-limited to ~2/10min). Skips non-ephemeral / no-guild rows.
+   */
+  async reconcileNamesForEvent(ev: NameReconcileRow): Promise<void> {
+    const channelId = ev.ephemeralVoiceChannelId;
+    if (!channelId) return;
+    const guild = this.requireGuild();
+    if (!guild) return;
+    const data = await buildRepointData(this.db, ev);
+    await this.reconcileChannelName(guild, ev.id, channelId, data);
+    await this.reconcileSeName(guild, ev, data);
+  }
+
   // ─── Private helpers ──────────────────────────────────────
+
+  /** Rename the channel only when its current Discord name differs (no churn). */
+  private async reconcileChannelName(
+    guild: Guild,
+    eventId: number,
+    channelId: string,
+    data: RepointEventData,
+  ): Promise<void> {
+    const expected = buildEphemeralChannelName(data);
+    const current = getEphemeralChannelName(guild, channelId);
+    if (current === null || current === expected) return;
+    try {
+      await renameVoiceChannel(guild, channelId, expected);
+      this.logger.log(
+        `Renamed ephemeral channel ${channelId} (event ${eventId}) → "${expected}"`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Ephemeral channel rename skipped for event ${eventId} (rate-limit/API), will retry: ${err instanceof Error ? err.message : 'unknown'}`,
+      );
+    }
+  }
+
+  /** Reconcile the SE name (with start-time suffix) only when it differs. */
+  private async reconcileSeName(
+    guild: Guild,
+    ev: NameReconcileRow,
+    data: RepointEventData,
+  ): Promise<void> {
+    const seId = ev.discordScheduledEventId;
+    if (!seId) return;
+    try {
+      const tz = await this.settingsService.getDefaultTimezone();
+      const expected = buildScheduledEventNameWithTime(data, tz);
+      if (await reconcileScheduledEventName(guild, seId, expected))
+        this.logger.log(
+          `Renamed ephemeral SE ${seId} (event ${ev.id}) → "${expected}"`,
+        );
+    } catch (err) {
+      this.logger.warn(
+        `Ephemeral SE rename skipped for event ${ev.id}: ${err instanceof Error ? err.message : 'unknown'}`,
+      );
+    }
+  }
 
   /** Re-resolve + edit the SE channel and trigger an embed re-sync. */
   private async repointAndResync(

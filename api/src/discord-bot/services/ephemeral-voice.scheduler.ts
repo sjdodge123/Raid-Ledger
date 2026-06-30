@@ -8,7 +8,10 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { EphemeralVoiceService } from './ephemeral-voice.service';
-import { findCreateCandidates } from './ephemeral-voice.db-helpers';
+import {
+  findCreateCandidates,
+  findNameReconcileCandidates,
+} from './ephemeral-voice.db-helpers';
 
 /**
  * Create-window scanner for ephemeral voice channels (ROK-1352).
@@ -61,6 +64,42 @@ export class EphemeralVoiceScheduler {
     } catch (err) {
       this.logger.error(
         `Ephemeral create-window scan failed: ${err instanceof Error ? err.message : 'unknown'}`,
+      );
+      Sentry.captureException(err, {
+        tags: { context: 'ephemeral-voice-scheduler' },
+      });
+    }
+  }
+
+  @Cron('45 * * * * *', {
+    name: 'EphemeralVoiceScheduler_scanNameReconcile',
+  })
+  async handleScanNameReconcile(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'EphemeralVoiceScheduler_scanNameReconcile',
+      () => this.scanNameReconcile(),
+    );
+  }
+
+  /**
+   * Backfill / self-heal Discord display names for in-flight ephemeral events.
+   * On the first post-deploy tick this renames existing channels + SEs to the
+   * current scheme (drop redundant "Event", add the start-time suffix); once they
+   * match it is a no-op (the service compares before renaming, so no rename-churn
+   * against Discord's ~2/10min channel-rename limit). Separate from the
+   * create-window scan; mirrors the reaper in gating only on connectivity so
+   * existing channels are reconciled regardless of the global toggle.
+   */
+  async scanNameReconcile(): Promise<void | false> {
+    if (!this.clientService.isConnected()) return false;
+    try {
+      const candidates = await findNameReconcileCandidates(this.db, new Date());
+      for (const ev of candidates) {
+        await this.ephemeralVoice.reconcileNamesForEvent(ev);
+      }
+    } catch (err) {
+      this.logger.error(
+        `Ephemeral name-reconcile scan failed: ${err instanceof Error ? err.message : 'unknown'}`,
       );
       Sentry.captureException(err, {
         tags: { context: 'ephemeral-voice-scheduler' },
