@@ -227,11 +227,34 @@ test.describe('Admin Discord — Features', () => {
         const quickPlayHeading = page.getByRole('heading', { name: 'Quick Play Events' });
         if (await quickPlayHeading.isVisible({ timeout: 5_000 }).catch(() => false)) {
             await expect(quickPlayHeading).toBeVisible();
-            await expect(page.getByRole('checkbox')).toBeVisible();
+            await expect(
+                page.getByRole('checkbox', { name: 'Enable Quick Play Events' }),
+            ).toBeVisible();
         }
 
         // General Lobbies info is always present
         await expect(page.getByRole('heading', { name: 'General Lobbies' })).toBeVisible();
+    });
+
+    // ROK-1352: the ephemeral-voice admin section (master toggle; force toggle +
+    // config fields appear once enabled). Like Quick Play, the whole section only
+    // renders when the bot is connected — so guard the assertions (CI has no
+    // connected bot; the section's render logic is covered by vitest unit tests).
+    test('renders the ephemeral voice section + master toggle', async ({ page }) => {
+        await pollDiscordBotStatus();
+        await page.goto('/admin/settings/discord/features');
+        await expect(page.getByRole('heading', { name: 'Discord Features' })).toBeVisible({ timeout: 15_000 });
+        const ephemeralHeading = page.getByRole('heading', {
+            name: 'Ephemeral Voice Channels',
+        });
+        if (
+            await ephemeralHeading.isVisible({ timeout: 5_000 }).catch(() => false)
+        ) {
+            await expect(ephemeralHeading).toBeVisible();
+            await expect(
+                page.getByLabel('Enable ephemeral voice channels'),
+            ).toBeVisible();
+        }
     });
 
     test('loads without error boundary', async ({ page }) => {

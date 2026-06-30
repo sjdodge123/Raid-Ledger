@@ -35,7 +35,7 @@ function parseOrThrow<T extends z.ZodTypeAny>(
   data: unknown,
 ): z.output<T> {
   try {
-    return schema.parse(data) as z.output<T>;
+    return schema.parse(data);
   } catch (error) {
     if (error instanceof ZodError) {
       throw new BadRequestException({

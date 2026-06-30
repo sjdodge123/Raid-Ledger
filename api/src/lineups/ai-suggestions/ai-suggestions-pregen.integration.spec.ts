@@ -103,6 +103,13 @@ function describePreGen() {
   beforeEach(async () => {
     await settings.set(SETTING_KEYS_AI_ENABLED, 'true');
     await settings.set(SETTING_KEYS_AI_PROVIDER, 'google');
+    // Resolve the seeded admin id BEFORE every test so the `sanity` test is
+    // order-independent under `jest --randomize`. Previously adminUserId was
+    // assigned only in afterEach, so when `sanity` was scheduled first it
+    // read `undefined` ("Expected number, Received undefined"). The admin row
+    // exists at this point (seeded in beforeAll / re-seeded by the prior
+    // afterEach truncate). ROK CI-flake A1/K1.
+    adminUserId = await resolveAdminUserId();
   });
 
   const SETTING_KEYS_AI_ENABLED = 'ai_suggestions_enabled';

@@ -3,6 +3,7 @@ import { DurationSection } from './shared/duration-section';
 import type { FormState, FormErrors } from './create-event-form.types';
 import { RECURRENCE_OPTIONS } from './create-event-form.types';
 import { formatDuration } from './create-event-form.utils';
+import { EphemeralVoiceToggle } from './ephemeral-voice-toggle';
 
 export function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
     return (
@@ -98,6 +99,7 @@ export function WhenSection({ form, errors, isEditMode, tzAbbr, endTimePreview, 
             <DurationSection durationMinutes={form.durationMinutes} customDuration={form.customDuration} durationError={errors.duration} onDurationMinutesChange={(v) => updateField('durationMinutes', v)} onCustomDurationChange={(v) => updateField('customDuration', v)} onDurationErrorClear={() => setErrors((prev) => ({ ...prev, duration: undefined }))} />
             {endTimePreview && <EndTimePreview endTimePreview={endTimePreview} tzAbbr={tzAbbr} durationMinutes={form.durationMinutes} />}
             {!isEditMode && <RecurrenceFields form={form} errors={errors} recurrenceCount={recurrenceCount} updateField={updateField} setErrors={setErrors} />}
+            <EphemeralVoiceToggle value={form.ephemeralVoiceEnabled} onChange={(v) => updateField('ephemeralVoiceEnabled', v)} />
         </FormSection>
     );
 }

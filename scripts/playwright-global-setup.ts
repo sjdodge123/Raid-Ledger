@@ -32,6 +32,37 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
 const ADMIN_EMAIL = 'admin@local';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password';
 
+/**
+ * Best-effort, idempotent archive of lineups from a previous smoke run.
+ * Scoped to the shared `smoke-w` worker-title prefix so it never touches
+ * real/demo lineups. Swallows all failures (logs + continues) so a missing
+ * DEMO_MODE endpoint or transient error can never crash global setup.
+ */
+async function archiveStaleSmokeLineups(
+    apiBase: string,
+    token: string,
+): Promise<void> {
+    try {
+        const res = await fetch(`${apiBase}/admin/test/reset-lineups`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ titlePrefix: 'smoke-w' }),
+        });
+        if (!res.ok) {
+            console.warn(
+                `[global-setup] reset-lineups(smoke-w) → ${res.status} — continuing`,
+            );
+        }
+    } catch (err) {
+        console.warn(
+            `[global-setup] reset-lineups(smoke-w) failed: ${String(err)} — continuing`,
+        );
+    }
+}
+
 export default async function globalSetup(_config: FullConfig) {
     // Ensure .auth directory exists
     fs.mkdirSync(AUTH_DIR, { recursive: true });
@@ -73,6 +104,18 @@ export default async function globalSetup(_config: FullConfig) {
 
     if (!resetRes.ok) {
         const body = await resetRes.text();
+        // ROK-1286 (FIX 4): a 403 here means the API is NOT in DEMO_MODE, so
+        // every /admin/test/* reset endpoint is disabled. Call it out loudly —
+        // the demo/install fallback below does NOT wipe lineups, so smoke
+        // fixtures can otherwise inherit stale/absent state and flake. The real
+        // fix is running smoke with DEMO_MODE=true in CI (see CI config).
+        if (resetRes.status === 403) {
+            console.warn(
+                '[global-setup] reset-to-seed → 403: API is NOT running in DEMO_MODE; ' +
+                    'test-only reset endpoints are disabled. Smoke state may be stale/absent. ' +
+                    'Run smoke with DEMO_MODE=true. Falling back to demo/install.',
+            );
+        }
         console.warn(
             `Reset-to-seed returned ${resetRes.status}: ${body} — falling back to demo/install`,
         );
@@ -88,6 +131,16 @@ export default async function globalSetup(_config: FullConfig) {
             console.warn(`Demo data seed returned ${seedRes.status}: ${seedBody}`);
         }
     }
+
+    // ROK-1286 (FIX 2): belt-and-suspenders archive of any lineups left behind
+    // by a PREVIOUS smoke run (title prefix `smoke-w<idx>-…`). When reset-to-
+    // seed succeeds above this is a no-op (all lineups are already wiped); but
+    // when it 403s/falls back to demo/install (which does NOT wipe lineups) on
+    // a persistent DB (e.g. the fleet), stale `smoke-w*` rows would otherwise
+    // bleed across runs and hand `/lineups/banner` to a sibling's VOTING-phase
+    // lineup — deterministically breaking the Nominate-button specs. Idempotent
+    // and best-effort: a failure logs and continues so setup never crashes.
+    await archiveStaleSmokeLineups(API_BASE, access_token);
 
     // 3. Launch browser, set JWT in localStorage, save storageState
     const browser = await chromium.launch();

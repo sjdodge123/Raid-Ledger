@@ -27,6 +27,15 @@
 #                                        # ride on GitHub. Migration/infra
 #                                        # changes still get full local
 #                                        # validation automatically.
+#   ./scripts/validate-ci.sh --scope=auto # Narrow build+typecheck+lint to the
+#                                        # single changed workspace (+contract)
+#                                        # when the diff touches only api/ or only
+#                                        # web/. all|api|web force a value; default
+#                                        # "all" is the legacy whole-monorepo gate.
+#                                        # GitHub CI still runs the full suite, so
+#                                        # this only trims duplicated local work for
+#                                        # a single-workspace small fix. Composes
+#                                        # with --static (e.g. --static --scope=auto).
 #   ./scripts/validate-ci.sh --ci        # Hard-fail on missing local prereqs
 #                                        # (e.g. pg_dump). Use in CI to ensure
 #                                        # backup integration tests never silently
@@ -128,6 +137,15 @@ only_e2e=false
 # migration/container checks only. Skips unit, integration, and all e2e.
 # Behavioral coverage is deferred to GitHub CI. See the usage header.
 static_mode=false
+# scope_mode (--scope=all|api|web|auto): narrows build/typecheck/lint to a single
+# changed workspace (+contract) instead of all three. Default "all" preserves the
+# legacy whole-monorepo gate exactly. "auto" resolves to detected_workspace (set in
+# detect_scope). GitHub CI still runs the full path-filtered suite on every PR, so
+# scoping the LOCAL gate loses no coverage — it only cuts duplicated build/lint work
+# for a single-workspace small fix.
+scope_mode="all"
+detected_workspace="all"
+effective_scope="all"
 
 # ---------------------------------------------------------------------------
 # Result tracking helpers
@@ -290,6 +308,30 @@ detect_scope() {
   else
     echo -e "  Discord-smoke-relevant changes: no"
   fi
+
+  # Single-workspace detection for --scope=auto. Sets detected_workspace to
+  # api | web | all. Resolves to "all" whenever the diff crosses a workspace
+  # boundary, touches packages/** (contract feeds both), or touches root
+  # config/tooling that can break anything (package.json, tsconfig, eslint,
+  # vitest/playwright config). Anything purely under api/ → "api"; purely under
+  # web/ → "web". Conservative: unknown/empty diffs fall back to "all".
+  local touches_api=false touches_web=false touches_shared=false
+  echo "$changed_files" | grep -qE '^api/' && touches_api=true
+  echo "$changed_files" | grep -qE '^web/' && touches_web=true
+  if echo "$changed_files" | grep -vE '^(api|web)/' \
+       | grep -qE '^packages/|(^|/)package(-lock)?\.json$|(^|/)tsconfig|(^|/)\.eslintrc|vitest\.config|playwright\.config'; then
+    touches_shared=true
+  fi
+  if $touches_shared || { $touches_api && $touches_web; }; then
+    detected_workspace="all"
+  elif $touches_api; then
+    detected_workspace="api"
+  elif $touches_web; then
+    detected_workspace="web"
+  else
+    detected_workspace="all"
+  fi
+  echo -e "  Detected workspace (for --scope=auto): ${YELLOW}${detected_workspace}${NC}"
 }
 
 # Resolve the canonical web target for fleet/local. Sets the global `web_url`.
@@ -365,9 +407,11 @@ check_env_up() {
 # ---------------------------------------------------------------------------
 
 run_build() {
-  npm run build -w packages/contract
-  npm run build -w api
-  npm run build -w web
+  # Contract is always built (both api and web depend on it). api/web are gated
+  # by effective_scope so a single-workspace --scope=auto run skips the other.
+  npm run build -w packages/contract || return $?
+  if [ "$effective_scope" != "web" ]; then npm run build -w api || return $?; fi
+  if [ "$effective_scope" != "api" ]; then npm run build -w web || return $?; fi
 }
 
 run_typecheck() {
@@ -376,14 +420,50 @@ run_typecheck() {
   # code of the LAST command only. With this missing, api/ TS2741 errors
   # printed to stderr but the step's outer `$?` capture (run_step:195) saw
   # rc=0 from the web/ check and stamped "TypeScript (all): PASS".
-  npx tsc --noEmit -p api/tsconfig.json || return $?
-  npx tsc --noEmit -p web/tsconfig.json || return $?
+  if [ "$effective_scope" != "web" ]; then npx tsc --noEmit -p api/tsconfig.json || return $?; fi
+  if [ "$effective_scope" != "api" ]; then npx tsc --noEmit -p web/tsconfig.json || return $?; fi
 }
 
 run_lint() {
-  npm run lint -w api
-  npm run prettier:check -w api
-  npm run lint -w web
+  if [ "$effective_scope" != "web" ]; then
+    npm run lint -w api || return $?
+    npm run prettier:check -w api || return $?
+  fi
+  if [ "$effective_scope" != "api" ]; then
+    npm run lint -w web || return $?
+  fi
+}
+
+run_shell_parse_check() {
+  # bash -n parse-lint every scripts/*.sh. Bash-3.2 parse breaks have shipped
+  # before (sync-local-to-env.sh) because shell scripts were never
+  # syntax-checked. Scope is scripts/*.sh only — rl-infra/** is a larger
+  # surface, out of scope here. Mirrors the `lint` job's shell-parse step in CI.
+  local f
+  for f in "$REPO_ROOT"/scripts/*.sh; do
+    [ -e "$f" ] || continue
+    bash -n "$f" || return $?
+  done
+}
+
+# Tools MCP-server vitest suites. CI runs these via the `tools-tests` matrix
+# job; mirror it locally so a broken tools test (e.g. env-lock.test.ts) is
+# caught by the local gate too. Each suite is sub-second. test-bot is NOT a
+# workspace and has no `test` script — it's intentionally excluded (its
+# coverage is the Discord smoke suite, gated separately).
+run_tools_tests() {
+  local ws pkg
+  for ws in mcp-rl-fleet mcp-env mcp-discord; do
+    pkg="$REPO_ROOT/tools/$ws/package.json"
+    # Guard: skip any workspace lacking a `test` script so the gate never
+    # fails on a missing script (defensive — all three define one today).
+    if ! python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('scripts',{}).get('test') else 1)" "$pkg" 2>/dev/null; then
+      echo "tools/$ws has no test script — skipping"
+      continue
+    fi
+    echo "--- tools/$ws (vitest) ---"
+    npm test -w "@raid-ledger/$ws" || return $?
+  done
 }
 
 run_unit_tests() {
@@ -419,7 +499,11 @@ check_backup_prereqs() {
   # and obscure real failures. CI runners install postgresql-client, so the
   # binary is always present there.
   if command -v pg_dump >/dev/null 2>&1; then
-    export SKIP_BACKUP_INTEGRATION=0
+    # ROK-1144: backup.integration.spec.ts gates on `=== '1'`, so the
+    # "no env var = run" model is the source of truth. Unset (rather than
+    # export 0) on the success path so a stale SKIP_BACKUP_INTEGRATION=1 from
+    # an earlier shell can't survive and silently skip the suite.
+    unset SKIP_BACKUP_INTEGRATION
     return 0
   fi
 
@@ -480,13 +564,15 @@ run_integration_tests() {
       # and ts-jest mis-resolves --ignoreDeprecations to an empty value
       # (TS5103). Discovered ROK-1331 Probe 1 attempt 6 (2026-05-20).
       #
-      # NODE_OPTIONS=--max-old-space-size=3072 gives V8 a 3 GB heap ceiling
+      # NODE_OPTIONS=--max-old-space-size=4096 gives V8 a 4 GB heap ceiling
       # per shard (vs 1.4 GB default) which is ample headroom for ~25 suites
-      # per shard.
+      # per shard. Raised 3072 -> 4096 (ROK-1268): 3 GB was tripping the OOM
+      # carrier under sustained re-runs while still leaving margin on the
+      # 7 GB fleet/CI runners (one shard process runs at a time here).
       # ROK-1331 M11 — JEST_SHARD_ID + JEST_TOTAL_SHARDS feed the perf
        # reporter so jest.suite.end events carry shard labels.
        # --logHeapUsage feeds the reporter's heap_used_mb sample.
-      if (cd api && NODE_OPTIONS="--max-old-space-size=3072" \
+      if (cd api && NODE_OPTIONS="--max-old-space-size=4096" \
          JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${shards}" \
          npx jest --config ./jest.integration.config.js \
                   --runInBand --verbose --logHeapUsage --shard="${i}/${shards}"); then
@@ -949,6 +1035,7 @@ main() {
     case "$1" in
       --full) shift ;;
       --static) static_mode=true; shift ;;
+      --scope=*) scope_mode="${1#--scope=}"; shift ;;
       --ci) ci_mode=true; shift ;;
       --no-e2e) e2e_mode="off"; shift ;;
       --with-e2e) e2e_mode="on"; shift ;;
@@ -974,6 +1061,16 @@ main() {
 
   echo -e "${GREEN}Starting local CI validation...${NC}"
   detect_scope
+
+  # Resolve --scope into effective_scope (auto → detected_workspace from detect_scope).
+  case "$scope_mode" in
+    auto) effective_scope="$detected_workspace" ;;
+    all|api|web) effective_scope="$scope_mode" ;;
+    *) echo -e "${RED}Invalid --scope=${scope_mode} (expected all|api|web|auto)${NC}"; exit 1 ;;
+  esac
+  if [ "$effective_scope" != "all" ]; then
+    echo -e "${YELLOW}Scope-narrowed gate: build/typecheck/lint for '${effective_scope}' workspace (+contract) only — GitHub CI still runs the full path-filtered suite.${NC}"
+  fi
 
   # ROK-1331 M11 — bookend the full validate-ci run with paired events so
   # dashboards can show "last validate-ci on branch X took T seconds, exit
@@ -1008,12 +1105,15 @@ print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2])
     run_step "Build (all workspaces)" run_build
     run_step "TypeScript (all)" run_typecheck
     run_step "Lint (all)" run_lint
+    # Static, deterministic check — runs in BOTH static and full gates.
+    run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
 
     # Unit + integration are the slow, behavioral checks. In --static (lite
     # gate) mode they're deferred to GitHub CI, which runs them sharded +
     # randomized on every PR. Full mode keeps them local.
     if ! $static_mode; then
       run_step "Unit tests + coverage" run_unit_tests
+      run_step "Tools unit tests (mcp servers)" run_tools_tests
       run_step "Integration tests (api)" run_integration_tests
     fi
 

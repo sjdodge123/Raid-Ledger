@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { UpdateEventSchema } from './events.schema.js';
+import { SeriesScopeSchema } from './series-scope.schema.js';
 
-/** Scope options for series operations (Google Calendar-style). */
-export const SeriesScopeSchema = z.enum(['this', 'this_and_following', 'all']);
-
-export type SeriesScope = z.infer<typeof SeriesScopeSchema>;
+// Re-exported from its own module to break the events ↔ event-series import
+// cycle (ROK-1352). Existing importers of `SeriesScopeSchema` / `SeriesScope`
+// from this file keep working.
+export { SeriesScopeSchema } from './series-scope.schema.js';
+export type { SeriesScope } from './series-scope.schema.js';
 
 /** Schema for updating a series of events. */
 export const UpdateSeriesSchema = z.object({

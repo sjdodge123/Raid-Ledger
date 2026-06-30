@@ -65,6 +65,19 @@ Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 
 ---
 
+## Trivial single-story short-circuit (CLAUDE.md "Trivial-fix fast lane")
+
+When the batch resolves to a **single story** that meets the `trivial` bar (≤30 net lines, single file, no `packages/contract`/migration/infra/auth surface, pure logic/copy/style/config), collapse the pipeline — do NOT pay the multi-story batch ceremony for one tiny fix:
+
+- **Step 2:** Lead edits directly on a `fix/rok-<num>` branch off `origin/main`. **No worktree, no `npm install`, no dev-agent spawn, no batch branch.** (Extends [[feedback_lead_does_small_fixes]].)
+- **Step 3 collapses to:** `validate-ci.sh --static --scope=auto` (3a) → **exactly one** review pass (Codex pre-push via `/push` Step 8.5; the per-story `devedup-rl:reviewer` in 3i is SKIPPED for a <300-line no-risk diff, mirroring `/build` Step 4b). Human gates tier by blast radius: **non-UI → no env-lock, no deploy, no Chrome MCP** (3f–3h are `N/A`); **cosmetic-UI → one screenshot on a running env** (no `--rebuild`). A Bug still gets a regression test at the lightest tier that proves the fix.
+- **Step 4:** PR the `fix/rok-<num>` branch directly.
+- **Escape hatch:** if mid-fix it grows past the bar (≥2 files, cross-workspace, contract/migration/infra/auth, or a real rendered-flow change), STOP and run the normal standard path below.
+
+Two or more stories — or any single story above the `trivial` bar — take the full batch pipeline below, unchanged.
+
+---
+
 ## Branch Strategy (Single PR)
 
 1. Create `fix/batch-YYYY-MM-DD` from `origin/main`
@@ -92,7 +105,7 @@ No agents to respawn. No pings to send. The state file IS the recovery mechanism
 
 | Scope | Criteria | Eligible? |
 |-------|----------|-----------|
-| **light** | Config, copy, style-only, docs | Yes |
+| **light / trivial** | Config, copy, style-only, docs, OR a single-file ≤30-line logic fix with no contract/migration/infra/auth surface (the `trivial` tier — CLAUDE.md "Trivial-fix fast lane"). Single trivial story → **short-circuit** (Lead-direct, no worktree, one reviewer, blast-radius human gates). | Yes |
 | **standard** | Single-module fix, bug fix, straightforward | Yes |
 | **full** | Cross-module, migrations, contract changes, complex | **No — recommend `/build`** |
 

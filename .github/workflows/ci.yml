@@ -68,6 +68,8 @@ jobs:
               - 'api/src/ai/providers/ollama-setup*'
             tools:
               - 'tools/mcp-rl-fleet/**'
+              - 'tools/mcp-env/**'
+              - 'tools/mcp-discord/**'
 
   # ─── Lint + Build ──────────────────────────────────────────────────
   # Skipped for docs/skills-only PRs (no code changes)
@@ -120,6 +122,16 @@ jobs:
 
       - name: Prettier check (api)
         run: npm run prettier:check -w api
+
+      # Shell parse-lint: bash-3.2 parse breaks have shipped before
+      # (sync-local-to-env.sh) because shell scripts are never syntax-checked.
+      # `bash -n` parses each scripts/*.sh without executing it. Scope is
+      # scripts/*.sh only — rl-infra/** is a larger surface, out of scope here.
+      - name: Shell parse check (bash -n on scripts/*.sh)
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f" || exit 1
+          done
 
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:
@@ -190,16 +202,26 @@ jobs:
         run: npx vitest run --coverage
         working-directory: web
 
-  # ─── Tools Unit Tests (mcp-rl-fleet — ROK-1362) ───────────────────
-  # The fleet MCP server (tools/mcp-rl-fleet) has a Vitest suite that is the
-  # behavioral gate for fleet-tooling changes, but was not run by any CI job
-  # before ROK-1362. This job closes that gap.
-  tools-tests:
+  # ─── Tools Unit Tests (MCP servers) ───────────────────────────────
+  # The MCP-server workspaces under tools/ each ship a Vitest suite that is the
+  # behavioral gate for tooling changes. Before ROK-1362 only mcp-rl-fleet ran
+  # here; mcp-env + mcp-discord ran NOWHERE in CI (a broken env-lock.test.ts
+  # once shipped CI-green). The matrix runs all three so any tools-workspace
+  # regression fails the PR. test-bot is intentionally excluded — it is not an
+  # npm workspace and has no `test` script (its gate is the Discord smoke suite).
+  tools-test-shard:
     runs-on: ubuntu-latest
     needs: [detect-changes]
     if: >-
       github.event_name == 'push' ||
       needs.detect-changes.outputs.tools == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - '@raid-ledger/mcp-rl-fleet'
+          - '@raid-ledger/mcp-env'
+          - '@raid-ledger/mcp-discord'
 
     steps:
       - name: Checkout code
@@ -221,8 +243,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test mcp-rl-fleet (Vitest)
-        run: npm test -w @raid-ledger/mcp-rl-fleet
+      - name: Test ${{ matrix.workspace }} (Vitest)
+        run: npm test -w ${{ matrix.workspace }}
+
+  # ─── Tools Tests (summary — required status check) ────────────────
+  # Stable required-check context for branch protection. The matrix above
+  # (tools-test-shard) produces per-workspace contexts; this aggregator keeps
+  # the single `tools-tests` check that branch protection requires. Mirrors
+  # the unit-tests / integration-tests / smoke-tests summary pattern.
+  tools-tests:
+    runs-on: ubuntu-latest
+    needs: [tools-test-shard]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          R="${{ needs.tools-test-shard.result }}"
+          if [ "$R" = "failure" ] || [ "$R" = "cancelled" ]; then
+            echo "Tools tests failed (result=$R)"
+            exit 1
+          fi
+          echo "Tools tests passed (result=$R)"
 
   # ─── Unit Tests (summary — required status check) ─────────────────
   unit-tests:
@@ -243,6 +284,15 @@ jobs:
   # ─── Integration Tests (sharded) ───────────────────────────────────
   integration-test-shard:
     runs-on: ubuntu-latest
+    # ROK-1352: read the CI service images from the GHCR mirror (private package);
+    # GITHUB_TOKEN needs packages:read to pull them via the service `credentials`.
+    permissions:
+      contents: read
+      packages: read
+    # Fast-lane (2026-06-25): bound a hung/flaky shard. maxWorkers=1 + 108 specs
+    # finish in ~6-7 min; 25 min is generous headroom. Previously unbounded
+    # (GHA default 360 min), so a wedged shard could hang the required check.
+    timeout-minutes: 25
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
@@ -252,14 +302,24 @@ jobs:
       matrix:
         shard: [1/3, 2/3, 3/3]
         # ROK-1058: repeat each shard 3× to surface order-dependent flake.
-        # Combined with `randomize: true` in jest.integration.config.js, every
-        # PR exercises 9 distinct file-orderings; a leak that only appears in
+        # Combined with `randomize: true` in jest.integration.config.js, the 3×
+        # repeat exercises 9 distinct file-orderings; a leak that only appears in
         # 1/3 of orderings still fails the matrix.
-        run: [1, 2, 3]
+        #
+        # Fast-lane (2026-06-25): the 3× repeat now runs ONLY on push-to-main (the
+        # post-merge order-flake sweep) and workflow_dispatch. PRs run each shard
+        # ONCE — 3 jobs, not 9. `randomize: true` still gives every PR a random
+        # ordering, and an order-flake regression is caught same-day on the main
+        # run, so coverage is preserved while a backend PR drops from 9
+        # NestApp-booting integration jobs to 3.
+        run: ${{ github.event_name == 'pull_request' && fromJSON('[1]') || fromJSON('[1, 2, 3]') }}
 
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
@@ -273,7 +333,10 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:alpine
+        image: ghcr.io/sjdodge123/rl-ci-redis:alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         ports:
           - 6379:6379
         options: >-
@@ -290,6 +353,14 @@ jobs:
       CORS_ORIGIN: http://localhost:5173
 
     steps:
+      # ROK-1144: backup.integration.spec.ts shells out to pg_dump/pg_restore.
+      # Today it relies on ubuntu-latest shipping postgresql-client by default;
+      # a future runner-image change could silently drop that binary and skip
+      # all backup coverage with no signal. Install it explicitly so the
+      # dependency is documented in the workflow and pinned to the job.
+      - name: Install postgresql-client (pg_dump/pg_restore for backup tests)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -317,7 +388,7 @@ jobs:
         # and restart the postgres container in place. Default 100 is too
         # low for the shard's combined NestJS boot + parallel-query load.
         run: |
-          PG_CONTAINER=$(docker ps --filter "ancestor=pgvector/pgvector:pg16" --format "{{.ID}}" | head -1)
+          PG_CONTAINER=$(docker ps --filter "ancestor=ghcr.io/sjdodge123/rl-ci-pgvector:pg16" --format "{{.ID}}" | head -1)
           if [ -z "$PG_CONTAINER" ]; then echo "Postgres container not found"; exit 1; fi
           docker exec "$PG_CONTAINER" psql -U user -d raid_ledger_test -c "ALTER SYSTEM SET max_connections = 300;"
           docker restart "$PG_CONTAINER"
@@ -354,6 +425,10 @@ jobs:
   # Only runs when web/UI files or Playwright config changed
   smoke-test-shard:
     runs-on: ubuntu-latest
+    # ROK-1352: pull CI service images from the private GHCR mirror.
+    permissions:
+      contents: read
+      packages: read
     timeout-minutes: 20
     needs: [detect-changes, lint]
     if: >-
@@ -366,7 +441,10 @@ jobs:
 
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
@@ -380,7 +458,10 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:alpine
+        image: ghcr.io/sjdodge123/rl-ci-redis:alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         ports:
           - 6379:6379
         options: >-
@@ -460,7 +541,7 @@ jobs:
         # and restart the postgres container in place. Default 100 is too
         # low for the boot connection burst + parallel-query test load.
         run: |
-          PG_CONTAINER=$(docker ps --filter "ancestor=pgvector/pgvector:pg16" --format "{{.ID}}" | head -1)
+          PG_CONTAINER=$(docker ps --filter "ancestor=ghcr.io/sjdodge123/rl-ci-pgvector:pg16" --format "{{.ID}}" | head -1)
           if [ -z "$PG_CONTAINER" ]; then echo "Postgres container not found"; exit 1; fi
           docker exec "$PG_CONTAINER" psql -U user -d raid_ledger -c "ALTER SYSTEM SET max_connections = 300;"
           docker restart "$PG_CONTAINER"

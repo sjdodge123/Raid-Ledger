@@ -27,6 +27,10 @@ export function buildBaseValues(
     reminder15min: dto.reminder15min ?? true,
     reminder1hour: dto.reminder1hour ?? false,
     reminder24hour: dto.reminder24hour ?? false,
+    // ROK-1352: per-event ephemeral opt-in (null/false = no channel unless the
+    // admin force-ephemeral setting is on). Recurring instances each inherit
+    // this base value; later series edits propagate via PATCH /events/:id/series.
+    ephemeralVoiceEnabled: dto.ephemeralVoiceEnabled ?? null,
   };
 }
 

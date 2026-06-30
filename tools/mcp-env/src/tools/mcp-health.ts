@@ -102,9 +102,16 @@ export async function execute(): Promise<McpHealthResult> {
   const mcpJsonPath = join(PROJECT_DIR, '.mcp.json');
   const raw = await readFile(mcpJsonPath, 'utf-8');
   const parsed = JSON.parse(raw) as McpJsonShape;
-  const servers: Record<string, HealthStatus> = {};
-  for (const [name, entry] of Object.entries(parsed.mcpServers ?? {})) {
-    servers[name] = await checkServer(entry);
-  }
+  const entries = Object.entries(parsed.mcpServers ?? {});
+  // Probe concurrently — checkServer isolates per-server errors (it resolves,
+  // never rejects), so Promise.all cannot reject. Array order is preserved,
+  // so the resulting record keeps the .mcp.json declaration order.
+  const results = await Promise.all(
+    entries.map(async ([name, entry]): Promise<[string, HealthStatus]> => [
+      name,
+      await checkServer(entry),
+    ]),
+  );
+  const servers: Record<string, HealthStatus> = Object.fromEntries(results);
   return { servers, summary: buildSummary(servers) };
 }

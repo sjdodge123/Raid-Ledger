@@ -25,7 +25,7 @@ Read `<worktree>/build-state.yaml`, follow `pipeline.next_action`. Stories with 
 
 | Scope | Criteria | E2E Test Type | Gates |
 |-------|----------|---------------|-------|
-| **light** | Config, copy, style-only, docs, single-file simple fix (typo, import order, isolated edit) — no team, no worktree, no dev agent | Fast CI on touched workspace ONLY (lint + tsc + workspace tests) | lead_direct → fast_ci → operator |
+| **light / trivial** | Config, copy, style-only, docs, OR **any single-file ≤30-line logic/copy/style/config fix touching no `packages/contract`/migration/infra/auth surface** (the `trivial` tier — see CLAUDE.md "Trivial-fix fast lane") — no team, no worktree, no dev agent | Lightest tier that covers the change (often **none** for a behavior-neutral diff); fast CI on the touched workspace ONLY (lint + tsc + workspace tests) | lead_direct → fast_ci → operator-PR-review (non-UI: no FULL STOP, no Chrome MCP) |
 | **standard** | Single-module feature, bug fix, OR straightforward cross-module add (≤10 files) — including new contract schemas with matching backend + frontend | Playwright/Discord smoke (TDD) | e2e_first → dev → ci → operator → reviewer → smoke |
 | **full** | DB migration, breaking change to existing contract schema, Dockerfile/entrypoint/nginx, OR ≥4 unrelated modules with non-trivial logic in each | Full suite (TDD) + planner + architect + phase-split dev | e2e_first → dev → ci → operator → reviewer → architect_final → smoke |
 
@@ -80,10 +80,11 @@ Both modes: light scope skips test-infra steps entirely.
 
 **Light scope bypasses team / worktree / dev-agent overhead.** For `scope: light` ONLY:
 - No team, no worktree, no `Agent()` spawn — Lead implements directly on a feature branch in the main repo.
-- No TDD test-first, no reviewer, no architect, no Lead final smoke run.
+- No TDD test-first; **lightest proportionate test only** (a unit assertion for a behavior-changing fix, none for a behavior-neutral one). No reviewer team, no architect, no Lead final smoke — a single Codex pre-push pass (`/push` Step 8.5) is the one review.
+- **Human gates tier by blast radius** (CLAUDE.md "Trivial-fix fast lane"): a **non-UI** light/trivial fix skips BOTH the Chrome MCP e2e gate and the operator FULL STOP — the operator reviews the PR diff instead. A **cosmetic-UI** fix gets one screenshot on the already-running env (no `deploy_dev.sh --rebuild`). Anything touching a rendered flow / auth / contract keeps the full gate → escalate to `standard`.
 - Fast CI only — lint + tsc + workspace tests for touched workspace; skip full `validate-ci.sh`, migration validation, container-startup, Playwright.
-- No `deploy_dev.sh` re-run.
-- Pipeline collapses to: Step 1 (setup + Linear flip) → Step 2 light fast-path → Step 3 light fast-path (Linear "In Review" + operator stop) → Step 4 (operator approval only) → Step 5 (push + PR + auto-merge).
+- No `deploy_dev.sh` re-run (except a cosmetic-UI screenshot against an already-running env).
+- Pipeline collapses to: Step 1 (setup + Linear flip) → Step 2 light fast-path → Step 3 light fast-path (Linear "In Review") → Step 4 (operator PR-diff review; FULL STOP only for cosmetic-UI fixes) → Step 5 (push + PR + auto-merge).
 - Escape hatch: if mid-implementation you find real complexity (≥3 files, cross-workspace, real architectural decision), STOP, escalate to `standard`, create a worktree, restart Step 2 from 2a.
 
 **STOP / PAUSE / halt from operator:** cease all tool calls immediately, acknowledge "Stopped.", wait.

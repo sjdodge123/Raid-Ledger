@@ -9,6 +9,7 @@ import {
   computeTimeDelta,
   applyTimeDelta,
 } from './event-series.helpers';
+import { buildUpdateData } from './event-update.helpers';
 
 const GROUP_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
@@ -126,6 +127,35 @@ describe('event-series.helpers', () => {
 
       expect(start.toISOString()).toBe('2026-03-17T16:00:00.000Z');
       expect(end.toISOString()).toBe('2026-03-17T18:00:00.000Z');
+    });
+  });
+
+  // ROK-1352: buildUpdateData drives both PATCH /events/:id (single) and
+  // PATCH /events/:id/series (per resolved target). Mapping the per-event
+  // ephemeral override here makes both edit + series-scope propagation work.
+  describe('buildUpdateData — ephemeral voice override (ROK-1352)', () => {
+    const existing = createMockEvent({ id: 1 }) as Parameters<
+      typeof buildUpdateData
+    >[1];
+
+    it('maps ephemeralVoiceEnabled=true onto the update set', () => {
+      const data = buildUpdateData({ ephemeralVoiceEnabled: true }, existing);
+      expect(data.ephemeralVoiceEnabled).toBe(true);
+    });
+
+    it('maps an explicit opt-out (false)', () => {
+      const data = buildUpdateData({ ephemeralVoiceEnabled: false }, existing);
+      expect(data.ephemeralVoiceEnabled).toBe(false);
+    });
+
+    it('maps null to clear the override (inherit series/global)', () => {
+      const data = buildUpdateData({ ephemeralVoiceEnabled: null }, existing);
+      expect(data.ephemeralVoiceEnabled).toBeNull();
+    });
+
+    it('omits the column when the field is not in the DTO', () => {
+      const data = buildUpdateData({ title: 'unchanged' }, existing);
+      expect('ephemeralVoiceEnabled' in data).toBe(false);
     });
   });
 });

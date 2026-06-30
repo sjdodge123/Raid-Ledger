@@ -207,12 +207,21 @@ test.describe('Voting phase — pill variant transitions', () => {
         await expect(pill).toContainText(/1 of \d+ votes used/i);
     });
 
-    // ROK-1297 round 5af: cross-spec voting-pill flake observed during
-    // /push validate-ci 2026-05-19. Got "Voted · 2 of 3 votes used"
-    // instead of the expected "waiting on …" copy — the third vote API
-    // POST hadn't propagated to React Query's cache by the time the pill
-    // re-rendered. Not caused by ROK-1297 (no changes to ConfirmationPill
-    // or VotingLeaderboard). Documented in TECH-DEBT-BACKLOG 2026-05-19.
+    // LEFT SKIPPED — root cause is NOT the original staleTime/propagation
+    // flake (2026-05-19 note); the targeted element no longer exists.
+    // ROK-1298 rewrote the voting phase: `LineupDetailBody` now renders the
+    // cycle-4 `VotingComposite`, which shows `votes-used-pill` (VotesUsedPill,
+    // copy "{n} of {m} votes used") above `VotingLeaderboardV2` (rows are
+    // `voting-row`). `ConfirmationPill` (`data-testid="confirmation-pill"`)
+    // and its `waitingOnN` "waiting on N others" copy are no longer in the
+    // voting flow at all — ConfirmationPill only renders in NominationCard
+    // (building) and the tiebreaker BracketView/VetoView. So this test's
+    // selector + copy resolve to zero elements regardless of how long we
+    // poll; a wait fix cannot rescue it. Re-enabling requires REWRITING the
+    // assertion against `votes-used-pill` reaching "{max} of {max} votes
+    // used" (a behavior/target change, out of scope for flake-hardening).
+    // Verified 2026-06-28: confirmation-pill render sites are NominationCard,
+    // BracketView, VetoView only (no voting-phase site).
     test.skip("pill flips to waitingOnN variant after using all votes", async ({ page }) => {
         // Top up to the cap.
         for (const gid of gameIds.slice(1)) {
@@ -244,14 +253,20 @@ test.describe('Decided phase — hero schedule CTA', () => {
         await awaitProcessing(adminToken);
     });
 
-    // ROK-1297 round 5af: cross-spec fixture race — `hero-next-step`
-    // was not visible at the assertion point on desktop. The
-    // suppression in round 5ae only fires during `building`, so a
-    // `decided`-phase fixture SHOULD still render HeroNextStep. The
-    // beforeAll PATCH to `decided` may not have propagated to the
-    // React Query cache before the page loaded, or the activity-log
-    // refetch raced the assertion. Not caused by ROK-1297. Documented
-    // in TECH-DEBT-BACKLOG 2026-05-19.
+    // LEFT SKIPPED — root cause is NOT the original staleTime/propagation
+    // flake (2026-05-19 note); the targeted element no longer exists.
+    // ROK-1323 FULLY retired the legacy `HeroNextStep` banner: the only
+    // `data-testid="hero-next-step"` source (components/common/HeroNextStep
+    // .tsx) is no longer rendered on the lineup detail page — only its
+    // `HeroNextStepProps` type survives, imported by use-lineup-hero.ts
+    // (verified 2026-06-28: no JSX usage outside web/src/dev + tests, and
+    // lineup-detail-page.tsx:200 documents the retirement). The decided
+    // phase now renders `DecidedView` whose JourneyHero carries the schedule
+    // CTA. `getByTestId('hero-next-step')` therefore resolves to zero
+    // elements regardless of timing, so polling the lineup status to
+    // `decided`/abortedAt===null cannot rescue it. Re-enabling requires
+    // re-targeting the assertion at the DecidedView composite's schedule
+    // CTA (a behavior/target change, out of scope for flake-hardening).
     test.skip('hero offers schedule CTA referencing the decided game name', async ({ page }) => {
         await page.goto(`/community-lineup/${lineupId}`);
 
@@ -273,12 +288,19 @@ test.describe('Decided phase — hero schedule CTA', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Mobile sticky hero', () => {
-    // TECH-DEBT 2026-05-20 / ROK-1298: getByTestId('hero-next-step') flakes
-    // in CI on mobile — 6/6 retries failed on PR #830 even after rerun.
-    // Hero is the legacy HeroNextStep which still renders in decided state;
-    // pre-existing cross-describe lineupId state isolation issue. Passes
-    // on operator's laptop. Candidate for the test:integration:flaky
-    // ringfence lane.
+    // LEFT SKIPPED — the original diagnosis (cross-describe lineupId
+    // pollution + mobile staleTime flake) is now superseded by a hard
+    // blocker: ROK-1323 fully retired the legacy `HeroNextStep` banner, so
+    // `data-testid="hero-next-step"` is no longer rendered on the lineup
+    // detail page (verified 2026-06-28 — only the type survives; see the
+    // decided-phase test above for the full retirement note). Switching to a
+    // dedicated per-test decided-state lineupId in a local beforeAll (the
+    // suggested isolation fix) would NOT help — the element does not exist
+    // to compact. Sticky-compact behaviour moved to the cycle-4 composite
+    // JourneyHero (sticky header in VotingComposite/NominatingComposite).
+    // Re-enabling requires re-targeting the scroll/compact assertion at that
+    // composite's sticky region, not a wait/isolation fix — out of scope for
+    // flake-hardening.
     test.skip('hero compacts after scrolling past sentinel on mobile', async ({ page }, testInfo) => {
         test.skip(
             testInfo.project.name === 'desktop',

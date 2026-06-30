@@ -223,6 +223,7 @@ async function enrichWithVoiceChannel(
     (await channelResolver.resolveVoiceChannelForScheduledEvent(
       event.gameId,
       event.recurrenceGroupId,
+      event.ephemeralVoiceChannelId,
     ));
   if (voiceChannelId) {
     eventData.voiceChannelId = voiceChannelId;

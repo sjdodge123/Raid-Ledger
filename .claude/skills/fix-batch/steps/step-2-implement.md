@@ -4,6 +4,23 @@
 
 ---
 
+## 2·0. Trivial single-story short-circuit (check FIRST)
+
+If the batch is a **single `trivial`-tier story** (SKILL.md "Trivial single-story short-circuit" + CLAUDE.md "Trivial-fix fast lane"), SKIP 2a–2e entirely:
+
+```bash
+git fetch origin main
+git checkout -b fix/rok-<num> origin/main
+```
+
+The Lead edits the single file directly (no worktree, no `npm install`, no dev-agent spawn), adds the lightest proportionate test (a unit assertion; **none** for a behavior-neutral diff), and commits `fix: <desc> (ROK-<num>)`. Then go straight to **Step 3**, which itself collapses (one reviewer, blast-radius human gates). The `fix/rok-<num>` branch IS the PR branch in Step 4 — there is no batch branch to merge.
+
+**Escape hatch:** if it grows past the trivial bar mid-fix (≥2 files, cross-workspace, contract/migration/infra/auth, or a real rendered-flow change), abandon the short-circuit and run 2a–2e normally.
+
+For **2+ stories, or any non-trivial story**, continue with 2a below (unchanged).
+
+---
+
 ## 2a. Create Batch Branch
 
 ```bash

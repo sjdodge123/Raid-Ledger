@@ -1,0 +1,5 @@
+# Keeps scripts/.auth/ present in the synced tree (ROK-1286).
+# Playwright global-setup writes admin-token.json + admin.json here; the *.json
+# token files stay gitignored (see .gitignore), but the directory itself must
+# exist so the fleet's one-way Mutagen replica never deletes it mid-run and the
+# token write never ENOENTs.

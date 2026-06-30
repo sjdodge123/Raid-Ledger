@@ -193,8 +193,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
           new Date(),
           SNAPSHOT_WINDOW_MS,
           this.snapshotted,
-          (gId, rId) =>
-            this.channelResolver.resolveVoiceChannelForEvent(gId, rId),
+          (gId, rId, ephId) =>
+            this.channelResolver.resolveVoiceChannelForEvent(gId, rId, ephId),
           (eId, chId) => this.snapshotVoiceForEvent(eId, chId),
           this.logger,
         ),

@@ -56,6 +56,7 @@ export interface EmbedEventData {
     preferredRoles: string[] | null;
     status?: string | null;
     className?: string | null;
+    runningLate?: boolean | null;
   }> | null;
   game?: {
     name: string;

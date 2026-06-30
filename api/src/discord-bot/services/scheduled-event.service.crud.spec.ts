@@ -116,14 +116,14 @@ describe('createScheduledEvent — DB persistence & edge cases', () => {
     await mocks.service.createScheduledEvent(42, baseEventData, 99, false);
     expect(
       mocks.channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(99, undefined);
+    ).toHaveBeenCalledWith(99, null, null);
   });
 
   it('handles null gameId gracefully', async () => {
     await mocks.service.createScheduledEvent(42, baseEventData, null, false);
     expect(
       mocks.channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(null, undefined);
+    ).toHaveBeenCalledWith(null, null, null);
     expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalled();
   });
 

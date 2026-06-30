@@ -101,6 +101,17 @@ export const eventSignups = pgTable(
     attendanceRecordedAt: timestamp('attendance_recorded_at'),
     /** Timestamp when signup was cancelled/roached out (ROK-421 AC#8/#9) */
     roachedOutAt: timestamp('roached_out_at'),
+    /**
+     * Timestamp the attendee marked themselves "running late" (ROK-1379).
+     * Null = not running late. Distinct from `status` — late is not a change
+     * of attendance intent. Auto-cleared on voice-join / "I'm here now".
+     */
+    runningLateAt: timestamp('running_late_at'),
+    /**
+     * Optional ETA-late minutes (ROK-1379). Column exists now for the
+     * fast-follow ETA presets; v1 does not populate it.
+     */
+    lateMinutes: integer('late_minutes'),
     signedUpAt: timestamp('signed_up_at').defaultNow().notNull(),
   },
   (table) => [

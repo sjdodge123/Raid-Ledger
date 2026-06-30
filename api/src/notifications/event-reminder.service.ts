@@ -117,9 +117,14 @@ export class EventReminderService {
   }
 
   /** Fetch all user data needed for sending reminders. */
-  private async fetchReminderContext(eventIds: number[]) {
+  private async fetchReminderContext(
+    eventIds: number[],
+    hostIds: number[] = [],
+  ) {
     const signupsByEvent = await fetchSignupsByEvent(this.db, eventIds);
-    const allUserIds = [...new Set(Array.from(signupsByEvent.values()).flat())];
+    const allUserIds = [
+      ...new Set([...Array.from(signupsByEvent.values()).flat(), ...hostIds]),
+    ];
     if (allUserIds.length === 0) return null;
     const [userMap, tzEntries, charsByUser] = await Promise.all([
       fetchUserMap(this.db, allUserIds),
@@ -137,13 +142,18 @@ export class EventReminderService {
       title: string;
       duration: [Date, Date];
       gameId: number | null;
+      creatorId: number;
     }[],
     windowType: ReminderWindowType,
     windowLabel: string,
     now: Date,
     defaultTimezone: string,
   ): Promise<void> {
-    const ctx = await this.fetchReminderContext(events.map((e) => e.id));
+    const hostIds = events.map((e) => e.creatorId).filter((id) => id != null);
+    const ctx = await this.fetchReminderContext(
+      events.map((e) => e.id),
+      hostIds,
+    );
     if (!ctx) return;
     for (const event of events) {
       await this.sendRemindersForEvent(
@@ -181,6 +191,7 @@ export class EventReminderService {
       title: string;
       duration: [Date, Date];
       gameId: number | null;
+      creatorId: number;
     },
     fetchCtx: ReminderFetchContext,
     windowType: ReminderWindowType,
@@ -188,7 +199,7 @@ export class EventReminderService {
     now: Date,
     defaultTimezone: string,
   ): Promise<void> {
-    const userIds = fetchCtx.signupsByEvent.get(event.id) ?? [];
+    const userIds = this.recipientsForEvent(event, fetchCtx.signupsByEvent);
     const eventCtx = await this.buildEventReminderContext(event, now);
     for (const userId of userIds) {
       const user = fetchCtx.userMap.get(userId);
@@ -204,6 +215,23 @@ export class EventReminderService {
         defaultTimezone,
       );
     }
+  }
+
+  /**
+   * Reminder recipients for an event: every signed-up user plus the host
+   * (`creatorId`), even when the host is not signed up — so the host always
+   * receives the reminder DM carrying the "Running Late" button (ROK-1379 AC5).
+   * Per-(event, user, window) dedup downstream prevents double-sends.
+   */
+  private recipientsForEvent(
+    event: { id: number; creatorId: number },
+    signupsByEvent: ReminderFetchContext['signupsByEvent'],
+  ): number[] {
+    const userIds = [...(signupsByEvent.get(event.id) ?? [])];
+    if (event.creatorId != null && !userIds.includes(event.creatorId)) {
+      userIds.push(event.creatorId);
+    }
+    return userIds;
   }
 
   /** Check if a user is currently in voice for the given event. */

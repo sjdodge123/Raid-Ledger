@@ -20,6 +20,7 @@ interface VoiceChannelResolver {
   resolveVoiceChannelForScheduledEvent(
     gameId?: number | null,
     recurrenceGroupId?: string | null,
+    ephemeralChannelId?: string | null,
   ): Promise<string | null>;
 }
 
@@ -232,6 +233,7 @@ export async function resolveVoiceForEdit(
   return channelResolver.resolveVoiceChannelForScheduledEvent(
     gameId,
     event.recurrenceGroupId,
+    event.ephemeralVoiceChannelId,
   );
 }
 

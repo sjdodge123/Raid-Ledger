@@ -23,6 +23,7 @@ async function buildChannelResolverModule() {
           getChannelForGame: jest.fn(),
           getChannelForSeries: jest.fn().mockResolvedValue(null),
           getVoiceChannelForGame: jest.fn().mockResolvedValue(null),
+          getVoiceChannelForSeries: jest.fn().mockResolvedValue(null),
         },
       },
       {
@@ -260,6 +261,40 @@ describe('ChannelResolverService', () => {
       expect(
         settingsService.getDiscordBotDefaultVoiceChannel,
       ).not.toHaveBeenCalled();
+    });
+
+    // ROK-1352: Tier 0 — a live ephemeral channel wins over every binding/default.
+    it('returns the ephemeral channel first (Tier 0) above all bindings', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      bindingsService.getVoiceChannelForSeries.mockResolvedValue(
+        'series-voice',
+      );
+      bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
+      settingsService.getDiscordBotDefaultVoiceChannel.mockResolvedValue(
+        'app-default-voice',
+      );
+      const result = await service.resolveVoiceChannelForScheduledEvent(
+        99,
+        'rg-1',
+        'ephemeral-ch',
+      );
+      expect(result).toBe('ephemeral-ch');
+      expect(bindingsService.getVoiceChannelForSeries).not.toHaveBeenCalled();
+      expect(bindingsService.getVoiceChannelForGame).not.toHaveBeenCalled();
+      expect(
+        settingsService.getDiscordBotDefaultVoiceChannel,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('falls through to bindings when no ephemeral channel is set', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
+      const result = await service.resolveVoiceChannelForScheduledEvent(
+        99,
+        null,
+        null,
+      );
+      expect(result).toBe('game-voice');
     });
   });
 });

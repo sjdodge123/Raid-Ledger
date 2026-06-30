@@ -206,6 +206,16 @@ test.describe('Community Lineup banner on Games page', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Nomination modal', () => {
+    // ROK-1286 (FIX 1): the Nominate button only renders while the newest
+    // lineup is in BUILDING phase. A sibling/stale VOTING-phase lineup that is
+    // newer hands `/lineups/banner` to itself (no Nominate CTA), so the click
+    // below times out — deterministic on a persistent DB, cross-worker flake in
+    // CI. Re-assert a building-phase lineup before each test, mirroring the
+    // banner/detail/responsive describes above.
+    test.beforeEach(async () => {
+        lineupId = await ensureActiveLineupInBuildingPhase(adminToken);
+    });
+
     test('opens when clicking Nominate button on banner', async ({ page }) => {
         await gotoGames(page);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
@@ -481,6 +491,66 @@ test.describe('Community Lineup responsive layout', () => {
 // Voting phase (ROK-936)
 // ---------------------------------------------------------------------------
 
+/** Shared lineup-create body (per-worker title, long phase durations). */
+function newLineupBody(): Record<string, unknown> {
+    return {
+        title: lineupTitle,
+        targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        buildingDurationHours: 720,
+        votingDurationHours: 720,
+        decidedDurationHours: 720,
+    };
+}
+
+/**
+ * ROK-1286 (FIX 1, #26): resolve a lineup we can deterministically drive to
+ * voting. Reuses the banner lineup when it's already voting/building; archives
+ * THIS worker's rows and re-creates (via createLineupOrRetry, so a sibling 409
+ * is loud + retried) when the banner is in a non-advanceable state (decided) or
+ * absent because an earlier spec left everything archived.
+ */
+async function ensureVotingLineup(token: string): Promise<number> {
+    const banner = await apiGet(token, '/lineups/banner');
+    if (
+        banner &&
+        typeof banner.id === 'number' &&
+        (banner.status === 'voting' || banner.status === 'building')
+    ) {
+        return banner.id;
+    }
+    if (banner && typeof banner.id === 'number') {
+        await archiveLineup(token, banner.id);
+    }
+    const { id } = await createLineupOrRetry(token, newLineupBody(), workerPrefix);
+    return id;
+}
+
+/**
+ * Ensure `id` has nominations, advance it to voting, and gate on the server
+ * actually reporting `voting` before tests assert the leaderboard. The PATCH +
+ * its async side-effects settle out-of-band; navigating too early renders the
+ * building surface (the #26 leaderboard flake).
+ */
+async function seedAndAdvanceToVoting(token: string, id: number): Promise<void> {
+    const detail = await apiGet(token, `/lineups/${id}`);
+    if (!detail?.entries?.length) {
+        const gameIds = await fetchGameIds(token, 3);
+        for (const gid of gameIds) {
+            await apiPost(token, `/lineups/${id}/nominate`, { gameId: gid });
+        }
+    }
+    if (detail?.status !== 'voting') {
+        await apiPatch(token, `/lineups/${id}/status`, { status: 'voting' });
+    }
+    await pollForCondition(
+        async () => {
+            const d = await apiGet(token, `/lineups/${id}`);
+            return d?.status === 'voting' ? d : null;
+        },
+        { timeoutMs: 10_000, description: `/lineups/${id} reports voting` },
+    );
+}
+
 test.describe('Voting phase', () => {
     // ROK-1147: this describe reads the global /lineups/banner to find a
     // voting lineup and also archives the active lineup to assert the
@@ -494,50 +564,12 @@ test.describe('Voting phase', () => {
     let votingLineupId: number;
 
     test.beforeAll(async () => {
-        // Ensure a lineup exists and advance it to voting status
-        const banner = await apiGet(adminToken, '/lineups/banner');
-        if (banner && typeof banner.id === 'number') {
-            if (banner.status === 'voting') {
-                votingLineupId = banner.id;
-                return;
-            }
-            // Archive anything that is not building (decided, etc)
-            if (banner.status !== 'building') {
-                await archiveLineup(adminToken, banner.id);
-                const created = (await apiPost(adminToken, '/lineups', {
-                    title: lineupTitle,
-                    targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-                    buildingDurationHours: 720,
-                    votingDurationHours: 720,
-                    decidedDurationHours: 720,
-                })) as { id: number };
-                votingLineupId = created.id;
-            } else {
-                votingLineupId = banner.id;
-            }
-        } else {
-            // No active lineup -- create one
-            const created = (await apiPost(adminToken, '/lineups', {
-                title: lineupTitle,
-                targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-                buildingDurationHours: 720,
-                votingDurationHours: 720,
-                decidedDurationHours: 720,
-            })) as { id: number };
-            votingLineupId = created.id;
-        }
-
-        // Ensure the lineup has nominations before advancing to voting.
-        const detail = await apiGet(adminToken, `/lineups/${votingLineupId}`);
-        if (!detail?.entries?.length) {
-            const gameIds = await fetchGameIds(adminToken, 3);
-            for (const gid of gameIds) {
-                await apiPost(adminToken, `/lineups/${votingLineupId}/nominate`, { gameId: gid });
-            }
-        }
-
-        // Advance to voting (the detail page needs games to render a leaderboard)
-        await apiPatch(adminToken, `/lineups/${votingLineupId}/status`, { status: 'voting' });
+        // ROK-1286 (#26): resolve (reuse or recreate) a lineup, seed it with
+        // nominations, advance it to voting, and gate on the server reporting
+        // `voting` — so this hook always reaches voting regardless of whether an
+        // earlier spec left the prior lineup archived/decided.
+        votingLineupId = await ensureVotingLineup(adminToken);
+        await seedAndAdvanceToVoting(adminToken, votingLineupId);
     });
 
     test('leaderboard renders sorted by vote count descending', async ({ page }) => {

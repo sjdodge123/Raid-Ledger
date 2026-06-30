@@ -46,7 +46,7 @@ If `origin/main` moved by >1 PR since the doc's last Derived update, run `/statu
 
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
-Before writing implementation code for ANY feature/fix that has a visual or UX dimension, scan for design references that may already exist. The operator regularly approves simplified-flow targets, wireframes, or design specs ahead of implementation — agents picking up follow-up work should be **implementing the approved target, not redesigning it**.
+Before writing implementation code for any feature/fix that **adds, relocates, or restructures UI or introduces a new user-facing flow**, scan for design references that may already exist. (In-place cosmetic tweaks — color, copy, spacing, a single prop on an existing element — are **exempt**: there is no approved target to honor, so skip the scan and ship the fix.) The operator regularly approves simplified-flow targets, wireframes, or design specs ahead of implementation — agents picking up follow-up work should be **implementing the approved target, not redesigning it**.
 
 Where designs live in this repo:
 
@@ -56,6 +56,35 @@ Where designs live in this repo:
 4. **Existing components/pages** that solve a similar problem — match the established pattern rather than introducing a parallel one.
 
 If you can't find a design reference and the UX direction matters, **ask the operator before coding**. Don't guess at the target — implementations of the wrong target are more expensive to undo than asking up front.
+
+## Trivial-fix fast lane (STRICT — applies to ALL agents and the /build, /fix-batch, /push skills)
+
+Most of the gates below were sized for risky, multi-file feature work and added after real incidents. Applied unchanged to a 4-line fix they compound into hours of ceremony for minutes of code. The **`trivial` tier** closes the cliff between `light` (≈no verification) and `standard` (the full gauntlet). This section is the canonical definition; the skills reference it.
+
+**A change is `trivial` only if ALL hold:**
+
+1. ≤ ~30 net changed lines, AND
+2. a single source file (optionally plus its co-located test), AND
+3. touches NONE of: `packages/contract/**`, `api/src/drizzle/migrations/**`, `Dockerfile*` / `nginx/**` / `docker-entrypoint*`, `api/src/auth/**`, or admin/crypto/payments/secret-handling paths, AND
+4. is a pure logic / copy / style / config / constant fix — **not** net-new feature behavior and **not** a new or relocated user-facing flow.
+
+If any condition fails, it is `standard` (unchanged). **When in doubt, it is `standard`** — the tier is for genuinely small, low-blast-radius fixes, not a way around review.
+
+**A `trivial` fix SKIPS:**
+
+- Worktree + `npm install` + dev-agent spawn → **the Lead edits directly** (this extends [[feedback_lead_does_small_fixes]] from 1–3 lines to the trivial tier).
+- TDD-failing-test-first ceremony → add the **lightest proportionate test** (one unit assertion / one added case); a behavior-neutral diff needs none.
+- The single-story "batch" branch ceremony → **PR the fix branch directly**.
+- The second reviewer + architect → **exactly one review pass** (Codex pre-push).
+- **Human gates, tiered by blast radius:** a **non-UI** trivial fix skips the Chrome MCP e2e gate AND the operator FULL STOP (the operator reviews the PR diff instead). A **cosmetic-UI** trivial fix gets a single screenshot on the already-running env (no `--rebuild`, no full flow-drive). Anything touching a rendered flow, auth, contract, migration, or infra keeps the **full** gate — those protections (e.g. the Chrome MCP gate after the ROK-1237 UI break) are unchanged where they earned their place.
+
+**A `trivial` fix KEEPS (non-negotiable):**
+
+- `validate-ci.sh --static` (build + tsc + lint), scoped to the changed workspace.
+- The full **GitHub CI** suite — the real gate; auto-merge-squash blocks until green.
+- One review pass (Codex pre-push).
+- A regression test for any **Bug** — but the **lightest tier that proves the fix** (a unit assertion is sufficient; no mandatory integration/Playwright spec for a one-liner).
+- Every safety guardrail: never-weaken-assertions, no `sleep()`, document-pre-existing-failures, operator-config ride-along, code-size limits, and all migration/infra/boot-script rules.
 
 ## MCP Tools (registered in `.mcp.json`)
 
@@ -318,11 +347,12 @@ GitHub CI runs the full Playwright suite (desktop + mobile, 5-shard) on every PR
 - **NEVER dismiss test failures as "pre-existing" or "unrelated to this change."** Every test failure must be investigated and either fixed or tracked in a Linear story with root cause.
 - **NEVER use `sleep()` in smoke tests.** Use deterministic wait helpers (`waitForEmbedUpdate`, `pollForCondition`, etc.).
 - **NEVER skip or weaken a test assertion to make CI pass.** Fix the code or fix the test infrastructure.
-- **Every feature/fix MUST include an end-to-end test:**
-  - UI changes → Playwright smoke test (desktop + mobile)
-  - Discord bot/notification changes → Discord companion bot smoke test
-  - API-only changes → Integration test (Jest, real DB)
+- **Every feature/fix MUST include a test at the lightest tier that actually covers the change** — pick by the surface touched, not by reflex:
+  - UI changes (new or changed rendered flow) → Playwright smoke test (desktop + mobile)
+  - Discord bot/notification changes (new or changed embed/dispatch/voice path) → Discord companion bot smoke test
+  - API-only behavior change → Integration test (Jest, real DB)
   - Pure logic → Unit test
+  - **Behavior-neutral diff** (copy/constant/comment/null-guard with no observable change — including a `trivial`-tier fix per the "Trivial-fix fast lane" section) → **no new test is required.** Add a single unit assertion if one naturally applies. "No new test for a behavior-neutral change" is an allowed, documented outcome — not a rule violation. Do NOT author a full Playwright/Discord-smoke spec for a one-liner that changes no rendered flow or bot output.
 
 ## Discord User Deactivation
 

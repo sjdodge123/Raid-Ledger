@@ -231,14 +231,15 @@ async function testReschedulePerfBatch() {
   );
   const newStart = new Date(Date.now() + 72 * 60 * 60 * 1000);
   const newEnd = new Date(newStart.getTime() + 3 * 60 * 60 * 1000);
-  const t0 = performance.now();
   const res = await testApp.request
     .patch(`/events/${eventId}/reschedule`)
     .set('Authorization', `Bearer ${adminToken}`)
     .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
-  const elapsed = performance.now() - t0;
   expect(res.status).toBe(200);
-  expect(elapsed).toBeLessThan(200);
+  // Batching (one createMany for all signups) is asserted deterministically by
+  // the ROK-1043 unit test in event-lifecycle.helpers.spec.ts. A wall-clock
+  // bound here was load-dependent and flaked under CI (ROK-1290); the
+  // end-to-end value is that ALL signups get a real notification row.
   const notifs = await testApp.db
     .select()
     .from(schema.notifications)
@@ -619,6 +620,81 @@ async function testEmbedCoalescesDiscordIds() {
   ).toBeDefined();
 }
 
+// ─── delay tests (ROK-1379) ─────────────────────────────────────────────────
+
+async function testDelayShiftsAndPreservesConfirmation() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Delayed Raid',
+  });
+  const { userId } = await createMemberAndLogin(
+    testApp,
+    'delay_member',
+    'delay_member@test.local',
+  );
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId,
+    userId,
+    status: 'signed_up',
+    confirmationStatus: 'confirmed',
+  });
+  const [before] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+  const oldStart = before.duration[0].getTime();
+
+  await testApp.app
+    .get(EventsService)
+    .delayEvent(eventId, 15, testApp.seed.adminUser.id);
+
+  const [after] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+  expect(after.duration[0].getTime()).toBe(oldStart + 15 * 60_000);
+
+  // Delay must NOT reset confirmations (the key difference from reschedule).
+  const [signup] = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, userId));
+  expect(signup.confirmationStatus).toBe('confirmed');
+
+  // Non-actor signed-up user gets event_delayed (NOT event_rescheduled).
+  const memberNotifs = await testApp.db
+    .select()
+    .from(schema.notifications)
+    .where(eq(schema.notifications.userId, userId));
+  expect(memberNotifs.find((n) => n.type === 'event_delayed')).toBeDefined();
+  expect(
+    memberNotifs.find((n) => n.type === 'event_rescheduled'),
+  ).toBeUndefined();
+
+  // The actor does not notify themselves.
+  const actorNotifs = await testApp.db
+    .select()
+    .from(schema.notifications)
+    .where(
+      and(
+        eq(schema.notifications.userId, testApp.seed.adminUser.id),
+        eq(schema.notifications.type, 'event_delayed'),
+      ),
+    );
+  expect(actorNotifs).toHaveLength(0);
+}
+
+async function testDelayRejectsNonHost() {
+  const eventId = await createFutureEvent(testApp, adminToken);
+  const { userId } = await createMemberAndLogin(
+    testApp,
+    'delay_nonhost',
+    'delay_nonhost@test.local',
+  );
+  await expect(
+    testApp.app.get(EventsService).delayEvent(eventId, 15, userId),
+  ).rejects.toBeDefined();
+}
+
 beforeAll(() => setupAll());
 afterEach(() => resetAfterEach());
 
@@ -639,7 +715,7 @@ describe('Events — reschedule', () => {
     testRescheduleResetsTentativeStatus());
   it('should not reset declined signups on reschedule (ROK-759)', () =>
     testRescheduleDoesNotResetDeclined());
-  it('reschedule with 12 signups completes under 200ms (ROK-1043)', () =>
+  it('reschedule with 12 signups notifies every signup in one batch (ROK-1043, ROK-1290)', () =>
     testReschedulePerfBatch());
   it("ROK-1269: rescheduler's signup stays confirmed; others flip to pending", () =>
     testRescheduleStaysConfirmedForRescheduler());
@@ -649,6 +725,12 @@ describe('Events — reschedule', () => {
     testRescheduleTentativeReschedulerStaysTentative());
   it('ROK-1269: roster update logs signup_reconfirmed per flipped attendee', () =>
     testRosterUpdateLogsSignupReconfirmed());
+});
+
+describe('Events — delay (ROK-1379)', () => {
+  it('shifts start/end, preserves confirmations, sends event_delayed to non-actor', () =>
+    testDelayShiftsAndPreservesConfirmation());
+  it('rejects a non-host actor', () => testDelayRejectsNonHost());
 });
 
 describe('Events — invite member', () => {

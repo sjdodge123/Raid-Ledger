@@ -159,6 +159,9 @@ function createSelectChainWithRecord(record: object) {
   const selectChain: Record<string, unknown> = {};
   selectChain.from = jest.fn().mockReturnValue(selectChain);
   selectChain.where = jest.fn().mockReturnValue(selectChain);
+  // ROK-1352: getEphemeralChannelId resolves via .limit(1); findEventMessages
+  // resolves via the thenable below. Support both off the same chain.
+  selectChain.limit = jest.fn().mockResolvedValue([record]);
   selectChain.then = (
     resolve: (v: unknown) => void,
     reject: (e: unknown) => void,

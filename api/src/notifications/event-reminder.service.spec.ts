@@ -440,6 +440,157 @@ describe('EventReminderService', () => {
       );
     });
 
+    it('should send a reminder to the host even when not signed up (ROK-1379 AC5)', async () => {
+      const now = new Date();
+      const soonStart = new Date(now.getTime() + 10 * 60 * 1000);
+      const soonEnd = new Date(soonStart.getTime() + 2 * 60 * 60 * 1000);
+
+      const eventsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([
+            {
+              id: 10,
+              title: 'Raid Night',
+              duration: [soonStart, soonEnd] as [Date, Date],
+              gameId: null,
+              creatorId: 99,
+              reminder15min: true,
+              reminder1hour: false,
+              reminder24hour: false,
+              cancelledAt: null,
+            },
+          ]),
+        }),
+      };
+
+      // Host (99) is NOT in the signups for this event.
+      const signupsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([{ eventId: 10, userId: 1 }]),
+        }),
+      };
+
+      const usersSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([
+            { id: 1, discordId: 'discord-1' },
+            { id: 99, discordId: 'discord-host' },
+          ]),
+        }),
+      };
+
+      const charsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      const tzSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockDb.select
+        .mockReturnValueOnce(eventsSelectChain)
+        .mockReturnValueOnce(signupsSelectChain)
+        .mockReturnValueOnce(usersSelectChain)
+        .mockReturnValueOnce(tzSelectChain)
+        .mockReturnValueOnce(charsSelectChain);
+
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest
+              .fn()
+              .mockResolvedValue([{ id: 1, eventId: 10, userId: 1 }]),
+          }),
+        }),
+      });
+
+      await service.handleReminders();
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 99, type: 'event_reminder' }),
+      );
+      // Both the lone signup (1) and the non-signed-up host (99) get a DM.
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not duplicate the host reminder when the host is also signed up (ROK-1379)', async () => {
+      const now = new Date();
+      const soonStart = new Date(now.getTime() + 10 * 60 * 1000);
+      const soonEnd = new Date(soonStart.getTime() + 2 * 60 * 60 * 1000);
+
+      const eventsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([
+            {
+              id: 10,
+              title: 'Raid Night',
+              duration: [soonStart, soonEnd] as [Date, Date],
+              gameId: null,
+              creatorId: 1,
+              reminder15min: true,
+              reminder1hour: false,
+              reminder24hour: false,
+              cancelledAt: null,
+            },
+          ]),
+        }),
+      };
+
+      const signupsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([{ eventId: 10, userId: 1 }]),
+        }),
+      };
+
+      const usersSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest
+            .fn()
+            .mockResolvedValue([{ id: 1, discordId: 'discord-1' }]),
+        }),
+      };
+
+      const charsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      const tzSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockDb.select
+        .mockReturnValueOnce(eventsSelectChain)
+        .mockReturnValueOnce(signupsSelectChain)
+        .mockReturnValueOnce(usersSelectChain)
+        .mockReturnValueOnce(tzSelectChain)
+        .mockReturnValueOnce(charsSelectChain);
+
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest
+              .fn()
+              .mockResolvedValue([{ id: 1, eventId: 10, userId: 1 }]),
+          }),
+        }),
+      });
+
+      await service.handleReminders();
+
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 1 }),
+      );
+    });
+
     it('should delegate role gap checking to RoleGapAlertService', async () => {
       const eventsSelectChain = {
         from: jest.fn().mockReturnValue({

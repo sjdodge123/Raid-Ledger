@@ -61,6 +61,12 @@ export function buildUpdateData(
     updateData.reminder1hour = dto.reminder1hour;
   if (dto.reminder24hour !== undefined)
     updateData.reminder24hour = dto.reminder24hour;
+  // ROK-1352: persist the per-event ephemeral-voice override on edit. Without
+  // this the toggle (shown in the edit form, and propagated across a series via
+  // the ROK-429 scope modal → PATCH /events/:id/series → updateSeriesEvents,
+  // which applies buildUpdateData per target) was a silent no-op.
+  if (dto.ephemeralVoiceEnabled !== undefined)
+    updateData.ephemeralVoiceEnabled = dto.ephemeralVoiceEnabled;
   if (dto.startTime || dto.endTime) {
     updateData.duration = resolveDuration(dto, existing);
   }

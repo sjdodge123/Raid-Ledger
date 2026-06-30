@@ -40,6 +40,7 @@ import { lineupGraceCountdownTests } from "./tests/lineup-grace-countdown.test.j
 import { discordDeactivationTests } from "./tests/discord-deactivation.test.js";
 import { recruitmentReminderTests } from "./tests/recruitment-reminder.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
+import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
 
 /** Build a TestResult from a test, status, and timing info. */
 function buildResult(
@@ -169,6 +170,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...discordDeactivationTests,
     ...recruitmentReminderTests,
     ...seriesDualBindingTests,
+    ...ephemeralVoiceTests,
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 

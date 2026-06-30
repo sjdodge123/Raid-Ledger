@@ -105,7 +105,10 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   }
   async function setupBlock() {
     mockDb = {
-      select: jest.fn(),
+      // Default empty chain so unsequenced selects (e.g. the ROK-1352
+      // getEphemeralChannelId lookup) never throw; setupEmptyRoster's
+      // mockReturnValueOnce sequence still overrides for ordered cases.
+      select: jest.fn().mockReturnValue(makeSelectChain([])),
       insert: jest.fn().mockReturnValue(makeInsertChain()),
     };
 
@@ -129,6 +132,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
   const setupEmptyRoster = () => {
     mockDb.select
+      .mockReturnValueOnce(makeSelectChain([])) // ROK-1352: getEphemeralChannelId lookup (none)
       .mockReturnValueOnce(makeSelectChain([])) // ROK-551: idempotency check (no existing embed)
       .mockReturnValueOnce(makeSelectChain([])) // eventSignups
       .mockReturnValueOnce(makeSelectChain([])); // rosterAssignments
@@ -141,7 +145,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(7, undefined);
+    ).toHaveBeenCalledWith(7, undefined, null);
   });
 
   it('sets voiceChannelId on enriched event data when resolver returns a channel', async () => {
@@ -180,7 +184,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(null, undefined);
+    ).toHaveBeenCalledWith(null, undefined, null);
   });
 
   it('calls resolveVoiceChannelForScheduledEvent with undefined when gameId is not provided', async () => {
@@ -190,7 +194,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(undefined, undefined);
+    ).toHaveBeenCalledWith(undefined, undefined, null);
   });
 
   it('uses notificationChannelOverride instead of resolver when provided (ROK-599)', async () => {

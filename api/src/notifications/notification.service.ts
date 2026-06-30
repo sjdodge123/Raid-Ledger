@@ -255,6 +255,7 @@ export class NotificationService {
         gameId: schema.events.gameId,
         recurrenceGroupId: schema.events.recurrenceGroupId,
         notificationChannelOverride: schema.events.notificationChannelOverride,
+        ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
       })
       .from(schema.events)
       .where(eq(schema.events.id, eventId))
@@ -265,6 +266,7 @@ export class NotificationService {
     return this.channelResolver.resolveVoiceChannelForScheduledEvent(
       event.gameId,
       event.recurrenceGroupId,
+      event.ephemeralVoiceChannelId,
     );
   }
 
