@@ -30,7 +30,7 @@ Built for raid leaders, clan officers, and server owners who are tired of herdin
 - **Smart reminders & reschedule flows** — batched DM reminders and one-tap confirm/decline reschedule prompts.
 - **Community lineups & AI game suggestions** — nominate, vote, and let Common Ground scoring surface what everyone actually wants to play.
 - **Scheduling polls & availability heatmaps** — find the slot that works for the most people, with deadlines and tiebreakers.
-- **Game library (IGDB) with live deal pricing** — rich metadata from IGDB paired with live IsThereAnyDeal pricing and "most-played" / best-deal discovery.
+- **Game library (200,000+ games via IGDB) with live deal pricing** — rich metadata from IGDB paired with live IsThereAnyDeal pricing and "most-played" / best-deal discovery.
 - **Steam integration** — link Steam to sync wishlists and playtime, feeding smarter game picks and deal alerts.
 - **Player taste profiles & archetypes** — fun archetypes (Casual → Hardcore, Duelist, and more) built from real play signals.
 - **Characters & WoW Classic import** — pull World of Warcraft Classic toons straight from the Blizzard API.
