@@ -52,7 +52,7 @@ function useTitleSuggestion(selectedEventType: { name?: string; defaultPlayerCap
             return `${names.join(' + ')}${suffix}`;
         }
         if (etName && gName) return `${etName} \u2014 ${gName}`;
-        if (gName) return `${gName} Event`;
+        if (gName) return gName;
         return '';
     }, [etName, etCap, gName, selectedInstances]);
 }
