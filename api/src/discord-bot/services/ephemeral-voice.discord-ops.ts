@@ -39,6 +39,54 @@ export async function deleteVoiceChannel(
 }
 
 /**
+ * Current name of an ephemeral voice channel from the guild cache, or null when
+ * it is not cached / gone. Used by the name-reconcile pass to compare against the
+ * expected name so a rename only fires when they actually differ (channel
+ * renames are rate-limited to ~2/10min — comparing first avoids churn).
+ */
+export function getEphemeralChannelName(
+  guild: Guild,
+  channelId: string,
+): string | null {
+  return guild.channels.cache.get(channelId)?.name ?? null;
+}
+
+/** Rename a voice channel (ephemeral name backfill). Instrumented + timed. */
+export async function renameVoiceChannel(
+  guild: Guild,
+  channelId: string,
+  name: string,
+): Promise<void> {
+  await timedDiscordCall('ephemeral.rename', () =>
+    guild.channels.edit(channelId, { name }),
+  );
+}
+
+/**
+ * Reconcile an ephemeral event's Scheduled-Event name to `expectedName`, renaming
+ * only when Discord's CURRENT name differs (no-churn: fires once after deploy,
+ * then matches → skip). Reads the current name from the cache, falling back to a
+ * single fetch on a cold cache; a missing/deleted SE is treated as a skip.
+ * Returns true when a rename was issued. Caller wraps in try/catch.
+ */
+export async function reconcileScheduledEventName(
+  guild: Guild,
+  seId: string,
+  expectedName: string,
+): Promise<boolean> {
+  const current =
+    guild.scheduledEvents.cache.get(seId) ??
+    (await timedDiscordCall('scheduledEvents.fetch', () =>
+      guild.scheduledEvents.fetch(seId),
+    ).catch(() => null));
+  if (!current || current.name === expectedName) return false;
+  await timedDiscordCall('scheduledEvents.edit', () =>
+    guild.scheduledEvents.edit(seId, { name: expectedName }),
+  );
+  return true;
+}
+
+/**
  * Live member count for a voice channel. Returns 0 when the channel is gone.
  * Used as the never-delete-while-occupied re-check immediately before delete.
  */

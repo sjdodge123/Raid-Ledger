@@ -89,6 +89,37 @@ export async function findReapCandidates(
     );
 }
 
+/** An in-flight ephemeral event plus its SE id, for the name-reconcile scan. */
+export interface NameReconcileRow extends EphemeralEventRow {
+  discordScheduledEventId: string | null;
+}
+
+/**
+ * In-flight ephemeral events for the name-reconcile / deploy backfill scan:
+ * those that hold a live ephemeral channel, are not cancelled, and have not yet
+ * ended (effective end >= now). Includes `discordScheduledEventId` so the SE name
+ * can be reconciled alongside the channel name. Ended channels are left to the
+ * reaper. Returns a naturally small set (only events near/in their window).
+ */
+export async function findNameReconcileCandidates(
+  db: PostgresJsDatabase<typeof schema>,
+  now: Date,
+): Promise<NameReconcileRow[]> {
+  return db
+    .select({
+      ...EVENT_FIELDS,
+      discordScheduledEventId: schema.events.discordScheduledEventId,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        isNotNull(schema.events.ephemeralVoiceChannelId),
+        isNull(schema.events.cancelledAt),
+        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
+      ),
+    );
+}
+
 /** Fetch a single event's ephemeral-relevant fields. */
 export async function fetchEventForEphemeral(
   db: PostgresJsDatabase<typeof schema>,
