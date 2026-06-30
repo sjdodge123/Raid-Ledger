@@ -32,6 +32,7 @@ import {
   tryEditDescription,
   tryEditFullEvent,
   resolveVoiceForEdit,
+  resolveEditedScheduledEventName,
 } from './scheduled-event.discord-ops';
 import {
   createScheduledEventIdempotent,
@@ -315,6 +316,9 @@ export class ScheduledEventService {
       gameId,
       this.channelResolver,
     );
+    const name = await resolveEditedScheduledEventName(event, eventData, () =>
+      this.settingsService.getDefaultTimezone(),
+    );
     try {
       await tryEditFullEvent(
         guild,
@@ -323,6 +327,7 @@ export class ScheduledEventService {
         eventData,
         d,
         vc,
+        name,
       );
     } catch (err) {
       if (!isUnknownEventError(err)) throw err;
