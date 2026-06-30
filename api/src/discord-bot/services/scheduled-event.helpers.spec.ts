@@ -2,6 +2,7 @@ import {
   buildScheduledEventName,
   buildScheduledEventNameWithTime,
   buildEphemeralChannelName,
+  stripTrailingEventWord,
   EPHEMERAL_CHANNEL_MARKER,
   MAX_SCHEDULED_EVENT_NAME_LENGTH,
   type ScheduledEventData,
@@ -84,6 +85,40 @@ describe('buildScheduledEventName (ROK-1350)', () => {
   });
 });
 
+describe('stripTrailingEventWord (ephemeral display de-dupe)', () => {
+  it('drops a trailing standalone " Event" word', () => {
+    expect(stripTrailingEventWord('HELLCARD Event')).toBe('HELLCARD');
+    expect(stripTrailingEventWord('Launch Event')).toBe('Launch');
+  });
+
+  it('is case-insensitive on the trailing word', () => {
+    expect(stripTrailingEventWord('HELLCARD EVENT')).toBe('HELLCARD');
+    expect(stripTrailingEventWord('hellcard event')).toBe('hellcard');
+  });
+
+  it('does NOT strip a non-standalone "Event" substring', () => {
+    expect(stripTrailingEventWord('Eventful')).toBe('Eventful');
+    expect(stripTrailingEventWord('Event Horizon')).toBe('Event Horizon');
+    expect(stripTrailingEventWord('HELLCARDEvent')).toBe('HELLCARDEvent');
+  });
+
+  it('only removes a SINGLE trailing "Event"', () => {
+    expect(stripTrailingEventWord('My Event Event')).toBe('My Event');
+  });
+
+  it('keeps the original when stripping would leave it empty/blank', () => {
+    expect(stripTrailingEventWord('Event')).toBe('Event');
+    expect(stripTrailingEventWord('  Event')).toBe('  Event');
+  });
+
+  it('returns names without a trailing "Event" unchanged', () => {
+    expect(stripTrailingEventWord('Friday Raid — WoW')).toBe(
+      'Friday Raid — WoW',
+    );
+    expect(stripTrailingEventWord('Gamernight')).toBe('Gamernight');
+  });
+});
+
 describe('buildEphemeralChannelName (ROK-1352)', () => {
   it('prefixes the clock marker onto the SE name', () => {
     const name = buildEphemeralChannelName(
@@ -116,14 +151,22 @@ describe('buildEphemeralChannelName (ROK-1352)', () => {
         game: null,
       }),
     );
-    expect(name).toBe(`${EPHEMERAL_CHANNEL_MARKER} HELLCARD Event`);
+    // Trailing redundant "Event" is dropped for the ephemeral channel display.
+    expect(name).toBe(`${EPHEMERAL_CHANNEL_MARKER} HELLCARD`);
     expect(name).not.toContain('·');
     expect(name).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('drops a redundant trailing "Event" from the title', () => {
+    const name = buildEphemeralChannelName(
+      makeEventData({ title: 'Launch Event', game: null }),
+    );
+    expect(name).toBe(`${EPHEMERAL_CHANNEL_MARKER} Launch`);
   });
 });
 
 describe('buildScheduledEventNameWithTime (sidebar de-dupe)', () => {
-  it('appends the start time after a middot, formatted in the given timezone', () => {
+  it('drops a redundant trailing "Event" then appends the start time after a middot', () => {
     const name = buildScheduledEventNameWithTime(
       makeEventData({
         title: 'HELLCARD Event',
@@ -132,7 +175,7 @@ describe('buildScheduledEventNameWithTime (sidebar de-dupe)', () => {
       }),
       'UTC',
     );
-    expect(name).toBe('HELLCARD Event · Sun 9:35 PM');
+    expect(name).toBe('HELLCARD · Sun 9:35 PM');
   });
 
   it('appends the time onto a variety-night base name (with game)', () => {
