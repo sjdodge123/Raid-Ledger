@@ -8,7 +8,7 @@ export default defineConfig({
     starlight({
       title: 'Raid Ledger',
       description:
-        'A unified dashboard for gaming communities — plan raids and events, track schedules and attendance, and boost engagement.',
+        'Run your entire raid operation from inside Discord. A self-hosted, Discord-native dashboard for gaming communities — signups, voice attendance, reminders, and game votes, all where your community already lives.',
       customCss: ['./src/styles/custom.css'],
       pagefind: false,
       social: [
