@@ -1,7 +1,15 @@
 import '@testing-library/jest-dom/vitest';
 import * as matchers from 'vitest-axe/matchers';
+import { configure } from '@testing-library/react';
 import { expect, beforeAll, afterEach, afterAll } from 'vitest';
 import { server } from './mocks/server';
+
+// ROK-1285: raise Testing Library's async-util timeout (default 1000ms) so
+// `waitFor`/`findBy` in poll-heavy specs (e.g. use-ai-suggestions) survive
+// transient event-loop starvation during the full coverage run. Kept below
+// vitest's testTimeout (15000) so a genuinely stuck test still fails the test,
+// not the util.
+configure({ asyncUtilTimeout: 10000 });
 
 // Node 24 ships a built-in `localStorage` whose prototype shadows the jsdom
 // polyfill — the result is an empty object with no `getItem`/`setItem`. Restore
