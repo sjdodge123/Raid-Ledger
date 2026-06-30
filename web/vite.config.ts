@@ -9,6 +9,36 @@ const rootPkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
 ) as { version: string }
 
+/**
+ * Vendor chunk grouping: each key is an output chunk name, each value the list
+ * of npm package names whose modules should land in that chunk.
+ */
+const VENDOR_CHUNKS: Record<string, string[]> = {
+  'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+  'query-vendor': ['@tanstack/react-query', 'zustand'],
+  'calendar-vendor': ['react-big-calendar', 'date-fns'],
+  sentry: ['@sentry/react'],
+  socket: ['socket.io-client'],
+}
+
+/**
+ * Maps a module id to a vendor chunk name. Vite 8 builds with rolldown, whose
+ * `manualChunks` is function-only (the Rollup object/record form was dropped),
+ * so we resolve the chunk by matching the package path inside node_modules.
+ *
+ * @param moduleId - Absolute id of the module being bundled.
+ * @returns The vendor chunk name, or `undefined` to use the default chunking.
+ */
+function manualChunks(moduleId: string): string | undefined {
+  if (!moduleId.includes('node_modules')) return undefined
+  for (const [chunk, pkgs] of Object.entries(VENDOR_CHUNKS)) {
+    if (pkgs.some((pkg) => moduleId.includes(`node_modules/${pkg}/`))) {
+      return chunk
+    }
+  }
+  return undefined
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -33,13 +63,7 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'query-vendor': ['@tanstack/react-query', 'zustand'],
-          'calendar-vendor': ['react-big-calendar', 'date-fns'],
-          'sentry': ['@sentry/react'],
-          'socket': ['socket.io-client'],
-        },
+        manualChunks,
       },
     },
   },
