@@ -231,6 +231,10 @@ export class EphemeralVoiceService {
   ): Promise<void> {
     const ev = await findEventByEphemeralChannel(this.db, channelId);
     if (!ev?.privateVoice || ev.ephemeralVoiceChannelId !== channelId) return;
+    // Never disconnect the bot itself — it joins to record voice attendance and
+    // will never be on the roster allow-list, so without this guard the join-
+    // guard would self-kick the bot (latent footgun, ROK-1386 review).
+    if (discordUserId === this.clientService.getClientId()) return;
     const guild = this.requireGuild();
     if (!guild) return;
     try {
@@ -300,7 +304,21 @@ export class EphemeralVoiceService {
     guildId: string,
   ): Promise<OverwriteResolvable[] | undefined> {
     const botId = this.clientService.getClientId();
-    if (!botId) return undefined;
+    if (!botId) {
+      // Fail-open: without the bot id we cannot seed roster overwrites, so the
+      // channel is created fully OPEN. The join-guard still backstops intruders,
+      // but flag the gap loudly for observability (ROK-1386 review).
+      const message =
+        'private ephemeral channel created WITHOUT overwrites — Discord client not ready; relying on join-guard';
+      this.logger.warn(`${message} (event ${ev.id})`);
+      Sentry.addBreadcrumb({
+        category: 'ephemeral-voice',
+        level: 'warning',
+        message,
+        data: { eventId: ev.id },
+      });
+      return undefined;
+    }
     const allowedDiscordIds = await this.resolveAllowedIds(ev.id);
     return buildPrivateVoiceOverwrites({ guildId, botId, allowedDiscordIds });
   }

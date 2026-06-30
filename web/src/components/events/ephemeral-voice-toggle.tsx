@@ -1,6 +1,35 @@
 import { useSystemStatus } from '../../hooks/use-system-status';
 
 /**
+ * Nested "Private — only rostered members can join" checkbox (ROK-1386).
+ * Extracted so the parent toggle stays under the max-lines-per-function limit.
+ */
+function PrivateVoiceCheckbox({
+    privateValue,
+    onPrivateChange,
+}: {
+    privateValue: boolean | null;
+    onPrivateChange: (v: boolean | null) => void;
+}) {
+    return (
+        <label className="flex items-center gap-3 cursor-pointer ml-7">
+            <input
+                type="checkbox"
+                aria-label="Private event — only rostered members can join"
+                checked={privateValue === true}
+                onChange={(e) =>
+                    onPrivateChange(e.target.checked ? true : null)
+                }
+                className="h-4 w-4 rounded border-edge text-emerald-500 focus:ring-emerald-500"
+            />
+            <span className="text-sm text-foreground">
+                Private — only rostered members can join
+            </span>
+        </label>
+    );
+}
+
+/**
  * ROK-1352: Per-event ephemeral-voice toggle.
  * ROK-1386: nested "Private — only rostered members can join" checkbox, shown
  * only when ephemeral voice is EFFECTIVELY on (checked or admin-forced).
@@ -51,20 +80,10 @@ export function EphemeralVoiceToggle({
                 </span>
             </label>
             {effectiveOn && (
-                <label className="flex items-center gap-3 cursor-pointer ml-7">
-                    <input
-                        type="checkbox"
-                        aria-label="Private event — only rostered members can join"
-                        checked={privateValue === true}
-                        onChange={(e) =>
-                            onPrivateChange(e.target.checked ? true : null)
-                        }
-                        className="h-4 w-4 rounded border-edge text-emerald-500 focus:ring-emerald-500"
-                    />
-                    <span className="text-sm text-foreground">
-                        Private — only rostered members can join
-                    </span>
-                </label>
+                <PrivateVoiceCheckbox
+                    privateValue={privateValue}
+                    onPrivateChange={onPrivateChange}
+                />
             )}
         </div>
     );

@@ -308,6 +308,19 @@ describe('enforceJoinGuard — private-event voice join-guard (ROK-1386)', () =>
     expect(disconnectSpy).not.toHaveBeenCalled();
   });
 
+  it('never disconnects the bot itself (self-kick guard, ROK-1386 review)', async () => {
+    const { service } = await build(0);
+    jest
+      .spyOn(dbHelpers, 'findEventByEphemeralChannel')
+      .mockResolvedValue(privateEv);
+    const disconnectSpy = jest
+      .spyOn(discordOps, 'disconnectMember')
+      .mockResolvedValue(true);
+    // 'bot-id' is what the mocked getClientId() returns in build().
+    await service.enforceJoinGuard('ch-1', 'bot-id');
+    expect(disconnectSpy).not.toHaveBeenCalled();
+  });
+
   it('is a no-op for a non-private channel', async () => {
     const { service } = await build(0);
     jest
