@@ -67,6 +67,9 @@ export function buildUpdateData(
   // which applies buildUpdateData per target) was a silent no-op.
   if (dto.ephemeralVoiceEnabled !== undefined)
     updateData.ephemeralVoiceEnabled = dto.ephemeralVoiceEnabled;
+  // ROK-1386: persist the per-event private-voice override on edit.
+  if (dto.privateVoice !== undefined)
+    updateData.privateVoice = dto.privateVoice;
   if (dto.startTime || dto.endTime) {
     updateData.duration = resolveDuration(dto, existing);
   }

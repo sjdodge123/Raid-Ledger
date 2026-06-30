@@ -125,6 +125,22 @@ export function buildScheduledEventName(eventData: ScheduledEventData): string {
 }
 
 /**
+ * Drop a single redundant trailing standalone " Event" word from a name, used
+ * for the EPHEMERAL Discord display only (channel + Scheduled-Event line). For an
+ * ephemeral event the surface is already an event (a Scheduled Event + auto voice
+ * channel), so a title like "HELLCARD Event" reads redundantly. Case-insensitive,
+ * word-boundary aware: "HELLCARD Event" → "HELLCARD", "Launch Event" → "Launch",
+ * but "Eventful" / "Event Horizon" / "HELLCARDEvent" are left untouched. If the
+ * strip would leave the name empty/blank (e.g. "Event"), the original is kept.
+ * NOTE: this is NOT applied to `buildScheduledEventName` — non-ephemeral SEs and
+ * the adopt/confirm-by-name matching keep the plain stored title.
+ */
+export function stripTrailingEventWord(name: string): string {
+  const stripped = name.replace(/\s+event\s*$/i, '');
+  return stripped.trim().length > 0 ? stripped : name;
+}
+
+/**
  * Format an event's start time for embedding in a Scheduled Event name, e.g.
  * `"Sun 9:35 PM"`. Mirrors the en-US, hour12 display style the push-content
  * formatter uses (`utils/push-content.ts`), but trimmed to weekday + time so it
@@ -160,7 +176,7 @@ export function buildScheduledEventNameWithTime(
   eventData: ScheduledEventData,
   timezone?: string | null,
 ): string {
-  const base = buildScheduledEventName(eventData);
+  const base = stripTrailingEventWord(buildScheduledEventName(eventData));
   const time = formatStartTimeForName(eventData.startTime, timezone);
   const combined = `${base} · ${time}`;
   if (combined.length <= MAX_SCHEDULED_EVENT_NAME_LENGTH) return combined;
@@ -176,15 +192,17 @@ export function buildScheduledEventNameWithTime(
 export const EPHEMERAL_CHANNEL_MARKER = '⏰';
 
 /**
- * Build an ephemeral voice channel name: the standard SE name with the
+ * Build an ephemeral voice channel name: the standard SE name (with the
+ * redundant trailing "Event" word dropped for the ephemeral display) and the
  * ephemeral marker prefixed, re-truncated to Discord's 100-char channel cap.
- * The marker lives on the channel only — the Scheduled Event keeps the clean
- * `buildScheduledEventName` value.
+ * The marker + strip live on the ephemeral surfaces only — `buildScheduledEventName`
+ * keeps the clean stored title for non-ephemeral SEs and name matching.
  */
 export function buildEphemeralChannelName(
   eventData: ScheduledEventData,
 ): string {
-  const withMarker = `${EPHEMERAL_CHANNEL_MARKER} ${buildScheduledEventName(eventData)}`;
+  const base = stripTrailingEventWord(buildScheduledEventName(eventData));
+  const withMarker = `${EPHEMERAL_CHANNEL_MARKER} ${base}`;
   if (withMarker.length <= MAX_SCHEDULED_EVENT_NAME_LENGTH) return withMarker;
   return withMarker.slice(0, MAX_SCHEDULED_EVENT_NAME_LENGTH - 1) + '…';
 }

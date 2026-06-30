@@ -16,6 +16,7 @@ import {
     apiGet,
     createLineupOrRetry,
     awaitProcessing,
+    pollForCondition,
 } from './api-helpers';
 
 // ROK-1147: every describe in this file creates a lineup, votes, advances
@@ -595,6 +596,28 @@ test.describe('Force-resolve tiebreaker', () => {
     });
 
     test('operator can force-resolve an active bracket tiebreaker', async ({ page }) => {
+        // ROK-1286: gate on the tiebreaker being observably ACTIVE before the
+        // page navigation, replacing the bare 15s `toBeVisible` wait. The
+        // force-resolve button only renders once BracketView mounts against an
+        // active tiebreaker; the POST + its init job settle out of band, so a
+        // navigate-then-wait raced the activation under full-suite latency. We
+        // poll the lineup-scoped `/tiebreaker` endpoint (NOT the global
+        // `/lineups/banner`, which returns the most-recent lineup across ALL
+        // workers and would race a sibling project's lineup) for status=active.
+        await pollForCondition(
+            async () => {
+                const tb = (await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/tiebreaker`,
+                )) as { status?: string } | null;
+                return tb?.status === 'active' ? tb : null;
+            },
+            {
+                timeoutMs: 15_000,
+                description: `/lineups/${lineupId}/tiebreaker reports status=active`,
+            },
+        );
+
         await page.goto(`/community-lineup/${lineupId}`);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 

@@ -1,6 +1,7 @@
 import { eq, and, isNull, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import type { RosterSignupRow } from './ephemeral-voice.private.helpers';
 
 /**
  * Fetch an event's live ephemeral voice channel id (null when none). Shared by
@@ -29,6 +30,8 @@ export interface EphemeralEventRow {
   recurrenceGroupId: string | null;
   ephemeralVoiceEnabled: boolean | null;
   ephemeralVoiceChannelId: string | null;
+  /** ROK-1386: roster-only lock on the ephemeral channel (null = open). */
+  privateVoice: boolean | null;
 }
 
 const EVENT_FIELDS = {
@@ -40,6 +43,7 @@ const EVENT_FIELDS = {
   recurrenceGroupId: schema.events.recurrenceGroupId,
   ephemeralVoiceEnabled: schema.events.ephemeralVoiceEnabled,
   ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
+  privateVoice: schema.events.privateVoice,
 };
 
 /**
@@ -85,6 +89,37 @@ export async function findReapCandidates(
       and(
         isNotNull(schema.events.ephemeralVoiceChannelId),
         sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${cutoff.toISOString()}::timestamptz`,
+      ),
+    );
+}
+
+/** An in-flight ephemeral event plus its SE id, for the name-reconcile scan. */
+export interface NameReconcileRow extends EphemeralEventRow {
+  discordScheduledEventId: string | null;
+}
+
+/**
+ * In-flight ephemeral events for the name-reconcile / deploy backfill scan:
+ * those that hold a live ephemeral channel, are not cancelled, and have not yet
+ * ended (effective end >= now). Includes `discordScheduledEventId` so the SE name
+ * can be reconciled alongside the channel name. Ended channels are left to the
+ * reaper. Returns a naturally small set (only events near/in their window).
+ */
+export async function findNameReconcileCandidates(
+  db: PostgresJsDatabase<typeof schema>,
+  now: Date,
+): Promise<NameReconcileRow[]> {
+  return db
+    .select({
+      ...EVENT_FIELDS,
+      discordScheduledEventId: schema.events.discordScheduledEventId,
+    })
+    .from(schema.events)
+    .where(
+      and(
+        isNotNull(schema.events.ephemeralVoiceChannelId),
+        isNull(schema.events.cancelledAt),
+        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
       ),
     );
 }
@@ -200,4 +235,30 @@ export async function findEventByEphemeralChannel(
     .where(eq(schema.events.ephemeralVoiceChannelId, channelId))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * ROK-1386: fetch every signup for an event reduced to the fields the private
+ * allow-list cares about — roster slot (LEFT JOIN roster_assignments.role, null
+ * when unallocated), attendance status, the linked member's Discord id, and the
+ * anonymous-participant fallback id. Fed straight into `computeAllowedDiscordIds`.
+ */
+export async function fetchRosterSignupRows(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<RosterSignupRow[]> {
+  return db
+    .select({
+      assignedSlot: schema.rosterAssignments.role,
+      status: schema.eventSignups.status,
+      userDiscordId: schema.users.discordId,
+      signupDiscordUserId: schema.eventSignups.discordUserId,
+    })
+    .from(schema.eventSignups)
+    .leftJoin(
+      schema.rosterAssignments,
+      eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
+    )
+    .leftJoin(schema.users, eq(schema.users.id, schema.eventSignups.userId))
+    .where(eq(schema.eventSignups.eventId, eventId));
 }

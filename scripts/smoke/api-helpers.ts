@@ -391,3 +391,45 @@ export async function pollForCondition<T>(
         `[${description}] timed out after ${timeoutMs}ms; last value=${lastDesc}`,
     );
 }
+
+// ---------------------------------------------------------------------------
+// Lineup phase-transition barrier (ROK-1286)
+// ---------------------------------------------------------------------------
+
+/** Lineup detail shape — only the fields the smoke fixtures read. */
+type LineupDetail = { status?: unknown } & Record<string, unknown>;
+
+/**
+ * Poll `GET /lineups/:id` until its `status` equals `target`, returning the
+ * lineup detail. Throws a descriptive error — including the lineup id, the
+ * target, and the LAST observed status — on timeout.
+ *
+ * Use this INSIDE a fixture helper immediately after driving a lineup through
+ * a phase transition (`PATCH /lineups/:id/status`, abort, or archive). A
+ * status PATCH and its async side-effects settle out of band; under the full
+ * desktop+mobile suite the parallel workers add 1–3s of latency so fixture
+ * setup races feature code (ROK-1286). Gating on the server-observed status
+ * here makes the fixture fail fast with a clear message instead of letting a
+ * downstream `expect(...).toBe(...)` fail with no context, and guarantees the
+ * page navigation that follows lands on the intended phase surface.
+ */
+export async function waitForLineupStatus(
+    token: string,
+    lineupId: number,
+    target: string,
+    opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<LineupDetail> {
+    const timeoutMs = opts.timeoutMs ?? 10_000;
+    const intervalMs = opts.intervalMs ?? 250;
+    const start = Date.now();
+    let last: LineupDetail | null = null;
+    while (Date.now() - start < timeoutMs) {
+        last = (await apiGet(token, `/lineups/${lineupId}`)) as LineupDetail | null;
+        if (last && last.status === target) return last;
+        await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    throw new Error(
+        `waitForLineupStatus: lineup ${lineupId} did not reach status='${target}' ` +
+            `within ${timeoutMs}ms; last observed status=${String(last?.status ?? '(none)')}`,
+    );
+}

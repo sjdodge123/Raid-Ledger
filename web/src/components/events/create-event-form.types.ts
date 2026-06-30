@@ -24,6 +24,8 @@ export interface FormState {
     reminder24hour: boolean;
     /** ROK-1352: per-event ephemeral-voice override. null = inherit series/global. */
     ephemeralVoiceEnabled: boolean | null;
+    /** ROK-1386: lock the ephemeral channel to rostered members only. null = open. */
+    privateVoice: boolean | null;
     selectedInstances: Record<string, unknown>[];
     titleIsAutoSuggested: boolean;
     descriptionIsAutoSuggested: boolean;

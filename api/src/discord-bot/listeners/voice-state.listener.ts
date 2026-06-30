@@ -22,6 +22,7 @@ import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { EphemeralVoiceIdleCoordinator } from '../services/ephemeral-voice-idle.coordinator';
+import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import {
   DEBOUNCE_MS,
@@ -79,6 +80,9 @@ export class VoiceStateListener implements OnApplicationShutdown {
     @Optional()
     @Inject(EphemeralVoiceIdleCoordinator)
     private readonly ephemeralIdle: EphemeralVoiceIdleCoordinator | null = null,
+    @Optional()
+    @Inject(EphemeralVoiceService)
+    private readonly ephemeralVoice: EphemeralVoiceService | null = null,
   ) {}
 
   private get deps(): VoiceHandlerDeps {
@@ -227,6 +231,12 @@ export class VoiceStateListener implements OnApplicationShutdown {
     }
     if (newCh) {
       this.userChannelMap.set(userId, newCh);
+      // ROK-1386: private-event join-guard — disconnect non-allow-listed members
+      // who join (or race into) a private ephemeral channel. Only fires on this
+      // join transition, so already-connected members are never kicked on demote.
+      await this.ephemeralVoice
+        ?.enforceJoinGuard(newCh, userId)
+        .catch((e) => this.logger.warn(`Join-guard failed: ${e}`));
       // ROK-1352: rejoin cancels any pending ephemeral idle-delete.
       await this.ephemeralIdle
         ?.onChannelJoin(newCh)

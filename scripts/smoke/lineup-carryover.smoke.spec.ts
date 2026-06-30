@@ -38,6 +38,7 @@ import {
     cancelLineupPhaseJobs,
     createLineupOrRetry,
     getAdminToken,
+    waitForLineupStatus,
 } from './api-helpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -143,7 +144,13 @@ async function buildPriorDecidedLineup(token: string): Promise<{
     await apiPatch(token, `/lineups/${lineupId}/status`, {
         status: 'archived',
     });
-    await awaitProcessing(token);
+    // ROK-1286: the archive PATCH and its async side-effects settle out of
+    // band. The carryover helper only copies forward from an ARCHIVED prior
+    // row, so poll until the status is observably `archived` before returning
+    // (replaces the prior fire-and-forget `awaitProcessing`, which drained the
+    // queues but did NOT guarantee the status flip was visible to the next
+    // /lineups POST under full-suite latency).
+    await waitForLineupStatus(token, lineupId, 'archived');
 
     return { lineupId, gameIds };
 }
