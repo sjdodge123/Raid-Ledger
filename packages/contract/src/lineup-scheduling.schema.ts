@@ -71,6 +71,10 @@ export const SchedulePollPageResponseSchema = z.object({
   uniqueVoterCount: z.number().int().optional(),
   /** Slot IDs that conflict with the authenticated user's existing events (ROK-1031). */
   conflictingSlotIds: z.array(z.number()).optional(),
+  /** Per-slot conflicting event titles for the "⚠ Conflicts with <event>" tooltip (ROK-1032). */
+  slotConflicts: z
+    .array(z.object({ slotId: z.number(), eventTitles: z.array(z.string()) }))
+    .optional(),
   /** Lineup phase deadline (ISO). Null when no deadline configured (ROK-1217). */
   phaseDeadline: z.string().nullable().optional(),
   /**

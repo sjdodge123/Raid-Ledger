@@ -141,6 +141,7 @@ function buildScheduledEventProviders(
       provide: SettingsService,
       useValue: {
         getClientUrl: jest.fn().mockResolvedValue('https://raidledger.app'),
+        getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
       },
     },
     {
