@@ -163,7 +163,11 @@ function GameBanner({ game, rating, genres, platforms, modes, pricing }: {
                 <div className="absolute inset-0 bg-gradient-to-b from-backdrop/50 to-backdrop" />
             </div>
             <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row gap-6">
-                {displayCover && <img src={displayCover} alt={game.name} className="w-40 sm:w-48 aspect-[3/4] object-cover rounded-xl shadow-2xl flex-shrink-0" />}
+                {displayCover && (
+                    <div className="relative w-40 sm:w-48 aspect-[3/4] flex-shrink-0 overflow-hidden rounded-xl shadow-2xl bg-panel">
+                        <img src={displayCover} alt={game.name} className="absolute inset-0 h-full w-full object-cover" />
+                    </div>
+                )}
                 <div className="flex-1 min-w-0">
                     <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">{game.name}</h1>
                     <MetaRow rating={rating} genres={genres} pricing={pricing} />
