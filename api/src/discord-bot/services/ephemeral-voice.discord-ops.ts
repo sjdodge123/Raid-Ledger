@@ -1,4 +1,8 @@
-import { ChannelType, OverwriteType, type OverwriteResolvable } from 'discord.js';
+import {
+  ChannelType,
+  OverwriteType,
+  type OverwriteResolvable,
+} from 'discord.js';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import { timedDiscordCall } from './scheduled-event.helpers';
 import { reconcileMemberOverwrites } from './ephemeral-voice.private.helpers';
@@ -75,6 +79,26 @@ export async function applyPrivateVoiceOverwrites(
   for (const id of toRemove) {
     await timedDiscordCall('ephemeral.lock.remove', () => po.delete(id));
   }
+}
+
+/**
+ * ROK-1386 join-guard: forcibly disconnect a member from voice. Used when a
+ * non-allow-listed member joins a private ephemeral channel. Force-fetches the
+ * member when not cached. Returns false (no-op) when the member is gone or not
+ * in voice. Instrumented like every other Discord call.
+ */
+export async function disconnectMember(
+  guild: Guild,
+  discordUserId: string,
+): Promise<boolean> {
+  const member =
+    guild.members.cache.get(discordUserId) ??
+    (await guild.members.fetch(discordUserId).catch(() => null));
+  if (!member?.voice?.channelId) return false;
+  await timedDiscordCall('ephemeral.guard.disconnect', () =>
+    member.voice.disconnect('Private event: not on the roster allow-list'),
+  );
+  return true;
 }
 
 /** Delete a voice channel. No-op (returns false) if it's already gone. */

@@ -28,9 +28,7 @@ export interface RosterSignupRow {
  * `signup.discordUserId`; drop rows whose resolved id is null (unlinked members
  * are silently blocked).
  */
-export function computeAllowedDiscordIds(
-  rows: RosterSignupRow[],
-): Set<string> {
+export function computeAllowedDiscordIds(rows: RosterSignupRow[]): Set<string> {
   const allowed = new Set<string>();
   for (const row of rows) {
     if (row.assignedSlot === 'bench') continue;

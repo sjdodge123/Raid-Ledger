@@ -2,6 +2,8 @@ import { useSystemStatus } from '../../hooks/use-system-status';
 
 /**
  * ROK-1352: Per-event ephemeral-voice toggle.
+ * ROK-1386: nested "Private — only rostered members can join" checkbox, shown
+ * only when ephemeral voice is EFFECTIVELY on (checked or admin-forced).
  *
  * Reads feature availability from the member-readable system status (NOT the
  * admin-only settings API) so non-admin event creators can opt in — and so the
@@ -13,29 +15,57 @@ import { useSystemStatus } from '../../hooks/use-system-status';
 export function EphemeralVoiceToggle({
     value,
     onChange,
+    privateValue,
+    onPrivateChange,
 }: {
     value: boolean | null;
     onChange: (v: boolean | null) => void;
+    privateValue: boolean | null;
+    onPrivateChange: (v: boolean | null) => void;
 }) {
     const { data: status } = useSystemStatus();
     if (!status?.ephemeralVoiceEnabled) return null;
     const forced = status.ephemeralVoiceForced === true;
+    const effectiveOn = forced || value === true;
 
     return (
-        <label className="flex items-center gap-3 cursor-pointer">
-            <input
-                type="checkbox"
-                aria-label="Ephemeral voice channel for this event"
-                checked={forced || value === true}
-                disabled={forced}
-                onChange={(e) => onChange(e.target.checked ? true : null)}
-                className="h-4 w-4 rounded border-edge text-emerald-500 focus:ring-emerald-500 disabled:opacity-60"
-            />
-            <span className="text-sm text-foreground">
-                {forced
-                    ? 'A temporary voice channel will be created for this event (enabled by admin)'
-                    : 'Create a temporary voice channel for this event'}
-            </span>
-        </label>
+        <div className="space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                    type="checkbox"
+                    aria-label="Ephemeral voice channel for this event"
+                    checked={forced || value === true}
+                    disabled={forced}
+                    onChange={(e) => {
+                        const next = e.target.checked ? true : null;
+                        onChange(next);
+                        // Private only makes sense while ephemeral is on.
+                        if (next !== true && !forced) onPrivateChange(null);
+                    }}
+                    className="h-4 w-4 rounded border-edge text-emerald-500 focus:ring-emerald-500 disabled:opacity-60"
+                />
+                <span className="text-sm text-foreground">
+                    {forced
+                        ? 'A temporary voice channel will be created for this event (enabled by admin)'
+                        : 'Create a temporary voice channel for this event'}
+                </span>
+            </label>
+            {effectiveOn && (
+                <label className="flex items-center gap-3 cursor-pointer ml-7">
+                    <input
+                        type="checkbox"
+                        aria-label="Private event — only rostered members can join"
+                        checked={privateValue === true}
+                        onChange={(e) =>
+                            onPrivateChange(e.target.checked ? true : null)
+                        }
+                        className="h-4 w-4 rounded border-edge text-emerald-500 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm text-foreground">
+                        Private — only rostered members can join
+                    </span>
+                </label>
+            )}
+        </div>
     );
 }
