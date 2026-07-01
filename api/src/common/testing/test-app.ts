@@ -39,6 +39,7 @@ import * as schema from '../../drizzle/schema';
 import { AppModule } from '../../app.module';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { QueueHealthService } from '../../queue/queue-health.service';
+import { closeTestSharedRedis } from '../../queue/queue.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
@@ -282,43 +283,53 @@ export async function closeTestApp(): Promise<void> {
   const instance = getInstance();
   if (!instance) return;
 
-  // ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
-  // never has to await an in-flight job whose DB query would race the
-  // _appClient.end timeout cap.
   try {
-    const queueHealth = instance.app.get(QueueHealthService, { strict: false });
-    if (queueHealth) {
-      await queueHealth.awaitDrained(15_000);
+    // ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
+    // never has to await an in-flight job whose DB query would race the
+    // _appClient.end timeout cap.
+    try {
+      const queueHealth = instance.app.get(QueueHealthService, {
+        strict: false,
+      });
+      if (queueHealth) {
+        await queueHealth.awaitDrained(15_000);
+      }
+    } catch {
+      // best-effort — fall through to app.close() regardless
     }
-  } catch {
-    // best-effort — fall through to app.close() regardless
+
+    // Capture the test container's port BEFORE _appClient.end() / container.stop()
+    // so the fallback destroy can scope itself to ONLY our test-DB sockets.
+    const connStr =
+      instance.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
+    const ourPort = extractPortFromConnectionString(connStr);
+
+    await instance.app.close();
+    if (instance._appClient) {
+      await instance._appClient.end({ timeout: 30 });
+    }
+
+    // ROK-1250 fallback guard: if anything is still bound to the test
+    // container's port AFTER the graceful end resolved, force-destroy it.
+    // The `remotePort === ourPort` filter cannot collide with redis-mock,
+    // supertest, or BullMQ sockets. On healthy runs this finds 0.
+    if (ourPort !== null) {
+      destroySocketsOnPort(ourPort);
+    }
+
+    destroyBullmqRedisSocketsIfDefault();
+
+    if (instance.container) {
+      await instance.container.stop();
+    }
+  } finally {
+    // ROK-1268: quit + clear the shared test ioredis connection so the next
+    // spec file gets a fresh one and no ::1:6379 handle leaks past teardown
+    // (would trip the ROK-1250 socket-handle audit). Runs even if app.close()
+    // above threw.
+    await closeTestSharedRedis();
+    setInstance(null);
   }
-
-  // Capture the test container's port BEFORE _appClient.end() / container.stop()
-  // so the fallback destroy can scope itself to ONLY our test-DB sockets.
-  const connStr =
-    instance.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
-  const ourPort = extractPortFromConnectionString(connStr);
-
-  await instance.app.close();
-  if (instance._appClient) {
-    await instance._appClient.end({ timeout: 30 });
-  }
-
-  // ROK-1250 fallback guard: if anything is still bound to the test
-  // container's port AFTER the graceful end resolved, force-destroy it.
-  // The `remotePort === ourPort` filter cannot collide with redis-mock,
-  // supertest, or BullMQ sockets. On healthy runs this finds 0.
-  if (ourPort !== null) {
-    destroySocketsOnPort(ourPort);
-  }
-
-  destroyBullmqRedisSocketsIfDefault();
-
-  if (instance.container) {
-    await instance.container.stop();
-  }
-  setInstance(null);
 }
 
 /**
