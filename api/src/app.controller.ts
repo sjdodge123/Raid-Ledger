@@ -12,9 +12,39 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  /**
+   * Liveness probe (ROK-1165). Touches NO external dependencies and returns
+   * immediately. Docker/nginx liveness polling (~every 30s) targets this so it
+   * no longer runs `SELECT 1` + Redis PING on every check.
+   */
+  @SkipThrottle()
+  @Get('health/live')
+  getLive(): { status: 'ok' } {
+    return { status: 'ok' };
+  }
+
+  /**
+   * Readiness probe (ROK-1165). Retains the DB + Redis dependency check —
+   * same semantics the legacy `/health` endpoint has always had.
+   */
+  @SkipThrottle()
+  @Get('health/ready')
+  async getReady(@Res() res: Response): Promise<void> {
+    await this.respondWithHealth(res);
+  }
+
+  /**
+   * @deprecated Use `/health/live` for liveness and `/health/ready` for
+   * readiness (ROK-1165). Retained unchanged for backward compatibility; still
+   * performs the full DB + Redis probe on every request.
+   */
   @SkipThrottle()
   @Get('health')
   async getHealth(@Res() res: Response): Promise<void> {
+    await this.respondWithHealth(res);
+  }
+
+  private async respondWithHealth(res: Response): Promise<void> {
     const [dbHealth, redisHealth] = await Promise.all([
       this.appService.checkDatabaseHealth(),
       this.appService.checkRedisHealth(),

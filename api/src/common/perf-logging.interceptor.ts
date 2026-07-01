@@ -10,6 +10,17 @@ import { isPerfEnabled, perfLog } from './perf-logger';
 
 type AuthRequest = Request & { user?: { sub?: number } };
 
+/**
+ * Liveness probe (ROK-1165) fires ~every 30s from Docker/nginx. Keep it out of
+ * the perf log so the access log stays readable and the histogram isn't skewed.
+ */
+function isLivenessProbe(url: string): boolean {
+  // Express `req.url` includes the query string; strip it so a cache-busted
+  // probe (`/health/live?_=123`) is still suppressed.
+  const path = url.split('?')[0];
+  return path === '/health/live' || path === '/api/health/live';
+}
+
 /** Extract HTTP status from an error, defaulting to 500 for non-HttpException errors. */
 function getErrorStatus(err: unknown): number {
   if (
@@ -34,6 +45,7 @@ export class PerfLoggingInterceptor implements NestInterceptor {
 
     const httpCtx = context.switchToHttp();
     const req = httpCtx.getRequest<Request>();
+    if (isLivenessProbe(req.url)) return next.handle();
     const start = performance.now();
 
     return next.handle().pipe(

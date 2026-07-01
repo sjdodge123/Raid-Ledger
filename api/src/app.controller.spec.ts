@@ -190,5 +190,65 @@ function describeAppController() {
     });
   }
   describe('health', () => describeHealth());
+
+  function describeLive() {
+    it('returns { status: "ok" } synchronously', () => {
+      expect(appController.getLive()).toEqual({ status: 'ok' });
+    });
+
+    it('touches neither the database nor Redis', () => {
+      mockDb.execute.mockClear();
+      mockRedis.ping.mockClear();
+
+      appController.getLive();
+
+      expect(mockDb.execute).not.toHaveBeenCalled();
+      expect(mockRedis.ping).not.toHaveBeenCalled();
+    });
+  }
+  describe('health/live', () => describeLive());
+
+  function describeReady() {
+    it('returns 200 + ok when DB and Redis are connected', async () => {
+      const mockRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      };
+
+      await appController.getReady(
+        mockRes as unknown as import('express').Response,
+      );
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'ok',
+          db: expect.objectContaining({ connected: true }) as unknown,
+          redis: expect.objectContaining({ connected: true }) as unknown,
+        }),
+      );
+    });
+
+    it('returns 503 when a dependency is down (readiness semantics)', async () => {
+      mockRedis.ping.mockRejectedValueOnce(new Error('Redis down'));
+      const mockRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      };
+
+      await appController.getReady(
+        mockRes as unknown as import('express').Response,
+      );
+
+      expect(mockRes.status).toHaveBeenCalledWith(503);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'unhealthy',
+          redis: expect.objectContaining({ connected: false }) as unknown,
+        }),
+      );
+    });
+  }
+  describe('health/ready', () => describeReady());
 }
 describe('AppController', () => describeAppController());

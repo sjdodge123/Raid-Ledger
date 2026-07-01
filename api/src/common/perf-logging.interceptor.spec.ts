@@ -73,6 +73,55 @@ describe('PerfLoggingInterceptor', () => {
     });
   });
 
+  describe('liveness probe (ROK-1165)', () => {
+    it('does not log GET /health/live even when perf is enabled', async () => {
+      const context = createMockExecutionContext('GET', '/health/live', 200);
+      const handler: CallHandler = { handle: () => of({ status: 'ok' }) };
+
+      const result = await firstValueFrom(
+        interceptor.intercept(context, handler),
+      );
+
+      expect(result).toEqual({ status: 'ok' });
+      expect(mockPerfLog).not.toHaveBeenCalled();
+    });
+
+    it('does not log the nginx-prefixed GET /api/health/live', async () => {
+      const context = createMockExecutionContext(
+        'GET',
+        '/api/health/live',
+        200,
+      );
+      const handler: CallHandler = { handle: () => of({ status: 'ok' }) };
+
+      await firstValueFrom(interceptor.intercept(context, handler));
+
+      expect(mockPerfLog).not.toHaveBeenCalled();
+    });
+
+    it('suppresses a cache-busted probe with a query string', async () => {
+      const context = createMockExecutionContext(
+        'GET',
+        '/api/health/live?_=1720000000000',
+        200,
+      );
+      const handler: CallHandler = { handle: () => of({ status: 'ok' }) };
+
+      await firstValueFrom(interceptor.intercept(context, handler));
+
+      expect(mockPerfLog).not.toHaveBeenCalled();
+    });
+
+    it('still logs the readiness probe GET /health/ready', async () => {
+      const context = createMockExecutionContext('GET', '/health/ready', 200);
+      const handler: CallHandler = { handle: () => of({ status: 'ok' }) };
+
+      await firstValueFrom(interceptor.intercept(context, handler));
+
+      expect(mockPerfLog).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('successful responses (2xx)', () => {
     it('logs status, method, URL, and duration for a 200 response', async () => {
       const context = createMockExecutionContext('GET', '/api/events', 200, 42);
