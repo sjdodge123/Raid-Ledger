@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { BackupFileDto } from '@raid-ledger/contract';
+import { copyWithToast } from '../../lib/clipboard';
 import { formatSize } from './backup-panel-utils';
 
 export function DeleteModal({ backup, onClose, onConfirm, isPending }: {
@@ -67,9 +68,9 @@ export function ResetModal({ onClose, onConfirm, isPending, result }: {
 
     if (result) {
         return <ResetResultView result={result} copied={copied} onCopy={() => {
-            navigator.clipboard.writeText(result.password);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            void copyWithToast(result.password, { error: 'Failed to copy password' }).then((ok) => {
+                if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
+            });
         }} />;
     }
 

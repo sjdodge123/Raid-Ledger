@@ -1,7 +1,17 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PugCard } from './pug-card';
 import type { PugSlotResponseDto } from '@raid-ledger/contract';
+
+// ROK-1378: copy now goes through copyToClipboard, which only uses the async
+// Clipboard API in a secure context. jsdom defaults isSecureContext to
+// undefined, so mark the context secure to exercise the writeText path.
+beforeEach(() => {
+    Object.defineProperty(window, 'isSecureContext', {
+        configurable: true,
+        value: true,
+    });
+});
 
 const createMockPug = (overrides: Partial<PugSlotResponseDto> = {}): PugSlotResponseDto => ({
     id: 'pug-uuid-1',

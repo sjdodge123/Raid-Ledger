@@ -8,7 +8,7 @@ import type { PugSlotResponseDto } from '@raid-ledger/contract';
 import { PugAvatar } from './pug-avatar';
 import { ROLE_BADGE_CLASSES, formatRole } from '../../lib/role-colors';
 import { RoleIcon } from '../shared/RoleIcon';
-import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 
 /** Status indicator colors */
 const STATUS_COLORS: Record<string, { dot: string; label: string }> = {
@@ -53,7 +53,7 @@ function ServerInviteLink({ url }: { url: string }) {
     return (
         <div className="mt-1 flex items-center gap-1.5">
             <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300 underline truncate" title="Share this invite link with the PUG player">Server invite link</a>
-            <button onClick={(e) => { e.stopPropagation(); void navigator.clipboard.writeText(url); }} className="shrink-0 text-xs text-dim hover:text-foreground transition-colors" title="Copy invite link">
+            <button onClick={(e) => { e.stopPropagation(); void copyWithToast(url, { success: 'Invite link copied!', error: 'Failed to copy link' }); }} className="shrink-0 text-xs text-dim hover:text-foreground transition-colors" title="Copy invite link">
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
@@ -126,7 +126,7 @@ export function PugCard({ pug, canManage = false, onEdit, onRemove, onRegenerate
     const inviteUrl = pug.inviteCode ? `${window.location.origin}/i/${pug.inviteCode}` : null;
     const handleCopyInviteUrl = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (inviteUrl) navigator.clipboard.writeText(inviteUrl).then(() => toast.success('Invite link copied!')).catch(() => {});
+        if (inviteUrl) void copyWithToast(inviteUrl, { success: 'Invite link copied!', error: 'Failed to copy link' });
     };
 
     return (

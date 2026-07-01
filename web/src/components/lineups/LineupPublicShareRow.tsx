@@ -3,6 +3,7 @@ import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { useTogglePublicShare } from '../../hooks/use-lineups';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 import { PublicShareToggle } from './PublicShareToggle';
 
 /**
@@ -74,10 +75,10 @@ function PublicShareCopyOnly({ slug }: { slug: string }): JSX.Element {
         type="button"
         onClick={() => {
           const url = `${window.location.origin}/p/lineup/${slug}`;
-          void navigator.clipboard
-            .writeText(url)
-            .then(() => toast.success('Public link copied'))
-            .catch(() => toast.error('Failed to copy link'));
+          void copyWithToast(url, {
+            success: 'Public link copied',
+            error: 'Failed to copy link',
+          });
         }}
         data-testid="public-share-copy"
         className="px-2.5 py-1.5 text-xs rounded border border-edge/50 hover:bg-overlay/50"
