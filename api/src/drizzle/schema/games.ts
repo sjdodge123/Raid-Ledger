@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   integer,
+  bigint,
   jsonb,
   real,
   boolean,
@@ -107,6 +108,22 @@ export const games = pgTable('games', {
   igdbEnrichmentRetryCount: integer('igdb_enrichment_retry_count')
     .default(0)
     .notNull(),
+
+  // ROK-1377: URL-only / free-to-play games (e.g. Chao Chao — not on Steam).
+  /** Homepage / play URL for games with no storefront (rendered as "Play ↗"). */
+  websiteUrl: text('website_url'),
+  /** Whether the game is free to play (drives a "Free" badge). */
+  isFreeToPlay: boolean('is_free_to_play').default(false).notNull(),
+
+  // ROK-1375: install/download footprint (resolved from Steam depots, or manual).
+  /** On-disk install footprint in bytes (base + one language + one OS depots). */
+  installSizeBytes: bigint('install_size_bytes', { mode: 'number' }),
+  /** Compressed download size in bytes (drives the "~N min" download estimate). */
+  downloadSizeBytes: bigint('download_size_bytes', { mode: 'number' }),
+  /** How the size was obtained: 'steam_depot' (auto) or 'manual' (admin override). */
+  installSizeSource: varchar('install_size_source', { length: 20 }),
+  /** Last time the size was resolved. */
+  installSizeUpdatedAt: timestamp('install_size_updated_at'),
 });
 
 /**
