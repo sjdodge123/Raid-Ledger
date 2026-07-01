@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { copyWithToast } from '../../lib/clipboard';
 
 interface CopyButtonProps {
     text: string;
@@ -7,19 +8,17 @@ interface CopyButtonProps {
 
 /**
  * Small icon button that copies text to clipboard.
- * Shows checkmark briefly after successful copy.
+ * Shows checkmark briefly after successful copy; surfaces an error toast
+ * (via {@link copyWithToast}) if the copy fails in an insecure context.
  */
 export function CopyButton({ text, className = '' }: CopyButtonProps) {
     const [copied, setCopied] = useState(false);
 
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            console.error('Failed to copy:', err);
-        }
+    const handleCopy = async (): Promise<void> => {
+        const ok = await copyWithToast(text);
+        if (!ok) return;
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     return (

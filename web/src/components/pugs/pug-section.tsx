@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import type { PugSlotResponseDto, PugRole } from '@raid-ledger/contract';
 import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 import { usePugs, useCreatePug, useUpdatePug, useDeletePug, useRegeneratePugInviteCode } from '../../hooks/use-pugs';
 import { PugCard } from './pug-card';
 import { PugFormModal } from './pug-form-modal';
@@ -38,8 +39,10 @@ function usePugActions(eventId: number) {
         try {
             const updated = await regenerateCode.mutateAsync(pugId);
             if (updated.inviteCode) {
-                await navigator.clipboard.writeText(`${window.location.origin}/i/${updated.inviteCode}`);
-                toast.success('New invite link copied to clipboard!');
+                await copyWithToast(`${window.location.origin}/i/${updated.inviteCode}`, {
+                    success: 'New invite link copied to clipboard!',
+                    error: 'Failed to copy invite link',
+                });
             }
         } catch (err) { toast.error('Failed to regenerate link', { description: errorDesc(err) }); }
     };
