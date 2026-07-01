@@ -1,16 +1,23 @@
 /**
- * ROK-1281: Boot-time migration runner with Sentry capture.
+ * ROK-1281 / ROK-1322: Instrumented migration runner.
  *
- * Two-phase startup migration:
+ * Two-phase migration:
  *   1. Refresh `games_dedup_audit` via the in-process union-find detection
  *      so any data migration that consumes the audit table sees current
  *      state (independent of cron timing). Prevents the ROK-1278 outage
  *      mode where 0140 failed because prod's audit was stale.
  *   2. Run drizzle migrations, then validate the journal + critical tables.
  *
- * Any unhandled error in either phase is captured by Sentry with a
- * `boot.migration` tag and flushed before `process.exit(1)` so prod
- * incidents are visible in alerting rather than only on container stdout.
+ * Any unhandled error in either phase is captured by Sentry (with a
+ * caller-supplied context tag) and flushed BEFORE the error propagates, so
+ * incidents are visible in alerting rather than only on stdout.
+ *
+ * TWO call sites share this ONE contract (ROK-1322):
+ *   - Deploy boot (`docker-entrypoint.sh` → `main()`) — context `boot.migration`.
+ *   - Restore / factory-reset (`backup.helpers.ts::runMigrations`) — passes its
+ *     already-resolved migrations folder + context `restore-migration` via
+ *     `runBootMigrations(url, opts)`, so restore gets the same dedup refresh +
+ *     validation + instrumentation as boot without a divergent code path.
  *
  * MUST stay self-contained — no NestJS bootstrap. The migration phase
  * runs before the app DI container exists.
@@ -30,9 +37,9 @@ import {
   type GameRow,
 } from '../src/admin/games-dedup-audit.helpers';
 
-const MIGRATIONS_FOLDER =
+/** Default folder used by the boot path; restore overrides via opts. */
+const DEFAULT_MIGRATIONS_FOLDER =
   process.env.MIGRATIONS_FOLDER ?? './drizzle/migrations';
-const JOURNAL_PATH = path.join(MIGRATIONS_FOLDER, 'meta', '_journal.json');
 const CRITICAL_TABLES = [
   'community_lineups',
   'community_lineup_matches',
@@ -132,17 +139,22 @@ async function tableExists(client: SqlClient, name: string): Promise<boolean> {
   return rows[0]?.exists === true;
 }
 
-export async function runDrizzleMigrate(client: SqlClient): Promise<void> {
+export async function runDrizzleMigrate(
+  client: SqlClient,
+  migrationsFolder: string = DEFAULT_MIGRATIONS_FOLDER,
+): Promise<void> {
   const db = drizzle(client);
   console.log('📦 Running drizzle migrations...');
-  await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+  await migrate(db, { migrationsFolder });
   console.log('✅ Drizzle migrate complete.');
 }
 
 export async function validateMigrationState(
   client: SqlClient,
+  migrationsFolder: string = DEFAULT_MIGRATIONS_FOLDER,
 ): Promise<{ applied: number; expected: number; missing: string[] }> {
-  const journal = JSON.parse(fs.readFileSync(JOURNAL_PATH, 'utf8')) as {
+  const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
+  const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as {
     entries: unknown[];
   };
   const expected = journal.entries.length;
@@ -175,13 +187,44 @@ export async function validateMigrationState(
   return { applied, expected, missing };
 }
 
-export async function runBootMigrations(databaseUrl: string): Promise<void> {
+export interface BootMigrationOptions {
+  /**
+   * Override the migrations folder. The restore path passes its own
+   * already-resolved folder so the switch to this runner does NOT silently
+   * change which migrations restore applies. Boot omits it and uses
+   * `DEFAULT_MIGRATIONS_FOLDER`.
+   */
+  migrationsFolder?: string;
+  /**
+   * Sentry failure-tag context. `boot.migration` (default) for deploy boot,
+   * `restore-migration` for the backup restore / factory-reset path.
+   */
+  context?: string;
+}
+
+/**
+ * Run the refresh → migrate → validate phase against `databaseUrl`, capturing
+ * any failure to Sentry (tagged with `opts.context`) and flushing BEFORE the
+ * error propagates. The original migration error is always re-thrown, even if
+ * the Sentry flush itself fails, so callers keep their propagation semantics.
+ */
+export async function runBootMigrations(
+  databaseUrl: string,
+  opts: BootMigrationOptions = {},
+): Promise<void> {
+  const migrationsFolder = opts.migrationsFolder ?? DEFAULT_MIGRATIONS_FOLDER;
+  const context = opts.context ?? 'boot.migration';
   const client = postgres(databaseUrl, { max: 1 });
   try {
     await refreshDedupAudit(client);
-    await runDrizzleMigrate(client);
-    await validateMigrationState(client);
-    console.log('🚀 Boot-time migration phase complete.');
+    await runDrizzleMigrate(client, migrationsFolder);
+    await validateMigrationState(client, migrationsFolder);
+    console.log('🚀 Migration phase complete.');
+  } catch (err) {
+    // Instrument here (not just in main's catch) so the RESTORE call site gets
+    // the same capture+flush contract without double-capturing.
+    await reportBootFailure(err, context).catch(() => undefined);
+    throw err;
   } finally {
     await client.end({ timeout: 5 });
   }
@@ -197,23 +240,26 @@ async function main(): Promise<void> {
 }
 
 /**
- * Capture a boot-time migration failure to Sentry, wait for the event to
- * flush, then return. Extracted from the script's catch handler so the
- * Sentry-capture contract is unit-testable without forking a Node process.
+ * Capture a migration failure to Sentry, wait for the event to flush, then
+ * return. Extracted so the Sentry-capture contract is unit-testable without
+ * forking a Node process. `context` is the failure tag: `boot.migration` for
+ * deploy boot, `restore-migration` for the restore path (ROK-1322).
  */
-export async function reportBootFailure(err: unknown): Promise<void> {
-  console.error('❌ Boot migration error:', err);
-  Sentry.captureException(err, { tags: { context: 'boot.migration' } });
+export async function reportBootFailure(
+  err: unknown,
+  context: string = 'boot.migration',
+): Promise<void> {
+  console.error('❌ Migration error:', err);
+  Sentry.captureException(err, { tags: { context } });
   await Sentry.flush(2000);
 }
 
 // Allow importing the helpers without triggering main() when the runner is
-// require()'d by tests. Only run when invoked as a script.
+// require()'d by tests OR statically imported by the app (backup.helpers).
+// Only run when invoked as a script. runBootMigrations already captured +
+// flushed any failure, so the catch here just sets the exit code.
 if (require.main === module) {
   main()
     .then(() => process.exit(0))
-    .catch(async (err) => {
-      await reportBootFailure(err);
-      process.exit(1);
-    });
+    .catch(() => process.exit(1));
 }
