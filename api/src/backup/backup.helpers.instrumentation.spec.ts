@@ -1,106 +1,113 @@
 /**
- * ROK-1322: the restore-time migration path
- * (`backup.helpers.ts::runMigrations`, invoked by `backup.service.ts` for
- * both post-restore and factory-reset) must route through the SAME
- * instrumented failure contract as the deploy-time boot runner — capturing
- * migration failures to Sentry with the `restore-migration` tag and flushing
- * the event BEFORE the error propagates — rather than propagating an
- * un-instrumented error that the caller can silently swallow.
+ * ROK-1322: the restore-time migration path (`backup.helpers.ts::runMigrations`,
+ * invoked by `backup.service.ts` for both post-restore and factory-reset) must
+ * route through the SAME instrumented runner as the deploy-time boot path —
+ * `runBootMigrations` — so restore gets the pre-migrate `games_dedup_audit`
+ * refresh + `validateMigrationState` + Sentry capture (tagged `restore-migration`)
+ * as ONE enforced invariant for boot AND restore.
  *
- * Before ROK-1322, `reportMigrationFailure` (the Sentry capture+flush helper
- * in `run-migrations.ts`) only ran when the script was invoked directly via
- * `require.main === module` (db:migrate / validate-migrations.sh). The backup
- * service call site got NO Sentry visibility. This spec pins the unified path.
+ * This spec pins the WIRING at the `backup.helpers` boundary:
+ *   - the restore-resolved migrations folder is threaded into `runBootMigrations`
+ *     (the switch must NOT silently change which folder restore uses), and
+ *   - the failure context is `restore-migration` (NOT the boot `boot.migration`
+ *     tag), and
+ *   - the DATABASE_URL is threaded from the caller (or the process env), and
+ *   - failures still propagate loudly.
  *
- * Mirrors `run-migrations.spec.ts` (the `reportMigrationFailure` capture
- * contract) but asserts the wiring at the `backup.helpers` boundary. The
- * broader loud-propagation guarantee is covered by
- * `backup.helpers.loud-failure.integration.spec.ts`.
+ * The runner's own instrumentation contract (capture + flush + rethrow with the
+ * supplied context) is proven in `run-migrations-with-sentry.spec.ts`; the
+ * real-DB refresh is proven in
+ * `backup.helpers.restore-dedup-refresh.integration.spec.ts`.
  */
-const captureException = jest.fn();
-const flush = jest.fn(() => Promise.resolve(true));
+const runBootMigrations = jest.fn(() => Promise.resolve());
 
-jest.mock('@sentry/nestjs', () => ({
-  captureException,
-  flush,
-  // The instrument import has side effects; stub init to a no-op.
-  init: jest.fn(),
+jest.mock('../../scripts/run-migrations-with-sentry', () => ({
+  runBootMigrations,
 }));
 
 // Force folder resolution to succeed without touching the real filesystem —
 // `runMigrations` picks the first candidate whose `meta/_journal.json` exists.
+// Keep the rest of `node:fs` real (transitive deps such as @sentry promisify
+// `fs.readFile` at import time).
 jest.mock('node:fs', () => ({
+  ...jest.requireActual('node:fs'),
   existsSync: jest.fn().mockReturnValue(true),
 }));
 
-// Replace ONLY the in-process migrate primitive with a rejecting stub; keep
-// the REAL `reportMigrationFailure` so the Sentry capture+flush contract is
-// exercised end-to-end through `backup.helpers`.
-jest.mock('../scripts/run-migrations', () => {
-  const actual = jest.requireActual('../scripts/run-migrations');
-  return {
-    ...actual,
-    runMigrations: jest.fn(() =>
-      Promise.reject(new Error('syntax error at or near "THIS"')),
-    ),
-  };
-});
-
+import * as path from 'node:path';
 import { runMigrations } from './backup.helpers';
-import { runMigrations as inProcessRunMigrations } from '../scripts/run-migrations';
 
 const API_ROOT = '/tmp/rok-1322-fake-api-root';
+const DB_URL = 'postgres://user:pass@localhost:5432/restore_target';
+const SRC_MIGRATIONS = path.join('src', 'drizzle', 'migrations');
 
-describe('ROK-1322 backup.helpers.runMigrations instrumentation', () => {
+describe('ROK-1322 backup.helpers.runMigrations routes through runBootMigrations', () => {
+  const savedDbUrl = process.env.DATABASE_URL;
+  const savedMigrationsFolder = process.env.MIGRATIONS_FOLDER;
+
   beforeEach(() => {
-    captureException.mockClear();
-    flush.mockClear();
-    (inProcessRunMigrations as jest.Mock).mockClear();
+    runBootMigrations.mockClear();
+    runBootMigrations.mockResolvedValue(undefined);
+    delete process.env.MIGRATIONS_FOLDER;
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+    if (savedDbUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = savedDbUrl;
+    if (savedMigrationsFolder === undefined)
+      delete process.env.MIGRATIONS_FOLDER;
+    else process.env.MIGRATIONS_FOLDER = savedMigrationsFolder;
   });
 
-  it('propagates the underlying SQL error loudly (does not swallow)', async () => {
-    await expect(runMigrations(API_ROOT)).rejects.toThrow(/syntax error/i);
-  });
+  it('threads the resolved migrations folder + restore-migration context', async () => {
+    await runMigrations(API_ROOT, DB_URL);
 
-  it('captures the failure to Sentry with the restore-migration tag', async () => {
-    const caught = await runMigrations(API_ROOT).catch((err: unknown) => err);
-
-    expect(captureException).toHaveBeenCalledTimes(1);
-    expect(captureException).toHaveBeenCalledWith(caught, {
-      tags: { context: 'restore-migration' },
+    expect(runBootMigrations).toHaveBeenCalledTimes(1);
+    expect(runBootMigrations).toHaveBeenCalledWith(DB_URL, {
+      migrationsFolder: expect.stringContaining(SRC_MIGRATIONS),
+      context: 'restore-migration',
     });
   });
 
-  it('captures then awaits flush(2000) before the error propagates', async () => {
-    const order: string[] = [];
-    captureException.mockImplementation(() => {
-      order.push('capture');
-    });
-    flush.mockImplementation(async () => {
-      order.push('flush-start');
-      await new Promise((r) => setImmediate(r));
-      order.push('flush-end');
-      return true;
-    });
+  it('honours an explicit MIGRATIONS_FOLDER override', async () => {
+    process.env.MIGRATIONS_FOLDER = '/opt/app/drizzle/migrations';
 
-    await expect(runMigrations(API_ROOT)).rejects.toThrow(/syntax error/i);
+    await runMigrations(API_ROOT, DB_URL);
 
-    expect(flush).toHaveBeenCalledWith(2000);
-    expect(order).toEqual(['capture', 'flush-start', 'flush-end']);
+    expect(runBootMigrations).toHaveBeenCalledWith(DB_URL, {
+      migrationsFolder: '/opt/app/drizzle/migrations',
+      context: 'restore-migration',
+    });
   });
 
-  it('does NOT touch Sentry when migrations succeed', async () => {
-    (inProcessRunMigrations as jest.Mock).mockResolvedValueOnce(undefined);
+  it('falls back to process.env.DATABASE_URL when no url is threaded', async () => {
+    process.env.DATABASE_URL = DB_URL;
 
-    await expect(runMigrations(API_ROOT)).resolves.toBeUndefined();
+    await runMigrations(API_ROOT);
 
-    expect(captureException).not.toHaveBeenCalled();
-    expect(flush).not.toHaveBeenCalled();
+    expect(runBootMigrations).toHaveBeenCalledWith(
+      DB_URL,
+      expect.objectContaining({ context: 'restore-migration' }),
+    );
+  });
+
+  it('throws when no DATABASE_URL is available and never calls the runner', async () => {
+    delete process.env.DATABASE_URL;
+
+    await expect(runMigrations(API_ROOT)).rejects.toThrow(/DATABASE_URL/i);
+    expect(runBootMigrations).not.toHaveBeenCalled();
+  });
+
+  it('propagates a runner failure loudly (does not swallow)', async () => {
+    runBootMigrations.mockRejectedValueOnce(
+      new Error('syntax error at or near "THIS"'),
+    );
+
+    await expect(runMigrations(API_ROOT, DB_URL)).rejects.toThrow(
+      /syntax error/i,
+    );
   });
 });

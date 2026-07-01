@@ -230,7 +230,7 @@ export class BackupService implements OnModuleInit {
     await dropSchemas(this.databaseUrl, this.dbContainer);
     const apiRoot = path.resolve(__dirname, '../../..');
     this.logger.warn('Running database migrations...');
-    await runMigrations(apiRoot);
+    await runMigrations(apiRoot, this.databaseUrl);
     this.logger.warn('Bootstrapping admin account...');
     const password = await bootstrapAdmin(apiRoot);
     this.logger.warn('Seeding game data...');
@@ -293,7 +293,7 @@ export class BackupService implements OnModuleInit {
     this.logger.warn('Running post-restore migrations...');
     const apiRoot = path.resolve(__dirname, '../../..');
     try {
-      await runMigrations(apiRoot);
+      await runMigrations(apiRoot, this.databaseUrl);
       this.logger.log('Post-restore migrations complete');
     } catch (err) {
       this.logger.warn(
