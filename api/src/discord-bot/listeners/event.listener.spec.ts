@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DiscordEventListener } from './event.listener';
 import type { EventPayload } from './event.listener';
+import { resolveEmbedStateForUpdate } from './event.listener.handlers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { EmbedPosterService } from '../services/embed-poster.service';
@@ -225,6 +226,36 @@ describe('DiscordEventListener', () => {
   describe('updateEmbedState', () => {
     updateEmbedStateTests();
   });
+
+  describe('handleEventRescheduling', () => {
+    eventReschedulingTests();
+  });
+});
+
+describe('resolveEmbedStateForUpdate (ROK-1370)', () => {
+  it('forces RESCHEDULING while a poll is open', () => {
+    expect(resolveEmbedStateForUpdate(EMBED_STATES.POSTED, true)).toBe(
+      EMBED_STATES.RESCHEDULING,
+    );
+    expect(resolveEmbedStateForUpdate(EMBED_STATES.LIVE, true)).toBe(
+      EMBED_STATES.RESCHEDULING,
+    );
+  });
+
+  it('resets a stuck RESCHEDULING record to POSTED once the poll clears', () => {
+    expect(resolveEmbedStateForUpdate(EMBED_STATES.RESCHEDULING, false)).toBe(
+      EMBED_STATES.POSTED,
+    );
+  });
+
+  it('passes other states through unchanged when not rescheduling', () => {
+    expect(resolveEmbedStateForUpdate(EMBED_STATES.LIVE, false)).toBe(
+      EMBED_STATES.LIVE,
+    );
+    expect(resolveEmbedStateForUpdate(EMBED_STATES.IMMINENT, false)).toBe(
+      EMBED_STATES.IMMINENT,
+    );
+  });
 });
 
 function eventCreatedTests() {
@@ -402,5 +433,22 @@ function updateEmbedStateTests() {
       { state: EMBED_STATES.IMMINENT },
     );
     expect(clientService.editEmbed).toHaveBeenCalled();
+  });
+}
+
+function eventReschedulingTests() {
+  it('tears down the scheduled event and flips the embed to RESCHEDULING', async () => {
+    mockDb.select.mockReturnValue(createSelectChainWithRecord(mockRecord));
+    mockDb.update.mockReturnValue(createUpdateChain());
+    const scheduledEventService = testModule.get(ScheduledEventService);
+
+    await listener.handleEventRescheduling(mockPayload);
+
+    expect(scheduledEventService.deleteScheduledEvent).toHaveBeenCalledWith(42);
+    expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      mockPayload.event,
+      { communityName: 'Test Guild', clientUrl: null, timezone: null },
+      { state: EMBED_STATES.RESCHEDULING },
+    );
   });
 }
