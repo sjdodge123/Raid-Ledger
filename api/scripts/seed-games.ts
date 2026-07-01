@@ -230,6 +230,30 @@ const GAMES_SEED = [
       },
     ],
   },
+  {
+    // ROK-1377: operator's own game — free, browser-based, not on Steam.
+    // URL-only listing; cover is the site favicon (swap for box-art if desired).
+    slug: 'chao-chao',
+    name: 'Chao Chao',
+    shortName: null,
+    iconUrl: null,
+    coverUrl: 'https://chaochaogame.com/assets/img/favicon.svg',
+    colorHex: '#D4A017',
+    hasRoles: false,
+    hasSpecs: false,
+    maxCharactersPerUser: 1,
+    websiteUrl: 'https://chaochaogame.com',
+    isFreeToPlay: true,
+    eventTypes: [
+      {
+        slug: 'race-night',
+        name: 'Race Night',
+        defaultPlayerCap: null,
+        defaultDurationMinutes: 60,
+        requiresComposition: false,
+      },
+    ],
+  },
 ];
 
 @Module({
@@ -280,6 +304,11 @@ async function bootstrap() {
             maxCharactersPerUser: game.maxCharactersPerUser,
             ...('apiNamespacePrefix' in game
               ? { apiNamespacePrefix: game.apiNamespacePrefix }
+              : {}),
+            // ROK-1377: keep URL-only / free-to-play metadata current on re-seed.
+            ...('websiteUrl' in game ? { websiteUrl: game.websiteUrl } : {}),
+            ...('isFreeToPlay' in game
+              ? { isFreeToPlay: game.isFreeToPlay }
               : {}),
           })
           .where(eq(schema.games.id, gameId));
