@@ -15,7 +15,10 @@ type AuthRequest = Request & { user?: { sub?: number } };
  * the perf log so the access log stays readable and the histogram isn't skewed.
  */
 function isLivenessProbe(url: string): boolean {
-  return url === '/health/live' || url === '/api/health/live';
+  // Express `req.url` includes the query string; strip it so a cache-busted
+  // probe (`/health/live?_=123`) is still suppressed.
+  const path = url.split('?')[0];
+  return path === '/health/live' || path === '/api/health/live';
 }
 
 /** Extract HTTP status from an error, defaulting to 500 for non-HttpException errors. */

@@ -26,11 +26,14 @@ describe('Health endpoints (ROK-1165)', () => {
 
     it('does not probe the database or Redis', async () => {
       const dbSpy = jest.spyOn(testApp.db, 'execute');
+      const redisSpy = jest.spyOn(testApp.redisMock.client, 'ping');
 
       await testApp.request.get('/health/live');
 
       expect(dbSpy).not.toHaveBeenCalled();
+      expect(redisSpy).not.toHaveBeenCalled();
       dbSpy.mockRestore();
+      redisSpy.mockRestore();
     });
   });
 

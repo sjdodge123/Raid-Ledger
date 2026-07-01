@@ -99,6 +99,19 @@ describe('PerfLoggingInterceptor', () => {
       expect(mockPerfLog).not.toHaveBeenCalled();
     });
 
+    it('suppresses a cache-busted probe with a query string', async () => {
+      const context = createMockExecutionContext(
+        'GET',
+        '/api/health/live?_=1720000000000',
+        200,
+      );
+      const handler: CallHandler = { handle: () => of({ status: 'ok' }) };
+
+      await firstValueFrom(interceptor.intercept(context, handler));
+
+      expect(mockPerfLog).not.toHaveBeenCalled();
+    });
+
     it('still logs the readiness probe GET /health/ready', async () => {
       const context = createMockExecutionContext('GET', '/health/ready', 200);
       const handler: CallHandler = { handle: () => of({ status: 'ok' }) };
