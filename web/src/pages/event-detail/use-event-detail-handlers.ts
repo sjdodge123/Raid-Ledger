@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../../hooks/use-signups';
 import { useUpdateRoster, useSelfUnassign, useAdminRemoveUser, buildRosterUpdate } from '../../hooks/use-roster';
 import { useUpdateAutoUnbench } from '../../hooks/use-auto-unbench';
@@ -81,8 +82,11 @@ function usePugHandlers(eventId: number, pugs: PugSlotResponseDto[]) {
             const pugSlot = await createPug.mutateAsync({ role: role as PugRole });
             if (!pugSlot.inviteCode) { toast.error('Failed to generate invite link', { description: 'No invite code returned.' }); return; }
             const inviteUrl = `${window.location.origin}/i/${pugSlot.inviteCode}`;
-            await navigator.clipboard.writeText(inviteUrl);
-            toast.success('Invite link copied to clipboard!', { description: inviteUrl });
+            await copyWithToast(inviteUrl, {
+                success: 'Invite link copied to clipboard!',
+                description: inviteUrl,
+                error: 'Failed to copy invite link',
+            });
         } catch (err) { toast.error('Failed to generate invite link', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     }, [createPug]);
 
@@ -94,7 +98,7 @@ function usePugHandlers(eventId: number, pugs: PugSlotResponseDto[]) {
     const handleRegeneratePugLink = useCallback(async (pugId: string) => {
         try {
             const updated = await regeneratePugCode.mutateAsync(pugId);
-            if (updated.inviteCode) { await navigator.clipboard.writeText(`${window.location.origin}/i/${updated.inviteCode}`); toast.success('New invite link copied to clipboard!'); }
+            if (updated.inviteCode) { await copyWithToast(`${window.location.origin}/i/${updated.inviteCode}`, { success: 'New invite link copied to clipboard!', error: 'Failed to copy invite link' }); }
         } catch (err) { toast.error('Failed to regenerate link', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     }, [regeneratePugCode]);
 

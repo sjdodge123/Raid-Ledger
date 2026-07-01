@@ -4,7 +4,7 @@ import { toAvatarUser } from '../../lib/avatar';
 import { CharacterCardCompact } from '../../components/characters/character-card-compact';
 import { RoleIcon } from '../../components/shared/RoleIcon';
 import { PluginSlot } from '../../plugins';
-import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 import type { EventResponseDto, EventRosterDto, SignupCharacterDto } from '@raid-ledger/contract';
 import { alphabetical } from './event-detail-helpers';
 
@@ -165,7 +165,7 @@ function RosterEmptyState() {
     return (
         <div className="event-detail-roster__empty">
             <p>No players signed up yet — share the event!</p>
-            <button onClick={() => navigator.clipboard.writeText(window.location.href).then(() => toast.success('Event link copied to clipboard!'))}
+            <button onClick={() => void copyWithToast(window.location.href, { success: 'Event link copied to clipboard!', error: 'Failed to copy link' })}
                 className="btn btn-secondary btn-sm mt-2">Copy Event Link</button>
         </div>
     );
