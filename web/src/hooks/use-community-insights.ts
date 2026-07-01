@@ -8,8 +8,7 @@ import type {
     CommunitySocialGraphResponseDto,
     CommunityTemporalResponseDto,
 } from '@raid-ledger/contract';
-import { API_BASE_URL } from '../lib/config';
-import { getAuthToken } from './use-auth';
+import { fetchWithAuth } from '../lib/api/fetch-api';
 
 const STALE_MS = 60_000;
 
@@ -42,17 +41,12 @@ interface FetchOptions {
 }
 
 async function insightsFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
-    const token = getAuthToken();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
-
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(opts.query ?? {})) {
         if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
     }
     const qs = params.toString();
-    const url = `${API_BASE_URL}${path}${qs ? `?${qs}` : ''}`;
-    const res = await fetch(url, { headers, signal: opts.signal, credentials: 'include' });
+    const res = await fetchWithAuth(`${path}${qs ? `?${qs}` : ''}`, { signal: opts.signal });
     if (res.status === 503) throw new NoSnapshotYetError();
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return (await res.json()) as T;
@@ -124,13 +118,8 @@ export function useRefreshCommunityInsights() {
     const queryClient = useQueryClient();
     return useMutation<CommunityRefreshResponseDto, Error>({
         mutationFn: async () => {
-            const token = getAuthToken();
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers.Authorization = `Bearer ${token}`;
-            const res = await fetch(`${API_BASE_URL}/insights/community/refresh`, {
+            const res = await fetchWithAuth('/insights/community/refresh', {
                 method: 'POST',
-                headers,
-                credentials: 'include',
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return (await res.json()) as CommunityRefreshResponseDto;
