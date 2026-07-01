@@ -13,6 +13,9 @@ export const APP_EVENT_EVENTS = {
   UPDATED: 'event.updated',
   CANCELLED: 'event.cancelled',
   DELETED: 'event.deleted',
+  /** ROK-1370: a reschedule poll opened against this event — flip the embed to
+   *  RESCHEDULING and tear down the Discord Scheduled Event until lock-in. */
+  RESCHEDULING: 'event.rescheduling',
 } as const;
 
 /**
