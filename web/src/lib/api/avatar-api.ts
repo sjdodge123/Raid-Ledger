@@ -48,11 +48,18 @@ async function uploadWithProgress(
     formData: FormData,
     onProgress: (percent: number) => void,
 ): Promise<{ customAvatarUrl: string }> {
+    // A refresh retry re-fires XHR progress from 0; clamp to a monotonic
+    // ceiling so the bar never rewinds across attempts.
+    let reportedCeiling = 0;
+    const report = (percent: number) => {
+        reportedCeiling = Math.max(reportedCeiling, percent);
+        onProgress(reportedCeiling);
+    };
     try {
-        return await sendAvatarXhr(formData, onProgress);
+        return await sendAvatarXhr(formData, report);
     } catch (err) {
         if (err instanceof AvatarUploadError && err.status === 401 && getAuthMethod()) {
-            if (await ensureFreshToken()) return sendAvatarXhr(formData, onProgress);
+            if (await ensureFreshToken()) return sendAvatarXhr(formData, report);
         }
         throw err;
     }

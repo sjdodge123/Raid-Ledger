@@ -124,10 +124,12 @@ describe('fetchWithAuth — ROK-1367 transparent on-401 refresh', () => {
 
     it('returns the raw 401 (no retry) when refresh itself fails', async () => {
         let dataCalls = 0;
+        let refreshCalls = 0;
         server.use(
-            http.post(`${API_BASE}/auth/refresh`, () =>
-                new HttpResponse(null, { status: 401 }),
-            ),
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                return new HttpResponse(null, { status: 401 });
+            }),
             http.get(`${API_BASE}/thing`, () => {
                 dataCalls += 1;
                 return new HttpResponse(null, { status: 401 });
@@ -137,6 +139,8 @@ describe('fetchWithAuth — ROK-1367 transparent on-401 refresh', () => {
         const response = await fetchWithAuth('/thing');
 
         expect(response.status).toBe(401);
+        // Refresh WAS attempted (once) but failed — so no retry fired.
+        expect(refreshCalls).toBe(1);
         expect(dataCalls).toBe(1);
     });
 });
