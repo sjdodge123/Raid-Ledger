@@ -16,6 +16,10 @@ jest.mock('node:child_process');
 // covered by `backup.helpers.loud-failure.integration.spec.ts`.
 jest.mock('../scripts/run-migrations', () => ({
   runMigrations: jest.fn(() => Promise.resolve()),
+  // ROK-1322: backup.helpers::runMigrations now delegates failures to
+  // reportMigrationFailure (Sentry capture + flush). The happy-path service
+  // tests never hit the failure branch, but stub it so the import resolves.
+  reportMigrationFailure: jest.fn(() => Promise.resolve()),
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;
