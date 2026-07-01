@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config';
+import { AUTH_METHOD_KEY, SILENT_GUARD_KEY } from './auth-storage-keys';
 
 /**
  * ROK-1353: silent Discord re-auth fallback.
@@ -9,9 +10,6 @@ import { API_BASE_URL } from '../config';
  * silent attempt itself fails, the API redirects back with
  * `?silent_failed=1`, which clears the guard and routes to login.
  */
-
-const AUTH_METHOD_KEY = 'raid_ledger_auth_method';
-const SILENT_GUARD_KEY = 'raid_ledger_silent_attempted';
 
 /** Record how the user authenticated (for the silent-reauth decision). */
 export function setAuthMethod(method: 'discord' | 'local' | 'magic'): void {

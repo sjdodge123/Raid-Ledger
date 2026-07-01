@@ -3,10 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { ensureFreshToken } from '../lib/api/refresh-client';
 import { clearSilentGuard, clearAuthMethod, getAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
+import { ACCESS_TOKEN_KEY as TOKEN_KEY, ORIGINAL_TOKEN_KEY } from '../lib/api/auth-storage-keys';
 import type { UserRole } from '@raid-ledger/contract';
 
-const TOKEN_KEY = 'raid_ledger_token';
-const ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';
 const USER_CACHE_KEY = 'raid_ledger_user_cache';
 
 export interface User {
