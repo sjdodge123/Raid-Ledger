@@ -1,11 +1,11 @@
 ---
 title: Raid Ledger
-description: Drive community engagement, organize events, play games socially, and automate reminders — all in one self-hosted dashboard for gaming communities.
+description: Run your entire raid operation from inside Discord. A self-hosted, Discord-native dashboard for gaming communities — signups, voice attendance, reminders, and game votes, all where your community already lives.
 template: splash
 hero:
-  tagline: Drive community engagement, organize events effortlessly, play games together, and automate the busywork — all in one self-hosted dashboard.
+  tagline: Run your entire raid operation from inside Discord. Members sign up on bot embeds, attendance tracks itself from voice, reminders arrive as DMs, and "what are we playing tonight?" finally has an answer.
   actions:
-    - text: Get Started
+    - text: Deploy in one command
       link: https://github.com/sjdodge123/Raid-Ledger#-quick-deploy
       icon: right-arrow
       variant: primary
@@ -26,48 +26,90 @@ import gameLibrary from '../../assets/screenshots/game-library.png';
 
 <div class="section-heading">
   <h2>Built to Bring Gamers Together</h2>
-  <p>Raid Ledger exists to solve one problem: getting your community to actually show up and play together. Less coordination overhead, more game time.</p>
+  <p>Raid Ledger exists to solve one problem: getting your community to actually show up and play together. Less coordination overhead, more game time — all where your community already lives.</p>
 </div>
 
 <div class="features-grid">
   <div class="feature-card">
-    <h3>Effortless Event Scheduling</h3>
-    <p>Create one-time or recurring events with natural language time parsing, a calendar view, and automatic Discord announcements. Scheduling should take seconds, not minutes.</p>
+    <h3>Event Scheduling &amp; Recurring Raids</h3>
+    <p>Spin up one-off or repeating events — weekly, biweekly, or monthly — with reusable templates and a shared calendar, so raid night books itself instead of living in a pinned message.</p>
   </div>
 
   <div class="feature-card">
-    <h3>Roster Management</h3>
-    <p>MMO-style role assignments (Tank/Healer/DPS), drag-and-drop slot management, bench tracking, and PUG invite system. Everyone knows their role before game time.</p>
+    <h3>Discord-Native Signups &amp; Rosters</h3>
+    <p>Members sign up right inside Discord with rich embeds and slash commands. Auto-allocation, bench slots, and tentative-to-confirmed promotion keep every roster filled without manual juggling.</p>
   </div>
 
   <div class="feature-card">
-    <h3>Discord Bot Integration</h3>
-    <p>Full-featured Discord bot with slash commands for event creation, roster viewing, channel bindings, and voice activity monitoring. Your community stays in Discord — Raid Ledger meets them there.</p>
+    <h3>Automated Voice Attendance</h3>
+    <p>Attendance is tracked from who actually shows up in voice — no roll-call, no spreadsheet — with two-phase no-show detection that nudges absent players and flags them to the host.</p>
   </div>
 
   <div class="feature-card">
-    <h3>Automated Reminders</h3>
-    <p>Event reminders, no-show detection with automatic DMs, and configurable notifications per user. No more "I forgot" — everyone gets pinged at the right time.</p>
+    <h3>Ephemeral Voice Channels</h3>
+    <p>A dedicated voice channel is created automatically for each event and cleaned up when it ends, so your server stays tidy and every raid gets its own room exactly when it's needed.</p>
   </div>
 
   <div class="feature-card">
-    <h3>Ad-Hoc Voice Events</h3>
-    <p>Auto-detect games in voice channels via Discord Rich Presence and create spontaneous events. Jump in when friends are already playing — no planning required.</p>
+    <h3>Running-Late &amp; Host-Delay Controls</h3>
+    <p>Attendees can flag that they're running late, and hosts can bump the start by 15 or 30 minutes in one tap — keeping everyone in sync without cancelling confirmations or spamming the channel.</p>
   </div>
 
   <div class="feature-card">
-    <h3>Game Library (IGDB)</h3>
-    <p>Browse and filter from a catalog of 200,000+ games powered by IGDB. Genre filtering, cover art, and game-specific event grouping.</p>
+    <h3>Smart Reminders &amp; Reschedule Flows</h3>
+    <p>Batched, de-duplicated DM reminders and one-tap confirm/decline reschedule prompts mean fewer missed raids and far less chasing people down.</p>
   </div>
 
   <div class="feature-card">
-    <h3>Admin Dashboard</h3>
-    <p>Full control panel for community admins — setup wizard, Discord integration management, user permissions, plugin configuration, and community settings all in one place.</p>
+    <h3>Community Lineups &amp; AI Suggestions</h3>
+    <p>Let the group nominate and vote on what to play. Common Ground scoring surfaces the games everyone actually wants, and AI-assisted picks (including wildcards) settle "what are we playing tonight?"</p>
   </div>
 
   <div class="feature-card">
-    <h3>Analytics and Metrics</h3>
-    <p>Track attendance rates, no-show patterns, game popularity, and community engagement over time. See what's working and what's not.</p>
+    <h3>Scheduling Polls &amp; Availability Heatmaps</h3>
+    <p>Find the time that works for the most people with group availability heatmaps and scheduling polls — complete with deadlines and tiebreakers — so you lock in a slot instead of guessing.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Game Library with Live Deal Pricing</h3>
+    <p>A rich game library of 200,000+ games powered by IGDB pairs every title with live IsThereAnyDeal pricing, plus Steam wishlist and playtime sync, so your community discovers what's trending, owned, and on sale.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Taste Profiles &amp; Characters</h3>
+    <p>Every member gets a taste profile and a fun archetype built from real play signals, while players manage characters — including World of Warcraft Classic toons imported via the Blizzard API.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Community Insights &amp; Analytics</h3>
+    <p>Admin dashboards reveal attendance trends, event metrics, churn risk, and social cliques — the signals you need to keep your community healthy and growing.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Discord OAuth Sign-In</h3>
+    <p>Members log in with the Discord account they already use — no new passwords, instant identity, and a roster that maps cleanly to your server.</p>
+  </div>
+</div>
+
+<div class="section-heading">
+  <h2>✨ Recently Shipped</h2>
+  <p>Raid Ledger ships continuously. A few of the newest capabilities:</p>
+</div>
+
+<div class="features-grid">
+  <div class="feature-card">
+    <h3>Ephemeral Voice Channels</h3>
+    <p>Per-event voice rooms auto-created (with a force-ephemeral option) and reaped on completion — full lifecycle cleanup, zero server clutter.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Running-Late &amp; Host Delay</h3>
+    <p>Attendee running-late markers plus one-tap host delay (+15 / +30 min) that shifts the start without resetting confirmations.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Lineups, Polls &amp; AI Picks</h3>
+    <p>Community lineups with Common Ground scoring, scheduling polls with availability heatmaps, and AI-assisted (including wildcard) game suggestions.</p>
   </div>
 </div>
 
@@ -95,7 +137,7 @@ import gameLibrary from '../../assets/screenshots/game-library.png';
       <Image src={eventWithRoster} alt="Event with roster" />
       <div class="carousel-caption">
         <strong>Roster Management</strong>
-        <span>MMO-style role assignments with Tank, Healer, and DPS slots. Drag-and-drop players, auto-fill from bench, and track confirmations.</span>
+        <span>Auto-allocation, bench slots, and tentative-to-confirmed promotion keep every roster filled — no manual juggling.</span>
       </div>
     </div>
     <div class="carousel-slide">
@@ -109,7 +151,7 @@ import gameLibrary from '../../assets/screenshots/game-library.png';
       <Image src={gameLibrary} alt="Game library" />
       <div class="carousel-caption">
         <strong>Game Library</strong>
-        <span>Browse and manage 200,000+ games powered by IGDB. Filter by genre, view cover art, and link games to events.</span>
+        <span>Browse 200,000+ games powered by IGDB with live IsThereAnyDeal pricing. Filter by genre, spot deals, and link games to events.</span>
       </div>
     </div>
     <div class="carousel-slide">
@@ -202,10 +244,26 @@ import gameLibrary from '../../assets/screenshots/game-library.png';
 
 <div class="benefits">
   <div class="benefit">
+    <span class="benefit-icon">&#x1F3AE;</span>
+    <div>
+      <h4>Discord-Native</h4>
+      <p>Signups, rosters, reminders, and game votes all happen in Discord. No separate app for your members to adopt — just the server they're already in.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F4CA;</span>
+    <div>
+      <h4>Attendance on Autopilot</h4>
+      <p>Voice-based tracking, automatic no-show detection, and ephemeral per-event channels handle the busywork — stop chasing who showed up.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
     <span class="benefit-icon">&#x1F3E0;</span>
     <div>
       <h4>Self-Hosted</h4>
-      <p>Your data stays on your hardware. No third-party dependencies, no subscriptions, no data harvesting.</p>
+      <p>Your data stays on your hardware. No subscriptions, no SaaS lock-in, no data harvesting.</p>
     </div>
   </div>
 
@@ -213,7 +271,15 @@ import gameLibrary from '../../assets/screenshots/game-library.png';
     <span class="benefit-icon">&#x1F433;</span>
     <div>
       <h4>Single Docker Command</h4>
-      <p>One container bundles PostgreSQL, Redis, the API, and the web app. Up and running in under a minute.</p>
+      <p>One container bundles PostgreSQL, Redis, the NestJS API, and the React web app. No external services to wire up.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F504;</span>
+    <div>
+      <h4>Automatic Backups</h4>
+      <p>Nightly database backups and pre-migration snapshots, preserved even across fresh resets. Your data is always safe.</p>
     </div>
   </div>
 
@@ -224,42 +290,18 @@ import gameLibrary from '../../assets/screenshots/game-library.png';
       <p>Fully open source. Fork it, modify it, contribute back. No vendor lock-in.</p>
     </div>
   </div>
-
-  <div class="benefit">
-    <span class="benefit-icon">&#x1F4E6;</span>
-    <div>
-      <h4>All-in-One Container</h4>
-      <p>PostgreSQL, Redis, NestJS API, and React frontend — everything included. No external services required.</p>
-    </div>
-  </div>
-
-  <div class="benefit">
-    <span class="benefit-icon">&#x1F504;</span>
-    <div>
-      <h4>Automatic Backups</h4>
-      <p>Daily database backups and pre-migration snapshots. Your data is always safe.</p>
-    </div>
-  </div>
-
-  <div class="benefit">
-    <span class="benefit-icon">&#x1F527;</span>
-    <div>
-      <h4>Zero Configuration</h4>
-      <p>Works out of the box with sensible defaults. Optional Discord OAuth and game integrations when you are ready.</p>
-    </div>
-  </div>
 </div>
 
 <div class="section-heading">
   <h2>Quick Start</h2>
-  <p>Get Raid Ledger running in under a minute.</p>
+  <p>One command runs the whole stack — app, PostgreSQL, and Redis. Mount a volume so your data and nightly backups persist.</p>
 </div>
 
 ```bash
-docker run -d -p 80:80 ghcr.io/sjdodge123/raid-ledger:main
+docker run -d -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
 ```
 
-Then open [http://localhost](http://localhost) and check the container logs for your admin credentials.
+Then open [http://localhost](http://localhost) and check the container logs for your admin credentials. Want to look around first? Install demo data from the Admin Panel to explore a fully-populated community.
 
 <div class="cta-group">
   <a href="https://github.com/sjdodge123/Raid-Ledger#-quick-deploy" class="cta-primary">Deploy Now</a>
