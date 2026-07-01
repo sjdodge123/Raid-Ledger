@@ -37,6 +37,8 @@ import {
 import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
 import { insertPollInterests } from '../scheduling/scheduling-auto-heart.helpers';
 import { SignupsService } from '../../events/signups.service';
+import { EventsService } from '../../events/events.service';
+import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import {
   splitVotersBySlot,
   formatPollTime,
@@ -69,6 +71,7 @@ export class StandalonePollService {
     private readonly schedulingPollEmbed: SchedulingPollEmbedService,
     private readonly signupsService: SignupsService,
     private readonly settingsService: SettingsService,
+    private readonly eventsService: EventsService,
   ) {}
 
   /** List all active standalone scheduling polls. */
@@ -92,6 +95,14 @@ export class StandalonePollService {
           this.logger.warn(`Auto-signup failed for match ${matchId}: ${msg}`);
         },
       );
+    }
+    // ROK-1370: lock-in cleared reschedulingPollId — re-emit UPDATED so the
+    // embed resets RESCHEDULING → POSTED and the Scheduled Event is recreated
+    // at the (already-moved) winning time.
+    if (result.ok && result.linkedEventId) {
+      this.eventsService
+        .emitLifecycleEvent(result.linkedEventId, APP_EVENT_EVENTS.UPDATED)
+        .catch(noop);
     }
     return result.ok;
   }
@@ -288,6 +299,11 @@ export class StandalonePollService {
         'Event is already being rescheduled or has been cancelled.',
       );
     }
+    // ROK-1370 (Option A): flip the Discord embed to RESCHEDULING and tear down
+    // the Scheduled Event now — lock-in recreates it at the winning time.
+    this.eventsService
+      .emitLifecycleEvent(eventId, APP_EVENT_EVENTS.RESCHEDULING)
+      .catch(noop);
   }
 
   /** Fire-and-forget: notify game-interested users. */

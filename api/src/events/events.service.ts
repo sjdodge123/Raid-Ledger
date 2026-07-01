@@ -281,6 +281,15 @@ export class EventsService {
     return buildEmbedEventData(this.db, event, eventId);
   }
 
+  /**
+   * Re-fetch an event and emit a Discord lifecycle event (ROK-1370).
+   * Lets non-events callers (e.g. the reschedule-poll flow) drive the same
+   * embed/scheduled-event listeners without reaching into the event emitter.
+   */
+  async emitLifecycleEvent(eventId: number, emitKey: string): Promise<void> {
+    emitEventLifecycle(this.eventEmitter, emitKey, await this.findOne(eventId));
+  }
+
   /** Gets the dominant game variant and region for an event. */
   async getVariantContext(
     eventId: number,

@@ -57,6 +57,7 @@ function makeService(
     {} as never, // schedulingPollEmbed
     {} as never, // signupsService
     settingsService as never,
+    {} as never, // eventsService
   );
 }
 
