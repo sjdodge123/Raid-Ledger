@@ -103,6 +103,9 @@ export class RoleGapAlertService {
       .where(
         and(
           isNull(schema.events.cancelledAt),
+          // ROK-1370: no role-gap alerts while a reschedule poll is open — the
+          // event's time is in flux; alerts resume at the new time on lock-in.
+          isNull(schema.events.reschedulingPollId),
           sql`${schema.events.slotConfig}->>'type' = 'mmo'`,
           sql`lower(${schema.events.duration}) >= ${lowerBound.toISOString()}::timestamptz`,
           sql`lower(${schema.events.duration}) <= ${upperBound.toISOString()}::timestamptz`,
