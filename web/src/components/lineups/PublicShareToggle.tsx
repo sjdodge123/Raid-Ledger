@@ -8,7 +8,7 @@
  *      that writes `${origin}/p/lineup/${slug}` to the clipboard.
  */
 import type { JSX } from 'react';
-import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 
 interface PublicShareToggleProps {
     enabled: boolean;
@@ -21,10 +21,10 @@ interface PublicShareToggleProps {
 
 function copyLink(slug: string): void {
     const url = `${window.location.origin}/p/lineup/${slug}`;
-    void navigator.clipboard
-        .writeText(url)
-        .then(() => toast.success('Public link copied'))
-        .catch(() => toast.error('Failed to copy link'));
+    void copyWithToast(url, {
+        success: 'Public link copied',
+        error: 'Failed to copy link',
+    });
 }
 
 export function PublicShareToggle({

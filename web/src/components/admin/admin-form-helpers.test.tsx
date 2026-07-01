@@ -17,6 +17,12 @@ vi.mock('../../lib/toast', () => ({
 describe('CopyableInput — keyboard accessibility (ROK-881)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // ROK-1378: copyToClipboard only uses the async Clipboard API in a
+        // secure context; jsdom defaults isSecureContext to undefined.
+        Object.defineProperty(window, 'isSecureContext', {
+            configurable: true,
+            value: true,
+        });
         Object.assign(navigator, {
             clipboard: {
                 writeText: vi.fn().mockResolvedValue(undefined),

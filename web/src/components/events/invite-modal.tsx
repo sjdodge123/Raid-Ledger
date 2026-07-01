@@ -4,6 +4,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Modal } from '../ui/modal';
 import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 import {
     listDiscordMembers,
     searchDiscordMembers,
@@ -98,7 +99,7 @@ async function shareToDiscordAction(eventId: number, setIsSharing: (v: boolean) 
 }
 
 function ShareSection({ eventId, isSharing, setIsSharing }: { eventId: number; isSharing: boolean; setIsSharing: (v: boolean) => void }) {
-    const handleCopyLink = () => { navigator.clipboard.writeText(window.location.href).then(() => toast.success('Event link copied to clipboard!')).catch(() => toast.error('Failed to copy link')); };
+    const handleCopyLink = () => { void copyWithToast(window.location.href, { success: 'Event link copied to clipboard!', error: 'Failed to copy link' }); };
 
     return (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-panel border border-edge">
@@ -119,8 +120,7 @@ async function generateInviteLink(createPug: ReturnType<typeof useCreatePug>, de
         if (!pugSlot.inviteCode) { toast.error('Failed to generate invite link', { description: 'No invite code returned. Please try again.' }); return; }
         const inviteUrl = `${window.location.origin}/i/${pugSlot.inviteCode}`;
         setGeneratedInviteUrl(inviteUrl);
-        await navigator.clipboard.writeText(inviteUrl);
-        toast.success('Invite link copied to clipboard!');
+        await copyWithToast(inviteUrl, { success: 'Invite link copied to clipboard!', error: 'Failed to copy invite link' });
     } catch (err) { toast.error('Failed to generate invite link', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     finally { setIsSubmitting(false); }
 }
@@ -151,7 +151,7 @@ function InviteLinkDisplay({ url }: { url: string }) {
             <input type="text" readOnly value={url}
                 className="flex-1 bg-transparent text-xs text-foreground border-none outline-none"
                 onClick={(e) => (e.target as HTMLInputElement).select()} />
-            <button type="button" onClick={() => { navigator.clipboard.writeText(url).then(() => toast.success('Copied!')).catch(() => {}); }}
+            <button type="button" onClick={() => { void copyWithToast(url, { success: 'Copied!', error: 'Failed to copy link' }); }}
                 className="shrink-0 text-xs text-dim hover:text-foreground transition-colors" title="Copy invite link">
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
