@@ -9,17 +9,14 @@ import * as childProcess from 'node:child_process';
 jest.mock('node:fs');
 jest.mock('node:child_process');
 
-// ROK-1343: backup.helpers::runMigrations now routes through the in-process
-// programmatic migrator (drizzle-orm/postgres-js/migrator) instead of shelling
-// out to `npx drizzle-kit migrate`. The unit suite doesn't carry a live
-// Postgres, so stub the wrapper to a no-op. The loud-failure behavior is
-// covered by `backup.helpers.loud-failure.integration.spec.ts`.
-jest.mock('../scripts/run-migrations', () => ({
-  runMigrations: jest.fn(() => Promise.resolve()),
-  // ROK-1322: backup.helpers::runMigrations now delegates failures to
-  // reportMigrationFailure (Sentry capture + flush). The happy-path service
-  // tests never hit the failure branch, but stub it so the import resolves.
-  reportMigrationFailure: jest.fn(() => Promise.resolve()),
+// ROK-1322: backup.helpers::runMigrations now routes through the instrumented
+// boot runner `runBootMigrations` (refresh dedup-audit → migrate → validate →
+// Sentry capture tagged `restore-migration`). The unit suite doesn't carry a
+// live Postgres, so stub the runner to a no-op. The dedup-refresh + loud-failure
+// behavior is covered by `backup.helpers.restore-via-runboot.integration.spec.ts`
+// and `backup.helpers.loud-failure.integration.spec.ts`.
+jest.mock('../../scripts/run-migrations-with-sentry', () => ({
+  runBootMigrations: jest.fn(() => Promise.resolve()),
 }));
 
 const mockFs = fs as jest.Mocked<typeof fs>;

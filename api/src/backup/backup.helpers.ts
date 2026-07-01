@@ -7,10 +7,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import {
-  runMigrations as runMigrationsInProcess,
-  reportMigrationFailure,
-} from '../scripts/run-migrations';
+import { runBootMigrations } from '../../scripts/run-migrations-with-sentry';
 
 const execFileAsync = promisify(execFile);
 
@@ -126,28 +123,15 @@ export function isRestoreFatal(error: unknown): boolean {
 }
 
 /**
- * Run post-restore / factory-reset database migrations.
+ * Resolve the drizzle migrations folder for the restore path.
  *
- * Routes through the programmatic `migrate()` API (via run-migrations.ts) on
- * BOTH the dev and production branches. The drizzle-kit CLI silently swallows
- * SQL errors (upstream drizzle-team/drizzle-orm#5601), which would mask a
- * broken restore — see ROK-1343.
- *
- * ROK-1322: on failure, route through the SAME instrumented contract the
- * deploy-time boot runner uses — `reportMigrationFailure` captures to Sentry
- * (tag `restore-migration`) and flushes the event BEFORE re-throwing. Without
- * this the backup service call site had zero Sentry visibility (the capture
- * previously only ran when run-migrations.ts was invoked as a script via
- * `require.main === module`). The error is still re-thrown so callers keep
- * their existing propagation semantics.
- *
- * Migrations folder resolution (precedence):
+ * Precedence:
  *   1. `MIGRATIONS_FOLDER` env var if set (operator override / boot script).
  *   2. `${apiRoot}/src/drizzle/migrations` (source tree — dev, tests, runner).
  *   3. `${apiRoot}/drizzle/migrations` (allinone production image — see
  *      Dockerfile.allinone line 165 which copies migrations to /app/drizzle).
  */
-export async function runMigrations(apiRoot: string): Promise<void> {
+function resolveMigrationsFolder(apiRoot: string): string {
   const candidates = [
     process.env.MIGRATIONS_FOLDER,
     path.resolve(apiRoot, 'src/drizzle/migrations'),
@@ -161,12 +145,41 @@ export async function runMigrations(apiRoot: string): Promise<void> {
       `Could not locate drizzle migrations folder (searched: ${candidates.join(', ')})`,
     );
   }
-  try {
-    await runMigrationsInProcess(migrationsFolder);
-  } catch (err) {
-    await reportMigrationFailure(err);
-    throw err;
+  return migrationsFolder;
+}
+
+/**
+ * Run post-restore / factory-reset database migrations.
+ *
+ * ROK-1322: routes through the SAME instrumented runner as the deploy-time
+ * boot path — `runBootMigrations` — so restore gets the identical invariant:
+ *   1. Refresh `games_dedup_audit` BEFORE migrate (the real 2026-05-14
+ *      incident-prevention: a data migration consuming a stale audit blows up).
+ *   2. Run the programmatic `migrate()` (the drizzle-kit CLI silently swallows
+ *      SQL errors — upstream drizzle-team/drizzle-orm#5601 — see ROK-1343).
+ *   3. `validateMigrationState` (journal-vs-applied + critical-table probe;
+ *      diagnostic-only, never throws) for the same phantom-migration visibility.
+ * Failures are captured to Sentry tagged `restore-migration` and flushed BEFORE
+ * re-throwing — instrumented inside `runBootMigrations`, so this call site adds
+ * no wrapper (avoids double-capture). The error still re-throws so callers keep
+ * their existing propagation semantics.
+ *
+ * `databaseUrl` is threaded from the caller (`backup.service` has it as
+ * `DATABASE_URL` from config); falls back to `process.env.DATABASE_URL`.
+ */
+export async function runMigrations(
+  apiRoot: string,
+  databaseUrl?: string,
+): Promise<void> {
+  const migrationsFolder = resolveMigrationsFolder(apiRoot);
+  const url = databaseUrl ?? process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error('DATABASE_URL is required for restore-time migrations');
   }
+  await runBootMigrations(url, {
+    migrationsFolder,
+    context: 'restore-migration',
+  });
 }
 
 /** Run bootstrap-admin script and extract password. */
