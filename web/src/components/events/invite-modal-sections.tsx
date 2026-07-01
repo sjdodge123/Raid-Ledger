@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { DiscordMemberSearchResult } from '../../lib/api-client';
 import { useEvent } from '../../hooks/use-events';
-import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 
 interface MemberListProps {
     members: DiscordMemberSearchResult[];
@@ -91,9 +91,10 @@ export function CopypastaSection({ eventId }: { eventId: number }) {
     const copypastaText = useCopypastaText(eventId);
 
     const handleCopy = () => {
-        navigator.clipboard.writeText(copypastaText)
-            .then(() => toast.success('Copied to clipboard!'))
-            .catch(() => toast.error('Failed to copy'));
+        void copyWithToast(copypastaText, {
+            success: 'Copied to clipboard!',
+            error: 'Failed to copy',
+        });
     };
 
     return (

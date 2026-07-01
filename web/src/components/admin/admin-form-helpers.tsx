@@ -1,5 +1,5 @@
 import type React from 'react';
-import { toast } from '../../lib/toast';
+import { copyWithToast } from '../../lib/clipboard';
 
 const EyeOffIcon = (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -50,8 +50,7 @@ export function TestResultBanner({ result }: { result: { success: boolean; messa
 
 export function CopyableInput({ value, onCopied }: { value: string; onCopied: string }) {
     const copyValue = async (): Promise<void> => {
-        try { await navigator.clipboard.writeText(value); toast.success(onCopied); }
-        catch { toast.error('Failed to copy'); }
+        await copyWithToast(value, { success: onCopied, error: 'Failed to copy' });
     };
     const handleKeyDown = (e: React.KeyboardEvent): void => {
         if (e.key === 'Enter') { e.preventDefault(); copyValue(); }
