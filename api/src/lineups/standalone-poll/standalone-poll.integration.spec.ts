@@ -117,6 +117,23 @@ async function addGameInterest(userId: number, gameId: number) {
   });
 }
 
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+/** PATCH /events/:id/reschedule as admin (moves the event in place). */
+function rescheduleReq(eventId: number, start: Date, end: Date) {
+  return testApp.request
+    .patch(`/events/${eventId}/reschedule`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ startTime: start.toISOString(), endTime: end.toISOString() });
+}
+
+/** POST /scheduling-polls/:matchId/complete as admin (locks the poll in). */
+function completeReq(matchId: number) {
+  return testApp.request
+    .post(`/scheduling-polls/${matchId}/complete`)
+    .set('Authorization', `Bearer ${adminToken}`);
+}
+
 /**
  * Poll the notifications table until a row with the given payload subtype
  * lands for the user, or the deadline elapses. The poll DMs from
@@ -567,44 +584,86 @@ describe(
   describeDuplicateReschedulingPoll,
 );
 
-// ── ROK-1034 AC5: Poll completion cancels linked event ───────────────
+// =====================================================================
+// ROK-1370: Reschedule-poll lock-in moves the event in place (no cancel)
+// =====================================================================
+//
+// The frontend reschedule-lock flow (use-scheduling-lock.ts) reschedules
+// the linked event in place — PATCH /events/:id/reschedule moves the time
+// and notifies signups — and THEN POST /scheduling-polls/:matchId/complete.
+// completeStandalonePoll() erroneously CANCELLED the just-rescheduled event
+// via a raw write, leaving it out of sync (cancelled, with no cancellation
+// notification). Lock-in must instead keep the event live at its winning
+// time and clear the reschedulingPollId linkage — same id, same signups.
+// (Supersedes the ROK-1034 AC5 "poll completion cancels linked event"
+// behavior, which this story intentionally reverses.)
 
-function describePollCompletion() {
-  it('should cancel linked event and clear rescheduling_poll_id when poll is completed', async () => {
-    const event = await createEvent('Complete Me', testApp.seed.game.id);
+/** Seed an event with the given signups, then open a linked reschedule poll. */
+async function seedLinkedPoll(signupUserIds: number[]) {
+  const event = await createEvent('Lock-in Event', testApp.seed.game.id);
+  for (const uid of signupUserIds) await addSignup(event.id, uid);
+  const pollRes = await postSchedulingPoll(adminToken, {
+    gameId: testApp.seed.game.id,
+    linkedEventId: event.id,
+  });
+  expect(pollRes.status).toBe(201);
+  return { event, matchId: pollRes.body.id as number };
+}
 
-    const pollRes = await postSchedulingPoll(adminToken, {
-      gameId: testApp.seed.game.id,
-      linkedEventId: event.id,
-    });
-    expect(pollRes.status).toBe(201);
+/** Drive the two-step lock-in: reschedule in place, then complete the poll. */
+async function lockInAtNewTime(eventId: number, matchId: number, start: Date) {
+  const rr = await rescheduleReq(
+    eventId,
+    start,
+    new Date(start.getTime() + TWO_HOURS_MS),
+  );
+  expect(rr.status).toBe(200);
+  const cr = await completeReq(matchId);
+  expect(cr.status).toBe(200);
+}
 
-    const matchId = pollRes.body.id as number;
+function describeRescheduleLockIn() {
+  it('keeps the linked event live at the winning time (no cancel, linkage cleared)', async () => {
+    const member = await loginAsMember('lockin-live');
+    const { event, matchId } = await seedLinkedPoll([member.userId]);
+    const newStart = new Date(Date.now() + 7 * 86_400_000);
 
-    // Complete the poll
-    const completeRes = await testApp.request
-      .post(`/scheduling-polls/${matchId}/complete`)
-      .set('Authorization', `Bearer ${adminToken}`);
+    await lockInAtNewTime(event.id, matchId, newStart);
 
-    expect(completeRes.status).toBe(200);
-
-    // Verify: original event should now have cancelledAt set
-    const [updatedEvent] = await testApp.db
+    const [after] = await testApp.db
       .select()
       .from(schema.events)
       .where(eq(schema.events.id, event.id));
+    expect(after.id).toBe(event.id);
+    expect(after.cancelledAt).toBeNull();
+    expect(new Date(after.duration[0]).getTime()).toBe(newStart.getTime());
+    expect((after as Record<string, unknown>).reschedulingPollId).toBeNull();
+  });
 
-    expect(updatedEvent.cancelledAt).not.toBeNull();
+  it('preserves existing signups and notifies each exactly once', async () => {
+    const member = await loginAsMember('lockin-notify');
+    const { event, matchId } = await seedLinkedPoll([member.userId]);
+    const newStart = new Date(Date.now() + 7 * 86_400_000);
 
-    // Verify: rescheduling_poll_id should be cleared
-    expect(
-      (updatedEvent as Record<string, unknown>).reschedulingPollId,
-    ).toBeNull();
+    await lockInAtNewTime(event.id, matchId, newStart);
+
+    const signups = await testApp.db
+      .select()
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, event.id));
+    expect(signups.map((s) => s.userId)).toContain(member.userId);
+
+    const notifs = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, member.userId));
+    const reschedules = notifs.filter((n) => n.type === 'event_rescheduled');
+    expect(reschedules).toHaveLength(1);
   });
 }
 describe(
-  'ROK-1034 AC5 — poll completion cancels linked event',
-  describePollCompletion,
+  'ROK-1370 — reschedule lock-in moves event in place',
+  describeRescheduleLockIn,
 );
 
 // ── ROK-1034 AC6: Poll expiry restores event ────────────────────────

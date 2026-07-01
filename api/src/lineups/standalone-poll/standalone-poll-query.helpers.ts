@@ -176,8 +176,18 @@ export async function clearReschedulingPollId(
     .where(eq(schema.events.id, eventId));
 }
 
-/** Complete a standalone poll: set match to 'scheduled', archive the lineup,
- *  and cancel any linked event. Returns linkedEventId if one was cancelled. */
+/**
+ * Complete a standalone poll: set match to 'scheduled', archive the lineup,
+ * and release any linked event's rescheduling lock. Returns linkedEventId if
+ * one was released.
+ *
+ * ROK-1370: the reschedule-lock flow moves the linked event IN PLACE to the
+ * winning time via PATCH /events/:id/reschedule (which keeps the event id +
+ * Discord Scheduled Event + signups and notifies signups) BEFORE calling this.
+ * We must therefore only clear `reschedulingPollId` here — cancelling the event
+ * (the old behavior) silently undid the reschedule and skipped notifications,
+ * leaving the just-rescheduled event out of sync.
+ */
 export async function completeStandalonePoll(
   db: Db,
   matchId: number,
@@ -212,22 +222,12 @@ export async function completeStandalonePoll(
       .set({ status: 'archived' })
       .where(eq(schema.communityLineups.id, match.lineupId));
     if (match.linkedEventId) {
-      await cancelLinkedEvent(tx, match.linkedEventId);
+      // ROK-1370: release the lock only — the event was already moved to the
+      // winning time in place. Do NOT cancel it.
+      await clearReschedulingPollId(tx, match.linkedEventId);
     }
   });
   return { ok: true, linkedEventId: match.linkedEventId ?? undefined };
-}
-
-/** Cancel a linked event and clear its reschedulingPollId. */
-async function cancelLinkedEvent(db: Db, eventId: number): Promise<void> {
-  await db
-    .update(schema.events)
-    .set({
-      cancelledAt: new Date(),
-      cancellationReason: 'Rescheduled via scheduling poll',
-      reschedulingPollId: null,
-    })
-    .where(eq(schema.events.id, eventId));
 }
 
 /** Find all active standalone polls (scheduling matches in standalone lineups). */
