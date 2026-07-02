@@ -302,15 +302,21 @@ function compensationDecision(
 
 /** Re-fetch our SE and report whether its actual start now equals the live row's
  *  start — i.e. the lock-in edit already repaired it. A 10070 (SE gone) or any
- *  fetch error returns false so compensation proceeds (ROK-1391, Codex HIGH). */
+ *  fetch error returns false so compensation proceeds (ROK-1391, Codex HIGH).
+ *  Uses the same generous bound as the guild-wide fetch: under the rate-limit
+ *  churn that motivated it, a merely-slow re-fetch must NOT read as "not repaired"
+ *  and delete a now-correct SE. */
 async function seRepairedToFreshStart(
   guild: Guild,
   seId: string,
   liveStartIso: string,
 ): Promise<boolean> {
   try {
-    const se = await timedDiscordCall('scheduledEvents.fetch', () =>
-      guild.scheduledEvents.fetch(seId),
+    const se = await timedDiscordCall(
+      'scheduledEvents.fetch',
+      () => guild.scheduledEvents.fetch(seId),
+      undefined,
+      GUILD_SE_FETCH_TIMEOUT_MS,
     );
     const actualStart = (se as { scheduledStartTimestamp?: number | null })
       ?.scheduledStartTimestamp;
