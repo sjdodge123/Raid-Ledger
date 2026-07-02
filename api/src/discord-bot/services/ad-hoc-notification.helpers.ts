@@ -88,18 +88,16 @@ async function resolveGame(
   return row ?? null;
 }
 
-/** Resolve voice channel with per-event override priority. */
+/** Resolve voice channel, honoring a voice-only per-event override (ROK-1389). */
 async function resolveVoice(
   deps: AdHocNotificationDeps,
   event: typeof schema.events.$inferSelect,
 ): Promise<string | null> {
-  return (
-    event.notificationChannelOverride ??
-    (await deps.channelResolver.resolveVoiceChannelForScheduledEvent(
-      event.gameId,
-      event.recurrenceGroupId,
-      event.ephemeralVoiceChannelId,
-    ))
+  return deps.channelResolver.resolveVoiceChannelHonoringOverride(
+    event.gameId,
+    event.recurrenceGroupId,
+    event.ephemeralVoiceChannelId,
+    event.notificationChannelOverride,
   );
 }
 

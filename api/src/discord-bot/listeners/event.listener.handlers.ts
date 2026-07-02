@@ -154,19 +154,18 @@ export async function resolveVoiceChannel(
   deps: EventListenerDeps,
   payload: EventPayload,
 ): Promise<string | null> {
-  if (payload.notificationChannelOverride) {
-    return payload.notificationChannelOverride;
-  }
   // ROK-1352: a live ephemeral channel wins, so an embed re-render on edit
   // doesn't rewrite the "Join Voice" link to the static/default channel.
   const ephemeralChannelId = await getEphemeralChannelId(
     deps.db,
     payload.eventId,
   );
-  return deps.channelResolver.resolveVoiceChannelForScheduledEvent(
+  // ROK-1389: honor a voice override only when it is a voice channel.
+  return deps.channelResolver.resolveVoiceChannelHonoringOverride(
     payload.gameId,
     payload.recurrenceGroupId,
     ephemeralChannelId,
+    payload.notificationChannelOverride,
   );
 }
 

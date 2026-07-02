@@ -218,13 +218,14 @@ async function enrichWithVoiceChannel(
   event: typeof schema.events.$inferSelect,
   eventData: EmbedEventData,
 ): Promise<void> {
+  // ROK-1389: honor a voice override only when it is actually a voice channel.
   const voiceChannelId =
-    event.notificationChannelOverride ??
-    (await channelResolver.resolveVoiceChannelForScheduledEvent(
+    await channelResolver.resolveVoiceChannelHonoringOverride(
       event.gameId,
       event.recurrenceGroupId,
       event.ephemeralVoiceChannelId,
-    ));
+      event.notificationChannelOverride,
+    );
   if (voiceChannelId) {
     eventData.voiceChannelId = voiceChannelId;
   }
