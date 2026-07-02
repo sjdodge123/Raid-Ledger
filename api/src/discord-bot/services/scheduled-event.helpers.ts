@@ -42,6 +42,7 @@ export async function timedDiscordCall<T>(
   operation: string,
   fn: () => Promise<T>,
   meta?: Record<string, string | number | null | undefined>,
+  timeoutMs: number = DISCORD_API_TIMEOUT_MS,
 ): Promise<T> {
   const start = performance.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -53,10 +54,10 @@ export async function timedDiscordCall<T>(
           () =>
             reject(
               new Error(
-                `Discord API timeout: ${operation} exceeded ${DISCORD_API_TIMEOUT_MS}ms`,
+                `Discord API timeout: ${operation} exceeded ${timeoutMs}ms`,
               ),
             ),
-          DISCORD_API_TIMEOUT_MS,
+          timeoutMs,
         );
       }),
     ]);

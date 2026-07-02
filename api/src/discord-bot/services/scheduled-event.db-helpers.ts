@@ -86,17 +86,6 @@ export async function getEventWithOverride(
   return event ?? null;
 }
 
-export async function saveScheduledEventId(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  seId: string,
-): Promise<void> {
-  await db
-    .update(schema.events)
-    .set({ discordScheduledEventId: seId })
-    .where(eq(schema.events.id, eventId));
-}
-
 export async function clearScheduledEventId(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
