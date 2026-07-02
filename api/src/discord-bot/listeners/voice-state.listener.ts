@@ -6,12 +6,16 @@ import {
   Optional,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   Events,
   type GuildMember,
   type Presence,
   type VoiceState,
 } from 'discord.js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import { reportBindingHealthWarnings } from '../services/channel-bindings-heal.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
@@ -83,6 +87,11 @@ export class VoiceStateListener implements OnApplicationShutdown {
     @Optional()
     @Inject(EphemeralVoiceService)
     private readonly ephemeralVoice: EphemeralVoiceService | null = null,
+    // ROK-1389: read-only binding-health WARN report at bot-ready. Optional so
+    // listener unit tests that build without the Drizzle provider simply skip it.
+    @Optional()
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema> | null = null,
   ) {}
 
   private get deps(): VoiceHandlerDeps {
@@ -116,12 +125,26 @@ export class VoiceStateListener implements OnApplicationShutdown {
     this.removeListeners(client);
     this.registerListeners(client);
     await this.voiceAttendanceService.recoverActiveSessions();
+    await this.reportBindingHealth();
     await recoverFromVoiceChannels(
       this.deps,
       (ch) => this.resolveBinding(ch),
       (ch, dm, gm) => handleChannelJoin(this.joinCtx, ch, dm, gm),
     );
     this.startCacheSweep();
+  }
+
+  /** ROK-1389: WARN about series voice bindings that resolve to the wrong
+   *  channel (pre-1372 residue shape / rotted recurrence group). Never mutates. */
+  private async reportBindingHealth(): Promise<void> {
+    try {
+      const guildId = this.clientService.getGuildId();
+      if (!this.db || !guildId) return;
+      const bindings = await this.channelBindingsService.getBindings(guildId);
+      await reportBindingHealthWarnings(this.db, bindings, this.logger);
+    } catch (err) {
+      this.logger.warn(`[binding-heal] health report failed: ${err}`);
+    }
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
