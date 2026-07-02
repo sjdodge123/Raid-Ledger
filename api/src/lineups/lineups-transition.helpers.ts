@@ -20,7 +20,6 @@ import {
 } from './lineups-query.helpers';
 import {
   applyStatusUpdate,
-  healClearedEventEmbeds,
   runMatchingAlgorithm,
   validateTransition,
 } from './lineups-lifecycle.helpers';
@@ -33,6 +32,7 @@ import {
 } from './lineups-notify-hooks.helpers';
 import type { LineupsGateway } from './lineups.gateway';
 import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
+import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 

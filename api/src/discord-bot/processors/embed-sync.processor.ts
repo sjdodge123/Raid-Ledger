@@ -81,7 +81,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     // any sync here (signup withdrawal, roster change, voice update) would
     // revert the card to a normal signup embed at the old time. Skip; the
     // lock-in / expiry UPDATED re-emit resumes syncing once the flag clears.
-    if (event.reschedulingPollId !== null) return;
+    if ((event.reschedulingPollId ?? null) !== null) return;
 
     const eventData = await buildEventData(
       this.db,

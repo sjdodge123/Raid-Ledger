@@ -20,10 +20,8 @@ import type { LineupNotificationService } from './lineup-notification.service';
 import type { LineupsGateway } from './lineups.gateway';
 import type { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import { findLineupById, findUserDisplayName } from './lineups-query.helpers';
-import {
-  applyStatusUpdate,
-  healClearedEventEmbeds,
-} from './lineups-lifecycle.helpers';
+import { applyStatusUpdate } from './lineups-lifecycle.helpers';
+import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
 import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { logAborted } from './lineups-activity.helpers';
