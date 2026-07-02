@@ -4,10 +4,12 @@
 import {
   findReconciliationCandidates,
   RECONCILIATION_BATCH_SIZE,
-  // ROK-1391 — not yet exported/reshaped on main; RED by construction.
+} from './scheduled-event.db-helpers';
+// ROK-1391 — create-time revalidation helpers live in their own module.
+import {
   getEventLiveState,
   saveScheduledEventId,
-} from './scheduled-event.db-helpers';
+} from './scheduled-event.revalidate';
 
 function createQueryChain(rows: unknown[] = []) {
   const chain: Record<string, jest.Mock> & { then?: unknown } = {};
@@ -106,8 +108,10 @@ describe('getEventLiveState (ROK-1391)', () => {
 
     const state = await getEventLiveState(mockDb, 7);
 
-    expect(state.reschedulingPollId).toBe('poll-7');
-    expect(state.cancelledAt).toBe('2026-07-04T12:00:00.000Z');
+    // getEventLiveState is nullable (row can be gone mid-flight); assert present.
+    expect(state).not.toBeNull();
+    expect(state?.reschedulingPollId).toBe('poll-7');
+    expect(state?.cancelledAt).toBe('2026-07-04T12:00:00.000Z');
   });
 });
 

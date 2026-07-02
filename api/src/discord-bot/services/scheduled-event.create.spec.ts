@@ -8,8 +8,11 @@
  *      actually created the SE, a confirmation fetch adopts the id instead of
  *      re-throwing (which would let the next tick create a duplicate).
  *
- * resolveVoiceForCreate, saveScheduledEventId and tryCreateNewEvent are mocked
- * so the spec stays at the unit level; the DB handle is a bare object.
+ * resolveVoiceForCreate, saveScheduledEventId, getEventLiveState and
+ * tryCreateNewEvent are mocked so the spec stays at the unit level; the DB
+ * handle is a bare object. ROK-1391: saveScheduledEventId now reports
+ * `{ bound }` and the create path re-reads live state post-bind, so both are
+ * mocked to the "no compensation" defaults (bound + no live flag).
  */
 import { Logger } from '@nestjs/common';
 import {
@@ -18,13 +21,18 @@ import {
   type CreatePreamble,
 } from './scheduled-event.create';
 import * as dbHelpers from './scheduled-event.db-helpers';
+import * as revalidate from './scheduled-event.revalidate';
 import * as discordOps from './scheduled-event.discord-ops';
 import type { ScheduledEventData } from './scheduled-event.helpers';
 
 jest.mock('./scheduled-event.db-helpers', () => ({
   ...jest.requireActual('./scheduled-event.db-helpers'),
   resolveVoiceForCreate: jest.fn().mockResolvedValue('voice-1'),
-  saveScheduledEventId: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('./scheduled-event.revalidate', () => ({
+  ...jest.requireActual('./scheduled-event.revalidate'),
+  saveScheduledEventId: jest.fn().mockResolvedValue({ bound: true }),
+  getEventLiveState: jest.fn().mockResolvedValue(null),
 }));
 jest.mock('./scheduled-event.discord-ops', () => ({
   ...jest.requireActual('./scheduled-event.discord-ops'),
@@ -36,8 +44,8 @@ const resolveVoiceForCreate =
     typeof dbHelpers.resolveVoiceForCreate
   >;
 const saveScheduledEventId =
-  dbHelpers.saveScheduledEventId as jest.MockedFunction<
-    typeof dbHelpers.saveScheduledEventId
+  revalidate.saveScheduledEventId as jest.MockedFunction<
+    typeof revalidate.saveScheduledEventId
   >;
 const tryCreateNewEvent = discordOps.tryCreateNewEvent as jest.MockedFunction<
   typeof discordOps.tryCreateNewEvent
@@ -93,9 +101,14 @@ function rlDesc(eventId: number): string {
   return `Event\n\nView event: https://rl.example/events/${eventId}`;
 }
 
+const getEventLiveState = revalidate.getEventLiveState as jest.MockedFunction<
+  typeof revalidate.getEventLiveState
+>;
+
 beforeEach(() => {
   resolveVoiceForCreate.mockReset().mockResolvedValue('voice-1');
-  saveScheduledEventId.mockReset().mockResolvedValue(undefined);
+  saveScheduledEventId.mockReset().mockResolvedValue({ bound: true });
+  getEventLiveState.mockReset().mockResolvedValue(null);
   tryCreateNewEvent.mockReset();
 });
 

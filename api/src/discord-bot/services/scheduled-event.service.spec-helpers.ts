@@ -83,11 +83,20 @@ export function createSelectChainNoLimit(
   return chain;
 }
 
-/** Helper to build a chainable Drizzle update mock. */
+/**
+ * Helper to build a chainable Drizzle update mock. `.where()` is BOTH awaitable
+ * (unconditional clears / the conditional-clear path resolve undefined) AND
+ * carries a `.returning()` (the ROK-1391 conditional `saveScheduledEventId`
+ * binds and reads rows back) that reports a single bound row → `{ bound: true }`.
+ */
 export function createUpdateChain(): Record<string, jest.Mock> {
   const chain: Record<string, jest.Mock> = {};
   chain.set = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockResolvedValue(undefined);
+  const whereResult = Promise.resolve(undefined) as Promise<undefined> & {
+    returning: jest.Mock;
+  };
+  whereResult.returning = jest.fn().mockResolvedValue([{ id: 1 }]);
+  chain.where = jest.fn().mockReturnValue(whereResult);
   return chain;
 }
 
