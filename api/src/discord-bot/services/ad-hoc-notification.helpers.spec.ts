@@ -6,6 +6,7 @@
  */
 import {
   buildEmbedEventData,
+  resolveNotificationChannel,
   toActiveParticipants,
   toInactiveParticipants,
   type AdHocNotificationDeps,
@@ -166,6 +167,173 @@ describe('buildEmbedEventData — participant inclusion (ROK-680)', () => {
     const byName = new Map(result!.signupMentions!.map((m) => [m.username, m]));
     expect(byName.get('A')!.status).toBeUndefined();
     expect(byName.get('B')!.status).toBe('left');
+  });
+});
+
+describe('resolveNotificationChannel — routing priority (ROK-1390)', () => {
+  /** A game-announcements sibling binding row for getBindings(). */
+  type AnnounceBinding = {
+    bindingPurpose: string;
+    gameId: number | null;
+    channelId: string;
+  };
+
+  function makeDeps(opts: {
+    binding: unknown;
+    seriesChannel?: string | null;
+    guildBindings?: AnnounceBinding[];
+    defaultChannel?: string | null;
+  }): AdHocNotificationDeps {
+    return {
+      db: {} as AdHocNotificationDeps['db'],
+      channelBindingsService: {
+        getBindingById: jest.fn().mockResolvedValue(opts.binding),
+        getBindings: jest.fn().mockResolvedValue(opts.guildBindings ?? []),
+        getChannelForSeries: jest
+          .fn()
+          .mockResolvedValue(opts.seriesChannel ?? null),
+      } as unknown as AdHocNotificationDeps['channelBindingsService'],
+      channelResolver: {} as AdHocNotificationDeps['channelResolver'],
+      settingsService: {
+        getDiscordBotDefaultChannel: jest
+          .fn()
+          .mockResolvedValue(opts.defaultChannel ?? 'default-ch'),
+      } as unknown as AdHocNotificationDeps['settingsService'],
+    };
+  }
+
+  const seriesMock = (deps: AdHocNotificationDeps): jest.Mock =>
+    deps.channelBindingsService.getChannelForSeries as unknown as jest.Mock;
+
+  it('routes a series-linked quick-play to the series announce slot over game/default (RED)', async () => {
+    const deps = makeDeps({
+      binding: {
+        id: 'b1',
+        guildId: 'g1',
+        gameId: 10,
+        recurrenceGroupId: 'series-1',
+        config: null,
+      },
+      seriesChannel: 'series-ch',
+      guildBindings: [
+        {
+          bindingPurpose: 'game-announcements',
+          gameId: 10,
+          channelId: 'game-ch',
+        },
+      ],
+      defaultChannel: 'default-ch',
+    });
+
+    const result = await resolveNotificationChannel(deps, 'b1');
+
+    // Series announce tier must win over the game-announcements/default channels.
+    expect(result).toBe('series-ch');
+  });
+
+  it('keeps an explicit config.notificationChannelId ahead of the series slot (GREEN pin)', async () => {
+    const deps = makeDeps({
+      binding: {
+        id: 'b1',
+        guildId: 'g1',
+        gameId: 10,
+        recurrenceGroupId: 'series-1',
+        config: { notificationChannelId: 'cfg-ch' },
+      },
+      seriesChannel: 'series-ch',
+    });
+
+    const result = await resolveNotificationChannel(deps, 'b1');
+
+    expect(result).toBe('cfg-ch');
+    expect(seriesMock(deps)).not.toHaveBeenCalled();
+  });
+
+  it('falls through to game-announcements when the series has no announce slot bound', async () => {
+    const deps = makeDeps({
+      binding: {
+        id: 'b1',
+        guildId: 'g1',
+        gameId: 10,
+        recurrenceGroupId: 'series-1',
+        config: null,
+      },
+      seriesChannel: null, // no series announce slot → graceful fallthrough
+      guildBindings: [
+        {
+          bindingPurpose: 'game-announcements',
+          gameId: 10,
+          channelId: 'game-ch',
+        },
+      ],
+      defaultChannel: 'default-ch',
+    });
+
+    const result = await resolveNotificationChannel(deps, 'b1');
+
+    expect(result).toBe('game-ch');
+  });
+
+  it('resolves the game-announcements tier using the event EFFECTIVE gameId, not the binding gameId (RED)', async () => {
+    // Binding is bound to game 10, but the live event effectively resolved to
+    // game 99 (runtime game fallback). Announce routing must follow the event's
+    // effective game. Cast bridges the pre-fix 2-arg signature (dev adds param).
+    const deps = makeDeps({
+      binding: {
+        id: 'b1',
+        guildId: 'g1',
+        gameId: 10,
+        recurrenceGroupId: null,
+        config: null,
+      },
+      seriesChannel: null,
+      guildBindings: [
+        {
+          bindingPurpose: 'game-announcements',
+          gameId: 99,
+          channelId: 'ann-99-ch',
+        },
+      ],
+      defaultChannel: 'default-ch',
+    });
+
+    // The current 2-arg signature is structurally assignable to the target
+    // 3-arg form (the dev adds the optional effectiveGameId param). No assertion
+    // needed — under current code the extra arg is ignored (uses binding.gameId).
+    const resolveWithEffective: (
+      d: AdHocNotificationDeps,
+      bindingId: string,
+      effectiveGameId?: number | null,
+    ) => Promise<string | null> = resolveNotificationChannel;
+
+    const result = await resolveWithEffective(deps, 'b1', 99);
+
+    expect(result).toBe('ann-99-ch');
+  });
+
+  it('falls back to the binding gameId for the announce tier when no effective gameId is supplied (GREEN pin)', async () => {
+    const deps = makeDeps({
+      binding: {
+        id: 'b1',
+        guildId: 'g1',
+        gameId: 10,
+        recurrenceGroupId: null,
+        config: null,
+      },
+      seriesChannel: null,
+      guildBindings: [
+        {
+          bindingPurpose: 'game-announcements',
+          gameId: 10,
+          channelId: 'ann-10-ch',
+        },
+      ],
+      defaultChannel: 'default-ch',
+    });
+
+    const result = await resolveNotificationChannel(deps, 'b1');
+
+    expect(result).toBe('ann-10-ch');
   });
 });
 

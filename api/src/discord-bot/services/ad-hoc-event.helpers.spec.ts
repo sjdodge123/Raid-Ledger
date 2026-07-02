@@ -114,6 +114,49 @@ describe('buildBindingClause — effectiveGameId null safety (ROK-968)', () => {
   });
 });
 
+describe('buildBindingClause — series-linked sibling suppression (ROK-1390)', () => {
+  let db: MockDb;
+  const now = new Date('2026-03-24T20:00:00Z');
+
+  beforeEach(() => {
+    db = createDrizzleMock();
+  });
+
+  it('matches series-linked siblings by recurrence_group_id in the suppression subquery (RED)', async () => {
+    // A live series event bound to the same physical voice channel — possibly
+    // under a general-lobby purpose after a bind flip — must still suppress
+    // quick-play. The sibling subquery has to reach series-linked rows by their
+    // recurrence_group_id, not only binding_purpose='game-voice-monitor'.
+    db.limit.mockResolvedValueOnce([]);
+
+    await findActiveScheduledEvent(
+      db as never,
+      'binding-A',
+      10,
+      now,
+      'voice-channel-1',
+    );
+
+    const sqlText = sqlToString(db.where.mock.calls[0]?.[0]);
+    expect(sqlText).toContain('recurrence_group_id');
+  });
+
+  it('preserves the base channel_bindings sibling match (GREEN pin)', async () => {
+    db.limit.mockResolvedValueOnce([]);
+
+    await findActiveScheduledEvent(
+      db as never,
+      'binding-A',
+      10,
+      now,
+      'voice-channel-1',
+    );
+
+    const sqlText = sqlToString(db.where.mock.calls[0]?.[0]);
+    expect(sqlText).toContain('channel_bindings');
+  });
+});
+
 describe('createAdHocEventRow — title resolution (ROK-817)', () => {
   let db: MockDb;
 
