@@ -232,22 +232,6 @@ export class DiscordEventListener {
     );
   }
 
-  private fireScheduledEventCreate(payload: EventPayload): void {
-    this.scheduledEventService
-      .createScheduledEvent(
-        payload.eventId,
-        payload.event,
-        payload.gameId,
-        payload.isAdHoc,
-        payload.notificationChannelOverride,
-      )
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `Failed to create scheduled event for ${payload.eventId}: ${String(err)}`,
-        );
-      });
-  }
-
   private async sendGameAffinityNotifications(
     payload: EventPayload,
     posted: boolean,

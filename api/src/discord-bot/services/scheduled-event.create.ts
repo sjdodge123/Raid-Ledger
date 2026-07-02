@@ -2,11 +2,18 @@ import type { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
+import { resolveVoiceForCreate } from './scheduled-event.db-helpers';
 import {
-  resolveVoiceForCreate,
+  getEventLiveState,
   saveScheduledEventId,
-} from './scheduled-event.db-helpers';
-import { tryCreateNewEvent } from './scheduled-event.discord-ops';
+  clearScheduledEventIdBySeId,
+  resolveCreateEntryGuard,
+  type EventLiveState,
+} from './scheduled-event.revalidate';
+import {
+  tryCreateNewEvent,
+  tryDeleteEvent,
+} from './scheduled-event.discord-ops';
 import { withCapacityRecovery } from './scheduled-event.capacity';
 import {
   findExistingGuildSE,
@@ -15,6 +22,7 @@ import {
 } from './scheduled-event.gc.helpers';
 import {
   buildScheduledEventName,
+  timedDiscordCall,
   type ScheduledEventData,
 } from './scheduled-event.helpers';
 
@@ -47,7 +55,13 @@ export class GuildSECache {
 
   async get(): Promise<GuildSEShape[]> {
     if (this.cached) return this.cached;
-    const all = await this.guild.scheduledEvents.fetch();
+    // ROK-1391: bound the guild-wide fetch — un-timed it could hold a create in
+    // flight for minutes behind a rate limit, the root-cause stall that let a
+    // stale-payload create land after a newer poll-start teardown. A timeout
+    // propagates to the caller's warn/skip path; reconcile heals on the next tick.
+    const all = await timedDiscordCall('scheduledEvents.fetch', () =>
+      this.guild.scheduledEvents.fetch(),
+    );
     this.cached = [...all.values()] as GuildSEShape[];
     return this.cached;
   }
@@ -83,6 +97,18 @@ export async function createScheduledEventIdempotent(
   preamble: CreatePreamble,
   cache?: GuildSECache,
 ): Promise<void> {
+  // ROK-1391: revalidate against live state at create time — a fire-and-forget
+  // create can carry a stale pre-reschedule payload minutes after the row moved.
+  // Skip on an open poll / cancellation; substitute the fresh row time otherwise.
+  const guard = resolveCreateEntryGuard(
+    await getEventLiveState(db, eventId),
+    eventData,
+  );
+  if (guard.skipReason) {
+    logger.warn(`Skip SE ${eventId}: ${guard.skipReason}`);
+    return;
+  }
+  eventData = guard.eventData;
   const vc = await resolveVoiceForCreate(
     db,
     eventId,
@@ -97,7 +123,9 @@ export async function createScheduledEventIdempotent(
   const description = await preamble.describe(eventId, eventData);
   const seCache = cache ?? new GuildSECache(guild);
 
-  if (await adoptExistingGuildSE(db, logger, eventId, eventData, seCache)) {
+  if (
+    await adoptExistingGuildSE(guild, db, logger, eventId, eventData, seCache)
+  ) {
     return;
   }
 
@@ -125,6 +153,7 @@ export async function createScheduledEventIdempotent(
 /** Pre-create liveness check: adopt a live guild SE matching this event's
  *  title+start, skipping the create. Returns true when adopted (ROK-1347). */
 async function adoptExistingGuildSE(
+  guild: Guild,
   db: PostgresJsDatabase<typeof schema>,
   logger: Logger,
   eventId: number,
@@ -151,7 +180,7 @@ async function adoptExistingGuildSE(
     return false;
   }
   logger.warn(`Skip SE ${eventId}: live guild SE ${existing.id} matches`);
-  await saveScheduledEventId(db, eventId, existing.id);
+  await bindOrCompensate(guild, db, logger, eventId, existing.id, eventData);
   return true;
 }
 
@@ -171,6 +200,7 @@ interface CreateAttempt {
  *  create a duplicate (ROK-1347). */
 async function createOrAdoptOnTimeout(a: CreateAttempt): Promise<void> {
   const { guild, db, logger, eventId, eventData, vc, description, seCache } = a;
+  let seId: string;
   try {
     const se = await tryCreateNewEvent(
       guild,
@@ -179,7 +209,7 @@ async function createOrAdoptOnTimeout(a: CreateAttempt): Promise<void> {
       vc,
       description,
     );
-    await saveScheduledEventId(db, eventId, se.id);
+    seId = se.id;
     seCache.invalidate();
   } catch (err) {
     if (!isTimeoutError(err)) throw err;
@@ -200,6 +230,52 @@ async function createOrAdoptOnTimeout(a: CreateAttempt): Promise<void> {
     logger.warn(
       `Adopt SE ${confirmed.id} for event ${eventId} after create timeout`,
     );
-    await saveScheduledEventId(db, eventId, confirmed.id);
+    seId = confirmed.id;
   }
+  await bindOrCompensate(guild, db, logger, eventId, seId, eventData);
+}
+
+/**
+ * Post-create/adopt reconciliation for the reschedule-poll lock-in race
+ * (ROK-1391). ORDERING IS LOAD-BEARING: conditional-bind FIRST, THEN re-read
+ * live state, THEN compensate. Binding before the re-read (Dekker-style
+ * write-before-read) closes the interleave where a concurrent poll-start
+ * teardown reads the binding as NULL and returns early, then our bind lands and
+ * a flagged-poll SE survives. When the bind lost the row, or the row now carries
+ * an open poll / cancellation / a different start than the SE we created, delete
+ * our SE and clear only the binding that still points at it.
+ */
+async function bindOrCompensate(
+  guild: Guild,
+  db: PostgresJsDatabase<typeof schema>,
+  logger: Logger,
+  eventId: number,
+  seId: string,
+  eventData: ScheduledEventData,
+): Promise<void> {
+  const { bound } = await saveScheduledEventId(db, eventId, seId);
+  const live = await getEventLiveState(db, eventId);
+  if (!shouldCompensate(bound, live, eventData.startTime)) return;
+  logger.warn(
+    `Compensating SE ${seId} for event ${eventId}: stale after bind ` +
+      `(bound=${bound}, poll=${live?.reschedulingPollId ?? 'none'})`,
+  );
+  await tryDeleteEvent(guild, eventId, seId);
+  await clearScheduledEventIdBySeId(db, seId);
+}
+
+/** True when a just-bound SE must be rolled back: the bind lost the row, or the
+ *  live row is now flagged/cancelled or points at a different start (ROK-1391). */
+function shouldCompensate(
+  bound: boolean,
+  live: EventLiveState | null,
+  createdStartIso: string,
+): boolean {
+  if (!bound) return true;
+  if (!live) return false;
+  if (live.reschedulingPollId != null) return true;
+  if (live.cancelledAt != null) return true;
+  return (
+    new Date(live.startIso).getTime() !== new Date(createdStartIso).getTime()
+  );
 }
