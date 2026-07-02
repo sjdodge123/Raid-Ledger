@@ -17,6 +17,7 @@ import type {
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { VALID_TRANSITIONS, VALID_REVERSIONS } from './lineups-query.helpers';
 import {
   computeTransitionDeadline,
@@ -102,6 +103,7 @@ export async function applyStatusUpdate(
   id: number,
   dto: UpdateLineupStatusDto,
   lineup: typeof schema.communityLineups.$inferSelect,
+  onEventsCleared?: (eventIds: number[]) => void,
 ): Promise<Date | null> {
   const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
   const values = {
@@ -141,12 +143,40 @@ export async function applyStatusUpdate(
   // and `auto_advance_paused_at`, so a lost race is safe.
   await phaseQueue.cancelGraceAdvance(id);
   if (dto.status === 'archived') {
-    await clearLinkedEventsByLineup(db, id);
+    const clearedEventIds = await clearLinkedEventsByLineup(db, id);
+    // ROK-1370: poll expiry/abort just cleared reschedulingPollId — hand the
+    // cleared events to the caller so the stuck RESCHEDULING embed heals.
+    if (clearedEventIds.length > 0) onEventsCleared?.(clearedEventIds);
   }
   // ROK-1363: return the freshly-computed deadline so callers (notably
   // `runStatusTransition`) thread the NEW voting deadline into `fireVotingOpen`
   // instead of the stale pre-update value off the loaded row.
   return phaseDeadline;
+}
+
+/**
+ * Build the `onEventsCleared` callback for `applyStatusUpdate` (ROK-1370):
+ * enqueue an embed re-sync per cleared event so a poll that expires (or a
+ * lineup aborted mid-poll) doesn't leave the channel embed stuck on the
+ * RESCHEDULING card. The SE itself is recreated by the reconciliation cron.
+ * Fire-and-forget; queue absence (spec contexts) is a no-op.
+ */
+export function healClearedEventEmbeds(
+  embedSyncQueue: EmbedSyncQueueService | undefined,
+  logger: Logger,
+): (eventIds: number[]) => void {
+  return (eventIds) => {
+    if (!embedSyncQueue) return;
+    for (const eventId of eventIds) {
+      embedSyncQueue
+        .enqueue(eventId, 'reschedule-poll-cleared')
+        .catch((err: unknown) =>
+          logger.warn(
+            `Embed heal enqueue failed for event ${eventId}: ${String(err)}`,
+          ),
+        );
+    }
+  };
 }
 
 /** Run the matching algorithm (never blocks the caller). */

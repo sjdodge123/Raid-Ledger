@@ -20,6 +20,7 @@ import {
 } from './lineups-query.helpers';
 import {
   applyStatusUpdate,
+  healClearedEventEmbeds,
   runMatchingAlgorithm,
   validateTransition,
 } from './lineups-lifecycle.helpers';
@@ -31,6 +32,7 @@ import {
   fireDecidedNotifications,
 } from './lineups-notify-hooks.helpers';
 import type { LineupsGateway } from './lineups.gateway';
+import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -41,6 +43,8 @@ export interface TransitionDeps {
   lineupNotifications: LineupNotificationService;
   lineupsGateway: LineupsGateway;
   logger: Logger;
+  /** ROK-1370: heals RESCHEDULING embeds when an archive clears linked polls. */
+  embedSyncQueue?: EmbedSyncQueueService;
 }
 
 /**
@@ -76,6 +80,7 @@ export async function runStatusTransition(
     id,
     dto,
     lineup,
+    healClearedEventEmbeds(deps.embedSyncQueue, deps.logger),
   );
   // ROK-1118: emit immediately after the conditional UPDATE succeeds so
   // subscribed clients see the phase flip without polling. The timestamp
