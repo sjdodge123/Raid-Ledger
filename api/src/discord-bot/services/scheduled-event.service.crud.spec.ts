@@ -69,7 +69,7 @@ describe('createScheduledEvent — happy path & skip conditions', () => {
   });
 
   it('skips when no voice channel is resolved (AC-10)', async () => {
-    mocks.channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+    mocks.channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
       null,
     );
     await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
@@ -117,19 +117,19 @@ describe('createScheduledEvent — DB persistence & edge cases', () => {
   it('uses gameId to resolve the voice channel', async () => {
     await mocks.service.createScheduledEvent(42, baseEventData, 99, false);
     expect(
-      mocks.channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(99, null, null);
+      mocks.channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(99, null, null, undefined);
   });
 
   it('handles null gameId gracefully', async () => {
     await mocks.service.createScheduledEvent(42, baseEventData, null, false);
     expect(
-      mocks.channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(null, null, null);
+      mocks.channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(null, null, null, undefined);
     expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalled();
   });
 
-  it('uses voiceChannelOverride instead of resolver when provided (ROK-599)', async () => {
+  it('threads voiceChannelOverride through the honoring resolver (ROK-599, ROK-1389)', async () => {
     await mocks.service.createScheduledEvent(
       42,
       baseEventData,
@@ -137,9 +137,11 @@ describe('createScheduledEvent — DB persistence & edge cases', () => {
       false,
       'override-vc-456',
     );
+    // The override is honored by the shared resolver (voice channel) and applied
+    // to the Discord SE, rather than the caller short-circuiting the resolver.
     expect(
-      mocks.channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).not.toHaveBeenCalled();
+      mocks.channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(99, null, null, 'override-vc-456');
     expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
       expect.objectContaining({ channel: 'override-vc-456' }),
     );
