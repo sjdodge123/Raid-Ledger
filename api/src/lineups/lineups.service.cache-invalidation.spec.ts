@@ -29,6 +29,7 @@ import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { TasteProfileService } from '../taste-profile/taste-profile.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
 import { LineupsGateway } from './lineups.gateway';
 import { TiebreakerService } from './tiebreaker/tiebreaker.service';
@@ -130,6 +131,10 @@ async function buildHarness(
       {
         provide: DiscordBotClientService,
         useValue: { getGuild: jest.fn().mockReturnValue(null) },
+      },
+      {
+        provide: EmbedSyncQueueService,
+        useValue: { enqueue: jest.fn().mockResolvedValue(undefined) },
       },
       {
         provide: TasteProfileService,
