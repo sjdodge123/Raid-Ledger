@@ -310,12 +310,7 @@ export class ScheduledEventService {
     gameId?: number | null,
   ): Promise<void> {
     const d = await desc(this.settingsService, eventId, eventData);
-    const vc = await resolveVoiceForEdit(
-      guild,
-      event,
-      gameId,
-      this.channelResolver,
-    );
+    const vc = await resolveVoiceForEdit(event, gameId, this.channelResolver);
     const name = await resolveEditedScheduledEventName(event, eventData, () =>
       this.settingsService.getDefaultTimezone(),
     );

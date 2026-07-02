@@ -18,10 +18,11 @@ import type { ScheduledEventRecord } from './scheduled-event.db-helpers';
 type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
 interface VoiceChannelResolver {
-  resolveVoiceChannelForScheduledEvent(
+  resolveVoiceChannelHonoringOverride(
     gameId?: number | null,
     recurrenceGroupId?: string | null,
     ephemeralChannelId?: string | null,
+    override?: string | null,
   ): Promise<string | null>;
 }
 
@@ -215,26 +216,21 @@ export async function tryEditDescription(
 }
 
 /**
- * Resolve the voice channel for a scheduled event edit (ROK-716).
- * If notificationChannelOverride is set and is a voice channel, use it.
- * If it's a text channel, fall back to the channel resolver.
- * If it's not in cache, use it optimistically (may be an uncached voice channel).
+ * Resolve the voice channel for a scheduled event edit (ROK-716, ROK-1389).
+ * Delegates to the shared voice-aware resolver so the voice-vs-text override
+ * guard lives in exactly ONE place (ChannelResolverService); a voice override
+ * wins, a cached text override falls through, an uncached override is optimistic.
  */
 export async function resolveVoiceForEdit(
-  guild: Guild,
   event: ScheduledEventRecord,
   gameId: number | null | undefined,
   channelResolver: VoiceChannelResolver,
 ): Promise<string | null> {
-  const override = event.notificationChannelOverride;
-  if (override) {
-    const cached = guild.channels.cache.get(override);
-    if (!cached || cached.isVoiceBased()) return override;
-  }
-  return channelResolver.resolveVoiceChannelForScheduledEvent(
+  return channelResolver.resolveVoiceChannelHonoringOverride(
     gameId,
     event.recurrenceGroupId,
     event.ephemeralVoiceChannelId,
+    event.notificationChannelOverride,
   );
 }
 
