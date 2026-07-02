@@ -7,6 +7,8 @@ import {
   makeDiscordApiError,
   baseEventData,
   PAST,
+  FUTURE,
+  FUTURE_END,
   type ScheduledEventMocks,
 } from './scheduled-event.service.spec-helpers';
 import { buildScheduledEventName } from './scheduled-event.helpers';
@@ -497,5 +499,117 @@ describe('updateDescription', () => {
     await expect(
       mocks.service.updateDescription(42, baseEventData),
     ).resolves.not.toThrow();
+  });
+});
+
+// ROK-1391 — the create entry guard reads live state (reschedule flag,
+// cancellation, fresh row time) once, after the id precheck. All cases below
+// are RED on main (no guard yet). A single combined events-row object backs
+// every mocked SELECT so getScheduledEventId / getEventLiveState /
+// getRecurrenceAndEphemeral each read the fields they need.
+describe('createScheduledEvent — reschedule-poll entry guard (ROK-1391)', () => {
+  let mocks: ScheduledEventMocks;
+
+  beforeEach(async () => {
+    mocks = await setupScheduledEventTestModule();
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  interface LiveRow {
+    discordScheduledEventId: string | null;
+    reschedulingPollId: string | null;
+    cancelledAt: string | null;
+    startIso: string;
+    endIso: string;
+    recurrenceGroupId: string | null;
+    ephemeralVoiceChannelId: string | null;
+  }
+
+  function makeLive(overrides: Partial<LiveRow> = {}): LiveRow {
+    return {
+      discordScheduledEventId: null,
+      reschedulingPollId: null,
+      cancelledAt: null,
+      startIso: FUTURE.toISOString(),
+      endIso: FUTURE_END.toISOString(),
+      recurrenceGroupId: null,
+      ephemeralVoiceChannelId: null,
+      ...overrides,
+    };
+  }
+
+  function armDb(live: LiveRow) {
+    mocks.mockDb.select.mockReturnValue(mocks.createSelectChain([live]));
+    const returning = jest.fn().mockResolvedValue([{ id: 42 }]);
+    const chain: Record<string, jest.Mock> = {
+      set: jest.fn(),
+      where: jest.fn(),
+      returning,
+    };
+    chain.set.mockReturnValue(chain);
+    chain.where.mockReturnValue(chain);
+    mocks.mockDb.update.mockReturnValue(chain);
+  }
+
+  it('skips the create when the event has an open reschedule poll', async () => {
+    armDb(makeLive({ reschedulingPollId: 'poll-1' }));
+    await mocks.service.createScheduledEvent(
+      42,
+      { ...baseEventData },
+      1,
+      false,
+    );
+    expect(mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
+  });
+
+  it('skips the create when the event is cancelled', async () => {
+    armDb(makeLive({ cancelledAt: new Date().toISOString() }));
+    await mocks.service.createScheduledEvent(
+      42,
+      { ...baseEventData },
+      1,
+      false,
+    );
+    expect(mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
+  });
+
+  it('substitutes the fresh row start/end when the payload time has drifted', async () => {
+    const freshStart = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    const freshEnd = new Date(freshStart.getTime() + 2 * 60 * 60 * 1000);
+    armDb(
+      makeLive({
+        startIso: freshStart.toISOString(),
+        endIso: freshEnd.toISOString(),
+      }),
+    );
+    await mocks.service.createScheduledEvent(
+      42,
+      { ...baseEventData },
+      1,
+      false,
+    );
+    expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scheduledStartTime: freshStart,
+        scheduledEndTime: freshEnd,
+      }),
+    );
+  });
+
+  it('re-applies the past-start check after substitution and skips a now-past fresh start', async () => {
+    armDb(
+      makeLive({
+        startIso: PAST.toISOString(),
+        endIso: FUTURE_END.toISOString(),
+      }),
+    );
+    await mocks.service.createScheduledEvent(
+      42,
+      { ...baseEventData },
+      1,
+      false,
+    );
+    expect(mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
   });
 });
