@@ -58,11 +58,21 @@ async function resolveGameId(ctx: TestContext): Promise<number> {
 /** Fetch a guild Scheduled Event by title substring (HTTP, not cache). */
 async function findScheduledEventByTitle(
   title: string,
-): Promise<{ id: string; status: GuildScheduledEventStatus } | null> {
+): Promise<{
+  id: string;
+  status: GuildScheduledEventStatus;
+  startsAtMs: number | null;
+} | null> {
   const guild = getGuild();
   const events = await guild.scheduledEvents.fetch();
   const match = events.find((se) => se.name.includes(title));
-  return match ? { id: match.id, status: match.status } : null;
+  return match
+    ? {
+        id: match.id,
+        status: match.status,
+        startsAtMs: match.scheduledStartAt?.getTime() ?? null,
+      }
+    : null;
 }
 
 /** Open a reschedule poll linked to the event. */
@@ -191,12 +201,23 @@ const lockInRestoresEventRepeatably: SmokeTest = {
           ctx.config.timeoutMs,
         );
 
+        const expectedStartMs = Date.now() + minutes * 60_000;
         await lockIn(ctx, ev.id, poll.id, minutes);
 
-        // Embed back to the live card and the Scheduled Event recreated.
+        // Embed back to the live card and the Scheduled Event recreated AT
+        // THE NEW TIME — presence alone would false-pass on a stale-time SE
+        // (the exact regression this test exists to catch).
         await waitForLiveEmbed(ch.channelId, ev.title, ctx.config.timeoutMs);
         await pollForCondition(
-          () => findScheduledEventByTitle(ev.title),
+          async () => {
+            const se = await findScheduledEventByTitle(ev.title);
+            if (!se || se.startsAtMs === null) return null;
+            // ±3 min tolerance: expectedStartMs is stamped just before the
+            // reschedule PATCH, so only seconds of processing skew apply.
+            return Math.abs(se.startsAtMs - expectedStartMs) < 3 * 60_000
+              ? se
+              : null;
+          },
           ctx.config.timeoutMs,
           { intervalMs: 2000 },
         );

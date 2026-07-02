@@ -27,7 +27,13 @@ import { fetchCandidateEvents } from '../../notifications/event-reminder.helpers
 import {
   findStartCandidates,
   findCompletionCandidates,
+  findReconciliationCandidates,
 } from '../../discord-bot/services/scheduled-event.db-helpers';
+import { findCreateCandidates } from '../../discord-bot/services/ephemeral-voice.db-helpers';
+import { findLiveEventsInNoShowWindow } from '../../notifications/live-noshow.helpers';
+import { RoleGapAlertService } from '../../notifications/role-gap-alert.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -355,3 +361,140 @@ function describeCompleteAuth() {
   });
 }
 describe('ROK-1370 P2 — complete-poll authorization', describeCompleteAuth);
+
+// =====================================================================
+// ROK-1370 review round — the adversarial review found four MORE query
+// paths that fired at the OLD time during an open poll (SE reconciliation,
+// ephemeral-voice create scan, live no-show window, role-gap alerts) plus
+// two lifecycle-emit gaps. Regression coverage for each.
+// =====================================================================
+
+/** Poll (≤2s) until `check` passes — the lifecycle emits are fire-and-forget
+ *  (`.catch(noop)`, not awaited by the HTTP handler), so assertions must wait
+ *  for the microtask chain to settle instead of asserting synchronously. */
+async function waitForCondition(check: () => boolean): Promise<boolean> {
+  for (let i = 0; i < 40; i++) {
+    if (check()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return check();
+}
+
+function describeReviewSuppression() {
+  it('SE-reconciliation candidates exclude an event while its poll is open', async () => {
+    // Future start, no bound SE (the RESCHEDULING teardown just cleared it).
+    const event = await createEvent('Reconcile Scan');
+    await assertSuppressedWhilePolling(event.id, () =>
+      findReconciliationCandidates(testApp.db),
+    );
+  });
+
+  it('ephemeral-voice create candidates exclude an event while its poll is open', async () => {
+    const start = new Date(Date.now() + 5 * 60 * 1000);
+    const event = await createEvent('Ephemeral Create', {
+      duration: [start, new Date(start.getTime() + TWO_HOURS_MS)],
+    });
+    await assertSuppressedWhilePolling(event.id, () =>
+      findCreateCandidates(testApp.db, new Date(), 10 * 60 * 1000),
+    );
+  });
+
+  it('live no-show window excludes an event while its poll is open', async () => {
+    // Started 10 minutes ago, still running — inside the phase-1 window.
+    const start = new Date(Date.now() - 10 * 60 * 1000);
+    const event = await createEvent('NoShow Window', {
+      duration: [start, new Date(Date.now() + 60 * 60 * 1000)],
+    });
+    await assertSuppressedWhilePolling(event.id, () =>
+      findLiveEventsInNoShowWindow(testApp.db, new Date()),
+    );
+  });
+
+  it('role-gap candidates exclude an event while its poll is open', async () => {
+    // ROLE_GAP_WINDOW centers 4h out (±15m); probe the service's query.
+    const start = new Date(Date.now() + 4 * 60 * 60 * 1000);
+    const event = await createEvent('Role Gap', {
+      duration: [start, new Date(start.getTime() + TWO_HOURS_MS)],
+      slotConfig: { type: 'mmo', tank: 2, healer: 4 },
+    });
+    const svc = testApp.app.get(RoleGapAlertService);
+    const query = (): Promise<Array<{ id: number }>> =>
+      (
+        svc as unknown as {
+          fetchCandidateEvents(now: Date): Promise<Array<{ id: number }>>;
+        }
+      ).fetchCandidateEvents(new Date());
+    await assertSuppressedWhilePolling(event.id, query);
+  });
+}
+describe(
+  'ROK-1370 review — remaining old-time paths suppressed while poll open',
+  describeReviewSuppression,
+);
+
+function describeLifecycleEmits() {
+  it('poll open emits RESCHEDULING; lock-in completion re-emits UPDATED', async () => {
+    const event = await createEvent('Emit Trace');
+    const emitter = testApp.app.get(EventEmitter2);
+    const emitSpy = jest.spyOn(emitter, 'emit');
+    try {
+      const pollRes = await postSchedulingPoll(event.id);
+      expect(pollRes.status).toBe(201);
+      expect(
+        await waitForCondition(() =>
+          emitSpy.mock.calls.some(
+            ([key]) => key === APP_EVENT_EVENTS.RESCHEDULING,
+          ),
+        ),
+      ).toBe(true);
+
+      const matchId = pollRes.body.id as number;
+      await lockInAtNewTime(
+        event.id,
+        matchId,
+        new Date(Date.now() + 3 * 86_400_000),
+      );
+      // complete() must re-emit UPDATED after clearing the flag so the embed
+      // resets RESCHEDULING → POSTED and the SE is recreated.
+      expect(
+        await waitForCondition(() =>
+          emitSpy.mock.calls.some(
+            ([key]) => key === APP_EVENT_EVENTS.UPDATED,
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      emitSpy.mockRestore();
+    }
+  });
+
+  it('completing a poll whose event was cancelled mid-poll does NOT re-emit UPDATED', async () => {
+    const event = await createEvent('Cancelled Mid-Poll');
+    const pollRes = await postSchedulingPoll(event.id);
+    expect(pollRes.status).toBe(201);
+    const matchId = pollRes.body.id as number;
+
+    await testApp.db
+      .update(schema.events)
+      .set({ cancelledAt: new Date() })
+      .where(eq(schema.events.id, event.id));
+
+    const emitter = testApp.app.get(EventEmitter2);
+    const emitSpy = jest.spyOn(emitter, 'emit');
+    try {
+      const cr = await completePollAs(adminToken, matchId);
+      expect(cr.status).toBe(200);
+      // Bounded settle for the (absent) fire-and-forget emit, then assert the
+      // UPDATED re-emit was skipped — it would recreate an SE for a dead event.
+      const emitted = await waitForCondition(() =>
+        emitSpy.mock.calls.some(([key]) => key === APP_EVENT_EVENTS.UPDATED),
+      );
+      expect(emitted).toBe(false);
+    } finally {
+      emitSpy.mockRestore();
+    }
+    const after = await readEvent(event.id);
+    expect((after as Record<string, unknown>).reschedulingPollId).toBeNull();
+  });
+}
+describe('ROK-1370 review — lifecycle emits', describeLifecycleEmits);
