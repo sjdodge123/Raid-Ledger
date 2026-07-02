@@ -82,7 +82,9 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
         provide: ChannelResolverService,
         useValue: {
           resolveChannelForEvent: jest.fn().mockResolvedValue('channel-abc'),
-          resolveVoiceChannelForScheduledEvent: jest
+          // ROK-1389: applyVoiceChannel now routes through the shared
+          // override-honoring entry.
+          resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue(null),
         },
@@ -138,20 +140,20 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
       .mockReturnValueOnce(makeSelectChain([])); // rosterAssignments
   };
 
-  it('calls resolveVoiceChannelForScheduledEvent with the provided gameId', async () => {
+  it('calls resolveVoiceChannelHonoringOverride with the provided gameId', async () => {
     setupEmptyRoster();
 
     await service.postEmbed(42, baseEvent, 7);
 
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(7, undefined, null);
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(7, undefined, null, undefined);
   });
 
   it('sets voiceChannelId on enriched event data when resolver returns a channel', async () => {
     setupEmptyRoster();
 
-    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
       'vc-555',
     );
 
@@ -166,9 +168,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   it('does NOT set voiceChannelId when resolver returns null', async () => {
     setupEmptyRoster();
 
-    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
-      null,
-    );
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(null);
 
     await service.postEmbed(42, baseEvent, 3);
 
@@ -177,66 +177,70 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
     expect(eventDataArg.voiceChannelId).toBeUndefined();
   });
 
-  it('calls resolveVoiceChannelForScheduledEvent with null when gameId is null', async () => {
+  it('calls resolveVoiceChannelHonoringOverride with null when gameId is null', async () => {
     setupEmptyRoster();
 
     await service.postEmbed(42, baseEvent, null);
 
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(null, undefined, null);
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(null, undefined, null, undefined);
   });
 
-  it('calls resolveVoiceChannelForScheduledEvent with undefined when gameId is not provided', async () => {
+  it('calls resolveVoiceChannelHonoringOverride with undefined when gameId is not provided', async () => {
     setupEmptyRoster();
 
     await service.postEmbed(42, baseEvent);
 
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(undefined, undefined, null);
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(undefined, undefined, null, undefined);
   });
 
-  it('uses notificationChannelOverride instead of resolver when provided (ROK-599)', async () => {
+  it('threads notificationChannelOverride through the honoring resolver (ROK-1389)', async () => {
     setupEmptyRoster();
+    // A voice override is honored by the resolver → returned unchanged.
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
+      'override-vc-123',
+    );
 
     await service.postEmbed(42, baseEvent, 7, undefined, 'override-vc-123');
 
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).not.toHaveBeenCalled();
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(7, undefined, null, 'override-vc-123');
     expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
       expect.objectContaining({ voiceChannelId: 'override-vc-123' }),
       expect.any(Object),
     );
   });
 
-  it('does not call resolveVoiceChannelForScheduledEvent when bot is not connected', async () => {
+  it('does not resolve voice when bot is not connected', async () => {
     clientService.isConnected.mockReturnValue(false);
 
     const result = await service.postEmbed(42, baseEvent, 7);
 
     expect(result).toBe(false);
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
+      channelResolver.resolveVoiceChannelHonoringOverride,
     ).not.toHaveBeenCalled();
   });
 
-  it('does not call resolveVoiceChannelForScheduledEvent when channel resolution fails', async () => {
+  it('does not resolve voice when channel resolution fails', async () => {
     channelResolver.resolveChannelForEvent.mockResolvedValue(null);
 
     const result = await service.postEmbed(42, baseEvent, 7);
 
     expect(result).toBe(false);
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
+      channelResolver.resolveVoiceChannelHonoringOverride,
     ).not.toHaveBeenCalled();
   });
 
   it('returns true and sends embed with voice channel when configured', async () => {
     setupEmptyRoster();
 
-    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
       'vc-999',
     );
 

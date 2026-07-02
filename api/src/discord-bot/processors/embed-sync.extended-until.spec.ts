@@ -161,7 +161,7 @@ beforeEach(async () => {
       {
         provide: ChannelResolverService,
         useValue: {
-          resolveVoiceChannelForScheduledEvent: jest
+          resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue(null),
         },
