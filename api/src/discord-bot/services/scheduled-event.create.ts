@@ -7,7 +7,7 @@ import {
   getEventLiveState,
   saveScheduledEventId,
   clearScheduledEventIdBySeId,
-  resolveCreateEntryGuard,
+  applyCreateEntryGuard,
   type EventLiveState,
 } from './scheduled-event.revalidate';
 import {
@@ -106,18 +106,12 @@ export async function createScheduledEventIdempotent(
   preamble: CreatePreamble,
   cache?: GuildSECache,
 ): Promise<void> {
-  // ROK-1391: revalidate against live state at create time — a fire-and-forget
-  // create can carry a stale pre-reschedule payload minutes after the row moved.
-  // Skip on an open poll / cancellation; substitute the fresh row time otherwise.
-  const guard = resolveCreateEntryGuard(
-    await getEventLiveState(db, eventId),
-    eventData,
-  );
-  if (guard.skipReason) {
-    logger.warn(`Skip SE ${eventId}: ${guard.skipReason}`);
-    return;
-  }
-  eventData = guard.eventData;
+  // ROK-1391: revalidate against live state before the create — a fire-and-forget
+  // create can carry a stale pre-reschedule payload minutes after the row moved
+  // (see applyCreateEntryGuard: skip on open poll / cancel, else fresh-time sub).
+  const guarded = await applyCreateEntryGuard(db, logger, eventId, eventData);
+  if (!guarded) return;
+  eventData = guarded;
   const vc = await resolveVoiceForCreate(
     db,
     eventId,
@@ -264,27 +258,66 @@ async function bindOrCompensate(
 ): Promise<void> {
   const { bound } = await saveScheduledEventId(db, eventId, seId);
   const live = await getEventLiveState(db, eventId);
-  if (!shouldCompensate(bound, live, eventData.startTime)) return;
+  const decision = compensationDecision(bound, live, eventData.startTime);
+  if (decision === 'none') return;
+  // Codex HIGH: on a PURE start drift, the lock-in `event.updated` path may have
+  // already edited OUR bound SE to the fresh time. Deleting it then would open an
+  // availability gap until reconcile — re-fetch and keep the SE when it already
+  // carries the fresh start. (Not applied to force legs: an open poll / cancel /
+  // lost-bind SE must go regardless of its current time.)
+  if (
+    decision === 'start-mismatch' &&
+    (await seRepairedToFreshStart(guild, seId, live!.startIso))
+  ) {
+    logger.log(
+      `SE ${seId} for event ${eventId} already repaired to the fresh start — keeping`,
+    );
+    return;
+  }
   logger.warn(
-    `Compensating SE ${seId} for event ${eventId}: stale after bind ` +
-      `(bound=${bound}, poll=${live?.reschedulingPollId ?? 'none'})`,
+    `Compensating SE ${seId} for event ${eventId} after bind (${decision})`,
   );
   await tryDeleteEvent(guild, eventId, seId);
   await clearScheduledEventIdBySeId(db, seId);
 }
 
-/** True when a just-bound SE must be rolled back: the bind lost the row, or the
- *  live row is now flagged/cancelled or points at a different start (ROK-1391). */
-function shouldCompensate(
+type CompensationDecision = 'none' | 'force' | 'start-mismatch';
+
+/** Classify a just-bound SE: `force` (bind lost the row, row hard-deleted, or an
+ *  open poll / cancellation — delete unconditionally), `start-mismatch` (row start
+ *  drifted — delete only if the SE wasn't repaired), or `none` (ROK-1391). */
+function compensationDecision(
   bound: boolean,
   live: EventLiveState | null,
   createdStartIso: string,
-): boolean {
-  if (!bound) return true;
-  if (!live) return false;
-  if (live.reschedulingPollId != null) return true;
-  if (live.cancelledAt != null) return true;
-  return (
-    new Date(live.startIso).getTime() !== new Date(createdStartIso).getTime()
-  );
+): CompensationDecision {
+  if (!bound) return 'force';
+  if (!live) return 'force'; // row hard-deleted between bind and re-read
+  if (live.reschedulingPollId != null) return 'force';
+  if (live.cancelledAt != null) return 'force';
+  if (new Date(live.startIso).getTime() !== new Date(createdStartIso).getTime())
+    return 'start-mismatch';
+  return 'none';
+}
+
+/** Re-fetch our SE and report whether its actual start now equals the live row's
+ *  start — i.e. the lock-in edit already repaired it. A 10070 (SE gone) or any
+ *  fetch error returns false so compensation proceeds (ROK-1391, Codex HIGH). */
+async function seRepairedToFreshStart(
+  guild: Guild,
+  seId: string,
+  liveStartIso: string,
+): Promise<boolean> {
+  try {
+    const se = await timedDiscordCall('scheduledEvents.fetch', () =>
+      guild.scheduledEvents.fetch(seId),
+    );
+    const actualStart = (se as { scheduledStartTimestamp?: number | null })
+      ?.scheduledStartTimestamp;
+    return (
+      actualStart != null && actualStart === new Date(liveStartIso).getTime()
+    );
+  } catch {
+    return false;
+  }
 }

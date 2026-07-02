@@ -1,3 +1,4 @@
+import type { Logger } from '@nestjs/common';
 import { eq, and, or, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -105,6 +106,28 @@ export async function clearScheduledEventIdBySeId(
  * past-start check against the FRESH start (the earlier `getCreateSkipReason`
  * ran on the stale payload). `live` null passes the payload through unchanged.
  */
+/**
+ * Read live state and apply the create-time entry guard, logging + returning
+ * null when the create should be skipped, otherwise the (possibly fresh-time-
+ * substituted) event data. Keeps the guard off `createScheduledEventIdempotent`.
+ */
+export async function applyCreateEntryGuard(
+  db: PostgresJsDatabase<typeof schema>,
+  logger: Logger,
+  eventId: number,
+  eventData: ScheduledEventData,
+): Promise<ScheduledEventData | null> {
+  const guard = resolveCreateEntryGuard(
+    await getEventLiveState(db, eventId),
+    eventData,
+  );
+  if (guard.skipReason) {
+    logger.warn(`Skip SE ${eventId}: ${guard.skipReason}`);
+    return null;
+  }
+  return guard.eventData;
+}
+
 export function resolveCreateEntryGuard(
   live: EventLiveState | null,
   eventData: ScheduledEventData,

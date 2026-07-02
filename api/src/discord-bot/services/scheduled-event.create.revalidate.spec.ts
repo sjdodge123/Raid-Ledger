@@ -197,4 +197,114 @@ describe('createScheduledEvent — create-time revalidation (ROK-1391)', () => {
 
     expect(mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
   });
+
+  it('T6: start drifted but our SE was already repaired to the fresh time — keeps it, no delete (Codex HIGH)', async () => {
+    const live = makeLive(); // entry start = FUTURE
+    const u = armDb(live);
+    mocks.mockDb.update.mockReturnValue(u.chain);
+    const freshStart = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+
+    const createCalled = deferred<void>();
+    const createResult = deferred<{ id: string }>();
+    mocks.mockGuild.scheduledEvents.create.mockImplementation(() => {
+      createCalled.resolve();
+      return createResult.promise;
+    });
+    // Adopt fetch → empty Map; post-bind re-fetch of OUR SE → repaired to fresh.
+    mocks.mockGuild.scheduledEvents.fetch.mockImplementation((seId?: string) =>
+      Promise.resolve(
+        seId === undefined
+          ? new Map()
+          : { id: seId, scheduledStartTimestamp: freshStart.getTime() },
+      ),
+    );
+
+    const pending = mocks.service.createScheduledEvent(
+      42,
+      { ...baseEventData },
+      1,
+      false,
+    );
+    await createCalled.promise;
+    live.startIso = freshStart.toISOString(); // lock-in moved the row (flag clear)
+    createResult.resolve({ id: 'discord-se-id-1' });
+    await pending;
+
+    expect(mocks.mockGuild.scheduledEvents.delete).not.toHaveBeenCalled();
+    expect(u.set).not.toHaveBeenCalledWith({ discordScheduledEventId: null });
+  });
+
+  it('T7: start drifted and our SE is still at the stale time — deletes + clears (T2 semantics preserved)', async () => {
+    const live = makeLive();
+    const u = armDb(live);
+    mocks.mockDb.update.mockReturnValue(u.chain);
+    const freshStart = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    const staleStartMs = new Date(baseEventData.startTime).getTime();
+
+    const createCalled = deferred<void>();
+    const createResult = deferred<{ id: string }>();
+    mocks.mockGuild.scheduledEvents.create.mockImplementation(() => {
+      createCalled.resolve();
+      return createResult.promise;
+    });
+    mocks.mockGuild.scheduledEvents.fetch.mockImplementation((seId?: string) =>
+      Promise.resolve(
+        seId === undefined
+          ? new Map()
+          : { id: seId, scheduledStartTimestamp: staleStartMs },
+      ),
+    );
+
+    const pending = mocks.service.createScheduledEvent(
+      42,
+      { ...baseEventData },
+      1,
+      false,
+    );
+    await createCalled.promise;
+    live.startIso = freshStart.toISOString();
+    createResult.resolve({ id: 'discord-se-id-1' });
+    await pending;
+
+    expect(mocks.mockGuild.scheduledEvents.delete).toHaveBeenCalledWith(
+      'discord-se-id-1',
+    );
+    expect(u.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+  });
+
+  it('T8: event row hard-deleted between bind and re-read — compensates (rl LOW)', async () => {
+    const live = makeLive();
+    let rowGone = false;
+    const chain: Record<string, jest.Mock> = {};
+    chain.select = jest.fn().mockReturnValue(chain);
+    chain.from = jest.fn().mockReturnValue(chain);
+    chain.where = jest.fn().mockReturnValue(chain);
+    chain.limit = jest.fn(() => Promise.resolve(rowGone ? [] : [live]));
+    mocks.mockDb.select.mockReturnValue(chain);
+    const u = makeUpdate([{ id: 42 }]);
+    mocks.mockDb.update.mockReturnValue(u.chain);
+
+    const createCalled = deferred<void>();
+    const createResult = deferred<{ id: string }>();
+    mocks.mockGuild.scheduledEvents.create.mockImplementation(() => {
+      createCalled.resolve();
+      return createResult.promise;
+    });
+
+    const pending = mocks.service.createScheduledEvent(
+      42,
+      { ...baseEventData },
+      1,
+      false,
+    );
+    await createCalled.promise;
+    rowGone = true; // event row hard-deleted concurrently
+    createResult.resolve({ id: 'discord-se-id-1' });
+    await pending;
+
+    expect(mocks.mockGuild.scheduledEvents.delete).toHaveBeenCalledWith(
+      'discord-se-id-1',
+    );
+    expect(u.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+  });
 });

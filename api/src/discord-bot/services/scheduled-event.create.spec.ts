@@ -10,9 +10,10 @@
  *
  * resolveVoiceForCreate, saveScheduledEventId, getEventLiveState and
  * tryCreateNewEvent are mocked so the spec stays at the unit level; the DB
- * handle is a bare object. ROK-1391: saveScheduledEventId now reports
- * `{ bound }` and the create path re-reads live state post-bind, so both are
- * mocked to the "no compensation" defaults (bound + no live flag).
+ * handle is a bare object. ROK-1391: saveScheduledEventId reports `{ bound }`
+ * and the create path re-reads live state post-bind, so both are mocked to the
+ * "no compensation" defaults (bound=true + a clean, future live row — a null
+ * row is now treated as hard-deleted → compensate, so it must be non-null here).
  */
 import { Logger } from '@nestjs/common';
 import {
@@ -31,6 +32,10 @@ jest.mock('./scheduled-event.db-helpers', () => ({
 }));
 jest.mock('./scheduled-event.revalidate', () => ({
   ...jest.requireActual('./scheduled-event.revalidate'),
+  // applyCreateEntryGuard calls getEventLiveState intra-module, so mocking the
+  // getEventLiveState export alone wouldn't intercept the guard — mock the guard
+  // entry point directly (default: fresh-time substitution, no skip).
+  applyCreateEntryGuard: jest.fn(),
   saveScheduledEventId: jest.fn().mockResolvedValue({ bound: true }),
   getEventLiveState: jest.fn().mockResolvedValue(null),
 }));
@@ -51,14 +56,26 @@ const tryCreateNewEvent = discordOps.tryCreateNewEvent as jest.MockedFunction<
   typeof discordOps.tryCreateNewEvent
 >;
 
-const START = '2026-07-01T20:00:00.000Z';
+// Future-dated so the ROK-1391 entry guard's past-start re-check passes; the
+// guild-SE mocks below key off START_MS so adopt-by-start still matches.
+const START = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 const START_MS = Date.parse(START);
+const END = new Date(START_MS + 3 * 60 * 60 * 1000).toISOString();
 
 const eventData: ScheduledEventData = {
   title: 'Palworld Event',
   startTime: START,
-  endTime: '2026-07-01T23:00:00.000Z',
+  endTime: END,
   signupCount: 3,
+};
+
+// ROK-1391: a healthy create sees a live row with no poll/cancel and a start
+// matching the payload → entry guard passes, post-bind compensation is a no-op.
+const LIVE = {
+  reschedulingPollId: null,
+  cancelledAt: null,
+  startIso: START,
+  endIso: END,
 };
 
 const db = {} as Parameters<typeof createScheduledEventIdempotent>[1];
@@ -104,11 +121,22 @@ function rlDesc(eventId: number): string {
 const getEventLiveState = revalidate.getEventLiveState as jest.MockedFunction<
   typeof revalidate.getEventLiveState
 >;
+const applyCreateEntryGuard =
+  revalidate.applyCreateEntryGuard as jest.MockedFunction<
+    typeof revalidate.applyCreateEntryGuard
+  >;
 
 beforeEach(() => {
   resolveVoiceForCreate.mockReset().mockResolvedValue('voice-1');
   saveScheduledEventId.mockReset().mockResolvedValue({ bound: true });
-  getEventLiveState.mockReset().mockResolvedValue(null);
+  getEventLiveState.mockReset().mockResolvedValue(LIVE);
+  // Guard passes; mirror the real fresh-time substitution to LIVE's start/end so
+  // post-bind compensationDecision sees a matching start → no compensation.
+  applyCreateEntryGuard
+    .mockReset()
+    .mockImplementation((_db, _logger, _eventId, ed) =>
+      Promise.resolve({ ...ed, startTime: START, endTime: END }),
+    );
   tryCreateNewEvent.mockReset();
 });
 
