@@ -4,7 +4,8 @@ import { toast } from '../lib/toast';
 import { useAuth } from '../hooks/use-auth';
 import { consumeAuthRedirect } from '../components/auth';
 import { API_BASE_URL } from '../lib/config';
-import { setAuthMethod, clearSilentGuard } from '../lib/api/silent-reauth';
+import { setAuthMethod, clearSilentGuard, armSilentGuard } from '../lib/api/silent-reauth';
+import { ACCESS_TOKEN_KEY } from '../lib/api/auth-storage-keys';
 import { TokenResponseSchema } from '@raid-ledger/contract';
 
 /**
@@ -67,12 +68,17 @@ function dispatchAuthCallback(
  * redirect, and route to the login screen.
  */
 function handleSilentFailed(navigate: ReturnType<typeof useNavigate>) {
-    localStorage.removeItem('raid_ledger_token');
-    sessionStorage.setItem('raid_ledger_silent_attempted', '1');
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    armSilentGuard();
     navigate('/', { replace: true });
 }
 
 function handleOAuthError(error: string, navigate: ReturnType<typeof useNavigate>) {
+    // ROK-1367: MUST NOT clear the silent-reauth guard here. A silent
+    // (prompt=none) attempt that fails at Discord bounces back as `?error=...`;
+    // clearing would let the next mount fire another silent attempt → an
+    // infinite `/` ↔ Discord loop. The timestamped guard's cooldown re-enables
+    // a genuine retry instead (see silent-reauth.ts).
     const errorMessages: Record<string, string> = {
         'access_denied': 'Discord login was cancelled.',
         'expired': 'Login session expired. Please try again.',

@@ -8,8 +8,7 @@
  * `fetchApi` path.
  */
 import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
-import { API_BASE_URL } from '../config';
-import { getAuthToken } from '../../hooks/use-auth';
+import { fetchWithAuth } from './fetch-api';
 
 export interface AiSuggestionsSuccess {
   kind: 'ok';
@@ -32,16 +31,8 @@ export async function getAiSuggestions(
   params: GetAiSuggestionsParams = {},
 ): Promise<AiSuggestionsResult> {
   const query = params.personalize ? '?personalize=me' : '';
-  const token = getAuthToken();
-  const response = await fetch(
-    `${API_BASE_URL}/lineups/${lineupId}/suggestions${query}`,
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      credentials: 'include',
-    },
+  const response = await fetchWithAuth(
+    `/lineups/${lineupId}/suggestions${query}`,
   );
 
   if (response.status === 503) return { kind: 'unavailable' };

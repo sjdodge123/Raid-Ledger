@@ -3,7 +3,8 @@ import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
 import { server } from '../../test/mocks/server';
-import { fetchApi, SchemaValidationError } from './fetch-api';
+import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
+import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY } from './auth-storage-keys';
 
 const captureExceptionMock = vi.fn();
 
@@ -88,5 +89,58 @@ describe('fetchApi — schema validation boundary (ROK-1237)', () => {
         expect(extra.endpoint).toBe('/fixture');
         expect(Array.isArray(extra.issues)).toBe(true);
         expect(extra.issues.length).toBeGreaterThan(0);
+    });
+});
+
+describe('fetchWithAuth — ROK-1367 transparent on-401 refresh', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        // Prior-session marker gates the refresh probe (fetchWithAuth).
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+    });
+
+    it('refreshes once and retries the request on a 401, then returns data', async () => {
+        let dataCalls = 0;
+        let refreshCalls = 0;
+        server.use(
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                return HttpResponse.json({ access_token: 'fresh-token' });
+            }),
+            http.get(`${API_BASE}/thing`, () => {
+                dataCalls += 1;
+                if (dataCalls === 1) return new HttpResponse(null, { status: 401 });
+                return HttpResponse.json({ ok: true });
+            }),
+        );
+
+        const result = await fetchApi<{ ok: boolean }>('/thing');
+
+        expect(result).toEqual({ ok: true });
+        expect(refreshCalls).toBe(1);
+        expect(dataCalls).toBe(2);
+        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh-token');
+    });
+
+    it('returns the raw 401 (no retry) when refresh itself fails', async () => {
+        let dataCalls = 0;
+        let refreshCalls = 0;
+        server.use(
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                return new HttpResponse(null, { status: 401 });
+            }),
+            http.get(`${API_BASE}/thing`, () => {
+                dataCalls += 1;
+                return new HttpResponse(null, { status: 401 });
+            }),
+        );
+
+        const response = await fetchWithAuth('/thing');
+
+        expect(response.status).toBe(401);
+        // Refresh WAS attempted (once) but failed — so no retry fired.
+        expect(refreshCalls).toBe(1);
+        expect(dataCalls).toBe(1);
     });
 });

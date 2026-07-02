@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config';
 import { RefreshResponseSchema } from '@raid-ledger/contract';
+import { ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
 
 /**
  * ROK-1353: single-flight access-token refresh.
@@ -11,15 +12,11 @@ import { RefreshResponseSchema } from '@raid-ledger/contract';
  * httpOnly `rl_rt` cookie; this module never sees it.
  */
 
-const TOKEN_KEY = 'raid_ledger_token';
-/** Set while an admin is impersonating — the cookie belongs to the ADMIN. */
-const ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';
-
 let inFlight: Promise<string | null> | null = null;
 
 /** Persist the freshly-minted access token where fetch-api reads it. */
 function storeAccessToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(ACCESS_TOKEN_KEY, token);
 }
 
 async function doRefresh(): Promise<string | null> {

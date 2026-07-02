@@ -1,15 +1,10 @@
 import { useContext } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameInterestResponseDto } from '@raid-ledger/contract';
-import { API_BASE_URL } from '../lib/config';
+import { fetchApi } from '../lib/api/fetch-api';
 import { toast } from '../lib/toast';
 import { getAuthToken } from './use-auth';
 import { WantToPlayContext, NO_PROVIDER } from './want-to-play-context';
-
-const getHeaders = () => ({
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${getAuthToken() || ''}`,
-});
 
 /**
  * Hook for want-to-play toggle with optimistic updates.
@@ -54,11 +49,10 @@ function useInterestToggleMutation(gameId: number | undefined) {
     const queryKey = ['games', 'interest', gameId];
 
     return useMutation<GameInterestResponseDto, Error, boolean>({
-        mutationFn: async (wantToPlay: boolean) => {
-            const response = await fetch(`${API_BASE_URL}/games/${gameId}/want-to-play`, { method: wantToPlay ? 'POST' : 'DELETE', headers: getHeaders() });
-            if (!response.ok) throw new Error('Failed to update interest');
-            return response.json();
-        },
+        mutationFn: (wantToPlay: boolean) =>
+            fetchApi<GameInterestResponseDto>(`/games/${gameId}/want-to-play`, {
+                method: wantToPlay ? 'POST' : 'DELETE',
+            }),
         onMutate: async (wantToPlay) => {
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<GameInterestResponseDto>(queryKey);
@@ -85,11 +79,8 @@ function useInterestToggleMutation(gameId: number | undefined) {
 function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
     const interest = useQuery<GameInterestResponseDto>({
         queryKey: ['games', 'interest', gameId],
-        queryFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/games/${gameId}/interest`, { headers: getHeaders() });
-            if (!response.ok) throw new Error('Failed to fetch interest');
-            return response.json();
-        },
+        queryFn: () =>
+            fetchApi<GameInterestResponseDto>(`/games/${gameId}/interest`),
         enabled: enabled && !!gameId && !!getAuthToken(),
         staleTime: 1000 * 60 * 5,
     });

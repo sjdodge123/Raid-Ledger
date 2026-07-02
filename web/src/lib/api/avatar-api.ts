@@ -1,6 +1,18 @@
 import { API_BASE_URL } from '../config';
 import { getAuthToken } from '../../hooks/use-auth';
 import { fetchApi } from './fetch-api';
+import { ensureFreshToken } from './refresh-client';
+import { getAuthMethod } from './silent-reauth';
+
+/** Carries the HTTP status so the caller can branch on 401 for a refresh. */
+class AvatarUploadError extends Error {
+    readonly status: number;
+    constructor(status: number, message: string) {
+        super(message);
+        this.name = 'AvatarUploadError';
+        this.status = status;
+    }
+}
 
 /**
  * Upload a custom avatar image with optional progress tracking.
@@ -27,8 +39,34 @@ export async function uploadAvatar(
     return response.data;
 }
 
-/** XHR-based upload with progress tracking */
-function uploadWithProgress(
+/**
+ * XHR-based upload with progress tracking. ROK-1367: mirrors fetchApi's
+ * transparent on-401 refresh — a single silent token refresh + retry before
+ * the error surfaces, so an expired access token doesn't fail the upload.
+ */
+async function uploadWithProgress(
+    formData: FormData,
+    onProgress: (percent: number) => void,
+): Promise<{ customAvatarUrl: string }> {
+    // A refresh retry re-fires XHR progress from 0; clamp to a monotonic
+    // ceiling so the bar never rewinds across attempts.
+    let reportedCeiling = 0;
+    const report = (percent: number) => {
+        reportedCeiling = Math.max(reportedCeiling, percent);
+        onProgress(reportedCeiling);
+    };
+    try {
+        return await sendAvatarXhr(formData, report);
+    } catch (err) {
+        if (err instanceof AvatarUploadError && err.status === 401 && getAuthMethod()) {
+            if (await ensureFreshToken()) return sendAvatarXhr(formData, report);
+        }
+        throw err;
+    }
+}
+
+/** Issue one XHR POST of the avatar, resolving on 2xx / rejecting otherwise. */
+function sendAvatarXhr(
     formData: FormData,
     onProgress: (percent: number) => void,
 ): Promise<{ customAvatarUrl: string }> {
@@ -54,7 +92,7 @@ function uploadWithProgress(
                 };
                 resolve(response.data);
             } else {
-                handleXhrError(xhr, reject);
+                reject(parseXhrError(xhr));
             }
         });
 
@@ -63,16 +101,13 @@ function uploadWithProgress(
     });
 }
 
-/** Parse XHR error response */
-function handleXhrError(
-    xhr: XMLHttpRequest,
-    reject: (err: Error) => void,
-): void {
+/** Build a status-tagged error from an XHR error response. */
+function parseXhrError(xhr: XMLHttpRequest): AvatarUploadError {
     try {
         const error = JSON.parse(xhr.responseText) as { message?: string };
-        reject(new Error(error.message || `HTTP ${xhr.status}`));
+        return new AvatarUploadError(xhr.status, error.message || `HTTP ${xhr.status}`);
     } catch {
-        reject(new Error(`HTTP ${xhr.status}`));
+        return new AvatarUploadError(xhr.status, `HTTP ${xhr.status}`);
     }
 }
 
