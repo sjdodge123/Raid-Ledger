@@ -34,7 +34,13 @@ function createMockDeps(mockDb: MockDb): AdHocNotificationDeps {
       getBindings: jest.fn().mockResolvedValue([]),
     } as unknown as AdHocNotificationDeps['channelBindingsService'],
     channelResolver: {
-      resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
+      // ROK-1389: resolveVoice routes through the shared entry. With no guild
+      // cache the guard uses a set override optimistically, else tiered (null).
+      resolveVoiceChannelHonoringOverride: jest
+        .fn()
+        .mockImplementation((_g, _r, _e, override) =>
+          Promise.resolve(override ?? null),
+        ),
     } as unknown as AdHocNotificationDeps['channelResolver'],
     settingsService: {
       getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),

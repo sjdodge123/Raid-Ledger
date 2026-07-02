@@ -77,7 +77,7 @@ function buildServiceProviders() {
     {
       provide: ChannelResolverService,
       useValue: {
-        resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
+        resolveVoiceChannelHonoringOverride: jest.fn().mockResolvedValue(null),
       },
     },
     {
