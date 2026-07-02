@@ -136,3 +136,43 @@ describe('saveScheduledEventId — conditional bind (ROK-1391)', () => {
     expect(result).toEqual({ bound: false });
   });
 });
+
+// ROK-1391 hardening: cross-source timestamp comparisons must be TZ-proof.
+// Naive pg text (`lower(duration)::text` on a no-offset column) is UTC by
+// storage convention; `new Date()` would interpret it in the process TZ.
+describe('parseEventTimestampUtc (ROK-1391)', () => {
+  const { parseEventTimestampUtc } = jest.requireActual<
+    typeof import('./scheduled-event.revalidate')
+  >('./scheduled-event.revalidate');
+
+  it('treats naive pg text as UTC — equal to the equivalent ISO-Z instant', () => {
+    expect(parseEventTimestampUtc('2026-07-03 01:13:47.557').getTime()).toBe(
+      parseEventTimestampUtc('2026-07-03T01:13:47.557Z').getTime(),
+    );
+  });
+
+  it('parses naive text identically regardless of process timezone semantics', () => {
+    // 22:00 naive-UTC === 22:00Z, never the local-TZ reading of 22:00.
+    expect(parseEventTimestampUtc('2026-07-02 22:00:00').toISOString()).toBe(
+      '2026-07-02T22:00:00.000Z',
+    );
+  });
+
+  it('leaves offset-carrying strings unchanged (Z, +00, -04:00)', () => {
+    expect(parseEventTimestampUtc('2026-07-02T22:00:00Z').toISOString()).toBe(
+      '2026-07-02T22:00:00.000Z',
+    );
+    expect(parseEventTimestampUtc('2026-07-02 22:00:00+00').toISOString()).toBe(
+      '2026-07-02T22:00:00.000Z',
+    );
+    expect(
+      parseEventTimestampUtc('2026-07-02T18:00:00-04:00').toISOString(),
+    ).toBe('2026-07-02T22:00:00.000Z');
+  });
+
+  it('propagates NaN for garbage (substituteFreshTimes NaN-guard relies on it)', () => {
+    expect(Number.isNaN(parseEventTimestampUtc('not-a-date').getTime())).toBe(
+      true,
+    );
+  });
+});
