@@ -91,8 +91,15 @@ export class AdHocNotificationService implements OnModuleDestroy {
     bindingId: string,
     _event: { id: number; title: string; gameName?: string },
     participants: Array<{ discordUserId: string; discordUsername: string }>,
+    effectiveGameId?: number | null,
   ): Promise<void> {
-    const channelId = await resolveNotificationChannel(this.deps, bindingId);
+    // ROK-1390: pass the event's effective game so announce routing follows the
+    // runtime game fallback, not the binding's stored game.
+    const channelId = await resolveNotificationChannel(
+      this.deps,
+      bindingId,
+      effectiveGameId,
+    );
     if (!channelId) return;
     const active = toActiveParticipants(participants);
     const embedData = await buildEmbedEventData(this.deps, eventId, active);
