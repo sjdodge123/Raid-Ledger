@@ -12,6 +12,7 @@ import {
   buildAttendanceSummary,
 } from './voice-attendance.helpers';
 import { findActiveEventsByEphemeralChannel } from './voice-attendance-ephemeral.helpers';
+import { unionSeriesEvents } from './voice-attendance-series.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -188,6 +189,9 @@ interface BindingSlim {
   channelId: string;
   bindingPurpose: string;
   gameId: number | null;
+  // ROK-1389: series voice bindings carry a recurrence group so a live instance
+  // whose gameId differs from the binding's stored gameId still maps back.
+  recurrenceGroupId?: string | null;
 }
 
 /** Resolve active events for a voice channel with diagnostic logging. */
@@ -241,12 +245,16 @@ async function resolveMultiBindingEvents(
   const events = gameIds
     ? await queryActiveEventsMultiGame(db, gameIds, now)
     : await queryActiveEvents(db, null, now);
+  // ROK-1389: union instances matched by the bindings' recurrence group(s) so a
+  // series voice channel maps to this week's instance even when its gameId
+  // differs from (or is null vs) the binding's stored gameId. Deduped by id.
+  const merged = await unionSeriesEvents(db, matched, events, now);
   logger.debug(
     '[voice-pipe] findActive: %d active event(s) for channelId=%s',
-    events.length,
+    merged.length,
     channelId,
   );
-  return events;
+  return merged;
 }
 
 /** Extract unique gameIds from bindings; null means "all games". */
