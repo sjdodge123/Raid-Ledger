@@ -64,6 +64,9 @@ export async function findCreateCandidates(
     .where(
       and(
         isNull(schema.events.cancelledAt),
+        // ROK-1370: don't spin up a temp voice channel for an old start time
+        // that an open reschedule poll is voting away.
+        isNull(schema.events.reschedulingPollId),
         isNull(schema.events.ephemeralVoiceChannelId),
         sql`lower(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
         sql`lower(${schema.events.duration}) <= ${until.toISOString()}::timestamptz`,

@@ -96,7 +96,14 @@ export class DiscordEventListener {
 
   @OnEvent(APP_EVENT_EVENTS.UPDATED)
   async handleEventUpdated(payload: EventPayload): Promise<void> {
-    this.fireScheduledEventUpdate(payload);
+    // ROK-1370: while a reschedule poll is open the SE is deliberately torn
+    // down — an unconditional SE sync here would route through the create
+    // branch (id cleared) and recreate it at the old time on ANY mid-poll
+    // edit. Lock-in re-emits UPDATED after the flag clears, so the SE is
+    // recreated at the winning time by that emission instead.
+    const isRescheduling =
+      (await getReschedulingPollId(this.deps, payload.eventId)) !== null;
+    if (!isRescheduling) this.fireScheduledEventUpdate(payload);
     if (!this.clientService.isConnected()) return;
     const records = await findEventMessages(this.deps, payload.eventId);
     if (records.length === 0) {

@@ -210,6 +210,9 @@ export async function findReconciliationCandidates(
       and(
         isNull(schema.events.discordScheduledEventId),
         isNull(schema.events.cancelledAt),
+        // ROK-1370: poll start deliberately tears the SE down — reconciliation
+        // must not resurrect it at the old time while the poll is open.
+        isNull(schema.events.reschedulingPollId),
         sql`${schema.events.isAdHoc} = false`,
         sql`lower(${schema.events.duration}) > ${now.toISOString()}::timestamptz`,
         // ROK-1332: Skip rows currently in capacity-backoff. NULL means never
