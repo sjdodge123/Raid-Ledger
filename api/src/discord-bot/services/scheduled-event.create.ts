@@ -44,6 +44,9 @@ export interface CreatePreamble {
   describe: (eventId: number, eventData: ScheduledEventData) => Promise<string>;
 }
 
+/** Generous bound for the guild-wide SE fetch (see GuildSECache.get). */
+export const GUILD_SE_FETCH_TIMEOUT_MS = 30_000;
+
 /**
  * Per-reconciliation-batch cache of the guild's scheduled events. Fetching the
  * (up to 100) guild SEs once and reusing it across all candidates avoids N
@@ -56,11 +59,17 @@ export class GuildSECache {
   async get(): Promise<GuildSEShape[]> {
     if (this.cached) return this.cached;
     // ROK-1391: bound the guild-wide fetch — un-timed it could hold a create in
-    // flight for minutes behind a rate limit, the root-cause stall that let a
-    // stale-payload create land after a newer poll-start teardown. A timeout
-    // propagates to the caller's warn/skip path; reconcile heals on the next tick.
-    const all = await timedDiscordCall('scheduledEvents.fetch', () =>
-      this.guild.scheduledEvents.fetch(),
+    // flight for minutes, the root-cause stall that let a stale-payload create
+    // land after a newer poll-start teardown. The bound must be GENEROUS: this
+    // fetch legitimately queues 10-20s behind discord.js rate-limit buckets
+    // under SE churn, and the default 5s killed every create in that state
+    // (staleness itself is already neutralized by the entry guard + post-bind
+    // compensation, so a slow fetch is safe — only a pathological hang is not).
+    const all = await timedDiscordCall(
+      'scheduledEvents.fetch',
+      () => this.guild.scheduledEvents.fetch(),
+      undefined,
+      GUILD_SE_FETCH_TIMEOUT_MS,
     );
     this.cached = [...all.values()] as GuildSEShape[];
     return this.cached;
