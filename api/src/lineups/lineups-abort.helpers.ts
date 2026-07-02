@@ -21,6 +21,8 @@ import type { LineupsGateway } from './lineups.gateway';
 import type { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import { findLineupById, findUserDisplayName } from './lineups-query.helpers';
 import { applyStatusUpdate } from './lineups-lifecycle.helpers';
+import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
+import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { logAborted } from './lineups-activity.helpers';
 
@@ -34,6 +36,8 @@ export interface AbortDeps {
   lineupsGateway: LineupsGateway;
   tiebreaker: TiebreakerService;
   logger: Logger;
+  /** ROK-1370: heals RESCHEDULING embeds when an abort clears linked polls. */
+  embedSyncQueue?: EmbedSyncQueueService;
 }
 
 /**
@@ -118,6 +122,7 @@ export async function runLineupAbort(
     id,
     { status: 'archived' },
     lineup,
+    healClearedEventEmbeds(deps.embedSyncQueue, deps.logger),
   );
   const trimmedReason = reason?.trim() || null;
   await finalizeAbort(deps, lineup, trimmedReason, actorId);

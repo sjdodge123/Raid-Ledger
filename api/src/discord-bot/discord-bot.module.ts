@@ -193,6 +193,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     PugInviteService,
     AdHocEventService,
     VoiceAttendanceService,
+    // ROK-1370: lineups' poll-expiry path enqueues an embed re-sync after
+    // clearing reschedulingPollId (heals the stuck RESCHEDULING card).
+    EmbedSyncQueueService,
   ],
 })
 export class DiscordBotModule {}

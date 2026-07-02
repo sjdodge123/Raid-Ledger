@@ -26,6 +26,7 @@ describe('LineupPhaseProcessor', () => {
     // runStatusTransition); the rehydration tests below don't exercise them.
     const mockSettings = { get: jest.fn() } as never;
     const mockGateway = { emitStatusChange: jest.fn() } as never;
+    const mockEmbedSyncQueue = { enqueue: jest.fn() } as never;
     const mockActivityLog = { log: jest.fn() } as never;
     const mockLineupNotifications = {} as never;
     processor = new LineupPhaseProcessor(
@@ -33,6 +34,7 @@ describe('LineupPhaseProcessor', () => {
       mockQueueService,
       mockSettings,
       mockGateway,
+      mockEmbedSyncQueue,
       mockActivityLog,
       mockLineupNotifications,
     );

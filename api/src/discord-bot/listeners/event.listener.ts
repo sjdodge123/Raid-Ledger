@@ -24,11 +24,12 @@ import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
 import {
   findEventMessages,
   findDiscordMessageRecord,
-  updateEmbedRecord,
   enrichEventData,
   cancelEmbedRecord,
   deleteEmbedRecord,
   updateEmbedStateForRecords,
+  getReschedulingPollId,
+  applyEmbedUpdates,
   type EventListenerDeps,
 } from './event.listener.handlers';
 
@@ -95,14 +96,21 @@ export class DiscordEventListener {
 
   @OnEvent(APP_EVENT_EVENTS.UPDATED)
   async handleEventUpdated(payload: EventPayload): Promise<void> {
-    this.fireScheduledEventUpdate(payload);
+    // ROK-1370: while a reschedule poll is open the SE is deliberately torn
+    // down — an unconditional SE sync here would route through the create
+    // branch (id cleared) and recreate it at the old time on ANY mid-poll
+    // edit. Lock-in re-emits UPDATED after the flag clears, so the SE is
+    // recreated at the winning time by that emission instead.
+    const isRescheduling =
+      (await getReschedulingPollId(this.deps, payload.eventId)) !== null;
+    if (!isRescheduling) this.fireScheduledEventUpdate(payload);
     if (!this.clientService.isConnected()) return;
     const records = await findEventMessages(this.deps, payload.eventId);
     if (records.length === 0) {
       await this.handleMissingEmbedOnUpdate(payload);
       return;
     }
-    await this.updateExistingEmbeds(payload, records);
+    await this.updateExistingEmbeds(payload, records, isRescheduling);
   }
 
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)
@@ -131,6 +139,21 @@ export class DiscordEventListener {
         );
       }
     }
+  }
+
+  @OnEvent(APP_EVENT_EVENTS.RESCHEDULING)
+  async handleEventRescheduling(payload: EventPayload): Promise<void> {
+    // ROK-1370 (Option A): a reschedule poll just opened. Tear down the Discord
+    // Scheduled Event now (guarded delete via the RL-owned binding; clears the
+    // stored id) so lock-in's `event.updated → updateScheduledEvent` recreates
+    // it accurately at the winning time. Then flip the channel embed to the
+    // amber RESCHEDULING card.
+    await this.scheduledEventService.deleteScheduledEvent(payload.eventId);
+    await this.updateEmbedState(
+      payload.eventId,
+      EMBED_STATES.RESCHEDULING,
+      payload.event,
+    );
   }
 
   @OnEvent(APP_EVENT_EVENTS.DELETED)
@@ -306,27 +329,21 @@ export class DiscordEventListener {
   private async updateExistingEmbeds(
     payload: EventPayload,
     records: (typeof schema.discordEventMessages.$inferSelect)[],
+    // ROK-1370: hold the embed at RESCHEDULING while a poll is open, and reset
+    // a stuck RESCHEDULING record to POSTED once the poll clears (lock-in
+    // re-emits event.updated after clearing reschedulingPollId). Computed once
+    // by handleEventUpdated, which also gates the SE sync on it.
+    isRescheduling: boolean,
   ): Promise<void> {
     const context = await this.buildContext();
     const eventData = await enrichEventData(this.deps, payload);
-    for (const record of records) {
-      try {
-        const state =
-          record.embedState as (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
-        await updateEmbedRecord(
-          this.deps,
-          record,
-          eventData,
-          context,
-          state,
-          payload.eventId,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to update embed for event ${payload.eventId}:`,
-          error,
-        );
-      }
-    }
+    await applyEmbedUpdates(
+      this.deps,
+      records,
+      eventData,
+      context,
+      isRescheduling,
+      payload.eventId,
+    );
   }
 }

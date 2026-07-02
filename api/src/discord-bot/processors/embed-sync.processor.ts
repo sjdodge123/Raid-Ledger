@@ -76,6 +76,12 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
 
     const event = await this.fetchEvent(eventId);
     if (!event || event.cancelledAt) return;
+    // ROK-1370: while a reschedule poll is open the embed shows the
+    // RESCHEDULING card — computeEmbedState can never return that state, so
+    // any sync here (signup withdrawal, roster change, voice update) would
+    // revert the card to a normal signup embed at the old time. Skip; the
+    // lock-in / expiry UPDATED re-emit resumes syncing once the flag clears.
+    if ((event.reschedulingPollId ?? null) !== null) return;
 
     const eventData = await buildEventData(
       this.db,

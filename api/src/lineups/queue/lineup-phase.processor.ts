@@ -30,6 +30,7 @@ import {
   type LineupPhaseJobData,
 } from './lineup-phase.constants';
 import { LineupPhaseQueueService } from './lineup-phase.queue';
+import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupsGateway } from '../lineups.gateway';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
@@ -77,6 +78,8 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
      *  `runStatusTransition`; kept here to bundle into TransitionDeps and
      *  for any future direct broadcast needs from this processor. */
     private readonly lineupsGateway: LineupsGateway,
+    /** ROK-1370: embed heal when a deadline archive clears linked polls. */
+    private readonly embedSyncQueue: EmbedSyncQueueService,
     /**
      * ROK-1253 rework: grace-driven `voting → decided` (and `building →
      * voting`) now routes through `runStatusTransition` so it triggers
@@ -216,6 +219,7 @@ export class LineupPhaseProcessor extends WorkerHost implements OnModuleInit {
       lineupNotifications: this.lineupNotifications,
       lineupsGateway: this.lineupsGateway,
       logger: this.logger,
+      embedSyncQueue: this.embedSyncQueue,
     };
   }
 

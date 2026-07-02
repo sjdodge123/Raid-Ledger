@@ -20,6 +20,7 @@ import { LineupsGateway } from './lineups.gateway';
 import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 
 // Mock notification hooks to avoid extra DB queries (ROK-932)
 jest.mock('./lineups-notify-hooks.helpers', () => ({
@@ -158,6 +159,10 @@ describe('LineupsService.removeNomination', () => {
         {
           provide: DiscordBotClientService,
           useValue: { getGuild: jest.fn().mockReturnValue(null) },
+        },
+        {
+          provide: EmbedSyncQueueService,
+          useValue: { enqueue: jest.fn().mockResolvedValue(undefined) },
         },
         {
           provide: TasteProfileService,

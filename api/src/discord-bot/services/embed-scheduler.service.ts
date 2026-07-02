@@ -89,6 +89,9 @@ export class EmbedSchedulerService {
         and(
           sql`upper(${schema.events.duration}) > ${now.toISOString()}::timestamp`,
           isNull(schema.events.cancelledAt),
+          // ROK-1370: don't post a fresh POSTED-state embed for an old start
+          // time while a reschedule poll is open.
+          isNull(schema.events.reschedulingPollId),
           isNull(schema.discordEventMessages.id),
         ),
       );

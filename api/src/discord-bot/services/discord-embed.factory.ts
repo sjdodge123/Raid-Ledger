@@ -73,10 +73,7 @@ export interface EmbedContext {
 
 /** Controls what action row buttons are attached to the embed. */
 export type EmbedButtonMode =
-  | 'signup'
-  | 'view'
-  | 'none'
-  | ActionRowBuilder<ButtonBuilder>;
+  'signup' | 'view' | 'none' | ActionRowBuilder<ButtonBuilder>;
 
 export interface BuildEventEmbedOptions {
   state?: EmbedState;
@@ -104,6 +101,12 @@ export class DiscordEmbedFactory {
     options?: BuildEventEmbedOptions,
   ): EmbedResult {
     const state = options?.state ?? EMBED_STATES.POSTED;
+    // ROK-1370: the RESCHEDULING lifecycle state renders the amber "being
+    // rescheduled" card (no signup buttons, no push content) rather than the
+    // standard event body — route it to the dedicated builder.
+    if (state === EMBED_STATES.RESCHEDULING) {
+      return this.buildEventRescheduling(event, context);
+    }
     const buttons = options?.buttons ?? 'signup';
     const content = buildPushContentForState(event, state, context.timezone);
     const color = getColorForState(state);

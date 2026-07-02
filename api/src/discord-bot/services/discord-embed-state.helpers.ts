@@ -37,6 +37,7 @@ export function getColorForState(state: EmbedState): number {
     case EMBED_STATES.FULL:
       return EMBED_COLORS.ANNOUNCEMENT;
     case EMBED_STATES.IMMINENT:
+    case EMBED_STATES.RESCHEDULING:
       return EMBED_COLORS.REMINDER;
     case EMBED_STATES.LIVE:
       return EMBED_COLORS.SIGNUP_CONFIRMATION;

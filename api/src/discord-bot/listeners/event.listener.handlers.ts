@@ -61,6 +61,34 @@ export async function findDiscordMessageRecord(
   return msgRecord ?? null;
 }
 
+/** Fetch the event's current reschedulingPollId (ROK-1370). */
+export async function getReschedulingPollId(
+  deps: EventListenerDeps,
+  eventId: number,
+): Promise<number | null> {
+  const [row] = await deps.db
+    .select({ reschedulingPollId: schema.events.reschedulingPollId })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return row?.reschedulingPollId ?? null;
+}
+
+/**
+ * Resolve the embed state to render on an `event.updated` re-render (ROK-1370).
+ * While a reschedule poll is open the embed must stay RESCHEDULING regardless
+ * of its stored state; once the poll clears, a stuck RESCHEDULING record is
+ * reset to POSTED so the event re-appears live. Any other state passes through.
+ */
+export function resolveEmbedStateForUpdate(
+  recordState: string,
+  isRescheduling: boolean,
+): (typeof EMBED_STATES)[keyof typeof EMBED_STATES] {
+  if (isRescheduling) return EMBED_STATES.RESCHEDULING;
+  if (recordState === EMBED_STATES.RESCHEDULING) return EMBED_STATES.POSTED;
+  return recordState as (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
+}
+
 /** Update a single embed record on edit. */
 export async function updateEmbedRecord(
   deps: EventListenerDeps,
@@ -84,13 +112,41 @@ export async function updateEmbedRecord(
     row,
     content,
   );
+  // ROK-1370: persist the resolved state so a RESCHEDULING↔POSTED transition
+  // sticks across re-renders (a no-op when state matches the stored value).
   await deps.db
     .update(schema.discordEventMessages)
-    .set({ updatedAt: new Date() })
+    .set({ embedState: state, updatedAt: new Date() })
     .where(eq(schema.discordEventMessages.id, record.id));
   deps.logger.log(
     `Updated event embed for event ${eventId} (msg: ${record.messageId})`,
   );
+}
+
+/**
+ * Re-render every embed record for an `event.updated`, honoring rescheduling
+ * state (ROK-1370). Extracted from DiscordEventListener to keep it under the
+ * 300-line limit.
+ */
+export async function applyEmbedUpdates(
+  deps: EventListenerDeps,
+  records: MessageRecord[],
+  eventData: EmbedEventData,
+  context: EmbedContext,
+  isRescheduling: boolean,
+  eventId: number,
+): Promise<void> {
+  for (const record of records) {
+    try {
+      const state = resolveEmbedStateForUpdate(
+        record.embedState,
+        isRescheduling,
+      );
+      await updateEmbedRecord(deps, record, eventData, context, state, eventId);
+    } catch (error) {
+      deps.logger.error(`Failed to update embed for event ${eventId}:`, error);
+    }
+  }
 }
 
 /** Resolve the voice channel ID for a payload. */

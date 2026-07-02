@@ -501,6 +501,44 @@ describe('buildEventEmbed — timezone threading (ROK-918)', () => {
   });
 });
 
+describe('buildEventEmbed — RESCHEDULING routing (ROK-1370)', () => {
+  let factory: DiscordEmbedFactory;
+
+  beforeEach(() => {
+    factory = createFactory();
+  });
+
+  it('routes RESCHEDULING state to the amber rescheduling card', () => {
+    const { embed, row, content } = factory.buildEventEmbed(
+      baseEvent,
+      baseContext,
+      { state: EMBED_STATES.RESCHEDULING },
+    );
+    const json = embed.toJSON();
+    expect(json.color).toBe(EMBED_COLORS.REMINDER);
+    expect(json.title).toContain('RESCHEDULING');
+    expect(json.description).toMatch(/reschedul/i);
+    // No signup buttons or push content while the poll is open.
+    expect(row).toBeUndefined();
+    expect(content).toBeUndefined();
+  });
+
+  it('matches the dedicated buildEventRescheduling output', () => {
+    const viaState = factory
+      .buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.RESCHEDULING,
+      })
+      .embed.toJSON();
+    const direct = factory
+      .buildEventRescheduling(baseEvent, baseContext)
+      .embed.toJSON();
+    expect({ ...viaState, timestamp: null }).toEqual({
+      ...direct,
+      timestamp: null,
+    });
+  });
+});
+
 describe('buildEventCancelled', () => {
   let factory: DiscordEmbedFactory;
 

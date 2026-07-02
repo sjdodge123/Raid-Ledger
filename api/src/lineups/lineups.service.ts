@@ -19,6 +19,7 @@ import * as schema from '../drizzle/schema';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { LineupNotificationService } from './lineup-notification.service';
@@ -93,14 +94,13 @@ export class LineupsService {
     private readonly lineupsGateway: LineupsGateway,
     @Inject(forwardRef(() => TiebreakerService))
     private readonly tiebreaker: TiebreakerService,
+    /** ROK-1370: embed heal on archive-clears (see TransitionDeps). */
+    private readonly embedSyncQueue: EmbedSyncQueueService,
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
-  private resolveChannelName = (channelId: string): string | null => {
-    const guild = this.botClient.getGuild();
-    const channel = guild?.channels?.cache?.get(channelId);
-    return channel?.name ?? null;
-  };
+  private resolveChannelName = (channelId: string): string | null =>
+    this.botClient.getGuild()?.channels?.cache?.get(channelId)?.name ?? null;
 
   /** Create a new lineup (ROK-1065). */
   create(
@@ -186,6 +186,7 @@ export class LineupsService {
       lineupNotifications: this.lineupNotifications,
       lineupsGateway: this.lineupsGateway,
       logger: this.logger,
+      embedSyncQueue: this.embedSyncQueue,
     };
   }
 

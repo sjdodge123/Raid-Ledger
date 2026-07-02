@@ -24,6 +24,9 @@ export async function findStartCandidates(
       and(
         isNotNull(schema.events.discordScheduledEventId),
         isNull(schema.events.cancelledAt),
+        // ROK-1370: skip events with an open reschedule poll — the start scan
+        // must not fire on the stale time; it resumes once the poll locks in.
+        isNull(schema.events.reschedulingPollId),
         sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
         sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
       ),
@@ -44,6 +47,9 @@ export async function findCompletionCandidates(
       and(
         isNotNull(schema.events.discordScheduledEventId),
         isNull(schema.events.cancelledAt),
+        // ROK-1370: don't auto-complete an event whose reschedule poll is open;
+        // the SE is torn down at poll start and recreated at lock-in.
+        isNull(schema.events.reschedulingPollId),
         sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) < ${now.toISOString()}::timestamptz`,
       ),
     );
@@ -204,6 +210,9 @@ export async function findReconciliationCandidates(
       and(
         isNull(schema.events.discordScheduledEventId),
         isNull(schema.events.cancelledAt),
+        // ROK-1370: poll start deliberately tears the SE down — reconciliation
+        // must not resurrect it at the old time while the poll is open.
+        isNull(schema.events.reschedulingPollId),
         sql`${schema.events.isAdHoc} = false`,
         sql`lower(${schema.events.duration}) > ${now.toISOString()}::timestamptz`,
         // ROK-1332: Skip rows currently in capacity-backoff. NULL means never

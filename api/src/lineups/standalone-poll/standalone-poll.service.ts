@@ -20,7 +20,6 @@ import { StandalonePollNotificationService } from './standalone-poll-notificatio
 import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
 import {
   findGameById,
-  eventExists,
   filterValidUserIds,
   insertDecidedLineup,
   insertSchedulingMatch,
@@ -31,12 +30,18 @@ import {
   stampReschedulingPollId,
 } from './standalone-poll-query.helpers';
 import {
+  assertCanRescheduleEvent,
+  assertCanCompletePoll,
+} from './standalone-poll-auth.helpers';
+import {
   findScheduleSlots,
   findScheduleVotes,
 } from '../scheduling/scheduling-query.helpers';
 import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
 import { insertPollInterests } from '../scheduling/scheduling-auto-heart.helpers';
 import { SignupsService } from '../../events/signups.service';
+import { EventsService } from '../../events/events.service';
+import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import {
   splitVotersBySlot,
   formatPollTime,
@@ -69,6 +74,7 @@ export class StandalonePollService {
     private readonly schedulingPollEmbed: SchedulingPollEmbedService,
     private readonly signupsService: SignupsService,
     private readonly settingsService: SettingsService,
+    private readonly eventsService: EventsService,
   ) {}
 
   /** List all active standalone scheduling polls. */
@@ -83,7 +89,11 @@ export class StandalonePollService {
     eventId?: number,
     startTime?: string,
     creatorId?: number,
+    isAdmin = false,
   ): Promise<boolean> {
+    // ROK-1370 (P2): a LINKED poll's lock-in re-emits UPDATED (embed → POSTED,
+    // SE recreated) — restrict it to the poll/event owner or an admin.
+    await assertCanCompletePoll(this.db, matchId, creatorId ?? -1, isAdmin);
     const result = await completeStandalonePoll(this.db, matchId);
     if (result.ok && eventId) {
       this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
@@ -92,6 +102,15 @@ export class StandalonePollService {
           this.logger.warn(`Auto-signup failed for match ${matchId}: ${msg}`);
         },
       );
+    }
+    // ROK-1370: lock-in cleared reschedulingPollId — re-emit UPDATED so the
+    // embed resets RESCHEDULING → POSTED and the Scheduled Event is recreated
+    // at the (already-moved) winning time. Skip for an event cancelled
+    // mid-poll: the re-emit would recreate a Discord SE for a dead event.
+    if (result.ok && result.linkedEventId && !result.linkedEventCancelled) {
+      this.eventsService
+        .emitLifecycleEvent(result.linkedEventId, APP_EVENT_EVENTS.UPDATED)
+        .catch(noop);
     }
     return result.ok;
   }
@@ -192,10 +211,18 @@ export class StandalonePollService {
   async create(
     input: CreatePollInput,
     userId: number,
+    isAdmin = false,
   ): Promise<SchedulingPollResponseDto> {
     const game = await this.validateGame(input.gameId);
     if (input.linkedEventId) {
-      await this.validateEvent(input.linkedEventId);
+      // ROK-1370 (P1): opening a poll linked to an event is destructive — only
+      // the event owner or an admin may do it (404 preserved when missing).
+      await assertCanRescheduleEvent(
+        this.db,
+        input.linkedEventId,
+        userId,
+        isAdmin,
+      );
     }
     const phaseDeadline = this.computeDeadline(input.durationHours);
     const lineup = await insertDecidedLineup(
@@ -243,12 +270,6 @@ export class StandalonePollService {
     return game;
   }
 
-  /** Validate linked event exists, throw 404 if not. */
-  private async validateEvent(eventId: number): Promise<void> {
-    const exists = await eventExists(this.db, eventId);
-    if (!exists) throw new NotFoundException('Event not found');
-  }
-
   /** Compute phase deadline from optional durationHours. */
   private computeDeadline(durationHours?: number): Date | null {
     if (!durationHours) return null;
@@ -288,6 +309,11 @@ export class StandalonePollService {
         'Event is already being rescheduled or has been cancelled.',
       );
     }
+    // ROK-1370 (Option A): flip the Discord embed to RESCHEDULING and tear down
+    // the Scheduled Event now — lock-in recreates it at the winning time.
+    this.eventsService
+      .emitLifecycleEvent(eventId, APP_EVENT_EVENTS.RESCHEDULING)
+      .catch(noop);
   }
 
   /** Fire-and-forget: notify game-interested users. */

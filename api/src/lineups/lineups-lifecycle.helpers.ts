@@ -102,6 +102,7 @@ export async function applyStatusUpdate(
   id: number,
   dto: UpdateLineupStatusDto,
   lineup: typeof schema.communityLineups.$inferSelect,
+  onEventsCleared?: (eventIds: number[]) => void,
 ): Promise<Date | null> {
   const phaseDeadline = computeTransitionDeadline(dto.status, lineup);
   const values = {
@@ -141,7 +142,11 @@ export async function applyStatusUpdate(
   // and `auto_advance_paused_at`, so a lost race is safe.
   await phaseQueue.cancelGraceAdvance(id);
   if (dto.status === 'archived') {
-    await clearLinkedEventsByLineup(db, id);
+    // `?? []` — several specs mock the helper without a return value.
+    const clearedEventIds = (await clearLinkedEventsByLineup(db, id)) ?? [];
+    // ROK-1370: poll expiry/abort just cleared reschedulingPollId — hand the
+    // cleared events to the caller so the stuck RESCHEDULING embed heals.
+    if (clearedEventIds.length > 0) onEventsCleared?.(clearedEventIds);
   }
   // ROK-1363: return the freshly-computed deadline so callers (notably
   // `runStatusTransition`) thread the NEW voting deadline into `fireVotingOpen`

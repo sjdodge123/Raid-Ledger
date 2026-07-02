@@ -193,6 +193,10 @@ export async function fetchCandidateEvents(
     .where(
       and(
         isNull(schema.events.cancelledAt),
+        // ROK-1370: suppress reminders while a reschedule poll is open — the
+        // old-time event must not ping; reminders resume at the new time once
+        // the poll locks in and reschedulingPollId clears.
+        isNull(schema.events.reschedulingPollId),
         sql`lower(${schema.events.duration}) >= ${lowerBound.toISOString()}::timestamptz`,
         sql`lower(${schema.events.duration}) <= ${upperBound.toISOString()}::timestamptz`,
       ),

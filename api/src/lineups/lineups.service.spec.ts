@@ -12,6 +12,7 @@ import { LineupsGateway } from './lineups.gateway';
 import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import { LineupNotificationService } from './lineup-notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 
 // Mock the matching algorithm to avoid extra DB queries in unit tests
 jest.mock('./lineups-matching.helpers', () => ({
@@ -219,6 +220,10 @@ function describeLineupsService() {
         {
           provide: DiscordBotClientService,
           useValue: { getGuild: jest.fn().mockReturnValue(null) },
+        },
+        {
+          provide: EmbedSyncQueueService,
+          useValue: { enqueue: jest.fn().mockResolvedValue(undefined) },
         },
         {
           provide: TasteProfileService,

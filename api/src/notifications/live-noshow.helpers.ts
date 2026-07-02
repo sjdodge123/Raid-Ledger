@@ -75,6 +75,9 @@ export async function findLiveEventsInNoShowWindow(
       and(
         eq(schema.events.isAdHoc, false),
         sql`${schema.events.cancelledAt} IS NULL`,
+        // ROK-1370: no no-show DMs for an old start time while a reschedule
+        // poll is open — the event isn't actually happening at that time.
+        sql`${schema.events.reschedulingPollId} IS NULL`,
         sql`lower(${schema.events.duration}) <= ${phase1Threshold.toISOString()}::timestamptz`,
         sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
       ),
