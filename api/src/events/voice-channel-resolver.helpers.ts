@@ -16,13 +16,15 @@ export async function resolveVoiceChannelForEvent(
   isAuthenticated: boolean,
 ): Promise<VoiceChannelResponseDto> {
   try {
+    // ROK-1389: route through the shared voice-aware resolver so a text override
+    // no longer masquerades as the event's voice channel on the website.
     const channelId =
-      event.notificationChannelOverride ??
-      (await deps.channelResolver.resolveVoiceChannelForScheduledEvent(
+      await deps.channelResolver.resolveVoiceChannelHonoringOverride(
         event.game?.id ?? null,
         event.recurrenceGroupId ?? null,
         event.ephemeralVoiceChannelId ?? null,
-      ));
+        event.notificationChannelOverride ?? null,
+      );
     if (!channelId) {
       return { channelId: null, channelName: null, guildId: null };
     }

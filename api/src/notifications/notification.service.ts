@@ -261,12 +261,13 @@ export class NotificationService {
       .where(eq(schema.events.id, eventId))
       .limit(1);
     if (!event) return null;
-    if (event.notificationChannelOverride)
-      return event.notificationChannelOverride;
-    return this.channelResolver.resolveVoiceChannelForScheduledEvent(
+    // ROK-1389: honor the override only when it is a voice channel, else fall
+    // through to tiered resolution — a text override no longer wins.
+    return this.channelResolver.resolveVoiceChannelHonoringOverride(
       event.gameId,
       event.recurrenceGroupId,
       event.ephemeralVoiceChannelId,
+      event.notificationChannelOverride,
     );
   }
 
