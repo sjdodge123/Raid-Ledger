@@ -22,6 +22,9 @@ export interface ResolvedBinding {
   gameId: number | null;
   gameName: string | null;
   bindingPurpose: string;
+  // ROK-1390: series link threaded into runtime so the zero-confirmation spawn
+  // guard can tell series-linked binds from plain fixed-game binds.
+  recurrenceGroupId: string | null;
   config: {
     minPlayers?: number;
     gracePeriod?: number;
@@ -139,6 +142,7 @@ function mapToResolvedBinding(binding: {
   gameId: number | null;
   gameName?: string | null;
   bindingPurpose: string;
+  recurrenceGroupId?: string | null;
   config: unknown;
 }): ResolvedBinding {
   return {
@@ -146,6 +150,7 @@ function mapToResolvedBinding(binding: {
     gameId: binding.gameId,
     gameName: binding.gameName ?? null,
     bindingPurpose: binding.bindingPurpose,
+    recurrenceGroupId: binding.recurrenceGroupId ?? null,
     config: binding.config as ResolvedBinding['config'],
   };
 }

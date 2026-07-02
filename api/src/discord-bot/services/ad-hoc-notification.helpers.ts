@@ -138,24 +138,50 @@ function assembleEmbedData(
 }
 
 /**
- * Resolve the notification channel for a binding.
+ * Resolve the notification channel for a binding (ROK-1390).
  * Priority: 1) explicit notificationChannelId in config,
- *           2) game-announcements binding for the same game,
- *           3) default bot channel.
+ *           2) series announce slot (ROK-1351) for a series-linked binding,
+ *           3) game-announcements binding for the EFFECTIVE game
+ *              (runtime game fallback), falling back to the binding game,
+ *           4) default bot channel,
+ *           5) null → caller skips posting (existing null-guard).
  */
 export async function resolveNotificationChannel(
   deps: AdHocNotificationDeps,
   bindingId: string,
+  effectiveGameId?: number | null,
 ): Promise<string | null> {
   const binding = await deps.channelBindingsService.getBindingById(bindingId);
   if (!binding) return null;
   const configChannel = extractConfigChannel(binding.config);
   if (configChannel) return configChannel;
-  if (binding.gameId && binding.guildId) {
-    const found = await findAnnouncementChannel(deps, binding);
+  const seriesChannel = await findSeriesAnnounceChannel(deps, binding);
+  if (seriesChannel) return seriesChannel;
+  const announceGameId = effectiveGameId ?? binding.gameId;
+  if (announceGameId && binding.guildId) {
+    const found = await findAnnouncementChannel(deps, {
+      guildId: binding.guildId,
+      gameId: announceGameId,
+    });
     if (found) return found;
   }
   return deps.settingsService.getDiscordBotDefaultChannel();
+}
+
+/**
+ * Find the series-level announce channel (ROK-1351) for a series-linked
+ * binding. Graceful fallthrough (null) when the binding is not series-linked
+ * or the series has no announce slot bound.
+ */
+async function findSeriesAnnounceChannel(
+  deps: AdHocNotificationDeps,
+  binding: { guildId?: string | null; recurrenceGroupId?: string | null },
+): Promise<string | null> {
+  if (!binding.guildId || !binding.recurrenceGroupId) return null;
+  return deps.channelBindingsService.getChannelForSeries(
+    binding.guildId,
+    binding.recurrenceGroupId,
+  );
 }
 
 /** Extract notificationChannelId from binding config. */

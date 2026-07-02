@@ -49,8 +49,12 @@ function buildBindingClause(
   effectiveGameId: number | null | undefined,
   channelId?: string,
 ) {
+  // ROK-1390: match sibling bindings on the same physical voice channel that are
+  // either the game-voice-monitor purpose OR series-linked (a series bind may sit
+  // under a general-lobby purpose after a bind flip). Reaching series siblings by
+  // recurrence_group_id keeps quick-play suppressed during a live series event.
   const siblingSubquery = channelId
-    ? sql`${tables.events.channelBindingId} IN (SELECT id FROM channel_bindings WHERE channel_id = ${channelId} AND binding_purpose = 'game-voice-monitor')`
+    ? sql`${tables.events.channelBindingId} IN (SELECT id FROM channel_bindings WHERE channel_id = ${channelId} AND (binding_purpose = 'game-voice-monitor' OR recurrence_group_id IS NOT NULL))`
     : undefined;
   if (effectiveGameId != null && siblingSubquery) {
     return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${tables.events.gameId} = ${effectiveGameId} OR ${siblingSubquery})`;

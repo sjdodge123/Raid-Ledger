@@ -17,6 +17,7 @@
  * Deterministic polling only — no fixed-delay waits.
  */
 import { pollForEmbed } from '../../helpers/polling.js';
+import { joinVoice, leaveVoice } from '../../helpers/voice.js';
 import {
   createEvent,
   deleteEvent,
@@ -58,13 +59,19 @@ async function bindSeriesChannel(
   seriesId: string,
   channelId: string,
   channelType: typeof GUILD_TEXT | typeof GUILD_VOICE,
+  gameName?: string,
 ): Promise<SlashCommandResponse> {
+  const options: Record<string, unknown> = {
+    series: seriesId,
+    channel: { id: channelId, type: channelType },
+  };
+  // A voice bind with an explicit game resolves to a series-linked
+  // game-voice-monitor binding (ROK-1372 shouldDeriveSeriesGame is a no-op when
+  // the game is explicit), which is the ROK-1390 incident shape.
+  if (gameName) options.game = gameName;
   return ctx.api.post<SlashCommandResponse>('/admin/test/slash-command', {
     commandName: 'bind',
-    options: {
-      series: seriesId,
-      channel: { id: channelId, type: channelType },
-    },
+    options,
     discordUserId: ctx.testBotDiscordId,
     guildId: ctx.config.guildId,
     channelId,
@@ -239,7 +246,135 @@ const announceRoutesToTextHostsInVoice: SmokeTest = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// ROK-1390 — quick-play spawned in a series-linked voice channel announces to
+// the series' text channel (series-announce routing tier), not #general.
+// ---------------------------------------------------------------------------
+
+/** Fetch the first game (id + name) from the registry for the routing test. */
+async function firstGame(
+  ctx: TestContext,
+): Promise<{ id: number; name: string }> {
+  const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
+    '/admin/settings/games?limit=1',
+  );
+  const game = res.data[0];
+  if (!game) throw new Error('No games in DB for quick-play routing test');
+  return game;
+}
+
+/**
+ * Set (or clear, when gameName is undefined) the test bot's /playing override.
+ * The bot has no Discord Rich Presence, so the override is what gives it a
+ * positive game confirmation for the game-voice-monitor spawn guard (ROK-1390).
+ */
+async function setPlayingOverride(
+  ctx: TestContext,
+  gameName?: string,
+): Promise<void> {
+  await ctx.api
+    .post('/admin/test/slash-command', {
+      commandName: 'playing',
+      options: gameName ? { game: gameName } : {},
+      discordUserId: ctx.testBotDiscordId,
+      guildId: ctx.config.guildId,
+      channelId: ctx.textChannels[0]?.id,
+    })
+    .catch(() => {
+      /* clear is best-effort during cleanup */
+    });
+}
+
+/** Bind text + series-linked game-voice-monitor voice slots; return their ids. */
+async function bindSeriesRoutingSlots(
+  ctx: TestContext,
+  recurrenceGroupId: string,
+  textChId: string,
+  voiceChId: string,
+  gameName: string,
+): Promise<{ ids: string[]; voiceBindingId: string }> {
+  await bindSeriesChannel(ctx, recurrenceGroupId, textChId, GUILD_TEXT);
+  await bindSeriesChannel(
+    ctx,
+    recurrenceGroupId,
+    voiceChId,
+    GUILD_VOICE,
+    gameName,
+  );
+  await awaitProcessing(ctx.api);
+  const rows = (await listBindings(ctx.api)).filter(
+    (b) => b.recurrenceGroupId === recurrenceGroupId,
+  );
+  const voiceRow = rows.find((b) => b.channelId === voiceChId);
+  if (!voiceRow) {
+    throw new Error(
+      `Expected a series-linked voice binding on #${voiceChId}; got ${JSON.stringify(rows)}`,
+    );
+  }
+  // minPlayers=1 so a single voice member trips the immediate-unanimous spawn
+  // (no 15-minute delay). The series link + game survive a config-only PATCH.
+  await ctx.api.patch(`/admin/discord/bindings/${voiceRow.id}`, {
+    config: { minPlayers: 1 },
+  });
+  return { ids: rows.map((r) => r.id), voiceBindingId: voiceRow.id };
+}
+
+const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
+  name: 'ROK-1390: series-linked quick-play announces to series text channel, not #general',
+  category: 'voice',
+  async run(ctx) {
+    const textCh = ctx.textChannels[0];
+    const voiceCh = ctx.voiceChannels[0];
+    if (!textCh) throw new Error('No text channel available');
+    if (!voiceCh) throw new Error('No voice channel available');
+
+    const game = await firstGame(ctx);
+    const series = await createSeries(ctx, 'rok1390-route');
+    let bindingIds: string[] = [];
+    try {
+      ({ ids: bindingIds } = await bindSeriesRoutingSlots(
+        ctx,
+        series.recurrenceGroupId,
+        textCh.id,
+        voiceCh.id,
+        game.name,
+      ));
+
+      // Presence-less bot + /playing = one positive confirmation → the series
+      // spawn guard allows the mint and the embed routes via getChannelForSeries.
+      await setPlayingOverride(ctx, game.name);
+      await joinVoice(voiceCh.id);
+
+      // The quick-play LIVE embed ("<game> — Quick Play") must land in the
+      // series TEXT announce channel. Without the ROK-1390 series-announce tier
+      // it would fall through to the default bot channel (the series text slot
+      // has gameId=null, so the game-announce tier can't match it).
+      const announced = await pollForEmbed(
+        textCh.id,
+        (m) => m.embeds.some((e) => /quick play/i.test(e.title ?? '')),
+        ctx.config.timeoutMs,
+      );
+      if (!announced) {
+        throw new Error(
+          `Expected quick-play LIVE embed in series announce channel #${textCh.name}; ` +
+            'series-announce routing tier (ROK-1390) did not fire',
+        );
+      }
+    } finally {
+      leaveVoice();
+      await setPlayingOverride(ctx); // clear override
+      for (const id of bindingIds) await deleteBinding(ctx.api, id);
+      await deleteEvent(ctx.api, series.id);
+    }
+  },
+};
+
+// Voice-join tests need real UDP connectivity to Discord voice servers; CI
+// runners can't establish those, so gate on SMOKE_SKIP_VOICE_JOIN (ROK-969).
+const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
+
 export const seriesDualBindingTests: SmokeTest[] = [
   dualBindingPersists,
   announceRoutesToTextHostsInVoice,
+  ...(canJoinVoice ? [quickPlayRoutesToSeriesAnnounce] : []),
 ];

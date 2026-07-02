@@ -332,7 +332,7 @@ describe('ChannelResolverService', () => {
     }
 
     function overrideResolver(): OverrideResolver {
-      return service as unknown as OverrideResolver;
+      return service;
     }
 
     it('returns the override when the guild cache says it is voice-based', async () => {
@@ -342,12 +342,13 @@ describe('ChannelResolverService', () => {
       );
       bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
 
-      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
-        1,
-        null,
-        null,
-        'ov-voice',
-      );
+      const result =
+        await overrideResolver().resolveVoiceChannelHonoringOverride(
+          1,
+          null,
+          null,
+          'ov-voice',
+        );
 
       expect(result).toBe('ov-voice');
       expect(bindingsService.getVoiceChannelForGame).not.toHaveBeenCalled();
@@ -360,12 +361,13 @@ describe('ChannelResolverService', () => {
       );
       bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
 
-      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
-        1,
-        null,
-        null,
-        'ov-text',
-      );
+      const result =
+        await overrideResolver().resolveVoiceChannelHonoringOverride(
+          1,
+          null,
+          null,
+          'ov-text',
+        );
 
       expect(result).toBe('game-voice');
       expect(result).not.toBe('ov-text');
@@ -375,12 +377,13 @@ describe('ChannelResolverService', () => {
       clientService.getGuildId.mockReturnValue('guild-123');
       clientService.getGuild.mockReturnValue(fakeGuild({}) as never);
 
-      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
-        1,
-        null,
-        null,
-        'ov-uncached',
-      );
+      const result =
+        await overrideResolver().resolveVoiceChannelHonoringOverride(
+          1,
+          null,
+          null,
+          'ov-uncached',
+        );
 
       expect(result).toBe('ov-uncached');
     });
@@ -395,12 +398,13 @@ describe('ChannelResolverService', () => {
         channels: { cache },
       } as never);
 
-      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
-        1,
-        null,
-        null,
-        'ov-stage',
-      );
+      const result =
+        await overrideResolver().resolveVoiceChannelHonoringOverride(
+          1,
+          null,
+          null,
+          'ov-stage',
+        );
 
       expect(result).toBe('ov-stage');
     });
@@ -410,12 +414,13 @@ describe('ChannelResolverService', () => {
       clientService.getGuild.mockReturnValue(fakeGuild({}) as never);
       bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
 
-      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
-        1,
-        null,
-        null,
-        null,
-      );
+      const result =
+        await overrideResolver().resolveVoiceChannelHonoringOverride(
+          1,
+          null,
+          null,
+          null,
+        );
 
       expect(result).toBe('game-voice');
     });

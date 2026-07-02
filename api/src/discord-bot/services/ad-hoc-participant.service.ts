@@ -154,8 +154,11 @@ export class AdHocParticipantService {
       )
       .returning({ id: schema.adHocParticipants.id });
 
+    // ROK-1390: finalizeAll only closes rows still active at end time
+    // (WHERE leftAt IS NULL); already-left participants keep their persisted
+    // durations. The reworded log makes "Finalized 0" read as expected, not a bug.
     this.logger.log(
-      `Finalized ${result.length} participants for ad-hoc event ${eventId}`,
+      `Finalized ${result.length} still-active participant(s) for ad-hoc event ${eventId} (already-left rows preserved)`,
     );
   }
 

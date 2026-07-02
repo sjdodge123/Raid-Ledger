@@ -262,6 +262,7 @@ async function notifySpawn(
         discordUsername: member.discordUsername,
       },
     ],
+    effectiveGameId,
   );
 }
 
