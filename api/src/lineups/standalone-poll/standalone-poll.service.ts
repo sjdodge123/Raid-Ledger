@@ -105,8 +105,9 @@ export class StandalonePollService {
     }
     // ROK-1370: lock-in cleared reschedulingPollId — re-emit UPDATED so the
     // embed resets RESCHEDULING → POSTED and the Scheduled Event is recreated
-    // at the (already-moved) winning time.
-    if (result.ok && result.linkedEventId) {
+    // at the (already-moved) winning time. Skip for an event cancelled
+    // mid-poll: the re-emit would recreate a Discord SE for a dead event.
+    if (result.ok && result.linkedEventId && !result.linkedEventCancelled) {
       this.eventsService
         .emitLifecycleEvent(result.linkedEventId, APP_EVENT_EVENTS.UPDATED)
         .catch(noop);

@@ -191,17 +191,29 @@ export async function clearReschedulingPollId(
 export async function completeStandalonePoll(
   db: Db,
   matchId: number,
-): Promise<{ ok: boolean; linkedEventId?: number }> {
+): Promise<{
+  ok: boolean;
+  linkedEventId?: number;
+  linkedEventCancelled?: boolean;
+}> {
   const [match] = await db
     .select({
       id: schema.communityLineupMatches.id,
       lineupId: schema.communityLineupMatches.lineupId,
       linkedEventId: schema.communityLineupMatches.linkedEventId,
+      // ROK-1370: the caller must not re-emit UPDATED (which recreates the
+      // Discord SE via the cleared-id create branch) for an event that was
+      // cancelled mid-poll.
+      linkedEventCancelled: sql<boolean>`${schema.events.cancelledAt} IS NOT NULL`,
     })
     .from(schema.communityLineupMatches)
     .innerJoin(
       schema.communityLineups,
       eq(schema.communityLineups.id, schema.communityLineupMatches.lineupId),
+    )
+    .leftJoin(
+      schema.events,
+      eq(schema.events.id, schema.communityLineupMatches.linkedEventId),
     )
     .where(
       and(
@@ -227,7 +239,11 @@ export async function completeStandalonePoll(
       await clearReschedulingPollId(tx, match.linkedEventId);
     }
   });
-  return { ok: true, linkedEventId: match.linkedEventId ?? undefined };
+  return {
+    ok: true,
+    linkedEventId: match.linkedEventId ?? undefined,
+    linkedEventCancelled: match.linkedEventCancelled,
+  };
 }
 
 /** Find all active standalone polls (scheduling matches in standalone lineups). */
@@ -272,17 +288,20 @@ export async function findActiveStandalonePolls(db: Db): Promise<
 export async function clearLinkedEventsByLineup(
   db: Db,
   lineupId: number,
-): Promise<void> {
+): Promise<number[]> {
   const matches = await db
     .select({ linkedEventId: schema.communityLineupMatches.linkedEventId })
     .from(schema.communityLineupMatches)
     .where(eq(schema.communityLineupMatches.lineupId, lineupId));
 
+  const cleared: number[] = [];
   for (const m of matches) {
     if (m.linkedEventId) {
       await clearReschedulingPollId(db, m.linkedEventId);
+      cleared.push(m.linkedEventId);
     }
   }
+  return cleared;
 }
 
 /** Count members for a given match. */
