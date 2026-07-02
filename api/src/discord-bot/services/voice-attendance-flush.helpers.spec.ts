@@ -461,3 +461,142 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1389 — series-aware union / dedup in findActiveEventsForChannel.
+//
+// RED until ROK-1389 lands. Part 1 of the fix must union events matched by the
+// voice binding's recurrence_group_id (via the new
+// `queryActiveEventsByRecurrenceGroups` in `voice-attendance-series.helpers.ts`)
+// with the existing gameId / all-games results, deduped by event id — so a
+// series voice channel maps to this week's instance even when the instance
+// gameId differs from (or is null vs) the binding's stored gameId.
+//
+// These exercise the observable union through the EXISTING public
+// `findActiveEventsForChannel` rather than importing the not-yet-created helper
+// (which would break this file's compilation and take the green ROK-842 suite
+// down with it). The flat mock resolves the FIRST `.where()` call — the existing
+// gameId query — to a miss, and every subsequent call — the new series query —
+// to the hit. So today (one query, miss) the assertions are RED; once the union
+// adds the second source they pass. Order-independent for the GREEN direction.
+// ---------------------------------------------------------------------------
+describe('findActiveEventsForChannel — series-aware union/dedup (ROK-1389)', () => {
+  let mockDb: MockDb;
+  let logger: Logger;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    logger = makeLogger();
+  });
+
+  it('matches a series instance whose gameId differs from the binding gameId', async () => {
+    // Binding stores gameId=1 (game-voice-monitor); the live instance is
+    // gameId=2 but shares the binding's recurrence group.
+    const bindings = [
+      {
+        channelId: 'series-voice',
+        bindingPurpose: 'game-voice-monitor',
+        gameId: 1,
+        recurrenceGroupId: 'group-R',
+      },
+    ];
+    mockDb.where.mockResolvedValueOnce([]); // gameId query misses (2 not in [1])
+    mockDb.where.mockResolvedValue([{ id: 42, gameId: 2 }]); // series query hits
+
+    const result = await findActiveEventsForChannel(
+      mockDb as never,
+      'series-voice',
+      bindings,
+      VOICE_PURPOSES,
+      null,
+      logger,
+    );
+
+    expect(result.map((e) => e.eventId)).toContain(42);
+  });
+
+  it('unions instances across MULTIPLE series bound to one channel', async () => {
+    const bindings = [
+      {
+        channelId: 'multi-voice',
+        bindingPurpose: 'game-voice-monitor',
+        gameId: 1,
+        recurrenceGroupId: 'group-1',
+      },
+      {
+        channelId: 'multi-voice',
+        bindingPurpose: 'game-voice-monitor',
+        gameId: 2,
+        recurrenceGroupId: 'group-2',
+      },
+    ];
+    mockDb.where.mockResolvedValueOnce([]); // gameId query
+    mockDb.where.mockResolvedValue([
+      { id: 1, gameId: 1 },
+      { id: 2, gameId: 2 },
+    ]); // series query across both groups
+
+    const result = await findActiveEventsForChannel(
+      mockDb as never,
+      'multi-voice',
+      bindings,
+      VOICE_PURPOSES,
+      null,
+      logger,
+    );
+
+    expect(result.map((e) => e.eventId).sort()).toEqual([1, 2]);
+  });
+
+  it('matches a series instance whose gameId is NULL (variety night)', async () => {
+    const bindings = [
+      {
+        channelId: 'variety-voice',
+        bindingPurpose: 'game-voice-monitor',
+        gameId: 1,
+        recurrenceGroupId: 'group-V',
+      },
+    ];
+    mockDb.where.mockResolvedValueOnce([]); // gameId query misses
+    mockDb.where.mockResolvedValue([{ id: 77, gameId: null }]); // series query
+
+    const result = await findActiveEventsForChannel(
+      mockDb as never,
+      'variety-voice',
+      bindings,
+      VOICE_PURPOSES,
+      null,
+      logger,
+    );
+
+    expect(result).toContainEqual({ eventId: 77, gameId: null });
+  });
+
+  // GREEN regression pin: dedup must hold. A general-lobby series binding makes
+  // the all-games query already return event 7; the series query returns the
+  // SAME event. The union must not double-count. Passes today (one source) and
+  // must keep passing after the fix adds the second source.
+  it('deduplicates when an event matches BOTH the all-games and series paths', async () => {
+    const bindings = [
+      {
+        channelId: 'lobby-voice',
+        bindingPurpose: 'general-lobby',
+        gameId: null,
+        recurrenceGroupId: 'group-L',
+      },
+    ];
+    mockDb.where.mockResolvedValueOnce([{ id: 7, gameId: 5 }]); // all-games query
+    mockDb.where.mockResolvedValue([{ id: 7, gameId: 5 }]); // series query, same event
+
+    const result = await findActiveEventsForChannel(
+      mockDb as never,
+      'lobby-voice',
+      bindings,
+      VOICE_PURPOSES,
+      null,
+      logger,
+    );
+
+    expect(result.filter((e) => e.eventId === 7)).toHaveLength(1);
+  });
+});
