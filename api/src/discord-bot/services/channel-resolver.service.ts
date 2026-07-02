@@ -147,4 +147,41 @@ export class ChannelResolverService {
     );
     return null;
   }
+
+  /**
+   * Resolve the voice channel while honoring a per-event override ONLY when it
+   * points at a voice channel (ROK-1389). This is the single voice-resolution
+   * entry every row-level surface (website detail, reminder deep-links, embed
+   * voice field, SE create/edit) routes through, so they can never disagree.
+   *
+   * A cached TEXT override falls through to the tiered resolution (mirrors the
+   * guard that previously lived only in resolveVoiceForEdit); an override the
+   * guild cache doesn't know is used optimistically (may be an uncached voice
+   * channel). The override was returned unconditionally before, which routed
+   * reminders/attendance to a non-voice channel.
+   */
+  async resolveVoiceChannelHonoringOverride(
+    gameId?: number | null,
+    recurrenceGroupId?: string | null,
+    ephemeralChannelId?: string | null,
+    override?: string | null,
+  ): Promise<string | null> {
+    if (override && this.overrideIsVoiceChannel(override)) return override;
+    return this.resolveVoiceChannelForScheduledEvent(
+      gameId,
+      recurrenceGroupId,
+      ephemeralChannelId,
+    );
+  }
+
+  /**
+   * True when the override is a voice channel, or when the guild cache doesn't
+   * know it (optimistic — may be an uncached voice channel). Mirrors
+   * resolveVoiceForEdit's guard so voice-ness lives in one place.
+   */
+  private overrideIsVoiceChannel(override: string): boolean {
+    const guild = this.clientService.getGuild();
+    const cached = guild?.channels.cache.get(override);
+    return !cached || cached.isVoiceBased();
+  }
 }

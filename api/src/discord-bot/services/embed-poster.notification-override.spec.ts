@@ -105,7 +105,8 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
           resolveChannelForEvent: jest
             .fn()
             .mockResolvedValue('default-channel'),
-          resolveVoiceChannelForScheduledEvent: jest
+          // ROK-1389: applyVoiceChannel routes voice resolution through here.
+          resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue(null),
         },

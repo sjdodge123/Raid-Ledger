@@ -28,7 +28,7 @@ async function buildChannelResolverModule() {
       },
       {
         provide: DiscordBotClientService,
-        useValue: { getGuildId: jest.fn() },
+        useValue: { getGuildId: jest.fn(), getGuild: jest.fn() },
       },
     ],
   }).compile();
@@ -294,6 +294,129 @@ describe('ChannelResolverService', () => {
         null,
         null,
       );
+      expect(result).toBe('game-voice');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // ROK-1389 — resolveVoiceChannelHonoringOverride: the ONE shared voice-aware
+  // resolver entry (Part 2). It honors notificationChannelOverride as the voice
+  // channel ONLY when the guild cache says the channel is voice-based (mirrors
+  // resolveVoiceForEdit's guard, scheduled-event.discord-ops.ts:229-233); a
+  // cached TEXT override falls through to tiered resolution, and an override not
+  // in the cache is used optimistically.
+  //
+  // RED until ROK-1389 lands: the method does not exist yet, so every call
+  // throws at runtime (fails-by-construction). We cast the service to the
+  // expected signature so the file still compiles and the existing suite stays
+  // green. Keep the method name + arity exactly as the spec names them.
+  // -------------------------------------------------------------------------
+  describe('resolveVoiceChannelHonoringOverride (ROK-1389)', () => {
+    type OverrideResolver = {
+      resolveVoiceChannelHonoringOverride(
+        gameId: number | null | undefined,
+        recurrenceGroupId: string | null | undefined,
+        ephemeralChannelId: string | null | undefined,
+        override: string | null | undefined,
+      ): Promise<string | null>;
+    };
+
+    function fakeGuild(channels: Record<string, boolean>) {
+      const cache = new Map(
+        Object.entries(channels).map(([id, isVoice]) => [
+          id,
+          { isVoiceBased: () => isVoice },
+        ]),
+      );
+      return { id: 'guild-123', channels: { cache } };
+    }
+
+    function overrideResolver(): OverrideResolver {
+      return service as unknown as OverrideResolver;
+    }
+
+    it('returns the override when the guild cache says it is voice-based', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      clientService.getGuild.mockReturnValue(
+        fakeGuild({ 'ov-voice': true }) as never,
+      );
+      bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
+
+      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
+        1,
+        null,
+        null,
+        'ov-voice',
+      );
+
+      expect(result).toBe('ov-voice');
+      expect(bindingsService.getVoiceChannelForGame).not.toHaveBeenCalled();
+    });
+
+    it('falls through to tiered resolution when the override is a cached TEXT channel', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      clientService.getGuild.mockReturnValue(
+        fakeGuild({ 'ov-text': false }) as never,
+      );
+      bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
+
+      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
+        1,
+        null,
+        null,
+        'ov-text',
+      );
+
+      expect(result).toBe('game-voice');
+      expect(result).not.toBe('ov-text');
+    });
+
+    it('uses an uncached override optimistically (not in the guild cache)', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      clientService.getGuild.mockReturnValue(fakeGuild({}) as never);
+
+      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
+        1,
+        null,
+        null,
+        'ov-uncached',
+      );
+
+      expect(result).toBe('ov-uncached');
+    });
+
+    it('honors a STAGE voice-channel override (isVoiceBased covers stage — ROK-716 pin)', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      const cache = new Map([
+        ['ov-stage', { type: 13, isVoiceBased: () => true }], // ChannelType.GuildStageVoice
+      ]);
+      clientService.getGuild.mockReturnValue({
+        id: 'guild-123',
+        channels: { cache },
+      } as never);
+
+      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
+        1,
+        null,
+        null,
+        'ov-stage',
+      );
+
+      expect(result).toBe('ov-stage');
+    });
+
+    it('with no override, resolves through the normal voice tiers', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      clientService.getGuild.mockReturnValue(fakeGuild({}) as never);
+      bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
+
+      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
+        1,
+        null,
+        null,
+        null,
+      );
+
       expect(result).toBe('game-voice');
     });
   });

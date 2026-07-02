@@ -30,7 +30,12 @@ function buildMockServices() {
     },
     channelBindingsService: { getBindingById: jest.fn() },
     channelResolver: {
-      resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
+      // ROK-1389: resolveVoice routes through the shared override-honoring entry.
+      resolveVoiceChannelHonoringOverride: jest
+        .fn()
+        .mockImplementation((_g, _r, _e, override) =>
+          Promise.resolve(override ?? null),
+        ),
     },
     settingsService: {
       getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),

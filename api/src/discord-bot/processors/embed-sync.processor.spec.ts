@@ -99,7 +99,7 @@ function buildProviders(mockDb: Record<string, jest.Mock>) {
     {
       provide: ChannelResolverService,
       useValue: {
-        resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
+        resolveVoiceChannelHonoringOverride: jest.fn().mockResolvedValue(null),
       },
     },
   ];

@@ -139,23 +139,25 @@ export async function resolveVoiceForCreate(
   gameId: number | null | undefined,
   override: string | null | undefined,
   channelResolver: {
-    resolveVoiceChannelForScheduledEvent(
+    resolveVoiceChannelHonoringOverride(
       gameId?: number | null,
       recurrenceGroupId?: string | null,
       ephemeralChannelId?: string | null,
+      override?: string | null,
     ): Promise<string | null>;
   },
 ): Promise<string | null> {
   const { recurrenceGroupId, ephemeralVoiceChannelId } =
     await getRecurrenceAndEphemeral(db, eventId);
+  // ROK-1389: honor the override only when it is a voice channel; the guard
+  // lives in ChannelResolverService so every surface agrees.
   return (
-    override ??
-    (await channelResolver.resolveVoiceChannelForScheduledEvent(
+    (await channelResolver.resolveVoiceChannelHonoringOverride(
       gameId,
       recurrenceGroupId,
       ephemeralVoiceChannelId,
-    )) ??
-    null
+      override,
+    )) ?? null
   );
 }
 

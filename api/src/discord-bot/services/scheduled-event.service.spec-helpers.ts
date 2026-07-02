@@ -144,6 +144,16 @@ function buildScheduledEventProviders(
         resolveVoiceChannelForScheduledEvent: jest
           .fn()
           .mockResolvedValue('voice-channel-123'),
+        // ROK-1389: SE create/edit now route voice resolution through the shared
+        // override-honoring entry. Mimic the real guard (no guild cache here →
+        // a set override is honored optimistically, else the tiered default).
+        // The guard cases (voice/text/uncached) are pinned on the real service
+        // in channel-resolver.service.spec.ts.
+        resolveVoiceChannelHonoringOverride: jest
+          .fn()
+          .mockImplementation((_g, _r, _e, override) =>
+            Promise.resolve(override ?? 'voice-channel-123'),
+          ),
       },
     },
     {

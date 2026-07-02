@@ -29,9 +29,13 @@ import {
 type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
 interface VoiceChannelResolver {
-  resolveVoiceChannelForScheduledEvent(
+  // ROK-1389: resolve via the shared voice-aware entry so a text override never
+  // becomes the SE's voice channel.
+  resolveVoiceChannelHonoringOverride(
     gameId?: number | null,
     recurrenceGroupId?: string | null,
+    ephemeralChannelId?: string | null,
+    override?: string | null,
   ): Promise<string | null>;
 }
 

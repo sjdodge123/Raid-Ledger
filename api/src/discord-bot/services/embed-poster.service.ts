@@ -165,13 +165,14 @@ export class EmbedPosterService {
     enrichedEvent: EmbedEventData,
     opts: ChannelOpts,
   ): Promise<void> {
+    // ROK-1389: a text override must not win the embed's "Join Voice" link.
     const voiceChannelId =
-      opts.notificationChannelOverride ??
-      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+      await this.channelResolver.resolveVoiceChannelHonoringOverride(
         opts.gameId,
         opts.recurrenceGroupId,
         opts.ephemeralVoiceChannelId,
-      ));
+        opts.notificationChannelOverride,
+      );
     if (voiceChannelId) enrichedEvent.voiceChannelId = voiceChannelId;
   }
 

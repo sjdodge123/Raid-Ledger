@@ -13,6 +13,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
   let service: NotificationService;
   let mockChannelResolver: {
     resolveVoiceChannelForScheduledEvent: jest.Mock;
+    resolveVoiceChannelHonoringOverride: jest.Mock;
   };
   let mockDb: {
     select: jest.Mock;
@@ -35,6 +36,9 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
   beforeEach(async () => {
     mockChannelResolver = {
       resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
+      // ROK-1389: resolveVoiceChannelForEvent now delegates here so a text
+      // override no longer wins unconditionally.
+      resolveVoiceChannelHonoringOverride: jest.fn().mockResolvedValue(null),
     };
 
     mockDb = {
@@ -138,7 +142,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
   // ─── resolveVoiceChannelForEvent ─────────────────────────────────────────
 
   describe('resolveVoiceChannelForEvent', () => {
-    it('looks up event by ID and delegates to channelResolver with its gameId', async () => {
+    it('looks up event by ID and delegates to the override-honoring resolver', async () => {
       const mockEvent = {
         gameId: 7,
         notificationChannelOverride: null,
@@ -146,7 +150,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         ephemeralVoiceChannelId: null,
       };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
-      mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+      mockChannelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
         'vc-from-game-7',
       );
 
@@ -154,8 +158,8 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
 
       expect(mockDb.select).toHaveBeenCalled();
       expect(
-        mockChannelResolver.resolveVoiceChannelForScheduledEvent,
-      ).toHaveBeenCalledWith(7, null, null);
+        mockChannelResolver.resolveVoiceChannelHonoringOverride,
+      ).toHaveBeenCalledWith(7, null, null, null);
       expect(result).toBe('vc-from-game-7');
     });
 
@@ -166,11 +170,11 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
 
       expect(result).toBeNull();
       expect(
-        mockChannelResolver.resolveVoiceChannelForScheduledEvent,
+        mockChannelResolver.resolveVoiceChannelHonoringOverride,
       ).not.toHaveBeenCalled();
     });
 
-    it('returns null when event has no gameId (null)', async () => {
+    it('delegates with a null gameId when the event has none', async () => {
       const mockEvent = {
         gameId: null,
         notificationChannelOverride: null,
@@ -178,26 +182,26 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         ephemeralVoiceChannelId: null,
       };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
-      mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+      mockChannelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
         null,
       );
 
       const result = await service.resolveVoiceChannelForEvent(50);
 
       expect(
-        mockChannelResolver.resolveVoiceChannelForScheduledEvent,
-      ).toHaveBeenCalledWith(null, null, null);
+        mockChannelResolver.resolveVoiceChannelHonoringOverride,
+      ).toHaveBeenCalledWith(null, null, null, null);
       expect(result).toBeNull();
     });
 
-    it('returns null when channelResolver returns null for the event game', async () => {
+    it('returns null when the resolver returns null for the event game', async () => {
       const mockEvent = {
         gameId: 3,
         notificationChannelOverride: null,
         recurrenceGroupId: null,
       };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
-      mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+      mockChannelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
         null,
       );
 
@@ -213,7 +217,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         recurrenceGroupId: null,
       };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
-      mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+      mockChannelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
         '111222333444',
       );
 
@@ -222,20 +226,24 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
       expect(result).toBe('111222333444');
     });
 
-    it('returns notificationChannelOverride directly without calling resolver (ROK-599)', async () => {
+    it('threads notificationChannelOverride through the honoring resolver (ROK-1389)', async () => {
       const mockEvent = {
         gameId: 7,
         notificationChannelOverride: 'override-vc-999',
         recurrenceGroupId: null,
       };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
+      // A voice override is honored by the resolver → returned unchanged.
+      mockChannelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
+        'override-vc-999',
+      );
 
       const result = await service.resolveVoiceChannelForEvent(42);
 
       expect(result).toBe('override-vc-999');
       expect(
-        mockChannelResolver.resolveVoiceChannelForScheduledEvent,
-      ).not.toHaveBeenCalled();
+        mockChannelResolver.resolveVoiceChannelHonoringOverride,
+      ).toHaveBeenCalledWith(7, null, undefined, 'override-vc-999');
     });
   });
 

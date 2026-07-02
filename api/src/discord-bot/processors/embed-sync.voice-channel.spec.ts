@@ -144,7 +144,8 @@ beforeEach(async () => {
       {
         provide: ChannelResolverService,
         useValue: {
-          resolveVoiceChannelForScheduledEvent: jest
+          // ROK-1389: enrichWithVoiceChannel routes through the shared entry.
+          resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue(null),
         },
@@ -166,18 +167,18 @@ const job = {
 } as Job<EmbedSyncJobData>;
 
 describe('EmbedSyncProcessor voice channel — resolver calls', () => {
-  it('calls resolveVoiceChannelForScheduledEvent with the event gameId', async () => {
+  it('calls resolveVoiceChannelHonoringOverride with the event gameId', async () => {
     setupDbForSuccessfulSync(mockDb);
     mockDb.update.mockReturnValue(makeUpdateChain());
 
     await processor.process(job);
 
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(7, null, null);
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(7, null, null, null);
   });
 
-  it('calls resolveVoiceChannelForScheduledEvent with null when event has no gameId', async () => {
+  it('calls resolveVoiceChannelHonoringOverride with null when event has no gameId', async () => {
     const eventWithNoGame = { ...mockEvent, gameId: null };
     mockDb.select
       .mockReturnValueOnce(makeSelectChain([mockRecord]))
@@ -189,8 +190,8 @@ describe('EmbedSyncProcessor voice channel — resolver calls', () => {
     await processor.process(job);
 
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(null, null, null);
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).toHaveBeenCalledWith(null, null, null, null);
   });
 });
 
@@ -199,7 +200,7 @@ describe('EmbedSyncProcessor voice channel — embed data', () => {
     setupDbForSuccessfulSync(mockDb);
     mockDb.update.mockReturnValue(makeUpdateChain());
 
-    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
       'voice-ch-999',
     );
 
@@ -216,9 +217,7 @@ describe('EmbedSyncProcessor voice channel — embed data', () => {
     setupDbForSuccessfulSync(mockDb);
     mockDb.update.mockReturnValue(makeUpdateChain());
 
-    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
-      null,
-    );
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(null);
 
     await processor.process(job);
 
@@ -239,7 +238,7 @@ describe('EmbedSyncProcessor voice channel — skip conditions', () => {
     );
 
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
+      channelResolver.resolveVoiceChannelHonoringOverride,
     ).not.toHaveBeenCalled();
   });
 
@@ -249,7 +248,7 @@ describe('EmbedSyncProcessor voice channel — skip conditions', () => {
     await processor.process(job);
 
     expect(
-      channelResolver.resolveVoiceChannelForScheduledEvent,
+      channelResolver.resolveVoiceChannelHonoringOverride,
     ).not.toHaveBeenCalled();
   });
 });

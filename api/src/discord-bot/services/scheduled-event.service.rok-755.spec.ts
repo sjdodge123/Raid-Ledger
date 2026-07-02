@@ -77,7 +77,7 @@ describe('createScheduledEvent — voice channel logging (ROK-755)', () => {
   afterEach(() => jest.clearAllMocks());
 
   it('logs warning when no voice channel resolved', async () => {
-    mocks.channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+    mocks.channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
       null,
     );
     const logSpy = jest.spyOn((mocks.service as any).logger, 'warn');
