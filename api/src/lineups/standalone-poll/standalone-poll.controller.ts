@@ -23,10 +23,8 @@ import {
   type SchedulingPollResponseDto,
 } from '@raid-ledger/contract';
 import { StandalonePollService } from './standalone-poll.service';
-
-interface AuthRequest extends Request {
-  user: { id: number; username: string; role: string };
-}
+import type { AuthenticatedRequest } from '../../auth/types';
+import { isOperatorOrAdmin } from '../../events/controller.helpers';
 
 @Controller('scheduling-polls')
 @UseGuards(AuthGuard('jwt'))
@@ -46,13 +44,14 @@ export class StandalonePollController {
   async complete(
     @Param('matchId', ParseIntPipe) matchId: number,
     @Body() body: { eventId?: number; startTime?: string },
-    @Req() req: AuthRequest,
+    @Req() req: AuthenticatedRequest,
   ) {
     const ok = await this.service.complete(
       matchId,
       body?.eventId,
       body?.startTime,
       req.user.id,
+      isOperatorOrAdmin(req.user.role),
     );
     if (!ok) throw new NotFoundException('Poll not found');
     return { ok: true };
@@ -68,12 +67,16 @@ export class StandalonePollController {
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() body: unknown,
-    @Req() req: AuthRequest,
+    @Req() req: AuthenticatedRequest,
   ): Promise<SchedulingPollResponseDto> {
     const parsed = CreateSchedulingPollSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.service.create(parsed.data, req.user.id);
+    return this.service.create(
+      parsed.data,
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+    );
   }
 }

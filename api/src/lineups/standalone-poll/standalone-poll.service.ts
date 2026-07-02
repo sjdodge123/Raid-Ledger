@@ -20,7 +20,6 @@ import { StandalonePollNotificationService } from './standalone-poll-notificatio
 import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
 import {
   findGameById,
-  eventExists,
   filterValidUserIds,
   insertDecidedLineup,
   insertSchedulingMatch,
@@ -30,6 +29,10 @@ import {
   completeStandalonePoll,
   stampReschedulingPollId,
 } from './standalone-poll-query.helpers';
+import {
+  assertCanRescheduleEvent,
+  assertCanCompletePoll,
+} from './standalone-poll-auth.helpers';
 import {
   findScheduleSlots,
   findScheduleVotes,
@@ -86,7 +89,11 @@ export class StandalonePollService {
     eventId?: number,
     startTime?: string,
     creatorId?: number,
+    isAdmin = false,
   ): Promise<boolean> {
+    // ROK-1370 (P2): a LINKED poll's lock-in re-emits UPDATED (embed → POSTED,
+    // SE recreated) — restrict it to the poll/event owner or an admin.
+    await assertCanCompletePoll(this.db, matchId, creatorId ?? -1, isAdmin);
     const result = await completeStandalonePoll(this.db, matchId);
     if (result.ok && eventId) {
       this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
@@ -203,10 +210,18 @@ export class StandalonePollService {
   async create(
     input: CreatePollInput,
     userId: number,
+    isAdmin = false,
   ): Promise<SchedulingPollResponseDto> {
     const game = await this.validateGame(input.gameId);
     if (input.linkedEventId) {
-      await this.validateEvent(input.linkedEventId);
+      // ROK-1370 (P1): opening a poll linked to an event is destructive — only
+      // the event owner or an admin may do it (404 preserved when missing).
+      await assertCanRescheduleEvent(
+        this.db,
+        input.linkedEventId,
+        userId,
+        isAdmin,
+      );
     }
     const phaseDeadline = this.computeDeadline(input.durationHours);
     const lineup = await insertDecidedLineup(
@@ -252,12 +267,6 @@ export class StandalonePollService {
     const game = await findGameById(this.db, gameId);
     if (!game) throw new NotFoundException('Game not found');
     return game;
-  }
-
-  /** Validate linked event exists, throw 404 if not. */
-  private async validateEvent(eventId: number): Promise<void> {
-    const exists = await eventExists(this.db, eventId);
-    if (!exists) throw new NotFoundException('Event not found');
   }
 
   /** Compute phase deadline from optional durationHours. */

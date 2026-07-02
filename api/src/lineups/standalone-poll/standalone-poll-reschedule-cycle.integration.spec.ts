@@ -65,10 +65,47 @@ async function createEvent(
 }
 
 function postSchedulingPoll(linkedEventId: number) {
+  return postPollAs(adminToken, linkedEventId);
+}
+
+/** POST /scheduling-polls as an arbitrary caller. */
+function postPollAs(token: string, linkedEventId: number) {
   return testApp.request
     .post('/scheduling-polls')
-    .set('Authorization', `Bearer ${adminToken}`)
+    .set('Authorization', `Bearer ${token}`)
     .send({ gameId: testApp.seed.game.id, linkedEventId });
+}
+
+/** POST /scheduling-polls/:matchId/complete as an arbitrary caller. */
+function completePollAs(token: string, matchId: number) {
+  return testApp.request
+    .post(`/scheduling-polls/${matchId}/complete`)
+    .set('Authorization', `Bearer ${token}`);
+}
+
+/** Create a non-admin member and return their bearer token + id. */
+async function loginAsMember(
+  tag: string,
+): Promise<{ token: string; userId: number }> {
+  const bcrypt = await import('bcrypt');
+  const hash = await bcrypt.hash('MemberPass1!', 4);
+  const [user] = await testApp.db
+    .insert(schema.users)
+    .values({
+      discordId: `local:${tag}@test.local`,
+      username: tag,
+      role: 'member',
+    })
+    .returning();
+  await testApp.db.insert(schema.localCredentials).values({
+    email: `${tag}@test.local`,
+    passwordHash: hash,
+    userId: user.id,
+  });
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email: `${tag}@test.local`, password: 'MemberPass1!' });
+  return { token: res.body.access_token as string, userId: user.id };
 }
 
 /** Drive the two-step lock-in: reschedule in place, then complete the poll. */
@@ -230,3 +267,91 @@ describe(
   'ROK-1370 Part 1 — cron/query suppression while poll open',
   describeQuerySuppression,
 );
+
+// =====================================================================
+// ROK-1370 P1/P2 — authorization on the destructive poll endpoints.
+// Opening a poll linked to an event tears down its Scheduled Event +
+// suppresses its scans; completing one re-emits UPDATED. Both must be
+// restricted to the event/poll owner or an admin (Codex security review).
+// =====================================================================
+
+function describeCreateAuth() {
+  it('403s a non-owner and leaves the event un-stamped (no side effects)', async () => {
+    const owner = await loginAsMember('p1-owner');
+    const stranger = await loginAsMember('p1-stranger');
+    const event = await createEvent('P1 Owned', { creatorId: owner.userId });
+
+    const res = await postPollAs(stranger.token, event.id);
+    expect(res.status).toBe(403);
+
+    const after = await readEvent(event.id);
+    expect((after as Record<string, unknown>).reschedulingPollId).toBeNull();
+    // The destructive path never ran: no lineup/match rows were created.
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches);
+    expect(matches).toHaveLength(0);
+  });
+
+  it('lets the event owner open a reschedule poll', async () => {
+    const owner = await loginAsMember('p1-owner-ok');
+    const event = await createEvent('P1 Owner OK', { creatorId: owner.userId });
+
+    const res = await postPollAs(owner.token, event.id);
+    expect(res.status).toBe(201);
+    const after = await readEvent(event.id);
+    expect((after as Record<string, unknown>).reschedulingPollId).toBe(
+      res.body.id,
+    );
+  });
+
+  it('lets an admin open a reschedule poll for any event', async () => {
+    const owner = await loginAsMember('p1-owner-admin');
+    const event = await createEvent('P1 Admin OK', { creatorId: owner.userId });
+
+    const res = await postPollAs(adminToken, event.id);
+    expect(res.status).toBe(201);
+  });
+}
+describe('ROK-1370 P1 — create-poll authorization', describeCreateAuth);
+
+function describeCompleteAuth() {
+  it('403s a non-owner completing a linked poll and keeps the linkage', async () => {
+    const owner = await loginAsMember('p2-owner');
+    const stranger = await loginAsMember('p2-stranger');
+    const event = await createEvent('P2 Owned', { creatorId: owner.userId });
+    const poll = await postPollAs(owner.token, event.id);
+    expect(poll.status).toBe(201);
+    const matchId = poll.body.id as number;
+
+    const res = await completePollAs(stranger.token, matchId);
+    expect(res.status).toBe(403);
+
+    // Flag NOT cleared — the UPDATED re-emit never fired.
+    const after = await readEvent(event.id);
+    expect((after as Record<string, unknown>).reschedulingPollId).toBe(matchId);
+  });
+
+  it('lets the poll/event owner complete their linked poll', async () => {
+    const owner = await loginAsMember('p2-owner-ok');
+    const event = await createEvent('P2 Owner OK', { creatorId: owner.userId });
+    const poll = await postPollAs(owner.token, event.id);
+    const matchId = poll.body.id as number;
+
+    const res = await completePollAs(owner.token, matchId);
+    expect(res.status).toBe(200);
+    const after = await readEvent(event.id);
+    expect((after as Record<string, unknown>).reschedulingPollId).toBeNull();
+  });
+
+  it('lets an admin complete any linked poll', async () => {
+    const owner = await loginAsMember('p2-owner-admin');
+    const event = await createEvent('P2 Admin OK', { creatorId: owner.userId });
+    const poll = await postPollAs(owner.token, event.id);
+    const matchId = poll.body.id as number;
+
+    const res = await completePollAs(adminToken, matchId);
+    expect(res.status).toBe(200);
+  });
+}
+describe('ROK-1370 P2 — complete-poll authorization', describeCompleteAuth);
