@@ -226,8 +226,25 @@ export async function executeDelayedSpawn(
 ): Promise<void> {
   const minPlayers = binding.config?.minPlayers ?? 2;
   if (binding.bindingPurpose !== 'general-lobby' && binding.gameId) {
-    const { counted } = await getGameFilteredCount(deps, channelId, binding);
+    const { counted, confirmedCount } = await getGameFilteredCount(
+      deps,
+      channelId,
+      binding,
+    );
     if (counted < minPlayers) return;
+    // ROK-1390: a series-linked bind must NOT mint its stored game off pure
+    // presence-null counting — that path spawned a BG3 series event while the
+    // group actually played Hellcard. Require at least one positive game
+    // confirmation. Non-series fixed-game binds keep ROK-697 presence-null
+    // counting (invisible/console/no-rich-presence raiders).
+    if (binding.recurrenceGroupId != null && confirmedCount === 0) {
+      deps.logger.warn(
+        `[voice-spawn] Skipping series-linked spawn for binding ${binding.bindingId} ` +
+          `in channel ${channelId}: ${counted} member(s) met threshold but 0 confirmed ` +
+          `game ${binding.gameId}`,
+      );
+      return;
+    }
   } else {
     const members = deps.channelMembers.get(channelId);
     if (!members || members.size < minPlayers) return;

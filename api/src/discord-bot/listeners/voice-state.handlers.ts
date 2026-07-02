@@ -194,25 +194,35 @@ async function moveToNewGame(
   );
 }
 
-/** Get game-filtered count for threshold checking (ROK-697). */
+/**
+ * Get game-filtered count for threshold checking (ROK-697).
+ *
+ * `counted` includes presence-null members (invisible/console raiders count
+ * toward minPlayers). `confirmedCount` (ROK-1390) counts ONLY members whose
+ * detected game positively matches the bound game — the series spawn guard
+ * uses it to refuse minting a stored game off pure presence-null counting.
+ */
 export async function getGameFilteredCount(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
-): Promise<{ counted: number; allConfirmed: boolean }> {
+): Promise<{ counted: number; allConfirmed: boolean; confirmedCount: number }> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
-  if (!channel || !binding.gameId) return { counted: 0, allConfirmed: false };
+  if (!channel || !binding.gameId)
+    return { counted: 0, allConfirmed: false, confirmedCount: 0 };
   const voiceMembers = [...channel.members.values()];
   let counted = 0;
   let allConfirmed = true;
+  let confirmedCount = 0;
   for (const member of voiceMembers) {
     const detected = await deps.presenceDetector.detectGameForMember(member);
     if (detected.gameId !== null && detected.gameId !== binding.gameId)
       continue;
     counted++;
     if (detected.gameId === null) allConfirmed = false;
+    else confirmedCount++;
   }
-  return { counted, allConfirmed };
+  return { counted, allConfirmed, confirmedCount };
 }
 
 /** Check if all members share the same game (ROK-697). */
