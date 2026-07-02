@@ -99,11 +99,8 @@ export class LineupsService {
   ) {}
 
   /** Resolve a Discord channel name from its ID via bot cache (ROK-1064). */
-  private resolveChannelName = (channelId: string): string | null => {
-    const guild = this.botClient.getGuild();
-    const channel = guild?.channels?.cache?.get(channelId);
-    return channel?.name ?? null;
-  };
+  private resolveChannelName = (channelId: string): string | null =>
+    this.botClient.getGuild()?.channels?.cache?.get(channelId)?.name ?? null;
 
   /** Create a new lineup (ROK-1065). */
   create(

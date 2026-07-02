@@ -458,9 +458,7 @@ function describeLifecycleEmits() {
       // resets RESCHEDULING → POSTED and the SE is recreated.
       expect(
         await waitForCondition(() =>
-          emitSpy.mock.calls.some(
-            ([key]) => key === APP_EVENT_EVENTS.UPDATED,
-          ),
+          emitSpy.mock.calls.some(([key]) => key === APP_EVENT_EVENTS.UPDATED),
         ),
       ).toBe(true);
     } finally {

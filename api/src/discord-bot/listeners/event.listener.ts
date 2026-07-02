@@ -110,7 +110,7 @@ export class DiscordEventListener {
       await this.handleMissingEmbedOnUpdate(payload);
       return;
     }
-    await this.updateExistingEmbeds(payload, records);
+    await this.updateExistingEmbeds(payload, records, isRescheduling);
   }
 
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)
@@ -329,14 +329,14 @@ export class DiscordEventListener {
   private async updateExistingEmbeds(
     payload: EventPayload,
     records: (typeof schema.discordEventMessages.$inferSelect)[],
+    // ROK-1370: hold the embed at RESCHEDULING while a poll is open, and reset
+    // a stuck RESCHEDULING record to POSTED once the poll clears (lock-in
+    // re-emits event.updated after clearing reschedulingPollId). Computed once
+    // by handleEventUpdated, which also gates the SE sync on it.
+    isRescheduling: boolean,
   ): Promise<void> {
     const context = await this.buildContext();
     const eventData = await enrichEventData(this.deps, payload);
-    // ROK-1370: hold the embed at RESCHEDULING while a poll is open, and reset a
-    // stuck RESCHEDULING record to POSTED once the poll clears (lock-in re-emits
-    // event.updated after clearing reschedulingPollId).
-    const isRescheduling =
-      (await getReschedulingPollId(this.deps, payload.eventId)) !== null;
     await applyEmbedUpdates(
       this.deps,
       records,
