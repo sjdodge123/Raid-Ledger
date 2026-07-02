@@ -385,6 +385,26 @@ describe('ChannelResolverService', () => {
       expect(result).toBe('ov-uncached');
     });
 
+    it('honors a STAGE voice-channel override (isVoiceBased covers stage — ROK-716 pin)', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      const cache = new Map([
+        ['ov-stage', { type: 13, isVoiceBased: () => true }], // ChannelType.GuildStageVoice
+      ]);
+      clientService.getGuild.mockReturnValue({
+        id: 'guild-123',
+        channels: { cache },
+      } as never);
+
+      const result = await overrideResolver().resolveVoiceChannelHonoringOverride(
+        1,
+        null,
+        null,
+        'ov-stage',
+      );
+
+      expect(result).toBe('ov-stage');
+    });
+
     it('with no override, resolves through the normal voice tiers', async () => {
       clientService.getGuildId.mockReturnValue('guild-123');
       clientService.getGuild.mockReturnValue(fakeGuild({}) as never);
