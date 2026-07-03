@@ -9,6 +9,7 @@ import {
   clearScheduledEventIdBySeId,
   applyCreateEntryGuard,
   type EventLiveState,
+  parseEventTimestampUtc,
 } from './scheduled-event.revalidate';
 import {
   tryCreateNewEvent,
@@ -299,7 +300,10 @@ function compensationDecision(
   if (!live) return 'force'; // row hard-deleted between bind and re-read
   if (live.reschedulingPollId != null) return 'force';
   if (live.cancelledAt != null) return 'force';
-  if (new Date(live.startIso).getTime() !== new Date(createdStartIso).getTime())
+  if (
+    parseEventTimestampUtc(live.startIso).getTime() !==
+    parseEventTimestampUtc(createdStartIso).getTime()
+  )
     return 'start-mismatch';
   return 'none';
 }
@@ -325,7 +329,8 @@ async function seRepairedToFreshStart(
     const actualStart = (se as { scheduledStartTimestamp?: number | null })
       ?.scheduledStartTimestamp;
     return (
-      actualStart != null && actualStart === new Date(liveStartIso).getTime()
+      actualStart != null &&
+      actualStart === parseEventTimestampUtc(liveStartIso).getTime()
     );
   } catch {
     return false;

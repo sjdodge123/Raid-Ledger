@@ -34,6 +34,25 @@ export interface CreateEntryGuardResult {
 }
 
 /**
+ * Parse an event timestamp that may be EITHER an ISO-8601 string (job/DTO
+ * payloads, offset-carrying) OR Postgres `lower/upper(duration)::text` output —
+ * which for this NAIVE (no-offset) column prints `YYYY-MM-DD HH:MM:SS[.fff]`.
+ * `new Date()` interprets a naive string in the PROCESS's local timezone, so a
+ * cross-source comparison (ISO-Z payload vs naive row text) skews by the host's
+ * UTC offset on any non-UTC deployment (4h on an EDT dev machine) — enough to
+ * fire the start-mismatch compensation on perfectly fresh creates. Stored
+ * values are UTC by convention (the driver serializes Dates via toISOString),
+ * so a naive string is normalized to explicit UTC before parsing. Strings that
+ * already carry an offset (Z / +hh / -hh:mm) parse unchanged.
+ */
+export function parseEventTimestampUtc(value: string | null | undefined): Date {
+  if (typeof value !== 'string' || value.trim() === '') return new Date(NaN);
+  const hasOffset = /(?:Z|[+-]\d{2}(?::?\d{2})?)$/.test(value.trim());
+  if (hasOffset) return new Date(value);
+  return new Date(value.trim().replace(' ', 'T') + 'Z');
+}
+
+/**
  * Read the live reschedule flag, cancellation, and derived start/end for an
  * event in a single row read. Returns null when the row is gone.
  */
@@ -138,7 +157,7 @@ export function resolveCreateEntryGuard(
   if (live.cancelledAt != null)
     return { skipReason: 'event cancelled', eventData };
   const fresh = substituteFreshTimes(eventData, live);
-  if (new Date(fresh.startTime).getTime() <= Date.now())
+  if (parseEventTimestampUtc(fresh.startTime).getTime() <= Date.now())
     return { skipReason: 'fresh start time in the past', eventData: fresh };
   return { skipReason: null, eventData: fresh };
 }
@@ -149,13 +168,14 @@ function substituteFreshTimes(
   eventData: ScheduledEventData,
   live: EventLiveState,
 ): ScheduledEventData {
-  const freshStart = new Date(live.startIso);
-  const freshEnd = new Date(live.endIso);
+  const freshStart = parseEventTimestampUtc(live.startIso);
+  const freshEnd = parseEventTimestampUtc(live.endIso);
   if (Number.isNaN(freshStart.getTime()) || Number.isNaN(freshEnd.getTime()))
     return eventData;
   if (
-    freshStart.getTime() === new Date(eventData.startTime).getTime() &&
-    freshEnd.getTime() === new Date(eventData.endTime).getTime()
+    freshStart.getTime() ===
+      parseEventTimestampUtc(eventData.startTime).getTime() &&
+    freshEnd.getTime() === parseEventTimestampUtc(eventData.endTime).getTime()
   )
     return eventData;
   return {
