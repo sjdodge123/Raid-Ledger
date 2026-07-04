@@ -112,8 +112,15 @@ function CharacterDetailError({ message, onBack }: { message: string; onBack: ()
 }
 
 function CharacterAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: string }) {
-    if (avatarUrl) return <img src={avatarUrl} alt={name} className="w-20 h-20 rounded-full bg-overlay flex-shrink-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
-    return <div className="w-20 h-20 rounded-full bg-overlay flex items-center justify-center text-3xl text-muted flex-shrink-0">&#128100;</div>;
+    return (
+        <>
+            {avatarUrl && (
+                <img src={avatarUrl} alt={name} className="w-20 h-20 rounded-full bg-overlay flex-shrink-0"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+            )}
+            <div className={`w-20 h-20 rounded-full bg-overlay flex items-center justify-center text-3xl text-muted flex-shrink-0 ${avatarUrl ? 'hidden' : ''}`}>&#128100;</div>
+        </>
+    );
 }
 
 function CharacterMeta({ character }: { character: { level?: number | null; race?: string | null; class?: string | null; spec?: string | null; realm?: string | null } }) {

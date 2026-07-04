@@ -184,7 +184,9 @@ export function DiscoverContent({
     }
     return (
         <div className="text-center py-16">
-            <p className="text-muted text-lg">No games in the library yet</p>
+            <p className="text-muted text-lg">
+                {selectedGenres.size > 0 ? 'No games match this genre' : 'No games in the library yet'}
+            </p>
             <p className="text-dim text-sm mt-1">
                 {selectedGenres.size > 0
                     ? 'Try selecting a different genre'

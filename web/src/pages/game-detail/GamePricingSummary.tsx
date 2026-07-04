@@ -1,6 +1,5 @@
 import type { JSX } from 'react';
 import type { ItadGamePricingDto } from '@raid-ledger/contract';
-import { PriceBadge } from '../../components/games/PriceBadge';
 
 /** Compact pricing summary shown inline in the game banner (ROK-419). */
 export function GamePricingSummary({ pricing }: {
@@ -27,7 +26,6 @@ export function GamePricingSummary({ pricing }: {
                         </span>
                     </>
                 )}
-                <PriceBadge pricing={pricing} />
                 {itadUrl && <ItadLink url={itadUrl} />}
             </div>
             {historyLow && <HistoryRow historyLow={historyLow} currency={currency} />}
