@@ -121,7 +121,7 @@ function ChannelSelector({ id, label, channels, value, isPending, prefix, hint, 
 
 function RoutingPriorityInfo() {
     return (
-        <div className="bg-overlay/30 rounded-lg p-4 border border-border">
+        <div className="bg-overlay/30 rounded-lg p-4 border border-edge">
             <h3 className="text-sm font-medium text-foreground mb-2">Event Routing Priority</h3>
             <ol className="list-decimal list-inside text-sm text-muted space-y-1">
                 <li><span className="text-foreground">Game-specific binding</span> — posts to the bound channel for that game</li>

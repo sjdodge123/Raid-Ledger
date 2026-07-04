@@ -80,9 +80,6 @@ export const CharacterDetailPage = lazyWithRetry(() =>
 export const PlayersPage = lazyWithRetry(() =>
     import('./pages/players-page').then((m) => ({ default: m.PlayersPage })),
 );
-export const MyEventsPage = lazyWithRetry(() =>
-    import('./pages/my-events-page').then((m) => ({ default: m.MyEventsPage })),
-);
 export const EventMetricsPage = lazyWithRetry(() =>
     import('./pages/event-metrics-page').then((m) => ({ default: m.EventMetricsPage })),
 );

@@ -107,7 +107,7 @@ function LogoSection({ logoUrl, isUploading, fileInputRef, onUpload }: {
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
             <div>
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Community Logo</h3>
-                <p className="text-xs text-muted mt-1">Square image, max 2 MB. PNG, JPEG, WebP, or SVG.</p>
+                <p className="text-xs text-muted mt-1">Square image, max 2 MB. PNG, JPEG, or WebP.</p>
             </div>
             <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-lg border border-edge/50 bg-surface/30 flex items-center justify-center overflow-hidden flex-shrink-0">

@@ -86,7 +86,7 @@ function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpda
 }) {
     return (
         <div key={binding.id}>
-            <div className="flex items-center justify-between p-4 bg-panel/50 rounded-lg border border-border">
+            <div className="flex items-center justify-between p-4 bg-panel/50 rounded-lg border border-edge">
                 <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} />
                 <BindingActions binding={binding} isEditing={editingId === binding.id}
                     onToggleEdit={() => setEditingId(editingId === binding.id ? null : binding.id)}

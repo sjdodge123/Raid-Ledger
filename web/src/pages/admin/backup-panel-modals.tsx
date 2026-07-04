@@ -102,7 +102,7 @@ function ConfirmTextInput({ value, onChange, keyword, disabled }: {
         <div className="mt-4">
             <label className="block text-sm text-muted mb-1">Type <span className="font-mono text-foreground">{keyword}</span> to confirm</label>
             <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={keyword} autoFocus disabled={disabled}
-                className="w-full px-3 py-2 text-sm bg-background border border-edge rounded-lg text-foreground placeholder-muted focus:ring-1 focus:ring-accent/50 focus:border-accent/50" />
+                className="w-full px-3 py-2 text-sm bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:ring-1 focus:ring-accent/50 focus:border-accent/50" />
         </div>
     );
 }
@@ -118,7 +118,7 @@ function ResetResultView({ result, copied, onCopy }: { result: { password: strin
         <ModalOverlay maxWidth="max-w-lg">
             <h3 className="text-lg font-semibold text-foreground">Instance Reset Complete</h3>
             <p className="text-sm text-muted mt-2">The instance has been reset to factory defaults. Use these credentials to log in:</p>
-            <div className="mt-4 p-4 bg-background border border-edge rounded-lg space-y-2">
+            <div className="mt-4 p-4 bg-backdrop border border-edge rounded-lg space-y-2">
                 <div className="flex items-center justify-between">
                     <span className="text-sm text-muted">Email</span>
                     <span className="font-mono text-sm text-foreground">admin@local</span>

@@ -97,7 +97,7 @@ function LinkDiscordPrompt({ icon, onLink }: { icon: React.ReactNode; onLink: ()
 
 function BotInviteLinkInfo() {
     return (
-        <div className="bg-overlay/30 rounded-lg p-4 border border-border">
+        <div className="bg-overlay/30 rounded-lg p-4 border border-edge">
             <h3 className="text-sm font-medium text-foreground mb-2">Bot Invite Link</h3>
             <p className="text-xs text-muted">
                 To invite the bot to your server, go to the{' '}
