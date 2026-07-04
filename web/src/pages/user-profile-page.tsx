@@ -136,12 +136,12 @@ function ProfileSections({
       {numericId !== undefined && (
         <TasteProfileSection userId={numericId} queryResult={tasteProfile} />
       )}
-      {numericId && <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} pricingMap={pricingMap} />}
-      {numericId && <UserEventSignups userId={numericId} />}
+      {numericId !== undefined && <ActivitySection userId={numericId} isOwnProfile={isOwnProfile} pricingMap={pricingMap} />}
+      {numericId !== undefined && <UserEventSignups userId={numericId} />}
       {profile.characters.length > 0 && <GroupedCharacters characters={profile.characters} games={games} />}
-      {numericId && <HeartedGamesSection userId={numericId} pricingMap={pricingMap} />}
-      {numericId && <SteamLibrarySection userId={numericId} pricingMap={pricingMap} />}
-      {numericId && <SteamWishlistSection userId={numericId} pricingMap={pricingMap} />}
+      {numericId !== undefined && <HeartedGamesSection userId={numericId} pricingMap={pricingMap} />}
+      {numericId !== undefined && <SteamLibrarySection userId={numericId} pricingMap={pricingMap} />}
+      {numericId !== undefined && <SteamWishlistSection userId={numericId} pricingMap={pricingMap} />}
     </>
   );
 }
@@ -241,12 +241,11 @@ function ProfileHeader({
 }): JSX.Element {
   return (
     <div className="user-profile-header">
-      {profileAvatar.url ? (
+      {profileAvatar.url && (
         <img src={profileAvatar.url} alt={profile.username} className="user-profile-avatar"
-          onError={(e) => { e.currentTarget.style.display = "none"; }} />
-      ) : (
-        <div className="user-profile-avatar user-profile-avatar--initials">{profile.username.charAt(0).toUpperCase()}</div>
+          onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.nextElementSibling?.classList.remove("hidden"); }} />
       )}
+      <div className={`user-profile-avatar user-profile-avatar--initials ${profileAvatar.url ? "hidden" : ""}`}>{profile.username.charAt(0).toUpperCase()}</div>
       <div className="user-profile-info">
         <h1 className="user-profile-name">
           {profile.username}
