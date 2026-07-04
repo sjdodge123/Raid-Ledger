@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useBranding } from '../../hooks/use-branding';
 import { API_BASE_URL } from '../../lib/config';
+import { LOGO_ACCEPT_MIME, LOGO_FORMAT_HINT } from '../../constants/branding';
 
 /** Preset accent colors for quick selection */
 const PRESET_COLORS = [
@@ -107,7 +108,7 @@ function LogoSection({ logoUrl, isUploading, fileInputRef, onUpload }: {
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
             <div>
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Community Logo</h3>
-                <p className="text-xs text-muted mt-1">Square image, max 2 MB. PNG, JPEG, WebP, or SVG.</p>
+                <p className="text-xs text-muted mt-1">{LOGO_FORMAT_HINT}</p>
             </div>
             <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-lg border border-edge/50 bg-surface/30 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -118,7 +119,7 @@ function LogoSection({ logoUrl, isUploading, fileInputRef, onUpload }: {
                         className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors disabled:opacity-50">
                         {isUploading ? 'Uploading...' : 'Upload Logo'}
                     </button>
-                    <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={onUpload} className="hidden" />
+                    <input ref={fileInputRef} type="file" accept={LOGO_ACCEPT_MIME} onChange={onUpload} className="hidden" />
                 </div>
             </div>
         </div>

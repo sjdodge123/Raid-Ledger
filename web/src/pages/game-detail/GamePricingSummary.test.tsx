@@ -106,17 +106,12 @@ describe('GamePricingSummary — historical low', () => {
 describe('GamePricingSummary — price badge', () => {
     beforeEach(() => vi.clearAllMocks());
 
-    it('shows "On Sale" badge when discounted above historical low', () => {
+    // The sale-state badge is rendered once by the banner's MetaRow next to the
+    // title; the summary omits it to avoid duplicate pills in the same banner.
+    it('does not render the sale-state badge (owned by MetaRow)', () => {
         render(<GamePricingSummary pricing={buildPricing()} />);
-        expect(screen.getByText('On Sale')).toBeInTheDocument();
-    });
-
-    it('shows "Best Price" badge when at historical low', () => {
-        render(<GamePricingSummary pricing={buildPricing({
-            currentBest: { shop: 'Steam', url: '', price: 14.99, regularPrice: 59.99, discount: 75 },
-            historyLow: { price: 14.99, shop: 'Steam', date: '2024-01-01' },
-        })} />);
-        expect(screen.getByText('Best Price')).toBeInTheDocument();
+        expect(screen.queryByText('On Sale')).not.toBeInTheDocument();
+        expect(screen.queryByText('Best Price')).not.toBeInTheDocument();
     });
 });
 

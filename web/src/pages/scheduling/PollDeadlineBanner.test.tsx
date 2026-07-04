@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { format } from 'date-fns';
 import { PollDeadlineBanner } from './PollDeadlineBanner';
 
 const FIXED_NOW = new Date('2026-05-09T12:00:00.000Z').getTime();
@@ -37,6 +38,23 @@ describe('PollDeadlineBanner (ROK-1217)', () => {
     expect(banner).toHaveAttribute('data-expired', 'false');
     expect(banner.textContent).toMatch(/Closes/);
     expect(banner.textContent).toMatch(/in \d+ days?/);
+  });
+
+  it('includes the calendar date when the deadline is 6+ days away', () => {
+    // 10 days out — a bare weekday would be ambiguous. Expected date is built
+    // with date-fns so the assertion is TZ-independent.
+    const deadlineDate = new Date(FIXED_NOW + 10 * 24 * 60 * 60 * 1000);
+    render(<PollDeadlineBanner phaseDeadline={deadlineDate.toISOString()} />);
+    const banner = screen.getByTestId('poll-deadline-banner');
+    expect(banner.textContent).toContain(`Closes ${format(deadlineDate, 'EEE, MMM d')} at`);
+  });
+
+  it('uses the bare weekday when the deadline is within 6 days', () => {
+    const deadlineDate = new Date(FIXED_NOW + 3 * 24 * 60 * 60 * 1000);
+    render(<PollDeadlineBanner phaseDeadline={deadlineDate.toISOString()} />);
+    const banner = screen.getByTestId('poll-deadline-banner');
+    expect(banner.textContent).toContain(`Closes ${format(deadlineDate, 'EEEE')} at`);
+    expect(banner.textContent).not.toContain(format(deadlineDate, 'MMM'));
   });
 
   it('uses urgent (soon) variant when less than 24h remain', () => {

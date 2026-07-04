@@ -112,7 +112,7 @@ function ScheduleEmpty() {
 function DayLabel({ day, isToday, stickyTop }: { day: Date; isToday: boolean; stickyTop: string }) {
     return (
         <div className="w-11 flex-shrink-0">
-            <div className="sticky z-10 bg-background pt-3 pb-2 text-center transition-[top] duration-300" style={{ top: stickyTop }}>
+            <div className="sticky z-10 bg-backdrop pt-3 pb-2 text-center transition-[top] duration-300" style={{ top: stickyTop }}>
                 <div className={`text-[10px] font-semibold uppercase tracking-wider ${isToday ? 'text-emerald-400' : 'text-muted'}`}>{format(day, 'EEE')}</div>
                 <div className={isToday ? 'w-8 h-8 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center text-base font-bold' : 'text-lg font-bold text-foreground mt-0.5'}>{format(day, 'd')}</div>
             </div>

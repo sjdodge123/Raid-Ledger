@@ -90,7 +90,7 @@ function BotNotConnectedWarning() {
 
 function GeneralLobbyInfo() {
     return (
-        <div className="bg-overlay/30 rounded-lg p-4 border border-border">
+        <div className="bg-overlay/30 rounded-lg p-4 border border-edge">
             <h3 className="text-sm font-medium text-foreground mb-2">General Lobbies</h3>
             <p className="text-sm text-muted">
                 Voice channels bound without a specific game become General Lobbies — games are

@@ -71,7 +71,7 @@ function SessionLengthField({ value, onChange }: { value: string; onChange: (v: 
                 max={365}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-32 rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                className="w-32 rounded-md border border-edge bg-surface px-3 py-2 text-sm text-foreground"
             />
             <p className="text-xs text-dim mt-1.5">
                 How long a signed-in session stays valid before re-login (default 60).

@@ -33,7 +33,7 @@ function MyEventsEmptyState({ activeTab, isAdmin, onTabChange }: { activeTab: Ta
                 <h1 className="text-3xl font-bold text-foreground mb-4">Event Metrics</h1>
                 {isAdmin && <TabSwitcher activeTab={activeTab} onTabChange={onTabChange} />}
                 <div className="text-center py-16">
-                    <p className="text-lg text-muted mb-4">You don't have any event metrics yet.</p>
+                    <p className="text-lg text-muted mb-4">{isAdmin ? 'No upcoming events yet.' : "You don't have any upcoming events yet."}</p>
                     <div className="flex items-center justify-center gap-4">
                         <Link to="/events" className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors">Browse Events</Link>
                         <Link to="/events/new" className="px-6 py-3 bg-panel hover:bg-overlay text-foreground font-semibold rounded-lg transition-colors border border-edge">Create Event</Link>

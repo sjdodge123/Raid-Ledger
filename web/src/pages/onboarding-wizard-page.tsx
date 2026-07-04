@@ -39,6 +39,8 @@ function useConditionalStepFlags(user: { discordId: string } | null): {
 
     const needsDiscordJoin = useMemo(() => {
         if (!discordConfigured || !user || !isDiscordLinked(user.discordId)) return false;
+        // Fail open while membership is unknown (loading or errored): a member
+        // sees the step flicker away, but a non-member can never race past it.
         if (!guildMembership) return true;
         return !guildMembership.isMember;
     }, [discordConfigured, user, guildMembership]);
@@ -98,18 +100,24 @@ function useNavCallbacks(
     stepValidatorRef: React.MutableRefObject<(() => boolean) | null>,
     setCurrentStep: React.Dispatch<React.SetStateAction<number>>,
     maxStep: number,
-): { goNext: () => void; goBack: () => void } {
+): { goNext: () => void; goSkip: () => void; goBack: () => void } {
     const goNext = useCallback(() => {
         if (stepValidatorRef.current && !stepValidatorRef.current()) return;
         stepValidatorRef.current = null;
         setCurrentStep((prev) => Math.min(prev + 1, maxStep));
     }, [maxStep, stepValidatorRef, setCurrentStep]);
 
+    // Skip bypasses the step validator — otherwise it can't skip an invalid step.
+    const goSkip = useCallback(() => {
+        stepValidatorRef.current = null;
+        goNext();
+    }, [goNext, stepValidatorRef]);
+
     const goBack = useCallback(() => {
         setCurrentStep((prev) => Math.max(prev - 1, 0));
     }, [setCurrentStep]);
 
-    return { goNext, goBack };
+    return { goNext, goSkip, goBack };
 }
 
 /** Add/remove dynamic character steps */
@@ -188,7 +196,7 @@ export function OnboardingWizardPage(): JSX.Element | null {
         () => buildSteps(needsConnect, needsDiscordJoin, needsSteamConnect, qualifyingGames, extraCharCounts),
         [needsConnect, needsDiscordJoin, needsSteamConnect, qualifyingGames, extraCharCounts],
     );
-    const { goNext, goBack } = useNavCallbacks(stepValidatorRef, setCurrentStep, steps.length - 1);
+    const { goNext, goSkip, goBack } = useNavCallbacks(stepValidatorRef, setCurrentStep, steps.length - 1);
     const { addCharacterStep, removeCharacterStep } = useCharacterStepActions(setExtraCharCounts, setCurrentStep);
     const { handleSkipAll, handleComplete } = useCompletionHandlers(completeOnboarding);
     useEscapeDismiss(handleSkipAll);
@@ -201,7 +209,7 @@ export function OnboardingWizardPage(): JSX.Element | null {
             onSkipAll={handleSkipAll} setCurrentStep={setCurrentStep}
             removeCharacterStep={removeCharacterStep} user={user ?? null}
             currentStepDef={steps[currentStep]} stepValidatorRef={stepValidatorRef}
-            addCharacterStep={addCharacterStep} goBack={goBack} goNext={goNext}
+            addCharacterStep={addCharacterStep} goBack={goBack} goNext={goNext} goSkip={goSkip}
             handleComplete={handleComplete} isPending={completeOnboarding.isPending} />
     );
 }
@@ -216,12 +224,12 @@ function useEscapeDismiss(onDismiss: () => void): void {
 }
 
 /** Full wizard dialog shell */
-function WizardShell({ currentStep, steps, isFinalStep, onSkipAll, setCurrentStep, removeCharacterStep, user, currentStepDef, stepValidatorRef, addCharacterStep, goBack, goNext, handleComplete, isPending }: {
+function WizardShell({ currentStep, steps, isFinalStep, onSkipAll, setCurrentStep, removeCharacterStep, user, currentStepDef, stepValidatorRef, addCharacterStep, goBack, goNext, goSkip, handleComplete, isPending }: {
     currentStep: number; steps: StepDef[]; isFinalStep: boolean; onSkipAll: () => void;
     setCurrentStep: (n: number) => void; removeCharacterStep: (gameId: number) => void;
     user: { avatar: string | null; displayName: string | null; username: string; discordId: string } | null;
     currentStepDef: StepDef | undefined; stepValidatorRef: React.MutableRefObject<(() => boolean) | null>;
-    addCharacterStep: (gameId: number) => void; goBack: () => void; goNext: () => void;
+    addCharacterStep: (gameId: number) => void; goBack: () => void; goNext: () => void; goSkip: () => void;
     handleComplete: () => void; isPending: boolean;
 }): JSX.Element {
     const isCharacterStep = currentStepDef?.key.startsWith('character-') ?? false;
@@ -231,7 +239,7 @@ function WizardShell({ currentStep, steps, isFinalStep, onSkipAll, setCurrentSte
                 <WizardHeader currentStep={currentStep} totalSteps={steps.length} isFinalStep={isFinalStep} onSkipAll={onSkipAll} />
                 <OnboardingBreadcrumbs steps={steps} currentStep={currentStep} setCurrentStep={setCurrentStep} removeCharacterStep={removeCharacterStep} user={user} />
                 <WizardContent currentStepDef={currentStepDef} isCharacterStep={isCharacterStep} stepValidatorRef={stepValidatorRef} addCharacterStep={addCharacterStep} removeCharacterStep={removeCharacterStep} />
-                <WizardFooter isFirstStep={currentStep === 0} isFinalStep={isFinalStep} goBack={goBack} goNext={goNext} handleComplete={handleComplete} isPending={isPending} />
+                <WizardFooter isFirstStep={currentStep === 0} isFinalStep={isFinalStep} goBack={goBack} goNext={goNext} goSkip={goSkip} handleComplete={handleComplete} isPending={isPending} />
             </div>
         </div>
     );
@@ -284,8 +292,8 @@ function WizardContent({ currentStepDef, isCharacterStep, stepValidatorRef, addC
 }
 
 /** Sticky footer with navigation buttons */
-function WizardFooter({ isFirstStep, isFinalStep, goBack, goNext, handleComplete, isPending }: {
-    isFirstStep: boolean; isFinalStep: boolean; goBack: () => void; goNext: () => void;
+function WizardFooter({ isFirstStep, isFinalStep, goBack, goNext, goSkip, handleComplete, isPending }: {
+    isFirstStep: boolean; isFinalStep: boolean; goBack: () => void; goNext: () => void; goSkip: () => void;
     handleComplete: () => void; isPending: boolean;
 }): JSX.Element {
     return (
@@ -294,7 +302,7 @@ function WizardFooter({ isFirstStep, isFinalStep, goBack, goNext, handleComplete
                 <button type="button" onClick={goBack} className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm">Back</button>
             )}
             {!isFinalStep && (
-                <button type="button" onClick={goNext} className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm">Skip</button>
+                <button type="button" onClick={goSkip} className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm">Skip</button>
             )}
             <button type="button" onClick={isFinalStep ? handleComplete : goNext} disabled={isFinalStep && isPending}
                 className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-semibold rounded-lg transition-colors text-sm">

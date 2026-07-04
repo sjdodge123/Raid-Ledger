@@ -174,7 +174,7 @@ function RescheduleContentBody({ d, eventTitle, reschedule, createPoll, handleCl
             <GridBody isLoading={d.isLoading} signupCount={d.signupCount} currentEventBlocks={d.currentEventBlocks}
                 previewBlocks={d.previewBlocks} heatmapOverlay={d.gameTimeData?.cells}
                 onCellClick={(day, hour) => { if (day === d.currentDayOfWeek && hour === d.currentHour) return; d.s.setGridSelection({ day, hour }); d.s.setNewStartTime(toLocalInput(nextOccurrence(day, hour))); }} />
-            <div className="shrink-0 pt-2 border-t border-border space-y-3">
+            <div className="shrink-0 pt-2 border-t border-edge space-y-3">
                 <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
                     <StartTimeInput newStartTime={d.s.newStartTime} onStartChange={(v) => { d.s.setNewStartTime(v); d.s.setGridSelection(null); }} />
                     <DurationSelector durationMinutes={d.s.durationMinutes} setDurationMinutes={d.s.setDurationMinutes} customDuration={d.s.customDuration} setCustomDuration={d.s.setCustomDuration} />

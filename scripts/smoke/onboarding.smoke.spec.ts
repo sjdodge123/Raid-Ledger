@@ -72,7 +72,7 @@ async function skipPastSteamIfPresent(dialog: import('@playwright/test').Locator
     const steamHeading = dialog.getByRole('heading', { name: 'Connect Your Steam Account' });
     const isSteam = await steamHeading.isVisible({ timeout: 3_000 }).catch(() => false);
     if (isSteam) {
-        await dialog.getByRole('button', { name: 'Next' }).click();
+        await dialog.getByRole('button', { name: 'Next', exact: true }).click();
         await expect(dialog.getByRole('heading', { name: 'What Do You Play?' })).toBeVisible({ timeout: 10_000 });
     }
 }
@@ -159,7 +159,7 @@ test.describe('Onboarding wizard', () => {
         await expect(dialog.getByRole('button', { name: 'Skip All' })).toBeVisible();
 
         // Next button visible on first step
-        await expect(dialog.getByRole('button', { name: 'Next' })).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'Next', exact: true })).toBeVisible();
 
         // Back button should NOT be visible on first step
         await expect(dialog.getByRole('button', { name: 'Back' })).not.toBeVisible();
@@ -234,7 +234,7 @@ test.describe('Onboarding wizard step navigation', () => {
         await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible();
 
         // Click Next to advance
-        await dialog.getByRole('button', { name: 'Next' }).click();
+        await dialog.getByRole('button', { name: 'Next', exact: true }).click();
 
         // Should now show step 2
         await expect(dialog.getByText(/Step 2 of \d+/)).toBeVisible({ timeout: 5_000 });
@@ -270,7 +270,7 @@ test.describe('Onboarding wizard step navigation', () => {
         await advanceToGamesStep(dialog);
 
         // Now on Games step — advance to verify breadcrumbs update
-        await dialog.getByRole('button', { name: 'Next' }).click();
+        await dialog.getByRole('button', { name: 'Next', exact: true }).click();
         await expect(dialog.getByText('Game Time')).toBeVisible({ timeout: 5_000 });
     });
 });
@@ -418,7 +418,7 @@ test.describe('Onboarding wizard final step', () => {
             const isComplete = await complete.isVisible({ timeout: 1_000 }).catch(() => false);
             const isSkipAllGone = !(await skipAll.isVisible({ timeout: 500 }).catch(() => false));
             if (isComplete && isSkipAllGone) break;
-            const nextBtn = dialog.getByRole('button', { name: 'Next' });
+            const nextBtn = dialog.getByRole('button', { name: 'Next', exact: true });
             const skipBtn = dialog.getByRole('button', { name: 'Skip', exact: true });
             const hasNext = await nextBtn.isVisible({ timeout: 1_000 }).catch(() => false);
             if (hasNext) {
@@ -432,7 +432,7 @@ test.describe('Onboarding wizard final step', () => {
 
         // On final step: Complete button should be visible, Next and Skip All should not
         await expect(dialog.getByRole('button', { name: 'Complete' })).toBeVisible({ timeout: 5_000 });
-        await expect(dialog.getByRole('button', { name: 'Next' })).not.toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'Next', exact: true })).not.toBeVisible();
         await expect(dialog.getByRole('button', { name: 'Skip All' })).not.toBeVisible();
     });
 });

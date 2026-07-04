@@ -12,9 +12,13 @@ interface Props {
 }
 
 const SOON_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+// Bare weekday names are only unambiguous within the next 6 days — at 6-7
+// days out the deadline can share today's weekday name.
+const BARE_WEEKDAY_MS = 6 * 24 * 60 * 60 * 1000;
 
-function formatAbsolute(date: Date): string {
-  return `Closes ${format(date, 'EEEE')} at ${format(date, 'h:mm a')}`;
+function formatAbsolute(date: Date, now: number): string {
+  const dayPart = date.getTime() - now < BARE_WEEKDAY_MS ? format(date, 'EEEE') : format(date, 'EEE, MMM d');
+  return `Closes ${dayPart} at ${format(date, 'h:mm a')}`;
 }
 
 function formatRelative(date: Date): string {
@@ -46,7 +50,7 @@ export function PollDeadlineBanner({ phaseDeadline }: Props): JSX.Element | null
   const remainingMs = date.getTime() - now;
   const expired = remainingMs <= 0;
   const soon = !expired && remainingMs < SOON_THRESHOLD_MS;
-  const absolute = formatAbsolute(date);
+  const absolute = formatAbsolute(date, now);
   const relative = expired ? 'closed' : formatRelative(date);
 
   return (

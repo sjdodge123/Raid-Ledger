@@ -112,7 +112,12 @@ function CharacterDetailError({ message, onBack }: { message: string; onBack: ()
 }
 
 function CharacterAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: string }) {
-    if (avatarUrl) return <img src={avatarUrl} alt={name} className="w-20 h-20 rounded-full bg-overlay flex-shrink-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
+    // Track which URL failed so a corrected avatar URL is retried.
+    const [erroredUrl, setErroredUrl] = useState<string | null>(null);
+    const url = avatarUrl && avatarUrl !== erroredUrl ? avatarUrl : null;
+    if (url) {
+        return <img src={url} alt={name} className="w-20 h-20 rounded-full bg-overlay flex-shrink-0" onError={() => setErroredUrl(url)} />;
+    }
     return <div className="w-20 h-20 rounded-full bg-overlay flex items-center justify-center text-3xl text-muted flex-shrink-0">&#128100;</div>;
 }
 

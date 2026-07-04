@@ -17,7 +17,7 @@ function GeneralLobbySection({ allowJustChatting, onChange }: { allowJustChattin
             </p>
             <div className="flex items-center gap-2">
                 <input type="checkbox" id="allowJustChatting" checked={allowJustChatting} onChange={(e) => onChange(e.target.checked)}
-                    className="rounded border-border bg-panel text-emerald-500 focus:ring-emerald-500/40" />
+                    className="rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500/40" />
                 <label htmlFor="allowJustChatting" className="text-sm text-foreground">Allow &quot;Just Chatting&quot; events (no game required)</label>
             </div>
         </div>
@@ -34,17 +34,17 @@ function VoiceMonitorFields({ minPlayers, onMinPlayersChange, autoClose, onAutoC
             <div>
                 <label className="block text-xs text-muted mb-1">Minimum Players (to spawn Quick Play event)</label>
                 <input type="number" min={1} max={50} value={minPlayers} onChange={(e) => onMinPlayersChange(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-panel border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
+                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
             </div>
             <div className="flex items-center gap-2">
                 <input type="checkbox" id="autoClose" checked={autoClose} onChange={(e) => onAutoCloseChange(e.target.checked)}
-                    className="rounded border-border bg-panel text-emerald-500 focus:ring-emerald-500/40" />
+                    className="rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500/40" />
                 <label htmlFor="autoClose" className="text-sm text-foreground">Auto-close event when voice empties</label>
             </div>
             <div>
                 <label className="block text-xs text-muted mb-1">Grace Period (minutes before closing)</label>
                 <input type="number" min={1} max={60} step={1} value={gracePeriod} onChange={(e) => onGracePeriodChange(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-panel border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
+                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
             </div>
         </>
     );
@@ -81,7 +81,7 @@ export function BindingConfigForm({ binding, onSave, onCancel, isSaving }: Bindi
     const isVoiceMonitor = binding.bindingPurpose === 'game-voice-monitor' || binding.bindingPurpose === 'general-lobby';
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 p-4 bg-overlay/30 rounded-lg border border-border">
+        <form onSubmit={handleSubmit} className="space-y-4 p-4 bg-overlay/30 rounded-lg border border-edge">
             <h4 className="text-sm font-medium text-foreground">Edit Config: #{binding.channelName ?? binding.channelId}</h4>
             {binding.bindingPurpose === 'general-lobby' && <GeneralLobbySection allowJustChatting={allowJustChatting} onChange={setAllowJustChatting} />}
             {isVoiceMonitor && <VoiceMonitorFields minPlayers={minPlayers} onMinPlayersChange={setMinPlayers} autoClose={autoClose} onAutoCloseChange={setAutoClose} gracePeriod={gracePeriod} onGracePeriodChange={setGracePeriod} />}
