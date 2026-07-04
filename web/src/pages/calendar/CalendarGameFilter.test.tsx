@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { SectionedGameList } from './CalendarGameFilter';
+import { render, screen, waitFor } from '@testing-library/react';
+import { CalendarGameFilterModal, SectionedGameList } from './CalendarGameFilter';
 import type { GameWithLiked } from './game-filter-helpers';
 
 vi.mock('../../constants/game-colors', () => ({
@@ -10,6 +10,27 @@ vi.mock('../../constants/game-colors', () => ({
 function makeGame(slug: string, name: string, liked: boolean): GameWithLiked {
     return { slug, name, coverUrl: null, liked };
 }
+
+describe('CalendarGameFilterModal', () => {
+    it('focuses the search input when opened (not the close button)', async () => {
+        render(
+            <CalendarGameFilterModal
+                isOpen
+                onClose={vi.fn()}
+                allKnownGames={[{ slug: 'wow', name: 'World of Warcraft', coverUrl: null }]}
+                selectedGames={new Set(['wow'])}
+                toggleGame={vi.fn()}
+                selectAllGames={vi.fn()}
+                deselectAllGames={vi.fn()}
+            />,
+        );
+
+        // Focus is applied by the focus trap in a requestAnimationFrame.
+        await waitFor(() => {
+            expect(screen.getByPlaceholderText('Search games...')).toHaveFocus();
+        });
+    });
+});
 
 describe('SectionedGameList', () => {
     it('renders section header for liked games', () => {

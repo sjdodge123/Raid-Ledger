@@ -15,6 +15,8 @@ const FOCUSABLE_SELECTOR = [
  * Restores focus to the previously focused element on unmount.
  *
  * @param active Whether the trap is currently active (e.g. modal is open)
+ * @param initialFocusRef Element to focus on activation instead of the
+ *   container's first focusable element
  * @returns ref to attach to the container element
  */
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
@@ -39,7 +41,10 @@ function handleTabTrap(e: KeyboardEvent, container: HTMLElement): void {
     }
 }
 
-export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(active: boolean) {
+export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
+    active: boolean,
+    initialFocusRef?: React.RefObject<HTMLElement | null>,
+) {
     const containerRef = useRef<T>(null);
     const previousFocusRef = useRef<HTMLElement | null>(null);
 
@@ -55,6 +60,10 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(active: boo
 
         const timer = requestAnimationFrame(() => {
             if (!containerRef.current) return;
+            if (initialFocusRef?.current) {
+                initialFocusRef.current.focus();
+                return;
+            }
             getFocusableElements(containerRef.current)[0]?.focus();
         });
 
@@ -63,7 +72,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(active: boo
             cancelAnimationFrame(timer);
             previousFocusRef.current?.focus();
         };
-    }, [active, handleKeyDown]);
+    }, [active, handleKeyDown, initialFocusRef]);
 
     return containerRef;
 }

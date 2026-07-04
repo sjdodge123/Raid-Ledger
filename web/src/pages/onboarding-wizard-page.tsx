@@ -33,17 +33,20 @@ function useConditionalStepFlags(user: { discordId: string } | null): {
         return !isDiscordLinked(user.discordId);
     }, [user, discordConfigured]);
 
-    const { data: guildMembership } = useGuildMembership(
+    const { data: guildMembership, isError: membershipError } = useGuildMembership(
         discordConfigured && !!user && isDiscordLinked(user.discordId),
     );
 
     const needsDiscordJoin = useMemo(() => {
         if (!discordConfigured || !user || !isDiscordLinked(user.discordId)) return false;
+        // Fail open on a failed membership check — better to show the step to a
+        // member than to silently skip it for a non-member.
+        if (membershipError) return true;
         // While membership is still loading, don't add the step — adding it
         // then removing it shifts the step counter mid-load for members.
         if (!guildMembership) return false;
         return !guildMembership.isMember;
-    }, [discordConfigured, user, guildMembership]);
+    }, [discordConfigured, user, guildMembership, membershipError]);
 
     const { steamStatus } = useSteamLink();
     const needsSteamConnect = useMemo(() => {
@@ -110,8 +113,8 @@ function useNavCallbacks(
     // Skip bypasses the step validator — otherwise it can't skip an invalid step.
     const goSkip = useCallback(() => {
         stepValidatorRef.current = null;
-        setCurrentStep((prev) => Math.min(prev + 1, maxStep));
-    }, [maxStep, stepValidatorRef, setCurrentStep]);
+        goNext();
+    }, [goNext, stepValidatorRef]);
 
     const goBack = useCallback(() => {
         setCurrentStep((prev) => Math.max(prev - 1, 0));

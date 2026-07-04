@@ -9,6 +9,7 @@ import {
   getBrowserTimezone,
 } from '../../../constants/timezones';
 import { getTimezoneAbbr } from '../../../lib/timezone-utils';
+import { LOGO_ACCEPT_MIME, LOGO_FORMAT_HINT } from '../../../constants/branding';
 
 interface CommunityIdentityStepProps {
   onNext: () => void;
@@ -59,7 +60,7 @@ function LogoUploadSection({ logoUrl, onUploadClick, isPending, fileInputRef, on
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
             <div>
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Community Logo</h3>
-                <p className="text-xs text-muted mt-1">Optional. Square image, max 2 MB. PNG, JPEG, or WebP.</p>
+                <p className="text-xs text-muted mt-1">Optional. {LOGO_FORMAT_HINT}</p>
             </div>
             <div className="flex items-center gap-4">
                 <LogoPreviewBox logoUrl={logoUrl} />
@@ -67,7 +68,7 @@ function LogoUploadSection({ logoUrl, onUploadClick, isPending, fileInputRef, on
                     className="px-4 py-2.5 min-h-[44px] text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors disabled:opacity-50">
                     {isPending ? 'Uploading...' : 'Upload Logo'}
                 </button>
-                <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={onFileChange} className="hidden" />
+                <input ref={fileInputRef} type="file" accept={LOGO_ACCEPT_MIME} onChange={onFileChange} className="hidden" />
             </div>
         </div>
     );

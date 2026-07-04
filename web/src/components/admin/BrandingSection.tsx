@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useBranding } from '../../hooks/use-branding';
 import { API_BASE_URL } from '../../lib/config';
+import { LOGO_ACCEPT_MIME, LOGO_FORMAT_HINT } from '../../constants/branding';
 
 /** Preset accent colors for quick selection */
 const PRESET_COLORS = [
@@ -50,7 +51,7 @@ function LogoSection({ logoUrl, onUpload, isUploading, fileInputRef }: {
     fileInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
     return (
-        <SectionCard title="Community Logo" hint="Square image, max 2 MB. PNG, JPEG, or WebP.">
+        <SectionCard title="Community Logo" hint={LOGO_FORMAT_HINT}>
             <div className="flex items-center gap-4">
                 <LogoPreview logoUrl={logoUrl} />
                 <div className="flex gap-2">
@@ -58,7 +59,7 @@ function LogoSection({ logoUrl, onUpload, isUploading, fileInputRef }: {
                         className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors disabled:opacity-50">
                         {isUploading ? 'Uploading...' : 'Upload Logo'}
                     </button>
-                    <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={onUpload} className="hidden" />
+                    <input ref={fileInputRef} type="file" accept={LOGO_ACCEPT_MIME} onChange={onUpload} className="hidden" />
                 </div>
             </div>
         </SectionCard>

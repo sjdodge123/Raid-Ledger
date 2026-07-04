@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { Modal } from '../../components/ui/modal';
 import { getGameColors } from '../../constants/game-colors';
@@ -54,7 +54,7 @@ export function CalendarGameFilterModal({
     toggleGame, selectAllGames, deselectAllGames, likedSlugs,
 }: CalendarGameFilterModalProps): JSX.Element {
     const [filterSearch, setFilterSearch] = useState('');
-    const searchInputRef = useModalSearchFocus(isOpen);
+    const searchInputRef = useRef<HTMLInputElement>(null);
     const sortedGames = useSortedGames(allKnownGames, likedSlugs);
 
     const filteredGames = useMemo(() => {
@@ -64,7 +64,7 @@ export function CalendarGameFilterModal({
     }, [sortedGames, filterSearch]);
 
     return (
-        <Modal isOpen={isOpen} onClose={() => { onClose(); setFilterSearch(''); }} title="Filter by Game" maxWidth="max-w-sm">
+        <Modal isOpen={isOpen} onClose={() => { onClose(); setFilterSearch(''); }} title="Filter by Game" maxWidth="max-w-sm" initialFocusRef={searchInputRef}>
             <FilterActions count={selectedGames.size} total={allKnownGames.length}
                 onSelectAll={selectAllGames} onDeselectAll={deselectAllGames} />
             <input type="text" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} placeholder="Search games..."
@@ -76,18 +76,6 @@ export function CalendarGameFilterModal({
             </div>
         </Modal>
     );
-}
-
-/** Focus the modal search input on open, after the focus trap's own rAF
- *  (which otherwise moves focus to the first focusable — the close button). */
-function useModalSearchFocus(isOpen: boolean) {
-    const inputRef = useRef<HTMLInputElement>(null);
-    useEffect(() => {
-        if (!isOpen) return;
-        const raf = requestAnimationFrame(() => inputRef.current?.focus());
-        return () => cancelAnimationFrame(raf);
-    }, [isOpen]);
-    return inputRef;
 }
 
 /** Hook to sort games with liked first, annotating each with liked flag. */

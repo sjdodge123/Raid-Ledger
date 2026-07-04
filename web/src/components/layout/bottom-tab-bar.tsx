@@ -21,6 +21,8 @@ const tabs = [
  * Visible only below the `md` breakpoint (< 768px).
  * Strategy 2: 4 direct tabs with hamburger for overflow (ROK-331).
  */
+// Full-screen wizard routes where the tab bar must not render. Exact-match
+// paths mirroring app-routes.tsx — update this when those routes move.
 const MODAL_ROUTES = new Set(['/onboarding', '/admin/setup']);
 
 function TabLink({ tab, isActive }: { tab: typeof tabs[number]; isActive: boolean }) {

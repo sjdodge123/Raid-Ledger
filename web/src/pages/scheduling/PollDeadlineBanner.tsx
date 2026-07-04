@@ -12,11 +12,12 @@ interface Props {
 }
 
 const SOON_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+// Bare weekday names are only unambiguous within the next 6 days — at 6-7
+// days out the deadline can share today's weekday name.
+const BARE_WEEKDAY_MS = 6 * 24 * 60 * 60 * 1000;
 
 function formatAbsolute(date: Date, now: number): string {
-  // A bare weekday is ambiguous once the deadline is a week or more away.
-  const dayPart = date.getTime() - now < WEEK_MS ? format(date, 'EEEE') : format(date, 'EEE, MMM d');
+  const dayPart = date.getTime() - now < BARE_WEEKDAY_MS ? format(date, 'EEEE') : format(date, 'EEE, MMM d');
   return `Closes ${dayPart} at ${format(date, 'h:mm a')}`;
 }
 

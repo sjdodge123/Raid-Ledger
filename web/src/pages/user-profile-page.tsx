@@ -195,7 +195,7 @@ function ProfileContent({ profile, numericId, isOwnProfile, games }: ProfileCont
  */
 export function UserProfilePage(): JSX.Element {
   const { userId } = useParams<{ userId: string }>();
-  const numericId = userId ? parseInt(userId, 10) : undefined;
+  const numericId = parseUserIdParam(userId);
   const location = useLocation();
   const { user: currentUser } = useAuth();
   const { data: profile, isLoading, error } = useUserProfile(numericId);
@@ -227,6 +227,19 @@ export function UserProfilePage(): JSX.Element {
   );
 }
 
+/** Parse the :userId route param; non-numeric params yield undefined, not NaN. */
+function parseUserIdParam(userId: string | undefined): number | undefined {
+  const parsed = userId ? parseInt(userId, 10) : NaN;
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+/** Avatar URL with error fallback; tracks which URL failed so a corrected URL is retried. */
+function useAvatarWithRetry(url: string | null): { url: string | null; onError: () => void } {
+  const [erroredUrl, setErroredUrl] = useState<string | null>(null);
+  const effectiveUrl = url && url !== erroredUrl ? url : null;
+  return { url: effectiveUrl, onError: () => setErroredUrl(effectiveUrl) };
+}
+
 /** Profile header with avatar and username */
 function ProfileHeader({
   profile,
@@ -239,13 +252,14 @@ function ProfileHeader({
   memberSince: string;
   archetype: ArchetypeDto | null;
 }): JSX.Element {
+  const avatar = useAvatarWithRetry(profileAvatar.url);
   return (
     <div className="user-profile-header">
-      {profileAvatar.url && (
-        <img src={profileAvatar.url} alt={profile.username} className="user-profile-avatar"
-          onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.nextElementSibling?.classList.remove("hidden"); }} />
+      {avatar.url ? (
+        <img src={avatar.url} alt={profile.username} className="user-profile-avatar" onError={avatar.onError} />
+      ) : (
+        <div className="user-profile-avatar user-profile-avatar--initials">{profile.username.charAt(0).toUpperCase()}</div>
       )}
-      <div className={`user-profile-avatar user-profile-avatar--initials ${profileAvatar.url ? "hidden" : ""}`}>{profile.username.charAt(0).toUpperCase()}</div>
       <div className="user-profile-info">
         <h1 className="user-profile-name">
           {profile.username}

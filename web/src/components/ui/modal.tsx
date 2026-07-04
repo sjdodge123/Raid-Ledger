@@ -11,6 +11,8 @@ interface ModalProps {
     maxWidth?: string;
     /** Override body overflow/height classes (default: scrollable body) */
     bodyClassName?: string;
+    /** Element to focus on open instead of the first focusable (the close button) */
+    initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 /**
@@ -53,9 +55,9 @@ function ModalHeader({ titleId, title, onClose }: { titleId: string; title: stri
     );
 }
 
-export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName, initialFocusRef }: ModalProps) {
     const titleId = useId();
-    const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
+    const trapRef = useFocusTrap<HTMLDivElement>(isOpen, initialFocusRef);
 
     useModalEscape(isOpen, onClose);
 
