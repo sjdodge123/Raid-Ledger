@@ -127,7 +127,13 @@ function EventDetailModals({ event, eventId, derived, handlers, showCancelModal,
     const deepLinkAction = searchParams.get('action');
     const deepLinkReason = searchParams.get('reason');
     const canDeepLink = derived.canManageRoster;
-    const clearDeepLink = () => { if (deepLinkAction) setSearchParams({}, { replace: true }); };
+    const clearDeepLink = () => {
+        if (!deepLinkAction) return;
+        const next = new URLSearchParams(searchParams);
+        next.delete('action');
+        next.delete('reason');
+        setSearchParams(next, { replace: true });
+    };
     return (
         <>
             <ConfirmModalSection show={handlers.showConfirmModal} onClose={handlers.closeConfirmModal} onConfirm={handlers.handleSelectionConfirm} onSkip={handlers.handleSelectionSkip}

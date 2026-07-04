@@ -12,9 +12,12 @@ interface Props {
 }
 
 const SOON_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-function formatAbsolute(date: Date): string {
-  return `Closes ${format(date, 'EEEE')} at ${format(date, 'h:mm a')}`;
+function formatAbsolute(date: Date, now: number): string {
+  // A bare weekday is ambiguous once the deadline is a week or more away.
+  const dayPart = date.getTime() - now < WEEK_MS ? format(date, 'EEEE') : format(date, 'EEE, MMM d');
+  return `Closes ${dayPart} at ${format(date, 'h:mm a')}`;
 }
 
 function formatRelative(date: Date): string {
@@ -46,7 +49,7 @@ export function PollDeadlineBanner({ phaseDeadline }: Props): JSX.Element | null
   const remainingMs = date.getTime() - now;
   const expired = remainingMs <= 0;
   const soon = !expired && remainingMs < SOON_THRESHOLD_MS;
-  const absolute = formatAbsolute(date);
+  const absolute = formatAbsolute(date, now);
   const relative = expired ? 'closed' : formatRelative(date);
 
   return (

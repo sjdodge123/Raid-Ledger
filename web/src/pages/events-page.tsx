@@ -37,7 +37,10 @@ function useGameTimeOverlaps(items: EventResponseDto[], gameTimeSlots: GameTimeS
   const slotSet = useMemo(() => {
     if (!gameTimeSlots?.length) return null;
     const set = new Set<string>();
-    for (const slot of gameTimeSlots) set.add(`${slot.dayOfWeek}-${slot.hour}`);
+    for (const slot of gameTimeSlots) {
+      if (slot.status === 'available' || !slot.status) set.add(`${slot.dayOfWeek}-${slot.hour}`);
+    }
+    if (set.size === 0) return null;
     return set;
   }, [gameTimeSlots]);
 
