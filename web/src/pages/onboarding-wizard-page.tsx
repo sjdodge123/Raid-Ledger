@@ -33,20 +33,17 @@ function useConditionalStepFlags(user: { discordId: string } | null): {
         return !isDiscordLinked(user.discordId);
     }, [user, discordConfigured]);
 
-    const { data: guildMembership, isError: membershipError } = useGuildMembership(
+    const { data: guildMembership } = useGuildMembership(
         discordConfigured && !!user && isDiscordLinked(user.discordId),
     );
 
     const needsDiscordJoin = useMemo(() => {
         if (!discordConfigured || !user || !isDiscordLinked(user.discordId)) return false;
-        // Fail open on a failed membership check — better to show the step to a
-        // member than to silently skip it for a non-member.
-        if (membershipError) return true;
-        // While membership is still loading, don't add the step — adding it
-        // then removing it shifts the step counter mid-load for members.
-        if (!guildMembership) return false;
+        // Fail open while membership is unknown (loading or errored): a member
+        // sees the step flicker away, but a non-member can never race past it.
+        if (!guildMembership) return true;
         return !guildMembership.isMember;
-    }, [discordConfigured, user, guildMembership, membershipError]);
+    }, [discordConfigured, user, guildMembership]);
 
     const { steamStatus } = useSteamLink();
     const needsSteamConnect = useMemo(() => {
