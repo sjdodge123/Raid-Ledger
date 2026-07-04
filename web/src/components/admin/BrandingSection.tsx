@@ -50,7 +50,7 @@ function LogoSection({ logoUrl, onUpload, isUploading, fileInputRef }: {
     fileInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
     return (
-        <SectionCard title="Community Logo" hint="Square image, max 2 MB. PNG, JPEG, WebP, or SVG.">
+        <SectionCard title="Community Logo" hint="Square image, max 2 MB. PNG, JPEG, or WebP.">
             <div className="flex items-center gap-4">
                 <LogoPreview logoUrl={logoUrl} />
                 <div className="flex gap-2">

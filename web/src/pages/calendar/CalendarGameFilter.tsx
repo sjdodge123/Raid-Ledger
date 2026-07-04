@@ -56,7 +56,11 @@ export function CalendarGameFilterModal({
     const [filterSearch, setFilterSearch] = useState('');
     const searchInputRef = useRef<HTMLInputElement>(null);
     useEffect(() => {
-        if (isOpen) searchInputRef.current?.focus();
+        if (!isOpen) return;
+        // rAF so this runs after the modal focus trap's own rAF, which
+        // otherwise moves focus to the first focusable (the close button).
+        const raf = requestAnimationFrame(() => searchInputRef.current?.focus());
+        return () => cancelAnimationFrame(raf);
     }, [isOpen]);
     const sortedGames = useSortedGames(allKnownGames, likedSlugs);
 
