@@ -39,6 +39,21 @@ describe('PollDeadlineBanner (ROK-1217)', () => {
     expect(banner.textContent).toMatch(/in \d+ days?/);
   });
 
+  it('includes the calendar date when the deadline is a week or more away', () => {
+    // 10 days from FIXED_NOW (2026-05-19) — a bare weekday would be ambiguous
+    const deadline = new Date(FIXED_NOW + 10 * 24 * 60 * 60 * 1000).toISOString();
+    render(<PollDeadlineBanner phaseDeadline={deadline} />);
+    const banner = screen.getByTestId('poll-deadline-banner');
+    expect(banner.textContent).toMatch(/Closes \w{3}, May 19 at/);
+  });
+
+  it('uses the bare weekday when the deadline is within the week', () => {
+    const deadline = new Date(FIXED_NOW + 3 * 24 * 60 * 60 * 1000).toISOString();
+    render(<PollDeadlineBanner phaseDeadline={deadline} />);
+    const banner = screen.getByTestId('poll-deadline-banner');
+    expect(banner.textContent).not.toMatch(/May \d/);
+  });
+
   it('uses urgent (soon) variant when less than 24h remain', () => {
     // 5 hours from FIXED_NOW
     const deadline = new Date(FIXED_NOW + 5 * 60 * 60 * 1000).toISOString();
