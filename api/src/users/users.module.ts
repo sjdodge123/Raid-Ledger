@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import * as multer from 'multer';
 import { UsersService } from './users.service';
+import { UsersModerationService } from './users-moderation.service';
 import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
 import { GameTimeService } from './game-time.service';
@@ -34,6 +35,7 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
   ],
   providers: [
     UsersService,
+    UsersModerationService,
     AvatarService,
     PreferencesService,
     GameTimeService,

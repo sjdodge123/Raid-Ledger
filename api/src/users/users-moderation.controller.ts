@@ -29,12 +29,16 @@ import {
 import { AdminGuard } from '../auth/admin.guard';
 import type { AuthenticatedRequest } from '../auth/types';
 import { UsersService } from './users.service';
+import { UsersModerationService } from './users-moderation.service';
 import { parsePagination } from './users-controller.helpers';
 
 @Controller('users')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class UsersModerationController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly moderationService: UsersModerationService,
+  ) {}
 
   /** Shared admin-protection guard: never self, never another admin. Returns the
    * target row so callers can apply action-specific checks. */
@@ -61,7 +65,7 @@ export class UsersModerationController {
     const target = await this.requireModeratableTarget(id, req);
     if (target.bannedAt)
       throw new BadRequestException('User is already banned');
-    return this.usersService.kickUser(req.user.id, id, dto);
+    return this.moderationService.kickUser(req.user.id, id, dto);
   }
 
   @Post(':id/unkick')
@@ -70,7 +74,7 @@ export class UsersModerationController {
     @Request() req: AuthenticatedRequest,
   ): Promise<ModerationActionResponseDto> {
     await this.requireModeratableTarget(id, req);
-    return this.usersService.unkickUser(req.user.id, id);
+    return this.moderationService.unkickUser(req.user.id, id);
   }
 
   @Post(':id/ban')
@@ -83,7 +87,7 @@ export class UsersModerationController {
     const target = await this.requireModeratableTarget(id, req);
     if (target.bannedAt)
       throw new BadRequestException('User is already banned');
-    return this.usersService.banUser(req.user.id, id, dto);
+    return this.moderationService.banUser(req.user.id, id, dto);
   }
 
   @Post(':id/unban')
@@ -92,7 +96,7 @@ export class UsersModerationController {
     @Request() req: AuthenticatedRequest,
   ): Promise<ModerationActionResponseDto> {
     await this.requireModeratableTarget(id, req);
-    return this.usersService.unbanUser(req.user.id, id);
+    return this.moderationService.unbanUser(req.user.id, id);
   }
 
   @Get(':id/admin-actions')
@@ -102,6 +106,6 @@ export class UsersModerationController {
     @Query('limit') limitStr?: string,
   ): Promise<AdminActionsListResponseDto> {
     const { page, limit } = parsePagination(pageStr, limitStr);
-    return this.usersService.getAdminActionsForUser(id, page, limit);
+    return this.moderationService.getAdminActionsForUser(id, page, limit);
   }
 }
