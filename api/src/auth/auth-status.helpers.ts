@@ -28,6 +28,13 @@ export const KICK_COOLDOWN_MS = 5 * 60 * 1000;
  */
 export const USER_SUSPENDED_CODE = 'USER_SUSPENDED';
 
+/**
+ * Structured error code for a kick-cooldown 401. Lets the Discord-OAuth failure
+ * redirect recognise the cooldown throw and thread its message to the login
+ * screen (AC4) — symmetric with USER_SUSPENDED. Stays a 401 (§9.2).
+ */
+export const USER_KICKED_CODE = 'USER_KICKED';
+
 /** Minimal ban-status shape (a `users` row satisfies it structurally). */
 interface BanStatus {
   bannedAt: Date | null;
@@ -86,7 +93,14 @@ export async function assertKickCooldownOrClear(
 ): Promise<void> {
   if (!user.kickedAt) return;
   if (!isKickExpired(user.kickedAt)) {
-    throw new UnauthorizedException(kickCooldownMessage(user.kickedAt));
+    // Structured 401 so the Discord-OAuth failure path can thread the cooldown
+    // message (AC4); the local path still reads `.message` off the object form.
+    const message = kickCooldownMessage(user.kickedAt);
+    throw new UnauthorizedException({
+      code: USER_KICKED_CODE,
+      message,
+      reason: message,
+    });
   }
   await db
     .update(users)

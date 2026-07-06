@@ -4,6 +4,7 @@ import * as schema from '../drizzle/schema';
 import {
   KICK_COOLDOWN_MS,
   USER_SUSPENDED_CODE,
+  USER_KICKED_CODE,
   assertNotBanned,
   assertKickCooldownOrClear,
   suspendedMessage,
@@ -111,12 +112,21 @@ describe('assertKickCooldownOrClear', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('throws 401 with remaining minutes while inside the cooldown', async () => {
+  it('throws a structured USER_KICKED 401 while inside the cooldown', async () => {
     const { db, update } = mockUpdateDb();
     const kickedAt = new Date(Date.now() - 60_000);
-    await expect(
-      assertKickCooldownOrClear(db, { id: 7, kickedAt }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    let caught: UnauthorizedException | undefined;
+    try {
+      await assertKickCooldownOrClear(db, { id: 7, kickedAt });
+    } catch (err) {
+      caught = err as UnauthorizedException;
+    }
+    expect(caught).toBeInstanceOf(UnauthorizedException);
+    const body = caught!.getResponse() as Record<string, unknown>;
+    expect(body.code).toBe(USER_KICKED_CODE);
+    expect(body.message).toContain('minute(s)');
+    // reason mirrors the message so the OAuth redirect threads the cooldown copy.
+    expect(body.reason).toBe(body.message);
     // Still inside the window → no clear write.
     expect(update).not.toHaveBeenCalled();
   });

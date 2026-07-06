@@ -74,17 +74,20 @@ export class DiscordAuthGuard extends AuthGuard('discord') {
 }
 
 /**
- * ROK-313 §9.7: extract the ban reason from a USER_SUSPENDED
- * `ForbiddenException` (thrown by `assertNotBanned` in the OAuth verify path)
- * so the suspension copy renders on the login screen. Returns the reason
- * string (`''` when the ban carried none) or null when this isn't a
- * suspension error.
+ * ROK-313 §9.7 / AC4: extract the reason from a structured auth-status error
+ * thrown in the OAuth verify path — USER_SUSPENDED (ban, from `assertNotBanned`)
+ * or USER_KICKED (kick cooldown, from `assertKickCooldownOrClear`) — so the copy
+ * renders on the login screen. Returns the reason string (`''` when the ban
+ * carried none) or null when this isn't a suspension/kick error.
  */
-function suspendedRedirectReason(err: Error | null): string | null {
+export function suspendedRedirectReason(err: Error | null): string | null {
   const resp = (err as { getResponse?: () => unknown } | null)?.getResponse?.();
   if (resp && typeof resp === 'object') {
     const body = resp as Record<string, unknown>;
     if (body.code === 'USER_SUSPENDED') {
+      return typeof body.reason === 'string' ? body.reason : '';
+    }
+    if (body.code === 'USER_KICKED') {
       return typeof body.reason === 'string' ? body.reason : '';
     }
   }
