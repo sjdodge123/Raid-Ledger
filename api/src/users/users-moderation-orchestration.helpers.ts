@@ -76,12 +76,17 @@ function isRealDiscordId(discordId: string | null): discordId is string {
 }
 
 /** Best-effort refresh-family revoke (lockout). Never throws. */
-async function revokeTokens(deps: ModerationDeps, userId: number): Promise<void> {
+async function revokeTokens(
+  deps: ModerationDeps,
+  userId: number,
+): Promise<void> {
   if (!deps.refreshTokenService) return;
   try {
     await deps.refreshTokenService.revokeAllForUser(userId);
   } catch (err: unknown) {
-    deps.logger.warn(`ROK-313: refresh revoke for user ${userId} failed: ${msg(err)}`);
+    deps.logger.warn(
+      `ROK-313: refresh revoke for user ${userId} failed: ${msg(err)}`,
+    );
   }
 }
 
@@ -96,27 +101,44 @@ async function maybeKickFromDiscord(
   try {
     return await deps.discord.kickMember(row.discordId, reason);
   } catch (err: unknown) {
-    deps.logger.warn(`ROK-313: Discord kick for user ${row.id} failed: ${msg(err)}`);
+    deps.logger.warn(
+      `ROK-313: Discord kick for user ${row.id} failed: ${msg(err)}`,
+    );
     return false;
   }
 }
 
 /** Best-effort cancel of every upcoming signup (drop from rosters). Never throws. */
-async function cancelUpcomingSignups(deps: ModerationDeps, userId: number): Promise<void> {
+async function cancelUpcomingSignups(
+  deps: ModerationDeps,
+  userId: number,
+): Promise<void> {
   if (!deps.rosterService) return;
   try {
-    const n = await cancelAllUpcomingSignupsForUser(deps.db, deps.rosterService, userId);
-    deps.logger.log(`ROK-313: cancelled ${n} upcoming signup(s) for banned user ${userId}`);
+    const n = await cancelAllUpcomingSignupsForUser(
+      deps.db,
+      deps.rosterService,
+      userId,
+    );
+    deps.logger.log(
+      `ROK-313: cancelled ${n} upcoming signup(s) for banned user ${userId}`,
+    );
   } catch (err: unknown) {
-    deps.logger.warn(`ROK-313: signup cancel for user ${userId} failed: ${msg(err)}`);
+    deps.logger.warn(
+      `ROK-313: signup cancel for user ${userId} failed: ${msg(err)}`,
+    );
   }
 }
 
 /** Kick (soft removal): lockout + audit + optional Discord kick. No signup
  * cancel / no deactivate — kick preserves data (AC2). */
-export async function runKick(deps: ModerationDeps, input: KickInput): Promise<ModerationResult> {
+export async function runKick(
+  deps: ModerationDeps,
+  input: KickInput,
+): Promise<ModerationResult> {
   const row = await kickUserById(deps.db, input.userId, input.reason);
-  if (!row) return { success: true, message: 'User is already kicked or banned.' };
+  if (!row)
+    return { success: true, message: 'User is already kicked or banned.' };
   invalidateAuthUser(row.id);
   await revokeTokens(deps, row.id);
   await insertAdminAction(deps.db, {
@@ -152,7 +174,11 @@ export async function runUnkick(
 
 /** Post-lockout best-effort cascade for ban: cancel signups, wipe or reassign,
  * optional Discord kick. */
-async function banCascade(deps: ModerationDeps, input: BanInput, row: ModerationRow): Promise<void> {
+async function banCascade(
+  deps: ModerationDeps,
+  input: BanInput,
+  row: ModerationRow,
+): Promise<void> {
   await cancelUpcomingSignups(deps, row.id);
   if (input.wipeData) {
     await deps.db.transaction(async (tx) => {
@@ -166,7 +192,10 @@ async function banCascade(deps: ModerationDeps, input: BanInput, row: Moderation
 
 /** Ban: lockout-first (write → cache drop → revoke → audit) then the best-effort
  * cascade. Idempotent — a repeat ban returns success without re-logging. */
-export async function runBan(deps: ModerationDeps, input: BanInput): Promise<ModerationResult> {
+export async function runBan(
+  deps: ModerationDeps,
+  input: BanInput,
+): Promise<ModerationResult> {
   const row = await banUserById(deps.db, input.userId, input.reason);
   if (!row) return { success: true, message: 'User is already banned.' };
   invalidateAuthUser(row.id);

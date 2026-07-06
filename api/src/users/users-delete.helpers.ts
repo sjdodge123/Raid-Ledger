@@ -60,7 +60,10 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     column: schema.wowClassicQuestProgress.userId,
   },
   { table: schema.eventPlans, column: schema.eventPlans.creatorId },
-  { table: schema.eventRemindersSent, column: schema.eventRemindersSent.userId },
+  {
+    table: schema.eventRemindersSent,
+    column: schema.eventRemindersSent.userId,
+  },
   {
     table: schema.gameActivitySessions,
     column: schema.gameActivitySessions.userId,
@@ -69,7 +72,10 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.gameActivityRollups,
     column: schema.gameActivityRollups.userId,
   },
-  { table: schema.playerTasteVectors, column: schema.playerTasteVectors.userId },
+  {
+    table: schema.playerTasteVectors,
+    column: schema.playerTasteVectors.userId,
+  },
   {
     table: schema.playerIntensitySnapshots,
     column: schema.playerIntensitySnapshots.userId,

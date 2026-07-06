@@ -10,12 +10,16 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { alias } from 'drizzle-orm/pg-core';
 import { desc, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
-import type { AdminActionDto, AdminActionsListResponseDto } from '@raid-ledger/contract';
+import type {
+  AdminActionDto,
+  AdminActionsListResponseDto,
+} from '@raid-ledger/contract';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Moderation action kinds recorded in `admin_actions.action`. */
-export type AdminActionKind = 'kick' | 'unkick' | 'ban' | 'unban' | 'role_change';
+export type AdminActionKind =
+  'kick' | 'unkick' | 'ban' | 'unban' | 'role_change';
 
 export interface InsertAdminActionInput {
   action: AdminActionKind;
@@ -67,23 +71,16 @@ function mapAdminActionRow(row: AdminActionRow): AdminActionDto {
   };
 }
 
-/** Paginated audit history for one target user, newest first, with actor/target
- * usernames joined (§3c). */
-export async function getAdminActionsForUser(
+/** Fetch one page of audit rows with actor/target usernames joined, newest first. */
+function queryAdminActionRows(
   db: Db,
   targetId: number,
-  page: number,
   limit: number,
-): Promise<AdminActionsListResponseDto> {
+  offset: number,
+) {
   const actor = alias(schema.users, 'actor');
   const target = alias(schema.users, 'target');
-  const offset = (page - 1) * limit;
-  const where = eq(schema.adminActions.targetId, targetId);
-  const [countRow] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(schema.adminActions)
-    .where(where);
-  const rows = await db
+  return db
     .select({
       id: schema.adminActions.id,
       action: schema.adminActions.action,
@@ -98,10 +95,25 @@ export async function getAdminActionsForUser(
     .from(schema.adminActions)
     .leftJoin(actor, eq(schema.adminActions.actorId, actor.id))
     .leftJoin(target, eq(schema.adminActions.targetId, target.id))
-    .where(where)
+    .where(eq(schema.adminActions.targetId, targetId))
     .orderBy(desc(schema.adminActions.createdAt))
     .limit(limit)
     .offset(offset);
+}
+
+/** Paginated audit history for one target user, newest first (§3c). */
+export async function getAdminActionsForUser(
+  db: Db,
+  targetId: number,
+  page: number,
+  limit: number,
+): Promise<AdminActionsListResponseDto> {
+  const offset = (page - 1) * limit;
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.adminActions)
+    .where(eq(schema.adminActions.targetId, targetId));
+  const rows = await queryAdminActionRows(db, targetId, limit, offset);
   const total = Number(countRow.count);
   return {
     data: rows.map(mapAdminActionRow),

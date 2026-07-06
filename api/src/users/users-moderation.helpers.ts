@@ -41,7 +41,11 @@ export async function kickUserById(
 ): Promise<ModerationRow | undefined> {
   const [row] = await db
     .update(schema.users)
-    .set({ kickedAt: sql`NOW()`, kickReason: reason ?? null, updatedAt: new Date() })
+    .set({
+      kickedAt: sql`NOW()`,
+      kickReason: reason ?? null,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(schema.users.id, userId),
