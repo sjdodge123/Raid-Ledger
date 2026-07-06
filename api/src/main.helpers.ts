@@ -4,6 +4,9 @@
  */
 
 import type { LogLevel } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { Request, Response, NextFunction } from 'express';
+import * as bodyParser from 'body-parser';
 
 type CorsCallback = (err: Error | null, allow?: boolean) => void;
 type CorsOriginFn = (origin: string | undefined, cb: CorsCallback) => void;
@@ -82,6 +85,42 @@ export function buildLoggerSelfTest(logger: LoggerLike): () => void {
     logger.warn(LOGGER_SELF_TEST_WARN_SENTINEL);
     logger.error(LOGGER_SELF_TEST_ERROR_SENTINEL);
   };
+}
+
+// Browsers POST CSP violation reports with content-type `application/csp-report`
+// (legacy) or `application/reports+json` (Reporting API). Nest's default
+// `application/json` parser ignores both, so register a dedicated parser first
+// to make `@Body()` resolve. ROK-1158.
+export const CSP_REPORT_CONTENT_TYPES = [
+  'application/csp-report',
+  'application/reports+json',
+];
+
+/**
+ * Install the CSP-violation-report body parser BEFORE Nest's default json
+ * parser.
+ *
+ * ROK-1365: body-parser runs `strict:true`, so a malformed/truncated report
+ * body throws a SyntaxError that Nest surfaces as HTTP 400. A CSP report
+ * endpoint must never 400 — browsers fire-and-forget these and curl-driven
+ * probes send garbage. Wrap the parser so a parse failure short-circuits to
+ * 204 instead of propagating. Valid bodies (and non-CSP content types) fall
+ * through to the controller, which also returns 204.
+ */
+export function installCspReportBodyParser(app: NestExpressApplication): void {
+  const parse = bodyParser.json({
+    type: CSP_REPORT_CONTENT_TYPES,
+    limit: '64kb',
+  });
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    parse(req, res, (err: unknown) => {
+      if (err) {
+        res.status(204).end();
+        return;
+      }
+      next();
+    });
+  });
 }
 
 export interface HelmetOptions {
