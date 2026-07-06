@@ -3,6 +3,14 @@
  * Separates voters into those who voted for the selected slot
  * vs those who voted for other slots.
  */
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../../drizzle/schema';
+import type { SettingsService } from '../../settings/settings.service';
+import type { StandalonePollNotificationService } from './standalone-poll-notification.service';
+import { resolveUserTimezones } from '../../notifications/timezone.helpers';
+
+/** No-op rejection swallower for fire-and-forget DMs. */
+const noop = (): void => {};
 
 /** Split voters into selected-slot voters and other-slot voters. */
 export function splitVotersBySlot<T extends { userId: number; slotId: number }>(
@@ -36,4 +44,44 @@ export function formatPollTime(isoTime: string, timeZone: string): string {
     minute: '2-digit',
     timeZone,
   });
+}
+
+/** Dependencies for {@link notifyPollVoters}. */
+export interface NotifyPollVotersDeps {
+  db: PostgresJsDatabase<typeof schema>;
+  settingsService: SettingsService;
+  notifications: StandalonePollNotificationService;
+}
+
+/**
+ * Fire-and-forget DMs to all poll voters (ROK-1031). The chosen time is
+ * formatted PER RECIPIENT in their own timezone (ROK-1112) — preference →
+ * guild default → 'UTC' — so a 9 PM EDT slot never renders as next-day UTC.
+ */
+export async function notifyPollVoters(
+  deps: NotifyPollVotersDeps,
+  selected: { userId: number }[],
+  others: { userId: number }[],
+  chosenTime: string,
+  eventId: number,
+  gameName: string,
+): Promise<void> {
+  const guildDefault =
+    (await deps.settingsService.getDefaultTimezone()) ?? 'UTC';
+  const selectedIds = [...new Set(selected.map((v) => v.userId))];
+  const otherIds = [...new Set(others.map((v) => v.userId))];
+  // One batch query for every recipient's timezone — no per-voter N+1.
+  const tz = await resolveUserTimezones(
+    deps.db,
+    [...selectedIds, ...otherIds],
+    guildDefault,
+  );
+  for (const uid of selectedIds) {
+    const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
+    deps.notifications.notifyAutoSignup(uid, gameName, at, eventId).catch(noop);
+  }
+  for (const uid of otherIds) {
+    const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
+    deps.notifications.notifyPollOutcome(uid, at, eventId).catch(noop);
+  }
 }

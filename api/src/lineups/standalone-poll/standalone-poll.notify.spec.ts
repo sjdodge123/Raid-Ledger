@@ -1,6 +1,5 @@
 /**
- * Unit tests for StandalonePollService.notifyVoters per-recipient timezone
- * rendering (ROK-1112).
+ * Unit tests for notifyPollVoters per-recipient timezone rendering (ROK-1112).
  *
  * Previously the chosen timeslot was formatted ONCE and the same string was
  * DMed to every recipient, so an EDT voter and a PDT voter both saw the
@@ -8,8 +7,15 @@
  * and resolves each recipient's IANA timezone (preference → guild default →
  * 'UTC'). This test proves two recipients with different prefs receive
  * different message strings for the same source ISO.
+ *
+ * ROK-1392: the helper was extracted from StandalonePollService.notifyVoters to
+ * `standalone-poll-voter.helpers.ts` to keep the service module under the
+ * 300-line limit — these tests now exercise the exported function directly.
  */
-import { StandalonePollService } from './standalone-poll.service';
+import {
+  notifyPollVoters,
+  type NotifyPollVotersDeps,
+} from './standalone-poll-voter.helpers';
 
 interface NotifyMock {
   notifyAutoSignup: jest.Mock;
@@ -29,9 +35,7 @@ function makeTzDb(tzByUser: Record<number, string | null>) {
   const where = jest.fn().mockResolvedValue(rows);
   const from = jest.fn().mockReturnValue({ where });
   const select = jest.fn().mockReturnValue({ from });
-  return { select } as unknown as ConstructorParameters<
-    typeof StandalonePollService
-  >[0];
+  return { select } as unknown as NotifyPollVotersDeps['db'];
 }
 
 function makeNotifications(): NotifyMock {
@@ -41,49 +45,42 @@ function makeNotifications(): NotifyMock {
   };
 }
 
-/** Construct the service with only the deps notifyVoters touches. */
-function makeService(
-  db: ConstructorParameters<typeof StandalonePollService>[0],
+/** Assemble the helper deps with only what notifyPollVoters touches. */
+function makeDeps(
+  db: NotifyPollVotersDeps['db'],
   notifications: NotifyMock,
   defaultTimezone = 'UTC',
-): StandalonePollService {
+): NotifyPollVotersDeps {
   const settingsService = {
     getDefaultTimezone: jest.fn().mockResolvedValue(defaultTimezone),
   };
-  return new StandalonePollService(
+  return {
     db,
-    {} as never, // phaseQueue
-    notifications as never,
-    {} as never, // schedulingPollEmbed
-    {} as never, // signupsService
-    settingsService as never,
-    {} as never, // eventsService
-  );
+    settingsService: settingsService as never,
+    notifications: notifications as never,
+  };
 }
 
-/** Invoke the private notifyVoters method. */
+/** Invoke notifyPollVoters with fixed eventId + gameName. */
 function callNotifyVoters(
-  service: StandalonePollService,
+  deps: NotifyPollVotersDeps,
   args: {
     selected: { userId: number }[];
     others: { userId: number }[];
     chosenTime: string;
   },
 ): Promise<void> {
-  return (
-    service as unknown as {
-      notifyVoters: (
-        s: { userId: number }[],
-        o: { userId: number }[],
-        t: string,
-        e: number,
-        g: string,
-      ) => Promise<void>;
-    }
-  ).notifyVoters(args.selected, args.others, args.chosenTime, 99, 'Game Night');
+  return notifyPollVoters(
+    deps,
+    args.selected,
+    args.others,
+    args.chosenTime,
+    99,
+    'Game Night',
+  );
 }
 
-describe('StandalonePollService.notifyVoters timezone (ROK-1112)', () => {
+describe('notifyPollVoters timezone (ROK-1112)', () => {
   // 2026-05-04T01:00:00Z is 9:00 PM EDT Sun May 3 / 1:00 AM UTC Mon May 4.
   const CHOSEN = '2026-05-04T01:00:00.000Z';
 
@@ -91,9 +88,9 @@ describe('StandalonePollService.notifyVoters timezone (ROK-1112)', () => {
     const notifications = makeNotifications();
     // User A (selected) → America/New_York, User B (selected) → America/Los_Angeles.
     const db = makeTzDb({ 1: 'America/New_York', 2: 'America/Los_Angeles' });
-    const service = makeService(db, notifications);
+    const deps = makeDeps(db, notifications);
 
-    await callNotifyVoters(service, {
+    await callNotifyVoters(deps, {
       selected: [{ userId: 1 }, { userId: 2 }],
       others: [],
       chosenTime: CHOSEN,
@@ -115,9 +112,9 @@ describe('StandalonePollService.notifyVoters timezone (ROK-1112)', () => {
     const notifications = makeNotifications();
     // No pref row → falls through to guild default America/New_York.
     const db = makeTzDb({ 7: null });
-    const service = makeService(db, notifications, 'America/New_York');
+    const deps = makeDeps(db, notifications, 'America/New_York');
 
-    await callNotifyVoters(service, {
+    await callNotifyVoters(deps, {
       selected: [{ userId: 7 }],
       others: [],
       chosenTime: CHOSEN,
@@ -131,9 +128,9 @@ describe('StandalonePollService.notifyVoters timezone (ROK-1112)', () => {
   it('formats other-slot voters in their own timezone too', async () => {
     const notifications = makeNotifications();
     const db = makeTzDb({ 3: 'America/New_York' });
-    const service = makeService(db, notifications);
+    const deps = makeDeps(db, notifications);
 
-    await callNotifyVoters(service, {
+    await callNotifyVoters(deps, {
       selected: [],
       others: [{ userId: 3 }],
       chosenTime: CHOSEN,
