@@ -149,8 +149,9 @@ async function recordAudit(
   }
 }
 
-/** Kick (soft removal): lockout + audit + optional Discord kick. No signup
- * cancel / no deactivate — kick preserves data (AC2). */
+/** Kick (soft removal): lockout, optional Discord kick, then audit recording the
+ * ACTUAL Discord result. No signup cancel / no deactivate — kick preserves data
+ * (AC2). */
 export async function runKick(
   deps: ModerationDeps,
   input: KickInput,
@@ -160,14 +161,21 @@ export async function runKick(
     return { success: true, message: 'User is already kicked or banned.' };
   invalidateAuthUser(row.id);
   await revokeTokens(deps, row.id);
+  // Discord kick runs BEFORE the audit so metadata records the ACTUAL result
+  // (best-effort: false when the bot is down / lacks perms / member missing).
+  const discordKicked = await maybeKickFromDiscord(
+    deps,
+    row,
+    input.kickFromDiscord,
+    input.reason,
+  );
   await recordAudit(deps, {
     action: 'kick',
     actorId: input.actorId,
     targetId: row.id,
     reason: input.reason ?? null,
-    metadata: JSON.stringify({ discordKicked: input.kickFromDiscord }),
+    metadata: JSON.stringify({ discordKicked }),
   });
-  await maybeKickFromDiscord(deps, row, input.kickFromDiscord, input.reason);
   deps.logger.log(`ROK-313: kicked user ${row.id} (${row.username})`);
   return { success: true, message: `${row.username} has been kicked.` };
 }
@@ -222,9 +230,9 @@ async function applyBanDataChanges(
 }
 
 /** Ban: lockout-first (write → cache drop → revoke), then the best-effort data
- * changes, then audit with the TRUE dataWiped result (so a rolled-back wipe is
- * never recorded as succeeded), then the optional Discord kick. Idempotent — a
- * repeat ban returns success without re-logging. */
+ * changes, then the optional Discord kick, then audit with the TRUE dataWiped +
+ * discordKicked results (so a rolled-back wipe / failed kick is never recorded as
+ * succeeded). Idempotent — a repeat ban returns success without re-logging. */
 export async function runBan(
   deps: ModerationDeps,
   input: BanInput,
@@ -234,17 +242,20 @@ export async function runBan(
   invalidateAuthUser(row.id);
   await revokeTokens(deps, row.id);
   const dataWiped = await applyBanDataChanges(deps, input, row);
+  // Discord kick before the audit so metadata records the ACTUAL outcome.
+  const discordKicked = await maybeKickFromDiscord(
+    deps,
+    row,
+    input.kickFromDiscord,
+    input.reason,
+  );
   await recordAudit(deps, {
     action: 'ban',
     actorId: input.actorId,
     targetId: row.id,
     reason: input.reason ?? null,
-    metadata: JSON.stringify({
-      dataWiped,
-      discordKicked: input.kickFromDiscord,
-    }),
+    metadata: JSON.stringify({ dataWiped, discordKicked }),
   });
-  await maybeKickFromDiscord(deps, row, input.kickFromDiscord, input.reason);
   deps.logger.log(`ROK-313: banned user ${row.id} (${row.username})`);
   return { success: true, message: `${row.username} has been banned.` };
 }

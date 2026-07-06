@@ -160,6 +160,26 @@ describe('runKick', () => {
       undefined,
     );
   });
+
+  it('audits discordKicked:false when the requested guild kick fails', async () => {
+    kickUserById.mockResolvedValue({ ...TARGET });
+    const deps = makeDeps({
+      discord: { kickMember: jest.fn().mockResolvedValue(false) },
+    });
+    await runKick(deps, {
+      userId: TARGET.id,
+      actorId: ACTOR,
+      kickFromDiscord: true,
+    });
+    expect(deps.discord.kickMember).toHaveBeenCalled();
+    // Audit records the ACTUAL outcome, not the request flag.
+    expect(insertAdminAction).toHaveBeenCalledWith(
+      deps.db,
+      expect.objectContaining({
+        metadata: JSON.stringify({ discordKicked: false }),
+      }),
+    );
+  });
 });
 
 describe('runBan', () => {
