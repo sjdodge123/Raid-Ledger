@@ -49,7 +49,11 @@ function makeDeps(overrides: Partial<ModerationDeps> = {}): ModerationDeps {
         Promise.resolve(cb({})),
       ),
     } as never,
-    logger: { log: jest.fn(), warn: jest.fn() } as unknown as Logger,
+    logger: {
+      log: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    } as unknown as Logger,
     refreshTokenService: {
       revokeAllForUser: jest.fn().mockResolvedValue(undefined),
     } as never,
@@ -140,6 +144,19 @@ describe('runKick', () => {
     });
     expect(deps.discord.kickMember).not.toHaveBeenCalled();
   });
+
+  it('a failed audit write does not abort the cascade or throw', async () => {
+    kickUserById.mockResolvedValue({ ...TARGET });
+    insertAdminAction.mockRejectedValueOnce(new Error('db down'));
+    const deps = makeDeps();
+    const res = await runKick(deps, {
+      userId: TARGET.id,
+      actorId: ACTOR,
+      kickFromDiscord: true,
+    });
+    expect(res.success).toBe(true);
+    expect(deps.discord.kickMember).toHaveBeenCalledWith('123456789', undefined);
+  });
 });
 
 describe('runBan', () => {
@@ -204,6 +221,29 @@ describe('runBan', () => {
       deps.db,
       expect.objectContaining({
         metadata: JSON.stringify({ dataWiped: true, discordKicked: false }),
+      }),
+    );
+  });
+
+  it('wipe failure keeps the ban and audits dataWiped:false (no throw)', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    cancelAll.mockResolvedValue(0);
+    wipeUserData.mockRejectedValueOnce(new Error('boom'));
+    const deps = makeDeps();
+
+    const res = await runBan(deps, {
+      userId: TARGET.id,
+      actorId: ACTOR,
+      wipeData: true,
+      kickFromDiscord: false,
+    });
+
+    expect(res.success).toBe(true); // ban kept, no 500
+    // Audit records the TRUE (failed) wipe result, not the requested flag.
+    expect(insertAdminAction).toHaveBeenCalledWith(
+      deps.db,
+      expect.objectContaining({
+        metadata: JSON.stringify({ dataWiped: false, discordKicked: false }),
       }),
     );
   });

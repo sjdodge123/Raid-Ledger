@@ -19,7 +19,10 @@ import type { RefreshTokenService } from '../auth/refresh/refresh-token.service'
 import type { SignupsRosterService } from '../events/signups-roster.service';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
-import { insertAdminAction } from './users-admin-actions.helpers';
+import {
+  insertAdminAction,
+  type InsertAdminActionInput,
+} from './users-admin-actions.helpers';
 import {
   banUserById,
   kickUserById,
@@ -130,6 +133,22 @@ async function cancelUpcomingSignups(
   }
 }
 
+/** Best-effort audit write. Callers gate this on the moderation UPDATE having
+ * RETURNed a row (no double-log on retry); a failure here logs but must not
+ * abort the rest of the cascade or 500 a partially-applied op. */
+async function recordAudit(
+  deps: ModerationDeps,
+  input: InsertAdminActionInput,
+): Promise<void> {
+  try {
+    await insertAdminAction(deps.db, input);
+  } catch (err: unknown) {
+    deps.logger.warn(
+      `ROK-313: audit write for user ${input.targetId} failed: ${msg(err)}`,
+    );
+  }
+}
+
 /** Kick (soft removal): lockout + audit + optional Discord kick. No signup
  * cancel / no deactivate — kick preserves data (AC2). */
 export async function runKick(
@@ -141,7 +160,7 @@ export async function runKick(
     return { success: true, message: 'User is already kicked or banned.' };
   invalidateAuthUser(row.id);
   await revokeTokens(deps, row.id);
-  await insertAdminAction(deps.db, {
+  await recordAudit(deps, {
     action: 'kick',
     actorId: input.actorId,
     targetId: row.id,
@@ -162,7 +181,7 @@ export async function runUnkick(
   const row = await unkickUserById(deps.db, userId);
   if (!row) return { success: true, message: 'User is not kicked.' };
   invalidateAuthUser(row.id);
-  await insertAdminAction(deps.db, {
+  await recordAudit(deps, {
     action: 'unkick',
     actorId,
     targetId: row.id,
@@ -172,26 +191,40 @@ export async function runUnkick(
   return { success: true, message: `${row.username}'s kick has been cleared.` };
 }
 
-/** Post-lockout best-effort cascade for ban: cancel signups, wipe or reassign,
- * optional Discord kick. */
-async function banCascade(
+/**
+ * Post-lockout data changes for ban. Returns whether the data wipe ACTUALLY
+ * succeeded so the audit records the true outcome. A wipe failure is logged
+ * loudly but keeps the ban (lockout already applied) — we never 500 a
+ * partially-applied op, and the audit will not falsely claim dataWiped. Wipe
+ * runs in its OWN transaction so a mid-wipe failure rolls back cleanly (§9.6).
+ */
+async function applyBanDataChanges(
   deps: ModerationDeps,
   input: BanInput,
   row: ModerationRow,
-): Promise<void> {
+): Promise<boolean> {
   await cancelUpcomingSignups(deps, row.id);
-  if (input.wipeData) {
+  if (!input.wipeData) {
+    await reassignPugSlots(deps.db, row.id, input.actorId);
+    return false;
+  }
+  try {
     await deps.db.transaction(async (tx) => {
       await wipeUserData(tx, row.id, input.actorId);
     });
-  } else {
-    await reassignPugSlots(deps.db, row.id, input.actorId);
+    return true;
+  } catch (err: unknown) {
+    deps.logger.error(
+      `ROK-313: data wipe for banned user ${row.id} FAILED (ban kept, lockout intact): ${msg(err)}`,
+    );
+    return false;
   }
-  await maybeKickFromDiscord(deps, row, input.kickFromDiscord, input.reason);
 }
 
-/** Ban: lockout-first (write → cache drop → revoke → audit) then the best-effort
- * cascade. Idempotent — a repeat ban returns success without re-logging. */
+/** Ban: lockout-first (write → cache drop → revoke), then the best-effort data
+ * changes, then audit with the TRUE dataWiped result (so a rolled-back wipe is
+ * never recorded as succeeded), then the optional Discord kick. Idempotent — a
+ * repeat ban returns success without re-logging. */
 export async function runBan(
   deps: ModerationDeps,
   input: BanInput,
@@ -200,17 +233,18 @@ export async function runBan(
   if (!row) return { success: true, message: 'User is already banned.' };
   invalidateAuthUser(row.id);
   await revokeTokens(deps, row.id);
-  await insertAdminAction(deps.db, {
+  const dataWiped = await applyBanDataChanges(deps, input, row);
+  await recordAudit(deps, {
     action: 'ban',
     actorId: input.actorId,
     targetId: row.id,
     reason: input.reason ?? null,
     metadata: JSON.stringify({
-      dataWiped: input.wipeData,
+      dataWiped,
       discordKicked: input.kickFromDiscord,
     }),
   });
-  await banCascade(deps, input, row);
+  await maybeKickFromDiscord(deps, row, input.kickFromDiscord, input.reason);
   deps.logger.log(`ROK-313: banned user ${row.id} (${row.username})`);
   return { success: true, message: `${row.username} has been banned.` };
 }
@@ -224,7 +258,7 @@ export async function runUnban(
   const row = await unbanUserById(deps.db, userId);
   if (!row) return { success: true, message: 'User is not banned.' };
   invalidateAuthUser(row.id);
-  await insertAdminAction(deps.db, {
+  await recordAudit(deps, {
     action: 'unban',
     actorId,
     targetId: row.id,

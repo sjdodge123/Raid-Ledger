@@ -7,14 +7,17 @@
  * suite; here we assert the DB state + audit + endpoint contract that the auth
  * enforcement reads from.
  *
- * The wipe-completeness seed is a CURATED representative set (Phase-A RESTRICT +
- * cascade leaves + the player_co_play dual-column special case). Exhaustive
- * classification of every FK-to-users table is guaranteed by the schema-driven
- * drift guard in `users-delete.helpers.drift.spec.ts`; this test proves the
- * DELETE mechanism + special-case predicates actually clear rows against Postgres.
+ * The wipe-completeness test seeds ≥1 row per WIPE-manifest table for the target
+ * (incl. the player_co_play dual-column and the community_lineups carry-over
+ * RESTRICT scenario), bans+wipes, then asserts EVERY WIPE table is cleared for
+ * the target (driven off WIPE_BY_COLUMN) while the users row survives. This is the
+ * ordering/RESTRICT safety net — it regresses without the carried_over_from
+ * null-out. A couple of exotic-type / deep-FK tables are assertion-only; see the
+ * seed helper for the rationale.
  */
 import { randomUUID } from 'crypto';
 import { and, eq, isNull, or } from 'drizzle-orm';
+import { getTableConfig } from 'drizzle-orm/pg-core';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -22,7 +25,7 @@ import {
 } from '../common/testing/integration-helpers';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import * as schema from '../drizzle/schema';
-import { deleteUserTransaction } from './users-delete.helpers';
+import { deleteUserTransaction, WIPE_BY_COLUMN } from './users-delete.helpers';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -181,52 +184,129 @@ describe('POST /users/:id/ban', () => {
 
 // ─── ban + wipe completeness ───────────────────────────────────────────────────
 
-async function seedWipeManifestRows(userId: number): Promise<number> {
-  await seedActiveRefreshToken(userId);
-  await testApp.db.insert(schema.userPreferences).values({
-    userId,
-    key: 'show_activity',
-    value: true,
-  });
-  await testApp.db
-    .insert(schema.feedback)
-    .values({ userId, category: 'bug', message: 'x' });
-  const start = new Date();
-  const end = new Date(Date.now() + 3_600_000);
-  await testApp.db.insert(schema.availability).values({
-    userId,
-    timeRange: [start, end] as [Date, Date],
-    status: 'available',
-  });
-  await testApp.db.insert(schema.eventTemplates).values({
-    userId,
-    name: 'T',
-    config: { title: 'T', durationMinutes: 60 },
-  });
-  // player_co_play (dual-column special): a co-play row with another user.
-  const [other] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:coplay-${userId}`,
-      username: `coplay-${userId}`,
-    })
+async function seedGame(tag: string): Promise<number> {
+  const [g] = await testApp.db
+    .insert(schema.games)
+    .values({ name: `Wipe ${tag}`, slug: `wipe-${tag}-${randomUUID().slice(0, 8)}` })
     .returning();
-  const [lo, hi] = [userId, other.id].sort((a, b) => a - b);
-  await testApp.db.insert(schema.playerCoPlay).values({
-    userIdA: lo,
-    userIdB: hi,
-    sessionCount: 1,
-    totalMinutes: 10,
-    lastPlayedAt: new Date(),
-    gamesPlayed: [1],
-  });
-  return other.id;
+  return g.id;
 }
 
-describe('ban with wipeData — true data wipe (§9.6)', () => {
-  it('deletes user-owned rows, keeps the users row with banned_at', async () => {
-    const { userId } = await seedMemberWithSignup('wipetarget');
-    await seedWipeManifestRows(userId);
+/** A community lineup created by `createdBy`, with one own entry. Returns its id. */
+async function seedLineup(createdBy: number, gameId: number): Promise<number> {
+  const [l] = await testApp.db
+    .insert(schema.communityLineups)
+    .values({
+      title: 'L',
+      status: 'building',
+      visibility: 'private',
+      createdBy,
+      publicSlug: randomUUID().replace(/-/g, '').slice(0, 16),
+    })
+    .returning();
+  await testApp.db
+    .insert(schema.communityLineupEntries)
+    .values({ lineupId: l.id, gameId, nominatedBy: createdBy });
+  return l.id;
+}
+
+/**
+ * Seed ≥1 row for the target across the WIPE manifest, INCLUDING the
+ * community_lineups carry-over scenario (survivor lineup L2 whose entry was
+ * carried over from the target's lineup L1) that regresses without the
+ * carried_over_from null-out. Returns ids for the survivor assertions.
+ *
+ * `player_taste_vectors` / `player_intensity_snapshots` (pgvector + typed-jsonb)
+ * and the deep community-lineup vote leaves are intentionally NOT seeded here:
+ * they take the SAME uniform `DELETE ... WHERE <col> = userId` path as the seeded
+ * by-column tables (asserted below) and cascade from the lineup delete; seeding
+ * their exotic types / deep FK chains would add fragility, not coverage.
+ */
+async function seedFullWipeManifest(
+  userId: number,
+  eventId: number,
+): Promise<{ otherId: number; l1Id: number; l2Id: number }> {
+  const gameId = await seedGame(`${userId}`);
+  const [other] = await testApp.db
+    .insert(schema.users)
+    .values({ discordId: `local:other-${userId}`, username: `other-${userId}` })
+    .returning();
+  const otherId = other.id;
+  const now = new Date();
+
+  await seedActiveRefreshToken(userId);
+  await testApp.db
+    .insert(schema.sessions)
+    .values({ id: `sess-${userId}`, userId, expiresAt: new Date(Date.now() + 86_400_000) });
+  await testApp.db
+    .insert(schema.availability)
+    .values({ userId, timeRange: [now, new Date(now.getTime() + 3_600_000)] as [Date, Date], status: 'available' });
+  await testApp.db
+    .insert(schema.eventTemplates)
+    .values({ userId, name: 'T', config: { title: 'T', durationMinutes: 60 } });
+  await testApp.db.insert(schema.characters).values({ userId, gameId, name: 'Char' });
+  await testApp.db.insert(schema.notifications).values({ userId, type: 'new_event', title: 't', message: 'm' });
+  await testApp.db.insert(schema.userNotificationPreferences).values({ userId });
+  await testApp.db.insert(schema.userPreferences).values({ userId, key: 'show_activity', value: true });
+  await testApp.db.insert(schema.gameTimeTemplates).values({ userId, dayOfWeek: 0, startHour: 18 });
+  await testApp.db.insert(schema.gameTimeOverrides).values({ userId, date: '2026-07-01', hour: 18, status: 'available' });
+  await testApp.db.insert(schema.gameTimeAbsences).values({ userId, startDate: '2026-07-01', endDate: '2026-07-02' });
+  await testApp.db.insert(schema.gameInterests).values({ userId, gameId, source: 'manual' });
+  await testApp.db.insert(schema.gameInterestSuppressions).values({ userId, gameId });
+  await testApp.db.insert(schema.feedback).values({ userId, category: 'bug', message: 'x' });
+  await testApp.db.insert(schema.wowClassicQuestProgress).values({ eventId, userId, questId: 1 });
+  await testApp.db
+    .insert(schema.eventPlans)
+    .values({ creatorId: userId, title: 'P', durationMinutes: 60, pollOptions: [], pollDurationHours: 24 });
+  await testApp.db.insert(schema.eventRemindersSent).values({ eventId, userId, reminderType: '24h' });
+  await testApp.db.insert(schema.gameActivitySessions).values({ userId, gameId, discordActivityName: 'X' });
+  await testApp.db
+    .insert(schema.gameActivityRollups)
+    .values({ userId, gameId, period: 'week', periodStart: '2026-07-01', totalSeconds: 100 });
+
+  const [lo, hi] = [userId, otherId].sort((a, b) => a - b);
+  await testApp.db
+    .insert(schema.playerCoPlay)
+    .values({ userIdA: lo, userIdB: hi, sessionCount: 1, totalMinutes: 10, lastPlayedAt: now, gamesPlayed: [gameId] });
+
+  // Carry-over RESTRICT scenario: L2 (survivor, owned by other) has an entry
+  // carried over FROM the target's L1 — the back-ref that must be nulled first.
+  // Distinct game so it doesn't collide with L2's own entry (uq lineup_id+game_id).
+  const carryGameId = await seedGame(`carry-${userId}`);
+  const l1Id = await seedLineup(userId, gameId);
+  const l2Id = await seedLineup(otherId, gameId);
+  await testApp.db
+    .insert(schema.communityLineupEntries)
+    .values({ lineupId: l2Id, gameId: carryGameId, nominatedBy: otherId, carriedOverFrom: l1Id });
+
+  return { otherId, l1Id, l2Id };
+}
+
+/** Assert every WIPE-manifest table has 0 rows for the target (manifest-driven). */
+async function expectWipeManifestCleared(userId: number): Promise<void> {
+  for (const { table, column } of WIPE_BY_COLUMN) {
+    const rows = await testApp.db.select().from(table).where(eq(column, userId));
+    expect({ table: getTableConfig(table).name, rows: rows.length }).toEqual({
+      table: getTableConfig(table).name,
+      rows: 0,
+    });
+  }
+  const coplay = await testApp.db
+    .select()
+    .from(schema.playerCoPlay)
+    .where(or(eq(schema.playerCoPlay.userIdA, userId), eq(schema.playerCoPlay.userIdB, userId)));
+  expect(coplay).toHaveLength(0);
+  const lineups = await testApp.db
+    .select()
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.createdBy, userId));
+  expect(lineups).toHaveLength(0);
+}
+
+describe('ban with wipeData — true data wipe (§9.6, §9.10 #2)', () => {
+  it('clears every WIPE table for the target, keeps the users row + survivors', async () => {
+    const { userId, eventId } = await seedMemberWithSignup('wipetarget');
+    const { l2Id } = await seedFullWipeManifest(userId, eventId);
 
     await testApp.request
       .post(`/users/${userId}/ban`)
@@ -234,46 +314,25 @@ describe('ban with wipeData — true data wipe (§9.6)', () => {
       .send({ reason: 'nuke', wipeData: true })
       .expect(201);
 
-    const counts = await Promise.all([
-      testApp.db
-        .select()
-        .from(schema.refreshTokens)
-        .where(eq(schema.refreshTokens.userId, userId)),
-      testApp.db
-        .select()
-        .from(schema.userPreferences)
-        .where(eq(schema.userPreferences.userId, userId)),
-      testApp.db
-        .select()
-        .from(schema.feedback)
-        .where(eq(schema.feedback.userId, userId)),
-      testApp.db
-        .select()
-        .from(schema.availability)
-        .where(eq(schema.availability.userId, userId)),
-      testApp.db
-        .select()
-        .from(schema.eventTemplates)
-        .where(eq(schema.eventTemplates.userId, userId)),
-      testApp.db
-        .select()
-        .from(schema.eventSignups)
-        .where(eq(schema.eventSignups.userId, userId)),
-      testApp.db
-        .select()
-        .from(schema.playerCoPlay)
-        .where(
-          or(
-            eq(schema.playerCoPlay.userIdA, userId),
-            eq(schema.playerCoPlay.userIdB, userId),
-          ),
-        ),
-    ]);
-    for (const rows of counts) expect(rows).toHaveLength(0);
+    await expectWipeManifestCleared(userId);
 
     const user = await fetchUser(userId); // users row survives
     expect(user).toBeDefined();
     expect(user?.bannedAt).not.toBeNull();
+
+    // Survivor lineup L2 (owned by other) persists; its carried-over back-ref to
+    // the target's deleted L1 was nulled (FIX: carried_over_from RESTRICT).
+    const survivor = await testApp.db
+      .select()
+      .from(schema.communityLineups)
+      .where(eq(schema.communityLineups.id, l2Id));
+    expect(survivor).toHaveLength(1);
+    const l2Entries = await testApp.db
+      .select()
+      .from(schema.communityLineupEntries)
+      .where(eq(schema.communityLineupEntries.lineupId, l2Id));
+    expect(l2Entries.length).toBeGreaterThan(0);
+    expect(l2Entries.every((e) => e.carriedOverFrom === null)).toBe(true);
 
     const [banRow] = await fetchActions(userId, 'ban');
     expect(JSON.parse(banRow.metadata ?? '{}').dataWiped).toBe(true);
