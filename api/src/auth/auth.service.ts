@@ -1,7 +1,14 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { UsersService } from '../users/users.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
+import {
+  assertNotBanned,
+  assertKickCooldownOrClear,
+} from './auth-status.helpers';
 import type { UserRole } from '@raid-ledger/contract';
 
 /** Event name emitted after Discord OAuth login/link (ROK-292). */
@@ -22,6 +29,8 @@ export class AuthService {
   constructor(
     @Inject(UsersService) private usersService: UsersService,
     @Inject(JwtService) private jwtService: JwtService,
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -32,6 +41,12 @@ export class AuthService {
   ) {
     const unlinked =
       await this.usersService.findByDiscordIdIncludingUnlinked(discordId);
+    // ROK-313: block banned users; enforce (or auto-clear) the kick cooldown
+    // before any re-link / create-or-update on an existing account.
+    if (unlinked) {
+      assertNotBanned(unlinked);
+      await assertKickCooldownOrClear(this.db, unlinked);
+    }
     if (unlinked && unlinked.discordId?.startsWith('unlinked:')) {
       return this.relinkUnlinkedAccount(
         unlinked.id,

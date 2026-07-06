@@ -12,6 +12,10 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { localCredentials, users } from '../drizzle/schema';
 import * as schema from '../drizzle/schema';
 import type { UserRole } from '@raid-ledger/contract';
+import {
+  assertNotBanned,
+  assertKickCooldownOrClear,
+} from './auth-status.helpers';
 
 const SALT_ROUNDS = 12;
 
@@ -70,6 +74,10 @@ export class LocalAuthService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+
+    // ROK-313: block banned users; enforce (or auto-clear) the kick cooldown.
+    assertNotBanned(user);
+    await assertKickCooldownOrClear(this.db, user);
 
     return user;
   }
@@ -198,6 +206,10 @@ export class LocalAuthService {
     if (!target) throw new UnauthorizedException('Target user not found');
     if (target.role === 'admin')
       throw new UnauthorizedException('Cannot impersonate admin users');
+    // ROK-313 §9.8: an admin must not impersonate INTO a banned account and
+    // dodge the lockout (NotDeactivatedGuard bypasses impersonation; ban must not).
+    if (target.bannedAt)
+      throw new UnauthorizedException('Cannot impersonate a suspended account');
     return target;
   }
 

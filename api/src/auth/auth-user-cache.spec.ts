@@ -13,6 +13,9 @@ describe('auth-user-cache', () => {
     role: 'member' as const,
     discordId: 'discord-123',
     deactivatedAt: null,
+    kickedAt: null,
+    bannedAt: null,
+    banReason: null,
   };
 
   it('returns null on cache miss', () => {
@@ -35,6 +38,9 @@ describe('auth-user-cache', () => {
       role: 'admin' as const,
       discordId: 'discord-456',
       deactivatedAt: null,
+      kickedAt: null,
+      bannedAt: null,
+      banReason: null,
     };
     setCachedAuthUser(1, userData);
     setCachedAuthUser(2, otherData);
@@ -75,6 +81,9 @@ describe('auth-user-cache', () => {
       role: 'admin',
       discordId: null,
       deactivatedAt: null,
+      kickedAt: null,
+      bannedAt: null,
+      banReason: null,
     });
 
     clearAuthUserCache();

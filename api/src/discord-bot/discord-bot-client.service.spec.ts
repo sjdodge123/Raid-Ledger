@@ -450,14 +450,14 @@ describe('DiscordBotClientService — sendEmbedDM: failures', () => {
 describe('DiscordBotClientService — checkPermissions', () => {
   it('should return all false when no client exists', () => {
     const results = service.checkPermissions();
-    expect(results).toHaveLength(13);
+    expect(results).toHaveLength(14);
     results.forEach((r) => expect(r.granted).toBe(false));
   });
 
   it('should return all false when client is not ready', () => {
     void service.connect('valid-token');
     const results = service.checkPermissions();
-    expect(results).toHaveLength(13);
+    expect(results).toHaveLength(14);
     results.forEach((r) => expect(r.granted).toBe(false));
   });
 
@@ -469,7 +469,7 @@ describe('DiscordBotClientService — checkPermissions', () => {
     setClient(service, client);
 
     const results = service.checkPermissions();
-    expect(results).toHaveLength(13);
+    expect(results).toHaveLength(14);
     results.forEach((r) => expect(r.granted).toBe(false));
   });
 
@@ -483,7 +483,7 @@ describe('DiscordBotClientService — checkPermissions', () => {
     setClient(service, client);
 
     const results = service.checkPermissions();
-    expect(results).toHaveLength(13);
+    expect(results).toHaveLength(14);
     results.forEach((r) => expect(r.granted).toBe(false));
   });
 
@@ -505,7 +505,7 @@ describe('DiscordBotClientService — checkPermissions', () => {
 
     const results = service.checkPermissions();
 
-    expect(results).toHaveLength(13);
+    expect(results).toHaveLength(14);
     const manageRoles = results.find((r) => r.name === 'Manage Roles');
     expect(manageRoles?.granted).toBe(false);
     const sendMessages = results.find((r) => r.name === 'Send Messages');

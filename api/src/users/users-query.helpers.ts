@@ -182,6 +182,8 @@ export async function findAllWithRolesQuery(
       role: schema.users.role,
       createdAt: schema.users.createdAt,
       deactivatedAt: schema.users.deactivatedAt,
+      kickedAt: schema.users.kickedAt,
+      bannedAt: schema.users.bannedAt,
     })
     .from(schema.users)
     .where(conditions)
@@ -340,6 +342,3 @@ export async function fetchGameActivity(
 
   return mergeActivityWithSteam(discordRows, steamRows, period);
 }
-
-// deleteUserTransaction moved to users-delete.helpers.ts (ROK-821 file size compliance)
-export { deleteUserTransaction } from './users-delete.helpers';
