@@ -49,7 +49,7 @@
     "class-validator": "^0.14.3",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
-    "discord.js": "^14.26.3",
+    "discord.js": "^14.26.4",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.1",
     "graphology": "^0.26.0",
