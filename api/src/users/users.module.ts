@@ -9,6 +9,7 @@ import { GuildReconciliationService } from './guild-reconciliation.service';
 import { UsersController } from './users.controller';
 import { UsersMeController } from './users-me.controller';
 import { UsersManagementController } from './users-management.controller';
+import { UsersModerationController } from './users-moderation.controller';
 import { CharactersModule } from '../characters/characters.module';
 import { EventsModule } from '../events/events.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
@@ -25,7 +26,12 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
     CronJobModule,
     MulterModule.register({ storage: multer.memoryStorage() }),
   ],
-  controllers: [UsersMeController, UsersManagementController, UsersController],
+  controllers: [
+    UsersMeController,
+    UsersManagementController,
+    UsersModerationController,
+    UsersController,
+  ],
   providers: [
     UsersService,
     AvatarService,

@@ -182,6 +182,8 @@ export async function findAllWithRolesQuery(
       role: schema.users.role,
       createdAt: schema.users.createdAt,
       deactivatedAt: schema.users.deactivatedAt,
+      kickedAt: schema.users.kickedAt,
+      bannedAt: schema.users.bannedAt,
     })
     .from(schema.users)
     .where(conditions)
