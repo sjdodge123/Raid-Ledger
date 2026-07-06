@@ -111,6 +111,14 @@ describe('UserRow — kebab menu items by state', () => {
         expect(screen.getByRole('menuitem', { name: 'Remove user' })).toBeInTheDocument();
         expect(screen.queryByRole('menuitem', { name: 'Ban user' })).not.toBeInTheDocument();
     });
+
+    it('offers Reactivate AND Ban for a deactivated (guild-left) member', () => {
+        renderRow(makeUser({ deactivatedAt: '2026-07-01T00:00:00Z' }), makeHandlers());
+        openMenu('Alice');
+        expect(screen.getByRole('menuitem', { name: 'Reactivate user' })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: 'Ban user' })).toBeInTheDocument();
+        expect(screen.queryByRole('menuitem', { name: 'Kick user' })).not.toBeInTheDocument();
+    });
 });
 
 describe('UserRow — menu item callbacks', () => {
@@ -138,5 +146,13 @@ describe('UserRow — menu item callbacks', () => {
         openMenu('Bob');
         fireEvent.click(screen.getByRole('menuitem', { name: 'Unkick user' }));
         expect(handlers.onUnkick).toHaveBeenCalledWith(expect.objectContaining({ id: 5 }));
+    });
+
+    it('calls onBan when Ban is chosen on a deactivated member', () => {
+        const handlers = makeHandlers();
+        renderRow(makeUser({ id: 5, username: 'Bob', deactivatedAt: '2026-07-01T00:00:00Z' }), handlers);
+        openMenu('Bob');
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Ban user' }));
+        expect(handlers.onBan).toHaveBeenCalledWith(expect.objectContaining({ id: 5 }));
     });
 });

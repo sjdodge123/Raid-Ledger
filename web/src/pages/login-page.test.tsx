@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { BrowserRouter, MemoryRouter, useLocation } from 'react-router-dom';
 import { LoginPage } from './login-page';
 import * as useSystemStatusModule from '../hooks/use-system-status';
+import { toast } from '../lib/toast';
 import type { SystemStatusDto } from '@raid-ledger/contract';
 
 // Mock the hooks
@@ -13,6 +14,7 @@ vi.mock('../hooks/use-auth', () => ({
 }));
 
 vi.mock('../hooks/use-system-status');
+vi.mock('../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
 
 // Type-safe mock helper
 function mockSystemStatus(data: Partial<SystemStatusDto>) {
@@ -187,4 +189,51 @@ describe('LoginPage — part 2', () => {
         expect(screen.getByText(/continue with github/i)).toBeInTheDocument();
     });
 
+});
+
+// ROK-313 AC4: the Discord OAuth ban/kick path redirects to
+// /login?error=suspended&reason=<enc>; the SPA must surface the reason and
+// scrub both query params. Shared by the ban and kick cooldown flows.
+function LocationProbe() {
+    const location = useLocation();
+    return <div data-testid="search">{location.search}</div>;
+}
+
+function renderSuspended(search: string) {
+    mockSystemStatus({ isFirstRun: false, authProviders: [] });
+    return render(
+        <MemoryRouter initialEntries={[`/login${search}`]}>
+            <LoginPage />
+            <LocationProbe />
+        </MemoryRouter>,
+    );
+}
+
+describe('LoginPage — suspended OAuth error (ROK-313 AC4)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('toasts the provided reason and clears both error and reason params', async () => {
+        renderSuspended('?error=suspended&reason=Banned%20for%20cheating');
+
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Banned for cheating'));
+        await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(''));
+        const search = screen.getByTestId('search').textContent ?? '';
+        expect(search).not.toContain('error');
+        expect(search).not.toContain('reason');
+    });
+
+    it('falls back to default copy when no reason is provided', async () => {
+        renderSuspended('?error=suspended');
+
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Your account has been suspended.'));
+        const search = screen.getByTestId('search').textContent ?? '';
+        expect(search).not.toContain('error');
+    });
+
+    it('does not toast a suspension when there is no error param', () => {
+        renderSuspended('');
+        expect(toast.error).not.toHaveBeenCalled();
+    });
 });

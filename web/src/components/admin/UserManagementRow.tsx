@@ -114,7 +114,14 @@ function buildMenuItems(s: RowState, bound: Record<keyof RowHandlers, () => void
         ];
     }
     if (s.isDeactivated) {
-        return [{ key: 'reactivate', icon: ReactivateIcon, label: 'Reactivate user', tone: GREEN, onClick: bound.onReactivate }];
+        // A guild-left (deactivated) user can still be banned — the backend
+        // hardens banUser with deactivated_at=COALESCE(...) to close the
+        // ROK-1353 re-mint hole if they rejoin (spec §9.5). Ban is admin-UI-only,
+        // so the deactivated branch must offer it alongside Reactivate.
+        return [
+            { key: 'reactivate', icon: ReactivateIcon, label: 'Reactivate user', tone: GREEN, onClick: bound.onReactivate },
+            { key: 'ban', icon: BanIcon, label: 'Ban user', tone: RED, onClick: bound.onBan },
+        ];
     }
     return [
         { key: 'kick', icon: KickIcon, label: 'Kick user', tone: AMBER, onClick: bound.onKick },
