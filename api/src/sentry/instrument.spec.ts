@@ -139,6 +139,8 @@ function describeSentryInstrumentTs() {
       type SentryEvent = {
         exception?: { values?: { type?: string; value?: string }[] };
         fingerprint?: string[];
+        tags?: Record<string, unknown>;
+        extra?: Record<string, unknown>;
       };
       type BeforeSend = (event: SentryEvent) => SentryEvent | null;
 
@@ -204,6 +206,47 @@ function describeSentryInstrumentTs() {
       it('passes through events without an exception payload', () => {
         const event: SentryEvent = {};
         expect(getBeforeSend()(event)).toBe(event);
+      });
+
+      // ── ROK-1365: drop synthetic CSP-report noise ──
+      //
+      // The /csp-report controller captures real browser violations via
+      // captureMessage (tag source='csp_report', report under extra.report).
+      // Curl-driven probes / scanners hit the endpoint with a hand-crafted
+      // `example.*` document-uri or `curl` UA. The drop MUST match those but
+      // MUST NOT suppress a genuine violation whose document-uri is real — the
+      // regex runs against JSON.stringify(report), so the negative guard below
+      // is load-bearing security telemetry coverage.
+      describe('ROK-1365: CSP-report noise drop', () => {
+        it('drops a synthetic report with an example.com document-uri', () => {
+          const result = getBeforeSend()({
+            tags: { source: 'csp_report' },
+            extra: { report: { 'document-uri': 'https://example.com/' } },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('drops a curl-UA probe report', () => {
+          const result = getBeforeSend()({
+            tags: { source: 'csp_report' },
+            extra: { report: { 'user-agent': 'curl/8.4.0', probe: true } },
+          });
+          expect(result).toBeNull();
+        });
+
+        it('still reports a genuine CSP violation (real document-uri)', () => {
+          const event: SentryEvent = {
+            tags: { source: 'csp_report' },
+            extra: {
+              report: {
+                'document-uri': 'https://raid.gamernight.net/',
+                'blocked-uri': 'eval',
+                'violated-directive': 'script-src',
+              },
+            },
+          };
+          expect(getBeforeSend()(event)).toBe(event);
+        });
       });
 
       // ── ROK-1260: defense-in-depth drop for DiscordAPIError noise ──
