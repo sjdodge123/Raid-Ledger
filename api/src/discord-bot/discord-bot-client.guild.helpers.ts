@@ -68,6 +68,26 @@ export async function isGuildMember(
 }
 
 /**
+ * Kick a member from the guild (ROK-313). Best-effort: returns false when the
+ * member isn't in the guild, the id isn't a real Discord user, or the bot
+ * lacks Kick Members. Mirrors `isGuildMember`'s fetch-and-swallow shape.
+ */
+export async function kickGuildMember(
+  guild: Guild | null,
+  discordId: string,
+  reason?: string,
+): Promise<boolean> {
+  if (!guild) return false;
+  try {
+    const member = await guild.members.fetch(discordId);
+    await member.kick(reason ?? 'Removed by admin via Raid Ledger');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetch every member of the guild and return their Discord IDs as a Set
  * (ROK-1282). Used by GuildReconciliationService to diff DB users against
  * actual guild membership. Returns null when the bot is disconnected
@@ -88,6 +108,28 @@ export function listGuildCategories(
   if (!guild) return [];
   return guild.channels.cache
     .filter((ch) => ch.type === ChannelType.GuildCategory)
+    .map((ch) => ({ id: ch.id, name: ch.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** List text channels from the guild (excludes threads + DMs). */
+export function listGuildTextChannels(
+  guild: Guild | null,
+): { id: string; name: string }[] {
+  if (!guild) return [];
+  return guild.channels.cache
+    .filter((ch) => ch.isTextBased() && !ch.isThread() && !ch.isDMBased())
+    .map((ch) => ({ id: ch.id, name: ch.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** List voice channels from the guild. */
+export function listGuildVoiceChannels(
+  guild: Guild | null,
+): { id: string; name: string }[] {
+  if (!guild) return [];
+  return guild.channels.cache
+    .filter((ch) => ch.isVoiceBased() && !ch.isDMBased())
     .map((ch) => ({ id: ch.id, name: ch.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -19,6 +19,7 @@ export interface PermissionCheckResult {
 /** The permissions the bot needs to function properly. */
 export const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
   { label: 'Manage Roles', flag: PermissionsBitField.Flags.ManageRoles },
+  { label: 'Kick Members', flag: PermissionsBitField.Flags.KickMembers },
   { label: 'Manage Channels', flag: PermissionsBitField.Flags.ManageChannels },
   {
     label: 'Create Instant Invite',
