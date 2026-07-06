@@ -1,4 +1,5 @@
 import { Inject, Injectable, ConflictException, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -7,6 +8,9 @@ import type {
   UserRole,
   ActivityPeriod,
   GameActivityEntryDto,
+  KickUserDto,
+  BanUserDto,
+  AdminActionsListResponseDto,
 } from '@raid-ledger/contract';
 import {
   findAllByGame,
@@ -23,6 +27,20 @@ import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { reactivateUserById } from './users-reactivate.helpers';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { buildModerationDeps } from './users-moderation-deps.helpers';
+import {
+  runKick,
+  runUnkick,
+  runBan,
+  runUnban,
+  type ModerationResult,
+} from './users-moderation-orchestration.helpers';
+import {
+  insertAdminAction,
+  getAdminActionsForUser as getAdminActionsForUserQuery,
+  type InsertAdminActionInput,
+} from './users-admin-actions.helpers';
 
 export const RECENT_MEMBER_DAYS = 30;
 export const RECENT_MEMBER_LIMIT = 10;
@@ -37,7 +55,19 @@ export class UsersService {
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     private readonly tokenBlocklist: TokenBlocklistService,
+    private readonly moduleRef: ModuleRef,
+    private readonly discordBotClientService: DiscordBotClientService,
   ) {}
+
+  /** Assemble the moderation cascade deps (lazy ModuleRef resolution, §9.4). */
+  private moderationDeps() {
+    return buildModerationDeps(
+      this.moduleRef,
+      this.db,
+      this.logger,
+      this.discordBotClientService,
+    );
+  }
 
   async findByDiscordId(discordId: string) {
     return this.db.query.users.findFirst({
@@ -354,5 +384,58 @@ export class UsersService {
   /** Admin-triggered reactivation (ROK-1260 AC-9). Delegates to helper. */
   async reactivateUser(userId: number) {
     return reactivateUserById(this.db, userId, this.logger);
+  }
+
+  /** Kick a user — soft removal, preserves data (ROK-313 AC2). */
+  async kickUser(
+    actorId: number,
+    userId: number,
+    dto: KickUserDto,
+  ): Promise<ModerationResult> {
+    return runKick(this.moderationDeps(), {
+      userId,
+      actorId,
+      reason: dto.reason,
+      kickFromDiscord: dto.kickFromDiscord,
+    });
+  }
+
+  /** Clear a kick (ROK-313). */
+  async unkickUser(actorId: number, userId: number): Promise<ModerationResult> {
+    return runUnkick(this.moderationDeps(), userId, actorId);
+  }
+
+  /** Ban a user — permanent lockout + deactivate, optional data wipe (ROK-313). */
+  async banUser(
+    actorId: number,
+    userId: number,
+    dto: BanUserDto,
+  ): Promise<ModerationResult> {
+    return runBan(this.moderationDeps(), {
+      userId,
+      actorId,
+      reason: dto.reason,
+      wipeData: dto.wipeData,
+      kickFromDiscord: dto.kickFromDiscord,
+    });
+  }
+
+  /** Lift a ban (ROK-313). Reactivation into the Players list is separate. */
+  async unbanUser(actorId: number, userId: number): Promise<ModerationResult> {
+    return runUnban(this.moderationDeps(), userId, actorId);
+  }
+
+  /** Record an admin moderation action in the audit log (ROK-313). */
+  async logAdminAction(input: InsertAdminActionInput): Promise<void> {
+    await insertAdminAction(this.db, input);
+  }
+
+  /** Paginated moderation audit history for a target user (ROK-313 §3c). */
+  async getAdminActionsForUser(
+    userId: number,
+    page: number,
+    limit: number,
+  ): Promise<AdminActionsListResponseDto> {
+    return getAdminActionsForUserQuery(this.db, userId, page, limit);
   }
 }
