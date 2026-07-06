@@ -34,6 +34,7 @@ import { findLiveEventsInNoShowWindow } from '../../notifications/live-noshow.he
 import { RoleGapAlertService } from '../../notifications/role-gap-alert.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
+import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -496,3 +497,63 @@ function describeLifecycleEmits() {
   });
 }
 describe('ROK-1370 review — lifecycle emits', describeLifecycleEmits);
+
+// =====================================================================
+// ROK-1392 — lock-in must enqueue an EXPLICIT embed sync for the linked
+// event. The UPDATED re-emit recreates the SE but its embed re-render is
+// fire-and-forget; on a quiet server nothing else enqueues a sync, so the
+// card stays stuck on RESCHEDULING. completeStandalonePoll clears the flag,
+// then the enqueued level-triggered sync restores the live embed.
+// =====================================================================
+function describeLockInEmbedSync() {
+  it('lock-in enqueues an embed sync for the linked event', async () => {
+    const event = await createEvent('Lock-in Embed Heal');
+    const pollRes = await postSchedulingPoll(event.id);
+    expect(pollRes.status).toBe(201);
+    const matchId = pollRes.body.id as number;
+
+    const queue = testApp.app.get(EmbedSyncQueueService);
+    const enqueueSpy = jest.spyOn(queue, 'enqueue');
+    try {
+      await lockInAtNewTime(
+        event.id,
+        matchId,
+        new Date(Date.now() + 3 * 86_400_000),
+      );
+      // complete() awaits the enqueue before returning, so it has already
+      // fired by the time the HTTP response lands — assert deterministically.
+      expect(enqueueSpy).toHaveBeenCalledWith(
+        event.id,
+        'reschedule-poll-lockin',
+      );
+    } finally {
+      enqueueSpy.mockRestore();
+    }
+  });
+
+  it('does NOT enqueue an embed sync when the event was cancelled mid-poll', async () => {
+    const event = await createEvent('Cancelled No Heal');
+    const pollRes = await postSchedulingPoll(event.id);
+    expect(pollRes.status).toBe(201);
+    const matchId = pollRes.body.id as number;
+
+    await testApp.db
+      .update(schema.events)
+      .set({ cancelledAt: new Date() })
+      .where(eq(schema.events.id, event.id));
+
+    const queue = testApp.app.get(EmbedSyncQueueService);
+    const enqueueSpy = jest.spyOn(queue, 'enqueue');
+    try {
+      const cr = await completePollAs(adminToken, matchId);
+      expect(cr.status).toBe(200);
+      expect(enqueueSpy).not.toHaveBeenCalledWith(
+        event.id,
+        'reschedule-poll-lockin',
+      );
+    } finally {
+      enqueueSpy.mockRestore();
+    }
+  });
+}
+describe('ROK-1392 — lock-in restores the live embed', describeLockInEmbedSync);

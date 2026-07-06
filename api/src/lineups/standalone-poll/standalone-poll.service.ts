@@ -9,6 +9,7 @@ import {
   Logger,
   NotFoundException,
   ConflictException,
+  forwardRef,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SchedulingPollResponseDto } from '@raid-ledger/contract';
@@ -44,10 +45,10 @@ import { EventsService } from '../../events/events.service';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import {
   splitVotersBySlot,
-  formatPollTime,
+  notifyPollVoters,
 } from './standalone-poll-voter.helpers';
-import { resolveUserTimezones } from '../../notifications/timezone.helpers';
 import { SettingsService } from '../../settings/settings.service';
+import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
 const noop = (): void => {};
@@ -75,6 +76,8 @@ export class StandalonePollService {
     private readonly signupsService: SignupsService,
     private readonly settingsService: SettingsService,
     private readonly eventsService: EventsService,
+    @Inject(forwardRef(() => EmbedSyncQueueService))
+    private readonly embedSyncQueue: EmbedSyncQueueService,
   ) {}
 
   /** List all active standalone scheduling polls. */
@@ -111,6 +114,18 @@ export class StandalonePollService {
       this.eventsService
         .emitLifecycleEvent(result.linkedEventId, APP_EVENT_EVENTS.UPDATED)
         .catch(noop);
+      // ROK-1392: the UPDATED re-emit recreates the Scheduled Event, but its
+      // embed re-render is fire-and-forget — on a quiet server nothing else
+      // enqueues an embed sync, so the card can stay stuck on RESCHEDULING
+      // until unrelated traffic heals it. completeStandalonePoll has already
+      // cleared reschedulingPollId, so enqueue an explicit level-triggered
+      // sync now: the processor reads the (cleared) flag and restores the live
+      // embed deterministically. Symmetric to the poll-start RESCHEDULING
+      // teardown's updateEmbedState.
+      await this.embedSyncQueue.enqueue(
+        result.linkedEventId,
+        'reschedule-poll-lockin',
+      );
     }
     return result.ok;
   }
@@ -159,47 +174,18 @@ export class StandalonePollService {
       });
     }
     if (startTime) {
-      await this.notifyVoters(
+      await notifyPollVoters(
+        {
+          db: this.db,
+          settingsService: this.settingsService,
+          notifications: this.notifications,
+        },
         selectedVoters,
         otherVoters,
         startTime,
         eventId,
         match?.gameName ?? 'Game Night',
       );
-    }
-  }
-
-  /**
-   * Fire-and-forget DMs to all poll voters (ROK-1031). The chosen time is
-   * formatted PER RECIPIENT in their own timezone (ROK-1112) — preference →
-   * guild default → 'UTC' — so a 9 PM EDT slot never renders as next-day UTC.
-   */
-  private async notifyVoters(
-    selected: { userId: number }[],
-    others: { userId: number }[],
-    chosenTime: string,
-    eventId: number,
-    gameName: string,
-  ): Promise<void> {
-    const guildDefault =
-      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-    const selectedIds = [...new Set(selected.map((v) => v.userId))];
-    const otherIds = [...new Set(others.map((v) => v.userId))];
-    // One batch query for every recipient's timezone — no per-voter N+1.
-    const tz = await resolveUserTimezones(
-      this.db,
-      [...selectedIds, ...otherIds],
-      guildDefault,
-    );
-    for (const uid of selectedIds) {
-      const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
-      this.notifications
-        .notifyAutoSignup(uid, gameName, at, eventId)
-        .catch(noop);
-    }
-    for (const uid of otherIds) {
-      const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
-      this.notifications.notifyPollOutcome(uid, at, eventId).catch(noop);
     }
   }
 
