@@ -11,6 +11,13 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <!-- ROK-1365: disable Zod v4's JIT validator compiler before the app bundle
+       loads. Zod probes `new Function("")` to detect eval support; under our
+       strict CSP that throw is caught (Zod silently falls back to interpreted
+       validation) but the browser still fires a `securitypolicyviolation`
+       report for the blocked eval. Pre-populating `jitless` skips the probe
+       entirely — no eval attempt, no violation, no behavior change. -->
+  <script>globalThis.__zod_globalConfig = { jitless: true };</script>
   <script>var whTooltips = { colorLinks: true, iconizeLinks: false, renameLinks: false };</script>
   <script src="https://wow.zamimg.com/js/tooltips.js" async></script>
   <script>

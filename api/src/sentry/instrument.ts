@@ -22,6 +22,21 @@ if (!telemetryDisabled && isProduction) {
     environment: process.env.SENTRY_ENVIRONMENT ?? 'production',
     tracesSampleRate: isProduction ? 0.1 : 1.0,
     beforeSend(event) {
+      // ROK-1365: drop synthetic CSP-report noise before anything else. The
+      // /csp-report controller captures real browser violations via
+      // captureMessage (tag source='csp_report', the report under
+      // extra.report). Curl-driven probes and scanners hit the endpoint with a
+      // hand-crafted `example.*` document-uri / `curl` UA — those used to
+      // create a prod Sentry issue on every probe. Match the report payload and
+      // drop; genuine violations (real document-uri) still report.
+      if (event.tags?.source === 'csp_report') {
+        const reportStr = JSON.stringify(
+          (event.extra as { report?: unknown } | undefined)?.report ?? '',
+        );
+        if (/example\.(com|org|net)|\bcurl\//i.test(reportStr)) {
+          return null;
+        }
+      }
       const exceptionType = event.exception?.values?.[0]?.type;
       const exceptionValue = event.exception?.values?.[0]?.value;
       // Don't report rate-limit (ThrottlerException) events to Sentry
