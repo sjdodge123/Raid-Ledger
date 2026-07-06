@@ -31,14 +31,21 @@ function buildListener(): GuildMemberAddListener {
   return new GuildMemberAddListener(
     testApp.db,
     { getClient: () => null } as never,
-    { findAdmin: jest.fn().mockResolvedValue({ id: testApp.seed.adminUser.id }) } as never,
+    {
+      findAdmin: jest.fn().mockResolvedValue({ id: testApp.seed.adminUser.id }),
+    } as never,
     { create: jest.fn().mockResolvedValue(undefined) } as never,
   );
 }
 
-async function rejoin(listener: GuildMemberAddListener, discordId: string): Promise<void> {
+async function rejoin(
+  listener: GuildMemberAddListener,
+  discordId: string,
+): Promise<void> {
   await (
-    listener as unknown as { handleGuildMemberAdd: (m: unknown) => Promise<void> }
+    listener as unknown as {
+      handleGuildMemberAdd: (m: unknown) => Promise<void>;
+    }
   ).handleGuildMemberAdd(makeMember(discordId));
 }
 
