@@ -20,6 +20,14 @@ function useOAuthErrorHandler(): void {
             toast.error('Login failed. Please try again.');
             searchParams.delete('error');
             setSearchParams(searchParams, { replace: true });
+        } else if (oauthError === 'suspended') {
+            // ROK-313 AC4: banned/kicked users hitting Discord OAuth are redirected
+            // here with the admin-authored reason so the suspension message shows
+            // on every login path, not just local login.
+            toast.error(searchParams.get('reason') || 'Your account has been suspended.');
+            searchParams.delete('error');
+            searchParams.delete('reason');
+            setSearchParams(searchParams, { replace: true });
         }
     }, [searchParams, setSearchParams]);
 }
