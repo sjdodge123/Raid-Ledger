@@ -155,7 +155,10 @@ describe('runKick', () => {
       kickFromDiscord: true,
     });
     expect(res.success).toBe(true);
-    expect(deps.discord.kickMember).toHaveBeenCalledWith('123456789', undefined);
+    expect(deps.discord.kickMember).toHaveBeenCalledWith(
+      '123456789',
+      undefined,
+    );
   });
 });
 

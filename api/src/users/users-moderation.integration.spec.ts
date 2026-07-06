@@ -187,7 +187,10 @@ describe('POST /users/:id/ban', () => {
 async function seedGame(tag: string): Promise<number> {
   const [g] = await testApp.db
     .insert(schema.games)
-    .values({ name: `Wipe ${tag}`, slug: `wipe-${tag}-${randomUUID().slice(0, 8)}` })
+    .values({
+      name: `Wipe ${tag}`,
+      slug: `wipe-${tag}-${randomUUID().slice(0, 8)}`,
+    })
     .returning();
   return g.id;
 }
@@ -235,39 +238,82 @@ async function seedFullWipeManifest(
   const now = new Date();
 
   await seedActiveRefreshToken(userId);
-  await testApp.db
-    .insert(schema.sessions)
-    .values({ id: `sess-${userId}`, userId, expiresAt: new Date(Date.now() + 86_400_000) });
-  await testApp.db
-    .insert(schema.availability)
-    .values({ userId, timeRange: [now, new Date(now.getTime() + 3_600_000)] as [Date, Date], status: 'available' });
+  await testApp.db.insert(schema.sessions).values({
+    id: `sess-${userId}`,
+    userId,
+    expiresAt: new Date(Date.now() + 86_400_000),
+  });
+  await testApp.db.insert(schema.availability).values({
+    userId,
+    timeRange: [now, new Date(now.getTime() + 3_600_000)] as [Date, Date],
+    status: 'available',
+  });
   await testApp.db
     .insert(schema.eventTemplates)
     .values({ userId, name: 'T', config: { title: 'T', durationMinutes: 60 } });
-  await testApp.db.insert(schema.characters).values({ userId, gameId, name: 'Char' });
-  await testApp.db.insert(schema.notifications).values({ userId, type: 'new_event', title: 't', message: 'm' });
-  await testApp.db.insert(schema.userNotificationPreferences).values({ userId });
-  await testApp.db.insert(schema.userPreferences).values({ userId, key: 'show_activity', value: true });
-  await testApp.db.insert(schema.gameTimeTemplates).values({ userId, dayOfWeek: 0, startHour: 18 });
-  await testApp.db.insert(schema.gameTimeOverrides).values({ userId, date: '2026-07-01', hour: 18, status: 'available' });
-  await testApp.db.insert(schema.gameTimeAbsences).values({ userId, startDate: '2026-07-01', endDate: '2026-07-02' });
-  await testApp.db.insert(schema.gameInterests).values({ userId, gameId, source: 'manual' });
-  await testApp.db.insert(schema.gameInterestSuppressions).values({ userId, gameId });
-  await testApp.db.insert(schema.feedback).values({ userId, category: 'bug', message: 'x' });
-  await testApp.db.insert(schema.wowClassicQuestProgress).values({ eventId, userId, questId: 1 });
   await testApp.db
-    .insert(schema.eventPlans)
-    .values({ creatorId: userId, title: 'P', durationMinutes: 60, pollOptions: [], pollDurationHours: 24 });
-  await testApp.db.insert(schema.eventRemindersSent).values({ eventId, userId, reminderType: '24h' });
-  await testApp.db.insert(schema.gameActivitySessions).values({ userId, gameId, discordActivityName: 'X' });
+    .insert(schema.characters)
+    .values({ userId, gameId, name: 'Char' });
   await testApp.db
-    .insert(schema.gameActivityRollups)
-    .values({ userId, gameId, period: 'week', periodStart: '2026-07-01', totalSeconds: 100 });
+    .insert(schema.notifications)
+    .values({ userId, type: 'new_event', title: 't', message: 'm' });
+  await testApp.db
+    .insert(schema.userNotificationPreferences)
+    .values({ userId });
+  await testApp.db
+    .insert(schema.userPreferences)
+    .values({ userId, key: 'show_activity', value: true });
+  await testApp.db
+    .insert(schema.gameTimeTemplates)
+    .values({ userId, dayOfWeek: 0, startHour: 18 });
+  await testApp.db
+    .insert(schema.gameTimeOverrides)
+    .values({ userId, date: '2026-07-01', hour: 18, status: 'available' });
+  await testApp.db
+    .insert(schema.gameTimeAbsences)
+    .values({ userId, startDate: '2026-07-01', endDate: '2026-07-02' });
+  await testApp.db
+    .insert(schema.gameInterests)
+    .values({ userId, gameId, source: 'manual' });
+  await testApp.db
+    .insert(schema.gameInterestSuppressions)
+    .values({ userId, gameId });
+  await testApp.db
+    .insert(schema.feedback)
+    .values({ userId, category: 'bug', message: 'x' });
+  await testApp.db
+    .insert(schema.wowClassicQuestProgress)
+    .values({ eventId, userId, questId: 1 });
+  await testApp.db.insert(schema.eventPlans).values({
+    creatorId: userId,
+    title: 'P',
+    durationMinutes: 60,
+    pollOptions: [],
+    pollDurationHours: 24,
+  });
+  await testApp.db
+    .insert(schema.eventRemindersSent)
+    .values({ eventId, userId, reminderType: '24h' });
+  await testApp.db
+    .insert(schema.gameActivitySessions)
+    .values({ userId, gameId, discordActivityName: 'X' });
+  await testApp.db.insert(schema.gameActivityRollups).values({
+    userId,
+    gameId,
+    period: 'week',
+    periodStart: '2026-07-01',
+    totalSeconds: 100,
+  });
 
   const [lo, hi] = [userId, otherId].sort((a, b) => a - b);
-  await testApp.db
-    .insert(schema.playerCoPlay)
-    .values({ userIdA: lo, userIdB: hi, sessionCount: 1, totalMinutes: 10, lastPlayedAt: now, gamesPlayed: [gameId] });
+  await testApp.db.insert(schema.playerCoPlay).values({
+    userIdA: lo,
+    userIdB: hi,
+    sessionCount: 1,
+    totalMinutes: 10,
+    lastPlayedAt: now,
+    gamesPlayed: [gameId],
+  });
 
   // Carry-over RESTRICT scenario: L2 (survivor, owned by other) has an entry
   // carried over FROM the target's L1 — the back-ref that must be nulled first.
@@ -275,9 +321,12 @@ async function seedFullWipeManifest(
   const carryGameId = await seedGame(`carry-${userId}`);
   const l1Id = await seedLineup(userId, gameId);
   const l2Id = await seedLineup(otherId, gameId);
-  await testApp.db
-    .insert(schema.communityLineupEntries)
-    .values({ lineupId: l2Id, gameId: carryGameId, nominatedBy: otherId, carriedOverFrom: l1Id });
+  await testApp.db.insert(schema.communityLineupEntries).values({
+    lineupId: l2Id,
+    gameId: carryGameId,
+    nominatedBy: otherId,
+    carriedOverFrom: l1Id,
+  });
 
   return { otherId, l1Id, l2Id };
 }
@@ -285,7 +334,10 @@ async function seedFullWipeManifest(
 /** Assert every WIPE-manifest table has 0 rows for the target (manifest-driven). */
 async function expectWipeManifestCleared(userId: number): Promise<void> {
   for (const { table, column } of WIPE_BY_COLUMN) {
-    const rows = await testApp.db.select().from(table).where(eq(column, userId));
+    const rows = await testApp.db
+      .select()
+      .from(table)
+      .where(eq(column, userId));
     expect({ table: getTableConfig(table).name, rows: rows.length }).toEqual({
       table: getTableConfig(table).name,
       rows: 0,
@@ -294,7 +346,12 @@ async function expectWipeManifestCleared(userId: number): Promise<void> {
   const coplay = await testApp.db
     .select()
     .from(schema.playerCoPlay)
-    .where(or(eq(schema.playerCoPlay.userIdA, userId), eq(schema.playerCoPlay.userIdB, userId)));
+    .where(
+      or(
+        eq(schema.playerCoPlay.userIdA, userId),
+        eq(schema.playerCoPlay.userIdB, userId),
+      ),
+    );
   expect(coplay).toHaveLength(0);
   const lineups = await testApp.db
     .select()

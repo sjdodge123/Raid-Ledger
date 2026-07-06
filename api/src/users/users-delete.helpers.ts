@@ -171,7 +171,9 @@ async function deleteUserOwnedData(tx: Db, userId: number): Promise<void> {
   await tx
     .update(schema.communityLineupEntries)
     .set({ carriedOverFrom: null })
-    .where(inArray(schema.communityLineupEntries.carriedOverFrom, userLineupIds));
+    .where(
+      inArray(schema.communityLineupEntries.carriedOverFrom, userLineupIds),
+    );
   // Deleting the lineup cascades all of its children (child→lineup FKs cascade).
   await tx
     .delete(schema.communityLineups)

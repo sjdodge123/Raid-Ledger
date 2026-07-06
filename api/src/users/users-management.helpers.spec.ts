@@ -3,7 +3,10 @@
  * discordId / kickedAt / bannedAt fields map through to the management DTO as
  * ISO strings (or null), alongside the existing deactivatedAt handling.
  */
-import { mapManagementRow, type UserManagementRow } from './users-management.helpers';
+import {
+  mapManagementRow,
+  type UserManagementRow,
+} from './users-management.helpers';
 
 const BASE: UserManagementRow = {
   id: 7,
