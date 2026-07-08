@@ -57,6 +57,11 @@ export const CreateEventSchema = z.object({
     /** ROK-1386: Lock the ephemeral voice channel to rostered members only.
      *  Only meaningful when ephemeral voice is effectively on. */
     privateVoice: z.boolean().nullable().optional(),
+    /** ROK-1371: When this event is created as a follow-up to a just-ended event
+     *  (via the post-event follow-up prompt deep-link), this carries the ended
+     *  event's id so the server post-create hook can fan out quick-sign-up DMs to
+     *  that event's attendees. Never persisted on the `events` row. */
+    followupForEventId: z.number().int().positive().optional(),
 }).refine(
     (data) => new Date(data.startTime) < new Date(data.endTime),
     { message: 'Start time must be before end time', path: ['endTime'] }
