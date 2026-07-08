@@ -53,6 +53,13 @@ export class DemoTestScheduledEventsController {
     return this.demoTestService.triggerScheduledEventCompletionForTest();
   }
 
+  /** Trigger the post-event follow-up cron — DEMO_MODE only (ROK-1371). */
+  @Post('trigger-post-event-followup')
+  @HttpCode(HttpStatus.OK)
+  async triggerPostEventFollowupForTest(): Promise<{ success: boolean }> {
+    return this.demoTestService.triggerPostEventFollowupForTest();
+  }
+
   /** Pause the reconciliation cron to prevent API queue flooding — DEMO_MODE only (ROK-969). */
   @Post('pause-reconciliation')
   @HttpCode(HttpStatus.OK)

@@ -9,6 +9,8 @@ import type { CreateEventDto, EventResponseDto } from '@raid-ledger/contract';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
+import type { NotificationService } from '../notifications/notification.service';
+import { runFollowupFanout } from '../notifications/post-event-followup-fanout.helpers';
 import {
   insertRecurringEvents,
   insertSingleEvent,
@@ -23,6 +25,36 @@ interface CreateFlowDeps {
   logger: Logger;
   findByIds: (ids: number[]) => Promise<EventResponseDto[]>;
   findOne: (id: number) => Promise<EventResponseDto>;
+  /** ROK-1371: reaches `createMany` for the post-create follow-up fan-out. */
+  notificationService: Pick<NotificationService, 'createMany'>;
+}
+
+/**
+ * ROK-1371 post-create hook: when the new event was created as a follow-up
+ * (`dto.followupForEventId` set), fan out quick-sign-up DMs to the ended event's
+ * attendees. Fire-and-forget — a follow-up failure must never fail event
+ * creation. The fan-out helper's tampering guard rejects a forged id.
+ */
+function maybeTriggerFollowupFanout(
+  deps: CreateFlowDeps,
+  dto: CreateEventDto,
+  newEventId: number,
+  creatorId: number,
+): void {
+  const endedEventId = dto.followupForEventId;
+  if (endedEventId == null) return;
+  void runFollowupFanout(
+    { db: deps.db, notificationService: deps.notificationService },
+    endedEventId,
+    { eventId: newEventId },
+    creatorId,
+  ).catch((err) =>
+    deps.logger.warn(
+      'Follow-up fan-out failed for ended event %d: %s',
+      endedEventId,
+      err,
+    ),
+  );
 }
 
 /** Emits a lifecycle event for Discord embed updates. */
@@ -126,6 +158,7 @@ export async function runCreateEvent(
           ),
         );
     }
+    maybeTriggerFollowupFanout(deps, dto, result.id, creatorId);
     return result;
   }
   const result = await createSingleFlow(
@@ -138,5 +171,6 @@ export async function runCreateEvent(
   await activityLog.log('event', result.id, 'event_created', creatorId, {
     title: dto.title,
   });
+  maybeTriggerFollowupFanout(deps, dto, result.id, creatorId);
   return result;
 }

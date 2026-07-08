@@ -317,6 +317,8 @@ export class EventsService {
       logger: this.logger,
       findByIds: (ids: number[]) => this.findByIds(ids),
       findOne: (id: number) => this.findOne(id),
+      // ROK-1371: post-create follow-up fan-out (NotificationService already injected).
+      notificationService: this.notificationService,
     };
   }
 }

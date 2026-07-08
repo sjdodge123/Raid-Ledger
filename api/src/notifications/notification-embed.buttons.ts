@@ -37,6 +37,8 @@ export function buildExtraRows(
     ];
   if (type === 'event_rescheduled') return [buildRescheduleRow(eid)];
   if (type === 'recruitment_reminder') return [buildSignupRow(eid)];
+  // ROK-1371 event path: the DM carries the NEW follow-up event's signup row.
+  if (type === 'post_event_followup') return [buildSignupRow(eid)];
   return undefined;
 }
 
@@ -130,6 +132,12 @@ export function buildPrimaryButton(
       .setURL(`${clientUrl}/profile/integrations`);
   }
   if (type === 'community_lineup') {
+    return buildLineupButton(payload, clientUrl);
+  }
+  // ROK-1371 poll path: payload carries {lineupId, matchId} → "Vote on a Time"
+  // deep-link. Placed before the eventId gate because the poll payload has no
+  // eventId (which would otherwise short-circuit to null).
+  if (type === 'post_event_followup') {
     return buildLineupButton(payload, clientUrl);
   }
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;

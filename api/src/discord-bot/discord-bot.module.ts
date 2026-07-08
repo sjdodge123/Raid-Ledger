@@ -33,6 +33,7 @@ import { SignupInteractionListener } from './listeners/signup-interaction.listen
 import { RescheduleResponseListener } from './listeners/reschedule-response.listener';
 import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
 import { RunningLateInteractionListener } from './listeners/running-late-interaction.listener';
+import { PostEventFollowupInteractionListener } from './listeners/post-event-followup-interaction.listener';
 import { DeparturePromoteListener } from './listeners/departure-promote.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
 import { GuildMemberAddListener } from './listeners/guild-member-add.listener';
@@ -92,6 +93,7 @@ import { EphemeralVoiceSettingsController } from './ephemeral-voice-settings.con
 import { DemoTestEphemeralVoiceController } from './demo-test-ephemeral-voice.controller';
 import { PlayingCommand } from './commands/playing.command';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { StandalonePollModule } from '../lineups/standalone-poll/standalone-poll.module';
 
 @Module({
   imports: [
@@ -106,6 +108,11 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ItadModule,
     GameTasteModule,
     ActivityLogModule,
+    // ROK-1371: the follow-up prompt's [Start a poll] button injects
+    // StandalonePollService. StandalonePollModule already forwardRefs
+    // DiscordBotModule (:34), so this closes the pair with one edge — no new
+    // NotificationModule↔StandalonePollModule cycle.
+    forwardRef(() => StandalonePollModule),
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),
@@ -149,6 +156,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     RescheduleResponseListener,
     RoachOutInteractionListener,
     RunningLateInteractionListener,
+    PostEventFollowupInteractionListener,
     DeparturePromoteListener,
     PugInviteListener,
     GuildMemberAddListener,

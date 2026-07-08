@@ -123,6 +123,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Sends post-event feedback reminders after events end every 60 seconds',
     category: 'Notifications',
   },
+  PostEventFollowupService_handlePostEventFollowups: {
+    description:
+      'DMs organizers a follow-up prompt ~15min after a scheduled event ends, every 60 seconds',
+    category: 'Notifications',
+  },
   RecruitmentReminderService_checkAndSendReminders: {
     description:
       'DMs unsigned game followers and posts channel "spots still available" bumps every 15 minutes. Suppresses both paths for short-notice events (start - created < RECRUITMENT_SHORT_NOTICE_HOURS, default 12) — ROK-1240.',

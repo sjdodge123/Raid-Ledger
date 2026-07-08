@@ -6,6 +6,8 @@ import { RosterNotificationBufferService } from './roster-notification-buffer.se
 import { EventReminderService } from './event-reminder.service';
 import { RoleGapAlertService } from './role-gap-alert.service';
 import { PostEventReminderService } from './post-event-reminder.service';
+import { PostEventFollowupService } from './post-event-followup.service';
+import { PostEventFollowupPromptService } from './post-event-followup-prompt.service';
 import { DiscordNotificationService } from './discord-notification.service';
 import { DiscordNotificationProcessor } from './discord-notification.processor';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
@@ -37,6 +39,8 @@ import { SettingsModule } from '../settings/settings.module';
     EventReminderService,
     RoleGapAlertService,
     PostEventReminderService,
+    PostEventFollowupService,
+    PostEventFollowupPromptService,
     DiscordNotificationService,
     DiscordNotificationProcessor,
     DiscordNotificationEmbedService,
