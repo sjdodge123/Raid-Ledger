@@ -66,6 +66,34 @@ async function mkEvent(
   return event;
 }
 
+/**
+ * Insert a minimal lineup + match so an event can carry a valid
+ * rescheduling_poll_id. The DB enforces the FK to community_lineup_matches even
+ * though the drizzle schema omits .references() (events.ts) to dodge a circular
+ * import, so a raw id like 999 fails the constraint.
+ */
+async function mkLineupMatch(testApp: TestApp): Promise<number> {
+  const [lineup] = await testApp.db
+    .insert(schema.communityLineups)
+    .values({
+      title: 'Reschedule Poll',
+      publicSlug: 'resched-poll',
+      createdBy: testApp.seed.adminUser.id,
+    })
+    .returning();
+  const [match] = await testApp.db
+    .insert(schema.communityLineupMatches)
+    .values({
+      lineupId: lineup.id,
+      gameId: testApp.seed.game.id,
+      status: 'scheduling',
+      thresholdMet: true,
+      voteCount: 1,
+    })
+    .returning();
+  return match.id;
+}
+
 /** duration whose upper bound (raw event end) sits inside the 14–16min window. */
 function endedFifteenMinAgo(): [Date, Date] {
   return [new Date(Date.now() - 3 * HOUR), new Date(Date.now() - 15 * MIN)];
@@ -320,9 +348,10 @@ describe('Post-event follow-up helpers (integration)', () => {
       const control = await mkEvent(testApp, testApp.seed.adminUser.id, {
         duration: endedFifteenMinAgo(),
       });
+      const pollMatchId = await mkLineupMatch(testApp);
       const rescheduling = await mkEvent(testApp, testApp.seed.adminUser.id, {
         duration: endedFifteenMinAgo(),
-        reschedulingPollId: 999,
+        reschedulingPollId: pollMatchId,
       });
       const ids = await candidateIds(testApp);
       expect(ids).toContain(control.id);
