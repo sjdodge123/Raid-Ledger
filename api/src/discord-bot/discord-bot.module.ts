@@ -93,7 +93,6 @@ import { EphemeralVoiceSettingsController } from './ephemeral-voice-settings.con
 import { DemoTestEphemeralVoiceController } from './demo-test-ephemeral-voice.controller';
 import { PlayingCommand } from './commands/playing.command';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
-import { StandalonePollModule } from '../lineups/standalone-poll/standalone-poll.module';
 
 @Module({
   imports: [
@@ -108,11 +107,6 @@ import { StandalonePollModule } from '../lineups/standalone-poll/standalone-poll
     ItadModule,
     GameTasteModule,
     ActivityLogModule,
-    // ROK-1371: the follow-up prompt's [Start a poll] button injects
-    // StandalonePollService. StandalonePollModule already forwardRefs
-    // DiscordBotModule (:34), so this closes the pair with one edge — no new
-    // NotificationModule↔StandalonePollModule cycle.
-    forwardRef(() => StandalonePollModule),
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
     BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),

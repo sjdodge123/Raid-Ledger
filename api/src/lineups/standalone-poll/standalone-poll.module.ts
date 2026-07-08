@@ -22,15 +22,10 @@ import { StandalonePollReminderService } from './standalone-poll-reminder.servic
 @Module({
   imports: [
     DrizzleModule,
-    // ROK-1371: DiscordBotModule now imports StandalonePollModule (the follow-up
-    // prompt's [Start a poll] button injects StandalonePollService). That enlarged
-    // the existing EventsModule → NotificationModule → DiscordBotModule cycle to
-    // loop back here, so these two cycle-participant imports must resolve lazily —
-    // otherwise they're `undefined` during the circular ES-module load.
-    forwardRef(() => NotificationModule),
+    NotificationModule,
     SettingsModule,
     SchedulingModule,
-    forwardRef(() => EventsModule),
+    EventsModule,
     CronJobModule,
     LineupsModule,
     // ROK-1392: the reschedule-poll lock-in enqueues an explicit embed sync to

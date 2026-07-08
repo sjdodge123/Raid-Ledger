@@ -1,4 +1,5 @@
-import { Injectable, Inject, Logger, forwardRef } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { OnEvent } from '@nestjs/event-emitter';
 import { MessageFlags } from 'discord.js';
 import type { ButtonInteraction, Interaction } from 'discord.js';
@@ -43,8 +44,12 @@ export class PostEventFollowupInteractionListener {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
-    @Inject(forwardRef(() => StandalonePollService))
-    private readonly standalonePollService: StandalonePollService,
+    // ROK-1371: resolve StandalonePollService lazily via ModuleRef instead of a
+    // constructor forwardRef. Injecting it directly would force DiscordBotModule
+    // to import StandalonePollModule, enlarging the existing
+    // Events→Notification→DiscordBot module cycle and leaving StandalonePoll's
+    // subtree imports (Notification/Events/Scheduling) undefined at ES load time.
+    private readonly moduleRef: ModuleRef,
     private readonly notificationService: NotificationService,
     private readonly settingsService: SettingsService,
   ) {}
@@ -52,7 +57,9 @@ export class PostEventFollowupInteractionListener {
   private get deps(): PostEventFollowupDeps {
     return {
       db: this.db,
-      standalonePollService: this.standalonePollService,
+      standalonePollService: this.moduleRef.get(StandalonePollService, {
+        strict: false,
+      }),
       notificationService: this.notificationService,
       settingsService: this.settingsService,
       logger: this.logger,
