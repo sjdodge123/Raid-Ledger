@@ -5,6 +5,7 @@ import type * as schema from '../drizzle/schema';
 import * as tables from '../drizzle/schema';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
 import { ScheduledEventReconciliationService } from '../discord-bot/services/scheduled-event.reconciliation';
+import { PostEventFollowupService } from '../notifications/post-event-followup.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
@@ -81,6 +82,15 @@ export async function triggerReconciliationForTest(
     strict: false,
   });
   await svc.reconcileMissingScheduledEvents();
+  return { success: true };
+}
+
+/** Run the post-event follow-up cron once on demand — for smoke tests (ROK-1371). */
+export async function triggerPostEventFollowupForTest(
+  moduleRef: ModuleRef,
+): Promise<{ success: boolean }> {
+  const svc = moduleRef.get(PostEventFollowupService, { strict: false });
+  await svc.runForTest();
   return { success: true };
 }
 

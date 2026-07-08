@@ -26,7 +26,6 @@ import {
   type CleanupSEResult,
 } from './demo-test-scheduled-event.helpers';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
-import { PostEventFollowupService } from '../notifications/post-event-followup.service';
 import {
   injectVoiceSessionForTest as injectVoice,
   triggerClassifyForTest as triggerClassify,
@@ -206,14 +205,6 @@ export class DemoTestService {
     await this.assertDemoMode();
     const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
     await svc.completeExpiredEvents();
-    return { success: true };
-  }
-
-  /** Trigger the post-event follow-up cron once — DEMO_MODE only (ROK-1371). */
-  async triggerPostEventFollowupForTest(): Promise<{ success: boolean }> {
-    await this.assertDemoMode();
-    const svc = this.moduleRef.get(PostEventFollowupService, { strict: false });
-    await svc.runForTest();
     return { success: true };
   }
 

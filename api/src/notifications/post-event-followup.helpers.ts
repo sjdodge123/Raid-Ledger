@@ -6,12 +6,12 @@ import { ACTIVE_MEMBER_SQL_AND } from '../users/users-active.helpers';
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** A recently-ended event that qualifies for a post-event follow-up prompt. */
-export interface FollowupCandidateEvent {
+export type FollowupCandidateEvent = {
   id: number;
   title: string;
   creator_id: number;
   game_id: number | null;
-}
+};
 
 /**
  * Resolve the recipients of a post-event quick-sign-up DM for an ended event

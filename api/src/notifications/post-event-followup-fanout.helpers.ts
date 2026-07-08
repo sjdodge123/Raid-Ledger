@@ -19,11 +19,11 @@ export type FollowupFanoutPayload =
   | { lineupId: number; matchId: number; subtype: 'post_event_poll' };
 
 /** Ended event row needed for the tampering guard + DM copy. */
-interface EndedEvent {
+type EndedEvent = {
   id: number;
   title: string;
   creator_id: number;
-}
+};
 
 /**
  * Atomically claim the one-time fan-out for an ended event (ROK-1371 M4). Sets

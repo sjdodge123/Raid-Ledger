@@ -17,13 +17,13 @@ import {
 import type { FollowupCandidateEvent } from './post-event-followup.helpers';
 
 /** Organizer gate row: Discord link + moderation state + opt-out flag. */
-interface OrganizerGate {
+type OrganizerGate = {
   discord_id: string | null;
   deactivated_at: Date | null;
   banned_at: Date | null;
   kicked_at: Date | null;
   discord_enabled: boolean;
-}
+};
 
 /**
  * Sends the "Schedule a follow-up?" organizer prompt DM (ROK-1371 M3). This is a

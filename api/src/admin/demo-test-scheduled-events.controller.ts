@@ -9,6 +9,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { ModuleRef } from '@nestjs/core';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
@@ -19,6 +20,7 @@ import { DemoTestService } from './demo-test.service';
 import { SetEventTimesSchema, ResetEventsSchema } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 import { resetEventsForTest as resetEventsHelper } from './demo-test-rok1070.helpers';
+import { triggerPostEventFollowupForTest as triggerFollowup } from './demo-test-scheduled-event.helpers';
 
 /**
  * Discord scheduled-event test endpoints — DEMO_MODE only.
@@ -30,6 +32,7 @@ export class DemoTestScheduledEventsController {
   constructor(
     private readonly demoTestService: DemoTestService,
     private readonly settingsService: SettingsService,
+    private readonly moduleRef: ModuleRef,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -57,7 +60,8 @@ export class DemoTestScheduledEventsController {
   @Post('trigger-post-event-followup')
   @HttpCode(HttpStatus.OK)
   async triggerPostEventFollowupForTest(): Promise<{ success: boolean }> {
-    return this.demoTestService.triggerPostEventFollowupForTest();
+    await this.assertDemoMode();
+    return triggerFollowup(this.moduleRef);
   }
 
   /** Pause the reconciliation cron to prevent API queue flooding — DEMO_MODE only (ROK-969). */
