@@ -23,6 +23,9 @@ export function CreateEventPage() {
 
     const initialStartTime = searchParams.get('startTime');
     const schedulingMatchId = searchParams.get('matchId') ? parseInt(searchParams.get('matchId')!, 10) : null;
+    // ROK-1371: post-event follow-up deep-link — links the new event back to the
+    // ended event so the server fans out quick-sign-up DMs to its attendees.
+    const followupForEventId = searchParams.get('followupForEventId') ? parseInt(searchParams.get('followupForEventId')!, 10) : null;
 
     const hasGameParam = !!searchParams.get('gameId');
     if (isLoading || (hasGameParam && registryLoading)) return <PageSpinner />;
@@ -37,7 +40,7 @@ export function CreateEventPage() {
                     <p className="text-muted">Set up a new gaming session for your community</p>
                 </div>
                 <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} />
+                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} followupForEventId={followupForEventId} />
                 </div>
             </div>
         </div>

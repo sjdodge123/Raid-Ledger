@@ -66,6 +66,11 @@ const NOTIFICATION_TYPE_META: {
         label: 'Community Lineup',
         description: 'Updates about community lineup voting, matches, and scheduling',
     },
+    {
+        type: 'post_event_followup',
+        label: 'Post-Event Follow-Ups',
+        description: 'Prompts to schedule a follow-up and quick sign-up invites after an event ends',
+    },
 ];
 
 /** All possible channel metadata */

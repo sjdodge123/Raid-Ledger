@@ -103,7 +103,8 @@ function useTemplateActions(form: FormState) {
 
 function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
     resolved: string, registryGameId: number | null | undefined,
-    mutate: (dto: CreateEventDto | UpdateEventDto) => void, isEditMode: boolean) {
+    mutate: (dto: CreateEventDto | UpdateEventDto) => void, isEditMode: boolean,
+    followupForEventId?: number | null) {
     const validationErrors = validateForm(form);
     setErrors(validationErrors);
     const errorKeys = Object.keys(validationErrors);
@@ -112,7 +113,7 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
         if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
-    mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode));
+    mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId));
 }
 
 function useCreateEventFormState(
@@ -149,13 +150,13 @@ function useCreateEventFormState(
     return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
 }
 
-export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId }: EventFormProps = {}) {
+export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, followupForEventId }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
     const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId);
 
     return (
-        <form onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode); }} className="space-y-4 sm:space-y-8">
+        <form onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId); }} className="space-y-4 sm:space-y-8">
             <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
             <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
                 isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} />
