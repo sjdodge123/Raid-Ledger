@@ -127,8 +127,14 @@ async function openFollowupPoll(
     );
   } catch (error) {
     await releasePollChoice(deps.db, event.id);
-    deps.logger.warn('Follow-up poll create failed (%d): %s', event.id, errMsg(error));
-    await interaction.editReply({ content: "Couldn't start the poll — try again." });
+    deps.logger.warn(
+      'Follow-up poll create failed (%d): %s',
+      event.id,
+      errMsg(error),
+    );
+    await interaction.editReply({
+      content: "Couldn't start the poll — try again.",
+    });
     return null;
   }
 }
@@ -147,7 +153,11 @@ async function fanOutPoll(
       event.creatorId,
     );
   } catch (error) {
-    deps.logger.warn('Follow-up poll fan-out failed (%d): %s', event.id, errMsg(error));
+    deps.logger.warn(
+      'Follow-up poll fan-out failed (%d): %s',
+      event.id,
+      errMsg(error),
+    );
   }
 }
 

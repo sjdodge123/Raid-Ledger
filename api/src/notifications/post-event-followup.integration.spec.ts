@@ -294,7 +294,10 @@ describe('Post-event follow-up helpers (integration)', () => {
       // (extended_until) is 15min ago (IN window). A raw-upper impl would
       // wrongly exclude it.
       const ev = await mkEvent(testApp, testApp.seed.adminUser.id, {
-        duration: [new Date(Date.now() - 3 * HOUR), new Date(Date.now() - 30 * MIN)],
+        duration: [
+          new Date(Date.now() - 3 * HOUR),
+          new Date(Date.now() - 30 * MIN),
+        ],
         extendedUntil: new Date(Date.now() - 15 * MIN),
       });
       expect(await candidateIds(testApp)).toContain(ev.id);
