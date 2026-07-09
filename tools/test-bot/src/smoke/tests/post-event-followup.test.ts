@@ -9,25 +9,22 @@
  * that mirror at `/admin/test/notifications` — the same approach used by
  * `lineup-private-dm.test.ts` and `recruitment-reminder.test.ts`.
  *
- * End-to-end flow exercised (M2 → M3 prompt → M4 event-path fan-out):
- *  1. Admin creates an already-ended event E (effective end ~15 min ago) and
- *     signs up the DM-recipient demo user as an attendee.
- *  2. `trigger-post-event-followup` fires the M2 cron → records the follow-up
- *     sentinel for E and DMs the organizer the prompt. (The sentinel is a hard
- *     prerequisite for step 4 — if the cron did not run, the fan-out no-ops and
- *     this test fails, so the assertion transitively proves the cron fired.)
- *  3. The organizer "clicks [Schedule event]" → the web form POSTs a follow-up
- *     event F carrying `followupForEventId = E.id`.
- *  4. The server post-create hook fans out to E's attendees.
+ * End-to-end flow (M2 cron → sentinel → M3 prompt → M4 event-path fan-out):
+ *  1. Admin creates event E **already-ended** (effective end ~15 min ago) so the
+ *     M2 cron's ActiveEventCache sees it on the CREATED refresh.
+ *  2. Fire the M2 cron **immediately** (before the slower signup steps, so E
+ *     cannot drift past the ~14–16 min detection window). The cron records the
+ *     `post_event_followup_sent` sentinel for E and DMs the organizer.
+ *     The sentinel is a HARD prerequisite: `runFollowupFanout` starts with a
+ *     `claimFanout` UPDATE on that row and no-ops if it is absent — so if the
+ *     cron did not record it, step 4 delivers nothing.
+ *  3. Roster a couple of signups on E.
+ *  4. The organizer "clicks [Schedule event]" → the web form POSTs a follow-up
+ *     event F carrying `followupForEventId = E.id`; the server post-create hook
+ *     fans out to E's rostered attendees (claiming the sentinel from step 2).
  *  5. Assert: the attendee receives a `post_event_followup` notification whose
  *     `payload.eventId === F.id`; the organizer (admin) receives none
  *     (HARD CONSTRAINT 8 — organizer excluded from part-(b) invites).
- *
- * E is created already-ended (rather than via `set-event-times`) on purpose:
- * `set-event-times` is a raw DB write that does NOT emit an event-lifecycle
- * refresh, so the M2 cron's `ActiveEventCache` pre-gate would not see the new
- * past end time. Creating E already-ended makes the cache correct on the
- * CREATED refresh, keeping the test deterministic.
  */
 import { pollForCondition } from '../../helpers/polling.js';
 import {
@@ -53,7 +50,8 @@ function endedTimes(): { startTime: string; endTime: string } {
   };
 }
 
-/** Fire the post-event follow-up cron once (DEMO_MODE test hook). */
+/** Fire the post-event follow-up cron once (DEMO_MODE hook) — records the
+ *  `post_event_followup_sent` sentinel the event-path fan-out later claims. */
 async function triggerFollowupCron(api: ApiClient): Promise<void> {
   await api.post('/admin/test/trigger-post-event-followup', {});
 }
@@ -89,18 +87,20 @@ const attendeeInvitedAfterFollowupScheduled: SmokeTest = {
     });
     let followupId: number | undefined;
     try {
+      // M2/M3 FIRST — while E is fresh in the ~15-min window — so the sentinel
+      // is recorded before E can drift out on a slow runner.
+      await triggerFollowupCron(ctx.api);
+      await awaitProcessing(ctx.api);
+
       // A couple of rostered signups on the ended event.
       await signupAs(ctx.api, ended.id, recipient);
       const buddy = ctx.demoUserIds?.[0];
       if (buddy) await signupAs(ctx.api, ended.id, buddy);
       await awaitProcessing(ctx.api);
 
-      // M2/M3: the cron records the follow-up sentinel + prompts the organizer.
-      await triggerFollowupCron(ctx.api);
-      await awaitProcessing(ctx.api);
-
       // M3/M4 event path: organizer "clicks [Schedule event]" → the web form
-      // POSTs a follow-up event carrying followupForEventId → server fan-out.
+      // POSTs a follow-up event carrying followupForEventId → server fan-out
+      // (claims the sentinel from the cron above).
       const followup = await createEvent(ctx.api, 'pef-followup', {
         ...(gameId ? { gameId } : {}),
         followupForEventId: ended.id,
@@ -118,7 +118,7 @@ const attendeeInvitedAfterFollowupScheduled: SmokeTest = {
       ).catch(() => {
         throw new Error(
           `No post_event_followup invite for attendee ${recipient} ` +
-            `(follow-up event ${followup.id}) — M2→M4 event path did not deliver`,
+            `(follow-up event ${followup.id}) — M2 sentinel missing or M4 fan-out did not deliver`,
         );
       });
 
