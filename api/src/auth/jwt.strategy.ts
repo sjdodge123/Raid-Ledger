@@ -7,6 +7,11 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { getCachedAuthUser, setCachedAuthUser } from './auth-user-cache';
 import { TokenBlocklistService } from './token-blocklist.service';
+import {
+  suspendedMessage,
+  kickCooldownMessage,
+  isKickExpired,
+} from './auth-status.helpers';
 
 interface JwtPayload {
   sub: number;
@@ -34,9 +39,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token has been revoked');
     }
     const cached = getCachedAuthUser(payload.sub);
-    if (cached) return buildAuthResult(payload, cached);
+    if (cached) {
+      assertAuthUserActive(cached);
+      return buildAuthResult(payload, cached);
+    }
     const user = await this.loadAuthUser(payload.sub);
     setCachedAuthUser(payload.sub, user);
+    assertAuthUserActive(user);
     return buildAuthResult(payload, user);
   }
 
@@ -46,6 +55,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: schema.users.role,
         discordId: schema.users.discordId,
         deactivatedAt: schema.users.deactivatedAt,
+        kickedAt: schema.users.kickedAt,
+        bannedAt: schema.users.bannedAt,
+        banReason: schema.users.banReason,
       })
       .from(schema.users)
       .where(eq(schema.users.id, userId))
@@ -55,9 +67,35 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 }
 
+/**
+ * Per-request lockout for banned/kicked users (§9.2). Throws 401 — NOT 403 —
+ * so the SPA runs its refresh→logout→/login cycle where the suspension reason
+ * renders. Read-only: no cache write / no kick auto-clear here (the clear
+ * happens at the next login via `assertKickCooldownOrClear`).
+ */
+function assertAuthUserActive(user: {
+  bannedAt: Date | null;
+  banReason: string | null;
+  kickedAt: Date | null;
+}): void {
+  if (user.bannedAt) {
+    throw new UnauthorizedException(suspendedMessage(user.banReason));
+  }
+  if (user.kickedAt && !isKickExpired(user.kickedAt)) {
+    throw new UnauthorizedException(kickCooldownMessage(user.kickedAt));
+  }
+}
+
 function buildAuthResult(
   payload: JwtPayload,
-  user: { role: string; discordId: string | null; deactivatedAt: Date | null },
+  user: {
+    role: string;
+    discordId: string | null;
+    deactivatedAt: Date | null;
+    kickedAt: Date | null;
+    bannedAt: Date | null;
+    banReason: string | null;
+  },
 ) {
   return {
     id: payload.sub,
@@ -65,6 +103,9 @@ function buildAuthResult(
     role: user.role,
     discordId: user.discordId,
     deactivatedAt: user.deactivatedAt,
+    kickedAt: user.kickedAt,
+    bannedAt: user.bannedAt,
+    banReason: user.banReason,
     impersonatedBy: payload.impersonatedBy || null,
   };
 }

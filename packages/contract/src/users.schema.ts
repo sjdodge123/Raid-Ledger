@@ -143,6 +143,9 @@ export const UserManagementSchema = z.object({
     role: UserRoleSchema,
     createdAt: z.string().datetime(),
     deactivatedAt: z.string().datetime().nullable(),
+    discordId: z.string().nullable().optional(),
+    kickedAt: z.string().datetime().nullable().optional(),
+    bannedAt: z.string().datetime().nullable().optional(),
 });
 
 export type UserManagementDto = z.infer<typeof UserManagementSchema>;
@@ -164,6 +167,71 @@ export const UserManagementListResponseSchema = z.object({
 });
 
 export type UserManagementListResponseDto = z.infer<typeof UserManagementListResponseSchema>;
+
+// ==========================================
+// Admin Moderation — Kick / Ban (ROK-313)
+// ==========================================
+
+/**
+ * Request body for POST /users/:id/kick (admin-only).
+ * Soft-removal: ends the session with a cooldown; data is preserved.
+ */
+export const KickUserSchema = z.object({
+    reason: z.string().max(500).optional(),
+    kickFromDiscord: z.boolean().optional().default(false),
+});
+export type KickUserDto = z.infer<typeof KickUserSchema>;
+
+/**
+ * Request body for POST /users/:id/ban (admin-only).
+ * Permanent lockout; optional wipeData runs the delete-cascade data wipe
+ * while keeping the users row.
+ */
+export const BanUserSchema = z.object({
+    reason: z.string().max(500).optional(),
+    wipeData: z.boolean().optional().default(false),
+    kickFromDiscord: z.boolean().optional().default(false),
+});
+export type BanUserDto = z.infer<typeof BanUserSchema>;
+
+/**
+ * Generic response for moderation actions (kick/unkick/ban/unban).
+ */
+export const ModerationActionResponseSchema = z.object({
+    success: z.boolean(),
+    message: z.string(),
+});
+export type ModerationActionResponseDto = z.infer<typeof ModerationActionResponseSchema>;
+
+/**
+ * A single admin moderation audit-log entry.
+ */
+export const AdminActionSchema = z.object({
+    id: z.number().int(),
+    action: z.enum(['kick', 'unkick', 'ban', 'unban', 'role_change']),
+    actorId: z.number().int().nullable(),
+    targetId: z.number().int().nullable(),
+    actorUsername: z.string().nullable().optional(),
+    targetUsername: z.string().nullable().optional(),
+    reason: z.string().nullable(),
+    metadata: z.string().nullable(),
+    createdAt: z.string().datetime(),
+});
+export type AdminActionDto = z.infer<typeof AdminActionSchema>;
+
+/**
+ * Paginated response for GET /users/:id/admin-actions.
+ */
+export const AdminActionsListResponseSchema = z.object({
+    data: z.array(AdminActionSchema),
+    meta: z.object({
+        total: z.number().int(),
+        page: z.number().int(),
+        limit: z.number().int(),
+        hasMore: z.boolean(),
+    }),
+});
+export type AdminActionsListResponseDto = z.infer<typeof AdminActionsListResponseSchema>;
 
 // ==========================================
 // FTE Onboarding (ROK-219)

@@ -10,6 +10,10 @@ import type {
   UserManagementListResponseDto,
   UserRole,
   TasteProfileResponseDto,
+  KickUserDto,
+  BanUserDto,
+  ModerationActionResponseDto,
+  AdminActionsListResponseDto,
 } from "@raid-ledger/contract";
 import { fetchApi } from "./fetch-api";
 
@@ -141,6 +145,51 @@ export async function adminReactivateUser(
     { method: "POST" },
   );
   return res.data;
+}
+
+/** Admin-kick a user — soft removal + 5-min cooldown, data preserved (ROK-313) */
+export async function adminKickUser(
+  userId: number,
+  body: KickUserDto,
+): Promise<ModerationActionResponseDto> {
+  return fetchApi(`/users/${userId}/kick`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Admin-unkick a user — clears kick state (ROK-313) */
+export async function adminUnkickUser(
+  userId: number,
+): Promise<ModerationActionResponseDto> {
+  return fetchApi(`/users/${userId}/unkick`, { method: "POST" });
+}
+
+/** Admin-ban a user — permanent lockout, optional data wipe (ROK-313) */
+export async function adminBanUser(
+  userId: number,
+  body: BanUserDto,
+): Promise<ModerationActionResponseDto> {
+  return fetchApi(`/users/${userId}/ban`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Admin-unban a user — clears ban state (ROK-313) */
+export async function adminUnbanUser(
+  userId: number,
+): Promise<ModerationActionResponseDto> {
+  return fetchApi(`/users/${userId}/unban`, { method: "POST" });
+}
+
+/** Fetch a user's admin moderation action history, paginated (ROK-313) */
+export async function adminGetUserActions(
+  userId: number,
+  page = 1,
+  limit = 20,
+): Promise<AdminActionsListResponseDto> {
+  return fetchApi(`/users/${userId}/admin-actions?page=${page}&limit=${limit}`);
 }
 
 /** Unlink Discord from current user's account (ROK-195) */

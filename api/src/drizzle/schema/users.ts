@@ -26,6 +26,12 @@ export const users = pgTable(
     gameTimeConfirmedAt: timestamp('game_time_confirmed_at'),
     /** Timestamp when the user left the Discord guild and was auto-deactivated (ROK-1260). Null = active. */
     deactivatedAt: timestamp('deactivated_at'),
+    /** ROK-313: soft-removal (kick) state. Null = not kicked. Cooldown enforced at auth time. */
+    kickedAt: timestamp('kicked_at'),
+    kickReason: text('kick_reason'),
+    /** ROK-313: permanent ban. Null = not banned. Blocks all auth. */
+    bannedAt: timestamp('banned_at'),
+    banReason: text('ban_reason'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
