@@ -13,6 +13,15 @@ export interface UserManagementRow {
   role: 'member' | 'operator' | 'admin';
   createdAt: Date | string;
   deactivatedAt?: Date | string | null;
+  discordId?: string | null;
+  kickedAt?: Date | string | null;
+  bannedAt?: Date | string | null;
+}
+
+/** Normalise a nullable Date|string timestamp to an ISO string (or null). */
+function toIso(value: Date | string | null | undefined): string | null {
+  if (value == null) return null;
+  return typeof value === 'string' ? value : value.toISOString();
 }
 
 /** Map a raw row to the contract DTO with ISO-string timestamps. */
@@ -21,12 +30,6 @@ export function mapManagementRow(row: UserManagementRow): UserManagementDto {
     typeof row.createdAt === 'string'
       ? row.createdAt
       : row.createdAt.toISOString();
-  const deactivatedAt =
-    row.deactivatedAt == null
-      ? null
-      : typeof row.deactivatedAt === 'string'
-        ? row.deactivatedAt
-        : row.deactivatedAt.toISOString();
   return {
     id: row.id,
     username: row.username,
@@ -34,6 +37,9 @@ export function mapManagementRow(row: UserManagementRow): UserManagementDto {
     customAvatarUrl: row.customAvatarUrl,
     role: row.role,
     createdAt,
-    deactivatedAt,
+    deactivatedAt: toIso(row.deactivatedAt),
+    discordId: row.discordId ?? null,
+    kickedAt: toIso(row.kickedAt),
+    bannedAt: toIso(row.bannedAt),
   };
 }

@@ -14,9 +14,9 @@ import {
   findAllWithRolesQuery,
   fetchGameActivity,
   fetchHeartedGames,
-  deleteUserTransaction,
   findAdminUser,
 } from './users-query.helpers';
+import { deleteUserTransaction } from './users-delete.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';

@@ -65,6 +65,9 @@ function describeOriginalResets(testAppRef: { current: TestApp }) {
       role: 'member',
       discordId: 'stale',
       deactivatedAt: null,
+      kickedAt: null,
+      bannedAt: null,
+      banReason: null,
     });
     expect(getCachedAuthUser(staleId)).not.toBeNull();
 

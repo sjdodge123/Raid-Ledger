@@ -25,6 +25,9 @@ import {
   listGuildMembers as listGuildMembersHelper,
   isGuildMember as isGuildMemberHelper,
   listAllGuildMemberIds as listAllGuildMemberIdsHelper,
+  kickGuildMember as kickGuildMemberHelper,
+  listGuildTextChannels as listGuildTextChannelsHelper,
+  listGuildVoiceChannels as listGuildVoiceChannelsHelper,
 } from './discord-bot-client.guild.helpers';
 
 export type {
@@ -226,22 +229,12 @@ export class DiscordBotClientService {
 
   /** List text channels from the guild. */
   getTextChannels(): { id: string; name: string }[] {
-    const guild = this.getGuild();
-    if (!guild) return [];
-    return guild.channels.cache
-      .filter((ch) => ch.isTextBased() && !ch.isThread() && !ch.isDMBased())
-      .map((ch) => ({ id: ch.id, name: ch.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return listGuildTextChannelsHelper(this.getGuild());
   }
 
   /** List voice channels from the guild. */
   getVoiceChannels(): { id: string; name: string }[] {
-    const guild = this.getGuild();
-    if (!guild) return [];
-    return guild.channels.cache
-      .filter((ch) => ch.isVoiceBased() && !ch.isDMBased())
-      .map((ch) => ({ id: ch.id, name: ch.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return listGuildVoiceChannelsHelper(this.getGuild());
   }
 
   /** Search guild members by username query. */
@@ -261,6 +254,11 @@ export class DiscordBotClientService {
   /** Check if a Discord user is in the guild (ROK-403). */
   async isGuildMember(discordUserId: string): Promise<boolean> {
     return isGuildMemberHelper(this.getGuild(), discordUserId);
+  }
+
+  /** Kick a member from the guild (ROK-313). False when disconnected/no guild. */
+  async kickMember(discordId: string, reason?: string): Promise<boolean> {
+    return kickGuildMemberHelper(this.getGuild(), discordId, reason);
   }
 
   /**
