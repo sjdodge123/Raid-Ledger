@@ -9,20 +9,23 @@
  * that mirror at `/admin/test/notifications` — the same approach used by
  * `lineup-private-dm.test.ts` and `recruitment-reminder.test.ts`.
  *
- * End-to-end flow (M2 cron → sentinel → M3 prompt → M4 event-path fan-out):
- *  1. Admin creates event E **already-ended** (effective end ~15 min ago) so the
- *     M2 cron's ActiveEventCache sees it on the CREATED refresh.
- *  2. Fire the M2 cron **immediately** (before the slower signup steps, so E
- *     cannot drift past the ~14–16 min detection window). The cron records the
- *     `post_event_followup_sent` sentinel for E and DMs the organizer.
- *     The sentinel is a HARD prerequisite: `runFollowupFanout` starts with a
- *     `claimFanout` UPDATE on that row and no-ops if it is absent — so if the
- *     cron did not record it, step 4 delivers nothing.
- *  3. Roster a couple of signups on E.
- *  4. The organizer "clicks [Schedule event]" → the web form POSTs a follow-up
- *     event F carrying `followupForEventId = E.id`; the server post-create hook
- *     fans out to E's rostered attendees (claiming the sentinel from step 2).
- *  5. Assert: the attendee receives a `post_event_followup` notification whose
+ * This test owns the M4 event-path DELIVERY. The event-path fan-out
+ * (`runFollowupFanout`) starts with a `claimFanout` UPDATE on the
+ * `post_event_followup_sent` sentinel and no-ops if the row is absent. Rather
+ * than race the M2 cron that normally records that sentinel (its
+ * ActiveEventCache + ~14–16min detection window is timing-sensitive on a loaded
+ * CI runner — see the git history of this file), we record the sentinel
+ * deterministically via `/admin/test/record-followup-sentinel`. M2 candidate
+ * detection is covered separately by the api integration suite.
+ *
+ * Flow:
+ *  1. Admin creates event E and rosters the DM-recipient demo user + a buddy.
+ *  2. Record E's follow-up sentinel deterministically (simulates "organizer was
+ *     prompted").
+ *  3. Organizer "clicks [Schedule event]" → the web form POSTs a follow-up event
+ *     F carrying `followupForEventId = E.id`; the server post-create hook fans
+ *     out to E's rostered attendees (claiming the sentinel).
+ *  4. Assert: the attendee receives a `post_event_followup` notification whose
  *     `payload.eventId === F.id`; the organizer (admin) receives none
  *     (HARD CONSTRAINT 8 — organizer excluded from part-(b) invites).
  */
@@ -42,18 +45,13 @@ interface FollowupNotification {
   payload?: { eventId?: number } | null;
 }
 
-/** Times for an event whose effective end fell ~15 min ago (M2 cron window). */
-function endedTimes(): { startTime: string; endTime: string } {
-  return {
-    startTime: new Date(Date.now() - 75 * 60 * 1000).toISOString(),
-    endTime: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-  };
-}
-
-/** Fire the post-event follow-up cron once (DEMO_MODE hook) — records the
- *  `post_event_followup_sent` sentinel the event-path fan-out later claims. */
-async function triggerFollowupCron(api: ApiClient): Promise<void> {
-  await api.post('/admin/test/trigger-post-event-followup', {});
+/** Deterministically record the `post_event_followup_sent` sentinel the
+ *  event-path fan-out claims — DEMO_MODE hook, avoids racing the M2 cron. */
+async function recordFollowupSentinel(
+  api: ApiClient,
+  eventId: number,
+): Promise<void> {
+  await api.post('/admin/test/record-followup-sentinel', { eventId });
 }
 
 /** True when `userId` has a post_event_followup notification for `eventId`. */
@@ -81,29 +79,26 @@ const attendeeInvitedAfterFollowupScheduled: SmokeTest = {
       return;
     }
     const gameId = ctx.mmoGameId ?? ctx.games[0]?.id;
-    const ended = await createEvent(ctx.api, 'pef-ended', {
-      ...endedTimes(),
+    const source = await createEvent(ctx.api, 'pef-source', {
       ...(gameId ? { gameId } : {}),
     });
     let followupId: number | undefined;
     try {
-      // M2/M3 FIRST — while E is fresh in the ~15-min window — so the sentinel
-      // is recorded before E can drift out on a slow runner.
-      await triggerFollowupCron(ctx.api);
-      await awaitProcessing(ctx.api);
-
-      // A couple of rostered signups on the ended event.
-      await signupAs(ctx.api, ended.id, recipient);
+      // Roster a couple of signups on the source event.
+      await signupAs(ctx.api, source.id, recipient);
       const buddy = ctx.demoUserIds?.[0];
-      if (buddy) await signupAs(ctx.api, ended.id, buddy);
+      if (buddy) await signupAs(ctx.api, source.id, buddy);
+
+      // Deterministically record the sentinel the event-path fan-out claims
+      // (simulates "organizer prompted"); no cron-timing race.
+      await recordFollowupSentinel(ctx.api, source.id);
       await awaitProcessing(ctx.api);
 
-      // M3/M4 event path: organizer "clicks [Schedule event]" → the web form
-      // POSTs a follow-up event carrying followupForEventId → server fan-out
-      // (claims the sentinel from the cron above).
+      // Event path: organizer "clicks [Schedule event]" → the web form POSTs a
+      // follow-up event carrying followupForEventId → server post-create fan-out.
       const followup = await createEvent(ctx.api, 'pef-followup', {
         ...(gameId ? { gameId } : {}),
-        followupForEventId: ended.id,
+        followupForEventId: source.id,
       });
       followupId = followup.id;
       await awaitProcessing(ctx.api);
@@ -118,7 +113,7 @@ const attendeeInvitedAfterFollowupScheduled: SmokeTest = {
       ).catch(() => {
         throw new Error(
           `No post_event_followup invite for attendee ${recipient} ` +
-            `(follow-up event ${followup.id}) — M2 sentinel missing or M4 fan-out did not deliver`,
+            `(follow-up event ${followup.id}) — M4 event-path fan-out did not deliver`,
         );
       });
 
@@ -135,7 +130,7 @@ const attendeeInvitedAfterFollowupScheduled: SmokeTest = {
         );
       }
     } finally {
-      await deleteEvent(ctx.api, ended.id);
+      await deleteEvent(ctx.api, source.id);
       if (followupId) await deleteEvent(ctx.api, followupId);
     }
   },

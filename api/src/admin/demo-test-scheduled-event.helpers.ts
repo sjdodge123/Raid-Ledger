@@ -94,6 +94,25 @@ export async function triggerPostEventFollowupForTest(
   return { success: true };
 }
 
+/**
+ * Force-record the post-event follow-up sentinel for an event, bypassing the M2
+ * cron's ActiveEventCache + detection-window timing — makes the event-path
+ * fan-out deterministically claimable in smoke tests without a cron race
+ * (ROK-1371). M2 candidate detection is covered separately by the api
+ * integration suite; this hook exists so the DM-delivery smoke is not flaky.
+ */
+export async function recordFollowupSentinelForTest(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<{ success: boolean }> {
+  await db.execute(sql`
+    INSERT INTO post_event_followup_sent (event_id)
+    VALUES (${eventId})
+    ON CONFLICT (event_id) DO NOTHING
+  `);
+  return { success: true };
+}
+
 /** Force-set event times bypassing Zod validation (ROK-969). */
 export async function setEventTimesForTest(
   db: PostgresJsDatabase<typeof schema>,
