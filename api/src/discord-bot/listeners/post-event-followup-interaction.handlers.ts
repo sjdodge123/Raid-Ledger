@@ -122,7 +122,13 @@ async function openFollowupPoll(
       event.creatorId,
     );
     return await deps.standalonePollService.create(
-      { gameId: event.gameId!, memberUserIds: recipients },
+      {
+        gameId: event.gameId!,
+        memberUserIds: recipients,
+        // ROK-1371: attendees get the targeted vote DM below — keep them out of
+        // the generic game-interest broadcast so they aren't double-DM'd.
+        broadcastExcludeUserIds: recipients,
+      },
       event.creatorId,
     );
   } catch (error) {

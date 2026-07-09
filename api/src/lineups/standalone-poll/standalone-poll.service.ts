@@ -61,6 +61,12 @@ export interface CreatePollInput {
   memberUserIds?: number[];
   /** Minimum unique voters before organizer is notified (ROK-1015). */
   minVoteThreshold?: number;
+  /**
+   * ROK-1371: user IDs to EXCLUDE from the game-interest broadcast because they
+   * are already receiving the targeted post-event follow-up DM. Internal-only
+   * (not on the public Zod schema) so regular polls never set it → no-op.
+   */
+  broadcastExcludeUserIds?: number[];
 }
 
 @Injectable()
@@ -237,6 +243,7 @@ export class StandalonePollService {
       match.id,
       userId,
       input.linkedEventId,
+      input.broadcastExcludeUserIds,
     );
     this.schedulingPollEmbed.firePostInitialEmbed(
       { id: match.id, gameId: input.gameId },
@@ -309,6 +316,7 @@ export class StandalonePollService {
     matchId: number,
     creatorId: number,
     linkedEventId?: number,
+    broadcastExcludeUserIds?: number[],
   ): void {
     void this.notifications.notifyInterestedUsers(
       game.id,
@@ -318,6 +326,7 @@ export class StandalonePollService {
       creatorId,
       game.coverUrl,
       linkedEventId,
+      broadcastExcludeUserIds,
     );
   }
 

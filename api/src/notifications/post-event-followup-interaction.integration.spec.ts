@@ -402,6 +402,11 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       expect(input).not.toHaveProperty('linkedEventId');
       expect(input.gameId).toBe(gameId);
       expect([...input.memberUserIds].sort()).toEqual([...recipients].sort());
+      // ROK-1371: attendees are excluded from the game-interest broadcast so
+      // they aren't double-DM'd (targeted vote DM + generic broadcast).
+      expect([...input.broadcastExcludeUserIds].sort()).toEqual(
+        [...recipients].sort(),
+      );
       expect(actingUserId).toBe(creator.id);
       const row = await getEvent(testApp, ev.id);
       expect(row.reschedulingPollId).toBeNull();

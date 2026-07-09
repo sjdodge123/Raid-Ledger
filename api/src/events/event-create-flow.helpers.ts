@@ -62,8 +62,9 @@ function emitLifecycle(
   emitter: EventEmitter2,
   eventName: string,
   response: EventResponseDto,
+  followupForEventId?: number | null,
 ): void {
-  emitter.emit(eventName, buildLifecyclePayload(response));
+  emitter.emit(eventName, buildLifecyclePayload(response, followupForEventId));
 }
 
 /** Creates recurring event instances and returns the first with all IDs. */
@@ -86,8 +87,12 @@ export async function createRecurringFlow(
     `Recurring event: ${events.length} instances by user ${creatorId}`,
   );
   const allResponses = await deps.findByIds(events.map((e) => e.id));
+  // ROK-1371: only the first/primary instance is the follow-up target the
+  // attendees were DM'd about (its signup button points at events[0].id).
   for (const r of allResponses) {
-    emitLifecycle(deps.eventEmitter, APP_EVENT_EVENTS.CREATED, r);
+    const followup =
+      r.id === events[0].id ? (dto.followupForEventId ?? null) : null;
+    emitLifecycle(deps.eventEmitter, APP_EVENT_EVENTS.CREATED, r, followup);
   }
   const first =
     allResponses.find((r) => r.id === events[0].id) ?? allResponses[0];
@@ -101,6 +106,7 @@ export async function createSingleFlow(
   startTime: Date,
   endTime: Date,
   creatorId: number,
+  followupForEventId?: number | null,
 ): Promise<EventResponseDto> {
   const event = await insertSingleEvent(
     deps.db,
@@ -110,7 +116,12 @@ export async function createSingleFlow(
   );
   deps.logger.log(`Event created: ${event.id} by user ${creatorId}`);
   const created = await deps.findOne(event.id);
-  emitLifecycle(deps.eventEmitter, APP_EVENT_EVENTS.CREATED, created);
+  emitLifecycle(
+    deps.eventEmitter,
+    APP_EVENT_EVENTS.CREATED,
+    created,
+    followupForEventId,
+  );
   return created;
 }
 
@@ -167,6 +178,7 @@ export async function runCreateEvent(
     startTime,
     endTime,
     creatorId,
+    dto.followupForEventId ?? null,
   );
   await activityLog.log('event', result.id, 'event_created', creatorId, {
     title: dto.title,
