@@ -13,6 +13,11 @@ export interface CachedAuthUser {
   role: UserRole;
   discordId: string | null;
   deactivatedAt: Date | null;
+  /** ROK-313: kick/ban state cached alongside role for the per-request lockout
+   * in jwt.strategy. Invalidated (like role) whenever moderation state changes. */
+  kickedAt: Date | null;
+  bannedAt: Date | null;
+  banReason: string | null;
 }
 
 interface CacheEntry {
