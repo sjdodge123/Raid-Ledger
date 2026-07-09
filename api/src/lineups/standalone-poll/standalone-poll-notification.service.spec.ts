@@ -260,6 +260,54 @@ describe('StandalonePollNotificationService (ROK-1016)', () => {
   });
 
   // -----------------------------------------------------------------------
+  // ROK-1371: excludeUserIds subtracts follow-up recipients from the broadcast
+  // -----------------------------------------------------------------------
+  describe('ROK-1371 — excludeUserIds subtraction', () => {
+    it('does NOT DM an excluded recipient but still DMs the others', async () => {
+      mockDb.execute.mockResolvedValueOnce([{ id: 20 }, { id: 21 }]);
+      mockDb.execute.mockResolvedValueOnce([
+        { displayName: 'TestCreator', username: 'testcreator' },
+      ]);
+
+      await service.notifyInterestedUsers(
+        GAME_ID,
+        GAME_NAME,
+        LINEUP_ID,
+        MATCH_ID,
+        CREATOR_ID,
+        null,
+        undefined,
+        [20],
+      );
+
+      const dmed = mockNotificationService.create.mock.calls.map(
+        ([input]) => input.userId,
+      );
+      expect(dmed).toEqual([21]);
+    });
+
+    it('defaults to a no-op (all recipients DM’d) when excludeUserIds is omitted', async () => {
+      mockDb.execute.mockResolvedValueOnce([{ id: 20 }, { id: 21 }]);
+      mockDb.execute.mockResolvedValueOnce([
+        { displayName: 'TestCreator', username: 'testcreator' },
+      ]);
+
+      await service.notifyInterestedUsers(
+        GAME_ID,
+        GAME_NAME,
+        LINEUP_ID,
+        MATCH_ID,
+        CREATOR_ID,
+      );
+
+      const dmed = mockNotificationService.create.mock.calls.map(
+        ([input]) => input.userId,
+      );
+      expect(dmed.sort()).toEqual([20, 21]);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Payload — creatorName field is present
   // -----------------------------------------------------------------------
   describe('payload includes creatorName', () => {

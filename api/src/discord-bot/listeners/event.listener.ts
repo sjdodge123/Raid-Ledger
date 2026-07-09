@@ -46,6 +46,12 @@ export interface EventPayload {
   creatorId?: number;
   isAdHoc?: boolean;
   notificationChannelOverride?: string | null;
+  /**
+   * ROK-1371: set on CREATED when this event was scheduled as a post-event
+   * follow-up. The game-affinity broadcast subtracts the follow-up recipients
+   * (who already got the targeted quick-sign-up DM) so they aren't double-DM'd.
+   */
+  followupForEventId?: number | null;
 }
 
 /**
@@ -252,6 +258,7 @@ export class DiscordEventListener {
       clientUrl: context.clientUrl,
       gameCoverUrl: payload.event.game!.coverUrl,
       discordMessage,
+      followupForEventId: payload.followupForEventId ?? null,
     }).catch((err: unknown) => {
       this.logger.warn(
         `Failed to send game affinity notifications: ${String(err)}`,

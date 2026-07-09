@@ -155,6 +155,11 @@ export const SetEventTimesSchema = z.object({
   endTime: z.string().datetime(),
 });
 
+/** Body for `/admin/test/record-followup-sentinel` (ROK-1371 smoke). */
+export const RecordFollowupSentinelSchema = z.object({
+  eventId: z.number().int().positive(),
+});
+
 export const CancelLineupPhaseJobsSchema = z.object({
   lineupId: z.number().int().positive(),
 });

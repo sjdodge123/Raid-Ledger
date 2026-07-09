@@ -40,6 +40,7 @@ export type NotificationType =
     | 'role_gap_alert'
     | 'lineup_steam_nudge'
     | 'community_lineup'
+    | 'post_event_followup'
     | 'system';
 
 export type Channel = 'inApp' | 'push' | 'discord';

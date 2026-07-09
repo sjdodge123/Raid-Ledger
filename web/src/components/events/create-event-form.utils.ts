@@ -168,6 +168,7 @@ export function buildSubmitDto(
     resolved: string,
     registryGameId: number | null | undefined,
     isEditMode: boolean,
+    followupForEventId?: number | null,
 ): CreateEventDto | UpdateEventDto {
     const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
     const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
@@ -185,5 +186,8 @@ export function buildSubmitDto(
         reminder15min: form.reminder15min, reminder1hour: form.reminder1hour, reminder24hour: form.reminder24hour,
         ephemeralVoiceEnabled: form.ephemeralVoiceEnabled,
         privateVoice: form.privateVoice,
+        // ROK-1371: create-only — links the new event to the ended event so the
+        // server post-create hook fans out sign-up DMs. Omitted in edit mode.
+        ...(!isEditMode && followupForEventId ? { followupForEventId } : {}),
     };
 }

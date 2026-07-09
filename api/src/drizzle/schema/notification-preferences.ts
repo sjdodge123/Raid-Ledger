@@ -25,6 +25,7 @@ export const NOTIFICATION_TYPES = [
   'community_lineup',
   'user_deactivated_discord',
   'user_reactivated_discord',
+  'post_event_followup',
   'system',
 ] as const;
 
@@ -64,6 +65,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   community_lineup: { inApp: true, push: true, discord: true },
   user_deactivated_discord: { inApp: true, push: false, discord: false },
   user_reactivated_discord: { inApp: true, push: false, discord: false },
+  post_event_followup: { inApp: true, push: false, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 
