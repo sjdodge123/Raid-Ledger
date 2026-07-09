@@ -89,6 +89,11 @@ export {
     deleteMyAccount,
     adminRemoveUser,
     adminReactivateUser,
+    adminKickUser,
+    adminUnkickUser,
+    adminBanUser,
+    adminUnbanUser,
+    adminGetUserActions,
     unlinkDiscord,
     getTasteProfile,
 } from './api/users-api';

@@ -73,6 +73,27 @@ export class DiscordAuthGuard extends AuthGuard('discord') {
   }
 }
 
+/**
+ * ROK-313 §9.7 / AC4: extract the reason from a structured auth-status error
+ * thrown in the OAuth verify path — USER_SUSPENDED (ban, from `assertNotBanned`)
+ * or USER_KICKED (kick cooldown, from `assertKickCooldownOrClear`) — so the copy
+ * renders on the login screen. Returns the reason string (`''` when the ban
+ * carried none) or null when this isn't a suspension/kick error.
+ */
+export function suspendedRedirectReason(err: Error | null): string | null {
+  const resp = (err as { getResponse?: () => unknown } | null)?.getResponse?.();
+  if (resp && typeof resp === 'object') {
+    const body = resp as Record<string, unknown>;
+    if (body.code === 'USER_SUSPENDED') {
+      return typeof body.reason === 'string' ? body.reason : '';
+    }
+    if (body.code === 'USER_KICKED') {
+      return typeof body.reason === 'string' ? body.reason : '';
+    }
+  }
+  return null;
+}
+
 /** Resolve the external origin for OAuth-failure redirects. */
 function failureClientUrl(req: Request): string {
   return (
@@ -94,6 +115,13 @@ function redirectOnOAuthFailure(
   const clientUrl = failureClientUrl(req);
   if (isSilentOAuthState(req.query?.state)) {
     res.redirect(`${clientUrl}/auth/success?silent_failed=1`);
+    return;
+  }
+  const suspendedReason = suspendedRedirectReason(err);
+  if (suspendedReason !== null) {
+    res.redirect(
+      `${clientUrl}/login?error=suspended&reason=${encodeURIComponent(suspendedReason)}`,
+    );
     return;
   }
   const errCode = (err as unknown as Record<string, unknown>)?.code;

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Events, type GuildMember } from 'discord.js';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -66,6 +66,9 @@ export class GuildMemberAddListener {
 
   private async handleGuildMemberAdd(member: GuildMember): Promise<void> {
     const discordId = member.user.id;
+    // ROK-313: a BANNED user rejoining the guild must NOT be reactivated —
+    // ban keeps deactivated_at set so they stay out of the Players list (auth is
+    // separately blocked by banned_at). The `banned_at IS NULL` guard skips them.
     const [row] = await this.db
       .update(schema.users)
       .set({ deactivatedAt: null })
@@ -73,6 +76,7 @@ export class GuildMemberAddListener {
         and(
           eq(schema.users.discordId, discordId),
           isNotNull(schema.users.deactivatedAt),
+          isNull(schema.users.bannedAt),
         ),
       )
       .returning({ id: schema.users.id, username: schema.users.username });
