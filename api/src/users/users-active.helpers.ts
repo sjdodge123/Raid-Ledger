@@ -14,3 +14,12 @@ export function activeUsersFilter() {
 
 /** Raw SQL fragment for callers that use raw `sql\`...\`` queries instead of Drizzle's query builder. */
 export const ACTIVE_USERS_SQL_AND = ' AND u.deactivated_at IS NULL ';
+
+/**
+ * Raw SQL fragment for "reachable member" — active AND not kicked AND not banned
+ * (ROK-1371). The batch DM path (`dispatchMany`) only checks `deactivated_at`, so
+ * kick/ban callers must add this predicate themselves. Assumes the `users` table
+ * is aliased `u`.
+ */
+export const ACTIVE_MEMBER_SQL_AND =
+  ' AND u.deactivated_at IS NULL AND u.banned_at IS NULL AND u.kicked_at IS NULL ';

@@ -5,6 +5,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
 import { NotificationDedupService } from './notification-dedup.service';
+import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
 
 /** TTL for game-alert dedup keys: 30 days in seconds */
 const GAME_ALERT_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -25,6 +26,12 @@ export interface GameAffinityNotificationInput {
     channelId: string;
     messageId: string;
   } | null;
+  /**
+   * ROK-1371: when this event was scheduled as a post-event follow-up, the id
+   * of the ended event. Its attendees already got the targeted quick-sign-up
+   * DM, so they are subtracted from this affinity broadcast to avoid a double DM.
+   */
+  followupForEventId?: number | null;
 }
 
 /**
@@ -69,8 +76,33 @@ export class GameAffinityNotificationService {
       return;
     }
     recipientIds = await this.excludeAbsentUsers(recipientIds, input);
+    recipientIds = await this.excludeFollowupRecipients(recipientIds, input);
     if (recipientIds.length === 0) return;
     await this.dispatchAffinityNotifications(input, recipientIds);
+  }
+
+  /**
+   * ROK-1371: exclude the ended event's attendees when this event is a
+   * post-event follow-up — they already receive the targeted quick-sign-up DM,
+   * so the affinity broadcast would be a duplicate. No-op for normal events
+   * (`followupForEventId` unset).
+   */
+  private async excludeFollowupRecipients(
+    recipientIds: number[],
+    input: GameAffinityNotificationInput,
+  ): Promise<number[]> {
+    if (input.followupForEventId == null || recipientIds.length === 0) {
+      return recipientIds;
+    }
+    const followupIds = new Set(
+      await resolvePostEventFollowupRecipients(
+        this.db,
+        input.followupForEventId,
+        input.creatorId,
+      ),
+    );
+    if (followupIds.size === 0) return recipientIds;
+    return recipientIds.filter((id) => !followupIds.has(id));
   }
 
   /** Exclude users with active absences covering the event date. */

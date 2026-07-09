@@ -102,12 +102,20 @@ export function mapEventToResponse(
   } as EventResponseDto;
 }
 
-/** Builds a lifecycle event payload from an EventResponseDto. */
+/**
+ * Builds a lifecycle event payload from an EventResponseDto.
+ *
+ * @param followupForEventId - ROK-1371: the ended event this one follows up on
+ *   (set only on CREATED for a follow-up). Lets the game-affinity broadcast
+ *   subtract the already-DM'd follow-up recipients.
+ */
 export function buildLifecyclePayload(
   eventResponse: EventResponseDto,
+  followupForEventId?: number | null,
 ): Record<string, unknown> {
   return {
     eventId: eventResponse.id,
+    followupForEventId: followupForEventId ?? null,
     event: {
       id: eventResponse.id,
       title: eventResponse.title,

@@ -9,6 +9,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { ModuleRef } from '@nestjs/core';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
@@ -16,9 +17,17 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { DemoTestService } from './demo-test.service';
-import { SetEventTimesSchema, ResetEventsSchema } from './demo-test.schemas';
+import {
+  SetEventTimesSchema,
+  ResetEventsSchema,
+  RecordFollowupSentinelSchema,
+} from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 import { resetEventsForTest as resetEventsHelper } from './demo-test-rok1070.helpers';
+import {
+  triggerPostEventFollowupForTest as triggerFollowup,
+  recordFollowupSentinelForTest as recordFollowupSentinel,
+} from './demo-test-scheduled-event.helpers';
 
 /**
  * Discord scheduled-event test endpoints — DEMO_MODE only.
@@ -30,6 +39,7 @@ export class DemoTestScheduledEventsController {
   constructor(
     private readonly demoTestService: DemoTestService,
     private readonly settingsService: SettingsService,
+    private readonly moduleRef: ModuleRef,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -51,6 +61,29 @@ export class DemoTestScheduledEventsController {
     success: boolean;
   }> {
     return this.demoTestService.triggerScheduledEventCompletionForTest();
+  }
+
+  /** Trigger the post-event follow-up cron — DEMO_MODE only (ROK-1371). */
+  @Post('trigger-post-event-followup')
+  @HttpCode(HttpStatus.OK)
+  async triggerPostEventFollowupForTest(): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    return triggerFollowup(this.moduleRef);
+  }
+
+  /**
+   * Force-record the post-event follow-up sentinel for an event — DEMO_MODE
+   * only (ROK-1371). Lets the DM-delivery smoke set the sentinel
+   * deterministically instead of racing the M2 cron's cache/detection-window.
+   */
+  @Post('record-followup-sentinel')
+  @HttpCode(HttpStatus.OK)
+  async recordFollowupSentinelForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const parsed = parseDemoBody(RecordFollowupSentinelSchema, body);
+    return recordFollowupSentinel(this.db, parsed.eventId);
   }
 
   /** Pause the reconciliation cron to prevent API queue flooding — DEMO_MODE only (ROK-969). */

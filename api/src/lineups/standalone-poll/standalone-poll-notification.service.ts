@@ -39,6 +39,11 @@ export class StandalonePollNotificationService {
    * When linkedEventId is provided, roster members get a reschedule
    * notification while interest-only users get the generic one.
    * Fire-and-forget — errors are logged, never thrown.
+   *
+   * @param excludeUserIds - ROK-1371: recipients already DM'd by the targeted
+   *   post-event follow-up fan-out, subtracted so an attendee never gets both
+   *   the follow-up vote DM AND this generic broadcast. Defaults to empty (a
+   *   no-op) so regular standalone polls are unaffected.
    */
   async notifyInterestedUsers(
     gameId: number,
@@ -48,9 +53,13 @@ export class StandalonePollNotificationService {
     creatorId: number,
     gameCoverUrl?: string | null,
     linkedEventId?: number,
+    excludeUserIds: number[] = [],
   ): Promise<void> {
     try {
-      const allRecipientIds = await this.findRecipients(gameId, creatorId);
+      const excluded = new Set(excludeUserIds);
+      const allRecipientIds = (
+        await this.findRecipients(gameId, creatorId)
+      ).filter((id) => !excluded.has(id));
       if (allRecipientIds.length === 0) return;
       const creatorName = await this.getCreatorName(creatorId);
       const basePayload = this.buildBasePayload(

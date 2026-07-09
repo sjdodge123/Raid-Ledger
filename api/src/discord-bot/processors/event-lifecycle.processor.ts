@@ -153,6 +153,7 @@ export class EventLifecycleProcessor
         clientUrl,
         gameCoverUrl: payload.event.game!.coverUrl,
         discordMessage,
+        followupForEventId: payload.followupForEventId ?? null,
       });
     } catch (err) {
       this.logger.warn(
