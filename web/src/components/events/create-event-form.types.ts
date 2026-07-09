@@ -1,81 +1,71 @@
-import type {
-  IgdbGameDto,
-  EventResponseDto,
-  SeriesScope,
-} from "@raid-ledger/contract";
+import type { IgdbGameDto, EventResponseDto, SeriesScope } from '@raid-ledger/contract';
 
 export interface FormState {
-  title: string;
-  description: string;
-  game: IgdbGameDto | null;
-  eventTypeId: number | null;
-  startDate: string;
-  startTime: string;
-  durationMinutes: number;
-  customDuration: boolean;
-  slotType: "mmo" | "generic";
-  slotTank: number;
-  slotHealer: number;
-  slotDps: number;
-  slotFlex: number;
-  slotPlayer: number;
-  maxAttendees: string;
-  autoUnbench: boolean;
-  recurrenceFrequency: "" | "weekly" | "biweekly" | "monthly";
-  recurrenceUntil: string;
-  reminder15min: boolean;
-  reminder1hour: boolean;
-  reminder24hour: boolean;
-  /** ROK-1352: per-event ephemeral-voice override. null = inherit series/global. */
-  ephemeralVoiceEnabled: boolean | null;
-  /** ROK-1386: lock the ephemeral channel to rostered members only. null = open. */
-  privateVoice: boolean | null;
-  selectedInstances: Record<string, unknown>[];
-  titleIsAutoSuggested: boolean;
-  descriptionIsAutoSuggested: boolean;
+    title: string;
+    description: string;
+    game: IgdbGameDto | null;
+    eventTypeId: number | null;
+    startDate: string;
+    startTime: string;
+    durationMinutes: number;
+    customDuration: boolean;
+    slotType: 'mmo' | 'generic';
+    slotTank: number;
+    slotHealer: number;
+    slotDps: number;
+    slotFlex: number;
+    slotPlayer: number;
+    maxAttendees: string;
+    autoUnbench: boolean;
+    recurrenceFrequency: '' | 'weekly' | 'biweekly' | 'monthly';
+    recurrenceUntil: string;
+    reminder15min: boolean;
+    reminder1hour: boolean;
+    reminder24hour: boolean;
+    /** ROK-1352: per-event ephemeral-voice override. null = inherit series/global. */
+    ephemeralVoiceEnabled: boolean | null;
+    /** ROK-1386: lock the ephemeral channel to rostered members only. null = open. */
+    privateVoice: boolean | null;
+    selectedInstances: Record<string, unknown>[];
+    titleIsAutoSuggested: boolean;
+    descriptionIsAutoSuggested: boolean;
 }
 
 export interface FormErrors {
-  title?: string;
-  startDate?: string;
-  startTime?: string;
-  duration?: string;
-  maxAttendees?: string;
-  recurrenceUntil?: string;
+    title?: string;
+    startDate?: string;
+    startTime?: string;
+    duration?: string;
+    maxAttendees?: string;
+    recurrenceUntil?: string;
 }
 
 export interface EventFormProps {
-  event?: EventResponseDto;
-  /** Series scope for bulk edit operations (ROK-429). */
-  seriesScope?: SeriesScope;
-  /** Pre-select a game when creating from lineup decided view (ROK-989). */
-  initialGame?: {
-    id: number;
-    name: string;
-    slug: string;
-    coverUrl: string | null;
-    playerCount?: { min: number; max: number } | null;
-  } | null;
-  /** Pre-fill start time from scheduling poll slot (ROK-977). ISO datetime string. */
-  initialStartTime?: string | null;
-  /** Scheduling poll match to complete after event creation (ROK-977). */
-  schedulingMatchId?: number | null;
-  /** ROK-1371: ended event this create is a follow-up to. Threaded into the
-   *  CreateEvent DTO (create mode only) so the server fans out sign-up DMs. */
-  followupForEventId?: number | null;
+    event?: EventResponseDto;
+    /** Series scope for bulk edit operations (ROK-429). */
+    seriesScope?: SeriesScope;
+    /** Pre-select a game when creating from lineup decided view (ROK-989). */
+    initialGame?: { id: number; name: string; slug: string; coverUrl: string | null; playerCount?: { min: number; max: number } | null } | null;
+    /** Pre-fill start time from scheduling poll slot (ROK-977). ISO datetime string. */
+    initialStartTime?: string | null;
+    /** Scheduling poll match to complete after event creation (ROK-977). */
+    schedulingMatchId?: number | null;
+    /** ROK-1371: ended event this create is a follow-up to. Threaded into the
+     *  CreateEvent DTO (create mode only) so the server fans out sign-up DMs. */
+    followupForEventId?: number | null;
 }
 
 export const RECURRENCE_OPTIONS = [
-  { value: "", label: "Does not repeat" },
-  { value: "weekly", label: "Weekly" },
-  { value: "biweekly", label: "Every 2 weeks" },
-  { value: "monthly", label: "Monthly" },
+    { value: '', label: 'Does not repeat' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'biweekly', label: 'Every 2 weeks' },
+    { value: 'monthly', label: 'Monthly' },
 ] as const;
 
 export const ERROR_FIELD_MAP: Record<string, string> = {
-  title: "title",
-  startDate: "startDate",
-  startTime: "startTime",
-  maxAttendees: "maxAttendees",
-  recurrenceUntil: "recurrenceUntil",
+    title: 'title',
+    startDate: 'startDate',
+    startTime: 'startTime',
+    maxAttendees: 'maxAttendees',
+    recurrenceUntil: 'recurrenceUntil',
 };
