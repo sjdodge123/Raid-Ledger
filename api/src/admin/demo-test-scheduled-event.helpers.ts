@@ -5,6 +5,7 @@ import type * as schema from '../drizzle/schema';
 import * as tables from '../drizzle/schema';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
 import { ScheduledEventReconciliationService } from '../discord-bot/services/scheduled-event.reconciliation';
+import { PostEventFollowupService } from '../notifications/post-event-followup.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
@@ -81,6 +82,34 @@ export async function triggerReconciliationForTest(
     strict: false,
   });
   await svc.reconcileMissingScheduledEvents();
+  return { success: true };
+}
+
+/** Run the post-event follow-up cron once on demand — for smoke tests (ROK-1371). */
+export async function triggerPostEventFollowupForTest(
+  moduleRef: ModuleRef,
+): Promise<{ success: boolean }> {
+  const svc = moduleRef.get(PostEventFollowupService, { strict: false });
+  await svc.runForTest();
+  return { success: true };
+}
+
+/**
+ * Force-record the post-event follow-up sentinel for an event, bypassing the M2
+ * cron's ActiveEventCache + detection-window timing — makes the event-path
+ * fan-out deterministically claimable in smoke tests without a cron race
+ * (ROK-1371). M2 candidate detection is covered separately by the api
+ * integration suite; this hook exists so the DM-delivery smoke is not flaky.
+ */
+export async function recordFollowupSentinelForTest(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<{ success: boolean }> {
+  await db.execute(sql`
+    INSERT INTO post_event_followup_sent (event_id)
+    VALUES (${eventId})
+    ON CONFLICT (event_id) DO NOTHING
+  `);
   return { success: true };
 }
 

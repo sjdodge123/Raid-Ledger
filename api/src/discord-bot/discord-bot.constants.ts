@@ -198,6 +198,16 @@ export const STEAM_NOMINATE_BUTTON_IDS = {
   DISMISS: 'steam_nominate_dismiss',
 } as const;
 
+/**
+ * Custom IDs for the post-event follow-up prompt DM buttons (ROK-1371).
+ * Format: `{action}:{endedEventId}` — e.g. `pef_schedule:42`.
+ * [Schedule event] replies with a deep-link; [Start a poll] opens a StandalonePoll.
+ */
+export const POST_EVENT_FOLLOWUP_BUTTON_IDS = {
+  SCHEDULE: 'pef_schedule',
+  POLL: 'pef_poll',
+} as const;
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',

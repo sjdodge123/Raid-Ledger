@@ -9,6 +9,8 @@ import type { CreateEventDto, EventResponseDto } from '@raid-ledger/contract';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
+import type { NotificationService } from '../notifications/notification.service';
+import { runFollowupFanout } from '../notifications/post-event-followup-fanout.helpers';
 import {
   insertRecurringEvents,
   insertSingleEvent,
@@ -23,6 +25,36 @@ interface CreateFlowDeps {
   logger: Logger;
   findByIds: (ids: number[]) => Promise<EventResponseDto[]>;
   findOne: (id: number) => Promise<EventResponseDto>;
+  /** ROK-1371: reaches `createMany` for the post-create follow-up fan-out. */
+  notificationService: Pick<NotificationService, 'createMany'>;
+}
+
+/**
+ * ROK-1371 post-create hook: when the new event was created as a follow-up
+ * (`dto.followupForEventId` set), fan out quick-sign-up DMs to the ended event's
+ * attendees. Fire-and-forget — a follow-up failure must never fail event
+ * creation. The fan-out helper's tampering guard rejects a forged id.
+ */
+function maybeTriggerFollowupFanout(
+  deps: CreateFlowDeps,
+  dto: CreateEventDto,
+  newEventId: number,
+  creatorId: number,
+): void {
+  const endedEventId = dto.followupForEventId;
+  if (endedEventId == null) return;
+  void runFollowupFanout(
+    { db: deps.db, notificationService: deps.notificationService },
+    endedEventId,
+    { eventId: newEventId },
+    creatorId,
+  ).catch((err) =>
+    deps.logger.warn(
+      'Follow-up fan-out failed for ended event %d: %s',
+      endedEventId,
+      err,
+    ),
+  );
 }
 
 /** Emits a lifecycle event for Discord embed updates. */
@@ -30,8 +62,9 @@ function emitLifecycle(
   emitter: EventEmitter2,
   eventName: string,
   response: EventResponseDto,
+  followupForEventId?: number | null,
 ): void {
-  emitter.emit(eventName, buildLifecyclePayload(response));
+  emitter.emit(eventName, buildLifecyclePayload(response, followupForEventId));
 }
 
 /** Creates recurring event instances and returns the first with all IDs. */
@@ -54,8 +87,12 @@ export async function createRecurringFlow(
     `Recurring event: ${events.length} instances by user ${creatorId}`,
   );
   const allResponses = await deps.findByIds(events.map((e) => e.id));
+  // ROK-1371: only the first/primary instance is the follow-up target the
+  // attendees were DM'd about (its signup button points at events[0].id).
   for (const r of allResponses) {
-    emitLifecycle(deps.eventEmitter, APP_EVENT_EVENTS.CREATED, r);
+    const followup =
+      r.id === events[0].id ? (dto.followupForEventId ?? null) : null;
+    emitLifecycle(deps.eventEmitter, APP_EVENT_EVENTS.CREATED, r, followup);
   }
   const first =
     allResponses.find((r) => r.id === events[0].id) ?? allResponses[0];
@@ -69,6 +106,7 @@ export async function createSingleFlow(
   startTime: Date,
   endTime: Date,
   creatorId: number,
+  followupForEventId?: number | null,
 ): Promise<EventResponseDto> {
   const event = await insertSingleEvent(
     deps.db,
@@ -78,7 +116,12 @@ export async function createSingleFlow(
   );
   deps.logger.log(`Event created: ${event.id} by user ${creatorId}`);
   const created = await deps.findOne(event.id);
-  emitLifecycle(deps.eventEmitter, APP_EVENT_EVENTS.CREATED, created);
+  emitLifecycle(
+    deps.eventEmitter,
+    APP_EVENT_EVENTS.CREATED,
+    created,
+    followupForEventId,
+  );
   return created;
 }
 
@@ -126,6 +169,7 @@ export async function runCreateEvent(
           ),
         );
     }
+    maybeTriggerFollowupFanout(deps, dto, result.id, creatorId);
     return result;
   }
   const result = await createSingleFlow(
@@ -134,9 +178,11 @@ export async function runCreateEvent(
     startTime,
     endTime,
     creatorId,
+    dto.followupForEventId ?? null,
   );
   await activityLog.log('event', result.id, 'event_created', creatorId, {
     title: dto.title,
   });
+  maybeTriggerFollowupFanout(deps, dto, result.id, creatorId);
   return result;
 }
