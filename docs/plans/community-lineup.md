@@ -1,7 +1,7 @@
 # Plan: Community Lineup — Collaborative Game Picking
 
 **Date:** 2026-03-22
-**Status:** draft
+**Status:** implemented — M1–M8 shipped (see `api/src/lineups/`); doc retained as design history
 **Epic:** [ROK-929](https://linear.app/roknua-projects/issue/ROK-929)
 
 ## Problem Statement
@@ -20,9 +20,7 @@ The "Community Lineup" is a living shortlist of nominated games that the group n
 
 New file: `packages/contract/src/lineup.schema.ts`
 
-- Schema: `LineupSchema` — community lineup with status, target date, voting deadline, decided game
-- Schema: `LineupEntrySchema` — nomination entry with game, nominator, note, carryover reference
-- Schema: `LineupVoteSchema` — vote cast by a user on a game within a lineup
+- Schema: `LineupStatusSchema`, `CreateLineupSchema`, `LineupEntryResponseSchema`, `LineupDetailResponseSchema`, `LineupBannerResponseSchema` (shipped names)
 - DTO: `CreateLineupDto` — input for creating a new lineup
 - DTO: `LineupDetailResponseDto` — full lineup detail with entries and votes
 
@@ -30,7 +28,7 @@ New file: `packages/contract/src/lineup.schema.ts`
 
 ### Data Model
 
-Three new tables:
+Three core tables (as shipped, plus later additions: `community_lineup_invitees`, four `community_lineup_tiebreaker*` tables, matches and user-submission tables — see `api/src/drizzle/schema/community-lineup*.ts`):
 
 **`community_lineups`**
 | Column | Type | Notes |
@@ -79,21 +77,22 @@ api/src/lineups/
 └── lineups.service.spec.ts
 ```
 
+As shipped, the module grew far beyond this sketch: `api/src/lineups/` now holds ~125 files with sub-modules for `tiebreaker/`, `scheduling/`, `ai-suggestions/`, `queue/` (BullMQ phase transitions), `quorum/`, `standalone-poll/`, and `submit/`, plus a WebSocket gateway (`lineups.gateway.ts`) and a public share controller (`public-lineup.controller.ts`).
+
 ### API Endpoints
 
 | Method | Path | Purpose | Auth |
 |--------|------|---------|------|
 | `POST` | `/lineups` | Create lineup | operator/admin |
 | `GET` | `/lineups/:id` | Full detail with entries + votes | member |
-| `GET` | `/lineups/active` | Current active lineup or 404 | member |
+| `GET` | `/lineups/active` | All lineups currently in building/voting status (array; was singular pre-ROK-1065) | member |
 | `PATCH` | `/lineups/:id/status` | Transition status | operator/admin |
 | `GET` | `/lineups/common-ground` | Ownership overlap query | member |
 | `POST` | `/lineups/:id/nominate` | Add game to lineup | any member |
 | `DELETE` | `/lineups/:id/nominations/:gameId` | Remove own nomination | member |
-| `POST` | `/lineups/:id/vote` | Cast up to 3 votes | member |
-| `DELETE` | `/lineups/:id/votes` | Retract all votes | member |
+| `POST` | `/lineups/:id/vote` | Toggle a vote on one game (call again to retract; per-lineup vote budget) | member |
 | `POST` | `/lineups/:id/tiebreaker` | Start bracket or veto | operator/admin |
-| `POST` | `/lineups/:id/tiebreaker/vote` | Bracket matchup vote | member |
+| `POST` | `/lineups/:id/tiebreaker/bracket-vote` | Bracket matchup vote (shipped controller also exposes `GET`, `POST .../dismiss`, `POST .../resolve`) | member |
 | `POST` | `/lineups/:id/tiebreaker/veto` | Cast veto | member |
 
 ### Games Page Integration
@@ -124,6 +123,10 @@ New notification preference toggle: "Community Lineup" (controls DMs only; chann
 
 When a lineup transitions to `decided`, all unchosen nominations (2nd place and below) are eligible for carryover. When a new lineup is created, those entries are auto-copied with `carried_over_from` set. Carried entries show the original nominator and "carried over from [date]". Operators can manually remove carried entries.
 
+### Post-Decided: Matches & Scheduling (shipped post-plan)
+
+As shipped, the lifecycle continues past `decided`: a matching algorithm (`match_threshold`) groups voters into per-game **matches** (`GET`/`POST /lineups/:id/matches...`), and an optional **scheduling poll** phase after Decided (`include_scheduling_phase`, ROK-1302) at `/community-lineup/:lineupId/schedule/:matchId` culminates in event creation.
+
 ### Alternatives Considered
 
 | Approach | Pros | Cons | Decision |
@@ -146,9 +149,9 @@ When a lineup transitions to `decided`, all unchosen nominations (2nd place and 
   - [ ] Contract exports all lineup schemas and DTOs
   - [ ] `POST /lineups` creates a new lineup (operator/admin only)
   - [ ] `GET /lineups/:id` returns lineup detail with entries and votes
-  - [ ] `GET /lineups/active` returns current active lineup or 404
+  - [ ] `GET /lineups/active` returns active lineups (shipped: array of all building/voting lineups, ROK-1065)
   - [ ] Status transitions enforced: `building -> voting -> decided -> archived`
-  - [ ] Only one lineup can be in `building` or `voting` status at a time
+  - [ ] Only one lineup can be in `building` or `voting` status at a time — superseded by ROK-1065: multiple lineups may be in `building`/`voting` simultaneously (each with `public`/`private` visibility); the single-active constraint was removed
   - [ ] Unit tests for service and status transition logic
 - **Complexity:** M
 - **Dependencies:** None
@@ -178,7 +181,7 @@ When a lineup transitions to `decided`, all unchosen nominations (2nd place and 
   - [ ] `POST /lineups/:id/nominate` adds game with optional note
   - [ ] `DELETE /lineups/:id/nominations/:gameId` removes own nomination
   - [ ] Duplicate game nomination returns 409
-  - [ ] Max 20 nominations enforced
+  - [ ] Nomination cap enforced (shipped as dynamic `max(20, participants × 5)` via `nominationCap()`)
   - [ ] `LineupBanner` on Games page shows active lineup status + CTAs
   - [ ] Banner hidden when no active lineup exists
   - [ ] `/community-lineup/:id` detail page renders nomination grid
@@ -195,10 +198,10 @@ When a lineup transitions to `decided`, all unchosen nominations (2nd place and 
 - **Workspace(s):** api, web
 - **Scope:** Voting endpoints, tournament-style leaderboard UI, deadline enforcement, vote tallying
 - **Acceptance Criteria:**
-  - [ ] `POST /lineups/:id/vote` accepts up to 3 game IDs
+  - [ ] `POST /lineups/:id/vote` toggles a vote on a single game (shipped: per-lineup vote budget, default 3)
   - [ ] Voting rejected when status != `voting`
   - [ ] Votes can be changed before deadline
-  - [ ] Cron auto-transitions to `decided` when deadline passes
+  - [ ] Deadline transitions ship as BullMQ delayed jobs on the lineup-phase queue (`phase-transition` + quorum `grace-advance`, ROK-946/ROK-1253); cron is used only for the 24h/1h reminders
   - [ ] Tie detection: stays in `voting` if no clear winner
   - [ ] Tournament leaderboard renders with vote bars and rank badges
   - [ ] Voted games show emerald accent + checkmark
@@ -248,16 +251,16 @@ When a lineup transitions to `decided`, all unchosen nominations (2nd place and 
 [ROK-931](https://linear.app/roknua-projects/issue/ROK-931)
 
 - **Workspace(s):** api, web
-- **Scope:** LLM-powered nomination suggestions via Ollama analyzing community play history, voter-specific preferences, and game metadata
+- **Scope:** LLM-powered nomination suggestions via the provider-agnostic `LlmService` (registry of Ollama / OpenAI / Claude / Google providers, `api/src/ai/providers/`) analyzing community play history, voter-specific preferences, and game metadata
 - **Acceptance Criteria:**
   - [ ] LLM prompt includes historical play patterns, voter scope, current nominations, and game metadata
   - [ ] Suggestions scale strategy based on number of active voters (full group vs small group)
   - [ ] Results are cached per lineup round (re-generated on demand, not every page load)
   - [ ] Suggestion cards show reasoning and ownership overlap
-  - [ ] Feature degrades gracefully when Ollama is unavailable
+  - [ ] Feature degrades gracefully when no AI provider is configured
   - [ ] Unit tests for prompt construction and response parsing
 - **Complexity:** L
-- **Dependencies:** ROK-542 (Ollama Foundation), M1-M3
+- **Dependencies:** ROK-542 (Ollama Foundation — shipped as the provider-agnostic `LlmService`), M1-M3
 
 ### M8: Tiebreakers
 [ROK-938](https://linear.app/roknua-projects/issue/ROK-938)
@@ -289,11 +292,12 @@ When a lineup transitions to `decided`, all unchosen nominations (2nd place and 
 
 - [x] **Who can initiate a lineup?** Operators/admins only (via `POST /lineups`)
 - [x] **Who can nominate?** Any guild member
-- [x] **Voting model?** Pick-3 (each member casts up to 3 votes). `rank` column reserved for future ranked choice.
+- [x] **Voting model?** Toggle-vote with a per-lineup vote budget — configurable 1–10 votes per player, default 3 (ROK-976). `rank` column reserved for future ranked choice.
 - [x] **Common Ground scope?** Includes both Steam library owners AND wishlist owners with badge distinction (emerald for library, amber for wishlist). Also shows early access and sale badges. Algorithmic sorting favors on-sale + high-ownership games.
-- [x] **Max nominations?** 20 per lineup
+- [x] **Max nominations?** Dynamic cap: `max(20, participants × 5)` per lineup (fixed 20 was superseded by `nominationCap()`)
 - [x] **Event creation from winner?** Manual button ("Create Event") — not automatic. Pre-fills the event form with the winning game. One-way link: lineup -> event.
-- [x] **Scope?** Per-guild. One active lineup (building or voting) at a time per guild.
+- [x] **Scope?** Per-guild. Originally one active lineup (building or voting) at a time — superseded by ROK-1065: multiple lineups may be active simultaneously.
+- [x] **Visibility?** (added post-plan) Lineups carry a `visibility` mode — `private` lineups restrict nominate/vote to an invitee roster (`community_lineup_invitees`, ROK-1065) and suppress channel embeds; `public` lineups can additionally be shared un-authed at `/p/lineup/:publicSlug` (ROK-1067).
 
 ## Risk Register
 
@@ -302,7 +306,7 @@ When a lineup transitions to `decided`, all unchosen nominations (2nd place and 
 | Low adoption if nomination/voting UX feels heavy | Medium | High | Games page banner provides low-friction entry point; pick-3 is simpler than ranked choice |
 | Common Ground query slow on large game libraries | Low | Medium | Index on ownership table; paginate results; cache per-lineup |
 | Voting ties require manual intervention | Medium | Low | Tiebreaker modes (M8) provide structured resolution; operator can also extend deadline |
-| Ollama dependency adds infrastructure complexity | Medium | Medium | Graceful degradation — feature hidden when Ollama unavailable; LLM suggestions are enhancement, not core |
+| AI provider dependency adds infrastructure complexity | Medium | Medium | Graceful degradation — feature hidden when no AI provider is configured (provider-agnostic `LlmService`); LLM suggestions are enhancement, not core |
 | Carryover accumulation clutters future lineups | Low | Low | Operators can manually remove carried entries; consider auto-expiry after N lineups |
 | Notification fatigue from lineup lifecycle DMs | Medium | Medium | Per-category DM toggle; milestone-based channel embeds (not per-nomination) |
 

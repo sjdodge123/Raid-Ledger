@@ -17,16 +17,17 @@ _This file contains critical rules and patterns that AI agents must follow when 
 ## Technology Stack & Versions
 
 ### Core Technologies
-- **Backend:** NestJS 11.x, TypeScript 5.7.x
-- **Frontend:** React 19.x, Vite 7.x, TypeScript ~5.9.x
-- **Database:** PostgreSQL (Latest Stable), Drizzle ORM
+- **Backend:** NestJS 11.x, TypeScript 6.0.x
+- **Frontend:** React 19.x, Vite 8.x, TypeScript ~6.0.x
+- **Database:** PostgreSQL 16 (pgvector image), Drizzle ORM
 - **Infrastructure:** Docker Compose
-- **Shared:** `packages/contract` (Zod 3.22.4)
+- **Shared:** `packages/contract` (Zod 4.x)
 
 ### Key Dependencies
 - **Validation:** `zod` (Single Source of Truth)
 - **State Management:** TanStack Query (Server), Zustand (Client)
-- **Styling:** TailwindCSS + Shadcn/UI
+- **Styling:** TailwindCSS 4 + hand-rolled component library in `web/src/components/ui` (no Shadcn/UI)
+- **Background Jobs:** BullMQ on Redis (embed sync, notification dispatch/buffering) — Redis is a hard runtime dependency in both topologies
 - **Time Management:** Postgres `tsrange` (Critical for Availability)
 
 ---
@@ -40,23 +41,25 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 ### Framework-Specific Rules
 - **Methodology:** "DIY Clean Start" - No opinionated boilerplates.
-- **NestJS:** Use `nestjs-zod` to auto-generate OpenAPI/Swagger.
-- **React:** Use `react-hook-form` resolved with Zod schemas. 
+- **NestJS:** Validate request bodies/queries by calling the shared contract Zod schemas directly in controllers (`const dto = SomeSchema.parse(body)`). There is no `nestjs-zod` and no OpenAPI/Swagger generation.
+- **React:** Forms are hand-rolled controlled components validated against the shared contract Zod schemas — `react-hook-form` is not used.
 - **Monorepo:** Use `npm workspaces`. Run commands with `-w` (e.g., `npm run test -w api`).
 
 ### Testing Rules
 - **Backend:** Jest (`npm run test -w api`)
 - **Frontend:** Vitest (`npm run test -w web`)
+- **E2E (UI):** Playwright smoke tests (`npx playwright test`, desktop + mobile — root `playwright.config.ts`)
+- **E2E (Discord):** companion-bot smoke suite (`cd tools/test-bot && npm run smoke`)
 - **Structure:** Implementation-adjacent spec files (e.g., `feature.service.spec.ts` next to `feature.service.ts`).
 - **Quality Standards:** See [TESTING.md](./TESTING.md) for patterns, anti-patterns, and exemplary references
 
 ### Code Quality & Style Rules
 - **Formatting:** Prettier is authoritative.
 - **Linting:** ESLint with standard presets.
-- **File Size Limits (strict `error`):**
-  - **Max 300 lines** per source file (`skipBlankLines + skipComments`)
-  - **Max 30 lines** per function (`skipBlankLines + skipComments`)
-  - **Max 750 lines** for test files (`*.spec.ts`, `*.test.tsx`)
+- **File Size Limits:**
+  - **Max 300 lines** per source file (`error`, skipBlankLines + skipComments)
+  - **Max 30 lines** per function (`warn` — planned upgrade to `error`; test files relaxed to 60)
+  - **Max 750 lines** for test files (`error`) (`*.spec.ts`, `*.test.tsx`)
   - Migration files are exempt from both limits
   - No blanket `/* eslint-disable */` — must specify rules
 - **Design small from the start** — plan focused modules, extract helpers/sub-services/child components proactively. Do not write large files and refactor after.
@@ -71,8 +74,8 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 ### Development Workflow Rules
 - **Build Order:** You MUST build `packages/contract` (`npm run build -w packages/contract`) before building `api` or `web`.
-- **Database Changes:** Use Drizzle Kit for migrations. NEVER modify schema manually.
-- **Docker:** All services run via `docker-compose up`.
+- **Database Changes:** Generate migrations with Drizzle Kit (`npm run db:generate -w api`); RUN them via the programmatic migrator (`npm run db:migrate -w api` → `api/src/scripts/run-migrations.ts`), never `drizzle-kit migrate` (it silently swallows SQL errors — ROK-1343). NEVER modify schema manually.
+- **Docker:** DB + Redis run in Docker; local dev is `./scripts/deploy_dev.sh` (native API watch mode + Vite dev server). Full-stack `docker-compose up` is for CI/test only (the `web` service is behind the `test` profile).
 
 ### Deployment Topologies (CRITICAL — two different Docker configurations)
 
@@ -84,9 +87,9 @@ _This file contains critical rules and patterns that AI agents must follow when 
 | Web | Separate Nginx container | Embedded Nginx |
 | Process mgmt | Docker Compose | Supervisor |
 | API user | `nestjs` (uid 1001) | `app` (uid 1001) |
-| Entrypoint | `api/scripts/docker-entrypoint.sh` (runs as `nestjs`) | Same entrypoint, called by `start-api.sh` (runs as root via supervisor) |
+| Entrypoint | `api/scripts/docker-entrypoint.sh` (runs as `nestjs`) | Same entrypoint, called by `start-api.sh` (runs as `app` via supervisor's `[program:api] user=app`; only the container-level `/app/entrypoint.sh` runs as root) |
 
-**Key files:** `Dockerfile.allinone` (327 lines), `api/Dockerfile`, `api/scripts/docker-entrypoint.sh`, `nginx/monolith.conf.template`
+**Key files:** `Dockerfile.allinone`, `api/Dockerfile`, `api/scripts/docker-entrypoint.sh`, `nginx/monolith.conf.template`
 **Deployment:** Watchtower auto-pulls GHCR images daily at 5 AM on the Synology NAS.
 
 ### Critical Don't-Miss Rules
@@ -110,4 +113,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Review quarterly for outdated rules
 - Remove rules that become obvious over time
 
-Last Updated: 2026-03-06
+Last Updated: 2026-07-10

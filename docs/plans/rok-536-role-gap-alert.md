@@ -1,7 +1,7 @@
 # Plan: ROK-536 — 4h Role Gap Alert
 
 **Date:** 2026-03-04
-**Status:** draft
+**Status:** implemented — shipped 2026-03-04 (PRs #364/#365; counting rule revised by ROK-733 PR #381)
 **Linear:** [ROK-536](https://linear.app/roknua-projects/issue/ROK-536)
 
 ## Problem Statement
@@ -21,9 +21,9 @@ When an MMO rostered event is ~4 hours from starting and still missing required 
 
 ## Technical Approach
 
-Hook into the existing `EventReminderService` cron (runs every 60s). Add a new method that:
-1. Queries MMO events starting in ~4 hours (3h45m–4h15m window)
-2. For each candidate, counts `signed_up` roster assignments by role
+Hook into the existing `EventReminderService` cron (runs every 60s). As shipped (ROK-683), the logic lives in a dedicated `RoleGapAlertService` (`api/src/notifications/role-gap-alert.service.ts`) with public `checkRoleGaps()` / `sendRoleGapAlert()` methods, invoked from `EventReminderService.handleReminders()`. The service:
+1. Queries MMO events starting in ~4 hours (3h45m–4h15m window); events with an open reschedule poll are skipped (`reschedulingPollId IS NULL`, ROK-1370) — the event time is in flux, and alerts resume at the new time once the poll locks in
+2. For each candidate, counts roster assignments by role (all statuses except `declined`/`roached_out` — revised by ROK-733, see M1 AC)
 3. Compares against `slotConfig` defaults (2 tank, 4 healer)
 4. If gaps exist, DMs the **event creator** (not all attendees) via the standard notification pipeline
 5. Deduplicates using `event_reminders_sent` with `reminderType = 'role_gap_4h'`
@@ -34,7 +34,7 @@ On the web side, add `?action=cancel` and `?action=reschedule` query param suppo
 
 | Approach | Pros | Cons | Decision |
 |----------|------|------|----------|
-| Separate service class | Clean separation | More files, same cron | Rejected — fits naturally in EventReminderService |
+| Separate service class | Clean separation | More files, same cron | Rejected initially — but ultimately adopted post-ship (ROK-683) as `RoleGapAlertService`, for file-size/focus reasons |
 | Alert all signed-up members | More visibility | Noisy, only creator can act | Rejected — creator-only per spec |
 | Discord interactive buttons (cancel/reschedule in-DM) | No web redirect | Complex, reschedule logic is too rich for Discord | Rejected — deep-link to web modals |
 
@@ -46,20 +46,21 @@ On the web side, add `?action=cancel` and `?action=reschedule` query param suppo
 - **Scope:**
   1. Add `'role_gap_alert'` to `NOTIFICATION_TYPES` array and default channel config
   2. Add `role_gap_alert` embed handling in `DiscordNotificationEmbedService` (color, emoji, type label, fields, buttons)
-  3. New private method `checkRoleGaps()` in `EventReminderService`:
+  3. Public method `checkRoleGaps()` on the dedicated `RoleGapAlertService` (as shipped, ROK-683):
      - Query events with `slotConfig.type === 'mmo'` starting in 3h45m–4h15m window
      - Filter out cancelled events (`cancelledAt IS NULL`)
-     - For each event, query `roster_assignments` joined with `event_signups` (status = `'signed_up'`) to count assignments by role
+     - Skip events with an open reschedule poll (`reschedulingPollId IS NULL`, ROK-1370)
+     - For each event, query `roster_assignments` joined with `event_signups` (all statuses except `'declined'`/`'roached_out'` — revised by ROK-733 PR #381 to match the roster UI filter) to count assignments by role
      - Compare against `slotConfig` (defaults: tank=2, healer=4)
      - If tank or healer count is below required, build gap summary
-  4. New private method `sendRoleGapAlert()`:
+  4. Public method `sendRoleGapAlert()` on `RoleGapAlertService`:
      - Dedup via `event_reminders_sent` with `reminderType = 'role_gap_4h'` (per event, creator userId)
      - Build notification with gap details, event info, and deep-link buttons
      - Send via `notificationService.create()` to event creator
   5. Call `checkRoleGaps()` from the existing `handleReminders()` cron, after the standard reminder windows loop
 - **Acceptance Criteria:**
   - [ ] MMO events with unfilled tank/healer slots trigger a DM to creator ~4h before start
-  - [ ] Only `signed_up` status signups are counted (not tentative/declined/roached_out)
+  - [ ] All roster-assigned signups count toward the fill except `declined`/`roached_out` — tentative signups DO count, matching the roster UI filter (superseded by ROK-733, PR #381; original spec counted only `signed_up`)
   - [ ] Alert fires at most once per event (dedup via `event_reminders_sent`)
   - [ ] Cancelled events are excluded
   - [ ] Non-MMO events are excluded
@@ -130,12 +131,12 @@ On the web side, add `?action=cancel` and `?action=reschedule` query param suppo
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
 | Cron timing drift causes missed/double alerts | Low | Medium | 30-minute window (3h45m–4h15m) is generous; dedup table prevents doubles |
-| `slotConfig` is null for some MMO events | Medium | Low | Fall back to genre-based MMO detection via `getSlotConfigFromGenre()` with standard defaults (2 tank, 4 healer) |
+| `slotConfig` is null for some MMO events | Medium | Low | As shipped: events with null `slotConfig` are simply excluded from the alert query (`slotConfig->>'type' = 'mmo'` filter); no genre-based fallback was implemented. The tank=2/healer=4 defaults apply only when an MMO slotConfig omits a role count |
 | Deep-link reason param too long for URL | Low | Low | URL-encode; truncate at 200 chars |
 | Creator has Discord DMs disabled | Low | Low | In-app notification still created; standard unreachable flow handles Discord failures |
 
 ## Open Questions
 
-- [x] Should the alert count tentative signups toward the fill? → **No**, only `signed_up` per spec
+- [x] Should the alert count tentative signups toward the fill? → Originally **No**, only `signed_up` per spec. **Revised by ROK-733 (PR #381):** all roster-assigned signups except `declined`/`roached_out` count — tentative DOES count, matching the roster UI filter
 - [x] Should the Dismiss button be a Discord interactive button or just omitted? → **No Dismiss button.** The alert is fire-and-forget — creator sees it and acts or ignores. Dedup prevents re-sending.
 - [x] Does `RescheduleModal` have a reason field to pre-populate? → **Yes, both modals.** RescheduleModal should also accept an `initialReason` prop for deep-link pre-population.

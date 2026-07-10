@@ -10,7 +10,7 @@ Per-operator direction, this audit works from the noise classes named in the ROK
 
 ### 1. `ConflictException` from `applyStatusUpdate` — DROPPED in `beforeSend`
 
-- **Throw site:** `api/src/lineups/lineups-lifecycle.helpers.ts:123-125`
+- **Throw site:** `api/src/lineups/lineups-lifecycle.helpers.ts:126-128`
 - **Sentry signature:** `event.exception.values[0].type === 'HttpException'` (NestJS surfaces `ConflictException` as its base `HttpException`), value matches `/status changed concurrently/`.
 - **Category:** Expected behavior — race detection from [ROK-1118](https://linear.app/roknua-projects/issue/ROK-1118). The 409 is the correct response to a concurrent status flip.
 - **Filter location:** `api/src/sentry/instrument.ts` (`beforeSend` block, ROK-1162 clause). 409 status is still logged by the NestJS HTTP access logger — no information is silently swallowed.
@@ -27,24 +27,34 @@ Per-operator direction, this audit works from the noise classes named in the ROK
 ### 3. Discord.js transient network errors — FINGERPRINT-GROUPED
 
 - **Origin:** discord.js v14 retries internally; what bubbles out of the library to Sentry is retry-exhaustion (`DiscordAPIError` with 5xx HTTP status, or values containing `ECONNRESET`/`ETIMEDOUT`/`getaddrinfo`/`fetch failed`).
-- **Sentry signature:** `type === 'DiscordAPIError'` with value matching `/5\d\d|ECONNRESET|ETIMEDOUT|getaddrinfo|fetch failed|network/i`.
+- **Sentry signature:** `type` starts with `'DiscordAPIError'` (discord.js v14 reports the bracketed `DiscordAPIError[<code>]` form in production — the original exact-equality match never fired; corrected in ROK-1354) with value matching `/\b5\d\d\b|ECONNRESET|ETIMEDOUT|getaddrinfo|fetch failed|\bnetwork\b/i` (the `\b` boundaries on `5\d\d` are load-bearing — Discord permanent application codes like 50013/50001 start with `500` and must not group as transient).
 - **Disposition:** keep visible (these can still indicate a real Discord outage) but coalesce under a single fingerprint `['discord-api-transient']` so the inbox shows one issue instead of N.
 - **Filter location:** `api/src/sentry/instrument.ts` (ROK-1162 fingerprint clause, runs after the existing 50278/50007 drop).
 
 ### 4. OAuth callback with malformed `state` — ALREADY HANDLED (no new code)
 
-- **Investigation:** `verifyOAuthState` (`api/src/plugins/discord/discord-auth.helpers.ts:90-111`) returns `null` on invalid state; `DiscordAuthGuard.handleRequest` (`api/src/plugins/discord/discord-auth.helpers.ts:32-63`) redirects to `/login?error=...` rather than throwing. The only exception that reaches Sentry from the OAuth callback path is passport-oauth2's `InternalOAuthError`, which is **already dropped** by the ROK-668 filter at `api/src/sentry/instrument.ts:28-30`.
+- **Investigation:** `verifyOAuthState` (`api/src/plugins/discord/discord-auth.helpers.ts:204-225`) returns `null` on invalid state; `DiscordAuthGuard.handleRequest` (`api/src/plugins/discord/discord-auth.helpers.ts:52-73`) redirects on failure (via `redirectOnOAuthFailure` — `/login?error=...`, silent-flow fall-through, or consent retry) rather than throwing. The only exception that reaches Sentry from the OAuth callback path is passport-oauth2's `InternalOAuthError`, which is **already dropped** by the ROK-668 filter at `api/src/sentry/instrument.ts:47-49`.
 - **Action:** added a regression test in `api/src/sentry/instrument.spec.ts` asserting `InternalOAuthError` with a state-mismatch value is dropped.
 
 ### 5. Existing filters retained from prior stories
 
 | Pattern | Story | File |
 |---|---|---|
-| `ThrottlerException` (rate limits) | original | `api/src/sentry/instrument.ts:24-26` |
-| `InternalOAuthError` (passport-oauth2) | ROK-668 | `api/src/sentry/instrument.ts:28-30` |
-| `no_snapshot_yet` 503s | ROK-1143 | `api/src/sentry/instrument.ts:36-41` |
-| `DiscordAPIError` 50278 / 50007 / no-mutual-guilds | ROK-1260 | `api/src/sentry/instrument.ts:46-54` |
+| `ThrottlerException` (rate limits) | original | `api/src/sentry/instrument.ts:43-45` |
+| `InternalOAuthError` (passport-oauth2) | ROK-668 | `api/src/sentry/instrument.ts:47-49` |
+| `no_snapshot_yet` 503s | ROK-1143 | `api/src/sentry/instrument.ts:55-60` |
+| `DiscordAPIError` 50278 / 50007 / 10013 / no-mutual-guilds / Unknown User | ROK-1260, ROK-1354 | `api/src/sentry/instrument.ts:106-115` |
 | `pg_catalog` spans (N+1 false positives) | ROK-366 | `api/src/sentry/instrument.ts` (`ignoreSpans`) |
+
+### Addendum — filters added after this audit
+
+Three `beforeSend` clauses shipped after this audit and are listed here so the tables above remain a complete filter inventory. ROK-1354 also fixed the dead `=== 'DiscordAPIError'` gate in both Discord clauses (see section 3).
+
+| Pattern | Story | File |
+|---|---|---|
+| Synthetic CSP-report probes (`example.*` / curl UA) | ROK-1365 | `api/src/sentry/instrument.ts:25-39` |
+| Steam-sync user-fixable 4xx (`Steam account not linked` / `Steam profile is private`) | ROK-1307 | `api/src/sentry/instrument.ts:61-79` |
+| `cron_job_executions_cron_job_id_fkey` FK violations | ROK-1328 | `api/src/sentry/instrument.ts:80-94` |
 
 ## Code delivered
 

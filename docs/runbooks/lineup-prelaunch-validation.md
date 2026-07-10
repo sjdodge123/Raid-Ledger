@@ -39,12 +39,12 @@ If `acquired: false` you have been queued. Wait — do not preempt.
 
 The script copies `.env` from the main repo into the worktree, brings up
 Postgres + Redis + API + web, runs migrations, and seeds demo data.
-Health: `curl http://127.0.0.1:3000/api/health`.
+Health: `curl http://127.0.0.1:3000/health`.
 
 ### 3. (Optional) Discord testing prerequisites
 
 The companion bot smoke suite requires Discord running with CDP enabled
-and a `tools/test-bot/.env` containing `DISCORD_TOKEN` + `GUILD_ID`.
+and a `tools/test-bot/.env` containing `TEST_BOT_TOKEN` + `TEST_GUILD_ID`.
 
 ```bash
 ./scripts/launch-discord.sh        # launches Discord with CDP on :9222
@@ -103,8 +103,8 @@ asserts the AC; **partial** = automated test asserts a subset;
 | 2 | Detail page renders header, phase breadcrumb, progress bar, activity timeline, nomination grid | `scripts/smoke/community-lineup.smoke.spec.ts` | full | PASS | H1 renders lineup title, status badge visible (Nominating/Voting/Scheduling/Archived), breadcrumb shows current phase + clickable next, nomination-count testid present | N/A |
 | 3 | Nomination modal: search → preview → submit → grid update | `scripts/smoke/community-lineup.smoke.spec.ts` | full | PASS (desktop) / FAIL (mobile, search empty-state timeout) | Modal opens on Nominate click with "Nominate a Game" heading, search input with placeholder "Search by name or paste a Steam store URL", "SUGGESTED FOR YOU" section visible, close button dismisses modal. Mobile fixture race documented in Known Issues. | N/A |
 | 4 | Voting phase: leaderboard renders, vote toggles with emerald accent, vote-count pill flips count → waitingOn | `scripts/smoke/community-lineup.smoke.spec.ts` | full | PASS | Leaderboard `data-testid="voting-leaderboard"` visible, leaderboard rows present, row click flips `data-voted="true"` with checkmark, confirmation pill shows "X of 3 votes used" → "waiting on N others" at cap | N/A |
-| 5 | Decided view: podium with Champion/Silver/Bronze, tiered match cards, bandwagon UI, rally URL, stats panel | `scripts/smoke/lineup-decided.smoke.spec.ts` | full | PASS | "THIS WEEK'S PODIUM" heading visible, Champion + Silver + Bronze labels render, podium-card testids present, Share button enabled, Lineup Stats panel shows Voters/Nominated/Total Votes, rally URL `?rally=<gameId>` applies `data-rallied="true"` to row | N/A |
-| 6 | Start Lineup flow: modal opens via test param, duration sliders pre-fill, submit → detail page | `scripts/smoke/lineup-creation.smoke.spec.ts` | full | FAIL (flake — see Known Issues) | `?test=open-lineup-modal` opens "Start Community Lineup" dialog with Title pre-filled "Lineup — May 2026", Visibility Public/Private, Public share link toggle, Post embeds to channel-override dropdown, Building Phase + Voting Phase duration sliders, Match Threshold slider at 35% with "More matches" / "Fewer, larger matches" labels, Votes per Player slider at 3, Tiebreaker Mode bracket/veto. Feature works; failures are cross-worker fixture races. | N/A |
+| 5 | Decided view: composite layout — JourneyHero, personal "Your matches" section, other matches, carried-forward chips (ROK-1299) | `scripts/smoke/decided-composite.smoke.spec.ts` (replaced `lineup-decided.smoke.spec.ts` in ROK-1299 PR #807) | full | PASS | Composite decided view renders (`data-testid="decided-composite-view"`): JourneyHero on top, personal "Your matches" section with per-match "Pick a time →" CTAs, "Other matches in this lineup" section, leftover-voters row, and Carried Forward chips. The podium, Lineup Stats panel, bandwagon UI, and `?rally=<gameId>` URL were removed in the ROK-1299 redesign. | N/A |
+| 6 | Start Lineup flow: modal opens via test param, duration sliders pre-fill, submit → detail page | `scripts/smoke/lineup-creation.smoke.spec.ts` | full | FAIL (flake — see Known Issues) | `?test=open-lineup-modal` opens "Start Community Lineup" dialog with 5 visible controls — Title pre-filled, Preset chooser, Match Threshold slider with "More matches" / "Fewer, larger matches" labels, Votes per Player slider at 3, and Include-scheduling-phase toggle (ROK-1302 PR #854); Visibility, Public share link, channel-override dropdown, phase-duration sliders, and Tiebreaker Mode now sit behind a "More options" expander. Feature works; failures are cross-worker fixture races. | N/A |
 | 7 | Phase countdown displays on banner + detail | `scripts/smoke/lineup-creation.smoke.spec.ts` | full | PASS | Banner shows compact countdown "X remaining"; detail page shows full countdown timer; both update without page navigation | N/A |
 | 8 | Phase breadcrumb: operator clicks next/previous → modal → confirm → status flips | `scripts/smoke/lineup-phase-breadcrumb.smoke.spec.ts` | full | PASS | Current phase rendered as `span`, next/previous phases as buttons; click opens `role="dialog"` with "Advance to Voting?" / "Revert to Nominating?" heading; confirm fires PATCH and status badge updates | N/A |
 | 9 | Auto-advance live UI refresh — user B's open page reflects user A's REST advance within 5s | `scripts/smoke/lineup-auto-advance.smoke.spec.ts` | full | PASS | With detail page open in tab A, PATCH `/lineups/:id/status` from tab B flips the badge `Voting → Scheduling` (label for `decided`) within 5s via `lineup:status` socket event | N/A |
@@ -135,6 +135,10 @@ asserts the AC; **partial** = automated test asserts a subset;
 | 34 | Nominator without Steam linked → nomination allowed with warning (private lineup flow) | `web/src/components/lineups/SteamNudgeBanner.tsx` (component); covered by `SteamNudgeBanner.test.tsx` vitest (6/6 tests pass) | full | PASS (vitest 6/6) | Logged in as admin with `steamId=null`, navigated to a `building`-phase lineup. Blue-bordered `SteamNudgeBanner` rendered the copy "Connect your account to include your game library in suggestions." with a "Link Steam" button + dismiss "×" affordance. The lineup detail also surfaces "220 without Steam" in the participant summary. Nominate button remained enabled; `POST /lineups/11/nominate` with `gameId=11868` succeeded (`status='building'`, `entries.length=1`) — nomination is non-blocking. | N/A |
 | 35 | Vote submitted within 1s of deadline cron firing → counted or rejected? Document expected. | `api/src/lineups/lineup-deadline-vote-race.integration.spec.ts` (added by ROK-1068 Phase F, 4/4 pass) | full | PASS (integration, 4/4) | Not Chrome-MCP-driveable: timing race documented in integration spec. Observed contract from the three CASE-A/B/C tests: vote BEFORE the grace processor runs → counted (HTTP 200); vote AFTER the grace flip to `decided` → rejected with HTTP 400 "voting is only allowed in voting status"; concurrent race window → vote path reads status outside any transaction, so an INSERT can land after the optimistic UPDATE commits, leaving the vote row silently retained on a now-`decided` lineup. The ROK-1253 grace window narrows but does not eliminate this race. The 4th test asserts the grace queue stays healthy (no orphan jobs) across the interleaving. | N/A |
 | 36 | Abort with reason vs without → embed copy differs correctly (Discord) | `tools/test-bot/src/smoke/tests/lineup-abort.test.ts` (extended by ROK-1068 Phase F — `abortReasonVarianceWalkthrough`) | full | N/A (companion bot domain) | Not Chrome-MCP-driveable: assertion is Discord embed body via companion bot. Web-side reason field is covered by AC 24. | PASS (3/3 abort smokes; new variance walkthrough explicitly aborts two lineups back-to-back and asserts `\n\n` separator + reason text present in one description and absent in the other) |
+| 37 | Cycle 4 nominating composite: JourneyHero + Common Ground hero on the building phase (ROK-1297 PR #823) | `scripts/smoke/lineup-nominating-composite.smoke.spec.ts` | full | not yet run in a registry pass (shipped after 2026-05-12) | not yet driven | N/A |
+| 38 | Cycle 4 voting composite: normalized vote bars (ROK-1298 PR #830) | `scripts/smoke/lineup-voting-composite.smoke.spec.ts` | full | not yet run in a registry pass (shipped after 2026-05-12) | not yet driven | N/A |
+| 39 | Cycle 4 lineup-detail legacy chrome strip (ROK-1323 PR #871) | `scripts/smoke/lineup-chrome-strip.smoke.spec.ts` | full | not yet run in a registry pass (shipped after 2026-05-12) | not yet driven | N/A |
+| 40 | Scheduling-phase opt-in + decided → scheduling-poll handoff (ROK-1302 PR #854) | `scripts/smoke/lineup-scheduling-toggle.smoke.spec.ts` (per-match "Pick a time →" CTA covered by `scripts/smoke/decided-composite.smoke.spec.ts`, row 5) | full | not yet run in a registry pass (shipped after 2026-05-12) | not yet driven | N/A |
 
 ## How to Validate
 
@@ -165,14 +169,15 @@ Interpret results:
 
 Findings from this validation run are logged in
 [`TECH-DEBT-BACKLOG.md`](../../TECH-DEBT-BACKLOG.md) under the
-`2026-05-12 — rok-1068-lineup-prelaunch-validation` batch. Six entries
-total: one real product bug (`/lineups/:id/matches` hardcodes
-`carriedForward: []`), one Playwright fixture-race cluster (9 specs
-intermittently failing while Chrome MCP confirms the feature works),
-and four coverage gaps from the original Linear AC list that this
-runbook did not exercise (no-bound-channel degradation, Steam-unlinked
-nominator warning, vote-at-deadline cron race, abort embed with/without
-reason variance).
+`2026-05-12 — rok-1068-lineup-prelaunch-validation` batch. One entry
+remains under that heading: the no-bound-channel degradation coverage
+gap (AC 33). The rest have been resolved since the run: the
+`/lineups/:id/matches` `carriedForward: []` hardcode was promoted to
+ROK-1274 and fixed (PR #782); the Playwright fixture-race cluster was
+triaged to ROK-1251 evidence comments and pruned; and the other three
+coverage gaps (Steam-unlinked nominator warning, vote-at-deadline cron
+race, abort embed reason variance) were covered in Phase F (AC rows
+34–36).
 
 Per `CLAUDE.md`, the backlog is operator-triaged: nothing in
 `TECH-DEBT-BACKLOG.md` should be acted on by an agent without explicit
@@ -189,4 +194,4 @@ operator direction.
 | Integration spec | `lineup-deadline-vote-race.integration.spec.ts`: 4/4 pass (CASE-A vote-before, CASE-B vote-after, CASE-C concurrent race, grace-queue idempotency). |
 | Chrome MCP drive | All 30 web-side ACs driven against the dev env in Phase D + AC 34 (SteamNudgeBanner) driven in Phase F. No console errors. |
 | AC coverage | **35 of 35** Linear sub-ACs driven via Playwright + Chrome MCP + integration spec + companion bot. The one remaining explicit DEMO_MODE-blocked gap (AC 33 — no-bound-channel degradation) is documented in `TECH-DEBT-BACKLOG.md`. |
-| Known Issues | 3 entries remain in `TECH-DEBT-BACKLOG.md` under `2026-05-12 — rok-1068-lineup-prelaunch-validation` (1 real bug — `carriedForward: []`; 1 fixture-race cluster; 1 coverage gap — no-bound-channel). The 3 Phase F ACs (F1/F2/F3) were promoted out of the backlog into runbook AC rows 34/35/36. |
+| Known Issues | 1 entry remains in `TECH-DEBT-BACKLOG.md` under `2026-05-12 — rok-1068-lineup-prelaunch-validation` (the no-bound-channel coverage gap, AC 33). The `carriedForward: []` bug shipped as ROK-1274 (PR #782); the fixture-race cluster was pruned after ROK-1251 evidence triage. The 3 Phase F ACs (F1/F2/F3) were promoted out of the backlog into runbook AC rows 34/35/36. |

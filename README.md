@@ -14,7 +14,7 @@ Built for raid leaders, clan officers, and server owners who are tired of herdin
 
 ## Why Raid Ledger?
 
-- **Discord-native, end to end** — Discord OAuth login (no new passwords), a companion bot with slash commands (`/event-create`, `/events`, `/roster`, `/playing`, `/bind`), interactive RSVP embeds, and DM reminders. Your community never leaves Discord.
+- **Discord-native, end to end** — Discord OAuth login (no new passwords), a companion bot with slash commands (`/event create`, `/events`, `/roster`, `/playing`, `/bind`), interactive RSVP embeds, and DM reminders. Your community never leaves Discord.
 - **Attendance tracks itself** — who actually shows up in voice *is* the attendance record. Two-phase no-show detection nudges absent players and flags them to the host. No roll-call, no spreadsheet.
 - **End the "what are we playing?" deadlock** — community lineups with Common Ground scoring, scheduling polls with availability heatmaps, and AI-assisted game suggestions turn debate into a decision.
 - **Schedules that adapt to real life** — recurring events, batched/de-duplicated reminders, running-late flags, and one-tap host delays (+15 / +30 min) that shift the start without resetting confirmations.
@@ -54,7 +54,7 @@ Built for raid leaders, clan officers, and server owners who are tired of herdin
 The whole stack — app, PostgreSQL, and Redis — runs from a single container. Mount a volume so your data and backups survive container recreation:
 
 ```bash
-docker run -d -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
+docker run -d --name raid-ledger -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
 ```
 
 Then open **http://localhost** and grab your admin password from the container logs (see below).
@@ -64,21 +64,24 @@ Then open **http://localhost** and grab your admin password from the container l
 Check container logs for your initial credentials:
 
 ```
-╔════════════════════════════════════════════════════════════╗
-║          🔐 INITIAL ADMIN CREDENTIALS                      ║
-╠════════════════════════════════════════════════════════════╣
-║  Email:    admin@local                                     ║
-║  Password: xK9mP2vL...                                     ║
-╠════════════════════════════════════════════════════════════╣
-║  ⚠️  Save this password! It will not be shown again.       ║
-╚════════════════════════════════════════════════════════════╝
+========================================================
+  INITIAL ADMIN CREDENTIALS
+========================================================
+  Email:    admin@local
+  Password: xK9mP2vL...
+--------------------------------------------------------
+  Save this password! It will not be shown again.
+  To reset, set RESET_PASSWORD=true and restart.
+========================================================
 ```
 
 ### Reset Admin Password
 
 ```bash
-docker run -e ADMIN_PASSWORD=mynewpassword -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
+docker run -e RESET_PASSWORD=true -e ADMIN_PASSWORD=mynewpassword -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
 ```
+
+`RESET_PASSWORD=true` alone generates a new random password and prints it to the logs; add `ADMIN_PASSWORD` to choose the value.
 
 ### Configure Discord OAuth
 
@@ -95,7 +98,8 @@ docker run -e ADMIN_PASSWORD=mynewpassword -p 80:80 -v raid-ledger-data:/data gh
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `80` | Port to expose the application |
-| `ADMIN_PASSWORD` | *(random)* | Set a specific admin password; updates on every startup if set |
+| `ADMIN_PASSWORD` | *(random)* | Set a specific admin password on first run; combine with `RESET_PASSWORD=true` to change an existing password |
+| `RESET_PASSWORD` | `false` | Set to `true` to reset the admin password on startup (new password is printed to the container logs) |
 | `DEBUG` | `false` | Enable verbose logging (query details, startup diagnostics, plugin internals) |
 | `DISABLE_TELEMETRY` | `false` | Set to `true` to disable anonymous error reporting to the maintainers via Sentry |
 
@@ -114,29 +118,33 @@ Raid Ledger automatically backs up your PostgreSQL database to `/data/backups/` 
 
 - **Daily backups** — A `pg_dump` runs every night and stores compressed `.dump` files in `/data/backups/daily/`. Backups older than 30 days are automatically deleted.
 - **Pre-migration snapshots** — Before every schema migration at container startup, a snapshot is saved to `/data/backups/migrations/`. These are not auto-rotated and should be cleaned up manually when no longer needed.
+- **Web UI** — You can also manage backups from **Admin Panel → Backups**, which lets you create, download, delete, and restore backups (restores take an automatic pre-restore safety snapshot).
 
 ### Accessing backups
 
 ```bash
 # List available backups
-docker exec raid-ledger-api ls /data/backups/daily/
-docker exec raid-ledger-api ls /data/backups/migrations/
+docker exec raid-ledger ls /data/backups/daily/
+docker exec raid-ledger ls /data/backups/migrations/
 
 # Copy a backup to the host
-docker cp raid-ledger-api:/data/backups/daily/<backup-file>.dump ./restore.dump
+docker cp raid-ledger:/data/backups/daily/<backup-file>.dump ./restore.dump
 ```
 
 ### Restoring a backup
 
 ```bash
-# Restore from a custom-format dump
-pg_restore --host localhost --port 5432 --username user --dbname raid_ledger \
-  --no-owner --no-privileges ./restore.dump
+# Copy the dump into the container and restore inside it
+docker cp ./restore.dump raid-ledger:/tmp/restore.dump
+docker exec raid-ledger su-exec postgres pg_restore --dbname raid_ledger \
+  --no-owner --no-privileges /tmp/restore.dump
 ```
+
+Or restore from **Admin Panel → Backups**, which also takes a pre-restore safety snapshot.
 
 ### Backup preservation across --fresh resets
 
-Both `deploy_dev.sh --fresh` and `deploy_prod.sh --fresh` automatically preserve and restore the `/data/backups/` directory across the volume wipe — your backup history is never lost during a fresh reset.
+Both `deploy_dev.sh --fresh` and `deploy_prod.sh --fresh` take a safety `pg_dump` into `api/backups/daily/` on the host filesystem before wiping volumes — host-side backups survive fresh resets automatically.
 
 ---
 

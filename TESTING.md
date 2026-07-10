@@ -87,7 +87,7 @@ mockDb.limit.mockResolvedValueOnce([{ id: 1 }]);
 mockDb.transaction.mockImplementation(async (fn) => fn(mockDb));
 ```
 
-**When NOT to use the flat mock:** Queries that terminate at `.where()`, `.from()`, or `.orderBy()` need deep mocks because these methods return `this` (not a thenable). See `characters.service.spec.ts` or `availability.service.spec.ts` for examples.
+**When NOT to use the flat mock:** Queries that terminate at `.where()`, `.from()`, or `.orderBy()` need deep mocks because these methods return `this` (not a thenable). See `characters.service.crud.spec.ts` or `availability.service.spec.ts` for examples.
 
 ### Test factories
 
@@ -275,7 +275,7 @@ Use **direct DB operations** (`testApp.db.insert/select/delete`) only when the c
 
 ## Test File Size Limits
 
-Test files have a **750-line limit** (enforced by ESLint `max-lines` with `skipBlankLines + skipComments`). Functions within test files are still limited to **30 lines**.
+Test files have a **750-line limit** (enforced by ESLint `max-lines` with `skipBlankLines + skipComments`). Functions within test files get a relaxed **60-line** limit (`max-lines-per-function`, warn).
 
 ### Splitting large test files
 
@@ -408,22 +408,20 @@ Playwright smoke tests verify end-to-end UI flows in a real browser against a ru
 
 ### Directory structure
 
-Tests are split per feature in `scripts/smoke/`:
+Tests are split per feature in `scripts/smoke/` (~68 spec files at time of writing — auth, events, lineup-\* flows, admin-\* pages, profile-\*, scheduling polls, …). Shared infrastructure:
 
 ```
 scripts/
-├── playwright-global-setup.ts        # Authenticates admin, seeds demo data, saves storageState
+├── playwright-global-setup.ts        # Authenticates admin, resets DB to seed baseline, saves storageState
 ├── smoke/
 │   ├── helpers.ts                    # Shared navigation + viewport helpers
-│   ├── auth.smoke.spec.ts            # Login, credentials, unauthenticated guard
-│   ├── calendar.smoke.spec.ts        # Calendar views
-│   ├── characters.smoke.spec.ts      # Character management
-│   ├── events.smoke.spec.ts          # Event list, detail, reschedule, regressions
-│   ├── games.smoke.spec.ts           # Game library
-│   ├── navigation.smoke.spec.ts      # Sidebar, routing, responsive nav
-│   ├── notifications.smoke.spec.ts   # Notification center
-│   └── players.smoke.spec.ts         # Player profiles
+│   ├── api-helpers.ts                # API client + pollForCondition
+│   ├── base.ts                       # Shared `test` fixture (import test/expect from here)
+│   ├── test-world.ts                 # Per-test isolation (TestWorld — unique prefixes + scoped cleanup)
+│   └── *.smoke.spec.ts               # Per-feature specs
 ```
+
+See `scripts/smoke/README.md` for per-spec fixture requirements.
 
 **File naming convention:** `<feature>.smoke.spec.ts` — Playwright picks up files matching `*.smoke.spec.ts` in `scripts/smoke/` (configured in `playwright.config.ts`).
 
@@ -450,7 +448,7 @@ test('desktop grid renders event cards', async ({ page }) => {
 Global setup (`scripts/playwright-global-setup.ts`) runs before all tests:
 
 1. Authenticates `admin@local` via `POST /auth/local`
-2. Seeds demo data via `POST /admin/settings/demo/install` (idempotent)
+2. Hard-resets the DB to the demo seed baseline via `POST /admin/test/reset-to-seed` (ROK-1186 — wipes stale fixtures from previous runs; falls back to `POST /admin/settings/demo/install` if the reset endpoint is unavailable), then archives any leftover `smoke-w*` lineups from a previous run
 3. Saves `storageState` to `scripts/.auth/admin.json`
 
 All tests inherit this authenticated state automatically. For tests that need an unauthenticated context:
@@ -467,7 +465,7 @@ test('redirects to login when unauthenticated', async ({ browser }) => {
 ### Writing a Playwright smoke test
 
 1. Create a new file `scripts/smoke/<feature>.smoke.spec.ts` (or add to an existing file if the feature fits)
-2. Import from `@playwright/test` and use shared helpers from `./helpers`
+2. Import `test` and `expect` from `./base` (NOT `@playwright/test` directly) — the shared fixture wraps `page.goto()` with `domcontentloaded` and exposes a per-test `world` fixture (`TestWorld`); tests that create entities should destructure `{ world }` and embed `world.uid('...')` in every created title so parallel workers never collide and cleanup is prefix-scoped. Use shared helpers from `./helpers` and `./api-helpers`
 3. Keep tests resilient — use `isVisible().catch(() => false)` guards for optional UI elements
 4. Test for absence of errors rather than exact content: `expect(page.locator('body')).not.toHaveText(/something went wrong/i)`
 5. Use `test.skip()` with a descriptive reason for viewport-specific tests
@@ -563,9 +561,8 @@ Available helpers:
 
 ### Rule 4: Timeouts are generous
 
-- Default timeout: 10s for most operations
-- Slow operations (reminders, cron-triggered): 30-60s
-- Use `ctx.config.timeoutMs` for standard timeouts, override with a literal for known-slow paths
+- Default timeout: 60s via `ctx.config.timeoutMs` (env-overridable with `SMOKE_TIMEOUT_MS`)
+- Use `ctx.config.timeoutMs` for standard timeouts; override with a literal only for known-slow paths (reminders, cron-triggered)
 
 ### Rule 5: Tests must be idempotent
 
@@ -589,33 +586,28 @@ The Discord companion bot runs smoke tests (see `tools/test-bot/src/smoke/tests/
 
 ### Directory structure
 
+~30 test files live in `tools/test-bot/src/smoke/tests/` covering embed lifecycle, roster calculation, DM notifications, interaction flows, voice activity, lineup flows (nomination/voting/tiebreaker/abort), scheduled-event lifecycle, slash commands, and push content. See the file names for current coverage areas.
+
+Shared infrastructure in `tools/test-bot/src/smoke/`:
+
 ```
 tools/test-bot/src/smoke/
 ├── api.ts               # HTTP client for API calls
 ├── assert.ts            # Assertion helpers (assertEmbedTitle, assertHasButton, etc.)
 ├── config.ts            # Smoke config from env vars (API_URL, guild ID, timeouts)
 ├── fixtures.ts          # Test fixtures (createEvent, signup, awaitProcessing, etc.)
+├── channel-pool.ts      # Per-worker channel allocation
+├── retry.ts             # Retry helpers
 ├── run.ts               # Test runner — connects bot, discovers channels, runs all suites
+├── setup.ts             # Runner setup
 ├── types.ts             # SmokeTest and TestContext type definitions
-└── tests/
-    ├── channel-embeds.test.ts      # Embed lifecycle: post, update, cancel, reschedule
-    ├── roster-calculation.test.ts  # Slot allocation, MMO roles, bench promotion
-    ├── dm-notifications.test.ts    # DM delivery for signups, reminders, roster changes
-    ├── interaction-flows.test.ts   # Multi-step flows: signup→cancel, vacate→promote
-    ├── voice-activity.test.ts      # Voice join/leave, attendance tracking, session flush
-    └── push-content.test.ts        # Push notification content validation
+├── cdp/                 # CDP helpers for the DISCORD_CDP-gated UI-level tests
+└── tests/               # ~30 per-feature test files (*.test.ts)
 ```
 
-### Test categories
+### CDP-gated tests
 
-| Category | File | Tests | What it validates |
-|----------|------|-------|-------------------|
-| Channel embeds | `channel-embeds.test.ts` | 8 | Embed posted, FILLING status, tentative, cancel signup, event cancel, reschedule, buttons, non-MMO avatar filtering |
-| Roster calculation | `roster-calculation.test.ts` | 4 | Slot allocation, MMO role assignment, bench overflow, promotion |
-| DM notifications | `dm-notifications.test.ts` | 18+1 slow | Signup confirmation, roster assignment, event cancellation, reminders |
-| Interaction flows | `interaction-flows.test.ts` | 8 | Bot connectivity, signup→cancel, slot vacate, bench promote, embed sync, multi-user, event delete cleanup, duplicate signup character data |
-| Voice activity | `voice-activity.test.ts` | 4+2 slow | Voice join/leave tracking, attendance session management |
-| Push content | `push-content.test.ts` | 8 | Push notification payload validation |
+A subset of smoke tests (`tests/cdp-*.test.ts`) drives the local Discord Electron client over CDP (helpers in `smoke/cdp/`) to exercise UI-level flows the bot API cannot (e.g. invoking slash commands as a user). They are gated behind `DISCORD_CDP=true`, require `./scripts/launch-discord.sh` (CDP on :9222), run sequentially (never concurrent with voice tests), and are local-only — they do not run in CI.
 
 ### Test anatomy
 
@@ -871,7 +863,7 @@ These files demonstrate best testing practices — use them as templates:
 | `events/recurrence.util.spec.ts` | Pure functions, timezone/DST edge cases |
 | `sentry/sentry-exception.filter.spec.ts` | HTTP/non-HTTP contexts, non-Error throwables |
 | `discord-bot/discord-bot-client.service.spec.ts` | Real bot lifecycle, error recovery |
-| `discord-bot/listeners/signup-interaction.listener.spec.ts` | Full signup flows, cooldowns |
+| `discord-bot/listeners/signup-interaction.buttons.spec.ts` (+ siblings `.menus` / `.race-conditions` / `.cooldown-cleanup` / `.adversarial`) | Full signup flows, cooldowns; also a live example of the `{name}.{concern}.spec.ts` split + `spec-helpers` convention |
 | `settings/settings.integration.spec.ts` | **Integration test exemplar** — real DB CRUD, encrypted settings persistence |
 
 ### Frontend
