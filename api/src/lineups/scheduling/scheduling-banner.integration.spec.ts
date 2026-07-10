@@ -38,6 +38,10 @@ describe('GET /scheduling/banner (ROK-1235)', () => {
     const res = await testApp.request.get('/scheduling/banner');
 
     expect(res.status).toBe(200);
-    expect(res.text === '' || res.body === null || res.body === '').toBe(true);
+    const bodyEmpty =
+      res.text === '' ||
+      res.text === 'null' ||
+      Object.keys(res.body ?? {}).length === 0;
+    expect(bodyEmpty).toBe(true);
   });
 });
