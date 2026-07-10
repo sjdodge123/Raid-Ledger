@@ -171,7 +171,7 @@ This rule exists because parallel agents kept seeing these commits, assuming "no
 
 ### Remote test fleet — `rl-infra` (STRICT — preferred path when reachable)
 
-The `rl-infra` Proxmox VM hosts a 4-slot runner fleet so heavy compute (build, jest, vitest, playwright, allinone builds, per-env stacks) runs on the VM instead of the laptop, and multiple agents work in parallel without env-lock contention. Full design + runbook: `rl-infra/README.md`. Operator-facing summary: `.claude/skills/_shared/rl-infra-fleet.md`.
+The `rl-infra` Proxmox VM hosts a 2-slot runner fleet (slots 3–4 pre-defined behind the `extra-slots` compose profile) so heavy compute (build, jest, vitest, playwright, allinone builds, per-env stacks) runs on the VM instead of the laptop, and multiple agents work in parallel without env-lock contention. Full design + runbook: `rl-infra/README.md`. Operator-facing summary: `.claude/skills/_shared/rl-infra-fleet.md`.
 
 **Default behavior:** `RL_TARGET=auto` (the default — operator CLI only; agents don't probe SSH) makes the `rl` CLI probe `RL_PROXMOX_HOST` over SSH. Reachable → remote mode. Unreachable / `RL_TARGET=local` → fall through to the legacy local section below.
 
@@ -180,13 +180,13 @@ In remote mode, prefer the `rl` CLI over today's equivalents — the full legacy
 `scripts/validate-ci.sh` already self-dispatches to `rl validate-ci` when
 `RL_TARGET=remote`, so existing `/push` / `/build` / `/fix-batch` flows that call
 it work unchanged once `RL_TARGET` is set. Heartbeats fire every 60s while a claim
-is held; missed heartbeats > 5min auto-release the slot (gc-sweeper). Always call
+is held; missed heartbeats > 30min auto-release the slot (gc-sweeper). Always call
 `rl release` at end-of-session anyway so the slot returns immediately.
 
 Chrome MCP, Discord MCP (companion bot + mcp-discord), Sentry, Linear, and GitHub
 stay on the laptop — they're network or display-bound, not compute-heavy. Browser
-tests point at `https://slot-N.rl.lan` (or `https://<slug>.rl.lan` for a spun env)
-instead of `localhost:5173`.
+tests point at the env's `url` field (slot-stable `https://slot-N.gamernight.net`
+— Discord OAuth works) instead of `localhost:5173`; never the per-slug hostname.
 
 ### Env coordination across agents (STRICT — local-mode fallback)
 
@@ -254,7 +254,7 @@ Backups exclude the `drizzle` schema (migration metadata is code, not data) to p
 
 - **`DATABASE_URL=... node scripts/reconcile-migrations.mjs`** — probes each journal entry, skips any whose effects already exist (treats `column already exists`, `relation already exists`, etc. as idempotent), runs anything truly missing, and records the hash row. Safe to re-run. Add `--dry-run` to preview.
 - `deploy_dev.sh` calls reconcile automatically after an auto-restore from `api/backups/daily/`.
-- **Symptom that means you need reconcile:** `drizzle-kit migrate` fails with `column/relation X already exists` on a migration whose hash isn't in `drizzle.__drizzle_migrations`.
+- **Symptom that means you need reconcile:** `npm run db:migrate -w api` (programmatic migrator) fails with `column/relation X already exists` on a migration whose hash isn't in `drizzle.__drizzle_migrations`.
 
 ### Games-table INSERT paths must use the name-dedup guard (STRICT)
 
@@ -293,7 +293,7 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 | Lint | `npm run lint` (api + web) | `validate-ci.sh` |
 | Unit tests | `npm run test:cov -w api`, `vitest run --coverage` (web) | `validate-ci.sh` |
 | Integration tests | `npm run test:integration -w api` | `validate-ci.sh` |
-| Migration validation | Postgres container + `drizzle-kit migrate` | `validate-migrations.sh` (conditional) |
+| Migration validation | Postgres container + programmatic migrator (`run-migrations-with-sentry.ts`) | `validate-migrations.sh` (conditional) |
 | Container startup | Build + start allinone image, health checks | `validate-ci.sh` (conditional) |
 | Playwright (desktop + mobile) | `npx playwright test` | `validate-ci.sh` (conditional + env-gated) |
 | Discord smoke (companion bot) | `cd tools/test-bot && npm run smoke` | `validate-ci.sh` (conditional + env-gated) |
@@ -409,7 +409,7 @@ Smoke tests in `tools/test-bot/src/smoke/tests/` validate real Discord behavior 
 - `POST /admin/test/flush-embed-queue` — drain embed sync queue
 - `POST /admin/test/flush-notification-buffer` — flush buffered notifications
 - `POST /admin/test/flush-voice-sessions` — flush in-memory voice sessions to DB
-- See `api/src/admin/demo-test.controller.ts` for the full list
+- See the `api/src/admin/demo-test-*.controller.ts` controllers (start with `demo-test-core.controller.ts`) for the full list
 
 **Test categories** map to files in `tools/test-bot/src/smoke/tests/*.test.ts` — see file names for current coverage areas.
 

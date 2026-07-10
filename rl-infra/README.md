@@ -44,7 +44,8 @@ Proxmox host
 | Hostname                          | Points at                                       |
 | --------------------------------- | ----------------------------------------------- |
 | `fleet.${RL_PUBLIC_DOMAIN}`       | Mobile fleet dashboard (bookmark on phone)      |
-| `{slug}test.${RL_PUBLIC_DOMAIN}`  | Env `{slug}` allinone — share URL with testers  |
+| `slot-N.${RL_PUBLIC_DOMAIN}`      | Slot N's active env — share URL with testers (Discord OAuth works here) |
+| `{slug}test.${RL_PUBLIC_DOMAIN}`  | Env `{slug}` allinone — backward-compat only; Discord login does NOT work, don't hand out |
 
 Wired through your external reverse proxy (NPM at the operator's apex
 domain). DNS: `*.{RL_PUBLIC_DOMAIN}` → operator's WAN IP via Cloudflare or
@@ -100,26 +101,30 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
    `agent_id`, `branch`, `started_at`, `last_heartbeat` in `claims.json`.
 2. Mutagen sync session starts: `~/Documents/Projects/Raid-Ledger` ↔
    `proxmox-vm:/srv/rl-infra/runners/slot-N/worktree`. Excludes `node_modules`,
-   `dist`, `coverage`, `.git/objects`.
+   `dist`, `coverage`, and the entire `.git` tree (the runner-side `.git` is
+   scaffolded separately via `git init` + `git fetch origin`), plus
+   `*.tsbuildinfo` and Playwright output dirs.
 3. Operator/agent works on the laptop. Saves trigger Mutagen → ~1s to runner.
 4. Heavy commands (`validate-ci`, `env spin`, jest) ship to the runner via
    `rl <cmd>` or operator-only VSCode Remote-SSH terminal. Agents use
    `mcp__mcp-rl-fleet__rl_run_on_runner` / `rl_validate_ci` instead.
-5. Local CLI heartbeats every 60s. Missed for 5min → slot auto-released.
+5. Local CLI heartbeats every 60s. Missed for 30min → slot auto-released.
 6. `rl release` → destroys child envs, prunes scoped to slot label, resets
    worktree dir, drops the claim.
 
 ## Cleanup ("account for every runner's mess")
 
-- **Container resource caps:** `cpus: 2.0`, `mem_limit: 6g`, `pids_limit: 4096`
-  on every runner. A runaway test throttles itself.
+- **Container resource caps:** `cpus: 2.0`, `mem_limit: 4g`, `pids_limit: 4096`
+  on every runner (raise to 6g only if you add RAM to the host). A runaway test
+  throttles itself.
 - **Disk quotas:** ZFS quota of 20GB per `runners/slot-N` dataset.
 - **Env TTL:** every env gets `rl.ttl=24h` + `rl.last-touched` labels. Sweeper
   destroys past-TTL.
-- **Dead claim sweep:** heartbeat older than 5min → slot released, claim record
-  cleared.
-- **Image/volume GC:** `docker system prune --volumes` scoped to `rl.role=*`
-  labels every 15min via `gc-sweeper`.
+- **Dead claim sweep:** heartbeat older than 30min (`CLAIM_HEARTBEAT_TIMEOUT_SECONDS`,
+  raised from 5min — fleet-grace fix) → slot released, claim record cleared.
+- **Image/volume/container GC:** `docker {image,volume,container} prune -f` scoped
+  to the `rl.role=env` label every 15min via `gc-sweeper` (runner and infra
+  containers are never pruned).
 - **Audit trail:** every orchestrator call writes a line to
   `/srv/rl-infra/state/audit.log` (claim ID, command, timestamp, outcome).
 - **`rl status`** surfaces all of the above in one screen.
@@ -214,14 +219,17 @@ intentionally operator-only.
 | Resource live view (op.)    | `rl top` → ctop inside the VM                                                |
 | VSCode debugger (operator-only) | Remote-SSH into runner, `launch.json` attaches to 9229                   |
 | Profiling (operator-only)   | `clinic doctor` etc. pre-installed in runner image                           |
-| Network capture (op.)       | `rl tcpdump <slot>` → tcpdump in the runner                                  |
+| Network capture (op.)       | `rl shell` → run `tcpdump` inside the runner (pre-installed in the runner image) |
 | Stack-trace clickable paths (op.) | VSCode Remote-SSH session uses the runner's filesystem                 |
 | "What did agent X do?" (op.)| `cat /srv/rl-infra/state/audit.log \| grep <agent-id>`                       |
 | Snapshot before risky run (op.) | `rl snapshot create pre-experiment` → ZFS-backed                         |
 
 ## DR — airplane mode
 
-The same `rl-infra/cli/rl` runs locally. At startup it probes `nc -z $RL_PROXMOX_HOST 22`:
+The same `rl-infra/cli/rl` runs locally. At startup it probes the VM with a
+3-second batch-mode SSH connection
+(`ssh -o BatchMode=yes -o ConnectTimeout=3 $RL_PROXMOX_USER@$RL_PROXMOX_HOST true`
+— SSH rather than `nc` so ssh-config Host aliases resolve):
 
 - Reachable → remote mode (everything in this doc).
 - Unreachable OR `RL_TARGET=local` → falls back to today's local model:
@@ -250,7 +258,7 @@ operator (NOT an agent) runs:
 ssh proxmox-vm    # operator-only SSH as the `rl` user
 cd /srv/rl-infra
 docker compose up -d
-./bin/init-state    # creates claims.json, env-registry.json, audit.log
+./orchestrator/bin/init-state    # creates claims.json, env-registry.json, audit.log
 ```
 
 From the laptop:
