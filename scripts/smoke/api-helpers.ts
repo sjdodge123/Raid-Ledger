@@ -362,6 +362,17 @@ interface PollForConditionOpts {
  * is the only reliable barrier. See `feedback_smoke_polling_for_async_writes.md`
  * (ROK-1156) and the canonical reference impl in
  * `admin-slow-queries-log.smoke.spec.ts`.
+ *
+ * CONTRACT: readiness is truthiness (`if (last)`), so a check that resolves
+ * to a falsy-but-valid value (`0`, `''`, `false`) is treated as "not yet
+ * ready" and will poll until timeout. Return a non-null object on ready and
+ * `null` otherwise — never a bare count or boolean.
+ *
+ * @example
+ * const data = await pollForCondition(async () => {
+ *     const res = await apiGet(token, '/users/management?page=1&limit=20');
+ *     return res?.users?.length ? res : null; // not `res?.users?.length`
+ * }, { description: '/users/management' });
  */
 export async function pollForCondition<T>(
     check: () => Promise<T | null | undefined>,
