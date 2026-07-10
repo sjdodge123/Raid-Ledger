@@ -199,6 +199,16 @@ function describeBackupService() {
         expect.stringContaining('test.dump'),
       );
     });
+
+    it('should accept listed filenames with spaces or plus signs', () => {
+      // listBackups only filters on '.dump' — any listed file must remain
+      // deletable/restorable (a strict charset regressed this once).
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      service.deleteBackup('daily', 'pre migration+copy.dump');
+      expect(mockFs.unlinkSync).toHaveBeenCalledWith(
+        expect.stringContaining('pre migration+copy.dump'),
+      );
+    });
   });
 
   function describeResetInstance() {

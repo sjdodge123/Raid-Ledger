@@ -40,7 +40,14 @@ const SANITIZED_EXCLUDED_TABLES = [
   'consumed_intent_tokens',
 ] as const;
 
-const SAFE_FILENAME = /^[a-zA-Z0-9_.-]+$/;
+// Traversal-only filename guard: block path separators and '..' but accept any
+// other character (spaces, '+', …) — listBackups only filters on '.dump', so a
+// stricter charset would make listed files impossible to download/delete/restore.
+const isSafeBackupFilename = (filename: string): boolean =>
+  filename.length > 0 &&
+  !filename.includes('/') &&
+  !filename.includes('\\') &&
+  !filename.includes('..');
 
 @Injectable()
 export class BackupService implements OnModuleInit {
@@ -187,7 +194,7 @@ export class BackupService implements OnModuleInit {
   getBackupFilePath(type: 'daily' | 'migration', filename: string): string {
     const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
     const notFound = `Backup file not found: ${type}/${filename}`;
-    if (!SAFE_FILENAME.test(filename)) throw new NotFoundException(notFound);
+    if (!isSafeBackupFilename(filename)) throw new NotFoundException(notFound);
     const resolved = path.resolve(dir, filename);
     if (path.dirname(resolved) !== path.resolve(dir))
       throw new NotFoundException(notFound);
