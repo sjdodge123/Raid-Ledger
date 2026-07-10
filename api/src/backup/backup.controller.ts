@@ -7,6 +7,7 @@ import {
   Res,
   UseGuards,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
@@ -21,6 +22,8 @@ import { BackupService } from './backup.service';
 @RateLimit('admin')
 export class BackupController {
   constructor(private readonly backupService: BackupService) {}
+
+  private readonly logger = new Logger(BackupController.name);
 
   @Get()
   listBackups() {
@@ -51,7 +54,14 @@ export class BackupController {
     const basename = path.basename(absPath);
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${basename}"`);
-    fs.createReadStream(absPath).pipe(res);
+    const stream = fs.createReadStream(absPath);
+    stream.on('error', (err) => {
+      this.logger.warn(
+        `Backup download stream error for ${basename}: ${err.message}`,
+      );
+      res.destroy(err);
+    });
+    stream.pipe(res);
   }
 
   @Delete(':type/:filename')
