@@ -134,8 +134,8 @@ describe('NotificationItem — existing navigation paths (regression guards)', (
         renderItem(
             makeNotification({
                 type: 'community_lineup',
-                // NOTE: real wire payload omits lineupId (lineup-reminder-dispatch.helpers.ts:52)
-                // — handleClick needs both, latent gap tracked separately
+                // Wire shape matches lineup-reminder-dispatch.helpers.ts, which
+                // sends both matchId and lineupId for scheduling reminders.
                 payload: { subtype: 'lineup_scheduling_reminder', matchId: 13, lineupId: 43 },
             }),
         );
