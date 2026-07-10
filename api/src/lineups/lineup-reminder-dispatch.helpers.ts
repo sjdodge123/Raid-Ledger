@@ -38,10 +38,14 @@ export async function sendVoteReminder(
 
 export async function sendSchedulingReminder(
   deps: DispatchDeps,
+  lineupId: number,
   matchId: number,
   userId: number,
   window: '24h' | '1h',
 ): Promise<void> {
+  // Dedup key intentionally keys on matchId only (the PK of
+  // community_lineup_matches) — adding lineupId would change the key
+  // and re-DM users who already received reminders.
   const key = `lineup-sched-remind:${matchId}:${userId}:${window}`;
   if (await deps.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
   await deps.notificationService.create({
@@ -49,7 +53,9 @@ export async function sendSchedulingReminder(
     type: 'community_lineup',
     title: 'Scheduling Reminder',
     message: 'Your match is waiting -- pick a time!',
-    payload: { subtype: 'lineup_scheduling_reminder', matchId },
+    // lineupId + matchId are both required for the web notification
+    // click-through (/community-lineup/:lineupId/schedule/:matchId).
+    payload: { subtype: 'lineup_scheduling_reminder', lineupId, matchId },
   });
 }
 

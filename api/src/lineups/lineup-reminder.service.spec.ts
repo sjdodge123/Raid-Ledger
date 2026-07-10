@@ -293,6 +293,7 @@ describe('LineupReminderService', () => {
           type: 'community_lineup',
           payload: expect.objectContaining({
             subtype: 'lineup_scheduling_reminder',
+            lineupId: LINEUP_ID,
           }),
         }),
       );
@@ -427,6 +428,7 @@ describe('LineupReminderService', () => {
           type: 'community_lineup',
           payload: expect.objectContaining({
             subtype: 'lineup_scheduling_reminder',
+            lineupId: LINEUP_ID,
             matchId: 100,
           }),
         }),
