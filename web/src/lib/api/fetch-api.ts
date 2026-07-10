@@ -3,6 +3,7 @@ import { getAuthToken } from '../../hooks/use-auth';
 import { ensureFreshToken } from './refresh-client';
 import { getAuthMethod } from './silent-reauth';
 import { Sentry } from '../../sentry';
+import type { ZodType } from 'zod';
 
 function buildHeaders(options: RequestInit): Record<string, string> {
     const token = getAuthToken();
@@ -83,7 +84,7 @@ export async function fetchWithAuth(
 export async function fetchApi<T>(
     endpoint: string,
     options: RequestInit = {},
-    schema?: { safeParse: (data: unknown) => { success: true; data: T } | { success: false; error: { issues: unknown[] } } }
+    schema?: ZodType<T>
 ): Promise<T> {
     const response = await fetchWithAuth(endpoint, options);
 
