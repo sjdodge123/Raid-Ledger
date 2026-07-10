@@ -61,7 +61,9 @@ if (
 // ConfigModule.forRoot() in AppModule reads api/.env during the import above,
 // setting process.env.DATABASE_URL to the dev DB. Delete it so getTestApp()
 // uses Testcontainers for a fresh database instead of hitting the dev DB.
-if (!process.env.CI) {
+// Strict check mirrors test-app.ts::provisionDatabase (`CI === 'true'`) so
+// non-standard values like CI=1 behave identically in both files.
+if (process.env.CI !== 'true') {
   delete process.env.DATABASE_URL;
 }
 
