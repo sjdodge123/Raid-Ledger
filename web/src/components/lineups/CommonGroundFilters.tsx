@@ -94,16 +94,16 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
     // count the FIRST time we see a known value (>0). Captures intent on
     // entry to the nomination panel without re-pinning when invitees join
     // or leave mid-building, and without overriding manual adjustments.
-    const didInitPlayersRef = useRef(false);
+    const intentCapturedRef = useRef(false);
     useEffect(() => {
-        if (didInitPlayersRef.current) return;
+        if (intentCapturedRef.current) return;
         // ROK-1348: a brand-new lineup has participantCount === 1 (creator
         // only). Auto-pinning maxPlayers to 1 would filter out every
         // multiplayer game, which is pathological for a co-op nomination
         // panel. Treat <= 1 as "no auto-set" so the slider stays open until
         // there are at least 2 eligible players.
         if (!participantCount || participantCount <= 1) return;
-        didInitPlayersRef.current = true;
+        intentCapturedRef.current = true;
         if (filters.maxPlayers != null) return;
         onChange({ ...filters, maxPlayers: participantCount });
     }, [participantCount, filters, onChange]);
