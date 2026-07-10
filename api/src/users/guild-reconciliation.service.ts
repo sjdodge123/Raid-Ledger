@@ -106,9 +106,9 @@ export class GuildReconciliationService {
           not(like(schema.users.discordId, 'unlinked:%')),
         ),
       );
-    return rows.filter(
-      (r): r is { id: number; discordId: string } => r.discordId !== null,
-    );
+    // SQL isNotNull(discordId) above guarantees non-null; Drizzle still infers
+    // `string | null` from the nullable column, so assert the narrowed type.
+    return rows as { id: number; discordId: string }[];
   }
 
   /** Deactivate each gap via the shared notification path (idempotent). */
