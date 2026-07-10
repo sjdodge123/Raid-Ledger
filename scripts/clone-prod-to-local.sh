@@ -176,7 +176,7 @@ prod_get_safe() {
     # Usage: prod_get_safe <path> [curl args...]
     local pth="$1"; shift
     if [[ "$pth" != "$PROD_GET_ALLOWED_PREFIX" \
-        && ! "$pth" =~ ^/admin/backups/(daily|migration)/[A-Za-z0-9_.-]+/download$ ]]; then
+        && ! "$pth" =~ ^/admin/backups/(daily|migration)/[A-Za-z0-9_][A-Za-z0-9_.-]*/download$ ]]; then
         red "BLOCKED: GET $pth is not on the prod-safe whitelist."
         red "Allowed: $PROD_GET_ALLOWED_PREFIX  OR  $PROD_GET_ALLOWED_PREFIX/(daily|migration)/<file>/download"
         exit 1

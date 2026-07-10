@@ -59,6 +59,9 @@ assert_allowed "/admin/backups/migration/pre_foo_20260101.dump/download"
 assert_blocked "/admin/backups/../users/1/download"
 assert_blocked "/admin/backups/daily/../../admin/settings/x/download"
 assert_blocked "/admin/backups/a/b/c/download"
+assert_blocked "/admin/backups/daily/../download"
+assert_blocked "/admin/backups/daily/./download"
+assert_blocked "/admin/backups/daily/.hidden/download"
 
 echo ""
 if [[ $FAIL -eq 0 ]]; then
