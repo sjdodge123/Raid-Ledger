@@ -190,12 +190,12 @@ function describeBackupCRUD() {
       expect(res.status).toBe(404);
     });
 
-    it('should reject path traversal', async () => {
+    it('returns 404 (no leak) on path traversal', async () => {
       const res = await testApp.request
         .delete('/admin/backups/daily/..%2F..%2Fetc%2Fpasswd')
         .set('Authorization', `Bearer ${adminToken}`);
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(404);
     });
   }
   describe('DELETE /admin/backups/:type/:filename', () =>

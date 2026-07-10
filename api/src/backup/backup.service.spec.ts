@@ -178,10 +178,10 @@ function describeBackupService() {
   describe('deleteBackup', () => {
     it('should reject path traversal attempts', () => {
       expect(() => service.deleteBackup('daily', '../etc/passwd')).toThrow(
-        'Invalid filename',
+        'Backup file not found',
       );
       expect(() => service.deleteBackup('daily', 'foo/bar')).toThrow(
-        'Invalid filename',
+        'Backup file not found',
       );
     });
 
@@ -255,7 +255,7 @@ function describeBackupService() {
     it('should reject path traversal attempts', async () => {
       await expect(
         service.restoreFromBackup('daily', '../bad'),
-      ).rejects.toThrow('Invalid filename');
+      ).rejects.toThrow('Backup file not found');
     });
 
     it('should throw NotFoundException for missing file', async () => {
