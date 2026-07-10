@@ -1,6 +1,13 @@
 /**
  * Scheduling poll controller (ROK-965).
  * Endpoints for schedule poll page, slot suggestions, voting, and event creation.
+ *
+ * ROUTE-SHADOW GUARD (ROK-1235): literal-segment routes are FORBIDDEN on this
+ * controller — only `:lineupId/schedule/...` patterns. LineupsController
+ * registers first under the same 'lineups' prefix with `@Get(':id')` +
+ * ParseIntPipe, so any literal route added here (e.g. `@Get('archive')`) would
+ * be shadowed and return 400. Put literal routes on a separate controller
+ * (see scheduling-banner.controller.ts, which lives at /scheduling/banner).
  */
 import {
   Controller,
