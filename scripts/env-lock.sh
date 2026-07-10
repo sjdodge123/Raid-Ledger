@@ -403,11 +403,20 @@ emit_acquire_result() {
 # -----------------------------------------------------------------------------
 # Subcommand: release
 # -----------------------------------------------------------------------------
-# Match order: --agent-id (primary, identity-stable across branch/worktree
-# renames) → (branch, worktree) (fallback, preserves bare-CLI behavior). We
-# always remove our queue entry by (branch, worktree) because the queue records
-# the requester's branch+worktree at enqueue time and is unaffected by holder
+# Match order: --agent-id (identity-stable across branch/worktree renames) →
+# (branch, worktree) (fallback, preserves bare-CLI behavior). We always remove
+# our queue entry by (branch, worktree) because the queue records the
+# requester's branch+worktree at enqueue time and is unaffected by holder
 # identity drift.
+#
+# NOTE: agent_id is ADVISORY, not authoritative. A supplied --agent-id that
+# does not match the holder falls through to the branch+worktree match. Do NOT
+# "harden" this into a refusal: the MCP wrapper persists its stamp to a single
+# machine-global file (~/.raid-ledger/mcp-agent-id) that a parallel agent's
+# enqueue-only acquire overwrites, so a wrong-looking agent_id is routinely the
+# RIGHTFUL holder carrying a clobbered stamp. A refusal here zombies the lease
+# until TTL expiry (attempted 2026-07-10, reverted — see TECH-DEBT-BACKLOG.md
+# 2026-07-10 entry).
 cmd_release() {
     if [ $# -lt 2 ] || [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
         echo '{"error": "missing_required_args", "expected": "<branch> <worktree> [--agent-id ID]"}' >&2
