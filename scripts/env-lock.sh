@@ -183,15 +183,6 @@ is_holder_by_agent() {
         '.holder != null and (.holder.agent_id // "") != "" and .holder.agent_id == $a' >/dev/null
 }
 
-# True when a non-empty agent_id was supplied AND the holder has a non-empty
-# agent_id AND they differ — wrong identity, not merely missing identity.
-is_agent_id_mismatch() {
-    local state="$1" agent_id="$2"
-    [ -z "$agent_id" ] && return 1
-    echo "$state" | jq -e --arg a "$agent_id" \
-        '.holder != null and (.holder.agent_id // "") != "" and .holder.agent_id != $a' >/dev/null
-}
-
 # True if (branch, worktree) is already in the queue.
 is_in_queue() {
     local state="$1" branch="$2" worktree="$3"
@@ -413,12 +404,9 @@ emit_acquire_result() {
 # Subcommand: release
 # -----------------------------------------------------------------------------
 # Match order: --agent-id (primary, identity-stable across branch/worktree
-# renames) → (branch, worktree) (fallback, preserves bare-CLI behavior). The
-# fallback applies only when the supplied OR holder agent_id is empty; a
-# non-empty mismatch refuses the release with matched_by="agent_id_mismatch"
-# so a wrong identity cannot release someone else's lease. We always remove
-# our queue entry by (branch, worktree) because the queue records the
-# requester's branch+worktree at enqueue time and is unaffected by holder
+# renames) → (branch, worktree) (fallback, preserves bare-CLI behavior). We
+# always remove our queue entry by (branch, worktree) because the queue records
+# the requester's branch+worktree at enqueue time and is unaffected by holder
 # identity drift.
 cmd_release() {
     if [ $# -lt 2 ] || [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
@@ -443,13 +431,6 @@ cmd_release() {
         was_holder=true
         matched_by="agent_id"
         state=$(echo "$state" | jq '.holder = null')
-    elif is_agent_id_mismatch "$state" "$agent_id"; then
-        # Wrong (non-empty) --agent-id against a holder that HAS an agent_id:
-        # refuse the branch+worktree fallback — a wrong identity must not
-        # release someone else's lease (stale ~/.raid-ledger/mcp-agent-id in a
-        # shared worktree). Bare-CLI (no --agent-id) and empty-holder-agent_id
-        # (deploy_dev.sh-acquired) releases still fall through below.
-        matched_by="agent_id_mismatch"
     elif is_holder_self "$state" "$branch" "$worktree"; then
         was_holder=true
         matched_by="branch_worktree"

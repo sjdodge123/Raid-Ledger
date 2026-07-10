@@ -137,12 +137,10 @@ describe('branch+worktree fallback (ROK-1318)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scenario 3: wrong agent_id, wrong branch+worktree — release no-ops, and the
-// wrong non-empty identity is surfaced as matched_by="agent_id_mismatch"
-// rather than silently reporting no match.
+// Scenario 3: wrong agent_id, wrong branch+worktree — release no-ops.
 // ---------------------------------------------------------------------------
 describe('no-match release is a no-op (ROK-1318)', () => {
-  it('was_holder=false + matched_by=agent_id_mismatch when neither predicate matches', () => {
+  it('was_holder=false + matched_by=null when neither predicate matches', () => {
     runScript([
       'acquire',
       'rok-1318',
@@ -169,8 +167,7 @@ describe('no-match release is a no-op (ROK-1318)', () => {
     // released:true always (the release command ran), but was_holder:false.
     expect(released.released).toBe(true);
     expect(released.was_holder).toBe(false);
-    // Wrong non-empty agent_id against an agent_id-stamped holder is surfaced.
-    expect(released.matched_by).toBe('agent_id_mismatch');
+    expect(released.matched_by).toBeNull();
     // Holder unchanged.
     expect(released.holder.agent_id).toBe('realholder0000000');
   });
@@ -234,65 +231,6 @@ describe('acquire_refresh_self preserves agent_id (ROK-1318)', () => {
     ]);
     const status = parse<{ holder: { agent_id: string } }>(runScript(['status']).stdout);
     expect(status.holder.agent_id).toBe('secondid000000000');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Scenario 6: wrong non-empty --agent-id must NOT fall through to the
-// branch+worktree match. A stale/foreign identity releasing someone else's
-// lease is the shared-worktree hazard; the fallback is only for callers that
-// don't plumb an agent_id at all (bare CLI) or holders that never had one
-// (deploy_dev.sh-acquired).
-// ---------------------------------------------------------------------------
-describe('non-empty agent_id mismatch refuses branch+worktree fallback', () => {
-  it('release with wrong --agent-id against an agent_id-stamped holder is refused', () => {
-    runScript([
-      'acquire',
-      'rok-1318',
-      '/wt',
-      'p',
-      '--agent-id',
-      'realholder0000000',
-    ]);
-
-    // Same branch+worktree as the holder, but a DIFFERENT non-empty agent_id.
-    const released = parse<{
-      released: boolean;
-      was_holder: boolean;
-      matched_by: string | null;
-    }>(
-      runScript([
-        'release',
-        'rok-1318',
-        '/wt',
-        '--agent-id',
-        'wrong-id-12345678',
-      ]).stdout,
-    );
-    expect(released.released).toBe(true);
-    expect(released.was_holder).toBe(false);
-    expect(released.matched_by).toBe('agent_id_mismatch');
-
-    // Holder untouched — the real owner keeps the lease.
-    const status = parse<{ holder: { agent_id: string } }>(runScript(['status']).stdout);
-    expect(status.holder.agent_id).toBe('realholder0000000');
-  });
-
-  it('release WITH --agent-id against an agent_id-less holder still falls back', () => {
-    // deploy_dev.sh-style bare acquire — holder.agent_id normalized to "".
-    runScript(['acquire', 'rok-1318', '/wt', 'p']);
-
-    const released = parse<{ was_holder: boolean; matched_by: string | null }>(
-      runScript([
-        'release',
-        'rok-1318',
-        '/wt',
-        '--agent-id',
-        'mcp-agent00000000',
-      ]).stdout,
-    );
-    expect(released.was_holder).toBe(true);
-    expect(released.matched_by).toBe('branch_worktree');
   });
 });
 
