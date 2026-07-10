@@ -42,7 +42,7 @@ ENV_FILE="$REPO_ROOT/.env.clone"
 
 # Whitelists. ANYTHING not on these lists is rejected.
 PROD_POST_ALLOWED=("/auth/local" "/admin/backups")
-PROD_GET_ALLOWED_PREFIX="/admin/backups"  # exact list endpoint or */download
+PROD_GET_ALLOWED_PREFIX="/admin/backups"  # exact list endpoint or (daily|migration)/<file>/download
 
 MODE="fresh"   # default per locked decision #5
 FORCE=false
@@ -175,9 +175,10 @@ prod_post_safe() {
 prod_get_safe() {
     # Usage: prod_get_safe <path> [curl args...]
     local pth="$1"; shift
-    if [[ "$pth" != "$PROD_GET_ALLOWED_PREFIX" && "$pth" != "$PROD_GET_ALLOWED_PREFIX"/*/download ]]; then
+    if [[ "$pth" != "$PROD_GET_ALLOWED_PREFIX" \
+        && ! "$pth" =~ ^/admin/backups/(daily|migration)/[A-Za-z0-9_.-]+/download$ ]]; then
         red "BLOCKED: GET $pth is not on the prod-safe whitelist."
-        red "Allowed: $PROD_GET_ALLOWED_PREFIX  OR  $PROD_GET_ALLOWED_PREFIX/<file>/download"
+        red "Allowed: $PROD_GET_ALLOWED_PREFIX  OR  $PROD_GET_ALLOWED_PREFIX/(daily|migration)/<file>/download"
         exit 1
     fi
     curl -fsS "$PROD_URL$pth" "$@"
