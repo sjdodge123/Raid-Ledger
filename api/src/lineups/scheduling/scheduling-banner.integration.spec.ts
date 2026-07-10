@@ -38,10 +38,9 @@ describe('GET /scheduling/banner (ROK-1235)', () => {
     const res = await testApp.request.get('/scheduling/banner');
 
     expect(res.status).toBe(200);
-    const bodyEmpty =
-      res.text === '' ||
-      res.text === 'null' ||
-      Object.keys(res.body ?? {}).length === 0;
-    expect(bodyEmpty).toBe(true);
+    // Only a truly empty body may pass: '' (no payload) or 'null' (JSON null).
+    // A literal '{}' must FAIL — the web client's truthiness gate would render
+    // an empty banner shell if the endpoint regressed to an empty object.
+    expect(['', 'null']).toContain(res.text);
   });
 });
