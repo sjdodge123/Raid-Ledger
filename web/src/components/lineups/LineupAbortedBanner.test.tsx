@@ -23,6 +23,10 @@ describe('LineupAbortedBanner', () => {
         expect(
             screen.getByTestId('lineup-aborted-banner'),
         ).toBeInTheDocument();
+        // role="status" carries an implicit polite live region; the explicit
+        // aria-live attribute is redundant and must stay absent.
+        const banner = screen.getByRole('status');
+        expect(banner).not.toHaveAttribute('aria-live');
         expect(screen.getByText(/this lineup was cancelled/i)).toBeInTheDocument();
         expect(screen.getByText(/reason/i)).toBeInTheDocument();
         expect(
