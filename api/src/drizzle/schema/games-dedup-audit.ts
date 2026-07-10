@@ -17,6 +17,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { games } from './games';
 import type { BlastRadiusCounts } from '../../admin/games-dedup-audit.helpers';
+import type { UniqueConflictCounts } from '../../admin/games-dedup-unique-conflicts.helpers';
 
 export const gamesDedupAudit = pgTable(
   'games_dedup_audit',
@@ -33,7 +34,7 @@ export const gamesDedupAudit = pgTable(
       .$type<BlastRadiusCounts>()
       .notNull(),
     uniqueConflicts: jsonb('unique_conflicts')
-      .$type<Record<string, number>>()
+      .$type<UniqueConflictCounts>()
       .notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     snapshotAt: timestamp('snapshot_at').notNull(),
