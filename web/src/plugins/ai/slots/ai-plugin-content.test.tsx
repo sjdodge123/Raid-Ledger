@@ -54,11 +54,24 @@ function mockAiUsage() {
     );
 }
 
+function mockAiFeatures() {
+    server.use(
+        http.get(`${API}/admin/ai/features`, () =>
+            HttpResponse.json({
+                chatEnabled: false,
+                dynamicCategoriesEnabled: false,
+                aiSuggestionsEnabled: true,
+            }),
+        ),
+    );
+}
+
 describe('AiPluginContent', () => {
     beforeEach(() => {
         mockAiStatus(true);
         mockAiProviders();
         mockAiUsage();
+        mockAiFeatures();
     });
 
     it('renders the integration card with title', async () => {
@@ -106,6 +119,7 @@ describe('AiPluginContent (adversarial)', () => {
         mockAiStatus(true);
         mockAiProviders();
         mockAiUsage();
+        mockAiFeatures();
     });
 
     it('renders when pluginSlug is "ai"', async () => {
@@ -155,6 +169,7 @@ describe('ROK-1000: TestChatSection error message', () => {
         mockAiStatus(true);
         mockAiProviders();
         mockAiUsage();
+        mockAiFeatures();
     });
 
     it('AC9: surfaces actual error message from mutation, not hardcoded "Request failed"', async () => {
