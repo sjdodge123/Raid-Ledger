@@ -178,6 +178,7 @@ export class LineupReminderService {
       for (const userId of userIds) {
         await sendSchedulingReminder(
           this.deps(),
+          match.lineupId,
           match.matchId,
           userId,
           window,

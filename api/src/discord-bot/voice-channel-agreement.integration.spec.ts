@@ -86,7 +86,10 @@ async function seedAgreementFixture(): Promise<{
       creatorId: testApp.seed.adminUser.id,
       gameId: gameB.id,
       recurrenceGroupId: SERIES_R,
-      duration: [new Date(now - 60 * 60 * 1000), new Date(now + 2 * 60 * 60 * 1000)] as [Date, Date],
+      duration: [
+        new Date(now - 60 * 60 * 1000),
+        new Date(now + 2 * 60 * 60 * 1000),
+      ] as [Date, Date],
       maxAttendees: 20,
     })
     .returning();
@@ -114,7 +117,10 @@ async function seedAgreementFixture(): Promise<{
 }
 
 /** Insert a non-bench, signed-up anonymous Discord signup for the event. */
-async function seedSignup(eventId: number, discordUserId: string): Promise<void> {
+async function seedSignup(
+  eventId: number,
+  discordUserId: string,
+): Promise<void> {
   await testApp.db.insert(schema.eventSignups).values({
     eventId,
     discordUserId,
@@ -156,7 +162,9 @@ afterEach(async () => {
   // Reset the singleton in-memory session map so a join from one test cannot
   // leak into the next (event ids are unique, but a stale dirty session would
   // otherwise try to flush against a now-deleted event id).
-  (voiceAttendance as unknown as { sessions: Map<string, unknown> }).sessions.clear();
+  (
+    voiceAttendance as unknown as { sessions: Map<string, unknown> }
+  ).sessions.clear();
   testApp.seed = await truncateAllTables(testApp.db);
 });
 

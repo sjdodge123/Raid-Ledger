@@ -22,8 +22,6 @@ import { enrichChunkEarlyAccess } from './itad-early-access-sync.helpers';
 import { perfLog } from '../common/perf-logger';
 import { extractErrorDetail } from '../common/pg-error.helpers';
 
-export { extractErrorDetail };
-
 /** Number of games to fetch from ITAD per batch request. */
 export const CHUNK_SIZE = 50;
 

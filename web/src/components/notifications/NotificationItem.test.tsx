@@ -57,6 +57,9 @@ beforeEach(() => {
     vi.clearAllMocks();
 });
 
+// Wire shape: backend sends type 'community_lineup' with the lineup discriminator in
+// payload.subtype; handleClick ignores notification.type and dispatches purely on payload
+// fields (see api/src/lineups/lineup-reminder-dispatch.helpers.ts).
 describe('NotificationItem — lineup-only fallback (ROK-1259)', () => {
     const lineupSubtypes = [
         'lineup_vote_reminder',
@@ -66,10 +69,10 @@ describe('NotificationItem — lineup-only fallback (ROK-1259)', () => {
         'lineup_nomination_milestone',
     ];
 
-    it.each(lineupSubtypes)('navigates to /community-lineup/:id for %s', async (type) => {
+    it.each(lineupSubtypes)('navigates to /community-lineup/:id for %s', async (subtype) => {
         const user = userEvent.setup();
         const { onClose } = renderItem(
-            makeNotification({ type, payload: { lineupId: 42 } }),
+            makeNotification({ type: 'community_lineup', payload: { subtype, lineupId: 42 } }),
         );
         await user.click(screen.getByRole('button'));
         expect(mockNavigate).toHaveBeenCalledWith('/community-lineup/42');
@@ -80,8 +83,8 @@ describe('NotificationItem — lineup-only fallback (ROK-1259)', () => {
         const user = userEvent.setup();
         renderItem(
             makeNotification({
-                type: 'lineup_tiebreaker_open',
-                payload: { lineupId: 99, tiebreakerId: 7 },
+                type: 'community_lineup',
+                payload: { subtype: 'lineup_tiebreaker_open', lineupId: 99, tiebreakerId: 7 },
             }),
         );
         await user.click(screen.getByRole('button'));
@@ -92,8 +95,8 @@ describe('NotificationItem — lineup-only fallback (ROK-1259)', () => {
         const user = userEvent.setup();
         renderItem(
             makeNotification({
-                type: 'lineup_vote_reminder',
-                payload: { lineupId: 42 },
+                type: 'community_lineup',
+                payload: { subtype: 'lineup_vote_reminder', lineupId: 42 },
             }),
         );
         await user.click(screen.getByRole('button'));
@@ -106,8 +109,8 @@ describe('NotificationItem — existing navigation paths (regression guards)', (
         const user = userEvent.setup();
         renderItem(
             makeNotification({
-                type: 'lineup_event_created',
-                payload: { eventId: 555, lineupId: 42 },
+                type: 'community_lineup',
+                payload: { subtype: 'lineup_event_created', eventId: 555, lineupId: 42 },
             }),
         );
         await user.click(screen.getByRole('button'));
@@ -118,8 +121,8 @@ describe('NotificationItem — existing navigation paths (regression guards)', (
         const user = userEvent.setup();
         renderItem(
             makeNotification({
-                type: 'lineup_scheduling_open',
-                payload: { matchId: 12, lineupId: 42 },
+                type: 'community_lineup',
+                payload: { subtype: 'lineup_scheduling_open', matchId: 12, lineupId: 42 },
             }),
         );
         await user.click(screen.getByRole('button'));
@@ -130,8 +133,10 @@ describe('NotificationItem — existing navigation paths (regression guards)', (
         const user = userEvent.setup();
         renderItem(
             makeNotification({
-                type: 'lineup_scheduling_reminder',
-                payload: { matchId: 13, lineupId: 43 },
+                type: 'community_lineup',
+                // Wire shape matches lineup-reminder-dispatch.helpers.ts, which
+                // sends both matchId and lineupId for scheduling reminders.
+                payload: { subtype: 'lineup_scheduling_reminder', matchId: 13, lineupId: 43 },
             }),
         );
         await user.click(screen.getByRole('button'));

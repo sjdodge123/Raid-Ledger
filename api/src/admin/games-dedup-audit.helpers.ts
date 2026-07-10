@@ -6,6 +6,8 @@
  * lives here alongside the per-id blast-radius query map.
  */
 import { count, eq, sql } from 'drizzle-orm';
+import type { Column } from 'drizzle-orm';
+import type { PgTable } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { normalizeForDedup } from '../igdb/igdb-search-dedup.helpers';
@@ -121,6 +123,20 @@ function takeCount(rows: { c: number }[]): number {
   return Number(rows[0]?.c ?? 0);
 }
 
+/** Single-shape direct count: SELECT count(*) FROM table WHERE column = id. */
+function countDirect(
+  db: Db,
+  table: PgTable,
+  column: Column,
+  id: number,
+): Promise<number> {
+  return db
+    .select({ c: count() })
+    .from(table)
+    .where(eq(column, id))
+    .then(takeCount);
+}
+
 /** 22 of the 23 FK tables (ROK-1271's 16 + ROK-1270's 6) expose a direct
  * `gameId` (or `decidedGameId` / `winnerGameId` / `gameAId` / `gameBId` /
  * `longestSessionGameId`) column — these all share a single SELECT shape.
@@ -131,88 +147,68 @@ function takeCount(rows: { c: number }[]): number {
  * counts are spread in from `buildExtraCountQueries` (same lockstep order
  * contract — destructure below must match). */
 function buildDirectCountQueries(db: Db, id: number): Promise<number>[] {
-  const c = () => count();
   return [
-    db
-      .select({ c: c() })
-      .from(schema.events)
-      .where(eq(schema.events.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.eventPlans)
-      .where(eq(schema.eventPlans.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.decidedGameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.communityLineupEntries)
-      .where(eq(schema.communityLineupEntries.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.communityLineupTiebreakers)
-      .where(eq(schema.communityLineupTiebreakers.winnerGameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.characters)
-      .where(eq(schema.characters.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.gameTasteVectors)
-      .where(eq(schema.gameTasteVectors.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.gameInterests)
-      .where(eq(schema.gameInterests.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.gameActivityRollups)
-      .where(eq(schema.gameActivityRollups.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.availability)
-      .where(eq(schema.availability.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.channelBindings)
-      .where(eq(schema.channelBindings.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.discordGameMappings)
-      .where(eq(schema.discordGameMappings.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.eventTypes)
-      .where(eq(schema.eventTypes.gameId, id))
-      .then(takeCount),
-    db
-      .select({ c: c() })
-      .from(schema.gameInterestSuppressions)
-      .where(eq(schema.gameInterestSuppressions.gameId, id))
-      .then(takeCount),
+    countDirect(db, schema.events, schema.events.gameId, id),
+    countDirect(db, schema.eventPlans, schema.eventPlans.gameId, id),
+    countDirect(
+      db,
+      schema.communityLineups,
+      schema.communityLineups.decidedGameId,
+      id,
+    ),
+    countDirect(
+      db,
+      schema.communityLineupEntries,
+      schema.communityLineupEntries.gameId,
+      id,
+    ),
+    countDirect(
+      db,
+      schema.communityLineupMatches,
+      schema.communityLineupMatches.gameId,
+      id,
+    ),
+    countDirect(
+      db,
+      schema.communityLineupTiebreakers,
+      schema.communityLineupTiebreakers.winnerGameId,
+      id,
+    ),
+    countDirect(db, schema.characters, schema.characters.gameId, id),
+    countDirect(
+      db,
+      schema.gameTasteVectors,
+      schema.gameTasteVectors.gameId,
+      id,
+    ),
+    countDirect(db, schema.gameInterests, schema.gameInterests.gameId, id),
+    countDirect(
+      db,
+      schema.gameActivityRollups,
+      schema.gameActivityRollups.gameId,
+      id,
+    ),
+    countDirect(
+      db,
+      schema.gameActivitySessions,
+      schema.gameActivitySessions.gameId,
+      id,
+    ),
+    countDirect(db, schema.availability, schema.availability.gameId, id),
+    countDirect(db, schema.channelBindings, schema.channelBindings.gameId, id),
+    countDirect(
+      db,
+      schema.discordGameMappings,
+      schema.discordGameMappings.gameId,
+      id,
+    ),
+    countDirect(db, schema.eventTypes, schema.eventTypes.gameId, id),
+    countDirect(
+      db,
+      schema.gameInterestSuppressions,
+      schema.gameInterestSuppressions.gameId,
+      id,
+    ),
     ...buildExtraCountQueries(db, id),
   ];
 }

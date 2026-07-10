@@ -69,12 +69,30 @@ function takeInt(rows: { c: number }[]): number {
 }
 
 /**
+ * SQL-injection guard for the sql.raw interpolations below: canonicalId and
+ * every dupId MUST be integers before being stitched into raw SQL text.
+ * All current callers pass typed games.id values; this makes the guarantee
+ * explicit instead of relying on caller discipline.
+ */
+function assertIntegerIds(input: UniqueConflictInput): void {
+  if (
+    !Number.isInteger(input.canonicalId) ||
+    !input.dupIds.every((id) => Number.isInteger(id))
+  ) {
+    throw new Error(
+      'computeUniqueConflicts: canonicalId and all dupIds must be integers',
+    );
+  }
+}
+
+/**
  * Count dup-side rows that would collide with a canonical-side row on a
  * composite UNIQUE(game_id, ...otherCols). Uses an INNER JOIN where the
  * "other columns" must match between dup-side and canonical-side rows.
  *
  * `tableName` is interpolated via `sql.raw` — only ever called with
- * compile-time literals below, NEVER with user input.
+ * compile-time literals below, NEVER with user input. Numeric inputs are
+ * asserted integer at the `computeUniqueConflicts` entry point.
  */
 async function countCompositeConflicts(
   db: Db,
@@ -121,6 +139,7 @@ export async function computeUniqueConflicts(
   db: Db,
   input: UniqueConflictInput,
 ): Promise<UniqueConflictCounts> {
+  assertIntegerIds(input);
   if (input.dupIds.length === 0) return { ...EMPTY };
 
   const [

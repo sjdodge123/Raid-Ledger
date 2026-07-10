@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -41,7 +40,14 @@ const SANITIZED_EXCLUDED_TABLES = [
   'consumed_intent_tokens',
 ] as const;
 
-const SAFE_FILENAME = /^[a-zA-Z0-9_.-]+$/;
+// Traversal-only filename guard: block path separators and '..' but accept any
+// other character (spaces, '+', …) — listBackups only filters on '.dump', so a
+// stricter charset would make listed files impossible to download/delete/restore.
+const isSafeBackupFilename = (filename: string): boolean =>
+  filename.length > 0 &&
+  !filename.includes('/') &&
+  !filename.includes('\\') &&
+  !filename.includes('..');
 
 @Injectable()
 export class BackupService implements OnModuleInit {
@@ -181,14 +187,14 @@ export class BackupService implements OnModuleInit {
 
   /**
    * Resolve a sanitized absolute path for the given backup file, or throw
-   * NotFoundException. Used by the streaming download endpoint. Path traversal
-   * attempts collapse to 404 — never 400 — to avoid leaking whether a path
-   * shape was malformed vs. a file is missing (ROK-1279).
+   * NotFoundException. Used by the download, delete, and restore endpoints.
+   * Path traversal attempts collapse to 404 — never 400 — to avoid leaking
+   * whether a path shape was malformed vs. a file is missing (ROK-1279).
    */
   getBackupFilePath(type: 'daily' | 'migration', filename: string): string {
     const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
     const notFound = `Backup file not found: ${type}/${filename}`;
-    if (!SAFE_FILENAME.test(filename)) throw new NotFoundException(notFound);
+    if (!isSafeBackupFilename(filename)) throw new NotFoundException(notFound);
     const resolved = path.resolve(dir, filename);
     if (path.dirname(resolved) !== path.resolve(dir))
       throw new NotFoundException(notFound);
@@ -198,11 +204,7 @@ export class BackupService implements OnModuleInit {
 
   /** Delete a specific backup file. */
   deleteBackup(type: 'daily' | 'migration', filename: string): void {
-    this.validateFilename(filename);
-    const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
-    const filepath = path.join(dir, filename);
-    if (!fs.existsSync(filepath))
-      throw new NotFoundException(`Backup file not found: ${filename}`);
+    const filepath = this.getBackupFilePath(type, filename);
     fs.unlinkSync(filepath);
     this.logger.log(`Deleted backup: ${type}/${filename}`);
   }
@@ -212,7 +214,7 @@ export class BackupService implements OnModuleInit {
     type: 'daily' | 'migration',
     filename: string,
   ): Promise<void> {
-    const filepath = this.resolveBackupPath(type, filename);
+    const filepath = this.getBackupFilePath(type, filename);
     await this.createMigrationSnapshot('restore');
     this.logger.warn(`Starting database restore from: ${type}/${filename}`);
     await this.executeRestore(filepath);
@@ -241,30 +243,6 @@ export class BackupService implements OnModuleInit {
   }
 
   // ─── Private helpers ──────────────────────────────────────────
-
-  /** Validate backup filename for path traversal. */
-  private validateFilename(filename: string): void {
-    if (
-      filename.includes('/') ||
-      filename.includes('\\') ||
-      filename.includes('..')
-    ) {
-      throw new BadRequestException('Invalid filename');
-    }
-  }
-
-  /** Resolve and validate a backup file path. */
-  private resolveBackupPath(
-    type: 'daily' | 'migration',
-    filename: string,
-  ): string {
-    this.validateFilename(filename);
-    const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
-    const filepath = path.join(dir, filename);
-    if (!fs.existsSync(filepath))
-      throw new NotFoundException(`Backup file not found: ${filename}`);
-    return filepath;
-  }
 
   /** Execute pg_restore with error handling. */
   private async executeRestore(filepath: string): Promise<void> {

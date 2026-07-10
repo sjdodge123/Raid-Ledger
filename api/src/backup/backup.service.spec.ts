@@ -178,10 +178,10 @@ function describeBackupService() {
   describe('deleteBackup', () => {
     it('should reject path traversal attempts', () => {
       expect(() => service.deleteBackup('daily', '../etc/passwd')).toThrow(
-        'Invalid filename',
+        'Backup file not found',
       );
       expect(() => service.deleteBackup('daily', 'foo/bar')).toThrow(
-        'Invalid filename',
+        'Backup file not found',
       );
     });
 
@@ -197,6 +197,16 @@ function describeBackupService() {
       service.deleteBackup('daily', 'test.dump');
       expect(mockFs.unlinkSync).toHaveBeenCalledWith(
         expect.stringContaining('test.dump'),
+      );
+    });
+
+    it('should accept listed filenames with spaces or plus signs', () => {
+      // listBackups only filters on '.dump' — any listed file must remain
+      // deletable/restorable (a strict charset regressed this once).
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      service.deleteBackup('daily', 'pre migration+copy.dump');
+      expect(mockFs.unlinkSync).toHaveBeenCalledWith(
+        expect.stringContaining('pre migration+copy.dump'),
       );
     });
   });
@@ -255,7 +265,7 @@ function describeBackupService() {
     it('should reject path traversal attempts', async () => {
       await expect(
         service.restoreFromBackup('daily', '../bad'),
-      ).rejects.toThrow('Invalid filename');
+      ).rejects.toThrow('Backup file not found');
     });
 
     it('should throw NotFoundException for missing file', async () => {

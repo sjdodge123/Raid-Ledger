@@ -14,9 +14,9 @@ import { Test } from '@nestjs/testing';
 import {
   ItadPriceSyncService,
   buildUpdateData,
-  extractErrorDetail,
   executeBulkPricingUpdate,
 } from './itad-price-sync.service';
+import { extractErrorDetail } from '../common/pg-error.helpers';
 import { ItadPriceService } from './itad-price.service';
 import { ItadService } from './itad.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';

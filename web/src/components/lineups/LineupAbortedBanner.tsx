@@ -22,7 +22,6 @@ export function LineupAbortedBanner({ abortedAt, reason }: Props): JSX.Element |
         <div
             data-testid="lineup-aborted-banner"
             role="status"
-            aria-live="polite"
             className="mb-4 px-4 py-3 rounded-lg border border-red-500/40 bg-red-500/10 text-red-100"
         >
             <p className="text-sm font-semibold text-red-200">
