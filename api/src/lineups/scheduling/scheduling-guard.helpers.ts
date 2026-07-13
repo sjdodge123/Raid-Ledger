@@ -4,8 +4,9 @@
  * Extracted from SchedulingService to keep that file under the 300-line limit.
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { and, eq, gte, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type * as schema from '../../drizzle/schema';
+import * as schema from '../../drizzle/schema';
 import { findSlotOrThrow } from './scheduling-event.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -32,6 +33,31 @@ export function assertSchedulingEnabled(match: {
   if (match.includeSchedulingPhase === false) {
     throw new NotFoundException('Scheduling is disabled for this lineup');
   }
+}
+
+const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+/** Refuse a suggested slot within 15 minutes of an existing one. */
+export async function assertNoDuplicateSlot(
+  db: Db,
+  matchId: number,
+  proposed: Date,
+): Promise<void> {
+  const windowStart = new Date(proposed.getTime() - DUPLICATE_WINDOW_MS);
+  const windowEnd = new Date(proposed.getTime() + DUPLICATE_WINDOW_MS);
+  const [dup] = await db
+    .select({ id: schema.communityLineupScheduleSlots.id })
+    .from(schema.communityLineupScheduleSlots)
+    .where(
+      and(
+        eq(schema.communityLineupScheduleSlots.matchId, matchId),
+        gte(schema.communityLineupScheduleSlots.proposedTime, windowStart),
+        lte(schema.communityLineupScheduleSlots.proposedTime, windowEnd),
+      ),
+    )
+    .limit(1);
+  if (dup)
+    throw new BadRequestException('A slot within 15 minutes already exists');
 }
 
 /**

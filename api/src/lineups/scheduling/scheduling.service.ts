@@ -9,7 +9,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { eq, and, gte, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   SchedulePollPageResponseDto,
@@ -60,14 +59,13 @@ import {
   assertSchedulingEnabled,
   assertSchedulable,
   assertSlotBelongsToMatch,
+  assertNoDuplicateSlot,
 } from './scheduling-guard.helpers';
 import {
   archiveAndNotifyCancel,
   normalizeReason,
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
-
-const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 @Injectable()
 export class SchedulingService {
@@ -150,7 +148,7 @@ export class SchedulingService {
     if (proposed < new Date()) {
       throw new BadRequestException('Cannot suggest a time in the past');
     }
-    await this.assertNoDuplicateSlot(matchId, proposed);
+    await assertNoDuplicateSlot(this.db, matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
     if (userId) {
       await this.autoVoteForSlot(slot.id, userId);
@@ -330,26 +328,5 @@ export class SchedulingService {
     const [match] = await findMatchById(this.db, matchId);
     if (!match) throw new NotFoundException('Match not found');
     return match;
-  }
-
-  private async assertNoDuplicateSlot(
-    matchId: number,
-    proposed: Date,
-  ): Promise<void> {
-    const windowStart = new Date(proposed.getTime() - DUPLICATE_WINDOW_MS);
-    const windowEnd = new Date(proposed.getTime() + DUPLICATE_WINDOW_MS);
-    const [dup] = await this.db
-      .select({ id: schema.communityLineupScheduleSlots.id })
-      .from(schema.communityLineupScheduleSlots)
-      .where(
-        and(
-          eq(schema.communityLineupScheduleSlots.matchId, matchId),
-          gte(schema.communityLineupScheduleSlots.proposedTime, windowStart),
-          lte(schema.communityLineupScheduleSlots.proposedTime, windowEnd),
-        ),
-      )
-      .limit(1);
-    if (dup)
-      throw new BadRequestException('A slot within 15 minutes already exists');
   }
 }
