@@ -32,6 +32,7 @@ import {
   findUserSchedulingMatches,
   countUniqueVoters,
   findLineupPollMeta,
+  ensureMatchMember,
 } from './scheduling-query.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
@@ -150,7 +151,10 @@ export class SchedulingService {
     }
     await this.assertNoDuplicateSlot(matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
-    if (userId) await this.autoVoteForSlot(slot.id, userId);
+    if (userId) {
+      await this.autoVoteForSlot(slot.id, userId);
+      await ensureMatchMember(this.db, matchId, userId);
+    }
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
   }
@@ -182,8 +186,16 @@ export class SchedulingService {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
+    // The guards above ran against the URL's match — reject a body slotId
+    // that belongs to a different match so a vote can't land on a poll
+    // whose state was never checked.
+    const slot = await findSlotOrThrow(this.db, slotId);
+    if (slot.matchId !== matchId) {
+      throw new NotFoundException('Slot not found in this match');
+    }
     const inserted = await insertScheduleVote(this.db, slotId, userId);
     if (inserted.length > 0) {
+      await ensureMatchMember(this.db, matchId, userId);
       this.pollEmbed.fireUpdateEmbed(matchId);
       return { voted: true };
     }
