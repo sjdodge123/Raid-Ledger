@@ -60,6 +60,7 @@ import {
   assertSchedulable,
   assertSlotBelongsToMatch,
   assertNoDuplicateSlot,
+  assertCallerMayVote,
 } from './scheduling-guard.helpers';
 import {
   archiveAndNotifyCancel,
@@ -140,10 +141,17 @@ export class SchedulingService {
     matchId: number,
     proposedTime: string,
     userId?: number,
+    callerRole?: string,
   ): Promise<{ id: number }> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
+    if (userId) {
+      await assertCallerMayVote(this.db, match.lineupId, {
+        id: userId,
+        role: callerRole,
+      });
+    }
     const proposed = new Date(proposedTime);
     if (proposed < new Date()) {
       throw new BadRequestException('Cannot suggest a time in the past');
@@ -191,10 +199,15 @@ export class SchedulingService {
     slotId: number,
     userId: number,
     matchId: number,
+    callerRole?: string,
   ): Promise<{ voted: boolean }> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
+    await assertCallerMayVote(this.db, match.lineupId, {
+      id: userId,
+      role: callerRole,
+    });
     await assertSlotBelongsToMatch(this.db, slotId, matchId);
     // Vote + member enrollment commit atomically — a partial write would
     // recreate the voter-without-membership state this fixes.

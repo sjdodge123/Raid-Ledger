@@ -8,8 +8,36 @@ import { and, eq, gte, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { findSlotOrThrow } from './scheduling-event.helpers';
+import { assertUserCanParticipate } from '../lineups-eligibility.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * Enforce private-lineup participation on scheduling mutations (vote /
+ * suggest). Public lineups (incl. every standalone poll) pass; private
+ * lineups are scoped to creator + invitees + admin/operator — mirroring
+ * nominate, game-vote, and bandwagon-join, which all run
+ * `assertUserCanParticipate`. Without this, a URL-holder could vote on a
+ * private lineup's poll and (since voting enrolls) persist themselves into
+ * its participant list.
+ */
+export async function assertCallerMayVote(
+  db: Db,
+  lineupId: number,
+  caller: { id: number; role?: string },
+): Promise<void> {
+  const [lineup] = await db
+    .select({
+      id: schema.communityLineups.id,
+      createdBy: schema.communityLineups.createdBy,
+      visibility: schema.communityLineups.visibility,
+    })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  await assertUserCanParticipate(db, lineup, caller);
+}
 
 /** A match still accepts scheduling changes while suggested or scheduling. */
 export function assertSchedulable(match: { status: string }): void {

@@ -76,6 +76,7 @@ export class SchedulingController {
       matchId,
       parsed.data.proposedTime,
       req.user?.id,
+      req.user?.role,
     );
   }
 
@@ -96,6 +97,7 @@ export class SchedulingController {
       parsed.data.slotId,
       req.user!.id,
       matchId,
+      req.user!.role,
     );
   }
 
