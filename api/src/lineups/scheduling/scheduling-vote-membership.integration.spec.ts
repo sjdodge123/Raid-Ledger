@@ -71,7 +71,9 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
    * Seed a schedulable match whose ONLY member is the creator (admin) —
    * the standalone-poll shape from the prod incident — plus one slot.
    */
-  async function seedPoll(): Promise<{
+  async function seedPoll(
+    visibility: 'public' | 'private' = 'public',
+  ): Promise<{
     lineupId: number;
     matchId: number;
     slotId: number;
@@ -82,6 +84,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
         title: 'Open Roster Poll',
         createdBy: testApp.seed.adminUser.id,
         status: 'decided',
+        visibility,
         publicSlug: generatePublicSlug(),
       })
       .returning();
@@ -302,6 +305,53 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     expect(votes).toHaveLength(0);
     expect(await memberRows(pollA.matchId, voter.id)).toHaveLength(0);
     expect(await memberRows(matchB.id, voter.id)).toHaveLength(0);
+  });
+
+  // ── private lineups: participation gate on the vote surface ────────
+
+  it('rejects a non-invitee vote on a private lineup without any writes', async () => {
+    const outsider = await createVoter('private-outsider');
+    const { lineupId, matchId, slotId } = await seedPoll('private');
+
+    const res = await postVote(outsider.token, lineupId, matchId, slotId);
+    expect(res.status).toBe(403);
+
+    const votes = await testApp.db
+      .select()
+      .from(schema.communityLineupScheduleVotes)
+      .where(eq(schema.communityLineupScheduleVotes.userId, outsider.id));
+    expect(votes).toHaveLength(0);
+    expect(await memberRows(matchId, outsider.id)).toHaveLength(0);
+  });
+
+  it('allows an invitee to vote on a private lineup and enrolls them', async () => {
+    const invitee = await createVoter('private-invitee');
+    const { lineupId, matchId, slotId } = await seedPoll('private');
+    await testApp.db
+      .insert(schema.communityLineupInvitees)
+      .values({ lineupId, userId: invitee.id });
+
+    const res = await postVote(invitee.token, lineupId, matchId, slotId);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ voted: true });
+    expect(await memberRows(matchId, invitee.id)).toHaveLength(1);
+  });
+
+  it('rejects a non-invitee suggest on a private lineup without creating a slot', async () => {
+    const outsider = await createVoter('private-suggester');
+    const { lineupId, matchId } = await seedPoll('private');
+
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/schedule/${matchId}/suggest`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({ proposedTime: '2099-07-01T19:00:00.000Z' });
+    expect(res.status).toBe(403);
+
+    const slots = await testApp.db
+      .select()
+      .from(schema.communityLineupScheduleSlots)
+      .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
+    expect(slots).toHaveLength(1); // only the seeded slot
   });
 
   // ── admin sanity: creator path unaffected ──────────────────────────
