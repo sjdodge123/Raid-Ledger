@@ -9,7 +9,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { eq, and, gte, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   SchedulePollPageResponseDto,
@@ -32,6 +31,7 @@ import {
   findUserSchedulingMatches,
   countUniqueVoters,
   findLineupPollMeta,
+  ensureMatchMember,
 } from './scheduling-query.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
@@ -58,14 +58,15 @@ import {
 import {
   assertSchedulingEnabled,
   assertSchedulable,
+  assertSlotBelongsToMatch,
+  assertNoDuplicateSlot,
+  assertCallerMayVote,
 } from './scheduling-guard.helpers';
 import {
   archiveAndNotifyCancel,
   normalizeReason,
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
-
-const DUPLICATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 @Injectable()
 export class SchedulingService {
@@ -140,25 +141,45 @@ export class SchedulingService {
     matchId: number,
     proposedTime: string,
     userId?: number,
+    callerRole?: string,
   ): Promise<{ id: number }> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
+    if (userId) {
+      await assertCallerMayVote(this.db, match.lineupId, {
+        id: userId,
+        role: callerRole,
+      });
+    }
     const proposed = new Date(proposedTime);
     if (proposed < new Date()) {
       throw new BadRequestException('Cannot suggest a time in the past');
     }
-    await this.assertNoDuplicateSlot(matchId, proposed);
+    await assertNoDuplicateSlot(this.db, matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
-    if (userId) await this.autoVoteForSlot(slot.id, userId);
+    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId);
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
   }
 
-  /** Auto-vote for a newly suggested slot. */
-  private async autoVoteForSlot(slotId: number, userId: number): Promise<void> {
+  /**
+   * Auto-vote for a newly suggested slot and enroll the suggester as a
+   * member — atomically, so a partial failure can't leave a voter without
+   * membership (they couldn't self-heal: re-suggesting 400s on the 15-min
+   * duplicate window). A failure never blocks the suggest itself; the
+   * suggester can still tap the slot to vote, which enrolls them.
+   */
+  private async autoVoteForSlot(
+    slotId: number,
+    matchId: number,
+    userId: number,
+  ): Promise<void> {
     try {
-      await insertScheduleVote(this.db, slotId, userId);
+      await this.db.transaction(async (tx) => {
+        await insertScheduleVote(tx, slotId, userId);
+        await ensureMatchMember(tx, matchId, userId);
+      });
     } catch (err) {
       this.logger.warn(
         'Auto-vote failed for slot %d user %d: %s',
@@ -178,11 +199,23 @@ export class SchedulingService {
     slotId: number,
     userId: number,
     matchId: number,
+    callerRole?: string,
   ): Promise<{ voted: boolean }> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    const inserted = await insertScheduleVote(this.db, slotId, userId);
+    await assertCallerMayVote(this.db, match.lineupId, {
+      id: userId,
+      role: callerRole,
+    });
+    await assertSlotBelongsToMatch(this.db, slotId, matchId);
+    // Vote + member enrollment commit atomically — a partial write would
+    // recreate the voter-without-membership state this fixes.
+    const inserted = await this.db.transaction(async (tx) => {
+      const rows = await insertScheduleVote(tx, slotId, userId);
+      if (rows.length > 0) await ensureMatchMember(tx, matchId, userId);
+      return rows;
+    });
     if (inserted.length > 0) {
       this.pollEmbed.fireUpdateEmbed(matchId);
       return { voted: true };
@@ -318,26 +351,5 @@ export class SchedulingService {
     const [match] = await findMatchById(this.db, matchId);
     if (!match) throw new NotFoundException('Match not found');
     return match;
-  }
-
-  private async assertNoDuplicateSlot(
-    matchId: number,
-    proposed: Date,
-  ): Promise<void> {
-    const windowStart = new Date(proposed.getTime() - DUPLICATE_WINDOW_MS);
-    const windowEnd = new Date(proposed.getTime() + DUPLICATE_WINDOW_MS);
-    const [dup] = await this.db
-      .select({ id: schema.communityLineupScheduleSlots.id })
-      .from(schema.communityLineupScheduleSlots)
-      .where(
-        and(
-          eq(schema.communityLineupScheduleSlots.matchId, matchId),
-          gte(schema.communityLineupScheduleSlots.proposedTime, windowStart),
-          lte(schema.communityLineupScheduleSlots.proposedTime, windowEnd),
-        ),
-      )
-      .limit(1);
-    if (dup)
-      throw new BadRequestException('A slot within 15 minutes already exists');
   }
 }

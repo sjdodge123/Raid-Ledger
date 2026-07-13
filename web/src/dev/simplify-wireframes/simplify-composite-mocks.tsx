@@ -152,12 +152,12 @@ export function StandaloneSsComposite(): JSX.Element {
       <JourneyHero active={0} tone="action" noRibbon
         badge="🗓 Scheduling Poll · started by you"
         task="Pick a time for Helldivers 2."
-        sub="You invited 5 members · 1 of 5 have voted on times so far."
+        sub="5 people in this poll · 1 of 5 have voted on times so far."
         exitCondition="Auto-locks at deadline Sat 11:59 PM (3d), or when you click Lock."
         cta=""
         hint="No nominate/vote phase — game is pre-chosen. Skip the loop, just pick a time." />
       <div className="mt-3">
-        <GameRef name="Helldivers 2" color="#B85450" sub="You + 5 invited members · 1–4 players (group exceeds cap — operator note)" />
+        <GameRef name="Helldivers 2" color="#B85450" sub="You + 5 members · 1–4 players (group exceeds cap — operator note)" />
       </div>
       <div className="mt-2 border-t border-edge pt-2">
         <div className="text-[11px] font-semibold mb-1">Group availability — this week</div>

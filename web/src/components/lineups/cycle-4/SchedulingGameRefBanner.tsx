@@ -22,9 +22,11 @@ export interface SchedulingGameRefBannerProps {
 function contextLine(mode: SchedulingMode, memberCount: number): string {
   const others = Math.max(0, memberCount - 1);
   if (mode === 'standalone') {
+    // "member", not "invited member" — voters self-enroll on open-roster
+    // polls, so not everyone here was explicitly invited.
     return others === 0
       ? 'Just you so far'
-      : `You + ${others} invited member${others === 1 ? '' : 's'}`;
+      : `You + ${others} member${others === 1 ? '' : 's'}`;
   }
   return others === 0 ? 'Match: just you' : `Match: You + ${others} others`;
 }
