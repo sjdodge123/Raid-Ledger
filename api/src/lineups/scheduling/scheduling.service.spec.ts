@@ -70,6 +70,18 @@ const SCHEDULING_MATCH = {
 };
 const SLOT_TIME = '2099-04-01T19:00:00.000Z';
 const GAME_ROW = { name: 'Test Game', coverUrl: null };
+/** Slot row for toggleVote's slot↔match validation (findSlotOrThrow). */
+const SLOT_ROW = { id: 5, matchId: 10 };
+/** Lineup row consumed by assertCallerMayVote (public → gate passes). */
+const LINEUP_VIS_ROW = { id: 1, createdBy: 999, visibility: 'public' };
+/**
+ * Row that satisfies findMatchOrThrow, assertCallerMayVote, AND
+ * findSlotOrThrow when a test uses a non-once
+ * `mockDb.limit.mockResolvedValue` for alternating calls: carries the match
+ * fields plus a `matchId` pointing at itself; its missing `visibility`
+ * field reads as not-private, so the participation gate passes.
+ */
+const MATCH_AND_SLOT_ROW = { ...SCHEDULING_MATCH, matchId: 10 };
 
 describe('SchedulingService', () => {
   let service: SchedulingService;
@@ -147,21 +159,23 @@ describe('SchedulingService', () => {
         voteSpy.mockRestore();
       });
 
-      function mockSuggestSlotFlow() {
+      function mockSuggestSlotFlow(withUser = false) {
         mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+        // assertCallerMayVote only runs for authed suggesters
+        if (withUser) mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
         mockDb.limit.mockResolvedValueOnce([]);
         mockDb.returning.mockResolvedValueOnce([{ id: 42 }]);
       }
 
       it('calls insertScheduleVote when userId is provided', async () => {
-        mockSuggestSlotFlow();
+        mockSuggestSlotFlow(true);
         voteSpy.mockResolvedValueOnce([{ id: 1 }]);
         await service.suggestSlot(10, SLOT_TIME, 7);
         expect(voteSpy).toHaveBeenCalledWith(mockDb, 42, 7);
       });
 
       it('succeeds even if auto-vote throws', async () => {
-        mockSuggestSlotFlow();
+        mockSuggestSlotFlow(true);
         voteSpy.mockRejectedValueOnce(new Error('DB constraint'));
         const result = await service.suggestSlot(10, SLOT_TIME, 7);
         expect(result).toMatchObject({ id: 42 });
@@ -176,9 +190,13 @@ describe('SchedulingService', () => {
   });
 
   describe('toggleVote', () => {
-    it('creates a vote when none exists', async () => {
+    it('creates a vote when none exists and enrolls the voter as a member', async () => {
       // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      // assertCallerMayVote — public lineup
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      // findSlotOrThrow — slot belongs to the URL's match
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       // insertScheduleVote returns inserted row (new vote)
       mockDb.returning.mockResolvedValueOnce([
         { id: 1, slotId: 5, userId: 10 },
@@ -186,16 +204,64 @@ describe('SchedulingService', () => {
 
       const result = await service.toggleVote(5, 10, 10);
       expect(result).toEqual({ voted: true });
+      // Open-roster enrollment: voting inserts a match-member row.
+      // 'bandwagon' — joined after the decide-time snapshot, not a
+      // game-phase voter (DecidedView counts 'voted' against totalVoters).
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          matchId: 10,
+          userId: 10,
+          source: 'bandwagon',
+        }),
+      );
     });
 
-    it('removes existing vote on toggle off', async () => {
+    it('removes existing vote on toggle off without touching membership', async () => {
       // findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      // assertCallerMayVote — public lineup
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      // findSlotOrThrow
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       // insertScheduleVote returns [] (ON CONFLICT — vote already exists)
       mockDb.returning.mockResolvedValueOnce([]);
 
       const result = await service.toggleVote(5, 10, 10);
       expect(result).toEqual({ voted: false });
+      expect(mockDb.values).not.toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'bandwagon' }),
+      );
+    });
+
+    it('rejects a slot that belongs to a different match', async () => {
+      // findMatchOrThrow
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      // assertCallerMayVote — public lineup
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      // findSlotOrThrow — slot exists but under another match
+      mockDb.limit.mockResolvedValueOnce([{ id: 5, matchId: 99 }]);
+
+      await expect(service.toggleVote(5, 10, 10)).rejects.toThrow(
+        NotFoundException,
+      );
+      // Neither the vote nor a member row was written.
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-invitee vote on a private lineup', async () => {
+      // findMatchOrThrow
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      // assertCallerMayVote — private lineup, caller is not the creator
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 1, createdBy: 999, visibility: 'private' },
+      ]);
+      // isInvitee — no invitee row
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      await expect(service.toggleVote(5, 10, 10, 'member')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException for non-scheduling match', async () => {
@@ -318,8 +384,8 @@ describe('SchedulingService', () => {
         .mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }])
         .mockResolvedValueOnce([]);
       deleteVoteSpy.mockResolvedValue(undefined);
-      // findMatchOrThrow must succeed for both calls
-      mockDb.limit.mockResolvedValue([SCHEDULING_MATCH]);
+      // findMatchOrThrow AND findSlotOrThrow must succeed for both calls
+      mockDb.limit.mockResolvedValue([MATCH_AND_SLOT_ROW]);
 
       // Fire two concurrent toggleVote calls for the same slot+user.
       // ON CONFLICT DO NOTHING returns [] — no throw.
@@ -338,6 +404,8 @@ describe('SchedulingService', () => {
     it('AC5: vote toggle cycle works — vote then unvote', async () => {
       // First call: insert succeeds (new row) → voted: true
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       insertVoteSpy.mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }]);
 
       const voteResult = await service.toggleVote(5, 10, 10);
@@ -345,6 +413,8 @@ describe('SchedulingService', () => {
 
       // Second call: insert returns [] (conflict) → delete → voted: false
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      mockDb.limit.mockResolvedValueOnce([SLOT_ROW]);
       insertVoteSpy.mockResolvedValueOnce([]);
       deleteVoteSpy.mockResolvedValueOnce(undefined);
 
@@ -358,7 +428,7 @@ describe('SchedulingService', () => {
         .mockResolvedValueOnce([{ id: 1, slotId: 5, userId: 10 }])
         .mockResolvedValueOnce([]);
       deleteVoteSpy.mockResolvedValue(undefined);
-      mockDb.limit.mockResolvedValue([SCHEDULING_MATCH]);
+      mockDb.limit.mockResolvedValue([MATCH_AND_SLOT_ROW]);
 
       // Idempotency: calling vote twice should not throw
       const first = await service.toggleVote(5, 10, 10);

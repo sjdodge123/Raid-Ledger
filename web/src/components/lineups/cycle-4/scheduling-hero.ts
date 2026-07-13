@@ -33,7 +33,7 @@ export interface SchedulingHeroInput {
   gameName: string;
   /** Distinct voters on this poll so far. */
   uniqueVoterCount: number;
-  /** Total members invited to this match. */
+  /** Total match members (explicit invitees + self-enrolled voters). */
   memberCount: number;
   /** From-match cross-refs; null for standalone. */
   crossRefs: SchedulingCrossRefs | null;
@@ -54,11 +54,17 @@ function nextHint(crossRefs: SchedulingCrossRefs | null): string | undefined {
   return undefined;
 }
 
-/** Standalone sub-line: invited count + voting progress. */
+/**
+ * Standalone sub-line: participant count + voting progress.
+ *
+ * Says "in this poll", not "You invited" — voters self-enroll as members
+ * on an open-roster poll, so the member count includes people the creator
+ * never explicitly invited.
+ */
 function standaloneSub(input: SchedulingHeroInput): string {
-  return `You invited ${input.memberCount} member${
-    input.memberCount === 1 ? '' : 's'
-  } · ${input.uniqueVoterCount} of ${input.memberCount} have voted on times so far`;
+  return `${input.memberCount} ${
+    input.memberCount === 1 ? 'person' : 'people'
+  } in this poll · ${input.uniqueVoterCount} of ${input.memberCount} have voted on times so far`;
 }
 
 /** Build the JourneyHero props for the current poll mode + submit state. */
