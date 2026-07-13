@@ -150,18 +150,28 @@ export class SchedulingService {
     }
     await assertNoDuplicateSlot(this.db, matchId, proposed);
     const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
-    if (userId) {
-      await this.autoVoteForSlot(slot.id, userId);
-      await ensureMatchMember(this.db, matchId, userId);
-    }
+    if (userId) await this.autoVoteForSlot(slot.id, matchId, userId);
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
   }
 
-  /** Auto-vote for a newly suggested slot. */
-  private async autoVoteForSlot(slotId: number, userId: number): Promise<void> {
+  /**
+   * Auto-vote for a newly suggested slot and enroll the suggester as a
+   * member — atomically, so a partial failure can't leave a voter without
+   * membership (they couldn't self-heal: re-suggesting 400s on the 15-min
+   * duplicate window). A failure never blocks the suggest itself; the
+   * suggester can still tap the slot to vote, which enrolls them.
+   */
+  private async autoVoteForSlot(
+    slotId: number,
+    matchId: number,
+    userId: number,
+  ): Promise<void> {
     try {
-      await insertScheduleVote(this.db, slotId, userId);
+      await this.db.transaction(async (tx) => {
+        await insertScheduleVote(tx, slotId, userId);
+        await ensureMatchMember(tx, matchId, userId);
+      });
     } catch (err) {
       this.logger.warn(
         'Auto-vote failed for slot %d user %d: %s',
