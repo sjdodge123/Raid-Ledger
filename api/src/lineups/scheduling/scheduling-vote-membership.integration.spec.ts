@@ -12,7 +12,7 @@
  *   - both scheduling reminder crons (member-derived audiences) skipped them.
  *
  * These tests pin the fix: POST .../vote and POST .../suggest enroll the
- * caller in community_lineup_match_members (source='voted', idempotent,
+ * caller in community_lineup_match_members (source='bandwagon', idempotent,
  * sticky across un-vote), the poll response reflects the enrollment, and a
  * voter can then submit-scheduling. A user with no votes still cannot.
  */
