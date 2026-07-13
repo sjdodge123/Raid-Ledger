@@ -147,7 +147,9 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const rows = await memberRows(matchId, voter.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe('voted');
+    // 'bandwagon' — joined after the decide-time snapshot; 'voted' is
+    // reserved for game-phase voters (DecidedView matched-voter math).
+    expect(rows[0].source).toBe('bandwagon');
 
     // Bug A regression: the poll page now counts the voter as a member,
     // so the "N of M have voted" denominator can never undercount voters.
@@ -183,7 +185,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     expect(await memberRows(matchId, voter.id)).toHaveLength(1);
   });
 
-  it('un-voting keeps membership sticky', async () => {
+  it('un-voting deletes the vote but keeps membership sticky', async () => {
     const voter = await createVoter('sticky');
     const { lineupId, matchId, slotId } = await seedPoll();
 
@@ -191,7 +193,21 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     const off = await postVote(voter.token, lineupId, matchId, slotId);
     expect(off.body).toEqual({ voted: false });
 
+    const votes = await testApp.db
+      .select()
+      .from(schema.communityLineupScheduleVotes)
+      .where(eq(schema.communityLineupScheduleVotes.userId, voter.id));
+    expect(votes).toHaveLength(0);
     expect(await memberRows(matchId, voter.id)).toHaveLength(1);
+  });
+
+  it('rejects a vote for a nonexistent slot without enrolling the caller', async () => {
+    const voter = await createVoter('ghost-slot');
+    const { lineupId, matchId } = await seedPoll();
+
+    const res = await postVote(voter.token, lineupId, matchId, 999999);
+    expect(res.status).toBe(404);
+    expect(await memberRows(matchId, voter.id)).toHaveLength(0);
   });
 
   it('suggesting a time enrolls the suggester as a member', async () => {
@@ -206,7 +222,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const rows = await memberRows(matchId, voter.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe('voted');
+    expect(rows[0].source).toBe('bandwagon');
   });
 
   // ── Bug B regression: voter can submit-scheduling ──────────────────

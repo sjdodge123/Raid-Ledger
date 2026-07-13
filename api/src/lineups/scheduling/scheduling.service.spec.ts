@@ -197,8 +197,14 @@ describe('SchedulingService', () => {
       const result = await service.toggleVote(5, 10, 10);
       expect(result).toEqual({ voted: true });
       // Open-roster enrollment: voting inserts a match-member row.
+      // 'bandwagon' — joined after the decide-time snapshot, not a
+      // game-phase voter (DecidedView counts 'voted' against totalVoters).
       expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({ matchId: 10, userId: 10, source: 'voted' }),
+        expect.objectContaining({
+          matchId: 10,
+          userId: 10,
+          source: 'bandwagon',
+        }),
       );
     });
 
@@ -213,7 +219,7 @@ describe('SchedulingService', () => {
       const result = await service.toggleVote(5, 10, 10);
       expect(result).toEqual({ voted: false });
       expect(mockDb.values).not.toHaveBeenCalledWith(
-        expect.objectContaining({ source: 'voted' }),
+        expect.objectContaining({ source: 'bandwagon' }),
       );
     });
 

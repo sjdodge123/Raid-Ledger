@@ -199,11 +199,17 @@ export async function countUniqueVoters(
  * therefore enroll the voter. ON CONFLICT keeps it idempotent; membership is
  * sticky across un-vote, matching the from-match snapshot semantics (the
  * decide-time member set never shrinks either).
+ *
+ * source='bandwagon', NOT 'voted': 'voted' means "game-phase voter" —
+ * DecidedView's matched-voter math counts voted-source members against
+ * totalVoters, so stamping slot-voters 'voted' would inflate it. A slot
+ * voter who wasn't snapshotted at decide time joined after the fact, which
+ * is exactly the bandwagon semantic.
  */
 export function ensureMatchMember(db: Db, matchId: number, userId: number) {
   return db
     .insert(schema.communityLineupMatchMembers)
-    .values({ matchId, userId, source: 'voted' })
+    .values({ matchId, userId, source: 'bandwagon' })
     .onConflictDoNothing({
       target: [
         schema.communityLineupMatchMembers.matchId,

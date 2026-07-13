@@ -188,9 +188,14 @@ export class SchedulingService {
     assertSchedulingEnabled(match);
     assertSchedulable(match);
     await assertSlotBelongsToMatch(this.db, slotId, matchId);
-    const inserted = await insertScheduleVote(this.db, slotId, userId);
+    // Vote + member enrollment commit atomically — a partial write would
+    // recreate the voter-without-membership state this fixes.
+    const inserted = await this.db.transaction(async (tx) => {
+      const rows = await insertScheduleVote(tx, slotId, userId);
+      if (rows.length > 0) await ensureMatchMember(tx, matchId, userId);
+      return rows;
+    });
     if (inserted.length > 0) {
-      await ensureMatchMember(this.db, matchId, userId);
       this.pollEmbed.fireUpdateEmbed(matchId);
       return { voted: true };
     }
