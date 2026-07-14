@@ -21,6 +21,8 @@ import { DemoTestStandalonePollController } from './demo-test-standalone-poll.co
 import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
+import { CooptimusSettingsController } from './cooptimus-settings.controller';
+import { CooptimusModule } from '../cooptimus/cooptimus.module';
 import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
 import { OnboardingController } from './onboarding.controller';
 import { SettingsModule } from '../settings/settings.module';
@@ -45,6 +47,7 @@ import { DiscordBotModule } from '../discord-bot/discord-bot.module';
 @Module({
   imports: [
     SettingsModule,
+    CooptimusModule,
     AuthModule,
     IgdbModule,
     LineupsModule,
@@ -81,6 +84,7 @@ import { DiscordBotModule } from '../discord-bot/discord-bot.module';
     AiChatTestController,
     SlashCommandTestController,
     ItadSettingsController,
+    CooptimusSettingsController,
     CommunityInsightsSettingsController,
     OnboardingController,
     GamesDedupAuditController,

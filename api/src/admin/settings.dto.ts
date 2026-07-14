@@ -58,3 +58,8 @@ export class SteamConfigDto {
 export class ItadConfigDto {
   @IsString() @IsNotEmpty({ message: 'API key is required' }) apiKey!: string;
 }
+export class CooptimusConfigDto {
+  @IsString()
+  @IsNotEmpty({ message: 'User-agent is required' })
+  userAgent!: string;
+}
