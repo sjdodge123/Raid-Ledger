@@ -17,6 +17,7 @@ import { StickyHeroScheduleSubmitButton } from './sticky-hero-buttons';
 import { useSchedulingSticky } from './use-scheduling-sticky';
 import { SchedulingGameRefBanner } from './SchedulingGameRefBanner';
 import { SchedulingCancelAction } from './SchedulingCancelAction';
+import { SchedulingRemindAction } from './SchedulingRemindAction';
 import { SchedulingVoteProgress } from './SchedulingVoteProgress';
 import type { SchedulingMode } from './scheduling-submit-copy';
 
@@ -70,11 +71,19 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
             />
           }
           headerAction={
-            <SchedulingCancelAction
-              lineupId={lineupId}
-              matchId={matchId}
-              readOnly={readOnly}
-            />
+            <div className="flex items-center gap-1.5">
+              <SchedulingRemindAction
+                lineupId={lineupId}
+                matchId={matchId}
+                match={match}
+                readOnly={readOnly}
+              />
+              <SchedulingCancelAction
+                lineupId={lineupId}
+                matchId={matchId}
+                readOnly={readOnly}
+              />
+            </div>
           }
         />
         {/* Game-ref (left) + submit (right) on one row; stacks on mobile. */}
