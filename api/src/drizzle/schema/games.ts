@@ -149,7 +149,15 @@ export const games = pgTable('games', {
   cooptimusUrl: text('cooptimus_url'),
   /** Display-only extras: { system, steamAppId, featurelist, coopExperience, description, downloadableOnly }. Detail endpoint only. */
   cooptimusExtras: jsonb('cooptimus_extras'),
-  /** Last sync. Set even on an empty result — a positive "no co-op entry" signal, distinct from never-synced NULL. */
+  /**
+   * Last sync. Set even on an empty result — a positive "no co-op entry"
+   * signal, distinct from never-synced NULL. NOTE for consumers: the zeroed
+   * counts are a CO-OP capability claim, not generic capacity — Co-Optimus
+   * catalogs co-op games only, so a multiplayer-but-not-co-op title
+   * (PvP/MMO) correctly carries 0 here while player_count stays authoritative
+   * for generic capacity. "Synced, no entry" = cooptimus_id IS NULL AND
+   * cooptimus_synced_at IS NOT NULL.
+   */
   cooptimusSyncedAt: timestamp('cooptimus_synced_at'),
 });
 

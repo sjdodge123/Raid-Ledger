@@ -89,11 +89,35 @@ describe('cooptimus-match.helpers (ROK-1397)', () => {
     );
     // NOT an edition — arbitrary colon subtitles must survive.
     expect(stripEditionSuffix('Divinity: Original Sin')).toBeNull();
+    // Word-boundary guard (review finding): suffix letters INSIDE a word
+    // must never strip.
+    expect(stripEditionSuffix('Marigold')).toBeNull();
+    expect(stripEditionSuffix('Expedition')).toBeNull();
+    expect(stripEditionSuffix('Surplus')).toBeNull();
+    expect(stripEditionSuffix('Sedition')).toBeNull();
 
     const baseResults = [entry({ title: 'Mortal Kombat 11' })];
     const m = matchEntries(baseResults, 'Mortal Kombat 11: Ultimate', null);
     expect(m.status).toBe('review');
     if (m.status === 'review') expect(m.baseTitle).toBe('Mortal Kombat 11');
+  });
+
+  it('routes same-system identical-title reboots to review, never auto-picks the newest', () => {
+    // Doom (1993) and Doom (2016) are separate Co-Optimus pages with equal
+    // titles; auto-picking max-id would silently map the wrong game.
+    const reboots = [
+      entry({ id: 100, title: 'Doom', system: 'PC' }),
+      entry({ id: 9000, title: 'Doom', system: 'PC' }),
+    ];
+    const m = matchEntries(reboots, 'Doom', null);
+    expect(m.status).toBe('review');
+
+    // Platform SIBLINGS (one entry per system) stay auto-matchable.
+    const siblings = [
+      entry({ id: 100, title: 'Doom', system: 'PC' }),
+      entry({ id: 101, title: 'Doom', system: 'Xbox One' }),
+    ];
+    expect(matchEntries(siblings, 'Doom', null).status).toBe('matched');
   });
 
   it('prefers PC entries, else newest by Co-Optimus id (console-only case)', () => {

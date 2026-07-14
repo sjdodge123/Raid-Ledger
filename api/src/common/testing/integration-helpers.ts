@@ -210,6 +210,7 @@ const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'standalone-poll-',
   'recruitment-',
   'game-alert',
+  'cooptimus:',
 ];
 
 /**

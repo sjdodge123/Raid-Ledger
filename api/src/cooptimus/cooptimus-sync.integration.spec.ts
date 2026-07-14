@@ -204,6 +204,120 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
     expect(after.cooptimusSyncedAt).toBeNull(); // untouched — retried next run
   });
 
+  it('garbage 200 (zero entries, NOT the empty envelope) never destroys a pinned match', async () => {
+    const g = await seedGame('Palworld', 1623730);
+    // Simulate a prior successful sync + pin.
+    await testApp.db
+      .update(schema.games)
+      .set({
+        cooptimusId: 9814,
+        cooptimusOnlineMax: 32,
+        cooptimusSyncedAt: new Date('2020-01-01'),
+      })
+      .where(eq(schema.games.id, g.id));
+    // Challenge HTML / truncated body: parses to zero entries, empty=false.
+    const byIdMock = jest
+      .spyOn(cooptimus, 'searchById')
+      .mockResolvedValue({ entries: [], empty: false });
+    mockLookup({ entries: [], empty: false });
+
+    const outcome = await sync.syncGame({
+      id: g.id,
+      name: g.name,
+      steamAppId: g.steamAppId,
+      cooptimusId: 9814,
+    });
+
+    expect(outcome).toBe('failed');
+    const after = await reload(g.id);
+    expect(after.cooptimusId).toBe(9814); // pin preserved
+    expect(after.cooptimusOnlineMax).toBe(32); // data preserved
+    expect(byNameMock).not.toHaveBeenCalled(); // no fall-through either
+    byIdMock.mockRestore();
+  });
+
+  it('steam-id-grade hit from the base-title fallback query auto-applies', async () => {
+    const g = await seedGame('Mortal Kombat 11: Ultimate', 976310);
+    byNameMock = jest
+      .spyOn(cooptimus, 'searchByName')
+      .mockResolvedValueOnce({ entries: [], empty: true })
+      .mockResolvedValueOnce({
+        entries: [entry({ id: 555, title: 'Mortal Kombat 11', steam: 976310 })],
+        empty: false,
+      });
+
+    const outcome = await sync.syncGame({
+      id: g.id,
+      name: g.name,
+      steamAppId: g.steamAppId,
+      cooptimusId: null,
+    });
+
+    expect(outcome).toBe('synced'); // arbiter-grade evidence, not review
+    const after = await reload(g.id);
+    expect(after.cooptimusId).toBe(555);
+  });
+
+  it('review queue dedups by gameId across repeated cycles', async () => {
+    const g = await seedGame('Sonic Mania Plus');
+    const missThenBase = () =>
+      jest
+        .spyOn(cooptimus, 'searchByName')
+        .mockResolvedValueOnce({ entries: [], empty: true })
+        .mockResolvedValueOnce({
+          entries: [entry({ id: 777, title: 'Sonic Mania' })],
+          empty: false,
+        });
+
+    byNameMock = missThenBase();
+    await sync.syncGame({ id: g.id, name: g.name, steamAppId: null, cooptimusId: null });
+    byNameMock.mockRestore();
+    byNameMock = missThenBase();
+    await sync.syncGame({ id: g.id, name: g.name, steamAppId: null, cooptimusId: null });
+
+    const queue = await sync.getReviewQueue();
+    const forGame = queue.filter(
+      (raw) => (JSON.parse(raw) as { gameId: number }).gameId === g.id,
+    );
+    expect(forGame).toHaveLength(1);
+  });
+
+  it('runSync scans only visible never-synced/stale rows and honors the batch abort', async () => {
+    const fresh = await seedGame('Fresh Game');
+    await testApp.db
+      .update(schema.games)
+      .set({ cooptimusSyncedAt: new Date() })
+      .where(eq(schema.games.id, fresh.id));
+    const hiddenGame = await seedGame('Hidden Game');
+    await testApp.db
+      .update(schema.games)
+      .set({ hidden: true })
+      .where(eq(schema.games.id, hiddenGame.id));
+    const stale = await seedGame('Stale Game');
+    await testApp.db
+      .update(schema.games)
+      .set({ cooptimusSyncedAt: new Date('2020-01-01') })
+      .where(eq(schema.games.id, stale.id));
+    // Enough never-synced rows that all-failing transport trips the
+    // 5-consecutive-failure abort deterministically.
+    for (let i = 0; i < 5; i++) await seedGame(`Never Synced ${i}`);
+
+    // Transport-level failure for every scanned row → exercises the scan
+    // predicate (fresh + hidden excluded) AND the batch abort.
+    mockLookup(null);
+    const summary = await sync.runSync();
+
+    const scannedNames = byNameMock.mock.calls.map((c) => c[0] as string);
+    expect(scannedNames).not.toContain('Fresh Game');
+    expect(scannedNames).not.toContain('Hidden Game');
+    expect(scannedNames).toHaveLength(5); // aborted after 5 consecutive
+    expect(summary.aborted).toBe(true);
+    expect(summary.failed).toBe(5);
+    expect(summary.synced).toBe(0);
+    // Stale + never-synced rows WERE selected (scanned ≥ the 7 eligible).
+    expect(summary.scanned).toBeGreaterThanOrEqual(7);
+  });
+
   it('pinned cooptimus_id re-syncs by id without a name search', async () => {
     const g = await seedGame('Some Renamed Game');
     const byIdMock = jest.spyOn(cooptimus, 'searchById').mockResolvedValue({
