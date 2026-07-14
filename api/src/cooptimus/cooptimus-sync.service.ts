@@ -179,9 +179,18 @@ export class CooptimusSyncService {
       const base = stripEditionSuffix(row.name);
       if (base) {
         const baseLookup = await this.cooptimus.searchByName(base);
-        const baseMatch =
-          baseLookup &&
-          matchEntries(baseLookup.entries, row.name, row.steamAppId);
+        // Mirror the first lookup's guards (Codex P2): a disabled transport
+        // or garbage 200 on the SECOND query must not fall through to
+        // markNoEntry either.
+        if (baseLookup == null) return 'failed';
+        if (baseLookup.entries.length === 0 && !baseLookup.empty) {
+          return 'failed';
+        }
+        const baseMatch = matchEntries(
+          baseLookup.entries,
+          row.name,
+          row.steamAppId,
+        );
         // Steam-id equality is the designated exact-match arbiter — a
         // base-query hit carrying OUR steam id is auto-accept grade, not
         // review (rl-review #2). Everything else from the fallback query

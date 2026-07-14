@@ -258,6 +258,26 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
     expect(after.cooptimusId).toBe(555);
   });
 
+  it('garbage 200 on the BASE-title query is a transient failure, not no-entry (Codex P2)', async () => {
+    const g = await seedGame('Mortal Kombat 11: Ultimate');
+    byNameMock = jest
+      .spyOn(cooptimus, 'searchByName')
+      .mockResolvedValueOnce({ entries: [], empty: true }) // full name: positive miss
+      .mockResolvedValueOnce({ entries: [], empty: false }); // base query: garbage 200
+
+    const outcome = await sync.syncGame({
+      id: g.id,
+      name: g.name,
+      steamAppId: null,
+      cooptimusId: null,
+    });
+
+    expect(outcome).toBe('failed');
+    const after = await reload(g.id);
+    expect(after.cooptimusSyncedAt).toBeNull(); // untouched — retried next run
+    expect(after.cooptimusOnlineMax).toBeNull(); // never zeroed
+  });
+
   it('review queue dedups by gameId across repeated cycles', async () => {
     const g = await seedGame('Sonic Mania Plus');
     const missThenBase = () =>

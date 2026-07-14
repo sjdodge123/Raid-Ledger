@@ -102,6 +102,33 @@ describe('cooptimus-match.helpers (ROK-1397)', () => {
     if (m.status === 'review') expect(m.baseTitle).toBe('Mortal Kombat 11');
   });
 
+  it('steam-anchored siblings never admit a same-system reboot (Codex P2)', () => {
+    // Two PC "Doom" pages; only the OLD one carries our steam id. The new
+    // reboot must not ride along, or newest-wins would displace the match.
+    const results = [
+      entry({ id: 100, title: 'Doom', system: 'PC', steam: 2280 }),
+      entry({ id: 9000, title: 'Doom', system: 'PC' }),
+      entry({ id: 101, title: 'Doom', system: 'Xbox One' }),
+    ];
+    const m = matchEntries(results, 'Doom', 2280);
+    expect(m.status).toBe('matched');
+    if (m.status === 'matched') {
+      expect(m.entries.map((e) => e.id).sort()).toEqual([100, 101]);
+    }
+
+    // Two extras fighting over ONE uncovered system: both dropped.
+    const contested = [
+      entry({ id: 100, title: 'Doom', system: 'PC', steam: 2280 }),
+      entry({ id: 200, title: 'Doom', system: 'PlayStation 5' }),
+      entry({ id: 201, title: 'Doom', system: 'PlayStation 5' }),
+    ];
+    const c = matchEntries(contested, 'Doom', 2280);
+    expect(c.status).toBe('matched');
+    if (c.status === 'matched') {
+      expect(c.entries.map((e) => e.id)).toEqual([100]);
+    }
+  });
+
   it('routes same-system identical-title reboots to review, never auto-picks the newest', () => {
     // Doom (1993) and Doom (2016) are separate Co-Optimus pages with equal
     // titles; auto-picking max-id would silently map the wrong game.

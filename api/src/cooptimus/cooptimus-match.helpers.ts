@@ -117,10 +117,32 @@ export function matchEntries(
     const bySteam = entries.filter((e) => e.steam === ourSteamAppId);
     if (bySteam.length > 0) {
       // Same game's other platform rows (steam tag only on PC) ride along
-      // when their title matches the arbitered entry's title.
+      // when their title matches the arbitered entry's title — but ANCHORED
+      // to the arbitered entry (Codex P2): a same-title reboot on a system
+      // the arbitered set already covers, or two same-title extras fighting
+      // over one system, must never displace the Steam-confirmed page in
+      // pickPlatformEntry's newest-wins tiebreak.
       const title = bySteam[0].title;
-      const siblings = entries.filter((e) => titlesMatchExact(e.title, title));
-      return { status: 'matched', entries: siblings, method: 'steam-id' };
+      const covered = new Set(bySteam.map((e) => e.system.toUpperCase()));
+      const extras = entries.filter(
+        (e) =>
+          e.steam !== ourSteamAppId &&
+          titlesMatchExact(e.title, title) &&
+          !covered.has(e.system.toUpperCase()),
+      );
+      const perSystem = new Map<string, number>();
+      for (const e of extras) {
+        const key = e.system.toUpperCase();
+        perSystem.set(key, (perSystem.get(key) ?? 0) + 1);
+      }
+      const unambiguousExtras = extras.filter(
+        (e) => perSystem.get(e.system.toUpperCase()) === 1,
+      );
+      return {
+        status: 'matched',
+        entries: [...bySteam, ...unambiguousExtras],
+        method: 'steam-id',
+      };
     }
   }
   // (b) exact normalized title. Co-Optimus lists same-name reboots (Doom
