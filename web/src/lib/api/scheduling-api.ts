@@ -7,6 +7,7 @@ import type {
   SchedulingBannerDto,
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
+  RemindVotersResponseDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 
@@ -81,6 +82,20 @@ export async function cancelSchedulePoll(
   return fetchApi(
     `/lineups/${lineupId}/schedule/${matchId}/cancel`,
     { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
+  );
+}
+
+/**
+ * Nudge members who haven't voted yet (ROK-1395, creator/operator only).
+ * The server 429s inside the 1h per-match cooldown.
+ */
+export async function remindVoters(
+  lineupId: number,
+  matchId: number,
+): Promise<RemindVotersResponseDto> {
+  return fetchApi(
+    `/lineups/${lineupId}/schedule/${matchId}/remind`,
+    { method: 'POST' },
   );
 }
 

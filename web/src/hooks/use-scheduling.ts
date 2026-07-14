@@ -8,6 +8,7 @@ import type {
   SchedulingBannerDto,
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
+  RemindVotersResponseDto,
 } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
 import {
@@ -20,6 +21,7 @@ import {
   getSchedulingBanner,
   getOtherPolls,
   cancelSchedulePoll,
+  remindVoters,
 } from '../lib/api-client';
 
 /** Query key prefix for scheduling poll queries. */
@@ -133,6 +135,21 @@ export function useOtherPolls(lineupId: number, matchId: number) {
     queryFn: () => getOtherPolls(lineupId, matchId),
     enabled: !!lineupId && !!matchId,
     staleTime: 60_000,
+  });
+}
+
+/**
+ * Hook for the manual "Remind voters" nudge (ROK-1395, creator/operator).
+ * Success toasts the reminded/skipped counts; a cooldown 429 (or any other
+ * failure) surfaces the server's message via the error toast.
+ */
+export function useRemindVoters() {
+  return useMutation<RemindVotersResponseDto, Error, { lineupId: number; matchId: number }>({
+    mutationFn: ({ lineupId, matchId }) => remindVoters(lineupId, matchId),
+    onSuccess: ({ reminded, skipped }) => {
+      toast.success(`Reminded ${reminded} voter${reminded === 1 ? '' : 's'} (${skipped} skipped)`);
+    },
+    onError: (err) => { toast.error(err.message || 'Failed to send reminders'); },
   });
 }
 
