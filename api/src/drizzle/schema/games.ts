@@ -124,6 +124,33 @@ export const games = pgTable('games', {
   installSizeSource: varchar('install_size_source', { length: 20 }),
   /** Last time the size was resolved. */
   installSizeUpdatedAt: timestamp('install_size_updated_at'),
+
+  // ROK-1397: Co-Optimus co-op enrichment. UPDATE-only sync (never INSERTs
+  // into games — keeps this path outside the name-dedup guard); written
+  // exclusively by api/src/cooptimus/. Precedence rule: cooptimus_online_max
+  // WINS over player_count.max when non-null; NULL both = no capability claim.
+  /** Co-Optimus game id of the chosen platform entry (re-sync key). */
+  cooptimusId: integer('cooptimus_id'),
+  /** Max online co-op players — the "supports N+ online co-op" filter field. */
+  cooptimusOnlineMax: integer('cooptimus_online_max'),
+  /** Max couch/local co-op players. */
+  cooptimusCouchMax: integer('cooptimus_couch_max'),
+  /** Max LAN co-op players. */
+  cooptimusLanMax: integer('cooptimus_lan_max'),
+  /** Split-screen support. */
+  cooptimusSplitscreen: boolean('cooptimus_splitscreen'),
+  /** Drop-in/drop-out support. */
+  cooptimusDropIn: boolean('cooptimus_drop_in'),
+  /** Campaign co-op support. */
+  cooptimusCampaignCoop: boolean('cooptimus_campaign_coop'),
+  /** Combo (same-session local+online) — parsed from featurelist text; NOT derivable from local∧online. */
+  cooptimusComboCoop: boolean('cooptimus_combo_coop'),
+  /** Attribution linkback to the Co-Optimus game page. */
+  cooptimusUrl: text('cooptimus_url'),
+  /** Display-only extras: { system, steamAppId, featurelist, coopExperience, description, downloadableOnly }. Detail endpoint only. */
+  cooptimusExtras: jsonb('cooptimus_extras'),
+  /** Last sync. Set even on an empty result — a positive "no co-op entry" signal, distinct from never-synced NULL. */
+  cooptimusSyncedAt: timestamp('cooptimus_synced_at'),
 });
 
 /**

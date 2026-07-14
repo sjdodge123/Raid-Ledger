@@ -25,6 +25,28 @@ export type IgdbGameDto = z.infer<typeof IgdbGameSchema>;
 // ROK-229: Expanded game schemas for discovery
 // ============================================================
 
+/**
+ * ROK-1397: Co-Optimus display-only extras. Ships on GET /games/:id ONLY —
+ * never on list/discover rows (payload weight). The two prose fields are
+ * editorial content whose display is permission-gated (see the ROK-275 plan).
+ */
+export const CooptimusExtrasSchema = z.object({
+    /** Platform of the chosen Co-Optimus entry (e.g. "PC"). */
+    system: z.string().nullable().optional(),
+    /** Co-Optimus's own steam id for the entry (audit trail; may disagree with ours). */
+    steamAppId: z.number().nullable().optional(),
+    /** Raw comma-separated feature list. */
+    featurelist: z.string().nullable().optional(),
+    /** "The Co-Op Experience" editorial blurb. */
+    coopExperience: z.string().nullable().optional(),
+    /** Their game "Description" prose. */
+    description: z.string().nullable().optional(),
+    /** "Downloadable Only" flag parsed from featurelist. */
+    downloadableOnly: z.boolean().nullable().optional(),
+});
+
+export type CooptimusExtrasDto = z.infer<typeof CooptimusExtrasSchema>;
+
 /** Full game detail with all IGDB metadata */
 export const GameDetailSchema = z.object({
     id: z.number(),
@@ -76,6 +98,26 @@ export const GameDetailSchema = z.object({
     earlyAccess: z.boolean().optional(),
     /** Steam app ID for linking to the Steam store page. */
     steamAppId: z.number().nullable().optional(),
+    /** ROK-1397: Co-Optimus max online co-op players. Precedence: wins over playerCount.max when non-null. */
+    cooptimusOnlineMax: z.number().nullable().optional(),
+    /** ROK-1397: Co-Optimus max couch/local co-op players. */
+    cooptimusCouchMax: z.number().nullable().optional(),
+    /** ROK-1397: Co-Optimus max LAN co-op players. */
+    cooptimusLanMax: z.number().nullable().optional(),
+    /** ROK-1397: split-screen support. */
+    cooptimusSplitscreen: z.boolean().nullable().optional(),
+    /** ROK-1397: drop-in/drop-out support. */
+    cooptimusDropIn: z.boolean().nullable().optional(),
+    /** ROK-1397: campaign co-op support. */
+    cooptimusCampaignCoop: z.boolean().nullable().optional(),
+    /** ROK-1397: combo (same-session local+online) co-op, parsed from their featurelist. */
+    cooptimusComboCoop: z.boolean().nullable().optional(),
+    /** ROK-1397: attribution linkback to the Co-Optimus game page. */
+    cooptimusUrl: z.string().nullable().optional(),
+    /** ROK-1397: last Co-Optimus sync (ISO). Set even when the game has no entry — "synced, no co-op" ≠ never-synced. */
+    cooptimusSyncedAt: z.string().nullable().optional(),
+    /** ROK-1397: display-only editorial extras. Populated on GET /games/:id ONLY (never on list rows — payload weight). */
+    cooptimusExtras: CooptimusExtrasSchema.nullable().optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;

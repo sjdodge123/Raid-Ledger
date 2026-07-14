@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { IgdbGameDto, GameDetailDto } from '@raid-ledger/contract';
-import { mapDbRowToDetail } from './igdb.mappers';
+import { mapDbRowToDetail, mapCooptimusExtras } from './igdb.mappers';
 import { discoverGameViaItad } from '../steam/steam-itad-discovery.helpers';
 import type { ItadGame } from '../itad/itad.constants';
 
@@ -46,7 +46,10 @@ export async function lookupGameDetailById(
     .from(schema.games)
     .where(eq(schema.games.id, id))
     .limit(1);
-  return r.length === 0 ? null : mapDbRowToDetail(r[0]);
+  if (r.length === 0) return null;
+  // Detail endpoint carries the Co-Optimus editorial extras; list builders
+  // use bare mapDbRowToDetail and never ship the blob (ROK-1397).
+  return { ...mapDbRowToDetail(r[0]), ...mapCooptimusExtras(r[0]) };
 }
 
 /**
