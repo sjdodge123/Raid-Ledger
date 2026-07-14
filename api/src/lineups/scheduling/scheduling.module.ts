@@ -13,6 +13,7 @@ import { SchedulingController } from './scheduling.controller';
 import { SchedulingBannerController } from './scheduling-banner.controller';
 import { SchedulingService } from './scheduling.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import { SchedulingRemindService } from './scheduling-remind.service';
 
 @Module({
   imports: [
@@ -24,7 +25,11 @@ import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
     forwardRef(() => LineupsModule),
   ],
   controllers: [SchedulingController, SchedulingBannerController],
-  providers: [SchedulingService, SchedulingPollEmbedService],
+  providers: [
+    SchedulingService,
+    SchedulingPollEmbedService,
+    SchedulingRemindService,
+  ],
   exports: [SchedulingService, SchedulingPollEmbedService],
 })
 export class SchedulingModule {}
