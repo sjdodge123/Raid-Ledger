@@ -103,6 +103,15 @@ describe('IgdbService', () => {
       itadPriceUpdatedAt: null,
       earlyAccess: false,
       steamAppId: null,
+      cooptimusOnlineMax: null,
+      cooptimusCouchMax: null,
+      cooptimusLanMax: null,
+      cooptimusSplitscreen: null,
+      cooptimusDropIn: null,
+      cooptimusCampaignCoop: null,
+      cooptimusComboCoop: null,
+      cooptimusUrl: null,
+      cooptimusSyncedAt: null,
     },
   ];
 

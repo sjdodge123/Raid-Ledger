@@ -18,9 +18,16 @@ const allOfflineStatuses = {
 };
 
 describe('buildCoreIntegrationItems', () => {
-    it('returns 3 items (IGDB, Steam, and ITAD)', () => {
+    it('returns 4 items (IGDB, Steam, ITAD, and Co-Optimus)', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
-        expect(items).toHaveLength(3);
+        expect(items).toHaveLength(4);
+    });
+
+    it('includes Co-Optimus with correct path (ROK-1397)', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const cooptimus = items.find((i) => i.label === 'Co-Optimus');
+        expect(cooptimus).toBeDefined();
+        expect(cooptimus!.to).toBe('/admin/settings/integrations/cooptimus');
     });
 
     it('includes IGDB with correct path', () => {
