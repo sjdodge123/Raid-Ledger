@@ -1,10 +1,11 @@
 /**
- * DM dispatch helpers for the lineup phase reminder cron (ROK-1126).
+ * DM dispatch helpers for lineup reminders — the phase reminder cron
+ * (ROK-1126) plus the manual "remind voters" nudge (ROK-1395).
  *
- * Composed by `LineupReminderService` — each helper checks the dedup
- * cache, builds the windowed copy, and creates a `community_lineup`
- * notification. Kept in its own file to keep the service under the
- * 300-line ESLint ceiling.
+ * Composed by `LineupReminderService` (cron) and `SchedulingRemindService`
+ * (manual) — each helper checks the dedup cache, builds the copy, and
+ * creates a `community_lineup` notification. Kept in its own file to keep
+ * the services under the 300-line ESLint ceiling.
  */
 import type { NotificationService } from '../notifications/notification.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';

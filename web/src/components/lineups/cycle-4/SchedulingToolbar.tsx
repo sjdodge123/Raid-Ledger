@@ -71,7 +71,10 @@ export function SchedulingToolbar(props: SchedulingToolbarProps): JSX.Element {
             />
           }
           headerAction={
-            <div className="flex items-center gap-1.5">
+            /* Stacks on mobile: the hero's badge-row cluster (participants +
+               done-pill + these actions) is flex-shrink-0/no-wrap, so two
+               side-by-side buttons could overflow a 375px viewport. */
+            <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center">
               <SchedulingRemindAction
                 lineupId={lineupId}
                 matchId={matchId}

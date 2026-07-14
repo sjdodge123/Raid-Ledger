@@ -14,6 +14,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -39,6 +40,8 @@ interface Caller {
 
 @Injectable()
 export class SchedulingRemindService {
+  private readonly logger = new Logger(SchedulingRemindService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
@@ -78,17 +81,28 @@ export class SchedulingRemindService {
     for (const userId of targets) {
       // Never self-nudge the actor (mirrors cancelPoll's except-the-actor).
       if (userId === caller.id) continue;
-      const sent = await sendManualSchedulingReminder(
-        {
-          notificationService: this.notificationService,
-          dedupService: this.dedupService,
-        },
-        lineupId,
-        matchId,
-        userId,
-      );
-      if (sent) reminded++;
-      else skipped++;
+      // Per-recipient isolation (mirrors the tiebreaker cron loop): one
+      // failed create must not 500 the whole fan-out after earlier sends
+      // already went out — count it as skipped and keep going.
+      try {
+        const sent = await sendManualSchedulingReminder(
+          {
+            notificationService: this.notificationService,
+            dedupService: this.dedupService,
+          },
+          lineupId,
+          matchId,
+          userId,
+        );
+        if (sent) reminded++;
+        else skipped++;
+      } catch (err) {
+        skipped++;
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Manual remind failed for match ${matchId} user ${userId}: ${msg}`,
+        );
+      }
     }
     return { reminded, skipped };
   }

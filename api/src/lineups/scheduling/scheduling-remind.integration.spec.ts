@@ -239,6 +239,20 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
     expect(await remindNotifsFor(lateJoiner.id)).toHaveLength(1);
   });
 
+  it('arms the cooldown even when there are zero recipients (decided design)', async () => {
+    const creator = await createUser('zero-creator');
+    // Only member is the creator (the actor) → zero recipients.
+    const { lineupId, matchId } = await seedPoll({ creatorId: creator.id });
+
+    const first = await postRemind(creator.token, lineupId, matchId);
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({ reminded: 0, skipped: 0 });
+
+    // The empty fan-out must still have armed the per-match cooldown.
+    const second = await postRemind(creator.token, lineupId, matchId);
+    expect(second.status).toBe(429);
+  });
+
   // ── authorization ──────────────────────────────────────────────────
 
   it('plain member → 403, and the rejected call must NOT arm the cooldown', async () => {
