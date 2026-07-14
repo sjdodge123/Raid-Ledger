@@ -25,7 +25,10 @@ export const COOPTIMUS_STALE_AFTER_DAYS = 14;
  * taught us subtitle variants can over-claim.
  */
 export const EDITION_SUFFIX_RE =
-  /(?::?\s*(?:game of the year|goty|definitive|complete|ultimate|special|gold|deluxe|enhanced|remastered|anniversary)(?:\s+edition)?|:?\s*edition|\s*plus|\s*\+)\s*$/i;
+  // A colon or whitespace MUST precede word suffixes — zero-width prefixes
+  // stripped mid-word ('Marigold'→'Mari', 'Expedition'→'Exp'; review finding).
+  // The bare '+' branch stays zero-width for 'Repentance+'-style names.
+  /(?:[:\s]\s*(?:game of the year|goty|definitive|complete|ultimate|special|gold|deluxe|enhanced|remastered|anniversary)(?:\s+edition)?|[:\s]\s*edition|\s+plus|\s*\+)\s*$/i;
 
 /** Redis list holding review-queue candidates for the admin surface. */
 export const COOPTIMUS_REVIEW_QUEUE_KEY = 'cooptimus:review-queue';

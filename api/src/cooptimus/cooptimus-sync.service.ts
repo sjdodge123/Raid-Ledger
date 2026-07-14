@@ -52,7 +52,12 @@ export interface SyncSummary {
   noEntry: number;
   review: number;
   failed: number;
+  /** True when the batch stopped early on consecutive transport failures. */
+  aborted: boolean;
 }
+
+/** Abort a batch after this many consecutive failures (revoked UA etc.). */
+const MAX_CONSECUTIVE_FAILURES = 5;
 
 @Injectable()
 export class CooptimusSyncService {
@@ -66,13 +71,13 @@ export class CooptimusSyncService {
     private readonly cronJobService: CronJobService,
   ) {}
 
-  /** Weekly delta sync — silent no-op while the transport is unconfigured. */
+  /** Weekly delta sync — records a no-op run while unconfigured (ITAD convention). */
   @Cron(COOPTIMUS_SYNC_CRON, { name: 'CooptimusSyncService_weeklySync' })
   async weeklySync(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'CooptimusSyncService_weeklySync',
       async () => {
-        if (!(await this.cooptimus.isConfigured())) return;
+        if (!(await this.cooptimus.isConfigured())) return false;
         await this.runSync();
       },
     );
@@ -107,17 +112,33 @@ export class CooptimusSyncService {
       noEntry: 0,
       review: 0,
       failed: 0,
+      aborted: false,
     };
+    let consecutiveFailures = 0;
     for (const row of rows) {
       const outcome = await this.syncGame(row);
       if (outcome === 'synced') summary.synced++;
       else if (outcome === 'no-entry') summary.noEntry++;
       else if (outcome === 'review') summary.review++;
       else summary.failed++;
+      // A revoked UA fails EVERY row — don't grind a whole library of
+      // throttled, guaranteed-futile requests weekly (review finding).
+      consecutiveFailures = outcome === 'failed' ? consecutiveFailures + 1 : 0;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        summary.aborted = true;
+        this.logger.error(
+          `Co-Optimus sync aborted after ${consecutiveFailures} consecutive failures — check the UA allowlisting (admin Test button)`,
+        );
+        break;
+      }
     }
+    // Staleness visibility: rows that STILL couldn't refresh this run keep
+    // aging silently otherwise (deliberate lightweight take on the ITAD
+    // clearStale analog — see ROK-1397 notes).
     this.logger.log(
       `Co-Optimus sync: ${summary.synced} synced, ${summary.noEntry} no-entry, ` +
-        `${summary.review} review, ${summary.failed} failed of ${summary.scanned}`,
+        `${summary.review} review, ${summary.failed} failed of ${summary.scanned}` +
+        (summary.aborted ? ' (ABORTED)' : ''),
     );
     return summary;
   }
@@ -133,10 +154,17 @@ export class CooptimusSyncService {
           await this.applyEntries(row.id, byId.entries);
           return 'synced';
         }
-        // Pin points at a removed entry — fall through to name matching.
+        // Zero entries WITHOUT the literal empty envelope = garbage 200
+        // (challenge HTML, truncated body). Never let it destroy a pin
+        // (HIGH review finding) — bail as transient failure.
+        if (!byId.empty) return 'failed';
+        // Positive empty: the pin points at a removed entry — fall through.
       }
       const lookup = await this.cooptimus.searchByName(row.name);
       if (lookup == null) return 'failed'; // transport disabled mid-run
+      // Same garbage-200 guard: only a positive empty envelope (or real
+      // entries that fail to match) may reach markNoEntry.
+      if (lookup.entries.length === 0 && !lookup.empty) return 'failed';
       const match = matchEntries(lookup.entries, row.name, row.steamAppId);
       if (match.status === 'matched') {
         await this.applyEntries(row.id, match.entries);
@@ -154,7 +182,19 @@ export class CooptimusSyncService {
         const baseMatch =
           baseLookup &&
           matchEntries(baseLookup.entries, row.name, row.steamAppId);
-        if (baseMatch && baseMatch.status !== 'no-match') {
+        // Steam-id equality is the designated exact-match arbiter — a
+        // base-query hit carrying OUR steam id is auto-accept grade, not
+        // review (rl-review #2). Everything else from the fallback query
+        // stays review-only.
+        if (baseMatch && baseMatch.status === 'matched') {
+          if (baseMatch.method === 'steam-id') {
+            await this.applyEntries(row.id, baseMatch.entries);
+            return 'synced';
+          }
+          await this.pushReview(row, base);
+          return 'review';
+        }
+        if (baseMatch && baseMatch.status === 'review') {
           await this.pushReview(row, base);
           return 'review';
         }
@@ -228,6 +268,20 @@ export class CooptimusSyncService {
   }
 
   private async pushReview(row: GameRow, baseTitle: string): Promise<void> {
+    // Dedup by gameId — the same unresolved candidate would otherwise
+    // re-queue every staleness cycle (review finding). O(queue cap) weekly.
+    const existing = await this.redis.lrange(COOPTIMUS_REVIEW_QUEUE_KEY, 0, -1);
+    const already = existing.some((raw) => {
+      try {
+        return (JSON.parse(raw) as { gameId?: number }).gameId === row.id;
+      } catch {
+        return false;
+      }
+    });
+    if (already) {
+      await this.stampSyncedAt(row.id);
+      return;
+    }
     const item = JSON.stringify({
       gameId: row.id,
       name: row.name,
@@ -245,9 +299,13 @@ export class CooptimusSyncService {
     );
     // Stamp synced_at so the weekly cron doesn't re-queue the same candidate
     // every run; the pin (cooptimus_id) or a stale re-sync revisits it.
+    await this.stampSyncedAt(row.id);
+  }
+
+  private async stampSyncedAt(gameId: number): Promise<void> {
     await this.db
       .update(schema.games)
       .set({ cooptimusSyncedAt: new Date() })
-      .where(eq(schema.games.id, row.id));
+      .where(eq(schema.games.id, gameId));
   }
 }

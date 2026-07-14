@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsString, IsUrl, IsOptional } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsUrl,
+  IsOptional,
+  Matches,
+} from 'class-validator';
 import type { IgdbHealthStatusDto } from '@raid-ledger/contract';
 
 /**
@@ -61,5 +67,8 @@ export class ItadConfigDto {
 export class CooptimusConfigDto {
   @IsString()
   @IsNotEmpty({ message: 'User-agent is required' })
+  // Post-trim guard: '  ' passes IsNotEmpty but the controller trims to '',
+  // producing a configured-but-inert state (review finding).
+  @Matches(/\S/, { message: 'User-agent cannot be blank' })
   userAgent!: string;
 }

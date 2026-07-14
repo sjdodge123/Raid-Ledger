@@ -13,6 +13,10 @@
 import type { CooptimusEntry } from './cooptimus-xml.util';
 import { EDITION_SUFFIX_RE } from './cooptimus.constants';
 
+// Known fold collisions: bare 'x'→'10' and 'v'→'5' make e.g. "Mega Man X" ≡
+// "Mega Man 10" under normalization. Accepted: a wrong AUTO-map additionally
+// requires the LIKE search to return the colliding title for our query, and
+// the same-system ambiguity guard below routes multi-entry ties to review.
 const ROMAN: Record<string, string> = {
   i: '1',
   ii: '2',
@@ -119,9 +123,18 @@ export function matchEntries(
       return { status: 'matched', entries: siblings, method: 'steam-id' };
     }
   }
-  // (b) exact normalized title.
+  // (b) exact normalized title. Co-Optimus lists same-name reboots (Doom
+  // 1993/2016, Prey…) as SEPARATE games with equal titles — if two exact
+  // hits share a system they are distinct game pages, not platform
+  // siblings, and auto-picking the newest would silently map the wrong
+  // game. Ambiguity routes to review.
   const exact = entries.filter((e) => titlesMatchExact(e.title, ourName));
   if (exact.length > 0) {
+    const systems = exact.map((e) => e.system.toUpperCase());
+    const ambiguous = systems.length !== new Set(systems).size;
+    if (ambiguous) {
+      return { status: 'review', baseTitle: ourName, entries: exact };
+    }
     return { status: 'matched', entries: exact, method: 'name-exact' };
   }
   // (c) edition-suffix fallback → review queue only.

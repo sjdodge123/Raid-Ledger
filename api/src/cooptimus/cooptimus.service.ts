@@ -32,7 +32,7 @@ export interface CooptimusLookup {
 export class CooptimusService {
   private readonly logger = new Logger(CooptimusService.name);
   private warnedUnconfigured = false;
-  private lastRequestAt = 0;
+  private nextFreeAt = 0;
 
   constructor(private readonly settingsService: SettingsService) {}
 
@@ -111,11 +111,17 @@ export class CooptimusService {
     };
   }
 
-  /** One request at a time, ≥ crawl-delay spacing (robots.txt asks 1s). */
+  /**
+   * ≥ crawl-delay spacing across ALL callers (robots.txt asks 1s). Slot
+   * reservation is synchronous (no await between read and write), so
+   * concurrent callers — e.g. admin "Test" during a cron batch — each get a
+   * consecutive slot instead of racing a shared timestamp (review finding).
+   */
   private async throttle(): Promise<void> {
-    const wait = this.lastRequestAt + COOPTIMUS_RATE_LIMIT_MS - Date.now();
+    const slot = Math.max(Date.now(), this.nextFreeAt);
+    this.nextFreeAt = slot + COOPTIMUS_RATE_LIMIT_MS;
+    const wait = slot - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    this.lastRequestAt = Date.now();
   }
 
   private async fetchApi(
