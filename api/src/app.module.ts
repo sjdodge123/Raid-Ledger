@@ -37,6 +37,7 @@ import { BackupModule } from './backup/backup.module';
 import { EnrichmentsModule } from './enrichments/enrichments.module';
 import { SteamModule } from './steam/steam.module';
 import { ItadModule } from './itad/itad.module';
+import { CooptimusModule } from './cooptimus/cooptimus.module';
 import { LogsModule } from './logs/logs.module';
 import { AiModule } from './ai/ai.module';
 import { LineupsModule } from './lineups/lineups.module';
@@ -87,6 +88,7 @@ import { GamesLookupModule } from './games-lookup/games-lookup.module';
     BackupModule,
     SteamModule,
     ItadModule,
+    CooptimusModule,
     LogsModule,
     AiModule,
     SchedulingModule,
