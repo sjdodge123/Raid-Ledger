@@ -5,6 +5,7 @@ import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { useItadSettings } from '../../hooks/admin/use-itad-settings';
+import { useCooptimusSettings } from '../../hooks/admin/use-cooptimus-settings';
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
@@ -81,11 +82,13 @@ function useAdminNavSections() {
     const { plugins } = usePluginAdmin();
     const { igdbStatus, steamStatus, oauthStatus, discordBotStatus } = useAdminSettings();
     const { itadStatus } = useItadSettings();
+    const { cooptimusStatus } = useCooptimusSettings();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: { configured: igdbStatus.data?.configured ?? false, loading: igdbStatus.isLoading },
         steam: { configured: steamStatus.data?.configured ?? false, loading: steamStatus.isLoading },
         itad: { configured: itadStatus.data?.configured ?? false, loading: itadStatus.isLoading },
+        cooptimus: { configured: cooptimusStatus.data?.configured ?? false, loading: cooptimusStatus.isLoading },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
     const discordItems = isDiscordActive
