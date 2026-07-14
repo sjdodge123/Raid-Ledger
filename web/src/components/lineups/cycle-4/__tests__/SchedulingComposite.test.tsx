@@ -70,6 +70,14 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
         isLoading: false,
     }),
     useCancelSchedulePoll: () => ({ mutate: cancelPollMutate, isPending: false }),
+    // ROK-1395: SchedulingRemindAction calls this unconditionally (hook rules)
+    // even when the visibility gate later renders null.
+    useRemindVoters: () => ({
+        mutate: vi.fn(),
+        reset: vi.fn(),
+        isPending: false,
+        isSuccess: false,
+    }),
 }));
 
 vi.mock('../../../../hooks/use-lineup-submit', () => ({

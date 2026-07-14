@@ -32,12 +32,14 @@ import {
   type SchedulePollPageResponseDto,
   type OtherPollsResponseDto,
   type AggregateGameTimeResponse,
+  type RemindVotersResponseDto,
 } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../../auth/optional-jwt.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { SchedulingService } from './scheduling.service';
+import { SchedulingRemindService } from './scheduling-remind.service';
 
 interface AuthRequest extends Request {
   user: { id: number; username: string; role: string } | null;
@@ -45,7 +47,10 @@ interface AuthRequest extends Request {
 
 @Controller('lineups')
 export class SchedulingController {
-  constructor(private readonly schedulingService: SchedulingService) {}
+  constructor(
+    private readonly schedulingService: SchedulingService,
+    private readonly remindService: SchedulingRemindService,
+  ) {}
 
   /** GET /lineups/:lineupId/schedule/:matchId — full poll page. */
   @Get(':lineupId/schedule/:matchId')
@@ -148,6 +153,25 @@ export class SchedulingController {
       parsed.data.reason,
     );
     return { ok: true };
+  }
+
+  /**
+   * POST /lineups/:lineupId/schedule/:matchId/remind — manual nudge to
+   * members who haven't voted yet (ROK-1395). Creator/admin/operator only
+   * (enforced in the service); 1h per-match cooldown → 429.
+   */
+  @Post(':lineupId/schedule/:matchId/remind')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async remindVoters(
+    @Param('lineupId', ParseIntPipe) lineupId: number,
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Req() req: AuthRequest,
+  ): Promise<RemindVotersResponseDto> {
+    return this.remindService.remindVoters(lineupId, matchId, {
+      id: req.user!.id,
+      role: req.user!.role,
+    });
   }
 
   /** DELETE /lineups/:lineupId/schedule/:matchId/votes — retract all votes. */

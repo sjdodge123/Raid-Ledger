@@ -13,6 +13,7 @@
 import { test, expect } from './base';
 import {
     getAdminToken,
+    getInviteeFixture,
     apiPost,
     apiGet,
     apiPatch,
@@ -569,6 +570,41 @@ test.describe('Scheduling poll sticky-toolbar submit (ROK-1300)', () => {
         await expect(submit).toBeVisible({ timeout: 15_000 });
         // No bottom SubmitBar is rendered for the scheduling phase.
         await expect(page.locator('[data-testid="submit-bar"]')).toHaveCount(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1395: manual "Remind Voters" nudge — creator/operator-gated toolbar
+// button. Placed BEFORE the event-creation tests: those flip the match to
+// scheduled (read-only), which hides the button by design.
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll remind voters (ROK-1395)', () => {
+    test('Remind Voters button visible for creator/operator, absent for a plain member', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        // Admin (operator-tier) sees the button on the active poll toolbar.
+        await expect(
+            page.getByRole('button', { name: /remind voters/i }),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // Swap the session to the non-creator member fixture (ROK-1276) —
+        // the button must NOT render for them. Session swap pattern from
+        // lineup-confirmation-pills-invitee.smoke.spec.ts.
+        const invitee = await getInviteeFixture();
+        await page.goto('/');
+        await page.evaluate((t) => {
+            localStorage.setItem('raid_ledger_token', t);
+        }, invitee.jwt);
+        await goToPoll(page, lineupId, matchId);
+        await expect(
+            page.getByRole('button', { name: /remind voters/i }),
+        ).toHaveCount(0);
+        // Context is per-test; the admin storageState is restored for
+        // subsequent tests automatically.
     });
 });
 

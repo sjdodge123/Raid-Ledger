@@ -1,14 +1,18 @@
 /**
- * DM dispatch helpers for the lineup phase reminder cron (ROK-1126).
+ * DM dispatch helpers for lineup reminders — the phase reminder cron
+ * (ROK-1126) plus the manual "remind voters" nudge (ROK-1395).
  *
- * Composed by `LineupReminderService` — each helper checks the dedup
- * cache, builds the windowed copy, and creates a `community_lineup`
- * notification. Kept in its own file to keep the service under the
- * 300-line ESLint ceiling.
+ * Composed by `LineupReminderService` (cron) and `SchedulingRemindService`
+ * (manual) — each helper checks the dedup cache, builds the copy, and
+ * creates a `community_lineup` notification. Kept in its own file to keep
+ * the services under the 300-line ESLint ceiling.
  */
 import type { NotificationService } from '../notifications/notification.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';
-import { DEDUP_TTL } from './lineup-notification.constants';
+import {
+  DEDUP_TTL,
+  MANUAL_REMIND_RECIPIENT_TTL,
+} from './lineup-notification.constants';
 
 interface DispatchDeps {
   notificationService: NotificationService;
@@ -57,6 +61,41 @@ export async function sendSchedulingReminder(
     // click-through (/community-lineup/:lineupId/schedule/:matchId).
     payload: { subtype: 'lineup_scheduling_reminder', lineupId, matchId },
   });
+}
+
+/**
+ * Manual "remind voters" nudge (ROK-1395). Same payload subtype as the cron
+ * path so notification click-through and NotificationItem rendering work
+ * unchanged; its own dedup namespace (24h per recipient per match) keeps the
+ * manual button independent of the cron's 24h/1h window keys.
+ *
+ * @returns true when a notification was created, false when deduped.
+ */
+export async function sendManualSchedulingReminder(
+  deps: DispatchDeps,
+  lineupId: number,
+  matchId: number,
+  userId: number,
+): Promise<boolean> {
+  const key = `lineup-sched-manual-remind:${matchId}:${userId}`;
+  const alreadySent = await deps.dedupService.checkAndMarkSent(
+    key,
+    MANUAL_REMIND_RECIPIENT_TTL,
+  );
+  if (alreadySent) return false;
+  const created = await deps.notificationService.create({
+    userId,
+    type: 'community_lineup',
+    title: 'Scheduling Reminder',
+    message: 'Your match is waiting -- pick a time!',
+    // lineupId + matchId are both required for the web notification
+    // click-through (/community-lineup/:lineupId/schedule/:matchId).
+    payload: { subtype: 'lineup_scheduling_reminder', lineupId, matchId },
+  });
+  // create() returns null when the recipient disabled community_lineup
+  // in-app notifications — this path reports counts to the actor's toast,
+  // so a suppressed recipient must count as skipped, not reminded.
+  return created != null;
 }
 
 export async function sendNominationReminder(
