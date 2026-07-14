@@ -6,11 +6,14 @@
  * server enforces a 1h per-match cooldown (429 → error toast) and a 24h
  * per-recipient dedup, so the button stays disabled after one success.
  */
-import type { JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { useRemindVoters } from '../../../hooks/use-scheduling';
 import { useAuth } from '../../../hooks/use-auth';
 import { canBypassThreshold } from '../../../pages/scheduling/threshold';
+
+/** Mirrors the server's MANUAL_REMIND_COOLDOWN_TTL (1h, api-side). */
+const REMIND_COOLDOWN_MS = 60 * 60 * 1000;
 
 export interface SchedulingRemindActionProps {
   lineupId: number;
@@ -26,6 +29,15 @@ export function SchedulingRemindAction(
   const { lineupId, matchId, match, readOnly } = props;
   const { user } = useAuth();
   const remind = useRemindVoters();
+  const { isSuccess, reset } = remind;
+  // Time-box the post-success disable to the server cooldown — a page left
+  // mounted past the hour must re-enable the action (Codex P2); the server's
+  // 429 stays the real gate either way.
+  useEffect(() => {
+    if (!isSuccess) return;
+    const timer = setTimeout(() => reset(), REMIND_COOLDOWN_MS);
+    return () => clearTimeout(timer);
+  }, [isSuccess, reset]);
   if (!canBypassThreshold(user, match) || readOnly) return null;
   const label = remind.isPending
     ? 'Reminding…'

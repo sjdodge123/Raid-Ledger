@@ -74,6 +74,7 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
     // even when the visibility gate later renders null.
     useRemindVoters: () => ({
         mutate: vi.fn(),
+        reset: vi.fn(),
         isPending: false,
         isSuccess: false,
     }),

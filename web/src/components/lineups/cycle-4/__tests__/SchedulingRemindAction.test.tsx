@@ -12,10 +12,16 @@ import { renderWithProviders } from '../../../../test/render-helpers';
 import { SchedulingRemindAction } from '../SchedulingRemindAction';
 
 const remindMutate = vi.fn();
+const remindReset = vi.fn();
 let isPending = false;
 let isSuccess = false;
 vi.mock('../../../../hooks/use-scheduling', () => ({
-    useRemindVoters: () => ({ mutate: remindMutate, isPending, isSuccess }),
+    useRemindVoters: () => ({
+        mutate: remindMutate,
+        reset: remindReset,
+        isPending,
+        isSuccess,
+    }),
 }));
 
 let authedUser: { id: number; role: string } | null = {
@@ -96,5 +102,18 @@ describe('SchedulingRemindAction', () => {
         expect(
             screen.getByRole('button', { name: /Reminded ✓/i }),
         ).toBeDisabled();
+    });
+
+    it('resets the success state once the 1h cooldown lapses', () => {
+        vi.useFakeTimers();
+        try {
+            isSuccess = true;
+            renderAction();
+            expect(remindReset).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(60 * 60 * 1000);
+            expect(remindReset).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
