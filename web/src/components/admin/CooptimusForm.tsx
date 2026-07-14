@@ -20,8 +20,7 @@ function CooptimusSetupInstructions() {
     );
 }
 
-/** Save / Test / Clear form for the Co-Optimus allowlisted user-agent (ROK-1397). */
-export function CooptimusForm() {
+function useCooptimusFormHandlers() {
     const { cooptimusStatus, updateCooptimus, testCooptimus, clearCooptimus } = useCooptimusSettings();
     const [userAgent, setUserAgent] = useState('');
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -47,8 +46,41 @@ export function CooptimusForm() {
         catch { toast.error('Failed to clear configuration'); }
     };
 
+    return { configured, userAgent, setUserAgent, testResult, handleSave, handleTest, handleClear,
+        isPending: { save: updateCooptimus.isPending, test: testCooptimus.isPending, clear: clearCooptimus.isPending } };
+}
+
+function CooptimusActionButtons({ configured, isPending, onTest, onClear }: {
+    configured: boolean; isPending: { save: boolean; test: boolean; clear: boolean };
+    onTest: () => void; onClear: () => void;
+}) {
     return (
-        <form onSubmit={handleSave} className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={isPending.save}
+                className="px-4 py-2 bg-[#5b9bd5] hover:bg-[#4a8ac4] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
+                {isPending.save ? 'Saving…' : 'Save'}
+            </button>
+            {configured && (
+                <>
+                    <button type="button" onClick={onTest} disabled={isPending.test}
+                        className="px-4 py-2 bg-surface border border-edge hover:bg-overlay text-foreground text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
+                        {isPending.test ? 'Testing…' : 'Test connection'}
+                    </button>
+                    <button type="button" onClick={onClear} disabled={isPending.clear}
+                        className="px-4 py-2 bg-surface border border-red-500/40 hover:bg-red-500/10 text-red-400 text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
+                        {isPending.clear ? 'Clearing…' : 'Clear'}
+                    </button>
+                </>
+            )}
+        </div>
+    );
+}
+
+/** Save / Test / Clear form for the Co-Optimus allowlisted user-agent (ROK-1397). */
+export function CooptimusForm() {
+    const s = useCooptimusFormHandlers();
+    return (
+        <form onSubmit={s.handleSave} className="space-y-4">
             <CooptimusSetupInstructions />
             <div>
                 <label htmlFor="cooptimus-ua" className="block text-sm font-medium text-secondary mb-1">
@@ -57,31 +89,15 @@ export function CooptimusForm() {
                 <input
                     id="cooptimus-ua"
                     type="text"
-                    value={userAgent}
-                    onChange={(e) => setUserAgent(e.target.value)}
-                    placeholder={configured ? 'Configured — enter a new value to replace' : 'e.g. RaidLedger/1.0 (granted-by-cooptimus)'}
+                    value={s.userAgent}
+                    onChange={(e) => s.setUserAgent(e.target.value)}
+                    placeholder={s.configured ? 'Configured — enter a new value to replace' : 'e.g. RaidLedger/1.0 (granted-by-cooptimus)'}
                     className={`w-full px-3 py-2 bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:outline-none focus:ring-2 ${COOPTIMUS_RING}`}
                 />
             </div>
-            <TestResultBanner result={testResult} />
-            <div className="flex flex-wrap gap-2">
-                <button type="submit" disabled={updateCooptimus.isPending}
-                    className="px-4 py-2 bg-[#5b9bd5] hover:bg-[#4a8ac4] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                    {updateCooptimus.isPending ? 'Saving…' : 'Save'}
-                </button>
-                {configured && (
-                    <>
-                        <button type="button" onClick={handleTest} disabled={testCooptimus.isPending}
-                            className="px-4 py-2 bg-surface border border-edge hover:bg-overlay text-foreground text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                            {testCooptimus.isPending ? 'Testing…' : 'Test connection'}
-                        </button>
-                        <button type="button" onClick={handleClear} disabled={clearCooptimus.isPending}
-                            className="px-4 py-2 bg-surface border border-red-500/40 hover:bg-red-500/10 text-red-400 text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                            {clearCooptimus.isPending ? 'Clearing…' : 'Clear'}
-                        </button>
-                    </>
-                )}
-            </div>
+            <TestResultBanner result={s.testResult} />
+            <CooptimusActionButtons configured={s.configured} isPending={s.isPending}
+                onTest={s.handleTest} onClear={s.handleClear} />
         </form>
     );
 }
