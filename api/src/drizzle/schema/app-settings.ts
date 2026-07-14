@@ -84,6 +84,8 @@ export const SETTING_KEYS = {
   STEAM_API_KEY: 'steam_api_key',
   /** ROK-772: IsThereAnyDeal API key for deal/price tracking */
   ITAD_API_KEY: 'itad_api_key',
+  /** ROK-1397: Co-Optimus allowlisted user-agent (permission-first — granted by the site) */
+  COOPTIMUS_USER_AGENT: 'cooptimus_user_agent',
   /** ROK-542: AI provider key (e.g. 'ollama') */
   AI_PROVIDER: 'ai_provider',
   /** ROK-542: AI model identifier */

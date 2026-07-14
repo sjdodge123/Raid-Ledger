@@ -393,6 +393,14 @@ export class SettingsService
   isItadConfigured = () => this.exists(SETTING_KEYS.ITAD_API_KEY);
   clearItadConfig = () => this.delete(SETTING_KEYS.ITAD_API_KEY);
 
+  // ─── Co-Optimus (ROK-1397) ───────────────────────────────────
+
+  getCooptimusUserAgent = () => this.get(SETTING_KEYS.COOPTIMUS_USER_AGENT);
+  setCooptimusUserAgent = (ua: string) =>
+    this.set(SETTING_KEYS.COOPTIMUS_USER_AGENT, ua);
+  isCooptimusConfigured = () => this.exists(SETTING_KEYS.COOPTIMUS_USER_AGENT);
+  clearCooptimusConfig = () => this.delete(SETTING_KEYS.COOPTIMUS_USER_AGENT);
+
   // ─── Common Ground weights (ROK-950) ─────────────────────────
 
   async getCommonGroundWeights(): Promise<CommonGroundWeights> {

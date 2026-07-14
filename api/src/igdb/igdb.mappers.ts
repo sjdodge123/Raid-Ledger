@@ -126,6 +126,36 @@ function mapItadPricing(g: typeof schema.games.$inferSelect) {
 }
 
 /**
+ * Extract Co-Optimus co-op fields from a DB row (ROK-1397).
+ * Deliberately EXCLUDES cooptimus_extras — the editorial blob ships on the
+ * detail endpoint only (see mapCooptimusExtras), never on list rows.
+ */
+function mapCooptimusFields(g: typeof schema.games.$inferSelect) {
+  return {
+    cooptimusOnlineMax: g.cooptimusOnlineMax ?? null,
+    cooptimusCouchMax: g.cooptimusCouchMax ?? null,
+    cooptimusLanMax: g.cooptimusLanMax ?? null,
+    cooptimusSplitscreen: g.cooptimusSplitscreen ?? null,
+    cooptimusDropIn: g.cooptimusDropIn ?? null,
+    cooptimusCampaignCoop: g.cooptimusCampaignCoop ?? null,
+    cooptimusComboCoop: g.cooptimusComboCoop ?? null,
+    cooptimusUrl: g.cooptimusUrl ?? null,
+    cooptimusSyncedAt: g.cooptimusSyncedAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * Detail-endpoint-only Co-Optimus extras (ROK-1397). Spread this AFTER
+ * mapDbRowToDetail in single-game responses; list builders must not use it.
+ */
+export function mapCooptimusExtras(g: typeof schema.games.$inferSelect) {
+  return {
+    cooptimusExtras:
+      (g.cooptimusExtras as GameDetailDto['cooptimusExtras']) ?? null,
+  };
+}
+
+/**
  * Map a database game row to a GameDetailDto.
  * @param g - Database game row
  * @returns GameDetailDto for API response
@@ -162,5 +192,6 @@ export function mapDbRowToDetail(
     // ITAD has also indexed the game, which confirms a real listing.
     steamAppId: g.itadGameId ? (g.steamAppId ?? null) : null,
     ...mapItadPricing(g),
+    ...mapCooptimusFields(g),
   };
 }

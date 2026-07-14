@@ -57,9 +57,38 @@ export interface RedisMockHandle {
   store: Map<string, string>;
 }
 
+/** JSON-array-in-the-store list helpers (ROK-1397: cooptimus review queue). */
+function readList(store: Map<string, string>, key: string): string[] {
+  const raw = store.get(key);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 function buildRedisMockClient(store: Map<string, string>) {
   return {
     get: (key: string) => Promise.resolve(store.get(key) ?? null),
+    lpush: (key: string, ...values: string[]) => {
+      const list = readList(store, key);
+      list.unshift(...values.reverse());
+      store.set(key, JSON.stringify(list));
+      return Promise.resolve(list.length);
+    },
+    ltrim: (key: string, start: number, stop: number) => {
+      const list = readList(store, key);
+      const end = stop < 0 ? list.length + stop + 1 : stop + 1;
+      store.set(key, JSON.stringify(list.slice(start, end)));
+      return Promise.resolve('OK');
+    },
+    lrange: (key: string, start: number, stop: number) => {
+      const list = readList(store, key);
+      const end = stop < 0 ? list.length + stop + 1 : stop + 1;
+      return Promise.resolve(list.slice(start, end));
+    },
     set: mockRedisSet(store),
     setex: (key: string, _seconds: number, value: string) => {
       store.set(key, value);

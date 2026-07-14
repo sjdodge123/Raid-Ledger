@@ -23,7 +23,7 @@ import {
   AvatarPanel, IntegrationsPanel, AccountPanel,
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
-  IgdbPanel, SteamPanel, ItadPanel, PluginsPanel, PluginIntegrationPanel,
+  IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, PluginsPanel, PluginIntegrationPanel,
   CronJobsPanel, BackupsPanel, LogsPanel,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
@@ -69,6 +69,7 @@ function AdminSettingsRoutes() {
       <Route path="integrations/igdb" element={<IgdbPanel />} />
       <Route path="integrations/steam" element={<SteamPanel />} />
       <Route path="integrations/itad" element={<ItadPanel />} />
+      <Route path="integrations/cooptimus" element={<CooptimusPanel />} />
       <Route path="discord" element={<DiscordOverviewPage />} />
       <Route path="discord/auth" element={<DiscordAuthPage />} />
       <Route path="discord/connection" element={<DiscordConnectionPage />} />
