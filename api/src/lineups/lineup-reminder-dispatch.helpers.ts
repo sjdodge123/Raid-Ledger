@@ -83,7 +83,7 @@ export async function sendManualSchedulingReminder(
     MANUAL_REMIND_RECIPIENT_TTL,
   );
   if (alreadySent) return false;
-  await deps.notificationService.create({
+  const created = await deps.notificationService.create({
     userId,
     type: 'community_lineup',
     title: 'Scheduling Reminder',
@@ -92,7 +92,10 @@ export async function sendManualSchedulingReminder(
     // click-through (/community-lineup/:lineupId/schedule/:matchId).
     payload: { subtype: 'lineup_scheduling_reminder', lineupId, matchId },
   });
-  return true;
+  // create() returns null when the recipient disabled community_lineup
+  // in-app notifications — this path reports counts to the actor's toast,
+  // so a suppressed recipient must count as skipped, not reminded.
+  return created != null;
 }
 
 export async function sendNominationReminder(

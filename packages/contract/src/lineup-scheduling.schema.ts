@@ -46,7 +46,9 @@ export type CancelSchedulePollDto = z.infer<typeof CancelSchedulePollSchema>;
  * Response for the manual "Remind voters" nudge (ROK-1395):
  * POST /lineups/:lineupId/schedule/:matchId/remind.
  * `reminded` = notifications created by this call; `skipped` = audience
- * members suppressed by the 24h per-recipient dedup. A repeat call inside
+ * members suppressed by the 24h per-recipient dedup, whose notification
+ * preferences disable community-lineup in-app notifications, or whose
+ * dispatch failed. A repeat call inside
  * the 1h per-match cooldown does NOT return this shape — it fails with
  * HTTP 429 and a human-readable `message` the UI surfaces via toast.
  */

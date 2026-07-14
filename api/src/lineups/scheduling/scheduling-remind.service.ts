@@ -76,11 +76,21 @@ export class SchedulingRemindService {
       'schedule',
       matchId,
     );
+    return this.dispatchToTargets(targets, lineupId, matchId, caller.id);
+  }
+
+  /** Fan the nudge out to every target except the actor, isolating failures. */
+  private async dispatchToTargets(
+    targets: number[],
+    lineupId: number,
+    matchId: number,
+    actorId: number,
+  ): Promise<RemindVotersResponseDto> {
     let reminded = 0;
     let skipped = 0;
     for (const userId of targets) {
       // Never self-nudge the actor (mirrors cancelPoll's except-the-actor).
-      if (userId === caller.id) continue;
+      if (userId === actorId) continue;
       // Per-recipient isolation (mirrors the tiebreaker cron loop): one
       // failed create must not 500 the whole fan-out after earlier sends
       // already went out — count it as skipped and keep going.

@@ -17,7 +17,10 @@ interface MockDeps {
 
 function makeDeps(): MockDeps {
   return {
-    notificationService: { create: jest.fn().mockResolvedValue(null) },
+    // create() resolves a DTO on success and null when the recipient's
+    // preferences suppress the notification (the helper counts that as
+    // not-sent).
+    notificationService: { create: jest.fn().mockResolvedValue({ id: '1' }) },
     dedupService: { checkAndMarkSent: jest.fn() },
   };
 }
@@ -74,5 +77,20 @@ describe('sendManualSchedulingReminder (ROK-1395)', () => {
 
     expect(sent).toBe(false);
     expect(deps.notificationService.create).not.toHaveBeenCalled();
+  });
+
+  it('returns false when create() is suppressed by notification prefs', async () => {
+    const deps = makeDeps();
+    deps.dedupService.checkAndMarkSent.mockResolvedValue(false);
+    deps.notificationService.create.mockResolvedValue(null);
+
+    const sent = await sendManualSchedulingReminder(
+      asDispatchDeps(deps),
+      7,
+      42,
+      99,
+    );
+
+    expect(sent).toBe(false);
   });
 });

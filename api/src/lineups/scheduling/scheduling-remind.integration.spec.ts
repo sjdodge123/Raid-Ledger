@@ -76,6 +76,7 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
     creatorId: number;
     visibility?: 'public' | 'private';
     includeSchedulingPhase?: boolean;
+    standalone?: boolean;
   }): Promise<{ lineupId: number; matchId: number; slotId: number }> {
     const [lineup] = await testApp.db
       .insert(schema.communityLineups)
@@ -86,6 +87,8 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
         visibility: opts.visibility ?? 'public',
         publicSlug: generatePublicSlug(),
         includeSchedulingPhase: opts.includeSchedulingPhase ?? true,
+        // ROK-977 standalone marker — the "Schedule a Game" poll variant.
+        phaseDurationOverride: opts.standalone ? { standalone: true } : null,
       })
       .returning();
     const [match] = await testApp.db
@@ -237,6 +240,21 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
 
     expect(await remindNotifsFor(nonVoter.id)).toHaveLength(1);
     expect(await remindNotifsFor(lateJoiner.id)).toHaveLength(1);
+  });
+
+  it('works on the standalone poll variant (ROK-977 — the other poll type)', async () => {
+    const creator = await createUser('sa-creator');
+    const nonVoter = await createUser('sa-nonvoter');
+    const { lineupId, matchId } = await seedPoll({
+      creatorId: creator.id,
+      standalone: true,
+    });
+    await addMember(matchId, nonVoter.id);
+
+    const res = await postRemind(creator.token, lineupId, matchId);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ reminded: 1, skipped: 0 });
+    expect(await remindNotifsFor(nonVoter.id)).toHaveLength(1);
   });
 
   it('arms the cooldown even when there are zero recipients (decided design)', async () => {
