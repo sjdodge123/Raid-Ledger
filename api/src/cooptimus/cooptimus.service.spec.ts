@@ -52,12 +52,13 @@ describe('CooptimusService (ROK-1397)', () => {
     expect(result).not.toBeNull();
     expect(result!.entries).toHaveLength(1);
     expect(result!.empty).toBe(false);
-    const [url, init] = fetchSpy.mock.calls[0];
-    expect(String(url)).toContain('api.co-optimus.com/games.php?search=true');
-    expect(String(url)).toContain('name=Palworld');
-    expect(
-      (init!.headers as Record<string, string>)['User-Agent'],
-    ).toBe('RaidLedger/1.0 (granted)');
+    const [rawUrl, init] = fetchSpy.mock.calls[0];
+    const url = rawUrl as string; // fetchApi always passes a string URL
+    expect(url).toContain('api.co-optimus.com/games.php?search=true');
+    expect(url).toContain('name=Palworld');
+    expect((init!.headers as Record<string, string>)['User-Agent']).toBe(
+      'RaidLedger/1.0 (granted)',
+    );
   });
 
   it('testConnection maps a 403 to the honest not-allowlisted message', async () => {
@@ -97,10 +98,7 @@ describe('CooptimusService (ROK-1397)', () => {
       });
 
       // Two callers enter at the same instant (admin Test during a cron run).
-      const both = Promise.all([
-        svc.searchByName('A'),
-        svc.searchByName('B'),
-      ]);
+      const both = Promise.all([svc.searchByName('A'), svc.searchByName('B')]);
       await jest.advanceTimersByTimeAsync(COOPTIMUS_RATE_LIMIT_MS * 2 + 50);
       await both;
 

@@ -270,10 +270,20 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
         });
 
     byNameMock = missThenBase();
-    await sync.syncGame({ id: g.id, name: g.name, steamAppId: null, cooptimusId: null });
+    await sync.syncGame({
+      id: g.id,
+      name: g.name,
+      steamAppId: null,
+      cooptimusId: null,
+    });
     byNameMock.mockRestore();
     byNameMock = missThenBase();
-    await sync.syncGame({ id: g.id, name: g.name, steamAppId: null, cooptimusId: null });
+    await sync.syncGame({
+      id: g.id,
+      name: g.name,
+      steamAppId: null,
+      cooptimusId: null,
+    });
 
     const queue = await sync.getReviewQueue();
     const forGame = queue.filter(
