@@ -14,9 +14,22 @@ import type { CooptimusEntry } from './cooptimus-xml.util';
 import { EDITION_SUFFIX_RE } from './cooptimus.constants';
 
 const ROMAN: Record<string, string> = {
-  i: '1', ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7',
-  viii: '8', ix: '9', x: '10', xi: '11', xii: '12', xiii: '13',
-  xiv: '14', xv: '15', xvi: '16',
+  i: '1',
+  ii: '2',
+  iii: '3',
+  iv: '4',
+  v: '5',
+  vi: '6',
+  vii: '7',
+  viii: '8',
+  ix: '9',
+  x: '10',
+  xi: '11',
+  xii: '12',
+  xiii: '13',
+  xiv: '14',
+  xv: '15',
+  xvi: '16',
 };
 
 /** Lowercase, strip punctuation, fold roman-numeral tokens to arabic. */
@@ -78,7 +91,11 @@ export function deriveFeatureFlags(featurelist: string | null): {
 }
 
 export type MatchResult =
-  | { status: 'matched'; entries: CooptimusEntry[]; method: 'steam-id' | 'name-exact' }
+  | {
+      status: 'matched';
+      entries: CooptimusEntry[];
+      method: 'steam-id' | 'name-exact';
+    }
   | { status: 'review'; baseTitle: string; entries: CooptimusEntry[] }
   | { status: 'no-match' };
 

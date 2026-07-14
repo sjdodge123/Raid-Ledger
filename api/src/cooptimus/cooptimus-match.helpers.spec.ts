@@ -40,13 +40,16 @@ describe('cooptimus-match.helpers (ROK-1397)', () => {
     expect(
       titlesMatchExact('Final Fantasy XIV Online', 'Final Fantasy 14 Online'),
     ).toBe(true);
-    expect(normalizeTitle('Divinity: Original Sin II - Definitive Edition')).toBe(
-      'divinity original sin 2 definitive edition',
-    );
+    expect(
+      normalizeTitle('Divinity: Original Sin II - Definitive Edition'),
+    ).toBe('divinity original sin 2 definitive edition');
   });
 
   it('REJECTS the probe’s substring false positives', () => {
-    const rustResults = [entry({ title: 'Distrust' }), entry({ title: 'Blind Trust' })];
+    const rustResults = [
+      entry({ title: 'Distrust' }),
+      entry({ title: 'Blind Trust' }),
+    ];
     expect(matchEntries(rustResults, 'Rust', null).status).toBe('no-match');
 
     const nwResults = [
@@ -58,7 +61,12 @@ describe('cooptimus-match.helpers (ROK-1397)', () => {
 
   it('steam-id equality arbitrates and pulls sibling platform rows along', () => {
     const results = [
-      entry({ id: 10, title: 'Baldur’s Gate III', system: 'PC', steam: 1086940 }),
+      entry({
+        id: 10,
+        title: 'Baldur’s Gate III',
+        system: 'PC',
+        steam: 1086940,
+      }),
       entry({ id: 11, title: 'Baldur’s Gate III', system: 'PlayStation 5' }),
       entry({ id: 12, title: 'Baldur’s Gate 3: Unrelated Mod' }),
     ];
@@ -71,7 +79,9 @@ describe('cooptimus-match.helpers (ROK-1397)', () => {
   });
 
   it('edition-suffix fallback routes to review, never auto-maps', () => {
-    expect(stripEditionSuffix('Mortal Kombat 11: Ultimate')).toBe('Mortal Kombat 11');
+    expect(stripEditionSuffix('Mortal Kombat 11: Ultimate')).toBe(
+      'Mortal Kombat 11',
+    );
     expect(stripEditionSuffix('Guacamelee!: Gold Edition')).toBe('Guacamelee!');
     expect(stripEditionSuffix('Sonic Mania Plus')).toBe('Sonic Mania');
     expect(stripEditionSuffix('The Binding of Isaac: Repentance+')).toBe(
@@ -102,7 +112,9 @@ describe('cooptimus-match.helpers (ROK-1397)', () => {
   });
 
   it('derives combo/downloadable flags from featurelist text only', () => {
-    expect(deriveFeatureFlags('Combo Co-Op (Local + Online), Co-Op Campaign')).toEqual({
+    expect(
+      deriveFeatureFlags('Combo Co-Op (Local + Online), Co-Op Campaign'),
+    ).toEqual({
       comboCoop: true,
       downloadableOnly: false,
     });
@@ -110,6 +122,9 @@ describe('cooptimus-match.helpers (ROK-1397)', () => {
       comboCoop: false,
       downloadableOnly: true,
     });
-    expect(deriveFeatureFlags(null)).toEqual({ comboCoop: false, downloadableOnly: false });
+    expect(deriveFeatureFlags(null)).toEqual({
+      comboCoop: false,
+      downloadableOnly: false,
+    });
   });
 });

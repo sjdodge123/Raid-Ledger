@@ -206,9 +206,10 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
 
   it('pinned cooptimus_id re-syncs by id without a name search', async () => {
     const g = await seedGame('Some Renamed Game');
-    const byIdMock = jest
-      .spyOn(cooptimus, 'searchById')
-      .mockResolvedValue({ entries: [entry({ id: 4242, online: 6 })], empty: false });
+    const byIdMock = jest.spyOn(cooptimus, 'searchById').mockResolvedValue({
+      entries: [entry({ id: 4242, online: 6 })],
+      empty: false,
+    });
     mockLookup({ entries: [], empty: true }); // would be a miss by name
 
     const outcome = await sync.syncGame({

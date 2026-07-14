@@ -58,10 +58,16 @@ export class CooptimusService {
   async testConnection(): Promise<{ success: boolean; message: string }> {
     const ua = await this.settingsService.getCooptimusUserAgent();
     if (!ua) {
-      return { success: false, message: 'Co-Optimus user-agent is not configured' };
+      return {
+        success: false,
+        message: 'Co-Optimus user-agent is not configured',
+      };
     }
     try {
-      const text = await this.fetchApi(ua, { search: 'true', name: 'Borderlands' });
+      const text = await this.fetchApi(ua, {
+        search: 'true',
+        name: 'Borderlands',
+      });
       const entries = parseCooptimusResponse(text);
       if (entries.length > 0) {
         return {
@@ -71,7 +77,8 @@ export class CooptimusService {
       }
       return {
         success: false,
-        message: 'Reached the API but the response held no entries — check the UA allowlisting',
+        message:
+          'Reached the API but the response held no entries — check the UA allowlisting',
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -98,7 +105,10 @@ export class CooptimusService {
       return null;
     }
     const text = await this.fetchApi(ua, params);
-    return { entries: parseCooptimusResponse(text), empty: isEmptyEnvelope(text) };
+    return {
+      entries: parseCooptimusResponse(text),
+      empty: isEmptyEnvelope(text),
+    };
   }
 
   /** One request at a time, ≥ crawl-delay spacing (robots.txt asks 1s). */

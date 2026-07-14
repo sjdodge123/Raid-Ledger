@@ -81,6 +81,11 @@ describe('cooptimus-xml.util (ROK-1397)', () => {
     );
     const entries = parseCooptimusResponse(two);
     expect(entries).toHaveLength(2);
-    expect(entries[1]).toMatchObject({ id: 9815, system: 'Xbox Series', steam: null, online: 4 });
+    expect(entries[1]).toMatchObject({
+      id: 9815,
+      system: 'Xbox Series',
+      steam: null,
+      online: 4,
+    });
   });
 });

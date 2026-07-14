@@ -152,7 +152,8 @@ export class CooptimusSyncService {
       if (base) {
         const baseLookup = await this.cooptimus.searchByName(base);
         const baseMatch =
-          baseLookup && matchEntries(baseLookup.entries, row.name, row.steamAppId);
+          baseLookup &&
+          matchEntries(baseLookup.entries, row.name, row.steamAppId);
         if (baseMatch && baseMatch.status !== 'no-match') {
           await this.pushReview(row, base);
           return 'review';
@@ -162,7 +163,9 @@ export class CooptimusSyncService {
       return 'no-entry';
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Co-Optimus sync failed for game ${row.id} (${row.name}): ${msg}`);
+      this.logger.warn(
+        `Co-Optimus sync failed for game ${row.id} (${row.name}): ${msg}`,
+      );
       return 'failed';
     }
   }
@@ -232,7 +235,11 @@ export class CooptimusSyncService {
       at: new Date().toISOString(),
     });
     await this.redis.lpush(COOPTIMUS_REVIEW_QUEUE_KEY, item);
-    await this.redis.ltrim(COOPTIMUS_REVIEW_QUEUE_KEY, 0, COOPTIMUS_REVIEW_QUEUE_MAX - 1);
+    await this.redis.ltrim(
+      COOPTIMUS_REVIEW_QUEUE_KEY,
+      0,
+      COOPTIMUS_REVIEW_QUEUE_MAX - 1,
+    );
     this.logger.warn(
       `Co-Optimus review candidate: game ${row.id} "${row.name}" → base "${baseTitle}" (pin cooptimus_id to accept)`,
     );
