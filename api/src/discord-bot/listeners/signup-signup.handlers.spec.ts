@@ -88,7 +88,7 @@ describe('handleExistingSignup — pending-confirmation heal', () => {
       interaction,
       EVENT_ID,
       makeExistingSignup('pending'),
-      deps as SignupInteractionDeps,
+      deps,
     );
 
     expect(setCalls).toEqual([{ confirmationStatus: 'confirmed' }]);
@@ -107,7 +107,7 @@ describe('handleExistingSignup — pending-confirmation heal', () => {
       interaction,
       EVENT_ID,
       makeExistingSignup('confirmed'),
-      deps as SignupInteractionDeps,
+      deps,
     );
 
     expect(setCalls).toEqual([]);

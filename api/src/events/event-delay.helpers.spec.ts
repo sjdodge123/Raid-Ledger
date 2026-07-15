@@ -11,19 +11,34 @@ describe('buildDelayMessage', () => {
   const newStart = new Date('2026-07-15T01:15:00.000Z');
 
   it('renders the new start in the recipient timezone', () => {
-    const msg = buildDelayMessage('D&d night', newStart, 15, 'America/New_York');
+    const msg = buildDelayMessage(
+      'D&d night',
+      newStart,
+      15,
+      'America/New_York',
+    );
     expect(msg).toContain('Jul 14');
     expect(msg).toContain('9:15 PM EDT');
   });
 
   it('includes the delay amount and never emits Discord timestamp markup', () => {
-    const msg = buildDelayMessage('D&d night', newStart, 15, 'America/New_York');
+    const msg = buildDelayMessage(
+      'D&d night',
+      newStart,
+      15,
+      'America/New_York',
+    );
     expect(msg).toContain('delayed by 15 minutes');
     expect(msg).not.toContain('<t:');
   });
 
   it('renders the time exactly once (no duplicated parenthetical)', () => {
-    const msg = buildDelayMessage('D&d night', newStart, 15, 'America/New_York');
+    const msg = buildDelayMessage(
+      'D&d night',
+      newStart,
+      15,
+      'America/New_York',
+    );
     expect(msg.match(/\d{1,2}:\d{2}/g) ?? []).toHaveLength(1);
   });
 
