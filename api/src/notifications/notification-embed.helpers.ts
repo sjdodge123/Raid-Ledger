@@ -77,6 +77,7 @@ export function getTypeLabel(type: NotificationType): string {
     roster_reassigned: 'Roster Reassigned',
     tentative_displaced: 'Tentative Displaced',
     event_rescheduled: 'Event Rescheduled',
+    event_delayed: 'Event Delayed',
     event_cancelled: 'Event Cancelled',
     achievement_unlocked: 'Achievement',
     level_up: 'Level Up',

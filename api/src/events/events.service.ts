@@ -50,6 +50,7 @@ import {
 import { inviteMemberToEvent } from './event-invite.helpers';
 import { findOneEvent, findEventsByIds } from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class EventsService {
@@ -62,6 +63,7 @@ export class EventsService {
     private readonly notificationService: NotificationService,
     private readonly eventEmitter: EventEmitter2,
     private readonly activityLog: ActivityLogService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /** Creates a single or recurring event. */
@@ -242,6 +244,8 @@ export class EventsService {
     actorUserId: number,
     isAdmin = false,
   ): Promise<EventResponseDto> {
+    const defaultTimezone =
+      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
     return runDelayEvent(
       this.db,
       this.notificationService,
@@ -250,6 +254,7 @@ export class EventsService {
       minutes,
       actorUserId,
       isAdmin,
+      defaultTimezone,
     );
   }
 
