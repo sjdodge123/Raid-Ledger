@@ -235,6 +235,7 @@ async function handleWinnerOrNoWinner(
     deps.signupsService,
     plan,
     winnerIndex,
+    results.get(winnerIndex)?.registeredVoterIds ?? [],
   );
 }
 
