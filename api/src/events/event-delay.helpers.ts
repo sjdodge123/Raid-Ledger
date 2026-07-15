@@ -14,7 +14,7 @@ import type { EventResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { NotificationService } from '../notifications/notification.service';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
-import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
+import { resolveUserTimezones } from '../notifications/timezone.helpers';
 import {
   findExistingOrThrow,
   assertOwnerOrAdmin,
@@ -25,9 +25,36 @@ type EventSelect = typeof schema.events.$inferSelect;
 
 const MS_PER_MINUTE = 60_000;
 
-/** Formats a date for Discord notification display using native timestamps. */
-function formatDiscordTime(d: Date): string {
-  return `${toDiscordTimestamp(d, 'f')} (${toDiscordTimestamp(d, 'R')})`;
+/**
+ * Builds the recipient-facing delay message with the new start baked in the
+ * recipient's timezone (ROK-1112 pattern). Discord `<t:...>` markup is NOT
+ * used here: the stored message is also the DM plaintext content, the phone
+ * push preview, and the web in-app text — none of which parse the markup.
+ */
+export function buildDelayMessage(
+  title: string,
+  newStart: Date,
+  minutes: number,
+  timeZone: string,
+): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+    timeZone,
+  };
+  let when: string;
+  try {
+    when = newStart.toLocaleString('en-US', opts);
+  } catch {
+    // A corrupt/non-IANA stored timezone must not abort the whole delay
+    // fan-out — fall back to UTC rather than throwing RangeError.
+    when = newStart.toLocaleString('en-US', { ...opts, timeZone: 'UTC' });
+  }
+  return `"${title}" has been delayed by ${minutes} minutes to ${when}`;
 }
 
 /** Builds the payload for an event_delayed notification. */
@@ -59,6 +86,8 @@ async function notifyEventDelayed(
   actorUserId: number,
   newStart: Date,
   newEnd: Date,
+  minutes: number,
+  defaultTimezone: string,
 ): Promise<void> {
   const usersToNotify = (await getSignedUpUserIds(db, eventId)).filter(
     (id) => id !== actorUserId,
@@ -67,7 +96,7 @@ async function notifyEventDelayed(
   const discordUrl = await notificationService.getDiscordEmbedUrl(eventId);
   const voiceChannelId =
     await notificationService.resolveVoiceChannelForEvent(eventId);
-  const message = `"${existing.title}" has been delayed to ${formatDiscordTime(newStart)}`;
+  const tzMap = await resolveUserTimezones(db, usersToNotify, defaultTimezone);
   const payload = buildDelayPayload(
     eventId,
     existing,
@@ -81,7 +110,12 @@ async function notifyEventDelayed(
       userId: uid,
       type: 'event_delayed' as const,
       title: 'Event Delayed',
-      message,
+      message: buildDelayMessage(
+        existing.title,
+        newStart,
+        minutes,
+        tzMap.get(uid) ?? defaultTimezone,
+      ),
       payload,
     })),
   );
@@ -100,6 +134,7 @@ export async function applyEventDelay(
   minutes: number,
   actorUserId: number,
   isAdmin = false,
+  defaultTimezone = 'UTC',
 ): Promise<{ newStart: Date; newEnd: Date }> {
   if (!Number.isFinite(minutes) || minutes <= 0)
     throw new BadRequestException('Delay minutes must be a positive number');
@@ -120,6 +155,8 @@ export async function applyEventDelay(
     actorUserId,
     newStart,
     newEnd,
+    minutes,
+    defaultTimezone,
   );
   return { newStart, newEnd };
 }
@@ -143,6 +180,7 @@ export async function runDelayEvent(
   minutes: number,
   actorUserId: number,
   isAdmin = false,
+  defaultTimezone = 'UTC',
 ): Promise<EventResponseDto> {
   await applyEventDelay(
     db,
@@ -151,6 +189,7 @@ export async function runDelayEvent(
     minutes,
     actorUserId,
     isAdmin,
+    defaultTimezone,
   );
   return postMutate(eventId, actorUserId, 'delayed', APP_EVENT_EVENTS.UPDATED);
 }

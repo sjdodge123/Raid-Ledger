@@ -1,5 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
+import { autoSignupPollVoters } from './event-plans-auto-signup.helpers';
+
+// Wiring boundary — voter resolution + signup-loop behavior is covered by
+// event-plans-auto-signup.helpers.spec.ts; here we assert the args it receives.
+jest.mock('./event-plans-auto-signup.helpers', () => ({
+  autoSignupPollVoters: jest.fn().mockResolvedValue(undefined),
+}));
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
@@ -493,6 +500,45 @@ async function testAutoSignupCreator() {
   expect(signupsService.signup).toHaveBeenCalledWith(99, CREATOR_ID);
 }
 
+async function testAutoSignupWinningVoters() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
+      [1, makePollAnswer([REGISTERED_USER_IDS[3]])],
+      [2, makePollAnswer([])],
+      [3, makePollAnswer([])],
+    ]),
+  );
+
+  await service.processPollClose(PLAN_ID);
+  expect(autoSignupPollVoters).toHaveBeenCalledWith(
+    expect.objectContaining({
+      eventId: 99,
+      creatorId: CREATOR_ID,
+      voterDiscordIds: REGISTERED_USER_IDS.slice(0, 3),
+    }),
+  );
+  const passedIds = (autoSignupPollVoters as jest.Mock).mock.calls[0][0]
+    .voterDiscordIds as string[];
+  expect(passedIds).not.toContain(REGISTERED_USER_IDS[3]);
+}
+
+async function testNoAutoSignupWhenNoneWins() {
+  setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
+  setupPollWithAnswers(
+    new Map([
+      [0, makePollAnswer([REGISTERED_USER_IDS[0]])],
+      [1, makePollAnswer([])],
+      [2, makePollAnswer([])],
+      [3, makePollAnswer(REGISTERED_USER_IDS.slice(0, 4))],
+    ]),
+  );
+
+  await service.processPollClose(PLAN_ID);
+  expect(autoSignupPollVoters).not.toHaveBeenCalled();
+}
+
 async function testMarksPlanCompleted() {
   setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
   setupPollWithAnswers(
@@ -575,6 +621,10 @@ describe('processPollClose — winner determination', () => {
   it('should pick highest registered votes', () => testPicksHighestVotes());
   it('should pick earliest date on tie', () => testPicksEarliestOnTie());
   it('should auto-signup creator', () => testAutoSignupCreator());
+  it('should auto-signup winning-option voters (ROK-1379 follow-up)', () =>
+    testAutoSignupWinningVoters());
+  it('should not auto-signup voters when None wins', () =>
+    testNoAutoSignupWhenNoneWins());
   it('should mark plan as completed', () => testMarksPlanCompleted());
 });
 

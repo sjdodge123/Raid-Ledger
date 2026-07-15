@@ -22,6 +22,7 @@ import { getCharacterById } from './signups-cancel.helpers';
 import { buildSignupResponseDto } from './signups-roster.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
 import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
+import { reconfirmPendingWithSlot } from './signups-reconfirm.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 
@@ -90,7 +91,7 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
     dto,
   );
   if (rolesChanged) await clearExistingAssignment(tx, existing.id);
-  await ensureAssignment(
+  const reconfirmed = await ensureAssignment(
     deps,
     tx,
     eventRow,
@@ -104,6 +105,8 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
     : null;
   return {
     isDuplicate: true as const,
+    reconfirmed,
+    reconfirmedUserId: existing.userId,
     response: buildSignupResponseDto(existing, user, character),
   };
 }
@@ -122,8 +125,19 @@ async function ensureAssignment(
   existing: typeof schema.eventSignups.$inferSelect,
   dto: CreateSignupDto | undefined,
   autoBench: boolean,
-) {
-  if (await checkHasAssignment(tx, existing.id)) return;
+): Promise<boolean> {
+  // Duplicate signup already holding a non-bench slot: reconfirm the 'pending'
+  // status left by the ROK-1269 reschedule reset (mutate `existing` for the
+  // response); returns true so the service emits the post-commit audit entry.
+  if (await checkHasAssignment(tx, existing.id)) {
+    const healed = await reconfirmPendingWithSlot(
+      tx,
+      existing.id,
+      existing.confirmationStatus,
+    );
+    if (healed) existing.confirmationStatus = 'confirmed';
+    return healed;
+  }
   if (signupH.shouldUseAutoAllocation(eventRow, existing, dto, autoBench)) {
     const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
     if (!existing.preferredRoles?.length && dto?.slotRole) {
@@ -148,6 +162,7 @@ async function ensureAssignment(
     });
     if (confirmed) existing.confirmationStatus = 'confirmed';
   }
+  return false;
 }
 
 export async function assignDirectSlot(

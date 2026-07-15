@@ -53,6 +53,9 @@ export function createMockDeps(): SignupInteractionDeps {
       getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
       getClassEmojiComponent: jest.fn().mockReturnValue(undefined),
     },
+    activityLog: {
+      log: jest.fn().mockResolvedValue(undefined),
+    },
     updateEmbedSignupCount: jest.fn().mockResolvedValue(undefined),
   } as unknown as SignupInteractionDeps;
 }

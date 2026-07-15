@@ -29,6 +29,7 @@ import * as rosterH from './signups-roster.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
 import * as flowH from './signups-flow.helpers';
 import * as discordSignupH from './signups-discord-signup.helpers';
+import * as reconfirmH from './signups-reconfirm.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 
 /** Service for managing event signups (FR-006), character confirmation (ROK-131), and anonymous Discord signups (ROK-137). */
@@ -89,7 +90,9 @@ export class SignupsService {
         err instanceof Error ? err.message : 'Unknown error',
       );
     });
-    if (result.isDuplicate) return result.response;
+    // ROK-1269 invariant: the reconfirm self-heal is audited post-commit.
+    if (result.isDuplicate)
+      return reconfirmH.finalizeDuplicate(this.activityLog, eventId, result);
     this.emit(SIGNUP_EVENTS.CREATED, {
       eventId,
       userId,

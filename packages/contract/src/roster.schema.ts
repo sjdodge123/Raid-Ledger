@@ -64,6 +64,10 @@ export const RosterAssignmentResponseSchema = z.object({
     preferredRoles: z.array(z.enum(['tank', 'healer', 'dps'])).nullable().optional(),
     /** ROK-459 / ROK-1237: Signup attendance status — canonical enum (covers departed/roached_out too). */
     signupStatus: SignupStatusSchema.optional(),
+    /** ROK-1379 follow-up: running-late marker for the ⏰ roster badge */
+    runningLate: z.boolean().optional(),
+    /** ROK-1379 follow-up: optional ETA-late minutes (unset in v1) */
+    lateMinutes: z.number().int().positive().nullable().optional(),
 });
 export type RosterAssignmentResponse = z.infer<typeof RosterAssignmentResponseSchema>;
 

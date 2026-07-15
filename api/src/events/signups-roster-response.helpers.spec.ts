@@ -73,3 +73,44 @@ describe('buildAnonymousSignupResponseDto — assignedSlot (ROK-626)', () => {
     expect(result.assignedSlot).toBeUndefined();
   });
 });
+
+describe('running-late fields in signup response DTOs (ROK-1379 follow-up)', () => {
+  const lateAt = new Date('2026-07-15T00:22:09.000Z');
+
+  it('maps runningLateAt/lateMinutes when set (registered)', () => {
+    const result = buildSignupResponseDto(
+      { ...baseSignup, runningLateAt: lateAt, lateMinutes: 15 },
+      baseUser as Parameters<typeof buildSignupResponseDto>[1],
+      null,
+    );
+    expect(result.runningLate).toBe(true);
+    expect(result.runningLateAt).toBe(lateAt.toISOString());
+    expect(result.lateMinutes).toBe(15);
+  });
+
+  it('reports not-late when runningLateAt is null (registered)', () => {
+    const result = buildSignupResponseDto(
+      baseSignup,
+      baseUser as Parameters<typeof buildSignupResponseDto>[1],
+      null,
+    );
+    expect(result.runningLate).toBe(false);
+    expect(result.runningLateAt).toBeNull();
+    expect(result.lateMinutes).toBeNull();
+  });
+
+  it('maps running-late fields for anonymous signups', () => {
+    const anonSignup = {
+      ...baseSignup,
+      userId: null,
+      discordUserId: 'discord-123',
+      discordUsername: 'AnonUser',
+      discordAvatarHash: 'hash-abc',
+      runningLateAt: lateAt,
+    };
+    const result = buildAnonymousSignupResponseDto(anonSignup);
+    expect(result.runningLate).toBe(true);
+    expect(result.runningLateAt).toBe(lateAt.toISOString());
+    expect(result.lateMinutes).toBeNull();
+  });
+});

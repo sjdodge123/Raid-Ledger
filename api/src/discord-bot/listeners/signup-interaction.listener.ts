@@ -13,6 +13,7 @@ import { SignupsService } from '../../events/signups.service';
 import { EventsService } from '../../events/events.service';
 import { CharactersService } from '../../characters/characters.service';
 import { IntentTokenService } from '../../auth/intent-token.service';
+import { ActivityLogService } from '../../activity-log/activity-log.service';
 import {
   DISCORD_BOT_EVENTS,
   SIGNUP_BUTTON_IDS,
@@ -69,6 +70,7 @@ export class SignupInteractionListener {
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly emojiService: DiscordEmojiService,
     private readonly settingsService: SettingsService,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   /** Register the interaction handler when the bot connects. */
@@ -117,8 +119,8 @@ export class SignupInteractionListener {
       embedFactory: this.embedFactory,
       emojiService: this.emojiService,
       settingsService: this.settingsService,
-      updateEmbedSignupCount: (eventId: number) =>
-        this.updateEmbedSignupCount(eventId),
+      activityLog: this.activityLog,
+      updateEmbedSignupCount: (id) => this.updateEmbedSignupCount(id),
     };
   }
 
@@ -206,8 +208,6 @@ export class SignupInteractionListener {
         break;
       case SIGNUP_BUTTON_IDS.QUICK_SIGNUP:
         await handleQuickSignup(interaction, eventId, deps);
-        break;
-      default:
         break;
     }
   }

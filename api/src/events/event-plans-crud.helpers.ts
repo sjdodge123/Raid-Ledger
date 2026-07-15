@@ -10,6 +10,7 @@ import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import type { CreateEventPlanDto } from '@raid-ledger/contract';
 import { dmOrganizer } from './event-plans-discord.helpers';
+import { autoSignupPollVoters } from './event-plans-auto-signup.helpers';
 
 const logger = new Logger('EventPlansCrud');
 type PlanRow = typeof schema.eventPlans.$inferSelect;
@@ -180,9 +181,19 @@ async function handleEventCreated(
   eventId: number,
   winnerIndex: number,
   winnerLabel: string,
+  winnerVoterDiscordIds: string[],
 ): Promise<void> {
   await signupsService.signup(eventId, plan.creatorId);
   await markPlanCompleted(db, plan.id, winnerIndex, eventId);
+  // After markPlanCompleted: auto-signup is best-effort and must never
+  // reach createEventFromPlan's catch (which would expire a completed plan).
+  await autoSignupPollVoters({
+    db,
+    signupsService,
+    eventId,
+    creatorId: plan.creatorId,
+    voterDiscordIds: winnerVoterDiscordIds,
+  });
   safeDmOrganizer(
     db,
     discordClient,
@@ -236,6 +247,7 @@ export async function createEventFromPlan(
   signupsService: SignupsService,
   plan: PlanRow,
   winnerIndex: number,
+  winnerVoterDiscordIds: string[] = [],
 ): Promise<void> {
   const { winningOption, startTime, endTime } = resolveWinningTimes(
     plan,
@@ -254,6 +266,7 @@ export async function createEventFromPlan(
       event.id,
       winnerIndex,
       winningOption.label,
+      winnerVoterDiscordIds,
     );
   } catch (error) {
     await expirePlanOnError(db, plan.id, error);
