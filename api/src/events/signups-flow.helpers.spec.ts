@@ -368,6 +368,93 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
     });
   });
 
+  describe('signupTxBody — duplicate signup heals pending confirmation (post-reschedule)', () => {
+    /** Duplicate signup where an assignment already exists; role controls the heal. */
+    function setupDuplicateWithAssignment(assignedRole: string) {
+      const mockTx = createMockTx();
+      const deps = createMockDeps();
+      const eventRow = createMmoEventRow();
+      const existingSignup = createSignupRow({
+        id: 30,
+        status: 'signed_up',
+        confirmationStatus: 'pending',
+      });
+
+      mockTx.select
+        // checkAutoBench: count non-bench roster assignments
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            innerJoin: jest.fn().mockReturnValue({
+              where: jest.fn().mockResolvedValue([{ count: 0 }]),
+            }),
+          }),
+        })
+        // fetchExistingSignup
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([existingSignup]),
+            }),
+          }),
+        })
+        // checkHasAssignment — assignment already exists
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+            }),
+          }),
+        })
+        // healPendingOnExistingAssignment: getAssignedSlotRole
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ role: assignedRole }]),
+            }),
+          }),
+        });
+
+      const params: SignupTxParams = {
+        tx: mockTx as unknown as SignupTxParams['tx'],
+        eventRow,
+        eventId: 1,
+        userId: 1,
+        dto: undefined,
+        user: undefined,
+      };
+      return { mockTx, deps, params };
+    }
+
+    it('re-confirms a pending signup that already holds a non-bench slot', async () => {
+      const { mockTx, deps, params } = setupDuplicateWithAssignment('player');
+
+      const result = await signupTxBody(deps, params);
+
+      const confirmWrites = mockTx.setCalls.filter(
+        (call) => call.confirmationStatus === 'confirmed',
+      );
+      expect(confirmWrites).toHaveLength(1);
+      expect(result.isDuplicate).toBe(true);
+      if (result.isDuplicate) {
+        expect(result.response.confirmationStatus).toBe('confirmed');
+      }
+    });
+
+    it('leaves a benched pending signup pending', async () => {
+      const { mockTx, deps, params } = setupDuplicateWithAssignment('bench');
+
+      const result = await signupTxBody(deps, params);
+
+      expect(
+        mockTx.setCalls.filter((c) => 'confirmationStatus' in c),
+      ).toHaveLength(0);
+      expect(result.isDuplicate).toBe(true);
+      if (result.isDuplicate) {
+        expect(result.response.confirmationStatus).toBe('pending');
+      }
+    });
+  });
+
   describe('signupTxBody — clearExistingAssignment on role change (ROK-814)', () => {
     /** Set up a duplicate signup scenario with the given existing roles and dto roles. */
     function setupDuplicateWithRoles(

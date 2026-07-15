@@ -114,6 +114,27 @@ async function clearExistingAssignment(tx: Tx, signupId: number) {
     .where(eq(schema.rosterAssignments.signupId, signupId));
 }
 
+/**
+ * Duplicate-signup self-heal: a signup that already holds a non-bench slot but
+ * sits at confirmationStatus 'pending' (e.g. after the ROK-1269 reschedule
+ * reset) is re-confirmed — mirrors the assignDirectSlot rule that a non-bench
+ * slot grant confirms the signup. Mutates `existing` in-place because the
+ * duplicate-signup response is built from it.
+ */
+async function healPendingOnExistingAssignment(
+  tx: Tx,
+  existing: typeof schema.eventSignups.$inferSelect,
+): Promise<void> {
+  if (existing.confirmationStatus !== 'pending') return;
+  const role = await rosterQH.getAssignedSlotRole(tx, existing.id);
+  if (!role || role === 'bench') return;
+  await tx
+    .update(schema.eventSignups)
+    .set({ confirmationStatus: 'confirmed' })
+    .where(eq(schema.eventSignups.id, existing.id));
+  existing.confirmationStatus = 'confirmed';
+}
+
 async function ensureAssignment(
   deps: FlowDeps,
   tx: Tx,
@@ -123,7 +144,10 @@ async function ensureAssignment(
   dto: CreateSignupDto | undefined,
   autoBench: boolean,
 ) {
-  if (await checkHasAssignment(tx, existing.id)) return;
+  if (await checkHasAssignment(tx, existing.id)) {
+    await healPendingOnExistingAssignment(tx, existing);
+    return;
+  }
   if (signupH.shouldUseAutoAllocation(eventRow, existing, dto, autoBench)) {
     const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
     if (!existing.preferredRoles?.length && dto?.slotRole) {
