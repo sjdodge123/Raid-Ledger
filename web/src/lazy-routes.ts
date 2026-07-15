@@ -164,6 +164,9 @@ export const SteamPanel = lazyWithRetry(() =>
 export const ItadPanel = lazyWithRetry(() =>
     import('./pages/admin/itad-panel').then((m) => ({ default: m.ItadPanel })),
 );
+export const CooptimusPanel = lazyWithRetry(() =>
+    import('./pages/admin/cooptimus-panel').then((m) => ({ default: m.CooptimusPanel })),
+);
 export const PluginsPanel = lazyWithRetry(() =>
     import('./pages/admin/plugins-panel').then((m) => ({ default: m.PluginsPanel })),
 );

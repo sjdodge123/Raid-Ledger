@@ -123,6 +123,9 @@ export function buildSignupResponseDto(
       (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
     attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
     attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
+    runningLate: signup.runningLateAt != null,
+    runningLateAt: signup.runningLateAt?.toISOString() ?? null,
+    lateMinutes: signup.lateMinutes ?? null,
     ...(assignedSlot ? { assignedSlot: assignedSlot as RosterRole } : {}),
   };
 }
@@ -155,6 +158,9 @@ export function buildAnonymousSignupResponseDto(
       (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
     attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
     attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
+    runningLate: signup.runningLateAt != null,
+    runningLateAt: signup.runningLateAt?.toISOString() ?? null,
+    lateMinutes: signup.lateMinutes ?? null,
     ...(assignedSlot ? { assignedSlot: assignedSlot as RosterRole } : {}),
   };
 }
@@ -182,5 +188,7 @@ export function buildRosterAssignmentResponseDto(
         | ('tank' | 'healer' | 'dps')[]
         | null) ?? null,
     signupStatus: row.event_signups.status as SignupStatus,
+    runningLate: row.event_signups.runningLateAt != null,
+    lateMinutes: row.event_signups.lateMinutes ?? null,
   };
 }

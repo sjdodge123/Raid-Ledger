@@ -1,5 +1,5 @@
 /**
- * Admin integration panel smoke tests — IGDB, Steam, ITAD.
+ * Admin integration panel smoke tests — IGDB, Steam, ITAD, Co-Optimus.
  * Verifies each panel renders its configuration form, API key fields,
  * status badge, and Save button at both desktop and mobile viewports.
  *
@@ -94,5 +94,32 @@ test.describe('Admin Integrations — ITAD panel', () => {
 
         // Save button
         await expect(page.getByRole('button', { name: 'Save Configuration' })).toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Co-Optimus panel (ROK-1397)
+// ---------------------------------------------------------------------------
+
+test.describe('Admin Integrations — Co-Optimus panel', () => {
+    test('renders heading, status badge, user-agent field, and save button', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), 'Admin settings panels use desktop sidebar layout');
+        await page.goto('/admin/settings/integrations/cooptimus');
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
+        // Panel heading
+        await expect(page.getByRole('heading', { name: 'Co-Optimus' }).first()).toBeVisible({ timeout: 10_000 });
+
+        // IntegrationCard status badge
+        await expect(page.getByText(/^(Online|Offline)$/).first()).toBeVisible({ timeout: 10_000 });
+
+        // Permission-first setup instructions block
+        await expect(page.getByText('Permission-first setup:')).toBeVisible();
+
+        // Allowlisted user-agent field
+        await expect(page.locator('#cooptimus-ua')).toBeVisible();
+
+        // Save button
+        await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
     });
 });

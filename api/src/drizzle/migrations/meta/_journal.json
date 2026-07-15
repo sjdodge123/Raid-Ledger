@@ -1100,6 +1100,20 @@
       "when": 1784054244103,
       "tag": "0156_fix_bad_steam_app_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 157,
+      "version": "7",
+      "when": 1784059507638,
+      "tag": "0157_cooptimus_coop_enrichment",
+      "breakpoints": true
+    },
+    {
+      "idx": 158,
+      "version": "7",
+      "when": 1784105920793,
+      "tag": "0158_free_hulk",
+      "breakpoints": true
     }
   ]
 }

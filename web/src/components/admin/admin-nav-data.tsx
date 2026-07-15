@@ -32,6 +32,7 @@ export function buildCoreIntegrationItems(statuses: {
     igdb: { configured: boolean; loading: boolean };
     steam: { configured: boolean; loading: boolean };
     itad?: { configured: boolean; loading: boolean };
+    cooptimus?: { configured: boolean; loading: boolean };
 }): NavItem[] {
     return [
         {
@@ -51,6 +52,12 @@ export function buildCoreIntegrationItems(statuses: {
             label: 'ITAD',
             status: statuses.itad?.loading ? 'loading'
                 : statuses.itad?.configured ? 'online' : 'offline',
+        },
+        {
+            to: '/admin/settings/integrations/cooptimus',
+            label: 'Co-Optimus',
+            status: statuses.cooptimus?.loading ? 'loading'
+                : statuses.cooptimus?.configured ? 'online' : 'offline',
         },
     ];
 }

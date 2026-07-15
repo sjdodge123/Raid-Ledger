@@ -1,5 +1,6 @@
 import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import * as schema from '../../drizzle/schema';
+import { healPendingFromDiscord } from '../../events/signups-reconfirm.helpers';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
   showCharacterSelect as sharedShowCharacterSelect,
@@ -48,17 +49,30 @@ export async function handleExistingSignup(
     existingSignup,
     deps,
   );
-  if (!handled) await replyReactivationResult(interaction, wasReactivated);
+  if (!handled) {
+    // Sign Up re-click reconfirms a pending, non-bench signup left by the
+    // ROK-1269 reschedule reset (characterless games have no other exit).
+    const healed = await healPendingFromDiscord(
+      deps.db,
+      deps.activityLog,
+      existingSignup,
+    );
+    await replyReactivationResult(interaction, wasReactivated, healed);
+  }
 }
 
 async function replyReactivationResult(
   interaction: ButtonInteraction,
   wasReactivated: boolean,
+  healed: boolean,
 ): Promise<void> {
+  const content = wasReactivated
+    ? 'Your status has been changed to **signed up**!'
+    : healed
+      ? "You're confirmed — see you there!"
+      : alreadySignedUpMessage();
   await interaction.editReply({
-    content: wasReactivated
-      ? 'Your status has been changed to **signed up**!'
-      : alreadySignedUpMessage(),
+    content,
     embeds: [],
   });
 }

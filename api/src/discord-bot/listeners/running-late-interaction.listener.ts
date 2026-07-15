@@ -193,7 +193,12 @@ export class RunningLateInteractionListener {
       return this.reply(interaction, 'This event has been cancelled.');
     if (user.id === event.creatorId)
       return this.handleHostLate(interaction, event, user.id);
-    return this.handleAttendeeLate(interaction, event, user.id);
+    return this.handleAttendeeLate(
+      interaction,
+      event,
+      user.id,
+      user.displayName ?? user.username,
+    );
   }
 
   private async handleHostLate(
@@ -217,6 +222,7 @@ export class RunningLateInteractionListener {
     interaction: ButtonInteraction,
     event: RunningLateEvent,
     userId: number,
+    username: string,
   ): Promise<void> {
     if (!(await userHasSignup(this.deps, event.id, userId)))
       return this.reply(interaction, "You're not signed up for this event.");
@@ -224,7 +230,24 @@ export class RunningLateInteractionListener {
       event.id,
       userId,
     );
-    if (marked) await updateChannelEmbeds(this.deps, event.id);
+    if (marked) {
+      await updateChannelEmbeds(this.deps, event.id);
+      // First transition to late only (setRunningLate RETURNING guard);
+      // best-effort — a notify failure must not break the ephemeral ack.
+      try {
+        await this.runningLateService.notifyRunningLate(
+          event,
+          userId,
+          username,
+        );
+      } catch (error) {
+        this.logger.warn(
+          'Failed to notify attendees of running-late for event %d: %s',
+          event.id,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
     await interaction.editReply({
       content: `⏰ Got it — marked you as running late for **${event.title}**.`,
     });

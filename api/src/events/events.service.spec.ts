@@ -7,6 +7,7 @@ import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
 
 let service: EventsService;
 let mockDb: MockDb;
@@ -64,6 +65,10 @@ async function setupEach() {
       {
         provide: NotificationService,
         useValue: { create: jest.fn() },
+      },
+      {
+        provide: SettingsService,
+        useValue: { getDefaultTimezone: jest.fn().mockResolvedValue(null) },
       },
       {
         provide: EventEmitter2,

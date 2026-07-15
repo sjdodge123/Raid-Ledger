@@ -115,6 +115,8 @@ export function PlayerCard({ player, size = 'default', onClick, onRemove, matchA
     const isCompact = size === 'compact';
     const avatarSize = isCompact ? 'h-8 w-8' : 'h-10 w-10';
     const isTentative = player.signupStatus === 'tentative';
+    const isRunningLate = player.runningLate === true;
+    const lateTitle = player.lateMinutes ? `Running late (+${player.lateMinutes} min)` : 'Running late';
     const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 0 ? player.preferredRoles : null;
     const borderStyle = matchAccent ? { borderLeft: `3px solid ${matchAccent}` } : undefined;
 
@@ -131,6 +133,9 @@ export function PlayerCard({ player, size = 'default', onClick, onRemove, matchA
                     <PlayerNameLink player={player} />
                     {isTentative && (
                         <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title="Tentative — may not attend">&#x23F3;</span>
+                    )}
+                    {isRunningLate && (
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
                     )}
                     {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} />}
                 </div>
