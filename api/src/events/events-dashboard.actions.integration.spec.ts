@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
 import { EventsService } from './events.service';
+import { RunningLateService } from './running-late.service';
 
 async function createMemberAndLogin(
   testApp: TestApp,
@@ -695,6 +696,72 @@ async function testDelayRejectsNonHost() {
   ).rejects.toBeDefined();
 }
 
+/** Seed an active signup for `userId` on `eventId`. */
+async function seedSignup(
+  eventId: number,
+  userId: number,
+  status: 'signed_up' | 'tentative' | 'declined' = 'signed_up',
+): Promise<void> {
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId,
+    userId,
+    status,
+    confirmationStatus: 'confirmed',
+  });
+}
+
+async function testRunningLateNotifiesActiveAttendeesAndHost() {
+  const eventId = await createFutureEvent(testApp, adminToken, {
+    title: 'Late Raid',
+  });
+  const late = await createMemberAndLogin(testApp, 'late_a', 'la@test.local');
+  const other = await createMemberAndLogin(testApp, 'late_b', 'lb@test.local');
+  const declined = await createMemberAndLogin(
+    testApp,
+    'late_c',
+    'lc@test.local',
+  );
+  await seedSignup(eventId, late.userId);
+  await seedSignup(eventId, other.userId);
+  await seedSignup(eventId, declined.userId, 'declined');
+
+  const [event] = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+
+  await testApp.app.get(RunningLateService).notifyRunningLate(
+    {
+      id: eventId,
+      title: event.title,
+      duration: event.duration,
+      creatorId: event.creatorId,
+    },
+    late.userId,
+    'Late Player',
+  );
+
+  const rowsFor = async (uid: number) =>
+    testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(
+        and(
+          eq(schema.notifications.userId, uid),
+          eq(schema.notifications.type, 'running_late'),
+        ),
+      );
+
+  // The host (event creator) and the other active attendee are notified.
+  expect(await rowsFor(testApp.seed.adminUser.id)).toHaveLength(1);
+  const otherRows = await rowsFor(other.userId);
+  expect(otherRows).toHaveLength(1);
+  expect(otherRows[0].message).toContain('Late Player');
+  // The late user themselves and the declined signup are NOT notified.
+  expect(await rowsFor(late.userId)).toHaveLength(0);
+  expect(await rowsFor(declined.userId)).toHaveLength(0);
+}
+
 beforeAll(() => setupAll());
 afterEach(() => resetAfterEach());
 
@@ -731,6 +798,11 @@ describe('Events — delay (ROK-1379)', () => {
   it('shifts start/end, preserves confirmations, sends event_delayed to non-actor', () =>
     testDelayShiftsAndPreservesConfirmation());
   it('rejects a non-host actor', () => testDelayRejectsNonHost());
+});
+
+describe('Events — running-late notify (ROK-1379 follow-up)', () => {
+  it('notifies active attendees + host, excludes late user and declined', () =>
+    testRunningLateNotifiesActiveAttendeesAndHost());
 });
 
 describe('Events — invite member', () => {

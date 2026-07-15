@@ -37,7 +37,7 @@ export function buildDelayMessage(
   minutes: number,
   timeZone: string,
 ): string {
-  const when = newStart.toLocaleString('en-US', {
+  const opts: Intl.DateTimeFormatOptions = {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -45,7 +45,15 @@ export function buildDelayMessage(
     hour12: true,
     timeZoneName: 'short',
     timeZone,
-  });
+  };
+  let when: string;
+  try {
+    when = newStart.toLocaleString('en-US', opts);
+  } catch {
+    // A corrupt/non-IANA stored timezone must not abort the whole delay
+    // fan-out — fall back to UTC rather than throwing RangeError.
+    when = newStart.toLocaleString('en-US', { ...opts, timeZone: 'UTC' });
+  }
   return `"${title}" has been delayed by ${minutes} minutes to ${when}`;
 }
 

@@ -1,6 +1,6 @@
 import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
-import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
+import { healPendingFromDiscord } from '../../events/signups-reconfirm.helpers';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import {
   showCharacterSelect as sharedShowCharacterSelect,
@@ -50,27 +50,15 @@ export async function handleExistingSignup(
     deps,
   );
   if (!handled) {
-    const healed = await healPendingConfirmation(existingSignup, deps);
+    // Sign Up re-click reconfirms a pending, non-bench signup left by the
+    // ROK-1269 reschedule reset (characterless games have no other exit).
+    const healed = await healPendingFromDiscord(
+      deps.db,
+      deps.activityLog,
+      existingSignup,
+    );
     await replyReactivationResult(interaction, wasReactivated, healed);
   }
-}
-
-/**
- * An explicit Sign Up re-click is an attendance re-assertion: heal the
- * 'pending' confirmationStatus left by the ROK-1269 reschedule reset.
- * Characterless games have no other recovery affordance (the one-shot
- * event_rescheduled DM Confirm button is the only exit otherwise).
- */
-async function healPendingConfirmation(
-  existingSignup: ExistingSignup,
-  deps: SignupInteractionDeps,
-): Promise<boolean> {
-  if (existingSignup.confirmationStatus !== 'pending') return false;
-  await deps.db
-    .update(schema.eventSignups)
-    .set({ confirmationStatus: 'confirmed' })
-    .where(eq(schema.eventSignups.id, existingSignup.id));
-  return true;
 }
 
 async function replyReactivationResult(

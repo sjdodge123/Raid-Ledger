@@ -63,9 +63,10 @@ export async function notifyAttendeeRunningLate(
   const { db, notificationService, event, lateUserId, lateUsername } = params;
   const recipients = await fetchRecipients(db, event, lateUserId);
   if (recipients.length === 0) return;
-  const discordUrl = await notificationService.getDiscordEmbedUrl(event.id);
-  const voiceChannelId =
-    await notificationService.resolveVoiceChannelForEvent(event.id);
+  const [discordUrl, voiceChannelId] = await Promise.all([
+    notificationService.getDiscordEmbedUrl(event.id),
+    notificationService.resolveVoiceChannelForEvent(event.id),
+  ]);
   const payload: Record<string, unknown> = {
     eventId: event.id,
     lateUserId,

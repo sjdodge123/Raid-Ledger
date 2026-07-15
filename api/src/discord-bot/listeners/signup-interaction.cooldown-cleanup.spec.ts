@@ -23,6 +23,7 @@ import { IntentTokenService } from '../../auth/intent-token.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { SettingsService } from '../../settings/settings.service';
+import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
@@ -168,6 +169,10 @@ function buildCooldownProviders() {
         }),
         getDefaultTimezone: jest.fn().mockResolvedValue(null),
       },
+    },
+    {
+      provide: ActivityLogService,
+      useValue: { log: jest.fn().mockResolvedValue(undefined) },
     },
   ];
 }

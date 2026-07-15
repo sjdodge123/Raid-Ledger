@@ -22,6 +22,7 @@ import { getCharacterById } from './signups-cancel.helpers';
 import { buildSignupResponseDto } from './signups-roster.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
 import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
+import { reconfirmPendingWithSlot } from './signups-reconfirm.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 
@@ -90,7 +91,7 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
     dto,
   );
   if (rolesChanged) await clearExistingAssignment(tx, existing.id);
-  await ensureAssignment(
+  const reconfirmed = await ensureAssignment(
     deps,
     tx,
     eventRow,
@@ -104,6 +105,8 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
     : null;
   return {
     isDuplicate: true as const,
+    reconfirmed,
+    reconfirmedUserId: existing.userId,
     response: buildSignupResponseDto(existing, user, character),
   };
 }
@@ -114,27 +117,6 @@ async function clearExistingAssignment(tx: Tx, signupId: number) {
     .where(eq(schema.rosterAssignments.signupId, signupId));
 }
 
-/**
- * Duplicate-signup self-heal: a signup that already holds a non-bench slot but
- * sits at confirmationStatus 'pending' (e.g. after the ROK-1269 reschedule
- * reset) is re-confirmed — mirrors the assignDirectSlot rule that a non-bench
- * slot grant confirms the signup. Mutates `existing` in-place because the
- * duplicate-signup response is built from it.
- */
-async function healPendingOnExistingAssignment(
-  tx: Tx,
-  existing: typeof schema.eventSignups.$inferSelect,
-): Promise<void> {
-  if (existing.confirmationStatus !== 'pending') return;
-  const role = await rosterQH.getAssignedSlotRole(tx, existing.id);
-  if (!role || role === 'bench') return;
-  await tx
-    .update(schema.eventSignups)
-    .set({ confirmationStatus: 'confirmed' })
-    .where(eq(schema.eventSignups.id, existing.id));
-  existing.confirmationStatus = 'confirmed';
-}
-
 async function ensureAssignment(
   deps: FlowDeps,
   tx: Tx,
@@ -143,10 +125,18 @@ async function ensureAssignment(
   existing: typeof schema.eventSignups.$inferSelect,
   dto: CreateSignupDto | undefined,
   autoBench: boolean,
-) {
+): Promise<boolean> {
+  // Duplicate signup already holding a non-bench slot: reconfirm the 'pending'
+  // status left by the ROK-1269 reschedule reset (mutate `existing` for the
+  // response); returns true so the service emits the post-commit audit entry.
   if (await checkHasAssignment(tx, existing.id)) {
-    await healPendingOnExistingAssignment(tx, existing);
-    return;
+    const healed = await reconfirmPendingWithSlot(
+      tx,
+      existing.id,
+      existing.confirmationStatus,
+    );
+    if (healed) existing.confirmationStatus = 'confirmed';
+    return healed;
   }
   if (signupH.shouldUseAutoAllocation(eventRow, existing, dto, autoBench)) {
     const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
@@ -172,6 +162,7 @@ async function ensureAssignment(
     });
     if (confirmed) existing.confirmationStatus = 'confirmed';
   }
+  return false;
 }
 
 export async function assignDirectSlot(

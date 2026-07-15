@@ -9,6 +9,7 @@ import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import type { DiscordEmojiService } from '../services/discord-emoji.service';
 import type { SettingsService } from '../../settings/settings.service';
+import type { ActivityLogService } from '../../activity-log/activity-log.service';
 
 /**
  * Shared dependency bag for signup interaction handlers.
@@ -25,5 +26,6 @@ export interface SignupInteractionDeps {
   embedFactory: DiscordEmbedFactory;
   emojiService: DiscordEmojiService;
   settingsService: SettingsService;
+  activityLog: ActivityLogService;
   updateEmbedSignupCount: (eventId: number) => Promise<void>;
 }

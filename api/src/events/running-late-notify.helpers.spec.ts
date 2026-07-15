@@ -10,7 +10,10 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 const EVENT = {
   id: 239,
   title: 'D&d night',
-  duration: [new Date('2026-07-15T01:00:00Z'), new Date('2026-07-15T03:00:00Z')],
+  duration: [
+    new Date('2026-07-15T01:00:00Z'),
+    new Date('2026-07-15T03:00:00Z'),
+  ],
   creatorId: 1,
 };
 const LATE_USER_ID = 106;

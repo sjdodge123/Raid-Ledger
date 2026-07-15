@@ -5,7 +5,6 @@
  */
 import { handleExistingSignup } from './signup-signup.handlers';
 import { createMockDeps } from './signup-handlers.spec-helpers';
-import type { SignupInteractionDeps } from './signup-interaction.types';
 import type { ButtonInteraction } from 'discord.js';
 
 const EVENT_ID = 104;
@@ -37,7 +36,17 @@ function makeInteraction(): ButtonInteraction {
   } as unknown as ButtonInteraction;
 }
 
-function setupDeps() {
+function selectOnce(rows: unknown[]) {
+  return {
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockResolvedValue(rows),
+      }),
+    }),
+  };
+}
+
+function setupDeps(assignedRole: string | null = 'player') {
   const deps = createMockDeps();
   const setCalls: Array<Record<string, unknown>> = [];
   const db = deps.db as unknown as {
@@ -45,31 +54,23 @@ function setupDeps() {
     update: jest.Mock;
   };
   // #1 findLinkedUser, #2 loadGameContext event (generic game, no gameId →
-  // null context → no selection UI → heal branch reachable)
+  // null context → no selection UI → heal branch reachable), #3
+  // reconfirmPendingWithSlot → getAssignedSlotRole (non-bench → heal fires).
   db.select
-    .mockReturnValueOnce({
-      from: jest.fn().mockReturnValue({
-        where: jest.fn().mockReturnValue({
-          limit: jest
-            .fn()
-            .mockResolvedValue([{ id: 42, discordId: DISCORD_ID }]),
-        }),
-      }),
-    })
-    .mockReturnValueOnce({
-      from: jest.fn().mockReturnValue({
-        where: jest.fn().mockReturnValue({
-          limit: jest.fn().mockResolvedValue([
-            {
-              id: EVENT_ID,
-              title: 'D&D Night',
-              slotConfig: { type: 'generic', player: 5 },
-              gameId: null,
-            },
-          ]),
-        }),
-      }),
-    });
+    .mockReturnValueOnce(selectOnce([{ id: 42, discordId: DISCORD_ID }]))
+    .mockReturnValueOnce(
+      selectOnce([
+        {
+          id: EVENT_ID,
+          title: 'D&D Night',
+          slotConfig: { type: 'generic', player: 5 },
+          gameId: null,
+        },
+      ]),
+    )
+    .mockReturnValueOnce(
+      selectOnce(assignedRole ? [{ role: assignedRole }] : []),
+    );
   db.update = jest.fn().mockReturnValue({
     set: jest.fn().mockImplementation((vals: Record<string, unknown>) => {
       setCalls.push(vals);
@@ -92,11 +93,37 @@ describe('handleExistingSignup — pending-confirmation heal', () => {
     );
 
     expect(setCalls).toEqual([{ confirmationStatus: 'confirmed' }]);
+    expect(deps.activityLog.log).toHaveBeenCalledWith(
+      'event',
+      EVENT_ID,
+      'signup_reconfirmed',
+      42,
+      { reason: 'discord-signup-reassert' },
+    );
     const reply = (interaction.editReply as jest.Mock).mock.calls[0][0] as {
       content: string;
     };
     expect(reply.content).toMatch(/confirmed/i);
     expect(reply.content).not.toMatch(/already signed up/i);
+  });
+
+  it('does NOT confirm a benched pending signup (parity with web heal)', async () => {
+    const { deps, setCalls } = setupDeps('bench');
+    const interaction = makeInteraction();
+
+    await handleExistingSignup(
+      interaction,
+      EVENT_ID,
+      makeExistingSignup('pending'),
+      deps,
+    );
+
+    expect(setCalls).toEqual([]);
+    expect(deps.activityLog.log).not.toHaveBeenCalled();
+    const reply = (interaction.editReply as jest.Mock).mock.calls[0][0] as {
+      content: string;
+    };
+    expect(reply.content).toMatch(/already signed up/i);
   });
 
   it('keeps the already-signed-up copy when nothing needed healing', async () => {
@@ -111,6 +138,7 @@ describe('handleExistingSignup — pending-confirmation heal', () => {
     );
 
     expect(setCalls).toEqual([]);
+    expect(deps.activityLog.log).not.toHaveBeenCalled();
     const reply = (interaction.editReply as jest.Mock).mock.calls[0][0] as {
       content: string;
     };
