@@ -149,5 +149,7 @@ export function buildRosterAssignmentResponse(
       | 'signed_up'
       | 'tentative'
       | 'declined',
+    runningLate: row.event_signups.runningLateAt != null,
+    lateMinutes: row.event_signups.lateMinutes ?? null,
   };
 }

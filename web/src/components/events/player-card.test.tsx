@@ -156,3 +156,29 @@ describe('PlayerCard — FlexibilityBadges tooltip & coexistence', () => {
         expect(screen.getByAltText('healer')).toBeInTheDocument();
     });
 });
+
+describe('PlayerCard — running-late badge (ROK-1379 follow-up)', () => {
+    it('renders the ⏰ badge when the player is running late', () => {
+        const player = createMockPlayer({ runningLate: true });
+        renderCard({ player });
+        expect(screen.getByTitle('Running late')).toBeInTheDocument();
+    });
+
+    it('shows minutes in the tooltip and badge when lateMinutes is set', () => {
+        const player = createMockPlayer({ runningLate: true, lateMinutes: 15 });
+        renderCard({ player });
+        expect(screen.getByTitle('Running late (+15 min)')).toHaveTextContent('+15m');
+    });
+
+    it('does not render the badge when runningLate is absent', () => {
+        renderCard({ player: createMockPlayer() });
+        expect(screen.queryByTitle(/Running late/)).not.toBeInTheDocument();
+    });
+
+    it('running-late and tentative badges coexist', () => {
+        const player = createMockPlayer({ runningLate: true, signupStatus: 'tentative' });
+        renderCard({ player });
+        expect(screen.getByTitle('Tentative — may not attend')).toBeInTheDocument();
+        expect(screen.getByTitle('Running late')).toBeInTheDocument();
+    });
+});

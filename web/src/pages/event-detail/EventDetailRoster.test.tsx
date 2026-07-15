@@ -190,3 +190,36 @@ describe('EventDetailRoster — boundary inputs & multiple signups', () => {
         expect(screen.getByText(/No players signed up yet/i)).toBeInTheDocument();
     });
 });
+
+describe('EventDetailRoster — running-late badge (ROK-1379 follow-up)', () => {
+    it('renders the ⏰ late badge for a confirmed signup marked running late', () => {
+        const signup = createSignup({ runningLate: true });
+        renderRoster(createRoster([signup]));
+        expect(screen.getByTitle('Running late')).toBeInTheDocument();
+        expect(screen.getByTitle('Running late')).toHaveTextContent('late');
+    });
+
+    it('includes minutes in the badge when lateMinutes is set', () => {
+        const signup = createSignup({ runningLate: true, lateMinutes: 15 });
+        renderRoster(createRoster([signup]));
+        expect(screen.getByTitle('Running late (+15 min)')).toHaveTextContent('+15m');
+    });
+
+    it('renders the badge for a tentative signup marked running late', () => {
+        const signup = createSignup({ status: 'tentative' as const, runningLate: true });
+        renderRoster(createRoster([signup]));
+        expect(screen.getByTitle('Running late')).toBeInTheDocument();
+    });
+
+    it('renders the badge in the Pending group', () => {
+        const signup = createSignup({ confirmationStatus: 'pending' as const, runningLate: true });
+        renderRoster(createRoster([signup]));
+        expect(screen.getByText('Pending (1)')).toBeInTheDocument();
+        expect(screen.getByTitle('Running late')).toBeInTheDocument();
+    });
+
+    it('does not render the badge when runningLate is false or undefined', () => {
+        renderRoster(createRoster([createSignup({ runningLate: false }), createSignup({ id: 2 })]));
+        expect(screen.queryByTitle(/Running late/)).not.toBeInTheDocument();
+    });
+});

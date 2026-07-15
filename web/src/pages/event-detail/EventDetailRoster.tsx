@@ -25,6 +25,9 @@ interface SignupItem {
         characters?: Array<{ gameId: string | number; name?: string; avatarUrl: string | null }>;
     };
     character?: SignupCharacterDto | null;
+    /** ROK-1379 follow-up: running-late marker (⏰ badge parity with the Discord embed) */
+    runningLate?: boolean;
+    lateMinutes?: number | null;
 }
 
 interface EventDetailRosterProps {
@@ -40,6 +43,20 @@ function RolePreferenceBadges({ roles }: { roles?: string[] | null }) {
             {roles.map((r, i) => (
                 <RoleIcon key={`${r}-${i}`} role={r} size="w-4 h-4" />
             ))}
+        </span>
+    );
+}
+
+/** Running-late pill — web parity with the Discord embed's ⏰ roster marker (ROK-1379 follow-up). */
+function RunningLateBadge({ signup }: { signup: Pick<SignupItem, 'runningLate' | 'lateMinutes'> }) {
+    if (!signup.runningLate) return null;
+    const minutes = signup.lateMinutes ?? null;
+    return (
+        <span
+            className="shrink-0 text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded"
+            title={minutes ? `Running late (+${minutes} min)` : 'Running late'}
+        >
+            <span role="img" aria-hidden="true">&#9200;</span> late{minutes ? ` +${minutes}m` : ''}
         </span>
     );
 }
@@ -65,6 +82,7 @@ function SignupEntry({ signup, event, showBadge }: {
                     : <UserLink userId={signup.user.id} username={signup.user.username} user={toAvatarUser(signup.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />}
                 <RolePreferenceBadges roles={signup.preferredRoles} />
                 {showBadge && <span className={showBadge.className}>{showBadge.text}</span>}
+                <RunningLateBadge signup={signup} />
             </div>
             {signup.character && (
                 <CharacterCardCompact id={signup.character.id} name={signup.character.name} avatarUrl={signup.character.avatarUrl}
@@ -114,6 +132,7 @@ function ConfirmedGroup({ signups, event }: { signups: SignupItem[]; event: Even
                         <div className="flex items-center gap-2">
                             <UserLink userId={s.user.id} username={s.user.username} user={toAvatarUser(s.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />
                             <RolePreferenceBadges roles={s.preferredRoles} />
+                            <RunningLateBadge signup={s} />
                             <PluginSlot name="event-detail:signup-warnings" context={{ characterLevel: s.character?.level, contentInstances: event.contentInstances ?? [], gameSlug: event.game?.slug }} />
                         </div>
                         {s.character && (
@@ -154,6 +173,7 @@ function SimpleSignupGroup({ signups, event, title, icon, itemClass, badge }: {
                     <div key={s.id} className={`event-detail-roster__item flex items-center gap-2 ${itemClass ?? ''}`}>
                         {s.isAnonymous ? <AnonymousUserLabel signup={s} /> : <UserLink userId={s.user.id} username={s.user.username} user={toAvatarUser(s.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />}
                         {badge && <span className={badge.className}>{badge.text}</span>}
+                        <RunningLateBadge signup={s} />
                     </div>
                 ))}
             </div>
