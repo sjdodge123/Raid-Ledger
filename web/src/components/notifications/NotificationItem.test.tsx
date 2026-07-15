@@ -104,6 +104,25 @@ describe('NotificationItem — lineup-only fallback (ROK-1259)', () => {
     });
 });
 
+describe('NotificationItem — Discord timestamp rendering (ROK-1403)', () => {
+    it('renders <t:> markup in the title AND message as a localized time, not raw tokens', () => {
+        renderItem(
+            makeNotification({
+                type: 'event_rescheduled',
+                // Token in the title too — the server DM path scans both, so the
+                // web must localize both (defense in depth).
+                title: 'Rescheduled to <t:1700000000:f>',
+                message: '"Raid Night" has been rescheduled to <t:1700000000:f> (<t:1700000000:R>)',
+                payload: { eventId: 7 },
+            }),
+        );
+        const row = screen.getByRole('button');
+        expect(row.textContent).not.toContain('<t:');
+        // Both the title <p> and message <p> localized their tokens.
+        expect(row.querySelectorAll('time').length).toBeGreaterThanOrEqual(2);
+    });
+});
+
 describe('NotificationItem — existing navigation paths (regression guards)', () => {
     it('navigates via eventId path for lineup_event_created', async () => {
         const user = userEvent.setup();

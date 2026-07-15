@@ -1,4 +1,5 @@
 import { useNotifications, type Notification } from '../../hooks/use-notifications';
+import { renderDiscordTimestamps } from '../../utils/discord-timestamps';
 
 /** Event-related notification types we show in the activity feed */
 const EVENT_TYPES = new Set([
@@ -25,7 +26,7 @@ function ActivityItem({ notification }: { notification: Notification }) {
             <span className="text-muted mt-0.5 text-sm shrink-0">•</span>
             <div className="min-w-0 flex-1">
                 <p className="text-sm text-foreground line-clamp-2">
-                    {notification.message}
+                    {renderDiscordTimestamps(notification.message)}
                 </p>
                 <p className="text-xs text-dim mt-0.5">
                     {getRelativeTimeAgo(notification.createdAt)}

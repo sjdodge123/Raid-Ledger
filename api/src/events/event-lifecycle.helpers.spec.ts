@@ -9,6 +9,10 @@ import {
   resetSignupConfirmations,
 } from './event-lifecycle.helpers';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
+import {
+  buildPlaintextContent,
+  formatEpoch,
+} from '../notifications/format-helpers';
 
 function createMockNotificationService() {
   return {
@@ -148,6 +152,30 @@ describe('Regression: ROK-828', () => {
     expect(call.message).not.toMatch(
       /\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+(Jan|Feb|Mar)/,
     );
+  });
+
+  // ROK-1403: the stored message keeps <t:> markup (so the Discord embed
+  // renders viewer-local); piping it through the fixed DM plaintext choke
+  // point must render recipient-local and NOT duplicate the absolute time.
+  it('renders recipient-local, non-duplicated plaintext for the DM/push path', async () => {
+    await rescheduleEvent(
+      mockDb as any,
+      mockNotifSvc as any,
+      eventId,
+      creatorId,
+      true,
+      { startTime: newStartISO, endTime: newEndISO },
+    );
+    const call = mockNotifSvc.createMany.mock.calls[0][0][0];
+    const abs = formatEpoch(expectedUnix, 'America/New_York');
+    const content = buildPlaintextContent(
+      call.title,
+      call.message,
+      'America/New_York',
+    );
+    expect(content).not.toMatch(/<t:\d+/); // no raw token survives
+    expect(content).toContain(abs); // rendered in the recipient timezone
+    expect(content.split(abs).length - 1).toBe(1); // absolute appears once
   });
 
   it('should include event title and correct type', async () => {
