@@ -32,6 +32,7 @@ export const notifications = pgTable(
         'missed_event_nudge',
         'event_rescheduled',
         'event_delayed',
+        'running_late',
         'bench_promoted',
         'event_cancelled',
         'roster_reassigned',

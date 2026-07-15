@@ -82,6 +82,7 @@ let mockClientService: {
 let mockRunningLateService: {
   setRunningLate: jest.Mock;
   clearRunningLate: jest.Mock;
+  notifyRunningLate: jest.Mock;
 };
 let mockEventsService: {
   delayEvent: jest.Mock;
@@ -108,6 +109,7 @@ async function setup() {
   mockRunningLateService = {
     setRunningLate: jest.fn().mockResolvedValue(true),
     clearRunningLate: jest.fn().mockResolvedValue(true),
+    notifyRunningLate: jest.fn().mockResolvedValue(undefined),
   };
   mockEventsService = {
     delayEvent: jest.fn(),
@@ -200,6 +202,59 @@ describe('RunningLateInteractionListener', () => {
       expect(mockRunningLateService.setRunningLate).not.toHaveBeenCalled();
       expect(interaction.editReply).toHaveBeenCalledWith({
         content: "You're not signed up for this event.",
+      });
+    });
+
+    it('notifies attendees on the FIRST transition to late', async () => {
+      mockFindLinkedUser.mockResolvedValue({
+        id: ATTENDEE_ID,
+        username: 'LateGuy',
+        displayName: null,
+      });
+      mockDb.limit
+        .mockResolvedValueOnce([futureEvent()]) // lookupEvent
+        .mockResolvedValueOnce([{ id: 1 }]); // userHasSignup
+      const interaction = makeButtonInteraction(
+        `${RUNNING_LATE_BUTTON_IDS.LATE}:${EVENT_ID}`,
+      );
+      await listener.handleLateClick(interaction, EVENT_ID);
+      expect(mockRunningLateService.notifyRunningLate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: EVENT_ID, title: 'Mythic Raid' }),
+        ATTENDEE_ID,
+        'LateGuy',
+      );
+    });
+
+    it('does NOT re-notify when the attendee was already marked late', async () => {
+      mockRunningLateService.setRunningLate.mockResolvedValue(false);
+      mockFindLinkedUser.mockResolvedValue({ id: ATTENDEE_ID });
+      mockDb.limit
+        .mockResolvedValueOnce([futureEvent()]) // lookupEvent
+        .mockResolvedValueOnce([{ id: 1 }]); // userHasSignup
+      const interaction = makeButtonInteraction(
+        `${RUNNING_LATE_BUTTON_IDS.LATE}:${EVENT_ID}`,
+      );
+      await listener.handleLateClick(interaction, EVENT_ID);
+      expect(mockRunningLateService.notifyRunningLate).not.toHaveBeenCalled();
+    });
+
+    it('still confirms to the attendee when the notify fan-out fails', async () => {
+      mockRunningLateService.notifyRunningLate.mockRejectedValue(
+        new Error('notification service down'),
+      );
+      mockFindLinkedUser.mockResolvedValue({
+        id: ATTENDEE_ID,
+        username: 'LateGuy',
+      });
+      mockDb.limit
+        .mockResolvedValueOnce([futureEvent()]) // lookupEvent
+        .mockResolvedValueOnce([{ id: 1 }]); // userHasSignup
+      const interaction = makeButtonInteraction(
+        `${RUNNING_LATE_BUTTON_IDS.LATE}:${EVENT_ID}`,
+      );
+      await listener.handleLateClick(interaction, EVENT_ID);
+      expect(interaction.editReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('running late'),
       });
     });
   });

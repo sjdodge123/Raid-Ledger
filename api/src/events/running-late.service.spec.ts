@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { RunningLateService } from './running-late.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { NotificationService } from '../notifications/notification.service';
 
 describe('RunningLateService (ROK-1379)', () => {
   let service: RunningLateService;
@@ -13,6 +14,14 @@ describe('RunningLateService (ROK-1379)', () => {
       providers: [
         RunningLateService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        {
+          provide: NotificationService,
+          useValue: {
+            createMany: jest.fn().mockResolvedValue(undefined),
+            getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
+            resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+          },
+        },
       ],
     }).compile();
     service = module.get(RunningLateService);
