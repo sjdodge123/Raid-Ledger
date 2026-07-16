@@ -157,7 +157,13 @@ export async function resolveNotificationChannel(
   if (configChannel) return configChannel;
   const seriesChannel = await findSeriesAnnounceChannel(deps, binding);
   if (seriesChannel) return seriesChannel;
-  const announceGameId = effectiveGameId ?? binding.gameId;
+  // ROK-1394: distinguish "no runtime game resolved" (undefined → fall back to
+  // the sticky bind game) from a "deliberate null-game degrade" (null → stays
+  // null so the game-announcements tier is skipped and an Untitled session does
+  // NOT route to the bind game's #announcements channel). `?? binding.gameId`
+  // would wrongly resurrect the sticky game for the degrade path.
+  const announceGameId =
+    effectiveGameId !== undefined ? effectiveGameId : binding.gameId;
   if (announceGameId && binding.guildId) {
     const found = await findAnnouncementChannel(deps, {
       guildId: binding.guildId,

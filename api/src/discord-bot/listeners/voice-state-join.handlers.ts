@@ -85,7 +85,11 @@ async function checkGameBindingThreshold(
   if (counted < minPlayers) return;
   if (allConfirmed) {
     spawnFns?.cancelSpawn();
-    await handleGameSpecificGroupRoster(deps, channelId, binding);
+    // allConfirmed ⟹ every counted member positively confirmed the bound game
+    // ⟹ confirmedCount === counted ≥ minPlayers > 0, so there is no zero-
+    // confirmation case here and the sticky bind game is always correct. Pass
+    // undefined explicitly (mint the bind game) — the degrade path is unreachable.
+    await handleGameSpecificGroupRoster(deps, channelId, binding, undefined);
   } else {
     spawnFns?.scheduleSpawn();
   }
@@ -218,32 +222,77 @@ async function handleLobbyThreshold(
   }
 }
 
+/** Threshold spawn decision + the game the event should mint with. */
+interface ThresholdSpawnDecision {
+  shouldSpawn: boolean;
+  resolvedGameId: number | null | undefined;
+}
+
 /**
- * ROK-1390: a series-linked bind must NOT mint its stored game off pure
- * presence-null counting — that path spawned a BG3 series event while the
- * group actually played Hellcard. Require at least one positive game
- * confirmation. Non-series fixed-game binds keep ROK-697 presence-null
- * counting (invisible/console/no-rich-presence raiders).
+ * ROK-1394: a fixed-game bind (series AND non-series alike) must NOT mint its
+ * stored game off pure presence-null counting — that path spawned a BG3 event
+ * while the group actually played Hellcard and routed the Completed embed to
+ * #general. On zero positive game confirmation we STILL spawn — preserving the
+ * ROK-697 auto-event + attendance for invisible/console/no-rich-presence
+ * raiders — but degrade to a null game rather than stamping the sticky bind
+ * game. This supersedes ROK-1390's series-only hard-block with an
+ * attendance-preserving degrade-to-null that applies uniformly.
+ *
+ * `undefined` → mint the sticky bind game (genuinely confirmed);
+ * `null` → deliberate degrade to a null-game "Untitled" session.
  */
-async function gameBindingBlocksSpawn(
+async function resolveThresholdSpawnGameId(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   minPlayers: number,
-): Promise<boolean> {
+): Promise<ThresholdSpawnDecision> {
   const { counted, confirmedCount } = await getGameFilteredCount(
     deps,
     channelId,
     binding,
   );
-  if (counted < minPlayers) return true;
-  if (binding.recurrenceGroupId == null || confirmedCount > 0) return false;
+  if (counted < minPlayers)
+    return { shouldSpawn: false, resolvedGameId: undefined };
+  if (confirmedCount > 0)
+    return { shouldSpawn: true, resolvedGameId: undefined };
   deps.logger.warn(
-    `[voice-spawn] Skipping series-linked spawn for binding ${binding.bindingId} ` +
+    `[voice-spawn] Degrading spawn to null game for binding ${binding.bindingId} ` +
       `in channel ${channelId}: ${counted} member(s) met threshold but 0 confirmed ` +
       `game ${binding.gameId}`,
   );
-  return true;
+  return { shouldSpawn: true, resolvedGameId: null };
+}
+
+/**
+ * Gate + resolved game for a delayed spawn. `proceed: false` → abort (below
+ * threshold). For fixed-game binds `resolvedGameId` carries the ROK-1394
+ * degrade decision (`undefined` = sticky game, `null` = degrade); general-lobby
+ * binds resolve their game later via presence detection so it stays `undefined`.
+ */
+async function resolveDelayedSpawnGate(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  minPlayers: number,
+): Promise<{ proceed: boolean; resolvedGameId: number | null | undefined }> {
+  if (binding.bindingPurpose !== 'general-lobby' && binding.gameId) {
+    const decision = await resolveThresholdSpawnGameId(
+      deps,
+      channelId,
+      binding,
+      minPlayers,
+    );
+    return {
+      proceed: decision.shouldSpawn,
+      resolvedGameId: decision.resolvedGameId,
+    };
+  }
+  const members = deps.channelMembers.get(channelId);
+  return {
+    proceed: !!members && members.size >= minPlayers,
+    resolvedGameId: undefined,
+  };
 }
 
 /** Execute delayed spawn logic (after timer fires). */
@@ -253,14 +302,13 @@ export async function executeDelayedSpawn(
   binding: ResolvedBinding,
 ): Promise<void> {
   const minPlayers = binding.config?.minPlayers ?? 2;
-  if (binding.bindingPurpose !== 'general-lobby' && binding.gameId) {
-    if (await gameBindingBlocksSpawn(deps, channelId, binding, minPlayers)) {
-      return;
-    }
-  } else {
-    const members = deps.channelMembers.get(channelId);
-    if (!members || members.size < minPlayers) return;
-  }
+  const gate = await resolveDelayedSpawnGate(
+    deps,
+    channelId,
+    binding,
+    minPlayers,
+  );
+  if (!gate.proceed) return;
   const state =
     binding.bindingPurpose === 'general-lobby'
       ? undefined
@@ -269,6 +317,11 @@ export async function executeDelayedSpawn(
   if (binding.bindingPurpose === 'general-lobby') {
     await handleGeneralLobbyGroupDetection(deps, channelId, binding);
   } else {
-    await handleGameSpecificGroupRoster(deps, channelId, binding);
+    await handleGameSpecificGroupRoster(
+      deps,
+      channelId,
+      binding,
+      gate.resolvedGameId,
+    );
   }
 }
