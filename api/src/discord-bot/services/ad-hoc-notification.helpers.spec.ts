@@ -335,6 +335,63 @@ describe('resolveNotificationChannel — routing priority (ROK-1390)', () => {
 
     expect(result).toBe('ann-10-ch');
   });
+
+  it('ROK-1394: a deliberate null effectiveGameId does NOT resurrect the bind game-announcements channel (non-series → default)', async () => {
+    // The degrade-to-null spawn path passes effectiveGameId === null. `?? binding.gameId`
+    // would wrongly route an Untitled session to the sticky game's #announcements
+    // channel (#general); null must stay distinct from undefined and fall through.
+    const deps = makeDeps({
+      binding: {
+        id: 'b1',
+        guildId: 'g1',
+        gameId: 10,
+        recurrenceGroupId: null,
+        config: null,
+      },
+      seriesChannel: null,
+      guildBindings: [
+        {
+          bindingPurpose: 'game-announcements',
+          gameId: 10,
+          channelId: 'game-ch',
+        },
+      ],
+      defaultChannel: 'default-ch',
+    });
+
+    const result = await resolveNotificationChannel(deps, 'b1', null);
+
+    // Must NOT be the sticky game's announcements channel — falls to default.
+    expect(result).not.toBe('game-ch');
+    expect(result).toBe('default-ch');
+  });
+
+  it('ROK-1394: a null effectiveGameId series bind still routes to the series announce slot (not #general)', async () => {
+    const deps = makeDeps({
+      binding: {
+        id: 'b1',
+        guildId: 'g1',
+        gameId: 10,
+        recurrenceGroupId: 'series-1',
+        config: null,
+      },
+      seriesChannel: 'series-ch',
+      guildBindings: [
+        {
+          bindingPurpose: 'game-announcements',
+          gameId: 10,
+          channelId: 'game-ch',
+        },
+      ],
+      defaultChannel: 'default-ch',
+    });
+
+    const result = await resolveNotificationChannel(deps, 'b1', null);
+
+    // Series announce tier precedes the game-announcements tier, so a null-game
+    // Untitled series session posts to the series channel, never the bind game's.
+    expect(result).toBe('series-ch');
+  });
 });
 
 describe('toActiveParticipants', () => {

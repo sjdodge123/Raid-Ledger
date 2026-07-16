@@ -93,11 +93,18 @@ function trackChannelMembers(
   deps.channelMembers.set(channelId, memberSet);
 }
 
-/** Roster ALL members in a game-specific channel for threshold spawn. */
+/**
+ * Roster ALL members in a game-specific channel for threshold spawn.
+ *
+ * `resolvedGameId` (ROK-1394): `undefined` → mint the sticky bind game
+ * (unchanged); `null` → deliberate degrade to a null-game session when the
+ * threshold was met with zero positive game confirmations.
+ */
 export async function handleGameSpecificGroupRoster(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
+  resolvedGameId?: number | null,
 ): Promise<void> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   if (!channel) return;
@@ -112,7 +119,7 @@ export async function handleGameSpecificGroupRoster(
       binding.bindingId,
       memberInfo,
       binding,
-      undefined,
+      resolvedGameId,
       undefined,
       channelId,
     );

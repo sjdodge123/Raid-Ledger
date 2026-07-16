@@ -40,6 +40,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
     handleVoiceJoin: jest.Mock;
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
+    getActiveBindingEventGameId: jest.Mock;
     trySuppressForScheduled: jest.Mock;
   };
   let mockChannelBindingsService: {
@@ -164,6 +165,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
+      getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
       trySuppressForScheduled: jest.fn().mockResolvedValue(false),
     };
 
@@ -754,13 +756,14 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
     });
   });
 
-  // ─── ROK-1390: series-linked zero-confirmation spawn guard ─────────────────
+  // ─── ROK-1390 → ROK-1394: fixed-game zero-confirmation degrade-to-null ─────
 
-  describe('ROK-1390: series-linked spawn guard (executeDelayedSpawn)', () => {
-    // Same game-voice-monitor binding as the ROK-697 cases, but SERIES-LINKED.
-    // Part 1 threads recurrenceGroupId through mapToResolvedBinding; the guard in
-    // executeDelayedSpawn reads it. Until threaded, the binding looks non-series
-    // at runtime and the delayed spawn mints the stored game regardless.
+  describe('ROK-1394: fixed-game zero-confirmation degrade (executeDelayedSpawn)', () => {
+    // ROK-1394 supersedes ROK-1390's series-only hard-block with a uniform
+    // degrade-to-null: on zero positive game confirmation a fixed-game bind
+    // (series AND non-series) still spawns (ROK-697 attendance for invisible
+    // raiders) but mints a null game instead of the sticky bind game, so the
+    // Completed embed never routes to the bind game's #announcements channel.
     const seriesGameBinding = {
       id: 'bind-series',
       channelId: 'voice-ch',
@@ -807,7 +810,12 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       );
     }
 
-    it('series-linked bind + all presence-null → delayed timer fires but NO event is minted', async () => {
+    it('ROK-1394: series-linked bind + all presence-null → timer mints a null game (degrade), NOT the sticky game', async () => {
+      // ROK-1394 supersedes ROK-1390's hard-block with an attendance-preserving
+      // degrade-to-null. A zero-confirmation fixed-game bind still spawns
+      // (ROK-697: invisible/console raiders keep their auto-event) but with
+      // resolvedGameId === null rather than the sticky gameId=1, so the
+      // Completed embed never routes to the bind game's #announcements channel.
       detectByMember({}); // every member presence-null → zero confirmations
       const handler = await setupWithBinding('voice-ch', seriesGameBinding);
       mockAdHocEventService.getActiveState.mockReturnValue(undefined);
@@ -818,12 +826,16 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       // Delayed path taken — nothing minted immediately.
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
 
-      // Timer fires: the series guard skips creation because confirmedCount === 0.
+      // Timer fires: the degrade mints the event, and every roster call passes
+      // resolvedGameId (arg [3]) === null — a STRONGER check than mere absence.
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
-      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+      for (const call of mockAdHocEventService.handleVoiceJoin.mock.calls) {
+        expect(call[3]).toBeNull();
+      }
     });
 
-    it('series-linked + 1 positively-confirmed member → mints the bound game (guard allows)', async () => {
+    it('series-linked + 1 positively-confirmed member → mints the bound game (no degrade)', async () => {
       detectByMember({ 'user-1': 1 }); // user-1 confirmed on bound game, user-2 null
       const handler = await setupWithBinding('voice-ch', seriesGameBinding);
       mockAdHocEventService.getActiveState.mockReturnValue(undefined);
@@ -840,6 +852,9 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
       const spawnCall = mockAdHocEventService.handleVoiceJoin.mock.calls[0];
       expect(spawnCall[2]).toEqual(expect.objectContaining({ gameId: 1 }));
+      // confirmedCount > 0 ⟹ no degrade ⟹ resolvedGameId (arg [3]) is undefined,
+      // so the service resolves the sticky bind game (contrast to the null degrade).
+      expect(spawnCall[3]).toBeUndefined();
     });
 
     it('non-series game bind + all presence-null → still spawns after the delay (ROK-697 regression pin)', async () => {
@@ -886,6 +901,71 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
 
       // The timer was NOT suppressed at scheduling; exec re-reads presence → mints.
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    });
+
+    describe('Regression: ROK-1394', () => {
+      it('non-series game bind + all presence-null → timer mints a null game (degrade), NOT the sticky game', async () => {
+        // This non-series game-voice-monitor bind (no recurrenceGroupId) is the
+        // exact path ROK-1390's series-only guard bypassed: it minted the sticky
+        // gameId=1 off pure presence-null counting and routed Completed to
+        // #general. The uniform degrade now mints a null game here too.
+        detectByMember({}); // all null → zero confirmations
+        const handler = await setupWithBinding('voice-ch', gameBinding);
+        mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+        await fireJoin(handler, 'user-1');
+        await fireJoin(handler, 'user-2');
+        expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+
+        // Spawns (ROK-697 preserved) but degrades: every roster call passes
+        // resolvedGameId (arg [3]) === null — never the sticky gameId=1.
+        await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
+        expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+        for (const call of mockAdHocEventService.handleVoiceJoin.mock.calls) {
+          expect(call[3]).toBeNull();
+        }
+      });
+
+      it('degraded null event already exists + a member now confirms the game → reconciles into the null event, NOT a duplicate sticky spawn', async () => {
+        // The dup-event regression: a session degraded to a null-keyed event,
+        // then a member's presence resolves the bound game. The join must
+        // reconcile into the EXISTING null event (resolvedGameId arg [3] === null)
+        // and NEVER mint a second, sticky-game event (no call with arg [3]
+        // undefined, which would key `bindingId:1` → duplicate live event +
+        // double attendance + re-route to #general).
+        detectByMember({ 'user-1': 1 }); // user-1 now confirms the bound game
+        const handler = await setupWithBinding('voice-ch', gameBinding);
+        mockAdHocEventService.getActiveBindingEventGameId.mockReturnValue({
+          gameId: null,
+        });
+        mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+        await fireJoin(handler, 'user-1');
+
+        expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+        for (const call of mockAdHocEventService.handleVoiceJoin.mock.calls) {
+          expect(call[3]).toBeNull();
+        }
+      });
+
+      it('existing sticky-game event + a join → routes with the matching game key (normal case unchanged)', async () => {
+        // The mirror pin: when the binding already holds a sticky-game event,
+        // a join reconciles into it with resolvedGameId (arg [3]) === its gameId
+        // — the pre-degrade behavior stays intact for the common path.
+        detectByMember({ 'user-1': 1 });
+        const handler = await setupWithBinding('voice-ch', gameBinding);
+        mockAdHocEventService.getActiveBindingEventGameId.mockReturnValue({
+          gameId: 1,
+        });
+        mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+        await fireJoin(handler, 'user-1');
+
+        expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+        for (const call of mockAdHocEventService.handleVoiceJoin.mock.calls) {
+          expect(call[3]).toBe(1);
+        }
+      });
     });
   });
 

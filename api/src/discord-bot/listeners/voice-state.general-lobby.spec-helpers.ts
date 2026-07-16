@@ -29,6 +29,7 @@ export interface GeneralLobbyMocks {
     handleVoiceJoin: jest.Mock;
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
+    getActiveBindingEventGameId: jest.Mock;
     hasAnyActiveEvent: jest.Mock;
   };
   channelBindingsService: {
@@ -71,6 +72,7 @@ export function createGeneralLobbyMocks(): GeneralLobbyMocks {
       handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
+      getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
       hasAnyActiveEvent: jest.fn().mockReturnValue(false),
     },
     channelBindingsService: {

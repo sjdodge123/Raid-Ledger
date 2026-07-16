@@ -56,6 +56,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     handleVoiceJoin: jest.Mock;
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
+    getActiveBindingEventGameId: jest.Mock;
   };
   let mockChannelBindingsService: {
     getBindings: jest.Mock;
@@ -134,6 +135,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
+      getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
     };
 
     mockChannelBindingsService = {
@@ -342,6 +344,11 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       eventId: 500,
       memberSet: new Set(),
       lastExtendedAt: 0,
+    });
+    // ROK-1394: the ad-hoc join path reconciles into the binding's active event
+    // via getActiveBindingEventGameId (→ handleVoiceJoin).
+    mockAdHocEventService.getActiveBindingEventGameId.mockReturnValue({
+      gameId: 1,
     });
 
     voiceHandler(
