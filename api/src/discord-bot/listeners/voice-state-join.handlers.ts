@@ -18,20 +18,28 @@ export interface GameSpawnFns {
   cancelSpawn: () => void;
 }
 
-/** Join an existing ad-hoc event for a game binding. */
+/**
+ * Join an existing ad-hoc event for a game binding.
+ *
+ * `resolvedGameId` (ROK-1394) must match the KEY of the existing event so the
+ * join reconciles into it rather than minting a duplicate: `null` targets a
+ * degraded Untitled session (`bindingId:null`), a number targets the sticky
+ * game event (`bindingId:<gameId>`).
+ */
 async function joinExistingEvent(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   dm: DiscordMemberInfo,
   uid: number | null,
+  resolvedGameId?: number | null,
 ): Promise<void> {
   const mi: VoiceMemberInfo = { ...dm, userId: uid };
   await deps.adHocEventService.handleVoiceJoin(
     binding.bindingId,
     mi,
     binding,
-    undefined,
+    resolvedGameId,
     undefined,
     channelId,
   );
@@ -54,9 +62,15 @@ export async function handleGameBindingJoin(
     binding.gameName ?? '',
     uid,
   );
-  const state = deps.adHocEventService.getActiveState(binding.bindingId);
-  if (state) {
-    await joinExistingEvent(deps, channelId, binding, dm, uid);
+  // ROK-1394: a fixed-game bind holds ≤1 active event, but the degrade path may
+  // have keyed it under `bindingId:null`. Look it up regardless of game key and
+  // reconcile the join into that event (keep it as-is — no game upgrade) so a
+  // later game confirmation never mints a second, sticky-game event.
+  const existing = deps.adHocEventService.getActiveBindingEventGameId(
+    binding.bindingId,
+  );
+  if (existing) {
+    await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
     return;
   }
   // ROK-959: suppress ad-hoc if a sibling binding has a scheduled event
@@ -309,11 +323,14 @@ export async function executeDelayedSpawn(
     minPlayers,
   );
   if (!gate.proceed) return;
-  const state =
+  // ROK-1394: abort if the fixed-game bind already has ANY active event (a
+  // degraded `bindingId:null` session included) so the timer never spawns a
+  // duplicate. General-lobby keeps its per-game keying and is checked later.
+  const existing =
     binding.bindingPurpose === 'general-lobby'
       ? undefined
-      : deps.adHocEventService.getActiveState(binding.bindingId);
-  if (state) return;
+      : deps.adHocEventService.getActiveBindingEventGameId(binding.bindingId);
+  if (existing) return;
   if (binding.bindingPurpose === 'general-lobby') {
     await handleGeneralLobbyGroupDetection(deps, channelId, binding);
   } else {

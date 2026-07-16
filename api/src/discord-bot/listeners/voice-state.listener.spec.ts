@@ -30,6 +30,7 @@ describe('VoiceStateListener', () => {
     handleVoiceJoin: jest.Mock;
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
+    getActiveBindingEventGameId: jest.Mock;
     trySuppressForScheduled: jest.Mock;
   };
   let mockChannelBindingsService: {
@@ -119,6 +120,7 @@ describe('VoiceStateListener', () => {
       handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
+      getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
       trySuppressForScheduled: jest.fn().mockResolvedValue(false),
     };
 
@@ -324,11 +326,16 @@ describe('VoiceStateListener', () => {
         },
       ]);
 
-      // Active state so threshold check passes
+      // Active state so threshold check passes. ROK-1394: handleGameBindingJoin
+      // now consults getActiveBindingEventGameId to find the binding's active
+      // event and reconcile the join into it (→ handleVoiceJoin).
       mockAdHocEventService.getActiveState.mockReturnValue({
         eventId: 100,
         memberSet: new Set(),
         lastExtendedAt: 0,
+      });
+      mockAdHocEventService.getActiveBindingEventGameId.mockReturnValue({
+        gameId: 1,
       });
 
       voiceHandler(
@@ -393,11 +400,16 @@ describe('VoiceStateListener', () => {
         },
       ]);
 
-      // Active state exists for both so threshold check passes
+      // Active state exists for both so threshold check passes. ROK-1394: the
+      // join half now reconciles into the binding's active event via
+      // getActiveBindingEventGameId (→ handleVoiceJoin).
       mockAdHocEventService.getActiveState.mockReturnValue({
         eventId: 200,
         memberSet: new Set(),
         lastExtendedAt: 0,
+      });
+      mockAdHocEventService.getActiveBindingEventGameId.mockReturnValue({
+        gameId: 2,
       });
 
       voiceHandler(

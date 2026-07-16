@@ -40,6 +40,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
     handleVoiceJoin: jest.Mock;
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
+    getActiveBindingEventGameId: jest.Mock;
     trySuppressForScheduled: jest.Mock;
   };
   let mockChannelBindingsService: {
@@ -106,6 +107,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
+      getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
       trySuppressForScheduled: jest.fn().mockResolvedValue(false),
     };
 
@@ -336,11 +338,16 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
 
-      // Simulate an event becoming active before timer fires
+      // Simulate an event becoming active before timer fires. ROK-1394:
+      // executeDelayedSpawn now aborts on getActiveBindingEventGameId, so the
+      // "active event exists → no second spawn" guard must mock it too.
       mockAdHocEventService.getActiveState.mockReturnValue({
         eventId: 999,
         memberSet: new Set(['user-1', 'user-2']),
         lastExtendedAt: 0,
+      });
+      mockAdHocEventService.getActiveBindingEventGameId.mockReturnValue({
+        gameId: 1,
       });
 
       // Timer fires — but active event exists, no second spawn

@@ -40,6 +40,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
     handleVoiceJoin: jest.Mock;
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
+    getActiveBindingEventGameId: jest.Mock;
     trySuppressForScheduled: jest.Mock;
   };
   let mockChannelBindingsService: {
@@ -164,6 +165,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
       handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
       getActiveState: jest.fn().mockReturnValue(undefined),
+      getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
       trySuppressForScheduled: jest.fn().mockResolvedValue(false),
     };
 
@@ -921,6 +923,47 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
         expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
         for (const call of mockAdHocEventService.handleVoiceJoin.mock.calls) {
           expect(call[3]).toBeNull();
+        }
+      });
+
+      it('degraded null event already exists + a member now confirms the game → reconciles into the null event, NOT a duplicate sticky spawn', async () => {
+        // The dup-event regression: a session degraded to a null-keyed event,
+        // then a member's presence resolves the bound game. The join must
+        // reconcile into the EXISTING null event (resolvedGameId arg [3] === null)
+        // and NEVER mint a second, sticky-game event (no call with arg [3]
+        // undefined, which would key `bindingId:1` → duplicate live event +
+        // double attendance + re-route to #general).
+        detectByMember({ 'user-1': 1 }); // user-1 now confirms the bound game
+        const handler = await setupWithBinding('voice-ch', gameBinding);
+        mockAdHocEventService.getActiveBindingEventGameId.mockReturnValue({
+          gameId: null,
+        });
+        mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+        await fireJoin(handler, 'user-1');
+
+        expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+        for (const call of mockAdHocEventService.handleVoiceJoin.mock.calls) {
+          expect(call[3]).toBeNull();
+        }
+      });
+
+      it('existing sticky-game event + a join → routes with the matching game key (normal case unchanged)', async () => {
+        // The mirror pin: when the binding already holds a sticky-game event,
+        // a join reconciles into it with resolvedGameId (arg [3]) === its gameId
+        // — the pre-degrade behavior stays intact for the common path.
+        detectByMember({ 'user-1': 1 });
+        const handler = await setupWithBinding('voice-ch', gameBinding);
+        mockAdHocEventService.getActiveBindingEventGameId.mockReturnValue({
+          gameId: 1,
+        });
+        mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+        await fireJoin(handler, 'user-1');
+
+        expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+        for (const call of mockAdHocEventService.handleVoiceJoin.mock.calls) {
+          expect(call[3]).toBe(1);
         }
       });
     });

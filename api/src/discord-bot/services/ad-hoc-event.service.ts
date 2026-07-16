@@ -176,12 +176,27 @@ export class AdHocEventService implements OnModuleInit {
     return this.activeEvents.get(this.buildEventKey(bindingId, gameId));
   }
 
+  /**
+   * ROK-1394: find the binding's single active event regardless of game key.
+   * Fixed-game binds hold ≤1 active event; the degrade path keys it under
+   * `bindingId:null` while later joins resolve the sticky game, so a game-keyed
+   * lookup misses it and mints a duplicate. Returns the event's gameId so the
+   * caller can join with the matching key.
+   */
+  getActiveBindingEventGameId(
+    bindingId: string,
+  ): { gameId: number | null } | undefined {
+    for (const [key, state] of this.activeEvents) {
+      if (key === bindingId || key.startsWith(`${bindingId}:`)) {
+        return { gameId: state.gameId ?? null };
+      }
+    }
+    return undefined;
+  }
+
   /** Check if any active event exists for a binding. */
   hasAnyActiveEvent(bindingId: string): boolean {
-    for (const key of this.activeEvents.keys()) {
-      if (key === bindingId || key.startsWith(`${bindingId}:`)) return true;
-    }
-    return false;
+    return this.getActiveBindingEventGameId(bindingId) !== undefined;
   }
 
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)
