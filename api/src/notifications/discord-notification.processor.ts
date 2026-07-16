@@ -169,8 +169,27 @@ export class DiscordNotificationProcessor
       },
       communityName,
     );
-    const content = buildPlaintextContent(data.title, data.message);
+    const content = buildPlaintextContent(
+      data.title,
+      data.message,
+      await this.resolveTimeZoneForContent(data),
+    );
     await this.clientService.sendEmbedDM(discordId, embed, row, rows, content);
+  }
+
+  /**
+   * Resolve the recipient timezone for plaintext rendering (ROK-1403) — only
+   * when the content actually carries `<t:>` markup, so markup-free DMs skip
+   * the extra lookup. Returns undefined → `buildPlaintextContent` renders in
+   * the server TZ (irrelevant when there are no timestamps to render).
+   */
+  private async resolveTimeZoneForContent(
+    data: DiscordNotificationJobData,
+  ): Promise<string | undefined> {
+    if (!/<t:\d+/.test(`${data.title}\n${data.message}`)) return undefined;
+    return this.discordNotificationService.resolveRecipientTimezone(
+      data.userId,
+    );
   }
 
   /** Log and track failures on final attempt. */

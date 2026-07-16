@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useNotifications, type Notification } from '../../hooks/use-notifications';
 import { EventInviteActions } from '../events/event-invite-actions';
+import { renderDiscordTimestamps } from '../../utils/discord-timestamps';
 
 interface NotificationItemProps {
     notification: Notification;
@@ -53,8 +54,8 @@ function NotificationContent({ notification, isUnread }: { notification: Notific
                 <NotificationIcon type={notification.type} />
             </div>
             <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${isUnread ? 'text-foreground' : 'text-secondary'}`}>{notification.title}</p>
-                <p className="text-sm text-muted mt-0.5 line-clamp-2">{notification.message}</p>
+                <p className={`text-sm font-medium ${isUnread ? 'text-foreground' : 'text-secondary'}`}>{renderDiscordTimestamps(notification.title)}</p>
+                <p className="text-sm text-muted mt-0.5 line-clamp-2">{renderDiscordTimestamps(notification.message)}</p>
                 <p className="text-xs text-dim mt-1">{formatTimeAgo(notification.createdAt)}</p>
             </div>
             {isUnread && <div className="flex-shrink-0 w-2 h-2 bg-emerald-400 rounded-full mt-2" />}

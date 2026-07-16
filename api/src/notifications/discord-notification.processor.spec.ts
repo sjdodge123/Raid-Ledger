@@ -30,6 +30,7 @@ describe('DiscordNotificationProcessor', () => {
     recordFailure: jest.fn().mockResolvedValue(undefined),
     deactivateUser: jest.fn().mockResolvedValue(undefined),
     isUserDeactivated: jest.fn().mockResolvedValue(false),
+    resolveRecipientTimezone: jest.fn().mockResolvedValue('America/New_York'),
   };
 
   const mockSettingsService = {
@@ -130,6 +131,49 @@ describe('DiscordNotificationProcessor', () => {
       expect(mockDiscordNotificationService.resetFailures).toHaveBeenCalledWith(
         1,
       );
+    });
+
+    // ROK-1403: when the message carries Discord <t:> markup, the plaintext
+    // content must be rendered in the recipient's timezone (resolved from the
+    // recipient), NOT the server TZ, and :R must become a relative delta.
+    describe('ROK-1403 — recipient-timezone plaintext rendering', () => {
+      const epoch = Math.floor(
+        new Date('2026-04-01T20:00:00Z').getTime() / 1000,
+      );
+
+      it('resolves the recipient tz and renders <t:> markup in it', async () => {
+        const job = buildJob({
+          userId: 7,
+          title: 'Event Rescheduled',
+          message: `"Raid Night" has been rescheduled to <t:${epoch}:f> (<t:${epoch}:R>)`,
+        });
+
+        await processor.process(job);
+
+        expect(
+          mockDiscordNotificationService.resolveRecipientTimezone,
+        ).toHaveBeenCalledWith(7);
+        const content = mockClientService.sendEmbedDM.mock
+          .calls[0][4] as string;
+        // America/New_York → 4:00 PM EDT (server UTC would be 8:00 PM UTC).
+        expect(content).toContain('4:00 PM EDT');
+        expect(content).not.toContain('UTC');
+        // No raw tokens survive, and the parenthetical is a relative delta,
+        // not a duplicate absolute string.
+        expect(content).not.toMatch(/<t:\d+/);
+        expect(content).toMatch(
+          /\d+ (year|month|day|hour|minute|second)s? ago/,
+        );
+      });
+
+      it('skips the tz lookup for markup-free messages', async () => {
+        await processor.process(
+          buildJob({ message: 'Your event starts soon' }),
+        );
+        expect(
+          mockDiscordNotificationService.resolveRecipientTimezone,
+        ).not.toHaveBeenCalled();
+      });
     });
 
     it('should pass payload through to embed service', async () => {

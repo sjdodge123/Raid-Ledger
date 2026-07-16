@@ -14,6 +14,7 @@ import { DiscordNotificationEmbedService } from './discord-notification-embed.se
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { deactivateUserViaModuleRef } from './discord-notification-deactivate.helpers';
+import { resolveUserTimezone } from './timezone.helpers';
 import {
   DISCORD_NOTIFICATION_QUEUE,
   RATE_LIMIT_WINDOW_MS,
@@ -310,6 +311,18 @@ export class DiscordNotificationService {
       .where(eq(schema.users.id, userId))
       .limit(1);
     return row?.deactivatedAt != null;
+  }
+
+  /**
+   * Resolve the recipient's IANA timezone for DM plaintext / push-preview
+   * rendering (ROK-1403). Chain: per-user pref → guild default → 'UTC'.
+   * Used by the processor to render any `<t:>` markup in the recipient's tz
+   * instead of the server process TZ (UTC in prod).
+   */
+  async resolveRecipientTimezone(userId: number): Promise<string> {
+    const defaultTz =
+      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
+    return resolveUserTimezone(this.db, userId, defaultTz);
   }
 
   /**
