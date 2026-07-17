@@ -200,6 +200,9 @@ async function obliterateAllQueues(): Promise<void> {
  * game-alert groups (ROK-1202) cover `recruitment-bump:event:N` /
  * `recruitment-dm:event:N` and `game-alert:event:N` so recruitment-reminder +
  * game-alert specs that recycle event IDs don't inherit stale dedup keys.
+ * `igdb:search:itad:` (ROK-1381) drops ITAD search-cache entries — the mock's
+ * setex never expires, so a cached hit could otherwise outlive the DB rows it
+ * was built from and mask expected external-call spies in a later spec.
  */
 const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'jwt_block:',
@@ -211,6 +214,7 @@ const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'recruitment-',
   'game-alert',
   'cooptimus:',
+  'igdb:search:itad:',
 ];
 
 /**
