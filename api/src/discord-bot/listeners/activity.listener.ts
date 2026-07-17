@@ -25,8 +25,8 @@ export class ActivityListener {
 
   /** Bound handler reference for cleanup */
   private boundHandler:
-    | ((oldPresence: Presence | null, newPresence: Presence) => void)
-    | null = null;
+    ((oldPresence: Presence | null, newPresence: Presence) => void) | null =
+    null;
 
   constructor(
     private readonly clientService: DiscordBotClientService,

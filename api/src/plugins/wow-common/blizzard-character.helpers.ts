@@ -94,8 +94,7 @@ function extractItemFields(item: Record<string, unknown>) {
     armor: item.armor as { value: number } | undefined,
     binding: item.binding as { type: string } | undefined,
     requirements: item.requirements as
-      | { level?: { value: number } }
-      | undefined,
+      { level?: { value: number } } | undefined,
     weapon: item.weapon as WeaponData | undefined,
     setObj: item.set as { item_set?: { name: string } } | undefined,
   };
@@ -249,15 +248,13 @@ function mapClassicTalents(
     .filter((t) => {
       const talent = t.talent as { name?: string } | undefined;
       const spell = t.spell_tooltip as
-        | { spell?: { name?: string } }
-        | undefined;
+        { spell?: { name?: string } } | undefined;
       return talent?.name || spell?.spell?.name;
     })
     .map((t) => {
       const talent = t.talent as { name?: string; id?: number } | undefined;
       const spell = t.spell_tooltip as
-        | { spell?: { name?: string; id?: number } }
-        | undefined;
+        { spell?: { name?: string; id?: number } } | undefined;
       return {
         name: talent?.name ?? spell?.spell?.name ?? 'Unknown',
         id: talent?.id,

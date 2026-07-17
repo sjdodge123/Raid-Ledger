@@ -13,10 +13,7 @@ import {
 
 /** Tag explaining WHERE a candidate came from (prompt surfaces this). */
 export type CandidateOrigin =
-  | 'taste_match'
-  | 'taste_discovery'
-  | 'wildcard_popular'
-  | 'wildcard_sale';
+  'taste_match' | 'taste_discovery' | 'wildcard_popular' | 'wildcard_sale';
 
 /** SimilarGameDto plus its provenance for prompt annotation. */
 interface TaggedSimilar extends SimilarGameDto {

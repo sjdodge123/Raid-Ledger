@@ -14,10 +14,7 @@ const MAX_RESPONSE_TOKENS = 3500;
 const PROMPT_TEMPERATURE = 0.8;
 
 export type CategoryTypeHint =
-  | 'seasonal'
-  | 'trend'
-  | 'community_pattern'
-  | 'event';
+  'seasonal' | 'trend' | 'community_pattern' | 'event';
 
 export interface PlayerCount {
   min: number;

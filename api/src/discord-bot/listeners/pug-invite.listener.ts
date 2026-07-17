@@ -53,8 +53,7 @@ export class PugInviteListener {
   private boundGuildMemberAddHandler: ((member: GuildMember) => void) | null =
     null;
   private boundInteractionHandler:
-    | ((interaction: import('discord.js').Interaction) => void)
-    | null = null;
+    ((interaction: import('discord.js').Interaction) => void) | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)

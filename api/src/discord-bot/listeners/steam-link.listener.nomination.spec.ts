@@ -102,8 +102,7 @@ function activeLineupTests() {
     await callHandleMessage(ctx.listener, msg);
 
     const call = ctx.mockDmSend.mock.calls[0]?.[0] as
-      | { content?: string }
-      | undefined;
+      { content?: string } | undefined;
     const content = call?.content ?? '';
     expect(content).not.toMatch(/Community Lineup/i);
     expect(content).not.toMatch(/nominate/i);

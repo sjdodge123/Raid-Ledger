@@ -173,12 +173,7 @@ export class DemoTestDeactivationController {
   @Get('job-state')
   async jobState(@Query('notificationId') notificationId?: string): Promise<{
     state:
-      | 'waiting'
-      | 'active'
-      | 'completed'
-      | 'failed'
-      | 'unknown'
-      | 'delayed';
+      'waiting' | 'active' | 'completed' | 'failed' | 'unknown' | 'delayed';
   }> {
     await this.assertDemoMode();
     if (!notificationId)
@@ -186,11 +181,7 @@ export class DemoTestDeactivationController {
     const job = await this.discordQueue.getJob(notificationId);
     if (!job) return { state: 'unknown' };
     const state = (await job.getState()) as
-      | 'waiting'
-      | 'active'
-      | 'completed'
-      | 'failed'
-      | 'delayed';
+      'waiting' | 'active' | 'completed' | 'failed' | 'delayed';
     return { state };
   }
 }

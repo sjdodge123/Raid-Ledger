@@ -32,11 +32,7 @@ export type ConfirmationStatus = 'pending' | 'confirmed' | 'changed';
  * - departed: User left voice mid-event and grace period expired (ROK-596)
  */
 export type SignupStatus =
-  | 'signed_up'
-  | 'tentative'
-  | 'declined'
-  | 'roached_out'
-  | 'departed';
+  'signed_up' | 'tentative' | 'declined' | 'roached_out' | 'departed';
 
 /**
  * Event signups table for tracking user participation in events.
