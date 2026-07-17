@@ -30,8 +30,7 @@ import {
 export class RoachOutInteractionListener {
   private readonly logger = new Logger(RoachOutInteractionListener.name);
   private boundHandler:
-    | ((interaction: import('discord.js').Interaction) => void)
-    | null = null;
+    ((interaction: import('discord.js').Interaction) => void) | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)

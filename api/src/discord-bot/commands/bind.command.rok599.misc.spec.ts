@@ -140,8 +140,7 @@ describe('BindCommand ROK-599 misc — getDefinition', () => {
   it('includes an "event" option with autocomplete', () => {
     const definition = command.getDefinition();
     const options = definition.options as
-      | Array<{ name: string; autocomplete?: boolean }>
-      | undefined;
+      Array<{ name: string; autocomplete?: boolean }> | undefined;
     const eventOption = options?.find((o) => o.name === 'event');
     expect(eventOption).toBeDefined();
     expect(eventOption?.autocomplete).toBe(true);

@@ -4,6 +4,44 @@ import {
   mapClaudeChatResponse,
   CLAUDE_MODELS,
 } from './claude.helpers';
+import { LlmQuotaExhaustedError } from '../llm-errors';
+
+// ROK-1376 (Codex P2): quota classification must cover every cloud provider,
+// not just Gemini — otherwise a provider switch silently restores the
+// retry-burning behavior the cooldown latch exists to prevent.
+describe('fetchClaude — quota classification (ROK-1376)', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function mockFailure(status: number, body: string): void {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status,
+      json: jest.fn(),
+      text: jest.fn().mockResolvedValue(body),
+    });
+  }
+
+  it('throws LlmQuotaExhaustedError on HTTP 429 preserving the status', async () => {
+    mockFailure(429, '{"error":{"type":"rate_limit_error"}}');
+    const err = await fetchClaude('k', '/v1/messages', {}).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(LlmQuotaExhaustedError);
+    expect((err as LlmQuotaExhaustedError).providerStatus).toBe(429);
+  });
+
+  it('throws a plain Error (NOT quota) on generic provider failures', async () => {
+    mockFailure(500, 'internal server error');
+    const err = await fetchClaude('k', '/v1/messages', {}).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(LlmQuotaExhaustedError);
+  });
+});
 
 describe('claude.helpers', () => {
   describe('extractSystemPrompt', () => {

@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { HttpException, NotFoundException } from '@nestjs/common';
+import { LlmQuotaExhaustedError } from './llm-errors';
 import { LlmService } from './llm.service';
 import { LlmProviderRegistry } from './llm-provider-registry';
 import { AiRequestLogService } from './ai-request-log.service';
@@ -286,6 +287,25 @@ describe('LlmService (adversarial)', () => {
           { feature: 'test' },
         ),
       ).rejects.toThrow('network failure');
+    });
+
+    // ROK-1376: the typed quota error must reach callers UNWRAPPED so the
+    // pre-gen processor can classify it as non-retryable — the facade must
+    // not collapse it into a generic failure shape.
+    it('propagates LlmQuotaExhaustedError as the SAME instance with providerStatus intact', async () => {
+      const quotaErr = new LlmQuotaExhaustedError(
+        'Gemini: HTTP 429 — monthly spending cap exceeded',
+        429,
+      );
+      (mockProvider.chat as jest.Mock).mockRejectedValue(quotaErr);
+      const caught = await service
+        .chat(
+          { messages: [{ role: 'user', content: 'Hi' }] },
+          { feature: 'test' },
+        )
+        .catch((e: unknown) => e);
+      expect(caught).toBe(quotaErr);
+      expect((caught as LlmQuotaExhaustedError).providerStatus).toBe(429);
     });
 
     it('throws NotFoundException when no provider available for listModels', async () => {

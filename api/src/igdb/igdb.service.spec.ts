@@ -210,8 +210,16 @@ describe('IgdbService', () => {
   describe('searchGames', () => {
     it('should return Redis-cached games when available', async () => {
       // ROK-660: Redis now stores full GameDetailDto objects and returns them
-      // directly without a DB re-query
-      mockRedis.get.mockResolvedValueOnce(JSON.stringify(mockGameDetails));
+      // directly without a DB re-query. Key-aware mock (ROK-1381): the ITAD
+      // cache layer consults its own key first — return the payload only for
+      // the SWR key so this test still covers the SWR hit path.
+      mockRedis.get.mockImplementation((key: string) =>
+        Promise.resolve(
+          key === 'igdb:search:valheim'
+            ? JSON.stringify(mockGameDetails)
+            : null,
+        ),
+      );
 
       const result = await service.searchGames('valheim');
 
@@ -381,8 +389,13 @@ describe('IgdbService', () => {
     });
 
     it('should escape LIKE special characters in query', async () => {
-      // Redis hit to avoid going through the whole chain
-      mockRedis.get.mockResolvedValue(JSON.stringify(mockGames));
+      // SWR-key-only Redis hit to avoid going through the whole chain
+      // (the ITAD cache layer probes its own key first — ROK-1381)
+      mockRedis.get.mockImplementation((key: string) =>
+        Promise.resolve(
+          key === 'igdb:search:valheimtest' ? JSON.stringify(mockGames) : null,
+        ),
+      );
 
       await service.searchGames('val%heim_test');
 
@@ -391,7 +404,11 @@ describe('IgdbService', () => {
     });
 
     it('should normalize query for cache keys (lowercase, trim)', async () => {
-      mockRedis.get.mockResolvedValue(JSON.stringify(mockGames));
+      mockRedis.get.mockImplementation((key: string) =>
+        Promise.resolve(
+          key === 'igdb:search:valheim' ? JSON.stringify(mockGames) : null,
+        ),
+      );
 
       await service.searchGames('  VALHEIM  ');
 

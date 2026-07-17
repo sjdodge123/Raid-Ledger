@@ -303,7 +303,7 @@ Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self
 - **Migrations:** run iff `drizzle/migrations/**` changed.
 - **Container startup:** run iff `Dockerfile*`, `nginx/**`, or `docker-entrypoint*` changed.
 - **Playwright:** run iff diff touches `web/**`, `api/src/auth/**`, `api/src/admin/demo-test*`, `playwright.config.*`, or `scripts/smoke/**` AND `:3000/health` + `:5173` both answer. SKIPPED otherwise (with a clear reason in the summary).
-- **Discord smoke:** run iff diff touches `api/src/discord-bot/**`, `api/src/notifications/**`, `api/src/events/signups*`, `api/src/events/event-lifecycle*`, `api/src/admin/demo-test*`, `tools/test-bot/src/smoke/**`, or `tools/test-bot/src/helpers/polling.ts` AND env is up.
+- **Discord smoke:** run iff diff touches `api/src/discord-bot/**`, `api/src/notifications/**`, `api/src/events/signups*`, `api/src/events/event-lifecycle*`, `api/src/lineups/standalone-poll/**`, `api/src/admin/demo-test*`, `tools/test-bot/src/smoke/**`, or `tools/test-bot/src/helpers/polling.ts` AND env is up.
 
 **Gate / E2E flags:**
 
@@ -418,6 +418,7 @@ Smoke tests in `tools/test-bot/src/smoke/tests/` validate real Discord behavior 
 - `api/src/notifications/**` — notification dispatch, DM embeds, reminder services
 - `api/src/events/signups*` — signup creation, auto-allocation, roster assignment
 - `api/src/events/event-lifecycle*` — cancel, reschedule, delete flows
+- `api/src/lineups/standalone-poll/**` — reschedule-poll lock-in enqueues embed syncs (ROK-1392)
 - `api/src/admin/demo-test*` — test-only API endpoints used by smoke tests
 - `tools/test-bot/src/smoke/**` — the tests themselves
 - `tools/test-bot/src/helpers/polling.ts` — deterministic wait helpers

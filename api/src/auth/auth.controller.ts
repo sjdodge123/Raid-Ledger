@@ -93,9 +93,7 @@ export class AuthController {
     avatarPref: { value: unknown } | null | undefined,
   ): Promise<string | null> {
     const pref = avatarPref?.value as
-      | { type: string; characterName?: string }
-      | null
-      | undefined;
+      { type: string; characterName?: string } | null | undefined;
     if (pref?.type === 'custom' && user.customAvatarUrl)
       return user.customAvatarUrl;
     if (pref?.type === 'character' && pref.characterName)

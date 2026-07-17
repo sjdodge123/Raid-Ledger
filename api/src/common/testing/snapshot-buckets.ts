@@ -116,8 +116,7 @@ function readWorkerFromHost(host: unknown): {
   isPaused: boolean | null;
 } {
   const worker = (host as { worker?: unknown })?.worker as
-    | { isRunning?: () => boolean; isPaused?: () => boolean }
-    | undefined;
+    { isRunning?: () => boolean; isPaused?: () => boolean } | undefined;
   if (!worker) return { isRunning: null, isPaused: null };
   return {
     isRunning: callBoolean(worker.isRunning),

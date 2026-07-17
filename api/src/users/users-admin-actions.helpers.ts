@@ -19,11 +19,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 /** Moderation action kinds recorded in `admin_actions.action`. */
 export type AdminActionKind =
-  | 'kick'
-  | 'unkick'
-  | 'ban'
-  | 'unban'
-  | 'role_change';
+  'kick' | 'unkick' | 'ban' | 'unban' | 'role_change';
 
 export interface InsertAdminActionInput {
   action: AdminActionKind;

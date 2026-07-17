@@ -43,8 +43,7 @@ async function findExistingByAltKey(
 ): Promise<typeof schema.games.$inferSelect | null> {
   const g = schema.games;
   const steamId = (game as Record<string, unknown>).steamAppId as
-    | number
-    | undefined;
+    number | undefined;
   if (steamId) {
     const rows = await db
       .select()

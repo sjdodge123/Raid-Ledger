@@ -1,8 +1,12 @@
 import {
   formatEpoch,
+  formatRelativeEpoch,
   stripDiscordMarkup,
   buildPlaintextContent,
 } from './format-helpers';
+
+// epoch 1700000000 = 2023-11-14T22:13:20Z (Nov 14 is EST, not EDT).
+const KNOWN_EPOCH = 1700000000;
 
 describe('formatEpoch', () => {
   it('formats a known Unix epoch into a short date string', () => {
@@ -23,6 +27,107 @@ describe('formatEpoch', () => {
     const result = formatEpoch(epoch);
     expect(result).toContain('Apr');
     expect(result).toContain('1');
+  });
+});
+
+describe('formatEpoch — timezone (ROK-1403)', () => {
+  it('renders in the given IANA timezone', () => {
+    const result = formatEpoch(KNOWN_EPOCH, 'America/New_York');
+    expect(result).toContain('5:13 PM EST');
+    expect(result).toContain('Nov 14');
+  });
+
+  it('renders a different wall-clock time for a different timezone', () => {
+    const la = formatEpoch(KNOWN_EPOCH, 'America/Los_Angeles');
+    expect(la).toContain('2:13 PM PST');
+  });
+
+  it('falls back to a correctly-labeled UTC rendering on a bad timezone', () => {
+    const result = formatEpoch(KNOWN_EPOCH, 'Not/AZone');
+    expect(result).toContain('UTC');
+    expect(result).toContain('Nov 14');
+  });
+
+  it('renders in UTC when explicitly asked', () => {
+    expect(formatEpoch(KNOWN_EPOCH, 'UTC')).toContain('10:13 PM UTC');
+  });
+});
+
+describe('formatRelativeEpoch (ROK-1403)', () => {
+  it('renders a future epoch as "in N …"', () => {
+    const now = Date.parse('2026-07-15T12:00:00Z');
+    const epoch = Math.floor((now + 2 * 3600 * 1000) / 1000);
+    expect(formatRelativeEpoch(epoch, now)).toBe('in 2 hours');
+  });
+
+  it('renders a past epoch as "N … ago"', () => {
+    const now = Date.parse('2026-07-15T12:00:00Z');
+    const epoch = Math.floor((now - 3 * 86400 * 1000) / 1000);
+    expect(formatRelativeEpoch(epoch, now)).toBe('3 days ago');
+  });
+
+  it('renders the current instant as "now"', () => {
+    const now = Date.parse('2026-07-15T12:00:00Z');
+    expect(formatRelativeEpoch(Math.floor(now / 1000), now)).toBe('now');
+  });
+
+  it('rounds ±x.5-unit deltas symmetrically (past magnitude == future magnitude)', () => {
+    const now = Date.parse('2026-07-15T12:00:00Z');
+    const future = Math.floor((now + 5400 * 1000) / 1000); // +1.5h
+    const past = Math.floor((now - 5400 * 1000) / 1000); // -1.5h
+    expect(formatRelativeEpoch(future, now)).toBe('in 2 hours');
+    expect(formatRelativeEpoch(past, now)).toBe('2 hours ago');
+  });
+
+  it('never throws on a non-finite epoch (Infinity)', () => {
+    expect(
+      formatRelativeEpoch(Infinity, Date.parse('2026-07-15T12:00:00Z')),
+    ).toBe('Invalid date');
+  });
+});
+
+describe('out-of-range epoch safety (ROK-1403)', () => {
+  // A user-controlled event title like `<t:9999999999999:f>` reaches these
+  // helpers verbatim. They must degrade gracefully, never throw.
+  const HUGE = 9999999999999; // *1000 exceeds the max valid Date
+
+  it('formatEpoch returns "Invalid Date" instead of throwing', () => {
+    expect(() => formatEpoch(HUGE, 'UTC')).not.toThrow();
+    expect(formatEpoch(HUGE, 'UTC')).toContain('Invalid Date');
+  });
+
+  it('stripDiscordMarkup renders an out-of-range token without throwing', () => {
+    const result = stripDiscordMarkup(`When: <t:${HUGE}:f>`, 'UTC');
+    expect(result).not.toMatch(/<t:\d+/);
+    expect(result).toContain('Invalid Date');
+  });
+});
+
+describe('stripDiscordMarkup — timezone + relative (ROK-1403)', () => {
+  it('renders an absolute :f token in the recipient timezone', () => {
+    const result = stripDiscordMarkup(
+      `At <t:${KNOWN_EPOCH}:f>`,
+      'America/New_York',
+    );
+    expect(result).toContain('5:13 PM EST');
+    expect(result).not.toMatch(/<t:\d+/);
+  });
+
+  it('renders :R as a relative delta and the absolute exactly once (no duplicate)', () => {
+    // The exact bug: `<t:E:f> (<t:E:R>)` used to collapse to "ABS (ABS)".
+    // Use a real ~2h-future epoch so the internal Date.now()-based relative
+    // ("in 2 hours") and the test's absolute share the same baseline.
+    const epoch = Math.floor(Date.now() / 1000) + 2 * 3600;
+    const abs = formatEpoch(epoch, 'UTC');
+    const result = stripDiscordMarkup(
+      `Starts <t:${epoch}:f> (<t:${epoch}:R>)`,
+      'UTC',
+    );
+    expect(result).not.toMatch(/<t:\d+/);
+    expect(result).toMatch(/in \d+ hours?/); // :R rendered as a relative delta
+    // The absolute appears exactly once — not the old "ABS (ABS)" duplicate.
+    expect(result.split(abs).length - 1).toBe(1);
+    expect(result).not.toContain(`${abs} (${abs})`);
   });
 });
 

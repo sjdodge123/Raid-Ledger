@@ -73,10 +73,7 @@ export interface EmbedContext {
 
 /** Controls what action row buttons are attached to the embed. */
 export type EmbedButtonMode =
-  | 'signup'
-  | 'view'
-  | 'none'
-  | ActionRowBuilder<ButtonBuilder>;
+  'signup' | 'view' | 'none' | ActionRowBuilder<ButtonBuilder>;
 
 export interface BuildEventEmbedOptions {
   state?: EmbedState;

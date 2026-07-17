@@ -15,10 +15,7 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /** Fit category based on voter count vs game capacity. */
 export type FitCategory =
-  | 'perfect'
-  | 'oversubscribed'
-  | 'undersubscribed'
-  | 'normal';
+  'perfect' | 'oversubscribed' | 'undersubscribed' | 'normal';
 
 /**
  * Build match records for a lineup transitioning to 'decided'.

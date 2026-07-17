@@ -20,8 +20,7 @@ export function buildListView(
 ): {
   embed: EmbedBuilder;
   components: (
-    | ActionRowBuilder<StringSelectMenuBuilder>
-    | ActionRowBuilder<ButtonBuilder>
+    ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>
   )[];
 } {
   const clientUrl = process.env.CLIENT_URL ?? null;
@@ -56,12 +55,10 @@ function buildListComponents(
   events: EventResponseDto[],
   clientUrl: string | null,
 ): (
-  | ActionRowBuilder<StringSelectMenuBuilder>
-  | ActionRowBuilder<ButtonBuilder>
+  ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>
 )[] {
   const components: (
-    | ActionRowBuilder<StringSelectMenuBuilder>
-    | ActionRowBuilder<ButtonBuilder>
+    ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>
   )[] = [];
 
   const selectMenu = buildEventSelectMenu(events);

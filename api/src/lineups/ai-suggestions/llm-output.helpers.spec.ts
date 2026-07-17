@@ -12,6 +12,7 @@
  * until Phase B lands `llm-output.helpers.ts`.
  */
 import type { LlmService } from '../../ai/llm.service';
+import { LlmQuotaExhaustedError } from '../../ai/llm-errors';
 import type {
   LlmChatOptions,
   LlmChatResponse,
@@ -115,6 +116,41 @@ describe('callAndParseLlmOutput (ROK-931)', () => {
       }),
     ).rejects.toBeInstanceOf(LlmUnavailableError);
     expect(chat).toHaveBeenCalledTimes(2);
+  });
+
+  // ROK-1376: quota exhaustion is permanent until billing resets — the
+  // parse-retry would burn a second doomed provider call, so the typed
+  // error must short-circuit the retry and reach the caller unwrapped.
+  describe('quota exhaustion (ROK-1376)', () => {
+    it('rethrows LlmQuotaExhaustedError from attempt 1 with NO retry call', async () => {
+      const quota = new LlmQuotaExhaustedError(
+        'Gemini: HTTP 429 — monthly spending cap exceeded',
+        429,
+      );
+      const { service, chat } = makeMockLlmService([quota]);
+      const caught = await callAndParseLlmOutput(service as LlmService, {
+        messages: [{ role: 'user', content: 'suggest games' }],
+      }).catch((e: unknown) => e);
+      expect(caught).toBe(quota);
+      expect(chat).toHaveBeenCalledTimes(1);
+    });
+
+    it('rethrows the typed error (NOT LlmUnavailableError) when the parse-retry hits the quota wall', async () => {
+      const quota = new LlmQuotaExhaustedError(
+        'Gemini: HTTP 429 — quota exceeded',
+        429,
+      );
+      const { service, chat } = makeMockLlmService([
+        makeChatResponse('not json at all'),
+        quota,
+      ]);
+      const caught = await callAndParseLlmOutput(service as LlmService, {
+        messages: [{ role: 'user', content: 'suggest games' }],
+      }).catch((e: unknown) => e);
+      expect(caught).toBe(quota);
+      expect(caught).not.toBeInstanceOf(LlmUnavailableError);
+      expect(chat).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('recovers with parsed output when the first call errors and the retry succeeds', async () => {

@@ -211,8 +211,7 @@ export function readTestServerPort(instance: Instance): TestServerPortResult {
     )?.app;
     if (!app) return { status: 'no-app' };
     const server = app.getHttpServer?.() as
-      | { address?: () => unknown }
-      | undefined;
+      { address?: () => unknown } | undefined;
     if (!server || typeof server.address !== 'function') {
       return { status: 'no-server' };
     }
