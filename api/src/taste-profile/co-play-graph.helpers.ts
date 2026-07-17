@@ -25,6 +25,8 @@ export interface SignupRow {
   eventId: number;
   userId: number | null;
   gameId: number | null;
+  /** Event start (tsrange lower bound) — signup evidence dates co-play to the event itself. */
+  eventStartAt: Date | null;
 }
 
 export interface CoPlayAggregate {
@@ -105,6 +107,7 @@ function upsertAggregate(
 export function aggregateCoPlay(
   voiceSessionsByEvent: Map<number, VoiceSessionRow[]>,
   signupsByEvent: Map<number, SignupRow[]>,
+  now: Date = new Date(),
 ): CoPlayAggregate[] {
   const map = new Map<string, CoPlayAggregate>();
 
@@ -133,6 +136,11 @@ export function aggregateCoPlay(
   }
 
   for (const [, signups] of signupsByEvent) {
+    // Signup evidence proves co-play only once the event has started (ROK-1405):
+    // stamping pairs with the aggregation time gave every partner the same
+    // "last played", and it always won the max() over real voice timestamps.
+    const eventStartAt = signups[0]?.eventStartAt;
+    if (!eventStartAt || eventStartAt > now) continue;
     for (let i = 0; i < signups.length; i++) {
       const a = signups[i];
       if (a.userId === null) continue;
@@ -144,7 +152,7 @@ export function aggregateCoPlay(
           a.userId,
           b.userId,
           0,
-          new Date(),
+          eventStartAt,
           a.gameId ?? b.gameId,
         );
       }
