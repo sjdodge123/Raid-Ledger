@@ -13,6 +13,7 @@ export async function runBuildCoPlayGraph(db: Db): Promise<void> {
   const voiceSessions = await db.select().from(schema.eventVoiceSessions);
   const events = await db.select().from(schema.events);
   const eventGameMap = new Map(events.map((e) => [e.id, e.gameId]));
+  const eventStartMap = new Map(events.map((e) => [e.id, e.duration[0]]));
 
   const voiceSessionsByEvent = new Map<number, VoiceSessionRow[]>();
   for (const vs of voiceSessions) {
@@ -37,6 +38,7 @@ export async function runBuildCoPlayGraph(db: Db): Promise<void> {
       eventId: s.eventId,
       userId: s.userId,
       gameId: eventGameMap.get(s.eventId) ?? null,
+      eventStartAt: eventStartMap.get(s.eventId) ?? null,
     });
     signupsByEvent.set(s.eventId, list);
   }
