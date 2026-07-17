@@ -1,4 +1,5 @@
 import type { LlmModelInfo, LlmChatResponse } from '../llm-provider.interface';
+import { LlmQuotaExhaustedError, isQuotaExhaustedSignal } from '../llm-errors';
 
 /** Known OpenAI chat model IDs to filter against. */
 export const OPENAI_CHAT_MODELS = [
@@ -25,7 +26,8 @@ export interface OpenAiChatRaw {
 
 /**
  * Fetch helper for OpenAI API calls with timeout support.
- * @throws Error on non-OK responses or timeouts.
+ * @throws LlmQuotaExhaustedError on quota/spend-cap responses (ROK-1376),
+ *         Error on other non-OK responses or timeouts.
  */
 export async function fetchOpenAi<T>(
   apiKey: string,
@@ -47,7 +49,11 @@ export async function fetchOpenAi<T>(
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(`OpenAI ${path}: HTTP ${res.status} — ${body}`);
+      const message = `OpenAI ${path}: HTTP ${res.status} — ${body}`;
+      if (isQuotaExhaustedSignal(res.status, body)) {
+        throw new LlmQuotaExhaustedError(message, res.status);
+      }
+      throw new Error(message);
     }
     return (await res.json()) as T;
   } finally {

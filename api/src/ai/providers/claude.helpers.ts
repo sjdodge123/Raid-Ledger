@@ -3,6 +3,7 @@ import type {
   LlmChatMessage,
   LlmChatResponse,
 } from '../llm-provider.interface';
+import { LlmQuotaExhaustedError, isQuotaExhaustedSignal } from '../llm-errors';
 
 /** Hardcoded list of available Claude models (Anthropic has no list API). */
 export const CLAUDE_MODELS: LlmModelInfo[] = [
@@ -50,7 +51,11 @@ export async function fetchClaude<T>(
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Anthropic ${path}: HTTP ${res.status} — ${body}`);
+    const message = `Anthropic ${path}: HTTP ${res.status} — ${body}`;
+    if (isQuotaExhaustedSignal(res.status, body)) {
+      throw new LlmQuotaExhaustedError(message, res.status);
+    }
+    throw new Error(message);
   }
   return (await res.json()) as T;
 }
