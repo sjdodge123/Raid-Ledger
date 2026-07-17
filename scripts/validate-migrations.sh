@@ -68,9 +68,12 @@ wait_for_postgres() {
   # pg_isready alone races initdb: it reports ready against the temporary
   # bootstrap server BEFORE the init scripts create POSTGRES_DB, so the first
   # migration could fail with "database raid_ledger does not exist". Polling
-  # an actual query against raid_ledger is strictly tighter.
-  while ! docker exec "$CONTAINER_NAME" \
-    psql -U user -d raid_ledger -c 'SELECT 1' >/dev/null 2>&1; do
+  # an actual query against raid_ledger over TCP closes the race completely:
+  # the bootstrap server is socket-only (listen_addresses=''), so a TCP
+  # success can only come from the final server — a socket-based poll could
+  # still pass in the window between DB creation and bootstrap shutdown.
+  while ! docker exec -e PGPASSWORD=password "$CONTAINER_NAME" \
+    psql -h 127.0.0.1 -U user -d raid_ledger -c 'SELECT 1' >/dev/null 2>&1; do
     sleep 1
     elapsed=$((elapsed + 1))
     if [ "$elapsed" -ge 30 ]; then
