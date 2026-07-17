@@ -1,13 +1,15 @@
 /**
- * Tests for search pipeline wiring (ROK-773, ROK-953).
+ * Tests for search pipeline wiring (ROK-773, ROK-953, ROK-1381).
  * Verifies ITAD-primary with IGDB fallback logic, error handling,
- * and partial prefix query optimization.
+ * partial prefix query optimization, and the short-TTL ITAD cache.
  */
 import {
   runSearchPipeline,
   isPartialPrefixQuery,
+  buildItadCacheKey,
   type SearchPipelineParams,
 } from './igdb-search-pipeline.helpers';
+import { IGDB_CONFIG } from './igdb.constants';
 
 // Mock the ITAD deps builder
 jest.mock('./igdb-itad-deps.helpers', () => ({
@@ -40,12 +42,23 @@ const { executeSearch } = require('./igdb-search-executor.helpers') as {
   executeSearch: jest.Mock;
 };
 
+/** Minimal redis mock covering the two calls the ITAD cache layer makes. */
+function makeRedis(
+  overrides: Partial<{ get: jest.Mock; setex: jest.Mock }> = {},
+): SearchPipelineParams['redis'] {
+  return {
+    get: jest.fn().mockResolvedValue(null),
+    setex: jest.fn().mockResolvedValue('OK'),
+    ...overrides,
+  } as unknown as SearchPipelineParams['redis'];
+}
+
 function makeParams(
   overrides: Partial<SearchPipelineParams> = {},
 ): SearchPipelineParams {
   return {
     db: {} as SearchPipelineParams['db'],
-    redis: {} as SearchPipelineParams['redis'],
+    redis: makeRedis(),
     itadService: {} as SearchPipelineParams['itadService'],
     resolveCredentials: jest
       .fn()
@@ -228,6 +241,178 @@ describe('runSearchPipeline', () => {
 
     expect(result).toEqual(itadResult);
     expect(executeItadSearch).toHaveBeenCalled();
+  });
+});
+
+describe('ITAD short-TTL cache (ROK-1381)', () => {
+  const itadGames = [{ id: 7, name: 'Game Alpha', slug: 'game-alpha' }];
+  const itadResult = { games: itadGames, cached: false, source: 'itad' };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('serves a cached result with zero ITAD/IGDB executor calls', async () => {
+    const redis = makeRedis({
+      get: jest.fn().mockResolvedValue(JSON.stringify(itadGames)),
+    });
+    const params = makeParams({ redis });
+
+    const result = await runSearchPipeline(
+      params,
+      'game alpha',
+      'game alpha',
+      jest.fn(),
+    );
+
+    expect(result).toEqual({
+      games: itadGames,
+      cached: true,
+      source: 'redis',
+    });
+    expect(executeItadSearch).not.toHaveBeenCalled();
+    expect(executeSearch).not.toHaveBeenCalled();
+    expect(redis.setex).not.toHaveBeenCalled();
+  });
+
+  it('writes the ITAD result to the cache on a miss', async () => {
+    executeItadSearch.mockResolvedValue(itadResult);
+    const redis = makeRedis();
+    const params = makeParams({ redis });
+
+    await runSearchPipeline(params, 'game alpha', 'game alpha', jest.fn());
+
+    expect(redis.get).toHaveBeenCalledWith(
+      'igdb:search:itad:adult=0:game alpha',
+    );
+    expect(redis.setex).toHaveBeenCalledWith(
+      'igdb:search:itad:adult=0:game alpha',
+      IGDB_CONFIG.ITAD_SEARCH_CACHE_TTL,
+      JSON.stringify(itadGames),
+    );
+  });
+
+  it('keys the cache on adult-filter state (no cross-state leakage)', async () => {
+    executeItadSearch.mockResolvedValue(itadResult);
+    const redis = makeRedis();
+    const params = makeParams({
+      redis,
+      getAdultFilter: jest.fn().mockResolvedValue(true),
+    });
+
+    await runSearchPipeline(params, 'game alpha', 'game alpha', jest.fn());
+
+    expect(redis.get).toHaveBeenCalledWith(
+      'igdb:search:itad:adult=1:game alpha',
+    );
+    expect(redis.setex).toHaveBeenCalledWith(
+      'igdb:search:itad:adult=1:game alpha',
+      IGDB_CONFIG.ITAD_SEARCH_CACHE_TTL,
+      JSON.stringify(itadGames),
+    );
+  });
+
+  it('does not cache empty ITAD results (IGDB fallback unchanged)', async () => {
+    executeItadSearch.mockResolvedValue({
+      games: [],
+      cached: false,
+      source: 'itad' as const,
+    });
+    const igdbResult = { games: [], cached: false, source: 'igdb' as const };
+    executeSearch.mockResolvedValue(igdbResult);
+    const redis = makeRedis();
+    const params = makeParams({ redis });
+
+    const result = await runSearchPipeline(params, 'game', 'game', jest.fn());
+
+    expect(result).toEqual(igdbResult);
+    expect(redis.setex).not.toHaveBeenCalled();
+  });
+
+  it('treats an empty cached array as a miss', async () => {
+    executeItadSearch.mockResolvedValue(itadResult);
+    const redis = makeRedis({ get: jest.fn().mockResolvedValue('[]') });
+    const params = makeParams({ redis });
+
+    const result = await runSearchPipeline(
+      params,
+      'game alpha',
+      'game alpha',
+      jest.fn(),
+    );
+
+    expect(result).toEqual(itadResult);
+    expect(executeItadSearch).toHaveBeenCalled();
+  });
+
+  it('treats a redis read error as a miss (search unaffected)', async () => {
+    executeItadSearch.mockResolvedValue(itadResult);
+    const redis = makeRedis({
+      get: jest.fn().mockRejectedValue(new Error('redis down')),
+    });
+    const params = makeParams({ redis });
+
+    const result = await runSearchPipeline(
+      params,
+      'game alpha',
+      'game alpha',
+      jest.fn(),
+    );
+
+    expect(result).toEqual(itadResult);
+    expect(executeItadSearch).toHaveBeenCalled();
+  });
+
+  it('does not break the search when the cache write fails', async () => {
+    executeItadSearch.mockResolvedValue(itadResult);
+    const redis = makeRedis({
+      setex: jest.fn().mockRejectedValue(new Error('redis down')),
+    });
+    const params = makeParams({ redis });
+
+    const result = await runSearchPipeline(
+      params,
+      'game alpha',
+      'game alpha',
+      jest.fn(),
+    );
+
+    expect(result).toEqual(itadResult);
+  });
+
+  it('never touches the ITAD cache for partial prefix queries', async () => {
+    executeSearch.mockResolvedValue({
+      games: [],
+      cached: false,
+      source: 'igdb' as const,
+    });
+    const redis = makeRedis();
+    const params = makeParams({ redis });
+
+    await runSearchPipeline(params, 'world of', 'world of', jest.fn());
+
+    expect(redis.get).not.toHaveBeenCalled();
+    expect(redis.setex).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildItadCacheKey (ROK-1381)', () => {
+  it('embeds adult-filter state so entries never collide across states', () => {
+    expect(buildItadCacheKey('halo', false)).not.toBe(
+      buildItadCacheKey('halo', true),
+    );
+  });
+
+  it('is stable for identical inputs', () => {
+    expect(buildItadCacheKey('halo infinite', true)).toBe(
+      buildItadCacheKey('halo infinite', true),
+    );
+  });
+
+  it('distinguishes different normalized queries', () => {
+    expect(buildItadCacheKey('halo', false)).not.toBe(
+      buildItadCacheKey('destiny', false),
+    );
   });
 });
 
