@@ -17,10 +17,7 @@ type AssignmentRow = typeof schema.rosterAssignments.$inferSelect;
 
 export function buildCharacterDto(character: CharacterRow): SignupCharacterDto {
   const roleOverride = character.roleOverride as
-    | 'tank'
-    | 'healer'
-    | 'dps'
-    | null;
+    'tank' | 'healer' | 'dps' | null;
   const role = character.role as 'tank' | 'healer' | 'dps' | null;
   return {
     id: character.id,
@@ -143,12 +140,9 @@ export function buildRosterAssignmentResponse(
     character: buildRosterCharacter(row.characters),
     preferredRoles:
       (row.event_signups.preferredRoles as
-        | ('tank' | 'healer' | 'dps')[]
-        | null) ?? null,
+        ('tank' | 'healer' | 'dps')[] | null) ?? null,
     signupStatus: row.event_signups.status as
-      | 'signed_up'
-      | 'tentative'
-      | 'declined',
+      'signed_up' | 'tentative' | 'declined',
     runningLate: row.event_signups.runningLateAt != null,
     lateMinutes: row.event_signups.lateMinutes ?? null,
   };

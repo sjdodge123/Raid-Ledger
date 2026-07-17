@@ -56,8 +56,7 @@ import { handleSelectMenuInteraction } from './signup-select.handlers';
 export class SignupInteractionListener {
   private readonly logger = new Logger(SignupInteractionListener.name);
   private boundHandler:
-    | ((interaction: import('discord.js').Interaction) => void)
-    | null = null;
+    ((interaction: import('discord.js').Interaction) => void) | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)

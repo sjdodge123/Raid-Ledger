@@ -21,8 +21,7 @@ function parseRedisPayload(raw: string): {
   storedAt: number | null;
 } {
   const parsed = JSON.parse(raw) as
-    | GameDetailDto[]
-    | { storedAt: number; games: GameDetailDto[] };
+    GameDetailDto[] | { storedAt: number; games: GameDetailDto[] };
   const games = Array.isArray(parsed) ? parsed : (parsed.games ?? []);
   const storedAt = Array.isArray(parsed) ? null : (parsed.storedAt ?? null);
   return { games, storedAt };

@@ -302,8 +302,7 @@ export async function showCharacterSelect(
 /** Wrapper for shared role select dropdown. */
 export async function showRoleSelect(
   interaction:
-    | ButtonInteraction
-    | import('discord.js').StringSelectMenuInteraction,
+    ButtonInteraction | import('discord.js').StringSelectMenuInteraction,
   eventId: number,
   deps: Pick<SignupInteractionDeps, 'emojiService'>,
   characterId?: string,

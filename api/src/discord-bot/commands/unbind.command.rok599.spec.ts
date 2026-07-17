@@ -429,8 +429,7 @@ describe('UnbindCommand ROK-599 — definition & routing', () => {
 
   it('includes "event" option with autocomplete', () => {
     const options = command.getDefinition().options as
-      | Array<{ name: string; autocomplete?: boolean }>
-      | undefined;
+      Array<{ name: string; autocomplete?: boolean }> | undefined;
     const eventOption = options?.find((o) => o.name === 'event');
     expect(eventOption).toBeDefined();
     expect(eventOption?.autocomplete).toBe(true);
@@ -438,8 +437,7 @@ describe('UnbindCommand ROK-599 — definition & routing', () => {
 
   it('has description that mentions "override"', () => {
     const options = command.getDefinition().options as
-      | Array<{ name: string; description: string }>
-      | undefined;
+      Array<{ name: string; description: string }> | undefined;
     const eventOption = options?.find((o) => o.name === 'event');
     expect(eventOption?.description.toLowerCase()).toContain('override');
   });

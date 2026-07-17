@@ -151,8 +151,7 @@ function buildDedupKeys(game: GameDetailDto): string[] {
   const keys: string[] = [];
   if (game.igdbId != null) keys.push(`igdb:${game.igdbId}`);
   const steamId = (game as Record<string, unknown>).steamAppId as
-    | number
-    | undefined;
+    number | undefined;
   if (steamId != null) keys.push(`steam:${String(steamId)}`);
   keys.push(`name:${normalizeForDedup(game.name)}`);
   return keys;

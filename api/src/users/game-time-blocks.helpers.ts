@@ -72,9 +72,7 @@ function buildSingleBlock(
     ...extractEventGameFields(event),
     signupId: event.signupId,
     confirmationStatus: event.confirmationStatus as
-      | 'pending'
-      | 'confirmed'
-      | 'changed',
+      'pending' | 'confirmed' | 'changed',
     dayOfWeek,
     startHour: hours[0],
     endHour: hours[hours.length - 1] + 1,

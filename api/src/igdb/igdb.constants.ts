@@ -84,6 +84,19 @@ export const IGDB_CONFIG = {
     'https://images.igdb.com/igdb/image/upload/t_screenshot_big',
   /** Redis cache TTL for search results (24 hours) */
   SEARCH_CACHE_TTL: 86400,
+  /**
+   * Redis cache TTL for ITAD-primary search results (seconds) — ROK-1381.
+   * Deliberately short: this layer caches the final post-moderation result,
+   * so a ban/hide action (or a new local registration) can be masked for at
+   * most this window. 180s absorbs repeat-search bursts — the uncached path
+   * costs one ITAD lookup POST + up to N IGDB external_games calls + N games
+   * upserts per query — while keeping moderation staleness tolerable.
+   */
+  ITAD_SEARCH_CACHE_TTL: 180,
+  /** Key prefix for the ITAD-primary search cache (ROK-1381). Distinct from
+   * the `igdb:search:` SWR keys so the two layers' entries stay in disjoint
+   * keyspaces and one layer can never read the other's cached payloads. */
+  ITAD_SEARCH_CACHE_PREFIX: 'igdb:search:itad:',
   /** Redis cache TTL for discovery rows (1 hour) */
   DISCOVER_CACHE_TTL: 3600,
   /** Redis cache TTL for streams (5 minutes) */

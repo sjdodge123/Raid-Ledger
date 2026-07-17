@@ -14,13 +14,15 @@ import { Inject, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { Job } from 'bullmq';
+import { UnrecoverableError, type Job } from 'bullmq';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { LlmService } from '../../ai/llm.service';
+import { LlmQuotaExhaustedError } from '../../ai/llm-errors';
 import { AI_SETTING_KEYS } from '../../ai/llm.constants';
 import { GameTasteService } from '../../game-taste/game-taste.service';
+import { AiQuotaCooldownService } from './quota-cooldown.service';
 import {
   resolveVoterScope,
   type VoterScopeLineup,
@@ -54,6 +56,7 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
     private readonly settings: SettingsService,
     private readonly llmService: LlmService,
     private readonly gameTaste: GameTasteService,
+    private readonly quotaCooldown: AiQuotaCooldownService,
   ) {
     super();
   }
@@ -69,6 +72,9 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
         }`,
       );
     } catch (err) {
+      if (err instanceof LlmQuotaExhaustedError) {
+        throw await this.onQuotaExhausted(lineupId, start, err);
+      }
       // Emit telemetry, then RE-THROW so BullMQ's attempts/backoff retries
       // a genuine generation failure (LLM timeout, transient DB error).
       // No-op cases (missing/inactive lineup, fresh row) never reach here —
@@ -82,6 +88,27 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
     }
   }
 
+  /**
+   * ROK-1376: quota/spend-cap exhaustion cannot succeed until billing
+   * resets. Arm the shared cooldown latch so later jobs skip without
+   * dialing the provider, emit a DISTINCT outcome (expected backpressure,
+   * not `error`), and return BullMQ's UnrecoverableError so the job fails
+   * WITHOUT consuming its remaining attempts (no 3×2-call retry burn).
+   */
+  private async onQuotaExhausted(
+    lineupId: number,
+    start: number,
+    err: LlmQuotaExhaustedError,
+  ): Promise<UnrecoverableError> {
+    await this.quotaCooldown.activate();
+    this.logger.warn(
+      `AI suggestions pre-gen | lineup=${lineupId} outcome=quota_exhausted elapsed=${
+        Date.now() - start
+      } status=${err.providerStatus} error=${err.message}`,
+    );
+    return new UnrecoverableError(err.message);
+  }
+
   /** Returns the telemetry outcome string. */
   private async run(lineupId: number, reason: PreGenReason): Promise<string> {
     if (await this.isFeatureDisabled()) return 'skipped_inactive';
@@ -90,6 +117,10 @@ export class AiSuggestionsPreGenProcessor extends WorkerHost {
     const scope = await resolveVoterScope(this.db, lineup);
     const skip = await this.shouldSkip(lineupId, scope.hash, reason);
     if (skip) return skip;
+    // ROK-1376: while the quota cooldown is armed every generation attempt
+    // is doomed — skip BEFORE dispatching the provider. Checked after the
+    // fresh-row guards so their more specific outcomes still win.
+    if (await this.quotaCooldown.isActive()) return 'skipped_quota';
     const deps: GenerateDeps = {
       db: this.db,
       settings: this.settings,

@@ -3,6 +3,7 @@ import type {
   LlmChatMessage,
   LlmChatResponse,
 } from '../llm-provider.interface';
+import { LlmQuotaExhaustedError, isQuotaExhaustedSignal } from '../llm-errors';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com';
 
@@ -38,7 +39,8 @@ interface GeminiMappedMessages {
 
 /**
  * Fetch helper for Gemini API calls with API key in query param.
- * @throws Error on non-OK responses.
+ * @throws LlmQuotaExhaustedError on quota/spend-cap responses (ROK-1376),
+ *         plain Error on any other non-OK response.
  */
 export async function fetchGemini<T>(
   apiKey: string,
@@ -56,8 +58,12 @@ export async function fetchGemini<T>(
   }
   const res = await fetch(url, options);
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Gemini ${path}: HTTP ${res.status} — ${body}`);
+    const failureBody = await res.text().catch(() => '');
+    const message = `Gemini ${path}: HTTP ${res.status} — ${failureBody}`;
+    if (isQuotaExhaustedSignal(res.status, failureBody)) {
+      throw new LlmQuotaExhaustedError(message, res.status);
+    }
+    throw new Error(message);
   }
   return (await res.json()) as T;
 }

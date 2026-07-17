@@ -37,8 +37,7 @@ const LINK_MSG =
 export class RunningLateInteractionListener {
   private readonly logger = new Logger(RunningLateInteractionListener.name);
   private boundHandler:
-    | ((interaction: import('discord.js').Interaction) => void)
-    | null = null;
+    ((interaction: import('discord.js').Interaction) => void) | null = null;
   private boundVoiceHandler: ((o: VoiceState, n: VoiceState) => void) | null =
     null;
 

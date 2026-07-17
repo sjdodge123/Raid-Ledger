@@ -211,9 +211,7 @@ export function shouldPostEmbed(
  */
 export function getLeadTimeFromRecurrence(
   recurrenceRule:
-    | { frequency: 'weekly' | 'biweekly' | 'monthly' }
-    | null
-    | undefined,
+    { frequency: 'weekly' | 'biweekly' | 'monthly' } | null | undefined,
 ): number | null {
   if (!recurrenceRule) return null;
   const intervalMs = getSeriesIntervalMs(recurrenceRule.frequency);

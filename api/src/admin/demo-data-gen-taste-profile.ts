@@ -13,10 +13,7 @@ import { IGDB_GAME_WEIGHTS } from './demo-data-generator-templates';
 
 /** Taste-profile intensity tier label (matches contract `IntensityTier`). */
 export type TasteIntensityTier =
-  | 'Hardcore'
-  | 'Dedicated'
-  | 'Regular'
-  | 'Casual';
+  'Hardcore' | 'Dedicated' | 'Regular' | 'Casual';
 
 export interface TasteTierProfile {
   /** Weekly hours range (inclusive) this tier plays across all games. */

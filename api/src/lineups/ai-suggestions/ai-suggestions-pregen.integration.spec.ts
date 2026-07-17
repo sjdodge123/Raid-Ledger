@@ -28,7 +28,7 @@
  * spec file still compiles before the implementation lands).
  */
 import { getQueueToken } from '@nestjs/bullmq';
-import type { Queue } from 'bullmq';
+import { UnrecoverableError, type Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { desc, eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -39,7 +39,10 @@ import {
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { LlmService } from '../../ai/llm.service';
+import { LlmQuotaExhaustedError } from '../../ai/llm-errors';
+import { GameTasteService } from '../../game-taste/game-taste.service';
 import { computeVoterSetHash } from './voter-scope.helpers';
+import { quotaCooldownKey } from './quota-cooldown.service';
 
 /**
  * The new pre-gen queue name. Resolved at runtime against the registry
@@ -89,7 +92,15 @@ function describePreGen() {
   });
 
   afterEach(async () => {
-    if (preGenQueue) await preGenQueue.obliterate({ force: true });
+    if (preGenQueue) {
+      await preGenQueue.obliterate({ force: true });
+      // ROK-1376: the quota-cooldown latch is Redis state shared across
+      // this spec's BULLMQ_KEY_PREFIX namespace — clear it so a quota
+      // test can never bleed a skip into unrelated tests.
+      await (
+        await preGenQueue.client
+      ).del(quotaCooldownKey(preGenQueue.opts.prefix));
+    }
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
     adminUserId = await resolveAdminUserId();
@@ -502,6 +513,131 @@ function describePreGen() {
     ).resolves.not.toThrow();
     expect(chatSpy).not.toHaveBeenCalled();
     chatSpy.mockRestore();
+  });
+
+  // ── ROK-1376: quota exhaustion → non-retryable + cooldown latch ────
+  describe('quota exhaustion (ROK-1376)', () => {
+    /** Seed a minimal taste vector so voter-scope's recent-active fallback
+     *  resolves a non-empty voter set (a candidate pool needs voters). */
+    async function seedTasteVector(userId: number): Promise<void> {
+      const dims: Record<string, number> = {
+        co_op: 80,
+        pvp: 10,
+        rpg: 60,
+        survival: 20,
+        strategy: 40,
+        social: 70,
+        mmo: 30,
+      };
+      await testApp.db.insert(schema.playerTasteVectors).values({
+        userId,
+        vector: [80, 10, 60, 20, 40, 70, 30],
+        dimensions:
+          dims as (typeof schema.playerTasteVectors.$inferInsert)['dimensions'],
+        intensityMetrics: {
+          intensity: 50,
+          focus: 50,
+          breadth: 50,
+          consistency: 50,
+        },
+        signalHash: `quota-test-${userId}`,
+      });
+    }
+
+    /** Seed a game that passes the player-count candidate filter. */
+    async function seedCandidateGame(): Promise<{
+      gameId: number;
+      name: string;
+    }> {
+      const [game] = await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Quota Candidate ${Date.now()}`,
+          slug: `quota-candidate-${Date.now()}`,
+          playerCount: { min: 1, max: 16 },
+        })
+        .returning();
+      return { gameId: game.id, name: game.name };
+    }
+
+    /** Wire the pipeline so the processor actually reaches `llm.chat`:
+     *  non-empty voter scope + a findSimilar candidate passing all filters. */
+    async function primeLlmPath(): Promise<jest.SpyInstance> {
+      await seedTasteVector(adminUserId);
+      const { gameId, name } = await seedCandidateGame();
+      const gameTaste = testApp.app.get(GameTasteService);
+      return jest
+        .spyOn(gameTaste, 'findSimilar')
+        .mockResolvedValue([
+          { gameId, name, coverUrl: null, similarity: 0.91 },
+        ]);
+    }
+
+    it('quota error → ONE provider call, UnrecoverableError (no retry burn), cooldown armed; next job skips with outcome=skipped_quota', async () => {
+      const lineupId = await createBuildingLineup();
+      const findSimilarSpy = await primeLlmPath();
+      const chatSpy = jest
+        .spyOn(llm, 'chat')
+        .mockRejectedValue(
+          new LlmQuotaExhaustedError(
+            'Gemini: HTTP 429 — monthly spending cap exceeded',
+            429,
+          ),
+        );
+      const processor = getProcessor();
+
+      // 1. Typed quota failure → BullMQ UnrecoverableError, which fails the
+      //    job WITHOUT consuming its remaining attempts (no 3-attempt burn).
+      await expect(
+        processor.process({ data: { lineupId, reason: 'read' } }),
+      ).rejects.toThrow(UnrecoverableError);
+      // Exactly ONE provider call — the parse-retry must not re-dial Gemini.
+      expect(chatSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Cooldown latch armed in Redis (TTL key).
+      const client = await preGenQueue!.client;
+      const latchKey = quotaCooldownKey(preGenQueue!.opts.prefix);
+      expect(await client.exists(latchKey)).toBe(1);
+      expect(await client.ttl(latchKey)).toBeGreaterThan(0);
+
+      // 3. A job during cooldown skips BEFORE dispatching Gemini with the
+      //    distinct telemetry outcome (not `error`).
+      const logSpy = jest.spyOn(Logger.prototype, 'log');
+      await expect(
+        processor.process({ data: { lineupId, reason: 'read' } }),
+      ).resolves.not.toThrow();
+      expect(chatSpy).toHaveBeenCalledTimes(1); // unchanged — no re-call
+      const lines = logSpy.mock.calls.map((c) => String(c[0]));
+      expect(lines.some((l) => l.includes('outcome=skipped_quota'))).toBe(true);
+
+      logSpy.mockRestore();
+      chatSpy.mockRestore();
+      findSimilarSpy.mockRestore();
+    });
+
+    it('non-quota provider error still retries (rethrows plain error, no cooldown armed)', async () => {
+      const lineupId = await createBuildingLineup();
+      const findSimilarSpy = await primeLlmPath();
+      const chatSpy = jest
+        .spyOn(llm, 'chat')
+        .mockRejectedValue(new Error('503 upstream high demand'));
+      const processor = getProcessor();
+
+      const caught = await processor
+        .process({ data: { lineupId, reason: 'read' } })
+        .catch((e: unknown) => e);
+      // Transient failure keeps the retryable path: NOT UnrecoverableError.
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(UnrecoverableError);
+      // And the cooldown latch must NOT be armed by a transient failure.
+      const client = await preGenQueue!.client;
+      expect(
+        await client.exists(quotaCooldownKey(preGenQueue!.opts.prefix)),
+      ).toBe(0);
+
+      chatSpy.mockRestore();
+      findSimilarSpy.mockRestore();
+    });
   });
 
   // keep adminUserId referenced (assigned in afterEach) to avoid unused warns

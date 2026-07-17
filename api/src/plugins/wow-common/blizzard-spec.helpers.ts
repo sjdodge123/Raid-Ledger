@@ -25,8 +25,7 @@ export function extractClassicTrees(data: Record<string, unknown>): Array<{
   talents?: Array<Record<string, unknown>>;
 }> {
   const specGroups = data.specialization_groups as
-    | Array<{ specializations?: unknown[] }>
-    | undefined;
+    Array<{ specializations?: unknown[] }> | undefined;
   return ((data.specializations as unknown[] | undefined) ??
     specGroups?.[0]?.specializations ??
     []) as Array<{
@@ -59,8 +58,7 @@ export function extractClassTalents(
     for (const t of tree.talents ?? []) {
       const talent = t.talent as { name?: string; id?: number } | undefined;
       const spell = t.spell_tooltip as
-        | { spell?: { name?: string; id?: number } }
-        | undefined;
+        { spell?: { name?: string; id?: number } } | undefined;
       const tName = talent?.name ?? spell?.spell?.name;
       if (tName)
         result.push({ name: tName, id: talent?.id ?? spell?.spell?.id });
