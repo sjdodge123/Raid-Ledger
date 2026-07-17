@@ -109,22 +109,30 @@ async function tryItadLayer(
   normalized: string,
 ): Promise<SearchResult | null> {
   try {
-    const cacheKey = buildItadCacheKey(
-      normalized,
-      await params.getAdultFilter(),
-    );
+    // Snapshot the adult filter ONCE and thread it through: the cache key,
+    // the ITAD filtering, and the local-DB merge must all see the same
+    // state. Independent re-reads would let a mid-request admin toggle
+    // cache content computed under one state beneath the other state's
+    // key for the full TTL (TOCTOU).
+    const adultFilter = await params.getAdultFilter();
+    const cacheKey = buildItadCacheKey(normalized, adultFilter);
     const cached = await getCachedItadResult(params.redis, cacheKey);
     if (cached) return cached;
     const itadDeps = buildItadSearchDeps({
       itadService: params.itadService,
       db: params.db,
       queryIgdb: params.queryIgdb,
-      getAdultFilter: params.getAdultFilter,
+      getAdultFilter: () => Promise.resolve(adultFilter),
       onGameUpserted: params.onGameUpserted,
     });
     const result = await executeItadSearch(itadDeps, normalized);
     if (result.games.length === 0) return null;
-    const merged = await mergeLocalGames(params, result, normalized);
+    const merged = await mergeLocalGames(
+      params,
+      result,
+      normalized,
+      adultFilter,
+    );
     await cacheItadResult(params.redis, cacheKey, merged.games);
     return merged;
   } catch (err) {
@@ -184,9 +192,9 @@ async function mergeLocalGames(
   params: SearchPipelineParams,
   result: SearchResult,
   normalized: string,
+  adultFilter: boolean,
 ): Promise<SearchResult> {
   try {
-    const adultFilter = await params.getAdultFilter();
     const local = await searchLocalGames(params.db, normalized, adultFilter);
     if (local.games.length === 0) return result;
     const existingSlugs = new Set(result.games.map((g) => g.slug));

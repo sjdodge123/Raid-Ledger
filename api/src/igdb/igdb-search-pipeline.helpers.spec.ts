@@ -380,6 +380,37 @@ describe('ITAD short-TTL cache (ROK-1381)', () => {
     expect(result).toEqual(itadResult);
   });
 
+  it('snapshots the adult filter ONCE per request — a mid-request toggle cannot cache one state under the other key (TOCTOU)', async () => {
+    executeItadSearch.mockResolvedValue(itadResult);
+    const redis = makeRedis();
+    // First read (cache key) sees ON; any later re-read would see the
+    // admin having toggled OFF mid-request.
+    const getAdultFilter = jest
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
+    const params = makeParams({ redis, getAdultFilter });
+
+    await runSearchPipeline(params, 'game alpha', 'game alpha', jest.fn());
+
+    // Key and content must both come from the single snapshot read…
+    expect(getAdultFilter).toHaveBeenCalledTimes(1);
+    expect(redis.setex).toHaveBeenCalledWith(
+      'igdb:search:itad:adult=1:game alpha',
+      IGDB_CONFIG.ITAD_SEARCH_CACHE_TTL,
+      JSON.stringify(itadGames),
+    );
+    // …including the getAdultFilter threaded into the ITAD deps builder.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { buildItadSearchDeps } = require('./igdb-itad-deps.helpers') as {
+      buildItadSearchDeps: jest.Mock;
+    };
+    const depsArg = buildItadSearchDeps.mock.calls[0][0] as {
+      getAdultFilter: () => Promise<boolean>;
+    };
+    await expect(depsArg.getAdultFilter()).resolves.toBe(true);
+  });
+
   it('never touches the ITAD cache for partial prefix queries', async () => {
     executeSearch.mockResolvedValue({
       games: [],
