@@ -425,6 +425,8 @@ run_typecheck() {
 }
 
 run_lint() {
+  # Check-only by design (ROK-1404): `lint` must never mutate the tree, so the
+  # lint → prettier:check order is irrelevant; use `lint:fix` for auto-fixes.
   if [ "$effective_scope" != "web" ]; then
     npm run lint -w api || return $?
     npm run prettier:check -w api || return $?
