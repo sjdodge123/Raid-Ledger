@@ -169,6 +169,26 @@ describe('aggregateCoPlay (ROK-948 AC 11)', () => {
     ).toEqual([]);
   });
 
+  it('counts signups for an event starting exactly at the aggregation instant', () => {
+    const eventStartAt = new Date('2026-04-12T00:00:00Z');
+    const signups = new Map<number, SignupRow[]>([
+      [
+        1,
+        [
+          { eventId: 1, userId: 5, gameId: 20, eventStartAt },
+          { eventId: 1, userId: 2, gameId: 20, eventStartAt },
+        ],
+      ],
+    ]);
+    const result = aggregateCoPlay(
+      new Map(),
+      signups,
+      new Date('2026-04-12T00:00:00Z'),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].lastPlayedAt).toEqual(eventStartAt);
+  });
+
   it('skips signups whose event start is unknown', () => {
     const signups = new Map<number, SignupRow[]>([
       [
