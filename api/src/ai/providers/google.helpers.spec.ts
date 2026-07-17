@@ -4,6 +4,7 @@ import {
   mapGeminiModel,
   mapGeminiChatResponse,
 } from './google.helpers';
+import { LlmQuotaExhaustedError } from '../llm-errors';
 
 describe('google.helpers', () => {
   describe('mapGeminiMessages', () => {
@@ -137,6 +138,53 @@ describe('google.helpers (adversarial)', () => {
       await fetchGemini('k', '/v1beta/models');
       const url = (global.fetch as jest.Mock).mock.calls[0][0] as string;
       expect(url).toContain('?key=k');
+    });
+  });
+
+  // ROK-1376: quota/spend-cap failures must surface as a TYPED error that
+  // preserves the provider HTTP status, so downstream callers (pre-gen
+  // processor) can stop retrying calls that cannot succeed.
+  describe('fetchGemini — quota classification (ROK-1376)', () => {
+    const originalFetch = global.fetch;
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    function mockFailure(status: number, body: string): void {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status,
+        json: jest.fn(),
+        text: jest.fn().mockResolvedValue(body),
+      });
+    }
+
+    it('throws LlmQuotaExhaustedError on HTTP 429 preserving the status', async () => {
+      mockFailure(429, 'Your project has exceeded its monthly spending cap');
+      const err = await fetchGemini('k', '/v1beta/models').catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(LlmQuotaExhaustedError);
+      expect((err as LlmQuotaExhaustedError).providerStatus).toBe(429);
+      expect((err as Error).message).toContain('HTTP 429');
+    });
+
+    it('throws LlmQuotaExhaustedError on RESOURCE_EXHAUSTED body with non-429 status', async () => {
+      mockFailure(500, '{"error":{"status":"RESOURCE_EXHAUSTED"}}');
+      const err = await fetchGemini('k', '/v1beta/models').catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(LlmQuotaExhaustedError);
+      expect((err as LlmQuotaExhaustedError).providerStatus).toBe(500);
+    });
+
+    it('throws a plain Error (NOT quota) on generic provider failures', async () => {
+      mockFailure(500, 'internal server error');
+      const err = await fetchGemini('k', '/v1beta/models').catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(LlmQuotaExhaustedError);
     });
   });
 
