@@ -29,6 +29,8 @@ import {
   AiSuggestionsPreGenQueueService,
   PREGEN_REQUEST_DELAY_MS,
 } from './pre-gen.queue';
+import { LlmUnavailableError } from './llm-output.helpers';
+import { AiQuotaCooldownService } from './quota-cooldown.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -65,6 +67,7 @@ export class AiSuggestionsService {
     private readonly settings: SettingsService,
     private readonly llmService: LlmService,
     private readonly preGen: AiSuggestionsPreGenQueueService,
+    private readonly quotaCooldown: AiQuotaCooldownService,
   ) {}
 
   /**
@@ -89,7 +92,9 @@ export class AiSuggestionsService {
     return this.serveFromCache(lineup, scope);
   }
 
-  /** SWR read: fresh hit → stale row → cold. Never awaits the LLM. */
+  /** SWR read: fresh hit → stale row → cold. Never awaits the LLM.
+   *  Stale rows are served UNCONDITIONALLY (ROK-1316, unchanged by the
+   *  ROK-1376 quota cooldown — last-good beats an error state). */
   private async serveFromCache(
     lineup: VoterScopeLineup,
     scope: ResolvedVoterScope,
@@ -105,20 +110,36 @@ export class AiSuggestionsService {
       await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS, 'read');
       return { ...latest.payload, cached: true, stale: true };
     }
-    // Cold cache: only promise `pending` (and queue a job) if a provider
-    // can actually fulfil it. With no provider configured the job would
-    // never complete and the client would poll a skeleton forever — surface
-    // the existing 503/unavailable contract instead (NotFoundException with
-    // "ai provider" → controller maps to 503 → frontend `kind:'unavailable'`).
+    return this.serveCold(lineup.id);
+  }
+
+  /**
+   * Cold cache: only promise `pending` (and queue a job) if a pre-gen job
+   * can actually fulfil it — otherwise the client would poll a skeleton
+   * forever (the raw-429 emitter from prod 2026-06-20). Two unwarmable
+   * cases surface the existing 503/unavailable contract instead:
+   *   - no provider configured → NotFoundException with "ai provider"
+   *     (controller maps to 503 → frontend `kind:'unavailable'`)
+   *   - ROK-1376 quota cooldown armed → pre-gen would `skipped_quota`, so
+   *     throw `LlmUnavailableError` (controller maps to the same 503).
+   */
+  private async serveCold(lineupId: number): Promise<AiSuggestionsResponseDto> {
+    this.logTelemetry(lineupId, 'miss_cold');
     if (!(await this.hasProvider())) {
-      this.logTelemetry(lineup.id, 'miss_cold');
       this.logger.log(
-        `AI suggestions cache | lineup=${lineup.id} cold-no-provider`,
+        `AI suggestions cache | lineup=${lineupId} cold-no-provider`,
       );
       throw new NotFoundException('No AI provider configured');
     }
-    this.logTelemetry(lineup.id, 'miss_cold');
-    await this.preGen.enqueue(lineup.id, PREGEN_REQUEST_DELAY_MS, 'read');
+    if (await this.quotaCooldown.isActive()) {
+      this.logger.log(
+        `AI suggestions cache | lineup=${lineupId} cold-quota-cooldown`,
+      );
+      throw new LlmUnavailableError(
+        'AI provider quota exhausted — cooldown active',
+      );
+    }
+    await this.preGen.enqueue(lineupId, PREGEN_REQUEST_DELAY_MS, 'read');
     return { ...this.emptyResponse(), pending: true };
   }
 

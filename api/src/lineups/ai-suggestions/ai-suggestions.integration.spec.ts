@@ -9,6 +9,8 @@
  * stub LLM provider via encrypted SettingsService is prohibitively
  * intricate for integration coverage.
  */
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -16,7 +18,14 @@ import {
 } from '../../common/testing/integration-helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { LlmService } from '../../ai/llm.service';
+import * as schema from '../../drizzle/schema';
 import { SETTING_KEYS } from '../../drizzle/schema';
+import { computeVoterSetHash } from './voter-scope.helpers';
+import { AI_SUGGESTIONS_PREGEN_QUEUE } from './pre-gen.queue';
+import {
+  AiQuotaCooldownService,
+  QUOTA_COOLDOWN_KEY,
+} from './quota-cooldown.service';
 
 function describeAiSuggestions() {
   let testApp: TestApp;
@@ -98,6 +107,72 @@ function describeAiSuggestions() {
         chatSpy.mockRestore();
         await settings.set(SETTING_KEYS.AI_SUGGESTIONS_ENABLED, 'true');
       }
+    });
+  });
+
+  // ── ROK-1376: read path during quota cooldown ──────────────────────
+  describe('GET /lineups/:id/suggestions — quota cooldown (ROK-1376)', () => {
+    async function clearCooldown(): Promise<void> {
+      const queue = testApp.app.get<Queue>(
+        getQueueToken(AI_SUGGESTIONS_PREGEN_QUEUE),
+      );
+      await (await queue.client).del(QUOTA_COOLDOWN_KEY);
+    }
+
+    /** Provider + feature flag on, so ONLY the cooldown drives behavior. */
+    async function configureProvider(): Promise<void> {
+      const settings = testApp.app.get(SettingsService);
+      await settings.set(SETTING_KEYS.AI_SUGGESTIONS_ENABLED, 'true');
+      await settings.set(SETTING_KEYS.AI_PROVIDER, 'google');
+    }
+
+    afterEach(async () => {
+      await clearCooldown();
+    });
+
+    it('cold cache during cooldown → 503 AI_PROVIDER_UNAVAILABLE (existing contract, no infinite pending)', async () => {
+      const lineupId = await createLineup();
+      await configureProvider();
+      const llm = testApp.app.get(LlmService);
+      const chatSpy = jest.spyOn(llm, 'chat');
+      await testApp.app.get(AiQuotaCooldownService).activate();
+
+      const res = await testApp.request
+        .get(`/lineups/${lineupId}/suggestions`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(503);
+      expect(res.body.error).toBe('AI_PROVIDER_UNAVAILABLE');
+      expect(res.body.pending).toBeUndefined();
+      expect(chatSpy).not.toHaveBeenCalled();
+      chatSpy.mockRestore();
+    });
+
+    it('stale row during cooldown → 200 stale:true (stale is served unconditionally, ROK-1316 unchanged)', async () => {
+      const lineupId = await createLineup();
+      await configureProvider();
+      // Row under a non-current hash → the SWR "stale" branch.
+      await testApp.db.insert(schema.lineupAiSuggestions).values({
+        lineupId,
+        voterSetHash: computeVoterSetHash([424242]),
+        payload: {
+          suggestions: [],
+          generatedAt: new Date(Date.now() - 60_000).toISOString(),
+          voterCount: 1,
+          voterScopeStrategy: 'small_group',
+        },
+        provider: 'test-provider',
+        model: 'test-model',
+      });
+      await testApp.app.get(AiQuotaCooldownService).activate();
+
+      const res = await testApp.request
+        .get(`/lineups/${lineupId}/suggestions`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.stale).toBe(true);
+      expect(res.body).toHaveProperty('suggestions');
     });
   });
 }
