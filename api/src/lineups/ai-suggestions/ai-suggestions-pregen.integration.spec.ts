@@ -42,7 +42,7 @@ import { LlmService } from '../../ai/llm.service';
 import { LlmQuotaExhaustedError } from '../../ai/llm-errors';
 import { GameTasteService } from '../../game-taste/game-taste.service';
 import { computeVoterSetHash } from './voter-scope.helpers';
-import { QUOTA_COOLDOWN_KEY } from './quota-cooldown.service';
+import { quotaCooldownKey } from './quota-cooldown.service';
 
 /**
  * The new pre-gen queue name. Resolved at runtime against the registry
@@ -94,9 +94,12 @@ function describePreGen() {
   afterEach(async () => {
     if (preGenQueue) {
       await preGenQueue.obliterate({ force: true });
-      // ROK-1376: the quota-cooldown latch is global Redis state — clear it
-      // so a quota test can never bleed a skip into unrelated tests.
-      await (await preGenQueue.client).del(QUOTA_COOLDOWN_KEY);
+      // ROK-1376: the quota-cooldown latch is Redis state shared across
+      // this spec's BULLMQ_KEY_PREFIX namespace — clear it so a quota
+      // test can never bleed a skip into unrelated tests.
+      await (
+        await preGenQueue.client
+      ).del(quotaCooldownKey(preGenQueue.opts.prefix));
     }
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
@@ -593,8 +596,9 @@ function describePreGen() {
 
       // 2. Cooldown latch armed in Redis (TTL key).
       const client = await preGenQueue!.client;
-      expect(await client.exists(QUOTA_COOLDOWN_KEY)).toBe(1);
-      expect(await client.ttl(QUOTA_COOLDOWN_KEY)).toBeGreaterThan(0);
+      const latchKey = quotaCooldownKey(preGenQueue!.opts.prefix);
+      expect(await client.exists(latchKey)).toBe(1);
+      expect(await client.ttl(latchKey)).toBeGreaterThan(0);
 
       // 3. A job during cooldown skips BEFORE dispatching Gemini with the
       //    distinct telemetry outcome (not `error`).
@@ -627,7 +631,9 @@ function describePreGen() {
       expect(caught).not.toBeInstanceOf(UnrecoverableError);
       // And the cooldown latch must NOT be armed by a transient failure.
       const client = await preGenQueue!.client;
-      expect(await client.exists(QUOTA_COOLDOWN_KEY)).toBe(0);
+      expect(
+        await client.exists(quotaCooldownKey(preGenQueue!.opts.prefix)),
+      ).toBe(0);
 
       chatSpy.mockRestore();
       findSimilarSpy.mockRestore();

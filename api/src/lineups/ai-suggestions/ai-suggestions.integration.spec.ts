@@ -24,7 +24,7 @@ import { computeVoterSetHash } from './voter-scope.helpers';
 import { AI_SUGGESTIONS_PREGEN_QUEUE } from './pre-gen.queue';
 import {
   AiQuotaCooldownService,
-  QUOTA_COOLDOWN_KEY,
+  quotaCooldownKey,
 } from './quota-cooldown.service';
 
 function describeAiSuggestions() {
@@ -116,7 +116,7 @@ function describeAiSuggestions() {
       const queue = testApp.app.get<Queue>(
         getQueueToken(AI_SUGGESTIONS_PREGEN_QUEUE),
       );
-      await (await queue.client).del(QUOTA_COOLDOWN_KEY);
+      await (await queue.client).del(quotaCooldownKey(queue.opts.prefix));
     }
 
     /** Provider + feature flag on, so ONLY the cooldown drives behavior. */

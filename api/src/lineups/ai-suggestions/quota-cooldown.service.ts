@@ -14,8 +14,21 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { AI_SUGGESTIONS_PREGEN_QUEUE } from './pre-gen.queue';
 
-/** Redis key holding the cooldown latch (value = ISO timestamp armed). */
-export const QUOTA_COOLDOWN_KEY = 'ai-suggestions:quota-cooldown';
+/** Un-prefixed latch key; always combined with the queue's prefix. */
+const QUOTA_COOLDOWN_KEY_BASE = 'ai-suggestions:quota-cooldown';
+
+/**
+ * Full Redis key holding the latch (value = ISO timestamp armed),
+ * namespaced under the SAME prefix BullMQ uses for the queue's own keys
+ * (`bull` in prod, the per-spec BULLMQ_KEY_PREFIX in integration tests).
+ * The latch is written through the RAW ioredis client, which BullMQ's
+ * `prefix` option does NOT apply to — without folding the prefix in
+ * here, every environment sharing a Redis (integration specs, the local
+ * dev env on raid-ledger-redis) would arm/clear ONE global key.
+ */
+export function quotaCooldownKey(prefix: string | undefined): string {
+  return `${prefix ?? 'bull'}:${QUOTA_COOLDOWN_KEY_BASE}`;
+}
 
 /** Back-off window after a quota failure (plan: ~15–60 min). */
 export const QUOTA_COOLDOWN_TTL_S = 30 * 60;
@@ -33,7 +46,7 @@ export class AiQuotaCooldownService {
     try {
       const client = await this.queue.client;
       await client.set(
-        QUOTA_COOLDOWN_KEY,
+        quotaCooldownKey(this.queue.opts.prefix),
         new Date().toISOString(),
         'EX',
         ttlSeconds,
@@ -54,7 +67,9 @@ export class AiQuotaCooldownService {
   async isActive(): Promise<boolean> {
     try {
       const client = await this.queue.client;
-      return (await client.exists(QUOTA_COOLDOWN_KEY)) === 1;
+      return (
+        (await client.exists(quotaCooldownKey(this.queue.opts.prefix))) === 1
+      );
     } catch {
       return false;
     }
