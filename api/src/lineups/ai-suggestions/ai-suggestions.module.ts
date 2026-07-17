@@ -12,6 +12,7 @@ import {
   AiSuggestionsPreGenQueueService,
 } from './pre-gen.queue';
 import { AiSuggestionsPreGenProcessor } from './pre-gen.processor';
+import { AiQuotaCooldownService } from './quota-cooldown.service';
 
 /**
  * AI nomination suggestions for Community Lineup (ROK-931).
@@ -36,6 +37,7 @@ import { AiSuggestionsPreGenProcessor } from './pre-gen.processor';
     AiSuggestionsCacheInvalidator,
     AiSuggestionsPreGenQueueService,
     AiSuggestionsPreGenProcessor,
+    AiQuotaCooldownService,
   ],
   exports: [AiSuggestionsCacheInvalidator],
 })
