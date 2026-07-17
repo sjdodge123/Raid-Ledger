@@ -32,6 +32,7 @@ jobs:
               - 'api/src/events/signups*'
               - 'api/src/events/event-lifecycle*'
               - 'api/src/admin/demo-test*'
+              - 'api/src/lineups/standalone-poll/**'
               - 'tools/test-bot/**'
               - 'packages/contract/**'
 

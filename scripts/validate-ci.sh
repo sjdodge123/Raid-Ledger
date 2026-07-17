@@ -300,9 +300,10 @@ detect_scope() {
   # Discord-smoke-relevant: the 6 trigger paths from CLAUDE.md's
   # "Files that trigger smoke test review" list. Matches discord-bot listeners,
   # notifications, signup flows, lifecycle ops, demo-test endpoints used by
-  # smoke fixtures, the smoke tests themselves, and the polling helper.
+  # smoke fixtures, the smoke tests themselves, and the polling helper — plus
+  # standalone-poll, which enqueues embed syncs at reschedule-poll lock-in.
   if echo "$changed_files" \
-    | grep -qE '^api/src/discord-bot/|^api/src/notifications/|^api/src/events/signups|^api/src/events/event-lifecycle|^api/src/admin/demo-test|^tools/test-bot/src/smoke/|^tools/test-bot/src/helpers/polling\.ts$'; then
+    | grep -qE '^api/src/discord-bot/|^api/src/notifications/|^api/src/events/signups|^api/src/events/event-lifecycle|^api/src/admin/demo-test|^tools/test-bot/src/smoke/|^tools/test-bot/src/helpers/polling\.ts$|^api/src/lineups/standalone-poll/'; then
     discord_smoke_relevant=true
     echo -e "  Discord-smoke-relevant changes: ${YELLOW}yes${NC}"
   else
