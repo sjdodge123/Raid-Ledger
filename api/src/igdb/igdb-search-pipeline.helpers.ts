@@ -8,7 +8,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type Redis from 'ioredis';
 import type * as schema from '../drizzle/schema';
 import type { ItadService } from '../itad/itad.service';
-import type { IgdbApiGame, SearchResult } from './igdb.constants';
+import {
+  IGDB_CONFIG,
+  type IgdbApiGame,
+  type SearchResult,
+} from './igdb.constants';
 import { buildItadSearchDeps } from './igdb-itad-deps.helpers';
 import { executeItadSearch } from './igdb-itad-search.helpers';
 import { deduplicateGames } from './igdb-search-dedup.helpers';
@@ -85,25 +89,94 @@ async function runSearchPipelineCore(
   triggerRefresh: (q: string, n: string, k: string) => void,
 ): Promise<SearchResult> {
   if (!isPartialPrefixQuery(normalized)) {
-    try {
-      const itadDeps = buildItadSearchDeps({
-        itadService: params.itadService,
-        db: params.db,
-        queryIgdb: params.queryIgdb,
-        getAdultFilter: params.getAdultFilter,
-        onGameUpserted: params.onGameUpserted,
-      });
-      const result = await executeItadSearch(itadDeps, normalized);
-      if (result.games.length > 0)
-        return mergeLocalGames(params, result, normalized);
-    } catch (err) {
-      logger.debug(`ITAD search failed, trying IGDB: ${err}`);
-    }
+    const itadResult = await tryItadLayer(params, normalized);
+    if (itadResult) return itadResult;
   } else {
     logger.debug(`Skipping ITAD for partial prefix query: "${normalized}"`);
   }
   const deps = buildIgdbSearchDeps(params);
   return executeSearch(deps, query, normalized, triggerRefresh);
+}
+
+/**
+ * ITAD-primary layer with a short-TTL cache in front (ROK-1381).
+ * A hit skips the ITAD lookup POST, the per-result IGDB external_games
+ * calls, and the per-result games upserts. Returns null when the layer
+ * has no results (or failed) so the caller falls through to IGDB.
+ */
+async function tryItadLayer(
+  params: SearchPipelineParams,
+  normalized: string,
+): Promise<SearchResult | null> {
+  try {
+    const cacheKey = buildItadCacheKey(
+      normalized,
+      await params.getAdultFilter(),
+    );
+    const cached = await getCachedItadResult(params.redis, cacheKey);
+    if (cached) return cached;
+    const itadDeps = buildItadSearchDeps({
+      itadService: params.itadService,
+      db: params.db,
+      queryIgdb: params.queryIgdb,
+      getAdultFilter: params.getAdultFilter,
+      onGameUpserted: params.onGameUpserted,
+    });
+    const result = await executeItadSearch(itadDeps, normalized);
+    if (result.games.length === 0) return null;
+    const merged = await mergeLocalGames(params, result, normalized);
+    await cacheItadResult(params.redis, cacheKey, merged.games);
+    return merged;
+  } catch (err) {
+    logger.debug(`ITAD search failed, trying IGDB: ${err}`);
+    return null;
+  }
+}
+
+/**
+ * Cache key for the ITAD-primary result (ROK-1381). Keyed on BOTH the
+ * normalized query and the adult-filter state so toggling the filter can
+ * never serve results computed under the other state.
+ */
+export function buildItadCacheKey(
+  normalized: string,
+  adultFilter: boolean,
+): string {
+  return `${IGDB_CONFIG.ITAD_SEARCH_CACHE_PREFIX}adult=${adultFilter ? 1 : 0}:${normalized}`;
+}
+
+/** Read a cached ITAD result; any failure degrades to a cache miss. */
+async function getCachedItadResult(
+  redis: Redis,
+  cacheKey: string,
+): Promise<SearchResult | null> {
+  try {
+    const raw = await redis.get(cacheKey);
+    if (!raw) return null;
+    const games = JSON.parse(raw) as GameDetailDto[];
+    if (!Array.isArray(games) || games.length === 0) return null;
+    return { games, cached: true, source: 'redis' };
+  } catch (err) {
+    logger.warn(`ITAD cache read failed for ${cacheKey}: ${err}`);
+    return null;
+  }
+}
+
+/** Write an ITAD result to the short-TTL cache; failures are non-fatal. */
+async function cacheItadResult(
+  redis: Redis,
+  cacheKey: string,
+  games: GameDetailDto[],
+): Promise<void> {
+  try {
+    await redis.setex(
+      cacheKey,
+      IGDB_CONFIG.ITAD_SEARCH_CACHE_TTL,
+      JSON.stringify(games),
+    );
+  } catch (err) {
+    logger.warn(`ITAD cache write failed for ${cacheKey}: ${err}`);
+  }
 }
 
 /** Merge local DB matches into external results so registered games always appear. */
