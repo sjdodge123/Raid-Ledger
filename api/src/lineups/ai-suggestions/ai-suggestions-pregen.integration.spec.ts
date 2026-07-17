@@ -529,13 +529,14 @@ function describePreGen() {
       await testApp.db.insert(schema.playerTasteVectors).values({
         userId,
         vector: [80, 10, 60, 20, 40, 70, 30],
-        dimensions: dims as (typeof schema.playerTasteVectors.$inferInsert)['dimensions'],
+        dimensions:
+          dims as (typeof schema.playerTasteVectors.$inferInsert)['dimensions'],
         intensityMetrics: {
           intensity: 50,
           focus: 50,
           breadth: 50,
           consistency: 50,
-        } as (typeof schema.playerTasteVectors.$inferInsert)['intensityMetrics'],
+        },
         signalHash: `quota-test-${userId}`,
       });
     }
@@ -564,18 +565,22 @@ function describePreGen() {
       const gameTaste = testApp.app.get(GameTasteService);
       return jest
         .spyOn(gameTaste, 'findSimilar')
-        .mockResolvedValue([{ gameId, name, coverUrl: null, similarity: 0.91 }]);
+        .mockResolvedValue([
+          { gameId, name, coverUrl: null, similarity: 0.91 },
+        ]);
     }
 
     it('quota error → ONE provider call, UnrecoverableError (no retry burn), cooldown armed; next job skips with outcome=skipped_quota', async () => {
       const lineupId = await createBuildingLineup();
       const findSimilarSpy = await primeLlmPath();
-      const chatSpy = jest.spyOn(llm, 'chat').mockRejectedValue(
-        new LlmQuotaExhaustedError(
-          'Gemini: HTTP 429 — monthly spending cap exceeded',
-          429,
-        ),
-      );
+      const chatSpy = jest
+        .spyOn(llm, 'chat')
+        .mockRejectedValue(
+          new LlmQuotaExhaustedError(
+            'Gemini: HTTP 429 — monthly spending cap exceeded',
+            429,
+          ),
+        );
       const processor = getProcessor();
 
       // 1. Typed quota failure → BullMQ UnrecoverableError, which fails the
