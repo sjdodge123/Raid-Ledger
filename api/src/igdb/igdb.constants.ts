@@ -94,7 +94,8 @@ export const IGDB_CONFIG = {
    */
   ITAD_SEARCH_CACHE_TTL: 180,
   /** Key prefix for the ITAD-primary search cache (ROK-1381). Distinct from
-   * the `igdb:search:` SWR keys — the payload shapes differ. */
+   * the `igdb:search:` SWR keys so the two layers' entries stay in disjoint
+   * keyspaces and one layer can never read the other's cached payloads. */
   ITAD_SEARCH_CACHE_PREFIX: 'igdb:search:itad:',
   /** Redis cache TTL for discovery rows (1 hour) */
   DISCOVER_CACHE_TTL: 3600,
