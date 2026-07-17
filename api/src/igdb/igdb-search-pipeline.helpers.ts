@@ -118,13 +118,7 @@ async function tryItadLayer(
     const cacheKey = buildItadCacheKey(normalized, adultFilter);
     const cached = await getCachedItadResult(params.redis, cacheKey);
     if (cached) return cached;
-    const itadDeps = buildItadSearchDeps({
-      itadService: params.itadService,
-      db: params.db,
-      queryIgdb: params.queryIgdb,
-      getAdultFilter: () => Promise.resolve(adultFilter),
-      onGameUpserted: params.onGameUpserted,
-    });
+    const itadDeps = buildSnapshotItadDeps(params, adultFilter);
     const result = await executeItadSearch(itadDeps, normalized);
     if (result.games.length === 0) return null;
     const merged = await mergeLocalGames(
@@ -139,6 +133,20 @@ async function tryItadLayer(
     logger.debug(`ITAD search failed, trying IGDB: ${err}`);
     return null;
   }
+}
+
+/** ITAD deps with the adult-filter snapshot threaded in (see tryItadLayer). */
+function buildSnapshotItadDeps(
+  params: SearchPipelineParams,
+  adultFilter: boolean,
+) {
+  return buildItadSearchDeps({
+    itadService: params.itadService,
+    db: params.db,
+    queryIgdb: params.queryIgdb,
+    getAdultFilter: () => Promise.resolve(adultFilter),
+    onGameUpserted: params.onGameUpserted,
+  });
 }
 
 /**
