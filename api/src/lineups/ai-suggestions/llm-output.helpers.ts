@@ -1,5 +1,6 @@
 import type { AiSuggestionsLlmOutputDto } from '@raid-ledger/contract';
 import { AiSuggestionsLlmOutputSchema } from '@raid-ledger/contract';
+import { LlmQuotaExhaustedError } from '../../ai/llm-errors';
 import type { LlmService } from '../../ai/llm.service';
 import type {
   LlmChatMessage,
@@ -90,6 +91,9 @@ async function tryChat(
  *   - both parse-failed → return `{ suggestions: [] }` (UI hides)
  *   - last attempt failed with provider error → throw `LlmUnavailableError`
  *     so the controller maps it to 503
+ * ROK-1376: quota/spend-cap exhaustion (`LlmQuotaExhaustedError`) is
+ * permanent until billing resets — it SKIPS the retry and propagates
+ * typed so the pre-gen processor can classify it as non-retryable.
  * Config-level failures (no provider registered) still propagate
  * untouched via `NotFoundException` from `LlmService.resolveOrThrow`.
  */
@@ -100,13 +104,21 @@ export async function callAndParseLlmOutput(
 ): Promise<AiSuggestionsLlmOutputDto> {
   const first = await tryChat(llmService, options, context);
   if ('suggestions' in first) return first;
+  if ('unavailable' in first && isQuota(first.unavailable)) {
+    throw first.unavailable;
+  }
 
   const retryOpts = buildRetryOptions(options);
   const second = await tryChat(llmService, retryOpts, context);
   if ('suggestions' in second) return second;
 
   if ('unavailable' in second) {
+    if (isQuota(second.unavailable)) throw second.unavailable;
     throw new LlmUnavailableError(second.unavailable.message);
   }
   return { suggestions: [] };
+}
+
+function isQuota(err: Error): err is LlmQuotaExhaustedError {
+  return err instanceof LlmQuotaExhaustedError;
 }
