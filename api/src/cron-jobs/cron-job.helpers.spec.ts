@@ -286,12 +286,27 @@ describe('flushPendingUpdates (ROK-1414 — batched flush)', () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 
-  it('warns instead of throwing when a pending entry carries an invalid Date', async () => {
+  it('skips only the poisoned row when a pending entry carries an invalid Date', async () => {
     const map = pending();
     map.set(4, {
       lastRunAt: new Date('not-a-date'),
       cronExpression: '0 * * * *',
     });
+    await expect(
+      flushPendingUpdates(mockDb as any, map, logger),
+    ).resolves.toBeUndefined();
+    // The bad row is warned about and dropped; the 3 valid rows still flush
+    // in a single batched statement.
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('job(s) 4'),
+    );
+    expect(mockDb.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('issues no statement when every pending row is unserialisable', async () => {
+    const map = new Map([
+      [7, { lastRunAt: new Date('not-a-date'), cronExpression: '0 * * * *' }],
+    ]);
     await expect(
       flushPendingUpdates(mockDb as any, map, logger),
     ).resolves.toBeUndefined();

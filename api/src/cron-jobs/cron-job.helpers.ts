@@ -297,13 +297,9 @@ export async function flushPendingUpdates(
   if (pending.size === 0) return;
   const updates = new Map(pending);
   pending.clear();
+  const rows = buildFlushRows(updates, logger);
+  if (rows.length === 0) return;
   try {
-    // Built inside the try: toISOString() throws on an invalid Date, and that
-    // must degrade to the same warn-and-skip as a DB failure, not escape to
-    // the flush interval (the old per-row loop caught it per-job).
-    const rows = Array.from(updates, ([id, { lastRunAt, cronExpression }]) =>
-      flushValuesRow(id, lastRunAt, cronExpression),
-    );
     await db.execute(sql`
       UPDATE ${schema.cronJobs} AS c
          SET last_run_at = v.last_run_at, next_run_at = v.next_run_at,
@@ -316,7 +312,34 @@ export async function flushPendingUpdates(
     logger.warn(`Failed to flush last_run_at for job(s) ${ids}: ${err}`);
     return;
   }
-  logger.debug(`Flushed last_run_at for ${updates.size} cron job(s)`);
+  logger.debug(`Flushed last_run_at for ${rows.length} cron job(s)`);
+}
+
+/**
+ * Build the `VALUES` tuples for the batched flush, skipping (with a warn) any
+ * row that fails to serialise — e.g. an invalid Date whose toISOString()
+ * throws. One poisoned entry must cost only its own row, not the whole
+ * cycle's updates (the pre-ROK-1414 per-row loop had the same property).
+ */
+function buildFlushRows(
+  updates: Map<number, { lastRunAt: Date; cronExpression: string }>,
+  logger: Logger,
+) {
+  const rows = [];
+  const failed: number[] = [];
+  for (const [id, { lastRunAt, cronExpression }] of updates) {
+    try {
+      rows.push(flushValuesRow(id, lastRunAt, cronExpression));
+    } catch {
+      failed.push(id);
+    }
+  }
+  if (failed.length > 0) {
+    logger.warn(
+      `Skipped unserialisable last_run_at row(s) for job(s) ${failed.join(', ')}`,
+    );
+  }
+  return rows;
 }
 
 /** Build one `VALUES` tuple (id, last_run_at, next_run_at) for the batched flush. */
