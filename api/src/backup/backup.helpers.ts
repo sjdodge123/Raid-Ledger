@@ -17,8 +17,16 @@ function excludeTableDataFlags(tables?: readonly string[]): string[] {
   return tables.map((t) => `--exclude-table-data=${t}`);
 }
 
-/** Build pg_dump args for custom format. */
-function pgDumpArgs(
+/**
+ * Build pg_dump args for custom format.
+ *
+ * ROK-1413: `--exclude-schema=drizzle` keeps migration metadata
+ * (`drizzle.__drizzle_migrations`) OUT of every dump. That schema is code, not
+ * data — including it re-imports another branch's applied-hash rows on restore,
+ * causing cross-branch drift + silently-skipped migrations. Exported so the arg
+ * list is unit-assertable without spawning pg_dump.
+ */
+export function pgDumpArgs(
   outputPath: string,
   dbUrl: string,
   excludeTableData?: readonly string[],
@@ -27,9 +35,33 @@ function pgDumpArgs(
     '--format=custom',
     '--no-owner',
     '--no-privileges',
+    '--exclude-schema=drizzle',
     `--file=${outputPath}`,
     ...excludeTableDataFlags(excludeTableData),
     dbUrl,
+  ];
+}
+
+/**
+ * Build pg_restore args.
+ *
+ * ROK-1413: `--exclude-schema=drizzle` is applied on restore too — existing
+ * dumps (local `api/backups/daily/` + the prod NAS) already contain the drizzle
+ * schema, so the exclusion must hold independent of the dump-side flag. Skipping
+ * the schema on restore leaves migration reconciliation to the boot-time runner
+ * / `reconcile-migrations.mjs` instead of importing stale hash rows. Exported so
+ * the arg list is unit-assertable without spawning pg_restore. `pg_restore`
+ * supports `--exclude-schema` from PG10+.
+ */
+export function pgRestoreArgs(dbUrl: string, inputPath: string): string[] {
+  return [
+    '--clean',
+    '--if-exists',
+    '--no-owner',
+    '--no-privileges',
+    '--exclude-schema=drizzle',
+    `--dbname=${dbUrl}`,
+    inputPath,
   ];
 }
 
@@ -53,16 +85,14 @@ export async function runPgDumpDocker(
   excludeTableData?: readonly string[],
 ): Promise<void> {
   const containerTmp = '/tmp/backup.dump';
+  // Reuse pgDumpArgs so the docker path can never drift from the direct path
+  // (the inlined arg list is exactly how the drizzle-schema exclusion was
+  // originally missed on one path — ROK-1413).
   await execFileAsync('docker', [
     'exec',
     container,
     'pg_dump',
-    '--format=custom',
-    '--no-owner',
-    '--no-privileges',
-    `--file=${containerTmp}`,
-    ...excludeTableDataFlags(excludeTableData),
-    dbUrl,
+    ...pgDumpArgs(containerTmp, dbUrl, excludeTableData),
   ]);
   await execFileAsync('docker', [
     'cp',
@@ -77,14 +107,7 @@ export async function runPgRestoreDirect(
   filepath: string,
   dbUrl: string,
 ): Promise<void> {
-  await execFileAsync('pg_restore', [
-    '--clean',
-    '--if-exists',
-    '--no-owner',
-    '--no-privileges',
-    `--dbname=${dbUrl}`,
-    filepath,
-  ]);
+  await execFileAsync('pg_restore', pgRestoreArgs(dbUrl, filepath));
 }
 
 /** Run pg_restore via Docker container (dev). */
@@ -99,16 +122,14 @@ export async function runPgRestoreDocker(
     filepath,
     `${container}:${containerTmp}`,
   ]);
+  // Reuse pgRestoreArgs so the docker restore path can never drift from the
+  // direct path — the same duplication that let the drizzle-schema exclusion
+  // go missing on the dump side (ROK-1413).
   await execFileAsync('docker', [
     'exec',
     container,
     'pg_restore',
-    '--clean',
-    '--if-exists',
-    '--no-owner',
-    '--no-privileges',
-    `--dbname=${dbUrl}`,
-    containerTmp,
+    ...pgRestoreArgs(dbUrl, containerTmp),
   ]);
   await execFileAsync('docker', ['exec', container, 'rm', '-f', containerTmp]);
 }

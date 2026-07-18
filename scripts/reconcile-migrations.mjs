@@ -159,19 +159,30 @@ async function runMigration(sql, entry, { dryRun, trustAsApplied }) {
     // The DB has application data, so the schema was historically built up
     // through migrations — BUT we must not blindly trust that THIS migration's
     // effect is present (the DB may be merely out of date, e.g. restored from
-    // an older backup missing newer migrations). Probe the first DDL effect:
-    //   • present  → safe to trust; record the hash only.
-    //   • absent   → demote to a real run so the missing schema actually lands
-    //     instead of being silently marked applied (ROK-1319).
-    const firstStmt = entry.statements[0];
-    const probe = firstStmt
-      ? await probeEffectExists(sql, firstStmt)
-      : { exists: true }; // no DDL to verify — nothing to run, trust the hash.
-    if (probe.exists) {
+    // an older backup missing newer migrations). Probe EVERY statement's effect,
+    // not just the first: a migration can be PARTIALLY applied (an early
+    // CREATE TABLE landed, a later one didn't — a backup taken mid-migration, a
+    // historical crash between statement-breakpoints, or cross-branch drift).
+    //   • all statements' effects present → safe to trust; record the hash only.
+    //   • any one absent → short-circuit and demote to a real run so the missing
+    //     schema actually lands instead of being silently marked applied
+    //     (ROK-1319 caught the first-statement case; ROK-1413 closes the
+    //     later-statement hole the shallow first-statement-only probe left open).
+    // An empty statement list has no DDL to verify → nothing to run, trust the
+    // hash (the loop leaves allPresent=true).
+    let allPresent = true;
+    for (const stmt of entry.statements) {
+      const probe = await probeEffectExists(sql, stmt);
+      if (!probe.exists) {
+        allPresent = false;
+        break;
+      }
+    }
+    if (allPresent) {
       outcome.trusted = entry.statements.length;
       return outcome;
     }
-    // Fall through to the apply path below — the effect is genuinely missing.
+    // Fall through to the apply path below — an effect is genuinely missing.
   }
   for (const stmt of entry.statements) {
     if (dryRun) {
