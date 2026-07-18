@@ -27,6 +27,12 @@
 #         table. The deepened probe must inspect EVERY statement, short-circuit to
 #         the apply path on the first missing effect, and actually run the whole
 #         migration so the absent table lands.
+#   AC-5 (ROK-1413 / Codex P1): a fully-applied migration containing a DML
+#         backfill statement (INSERT) must still be TRUSTED. A DML statement
+#         runs CLEANLY on a populated DB, which the probe would misread as
+#         "effect absent" — demoting the migration to a real re-run that
+#         re-applies the data transformation. Only DDL statements may
+#         influence the trust decision.
 
 set -uo pipefail
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -87,6 +93,15 @@ CREATE TABLE "rl_epsilon" (
 	"id" integer PRIMARY KEY
 );
 SQL
+# 0004_zeta mixes DDL + a DML backfill — the fixture for AC-5's
+# DML-must-not-poison-the-trust-decision case (Codex P1, fix-batch 2026-07-17-b).
+cat > "$FIXTURE_DIR/0004_zeta.sql" <<'SQL'
+CREATE TABLE "rl_zeta" (
+	"id" integer PRIMARY KEY
+);
+--> statement-breakpoint
+INSERT INTO "rl_zeta" ("id") VALUES (1);
+SQL
 cat > "$FIXTURE_DIR/meta/_journal.json" <<'JSON'
 {
   "version": "7",
@@ -95,7 +110,8 @@ cat > "$FIXTURE_DIR/meta/_journal.json" <<'JSON'
     { "idx": 0, "version": "7", "when": 1000, "tag": "0000_alpha", "breakpoints": true },
     { "idx": 1, "version": "7", "when": 2000, "tag": "0001_beta", "breakpoints": true },
     { "idx": 2, "version": "7", "when": 3000, "tag": "0002_gamma", "breakpoints": true },
-    { "idx": 3, "version": "7", "when": 4000, "tag": "0003_delta", "breakpoints": true }
+    { "idx": 3, "version": "7", "when": 4000, "tag": "0003_delta", "breakpoints": true },
+    { "idx": 4, "version": "7", "when": 5000, "tag": "0004_zeta", "breakpoints": true }
   ]
 }
 JSON
@@ -159,6 +175,11 @@ echo "AC-2 setup..."
     echo "INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('$(file_hash 0000_alpha)', 1000);"
     echo "INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('$(file_hash 0001_beta)', 2000);"
     echo "INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('$(file_hash 0003_delta)', 4000);"
+    # zeta is fully applied (table + backfill row + hash) from the start so it
+    # is NOT in AC-2's missing set — AC-5 later removes only its hash row.
+    echo "CREATE TABLE rl_zeta (id integer PRIMARY KEY);"
+    echo "INSERT INTO rl_zeta (id) VALUES (1);"
+    echo "INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('$(file_hash 0004_zeta)', 5000);"
 } | psql_exec >/dev/null || { echo "AC-2 setup failed"; exit 1; }
 
 AC2_OUT="$(run_reconcile)"
@@ -207,13 +228,13 @@ else
     fail "AC-3: second reconcile did not report 'in sync' (expected no-op skip)"
 fi
 
-# Belt-and-suspenders: exactly 4 hash rows (alpha, beta, gamma, delta), no
-# duplicates / phantom inserts.
+# Belt-and-suspenders: exactly 5 hash rows (alpha, beta, gamma, delta, zeta),
+# no duplicates / phantom inserts.
 ROW_COUNT="$(echo "SELECT count(*) FROM drizzle.__drizzle_migrations;" | psql_exec | tr -d '[:space:]')"
-if [[ "$ROW_COUNT" == "4" ]]; then
+if [[ "$ROW_COUNT" == "5" ]]; then
     pass
 else
-    fail "AC-3: expected 4 hash rows after no-op reconcile, got '$ROW_COUNT'"
+    fail "AC-3: expected 5 hash rows after no-op reconcile, got '$ROW_COUNT'"
 fi
 
 # ---------------------------------------------------------------------------
@@ -262,6 +283,52 @@ if [[ "$DELTA_ROW" == "1" ]]; then
     pass
 else
     fail "AC-4: delta hash row count is '$DELTA_ROW' (expected 1)"
+fi
+
+# ---------------------------------------------------------------------------
+# AC-5 (ROK-1413 / Codex P1) — a fully-applied migration whose LATER statement
+# is DML must still be TRUSTED in trust mode.
+#
+# Setup: remove only zeta's hash row (its table AND backfill row remain — the
+# migration was historically applied). Broken behaviour: the INSERT probe runs
+# cleanly inside the savepoint → "effect absent" → the whole migration demotes
+# to a real re-run → the INSERT re-executes (PK violation → reconcile aborts;
+# or, for non-unique backfills, silent duplicate data). Fixed behaviour: only
+# the CREATE TABLE (present → idempotent error) influences the decision → zeta
+# is trusted, hash recorded, data untouched.
+# ---------------------------------------------------------------------------
+echo "AC-5 setup..."
+{
+    echo "DELETE FROM drizzle.__drizzle_migrations WHERE hash = '$(file_hash 0004_zeta)';"
+} | psql_exec >/dev/null || { echo "AC-5 setup failed"; exit 1; }
+
+AC5_OUT="$(run_reconcile)"
+echo "--- reconcile output (AC-5) ---"
+echo "$AC5_OUT"
+echo "-------------------------------"
+
+# zeta must be TRUSTED (hash-only), never demoted to a run.
+if echo "$AC5_OUT" | grep -E '0004_zeta' | grep -qE '\bran\b'; then
+    fail "AC-5: 0004_zeta was RE-RUN in trust mode (DML probe poisoned the trust decision — data backfill re-applied)"
+else
+    pass
+fi
+
+# The backfill row must still exist exactly once (no duplicate re-apply).
+ZETA_ROWS="$(echo "SELECT count(*) FROM rl_zeta;" | psql_exec | tr -d '[:space:]')"
+if [[ "$ZETA_ROWS" == "1" ]]; then
+    pass
+else
+    fail "AC-5: rl_zeta row count is '$ZETA_ROWS' (expected 1 — backfill must not re-apply)"
+fi
+
+# zeta hash row must be recorded exactly once.
+ZETA_HASH="$(file_hash 0004_zeta)"
+ZETA_ROW="$(echo "SELECT count(*) FROM drizzle.__drizzle_migrations WHERE hash = '$ZETA_HASH';" | psql_exec | tr -d '[:space:]')"
+if [[ "$ZETA_ROW" == "1" ]]; then
+    pass
+else
+    fail "AC-5: zeta hash row count is '$ZETA_ROW' (expected 1)"
 fi
 
 # ---------------------------------------------------------------------------

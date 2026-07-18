@@ -170,8 +170,19 @@ async function runMigration(sql, entry, { dryRun, trustAsApplied }) {
     //     later-statement hole the shallow first-statement-only probe left open).
     // An empty statement list has no DDL to verify → nothing to run, trust the
     // hash (the loop leaves allPresent=true).
+    //
+    // ONLY DDL statements are probed. The probe's signal is "does re-running
+    // this statement error with an already-exists code?" — that only works for
+    // CREATE/ALTER/DROP. A DML statement (UPDATE/INSERT/DELETE backfill) runs
+    // CLEANLY on a populated DB, which the probe would misread as "effect
+    // absent" and demote the whole migration to a real re-run — re-applying
+    // data transformations (Codex P1, fix-batch 2026-07-17-b). Non-DDL
+    // statements are unverifiable in trust mode → they don't influence the
+    // decision (trust-mode default: a populated DB is presumed historically
+    // migrated).
     let allPresent = true;
     for (const stmt of entry.statements) {
+      if (!/^\s*(CREATE|ALTER|DROP)\b/i.test(stmt)) continue;
       const probe = await probeEffectExists(sql, stmt);
       if (!probe.exists) {
         allPresent = false;
