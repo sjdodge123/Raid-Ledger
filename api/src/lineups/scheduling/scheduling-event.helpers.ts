@@ -11,6 +11,7 @@ import {
   findScheduleSlots,
   findVoteBySlotAndUser,
 } from './scheduling-query.helpers';
+import { resolvePlayerCap } from '../lineups-match-response.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -48,16 +49,26 @@ export async function findSlotOrThrow(db: Db, slotId: number) {
   return slot;
 }
 
-/** Resolve game name and cover URL from a game ID. */
+/** Resolve game name, cover URL, and player cap from a game ID. */
 export async function resolveGameInfo(db: Db, gameId: number) {
   const [game] = await db
-    .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
+    .select({
+      name: schema.games.name,
+      coverUrl: schema.games.coverUrl,
+      // ROK-1411: both feed resolvePlayerCap (ROK-1397 precedence).
+      playerCount: schema.games.playerCount,
+      cooptimusOnlineMax: schema.games.cooptimusOnlineMax,
+    })
     .from(schema.games)
     .where(eq(schema.games.id, gameId))
     .limit(1);
   return {
     gameName: game?.name ?? 'Game Night',
     gameCoverUrl: game?.coverUrl ?? null,
+    playerCap: resolvePlayerCap(
+      game?.cooptimusOnlineMax ?? null,
+      game?.playerCount?.max ?? null,
+    ),
   };
 }
 
