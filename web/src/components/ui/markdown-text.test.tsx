@@ -21,6 +21,11 @@ describe('MarkdownText link validation (ROK-1077 item 1)', () => {
         expect(link).toHaveAttribute('href', 'https://example.com/ok');
     });
 
+    it('rejects the backslash protocol-relative variant /\\host', () => {
+        render(<MarkdownText text={'[x](/\\evil.com)'} />);
+        expect(screen.queryByRole('link')).toBeNull();
+    });
+
     it('still rejects other unsupported schemes (javascript:)', () => {
         render(<MarkdownText text="[x](javascript:alert(1))" />);
         expect(screen.queryByRole('link')).toBeNull();
