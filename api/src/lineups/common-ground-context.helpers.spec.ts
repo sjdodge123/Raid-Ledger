@@ -85,4 +85,21 @@ describe('runCommonGroundForBuildingLineup (ROK-1348)', () => {
     ).toBe(3);
     expect(eligibilityHelpers.loadInvitees).toHaveBeenCalledTimes(1);
   });
+
+  it('shrinks the private count when loadInvitees drops a deactivated invitee (ROK-1412)', async () => {
+    setupCommonMocks('private');
+    // ROK-1412: loadInvitees now inner-joins active users, so a deactivated
+    // invitee is absent from its result — here [20] instead of [20, 21].
+    mocked(eligibilityHelpers.loadInvitees).mockResolvedValue([20]);
+    const res = await runCommonGroundForBuildingLineup(
+      {} as never,
+      { lineupId: 7 } as never,
+      tasteProfile,
+      settings,
+    );
+    // 1 active invitee + creator → participantCount 2.
+    expect(
+      (res as { meta: { participantCount: number } }).meta.participantCount,
+    ).toBe(2);
+  });
 });
