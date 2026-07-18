@@ -102,8 +102,9 @@ export const MatchDetailResponseSchema = LineupMatchSchema.extend({
     gameCoverUrl: z.string().nullable(),
     /**
      * ROK-1411: per-match player cap for the "X of Y players" denominator and
-     * "group is full" copy. Sourced from the game's max player count
-     * (`games.player_count.max`); null when the game has no known cap.
+     * "group is full" copy. Sourced via the ROK-1397 precedence: a positive
+     * `games.cooptimus_online_max` wins, else `games.player_count.max`; null
+     * when the game has no known cap.
      */
     playerCap: z.number().int().nullable(),
     /** ROK-1121: lineup creator user ID for early-create override. */
