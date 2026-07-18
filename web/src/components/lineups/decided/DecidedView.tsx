@@ -206,6 +206,33 @@ function DecidedLoading({
   );
 }
 
+function DecidedHero({
+  lineup,
+  terminal,
+  hero,
+}: {
+  lineup: LineupDetailResponseDto;
+  terminal: boolean;
+  hero: { task: string; sub: string };
+}): JSX.Element {
+  return (
+    <JourneyHero
+      phase="decided"
+      tone="action"
+      badge={terminal ? 'Decided' : 'Step 3 of 4 · Decided'}
+      task={hero.task}
+      action={<LineupParticipantsButton lineupId={lineup.id} />}
+      sub={<LineupHeroMeta lineup={lineup} phaseContext={hero.sub} />}
+      hint={
+        terminal
+          ? 'Tap any game to learn more.'
+          : 'Tap any game to learn more before scheduling.'
+      }
+      hideSchedulePhase={terminal}
+    />
+  );
+}
+
 export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
   const { mine, others, leftover, hero, carriedForward, isLoading } =
     useDecidedState(lineup);
@@ -216,20 +243,7 @@ export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
   if (isLoading) return <DecidedLoading lineup={lineup} terminal={terminal} />;
   return (
     <div data-testid="decided-composite-view">
-      <JourneyHero
-        phase="decided"
-        tone="action"
-        badge={terminal ? 'Decided' : 'Step 3 of 4 · Decided'}
-        task={hero.task}
-        action={<LineupParticipantsButton lineupId={lineup.id} />}
-        sub={<LineupHeroMeta lineup={lineup} phaseContext={hero.sub} />}
-        hint={
-          terminal
-            ? 'Tap any game to learn more.'
-            : 'Tap any game to learn more before scheduling.'
-        }
-        hideSchedulePhase={terminal}
-      />
+      <DecidedHero lineup={lineup} terminal={terminal} hero={hero} />
       <YourMatches
         matches={mine}
         lineupId={lineup.id}
