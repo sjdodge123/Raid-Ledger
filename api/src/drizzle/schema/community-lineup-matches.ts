@@ -7,6 +7,7 @@ import {
   boolean,
   numeric,
   unique,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { communityLineups } from './community-lineups';
 import { games } from './games';
@@ -72,9 +73,7 @@ export const communityLineupMatchMembers = pgTable(
   'community_lineup_match_members',
   {
     id: serial('id').primaryKey(),
-    matchId: integer('match_id')
-      .references(() => communityLineupMatches.id, { onDelete: 'cascade' })
-      .notNull(),
+    matchId: integer('match_id').notNull(),
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
@@ -89,7 +88,15 @@ export const communityLineupMatchMembers = pgTable(
     schedulingSubmittedAt: timestamp('scheduling_submitted_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
-  (table) => [unique('uq_match_member_user').on(table.matchId, table.userId)],
+  (table) => [
+    unique('uq_match_member_user').on(table.matchId, table.userId),
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.matchId],
+      foreignColumns: [communityLineupMatches.id],
+      name: 'cl_match_members_match_id_fk',
+    }).onDelete('cascade'),
+  ],
 );
 
 /**
@@ -102,9 +109,7 @@ export const communityLineupScheduleSlots = pgTable(
   'community_lineup_schedule_slots',
   {
     id: serial('id').primaryKey(),
-    matchId: integer('match_id')
-      .references(() => communityLineupMatches.id, { onDelete: 'cascade' })
-      .notNull(),
+    matchId: integer('match_id').notNull(),
     proposedTime: timestamp('proposed_time').notNull(),
     overlapScore: numeric('overlap_score', {
       precision: 5,
@@ -115,6 +120,14 @@ export const communityLineupScheduleSlots = pgTable(
     }).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
+  (table) => [
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.matchId],
+      foreignColumns: [communityLineupMatches.id],
+      name: 'cl_schedule_slots_match_id_fk',
+    }).onDelete('cascade'),
+  ],
 );
 
 /**
@@ -126,15 +139,19 @@ export const communityLineupScheduleVotes = pgTable(
   'community_lineup_schedule_votes',
   {
     id: serial('id').primaryKey(),
-    slotId: integer('slot_id')
-      .references(() => communityLineupScheduleSlots.id, {
-        onDelete: 'cascade',
-      })
-      .notNull(),
+    slotId: integer('slot_id').notNull(),
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
-  (table) => [unique('uq_schedule_vote_user').on(table.slotId, table.userId)],
+  (table) => [
+    unique('uq_schedule_vote_user').on(table.slotId, table.userId),
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.slotId],
+      foreignColumns: [communityLineupScheduleSlots.id],
+      name: 'cl_schedule_votes_slot_id_fk',
+    }).onDelete('cascade'),
+  ],
 );

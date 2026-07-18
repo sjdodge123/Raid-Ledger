@@ -17,6 +17,7 @@ import {
   boolean,
   jsonb,
   unique,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { communityLineups } from './community-lineups';
 import { games } from './games';
@@ -54,16 +55,12 @@ export const communityLineupTiebreakerBracketMatchups = pgTable(
   'community_lineup_tiebreaker_bracket_matchups',
   {
     id: serial('id').primaryKey(),
-    tiebreakerId: integer('tiebreaker_id')
-      .references(() => communityLineupTiebreakers.id, { onDelete: 'cascade' })
-      .notNull(),
+    tiebreakerId: integer('tiebreaker_id').notNull(),
     round: smallint('round').notNull(),
     position: smallint('position').notNull(),
-    gameAId: integer('game_a_id')
-      .references(() => games.id)
-      .notNull(),
-    gameBId: integer('game_b_id').references(() => games.id),
-    winnerGameId: integer('winner_game_id').references(() => games.id),
+    gameAId: integer('game_a_id').notNull(),
+    gameBId: integer('game_b_id'),
+    winnerGameId: integer('winner_game_id'),
     isBye: boolean('is_bye').default(false).notNull(),
   },
   (table) => [
@@ -72,6 +69,28 @@ export const communityLineupTiebreakerBracketMatchups = pgTable(
       table.round,
       table.position,
     ),
+    // ROK-1387: explicit FK names — the drizzle defaults exceed Postgres's
+    // 63-char identifier limit and were being silently truncated.
+    foreignKey({
+      columns: [table.tiebreakerId],
+      foreignColumns: [communityLineupTiebreakers.id],
+      name: 'cl_tb_bracket_matchups_tiebreaker_id_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.gameAId],
+      foreignColumns: [games.id],
+      name: 'cl_tb_bracket_matchups_game_a_id_fk',
+    }),
+    foreignKey({
+      columns: [table.gameBId],
+      foreignColumns: [games.id],
+      name: 'cl_tb_bracket_matchups_game_b_id_fk',
+    }),
+    foreignKey({
+      columns: [table.winnerGameId],
+      foreignColumns: [games.id],
+      name: 'cl_tb_bracket_matchups_winner_game_id_fk',
+    }),
   ],
 );
 
@@ -80,11 +99,7 @@ export const communityLineupTiebreakerBracketVotes = pgTable(
   'community_lineup_tiebreaker_bracket_votes',
   {
     id: serial('id').primaryKey(),
-    matchupId: integer('matchup_id')
-      .references(() => communityLineupTiebreakerBracketMatchups.id, {
-        onDelete: 'cascade',
-      })
-      .notNull(),
+    matchupId: integer('matchup_id').notNull(),
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
@@ -94,6 +109,12 @@ export const communityLineupTiebreakerBracketVotes = pgTable(
   },
   (table) => [
     unique('uq_tiebreaker_bracket_vote').on(table.matchupId, table.userId),
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.matchupId],
+      foreignColumns: [communityLineupTiebreakerBracketMatchups.id],
+      name: 'cl_tb_bracket_votes_matchup_id_fk',
+    }).onDelete('cascade'),
   ],
 );
 
@@ -102,9 +123,7 @@ export const communityLineupTiebreakerVetoes = pgTable(
   'community_lineup_tiebreaker_vetoes',
   {
     id: serial('id').primaryKey(),
-    tiebreakerId: integer('tiebreaker_id')
-      .references(() => communityLineupTiebreakers.id, { onDelete: 'cascade' })
-      .notNull(),
+    tiebreakerId: integer('tiebreaker_id').notNull(),
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
@@ -115,5 +134,11 @@ export const communityLineupTiebreakerVetoes = pgTable(
   },
   (table) => [
     unique('uq_tiebreaker_veto_user').on(table.tiebreakerId, table.userId),
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.tiebreakerId],
+      foreignColumns: [communityLineupTiebreakers.id],
+      name: 'cl_tb_vetoes_tiebreaker_id_fk',
+    }).onDelete('cascade'),
   ],
 );

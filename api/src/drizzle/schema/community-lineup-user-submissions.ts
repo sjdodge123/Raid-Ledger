@@ -4,6 +4,7 @@ import {
   timestamp,
   integer,
   unique,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { communityLineups } from './community-lineups';
 import { users } from './users';
@@ -27,9 +28,7 @@ export const communityLineupUserSubmissions = pgTable(
   'community_lineup_user_submissions',
   {
     id: serial('id').primaryKey(),
-    lineupId: integer('lineup_id')
-      .references(() => communityLineups.id, { onDelete: 'cascade' })
-      .notNull(),
+    lineupId: integer('lineup_id').notNull(),
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
@@ -42,5 +41,11 @@ export const communityLineupUserSubmissions = pgTable(
   },
   (table) => [
     unique('uq_lineup_user_submission').on(table.lineupId, table.userId),
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.lineupId],
+      foreignColumns: [communityLineups.id],
+      name: 'cl_user_submissions_lineup_id_fk',
+    }).onDelete('cascade'),
   ],
 );

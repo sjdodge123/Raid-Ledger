@@ -9,6 +9,7 @@ import {
   jsonb,
   varchar,
   boolean,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { games } from './games';
@@ -137,12 +138,18 @@ export const communityLineupEntries = pgTable(
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
     note: text('note'),
-    carriedOverFrom: integer('carried_over_from').references(
-      () => communityLineups.id,
-    ),
+    carriedOverFrom: integer('carried_over_from'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
-  (table) => [unique('uq_lineup_entry_game').on(table.lineupId, table.gameId)],
+  (table) => [
+    unique('uq_lineup_entry_game').on(table.lineupId, table.gameId),
+    // ROK-1387: explicit FK name (default exceeded the 63-char limit).
+    foreignKey({
+      columns: [table.carriedOverFrom],
+      foreignColumns: [communityLineups.id],
+      name: 'cl_entries_carried_over_from_fk',
+    }),
+  ],
 );
 
 /** User votes on nominated games. */
