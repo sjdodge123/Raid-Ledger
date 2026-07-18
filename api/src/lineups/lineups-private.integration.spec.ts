@@ -18,6 +18,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { findInviteeDiscordMembers } from './lineup-notification-targets.helpers';
+import { clearAuthUserCache } from '../auth/auth-user-cache';
 
 function describePrivateLineups() {
   let testApp: TestApp;
@@ -126,6 +127,87 @@ function describePrivateLineups() {
       .send({ gameId: testApp.seed.game.id });
 
     expect(res.status).toBe(201);
+  });
+
+  // ── ROK-1412: deactivated invitees drop from eligibility ─────
+
+  it('excludes deactivated invitees from banner + detail eligible counts (ROK-1412)', async () => {
+    const a = await createMember('rok1412-a@test.local', 'rok1412a');
+    const b = await createMember('rok1412-b@test.local', 'rok1412b');
+    const createRes = await createPrivateLineup(adminToken, [a.id, b.id]);
+    expect(createRes.status).toBe(201);
+    const lineupId = createRes.body.id as number;
+
+    // Baseline: creator (admin) + 2 active invitees → 3, banner == detail.
+    const bannerBefore = await testApp.request
+      .get('/lineups/banner')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const detailBefore = await testApp.request
+      .get(`/lineups/${lineupId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(bannerBefore.body.id).toBe(lineupId);
+    expect(bannerBefore.body.votingEligibleCount).toBe(3);
+    expect(detailBefore.body.votingEligibleCount).toBe(3);
+
+    // Deactivate one invitee (the auto-deactivation path sets deactivated_at).
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: new Date() })
+      .where(eq(schema.users.id, b.id));
+    clearAuthUserCache();
+
+    const bannerAfter = await testApp.request
+      .get('/lineups/banner')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const detailAfter = await testApp.request
+      .get(`/lineups/${lineupId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    // creator + 1 active invitee → 2; the reported bug was banner != detail.
+    expect(bannerAfter.body.votingEligibleCount).toBe(2);
+    expect(detailAfter.body.votingEligibleCount).toBe(2);
+    expect(bannerAfter.body.votingEligibleCount).toBe(
+      detailAfter.body.votingEligibleCount,
+    );
+  });
+
+  it('blocks a deactivated invitee from participating; reactivation restores (ROK-1412)', async () => {
+    const invitee = await createMember('rok1412-p@test.local', 'rok1412p');
+    const createRes = await createPrivateLineup(adminToken, [invitee.id]);
+    const lineupId = createRes.body.id as number;
+
+    // Warm the auth-user cache while active so NotDeactivatedGuard sees the
+    // stale-active record — this isolates the eligibility (isInvitee) path as
+    // the 403 source, not the write-side guard.
+    const warm = await testApp.request
+      .get(`/lineups/${lineupId}`)
+      .set('Authorization', `Bearer ${invitee.token}`);
+    expect(warm.status).toBe(200);
+
+    // Deactivate WITHOUT clearing the auth cache (guard still sees active).
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: new Date() })
+      .where(eq(schema.users.id, invitee.id));
+
+    const blocked = await testApp.request
+      .post(`/lineups/${lineupId}/nominate`)
+      .set('Authorization', `Bearer ${invitee.token}`)
+      .send({ gameId: testApp.seed.game.id });
+    expect(blocked.status).toBe(403);
+
+    // Reactivation clears deactivated_at — eligibility returns with no data
+    // change (the invitee row was never touched).
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: null })
+      .where(eq(schema.users.id, invitee.id));
+    clearAuthUserCache();
+
+    const restored = await testApp.request
+      .post(`/lineups/${lineupId}/nominate`)
+      .set('Authorization', `Bearer ${invitee.token}`)
+      .send({ gameId: testApp.seed.game.id });
+    expect(restored.status).toBe(201);
   });
 
   // ── Invitee CRUD: dedupe + 403 non-creator ───────────────────
