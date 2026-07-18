@@ -14,9 +14,7 @@ const NOW = new Date('2026-05-12T00:00:00Z');
 
 type MatchRow = Awaited<ReturnType<typeof findMatchesByLineup>>[0];
 
-function makeMatchRow(
-  overrides: Partial<MatchRow> = {},
-): MatchRow {
+function makeMatchRow(overrides: Partial<MatchRow> = {}): MatchRow {
   return {
     id: 1,
     lineupId: 1,
@@ -34,7 +32,7 @@ function makeMatchRow(
     gamePlayerCount: null,
     gameCooptimusOnlineMax: null,
     ...overrides,
-  } as MatchRow;
+  };
 }
 
 function makeEntry(overrides: {
