@@ -2,7 +2,7 @@
  * Target resolution queries for Community Lineup notifications (ROK-932).
  * Finds Discord-linked members and match members for DM dispatch.
  */
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { DiscordMember } from './lineup-notification-dm.helpers';
@@ -33,22 +33,38 @@ export async function findInviteeDiscordMembers(
   db: Db,
   lineupId: number,
 ): Promise<DiscordMember[]> {
-  return (await db.execute(sql`
-    SELECT DISTINCT u.id, u.id AS "userId",
-           COALESCE(u.display_name, u.username) AS "displayName",
-           u.discord_id AS "discordId"
-    FROM users u
-    WHERE u.discord_id IS NOT NULL
-      AND u.deactivated_at IS NULL
-      AND (
-        u.id IN (
-          SELECT user_id FROM community_lineup_invitees WHERE lineup_id = ${lineupId}
-        )
-        OR u.id = (
-          SELECT created_by FROM community_lineups WHERE id = ${lineupId}
-        )
-      )
-  `)) as unknown as DiscordMember[];
+  // ROK-1131: typed rewrite of the raw SQL. Semantics preserved exactly:
+  // DISTINCT over the invitee ∪ creator union — the creator is ALWAYS included
+  // even when not explicitly invited. `inArray` on the single-row creator
+  // subquery matches the old `u.id = (SELECT created_by …)` for both the
+  // found and no-row cases.
+  const inviteeIds = db
+    .select({ userId: schema.communityLineupInvitees.userId })
+    .from(schema.communityLineupInvitees)
+    .where(eq(schema.communityLineupInvitees.lineupId, lineupId));
+  const creatorId = db
+    .select({ createdBy: schema.communityLineups.createdBy })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId));
+  const rows = await db
+    .selectDistinct({
+      id: schema.users.id,
+      userId: schema.users.id,
+      displayName: sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`,
+      discordId: schema.users.discordId,
+    })
+    .from(schema.users)
+    .where(
+      and(
+        isNotNull(schema.users.discordId),
+        activeUsersFilter(),
+        or(
+          inArray(schema.users.id, inviteeIds),
+          inArray(schema.users.id, creatorId),
+        ),
+      ),
+    );
+  return rows as DiscordMember[];
 }
 
 /** Check if a match already has a poll embed posted (ROK-1033). */
@@ -69,16 +85,27 @@ export async function findMatchMemberUsers(
   db: Db,
   matchId: number,
 ): Promise<DiscordMember[]> {
-  return (await db.execute(sql`
-    SELECT u.id, u.id AS "userId",
-           COALESCE(u.display_name, u.username) AS "displayName",
-           u.discord_id AS "discordId"
-    FROM community_lineup_match_members lmm
-    JOIN users u ON u.id = lmm.user_id
-    WHERE lmm.match_id = ${matchId}
-      AND u.discord_id IS NOT NULL
-      AND u.deactivated_at IS NULL
-  `)) as unknown as DiscordMember[];
+  // ROK-1131: typed rewrite of the raw SQL — same inner join + filters.
+  const rows = await db
+    .select({
+      id: schema.users.id,
+      userId: schema.users.id,
+      displayName: sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`,
+      discordId: schema.users.discordId,
+    })
+    .from(schema.communityLineupMatchMembers)
+    .innerJoin(
+      schema.users,
+      eq(schema.users.id, schema.communityLineupMatchMembers.userId),
+    )
+    .where(
+      and(
+        eq(schema.communityLineupMatchMembers.matchId, matchId),
+        isNotNull(schema.users.discordId),
+        activeUsersFilter(),
+      ),
+    );
+  return rows as DiscordMember[];
 }
 
 /**

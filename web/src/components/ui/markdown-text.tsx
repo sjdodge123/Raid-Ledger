@@ -28,7 +28,11 @@ function parseInline(line: string): Token[] {
             const closeBracket = raw.indexOf('](');
             const text = raw.slice(1, closeBracket);
             const href = raw.slice(closeBracket + 2, -1);
-            if (/^https?:\/\//.test(href) || href.startsWith('/')) {
+            // Protocol-relative //host URLs would pass a bare startsWith('/')
+            // and resolve to an external origin — require a single leading /.
+            // The second char must also not be a backslash: browsers normalize
+            // \ to / for http(s), so /\evil.com is //evil.com in disguise.
+            if (/^https?:\/\//.test(href) || (href.startsWith('/') && !/^\/[/\\]/.test(href))) {
                 tokens.push({ kind: 'link', text, href });
             } else {
                 tokens.push({ kind: 'text', value: raw });

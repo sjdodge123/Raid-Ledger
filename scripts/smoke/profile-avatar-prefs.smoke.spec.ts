@@ -5,6 +5,7 @@
  * at both desktop and mobile viewports.
  */
 import { test, expect } from './base';
+import { getAdminToken, apiPatch } from './api-helpers';
 
 // ---------------------------------------------------------------------------
 // Avatar Panel — Desktop
@@ -110,12 +111,21 @@ test.describe('Preferences panel (desktop)', () => {
     });
 
     test('timezone section renders with select', async ({ page }) => {
+        // Deterministic setup: on cloned-prod / long-lived DBs the admin's
+        // saved timezone is a real IANA zone, so asserting the seed default
+        // without resetting first fails. Reset via the app's own prefs API,
+        // then reload so the select reflects the persisted value.
+        const token = await getAdminToken();
+        await apiPatch(token, '/users/me/preferences', {
+            preferences: { timezone: 'auto' },
+        });
+        await page.reload();
         await expect(page.getByRole('heading', { name: 'Timezone' })).toBeVisible();
         await expect(page.getByText(/Choose how event times are displayed/)).toBeVisible();
         // Timezone select is visible
         const timezoneSelect = page.locator('select');
         await expect(timezoneSelect).toBeVisible();
-        // Should have the "auto" value selected by default
+        // Should have the "auto" value selected (reset above; seed default)
         await expect(timezoneSelect).toHaveValue('auto');
     });
 });

@@ -274,7 +274,15 @@ export class BackupService implements OnModuleInit {
       await runMigrations(apiRoot, this.databaseUrl);
       this.logger.log('Post-restore migrations complete');
     } catch (err) {
-      this.logger.warn(
+      // ROK-1413: log at ERROR — a failed post-restore migration is a real
+      // data-integrity hazard (the DB may be missing tables the app expects),
+      // not a benign note. We deliberately SWALLOW (do not rethrow) so the
+      // restore still completes and `reloadAndReconnectIntegrations` runs —
+      // rethrowing would leave settings/integrations disconnected on a DB that
+      // is otherwise restored. Sentry capture already happens exactly ONCE
+      // inside `runMigrations` → `runBootMigrations` (tagged `restore-migration`,
+      // flushed before it rethrows to us), so we add NO second capture here.
+      this.logger.error(
         `Post-restore migration note: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
