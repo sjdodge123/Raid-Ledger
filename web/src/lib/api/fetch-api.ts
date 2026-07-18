@@ -2,6 +2,7 @@ import { API_BASE_URL } from '../config';
 import { getAuthToken } from '../../hooks/use-auth';
 import { ensureFreshToken } from './refresh-client';
 import { getAuthMethod } from './silent-reauth';
+import { isTokenStale } from './token-expiry';
 import { Sentry } from '../../sentry';
 import type { ZodType } from 'zod';
 
@@ -68,11 +69,21 @@ function sendRequest(endpoint: string, options: RequestInit): Promise<Response> 
  * Returns the raw Response so callers that need to branch on a status code
  * fetchApi would otherwise turn into a thrown Error (e.g. 503 → "unavailable"
  * or "no snapshot yet") can inspect it while still sharing the 401 path.
+ *
+ * ROK-1409: a pre-flight staleness gate refreshes the token BEFORE the first
+ * request when the stored access token is already expired (the boot/resume
+ * case), so a burst of parallel initial queries makes ONE refresh up front
+ * instead of each 401ing and triggering a retry. `ensureFreshToken` is
+ * single-flight and self-guards impersonation (returns null) — on null we
+ * proceed with the stored token and lean on the reactive 401 backstop below.
  */
 export async function fetchWithAuth(
     endpoint: string,
     options: RequestInit = {},
 ): Promise<Response> {
+    if (getAuthMethod() && isTokenStale(getAuthToken())) {
+        await ensureFreshToken();
+    }
     const response = await sendRequest(endpoint, options);
     if (response.status === 401 && getAuthMethod()) {
         const refreshed = await ensureFreshToken();

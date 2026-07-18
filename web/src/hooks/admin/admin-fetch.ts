@@ -4,6 +4,8 @@
  */
 import { API_BASE_URL } from '../../lib/config';
 import { ensureFreshToken } from '../../lib/api/refresh-client';
+import { getAuthMethod } from '../../lib/api/silent-reauth';
+import { isTokenStale } from '../../lib/api/token-expiry';
 import { getAuthToken } from '../use-auth';
 
 /** Build auth headers with current token */
@@ -22,6 +24,14 @@ export async function adminFetch<T>(
 ): Promise<T> {
     let response: Response;
     try {
+        // ROK-1409: pre-flight staleness gate — refresh once up front when the
+        // stored access token is already expired (boot/resume), so parallel
+        // admin queries don't each 401 + retry. Single-flight + impersonation
+        // self-guard in ensureFreshToken; the reactive path below still covers
+        // server-side revocation / clock skew.
+        if (getAuthMethod() && isTokenStale(getAuthToken())) {
+            await ensureFreshToken();
+        }
         response = await fetch(`${API_BASE_URL}${path}`, {
             ...options,
             headers: getHeaders(),
