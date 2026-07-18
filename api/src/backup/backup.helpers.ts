@@ -47,11 +47,18 @@ export function pgDumpArgs(
  *
  * ROK-1413: `--exclude-schema=drizzle` is applied on restore too — existing
  * dumps (local `api/backups/daily/` + the prod NAS) already contain the drizzle
- * schema, so the exclusion must hold independent of the dump-side flag. Skipping
- * the schema on restore leaves migration reconciliation to the boot-time runner
- * / `reconcile-migrations.mjs` instead of importing stale hash rows. Exported so
- * the arg list is unit-assertable without spawning pg_restore. `pg_restore`
- * supports `--exclude-schema` from PG10+.
+ * schema, so the exclusion must hold independent of the dump-side flag. The
+ * live DB's `drizzle.__drizzle_migrations` hashes are preserved across the
+ * restore instead of being replaced by the backup's (the foreign-hash-import
+ * incident class this fix closes). CAVEAT — cross-version restores: restoring
+ * a backup OLDER than the deployed schema recreates public tables in the older
+ * shape while the newer hashes survive, and the post-restore `runMigrations`
+ * trusts those hashes (re-applies nothing). That case needs a manual
+ * `node scripts/reconcile-migrations.mjs` run afterward (its per-statement
+ * trust-probe demotes partially-present migrations to a real apply);
+ * `deploy_dev.sh` already does this after its restores. Exported so the arg
+ * list is unit-assertable without spawning pg_restore. `pg_restore` supports
+ * `--exclude-schema` from PG10+.
  */
 export function pgRestoreArgs(dbUrl: string, inputPath: string): string[] {
   return [
