@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { BackupService } from './backup.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { SettingsService } from '../settings/settings.service';
+import { runBootMigrations } from '../../scripts/run-migrations-with-sentry';
 import * as fs from 'node:fs';
 import * as childProcess from 'node:child_process';
 
@@ -21,10 +23,16 @@ jest.mock('../../scripts/run-migrations-with-sentry', () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockChildProcess = childProcess as jest.Mocked<typeof childProcess>;
+const mockRunBootMigrations = runBootMigrations as jest.Mock;
 
 function describeBackupService() {
   let service: BackupService;
   let mockCronJobService: { executeWithTracking: jest.Mock };
+  let mockSettingsService: {
+    invalidateCache: jest.Mock;
+    emitAllIntegrationsCleared: jest.Mock;
+    reloadAndReconnectIntegrations: jest.Mock;
+  };
 
   async function beforeEachHelper() {
     mockCronJobService = {
@@ -32,6 +40,13 @@ function describeBackupService() {
         fn(),
       ),
     };
+    mockSettingsService = {
+      invalidateCache: jest.fn(),
+      emitAllIntegrationsCleared: jest.fn(),
+      reloadAndReconnectIntegrations: jest.fn().mockResolvedValue(undefined),
+    };
+    mockRunBootMigrations.mockReset();
+    mockRunBootMigrations.mockResolvedValue(undefined);
 
     // Reset mocks
     mockFs.mkdirSync.mockReturnValue(undefined);
@@ -73,13 +88,7 @@ function describeBackupService() {
         { provide: CronJobService, useValue: mockCronJobService },
         {
           provide: SettingsService,
-          useValue: {
-            invalidateCache: jest.fn(),
-            emitAllIntegrationsCleared: jest.fn(),
-            reloadAndReconnectIntegrations: jest
-              .fn()
-              .mockResolvedValue(undefined),
-          },
+          useValue: mockSettingsService,
         },
       ],
     }).compile();
@@ -294,6 +303,41 @@ function describeBackupService() {
       expect(pgRestoreCall![1]).toEqual(
         expect.arrayContaining(['--clean', '--if-exists']),
       );
+    });
+
+    it('logs a post-restore migration failure at error and still completes restore', async () => {
+      // ROK-1413: a swallowed migration failure must surface at logger.error
+      // (was warn); the catch is kept (no rethrow) so restore completes + the
+      // settings reload still runs, and Sentry captures ONCE in runBootMigrations.
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const warnSpy = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      // statSync default (size/mtime) comes from beforeEach; only existsSync
+      // needs overriding so the backup file resolves.
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      mockRunBootMigrations.mockRejectedValueOnce(
+        new Error('relation "games" does not exist'),
+      );
+
+      await expect(
+        service.restoreFromBackup('daily', 'test.dump'),
+      ).resolves.toBeUndefined();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Post-restore migration note'),
+      );
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Post-restore migration note'),
+      );
+      expect(
+        mockSettingsService.reloadAndReconnectIntegrations,
+      ).toHaveBeenCalled();
+
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
   });
 }
