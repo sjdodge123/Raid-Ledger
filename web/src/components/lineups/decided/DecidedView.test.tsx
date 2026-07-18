@@ -99,6 +99,7 @@ function makeMatch(
     votePercentage: 60,
     fitType: 'normal',
     linkedEventId: null,
+    playerCap: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     members: [makeMember({ id: 1, userId: 99, displayName: 'Me' })],
@@ -174,6 +175,35 @@ describe('DecidedView — JourneyHero (AC1)', () => {
     const root = screen.getByTestId('decided-composite-view');
     // Hero is the first child of the composite root.
     expect(root.firstElementChild).toBe(hero);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1411 — loading state (no empty-copy flash mid-fetch)
+// ---------------------------------------------------------------------------
+
+describe('DecidedView — loading state (ROK-1411)', () => {
+  it('renders a hero-only loading state without the empty-state copy while the query is pending', () => {
+    const lineup = createMockLineupDetail({ status: 'decided' });
+    useLineupMatchesMock.mockReturnValue({ data: undefined, isLoading: true });
+
+    renderWithProviders(<DecidedView lineup={lineup} />);
+
+    // Loading skeleton renders inside the composite root.
+    expect(screen.getByTestId('decided-composite-view')).toBeInTheDocument();
+    expect(screen.getByTestId('decided-loading')).toBeInTheDocument();
+
+    // The misleading empty-state copy must NOT flash before data resolves.
+    expect(
+      screen.queryByText(/no matches were generated from voting results/i),
+    ).toBeNull();
+    expect(
+      screen.queryByText(/you're not in any matches yet/i),
+    ).toBeNull();
+
+    // No match sections render during load.
+    expect(screen.queryByTestId('decided-your-matches-section')).toBeNull();
+    expect(screen.queryByTestId('decided-other-matches-section')).toBeNull();
   });
 });
 
@@ -637,11 +667,11 @@ describe('DecidedView — single-match edge case (AC7)', () => {
 
 // ---------------------------------------------------------------------------
 // MatchCard sub-line copy — locks accurate personal-context wording.
-// NOTE: The data model does not expose a per-match player cap (matchThreshold
-// on GroupedMatchesResponseDto is a 0–100 percentage for the grouping algo,
-// not a player count), so "X of Y players" is deliberately absent. Restoring
-// the wireframe denominator + "group is full" requires extending
-// MatchDetailResponseDto with a per-match playerCap — tracked as a follow-up.
+// NOTE: these cases use matches with `playerCap: null` (no known cap), which
+// falls back to the personal-context copy. The "X of Y players" / "group is
+// full" denominator (ROK-1411, sourced from games.player_count.max) is
+// covered by MatchCard.test.tsx; matchThreshold on GroupedMatchesResponseDto
+// remains a 0–100 grouping percentage and is NOT a player count.
 // ---------------------------------------------------------------------------
 
 describe('DecidedView — MatchCard sub-line copy', () => {
