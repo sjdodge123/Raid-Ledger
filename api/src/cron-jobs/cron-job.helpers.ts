@@ -273,7 +273,22 @@ export function extractRegistryJobMeta(
   };
 }
 
-/** Flush pending last_run_at updates to DB. */
+/**
+ * Flush pending last_run_at updates to DB (ROK-1414).
+ *
+ * On the disk-latency-bound NAS, per-job single-row UPDATEs dominated the
+ * ≥100ms app-observed query load — the cost is the per-write commit/fsync
+ * roundtrip, not the statement itself. So this issues exactly ONE batched
+ * UPDATE per flush cycle covering every pending job (via a `VALUES` join),
+ * regardless of how many jobs are queued.
+ *
+ * Dates are serialised with `toISOString()` and cast to `timestamp` to match
+ * drizzle's own `PgTimestamp.mapToDriverValue`, so stored values are identical
+ * to the previous per-row path. Every pending entry is already a genuine
+ * change (see `queueLivenessIfStale`, which only queues when the value moves
+ * and immediately advances the in-memory `lastRunAt`), so no separate
+ * unchanged-row skip is needed.
+ */
 export async function flushPendingUpdates(
   db: Db,
   pending: Map<number, { lastRunAt: Date; cronExpression: string }>,
@@ -282,19 +297,31 @@ export async function flushPendingUpdates(
   if (pending.size === 0) return;
   const updates = new Map(pending);
   pending.clear();
-  const now = new Date();
-  for (const [jobId, { lastRunAt, cronExpression }] of updates) {
-    try {
-      const nextRunAt = computeNextRun(cronExpression);
-      await db
-        .update(schema.cronJobs)
-        .set({ lastRunAt, nextRunAt, updatedAt: now })
-        .where(eq(schema.cronJobs.id, jobId));
-    } catch (err) {
-      logger.warn(`Failed to flush last_run_at for job ${jobId}: ${err}`);
-    }
+  const rows = Array.from(updates, ([id, { lastRunAt, cronExpression }]) =>
+    flushValuesRow(id, lastRunAt, cronExpression),
+  );
+  try {
+    await db.execute(sql`
+      UPDATE ${schema.cronJobs} AS c
+         SET last_run_at = v.last_run_at, next_run_at = v.next_run_at,
+             updated_at = ${new Date().toISOString()}::timestamp
+        FROM (VALUES ${sql.join(rows, sql`, `)}) AS v(id, last_run_at, next_run_at)
+       WHERE c.id = v.id
+    `);
+  } catch (err) {
+    const ids = Array.from(updates.keys()).join(', ');
+    logger.warn(`Failed to flush last_run_at for job(s) ${ids}: ${err}`);
+    return;
   }
   logger.debug(`Flushed last_run_at for ${updates.size} cron job(s)`);
+}
+
+/** Build one `VALUES` tuple (id, last_run_at, next_run_at) for the batched flush. */
+function flushValuesRow(id: number, lastRunAt: Date, cronExpression: string) {
+  const nextRunAt = computeNextRun(cronExpression);
+  return sql`(${id}::int, ${lastRunAt.toISOString()}::timestamp, ${
+    nextRunAt ? nextRunAt.toISOString() : null
+  }::timestamp)`;
 }
 
 /** Record a skipped trigger for a job not in the SchedulerRegistry. */
