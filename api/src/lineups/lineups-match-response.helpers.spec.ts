@@ -3,9 +3,37 @@
  * Exercises the pure `mapCarriedForwardEntries` mapper that produces the
  * decided-view chip strip payload from `community_lineup_entries` rows.
  */
-import { mapCarriedForwardEntries } from './lineups-match-response.helpers';
+import {
+  mapCarriedForwardEntries,
+  mapMatchToDto,
+} from './lineups-match-response.helpers';
+import type { findMatchesByLineup } from './lineups-match-query.helpers';
 
 const NOW = new Date('2026-05-12T00:00:00Z');
+
+type MatchRow = Awaited<ReturnType<typeof findMatchesByLineup>>[0];
+
+function makeMatchRow(
+  overrides: Partial<MatchRow> = {},
+): MatchRow {
+  return {
+    id: 1,
+    lineupId: 1,
+    gameId: 42,
+    status: 'scheduling',
+    thresholdMet: true,
+    voteCount: 5,
+    votePercentage: '60',
+    fitType: 'normal',
+    linkedEventId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    gameName: 'Valheim',
+    gameCoverUrl: null,
+    gamePlayerCount: null,
+    ...overrides,
+  } as MatchRow;
+}
 
 function makeEntry(overrides: {
   id: number;
@@ -82,5 +110,22 @@ describe('mapCarriedForwardEntries', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].voteCount).toBe(0);
+  });
+});
+
+describe('mapMatchToDto — playerCap population (ROK-1411)', () => {
+  it('sets playerCap to null when the game has no player_count', () => {
+    const dto = mapMatchToDto(makeMatchRow({ gamePlayerCount: null }), []);
+
+    expect(dto.playerCap).toBeNull();
+  });
+
+  it('sets playerCap to the game player_count max when present', () => {
+    const dto = mapMatchToDto(
+      makeMatchRow({ gamePlayerCount: { min: 1, max: 10 } }),
+      [],
+    );
+
+    expect(dto.playerCap).toBe(10);
   });
 });

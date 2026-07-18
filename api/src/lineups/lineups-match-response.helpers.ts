@@ -54,7 +54,7 @@ function mapMemberRow(m: MatchMemberRow) {
 }
 
 /** Map a raw match row + its members to a MatchDetailResponseDto. */
-function mapMatchToDto(
+export function mapMatchToDto(
   match: Awaited<ReturnType<typeof findMatchesByLineup>>[0],
   memberRows: MatchMemberRow[],
 ): MatchDetailResponseDto {
@@ -76,6 +76,8 @@ function mapMatchToDto(
     updatedAt: match.updatedAt.toISOString(),
     gameName: match.gameName,
     gameCoverUrl: match.gameCoverUrl,
+    // ROK-1411: per-game max player count as the "X of Y players" cap.
+    playerCap: match.gamePlayerCount?.max ?? null,
     members,
   };
 }

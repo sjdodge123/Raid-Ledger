@@ -40,6 +40,8 @@ export function findMatchesByLineup(db: Db, lineupId: number) {
       updatedAt: schema.communityLineupMatches.updatedAt,
       gameName: schema.games.name,
       gameCoverUrl: schema.games.coverUrl,
+      // ROK-1411: max player count drives the "X of Y players" denominator.
+      gamePlayerCount: schema.games.playerCount,
     })
     .from(schema.communityLineupMatches)
     .innerJoin(
