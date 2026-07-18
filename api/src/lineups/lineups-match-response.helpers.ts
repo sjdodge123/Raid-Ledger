@@ -36,6 +36,24 @@ export function classifyMatch(
   return 'rallyYourCrew';
 }
 
+/**
+ * ROK-1411: resolve the per-game player cap for the "X of Y players" / "group
+ * is full" copy, following the ROK-1397 precedence documented in
+ * games.ts:128-159: `cooptimus_online_max` WINS over `player_count.max` when
+ * non-null — EXCEPT a ZERO cooptimus value is a co-op-capability claim (this
+ * game has no online co-op), NOT a capacity of zero, so we treat it as absent
+ * and fall through to `player_count.max`. Null both → no cap.
+ */
+export function resolvePlayerCap(
+  cooptimusOnlineMax: number | null,
+  playerCountMax: number | null,
+): number | null {
+  if (cooptimusOnlineMax != null && cooptimusOnlineMax > 0) {
+    return cooptimusOnlineMax;
+  }
+  return playerCountMax ?? null;
+}
+
 /** Map a single member row to the response shape. */
 function mapMemberRow(m: MatchMemberRow) {
   return {
@@ -76,8 +94,11 @@ export function mapMatchToDto(
     updatedAt: match.updatedAt.toISOString(),
     gameName: match.gameName,
     gameCoverUrl: match.gameCoverUrl,
-    // ROK-1411: per-game max player count as the "X of Y players" cap.
-    playerCap: match.gamePlayerCount?.max ?? null,
+    // ROK-1411: cooptimus-aware player cap (see resolvePlayerCap).
+    playerCap: resolvePlayerCap(
+      match.gameCooptimusOnlineMax ?? null,
+      match.gamePlayerCount?.max ?? null,
+    ),
     members,
   };
 }

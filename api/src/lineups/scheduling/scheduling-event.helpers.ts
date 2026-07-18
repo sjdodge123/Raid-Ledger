@@ -11,6 +11,7 @@ import {
   findScheduleSlots,
   findVoteBySlotAndUser,
 } from './scheduling-query.helpers';
+import { resolvePlayerCap } from '../lineups-match-response.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -54,8 +55,9 @@ export async function resolveGameInfo(db: Db, gameId: number) {
     .select({
       name: schema.games.name,
       coverUrl: schema.games.coverUrl,
-      // ROK-1411: max player count backs the "X of Y players" cap.
+      // ROK-1411: both feed resolvePlayerCap (ROK-1397 precedence).
       playerCount: schema.games.playerCount,
+      cooptimusOnlineMax: schema.games.cooptimusOnlineMax,
     })
     .from(schema.games)
     .where(eq(schema.games.id, gameId))
@@ -63,7 +65,10 @@ export async function resolveGameInfo(db: Db, gameId: number) {
   return {
     gameName: game?.name ?? 'Game Night',
     gameCoverUrl: game?.coverUrl ?? null,
-    playerCap: game?.playerCount?.max ?? null,
+    playerCap: resolvePlayerCap(
+      game?.cooptimusOnlineMax ?? null,
+      game?.playerCount?.max ?? null,
+    ),
   };
 }
 
