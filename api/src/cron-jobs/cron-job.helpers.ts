@@ -297,10 +297,13 @@ export async function flushPendingUpdates(
   if (pending.size === 0) return;
   const updates = new Map(pending);
   pending.clear();
-  const rows = Array.from(updates, ([id, { lastRunAt, cronExpression }]) =>
-    flushValuesRow(id, lastRunAt, cronExpression),
-  );
   try {
+    // Built inside the try: toISOString() throws on an invalid Date, and that
+    // must degrade to the same warn-and-skip as a DB failure, not escape to
+    // the flush interval (the old per-row loop caught it per-job).
+    const rows = Array.from(updates, ([id, { lastRunAt, cronExpression }]) =>
+      flushValuesRow(id, lastRunAt, cronExpression),
+    );
     await db.execute(sql`
       UPDATE ${schema.cronJobs} AS c
          SET last_run_at = v.last_run_at, next_run_at = v.next_run_at,

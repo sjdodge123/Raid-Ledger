@@ -285,6 +285,19 @@ describe('flushPendingUpdates (ROK-1414 — batched flush)', () => {
     ).resolves.toBeUndefined();
     expect(logger.warn).toHaveBeenCalled();
   });
+
+  it('warns instead of throwing when a pending entry carries an invalid Date', async () => {
+    const map = pending();
+    map.set(4, {
+      lastRunAt: new Date('not-a-date'),
+      cronExpression: '0 * * * *',
+    });
+    await expect(
+      flushPendingUpdates(mockDb as any, map, logger),
+    ).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalled();
+    expect(mockDb.execute).not.toHaveBeenCalled();
+  });
 });
 
 describe('shouldUpdateLiveness', () => {
