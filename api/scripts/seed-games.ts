@@ -8,6 +8,7 @@ import {
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../src/drizzle/schema';
+import { buildSeedGameUpdateSet } from '../src/games-lookup/seed-games.helpers';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -232,12 +233,13 @@ const GAMES_SEED = [
   },
   {
     // ROK-1377: operator's own game — free, browser-based, not on Steam.
-    // URL-only listing; cover is the site favicon (swap for box-art if desired).
+    // ROK-1410: cover is self-hosted (web/public/game-covers/) — the original
+    // chaochaogame.com favicon URL was blocked by the CSP img-src allowlist.
     slug: 'chao-chao',
     name: 'Chao Chao',
     shortName: null,
     iconUrl: null,
-    coverUrl: 'https://chaochaogame.com/assets/img/favicon.svg',
+    coverUrl: '/game-covers/chao-chao-cover.jpg',
     colorHex: '#D4A017',
     hasRoles: false,
     hasSpecs: false,
@@ -292,25 +294,11 @@ async function bootstrap() {
           .where(eq(schema.games.slug, game.slug))
           .limit(1);
         gameId = existing.id;
-        // Update config columns + igdbId if they changed
+        // Update config columns + igdbId if they changed (ROK-1410: set
+        // builder extracted so the chao-chao coverUrl heal scope is testable)
         await db
           .update(schema.games)
-          .set({
-            ...(game.igdbId ? { igdbId: game.igdbId } : {}),
-            shortName: game.shortName,
-            colorHex: game.colorHex,
-            hasRoles: game.hasRoles,
-            hasSpecs: game.hasSpecs,
-            maxCharactersPerUser: game.maxCharactersPerUser,
-            ...('apiNamespacePrefix' in game
-              ? { apiNamespacePrefix: game.apiNamespacePrefix }
-              : {}),
-            // ROK-1377: keep URL-only / free-to-play metadata current on re-seed.
-            ...('websiteUrl' in game ? { websiteUrl: game.websiteUrl } : {}),
-            ...('isFreeToPlay' in game
-              ? { isFreeToPlay: game.isFreeToPlay }
-              : {}),
-          })
+          .set(buildSeedGameUpdateSet(game))
           .where(eq(schema.games.id, gameId));
         console.log(`  🔄 Updated game: ${game.name}`);
       }
