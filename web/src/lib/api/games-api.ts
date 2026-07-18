@@ -10,7 +10,11 @@ import type {
     IgdbGameDto,
     GameTasteProfileResponseDto,
 } from '@raid-ledger/contract';
-import { GameSearchResponseSchema, IgdbGameSchema } from '@raid-ledger/contract';
+import {
+    GameSearchResponseSchema,
+    GameTasteProfileResponseSchema,
+    IgdbGameSchema,
+} from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 
 /** Search for games via IGDB */
@@ -82,5 +86,5 @@ export async function getGameBySteamAppId(
 export async function getGameTasteProfile(
     gameId: number,
 ): Promise<GameTasteProfileResponseDto> {
-    return fetchApi(`/games/${gameId}/taste-profile`);
+    return fetchApi(`/games/${gameId}/taste-profile`, {}, GameTasteProfileResponseSchema);
 }
