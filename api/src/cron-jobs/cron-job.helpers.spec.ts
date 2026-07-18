@@ -4,6 +4,7 @@ import {
   recordCompleted,
   recordFailed,
   shouldUpdateLiveness,
+  flushPendingUpdates,
 } from './cron-job.helpers';
 import { isForeignKeyViolation } from './cron-job.fk-recovery.helpers';
 
@@ -215,6 +216,74 @@ describe('recordCompleted — FK self-heal (ROK-1328)', () => {
       ),
     ).rejects.toThrow('connection reset');
     expect(reresolve).not.toHaveBeenCalled();
+  });
+});
+
+describe('flushPendingUpdates (ROK-1414 — batched flush)', () => {
+  let mockDb: MockDb;
+  const logger = { warn: jest.fn(), debug: jest.fn() } as any;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    jest.clearAllMocks();
+  });
+
+  const pending = () =>
+    new Map<number, { lastRunAt: Date; cronExpression: string }>([
+      [
+        1,
+        {
+          lastRunAt: new Date('2025-01-01T00:00:00Z'),
+          cronExpression: '0 * * * *',
+        },
+      ],
+      [
+        2,
+        {
+          lastRunAt: new Date('2025-01-01T01:00:00Z'),
+          cronExpression: '*/5 * * * *',
+        },
+      ],
+      [
+        3,
+        {
+          lastRunAt: new Date('2025-01-01T02:00:00Z'),
+          cronExpression: '0 0 * * *',
+        },
+      ],
+    ]);
+
+  it('issues exactly ONE db statement for N>1 pending jobs', async () => {
+    const map = pending();
+    await flushPendingUpdates(mockDb as any, map, logger);
+
+    // The whole flush is a single batched UPDATE — one execute, zero per-row updates.
+    expect(mockDb.execute).toHaveBeenCalledTimes(1);
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it('drains the pending map so the next cycle is a no-op', async () => {
+    const map = pending();
+    await flushPendingUpdates(mockDb as any, map, logger);
+    expect(map.size).toBe(0);
+
+    await flushPendingUpdates(mockDb as any, map, logger);
+    // Empty map ⇒ no additional statement issued.
+    expect(mockDb.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing (no statement) when the pending map is empty', async () => {
+    await flushPendingUpdates(mockDb as any, new Map(), logger);
+    expect(mockDb.execute).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it('logs a warning and swallows a DB failure without throwing', async () => {
+    mockDb.execute.mockRejectedValueOnce(new Error('boom'));
+    await expect(
+      flushPendingUpdates(mockDb as any, pending(), logger),
+    ).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalled();
   });
 });
 
