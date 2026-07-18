@@ -25,11 +25,29 @@ function makeMockDb() {
   const whereResult = Object.assign([] as unknown[], {
     limit: jest.fn().mockResolvedValue([{ embedMessageId: null }]),
   });
+  // Single row-source shared by every target-resolution helper. The raw-SQL
+  // helpers await db.execute directly; ROK-1131's typed rewrites
+  // (selectDistinct for invitees, select().innerJoin() for match members)
+  // route their awaited terminals through the SAME jest.fn, so the tests'
+  // call-order `execute.mockResolvedValueOnce(...)` queues serve all three
+  // shapes unchanged. The plain select().from().where() chain (embed lookup
+  // via .limit(), tz-prefs iteration, and the never-awaited invitee/creator
+  // subquery builders) still returns whereResult and does NOT consume from
+  // the queue.
+  const execute = jest.fn().mockResolvedValue([]);
   return {
-    execute: jest.fn().mockResolvedValue([]),
+    execute,
     select: jest.fn().mockReturnValue({
       from: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnValue(whereResult),
+        innerJoin: jest.fn().mockReturnValue({
+          where: jest.fn().mockImplementation(() => execute()),
+        }),
+      }),
+    }),
+    selectDistinct: jest.fn().mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockImplementation(() => execute()),
       }),
     }),
     update: jest.fn().mockReturnValue({
@@ -869,6 +887,12 @@ describe('LineupNotificationService', () => {
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
             limit: jest.fn().mockResolvedValue(rows),
+          }),
+          // ROK-1131: findMatchMemberUsers shares db.select — keep its typed
+          // innerJoin chain alive alongside the overridden match lookup,
+          // routed through the shared execute queue like the base mock.
+          innerJoin: jest.fn().mockReturnValue({
+            where: jest.fn().mockImplementation(() => mockDb.execute()),
           }),
         }),
       });

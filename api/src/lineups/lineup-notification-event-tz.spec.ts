@@ -65,7 +65,16 @@ function makeDb(opts: {
   const from = jest.fn().mockReturnValue({ where });
   const select = jest.fn().mockReturnValue({ from });
   const execute = jest.fn().mockResolvedValue(opts.members ?? []);
-  return { select, execute } as never;
+  // ROK-1131: findInviteeDiscordMembers is now a typed selectDistinct chain
+  // (was raw db.execute) — resolve it from the same members queue. The plain
+  // select().from().where() chain keeps serving tzRows (and the never-awaited
+  // invitee/creator subquery builders).
+  const selectDistinct = jest.fn().mockReturnValue({
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockImplementation(() => execute()),
+    }),
+  });
+  return { select, selectDistinct, execute } as never;
 }
 
 const MEMBER_A = {
