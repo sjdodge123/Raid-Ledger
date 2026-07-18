@@ -109,13 +109,27 @@ vi.mock('node:child_process', async () => {
   };
 });
 
+// Pin RL_PROXMOX_HOST to a non-default value so resolveProxmoxHost
+// short-circuits (exec.ts operator-override branch) instead of doing a real
+// dns.promises.lookup('rl-infra.lan'). vi.resetModules() below wipes the
+// resolver memo every test, so without this stub the lookup is re-paid per
+// test and CI DNS latency (>100ms) starves the AC2 spawn-capture race.
+let savedProxmoxHost: string | undefined;
+
 beforeEach(() => {
   lastExecFileArgs = null;
   lastSpawnArgs = null;
   allExecFileArgs.length = 0;
+  savedProxmoxHost = process.env.RL_PROXMOX_HOST;
+  process.env.RL_PROXMOX_HOST = '198.51.100.1';
 });
 
 afterEach(() => {
+  if (savedProxmoxHost === undefined) {
+    delete process.env.RL_PROXMOX_HOST;
+  } else {
+    process.env.RL_PROXMOX_HOST = savedProxmoxHost;
+  }
   vi.clearAllMocks();
 });
 
@@ -340,9 +354,14 @@ describe('ROK-1337 AC2 — executeWait watches the slug directory, not a single 
     const { executeWait } = await import('../test-plan.js');
     // Fire-and-forget; the mock spawn emits close immediately so this
     // resolves but we only care about the spawn argv.
-    const p = executeWait({ slug: 'aaa', timeout_seconds: 5 } as never);
-    await Promise.race([p, new Promise((r) => setTimeout(r, 100))]);
-    expect(lastSpawnArgs).not.toBeNull();
+    // Fire-and-forget (attach a no-op catch so a rejection can't surface as
+    // an unhandled-rejection crash); we only assert on the spawn argv.
+    executeWait({ slug: 'aaa', timeout_seconds: 5 } as never).catch(() => {});
+    // Poll for the spawn capture instead of racing a fixed timer — resolves
+    // as soon as the argv is recorded, fails loudly at 2s if it never is.
+    await vi.waitFor(() => expect(lastSpawnArgs).not.toBeNull(), {
+      timeout: 2000,
+    });
     const remote = lastSpawnArgs!.args[lastSpawnArgs!.args.length - 1];
     // Must watch the per-slug DIRECTORY, not a {slug}.json file.
     expect(remote).toMatch(/\/srv\/rl-infra\/state\/test-plans\/aaa\/?(\s|$)/);
