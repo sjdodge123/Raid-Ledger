@@ -292,6 +292,8 @@ describe('MatchDetailResponseSchema (ROK-964)', () => {
     updatedAt: '2026-01-01T00:00:00.000Z',
     gameName: 'Test Game',
     gameCoverUrl: null,
+    // ROK-1411: per-match player cap (nullable — null = no known cap).
+    playerCap: 8,
     members: [
       {
         id: 1,

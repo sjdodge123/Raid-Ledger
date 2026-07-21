@@ -40,6 +40,10 @@ export function findMatchesByLineup(db: Db, lineupId: number) {
       updatedAt: schema.communityLineupMatches.updatedAt,
       gameName: schema.games.name,
       gameCoverUrl: schema.games.coverUrl,
+      // ROK-1411: both feed the "X of Y players" cap via resolvePlayerCap
+      // (ROK-1397 precedence — see games.ts:128-159).
+      gamePlayerCount: schema.games.playerCount,
+      gameCooptimusOnlineMax: schema.games.cooptimusOnlineMax,
     })
     .from(schema.communityLineupMatches)
     .innerJoin(

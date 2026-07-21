@@ -4,9 +4,13 @@ import { z } from 'zod';
 
 import { server } from '../../test/mocks/server';
 import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
-import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY } from './auth-storage-keys';
+import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
 
 const captureExceptionMock = vi.fn();
+
+// Mutable stored access token so tests can exercise the ROK-1409 pre-flight
+// staleness gate (fresh vs expired) against a controllable getAuthToken().
+const authState = vi.hoisted(() => ({ token: null as string | null }));
 
 vi.mock('../../sentry', () => ({
     Sentry: {
@@ -15,10 +19,27 @@ vi.mock('../../sentry', () => ({
 }));
 
 vi.mock('../../hooks/use-auth', () => ({
-    getAuthToken: () => null,
+    getAuthToken: () => authState.token,
 }));
 
 const API_BASE = 'http://localhost:3000';
+
+/** Encode an object as a base64url JWT segment (no padding). */
+function base64url(obj: Record<string, unknown>): string {
+    return btoa(JSON.stringify(obj))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+/** Build a JWT whose exp is `offsetSeconds` from now. */
+function tokenExpiringIn(offsetSeconds: number): string {
+    const exp = Math.floor(Date.now() / 1000) + offsetSeconds;
+    return `${base64url({ alg: 'HS256' })}.${base64url({ sub: 'u', exp })}.sig`;
+}
+
+const FRESH_TOKEN = tokenExpiringIn(3600);
+const EXPIRED_TOKEN = tokenExpiringIn(-60);
 
 const FixtureSchema = z.object({
     id: z.number(),
@@ -97,6 +118,9 @@ describe('fetchWithAuth — ROK-1367 transparent on-401 refresh', () => {
         localStorage.clear();
         // Prior-session marker gates the refresh probe (fetchWithAuth).
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        // A fresh token means the ROK-1409 pre-flight gate does NOT fire, so
+        // these reactive-path assertions isolate the on-401 behaviour.
+        authState.token = FRESH_TOKEN;
     });
 
     it('refreshes once and retries the request on a 401, then returns data', async () => {
@@ -142,5 +166,110 @@ describe('fetchWithAuth — ROK-1367 transparent on-401 refresh', () => {
         // Refresh WAS attempted (once) but failed — so no retry fired.
         expect(refreshCalls).toBe(1);
         expect(dataCalls).toBe(1);
+    });
+});
+
+describe('fetchWithAuth — ROK-1409 pre-flight staleness gate', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        authState.token = null;
+    });
+
+    it('refreshes ONCE up front for an expired token and sends the fresh token, zero 401 cycles', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        authState.token = EXPIRED_TOKEN;
+        let dataCalls = 0;
+        let refreshCalls = 0;
+        let firstAuthHeader: string | null = null;
+        server.use(
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                // The pre-flight refresh must complete BEFORE the first data
+                // request goes out.
+                expect(dataCalls).toBe(0);
+                authState.token = 'fresh-token';
+                return HttpResponse.json({ access_token: 'fresh-token' });
+            }),
+            http.get(`${API_BASE}/thing`, ({ request }) => {
+                dataCalls += 1;
+                firstAuthHeader ??= request.headers.get('authorization');
+                return HttpResponse.json({ ok: true });
+            }),
+        );
+
+        const result = await fetchApi<{ ok: boolean }>('/thing');
+
+        expect(result).toEqual({ ok: true });
+        expect(refreshCalls).toBe(1);
+        // No 401 → exactly one data request, carrying the freshly-minted token.
+        expect(dataCalls).toBe(1);
+        expect(firstAuthHeader).toBe('Bearer fresh-token');
+    });
+
+    it('does NOT pre-flight refresh for a still-fresh token', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        authState.token = FRESH_TOKEN;
+        let dataCalls = 0;
+        let refreshCalls = 0;
+        server.use(
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                return HttpResponse.json({ access_token: 'nope' });
+            }),
+            http.get(`${API_BASE}/thing`, () => {
+                dataCalls += 1;
+                return HttpResponse.json({ ok: true });
+            }),
+        );
+
+        await fetchApi('/thing');
+
+        expect(refreshCalls).toBe(0);
+        expect(dataCalls).toBe(1);
+    });
+
+    it('does NOT refresh while impersonating (guard returns null), proceeds with the stored token', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token');
+        authState.token = EXPIRED_TOKEN;
+        let dataCalls = 0;
+        let refreshCalls = 0;
+        server.use(
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                return HttpResponse.json({ access_token: 'should-not-happen' });
+            }),
+            http.get(`${API_BASE}/thing`, ({ request }) => {
+                dataCalls += 1;
+                return HttpResponse.json({
+                    header: request.headers.get('authorization'),
+                });
+            }),
+        );
+
+        const result = await fetchApi<{ header: string }>('/thing');
+
+        // ensureFreshToken self-guards impersonation → no network refresh; the
+        // request still went out on the (expired) impersonated bearer.
+        expect(refreshCalls).toBe(0);
+        expect(dataCalls).toBe(1);
+        expect(result.header).toBe(`Bearer ${EXPIRED_TOKEN}`);
+    });
+
+    it('does NOT pre-flight for an anonymous visitor (no auth method) even with a stale token', async () => {
+        // No AUTH_METHOD_KEY set.
+        authState.token = EXPIRED_TOKEN;
+        let refreshCalls = 0;
+        server.use(
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                return HttpResponse.json({ access_token: 'nope' });
+            }),
+            http.get(`${API_BASE}/thing`, () => HttpResponse.json({ ok: true })),
+        );
+
+        await fetchApi('/thing');
+
+        expect(refreshCalls).toBe(0);
     });
 });

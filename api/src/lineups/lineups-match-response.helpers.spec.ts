@@ -3,9 +3,37 @@
  * Exercises the pure `mapCarriedForwardEntries` mapper that produces the
  * decided-view chip strip payload from `community_lineup_entries` rows.
  */
-import { mapCarriedForwardEntries } from './lineups-match-response.helpers';
+import {
+  mapCarriedForwardEntries,
+  mapMatchToDto,
+  resolvePlayerCap,
+} from './lineups-match-response.helpers';
+import type { findMatchesByLineup } from './lineups-match-query.helpers';
 
 const NOW = new Date('2026-05-12T00:00:00Z');
+
+type MatchRow = Awaited<ReturnType<typeof findMatchesByLineup>>[0];
+
+function makeMatchRow(overrides: Partial<MatchRow> = {}): MatchRow {
+  return {
+    id: 1,
+    lineupId: 1,
+    gameId: 42,
+    status: 'scheduling',
+    thresholdMet: true,
+    voteCount: 5,
+    votePercentage: '60',
+    fitType: 'normal',
+    linkedEventId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    gameName: 'Valheim',
+    gameCoverUrl: null,
+    gamePlayerCount: null,
+    gameCooptimusOnlineMax: null,
+    ...overrides,
+  };
+}
 
 function makeEntry(overrides: {
   id: number;
@@ -82,5 +110,60 @@ describe('mapCarriedForwardEntries', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].voteCount).toBe(0);
+  });
+});
+
+describe('resolvePlayerCap — ROK-1397 precedence (ROK-1411)', () => {
+  it('prefers cooptimusOnlineMax over player_count.max when it is > 0', () => {
+    expect(resolvePlayerCap(6, 10)).toBe(6);
+  });
+
+  it('falls back to player_count.max when cooptimusOnlineMax is 0 (PvP/MMO zero-caveat)', () => {
+    // A ZERO cooptimus value is a "no online co-op" capability claim, not a
+    // capacity of zero — player_count stays authoritative (games.ts:152-159).
+    expect(resolvePlayerCap(0, 10)).toBe(10);
+  });
+
+  it('uses cooptimusOnlineMax when player_count is null', () => {
+    expect(resolvePlayerCap(6, null)).toBe(6);
+  });
+
+  it('returns null when both sources are null', () => {
+    expect(resolvePlayerCap(null, null)).toBeNull();
+  });
+});
+
+describe('mapMatchToDto — playerCap population (ROK-1411)', () => {
+  it('sets playerCap to null when the game has no cap sources', () => {
+    const dto = mapMatchToDto(
+      makeMatchRow({ gamePlayerCount: null, gameCooptimusOnlineMax: null }),
+      [],
+    );
+
+    expect(dto.playerCap).toBeNull();
+  });
+
+  it('sets playerCap to the game player_count max when cooptimus is absent', () => {
+    const dto = mapMatchToDto(
+      makeMatchRow({
+        gamePlayerCount: { min: 1, max: 10 },
+        gameCooptimusOnlineMax: null,
+      }),
+      [],
+    );
+
+    expect(dto.playerCap).toBe(10);
+  });
+
+  it('sets playerCap from cooptimusOnlineMax when it wins the precedence', () => {
+    const dto = mapMatchToDto(
+      makeMatchRow({
+        gamePlayerCount: { min: 1, max: 10 },
+        gameCooptimusOnlineMax: 4,
+      }),
+      [],
+    );
+
+    expect(dto.playerCap).toBe(4);
   });
 });

@@ -143,7 +143,7 @@ function OtherMatches({
 
 function useDecidedState(lineup: LineupDetailResponseDto) {
   const { user } = useAuth();
-  const { data } = useLineupMatches(lineup.id);
+  const { data, isLoading } = useLineupMatches(lineup.id);
   const { mine, others } = useMemo(
     () => partitionMatches(data, user?.id),
     [data, user?.id],
@@ -163,32 +163,87 @@ function useDecidedState(lineup: LineupDetailResponseDto) {
     leftover,
     hero,
     carriedForward: data?.carriedForward ?? [],
+    isLoading,
   };
 }
 
-export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
-  const { mine, others, leftover, hero, carriedForward } =
-    useDecidedState(lineup);
-  // ROK-1302: a scheduling-opted-out lineup terminates at Decided — drop the
-  // 4-step framing + "before scheduling" copy so it doesn't read as a broken
-  // scheduling phase.
-  const terminal = lineup.includeSchedulingPhase === false;
+/**
+ * ROK-1411: hero-only loading state. The empty-state hero copy ("No matches
+ * were generated…" / "You're not in any matches yet.") is computed from
+ * `data`, which is undefined mid-fetch — so without this branch it flashes
+ * before the matches resolve. We render the hero shell with neutral loading
+ * copy plus a skeleton match strip, and defer the real (empty or populated)
+ * copy until the query settles.
+ */
+function DecidedLoading({
+  lineup,
+  terminal,
+}: {
+  lineup: LineupDetailResponseDto;
+  terminal: boolean;
+}): JSX.Element {
   return (
     <div data-testid="decided-composite-view">
       <JourneyHero
         phase="decided"
         tone="action"
         badge={terminal ? 'Decided' : 'Step 3 of 4 · Decided'}
-        task={hero.task}
+        task="Loading matches…"
         action={<LineupParticipantsButton lineupId={lineup.id} />}
-        sub={<LineupHeroMeta lineup={lineup} phaseContext={hero.sub} />}
-        hint={
-          terminal
-            ? 'Tap any game to learn more.'
-            : 'Tap any game to learn more before scheduling.'
-        }
+        sub={<LineupHeroMeta lineup={lineup} />}
         hideSchedulePhase={terminal}
       />
+      <div
+        data-testid="decided-loading"
+        className="space-y-2 mt-3 animate-pulse"
+        aria-hidden="true"
+      >
+        {[0, 1].map((i) => (
+          <div key={i} className="h-16 bg-panel rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DecidedHero({
+  lineup,
+  terminal,
+  hero,
+}: {
+  lineup: LineupDetailResponseDto;
+  terminal: boolean;
+  hero: { task: string; sub: string };
+}): JSX.Element {
+  return (
+    <JourneyHero
+      phase="decided"
+      tone="action"
+      badge={terminal ? 'Decided' : 'Step 3 of 4 · Decided'}
+      task={hero.task}
+      action={<LineupParticipantsButton lineupId={lineup.id} />}
+      sub={<LineupHeroMeta lineup={lineup} phaseContext={hero.sub} />}
+      hint={
+        terminal
+          ? 'Tap any game to learn more.'
+          : 'Tap any game to learn more before scheduling.'
+      }
+      hideSchedulePhase={terminal}
+    />
+  );
+}
+
+export function DecidedView({ lineup }: DecidedViewProps): JSX.Element {
+  const { mine, others, leftover, hero, carriedForward, isLoading } =
+    useDecidedState(lineup);
+  // ROK-1302: a scheduling-opted-out lineup terminates at Decided — drop the
+  // 4-step framing + "before scheduling" copy so it doesn't read as a broken
+  // scheduling phase.
+  const terminal = lineup.includeSchedulingPhase === false;
+  if (isLoading) return <DecidedLoading lineup={lineup} terminal={terminal} />;
+  return (
+    <div data-testid="decided-composite-view">
+      <DecidedHero lineup={lineup} terminal={terminal} hero={hero} />
       <YourMatches
         matches={mine}
         lineupId={lineup.id}

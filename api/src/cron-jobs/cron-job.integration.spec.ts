@@ -222,6 +222,50 @@ function describeCronJob() {
       expect(job.lastRunAt!.getTime()).toBeGreaterThan(staleDate.getTime());
     });
 
+    it('flushes multiple queued liveness updates in one cycle (ROK-1414)', async () => {
+      const staleDate = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
+      const specs = [
+        { name: 'test:batch-a', cronExpression: '0 * * * *' },
+        { name: 'test:batch-b', cronExpression: '*/15 * * * *' },
+        { name: 'test:batch-c', cronExpression: '0 0 * * *' },
+      ];
+      const ids: number[] = [];
+      for (const s of specs) {
+        ids.push(
+          await insertTestJob(testApp, s.name, {
+            lastRunAt: staleDate,
+            cronExpression: s.cronExpression,
+          }),
+        );
+      }
+      const cronJobService = testApp.app.get(CronJobService);
+
+      // Queue a liveness heartbeat for each job (no-op handlers, all stale).
+      for (const s of specs) {
+        await cronJobService.executeWithTracking(s.name, () =>
+          Promise.resolve(false),
+        );
+      }
+
+      // One flush cycle must persist ALL queued jobs correctly.
+      await cronJobService.flushLastRunUpdates();
+
+      const jobs = await testApp.db
+        .select()
+        .from(schema.cronJobs)
+        .where(eq(schema.cronJobs.source, 'core'));
+      const byId = new Map(jobs.map((j) => [j.id, j]));
+
+      for (const id of ids) {
+        const job = byId.get(id)!;
+        expect(job.lastRunAt).not.toBeNull();
+        expect(job.lastRunAt!.getTime()).toBeGreaterThan(staleDate.getTime());
+        // next_run_at is derived per-job from its own cron expression.
+        expect(job.nextRunAt).not.toBeNull();
+        expect(job.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
+      }
+    });
+
     it('should still fully track completed runs', async () => {
       const jobId = await insertTestJob(testApp, 'test:completed-tracked');
       const cronJobService = testApp.app.get(CronJobService);

@@ -1,8 +1,9 @@
 /**
  * Single match card for the Decided composite layout (ROK-1299).
- * Renders a GameRef row (drawer trigger) plus an optional "Pick a time →"
- * link to the schedule route. The CTA stops propagation so the drawer does
- * not open when the user clicks it.
+ * Renders a GameRef row (drawer trigger) plus an optional CTA — either a
+ * "View Event →" link when the match is already linked to an event, or a
+ * "Pick a time →" link to the schedule route. The CTA stops propagation so
+ * the drawer does not open when the user clicks it.
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -21,18 +22,37 @@ interface MatchCardProps {
   schedulingEnabled: boolean;
 }
 
-// Sub-line emits "personal context only" — the decided-view data does not carry
-// a per-match player cap (GroupedMatchesResponseDto.matchThreshold is the
-// grouping-algorithm percentage 0–100, not a player count), so "X of Y players"
-// is intentionally absent. Restoring it requires extending MatchDetailResponseDto
-// with a per-match playerCap — tracked as a follow-up.
-function matchSubLine(memberCount: number, isPersonal: boolean): string {
+// ROK-1411: `match.playerCap` (from games.player_count.max) is the "X of Y
+// players" denominator. When it is null the game has no known cap, so we fall
+// back to the personal-context copy ("You + N others") / raw count
+// ("N players") that carries no false denominator.
+function matchSubLine(
+  memberCount: number,
+  isPersonal: boolean,
+  playerCap: number | null,
+): string {
+  if (playerCap != null) {
+    const base = `${memberCount} of ${playerCap} players`;
+    return memberCount >= playerCap ? `${base} · Group is full` : base;
+  }
   if (!isPersonal) {
     return `${memberCount} ${memberCount === 1 ? 'player' : 'players'}`;
   }
   const others = Math.max(0, memberCount - 1);
   if (others === 0) return 'Just you so far';
   return `You + ${others} ${others === 1 ? 'other' : 'others'}`;
+}
+
+function ViewEventCta({ eventId }: { eventId: number }): JSX.Element {
+  return (
+    <Link
+      to={`/events/${eventId}`}
+      onClick={(e) => e.stopPropagation()}
+      className="mt-2 ml-12 inline-block px-3 py-1 text-xs font-medium text-emerald-300 bg-emerald-600/15 border border-emerald-500/30 rounded-md hover:bg-emerald-600/25 transition-colors"
+    >
+      View Event &rarr;
+    </Link>
+  );
 }
 
 function PickATimeCta({
@@ -53,6 +73,28 @@ function PickATimeCta({
   );
 }
 
+// ROK-1411: a match with a `linkedEventId` already resolved into a concrete
+// event, so we link straight to it and skip the schedule poll. This overrides
+// the ROK-1302 opt-out gating: an opted-out lineup (`schedulingEnabled=false`)
+// has no poll — "Pick a time" is hidden — but if such a match was still turned
+// into an event, "View Event" must surface. Poll-vs-event is exclusive; the
+// linked event always wins.
+function MatchCta({
+  match,
+  lineupId,
+  schedulingEnabled,
+}: {
+  match: MatchDetailResponseDto;
+  lineupId: number;
+  schedulingEnabled: boolean;
+}): JSX.Element | null {
+  if (match.linkedEventId != null) {
+    return <ViewEventCta eventId={match.linkedEventId} />;
+  }
+  if (!schedulingEnabled) return null;
+  return <PickATimeCta lineupId={lineupId} matchId={match.id} />;
+}
+
 export function MatchCard({
   match,
   lineupId,
@@ -66,10 +108,14 @@ export function MatchCard({
         gameId={match.gameId}
         name={match.gameName}
         coverUrl={match.gameCoverUrl}
-        sub={matchSubLine(match.members.length, isPersonal)}
+        sub={matchSubLine(match.members.length, isPersonal, match.playerCap)}
       />
-      {isPersonal && schedulingEnabled && (
-        <PickATimeCta lineupId={lineupId} matchId={match.id} />
+      {isPersonal && (
+        <MatchCta
+          match={match}
+          lineupId={lineupId}
+          schedulingEnabled={schedulingEnabled}
+        />
       )}
     </div>
   );

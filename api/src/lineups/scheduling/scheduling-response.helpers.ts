@@ -41,6 +41,7 @@ export function buildMatchDetailDto(
   gameName: string,
   gameCoverUrl: string | null,
   lineupCreatedById: number | null = null,
+  playerCap: number | null = null,
 ): MatchDetailResponseDto {
   return {
     id: match.id,
@@ -57,6 +58,8 @@ export function buildMatchDetailDto(
     updatedAt: match.updatedAt.toISOString(),
     gameName,
     gameCoverUrl,
+    // ROK-1411: per-game player cap (games.player_count.max); null when unknown.
+    playerCap,
     ...(lineupCreatedById !== null ? { lineupCreatedById } : {}),
     members: members.map((m) => ({
       id: m.id,
@@ -136,6 +139,7 @@ export function buildPollResponse(
     gameName?: string;
     gameCoverUrl?: string | null;
     lineupCreatedById?: number | null;
+    playerCap?: number | null;
   },
   members: MatchMemberRow[],
   slots: SlotRow[],
@@ -147,6 +151,7 @@ export function buildPollResponse(
   const gameName = match.gameName ?? 'Unknown';
   const gameCoverUrl = match.gameCoverUrl ?? null;
   const lineupCreatedById = match.lineupCreatedById ?? null;
+  const playerCap = match.playerCap ?? null;
 
   return {
     match: buildMatchDetailDto(
@@ -155,6 +160,7 @@ export function buildPollResponse(
       gameName,
       gameCoverUrl,
       lineupCreatedById,
+      playerCap,
     ),
     slots: mapSlotsWithVotes(slots, votes),
     myVotedSlotIds: extractMyVotedSlotIds(votes, userId),

@@ -2,6 +2,7 @@
  * Structured DM embed builder for subscribed_game notifications (ROK-845).
  * Mirrors the channel embed layout from discord-embed.factory.ts.
  */
+import { absoluteEmbedImageUrl } from '../discord-bot/services/embed-thumbnail.helpers';
 import { EmbedBuilder } from 'discord.js';
 import { formatDurationMs } from '../discord-bot/utils/format-duration';
 import { toStr } from './notification-embed.helpers';
@@ -24,8 +25,11 @@ export function applySubscribedGameEmbed(
     lines.push(`🔊 <#${toStr(payload.voiceChannelId)}>`);
   }
   if (lines.length > 0) embed.setDescription(lines.join('\n'));
-  if (typeof payload.gameCoverUrl === 'string' && payload.gameCoverUrl)
-    embed.setThumbnail(payload.gameCoverUrl);
+  const thumbnail =
+    typeof payload.gameCoverUrl === 'string'
+      ? absoluteEmbedImageUrl(payload.gameCoverUrl)
+      : null;
+  if (thumbnail) embed.setThumbnail(thumbnail);
 }
 
 function computeDurationSuffix(start: unknown, end: unknown): string {

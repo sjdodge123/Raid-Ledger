@@ -2,6 +2,7 @@
  * Invite embed helpers for DiscordEmbedFactory.
  * Extracted from discord-embed.factory.ts for file size compliance (ROK-719).
  */
+import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { EmbedBuilder } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot.constants';
 import type { EmbedEventData, EmbedContext } from './discord-embed.factory';
@@ -25,7 +26,8 @@ export function createInviteEmbed(
 
   const clientUrl = context.clientUrl || process.env.CLIENT_URL;
   if (clientUrl) embed.setURL(`${clientUrl}/events/${event.id}`);
-  if (event.game?.coverUrl) embed.setThumbnail(event.game.coverUrl);
+  const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
+  if (thumbnail) embed.setThumbnail(thumbnail);
 
   return embed;
 }

@@ -273,29 +273,10 @@ export function extractRegistryJobMeta(
   };
 }
 
-/** Flush pending last_run_at updates to DB. */
-export async function flushPendingUpdates(
-  db: Db,
-  pending: Map<number, { lastRunAt: Date; cronExpression: string }>,
-  logger: Logger,
-): Promise<void> {
-  if (pending.size === 0) return;
-  const updates = new Map(pending);
-  pending.clear();
-  const now = new Date();
-  for (const [jobId, { lastRunAt, cronExpression }] of updates) {
-    try {
-      const nextRunAt = computeNextRun(cronExpression);
-      await db
-        .update(schema.cronJobs)
-        .set({ lastRunAt, nextRunAt, updatedAt: now })
-        .where(eq(schema.cronJobs.id, jobId));
-    } catch (err) {
-      logger.warn(`Failed to flush last_run_at for job ${jobId}: ${err}`);
-    }
-  }
-  logger.debug(`Flushed last_run_at for ${updates.size} cron job(s)`);
-}
+// ROK-1414: the batched last_run_at flusher lives in cron-job.flush.helpers.ts
+// (extracted to keep this file under the 300-line limit); re-exported here so
+// existing call sites and specs keep their import path.
+export { flushPendingUpdates } from './cron-job.flush.helpers';
 
 /** Record a skipped trigger for a job not in the SchedulerRegistry. */
 export async function recordSkippedTrigger(

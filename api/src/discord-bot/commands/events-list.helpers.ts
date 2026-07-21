@@ -1,3 +1,4 @@
+import { absoluteEmbedImageUrl } from '../services/embed-thumbnail.helpers';
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -134,7 +135,8 @@ function buildDetailEmbedBody(event: EventResponseDto): EmbedBuilder {
     .setDescription(descriptionLines.join('\n'))
     .setTimestamp();
 
-  if (event.game?.coverUrl) embed.setThumbnail(event.game.coverUrl);
+  const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
+  if (thumbnail) embed.setThumbnail(thumbnail);
   return embed;
 }
 
