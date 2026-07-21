@@ -11,9 +11,13 @@ import * as schema from './schema';
 const PG_IDENTIFIER_LIMIT = 63;
 
 describe('drizzle constraint identifier lengths (ROK-1387)', () => {
+  // Cast via unknown: schema's exports are each a concrete
+  // PgTableWithColumns<...> whose specific generics don't flow back into the
+  // bare PgTable that getTableConfig accepts (TS2677/TS2345 under full tsc);
+  // the instanceof filter is the real runtime guarantee.
   const tables = Object.values(schema).filter(
-    (value): value is PgTable => value instanceof PgTable,
-  );
+    (value) => value instanceof PgTable,
+  ) as unknown as PgTable[];
 
   it('finds tables to audit', () => {
     expect(tables.length).toBeGreaterThan(30);
