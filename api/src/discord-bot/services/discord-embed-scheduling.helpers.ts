@@ -2,6 +2,7 @@
  * Helpers for building scheduling poll Discord embeds (ROK-1014).
  * Extracted to keep the factory file within the 300-line limit.
  */
+import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -53,8 +54,9 @@ export function buildSchedulingPollEmbedBody(
   }
   embed.setDescription(lines.join('\n'));
 
-  if (data.gameCoverUrl) {
-    embed.setThumbnail(data.gameCoverUrl);
+  const thumbnail = absoluteEmbedImageUrl(data.gameCoverUrl);
+  if (thumbnail) {
+    embed.setThumbnail(thumbnail);
   }
 
   return embed;

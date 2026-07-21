@@ -2,6 +2,7 @@
  * Discord notification embed helpers.
  * Extracted from discord-notification-embed.service.ts for file size compliance (ROK-711).
  */
+import { absoluteEmbedImageUrl } from '../discord-bot/services/embed-thumbnail.helpers';
 import { EmbedBuilder } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
@@ -164,8 +165,12 @@ export function addTypeSpecificFields(
     applySubscribedGameEmbed(embed, payload);
     return;
   }
-  if (typeof payload.gameCoverUrl === 'string' && payload.gameCoverUrl) {
-    embed.setThumbnail(payload.gameCoverUrl);
+  const thumbnail =
+    typeof payload.gameCoverUrl === 'string'
+      ? absoluteEmbedImageUrl(payload.gameCoverUrl)
+      : null;
+  if (thumbnail) {
+    embed.setThumbnail(thumbnail);
   }
   if (type === 'roster_reassigned') {
     addRosterReassignedFields(embed, payload);

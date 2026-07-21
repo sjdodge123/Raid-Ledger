@@ -1,3 +1,4 @@
+import { absoluteEmbedImageUrl } from '../discord-bot/services/embed-thumbnail.helpers';
 import { eq, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -54,8 +55,8 @@ async function buildPollEmbed(
     params.durationHours,
   );
   embed.setDescription(bodyLines.join('\n'));
-  if (params.details?.gameCoverUrl)
-    embed.setThumbnail(params.details.gameCoverUrl);
+  const thumbnail = absoluteEmbedImageUrl(params.details?.gameCoverUrl);
+  if (thumbnail) embed.setThumbnail(thumbnail);
   embed.setFooter({ text: 'Raid Ledger' }).setTimestamp();
   return embed;
 }

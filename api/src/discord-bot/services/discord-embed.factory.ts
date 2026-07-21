@@ -1,3 +1,4 @@
+import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { Injectable } from '@nestjs/common';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import {
@@ -282,7 +283,8 @@ export class DiscordEmbedFactory {
       bodyLines.push(roster);
     }
     embed.setDescription(bodyLines.join('\n'));
-    if (event.game?.coverUrl) embed.setThumbnail(event.game.coverUrl);
+    const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
+    if (thumbnail) embed.setThumbnail(thumbnail);
     embed.setFooter({ text: context.communityName || 'Raid Ledger' });
     embed.setTimestamp();
     return embed;
