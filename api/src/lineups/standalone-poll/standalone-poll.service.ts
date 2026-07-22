@@ -26,6 +26,7 @@ import {
   insertSchedulingMatch,
   insertMatchMembers,
   countMatchMembers,
+  countActiveEventSignups,
   findActiveStandalonePolls,
   completeStandalonePoll,
   stampReschedulingPollId,
@@ -228,7 +229,7 @@ export class StandalonePollService {
       lineup.id,
       input.gameId,
       input.linkedEventId,
-      input.minVoteThreshold,
+      await this.resolveMinVoteThreshold(input),
     );
     if (input.linkedEventId) {
       await this.linkEventToPoll(input.linkedEventId, match.id);
@@ -252,6 +253,23 @@ export class StandalonePollService {
     );
     const memberCount = await countMatchMembers(this.db, match.id);
     return this.buildResponse(match.id, lineup.id, game, memberCount);
+  }
+
+  /**
+   * Resolve the vote threshold for a new poll. Linked (reschedule) polls
+   * default to the linked event's active roster size — the ROK-1015
+   * ready-for-review cron only considers polls with a non-null threshold, so
+   * a NULL default meant the creator was never notified. Explicit input
+   * always wins; an empty roster keeps null (nothing meaningful to wait for).
+   */
+  private async resolveMinVoteThreshold(
+    input: CreatePollInput,
+  ): Promise<number | undefined> {
+    if (input.minVoteThreshold !== undefined || !input.linkedEventId) {
+      return input.minVoteThreshold;
+    }
+    const count = await countActiveEventSignups(this.db, input.linkedEventId);
+    return count > 0 ? count : undefined;
   }
 
   /** Validate game exists, throw 404 if not. */

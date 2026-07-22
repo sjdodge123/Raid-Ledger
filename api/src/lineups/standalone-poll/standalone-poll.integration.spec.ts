@@ -101,10 +101,14 @@ function postSchedulingPoll(token: string, body: Record<string, unknown>) {
     .send(body);
 }
 
-async function addSignup(eventId: number, userId: number) {
+async function addSignup(
+  eventId: number,
+  userId: number,
+  status = 'signed_up',
+) {
   const [signup] = await testApp.db
     .insert(schema.eventSignups)
-    .values({ eventId, userId, status: 'signed_up' })
+    .values({ eventId, userId, status })
     .returning();
   return signup;
 }
@@ -393,6 +397,97 @@ function describeLinkedEvent() {
   });
 }
 describe('POST /scheduling-polls — linkedEventId', describeLinkedEvent);
+
+// ── Linked polls default min_vote_threshold to the roster size ───────
+// A NULL threshold makes the ROK-1015 "poll ready for review" cron skip the
+// poll entirely (WHERE min_vote_threshold IS NOT NULL), so the creator of a
+// reschedule poll was never notified. Linked polls must default to the
+// active roster size of the linked event.
+
+function describeLinkedPollThreshold() {
+  it('should default min_vote_threshold to the linked event active roster size', async () => {
+    const event = await createEvent('Threshold Default', testApp.seed.game.id);
+    const m1 = await loginAsMember('threshold-signed-1');
+    const m2 = await loginAsMember('threshold-signed-2');
+    const m3 = await loginAsMember('threshold-tentative');
+    const declined = await loginAsMember('threshold-declined');
+    await addSignup(event.id, m1.userId);
+    await addSignup(event.id, m2.userId);
+    await addSignup(event.id, m3.userId, 'tentative');
+    // Declined and anonymous Discord signups are not polled on a reschedule —
+    // neither may count toward the threshold.
+    await addSignup(event.id, declined.userId, 'declined');
+    await testApp.db.insert(schema.eventSignups).values({
+      eventId: event.id,
+      discordUserId: 'anon-threshold-user',
+      status: 'signed_up',
+    });
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+    expect(res.status).toBe(201);
+
+    const [match] = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, res.body.id as number));
+    expect(match.minVoteThreshold).toBe(3);
+  });
+
+  it('should respect an explicit minVoteThreshold on a linked poll', async () => {
+    const event = await createEvent('Threshold Explicit', testApp.seed.game.id);
+    const member = await loginAsMember('threshold-explicit');
+    await addSignup(event.id, member.userId);
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+      minVoteThreshold: 5,
+    });
+    expect(res.status).toBe(201);
+
+    const [match] = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, res.body.id as number));
+    expect(match.minVoteThreshold).toBe(5);
+  });
+
+  it('should keep min_vote_threshold NULL for a poll without linkedEventId', async () => {
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+    });
+    expect(res.status).toBe(201);
+
+    const [match] = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, res.body.id as number));
+    expect(match.minVoteThreshold).toBeNull();
+  });
+
+  it('should keep min_vote_threshold NULL when the linked event has no active signups', async () => {
+    const event = await createEvent('Threshold Empty', testApp.seed.game.id);
+
+    const res = await postSchedulingPoll(adminToken, {
+      gameId: testApp.seed.game.id,
+      linkedEventId: event.id,
+    });
+    expect(res.status).toBe(201);
+
+    const [match] = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, res.body.id as number));
+    expect(match.minVoteThreshold).toBeNull();
+  });
+}
+describe(
+  'POST /scheduling-polls — linked poll vote threshold',
+  describeLinkedPollThreshold,
+);
 
 // ── ROK-977 AC6: Any authenticated user can create ───────────────────
 
