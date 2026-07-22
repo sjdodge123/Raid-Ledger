@@ -315,3 +315,26 @@ export async function countMatchMembers(
     .where(eq(schema.communityLineupMatchMembers.matchId, matchId));
   return row?.count ?? 0;
 }
+
+/**
+ * Count active RL-member signups on an event — the reschedule-poll audience.
+ * Mirrors findRosterMembers (standalone-poll-notification.service.ts): only
+ * signed_up/tentative rows with a user_id (anonymous Discord signups can't
+ * vote, so they don't count toward a threshold).
+ */
+export async function countActiveEventSignups(
+  db: Db,
+  eventId: number,
+): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        inArray(schema.eventSignups.status, ['signed_up', 'tentative']),
+        sql`${schema.eventSignups.userId} IS NOT NULL`,
+      ),
+    );
+  return row?.count ?? 0;
+}
