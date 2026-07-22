@@ -6,9 +6,10 @@
  *   - past-time guard (toast + abort),
  *   - majority-voter threshold → confirm modal for an early lock,
  *   - reschedule-vs-create branch: `linkedEventId != null` reschedules the
- *     linked event then `completeStandalonePoll(matchId)`; otherwise navigate
- *     to `/events/new?gameId&startTime&matchId` (verbatim target from
- *     `CreateFromSlot::performNavigate`).
+ *     linked event then `completeStandalonePoll(matchId, eventId, startTime)`
+ *     so the backend auto-signs-up/re-rosters the slot's voters (ROK-1031);
+ *     otherwise navigate to `/events/new?gameId&startTime&matchId` (verbatim
+ *     target from `CreateFromSlot::performNavigate`).
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -56,12 +57,16 @@ export function useSchedulingLock(
       return;
     }
     if (match.linkedEventId != null) {
+      // Capture now: property narrowing doesn't survive into the callback.
+      const eventId = match.linkedEventId;
       const end = new Date(start.getTime() + TWO_HOURS_MS);
       reschedule.mutate(
         { startTime: start.toISOString(), endTime: end.toISOString() },
         {
           onSuccess: () => {
-            void completeStandalonePoll(matchId);
+            // startTime must be the same instant as slot.proposedTime — the
+            // backend matches it to a slot by Date-getTime equality (ROK-1031).
+            void completeStandalonePoll(matchId, eventId, start.toISOString());
             toast.success('Event rescheduled');
           },
           onError: (err) =>
