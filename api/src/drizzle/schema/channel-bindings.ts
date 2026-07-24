@@ -40,14 +40,14 @@ export const channelBindings = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
-  (table) => ({
-    guildChannelSeriesUnique: uniqueIndex(
-      'channel_bindings_guild_channel_series_unique',
-    ).on(table.guildId, table.channelId, table.recurrenceGroupId),
-    guildIdx: index('idx_channel_bindings_guild').on(table.guildId),
-    gameIdx: index('idx_channel_bindings_game').on(table.gameId),
-    recurrenceGroupIdx: index('idx_channel_bindings_recurrence_group').on(
+  (table) => [
+    uniqueIndex('channel_bindings_guild_channel_series_unique').on(
+      table.guildId,
+      table.channelId,
       table.recurrenceGroupId,
     ),
-  }),
+    index('idx_channel_bindings_guild').on(table.guildId),
+    index('idx_channel_bindings_game').on(table.gameId),
+    index('idx_channel_bindings_recurrence_group').on(table.recurrenceGroupId),
+  ],
 );
