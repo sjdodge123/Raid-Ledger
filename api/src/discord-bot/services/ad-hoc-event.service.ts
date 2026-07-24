@@ -18,14 +18,13 @@ import { VoiceAttendanceService } from './voice-attendance.service';
 import { APP_EVENT_EVENTS } from '../discord-bot.constants';
 import type { AdHocRosterResponseDto } from '@raid-ledger/contract';
 import {
-  findActiveScheduledEvent,
-  extendScheduledEventWindow,
   autoSignupParticipant,
   recoverLiveEvents,
   getEventById,
   setEventEndTime,
   claimAndEndEvent,
 } from './ad-hoc-event.helpers';
+import { suppressScheduled } from './ad-hoc-suppression.helpers';
 import {
   handleJoinExisting,
   spawnNewEvent,
@@ -253,17 +252,7 @@ export class AdHocEventService implements OnModuleInit {
     effectiveGameId: number | null | undefined,
     channelId?: string,
   ): Promise<boolean> {
-    const now = new Date();
-    const scheduled = await findActiveScheduledEvent(
-      this.db,
-      bindingId,
-      effectiveGameId,
-      now,
-      channelId,
-    );
-    if (!scheduled) return false;
-    await extendScheduledEventWindow(this.db, scheduled.id, null, now);
-    return true;
+    return suppressScheduled(this.db, bindingId, effectiveGameId, channelId);
   }
 
   private async processLeave(

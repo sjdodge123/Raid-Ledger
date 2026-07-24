@@ -2,26 +2,41 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
+import {
+  buildBindingClause,
+  buildTimeConditions,
+} from './ad-hoc-suppression.helpers';
 
-// Re-export from extracted file for backward compatibility
+// Re-export from extracted files for backward compatibility.
 export { autoSignupParticipant } from './ad-hoc-event.signup-helpers';
+export {
+  buildAnchoredGameClause,
+  buildBindingClause,
+  buildTimeConditions,
+  extendScheduledEventWindow,
+  planSuppressionExtension,
+  SUPPRESSION_WINDOW_MS,
+  SUPPRESSION_REFRESH_THRESHOLD_MS,
+  SUPPRESSION_MAX_EXTENSION_MS,
+} from './ad-hoc-suppression.helpers';
 
-/** Build the time-window WHERE conditions for scheduled event suppression. */
-function buildTimeConditions(now: Date) {
-  const lookbackMs = 30 * 60 * 1000;
-  const lookbackTime = new Date(now.getTime() - lookbackMs);
-  return [
-    eq(tables.events.isAdHoc, false),
-    sql`${tables.events.cancelledAt} IS NULL`,
-    sql`lower(${tables.events.duration}) <= ${now.toISOString()}::timestamptz`,
-    sql`(upper(${tables.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz OR ${tables.events.extendedUntil} >= ${now.toISOString()}::timestamptz)`,
-  ] as const;
+/**
+ * Projection returned by findActiveScheduledEvent (ROK-1418 restored the
+ * shape ROK-968 narrowed): the matched event's id, its current suppression
+ * window (nullable), its scheduled end (`upper(duration)`), and which term
+ * matched. `matchedBy` is informational for the `[voice-spawn]` debug log.
+ */
+export interface ActiveScheduledEvent {
+  id: number;
+  extendedUntil: Date | null;
+  scheduledEnd: Date;
+  matchedBy: 'binding' | 'game' | 'sibling';
 }
 
 /**
  * Check if a scheduled (non-ad-hoc) event is currently active for the same
  * game/binding, suppressing ad-hoc spawns while scheduled events run.
- * Returns the matching scheduled event row or undefined.
+ * Returns the matching scheduled event projection or undefined.
  */
 export async function findActiveScheduledEvent(
   db: PostgresJsDatabase<typeof schema>,
@@ -29,62 +44,30 @@ export async function findActiveScheduledEvent(
   effectiveGameId: number | null | undefined,
   now: Date,
   channelId?: string,
-): Promise<{ id: number } | undefined> {
+): Promise<ActiveScheduledEvent | undefined> {
   const bindingClause = buildBindingClause(
     bindingId,
     effectiveGameId,
     channelId,
   );
   const [match] = await db
-    .select({ id: tables.events.id })
+    .select({
+      id: tables.events.id,
+      extendedUntil: tables.events.extendedUntil,
+      // `duration` is a tsrange (timestamp WITHOUT tz); its bounds come back as
+      // unparsed strings, so decode UTC-safe like the tsrange fromDriver does
+      // (append `Z`) rather than letting `new Date` assume the local zone.
+      scheduledEnd: sql<Date>`upper(${tables.events.duration})`.mapWith(
+        (value: string) => new Date(value.endsWith('Z') ? value : `${value}Z`),
+      ),
+      matchedBy: sql<
+        'binding' | 'game' | 'sibling'
+      >`CASE WHEN ${tables.events.channelBindingId} = ${bindingId} THEN 'binding' WHEN ${tables.events.gameId} = ${effectiveGameId ?? null} THEN 'game' ELSE 'sibling' END`,
+    })
     .from(tables.events)
     .where(and(bindingClause, ...buildTimeConditions(now)))
     .limit(1);
   return match;
-}
-
-/** Build the binding/game/channel OR clause for suppression. */
-function buildBindingClause(
-  bindingId: string,
-  effectiveGameId: number | null | undefined,
-  channelId?: string,
-) {
-  // ROK-1390: match sibling bindings on the same physical voice channel that are
-  // either the game-voice-monitor purpose OR series-linked (a series bind may sit
-  // under a general-lobby purpose after a bind flip). Reaching series siblings by
-  // recurrence_group_id keeps quick-play suppressed during a live series event.
-  const siblingSubquery = channelId
-    ? sql`${tables.events.channelBindingId} IN (SELECT id FROM channel_bindings WHERE channel_id = ${channelId} AND (binding_purpose = 'game-voice-monitor' OR recurrence_group_id IS NOT NULL))`
-    : undefined;
-  if (effectiveGameId != null && siblingSubquery) {
-    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${tables.events.gameId} = ${effectiveGameId} OR ${siblingSubquery})`;
-  }
-  if (effectiveGameId != null) {
-    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${tables.events.gameId} = ${effectiveGameId})`;
-  }
-  if (siblingSubquery) {
-    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${siblingSubquery})`;
-  }
-  return eq(tables.events.channelBindingId, bindingId);
-}
-
-/**
- * Extend a scheduled event's suppression window so ad-hoc events don't
- * spawn while members are still in the channel.
- */
-export async function extendScheduledEventWindow(
-  db: PostgresJsDatabase<typeof schema>,
-  scheduledEventId: number,
-  currentExtended: Date | null,
-  now: Date,
-): Promise<void> {
-  const newEnd = new Date(now.getTime() + 60 * 60 * 1000);
-  if (!currentExtended || currentExtended < newEnd) {
-    await db
-      .update(tables.events)
-      .set({ extendedUntil: newEnd, updatedAt: now })
-      .where(eq(tables.events.id, scheduledEventId));
-  }
 }
 
 /**

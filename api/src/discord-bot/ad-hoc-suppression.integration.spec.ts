@@ -337,7 +337,9 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
     expect(suppressed).toBe(true);
 
     const after = await readEpochs(eventId);
-    expect(Math.abs((after.extEpoch ?? 0) - (before.extEpoch ?? 0))).toBeLessThan(2);
+    expect(
+      Math.abs((after.extEpoch ?? 0) - (before.extEpoch ?? 0)),
+    ).toBeLessThan(2);
   });
 
   // Case 8 — RED today: the guard never moves extended_until backward. A
@@ -361,7 +363,9 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
     expect(suppressed).toBe(true);
 
     const after = await readEpochs(eventId);
-    expect(after.extEpoch ?? 0).toBeGreaterThanOrEqual((before.extEpoch ?? 0) - 2);
+    expect(after.extEpoch ?? 0).toBeGreaterThanOrEqual(
+      (before.extEpoch ?? 0) - 2,
+    );
   });
 
   // Case 9 — RED today: extended_until is capped at scheduledEnd + 6h. Event
@@ -385,7 +389,9 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
 
     const after = await readEpochs(eventId);
     expect(after.extEpoch).not.toBeNull();
-    expect(after.extEpoch as number).toBeLessThanOrEqual(after.endEpoch + 6 * HOUR_S + 2);
+    expect(after.extEpoch as number).toBeLessThanOrEqual(
+      after.endEpoch + 6 * HOUR_S + 2,
+    );
   });
 
   // Case 11 — PIN (P-9, false-negative direction): the guard DOES write when
@@ -411,7 +417,9 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
 
     const after = await readEpochs(eventId);
     expect(after.extEpoch).not.toBeNull();
-    expect(after.extEpoch as number).toBeGreaterThan((before.extEpoch ?? 0) + 60);
+    expect(after.extEpoch as number).toBeGreaterThan(
+      (before.extEpoch ?? 0) + 60,
+    );
     expect(after.extEpoch as number).toBeGreaterThan(nowEpoch);
   });
 });
