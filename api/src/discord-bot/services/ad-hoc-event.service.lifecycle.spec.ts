@@ -193,11 +193,18 @@ describe('AdHocEventService — lifecycle', () => {
   describe('scheduled event interaction', () => {
     it('extends scheduled event end time when members join during active event', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
-      const eventStart = new Date(Date.now() - 3600000);
       const eventEnd = new Date(Date.now() - 60000);
+      // ROK-1418: findActiveScheduledEvent now returns the widened projection;
+      // a null extendedUntil means the first suppressed join still writes.
       mocks.db.limit.mockResolvedValueOnce([
-        { id: 42, duration: [eventStart, eventEnd] },
+        {
+          id: 42,
+          extendedUntil: null,
+          scheduledEnd: eventEnd,
+          matchedBy: 'binding',
+        },
       ]);
+      mocks.db.returning.mockResolvedValueOnce([{ id: 42 }]);
       await service.handleVoiceJoin('binding-extend', baseMember, baseBinding);
       expect(mocks.db.insert).not.toHaveBeenCalled();
       expect(mocks.db.update).toHaveBeenCalled();
