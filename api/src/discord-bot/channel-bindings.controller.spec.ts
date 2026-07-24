@@ -546,7 +546,7 @@ describe('ChannelBindingsController — deleteBinding', () => {
     );
   });
 
-  it('should delete the binding by resolving guildId and channelId', async () => {
+  it('should delete exactly the resolved binding via unbindById', async () => {
     const binding = makeBinding({
       guildId: 'guild-123',
       channelId: 'channel-456',
@@ -555,11 +555,9 @@ describe('ChannelBindingsController — deleteBinding', () => {
 
     await controller.deleteBinding('binding-uuid-1');
 
-    expect(bindingsService.unbind).toHaveBeenCalledWith(
-      'guild-123',
-      'channel-456',
-      null,
-    );
+    // ROK-1419: delete-by-id, NOT the channel-wide unbind(guild, channel, rgid).
+    expect(bindingsService.unbindById).toHaveBeenCalledWith('binding-uuid-1');
+    expect(bindingsService.unbind).not.toHaveBeenCalled();
   });
 
   it('should return void (204 No Content) on success', async () => {
