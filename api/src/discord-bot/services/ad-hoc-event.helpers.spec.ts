@@ -55,9 +55,9 @@ describe('findActiveScheduledEvent — sibling binding suppression (ROK-959)', (
   });
 
   it('does not leak across channels (AC2 — backward compat)', async () => {
-    // AC2: When a different channelId is passed, no sibling match
-    // should occur. With current code, channelId is ignored entirely,
-    // so this verifies existing binding-only matching still works.
+    // AC2: A non-matching channelId yields no match. Post ROK-1418 the
+    // game-suppression term is channel-scoped (buildAnchoredGameClause), so
+    // the WHERE clause now carries a channel_bindings/channel_type subquery.
     db.limit.mockResolvedValueOnce([]);
 
     const result = await findActiveScheduledEvent(
@@ -69,6 +69,13 @@ describe('findActiveScheduledEvent — sibling binding suppression (ROK-959)', (
     );
 
     expect(result).toBeUndefined();
+
+    // ROK-1418: the anchored game clause introduces a channel_type subquery
+    // absent from today's unscoped clause (RED until the fix lands). Note
+    // sqlToString surfaces only raw template text, so we assert on the raw
+    // `channel_type` token rather than the column-ref anchors.
+    const sqlText = sqlToString(db.where.mock.calls[0]?.[0]);
+    expect(sqlText).toContain('channel_type');
   });
 
   it('omits channel_bindings subquery when channelId absent (AC3)', async () => {
@@ -92,7 +99,7 @@ describe('buildBindingClause — effectiveGameId null safety (ROK-968)', () => {
     db = createDrizzleMock();
   });
 
-  it('includes gameId clause when effectiveGameId is null', async () => {
+  it('omits gameId clause when effectiveGameId is null', async () => {
     db.limit.mockResolvedValueOnce([]);
 
     await findActiveScheduledEvent(db as never, 'binding-A', null, now);
@@ -103,7 +110,7 @@ describe('buildBindingClause — effectiveGameId null safety (ROK-968)', () => {
     expect(sqlText).not.toContain('game_id');
   });
 
-  it('includes gameId clause when effectiveGameId is undefined', async () => {
+  it('omits gameId clause when effectiveGameId is undefined', async () => {
     db.limit.mockResolvedValueOnce([]);
 
     await findActiveScheduledEvent(db as never, 'binding-A', undefined, now);

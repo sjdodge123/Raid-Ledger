@@ -73,15 +73,18 @@ describe('AdHocEventService — voice', () => {
 
     it('suppresses ad-hoc creation when a scheduled event is active', async () => {
       mocks.settingsService.get.mockResolvedValue('true');
+      // ROK-1418: findActiveScheduledEvent returns the restored projection
+      // { id, extendedUntil, scheduledEnd, matchedBy }. A null window + future
+      // end means the suppressed join must extend it → db.update fires.
       mocks.db.limit.mockResolvedValueOnce([
         {
           id: 42,
-          duration: [
-            new Date('2026-02-10T18:00:00Z'),
-            new Date('2026-02-10T19:00:00Z'),
-          ],
+          extendedUntil: null,
+          scheduledEnd: new Date(Date.now() + 2 * 60 * 60_000),
+          matchedBy: 'game',
         },
       ]);
+      mocks.db.returning.mockResolvedValueOnce([{ id: 42 }]);
       await service.handleVoiceJoin(
         'binding-suppress',
         baseMember,
@@ -208,7 +211,14 @@ describe('AdHocEventService — voice', () => {
 
       const spy = jest
         .spyOn(helpers, 'findActiveScheduledEvent')
-        .mockResolvedValueOnce({ id: 55 });
+        // ROK-1418: widen to the restored projection. A fresh window keeps this
+        // case focused on arg-threading (the write path is not exercised here).
+        .mockResolvedValueOnce({
+          id: 55,
+          extendedUntil: new Date(Date.now() + 40 * 60_000),
+          scheduledEnd: new Date(Date.now() + 2 * 60 * 60_000),
+          matchedBy: 'game',
+        } as never);
 
       const siblingBinding = {
         ...baseBinding,
@@ -235,6 +245,69 @@ describe('AdHocEventService — voice', () => {
         'voice-channel-shared', // channelId — must be threaded
       );
 
+      spy.mockRestore();
+    });
+  });
+
+  describe('handleVoiceJoin — bounded extension (ROK-1418)', () => {
+    it('does NOT rewrite a fresh suppression window on a suppressed join (skip-fresh)', async () => {
+      // RED today: the pre-fix path calls extendScheduledEventWindow with a
+      // hardcoded null currentExtended, so it ALWAYS writes — even when the
+      // window is still fresh. Post-fix, planSuppressionExtension skips the
+      // write, so db.update is never touched on this join.
+      mocks.settingsService.get.mockResolvedValue('true');
+      const spy = jest
+        .spyOn(helpers, 'findActiveScheduledEvent')
+        .mockResolvedValueOnce({
+          id: 55,
+          extendedUntil: new Date(Date.now() + 40 * 60_000), // fresh (>= now+15m)
+          scheduledEnd: new Date(Date.now() + 2 * 60 * 60_000),
+          matchedBy: 'game',
+        } as never);
+
+      await service.handleVoiceJoin(
+        'binding-A',
+        baseMember,
+        { ...baseBinding, gameId: 10 },
+        undefined,
+        undefined,
+        'voice-channel-shared',
+      );
+
+      expect(mocks.db.update).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('writes extended_until as a Date, never null, when the window must extend', async () => {
+      // Pin: the value written to extended_until is always a Date. The pre-fix
+      // bug passed null as the currentExtended *argument*, but the persisted
+      // value was still a Date; this locks that the write shape stays a Date.
+      mocks.settingsService.get.mockResolvedValue('true');
+      mocks.db.returning.mockResolvedValueOnce([{ id: 55 }]);
+      const spy = jest
+        .spyOn(helpers, 'findActiveScheduledEvent')
+        .mockResolvedValueOnce({
+          id: 55,
+          extendedUntil: null, // no live window ⇒ must extend
+          scheduledEnd: new Date(Date.now() + 2 * 60 * 60_000),
+          matchedBy: 'game',
+        } as never);
+
+      await service.handleVoiceJoin(
+        'binding-A',
+        baseMember,
+        { ...baseBinding, gameId: 10 },
+        undefined,
+        undefined,
+        'voice-channel-shared',
+      );
+
+      expect(mocks.db.set).toHaveBeenCalledWith(
+        expect.objectContaining({ extendedUntil: expect.any(Date) }),
+      );
+      expect(mocks.db.set).not.toHaveBeenCalledWith(
+        expect.objectContaining({ extendedUntil: null }),
+      );
       spy.mockRestore();
     });
   });

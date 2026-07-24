@@ -547,6 +547,11 @@ function assertEq(label: string, actual: number, expected: number) {
  * scheduled event exists on binding B, ad-hoc creation for binding A must be
  * suppressed. The suppression check calls extendScheduledEventWindow(), so we
  * verify extendedUntil is set on the scheduled event after voice join.
+ *
+ * ROK-1418: also asserts bounded extension — extended_until stays within event
+ * end + 6h and a second in-window join does not rewrite it. This file is gated
+ * OFF in CI by SMOKE_SKIP_VOICE_JOIN=1 (discord-smoke.yml:101), so the
+ * behavioural regression net lives in the B1-2 integration spec.
  */
 const siblingBindingSuppression: SmokeTest = {
   name: 'Sibling binding suppresses ad-hoc via channel-level check (ROK-959)',
@@ -582,10 +587,11 @@ const siblingBindingSuppression: SmokeTest = {
       await awaitProcessing(ctx.api);
 
       // Live event for gameB — extendedUntil starts null
+      const eventEnd = futureTime(55);
       const ev = await createEvent(ctx.api, 'rok959-suppress', {
         gameId: gameB,
         startTime: futureTime(-5),
-        endTime: futureTime(55),
+        endTime: eventEnd,
       });
       eventId = ev.id;
       await signup(ctx.api, ev.id);
@@ -596,7 +602,7 @@ const siblingBindingSuppression: SmokeTest = {
       await joinVoice(vCh.id);
 
       type EventDetail = { extendedUntil: string | null };
-      await pollForCondition(
+      const firstDetail = await pollForCondition(
         async () => {
           await awaitProcessing(ctx.api);
           const detail = await ctx.api.get<EventDetail>(
@@ -611,6 +617,28 @@ const siblingBindingSuppression: SmokeTest = {
           `extendedUntil not set on event ${ev.id} — sibling suppression failed`,
         );
       });
+
+      // ROK-1418: the window must never exceed event end + 6h (the ceiling).
+      const firstExtended = firstDetail.extendedUntil as string;
+      const ceilingMs = new Date(eventEnd).getTime() + 6 * 60 * 60 * 1000;
+      if (new Date(firstExtended).getTime() > ceilingMs) {
+        throw new Error(
+          `extendedUntil ${firstExtended} exceeds event end + 6h ceiling`,
+        );
+      }
+
+      // ROK-1418: a second join inside the 60m window must NOT rewrite it.
+      leaveVoice();
+      await awaitProcessing(ctx.api);
+      await joinVoice(vCh.id);
+      await awaitProcessing(ctx.api);
+      const afterDetail = await ctx.api.get<EventDetail>(`/events/${ev.id}`);
+      if (afterDetail.extendedUntil !== firstExtended) {
+        throw new Error(
+          `extended_until moved on a second in-window join: ` +
+            `${firstExtended} → ${afterDetail.extendedUntil}`,
+        );
+      }
     } finally {
       leaveVoice();
       if (bindA) await deleteBinding(ctx.api, bindA);
