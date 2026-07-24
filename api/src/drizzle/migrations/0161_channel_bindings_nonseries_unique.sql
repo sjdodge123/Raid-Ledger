@@ -69,12 +69,21 @@ SET moved_events = COALESCE(
       '[]'::jsonb),
     events_repointed = (
       SELECT count(*) FROM moved m WHERE m.loser_id = x.loser_binding_id)
-WHERE x.run_id = '003d4c02-de37-4c64-81e0-cc878714d1a0'::uuid;
+WHERE x.run_id = '003d4c02-de37-4c64-81e0-cc878714d1a0'::uuid
+  -- Re-run guard: a reconcile re-run after the events were already repointed
+  -- produces an empty `moved` set — without this EXISTS the re-run would wipe
+  -- the recorded rollback payload back to '[]'. First run: rows with no live
+  -- events keep the column DEFAULT '[]' untouched.
+  AND EXISTS (SELECT 1 FROM moved m WHERE m.loser_id = x.loser_binding_id);
 --> statement-breakpoint
 UPDATE channel_bindings_dedup_audit a
 SET events_nulled = (
       SELECT count(*) FROM events e WHERE e.channel_binding_id = a.loser_binding_id)
-WHERE a.run_id = '003d4c02-de37-4c64-81e0-cc878714d1a0'::uuid;
+WHERE a.run_id = '003d4c02-de37-4c64-81e0-cc878714d1a0'::uuid
+  -- Re-run guard: only count while the loser row still exists (first run,
+  -- pre-DELETE). A re-run after the DELETE would otherwise reset the recorded
+  -- historical-orphan count to 0.
+  AND EXISTS (SELECT 1 FROM channel_bindings cb WHERE cb.id = a.loser_binding_id);
 --> statement-breakpoint
 DELETE FROM channel_bindings
 WHERE id IN (
