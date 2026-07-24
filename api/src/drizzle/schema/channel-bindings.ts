@@ -66,12 +66,7 @@ export const channelBindings = pgTable(
     // REJECTED: a second row sharing (guild, channel, purpose, game) among
     //   non-series rows, and two null-game rows of the same purpose.
     uniqueIndex('channel_bindings_nonseries_game_unique')
-      .on(
-        table.guildId,
-        table.channelId,
-        table.bindingPurpose,
-        table.gameId,
-      )
+      .on(table.guildId, table.channelId, table.bindingPurpose, table.gameId)
       .where(
         sql`${table.recurrenceGroupId} IS NULL AND ${table.gameId} IS NOT NULL`,
       ),

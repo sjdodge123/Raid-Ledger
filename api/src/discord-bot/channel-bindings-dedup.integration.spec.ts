@@ -408,14 +408,14 @@ describe('ROK-1419 (B2-4) validateMigrationState flags an absent critical index'
     const warnSpy = jest
       .spyOn(console, 'warn')
       .mockImplementation(() => undefined);
-    let warned = '';
     try {
       await validateMigrationState(testApp._appClient, MIGRATIONS_DIR);
-      // Capture BEFORE mockRestore() — mockRestore also clears mock.calls.
-      warned = warnSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      // Assert BEFORE mockRestore() in finally — mockRestore also clears
+      // mock.calls, so reading them afterwards always yields an empty array.
+      const warned = warnSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(warned).toMatch(/channel_bindings_nonseries_game_unique/);
     } finally {
       warnSpy.mockRestore();
     }
-    expect(warned).toMatch(/channel_bindings_nonseries_game_unique/);
   });
 });

@@ -477,13 +477,13 @@ describe('non-series uniqueness (Regression: ROK-1419)', () => {
           gameId: game.id,
         }),
       ).rejects.toMatchObject({
-      // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
-      // (top-level .message is the generic "Failed query: …" wrapper).
-      cause: expect.objectContaining({
-        code: '23505',
-        constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
-      }),
-    });
+        // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
+        // (top-level .message is the generic "Failed query: …" wrapper).
+        cause: expect.objectContaining({
+          code: '23505',
+          constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
+        }),
+      });
     });
 
     it('rejects two game-voice-monitor rows both with game_id NULL', async () => {
@@ -494,13 +494,13 @@ describe('non-series uniqueness (Regression: ROK-1419)', () => {
       await expect(
         insertBinding({ bindingPurpose: 'game-voice-monitor', gameId: null }),
       ).rejects.toMatchObject({
-      // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
-      // (top-level .message is the generic "Failed query: …" wrapper).
-      cause: expect.objectContaining({
-        code: '23505',
-        constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
-      }),
-    });
+        // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
+        // (top-level .message is the generic "Failed query: …" wrapper).
+        cause: expect.objectContaining({
+          code: '23505',
+          constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
+        }),
+      });
     });
 
     it('rejects two general-lobby rows both with game_id NULL', async () => {
@@ -508,13 +508,13 @@ describe('non-series uniqueness (Regression: ROK-1419)', () => {
       await expect(
         insertBinding({ bindingPurpose: 'general-lobby', gameId: null }),
       ).rejects.toMatchObject({
-      // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
-      // (top-level .message is the generic "Failed query: …" wrapper).
-      cause: expect.objectContaining({
-        code: '23505',
-        constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
-      }),
-    });
+        // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
+        // (top-level .message is the generic "Failed query: …" wrapper).
+        cause: expect.objectContaining({
+          code: '23505',
+          constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
+        }),
+      });
     });
   });
 
