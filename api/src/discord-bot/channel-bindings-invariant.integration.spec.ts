@@ -77,10 +77,16 @@ async function insertBinding(o: {
 }
 
 /** Insert a throwaway game we can delete without touching the seeded one. */
-async function makeGame(name: string): Promise<typeof schema.games.$inferSelect> {
+async function makeGame(
+  name: string,
+): Promise<typeof schema.games.$inferSelect> {
   const [g] = await testApp.db
     .insert(schema.games)
-    .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-'), igdbId: null })
+    .values({
+      name,
+      slug: name.toLowerCase().replace(/\s+/g, '-'),
+      igdbId: null,
+    })
     .returning();
   return g;
 }
@@ -124,7 +130,10 @@ describe('Channel binding invariant guard (Regression: ROK-1415)', () => {
 
   // (2) The second, undocumented route in: flipping purpose on the stored row.
   it('PATCH null-game general-lobby → game-voice-monitor → 400, purpose unchanged', async () => {
-    const b = await insertBinding({ bindingPurpose: 'general-lobby', gameId: null });
+    const b = await insertBinding({
+      bindingPurpose: 'general-lobby',
+      gameId: null,
+    });
 
     const res = await testApp.request
       .patch(`/admin/discord/bindings/${b.id}`)
@@ -197,8 +206,14 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
   it('collision-aware: two monitors + one delete → one general-lobby survivor, no 23505', async () => {
     const gameA = await makeGame('Doomed Game 4c A');
     const gameB = await makeGame('Doomed Game 4c B');
-    await insertBinding({ bindingPurpose: 'game-voice-monitor', gameId: gameA.id });
-    await insertBinding({ bindingPurpose: 'game-voice-monitor', gameId: gameB.id });
+    await insertBinding({
+      bindingPurpose: 'game-voice-monitor',
+      gameId: gameA.id,
+    });
+    await insertBinding({
+      bindingPurpose: 'game-voice-monitor',
+      gameId: gameB.id,
+    });
 
     await expect(
       normalizeAndDeleteGames(testApp.db, [gameA.id, gameB.id]),

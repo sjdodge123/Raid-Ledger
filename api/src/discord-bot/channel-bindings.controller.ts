@@ -18,12 +18,30 @@ import { AdminGuard } from '../auth/admin.guard';
 import { ChannelBindingsService } from './services/channel-bindings.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import {
+  classifyBindingTriple,
   CreateChannelBindingSchema,
   UpdateChannelBindingSchema,
+  type BindingPurpose,
   type ChannelBindingDto,
   type ChannelBindingListDto,
+  type ChannelType,
 } from '@raid-ledger/contract';
 import { handleValidationError } from './validation.util';
+import { SettingsService } from '../settings/settings.service';
+import { SETTING_KEYS } from '../drizzle/schema';
+import { getLogLevels } from '../main.helpers';
+
+interface BindingHealthDto {
+  data: Array<{
+    id: string;
+    channelId: string;
+    channelName?: string;
+    code: string;
+    message: string;
+  }>;
+  adHocEventsEnabled: boolean;
+  logLevels: { effective: string[]; DEBUG?: string; LOG_LEVEL?: string };
+}
 
 @Controller('admin/discord/bindings')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
@@ -33,7 +51,58 @@ export class ChannelBindingsController {
   constructor(
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly clientService: DiscordBotClientService,
+    private readonly settingsService: SettingsService,
   ) {}
+
+  /**
+   * ROK-1415 Tier-4 health probe. Reports every binding whose (channelType,
+   * bindingPurpose, gameId) triple the contract classifier rejects — above all
+   * the inert (voice, game-voice-monitor, NULL) Quick Play shape — plus the
+   * ad-hoc kill-switch state and the container's EFFECTIVE log levels, so one
+   * restart-free request answers "why is Quick Play dead here" end to end.
+   */
+  @Get('health')
+  async bindingHealth(): Promise<BindingHealthDto> {
+    const guildId = this.clientService.getGuildId();
+    const bindings = guildId
+      ? await this.channelBindingsService.getBindings(guildId)
+      : [];
+    const channelMap = new Map(
+      [
+        ...this.clientService.getTextChannels(),
+        ...this.clientService.getVoiceChannels(),
+      ].map((ch) => [ch.id, ch.name]),
+    );
+    const data = bindings.flatMap((b) => {
+      const v = classifyBindingTriple(
+        b.channelType as ChannelType,
+        b.bindingPurpose as BindingPurpose,
+        b.gameId,
+      );
+      if (!v) return [];
+      return [
+        {
+          id: b.id,
+          channelId: b.channelId,
+          channelName: channelMap.get(b.channelId),
+          code: v.code,
+          message: v.message,
+        },
+      ];
+    });
+    const adHocEventsEnabled =
+      (await this.settingsService.get(SETTING_KEYS.AD_HOC_EVENTS_ENABLED)) ===
+      'true';
+    return {
+      data,
+      adHocEventsEnabled,
+      logLevels: {
+        effective: getLogLevels(process.env),
+        DEBUG: process.env.DEBUG,
+        LOG_LEVEL: process.env.LOG_LEVEL,
+      },
+    };
+  }
 
   @Get()
   async listBindings(): Promise<ChannelBindingListDto> {

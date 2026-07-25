@@ -51,35 +51,193 @@ interface Cell {
  */
 const TRUTH_TABLE: Cell[] = [
   // ── voice + game-voice-monitor: needs a game; 0 is a REAL game (mandatory) ──
-  { channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameLabel: 'null', gameId: null, code: 'BINDING_MONITOR_REQUIRES_GAME', field: 'gameId' },
-  { channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameLabel: 'undefined', gameId: undefined, code: 'BINDING_MONITOR_REQUIRES_GAME', field: 'gameId' },
-  { channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameLabel: '0', gameId: 0, code: null },
-  { channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameLabel: '42', gameId: 42, code: null },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'game-voice-monitor',
+    gameLabel: 'null',
+    gameId: null,
+    code: 'BINDING_MONITOR_REQUIRES_GAME',
+    field: 'gameId',
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'game-voice-monitor',
+    gameLabel: 'undefined',
+    gameId: undefined,
+    code: 'BINDING_MONITOR_REQUIRES_GAME',
+    field: 'gameId',
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'game-voice-monitor',
+    gameLabel: '0',
+    gameId: 0,
+    code: null,
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'game-voice-monitor',
+    gameLabel: '42',
+    gameId: 42,
+    code: null,
+  },
   // ── voice + general-lobby: legal for any gameId (lobby resolves from presence) ──
-  { channelType: 'voice', bindingPurpose: 'general-lobby', gameLabel: 'null', gameId: null, code: null },
-  { channelType: 'voice', bindingPurpose: 'general-lobby', gameLabel: 'undefined', gameId: undefined, code: null },
-  { channelType: 'voice', bindingPurpose: 'general-lobby', gameLabel: '0', gameId: 0, code: null },
-  { channelType: 'voice', bindingPurpose: 'general-lobby', gameLabel: '42', gameId: 42, code: null },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'general-lobby',
+    gameLabel: 'null',
+    gameId: null,
+    code: null,
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'general-lobby',
+    gameLabel: 'undefined',
+    gameId: undefined,
+    code: null,
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'general-lobby',
+    gameLabel: '0',
+    gameId: 0,
+    code: null,
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'general-lobby',
+    gameLabel: '42',
+    gameId: 42,
+    code: null,
+  },
   // ── voice + game-announcements: announcements are a TEXT purpose ──
-  { channelType: 'voice', bindingPurpose: 'game-announcements', gameLabel: 'null', gameId: null, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'voice', bindingPurpose: 'game-announcements', gameLabel: 'undefined', gameId: undefined, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'voice', bindingPurpose: 'game-announcements', gameLabel: '0', gameId: 0, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'voice', bindingPurpose: 'game-announcements', gameLabel: '42', gameId: 42, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'game-announcements',
+    gameLabel: 'null',
+    gameId: null,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'game-announcements',
+    gameLabel: 'undefined',
+    gameId: undefined,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'game-announcements',
+    gameLabel: '0',
+    gameId: 0,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'voice',
+    bindingPurpose: 'game-announcements',
+    gameLabel: '42',
+    gameId: 42,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
   // ── text + game-announcements: legal for any gameId ──
-  { channelType: 'text', bindingPurpose: 'game-announcements', gameLabel: 'null', gameId: null, code: null },
-  { channelType: 'text', bindingPurpose: 'game-announcements', gameLabel: 'undefined', gameId: undefined, code: null },
-  { channelType: 'text', bindingPurpose: 'game-announcements', gameLabel: '0', gameId: 0, code: null },
-  { channelType: 'text', bindingPurpose: 'game-announcements', gameLabel: '42', gameId: 42, code: null },
+  {
+    channelType: 'text',
+    bindingPurpose: 'game-announcements',
+    gameLabel: 'null',
+    gameId: null,
+    code: null,
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'game-announcements',
+    gameLabel: 'undefined',
+    gameId: undefined,
+    code: null,
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'game-announcements',
+    gameLabel: '0',
+    gameId: 0,
+    code: null,
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'game-announcements',
+    gameLabel: '42',
+    gameId: 42,
+    code: null,
+  },
   // ── text + game-voice-monitor: voice purpose on a text channel ──
-  { channelType: 'text', bindingPurpose: 'game-voice-monitor', gameLabel: 'null', gameId: null, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'text', bindingPurpose: 'game-voice-monitor', gameLabel: 'undefined', gameId: undefined, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'text', bindingPurpose: 'game-voice-monitor', gameLabel: '0', gameId: 0, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'text', bindingPurpose: 'game-voice-monitor', gameLabel: '42', gameId: 42, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
+  {
+    channelType: 'text',
+    bindingPurpose: 'game-voice-monitor',
+    gameLabel: 'null',
+    gameId: null,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'game-voice-monitor',
+    gameLabel: 'undefined',
+    gameId: undefined,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'game-voice-monitor',
+    gameLabel: '0',
+    gameId: 0,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'game-voice-monitor',
+    gameLabel: '42',
+    gameId: 42,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
   // ── text + general-lobby: voice purpose on a text channel ──
-  { channelType: 'text', bindingPurpose: 'general-lobby', gameLabel: 'null', gameId: null, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'text', bindingPurpose: 'general-lobby', gameLabel: 'undefined', gameId: undefined, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'text', bindingPurpose: 'general-lobby', gameLabel: '0', gameId: 0, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
-  { channelType: 'text', bindingPurpose: 'general-lobby', gameLabel: '42', gameId: 42, code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE', field: 'bindingPurpose' },
+  {
+    channelType: 'text',
+    bindingPurpose: 'general-lobby',
+    gameLabel: 'null',
+    gameId: null,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'general-lobby',
+    gameLabel: 'undefined',
+    gameId: undefined,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'general-lobby',
+    gameLabel: '0',
+    gameId: 0,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
+  {
+    channelType: 'text',
+    bindingPurpose: 'general-lobby',
+    gameLabel: '42',
+    gameId: 42,
+    code: 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE',
+    field: 'bindingPurpose',
+  },
 ];
 
 describe('classifyBindingTriple — full 24-cell cross product (ROK-1415)', () => {
@@ -92,7 +250,11 @@ describe('classifyBindingTriple — full 24-cell cross product (ROK-1415)', () =
     if (cell.code === null) {
       it(`ALLOWS ${label}`, () => {
         expect(
-          classifyBindingTriple(cell.channelType, cell.bindingPurpose, cell.gameId),
+          classifyBindingTriple(
+            cell.channelType,
+            cell.bindingPurpose,
+            cell.gameId,
+          ),
         ).toBeNull();
       });
     } else {
@@ -113,9 +275,7 @@ describe('classifyBindingTriple — full 24-cell cross product (ROK-1415)', () =
 
   it('classifies gameId === 0 as a VALID game for a monitor (NOT truthiness)', () => {
     // The regression cell: `!gameId` would misfire here and disable Quick Play.
-    expect(
-      classifyBindingTriple('voice', 'game-voice-monitor', 0),
-    ).toBeNull();
+    expect(classifyBindingTriple('voice', 'game-voice-monitor', 0)).toBeNull();
   });
 });
 
@@ -123,7 +283,9 @@ describe('assertValidBindingTriple — throw shape + [binding-guard] WARN (ROK-1
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    warnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -228,7 +390,9 @@ describe('deriveBindingPurpose — canonical derivation + anti-drift (ROK-1415)'
     const gameIds: Array<number | null | undefined> = [null, undefined, 0, 42];
     for (const ct of channelTypes) {
       for (const gameId of gameIds) {
-        expect(detectBehavior(ct, gameId)).toBe(deriveBindingPurpose(ct, gameId));
+        expect(detectBehavior(ct, gameId)).toBe(
+          deriveBindingPurpose(ct, gameId),
+        );
       }
     }
   });

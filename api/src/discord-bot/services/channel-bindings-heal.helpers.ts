@@ -8,6 +8,7 @@
  * intent. The one-shot data repair (residue → general-lobby) ships separately
  * after operator sign-off. This reporter only reads + logs.
  */
+import * as Sentry from '@sentry/nestjs';
 import { and, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -61,15 +62,43 @@ async function findGroupsWithFutureEvents(
 }
 
 /**
- * Log WARN for (a) pre-1372 residue-shaped series voice bindings and (b) series
- * bindings whose recurrence group has no future non-cancelled event (rot →
- * operator must re-run `/bind`). Read-only: mutates nothing, asserts nothing.
+ * The ROK-1415 incident shape: a voice game-voice-monitor binding whose game
+ * was cleared (FK SET NULL, bad write, restore). getGameFilteredCount
+ * short-circuits to counted:0 for it, so Quick Play can NEVER spawn there.
+ */
+export function isInertQuickPlayBind(b: HealBinding): boolean {
+  return (
+    b.channelType === 'voice' &&
+    b.bindingPurpose === 'game-voice-monitor' &&
+    b.gameId === null
+  );
+}
+
+/**
+ * Log WARN for (a) INERT Quick Play bindings (ROK-1415 — scanned FIRST, before
+ * the series short-circuit and before any DB access, so a non-series inert bind
+ * surfaces and a transient DB error cannot suppress detection; also pushed to
+ * Sentry since a log line nobody reads is what made the incident invisible),
+ * (b) pre-1372 residue-shaped series voice bindings and (c) series bindings
+ * whose recurrence group has no future non-cancelled event (rot → operator must
+ * re-run `/bind`). Read-only: mutates nothing, asserts nothing.
  */
 export async function reportBindingHealthWarnings(
   db: Db,
   bindings: HealBinding[],
   logger: WarnLogger,
 ): Promise<void> {
+  for (const b of bindings.filter(isInertQuickPlayBind)) {
+    logger.warn(
+      `[binding-heal] INERT binding channel=${b.channelId} purpose=game-voice-monitor game_id=NULL — Quick Play can never spawn on this channel (ROK-1415). Fix: re-run /bind with a game, or set purpose to general-lobby.`,
+    );
+    Sentry.captureMessage('Inert Quick Play binding', {
+      level: 'warning',
+      tags: { context: 'binding-health', channelId: b.channelId },
+      extra: { recurrenceGroupId: b.recurrenceGroupId },
+    });
+  }
+
   const seriesBindings = bindings.filter((b) => b.recurrenceGroupId !== null);
   if (seriesBindings.length === 0) return;
 

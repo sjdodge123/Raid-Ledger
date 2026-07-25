@@ -7,6 +7,7 @@ import {
 import { ChannelBindingsController } from './channel-bindings.controller';
 import { ChannelBindingsService } from './services/channel-bindings.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
+import { SettingsService } from '../settings/settings.service';
 import type { BindingRecord } from './services/channel-bindings.service';
 
 const makeBinding = (
@@ -47,6 +48,11 @@ function buildModule() {
           updateConfig: jest.fn(),
           gameExists: jest.fn().mockResolvedValue(true),
         },
+      },
+      {
+        // ROK-1415: the health endpoint reads the ad-hoc kill-switch state.
+        provide: SettingsService,
+        useValue: { get: jest.fn().mockResolvedValue('true') },
       },
       {
         provide: DiscordBotClientService,
