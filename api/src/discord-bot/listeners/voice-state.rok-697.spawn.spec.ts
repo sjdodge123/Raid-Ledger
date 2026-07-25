@@ -969,5 +969,72 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
     });
   });
 
+  // ─── Regression: ROK-1415 — null-game monitor binding is no longer inert ────
+
+  describe('Regression: ROK-1415 — null-game monitor arms the delayed spawn', () => {
+    // A `game-voice-monitor` binding whose `gameId` is NULL (the incident shape:
+    // reachable via FK SET NULL, pg_restore, or an un-cross-checked purpose flip).
+    // On main this is permanently inert — `getGameFilteredCount` short-circuits to
+    // `counted:0` and `checkGameBindingThreshold` returns before `scheduleSpawn()`,
+    // so the 15-minute timer is NEVER armed for any member count. The ROK-1415
+    // runtime tolerance branches on `binding.gameId == null` to use the raw
+    // channelMembers count, so the delayed spawn arms + fires like any other
+    // non-unanimous bind.
+    const nullGameMonitorBinding = {
+      id: 'bind-null-monitor',
+      channelId: 'voice-ch',
+      bindingPurpose: 'game-voice-monitor' as const,
+      gameId: null,
+      gameName: null,
+      config: { minPlayers: 2 },
+    };
+
+    it('arms and fires the 15-minute delayed spawn at/above minPlayers (RED on main)', async () => {
+      const handler = await setupWithBinding('voice-ch', nullGameMonitorBinding);
+
+      // Presence-null → non-unanimous → delayed path (never immediate).
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      handler(
+        { channelId: null, id: 'user-1' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-1',
+          member: {
+            displayName: 'Player1',
+            user: { username: 'Player1', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // Second join — threshold met (2/2). On main the timer is still never armed.
+      handler(
+        { channelId: null, id: 'user-2' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-2',
+          member: {
+            displayName: 'Player2',
+            user: { username: 'Player2', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // Not immediate (non-unanimous) — holds on main AND after the fix.
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+
+      // Advance the 15-minute timer. On main it was never armed → still not
+      // called (RED). After the tolerance, the delayed spawn fires.
+      await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    });
+  });
+
   // ─── Edge cases ────────────────────────────────────────────────────────────
 });

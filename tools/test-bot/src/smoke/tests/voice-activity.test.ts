@@ -29,6 +29,10 @@ async function withVoiceBinding(
   ctx: TestContext,
   index: number,
   purpose: string,
+  // ROK-1415: a game-voice-monitor binding MUST carry a game — the write-path
+  // guard now rejects a null-game monitor (400). Monitor callers pass a real
+  // game; general-lobby callers pass undefined (a null-game lobby is valid).
+  gameId: number | undefined,
   fn: (voiceChId: string, textChId: string) => Promise<void>,
 ) {
   const vCh = pickChannel(ctx.voiceChannels, index);
@@ -40,6 +44,7 @@ async function withVoiceBinding(
       channelId: vCh.id,
       channelType: 'voice',
       purpose,
+      gameId,
       config: { minPlayers: 1, notificationChannelId: tCh.id },
     });
     console.log(`  [voice] Created ${purpose} binding for ${vCh.name}`);
@@ -67,7 +72,7 @@ const voiceJoinDetected: SmokeTest = {
   name: 'Voice join triggers attendance session',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 0, 'game-voice-monitor', async (vChId) => {
+    await withVoiceBinding(ctx, 0, 'game-voice-monitor', ctx.games[0]?.id, async (vChId) => {
       await joinVoice(vChId);
       try {
         await pollForCondition(
@@ -90,7 +95,7 @@ const voiceLeaveRecorded: SmokeTest = {
   name: 'Voice leave ends attendance session',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 1, 'game-voice-monitor', async (vChId) => {
+    await withVoiceBinding(ctx, 1, 'game-voice-monitor', ctx.games[0]?.id, async (vChId) => {
       await joinVoice(vChId);
       // Wait until bot appears in voice, then leave
       await pollForCondition(
@@ -119,7 +124,7 @@ const adHocSpawn: SmokeTest = {
   name: 'Ad-hoc event spawns on voice activity',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 2, 'general-lobby', async (vChId, tChId) => {
+    await withVoiceBinding(ctx, 2, 'general-lobby', undefined, async (vChId, tChId) => {
       await joinVoice(vChId);
       try {
         const msg = await pollForEmbed(
@@ -158,7 +163,7 @@ const adHocPreservesParticipants: SmokeTest = {
   name: 'Quick Play embed preserves participants after leave (ROK-1243)',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 2, 'general-lobby', async (vChId, tChId) => {
+    await withVoiceBinding(ctx, 2, 'general-lobby', undefined, async (vChId, tChId) => {
       const botMention = `<@${ctx.testBotDiscordId}>`;
       const struckBotMention = `~~${botMention}~~`;
 
@@ -308,7 +313,7 @@ const metricsVoicePopulated: SmokeTest = {
   name: 'Event metrics roster shows voice data (ROK-852)',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 2, 'game-voice-monitor', async (vChId) => {
+    await withVoiceBinding(ctx, 2, 'game-voice-monitor', ctx.games[0]?.id, async (vChId) => {
       const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
         '/admin/settings/games?limit=1',
       );
@@ -670,7 +675,7 @@ const attendancePipelineE2E: SmokeTest = {
   name: 'Attendance pipeline: signup → real voice → classify → attended (ROK-985)',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 3, 'game-voice-monitor', async (vChId) => {
+    await withVoiceBinding(ctx, 3, 'game-voice-monitor', ctx.games[0]?.id, async (vChId) => {
       const gameId = ctx.games[0]?.id;
       if (!gameId) throw new Error('No games for ROK-985 test');
 

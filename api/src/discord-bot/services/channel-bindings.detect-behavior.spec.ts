@@ -39,6 +39,14 @@ describe('ChannelBindingsService.detectBehavior (ROK-515)', () => {
     expect(service.detectBehavior('voice', 42)).toBe('game-voice-monitor');
   });
 
+  // Regression: ROK-1415 — the `:373` `gameId ? …` truthiness bug derived
+  // 'general-lobby' for gameId 0 (a real game). `deriveBindingPurpose` uses
+  // `!= null`. RED on main (returns 'general-lobby'); intentional behaviour
+  // correction, flagged in the PR.
+  it('returns "game-voice-monitor" for voice channel when gameId is 0 (real game, not truthiness)', () => {
+    expect(service.detectBehavior('voice', 0)).toBe('game-voice-monitor');
+  });
+
   it('returns "game-announcements" for text channel regardless of gameId', () => {
     expect(service.detectBehavior('text')).toBe('game-announcements');
     expect(service.detectBehavior('text', null)).toBe('game-announcements');
