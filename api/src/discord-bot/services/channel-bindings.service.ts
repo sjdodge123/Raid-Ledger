@@ -3,6 +3,11 @@ import { eq, and, isNotNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import {
+  assertNoBindingConflict,
+  findExistingBinding,
+  mappingConflicts,
+} from './channel-bindings-uniqueness.helpers';
 import type {
   BindingPurpose,
   ChannelType,
@@ -106,64 +111,45 @@ export class ChannelBindingsService {
   }
 
   /**
-   * Find an existing binding matching (guild, channel, series, game).
-   * Handles NULL comparisons explicitly (PostgreSQL NULL != NULL).
-   */
-  private async findExistingBinding(
-    opts: UpsertBindingOpts,
-  ): Promise<{ id: string } | undefined> {
-    const conditions = [
-      eq(schema.channelBindings.guildId, opts.guildId),
-      eq(schema.channelBindings.channelId, opts.channelId),
-      opts.recurrenceGroupId
-        ? eq(schema.channelBindings.recurrenceGroupId, opts.recurrenceGroupId)
-        : sql`${schema.channelBindings.recurrenceGroupId} IS NULL`,
-      opts.gameId != null
-        ? eq(schema.channelBindings.gameId, opts.gameId)
-        : sql`${schema.channelBindings.gameId} IS NULL`,
-    ];
-    const [existing] = await this.db
-      .select({ id: schema.channelBindings.id })
-      .from(schema.channelBindings)
-      .where(and(...conditions))
-      .limit(1);
-    return existing;
-  }
-
-  /**
    * Insert or update a channel binding row.
    * Uses manual SELECT → INSERT/UPDATE instead of ON CONFLICT because the
    * unique index includes nullable columns where NULL != NULL in PostgreSQL.
    * Matches on (guild, channel, series, game) to support multiple
-   * game-specific bindings per channel (ROK-842).
+   * game-specific bindings per channel (ROK-842). findExistingBinding stays
+   * WIDER than the DB key on purpose (ROK-1419 D3(7)); mappingConflicts maps a
+   * 23505 from either partial unique index to a 409.
    */
   private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
-    const existing = await this.findExistingBinding(opts);
+    const existing = await findExistingBinding(this.db, opts);
     if (existing) {
-      const [result] = await this.db
-        .update(schema.channelBindings)
-        .set({
-          channelType: opts.channelType,
-          bindingPurpose: opts.bindingPurpose,
-          config: opts.config ?? {},
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.channelBindings.id, existing.id))
-        .returning();
+      const [result] = await mappingConflicts(() =>
+        this.db
+          .update(schema.channelBindings)
+          .set({
+            channelType: opts.channelType,
+            bindingPurpose: opts.bindingPurpose,
+            config: opts.config ?? {},
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.channelBindings.id, existing.id))
+          .returning(),
+      );
       return result;
     }
-    const [result] = await this.db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: opts.guildId,
-        channelId: opts.channelId,
-        channelType: opts.channelType,
-        bindingPurpose: opts.bindingPurpose,
-        gameId: opts.gameId,
-        recurrenceGroupId: opts.recurrenceGroupId ?? null,
-        config: opts.config ?? {},
-      })
-      .returning();
+    const [result] = await mappingConflicts(() =>
+      this.db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: opts.guildId,
+          channelId: opts.channelId,
+          channelType: opts.channelType,
+          bindingPurpose: opts.bindingPurpose,
+          gameId: opts.gameId,
+          recurrenceGroupId: opts.recurrenceGroupId ?? null,
+          config: opts.config ?? {},
+        })
+        .returning(),
+    );
     return result;
   }
 
@@ -204,6 +190,19 @@ export class ChannelBindingsService {
     }
 
     return false;
+  }
+
+  /**
+   * Remove a SINGLE binding by id (ROK-1419). The admin Remove button uses this
+   * so deleting one binding never drops a sibling on the same channel — contrast
+   * unbind(), which deletes EVERY non-series binding on the channel.
+   */
+  async unbindById(id: string): Promise<boolean> {
+    const result = await this.db
+      .delete(schema.channelBindings)
+      .where(eq(schema.channelBindings.id, id))
+      .returning();
+    return result.length > 0;
   }
 
   /**
@@ -334,16 +333,21 @@ export class ChannelBindingsService {
   ): Promise<BindingRecord | null> {
     const existing = await this.getBindingById(id);
     if (!existing) return null;
+    // ROK-1419: reject a purpose flip into an already-occupied non-series slot
+    // with the operator message before the write; the DB index is the backstop.
+    await assertNoBindingConflict(this.db, existing, bindingPurpose);
     const updateSet: Partial<typeof schema.channelBindings.$inferInsert> = {
       config: { ...(existing.config ?? {}), ...config },
       updatedAt: new Date(),
       ...(bindingPurpose && { bindingPurpose }),
     };
-    const [result] = await this.db
-      .update(schema.channelBindings)
-      .set(updateSet)
-      .where(eq(schema.channelBindings.id, id))
-      .returning();
+    const [result] = await mappingConflicts(() =>
+      this.db
+        .update(schema.channelBindings)
+        .set(updateSet)
+        .where(eq(schema.channelBindings.id, id))
+        .returning(),
+    );
     return result ?? null;
   }
 

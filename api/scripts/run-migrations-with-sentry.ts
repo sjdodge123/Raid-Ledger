@@ -47,6 +47,20 @@ const CRITICAL_TABLES = [
   'events',
   'users',
 ];
+/**
+ * ROK-1419 (M-1): indexes whose absence is otherwise SILENT after a restore.
+ * `pgRestoreArgs` uses `--exclude-schema=drizzle`, so restoring a pre-0161
+ * backup recreates `public` WITHOUT these partial unique indexes while the
+ * drizzle migration hashes survive — `validateMigrationState` would print
+ * "✅ Migrations completed" and reconcile skips the (present) hash. Probe them
+ * directly and, when the hashes claim done yet an index is gone, escalate to
+ * the Sentry push channel (a plain WARN is exactly the pull-only signal M-1
+ * exists to replace).
+ */
+const CRITICAL_INDEXES = [
+  'channel_bindings_nonseries_game_unique',
+  'channel_bindings_nonseries_nullgame_unique',
+];
 
 type SqlClient = ReturnType<typeof postgres>;
 
@@ -152,7 +166,12 @@ export async function runDrizzleMigrate(
 export async function validateMigrationState(
   client: SqlClient,
   migrationsFolder: string = DEFAULT_MIGRATIONS_FOLDER,
-): Promise<{ applied: number; expected: number; missing: string[] }> {
+): Promise<{
+  applied: number;
+  expected: number;
+  missing: string[];
+  missingIndexes: string[];
+}> {
   const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
   const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as {
     entries: unknown[];
@@ -184,7 +203,34 @@ export async function validateMigrationState(
       `⚠️  PHANTOM MIGRATION: tables missing despite ${applied} migrations applied: ${missing.join(', ')}`,
     );
   }
-  return { applied, expected, missing };
+
+  const missingIndexes: string[] = [];
+  for (const idx of CRITICAL_INDEXES) {
+    const rows =
+      (await client`SELECT to_regclass(${`public.${idx}`}) AS oid`) as unknown as Array<{
+        oid: string | null;
+      }>;
+    if (!rows[0]?.oid) missingIndexes.push(idx);
+  }
+  if (missingIndexes.length > 0) {
+    console.warn(
+      `⚠️  PHANTOM MIGRATION: indexes missing despite ${applied} migrations applied: ${missingIndexes.join(', ')}`,
+    );
+    // Push signal ONLY for the genuine restore-revert (M-1): every migration
+    // hash is present (applied >= expected) yet a critical index is gone. A
+    // partial apply (applied < expected) is a different failure the mismatch
+    // log above already covers, and must NOT trip the Sentry escalation.
+    if (applied >= expected) {
+      await reportBootFailure(
+        new Error(
+          `Critical index(es) missing after migration: ${missingIndexes.join(', ')}. ` +
+            `Restore of a pre-0161 backup? Re-run 0161's CREATE UNIQUE INDEX + dedupe manually.`,
+        ),
+        'boot.migration',
+      ).catch(() => undefined);
+    }
+  }
+  return { applied, expected, missing, missingIndexes };
 }
 
 export interface BootMigrationOptions {

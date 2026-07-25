@@ -7,6 +7,7 @@
  * that was invisible to mocked tests.
  */
 import { eq } from 'drizzle-orm';
+import { ConflictException } from '@nestjs/common';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -396,5 +397,202 @@ describe('Channel Bindings CRUD — FK cascade', () => {
 
     expect(updated).toBeDefined();
     expect(updated.gameId).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1419: migration 0067 dropped UNIQUE(guild_id, channel_id) in favour of a
+// 3-column key whose third member (recurrence_group_id) is nullable, so NULL !=
+// NULL removed ALL duplicate protection for non-series bindings. B2 restores it
+// with two ADDITIVE partial unique indexes keyed on binding_purpose:
+//   channel_bindings_nonseries_game_unique     (guild,channel,purpose,game)
+//                                              WHERE rgid IS NULL AND game IS NOT NULL
+//   channel_bindings_nonseries_nullgame_unique (guild,channel,purpose)
+//                                              WHERE rgid IS NULL AND game IS NULL
+// plus a 23505 -> ConflictException mapping in ChannelBindingsService.
+//
+// REJECT cases are RED on origin/main: no index exists, so the second write
+// simply succeeds (raw insert) or the purpose-flip UPDATE simply succeeds
+// (service) — neither raises 23505 nor a ConflictException.
+// PERMIT cases pass today AND must keep passing post-index: they pin that the
+// chosen partial-index shape never rejects a live/allowed configuration
+// (multi-game monitors ROK-842, the prod #Gamer Night monitor+lobby pair, and
+// any series row). They are the guard against an over-broad index.
+// ---------------------------------------------------------------------------
+describe('non-series uniqueness (Regression: ROK-1419)', () => {
+  const GUILD = 'rok1419-guild';
+  const CHANNEL = 'rok1419-channel';
+  const SERIES = 'ffffffff-1111-2222-3333-444444444444';
+
+  function svc(): ChannelBindingsService {
+    return testApp.app.get(ChannelBindingsService);
+  }
+
+  /** Raw-insert a single non-series binding on the shared test channel. */
+  async function insertBinding(overrides: {
+    bindingPurpose:
+      'game-voice-monitor' | 'general-lobby' | 'game-announcements';
+    gameId: number | null;
+    channelType?: 'text' | 'voice';
+    recurrenceGroupId?: string | null;
+  }): Promise<typeof schema.channelBindings.$inferSelect> {
+    const [row] = await testApp.db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: GUILD,
+        channelId: CHANNEL,
+        channelType: overrides.channelType ?? 'voice',
+        bindingPurpose: overrides.bindingPurpose,
+        gameId: overrides.gameId,
+        recurrenceGroupId: overrides.recurrenceGroupId ?? null,
+        config: {},
+      })
+      .returning();
+    return row;
+  }
+
+  async function secondGame(): Promise<typeof schema.games.$inferSelect> {
+    const [g] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Second Game 1419',
+        slug: 'second-game-1419',
+        igdbId: null,
+      })
+      .returning();
+    return g;
+  }
+
+  // ── REJECT — the DB unique index is in force (raw 23505) ──────────────────
+  describe('REJECT — duplicate protection at the DB layer', () => {
+    it('rejects a second (guild, channel, game-voice-monitor, gameId) row', async () => {
+      const game = testApp.seed.game;
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: game.id,
+      });
+      await expect(
+        insertBinding({
+          bindingPurpose: 'game-voice-monitor',
+          gameId: game.id,
+        }),
+      ).rejects.toMatchObject({
+        // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
+        // (top-level .message is the generic "Failed query: …" wrapper).
+        cause: expect.objectContaining({
+          code: '23505',
+          constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
+        }),
+      });
+    });
+
+    it('rejects two game-voice-monitor rows both with game_id NULL', async () => {
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: null,
+      });
+      await expect(
+        insertBinding({ bindingPurpose: 'game-voice-monitor', gameId: null }),
+      ).rejects.toMatchObject({
+        // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
+        // (top-level .message is the generic "Failed query: …" wrapper).
+        cause: expect.objectContaining({
+          code: '23505',
+          constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
+        }),
+      });
+    });
+
+    it('rejects two general-lobby rows both with game_id NULL', async () => {
+      await insertBinding({ bindingPurpose: 'general-lobby', gameId: null });
+      await expect(
+        insertBinding({ bindingPurpose: 'general-lobby', gameId: null }),
+      ).rejects.toMatchObject({
+        // drizzle wraps the PG error; the SQLSTATE + constraint live on .cause
+        // (top-level .message is the generic "Failed query: …" wrapper).
+        cause: expect.objectContaining({
+          code: '23505',
+          constraint_name: expect.stringMatching(/channel_bindings_nonseries/),
+        }),
+      });
+    });
+  });
+
+  // ── REJECT — the service maps the violation to a 409 ConflictException ─────
+  describe('REJECT — service surfaces the conflict as ConflictException', () => {
+    it('flipping bindingPurpose into an occupied monitor+game slot throws ConflictException', async () => {
+      const game = testApp.seed.game;
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: game.id,
+      });
+      const b = await insertBinding({
+        bindingPurpose: 'general-lobby',
+        gameId: game.id,
+      });
+      await expect(
+        svc().updateConfig(b.id, {}, 'game-voice-monitor'),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('flipping bindingPurpose into an occupied null-game slot throws ConflictException', async () => {
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: null,
+      });
+      const b = await insertBinding({
+        bindingPurpose: 'general-lobby',
+        gameId: null,
+      });
+      await expect(
+        svc().updateConfig(b.id, {}, 'game-voice-monitor'),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  // ── PERMIT — shapes the partial indexes must NEVER reject ──────────────────
+  describe('PERMIT — allowed shapes stay allowed', () => {
+    it('permits two game-voice-monitor bindings for different games (ROK-842)', async () => {
+      const g2 = await secondGame();
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: testApp.seed.game.id,
+      });
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: g2.id,
+      });
+      const rows = (await svc().getBindings(GUILD)).filter(
+        (r) => r.channelId === CHANNEL,
+      );
+      expect(rows).toHaveLength(2);
+    });
+
+    it('permits monitor(game) + general-lobby(NULL) — the prod #Gamer Night pair', async () => {
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: testApp.seed.game.id,
+      });
+      await insertBinding({ bindingPurpose: 'general-lobby', gameId: null });
+      const rows = await svc().getBindingsWithGameNames(GUILD);
+      expect(rows.filter((r) => r.channelId === CHANNEL)).toHaveLength(2);
+    });
+
+    it('permits a non-series row and a series row sharing purpose + game', async () => {
+      const game = testApp.seed.game;
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: game.id,
+      });
+      await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: game.id,
+        recurrenceGroupId: SERIES,
+      });
+      const rows = (await svc().getBindings(GUILD)).filter(
+        (r) => r.channelId === CHANNEL,
+      );
+      expect(rows).toHaveLength(2);
+    });
   });
 });

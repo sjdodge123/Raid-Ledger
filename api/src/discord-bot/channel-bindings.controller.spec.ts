@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ChannelBindingsController } from './channel-bindings.controller';
 import { ChannelBindingsService } from './services/channel-bindings.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
@@ -37,6 +41,9 @@ function buildModule() {
           getBindingById: jest.fn().mockResolvedValue(null),
           bind: jest.fn(),
           unbind: jest.fn().mockResolvedValue(true),
+          // ROK-1419: delete-by-id replaces the channel-wide unbind() so the
+          // admin Remove button drops exactly one binding, not every sibling.
+          unbindById: jest.fn().mockResolvedValue(true),
           updateConfig: jest.fn(),
           gameExists: jest.fn().mockResolvedValue(true),
         },
@@ -539,7 +546,7 @@ describe('ChannelBindingsController — deleteBinding', () => {
     );
   });
 
-  it('should delete the binding by resolving guildId and channelId', async () => {
+  it('should delete exactly the resolved binding via unbindById', async () => {
     const binding = makeBinding({
       guildId: 'guild-123',
       channelId: 'channel-456',
@@ -548,11 +555,9 @@ describe('ChannelBindingsController — deleteBinding', () => {
 
     await controller.deleteBinding('binding-uuid-1');
 
-    expect(bindingsService.unbind).toHaveBeenCalledWith(
-      'guild-123',
-      'channel-456',
-      null,
-    );
+    // ROK-1419: delete-by-id, NOT the channel-wide unbind(guild, channel, rgid).
+    expect(bindingsService.unbindById).toHaveBeenCalledWith('binding-uuid-1');
+    expect(bindingsService.unbind).not.toHaveBeenCalled();
   });
 
   it('should return void (204 No Content) on success', async () => {
@@ -570,5 +575,57 @@ describe('ChannelBindingsController — deleteBinding', () => {
       NotFoundException,
     );
     expect(bindingsService.getBindingById).toHaveBeenCalledWith('my-id-xyz');
+  });
+});
+
+// ── ROK-1419: delete-by-id + slot-conflict surfacing ──────────────────────
+
+describe('ChannelBindingsController — ROK-1419 deleteBinding removes exactly one row', () => {
+  it('should delete via unbindById(id) and NOT the channel-wide unbind()', async () => {
+    // On origin/main deleteBinding calls unbind(guildId, channelId, rgid),
+    // which deletes EVERY non-series binding on the channel (the #Gamer Night
+    // blast-radius bug). Post-fix it must delegate to unbindById(id) so a
+    // sibling binding on the same channel survives.
+    const binding = makeBinding({
+      id: 'binding-uuid-1',
+      guildId: 'guild-123',
+      channelId: 'channel-456',
+    });
+    bindingsService.getBindingById.mockResolvedValue(binding);
+    (
+      bindingsService as unknown as { unbindById: jest.Mock }
+    ).unbindById.mockResolvedValue(true);
+
+    await controller.deleteBinding('binding-uuid-1');
+
+    expect(
+      (bindingsService as unknown as { unbindById: jest.Mock }).unbindById,
+    ).toHaveBeenCalledWith('binding-uuid-1');
+    expect(bindingsService.unbind).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChannelBindingsController — ROK-1419 updateBinding surfaces slot conflict as 409', () => {
+  it('should propagate a ConflictException from updateConfig as HTTP 409 (not swallow to 400)', async () => {
+    // Flipping bindingPurpose into an already-occupied slot violates one of the
+    // new partial unique indexes; the service raises a ConflictException with
+    // an operator-facing message. The controller must surface it as 409, NOT
+    // convert it to a generic 400 in the validation catch block.
+    const conflict = new ConflictException({
+      message:
+        'That channel already has a Game Voice Monitor binding for this game.',
+      code: 'BINDING_SLOT_OCCUPIED',
+    });
+    bindingsService.updateConfig.mockRejectedValue(conflict);
+
+    const error = await controller
+      .updateBinding('binding-uuid-1', { bindingPurpose: 'game-voice-monitor' })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getStatus()).toBe(409);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'BINDING_SLOT_OCCUPIED',
+    });
   });
 });

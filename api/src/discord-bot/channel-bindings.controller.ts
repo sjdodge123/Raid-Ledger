@@ -128,11 +128,9 @@ export class ChannelBindingsController {
       throw new NotFoundException('Binding not found');
     }
 
-    await this.channelBindingsService.unbind(
-      binding.guildId,
-      binding.channelId,
-      binding.recurrenceGroupId,
-    );
+    // ROK-1419: delete exactly THIS binding, not every non-series binding on
+    // the channel (the #Gamer Night blast-radius bug that unbind() caused).
+    await this.channelBindingsService.unbindById(id);
   }
 }
 
