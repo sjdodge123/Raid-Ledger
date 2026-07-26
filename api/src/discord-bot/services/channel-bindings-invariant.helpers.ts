@@ -147,13 +147,20 @@ export async function normalizeAndDeleteGames(
     if (dropIds.length > 0) {
       await tx.delete(cb).where(inArray(cb.id, dropIds));
     }
-    await tx.delete(schema.games).where(inArray(schema.games.id, gameIds));
+    // Retarget BEFORE the games delete (Codex P1 finding): a monitor survivor
+    // passing through (game-voice-monitor, NULL) at FK-null time would collide
+    // with a pre-existing legacy inert monitor(NULL) row on the same channel
+    // under the null-game index. Retargeted first, the survivor transits as
+    // (general-lobby, G) — which cannot collide: any OTHER lobby carrying G on
+    // the channel is in the same slot group and would have been the preferred
+    // survivor instead of this monitor.
     if (retargetIds.length > 0) {
       await tx
         .update(cb)
         .set({ bindingPurpose: 'general-lobby', updatedAt: new Date() })
         .where(inArray(cb.id, retargetIds));
     }
+    await tx.delete(schema.games).where(inArray(schema.games.id, gameIds));
     for (const b of affected) {
       const action = dropIds.includes(b.id)
         ? 'removed as redundant (slot already covered)'

@@ -254,6 +254,39 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
     expect(rows[0].gameId).toBeNull();
   });
 
+  // (4f) Codex P1 pin: a LEGACY inert monitor(NULL) (raw/restore shape) shares
+  // the channel with a doomed monitor(G). At FK-null time the survivor would
+  // transiently become a second (game-voice-monitor, NULL) row — 23505 under
+  // the null-game index — unless the retarget runs BEFORE the games delete.
+  it('legacy inert monitor + doomed monitor → survivor becomes lobby, inert row still flagged, no 23505', async () => {
+    const game = await makeGame('Doomed Game 4f');
+    const legacyInert = await insertBinding({
+      bindingPurpose: 'game-voice-monitor',
+      gameId: null,
+    });
+    const doomed = await insertBinding({
+      bindingPurpose: 'game-voice-monitor',
+      gameId: game.id,
+    });
+
+    await expect(
+      normalizeAndDeleteGames(testApp.db, [game.id]),
+    ).resolves.not.toThrow();
+
+    const rows = await bindingsOnChannel();
+    expect(rows).toHaveLength(2);
+    const survivor = rows.find((r) => r.id === doomed.id);
+    expect(survivor?.bindingPurpose).toBe('general-lobby');
+    expect(survivor?.gameId).toBeNull();
+    const legacy = rows.find((r) => r.id === legacyInert.id);
+    expect(legacy?.bindingPurpose).toBe('game-voice-monitor'); // untouched…
+
+    const health = await getHealth();
+    const flagged = health.data.filter((d) => d.channelId === CHANNEL);
+    expect(flagged).toHaveLength(1); // …and still surfaced for repair
+    expect(flagged[0]?.code).toBe('BINDING_MONITOR_REQUIRES_GAME');
+  });
+
   // (4c) Collision: two co-channel monitors whose games are deleted together
   // cannot both become (general-lobby, NULL) under B2's nullgame unique index.
   // The normalizer keeps ONE (general-lobby) and drops the redundant one — no 23505.
