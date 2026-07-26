@@ -103,19 +103,30 @@ export function detectBehavior(
 
 type BindingLogger = Pick<Logger, 'log'>;
 
+type BindingRow = typeof schema.channelBindings.$inferSelect;
+
+/** The purpose a binding legally lands on once its game is nulled. */
+function targetPurposeAfterNull(b: BindingRow): string {
+  return b.channelType === 'voice' ? 'general-lobby' : 'game-announcements';
+}
+
 /**
  * App-side game deletion that keeps the binding invariant intact (AC3).
  *
- * Deleting a game fires channel_bindings' FK ON DELETE SET NULL, which would
- * leave any game-voice-monitor binding inert. This helper OWNS the delete:
- * affected monitors are normalized to general-lobby — collision-aware, because
- * under ROK-1419's null-game unique index a channel can hold at most ONE
- * non-series (general-lobby, NULL) row. Per (guild, channel): if a lobby
- * already covers the channel, ALL affected monitors are redundant and are
- * removed; otherwise the first affected monitor becomes the lobby and the rest
- * are removed. Series monitors (outside the partial indexes) are normalized
- * in place. Raw-SQL / pg_restore / bulk paths bypass this by nature — that is
- * what the runtime tolerance + boot detection exist for.
+ * Deleting a game fires channel_bindings' FK ON DELETE SET NULL. Two hazards:
+ * a game-voice-monitor binding becomes permanently INERT (the ROK-1415
+ * incident), and — under ROK-1419's null-game partial unique index — ANY
+ * affected non-series row (monitor OR lobby-with-game OR text announcements)
+ * that nulls into a (channel, purpose) slot already holding a null-game row
+ * raises 23505 mid-delete. This helper OWNS the delete: per (guild, channel,
+ * target-purpose) slot it keeps at most ONE null-game survivor — preferring an
+ * untouched existing null-game row, then an affected row that already carries
+ * the target purpose (no rewrite needed), then the first affected monitor
+ * (purpose normalized to general-lobby after the delete) — and removes the
+ * rest as redundant. Series rows sit outside the partial indexes: series
+ * monitors are purpose-normalized in place, other series rows are left alone.
+ * Raw-SQL / pg_restore / bulk paths bypass this by nature — that is what the
+ * runtime tolerance + boot detection exist for.
  */
 export async function normalizeAndDeleteGames(
   db: PostgresJsDatabase<typeof schema>,
@@ -128,28 +139,29 @@ export async function normalizeAndDeleteGames(
     const affected = await tx
       .select()
       .from(cb)
-      .where(
-        and(
-          inArray(cb.gameId, gameIds),
-          eq(cb.bindingPurpose, 'game-voice-monitor'),
-          eq(cb.channelType, 'voice'),
-        ),
-      );
-    const { keepIds, dropIds } = await planNormalization(tx, affected);
+      .where(inArray(cb.gameId, gameIds));
+    const { keepIds, retargetIds, dropIds } = await planNormalization(
+      tx,
+      affected,
+    );
     if (dropIds.length > 0) {
       await tx.delete(cb).where(inArray(cb.id, dropIds));
     }
     await tx.delete(schema.games).where(inArray(schema.games.id, gameIds));
-    if (keepIds.length > 0) {
+    if (retargetIds.length > 0) {
       await tx
         .update(cb)
         .set({ bindingPurpose: 'general-lobby', updatedAt: new Date() })
-        .where(inArray(cb.id, keepIds));
+        .where(inArray(cb.id, retargetIds));
     }
     for (const b of affected) {
-      const action = keepIds.includes(b.id)
-        ? 'normalized to general-lobby'
-        : 'removed as redundant (a lobby already covers the channel)';
+      const action = dropIds.includes(b.id)
+        ? 'removed as redundant (slot already covered)'
+        : retargetIds.includes(b.id)
+          ? 'normalized to general-lobby'
+          : keepIds.includes(b.id)
+            ? 'kept (game cleared, purpose already valid)'
+            : 'left in place (series row outside the unique indexes)';
       logger.log(
         `[binding-guard] game-delete: binding=${b.id} channel=${b.channelId} ${action} (game ${b.gameId} deleted, ROK-1415)`,
       );
@@ -157,44 +169,58 @@ export async function normalizeAndDeleteGames(
   });
 }
 
-/** Per-channel collision plan: at most one non-series (lobby, NULL) survivor. */
+interface NormalizationPlan {
+  /** Non-series survivors whose purpose is already the slot target. */
+  keepIds: string[];
+  /** Survivors needing a purpose rewrite to general-lobby (monitors). */
+  retargetIds: string[];
+  /** Redundant rows removed BEFORE the games delete (collision avoidance). */
+  dropIds: string[];
+}
+
+/** Per (guild, channel, target-purpose) slot: at most one null-game survivor. */
 async function planNormalization(
   tx: Pick<PostgresJsDatabase<typeof schema>, 'select'>,
-  affected: (typeof schema.channelBindings.$inferSelect)[],
-): Promise<{ keepIds: string[]; dropIds: string[] }> {
+  affected: BindingRow[],
+): Promise<NormalizationPlan> {
   const cb = schema.channelBindings;
-  const keepIds: string[] = [];
-  const dropIds: string[] = [];
-  const byChannel = new Map<string, typeof affected>();
+  const plan: NormalizationPlan = { keepIds: [], retargetIds: [], dropIds: [] };
+  const bySlot = new Map<string, BindingRow[]>();
   for (const b of affected) {
     if (b.recurrenceGroupId != null) {
-      // Series rows sit outside the partial unique indexes — no collision risk.
-      keepIds.push(b.id);
+      // Series rows: no index collision possible; only monitors need repair.
+      if (b.bindingPurpose === 'game-voice-monitor')
+        plan.retargetIds.push(b.id);
       continue;
     }
-    const key = `${b.guildId}:${b.channelId}`;
-    byChannel.set(key, [...(byChannel.get(key) ?? []), b]);
+    const key = `${b.guildId}:${b.channelId}:${targetPurposeAfterNull(b)}`;
+    bySlot.set(key, [...(bySlot.get(key) ?? []), b]);
   }
-  for (const group of byChannel.values()) {
+  for (const group of bySlot.values()) {
     const [first] = group;
-    const [existingLobby] = await tx
+    const target = targetPurposeAfterNull(first);
+    const [occupied] = await tx
       .select({ id: cb.id })
       .from(cb)
       .where(
         and(
           eq(cb.guildId, first.guildId),
           eq(cb.channelId, first.channelId),
-          eq(cb.bindingPurpose, 'general-lobby'),
+          eq(cb.bindingPurpose, target),
           isNull(cb.gameId),
           isNull(cb.recurrenceGroupId),
         ),
       )
       .limit(1);
-    const survivors = existingLobby ? [] : [first.id];
-    keepIds.push(...survivors);
-    dropIds.push(
-      ...group.map((b) => b.id).filter((id) => !survivors.includes(id)),
+    let survivor: BindingRow | undefined;
+    if (!occupied) {
+      survivor = group.find((b) => b.bindingPurpose === target) ?? group[0];
+      if (survivor.bindingPurpose === target) plan.keepIds.push(survivor.id);
+      else plan.retargetIds.push(survivor.id);
+    }
+    plan.dropIds.push(
+      ...group.map((b) => b.id).filter((id) => id !== survivor?.id),
     );
   }
-  return { keepIds, dropIds };
+  return plan;
 }

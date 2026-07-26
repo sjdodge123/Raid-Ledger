@@ -200,6 +200,60 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
     expect(health.data.find((d) => d.channelId === CHANNEL)).toBeUndefined();
   });
 
+  // (4d) Lobby-with-game collision (Lead-found while implementing): a
+  // general-lobby binding CARRYING the doomed game takes FK SET NULL too — if
+  // an untouched (general-lobby, NULL) row already occupies the channel, the
+  // naive delete would 23505 under ROK-1419's null-game index mid-transaction.
+  it('lobby-with-game + existing null lobby → doomed lobby dropped as redundant, no 23505', async () => {
+    const game = await makeGame('Doomed Game 4d');
+    await insertBinding({ bindingPurpose: 'general-lobby', gameId: null });
+    await insertBinding({ bindingPurpose: 'general-lobby', gameId: game.id });
+
+    await expect(
+      normalizeAndDeleteGames(testApp.db, [game.id]),
+    ).resolves.not.toThrow();
+
+    const rows = await bindingsOnChannel();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].bindingPurpose).toBe('general-lobby');
+    expect(rows[0].gameId).toBeNull();
+  });
+
+  // (4e) Same hazard on TEXT channels: announcements(game) nulling into a
+  // channel that already has announcements(NULL) — the null-game index is
+  // purpose-keyed, not voice-only.
+  it('text announcements(game) + announcements(null) → doomed row dropped, no 23505', async () => {
+    const game = await makeGame('Doomed Game 4e');
+    const TEXT_CH = 'rok1415-text-channel';
+    const insertText = (gameId: number | null) =>
+      testApp.db
+        .insert(cb)
+        .values({
+          guildId: GUILD,
+          channelId: TEXT_CH,
+          channelType: 'text',
+          bindingPurpose: 'game-announcements',
+          gameId,
+          recurrenceGroupId: null,
+          config: {},
+        })
+        .returning();
+    await insertText(null);
+    await insertText(game.id);
+
+    await expect(
+      normalizeAndDeleteGames(testApp.db, [game.id]),
+    ).resolves.not.toThrow();
+
+    const rows = await testApp.db
+      .select()
+      .from(cb)
+      .where(eq(cb.channelId, TEXT_CH));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].bindingPurpose).toBe('game-announcements');
+    expect(rows[0].gameId).toBeNull();
+  });
+
   // (4c) Collision: two co-channel monitors whose games are deleted together
   // cannot both become (general-lobby, NULL) under B2's nullgame unique index.
   // The normalizer keeps ONE (general-lobby) and drops the redundant one — no 23505.
