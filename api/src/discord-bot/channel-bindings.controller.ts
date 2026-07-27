@@ -176,10 +176,12 @@ export class ChannelBindingsController {
   ): Promise<{ data: ChannelBindingDto }> {
     try {
       const dto = UpdateChannelBindingSchema.parse(body);
+      const gameIdPatch = await this.resolveUpdateGameId(dto);
       const result = await this.channelBindingsService.updateConfig(
         id,
         dto.config ?? {},
         dto.bindingPurpose,
+        ...gameIdPatch,
       );
       if (!result) throw new NotFoundException('Binding not found');
       return { data: toBindingDto(result) };
@@ -187,6 +189,24 @@ export class ChannelBindingsController {
       if (error instanceof NotFoundException) throw error;
       handleValidationError(error);
     }
+  }
+
+  /**
+   * ROK-1416: resolve the optional PATCH gameId into updateConfig's 4th arg.
+   * Returns a spreadable tuple — `[]` when the body omits gameId (updateConfig
+   * stays a 3-arg call, unchanged) or a one-element patch when present. A
+   * non-null gameId is existence-checked → 404, exactly like the create path;
+   * an explicit null rides through so the invariant guard can 400 a monitor.
+   */
+  private async resolveUpdateGameId(dto: {
+    gameId?: number | null;
+  }): Promise<[] | [{ gameIdProvided: boolean; gameId: number | null }]> {
+    if (dto.gameId === undefined) return [];
+    if (dto.gameId != null) {
+      const exists = await this.channelBindingsService.gameExists(dto.gameId);
+      if (!exists) throw new NotFoundException('Game not found');
+    }
+    return [{ gameIdProvided: true, gameId: dto.gameId }];
   }
 
   @Delete(':id')

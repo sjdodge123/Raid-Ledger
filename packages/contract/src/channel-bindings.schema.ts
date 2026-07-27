@@ -47,6 +47,12 @@ export const CreateChannelBindingSchema = z.object({
 export const UpdateChannelBindingSchema = z.object({
   config: ChannelBindingConfigSchema.optional(),
   bindingPurpose: BindingPurposeEnum.optional(),
+  /**
+   * ROK-1416: reassign/clear the bound game from the admin edit form.
+   * Omitted = leave the game unchanged; explicit `null` = clear it (the guard
+   * 400s a monitor cleared to null); a number = reassign to that game.
+   */
+  gameId: z.number().int().nullable().optional(),
 });
 
 export type BindingPurpose = z.infer<typeof BindingPurposeEnum>;
