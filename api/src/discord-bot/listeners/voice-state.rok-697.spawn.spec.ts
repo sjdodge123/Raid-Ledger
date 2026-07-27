@@ -9,6 +9,7 @@
  * 2. Without unanimous game activity → spawn after 15-minute delay
  *    - Timer resets if count drops below threshold during wait
  */
+import { Logger } from '@nestjs/common';
 import { Events } from 'discord.js';
 import type { VoiceStateListener } from './voice-state.listener';
 import {
@@ -872,6 +873,130 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       // called (RED). After the tolerance, the delayed spawn fires.
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    });
+  });
+
+  // ─── ROK-1417 B4: per-join terminal-outcome trace lines ────────────────────
+
+  describe('ROK-1417 B4: [voice-gate] terminal-outcome trace (RED until traceGate is wired)', () => {
+    // These assert the Tier-1 trace line emits at the join→spawn decision. On
+    // main (traceGate not yet wired) NO `[voice-gate]` line is logged → RED.
+    // Each case uses a UNIQUE channel+binding id so its throttle bucket
+    // (`${channelId}:${bindingId}:${outcome}`) is a guaranteed first-emit and
+    // cannot be suppressed by another test's earlier emit (no __resetTraceState
+    // import — that would tie this file to the not-yet-created module).
+    let logSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      logSpy = jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      logSpy.mockRestore();
+    });
+
+    function firedOutcome(outcome: string): boolean {
+      return logSpy.mock.calls
+        .map((c) => c[0])
+        .some(
+          (a) =>
+            typeof a === 'string' &&
+            a.startsWith('[voice-gate]') &&
+            a.includes(`outcome=${outcome} `),
+        );
+    }
+
+    async function join(
+      handler: (o: unknown, n: unknown) => void,
+      channelId: string,
+      userId: string,
+    ): Promise<void> {
+      handler(
+        { channelId: null, id: userId },
+        {
+          channelId,
+          id: userId,
+          member: {
+            displayName: userId,
+            user: { username: userId, avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+    }
+
+    it('emits outcome=spawned-immediate when a unanimous game bind spawns on the spot', async () => {
+      const binding = {
+        id: 'b4-imm',
+        channelId: 'voice-b4-imm',
+        bindingPurpose: 'game-voice-monitor' as const,
+        gameId: 1,
+        gameName: 'Rise of Kingdoms',
+        config: { minPlayers: 2 },
+      };
+      const handler = await setupWithBinding('voice-b4-imm', binding);
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: 1,
+        gameName: 'Rise of Kingdoms',
+      });
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      await join(handler, 'voice-b4-imm', 'user-1');
+      await join(handler, 'voice-b4-imm', 'user-2');
+
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+      expect(firedOutcome('spawned-immediate')).toBe(true);
+    });
+
+    it('emits outcome=spawn-scheduled when a game bind arms the 15-minute delayed timer', async () => {
+      const binding = {
+        id: 'b4-sched',
+        channelId: 'voice-b4-sched',
+        bindingPurpose: 'game-voice-monitor' as const,
+        gameId: 1,
+        gameName: 'Rise of Kingdoms',
+        config: { minPlayers: 2 },
+      };
+      const handler = await setupWithBinding('voice-b4-sched', binding);
+      // Presence-null → non-unanimous → delayed path scheduled at join time.
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      await join(handler, 'voice-b4-sched', 'user-1');
+      await join(handler, 'voice-b4-sched', 'user-2');
+
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+      expect(firedOutcome('spawn-scheduled')).toBe(true);
+    });
+
+    it('emits outcome=below-threshold-inert for a null-game monitor below threshold', async () => {
+      const binding = {
+        id: 'b4-inert',
+        channelId: 'voice-b4-inert',
+        bindingPurpose: 'game-voice-monitor' as const,
+        gameId: null,
+        gameName: null,
+        config: { minPlayers: 2 },
+      };
+      const handler = await setupWithBinding('voice-b4-inert', binding, [
+        { id: 'user-1', displayName: 'Player1' },
+      ]);
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      // Single member: 1 < minPlayers(2) on a null-game monitor → the distinct
+      // below-threshold-inert token (not healthy below-threshold).
+      await join(handler, 'voice-b4-inert', 'user-1');
+
+      expect(firedOutcome('below-threshold-inert')).toBe(true);
     });
   });
 
