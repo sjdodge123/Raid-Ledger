@@ -9,6 +9,14 @@ interface GameSearchInputProps {
     error?: string;
     /** Games to show immediately when input is focused with no query (e.g. registry games) */
     initialSuggestions?: IgdbGameDto[];
+    /**
+     * ROK-1416: unique field id so per-row admin forms don't collide on the
+     * hard-coded `game-search` DOM id (duplicate-id hazard). Defaults to
+     * `game-search` to keep every existing single-instance caller unchanged.
+     */
+    id?: string;
+    /** ROK-1416: focus the input on mount (the inert-binding "Fix →" repair target). */
+    autoFocus?: boolean;
 }
 
 function measureDropdownPos(el: HTMLDivElement) {
@@ -150,12 +158,12 @@ function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGame
     return { query, setQuery, isOpen, setIsOpen, containerRef, inputRef, isLoading, source: searchResult?.meta?.source, dropdownPos, handleSelect, handleClear, hasInitialSuggestions, showDropdown, displayGames };
 }
 
-export function GameSearchInput({ value, onChange, error, initialSuggestions }: GameSearchInputProps) {
+export function GameSearchInput({ value, onChange, error, initialSuggestions, id = 'game-search', autoFocus }: GameSearchInputProps) {
     const { containerRef, inputRef, ...s } = useGameSearchState(value, onChange, initialSuggestions);
     return (
         <div className="relative" ref={containerRef}>
-            <label htmlFor="game-search" className="block text-sm font-medium text-secondary mb-2">Game</label>
-            <SearchInputField inputRef={inputRef} query={s.query} value={value} isLoading={s.isLoading}
+            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-2">Game</label>
+            <SearchInputField inputRef={inputRef} id={id} autoFocus={autoFocus} query={s.query} value={value} isLoading={s.isLoading}
                 error={error}
                 onInputChange={(e) => { s.setQuery(e.target.value); s.setIsOpen(true); if (value && e.target.value !== value.name) onChange(null); }}
                 onFocus={() => (s.query.length >= 2 || s.hasInitialSuggestions) && s.setIsOpen(true)}
@@ -168,14 +176,15 @@ export function GameSearchInput({ value, onChange, error, initialSuggestions }: 
     );
 }
 
-function SearchInputField({ inputRef, query, value, isLoading, error, onInputChange, onFocus, onClear }: {
-    inputRef: React.RefObject<HTMLInputElement | null>; query: string; value: IgdbGameDto | null;
+function SearchInputField({ inputRef, id, autoFocus, query, value, isLoading, error, onInputChange, onFocus, onClear }: {
+    inputRef: React.RefObject<HTMLInputElement | null>; id: string; autoFocus?: boolean; query: string; value: IgdbGameDto | null;
     isLoading: boolean; error?: string;
     onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void; onFocus: () => void; onClear: () => void;
 }) {
     return (
         <div className="relative">
-            <input ref={inputRef} id="game-search" type="text" value={query}
+            {/* autoFocus (ROK-1416): the input receives focus when the form opens as the inert-binding repair target. */}
+            <input ref={inputRef} id={id} autoFocus={autoFocus} type="text" value={query}
                 onChange={onInputChange} onFocus={onFocus} placeholder="Search for a game..."
                 className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${error ? 'border-red-500' : value ? 'border-emerald-500' : 'border-edge'}`} />
             {value && (
