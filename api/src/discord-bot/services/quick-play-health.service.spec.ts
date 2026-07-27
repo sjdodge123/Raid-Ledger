@@ -92,7 +92,7 @@ function makeService(db: unknown, cron: unknown, settingsValue: string | null) {
   } as unknown as SettingsService;
   return new QuickPlayHealthService(
     db as never,
-    cron as unknown as CronJobService,
+    cron as CronJobService,
     settings,
   );
 }
@@ -101,7 +101,9 @@ describe('QuickPlayHealthService (ROK-1417 B3b Tier 3)', () => {
   let logSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    logSpy = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
     (Sentry.captureMessage as jest.Mock).mockClear();
   });
 
@@ -111,7 +113,11 @@ describe('QuickPlayHealthService (ROK-1417 B3b Tier 3)', () => {
 
   it('runs its body through executeWithTracking under the exact job name', async () => {
     const cron = makeCron();
-    const db = makeDb([[{ count: 5, lastCreatedAt: new Date() }], [], [{ count: 0 }]]);
+    const db = makeDb([
+      [{ count: 5, lastCreatedAt: new Date() }],
+      [],
+      [{ count: 0 }],
+    ]);
     await makeService(db, cron, 'true').checkQuickPlayHealth();
     expect(cron.executeWithTracking).toHaveBeenCalledWith(
       JOB_NAME,
@@ -159,7 +165,11 @@ describe('QuickPlayHealthService (ROK-1417 B3b Tier 3)', () => {
 
   it('is HEALTHY when there are no inert bindings, even with zero ad-hoc events', async () => {
     const cron = makeCron();
-    const db = makeDb([[{ count: 0, lastCreatedAt: null }], [], [{ count: 0 }]]);
+    const db = makeDb([
+      [{ count: 0, lastCreatedAt: null }],
+      [],
+      [{ count: 0 }],
+    ]);
     await expect(
       makeService(db, cron, 'true').checkQuickPlayHealth(),
     ).resolves.toBeUndefined();
@@ -168,7 +178,11 @@ describe('QuickPlayHealthService (ROK-1417 B3b Tier 3)', () => {
 
   it('ALWAYS logs a [quick-play-health] summary line at logger.log', async () => {
     const cron = makeCron();
-    const db = makeDb([[{ count: 4, lastCreatedAt: new Date() }], [], [{ count: 0 }]]);
+    const db = makeDb([
+      [{ count: 4, lastCreatedAt: new Date() }],
+      [],
+      [{ count: 0 }],
+    ]);
     await makeService(db, cron, 'true').checkQuickPlayHealth();
     const logged = logSpy.mock.calls
       .map((c) => c[0])

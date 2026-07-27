@@ -47,7 +47,9 @@ function makeLogger() {
 function gateLines(logger: ReturnType<typeof makeLogger>): string[] {
   return logger.log.mock.calls
     .map((c) => c[0])
-    .filter((a): a is string => typeof a === 'string' && a.startsWith('[voice-gate]'));
+    .filter(
+      (a): a is string => typeof a === 'string' && a.startsWith('[voice-gate]'),
+    );
 }
 
 const FULL_CTX: GateCtx = {
@@ -87,7 +89,9 @@ describe('voice-gate-trace (ROK-1417 B4 Tier 1+2)', () => {
 
     it('puts outcome= FIRST, right after the [voice-gate] tag', () => {
       traceGate(asLogger(), 'spawned-immediate', FULL_CTX);
-      expect(gateLines(logger)[0]).toMatch(/^\[voice-gate\] outcome=spawned-immediate /);
+      expect(gateLines(logger)[0]).toMatch(
+        /^\[voice-gate\] outcome=spawned-immediate /,
+      );
     });
 
     it('prints the full fixed-key line in order when every field is present', () => {
@@ -99,7 +103,10 @@ describe('voice-gate-trace (ROK-1417 B4 Tier 1+2)', () => {
     });
 
     it('prints game=null LITERALLY for a null-game binding (the null is the signal)', () => {
-      traceGate(asLogger(), 'below-threshold-inert', { ...FULL_CTX, gameId: null });
+      traceGate(asLogger(), 'below-threshold-inert', {
+        ...FULL_CTX,
+        gameId: null,
+      });
       expect(gateLines(logger)[0]).toContain(' game=null ');
     });
 

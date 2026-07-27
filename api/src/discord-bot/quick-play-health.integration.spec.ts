@@ -125,4 +125,5 @@ function describeQuickPlayHealth() {
   });
 }
 
-describe('QuickPlayHealthService (integration)', () => describeQuickPlayHealth());
+describe('QuickPlayHealthService (integration)', () =>
+  describeQuickPlayHealth());

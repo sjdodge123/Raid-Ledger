@@ -57,7 +57,7 @@ export class QuickPlayHealthService {
         // max(created_at) comes back from postgres-js as a raw string for the
         // aggregate expression (no column parser), so interpolate it as-is
         // rather than calling Date methods on it.
-        `last=${adHoc.lastCreatedAt ?? 'never'} ` +
+        `last=${String(adHoc.lastCreatedAt ?? 'never')} ` +
         `inert=${inert.length} monitors_no_adhoc=${monitorsNoAdHoc} ` +
         `enabled=${enabled ?? 'unset'}`,
     );
