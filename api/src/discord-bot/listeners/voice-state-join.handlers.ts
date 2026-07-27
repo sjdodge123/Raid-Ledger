@@ -91,6 +91,18 @@ async function checkGameBindingThreshold(
   spawnFns?: GameSpawnFns,
 ): Promise<void> {
   const minPlayers = binding.config?.minPlayers ?? 2;
+  // ROK-1415 runtime tolerance: a null-game monitor (FK SET NULL, pg_restore,
+  // legacy write) must not be silently inert. Use the raw member count —
+  // mirroring resolveDelayedSpawnGate's fallback — and always take the
+  // non-unanimous DELAYED path: with no bind game nothing can be
+  // game-confirmed, so an immediate unanimous spawn is impossible by
+  // construction. getGameFilteredCount stays untouched — its confirmedCount
+  // feeds the ROK-1390/1394 degrade guard.
+  if (binding.gameId == null) {
+    const members = deps.channelMembers.get(channelId);
+    if (members && members.size >= minPlayers) spawnFns?.scheduleSpawn();
+    return;
+  }
   const { counted, allConfirmed } = await getGameFilteredCount(
     deps,
     channelId,

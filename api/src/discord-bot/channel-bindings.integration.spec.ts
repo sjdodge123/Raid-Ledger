@@ -535,17 +535,24 @@ describe('non-series uniqueness (Regression: ROK-1419)', () => {
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
-    it('flipping bindingPurpose into an occupied null-game slot throws ConflictException', async () => {
+    // ROK-1415 updated the scenario (intent preserved, not weakened): flipping
+    // TOWARD game-voice-monitor on a null-game row is now rejected 400 by the
+    // invariant guard BEFORE the conflict check (pinned by the invariant
+    // integration spec, case 2). The only classifier-legal flip that lands in
+    // the null-game index is the REPAIR direction — an inert monitor (seeded
+    // raw, the restore/bypass shape) flipped to general-lobby while a lobby
+    // already occupies the channel. B2's index still backstops that as a 409.
+    it('flipping an inert monitor to general-lobby onto an occupied null-game slot throws ConflictException', async () => {
       await insertBinding({
-        bindingPurpose: 'game-voice-monitor',
-        gameId: null,
-      });
-      const b = await insertBinding({
         bindingPurpose: 'general-lobby',
         gameId: null,
       });
+      const b = await insertBinding({
+        bindingPurpose: 'game-voice-monitor',
+        gameId: null,
+      });
       await expect(
-        svc().updateConfig(b.id, {}, 'game-voice-monitor'),
+        svc().updateConfig(b.id, {}, 'general-lobby'),
       ).rejects.toBeInstanceOf(ConflictException);
     });
   });

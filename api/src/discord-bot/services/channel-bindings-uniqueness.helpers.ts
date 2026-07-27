@@ -13,7 +13,7 @@
  * 23505 (races, the /bind path) into the same ConflictException.
  */
 import { ConflictException } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -178,4 +178,34 @@ export async function findExistingBinding(
     .where(and(...conditions))
     .limit(1);
   return existing;
+}
+
+/**
+ * Remove existing SAME-SLOT series bindings, returning replaced channel IDs.
+ * Relocated verbatim from ChannelBindingsService (ROK-1415 line-budget move).
+ *
+ * ROK-1351: scoped by `channelType` so a series can hold a voice (host) slot
+ * and a text (announce) slot simultaneously. Re-binding the voice slot only
+ * deletes the prior voice row; the text announce row survives (and vice versa).
+ */
+export async function cleanupSeriesBindings(
+  db: PostgresJsDatabase<typeof schema>,
+  guildId: string,
+  channelId: string,
+  channelType: string,
+  recurrenceGroupId?: string | null,
+): Promise<string[]> {
+  if (!recurrenceGroupId) return [];
+  const deleted = await db
+    .delete(schema.channelBindings)
+    .where(
+      and(
+        eq(schema.channelBindings.guildId, guildId),
+        eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
+        isNotNull(schema.channelBindings.recurrenceGroupId),
+        eq(schema.channelBindings.channelType, channelType),
+      ),
+    )
+    .returning({ channelId: schema.channelBindings.channelId });
+  return deleted.map((d) => d.channelId).filter((id) => id !== channelId);
 }

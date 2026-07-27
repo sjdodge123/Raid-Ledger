@@ -5,6 +5,7 @@
  * group) and — critically — never mutates: insert/update/delete are asserted
  * unused. The rejected auto-repair variant is why this must stay read-only.
  */
+import * as Sentry from '@sentry/nestjs';
 import {
   reportBindingHealthWarnings,
   type HealBinding,
@@ -13,6 +14,11 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+
+jest.mock('@sentry/nestjs', () => ({
+  captureMessage: jest.fn(),
+  captureException: jest.fn(),
+}));
 
 function makeLogger() {
   return { warn: jest.fn() };
@@ -102,5 +108,70 @@ describe('reportBindingHealthWarnings (ROK-1389 Part 3)', () => {
 
     expect(logger.warn).not.toHaveBeenCalled();
     expect(mockDb.select).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ROK-1415 (B3-4) — inert Quick Play binding detection (Tier 0).
+ *
+ * A (voice, game-voice-monitor, gameId=NULL) binding makes Quick Play
+ * permanently inert. The reporter now flags it with a `[binding-heal] INERT`
+ * WARN + a stable-message `Sentry.captureMessage`, scanned ABOVE the
+ * `seriesBindings.length === 0` short-circuit so a NON-series inert bind (the
+ * common shape) still surfaces, and BEFORE the DB call so a transient DB error
+ * can't suppress the detection.
+ *
+ * RED on main: the current `reportBindingHealthWarnings` returns early for a
+ * zero-series binding set, so it never warns and never captures.
+ */
+describe('reportBindingHealthWarnings — inert Quick Play detection (Regression: ROK-1415)', () => {
+  let mockDb: MockDb;
+  let logger: ReturnType<typeof makeLogger>;
+
+  /** The incident shape: voice monitor with a NULL game, NON-series. */
+  const INERT: HealBinding = {
+    channelId: 'voice-inert',
+    channelType: 'voice',
+    bindingPurpose: 'game-voice-monitor',
+    gameId: null,
+    recurrenceGroupId: null,
+  };
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    logger = makeLogger();
+    (Sentry.captureMessage as jest.Mock).mockClear();
+    // No series bindings in this suite → the future-events query is never reached.
+    mockDb.where.mockResolvedValue([]);
+  });
+
+  it('WARNs [binding-heal] INERT with the channelId and ROK-1415, even with ZERO series bindings', async () => {
+    await reportBindingHealthWarnings(mockDb as never, [INERT], logger);
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const msg = logger.warn.mock.calls[0][0] as string;
+    expect(msg).toContain('INERT');
+    expect(msg).toContain('voice-inert'); // channelId
+    expect(msg).toContain('ROK-1415');
+  });
+
+  it('captures the inert binding to Sentry exactly once', async () => {
+    await reportBindingHealthWarnings(mockDb as never, [INERT], logger);
+    expect(Sentry.captureMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT flag a healthy monitor binding (voice, monitor, game set)', async () => {
+    const healthy: HealBinding = {
+      channelId: 'voice-ok',
+      channelType: 'voice',
+      bindingPurpose: 'game-voice-monitor',
+      gameId: 5,
+      recurrenceGroupId: null,
+    };
+
+    await reportBindingHealthWarnings(mockDb as never, [healthy], logger);
+
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
   });
 });

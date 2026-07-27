@@ -1,13 +1,19 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { eq, and, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import {
   assertNoBindingConflict,
+  cleanupSeriesBindings,
   findExistingBinding,
   mappingConflicts,
 } from './channel-bindings-uniqueness.helpers';
+import {
+  assertResolvedUpdateTriple,
+  assertUpsertTriple,
+  detectBehavior,
+} from './channel-bindings-invariant.helpers';
 import type {
   BindingPurpose,
   ChannelType,
@@ -60,7 +66,8 @@ export class ChannelBindingsService {
     config?: ChannelBindingConfig,
     recurrenceGroupId?: string | null,
   ): Promise<{ binding: BindingRecord; replacedChannelIds: string[] }> {
-    const replacedChannelIds = await this.cleanupSeriesBindings(
+    const replacedChannelIds = await cleanupSeriesBindings(
+      this.db,
       guildId,
       channelId,
       channelType,
@@ -83,34 +90,6 @@ export class ChannelBindingsService {
   }
 
   /**
-   * Remove existing SAME-SLOT series bindings, returning replaced channel IDs.
-   *
-   * ROK-1351: scoped by `channelType` so a series can hold a voice (host) slot
-   * and a text (announce) slot simultaneously. Re-binding the voice slot only
-   * deletes the prior voice row; the text announce row survives (and vice versa).
-   */
-  private async cleanupSeriesBindings(
-    guildId: string,
-    channelId: string,
-    channelType: ChannelType,
-    recurrenceGroupId?: string | null,
-  ): Promise<string[]> {
-    if (!recurrenceGroupId) return [];
-    const deleted = await this.db
-      .delete(schema.channelBindings)
-      .where(
-        and(
-          eq(schema.channelBindings.guildId, guildId),
-          eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
-          isNotNull(schema.channelBindings.recurrenceGroupId),
-          eq(schema.channelBindings.channelType, channelType),
-        ),
-      )
-      .returning({ channelId: schema.channelBindings.channelId });
-    return deleted.map((d) => d.channelId).filter((id) => id !== channelId);
-  }
-
-  /**
    * Insert or update a channel binding row.
    * Uses manual SELECT → INSERT/UPDATE instead of ON CONFLICT because the
    * unique index includes nullable columns where NULL != NULL in PostgreSQL.
@@ -120,6 +99,11 @@ export class ChannelBindingsService {
    * 23505 from either partial unique index to a 409.
    */
   private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
+    // ROK-1415: covers BOTH branches — the UPDATE branch never writes gameId,
+    // and findExistingBinding matches on gameId, so opts.gameId IS the stored
+    // value there. This closes the second, undocumented route into the inert
+    // (voice, game-voice-monitor, NULL) triple.
+    assertUpsertTriple(opts);
     const existing = await findExistingBinding(this.db, opts);
     if (existing) {
       const [result] = await mappingConflicts(() =>
@@ -333,6 +317,10 @@ export class ChannelBindingsService {
   ): Promise<BindingRecord | null> {
     const existing = await this.getBindingById(id);
     if (!existing) return null;
+    // ROK-1415: assert the RESOLVED post-write triple. When ROK-1416 threads a
+    // gameId through this method, it must resolve into this same call — the
+    // guard sits downstream of any future field, by design.
+    assertResolvedUpdateTriple(existing, { bindingPurpose }, id);
     // ROK-1419: reject a purpose flip into an already-occupied non-series slot
     // with the operator message before the write; the DB index is the backstop.
     await assertNoBindingConflict(this.db, existing, bindingPurpose);
@@ -364,20 +352,14 @@ export class ChannelBindingsService {
   }
 
   /**
-   * Smart behavior detection based on channel type and binding context.
-   * Text channels default to game-announcements.
-   * Voice channels: game-voice-monitor if a game is specified, general-lobby if not.
+   * Smart behavior detection — delegates to the contract's canonical
+   * deriveBindingPurpose (ROK-1415). Note the intentional behaviour correction:
+   * gameId === 0 now derives game-voice-monitor (`!= null`, not truthiness).
    */
   detectBehavior(
     channelType: ChannelType,
     gameId?: number | null,
   ): BindingPurpose {
-    switch (channelType) {
-      case 'voice':
-        return gameId ? 'game-voice-monitor' : 'general-lobby';
-      case 'text':
-      default:
-        return 'game-announcements';
-    }
+    return detectBehavior(channelType, gameId);
   }
 }

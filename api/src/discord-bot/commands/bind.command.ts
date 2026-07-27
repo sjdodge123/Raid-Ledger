@@ -185,8 +185,14 @@ export class BindCommand
       if (series) await this.resyncSeriesEvents(series.id);
     } catch (err: unknown) {
       this.logger.error('Failed to create channel binding:', err);
+      // ROK-1415: surface the guard's own sentence (e.g. "gameId: A Game Voice
+      // Monitor binding must have a game…") so Discord and the web admin show
+      // the identical message from the identical classifier.
+      const body = (err as { getResponse?: () => unknown }).getResponse?.() as
+        { errors?: string[] } | undefined;
       await interaction.editReply(
-        'Failed to bind channel. Please try again or use the web admin panel.',
+        body?.errors?.[0] ??
+          'Failed to bind channel. Please try again or use the web admin panel.',
       );
     }
   }

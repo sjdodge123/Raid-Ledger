@@ -6,6 +6,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   Events,
@@ -143,6 +144,10 @@ export class VoiceStateListener implements OnApplicationShutdown {
       const bindings = await this.channelBindingsService.getBindings(guildId);
       await reportBindingHealthWarnings(this.db, bindings, this.logger);
     } catch (err) {
+      // ROK-1415: inert-binding detection lives in this path now — a swallowed
+      // failure is a detection outage, so it must reach Sentry, not just a
+      // routine-looking warn.
+      Sentry.captureException(err, { tags: { context: 'binding-health' } });
       this.logger.warn(`[binding-heal] health report failed: ${err}`);
     }
   }
