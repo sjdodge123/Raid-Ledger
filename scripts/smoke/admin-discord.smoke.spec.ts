@@ -337,3 +337,60 @@ test.describe('Admin Discord — No critical errors', () => {
         expect(criticalErrors).toHaveLength(0);
     });
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1416 — binding create form + edit purpose/game + inert "Fix →" repair
+//
+// Authoring-only: these assert the net-new admin UI and are RED until ROK-1416
+// ships. The Lead runs them at the Chrome-MCP / Playwright gate on a deployed
+// env (with a connected bot + seeded bindings). Selectors stay resilient — the
+// Channels panel is a shared admin page whose row set depends on env state, so
+// row-dependent assertions skip when their precondition (an Edit / Fix control)
+// is absent rather than false-failing on a bindingless CI env.
+// ---------------------------------------------------------------------------
+
+test.describe('Admin Discord — ROK-1416 binding editor', () => {
+    test('renders a working create-binding form (wires the dead "add one below" affordance)', async ({ page }) => {
+        await pollDiscordBotStatus();
+        await page.goto('/admin/settings/discord/channels');
+        await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
+
+        // The create affordance is unconditional (empty state + list both offer it).
+        const createTrigger = page.getByRole('button', { name: /add binding|new binding|create binding/i });
+        await expect(createTrigger.first()).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('edit form exposes a purpose selector and a game picker', async ({ page }) => {
+        await pollDiscordBotStatus();
+        await page.goto('/admin/settings/discord/channels');
+        await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
+
+        const editBtn = page.getByRole('button', { name: 'Edit' }).first();
+        if (!(await editBtn.isVisible({ timeout: 5_000 }).catch(() => false))) {
+            test.skip(true, 'No binding row on this env to edit');
+            return;
+        }
+        await editBtn.click();
+
+        // Purpose selector + game autocomplete are the ROK-1416 additions.
+        await expect(page.getByRole('combobox', { name: /purpose/i })).toBeVisible({ timeout: 5_000 });
+        await expect(page.getByPlaceholder(/search for a game/i)).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('an inert monitor row surfaces a "Fix →" repair that opens the edit form', async ({ page }) => {
+        await pollDiscordBotStatus();
+        await page.goto('/admin/settings/discord/channels');
+        await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
+
+        const fixBtn = page.getByRole('button', { name: /fix/i }).first();
+        if (!(await fixBtn.isVisible({ timeout: 5_000 }).catch(() => false))) {
+            test.skip(true, 'No inert binding on this env to repair');
+            return;
+        }
+        await fixBtn.click();
+        // Fix → opens the edit form focused on the game field, offering the
+        // secondary "Convert to General Lobby" heal.
+        await expect(page.getByRole('combobox', { name: /purpose/i })).toBeVisible({ timeout: 5_000 });
+        await expect(page.getByRole('button', { name: /convert to general lobby/i })).toBeVisible({ timeout: 5_000 });
+    });
+});

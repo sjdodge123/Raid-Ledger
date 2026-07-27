@@ -635,3 +635,37 @@ describe('ChannelBindingsController — ROK-1419 updateBinding surfaces slot con
     });
   });
 });
+
+// ── ROK-1416: PATCH threads gameId (edit purpose/game on the config form) ────
+
+describe('ChannelBindingsController — ROK-1416 updateBinding threads gameId', () => {
+  it('should thread a provided gameId into updateConfig', async () => {
+    bindingsService.gameExists.mockResolvedValue(true);
+    bindingsService.updateConfig.mockResolvedValue(makeBinding({ gameId: 42 }));
+
+    await controller.updateBinding('binding-uuid-1', { gameId: 42 });
+
+    // The current schema strips gameId, so updateConfig is called with only 3
+    // args today; post-fix the resolved gameId patch rides in the 4th arg.
+    const updateConfigMock = bindingsService.updateConfig as unknown as jest.Mock;
+    expect(updateConfigMock).toHaveBeenCalledWith(
+      'binding-uuid-1',
+      {},
+      undefined,
+      expect.objectContaining({ gameId: 42 }),
+    );
+  });
+
+  it('should reuse gameExists and throw NotFoundException (Game not found) for a non-existent PATCH gameId', async () => {
+    bindingsService.gameExists.mockResolvedValue(false);
+    // Resolve a binding so any failure is "Game not found", NOT "Binding not found".
+    bindingsService.updateConfig.mockResolvedValue(makeBinding());
+
+    const error = await controller
+      .updateBinding('binding-uuid-1', { gameId: 99999 })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundException);
+    expect((error as NotFoundException).message).toBe('Game not found');
+  });
+});
