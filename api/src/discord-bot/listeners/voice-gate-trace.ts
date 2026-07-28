@@ -118,6 +118,11 @@ export function traceGate(
  */
 export function warnInertOnce(logger: Logger, ctx: GateCtx): void {
   const now = Date.now();
+  // Codex P3: keep this hot-path Map bounded — drop entries whose dedupe
+  // window has lapsed (recreated bindings would otherwise accrete forever).
+  for (const [key, at] of inertWarnedAt) {
+    if (now - at >= INERT_WARN_WINDOW_MS) inertWarnedAt.delete(key);
+  }
   const last = inertWarnedAt.get(ctx.bindingId);
   if (last !== undefined && now - last < INERT_WARN_WINDOW_MS) return;
   inertWarnedAt.set(ctx.bindingId, now);

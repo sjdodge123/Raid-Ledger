@@ -53,7 +53,7 @@ export async function joinExistingEvent(
   resolvedGameId?: number | null,
 ): Promise<void> {
   const mi: VoiceMemberInfo = { ...dm, userId: uid };
-  await deps.adHocEventService.handleVoiceJoin(
+  const handled = await deps.adHocEventService.handleVoiceJoin(
     binding.bindingId,
     mi,
     binding,
@@ -61,7 +61,10 @@ export async function joinExistingEvent(
     undefined,
     channelId,
   );
-  traceGate(deps.logger, 'joined-existing', gateCtx(binding, channelId));
+  // Codex P2: only claim the outcome when the service actually processed the
+  // join — a kill-switch/suppression gate already traced its own reason.
+  if (handled)
+    traceGate(deps.logger, 'joined-existing', gateCtx(binding, channelId));
 }
 
 /**
@@ -160,8 +163,16 @@ async function resolveGameBindingSpawn(
     spawnFns?.cancelSpawn();
     // allConfirmed ⟹ every counted member confirmed the bound game, so the
     // sticky game is correct and the ROK-1394 degrade is unreachable here.
-    await handleGameSpecificGroupRoster(deps, channelId, binding, undefined);
-    return traceGate(deps.logger, 'spawned-immediate', ctx);
+    const rostered = await handleGameSpecificGroupRoster(
+      deps,
+      channelId,
+      binding,
+      undefined,
+    );
+    // Codex P2: a kill-switch-gated roster must not log a false success line —
+    // the service already traced feature-disabled (throttled).
+    if (rostered) return traceGate(deps.logger, 'spawned-immediate', ctx);
+    return;
   }
   spawnFns?.scheduleSpawn();
   return traceGate(deps.logger, 'spawn-scheduled', ctx);

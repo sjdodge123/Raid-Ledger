@@ -105,9 +105,10 @@ export async function handleGameSpecificGroupRoster(
   channelId: string,
   binding: ResolvedBinding,
   resolvedGameId?: number | null,
-): Promise<void> {
+): Promise<boolean> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
-  if (!channel) return;
+  if (!channel) return false;
+  let handled = false;
   for (const [memberId, guildMember] of channel.members) {
     const rlUser = await deps.usersService.findByDiscordId(memberId);
     const memberInfo = buildMemberInfo(
@@ -115,7 +116,7 @@ export async function handleGameSpecificGroupRoster(
       guildMember,
       rlUser?.id ?? null,
     );
-    await deps.adHocEventService.handleVoiceJoin(
+    const joined = await deps.adHocEventService.handleVoiceJoin(
       binding.bindingId,
       memberInfo,
       binding,
@@ -123,7 +124,9 @@ export async function handleGameSpecificGroupRoster(
       undefined,
       channelId,
     );
+    handled = handled || joined;
   }
+  return handled;
 }
 
 /** Roster all members from detected groups into ad-hoc events. */

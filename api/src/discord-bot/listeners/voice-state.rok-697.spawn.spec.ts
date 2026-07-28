@@ -16,6 +16,7 @@ import {
   createMockClient,
   createVoiceChannel,
   createSpawnTestModule,
+  join,
   type SpawnSpecHarness,
 } from './voice-state.rok-697.spawn.spec-helpers';
 
@@ -908,25 +909,6 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
         );
     }
 
-    async function join(
-      handler: (o: unknown, n: unknown) => void,
-      channelId: string,
-      userId: string,
-    ): Promise<void> {
-      handler(
-        { channelId: null, id: userId },
-        {
-          channelId,
-          id: userId,
-          member: {
-            displayName: userId,
-            user: { username: userId, avatar: null },
-          },
-        },
-      );
-      await jest.advanceTimersByTimeAsync(2100);
-    }
-
     it('emits outcome=spawned-immediate when a unanimous game bind spawns on the spot', async () => {
       const binding = {
         id: 'b4-imm',
@@ -948,6 +930,30 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
 
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
       expect(firedOutcome('spawned-immediate')).toBe(true);
+    });
+
+    it('P2 pin: NO spawned-immediate when handleVoiceJoin reports the join was gated', async () => {
+      const binding = {
+        id: 'b4-p2',
+        channelId: 'voice-b4-p2',
+        bindingPurpose: 'game-voice-monitor' as const,
+        gameId: 1,
+        gameName: 'Rise of Kingdoms',
+        config: { minPlayers: 2 },
+      };
+      const handler = await setupWithBinding('voice-b4-p2', binding);
+      mockAdHocEventService.handleVoiceJoin.mockResolvedValue(false); // gated
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: 1,
+        gameName: 'Rise of Kingdoms',
+      });
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      await join(handler, 'voice-b4-p2', 'user-1');
+      await join(handler, 'voice-b4-p2', 'user-2');
+
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+      expect(firedOutcome('spawned-immediate')).toBe(false);
     });
 
     it('emits outcome=spawn-scheduled when a game bind arms the 15-minute delayed timer', async () => {
