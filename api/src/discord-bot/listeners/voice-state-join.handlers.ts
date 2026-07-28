@@ -168,7 +168,7 @@ async function processLobbyMember(
     return;
   }
   const mi: VoiceMemberInfo = { ...dm, userId: uid };
-  await deps.adHocEventService.handleVoiceJoin(
+  const handled = await deps.adHocEventService.handleVoiceJoin(
     binding.bindingId,
     mi,
     binding,
@@ -176,7 +176,9 @@ async function processLobbyMember(
     detected.gameName,
     channelId,
   );
-  traceGate(deps.logger, 'joined-existing', trace);
+  // Reviewer LOW-3 (same family as Codex P2): only claim the outcome when the
+  // service actually processed the join — a gated join traced its own reason.
+  if (handled) traceGate(deps.logger, 'joined-existing', trace);
 }
 
 /** Handle threshold check for lobby spawn. */
