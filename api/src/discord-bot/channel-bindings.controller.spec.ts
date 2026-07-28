@@ -647,7 +647,8 @@ describe('ChannelBindingsController — ROK-1416 updateBinding threads gameId', 
 
     // The current schema strips gameId, so updateConfig is called with only 3
     // args today; post-fix the resolved gameId patch rides in the 4th arg.
-    const updateConfigMock = bindingsService.updateConfig as unknown as jest.Mock;
+    const updateConfigMock =
+      bindingsService.updateConfig as unknown as jest.Mock;
     expect(updateConfigMock).toHaveBeenCalledWith(
       'binding-uuid-1',
       {},

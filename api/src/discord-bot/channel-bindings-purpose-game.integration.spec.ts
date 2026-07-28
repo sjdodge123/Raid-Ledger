@@ -78,7 +78,11 @@ async function makeGame(
 ): Promise<typeof schema.games.$inferSelect> {
   const [g] = await testApp.db
     .insert(schema.games)
-    .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-'), igdbId: null })
+    .values({
+      name,
+      slug: name.toLowerCase().replace(/\s+/g, '-'),
+      igdbId: null,
+    })
     .returning();
   return g;
 }
@@ -164,7 +168,12 @@ describe('Channel binding AC5 config prune (ROK-1416)', () => {
     const b = await insertBinding({
       bindingPurpose: 'general-lobby',
       gameId: testApp.seed.game.id,
-      config: { allowJustChatting: true, minPlayers: 3, autoClose: true, gracePeriod: 5 },
+      config: {
+        allowJustChatting: true,
+        minPlayers: 3,
+        autoClose: true,
+        gracePeriod: 5,
+      },
     });
 
     const res = await testApp.request
