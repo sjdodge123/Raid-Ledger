@@ -26,6 +26,7 @@ import {
   schedulePresenceRecheck,
   type TimerMaps,
 } from './voice-state-leave.handlers';
+import { traceGate } from './voice-gate-trace';
 
 const SPAWN_DELAY_MS = 15 * 60 * 1000;
 
@@ -53,7 +54,14 @@ export async function handleChannelJoin(
     ctx.logger.error(`Join tracking failed for ${dm.discordUserId}: ${err}`);
   }
   const bindings = await ctx.resolveAllBindings(chId);
-  if (bindings.length === 0) return;
+  if (bindings.length === 0) {
+    traceGate(ctx.logger, 'unbound-channel', {
+      channelId: chId,
+      bindingId: 'none',
+      gameId: null,
+    });
+    return;
+  }
   trackChannelMember(ctx.channelMembers, chId, dm.discordUserId);
   for (const b of bindings) {
     await dispatchBindingJoin(ctx, chId, b, dm, gm);

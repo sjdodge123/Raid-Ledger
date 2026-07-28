@@ -245,4 +245,9 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Safety-net: deletes empty ephemeral voice channels whose event ended more than the idle window ago every 5 minutes (ROK-1352)',
     category: 'Events',
   },
+  QuickPlayHealthService_checkQuickPlayHealth: {
+    description:
+      'Reports Quick Play health: ad-hoc events spawned in the last 7 days, inert bindings, and the ad-hoc kill-switch state.',
+    category: 'Monitoring',
+  },
 };
