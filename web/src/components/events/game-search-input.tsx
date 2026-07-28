@@ -146,7 +146,11 @@ function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGame
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
-    const { data: searchResult, isLoading } = useGameSearch(query, isOpen);
+    // Defensive read: prod always returns a useQuery result, but a bare
+    // `vi.fn()` mock (per-row admin forms, ROK-1416) can resolve undefined.
+    const search = useGameSearch(query, isOpen);
+    const searchResult = search?.data;
+    const isLoading = search?.isLoading ?? false;
     const { dropdownPos } = useDropdownPosition(containerRef, isOpen);
     const closeDropdown = useCallback(() => setIsOpen(false), []);
     useOutsideClick(containerRef, isOpen, closeDropdown);

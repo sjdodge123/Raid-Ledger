@@ -4,7 +4,8 @@ import { useChannelBindings } from '../../hooks/use-channel-bindings';
 import { usePluginStore } from '../../stores/plugin-store';
 import { toast } from '../../lib/toast';
 import { ChannelBindingList } from '../../components/admin/ChannelBindingList';
-import type { UpdateChannelBindingDto, ChannelBindingDto } from '@raid-ledger/contract';
+import { BindingCreateForm, type BindingChannelOption } from '../../components/admin/BindingCreateForm';
+import type { UpdateChannelBindingDto, CreateChannelBindingDto } from '@raid-ledger/contract';
 
 export function DiscordChannelsPage() {
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
@@ -30,14 +31,32 @@ export function DiscordChannelsPage() {
 }
 
 function useBindingHandlers() {
-    const { bindings, updateBinding, deleteBinding } = useChannelBindings();
-    const handleUpdate = (id: string, dto: UpdateChannelBindingDto) => {
-        updateBinding.mutate({ id, dto }, { onSuccess: () => toast.success('Binding updated'), onError: (err: Error) => toast.error(err.message) });
-    };
+    const { bindings, createBinding, updateBinding, deleteBinding } = useChannelBindings();
+    // Return the mutation promise so the list collapses the row only on success
+    // (a rejected PATCH keeps the edit form open with its error) — ROK-1416.
+    const handleUpdate = (id: string, dto: UpdateChannelBindingDto) =>
+        updateBinding.mutateAsync({ id, dto })
+            .then((r) => { toast.success('Binding updated'); return r; })
+            .catch((err: Error) => { toast.error(err.message); throw err; });
+    const handleCreate = (dto: CreateChannelBindingDto) =>
+        createBinding.mutateAsync(dto)
+            .then((r) => { toast.success('Binding created'); return r; })
+            .catch((err: Error) => { toast.error(err.message); throw err; });
     const handleDelete = (id: string) => {
         deleteBinding.mutate(id, { onSuccess: () => toast.success('Binding removed'), onError: (err: Error) => toast.error(err.message) });
     };
-    return { bindings, handleUpdate, handleDelete, isUpdating: updateBinding.isPending, isDeleting: deleteBinding.isPending };
+    return {
+        bindings, handleUpdate, handleCreate, handleDelete,
+        isUpdating: updateBinding.isPending, isDeleting: deleteBinding.isPending, isCreating: createBinding.isPending,
+        updateError: updateBinding.error?.message ?? null, createError: createBinding.error?.message ?? null,
+    };
+}
+
+function useBindingChannelOptions(settings: ReturnType<typeof useAdminSettings>): BindingChannelOption[] {
+    return [
+        ...(settings.discordChannels.data ?? []).map((c) => ({ ...c, channelType: 'text' as const })),
+        ...(settings.discordVoiceChannels.data ?? []).map((c) => ({ ...c, channelType: 'voice' as const })),
+    ];
 }
 
 function TextChannelSelector({ settings }: { settings: ReturnType<typeof useAdminSettings> }) {
@@ -73,7 +92,8 @@ function LineupChannelSelector({ settings }: { settings: ReturnType<typeof useAd
 function DiscordChannelsContent() {
     const settings = useAdminSettings();
     const isBotConnected = settings.discordBotStatus.data?.connected ?? false;
-    const { bindings, handleUpdate, handleDelete, isUpdating, isDeleting } = useBindingHandlers();
+    const handlers = useBindingHandlers();
+    const channels = useBindingChannelOptions(settings);
 
     return (
         <div className="space-y-6">
@@ -84,7 +104,7 @@ function DiscordChannelsContent() {
             {isBotConnected && <VoiceChannelSelector settings={settings} />}
             {isBotConnected && <LineupChannelSelector settings={settings} />}
             <RoutingPriorityInfo />
-            <ChannelBindingsSection bindings={bindings} onUpdate={handleUpdate} onDelete={handleDelete} isUpdating={isUpdating} isDeleting={isDeleting} />
+            <ChannelBindingsSection handlers={handlers} channels={channels} />
         </div>
     );
 }
@@ -132,11 +152,11 @@ function RoutingPriorityInfo() {
     );
 }
 
-function ChannelBindingsSection({ bindings, onUpdate, onDelete, isUpdating, isDeleting }: {
-    bindings: { isLoading: boolean; isError: boolean; error: Error | null; data: { data: ChannelBindingDto[] } | undefined };
-    onUpdate: (id: string, dto: UpdateChannelBindingDto) => void;
-    onDelete: (id: string) => void; isUpdating: boolean; isDeleting: boolean;
+function ChannelBindingsSection({ handlers, channels }: {
+    handlers: ReturnType<typeof useBindingHandlers>;
+    channels: BindingChannelOption[];
 }) {
+    const { bindings } = handlers;
     return (
         <div>
             <p className="text-sm text-muted mb-4">
@@ -151,8 +171,12 @@ function ChannelBindingsSection({ bindings, onUpdate, onDelete, isUpdating, isDe
                     <p className="text-sm text-red-400">Failed to load bindings: {bindings.error?.message}</p>
                 </div>
             ) : (
-                <ChannelBindingList bindings={bindings.data?.data ?? []} onUpdate={onUpdate} onDelete={onDelete} isUpdating={isUpdating} isDeleting={isDeleting} />
+                <ChannelBindingList bindings={bindings.data?.data ?? []} onUpdate={handlers.handleUpdate} onDelete={handlers.handleDelete}
+                    isUpdating={handlers.isUpdating} isDeleting={handlers.isDeleting} updateError={handlers.updateError} />
             )}
+            <div className="mt-4">
+                <BindingCreateForm channels={channels} onCreate={handlers.handleCreate} isCreating={handlers.isCreating} createError={handlers.createError} />
+            </div>
         </div>
     );
 }

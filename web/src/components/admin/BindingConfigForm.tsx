@@ -202,7 +202,9 @@ function FormActions({ saveDisabled, isSaving, onCancel }: { saveDisabled: boole
  */
 export function BindingConfigForm({ binding, onSave, onCancel, isSaving, saveError }: BindingConfigFormProps) {
     const f = useBindingConfigForm(binding);
-    const showGameField = f.channelType === 'voice' && f.purpose === 'game-voice-monitor';
+    // The game maps to a purpose for a monitor / announcement channel; a General
+    // Lobby auto-detects it, so the field is hidden there (wireframe B1).
+    const showGameField = f.purpose !== 'general-lobby';
     const showVoiceFields = f.purpose === 'game-voice-monitor' || f.purpose === 'general-lobby';
     const saveDisabled = isSaving || f.gameRequired;
     const purposeId = `binding-purpose-${binding.id}`;
