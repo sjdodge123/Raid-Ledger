@@ -18,6 +18,7 @@ import {
   classifyBindingTriple,
   deriveBindingPurpose,
   type BindingPurpose,
+  type ChannelBindingConfig,
   type ChannelType,
 } from '@raid-ledger/contract';
 
@@ -66,10 +67,27 @@ export function assertUpsertTriple(opts: {
   });
 }
 
+/** ROK-1416 updateConfig patch — a purpose flip and/or a game reassign/clear. */
+export interface BindingUpdatePatch {
+  bindingPurpose?: BindingPurpose;
+  /** True when the PATCH body carried a `gameId` (including explicit null). */
+  gameIdProvided?: boolean;
+  /** The provided game; null clears it. Ignored unless `gameIdProvided`. */
+  gameId?: number | null;
+}
+
+/** Resolve the post-write gameId: the patched value when provided, else current. */
+export function resolvePatchedGameId(
+  existingGameId: number | null,
+  patch: BindingUpdatePatch,
+): number | null {
+  return patch.gameIdProvided ? (patch.gameId ?? null) : existingGameId;
+}
+
 /**
  * Site-B wrapper (updateConfig path): asserts the RESOLVED post-write triple.
  * ROK-1416 threads gameId by extending `patch` — the guard stays downstream of
- * any future field by construction.
+ * any future field by construction, so a monitor cleared to null 400s here.
  */
 export function assertResolvedUpdateTriple(
   existing: {
@@ -79,18 +97,61 @@ export function assertResolvedUpdateTriple(
     guildId: string;
     channelId: string;
   },
-  patch: { bindingPurpose?: BindingPurpose },
+  patch: BindingUpdatePatch,
   bindingId: string,
 ): void {
   assertValidBindingTriple({
     channelType: existing.channelType as ChannelType,
     bindingPurpose:
       patch.bindingPurpose ?? (existing.bindingPurpose as BindingPurpose),
-    gameId: existing.gameId,
+    gameId: resolvePatchedGameId(existing.gameId, patch),
     guildId: existing.guildId,
     channelId: existing.channelId,
     bindingId,
   });
+}
+
+/**
+ * AC5 — drop config keys that no longer apply once the purpose resolves. Pure;
+ * returns a fresh object. `allowJustChatting` is General-Lobby-only; a text
+ * announcements channel carries none of the voice-monitor tuning keys.
+ */
+export function pruneConfigForPurpose(
+  config: ChannelBindingConfig | null | undefined,
+  purpose: BindingPurpose,
+): ChannelBindingConfig {
+  const pruned: ChannelBindingConfig = { ...(config ?? {}) };
+  if (purpose !== 'general-lobby') delete pruned.allowJustChatting;
+  if (purpose === 'game-announcements') {
+    delete pruned.minPlayers;
+    delete pruned.autoClose;
+    delete pruned.gracePeriod;
+  }
+  return pruned;
+}
+
+/**
+ * Assemble the resolved updateConfig write set: config merged then AC5-pruned
+ * against the resolved purpose, plus the purpose/game fields only when the
+ * PATCH supplied them. Kept out of the service to hold it under the 300 cap.
+ */
+export function buildBindingUpdateSet(
+  existing: { config: ChannelBindingConfig | null; bindingPurpose: string },
+  patchConfig: Partial<ChannelBindingConfig>,
+  bindingPurpose: BindingPurpose | undefined,
+  patch: BindingUpdatePatch,
+): Partial<typeof schema.channelBindings.$inferInsert> {
+  const resolvedPurpose =
+    bindingPurpose ?? (existing.bindingPurpose as BindingPurpose);
+  return {
+    config: pruneConfigForPurpose(
+      { ...(existing.config ?? {}), ...patchConfig },
+      resolvedPurpose,
+    ),
+    updatedAt: new Date(),
+    ...(bindingPurpose && { bindingPurpose }),
+    ...(patch.gameIdProvided && { gameId: patch.gameId ?? null }),
+  };
 }
 
 /** Moved out of ChannelBindingsService purely to free lines under the 300 cap. */

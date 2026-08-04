@@ -9,9 +9,9 @@
  *   /admin/settings/discord/channels  (Channels)
  *   /admin/settings/discord/features  (Features)
  */
-import { test, expect } from './base';
-import { isMobile } from './helpers';
-import { apiGet, getAdminToken, pollForCondition } from './api-helpers';
+import { test, expect } from "./base";
+import { isMobile } from "./helpers";
+import { apiGet, getAdminToken, pollForCondition } from "./api-helpers";
 
 /**
  * ROK-1247: Pre-warm Discord admin queries before asserting on the panels.
@@ -24,316 +24,503 @@ import { apiGet, getAdminToken, pollForCondition } from './api-helpers';
  * state is observable before we navigate.
  */
 async function pollDiscordBotStatus() {
-    const token = await getAdminToken();
-    await pollForCondition(
-        async () => {
-            const data = await apiGet(token, '/admin/settings/discord-bot');
-            return data ? data : null;
-        },
-        { timeoutMs: 15_000, description: '/admin/settings/discord-bot' },
-    );
+  const token = await getAdminToken();
+  await pollForCondition(
+    async () => {
+      const data = await apiGet(token, "/admin/settings/discord-bot");
+      return data ? data : null;
+    },
+    { timeoutMs: 15_000, description: "/admin/settings/discord-bot" },
+  );
 }
 
 async function pollDiscordSetupStatus() {
-    const token = await getAdminToken();
-    await pollForCondition(
-        async () => {
-            const data = await apiGet(
-                token,
-                '/admin/settings/discord-bot/setup-status',
-            );
-            return data ? data : null;
-        },
-        {
-            timeoutMs: 15_000,
-            description: '/admin/settings/discord-bot/setup-status',
-        },
-    );
+  const token = await getAdminToken();
+  await pollForCondition(
+    async () => {
+      const data = await apiGet(
+        token,
+        "/admin/settings/discord-bot/setup-status",
+      );
+      return data ? data : null;
+    },
+    {
+      timeoutMs: 15_000,
+      description: "/admin/settings/discord-bot/setup-status",
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Overview panel
 // ---------------------------------------------------------------------------
 
-test.describe('Admin Discord — Overview', () => {
-    test('renders setup progress and bot status', async ({ page }) => {
-        // ROK-1247: poll the API before page.goto so the gated "X/Y complete"
-        // text (depends on setupStatus.data) renders within the test window
-        // even when useQuery's 15s staleTime is holding an empty cache.
-        await pollDiscordSetupStatus();
-        await pollDiscordBotStatus();
+test.describe("Admin Discord — Overview", () => {
+  test("renders setup progress and bot status", async ({ page }) => {
+    // ROK-1247: poll the API before page.goto so the gated "X/Y complete"
+    // text (depends on setupStatus.data) renders within the test window
+    // even when useQuery's 15s staleTime is holding an empty cache.
+    await pollDiscordSetupStatus();
+    await pollDiscordBotStatus();
 
-        await page.goto('/admin/settings/discord');
-        await expect(page.getByRole('heading', { name: 'Discord Overview' })).toBeVisible({ timeout: 15_000 });
+    await page.goto("/admin/settings/discord");
+    await expect(
+      page.getByRole("heading", { name: "Discord Overview" }),
+    ).toBeVisible({ timeout: 15_000 });
 
-        // Setup Progress card
-        await expect(page.getByRole('heading', { name: 'Setup Progress' })).toBeVisible();
-        await expect(page.getByText(/complete$/)).toBeVisible();
+    // Setup Progress card
+    await expect(
+      page.getByRole("heading", { name: "Setup Progress" }),
+    ).toBeVisible();
+    await expect(page.getByText(/complete$/)).toBeVisible();
 
-        // Bot Status card
-        await expect(page.getByRole('heading', { name: 'Bot Status' })).toBeVisible();
-    });
+    // Bot Status card
+    await expect(
+      page.getByRole("heading", { name: "Bot Status" }),
+    ).toBeVisible();
+  });
 
-    test('renders quick action buttons', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord');
-        await expect(page.getByRole('heading', { name: 'Quick Actions' })).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByRole('button', { name: 'Reconnect Bot' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Send Test Message' })).toBeVisible();
-    });
+  test("renders quick action buttons", async ({ page }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord");
+    await expect(
+      page.getByRole("heading", { name: "Quick Actions" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("button", { name: "Reconnect Bot" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Send Test Message" }),
+    ).toBeVisible();
+  });
 
-    test('loads without error boundary', async ({ page }) => {
-        await page.goto('/admin/settings/discord');
-        await expect(page.getByRole('heading', { name: 'Discord Overview' })).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
-    });
+  test("loads without error boundary", async ({ page }) => {
+    await page.goto("/admin/settings/discord");
+    await expect(
+      page.getByRole("heading", { name: "Discord Overview" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toHaveText(/something went wrong/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // Auth panel
 // ---------------------------------------------------------------------------
 
-test.describe('Admin Discord — Auth', () => {
-    test('renders OAuth config form', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord/auth');
-        await expect(page.getByRole('heading', { name: 'Discord Authentication' })).toBeVisible({ timeout: 15_000 });
+test.describe("Admin Discord — Auth", () => {
+  test("renders OAuth config form", async ({ page }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/auth");
+    await expect(
+      page.getByRole("heading", { name: "Discord Authentication" }),
+    ).toBeVisible({ timeout: 15_000 });
 
-        // OAuth card heading
-        await expect(page.getByRole('heading', { name: 'Discord OAuth' })).toBeVisible();
+    // OAuth card heading
+    await expect(
+      page.getByRole("heading", { name: "Discord OAuth" }),
+    ).toBeVisible();
 
-        // Form fields
-        await expect(page.getByRole('textbox', { name: 'Client ID' })).toBeVisible();
-        await expect(page.getByRole('textbox', { name: 'Client Secret' })).toBeVisible();
-    });
+    // Form fields
+    await expect(
+      page.getByRole("textbox", { name: "Client ID" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Client Secret" }),
+    ).toBeVisible();
+  });
 
-    test('renders save button (test button only when configured)', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord/auth');
-        await expect(page.getByRole('heading', { name: 'Discord Authentication' })).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByRole('button', { name: 'Save Configuration' })).toBeVisible();
+  test("renders save button (test button only when configured)", async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/auth");
+    await expect(
+      page.getByRole("heading", { name: "Discord Authentication" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("button", { name: "Save Configuration" }),
+    ).toBeVisible();
 
-        // "Test Connection" only renders when OAuth is already configured (conditional in DiscordOAuthForm).
-        // In CI without Discord configured, this button won't exist — soft check.
-        const testBtn = page.getByRole('button', { name: 'Test Connection' });
-        if (await testBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-            await expect(testBtn).toBeVisible();
-        }
-    });
+    // "Test Connection" only renders when OAuth is already configured (conditional in DiscordOAuthForm).
+    // In CI without Discord configured, this button won't exist — soft check.
+    const testBtn = page.getByRole("button", { name: "Test Connection" });
+    if (await testBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await expect(testBtn).toBeVisible();
+    }
+  });
 
-    test('loads without error boundary', async ({ page }) => {
-        await page.goto('/admin/settings/discord/auth');
-        await expect(page.getByRole('heading', { name: 'Discord Authentication' })).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
-    });
+  test("loads without error boundary", async ({ page }) => {
+    await page.goto("/admin/settings/discord/auth");
+    await expect(
+      page.getByRole("heading", { name: "Discord Authentication" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toHaveText(/something went wrong/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // Connection panel
 // ---------------------------------------------------------------------------
 
-test.describe('Admin Discord — Connection', () => {
-    test('renders bot token field and enable switch (when Discord is linked)', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord/connection');
-        await expect(page.getByRole('heading', { name: 'Discord Bot', exact: true }).first()).toBeVisible({ timeout: 15_000 });
+test.describe("Admin Discord — Connection", () => {
+  test("renders bot token field and enable switch (when Discord is linked)", async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/connection");
+    await expect(
+      page.getByRole("heading", { name: "Discord Bot", exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
-        // Bot Token field and Enable Bot switch only render when the admin user
-        // has their Discord account linked. In CI the user may not have Discord
-        // linked, so a "Link Discord Account" prompt appears instead — soft check.
-        const botTokenField = page.getByRole('textbox', { name: 'Bot Token' });
-        if (await botTokenField.isVisible({ timeout: 5_000 }).catch(() => false)) {
-            await expect(botTokenField).toBeVisible();
-            await expect(page.getByRole('switch', { name: 'Enable Bot' })).toBeVisible();
-        } else {
-            // Fallback: the "Discord Account Required" prompt should be visible
-            await expect(page.getByRole('heading', { name: 'Discord Account Required' })).toBeVisible();
-        }
-    });
+    // Bot Token field and Enable Bot switch only render when the admin user
+    // has their Discord account linked. In CI the user may not have Discord
+    // linked, so a "Link Discord Account" prompt appears instead — soft check.
+    const botTokenField = page.getByRole("textbox", { name: "Bot Token" });
+    if (await botTokenField.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await expect(botTokenField).toBeVisible();
+      await expect(
+        page.getByRole("switch", { name: "Enable Bot" }),
+      ).toBeVisible();
+    } else {
+      // Fallback: the "Discord Account Required" prompt should be visible
+      await expect(
+        page.getByRole("heading", { name: "Discord Account Required" }),
+      ).toBeVisible();
+    }
+  });
 
-    test('renders bot invite link info (when OAuth is configured)', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord/connection');
-        await expect(page.getByRole('heading', { name: 'Discord Bot', exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  test("renders bot invite link info (when OAuth is configured)", async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/connection");
+    await expect(
+      page.getByRole("heading", { name: "Discord Bot", exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
-        // Bot Invite Link only renders when OAuth is configured. In CI without
-        // Discord configured, this section won't exist — soft check.
-        const inviteLink = page.getByRole('heading', { name: 'Bot Invite Link' });
-        if (await inviteLink.isVisible({ timeout: 3_000 }).catch(() => false)) {
-            await expect(inviteLink).toBeVisible();
-        }
-    });
+    // Bot Invite Link only renders when OAuth is configured. In CI without
+    // Discord configured, this section won't exist — soft check.
+    const inviteLink = page.getByRole("heading", { name: "Bot Invite Link" });
+    if (await inviteLink.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await expect(inviteLink).toBeVisible();
+    }
+  });
 
-    test('loads without error boundary', async ({ page }) => {
-        await page.goto('/admin/settings/discord/connection');
-        await expect(page.getByRole('heading', { name: 'Discord Bot', exact: true }).first()).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
-    });
+  test("loads without error boundary", async ({ page }) => {
+    await page.goto("/admin/settings/discord/connection");
+    await expect(
+      page.getByRole("heading", { name: "Discord Bot", exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toHaveText(/something went wrong/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // Channels panel
 // ---------------------------------------------------------------------------
 
-test.describe('Admin Discord — Channels', () => {
-    test('renders channel selectors and routing info', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord/channels');
-        await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
+test.describe("Admin Discord — Channels", () => {
+  test("renders channel selectors and routing info", async ({ page }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/channels");
+    await expect(
+      page.getByRole("heading", { name: "Discord Channels" }),
+    ).toBeVisible({ timeout: 15_000 });
 
-        // Channel selectors (only visible when bot is connected)
-        const notifSelector = page.getByRole('combobox', { name: 'Default Notification Channel' });
-        const voiceSelector = page.getByRole('combobox', { name: 'Default Voice Channel' });
-
-        // In demo mode with bot connected, both should be visible
-        if (await notifSelector.isVisible({ timeout: 5_000 }).catch(() => false)) {
-            await expect(notifSelector).toBeVisible();
-        }
-        if (await voiceSelector.isVisible({ timeout: 2_000 }).catch(() => false)) {
-            await expect(voiceSelector).toBeVisible();
-        }
-
-        // Routing priority info is always visible
-        await expect(page.getByRole('heading', { name: 'Event Routing Priority' })).toBeVisible();
+    // Channel selectors (only visible when bot is connected)
+    const notifSelector = page.getByRole("combobox", {
+      name: "Default Notification Channel",
+    });
+    const voiceSelector = page.getByRole("combobox", {
+      name: "Default Voice Channel",
     });
 
-    test('renders channel binding list or empty state', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord/channels');
-        await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
+    // In demo mode with bot connected, both should be visible
+    if (await notifSelector.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await expect(notifSelector).toBeVisible();
+    }
+    if (await voiceSelector.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await expect(voiceSelector).toBeVisible();
+    }
 
-        // The binding instructions text is always present
-        await expect(page.getByText(/Map Discord channels to games/)).toBeVisible({ timeout: 5_000 });
-    });
+    // Routing priority info is always visible
+    await expect(
+      page.getByRole("heading", { name: "Event Routing Priority" }),
+    ).toBeVisible();
+  });
 
-    test('loads without error boundary', async ({ page }) => {
-        await page.goto('/admin/settings/discord/channels');
-        await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+  test("renders channel binding list or empty state", async ({ page }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/channels");
+    await expect(
+      page.getByRole("heading", { name: "Discord Channels" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // The binding instructions text is always present
+    await expect(page.getByText(/Map Discord channels to games/)).toBeVisible({
+      timeout: 5_000,
     });
+  });
+
+  test("loads without error boundary", async ({ page }) => {
+    await page.goto("/admin/settings/discord/channels");
+    await expect(
+      page.getByRole("heading", { name: "Discord Channels" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toHaveText(/something went wrong/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // Features panel
 // ---------------------------------------------------------------------------
 
-test.describe('Admin Discord — Features', () => {
-    test('renders feature toggles and info sections', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord/features');
-        await expect(page.getByRole('heading', { name: 'Discord Features' })).toBeVisible({ timeout: 15_000 });
+test.describe("Admin Discord — Features", () => {
+  test("renders feature toggles and info sections", async ({ page }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/features");
+    await expect(
+      page.getByRole("heading", { name: "Discord Features" }),
+    ).toBeVisible({ timeout: 15_000 });
 
-        // Quick Play Events toggle (visible when bot is connected)
-        const quickPlayHeading = page.getByRole('heading', { name: 'Quick Play Events' });
-        if (await quickPlayHeading.isVisible({ timeout: 5_000 }).catch(() => false)) {
-            await expect(quickPlayHeading).toBeVisible();
-            await expect(
-                page.getByRole('checkbox', { name: 'Enable Quick Play Events' }),
-            ).toBeVisible();
-        }
-
-        // General Lobbies info is always present
-        await expect(page.getByRole('heading', { name: 'General Lobbies' })).toBeVisible();
+    // Quick Play Events toggle (visible when bot is connected)
+    const quickPlayHeading = page.getByRole("heading", {
+      name: "Quick Play Events",
     });
+    if (
+      await quickPlayHeading.isVisible({ timeout: 5_000 }).catch(() => false)
+    ) {
+      await expect(quickPlayHeading).toBeVisible();
+      await expect(
+        page.getByRole("checkbox", { name: "Enable Quick Play Events" }),
+      ).toBeVisible();
+    }
 
-    // ROK-1352: the ephemeral-voice admin section (master toggle; force toggle +
-    // config fields appear once enabled). Like Quick Play, the whole section only
-    // renders when the bot is connected — so guard the assertions (CI has no
-    // connected bot; the section's render logic is covered by vitest unit tests).
-    test('renders the ephemeral voice section + master toggle', async ({ page }) => {
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord/features');
-        await expect(page.getByRole('heading', { name: 'Discord Features' })).toBeVisible({ timeout: 15_000 });
-        const ephemeralHeading = page.getByRole('heading', {
-            name: 'Ephemeral Voice Channels',
-        });
-        if (
-            await ephemeralHeading.isVisible({ timeout: 5_000 }).catch(() => false)
-        ) {
-            await expect(ephemeralHeading).toBeVisible();
-            await expect(
-                page.getByLabel('Enable ephemeral voice channels'),
-            ).toBeVisible();
-        }
-    });
+    // General Lobbies info is always present
+    await expect(
+      page.getByRole("heading", { name: "General Lobbies" }),
+    ).toBeVisible();
+  });
 
-    test('loads without error boundary', async ({ page }) => {
-        await page.goto('/admin/settings/discord/features');
-        await expect(page.getByRole('heading', { name: 'Discord Features' })).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+  // ROK-1352: the ephemeral-voice admin section (master toggle; force toggle +
+  // config fields appear once enabled). Like Quick Play, the whole section only
+  // renders when the bot is connected — so guard the assertions (CI has no
+  // connected bot; the section's render logic is covered by vitest unit tests).
+  test("renders the ephemeral voice section + master toggle", async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/features");
+    await expect(
+      page.getByRole("heading", { name: "Discord Features" }),
+    ).toBeVisible({ timeout: 15_000 });
+    const ephemeralHeading = page.getByRole("heading", {
+      name: "Ephemeral Voice Channels",
     });
+    if (
+      await ephemeralHeading.isVisible({ timeout: 5_000 }).catch(() => false)
+    ) {
+      await expect(ephemeralHeading).toBeVisible();
+      await expect(
+        page.getByLabel("Enable ephemeral voice channels"),
+      ).toBeVisible();
+    }
+  });
+
+  test("loads without error boundary", async ({ page }) => {
+    await page.goto("/admin/settings/discord/features");
+    await expect(
+      page.getByRole("heading", { name: "Discord Features" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toHaveText(/something went wrong/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // Navigation between panels (desktop only — sidebar hidden on mobile)
 // ---------------------------------------------------------------------------
 
-test.describe('Admin Discord — Panel navigation', () => {
-    test('sidebar nav links navigate between panels', async ({ page }) => {
-        test.skip(isMobile(test.info()), 'Desktop-only — sidebar nav hidden on mobile');
+test.describe("Admin Discord — Panel navigation", () => {
+  test("sidebar nav links navigate between panels", async ({ page }) => {
+    test.skip(
+      isMobile(test.info()),
+      "Desktop-only — sidebar nav hidden on mobile",
+    );
 
-        await pollDiscordBotStatus();
-        await page.goto('/admin/settings/discord');
-        const nav = page.getByRole('navigation', { name: 'Admin settings navigation' });
-        if (!(await nav.isVisible({ timeout: 15_000 }).catch(() => false))) {
-            test.skip(true, 'Admin settings navigation not visible');
-            return;
-        }
-
-        // Navigate to each panel that exists in the sidebar
-        const panels = [
-            { link: /Authentication/, heading: 'Discord Authentication' },
-            { link: /^Bot/, heading: 'Discord Bot' },
-            { link: 'Channels', heading: 'Discord Channels' },
-            { link: 'Features', heading: 'Discord Features' },
-            { link: 'Overview', heading: 'Discord Overview' },
-        ];
-        for (const panel of panels) {
-            const link = nav.getByRole('link', { name: panel.link, exact: typeof panel.link === 'string' });
-            if (await link.isVisible({ timeout: 2_000 }).catch(() => false)) {
-                await link.click();
-                await expect(page.getByRole('heading', { name: panel.heading }).first()).toBeVisible({ timeout: 10_000 });
-            }
-        }
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord");
+    const nav = page.getByRole("navigation", {
+      name: "Admin settings navigation",
     });
+    if (!(await nav.isVisible({ timeout: 15_000 }).catch(() => false))) {
+      test.skip(true, "Admin settings navigation not visible");
+      return;
+    }
+
+    // Navigate to each panel that exists in the sidebar
+    const panels = [
+      { link: /Authentication/, heading: "Discord Authentication" },
+      { link: /^Bot/, heading: "Discord Bot" },
+      { link: "Channels", heading: "Discord Channels" },
+      { link: "Features", heading: "Discord Features" },
+      { link: "Overview", heading: "Discord Overview" },
+    ];
+    for (const panel of panels) {
+      const link = nav.getByRole("link", {
+        name: panel.link,
+        exact: typeof panel.link === "string",
+      });
+      if (await link.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await link.click();
+        await expect(
+          page.getByRole("heading", { name: panel.heading }).first(),
+        ).toBeVisible({ timeout: 10_000 });
+      }
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
 // No console errors across all panels
 // ---------------------------------------------------------------------------
 
-test.describe('Admin Discord — No critical errors', () => {
-    test('all panels load without critical console errors', async ({ page }) => {
-        const errors: string[] = [];
-        page.on('console', (msg) => {
-            if (msg.type() === 'error') errors.push(msg.text());
-        });
-
-        await page.goto('/admin/settings/discord');
-        await expect(page.getByRole('heading', { name: 'Discord Overview' })).toBeVisible({ timeout: 15_000 });
-
-        await page.goto('/admin/settings/discord/auth');
-        await expect(page.getByRole('heading', { name: 'Discord Authentication' })).toBeVisible({ timeout: 15_000 });
-
-        await page.goto('/admin/settings/discord/connection');
-        await expect(page.getByRole('heading', { name: 'Discord Bot', exact: true }).first()).toBeVisible({ timeout: 15_000 });
-
-        await page.goto('/admin/settings/discord/channels');
-        await expect(page.getByRole('heading', { name: 'Discord Channels' })).toBeVisible({ timeout: 15_000 });
-
-        await page.goto('/admin/settings/discord/features');
-        await expect(page.getByRole('heading', { name: 'Discord Features' })).toBeVisible({ timeout: 15_000 });
-
-        const criticalErrors = errors.filter(
-            (e) =>
-                !e.includes('net::') &&
-                !e.includes('favicon') &&
-                !e.includes('404') &&
-                !e.includes('429') &&
-                !e.includes('CORS') &&
-                !e.includes('ERR_CONNECTION_REFUSED') &&
-                !e.includes('Failed to load resource'),
-        );
-        expect(criticalErrors).toHaveLength(0);
+test.describe("Admin Discord — No critical errors", () => {
+  test("all panels load without critical console errors", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
     });
+
+    await page.goto("/admin/settings/discord");
+    await expect(
+      page.getByRole("heading", { name: "Discord Overview" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await page.goto("/admin/settings/discord/auth");
+    await expect(
+      page.getByRole("heading", { name: "Discord Authentication" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await page.goto("/admin/settings/discord/connection");
+    await expect(
+      page.getByRole("heading", { name: "Discord Bot", exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await page.goto("/admin/settings/discord/channels");
+    await expect(
+      page.getByRole("heading", { name: "Discord Channels" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await page.goto("/admin/settings/discord/features");
+    await expect(
+      page.getByRole("heading", { name: "Discord Features" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const criticalErrors = errors.filter(
+      (e) =>
+        !e.includes("net::") &&
+        !e.includes("favicon") &&
+        !e.includes("404") &&
+        !e.includes("429") &&
+        !e.includes("CORS") &&
+        !e.includes("ERR_CONNECTION_REFUSED") &&
+        !e.includes("Failed to load resource"),
+    );
+    expect(criticalErrors).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1416 — binding create form + edit purpose/game + inert "Fix →" repair
+//
+// Authoring-only: these assert the net-new admin UI and are RED until ROK-1416
+// ships. The Lead runs them at the Chrome-MCP / Playwright gate on a deployed
+// env (with a connected bot + seeded bindings). Selectors stay resilient — the
+// Channels panel is a shared admin page whose row set depends on env state, so
+// row-dependent assertions skip when their precondition (an Edit / Fix control)
+// is absent rather than false-failing on a bindingless CI env.
+// ---------------------------------------------------------------------------
+
+test.describe("Admin Discord — ROK-1416 binding editor", () => {
+  test('renders a working create-binding form (wires the dead "add one below" affordance)', async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/channels");
+    await expect(
+      page.getByRole("heading", { name: "Discord Channels" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // The create affordance is unconditional (empty state + list both offer it).
+    const createTrigger = page.getByRole("button", {
+      name: /add binding|new binding|create binding/i,
+    });
+    await expect(createTrigger.first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("edit form exposes a purpose selector and a game picker", async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/channels");
+    await expect(
+      page.getByRole("heading", { name: "Discord Channels" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Codex P3: bindings are unordered — a General Lobby row hides the game
+    // field by design, so anchor on a row whose purpose SHOWS it.
+    const monitorRow = page
+      .locator("div")
+      .filter({ hasText: /Activity Monitor|Announcements/ })
+      .filter({ has: page.getByRole("button", { name: "Edit" }) })
+      .last();
+    const editBtn = (await monitorRow.count())
+      ? monitorRow.getByRole("button", { name: "Edit" }).first()
+      : page.getByRole("button", { name: "Edit" }).first();
+    if (!(await editBtn.isVisible({ timeout: 5_000 }).catch(() => false))) {
+      test.skip(true, "No binding row on this env to edit");
+      return;
+    }
+    await editBtn.click();
+
+    // Purpose selector is a ROK-1416 addition on every purpose.
+    await expect(page.getByRole("combobox", { name: /purpose/i })).toBeVisible({
+      timeout: 5_000,
+    });
+    // The game field is purpose-dependent (hidden for General Lobby) —
+    // assert it only when the opened row's purpose surfaces it.
+    const gameField = page.getByPlaceholder(/search for a game/i);
+    const purposeValue = await page
+      .getByRole("combobox", { name: /purpose/i })
+      .inputValue()
+      .catch(() => "");
+    if (purposeValue !== "general-lobby") {
+      await expect(gameField).toBeVisible({ timeout: 5_000 });
+    }
+  });
+
+  test('an inert monitor row surfaces a "Fix →" repair that opens the edit form', async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/channels");
+    await expect(
+      page.getByRole("heading", { name: "Discord Channels" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const fixBtn = page.getByRole("button", { name: /fix/i }).first();
+    if (!(await fixBtn.isVisible({ timeout: 5_000 }).catch(() => false))) {
+      test.skip(true, "No inert binding on this env to repair");
+      return;
+    }
+    await fixBtn.click();
+    // Fix → opens the edit form focused on the game field, offering the
+    // secondary "Convert to General Lobby" heal.
+    await expect(page.getByRole("combobox", { name: /purpose/i })).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(
+      page.getByRole("button", { name: /convert to general lobby/i }),
+    ).toBeVisible({ timeout: 5_000 });
+  });
 });

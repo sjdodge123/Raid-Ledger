@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ChannelBindingDto, UpdateChannelBindingDto } from '@raid-ledger/contract';
+import { classifyBindingTriple } from '@raid-ledger/contract';
 import { BindingConfigForm } from './BindingConfigForm';
 import { useMultiMonitorChannels } from './use-multi-monitor-channels';
 
@@ -17,10 +18,17 @@ const BEHAVIOR_BADGES: Record<string, { label: string; className: string }> = {
 
 interface ChannelBindingListProps {
   bindings: ChannelBindingDto[];
-  onUpdate: (id: string, dto: UpdateChannelBindingDto) => void;
+  onUpdate: (id: string, dto: UpdateChannelBindingDto) => void | Promise<unknown>;
   onDelete: (id: string) => void;
   isUpdating: boolean;
   isDeleting: boolean;
+  /** ROK-1416: a rejected PATCH surfaced inside the open edit form (form stays open). */
+  updateError?: string | null;
+}
+
+/** ROK-1415/1416: any triple the shared classifier rejects renders as INERT. */
+function isBindingInert(binding: ChannelBindingDto): boolean {
+  return classifyBindingTriple(binding.channelType, binding.bindingPurpose, binding.gameId) != null;
 }
 
 function ChannelTypeIcon({ type }: { type: string }) {
@@ -36,38 +44,53 @@ function BindingBadge({ purpose }: { purpose: string }) {
     return <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${badge.className}`}>{badge.label}</span>;
 }
 
-function MultiMonitorWarning() {
+function InertBadge() {
+    return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-600/40 text-red-100">
+            ⚠ INERT — Quick Play can&apos;t fire
+        </span>
+    );
+}
+
+function MultiMonitorNote() {
     return (
         <p className="text-xs text-amber-400 mt-1">
-            Multiple game monitors on this channel. Scheduled events for one game will suppress Quick Play for all.
+            Heads up: this channel monitors more than one game. While a scheduled event for one game is
+            live, Quick Play pauses for the others on this channel until it ends. This is a supported setup.
         </p>
     );
 }
 
-function BindingInfo({ binding, hasMultiMonitor }: { binding: ChannelBindingDto; hasMultiMonitor: boolean }) {
+function BindingInfo({ binding, hasMultiMonitor, isInert }: { binding: ChannelBindingDto; hasMultiMonitor: boolean; isInert: boolean }) {
     return (
         <div className="flex items-center gap-3 min-w-0">
             <div className="flex-shrink-0"><ChannelTypeIcon type={binding.channelType} /></div>
             <div className="min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-foreground truncate">#{binding.channelName ?? binding.channelId}</span>
                     <BindingBadge purpose={binding.bindingPurpose} />
+                    {isInert && <InertBadge />}
                 </div>
                 <p className="text-xs text-muted mt-0.5">
-                    {binding.gameName ? binding.gameName : 'All games'}{' \u00B7 '}{BEHAVIOR_LABELS[binding.bindingPurpose] ?? binding.bindingPurpose}
+                    {binding.gameName ? binding.gameName : 'All games'}{' · '}{BEHAVIOR_LABELS[binding.bindingPurpose] ?? binding.bindingPurpose}
                 </p>
-                {hasMultiMonitor && <MultiMonitorWarning />}
+                {hasMultiMonitor && <MultiMonitorNote />}
             </div>
         </div>
     );
 }
 
-function BindingActions({ binding, isEditing, onToggleEdit, onDelete, isDeleting, deletingId }: {
-    binding: ChannelBindingDto; isEditing: boolean; onToggleEdit: () => void;
+function BindingActions({ binding, isEditing, isInert, onToggleEdit, onFix, onDelete, isDeleting, deletingId }: {
+    binding: ChannelBindingDto; isEditing: boolean; isInert: boolean; onToggleEdit: () => void; onFix: () => void;
     onDelete: (id: string) => void; isDeleting: boolean; deletingId: string | null;
 }) {
     return (
         <div className="flex items-center gap-2 flex-shrink-0">
+            {isInert && !isEditing && (
+                <button onClick={onFix} className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors">
+                    Fix &rarr;
+                </button>
+            )}
             <button onClick={onToggleEdit} className="px-3 py-1.5 text-xs bg-overlay hover:bg-faint text-foreground rounded-lg transition-colors">
                 {isEditing ? 'Close' : 'Edit'}
             </button>
@@ -79,22 +102,26 @@ function BindingActions({ binding, isEditing, onToggleEdit, onDelete, isDeleting
     );
 }
 
-function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpdating, isDeleting, deletingId, hasMultiMonitor }: {
+function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpdating, isDeleting, deletingId, hasMultiMonitor, updateError }: {
     binding: ChannelBindingDto; editingId: string | null; setEditingId: (id: string | null) => void;
     onSave: (id: string, dto: UpdateChannelBindingDto) => void; onDelete: (id: string) => void;
-    isUpdating: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean;
+    isUpdating: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean; updateError?: string | null;
 }) {
+    const isEditing = editingId === binding.id;
+    const isInert = isBindingInert(binding);
     return (
         <div key={binding.id}>
-            <div className="flex items-center justify-between p-4 bg-panel/50 rounded-lg border border-edge">
-                <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} />
-                <BindingActions binding={binding} isEditing={editingId === binding.id}
-                    onToggleEdit={() => setEditingId(editingId === binding.id ? null : binding.id)}
+            <div className={`flex items-center justify-between p-4 rounded-lg border ${isInert ? 'bg-red-500/5 border-red-500/30' : 'bg-panel/50 border-edge'}`}>
+                <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} isInert={isInert} />
+                <BindingActions binding={binding} isEditing={isEditing} isInert={isInert}
+                    onToggleEdit={() => setEditingId(isEditing ? null : binding.id)}
+                    onFix={() => setEditingId(binding.id)}
                     onDelete={onDelete} isDeleting={isDeleting} deletingId={deletingId} />
             </div>
-            {editingId === binding.id && (
+            {isEditing && (
                 <div className="mt-2">
-                    <BindingConfigForm binding={binding} onSave={onSave} onCancel={() => setEditingId(null)} isSaving={isUpdating} />
+                    <BindingConfigForm binding={binding} onSave={onSave} onCancel={() => setEditingId(null)}
+                        isSaving={isUpdating} saveError={updateError} />
                 </div>
             )}
         </div>
@@ -102,9 +129,9 @@ function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpda
 }
 
 /**
- * Table of all channel bindings with inline editing and delete.
+ * Table of all channel bindings with inline editing, inert-binding repair, and delete.
  */
-export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, isDeleting }: ChannelBindingListProps) {
+export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, isDeleting, updateError }: ChannelBindingListProps) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -120,13 +147,24 @@ export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, i
     }
 
     const handleDelete = (id: string) => { setDeletingId(id); onDelete(id); };
-    const handleSave = (id: string, dto: UpdateChannelBindingDto) => { onUpdate(id, dto); setEditingId(null); };
+    // ROK-1416: collapse the row only once the PATCH resolves so a rejected save
+    // (400/409) keeps the form open with its error instead of vanishing. A void
+    // return (unit tests / fire-and-forget) closes synchronously as before.
+    const handleSave = (id: string, dto: UpdateChannelBindingDto) => {
+        const result: unknown = onUpdate(id, dto);
+        if (result && typeof (result as { then?: unknown }).then === 'function') {
+            (result as Promise<unknown>).then(() => setEditingId(null)).catch(() => {});
+        } else {
+            setEditingId(null);
+        }
+    };
 
     return (
         <div className="space-y-3">
             {bindings.map((binding) => (
                 <BindingRow key={binding.id} binding={binding} editingId={editingId} setEditingId={setEditingId}
                     onSave={handleSave} onDelete={handleDelete} isUpdating={isUpdating} isDeleting={isDeleting} deletingId={deletingId}
+                    updateError={updateError}
                     hasMultiMonitor={binding.bindingPurpose === 'game-voice-monitor' && multiMonitorChannels.has(binding.channelId)} />
             ))}
         </div>
