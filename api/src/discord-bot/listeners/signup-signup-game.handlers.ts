@@ -4,6 +4,7 @@ import * as schema from '../../drizzle/schema';
 import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
+import { signupTimeSuffix } from './signup-event-time.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
 import { getConflictSuffix } from './signup-conflict-warning.helpers';
@@ -186,7 +187,7 @@ async function signupWithoutCharacter(a: NoCharSignupArgs): Promise<boolean> {
       : '';
   const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${nudge}${conflictSuffix}`,
+    content: `You're signed up for **${event.title}**!${signupTimeSuffix(event)}${benchSuffix(result.assignedSlot)}${nudge}${conflictSuffix}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);

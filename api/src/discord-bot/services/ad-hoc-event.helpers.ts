@@ -11,6 +11,7 @@ import {
 export { autoSignupParticipant } from './ad-hoc-event.signup-helpers';
 export {
   buildAnchoredGameClause,
+  buildNullGameAnchoredClause,
   buildBindingClause,
   buildTimeConditions,
   extendScheduledEventWindow,
