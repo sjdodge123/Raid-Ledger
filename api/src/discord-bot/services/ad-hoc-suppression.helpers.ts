@@ -101,10 +101,14 @@ export function buildAnchoredGameClause(gameId: number, channelId?: string) {
  * Without a `channelId` only the affinity-free branch applies (the two channel
  * anchors have nothing to match against). This intentionally does NOT resurrect
  * game-wide cross-channel suppression: an event homed in a DIFFERENT channel
- * matches none of the three branches.
+ * matches none of the three branches. `channel_binding_id` also disqualifies
+ * affinity-free (Codex P2): today only the ad-hoc INSERT writes it — and the
+ * suppression query filters `is_ad_hoc = false` — but the anti-over-reach
+ * property must be structural, not an accident of current write paths.
  */
 export function buildNullGameAnchoredClause(channelId?: string) {
   const affinityFree = sql`(${tables.events.ephemeralVoiceChannelId} IS NULL
+    AND ${tables.events.channelBindingId} IS NULL
     AND NOT EXISTS (SELECT 1 FROM channel_bindings cbaf
                      WHERE cbaf.recurrence_group_id = ${tables.events.recurrenceGroupId}
                        AND cbaf.channel_type = 'voice'))`;

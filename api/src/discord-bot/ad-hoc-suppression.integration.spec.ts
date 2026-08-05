@@ -574,4 +574,31 @@ describe('null-game channel-anchored suppression (Regression: ROK-1423)', () => 
     );
     expect(match).toBeUndefined();
   });
+
+  // Case 17 — OVER-REACH PIN (Codex P2): a non-ad-hoc event homed via
+  // channel_binding_id (a binding on channel D) with neither ephemeral nor
+  // series anchor must NOT count as affinity-free for a null-game join on C.
+  // No current write path produces this row shape (only the ad-hoc INSERT sets
+  // channel_binding_id), so this pins the structural guard, not live behavior.
+  it('case 17 — event homed via channel_binding_id is not affinity-free for a null-game join', async () => {
+    const now = new Date();
+    const bindingOnD = await createVoiceBinding({ channelId: CHANNEL_D });
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId: null,
+      channelBindingId: bindingOnD,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeUndefined();
+  });
 });
