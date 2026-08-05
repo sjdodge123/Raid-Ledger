@@ -137,13 +137,35 @@ export async function runFollowupFanout(
   payload: FollowupFanoutPayload,
   actingCreatorId: number,
 ): Promise<void> {
-  const { db, notificationService } = deps;
+  const { db } = deps;
   if (!(await claimFanout(db, endedEventId))) return;
   const ended = await loadEndedEvent(db, endedEventId);
   if (!ended || ended.creator_id !== actingCreatorId) {
     await releaseFanout(db, endedEventId);
     return;
   }
+  await dispatchFollowupInvites(
+    deps,
+    endedEventId,
+    ended.title,
+    payload,
+    actingCreatorId,
+  );
+}
+
+/**
+ * Resolve recipients, load the event-path start time, and dispatch the DMs via
+ * `createMany`. Rolls the fan-out claim back and rethrows on failure so a retry
+ * (or the other path) can re-attempt.
+ */
+async function dispatchFollowupInvites(
+  deps: FollowupFanoutDeps,
+  endedEventId: number,
+  endedTitle: string,
+  payload: FollowupFanoutPayload,
+  actingCreatorId: number,
+): Promise<void> {
+  const { db, notificationService } = deps;
   try {
     const recipients = await resolvePostEventFollowupRecipients(
       db,
@@ -157,7 +179,7 @@ export async function runFollowupFanout(
         ? await loadEventStartEpoch(db, payload.eventId)
         : null;
     await notificationService.createMany(
-      buildInputs(recipients, ended.title, payload, startEpoch),
+      buildInputs(recipients, endedTitle, payload, startEpoch),
     );
   } catch (err) {
     await releaseFanout(db, endedEventId);
