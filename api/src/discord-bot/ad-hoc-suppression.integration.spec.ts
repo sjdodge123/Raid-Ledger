@@ -423,3 +423,182 @@ describe('bounded extension window (Regression: ROK-1418)', () => {
     expect(after.extEpoch as number).toBeGreaterThan(nowEpoch);
   });
 });
+
+// ── Null-game channel-anchored suppression (Regression: ROK-1423) ────
+//
+// Prod incident 2026-07-29: a "Gaming — Quick Play" null-game ad-hoc (event
+// 250, binding c5ada9a8) spawned on voice #General while the scheduled
+// Gamernight series event (event 156, game_id NULL, recurrence_group_id set,
+// no ephemeral anchor) was LIVE on that same channel — the series' general-
+// lobby binding is bound to #General by recurrence_group_id. When
+// effectiveGameId is null the pre-1423 clause builder emitted NO game term, so
+// no scheduled event could ever suppress a null-game join. These cases mirror
+// buildAnchoredGameClause's anchor disjunction for the null-game path:
+// suppress iff (1) ephemeral anchor to this channel, (2) series bound to this
+// channel by recurrence_group_id, or (3) the event is affinity-free.
+describe('null-game channel-anchored suppression (Regression: ROK-1423)', () => {
+  const CHANNEL_C = 'voice-channel-C';
+  const CHANNEL_D = 'voice-channel-D';
+
+  // Case 12 — RED today (exact prod shape). A live non-ad-hoc series event with
+  // null game + no ephemeral anchor, whose series is rgid-bound to channel C via
+  // a general-lobby binding, must suppress a null-game join on C. The querying
+  // monitor binding (analog of c5ada9a8) is a DIFFERENT binding on C, so the
+  // pre-fix binding-id + sibling terms are both structurally dead here.
+  it('case 12 — series rgid-bound to this channel suppresses a null-game join (RED today)', async () => {
+    const now = new Date();
+    const recurrenceGroupId = randomUUID();
+    // The querying game-voice-monitor binding on C (the ad-hoc's own binding).
+    const monitorBindingId = await createVoiceBinding({
+      channelId: CHANNEL_C,
+      bindingPurpose: 'game-voice-monitor',
+      gameId: testApp.seed.game.id,
+    });
+    // The live series' general-lobby binding on C, linked by recurrence group.
+    await createVoiceBinding({
+      channelId: CHANNEL_C,
+      bindingPurpose: 'general-lobby',
+      recurrenceGroupId,
+    });
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      monitorBindingId,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeDefined();
+  });
+
+  // Case 13 — RED today: ephemeral-anchor variant. Event ephemeral_voice_
+  // channel_id = C, null game, no series → suppresses a null-game join on C.
+  it('case 13 — ephemeral anchor to this channel suppresses a null-game join (RED today)', async () => {
+    const now = new Date();
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: CHANNEL_C,
+      recurrenceGroupId: null,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeDefined();
+  });
+
+  // Case 14 — RED today: affinity-free variant. Event with neither anchor
+  // (ROK-293 "community occupied") suppresses a null-game join on ANY channel.
+  it('case 14 — affinity-free event suppresses a null-game join on any channel (RED today)', async () => {
+    const now = new Date();
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId: null,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeDefined();
+  });
+
+  // Case 15 — OVER-REACH PIN (must STILL SPAWN, before and after the fix): an
+  // event anchored to channel C only must NOT suppress a null-game join on the
+  // unrelated channel D. Guards against resurrecting game-wide cross-channel
+  // suppression on the null-game path.
+  it('case 15 — event anchored to another channel does NOT suppress a null-game join here', async () => {
+    const now = new Date();
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: CHANNEL_C,
+      recurrenceGroupId: null,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_D,
+    );
+    expect(match).toBeUndefined();
+  });
+
+  // Case 16 — OVER-REACH PIN: a series bound to a DIFFERENT channel (D) must
+  // NOT suppress a null-game join on C (the NOT-EXISTS affinity-free branch
+  // must see the series IS anchored elsewhere and stay out).
+  it('case 16 — series bound to a different channel does NOT suppress a null-game join here', async () => {
+    const now = new Date();
+    const recurrenceGroupId = randomUUID();
+    await createVoiceBinding({
+      channelId: CHANNEL_D,
+      bindingPurpose: 'general-lobby',
+      recurrenceGroupId,
+    });
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeUndefined();
+  });
+
+  // Case 17 — OVER-REACH PIN (Codex P2): a non-ad-hoc event homed via
+  // channel_binding_id (a binding on channel D) with neither ephemeral nor
+  // series anchor must NOT count as affinity-free for a null-game join on C.
+  // No current write path produces this row shape (only the ad-hoc INSERT sets
+  // channel_binding_id), so this pins the structural guard, not live behavior.
+  it('case 17 — event homed via channel_binding_id is not affinity-free for a null-game join', async () => {
+    const now = new Date();
+    const bindingOnD = await createVoiceBinding({ channelId: CHANNEL_D });
+    await createScheduledEvent({
+      gameId: null,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: null,
+      recurrenceGroupId: null,
+      channelBindingId: bindingOnD,
+    });
+
+    const match = await findActiveScheduledEvent(
+      testApp.db,
+      UNRELATED_BINDING,
+      null,
+      now,
+      CHANNEL_C,
+    );
+    expect(match).toBeUndefined();
+  });
+});
