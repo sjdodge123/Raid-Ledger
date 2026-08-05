@@ -90,8 +90,9 @@ export function buildAnchoredGameClause(gameId: number, channelId?: string) {
 
 /**
  * ROK-1423 — channel-anchored + affinity-free suppression clause for a
- * NULL-game voice join. Mirrors `buildAnchoredGameClause`'s anchor disjunction
- * minus the game-match term: a null-game join on `channelId` is suppressed by a
+ * NULL-game voice join. An OR-of-three anchor disjunction (the same three
+ * anchors `buildAnchoredGameClause` recognizes, with no game-match
+ * requirement): a null-game join on `channelId` is suppressed by a
  * live scheduled event iff (1) its ephemeral anchor IS this channel, (2) its
  * series is bound to this channel by `recurrence_group_id`, or (3) it is
  * affinity-free — no ephemeral anchor AND its series (if any) has no voice
