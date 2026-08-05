@@ -88,6 +88,33 @@ export function buildAnchoredGameClause(gameId: number, channelId?: string) {
                            AND cb2.channel_type = 'voice')))`;
 }
 
+/**
+ * ROK-1423 — channel-anchored + affinity-free suppression clause for a
+ * NULL-game voice join. Mirrors `buildAnchoredGameClause`'s anchor disjunction
+ * minus the game-match term: a null-game join on `channelId` is suppressed by a
+ * live scheduled event iff (1) its ephemeral anchor IS this channel, (2) its
+ * series is bound to this channel by `recurrence_group_id`, or (3) it is
+ * affinity-free — no ephemeral anchor AND its series (if any) has no voice
+ * binding at all, preserving ROK-293 "community occupied" for the null-game
+ * path. Affinity-free suppression applies regardless of the event's game.
+ * Without a `channelId` only the affinity-free branch applies (the two channel
+ * anchors have nothing to match against). This intentionally does NOT resurrect
+ * game-wide cross-channel suppression: an event homed in a DIFFERENT channel
+ * matches none of the three branches.
+ */
+export function buildNullGameAnchoredClause(channelId?: string) {
+  const affinityFree = sql`(${tables.events.ephemeralVoiceChannelId} IS NULL
+    AND NOT EXISTS (SELECT 1 FROM channel_bindings cbaf
+                     WHERE cbaf.recurrence_group_id = ${tables.events.recurrenceGroupId}
+                       AND cbaf.channel_type = 'voice'))`;
+  if (!channelId) return affinityFree;
+  return sql`(${tables.events.ephemeralVoiceChannelId} = ${channelId}
+    OR EXISTS (SELECT 1 FROM channel_bindings cbng
+                WHERE cbng.recurrence_group_id = ${tables.events.recurrenceGroupId}
+                  AND cbng.channel_type = 'voice' AND cbng.channel_id = ${channelId})
+    OR ${affinityFree})`;
+}
+
 /** Build the time-window WHERE conditions for scheduled event suppression. */
 export function buildTimeConditions(now: Date) {
   const lookbackMs = 30 * 60 * 1000;
@@ -120,7 +147,10 @@ export function buildBindingClause(
     return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${buildAnchoredGameClause(effectiveGameId, channelId)})`;
   }
   if (siblingSubquery) {
-    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${siblingSubquery})`;
+    // ROK-1423: a null-game join also gets the channel-anchored + affinity-free
+    // scheduled-event suppression. `siblingSubquery` is defined iff `channelId`
+    // is set, so the anchored clause always has a channel to bind to here.
+    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${siblingSubquery} OR ${buildNullGameAnchoredClause(channelId)})`;
   }
   return eq(tables.events.channelBindingId, bindingId);
 }
