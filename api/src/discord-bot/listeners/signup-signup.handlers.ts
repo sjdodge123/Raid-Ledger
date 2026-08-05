@@ -10,6 +10,7 @@ import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
 import { benchSuffix } from './signup-bench-feedback.helpers';
+import { signupTimeSuffix } from './signup-event-time.helpers';
 import { loadGameContext } from './signup-signup-context.helpers';
 import type { GameContext } from './signup-signup-context.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
@@ -272,7 +273,7 @@ export async function handleNewLinkedSignup(
     eventId,
   );
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
+    content: `You're signed up for **${event.title}**!${signupTimeSuffix(event)}${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);
