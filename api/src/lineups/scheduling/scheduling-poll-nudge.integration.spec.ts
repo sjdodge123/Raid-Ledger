@@ -7,19 +7,22 @@
  * is still in the future, so members whose only votes are on days that have
  * since passed re-enter the audience automatically.
  *
- * Coverage (12 cases):
+ * Coverage (15 cases):
  *   1. Deadline-less standalone poll + zero-vote member older than 48h -> DM
  *   2. Member voted on a FUTURE slot -> not nudged
  *   3. Member voted ONLY on past slots -> nudged (the incident case)
- *   4. Match with zero future slots -> stalled copy variant
- *   5. Member added < 48h ago -> not nudged (and the tick is a no-op)
- *   6. `phase_deadline` inside 24h -> suppressed (deadline DMs own the window)
- *   7. `phase_deadline` already passed -> suppressed
- *   8. Dedup contract: key shape + 48h TTL in SECONDS; `true` -> no send
- *   9. Closed poll (match 'scheduled' / lineup 'archived') -> no candidates
- *  10. Deactivated member -> excluded
- *  11. NON-standalone decided lineup with a scheduling match -> also nudged
- *  12. Per-poll error isolation: poll A throwing does not starve poll B
+ *   4. Match whose slots have all passed -> stalled copy variant
+ *   5. Match that never had slots -> no-times-proposed copy variant
+ *   6. Member added < 48h ago -> not nudged (and the tick is a no-op)
+ *   7. `phase_deadline` inside 24h -> suppressed (deadline DMs own the window)
+ *   8. `phase_deadline` already passed -> suppressed
+ *   9. Dedup contract: key shape + 48h TTL in SECONDS; `true` -> no send
+ *  10. Closed poll (match 'scheduled' / lineup 'archived') -> no candidates
+ *  11. Lineup that opted out of the scheduling phase -> excluded
+ *  12. Deactivated member -> excluded
+ *  13. NON-standalone decided lineup with a scheduling match -> also nudged
+ *  14. Per-poll error isolation: poll A throwing does not starve poll B
+ *  15. All-polls-failed tick records an execution (not a silent no-op)
  */
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
@@ -55,6 +58,8 @@ interface SeedOptions {
   memberAgeHours?: number;
   /** Hour offsets (from now) of the slots to seed. Default one future slot. */
   slotHours?: number[];
+  /** ROK-1302 scheduling-phase opt-out on the parent lineup. Default true. */
+  includeSchedulingPhase?: boolean;
 }
 
 function describeSchedulingPollNudge(): void {
@@ -129,7 +134,7 @@ function describeSchedulingPollNudge(): void {
         status: opts.lineupStatus ?? 'decided',
         visibility: 'public',
         createdBy: creatorId,
-        includeSchedulingPhase: true,
+        includeSchedulingPhase: opts.includeSchedulingPhase ?? true,
         phaseDeadline:
           deadlineHours === null
             ? null
@@ -308,6 +313,23 @@ function describeSchedulingPollNudge(): void {
     expect(dms[0].message).toContain(poll.gameName);
   });
 
+  // ── 4b. never-had-slots copy variant ───────────────────────────────
+
+  it('sends the no-times-proposed variant when the poll never had slots', async () => {
+    const poll = await seedPoll('slotless', { slotHours: [] });
+    const member = poll.memberIds[0];
+
+    await nudgeService.runNudges();
+
+    const dms = dmsForUser(member);
+    expect(dms.length).toBe(1);
+    expect(dms[0]).toMatchObject({
+      title: 'Scheduling poll needs times',
+      message: expect.stringContaining('No days have been proposed'),
+    });
+    expect(dms[0].message).toContain(poll.gameName);
+  });
+
   // ── 5. member grace period ─────────────────────────────────────────
 
   it('does not nudge members added less than 48h ago (no-op tick)', async () => {
@@ -377,6 +399,16 @@ function describeSchedulingPollNudge(): void {
     expect(createSpy).not.toHaveBeenCalled();
   });
 
+  // ── 9b. scheduling-phase opt-out ───────────────────────────────────
+
+  it('excludes lineups that opted out of the scheduling phase', async () => {
+    await seedPoll('optout', { includeSchedulingPhase: false });
+
+    await nudgeService.runNudges();
+
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
   // ── 10. deactivated members ────────────────────────────────────────
 
   it('excludes deactivated members from the nudge audience', async () => {
@@ -424,6 +456,19 @@ function describeSchedulingPollNudge(): void {
 
     expect(dmsForUser(healthy.memberIds[0]).length).toBe(1);
     expect(dmsForUser(healthy.creatorId).length).toBe(1);
+  });
+
+  // ── 15. failed ticks are not silent no-ops ─────────────────────────
+
+  it('records an execution (not a no-op) when every poll fails', async () => {
+    await seedPoll('allfail');
+    createSpy.mockRejectedValue(new Error('dispatch exploded'));
+
+    const result = await nudgeService.runNudges();
+
+    // `false` would suppress the execution row and hide the outage from the
+    // admin cron panel — a failing tick must be distinguishable from idle.
+    expect(result).not.toBe(false);
   });
 }
 

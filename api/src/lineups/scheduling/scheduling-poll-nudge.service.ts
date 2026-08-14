@@ -54,24 +54,30 @@ export class SchedulingPollNudgeService {
   /**
    * Nudge every pending member of every eligible scheduling poll.
    *
-   * @returns `false` on a no-op tick so no execution row is recorded
+   * @returns `false` only on a genuinely idle tick (nothing sent AND nothing
+   *   failed) so no execution row is recorded. A tick where any poll threw
+   *   records an execution — an all-errors tick must not read as a healthy
+   *   no-op in the admin cron panel.
    */
   async runNudges(): Promise<void | false> {
     const polls = await findNudgeablePolls(this.db);
     if (polls.length === 0) return false;
 
     let sent = 0;
+    let failed = 0;
     for (const poll of polls) {
       try {
         sent += await this.processPoll(poll);
       } catch (err) {
+        failed++;
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.warn(`Poll nudge failed for match ${poll.matchId}: ${msg}`);
       }
     }
-    if (sent === 0) return false;
+    if (sent === 0 && failed === 0) return false;
     this.logger.log(
-      `Scheduling poll nudges: ${sent} sent across ${polls.length} polls`,
+      `Scheduling poll nudges: ${sent} sent across ${polls.length} polls` +
+        (failed > 0 ? `, ${failed} poll(s) failed` : ''),
     );
   }
 
@@ -103,10 +109,7 @@ export class SchedulingPollNudgeService {
     );
     if (alreadySent) return false;
 
-    const { title, message } = buildNudgeCopy(
-      poll.gameName,
-      poll.hasFutureSlots,
-    );
+    const { title, message } = buildNudgeCopy(poll);
     await this.notificationService.create({
       userId,
       type: 'community_lineup',

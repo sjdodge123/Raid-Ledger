@@ -21,6 +21,8 @@ export interface NudgePoll {
   gameName: string;
   /** False when every proposed day has passed (the stalled-poll state). */
   hasFutureSlots: boolean;
+  /** False when no day was ever proposed — distinct copy from "all passed". */
+  hadSlots: boolean;
 }
 
 interface NudgePollRow {
@@ -28,6 +30,7 @@ interface NudgePollRow {
   matchId: number;
   gameName: string;
   hasFutureSlots: boolean;
+  hadSlots: boolean;
 }
 
 /**
@@ -49,12 +52,11 @@ export async function findNudgeablePolls(db: Db): Promise<NudgePoll[]> {
     SELECT cl.id AS "lineupId",
            clm.id AS "matchId",
            COALESCE(g.name, 'your game') AS "gameName",
-           EXISTS (
-             SELECT 1
-             FROM community_lineup_schedule_slots css
-             WHERE css.match_id = clm.id
-               AND css.proposed_time > NOW()
-           ) AS "hasFutureSlots"
+           EXISTS (SELECT 1 FROM community_lineup_schedule_slots css
+                   WHERE css.match_id = clm.id
+                     AND css.proposed_time > NOW()) AS "hasFutureSlots",
+           EXISTS (SELECT 1 FROM community_lineup_schedule_slots css2
+                   WHERE css2.match_id = clm.id) AS "hadSlots"
     FROM community_lineups cl
     JOIN community_lineup_matches clm ON clm.lineup_id = cl.id
     LEFT JOIN games g ON g.id = clm.game_id
@@ -72,6 +74,7 @@ export async function findNudgeablePolls(db: Db): Promise<NudgePoll[]> {
     matchId: r.matchId,
     gameName: r.gameName,
     hasFutureSlots: r.hasFutureSlots === true,
+    hadSlots: r.hadSlots === true,
   }));
 }
 
@@ -114,30 +117,38 @@ export async function findPendingMemberIds(
 }
 
 /**
- * Title + message for the nudge DM. The stalled variant fires when every
- * proposed day has passed — "vote on a time" would be misleading, so we ask
- * for new times instead (suggesting a slot auto-votes for it).
+ * Title + message for the nudge DM. When no proposed day is still viable,
+ * "vote on a time" would be misleading, so we ask for new times instead
+ * (suggesting a slot auto-votes for it) — with distinct wording for a poll
+ * whose days all passed vs one where no day was ever proposed.
  *
- * @param gameName - Game the poll is scheduling
- * @param hasFutureSlots - Whether any proposed day is still in the future
+ * @param poll - Eligible poll with its game name and slot state
  * @returns Copy for `NotificationService.create`
  */
-export function buildNudgeCopy(
-  gameName: string,
-  hasFutureSlots: boolean,
-): { title: string; message: string } {
-  if (!hasFutureSlots) {
+export function buildNudgeCopy(poll: NudgePoll): {
+  title: string;
+  message: string;
+} {
+  if (poll.hasFutureSlots) {
     return {
-      title: 'Scheduling poll needs new times',
+      title: 'Scheduling poll waiting on you',
       message:
-        `All proposed days for ${gameName} have passed — ` +
-        'suggest a new time so the group can pick one.',
+        `The group still needs your availability for ${poll.gameName} — ` +
+        'vote on a time so the poll can lock in.',
+    };
+  }
+  if (!poll.hadSlots) {
+    return {
+      title: 'Scheduling poll needs times',
+      message:
+        `No days have been proposed for ${poll.gameName} yet — ` +
+        'suggest a time so the group can pick one.',
     };
   }
   return {
-    title: 'Scheduling poll waiting on you',
+    title: 'Scheduling poll needs new times',
     message:
-      `The group still needs your availability for ${gameName} — ` +
-      'vote on a time so the poll can lock in.',
+      `All proposed days for ${poll.gameName} have passed — ` +
+      'suggest a new time so the group can pick one.',
   };
 }
