@@ -215,6 +215,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'DMs standalone scheduling poll non-voters 24h and 1h before phase deadline every 5 minutes',
     category: 'Notifications',
   },
+  SchedulingPollNudgeService_runNudges: {
+    description:
+      'DMs members of an active scheduling poll every 48h until they vote on a still-future day. Skips polls whose phase deadline is within 24h (the deadline reminders own that window) and members added in the last 48h.',
+    category: 'Notifications',
+  },
   SlowQueriesCron_appendDigest: {
     description:
       'Reads pg_stat_statements every hour and appends a top-N digest to slow-queries.log',
