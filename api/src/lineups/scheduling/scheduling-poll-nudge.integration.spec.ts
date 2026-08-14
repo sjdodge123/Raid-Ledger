@@ -105,7 +105,9 @@ function describeSchedulingPollNudge(): void {
     return user.id;
   }
 
-  async function createGame(label: string): Promise<{ id: number; name: string }> {
+  async function createGame(
+    label: string,
+  ): Promise<{ id: number; name: string }> {
     const name = `Nudge Game ${label}-${++tag}`;
     const [game] = await testApp.db
       .insert(schema.games)

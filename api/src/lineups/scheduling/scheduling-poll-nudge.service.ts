@@ -66,9 +66,7 @@ export class SchedulingPollNudgeService {
         sent += await this.processPoll(poll);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(
-          `Poll nudge failed for match ${poll.matchId}: ${msg}`,
-        );
+        this.logger.warn(`Poll nudge failed for match ${poll.matchId}: ${msg}`);
       }
     }
     if (sent === 0) return false;
