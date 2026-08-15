@@ -7,14 +7,15 @@
  * is still in the future, so members whose only votes are on days that have
  * since passed re-enter the audience automatically.
  *
- * Coverage (15 cases):
+ * Coverage (16 cases):
  *   1. Deadline-less standalone poll + zero-vote member older than 48h -> DM
  *   2. Member voted on a FUTURE slot -> not nudged
  *   3. Member voted ONLY on past slots -> nudged (the incident case)
  *   4. Match whose slots have all passed -> stalled copy variant
  *   5. Match that never had slots -> no-times-proposed copy variant
  *   6. Member added < 48h ago -> not nudged (and the tick is a no-op)
- *   7. `phase_deadline` inside 24h -> suppressed (deadline DMs own the window)
+ *   7. `phase_deadline` inside 24h -> zero-vote members handed off to the
+ *      deadline DMs, but STALE voters (invisible to those) are still nudged
  *   8. `phase_deadline` already passed -> suppressed
  *   9. Dedup contract: key shape + 48h TTL in SECONDS; `true` -> no send
  *  10. Closed poll (match 'scheduled' / lineup 'archived') -> no candidates
@@ -22,7 +23,7 @@
  *  12. Deactivated member -> excluded
  *  13. NON-standalone decided lineup with a scheduling match -> also nudged
  *  14. Per-poll error isolation: poll A throwing does not starve poll B
- *  15. All-polls-failed tick records an execution (not a silent no-op)
+ *  15. All-polls-failed tick records a DEGRADED execution (not a no-op)
  */
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
@@ -344,12 +345,32 @@ function describeSchedulingPollNudge(): void {
 
   // ── 6. deadline handoff (inside 24h) ───────────────────────────────
 
-  it('suppresses the nudge when phase_deadline is inside the 24h handoff window', async () => {
+  it('hands zero-vote members to the deadline DMs inside the 24h window', async () => {
     await seedPoll('handoff', { deadlineHours: 12 });
 
     await nudgeService.runNudges();
 
+    // Every member is zero-vote: the 24h/1h deadline reminders cover them,
+    // so the nudge stays silent for this poll.
     expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('still nudges STALE voters inside the 24h window (deadline DMs skip them)', async () => {
+    const poll = await seedPoll('handoff-stale', {
+      deadlineHours: 12,
+      slotHours: [-72, 12],
+    });
+    const staleVoter = poll.memberIds[0];
+    const pastSlot = await addSlot(poll.matchId, -48);
+    await castVote(pastSlot, staleVoter);
+
+    await nudgeService.runNudges();
+
+    // The stale voter has a vote row, so the deadline reminders' any-vote
+    // check skips them — the nudge is their only coverage in the final day.
+    expect(dmsForUser(staleVoter).length).toBe(1);
+    // The zero-vote creator is left to the deadline reminders.
+    expect(dmsForUser(poll.creatorId).length).toBe(0);
   });
 
   // ── 7. deadline already passed ─────────────────────────────────────
@@ -460,15 +481,15 @@ function describeSchedulingPollNudge(): void {
 
   // ── 15. failed ticks are not silent no-ops ─────────────────────────
 
-  it('records an execution (not a no-op) when every poll fails', async () => {
+  it('records a DEGRADED execution when every poll fails', async () => {
     await seedPoll('allfail');
     createSpy.mockRejectedValue(new Error('dispatch exploded'));
 
     const result = await nudgeService.runNudges();
 
     // `false` would suppress the execution row and hide the outage from the
-    // admin cron panel — a failing tick must be distinguishable from idle.
-    expect(result).not.toBe(false);
+    // admin cron panel — a failing tick must surface as degraded (ROK-1197).
+    expect(result).toEqual({ degraded: true });
   });
 }
 

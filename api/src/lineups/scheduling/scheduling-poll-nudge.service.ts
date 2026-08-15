@@ -55,11 +55,11 @@ export class SchedulingPollNudgeService {
    * Nudge every pending member of every eligible scheduling poll.
    *
    * @returns `false` only on a genuinely idle tick (nothing sent AND nothing
-   *   failed) so no execution row is recorded. A tick where any poll threw
-   *   records an execution — an all-errors tick must not read as a healthy
-   *   no-op in the admin cron panel.
+   *   failed) so no execution row is recorded; `{ degraded: true }` when any
+   *   poll threw so a dispatch outage shows as degraded in the admin cron
+   *   panel instead of reading as healthy (ROK-1197 marker).
    */
-  async runNudges(): Promise<void | false> {
+  async runNudges(): Promise<void | false | { degraded: true }> {
     const polls = await findNudgeablePolls(this.db);
     if (polls.length === 0) return false;
 
@@ -79,6 +79,7 @@ export class SchedulingPollNudgeService {
       `Scheduling poll nudges: ${sent} sent across ${polls.length} polls` +
         (failed > 0 ? `, ${failed} poll(s) failed` : ''),
     );
+    if (failed > 0) return { degraded: true };
   }
 
   /**
@@ -87,7 +88,11 @@ export class SchedulingPollNudgeService {
    * @returns Number of DMs actually created (dedup skips are not counted)
    */
   private async processPoll(poll: NudgePoll): Promise<number> {
-    const userIds = await findPendingMemberIds(this.db, poll.matchId);
+    const userIds = await findPendingMemberIds(
+      this.db,
+      poll.matchId,
+      poll.inDeadlineHandoff,
+    );
     let sent = 0;
     for (const userId of userIds) {
       if (await this.sendNudge(poll, userId)) sent++;
