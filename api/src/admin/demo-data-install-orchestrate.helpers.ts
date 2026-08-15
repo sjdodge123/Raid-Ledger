@@ -219,7 +219,8 @@ async function installEngagementSignals(
 
 /**
  * ROK-1083: seed taste-profile signals so the aggregator derives varied
- * intensity tiers + vector titles. Runs before the aggregator pass below.
+ * intensity tiers + vector titles. Runs before `runTasteProfileAggregation`,
+ * which the caller (demo-data.service.ts) invokes after this install pass.
  */
 async function installTasteSignals(
   ctx: InstallCtx,

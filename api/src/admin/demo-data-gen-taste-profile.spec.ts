@@ -162,6 +162,17 @@ describe('demo-data-gen-taste-profile (ROK-1083)', () => {
       }
     });
 
+    it('consumes one rng() draw per zero-weight tail-filled pick', () => {
+      // Two weighted draws exhaust the positive weights; the remaining two
+      // picks come from the zero-weight tail fill, which must still advance
+      // the shared rng stream once per pick so full-seed demo-data runs stay
+      // reproducible downstream (ROK-1105 review finding).
+      const rng = jest.fn(() => 0.5);
+      const picks = pickWeightedUnique(rng, [1, 2, 3, 4], [0, 5, 0, 3], 4);
+      expect(picks).toEqual([2, 4, 1, 3]);
+      expect(rng).toHaveBeenCalledTimes(4);
+    });
+
     it('is deterministic under a fixed seed', () => {
       const a = pickWeightedUnique(createRng(42), POOL, WEIGHTS, 4);
       const b = pickWeightedUnique(createRng(42), POOL, WEIGHTS, 4);

@@ -151,9 +151,14 @@ export function pickWeightedUnique(
     live[idx] = 0;
   }
   // Only zero-weight entries remain (count >= positive pool): fill in pool
-  // order, matching the previous implementation's exhaustion behavior.
+  // order, matching the previous implementation's exhaustion behavior —
+  // including its one rng() draw per pick, so the shared seeded stream
+  // stays in sync for every generator downstream of this call.
   for (let i = 0; i < pool.length && picked.length < want; i++) {
-    if (!taken[i]) picked.push(pool[i]);
+    if (!taken[i]) {
+      rng();
+      picked.push(pool[i]);
+    }
   }
   return picked;
 }
