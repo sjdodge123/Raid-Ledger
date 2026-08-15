@@ -13,6 +13,10 @@ import {
   resolveLineupChannel,
   loadLineupChannelOverride,
 } from './lineup-notification-channel.helpers';
+import {
+  DEDUP_TTL,
+  FALLBACK_WARN_TTL_SECONDS,
+} from './lineup-notification.constants';
 import type { SettingsService } from '../settings/settings.service';
 import type { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';
@@ -133,10 +137,13 @@ describe('resolveLineupChannel (ROK-1064)', () => {
       OVERRIDE_ID,
     );
     expect(result).toBe(BOUND_ID);
+    // ROK-1093: the warn dedup slot uses its own short TTL — NOT the shared
+    // 7-day lineup DEDUP_TTL — so a fixed-then-re-broken override re-warns.
     expect(dedup.checkAndMarkSent).toHaveBeenCalledWith(
       `lineup-override-fallback:${LINEUP_ID}:${OVERRIDE_ID}`,
-      expect.any(Number),
+      FALLBACK_WARN_TTL_SECONDS,
     );
+    expect(FALLBACK_WARN_TTL_SECONDS).toBeLessThan(DEDUP_TTL);
     const matching = warnSpy.mock.calls.filter((c) => {
       const msg = String(c[0] ?? '');
       return msg.includes(String(LINEUP_ID)) && msg.includes(OVERRIDE_ID);
