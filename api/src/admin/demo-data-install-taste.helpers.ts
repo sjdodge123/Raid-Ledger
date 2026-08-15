@@ -4,7 +4,7 @@
  * interests so the taste-profile pipelines derive varied intensity tiers
  * and vector titles across the demo population.
  */
-import { eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { deriveArchetype } from '../taste-profile/archetype.helpers';
@@ -105,6 +105,9 @@ export async function installPlayhistoryInterests(
  * for demo installs — after `aggregateVectors` has populated vectors and
  * `weeklyIntensityRollup` has written fresh `intensity_metrics`, we
  * recompute archetypes bottom-up using the current metrics + dimensions.
+ *
+ * ROK-1105: all per-row updates are batched into a single round-trip via
+ * `UPDATE ... FROM (VALUES ...)` instead of one UPDATE per user.
  */
 export async function refreshArchetypesFromCurrentMetrics(
   db: PostgresJsDatabase<typeof schema>,
@@ -116,17 +119,19 @@ export async function refreshArchetypesFromCurrentMetrics(
       intensityMetrics: schema.playerTasteVectors.intensityMetrics,
     })
     .from(schema.playerTasteVectors);
-  let updated = 0;
-  for (const row of rows) {
+  if (rows.length === 0) return 0;
+  const valueTuples = rows.map((row) => {
     const archetype = deriveArchetype({
       intensityMetrics: row.intensityMetrics,
       dimensions: row.dimensions,
     });
-    await db
-      .update(schema.playerTasteVectors)
-      .set({ archetype })
-      .where(eq(schema.playerTasteVectors.userId, row.userId));
-    updated += 1;
-  }
-  return updated;
+    return sql`(${row.userId}::integer, ${JSON.stringify(archetype)}::jsonb)`;
+  });
+  await db.execute(sql`
+    UPDATE ${schema.playerTasteVectors} AS t
+    SET archetype = v.archetype
+    FROM (VALUES ${sql.join(valueTuples, sql`, `)}) AS v(user_id, archetype)
+    WHERE t.user_id = v.user_id
+  `);
+  return rows.length;
 }
