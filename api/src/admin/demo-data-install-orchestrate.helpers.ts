@@ -23,6 +23,24 @@ type BatchInsertReturning = (
   rows: Record<string, unknown>[],
 ) => Promise<Record<string, unknown>[]>;
 
+/** Shared deps threaded through the per-entity install steps (ROK-1105). */
+interface InstallCtx {
+  db: Db;
+  batchInsert: BatchInsert;
+  allUsers: (typeof schema.users.$inferSelect)[];
+  userByName: Map<string, typeof schema.users.$inferSelect>;
+  allGames: (typeof schema.games.$inferSelect)[];
+  gen: ReturnType<typeof coreH.generateAllData>;
+}
+
+interface CoreInstallCtx extends InstallCtx {
+  batchInsertReturning: BatchInsertReturning;
+}
+
+type EventsResult = Awaited<ReturnType<typeof coreH.installEvents>>;
+type CharsResult = Awaited<ReturnType<typeof coreH.installCharacters>>;
+type SignupsResult = Awaited<ReturnType<typeof signupsH.installSignups>>;
+
 export async function installCoreEntities(
   db: Db,
   batchInsert: BatchInsert,
@@ -32,57 +50,93 @@ export async function installCoreEntities(
   allGames: (typeof schema.games.$inferSelect)[],
   gen: ReturnType<typeof coreH.generateAllData>,
 ) {
-  const gamesBySlug = new Map(allGames.map((g) => [g.slug, g]));
-  const evResult = await coreH.installEvents(
+  const ctx: CoreInstallCtx = {
+    db,
+    batchInsert,
     batchInsertReturning,
-    allUsers[0].id,
-    allGames,
-    gen.events,
-  );
-  const chResult = await coreH.installCharacters(
-    batchInsertReturning,
-    userByName,
-    allGames,
-    gamesBySlug,
-    gen.chars,
-  );
-  const suResult = await signupsH.installSignups(
-    batchInsertReturning,
-    evResult.origEvents,
-    evResult.genEvents,
     allUsers,
     userByName,
-    chResult.charByUserGame,
-    gen.signups,
     allGames,
+    gen,
+  };
+  const { ev, ch } = await installEventsAndCharacters(ctx);
+  const su = await installSignupsAndRoster(ctx, ev, ch);
+  await installCoreFollowups(ctx, ev, su);
+  return {
+    events: ev.createdEvents.length,
+    characters: ch.createdChars.length,
+    signups: su.uniqueSignups.length,
+  };
+}
+
+/** Events + characters — the rows every later install step keys off. */
+async function installEventsAndCharacters(
+  ctx: CoreInstallCtx,
+): Promise<{ ev: EventsResult; ch: CharsResult }> {
+  const gamesBySlug = new Map(ctx.allGames.map((g) => [g.slug, g]));
+  const ev = await coreH.installEvents(
+    ctx.batchInsertReturning,
+    ctx.allUsers[0].id,
+    ctx.allGames,
+    ctx.gen.events,
+  );
+  const ch = await coreH.installCharacters(
+    ctx.batchInsertReturning,
+    ctx.userByName,
+    ctx.allGames,
+    gamesBySlug,
+    ctx.gen.chars,
+  );
+  return { ev, ch };
+}
+
+/** Signups + roster assignments for the created events. */
+async function installSignupsAndRoster(
+  ctx: CoreInstallCtx,
+  ev: EventsResult,
+  ch: CharsResult,
+): Promise<SignupsResult> {
+  const su = await signupsH.installSignups(
+    ctx.batchInsertReturning,
+    ev.origEvents,
+    ev.genEvents,
+    ctx.allUsers,
+    ctx.userByName,
+    ch.charByUserGame,
+    ctx.gen.signups,
+    ctx.allGames,
   );
   await signupsH.installRosterAssignments(
-    batchInsert,
-    suResult.createdSignups,
-    chResult.createdChars,
-    evResult.createdEvents,
-    evResult.genEvents,
-    gen.events,
-    allGames,
+    ctx.batchInsert,
+    su.createdSignups,
+    ch.createdChars,
+    ev.createdEvents,
+    ev.genEvents,
+    ctx.gen.events,
+    ctx.allGames,
   );
+  return su;
+}
+
+/** Creator reassignment + activity log, once the core rows exist. */
+async function installCoreFollowups(
+  ctx: CoreInstallCtx,
+  ev: EventsResult,
+  su: SignupsResult,
+): Promise<void> {
   await secondaryH.reassignEventCreators(
-    db,
-    userByName,
-    allUsers,
-    evResult.origEvents,
-    evResult.genEvents,
+    ctx.db,
+    ctx.userByName,
+    ctx.allUsers,
+    ev.origEvents,
+    ev.genEvents,
   );
   await activityH.installActivityLog(
-    db,
-    batchInsert,
-    evResult.createdEvents,
-    suResult.createdSignups,
+    ctx.db,
+    ctx.batchInsert,
+    ev.createdEvents,
+    su.createdSignups,
   );
-  return {
-    events: evResult.createdEvents.length,
-    characters: chResult.createdChars.length,
-    signups: suResult.uniqueSignups.length,
-  };
 }
 
 export async function installSecondaryEntities(
@@ -93,61 +147,97 @@ export async function installSecondaryEntities(
   allGames: (typeof schema.games.$inferSelect)[],
   gen: ReturnType<typeof coreH.generateAllData>,
 ) {
+  const ctx: InstallCtx = {
+    db,
+    batchInsert,
+    allUsers,
+    userByName,
+    allGames,
+    gen,
+  };
   const igdbIdsByDbId = new Map(allGames.map((g) => [g.igdbId, g.id]));
-  const origTitles = getEventsDefinitions(allGames).map((e) => e.title);
-  const origEvents = await db
+  const scheduling = await installSchedulingSignals(ctx);
+  const notifications = await installEngagementSignals(ctx, igdbIdsByDbId);
+  await installTasteSignals(ctx, igdbIdsByDbId);
+  return { ...scheduling, notifications };
+}
+
+/** Availability + game-time scheduling signals. */
+async function installSchedulingSignals(
+  ctx: InstallCtx,
+): Promise<{ availability: number; gameTimeSlots: number }> {
+  const avail = await secondaryH.installAvailability(
+    ctx.batchInsert,
+    ctx.userByName,
+    ctx.gen.avail,
+  );
+  const gameTime = await secondaryH.installGameTime(
+    ctx.batchInsert,
+    ctx.userByName,
+    ctx.gen.gameTime,
+  );
+  return { availability: avail.length, gameTimeSlots: gameTime.length };
+}
+
+/** The original (non-generated) seed events, looked up by title. */
+async function findOriginalEvents(ctx: InstallCtx) {
+  const origTitles = getEventsDefinitions(ctx.allGames).map((e) => e.title);
+  return ctx.db
     .select()
     .from(schema.events)
     .where(inArray(schema.events.title, origTitles));
-  const avail = await secondaryH.installAvailability(
-    batchInsert,
-    userByName,
-    gen.avail,
-  );
-  const gameTime = await secondaryH.installGameTime(
-    batchInsert,
-    userByName,
-    gen.gameTime,
-  );
+}
+
+/** Notifications, notification preferences, and game interests. */
+async function installEngagementSignals(
+  ctx: InstallCtx,
+  igdbIdsByDbId: Map<number | null, number>,
+): Promise<number> {
+  const origEvents = await findOriginalEvents(ctx);
   const notifs = await secondaryH.installNotifications(
-    batchInsert,
-    db,
-    userByName,
-    allUsers,
+    ctx.batchInsert,
+    ctx.db,
+    ctx.userByName,
+    ctx.allUsers,
     origEvents,
-    gen.notifs,
+    ctx.gen.notifs,
   );
   await secondaryH.installPreferences(
-    batchInsert,
-    userByName,
-    allUsers,
-    gen.notifPrefs,
+    ctx.batchInsert,
+    ctx.userByName,
+    ctx.allUsers,
+    ctx.gen.notifPrefs,
   );
   await secondaryH.installGameInterests(
-    batchInsert,
-    userByName,
+    ctx.batchInsert,
+    ctx.userByName,
     igdbIdsByDbId,
-    gen.interests,
+    ctx.gen.interests,
   );
-  // ROK-1083: seed taste-profile signals so the aggregator derives varied
-  // intensity tiers + vector titles. Runs before the aggregator pass below.
+  return notifs;
+}
+
+/**
+ * ROK-1083: seed taste-profile signals so the aggregator derives varied
+ * intensity tiers + vector titles. Runs before `runTasteProfileAggregation`,
+ * which the caller (demo-data.service.ts) invokes after this install pass.
+ */
+async function installTasteSignals(
+  ctx: InstallCtx,
+  igdbIdsByDbId: Map<number | null, number>,
+): Promise<void> {
   await tasteH.installGameActivityRollups(
-    batchInsert,
-    userByName,
+    ctx.batchInsert,
+    ctx.userByName,
     igdbIdsByDbId,
-    gen.activityRollups,
+    ctx.gen.activityRollups,
   );
   await tasteH.installPlayhistoryInterests(
-    batchInsert,
-    userByName,
+    ctx.batchInsert,
+    ctx.userByName,
     igdbIdsByDbId,
-    gen.playhistoryInterests,
+    ctx.gen.playhistoryInterests,
   );
-  return {
-    availability: avail.length,
-    gameTimeSlots: gameTime.length,
-    notifications: notifs,
-  };
 }
 
 /**

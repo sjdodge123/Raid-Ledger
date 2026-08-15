@@ -6,13 +6,26 @@
  * pass through the normal LineupsService guards so tests can set up and
  * tear down lineups regardless of status-transition rules.
  */
+import type { ModuleRef } from '@nestjs/core';
 import { sql, and, like } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { generatePublicSlug } from '../lineups/public-lineup-slug.helpers';
+import { LineupPhaseQueueService } from '../lineups/queue/lineup-phase.queue';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+/** Cancel all pending BullMQ phase-transition jobs for a lineup (ROK-1072). */
+export async function cancelLineupPhaseJobsForTest(
+  moduleRef: ModuleRef,
+  lineupId: number,
+): Promise<number> {
+  const queueSvc = moduleRef.get(LineupPhaseQueueService, {
+    strict: false,
+  });
+  return queueSvc.cancelAllForLineup(lineupId);
+}
 
 /** Create a new community lineup in `building` status. */
 export async function createBuildingLineupForTest(

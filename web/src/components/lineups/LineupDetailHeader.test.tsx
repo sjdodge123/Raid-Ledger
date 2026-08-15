@@ -30,6 +30,14 @@ vi.mock('../../hooks/use-lineups', () => ({
         mutate: vi.fn(),
         isPending: false,
     }),
+    // Fallback states (archived/aborted/empty-voting) render
+    // LineupParticipantsButton, which reads the roster query.
+    useLineupParticipants: () => ({
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+    }),
 }));
 
 vi.mock('../../hooks/use-auth', () => ({
@@ -179,6 +187,44 @@ describe('LineupDetailHeader — operator ⋮ menu (ROK-1323)', () => {
         expect(
             screen.getByRole('heading', { name: /Revert to Nominating\?/ }),
         ).toBeInTheDocument();
+    });
+});
+
+describe('LineupDetailHeader — channel override in operator ⓘ hover (ROK-1093)', () => {
+    // ROK-1064 wired a standalone `lineup-channel-override-badge`; ROK-1323
+    // folded that display into LineupHeroMeta's operator-only ⓘ hover
+    // (`lineup-operator-info`). The header renders the hero meta itself in
+    // fallback states (archived / aborted / empty voting), so exercise the
+    // archived path here to cover the override display end-to-end.
+    beforeEach(() => {
+        asOperator();
+    });
+
+    it('shows #<name> in the operator info hover when the override is set', () => {
+        const lineup = buildDetail({
+            title: 'Override Set',
+            status: 'archived',
+            channelOverrideId: '987654321098765432',
+            channelOverrideName: 'raid-signups',
+        } as DetailOverrides);
+        renderWithProviders(<LineupDetailHeader lineup={lineup} />);
+        const hover = screen.getByTestId('lineup-operator-info');
+        expect(hover).toHaveAttribute(
+            'title',
+            expect.stringContaining('#raid-signups'),
+        );
+    });
+
+    it('omits the channel reference when channelOverrideId is null', () => {
+        const lineup = buildDetail({
+            title: 'No Override',
+            status: 'archived',
+            channelOverrideId: null,
+            channelOverrideName: null,
+        } as DetailOverrides);
+        renderWithProviders(<LineupDetailHeader lineup={lineup} />);
+        const hover = screen.getByTestId('lineup-operator-info');
+        expect(hover.getAttribute('title')).not.toContain('#');
     });
 });
 

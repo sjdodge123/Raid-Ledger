@@ -1,3 +1,4 @@
+import type { ModuleRef } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import * as tables from '../drizzle/schema';
@@ -5,6 +6,7 @@ import {
   classifyEventSessions,
   autoPopulateAttendance,
 } from '../discord-bot/services/voice-attendance-classify.helpers';
+import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 
 /** Parameters for injecting a synthetic voice session. */
 export interface InjectVoiceSessionParams {
@@ -53,6 +55,15 @@ export async function injectVoiceSessionForTest(
       ],
     })
     .onConflictDoNothing();
+}
+
+/** Flush in-memory voice attendance sessions to the DB (ROK-1072 extraction). */
+export async function flushVoiceSessionsForTest(
+  moduleRef: ModuleRef,
+): Promise<{ success: boolean }> {
+  const svc = moduleRef.get(VoiceAttendanceService, { strict: false });
+  await svc.flushToDb();
+  return { success: true };
 }
 
 /** Trigger voice classification + attendance auto-population (ROK-943). */
