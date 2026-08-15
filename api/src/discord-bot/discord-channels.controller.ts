@@ -7,6 +7,10 @@
  *           omitted returns all text channels.
  *
  * Returns 503 when the Discord bot is not connected to a guild.
+ *
+ * Guard placement (ROK-1093): class-level guard + role decoration is the
+ * discord-bot module norm — every sibling controller decorates at class
+ * level — so the class-level `@UseGuards`/`@Roles` here is intentional.
  */
 import {
   Controller,

@@ -122,30 +122,89 @@ export function generateSignalProfiles(
   });
 }
 
-/** Weighted sample without replacement — returns `count` unique IGDB IDs. */
-function pickWeightedUnique(
+/**
+ * Weighted sample without replacement — returns `count` unique IGDB IDs.
+ *
+ * ROK-1105: uses a Fenwick (binary-indexed) partial-sum tree so each draw
+ * is an O(log n) prefix-sum binary search plus an O(log n) weight removal,
+ * replacing the previous O(pool) rescan-and-splice per pick. One `rng()`
+ * call per pick, exactly like before. Exported for direct spec coverage.
+ */
+export function pickWeightedUnique(
   rng: Rng,
   pool: number[],
   weights: number[],
   count: number,
 ): number[] {
+  const want = Math.min(count, pool.length);
+  const live = weights.slice(0, pool.length);
+  const tree = buildPrefixSumTree(live);
+  const taken = new Array<boolean>(pool.length).fill(false);
   const picked: number[] = [];
-  const remaining = pool.map((id, i) => ({ id, weight: weights[i] }));
-  while (picked.length < count && remaining.length > 0) {
-    const totalWeight = remaining.reduce((acc, r) => acc + r.weight, 0);
-    let roll = rng() * totalWeight;
-    let chosenIdx = 0;
-    for (let i = 0; i < remaining.length; i++) {
-      roll -= remaining[i].weight;
-      if (roll <= 0) {
-        chosenIdx = i;
-        break;
-      }
+  while (picked.length < want) {
+    const total = prefixSumTotal(tree);
+    if (total <= 0) break;
+    const idx = findByPrefixSum(tree, rng() * total);
+    picked.push(pool[idx]);
+    taken[idx] = true;
+    addToPrefixSum(tree, idx, -live[idx]);
+    live[idx] = 0;
+  }
+  // Only zero-weight entries remain (count >= positive pool): fill in pool
+  // order, matching the previous implementation's exhaustion behavior —
+  // including its one rng() draw per pick, so the shared seeded stream
+  // stays in sync for every generator downstream of this call.
+  for (let i = 0; i < pool.length && picked.length < want; i++) {
+    if (!taken[i]) {
+      rng();
+      picked.push(pool[i]);
     }
-    picked.push(remaining[chosenIdx].id);
-    remaining.splice(chosenIdx, 1);
   }
   return picked;
+}
+
+/** Build a 1-indexed Fenwick tree of partial sums over `weights`. */
+function buildPrefixSumTree(weights: number[]): number[] {
+  const tree = new Array<number>(weights.length + 1).fill(0);
+  for (let i = 1; i <= weights.length; i++) {
+    tree[i] += weights[i - 1];
+    const parent = i + (i & -i);
+    if (parent < tree.length) tree[parent] += tree[i];
+  }
+  return tree;
+}
+
+/** Add `delta` to the weight at 0-based index `idx`. */
+function addToPrefixSum(tree: number[], idx: number, delta: number): void {
+  for (let i = idx + 1; i < tree.length; i += i & -i) tree[i] += delta;
+}
+
+/** Sum of all weights currently in the tree. */
+function prefixSumTotal(tree: number[]): number {
+  let total = 0;
+  for (let i = tree.length - 1; i > 0; i -= i & -i) total += tree[i];
+  return total;
+}
+
+/**
+ * Prefix-sum binary search (Fenwick descent): returns the 0-based index of
+ * the first entry whose running cumulative weight strictly exceeds
+ * `target`. Requires `0 <= target < total`, which guarantees the hit has a
+ * positive weight — already-picked (zeroed) entries are never re-selected.
+ */
+function findByPrefixSum(tree: number[], target: number): number {
+  let pos = 0;
+  let remaining = target;
+  let step = 1;
+  while (step * 2 < tree.length) step *= 2;
+  for (; step > 0; step = Math.floor(step / 2)) {
+    const next = pos + step;
+    if (next < tree.length && tree[next] <= remaining) {
+      pos = next;
+      remaining -= tree[next];
+    }
+  }
+  return pos;
 }
 
 /** Monday-floor date for `game_activity_rollups.period_start` week rows. */

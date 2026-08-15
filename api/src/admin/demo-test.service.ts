@@ -1,41 +1,54 @@
 import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, and, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
-import { NOTIFICATION_TYPES } from '../drizzle/schema/notification-preferences';
-import type { ChannelPrefs } from '../drizzle/schema/notification-preferences';
-import type { SignupStatus } from '../drizzle/schema/event-signups';
-import type { CreateSignupDto, SignupResponseDto } from '@raid-ledger/contract';
+import type { SignupResponseDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
-import { SignupsService } from '../events/signups.service';
-import { SignupsRosterService } from '../events/signups-roster.service';
-import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
-import { LineupPhaseQueueService } from '../lineups/queue/lineup-phase.queue';
-import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
-import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
-import { QueueHealthService } from '../queue/queue-health.service';
 import {
   enableScheduledEventsForTest as enableSE,
   disableScheduledEventsForTest as disableSE,
   cleanupScheduledEventsForTest as cleanupSE,
   pauseReconciliationForTest as pauseRecon,
   triggerReconciliationForTest as triggerRecon,
+  triggerScheduledEventCompletionForTest as triggerSECompletion,
   setEventTimesForTest as setTimes,
   type CleanupSEResult,
 } from './demo-test-scheduled-event.helpers';
-import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
 import {
   injectVoiceSessionForTest as injectVoice,
   triggerClassifyForTest as triggerClassify,
+  flushVoiceSessionsForTest as flushVoice,
   type InjectVoiceSessionParams,
 } from './demo-test-voice.helpers';
-import { setAutoHeartSteamUrlsPref } from '../discord-bot/listeners/steam-link-interest.helpers';
+import {
+  addGameInterestForTest as addGameInterest,
+  clearGameInterestForTest as clearGameInterest,
+  setSteamAppIdForTest as setSteamAppId,
+  getGameForTest as getGame,
+  setAutoHeartPrefForTest as setAutoHeartPref,
+} from './demo-test-steam.helpers';
+import {
+  createSignupForTest as createSignup,
+  triggerDepartureForTest as triggerDeparture,
+  cancelSignupForTest as cancelSignup,
+  type CreateSignupForTestDto,
+} from './demo-test-signups.helpers';
+import {
+  linkDiscordForTest as linkDiscord,
+  enableDiscordNotificationsForTest as enableDiscordNotifications,
+  getNotificationsForTest as getNotifications,
+  clearGameTimeConfirmationForTest as clearGameTimeConfirmation,
+  flushNotificationBufferForTest as flushNotificationBuffer,
+  flushEmbedQueueForTest as flushEmbedQueue,
+  awaitProcessingForTest as awaitProcessing,
+} from './demo-test-core.helpers';
+import { cancelLineupPhaseJobsForTest as cancelLineupPhaseJobs } from './demo-test-lineup.helpers';
 
 /**
- * Service for demo/test-only endpoints used by smoke tests.
- * All methods require DEMO_MODE to be enabled (both env and DB flag).
+ * Thin facade for demo/test-only endpoints used by smoke tests (ROK-1072).
+ * All methods require DEMO_MODE to be enabled (both env and DB flag); the
+ * actual logic lives in per-domain `demo-test-*.helpers.ts` files.
  */
 @Injectable()
 export class DemoTestService {
@@ -67,67 +80,29 @@ export class DemoTestService {
     username: string,
   ): Promise<typeof schema.users.$inferSelect | undefined> {
     await this.assertDemoMode();
-    // Clear the Discord ID from any other user first (avoids unique constraint
-    // when multiple CI smoke categories re-run setup with different dmRecipient)
-    await this.db
-      .update(schema.users)
-      .set({ discordId: null, updatedAt: new Date() })
-      .where(
-        and(
-          eq(schema.users.discordId, discordId),
-          sql`${schema.users.id} != ${userId}`,
-        ),
-      );
-    const [updated] = await this.db
-      .update(schema.users)
-      .set({ discordId, username, updatedAt: new Date() })
-      .where(eq(schema.users.id, userId))
-      .returning();
-    return updated;
+    return linkDiscord(this.db, userId, discordId, username);
   }
 
   /** Enable Discord DM notifications for a user -- DEMO_MODE only. */
   async enableDiscordNotificationsForTest(userId: number): Promise<void> {
     await this.assertDemoMode();
-    const prefs = this.buildAllChannelsEnabled();
-    await this.db
-      .insert(schema.userNotificationPreferences)
-      .values({ userId, channelPrefs: prefs })
-      .onConflictDoUpdate({
-        target: schema.userNotificationPreferences.userId,
-        set: { channelPrefs: prefs },
-      });
+    await enableDiscordNotifications(this.db, userId);
   }
 
   /** Add a game interest for a user -- DEMO_MODE only (for smoke tests). */
   async addGameInterestForTest(userId: number, gameId: number): Promise<void> {
     await this.assertDemoMode();
-    await this.db
-      .insert(schema.gameInterests)
-      .values({ userId, gameId, source: 'manual' })
-      .onConflictDoNothing();
+    await addGameInterest(this.db, userId, gameId);
   }
 
   /** Create a signup for any user -- DEMO_MODE only (for smoke tests). */
   async createSignupForTest(
     eventId: number,
     userId: number,
-    dto?: {
-      preferredRoles?: string[];
-      characterId?: string;
-      status?: SignupStatus;
-    },
+    dto?: CreateSignupForTestDto,
   ): Promise<SignupResponseDto> {
     await this.assertDemoMode();
-    const svc = this.moduleRef.get(SignupsService, { strict: false });
-    const signupDto = this.buildSignupDto(dto);
-    const result = await svc.signup(eventId, userId, signupDto, {
-      skipEndedCheck: true,
-    });
-    if (dto?.status && dto.status !== 'signed_up') {
-      await this.overrideSignupStatus(result.id, dto.status);
-    }
-    return result;
+    return createSignup(this.moduleRef, this.db, eventId, userId, dto);
   }
 
   /** Enqueue a departure grace job with 0ms delay — DEMO_MODE only. */
@@ -137,10 +112,7 @@ export class DemoTestService {
     discordUserId: string,
   ): Promise<void> {
     await this.assertDemoMode();
-    const queueSvc = this.moduleRef.get(DepartureGraceQueueService, {
-      strict: false,
-    });
-    await queueSvc.enqueue({ eventId, signupId, discordUserId }, 0);
+    await triggerDeparture(this.moduleRef, eventId, signupId, discordUserId);
   }
 
   /** Query a user's notifications — DEMO_MODE only (smoke tests). */
@@ -150,52 +122,31 @@ export class DemoTestService {
     limit = 20,
   ): Promise<(typeof schema.notifications.$inferSelect)[]> {
     await this.assertDemoMode();
-    const conditions = [eq(schema.notifications.userId, userId)];
-    if (type) {
-      conditions.push(sql`${schema.notifications.type} = ${type}`);
-    }
-    return this.db
-      .select()
-      .from(schema.notifications)
-      .where(and(...conditions))
-      .orderBy(sql`${schema.notifications.createdAt} DESC`)
-      .limit(limit);
+    return getNotifications(this.db, userId, type, limit);
   }
 
   /** Cancel a signup as if the user did it — triggers bufferLeave. */
   async cancelSignupForTest(eventId: number, userId: number): Promise<void> {
     await this.assertDemoMode();
-    const svc = this.moduleRef.get(SignupsRosterService, { strict: false });
-    await svc.cancel(eventId, userId);
+    await cancelSignup(this.moduleRef, eventId, userId);
   }
 
   /** Flush the roster notification buffer and return pending count. */
   async flushNotificationBufferForTest(): Promise<number> {
     await this.assertDemoMode();
-    const buf = this.moduleRef.get(RosterNotificationBufferService, {
-      strict: false,
-    });
-    const count = buf.pendingCount;
-    await buf.flushAll();
-    return count;
+    return flushNotificationBuffer(this.moduleRef);
   }
 
   /** Flush voice attendance sessions to DB — DEMO_MODE only. */
   async flushVoiceSessionsForTest(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
-    const svc = this.moduleRef.get(VoiceAttendanceService, {
-      strict: false,
-    });
-    await svc.flushToDb();
-    return { success: true };
+    return flushVoice(this.moduleRef);
   }
 
   /** Drain the embed sync BullMQ queue — DEMO_MODE only. */
   async flushEmbedQueueForTest(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
-    const qhs = this.moduleRef.get(QueueHealthService, { strict: false });
-    await qhs.drainAll();
-    return { success: true };
+    return flushEmbedQueue(this.moduleRef);
   }
 
   /** Trigger scheduled event completion cron — DEMO_MODE only (ROK-944). */
@@ -203,9 +154,7 @@ export class DemoTestService {
     success: boolean;
   }> {
     await this.assertDemoMode();
-    const svc = this.moduleRef.get(ScheduledEventService, { strict: false });
-    await svc.completeExpiredEvents();
-    return { success: true };
+    return triggerSECompletion(this.moduleRef);
   }
 
   /** Enable Discord scheduled event creation -- DEMO_MODE only (ROK-969). */
@@ -241,8 +190,7 @@ export class DemoTestService {
   /** Wait for all BullMQ queues to drain — DEMO_MODE only. */
   async awaitProcessingForTest(timeoutMs = 30_000): Promise<void> {
     await this.assertDemoMode();
-    const qhs = this.moduleRef.get(QueueHealthService, { strict: false });
-    await qhs.awaitDrained(timeoutMs);
+    await awaitProcessing(this.moduleRef, timeoutMs);
   }
 
   /** Inject a synthetic voice session — DEMO_MODE only (ROK-943 smoke test). */
@@ -257,33 +205,6 @@ export class DemoTestService {
     await triggerClassify(this.db, eventId);
   }
 
-  /** Directly update a signup's status in the DB. */
-  private async overrideSignupStatus(
-    signupId: number,
-    status: SignupStatus,
-  ): Promise<void> {
-    await this.db
-      .update(schema.eventSignups)
-      .set({ status })
-      .where(eq(schema.eventSignups.id, signupId));
-  }
-
-  /** Build a CreateSignupDto, filtering preferredRoles to valid values. */
-  private buildSignupDto(dto?: {
-    preferredRoles?: string[];
-    characterId?: string;
-  }): CreateSignupDto | undefined {
-    if (!dto) return undefined;
-    const validRoles = new Set(['tank', 'healer', 'dps']);
-    const filtered = dto.preferredRoles?.filter((r) =>
-      validRoles.has(r),
-    ) as CreateSignupDto['preferredRoles'];
-    return {
-      preferredRoles: filtered?.length ? filtered : undefined,
-      characterId: dto.characterId,
-    };
-  }
-
   /** Force-set event times bypassing Zod validation — DEMO_MODE only (ROK-969). */
   async setEventTimesForTest(id: number, start: string, end: string) {
     await this.assertDemoMode();
@@ -296,14 +217,7 @@ export class DemoTestService {
     gameId: number,
   ): Promise<void> {
     await this.assertDemoMode();
-    await this.db
-      .delete(schema.gameInterests)
-      .where(
-        and(
-          eq(schema.gameInterests.userId, userId),
-          eq(schema.gameInterests.gameId, gameId),
-        ),
-      );
+    await clearGameInterest(this.db, userId, gameId);
   }
 
   /** Set steamAppId on a game — DEMO_MODE only (ROK-966 smoke test). */
@@ -312,21 +226,13 @@ export class DemoTestService {
     steamAppId: number,
   ): Promise<void> {
     await this.assertDemoMode();
-    await this.db
-      .update(schema.games)
-      .set({ steamAppId })
-      .where(eq(schema.games.id, gameId));
+    await setSteamAppId(this.db, gameId, steamAppId);
   }
 
   /** Fetch a game by id (for smoke-test fixture setup) — DEMO_MODE only (ROK-1054). */
   async getGameForTest(id: number) {
     await this.assertDemoMode();
-    const rows = await this.db
-      .select({ id: schema.games.id, name: schema.games.name })
-      .from(schema.games)
-      .where(eq(schema.games.id, id))
-      .limit(1);
-    return rows[0] ?? null;
+    return getGame(this.db, id);
   }
 
   /** Set the autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */
@@ -335,33 +241,18 @@ export class DemoTestService {
     enabled: boolean,
   ): Promise<void> {
     await this.assertDemoMode();
-    await setAutoHeartSteamUrlsPref(this.db, userId, enabled);
+    await setAutoHeartPref(this.db, userId, enabled);
   }
 
   /** Clear game_time_confirmed_at for a user -- DEMO_MODE only (ROK-999). */
   async clearGameTimeConfirmationForTest(userId: number): Promise<void> {
     await this.assertDemoMode();
-    await this.db
-      .update(schema.users)
-      .set({ gameTimeConfirmedAt: null })
-      .where(eq(schema.users.id, userId));
+    await clearGameTimeConfirmation(this.db, userId);
   }
 
   /** Cancel all pending BullMQ phase-transition jobs for a lineup — DEMO_MODE only. */
   async cancelLineupPhaseJobsForTest(lineupId: number): Promise<number> {
     await this.assertDemoMode();
-    const queueSvc = this.moduleRef.get(LineupPhaseQueueService, {
-      strict: false,
-    });
-    return queueSvc.cancelAllForLineup(lineupId);
-  }
-
-  /** Build a ChannelPrefs object with all channels enabled for all types. */
-  private buildAllChannelsEnabled(): ChannelPrefs {
-    const prefs = {} as Record<string, Record<string, boolean>>;
-    for (const type of NOTIFICATION_TYPES) {
-      prefs[type] = { inApp: true, push: true, discord: true };
-    }
-    return prefs as ChannelPrefs;
+    return cancelLineupPhaseJobs(this.moduleRef, lineupId);
   }
 }

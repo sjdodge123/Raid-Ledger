@@ -20,6 +20,15 @@ export interface CleanupSEResult {
   total: number;
 }
 
+/** Trigger the scheduled event completion cron once (ROK-944). */
+export async function triggerScheduledEventCompletionForTest(
+  moduleRef: ModuleRef,
+): Promise<{ success: boolean }> {
+  const svc = moduleRef.get(ScheduledEventService, { strict: false });
+  await svc.completeExpiredEvents();
+  return { success: true };
+}
+
 /** Enable Discord scheduled event creation (ROK-969). */
 export function enableScheduledEventsForTest(moduleRef: ModuleRef): {
   success: boolean;

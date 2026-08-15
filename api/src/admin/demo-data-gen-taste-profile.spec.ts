@@ -4,6 +4,7 @@ import {
   generateGameActivityRollups,
   generatePlayhistoryInterests,
   generateSignalProfiles,
+  pickWeightedUnique,
   type TasteIntensityTier,
 } from './demo-data-gen-taste-profile';
 import { createRng } from './demo-data-rng';
@@ -101,6 +102,81 @@ describe('demo-data-gen-taste-profile (ROK-1083)', () => {
       expect(weekRow!.periodStart.toISOString()).toBe(
         expectedMonday.toISOString(),
       );
+    });
+  });
+
+  describe('pickWeightedUnique (ROK-1105 prefix-sum rewrite)', () => {
+    const POOL = [101, 102, 103, 104, 105];
+    // Prefix sums: [1, 3, 6, 10, 100].
+    const WEIGHTS = [1, 2, 3, 4, 90];
+
+    it('returns unique in-pool picks of the requested count', () => {
+      const rng = createRng(5);
+      for (let i = 0; i < 200; i++) {
+        const picks = pickWeightedUnique(rng, POOL, WEIGHTS, 3);
+        expect(picks).toHaveLength(3);
+        expect(new Set(picks).size).toBe(3);
+        for (const p of picks) expect(POOL).toContain(p);
+      }
+    });
+
+    it('clamps count to the pool size and returns every item', () => {
+      const picks = pickWeightedUnique(createRng(6), POOL, WEIGHTS, 50);
+      expect([...picks].sort((a, b) => a - b)).toEqual(POOL);
+    });
+
+    it('returns empty for an empty pool', () => {
+      expect(pickWeightedUnique(createRng(7), [], [], 3)).toEqual([]);
+    });
+
+    it('returns empty for a non-positive count', () => {
+      expect(pickWeightedUnique(createRng(8), POOL, WEIGHTS, 0)).toEqual([]);
+    });
+
+    it('maps stubbed rolls onto the prefix-sum boundaries', () => {
+      // target = roll * total(100); pick = first index whose cumulative
+      // weight exceeds the target.
+      expect(pickWeightedUnique(() => 0.005, POOL, WEIGHTS, 1)).toEqual([101]);
+      expect(pickWeightedUnique(() => 0.02, POOL, WEIGHTS, 1)).toEqual([102]);
+      expect(pickWeightedUnique(() => 0.05, POOL, WEIGHTS, 1)).toEqual([103]);
+      expect(pickWeightedUnique(() => 0.08, POOL, WEIGHTS, 1)).toEqual([104]);
+      expect(pickWeightedUnique(() => 0.5, POOL, WEIGHTS, 1)).toEqual([105]);
+    });
+
+    it('selects proportionally to weight over many seeded draws', () => {
+      const rng = createRng(9);
+      let heavyFirst = 0;
+      const trials = 1000;
+      for (let i = 0; i < trials; i++) {
+        const [first] = pickWeightedUnique(rng, POOL, WEIGHTS, 1);
+        if (first === 105) heavyFirst += 1;
+      }
+      // Weight 90 of 100 total → expect ~90%; generous tolerance.
+      expect(heavyFirst / trials).toBeGreaterThan(0.8);
+    });
+
+    it('never selects zero-weight items while positive weights remain', () => {
+      const rng = createRng(10);
+      for (let i = 0; i < 200; i++) {
+        expect(pickWeightedUnique(rng, [1, 2, 3], [0, 5, 0], 1)).toEqual([2]);
+      }
+    });
+
+    it('consumes one rng() draw per zero-weight tail-filled pick', () => {
+      // Two weighted draws exhaust the positive weights; the remaining two
+      // picks come from the zero-weight tail fill, which must still advance
+      // the shared rng stream once per pick so full-seed demo-data runs stay
+      // reproducible downstream (ROK-1105 review finding).
+      const rng = jest.fn(() => 0.5);
+      const picks = pickWeightedUnique(rng, [1, 2, 3, 4], [0, 5, 0, 3], 4);
+      expect(picks).toEqual([2, 4, 1, 3]);
+      expect(rng).toHaveBeenCalledTimes(4);
+    });
+
+    it('is deterministic under a fixed seed', () => {
+      const a = pickWeightedUnique(createRng(42), POOL, WEIGHTS, 4);
+      const b = pickWeightedUnique(createRng(42), POOL, WEIGHTS, 4);
+      expect(b).toEqual(a);
     });
   });
 

@@ -12,7 +12,9 @@
  *   When an override is set but the bot lacks required permissions (or the
  *   channel is missing from the guild cache), we WARN once per
  *   `(lineupId, channelId)` pair via the dedup service and fall through to
- *   the existing chain. The DB row is never mutated.
+ *   the existing chain. The DB row is never mutated. The warn dedup uses a
+ *   dedicated short TTL (ROK-1093) so a fixed-then-re-broken override
+ *   re-warns promptly instead of sharing the 7-day lineup dedup window.
  */
 import { eq } from 'drizzle-orm';
 import { Logger } from '@nestjs/common';
@@ -23,7 +25,7 @@ import { SETTING_KEYS } from '../drizzle/schema';
 import type { SettingsService } from '../settings/settings.service';
 import type { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import type { NotificationDedupService } from '../notifications/notification-dedup.service';
-import { DEDUP_TTL } from './lineup-notification.constants';
+import { FALLBACK_WARN_TTL_SECONDS } from './lineup-notification.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -130,7 +132,7 @@ async function warnOverrideFallback(
   const dedupKey = `lineup-override-fallback:${lineupId}:${overrideId}`;
   const alreadyWarned = await dedupService.checkAndMarkSent(
     dedupKey,
-    DEDUP_TTL,
+    FALLBACK_WARN_TTL_SECONDS,
   );
   if (alreadyWarned) return;
   logger.warn(

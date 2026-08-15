@@ -5,6 +5,15 @@
 /** TTL for dedup records (7 days in seconds). */
 export const DEDUP_TTL = 7 * 24 * 3600;
 
+/**
+ * Dedup TTL for the channel-override fallback warn (10 minutes, in the
+ * SECONDS unit `NotificationDedupService.checkAndMarkSent` expects —
+ * ROK-1093). Deliberately much shorter than {@link DEDUP_TTL}: if an operator
+ * fixes bot permissions and they later break again, the fallback re-warns
+ * within minutes instead of staying silent for the rest of the 7-day window.
+ */
+export const FALLBACK_WARN_TTL_SECONDS = 10 * 60;
+
 /** Per-match cooldown for the manual "remind voters" nudge (1h, ROK-1395). */
 export const MANUAL_REMIND_COOLDOWN_TTL = 3600;
 
