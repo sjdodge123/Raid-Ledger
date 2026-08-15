@@ -12,7 +12,10 @@ import {
 import {
   assertResolvedUpdateTriple,
   assertUpsertTriple,
+  buildBindingUpdateSet,
   detectBehavior,
+  resolvePatchedGameId,
+  type BindingUpdatePatch,
 } from './channel-bindings-invariant.helpers';
 import type {
   BindingPurpose,
@@ -308,27 +311,36 @@ export class ChannelBindingsService {
   }
 
   /**
-   * Update binding config fields (min players, grace period, etc.).
+   * Update binding config, purpose, and/or game (ROK-1416). `gameIdPatch`
+   * threads a game reassign/clear from the admin edit form: the guard resolves
+   * it into the post-write triple (a monitor cleared to null 400s), the slot
+   * conflict check uses the resolved game, and AC5 prunes config keys that no
+   * longer apply to the resolved purpose.
    */
   async updateConfig(
     id: string,
     config: Partial<ChannelBindingConfig>,
     bindingPurpose?: BindingPurpose,
+    gameIdPatch?: { gameIdProvided: boolean; gameId: number | null },
   ): Promise<BindingRecord | null> {
     const existing = await this.getBindingById(id);
     if (!existing) return null;
-    // ROK-1415: assert the RESOLVED post-write triple. When ROK-1416 threads a
-    // gameId through this method, it must resolve into this same call — the
-    // guard sits downstream of any future field, by design.
-    assertResolvedUpdateTriple(existing, { bindingPurpose }, id);
-    // ROK-1419: reject a purpose flip into an already-occupied non-series slot
+    const patch: BindingUpdatePatch = { bindingPurpose, ...gameIdPatch };
+    // ROK-1415/1416: assert the RESOLVED post-write (purpose, game) triple.
+    assertResolvedUpdateTriple(existing, patch, id);
+    // ROK-1419: reject a flip/reassign into an already-occupied non-series slot
     // with the operator message before the write; the DB index is the backstop.
-    await assertNoBindingConflict(this.db, existing, bindingPurpose);
-    const updateSet: Partial<typeof schema.channelBindings.$inferInsert> = {
-      config: { ...(existing.config ?? {}), ...config },
-      updatedAt: new Date(),
-      ...(bindingPurpose && { bindingPurpose }),
-    };
+    await assertNoBindingConflict(
+      this.db,
+      { ...existing, gameId: resolvePatchedGameId(existing.gameId, patch) },
+      bindingPurpose,
+    );
+    const updateSet = buildBindingUpdateSet(
+      existing,
+      config,
+      bindingPurpose,
+      patch,
+    );
     const [result] = await mappingConflicts(() =>
       this.db
         .update(schema.channelBindings)

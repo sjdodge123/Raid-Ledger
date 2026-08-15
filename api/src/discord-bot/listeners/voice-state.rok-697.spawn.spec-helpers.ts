@@ -96,7 +96,9 @@ export async function createSpawnTestModule(): Promise<SpawnSpecHarness> {
     getGuildId: jest.fn().mockReturnValue('guild-1'),
   };
   const mockAdHocEventService = {
-    handleVoiceJoin: jest.fn().mockResolvedValue(undefined),
+    // ROK-1417 P2 contract: resolves true when the join was actually
+    // processed (joined/spawned), false when kill-switch/suppression gated it.
+    handleVoiceJoin: jest.fn().mockResolvedValue(true),
     handleVoiceLeave: jest.fn().mockResolvedValue(undefined),
     getActiveState: jest.fn().mockReturnValue(undefined),
     getActiveBindingEventGameId: jest.fn().mockReturnValue(undefined),
@@ -172,4 +174,24 @@ export async function createSpawnTestModule(): Promise<SpawnSpecHarness> {
     mockGameActivityService,
     mockUsersService,
   };
+}
+
+/** Fire a voice-join through the captured handler, then let debounce settle. */
+export async function join(
+  handler: (o: unknown, n: unknown) => void,
+  channelId: string,
+  userId: string,
+): Promise<void> {
+  handler(
+    { channelId: null, id: userId },
+    {
+      channelId,
+      id: userId,
+      member: {
+        displayName: userId,
+        user: { username: userId, avatar: null },
+      },
+    },
+  );
+  await jest.advanceTimersByTimeAsync(2100);
 }

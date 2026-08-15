@@ -24,6 +24,7 @@ import { ChannelBindingsService } from './services/channel-bindings.service';
 import { PugInviteService } from './services/pug-invite.service';
 import { GameActivityService } from './services/game-activity.service';
 import { AdHocEventService } from './services/ad-hoc-event.service';
+import { QuickPlayHealthService } from './services/quick-play-health.service';
 import { AdHocParticipantService } from './services/ad-hoc-participant.service';
 import { AdHocNotificationService } from './services/ad-hoc-notification.service';
 import { DiscordEventListener } from './listeners/event.listener';
@@ -132,6 +133,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ChannelBindingsService,
     PugInviteService,
     AdHocEventService,
+    QuickPlayHealthService,
     AdHocParticipantService,
     AdHocNotificationService,
     DiscordEventListener,

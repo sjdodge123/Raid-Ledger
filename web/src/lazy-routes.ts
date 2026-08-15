@@ -138,6 +138,9 @@ export const LineupWireframesIndexRoute = lazyWithRetry(() =>
 export const SimplifyWireframesPage = lazyWithRetry(() =>
     import('./dev/simplify-wireframes/SimplifyWireframesPage').then((m) => ({ default: m.SimplifyWireframesPage })),
 );
+export const BindingAdminWireframesPage = lazyWithRetry(() =>
+    import('./dev/binding-admin-wireframes/BindingAdminWireframesPage').then((m) => ({ default: m.BindingAdminWireframesPage })),
+);
 
 // -- Lazy loaded admin panels --
 export const AdminSettingsLayout = lazyWithRetry(() =>

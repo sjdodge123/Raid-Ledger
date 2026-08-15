@@ -25,6 +25,7 @@ import {
   claimAndEndEvent,
 } from './ad-hoc-event.helpers';
 import { suppressScheduled } from './ad-hoc-suppression.helpers';
+import { traceGate } from '../listeners/voice-gate-trace';
 import {
   handleJoinExisting,
   spawnNewEvent,
@@ -93,18 +94,27 @@ export class AdHocEventService implements OnModuleInit {
     resolvedGameId?: number | null,
     resolvedGameName?: string,
     channelId?: string,
-  ): Promise<void> {
-    if (!(await this.isEnabled())) return;
+  ): Promise<boolean> {
+    if (!(await this.isEnabled())) {
+      // ROK-1417: the kill-switch is the single most common "why didn't Quick
+      // Play spawn" cause — trace it (throttled per binding) so it's visible.
+      traceGate(this.logger, 'feature-disabled', {
+        channelId: channelId ?? 'unknown',
+        bindingId,
+        gameId: binding.gameId,
+      });
+      return false;
+    }
 
     const effectiveGameId =
       resolvedGameId !== undefined ? resolvedGameId : binding.gameId;
     const eventKey = this.buildEventKey(bindingId, effectiveGameId);
 
-    if (await this.tryJoinExisting(eventKey, bindingId, member)) return;
+    if (await this.tryJoinExisting(eventKey, bindingId, member)) return true;
     if (
       await this.trySuppressForScheduled(bindingId, effectiveGameId, channelId)
     )
-      return;
+      return false;
 
     await spawnNewEvent(
       this.getDeps(),
@@ -115,6 +125,7 @@ export class AdHocEventService implements OnModuleInit {
       member,
       resolvedGameName,
     );
+    return true;
   }
 
   /** Handle a member leaving a bound voice channel. */

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ChannelBindingList } from './ChannelBindingList';
 import type { ChannelBindingDto } from '@raid-ledger/contract';
 
@@ -527,4 +527,61 @@ beforeEach(() => {
     channelbindinglistGroup20();
     channelbindinglistGroup21();
     channelbindinglistGroup22();
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// ROK-1416 (B5-2) — inert-binding surfacing + one-click "Fix →" repair.
+// The list flags any binding the shared classifyBindingTriple classifier rejects
+// (above all the voice, game-voice-monitor, gameId=null "inert" Quick Play shape,
+// ROK-1415) with an INERT badge and a "Fix →" action that opens the edit form.
+// RED until the dev adds the detection + badge + Fix button; the current list
+// renders neither, so the getBy* queries throw.
+// ───────────────────────────────────────────────────────────────────────────
+
+function renderBindingList(bindings: ChannelBindingDto[]) {
+  return render(
+    <ChannelBindingList
+      bindings={bindings}
+      onUpdate={onUpdate}
+      onDelete={onDelete}
+      isUpdating={false}
+      isDeleting={false}
+    />,
+  );
+}
+
+function channelbindinglistInertBadge() {
+  it('flags only the inert (voice monitor, no game) binding with an INERT badge', () => {
+    renderBindingList([
+      makeBinding({ id: 'inert', channelId: 'ch-a', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: null }),
+      makeBinding({ id: 'healthy', channelId: 'ch-b', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: 7, gameName: 'WoW' }),
+      makeBinding({ id: 'lobby', channelId: 'ch-c', channelType: 'voice', bindingPurpose: 'general-lobby', gameId: null }),
+    ]);
+    // A voice monitor with a game and a null-game general lobby are BOTH legal —
+    // exactly one row (the inert monitor) is flagged.
+    expect(screen.getAllByText(/inert/i)).toHaveLength(1);
+  });
+}
+
+function channelbindinglistFixOpensForm() {
+  it('shows a single "Fix →" action on the inert row and opens its edit form', () => {
+    renderBindingList([
+      makeBinding({ id: 'inert', channelId: 'ch-a', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: null }),
+      makeBinding({ id: 'healthy', channelId: 'ch-b', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: 7, gameName: 'WoW' }),
+    ]);
+    const fixButtons = screen.getAllByRole('button', { name: /fix/i });
+    expect(fixButtons).toHaveLength(1);
+    fireEvent.click(fixButtons[0]);
+    const form = screen.getByTestId('binding-config-form');
+    expect(within(form).getByText('inert')).toBeInTheDocument();
+  });
+}
+
+describe('ChannelBindingList — ROK-1416 inert surfacing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  channelbindinglistInertBadge();
+  channelbindinglistFixOpensForm();
 });

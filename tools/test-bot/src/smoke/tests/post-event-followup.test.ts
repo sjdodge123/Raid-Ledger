@@ -42,6 +42,7 @@ import type { SmokeTest, TestContext } from '../types.js';
 
 interface FollowupNotification {
   type: string;
+  message?: string | null;
   payload?: { eventId?: number } | null;
 }
 
@@ -54,19 +55,28 @@ async function recordFollowupSentinel(
   await api.post('/admin/test/record-followup-sentinel', { eventId });
 }
 
-/** True when `userId` has a post_event_followup notification for `eventId`. */
-async function hasFollowupInvite(
+/** The user's post_event_followup notification for `eventId`, or null. */
+async function findFollowupInvite(
   ctx: TestContext,
   userId: number,
   eventId: number,
-): Promise<boolean> {
+): Promise<FollowupNotification | null> {
   const list = (await getNotificationsFor(
     ctx.api,
     userId,
     'post_event_followup',
     25,
   ).catch(() => [] as FollowupNotification[])) as FollowupNotification[];
-  return list.some((n) => n.payload?.eventId === eventId);
+  return list.find((n) => n.payload?.eventId === eventId) ?? null;
+}
+
+/** True when `userId` has a post_event_followup notification for `eventId`. */
+async function hasFollowupInvite(
+  ctx: TestContext,
+  userId: number,
+  eventId: number,
+): Promise<boolean> {
+  return (await findFollowupInvite(ctx, userId, eventId)) !== null;
 }
 
 const attendeeInvitedAfterFollowupScheduled: SmokeTest = {
@@ -116,6 +126,17 @@ const attendeeInvitedAfterFollowupScheduled: SmokeTest = {
             `(follow-up event ${followup.id}) — M4 event-path fan-out did not deliver`,
         );
       });
+
+      // ROK-1422: the invite must carry the follow-up event's start time as
+      // native Discord `<t:EPOCH:...>` markup (embed renders viewer-local) — the
+      // in-app mirror stores the raw markup, so assert on the notification body.
+      const invite = await findFollowupInvite(ctx, recipient, followup.id);
+      if (!invite || !/<t:\d+/.test(invite.message ?? '')) {
+        throw new Error(
+          `Follow-up invite for attendee ${recipient} omits the event time — ` +
+            `expected a <t:...> token in the DM message, got: ${invite?.message ?? 'none'}`,
+        );
+      }
 
       // M4-AC3 / HARD CONSTRAINT 8: the organizer (admin) is excluded from
       // part-(b) attendee invites.

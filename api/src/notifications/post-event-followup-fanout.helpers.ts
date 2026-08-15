@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
 import type { NotificationService } from './notification.service';
 import type { CreateNotificationInput } from './notification.types';
 import { resolvePostEventFollowupRecipients } from './post-event-followup.helpers';
@@ -61,16 +62,52 @@ async function loadEndedEvent(
   return Array.from(rows)[0] ?? null;
 }
 
-/** Build one quick-sign-up notification input per recipient. */
-function buildInputs(
+/**
+ * Load an event's start (`lower(duration)`) as Unix epoch seconds, or null.
+ * `duration` is a tsrange of UTC wall-clock timestamps; `EXTRACT(EPOCH …)` on a
+ * `timestamp without time zone` treats the value as UTC (no session-TZ drift),
+ * so the result is the correct absolute epoch. (ROK-1422)
+ */
+async function loadEventStartEpoch(
+  db: Db,
+  eventId: number,
+): Promise<number | null> {
+  const rows = await db.execute<{ epoch: string }>(sql`
+    SELECT EXTRACT(EPOCH FROM lower(duration))::bigint AS epoch
+    FROM events WHERE id = ${eventId} LIMIT 1
+  `);
+  const raw = Array.from(rows)[0]?.epoch;
+  return raw != null ? Number(raw) : null;
+}
+
+/**
+ * ROK-1422: render the follow-up event's start as native Discord timestamp
+ * markup (`<t:…:F> (<t:…:R>)`) so the DM embed renders viewer-local and the
+ * plaintext push preview resolves it in the recipient's timezone (via
+ * `stripDiscordMarkup`). Returns '' when the start is unknown — never throws.
+ */
+function followupTimeSuffix(startEpoch: number | null): string {
+  if (startEpoch == null) return '';
+  const start = new Date(startEpoch * 1000);
+  return ` — ${toDiscordTimestamp(start, 'F')} (${toDiscordTimestamp(start, 'R')})`;
+}
+
+/**
+ * Build one quick-sign-up notification input per recipient. On the event path
+ * (`{eventId}`) the follow-up event's start time (`startEpoch`) is appended as
+ * `<t:>` markup so recipients see WHEN the event is before committing (ROK-1422).
+ * The poll path has no fixed time yet, so it never carries a timestamp.
+ */
+export function buildInputs(
   recipients: number[],
   endedTitle: string,
   payload: FollowupFanoutPayload,
+  startEpoch: number | null = null,
 ): CreateNotificationInput[] {
   const isPoll = 'matchId' in payload;
   const message = isPoll
     ? `Help pick a time for the next **${endedTitle}** session.`
-    : `Sign up for the follow-up to **${endedTitle}**.`;
+    : `Sign up for the follow-up to **${endedTitle}**.${followupTimeSuffix(startEpoch)}`;
   return recipients.map((userId) => ({
     userId,
     type: 'post_event_followup' as const,
@@ -100,21 +137,49 @@ export async function runFollowupFanout(
   payload: FollowupFanoutPayload,
   actingCreatorId: number,
 ): Promise<void> {
-  const { db, notificationService } = deps;
+  const { db } = deps;
   if (!(await claimFanout(db, endedEventId))) return;
   const ended = await loadEndedEvent(db, endedEventId);
   if (!ended || ended.creator_id !== actingCreatorId) {
     await releaseFanout(db, endedEventId);
     return;
   }
+  await dispatchFollowupInvites(
+    deps,
+    endedEventId,
+    ended.title,
+    payload,
+    actingCreatorId,
+  );
+}
+
+/**
+ * Resolve recipients, load the event-path start time, and dispatch the DMs via
+ * `createMany`. Rolls the fan-out claim back and rethrows on failure so a retry
+ * (or the other path) can re-attempt.
+ */
+async function dispatchFollowupInvites(
+  deps: FollowupFanoutDeps,
+  endedEventId: number,
+  endedTitle: string,
+  payload: FollowupFanoutPayload,
+  actingCreatorId: number,
+): Promise<void> {
+  const { db, notificationService } = deps;
   try {
     const recipients = await resolvePostEventFollowupRecipients(
       db,
       endedEventId,
       actingCreatorId,
     );
+    // Event path carries the new follow-up event's start time; the poll path
+    // has no fixed time yet (ROK-1422).
+    const startEpoch =
+      'eventId' in payload
+        ? await loadEventStartEpoch(db, payload.eventId)
+        : null;
     await notificationService.createMany(
-      buildInputs(recipients, ended.title, payload),
+      buildInputs(recipients, endedTitle, payload, startEpoch),
     );
   } catch (err) {
     await releaseFanout(db, endedEventId);

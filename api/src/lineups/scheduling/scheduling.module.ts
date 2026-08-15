@@ -8,12 +8,14 @@ import { EventsModule } from '../../events/events.module';
 import { DiscordBotModule } from '../../discord-bot/discord-bot.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { NotificationModule } from '../../notifications/notification.module';
+import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { LineupsModule } from '../lineups.module';
 import { SchedulingController } from './scheduling.controller';
 import { SchedulingBannerController } from './scheduling-banner.controller';
 import { SchedulingService } from './scheduling.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingRemindService } from './scheduling-remind.service';
+import { SchedulingPollNudgeService } from './scheduling-poll-nudge.service';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { SchedulingRemindService } from './scheduling-remind.service';
     DiscordBotModule,
     SettingsModule,
     NotificationModule,
+    // Supplies CronJobService for the recurring poll-nudge cron.
+    CronJobModule,
     forwardRef(() => LineupsModule),
   ],
   controllers: [SchedulingController, SchedulingBannerController],
@@ -29,6 +33,7 @@ import { SchedulingRemindService } from './scheduling-remind.service';
     SchedulingService,
     SchedulingPollEmbedService,
     SchedulingRemindService,
+    SchedulingPollNudgeService,
   ],
   exports: [SchedulingService, SchedulingPollEmbedService],
 })
