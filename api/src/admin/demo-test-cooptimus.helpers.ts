@@ -89,6 +89,9 @@ async function upsertFixtureGame(
       .where(eq(schema.games.id, existing.id));
     return existing.id;
   }
+  // Concurrent Playwright workers (desktop + mobile beforeAll) can both miss
+  // the dedup lookup and race this INSERT; slug is UNIQUE, so make it
+  // idempotent rather than letting the loser 500 (reviewer finding).
   const [created] = await db
     .insert(schema.games)
     .values({
@@ -96,6 +99,10 @@ async function upsertFixtureGame(
       slug,
       summary: 'Smoke-test fixture for the Co-Optimus co-op section.',
       ...values,
+    })
+    .onConflictDoUpdate({
+      target: schema.games.slug,
+      set: { ...values, hidden: false, banned: false },
     })
     .returning({ id: schema.games.id });
   return created.id;
