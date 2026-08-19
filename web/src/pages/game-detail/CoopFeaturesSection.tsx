@@ -22,11 +22,13 @@ const CREDIT_TEXT = 'Co-op data from Co-Optimus';
 const COUNT_FACTS = [
     { key: 'cooptimusOnlineMax', label: 'Online Co-Op' },
     { key: 'cooptimusCouchMax', label: 'Local Co-Op' },
-    { key: 'cooptimusLanMax', label: 'LAN Co-Op' },
+    { key: 'cooptimusLanMax', label: 'LAN Play or System Link' },
 ] as const;
 
 /** Boolean facts, split across the two blocks. */
-const CORE_FLAGS = [{ key: 'cooptimusComboCoop', label: 'Combo Co-Op' }] as const;
+const CORE_FLAGS = [
+    { key: 'cooptimusComboCoop', label: 'Combo Co-Op (Local + Online)' },
+] as const;
 const EXTRA_FLAGS = [
     { key: 'cooptimusCampaignCoop', label: 'Campaign Co-Op' },
     { key: 'cooptimusDropIn', label: 'Drop In/Drop Out' },
