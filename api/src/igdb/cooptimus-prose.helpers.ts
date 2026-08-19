@@ -25,10 +25,9 @@ const PROSE_KEYS = ['coopExperience', 'description'] as const;
  * @returns The same DTO when prose is enabled or there is nothing to strip,
  *          otherwise a shallow copy with the prose keys omitted.
  */
-export function stripCooptimusProse<T extends Pick<GameDetailDto, 'cooptimusExtras'>>(
-  game: T,
-  proseEnabled: boolean,
-): T {
+export function stripCooptimusProse<
+  T extends Pick<GameDetailDto, 'cooptimusExtras'>,
+>(game: T, proseEnabled: boolean): T {
   if (proseEnabled) return game;
   const extras = game.cooptimusExtras;
   if (!extras) return game;

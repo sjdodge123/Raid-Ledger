@@ -48,7 +48,6 @@ import {
   hideAdultGamesHelper,
   executeIgdbQuery,
 } from './igdb-helpers.barrel';
-import { stripCooptimusProse } from './cooptimus-prose.helpers';
 import { runSyncAllGames } from './igdb-sync-orchestration.helpers';
 import { sortByRelevance } from './igdb-search-sort.helpers';
 import {
@@ -231,11 +230,8 @@ export class IgdbService {
    * the operator has opted in — the grant covers facts, not prose (ROK-1398).
    */
   async getGameDetailById(id: number): Promise<GameDetailDto | null> {
-    const game = await lookupGameDetailById(this.db, id);
-    if (!game) return null;
-    const proseEnabled =
-      await this.settingsService.getCooptimusProseEnabled();
-    return stripCooptimusProse(game, proseEnabled);
+    const prose = await this.settingsService.getCooptimusProseEnabled();
+    return lookupGameDetailById(this.db, id, prose);
   }
 
   async queryIgdb(body: string): Promise<IgdbApiGame[]> {
