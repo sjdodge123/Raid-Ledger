@@ -86,6 +86,12 @@ export const SETTING_KEYS = {
   ITAD_API_KEY: 'itad_api_key',
   /** ROK-1397: Co-Optimus allowlisted user-agent (permission-first — granted by the site) */
   COOPTIMUS_USER_AGENT: 'cooptimus_user_agent',
+  /**
+   * ROK-1398: opt-in for Co-Optimus editorial prose ("The Co-Op Experience" +
+   * their description). Defaults OFF — the grant covers the co-op *facts*;
+   * prose is only redistributed once the operator explicitly enables it.
+   */
+  COOPTIMUS_PROSE_ENABLED: 'cooptimus_prose_enabled',
   /** ROK-542: AI provider key (e.g. 'ollama') */
   AI_PROVIDER: 'ai_provider',
   /** ROK-542: AI model identifier */

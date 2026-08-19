@@ -401,6 +401,14 @@ export class SettingsService
   isCooptimusConfigured = () => this.exists(SETTING_KEYS.COOPTIMUS_USER_AGENT);
   clearCooptimusConfig = () => this.delete(SETTING_KEYS.COOPTIMUS_USER_AGENT);
 
+  /** ROK-1398: editorial-prose opt-in. Unset resolves to false (facts only). */
+  async getCooptimusProseEnabled(): Promise<boolean> {
+    return (await this.get(SETTING_KEYS.COOPTIMUS_PROSE_ENABLED)) === 'true';
+  }
+
+  setCooptimusProseEnabled = (enabled: boolean) =>
+    this.set(SETTING_KEYS.COOPTIMUS_PROSE_ENABLED, enabled ? 'true' : 'false');
+
   // ─── Common Ground weights (ROK-950) ─────────────────────────
 
   async getCommonGroundWeights(): Promise<CommonGroundWeights> {

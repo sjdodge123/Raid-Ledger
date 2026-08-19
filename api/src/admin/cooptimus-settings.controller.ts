@@ -23,7 +23,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { CooptimusService } from '../cooptimus/cooptimus.service';
-import { CooptimusConfigDto } from './settings.dto';
+import { CooptimusConfigDto, CooptimusProseDto } from './settings.dto';
 import type { OAuthTestResponse } from './settings.dto';
 
 @Controller('admin/settings/cooptimus')
@@ -38,14 +38,38 @@ export class CooptimusSettingsController {
   ) {}
 
   @Get()
-  async getStatus(): Promise<{ configured: boolean }> {
-    return { configured: await this.settingsService.isCooptimusConfigured() };
+  async getStatus(): Promise<{ configured: boolean; proseEnabled: boolean }> {
+    return {
+      configured: await this.settingsService.isCooptimusConfigured(),
+      proseEnabled: await this.settingsService.getCooptimusProseEnabled(),
+    };
+  }
+
+  /**
+   * ROK-1398: editorial-prose opt-in. A dedicated sub-route so the operator can
+   * flip the toggle without re-submitting the allowlisted user-agent (the main
+   * PUT still requires it). Prose is stripped server-side while this is false.
+   */
+  @Put('prose')
+  @HttpCode(HttpStatus.OK)
+  async updateProse(@Body() body: CooptimusProseDto) {
+    await this.settingsService.setCooptimusProseEnabled(body.enabled);
+    this.logger.log(`Co-Optimus prose display set to ${body.enabled}`);
+    return {
+      success: true,
+      message: body.enabled
+        ? 'Co-Optimus editorial prose will now render on game detail pages.'
+        : 'Co-Optimus editorial prose hidden — co-op facts still render.',
+    };
   }
 
   @Put()
   @HttpCode(HttpStatus.OK)
   async updateConfig(@Body() body: CooptimusConfigDto) {
     await this.settingsService.setCooptimusUserAgent(body.userAgent.trim());
+    if (body.proseEnabled !== undefined) {
+      await this.settingsService.setCooptimusProseEnabled(body.proseEnabled);
+    }
     this.logger.log('Co-Optimus user-agent updated via admin UI');
     return {
       success: true,

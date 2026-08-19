@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsNotEmpty,
   IsString,
   IsUrl,
@@ -71,4 +72,17 @@ export class CooptimusConfigDto {
   // producing a configured-but-inert state (review finding).
   @Matches(/\S/, { message: 'User-agent cannot be blank' })
   userAgent!: string;
+  /**
+   * ROK-1398: optional editorial-prose opt-in. Omitted by existing clients,
+   * which leaves the stored flag untouched (backward compatible).
+   */
+  @IsOptional()
+  @IsBoolean()
+  proseEnabled?: boolean;
+}
+
+/** ROK-1398: standalone prose toggle — flipping it must not require the UA. */
+export class CooptimusProseDto {
+  @IsBoolean()
+  enabled!: boolean;
 }
