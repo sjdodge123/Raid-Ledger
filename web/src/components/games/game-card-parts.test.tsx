@@ -304,3 +304,234 @@ describe('InfoBar — primaryMode display', () => {
         expect(container.textContent).toContain('·');
     });
 });
+
+// ── InfoBar — Co-Optimus co-op badge (ROK-1399) ───────────────────────────────
+//
+// Contract under test (spec: planning-artifacts/specs/ROK-1399.md):
+//   - InfoBar accepts `cooptimusOnlineMax` / `cooptimusCouchMax`
+//     (number | null | undefined).
+//   - ONE compact badge, `data-testid="card-coop-badge"`, rendered only when at
+//     least one of the two counts is a positive number.
+//   - Visible text carries the 👥 glyph + the count ("👥 4 online",
+//     couch-only: "👥 2 couch").
+//   - Accessible name (aria-label) names co-op and which mode(s) are covered.
+//   - 0 / null / undefined (unenriched row, or a stale Redis-cached discover
+//     row that predates the SELECT change) → NO badge, no crash, and never a
+//     literal "undefined"/"NaN" in the DOM.
+//   - NO attribution/credit line in the card — the Co-Optimus credit lives on
+//     the game detail page (ROK-1398, same batch, operator decision).
+
+const COOP_BADGE = 'card-coop-badge';
+
+describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
+    it('renders "👥 N online" when cooptimusOnlineMax is a positive number', () => {
+        render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={null}
+            />,
+        );
+        const badge = screen.getByTestId(COOP_BADGE);
+        expect(badge).toHaveTextContent(/4\s*online/i);
+        expect(badge.textContent).toContain('👥');
+    });
+
+    it('gives the badge an accessible name naming co-op and online play', () => {
+        render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={null}
+            />,
+        );
+        const label = screen.getByTestId(COOP_BADGE).getAttribute('aria-label');
+        expect(label).toMatch(/co-?op/i);
+        expect(label).toMatch(/online/i);
+        expect(label).toMatch(/4/);
+    });
+
+    it('renders for the minimum positive count of 1', () => {
+        render(
+            <InfoBar
+                rating={null}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={1}
+                cooptimusCouchMax={0}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
+            /1\s*online/i,
+        );
+    });
+
+    it('renders a large count (32) without dropping or truncating the number', () => {
+        render(
+            <InfoBar
+                rating={80}
+                primaryMode="Multiplayer"
+                cooptimusOnlineMax={32}
+                cooptimusCouchMax={null}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
+            /32\s*online/i,
+        );
+    });
+
+    it('renders the badge even when rating and primaryMode are both absent', () => {
+        // AC1: the badge must survive InfoBar's "nothing to show" early return —
+        // an enriched game with no rating and no mode still gets its badge.
+        render(
+            <InfoBar
+                rating={null}
+                primaryMode={null}
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={null}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
+            /4\s*online/i,
+        );
+    });
+
+    it('adds a couch indicator to the accessible name when couch co-op exists', () => {
+        render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={2}
+            />,
+        );
+        const badge = screen.getByTestId(COOP_BADGE);
+        expect(badge).toHaveTextContent(/4\s*online/i);
+        expect(badge.getAttribute('aria-label')).toMatch(/couch/i);
+    });
+
+    it('renders a couch-only badge when online is 0 but couch is positive', () => {
+        // Console-port edge case: couch co-op exists, online co-op does not.
+        render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={0}
+                cooptimusCouchMax={2}
+            />,
+        );
+        const badge = screen.getByTestId(COOP_BADGE);
+        expect(badge).toHaveTextContent(/2\s*couch/i);
+        expect(badge.textContent).not.toMatch(/online/i);
+        expect(badge.getAttribute('aria-label')).toMatch(/couch/i);
+        expect(badge.getAttribute('aria-label')).not.toMatch(/online/i);
+    });
+
+    it('renders a couch-only badge when online is null but couch is positive', () => {
+        render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={null}
+                cooptimusCouchMax={3}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
+            /3\s*couch/i,
+        );
+    });
+});
+
+describe('InfoBar — co-op badge absent when unenriched (ROK-1399)', () => {
+    // Each case anchors on a positive render first, then re-renders with the
+    // unenriched shape — so the assertion pair proves the badge both appears
+    // and disappears, rather than passing vacuously before implementation.
+
+    it('drops the badge when both counts are 0 (synced, no co-op)', () => {
+        const { rerender } = render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={2}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toBeInTheDocument();
+
+        rerender(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={0}
+                cooptimusCouchMax={0}
+            />,
+        );
+        expect(screen.queryByTestId(COOP_BADGE)).not.toBeInTheDocument();
+    });
+
+    it('drops the badge when both counts are null (unenriched row)', () => {
+        const { rerender } = render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={2}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toBeInTheDocument();
+
+        rerender(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={null}
+                cooptimusCouchMax={null}
+            />,
+        );
+        expect(screen.queryByTestId(COOP_BADGE)).not.toBeInTheDocument();
+    });
+
+    it('drops the badge and prints no "undefined" for stale-cache rows', () => {
+        // Redis-cached discover rows written before the SELECT change carry
+        // neither field at all — the card must null-guard until TTL expiry.
+        const { container, rerender } = render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={2}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toBeInTheDocument();
+
+        rerender(<InfoBar rating={87} primaryMode="Co-operative" />);
+        expect(screen.queryByTestId(COOP_BADGE)).not.toBeInTheDocument();
+        expect(container.textContent).not.toMatch(/undefined|NaN/);
+        // The rest of the InfoBar is untouched — no layout shift, no data loss.
+        expect(screen.getByText('87')).toBeInTheDocument();
+        expect(screen.getByText('Co-operative')).toBeInTheDocument();
+    });
+
+    it('ignores negative counts (defensive: bad sync data)', () => {
+        const { rerender } = render(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={2}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toBeInTheDocument();
+
+        rerender(
+            <InfoBar
+                rating={87}
+                primaryMode="Co-operative"
+                cooptimusOnlineMax={-1}
+                cooptimusCouchMax={-1}
+            />,
+        );
+        expect(screen.queryByTestId(COOP_BADGE)).not.toBeInTheDocument();
+    });
+});
