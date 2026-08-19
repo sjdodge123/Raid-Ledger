@@ -29,6 +29,10 @@ import {
   setAutoHeartPrefForTest as setAutoHeartPref,
 } from './demo-test-steam.helpers';
 import {
+  seedCooptimusFixtures,
+  type CooptimusSeedResult,
+} from './demo-test-cooptimus.helpers';
+import {
   createSignupForTest as createSignup,
   triggerDepartureForTest as triggerDeparture,
   cancelSignupForTest as cancelSignup,
@@ -233,6 +237,12 @@ export class DemoTestService {
   async getGameForTest(id: number) {
     await this.assertDemoMode();
     return getGame(this.db, id);
+  }
+
+  /** Seed the Co-Optimus co-op UI-state fixtures — DEMO_MODE only (ROK-1398). */
+  async seedCooptimusForTest(): Promise<CooptimusSeedResult> {
+    await this.assertDemoMode();
+    return seedCooptimusFixtures(this.db);
   }
 
   /** Set the autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */

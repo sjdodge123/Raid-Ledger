@@ -27,6 +27,7 @@ import {
   ResetLineupsSchema,
 } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
+import type { CooptimusSeedResult } from './demo-test-cooptimus.helpers';
 
 /**
  * Game/lineup test endpoints — DEMO_MODE only (smoke tests).
@@ -91,6 +92,17 @@ export class DemoTestGamesController {
     const game = await this.demoTestService.getGameForTest(id);
     if (!game) throw new NotFoundException('Game not found');
     return game;
+  }
+
+  /**
+   * Seed the Co-Optimus co-op UI-state fixtures — DEMO_MODE only (ROK-1398).
+   * Returns the three game ids the game-detail smoke spec drives, plus the
+   * attribution url the enriched fixture must credit.
+   */
+  @Post('seed-cooptimus')
+  @HttpCode(HttpStatus.OK)
+  async seedCooptimusForTest(): Promise<CooptimusSeedResult> {
+    return this.demoTestService.seedCooptimusForTest();
   }
 
   /** Set autoHeartSteamUrls preference for a user — DEMO_MODE only (ROK-1054). */
