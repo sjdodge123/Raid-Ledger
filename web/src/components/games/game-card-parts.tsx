@@ -197,6 +197,7 @@ function CoopBadge({
     return (
         <span
             data-testid="card-coop-badge"
+            role="img"
             aria-label={`Co-op: up to ${count} players ${unit}${couchSuffix}`}
             className="ml-auto inline-flex items-center whitespace-nowrap text-[10px] text-emerald-300"
         >
