@@ -44,7 +44,7 @@ import {
 } from './settings-discord.helpers';
 
 import { SETTINGS_EVENTS } from './settings.types';
-import { EphemeralVoiceSettingsBase } from './settings-ephemeral.base';
+import { CooptimusSettingsBase } from './settings-cooptimus.base';
 import type {
   DiscordOAuthConfig,
   IgdbConfig,
@@ -59,7 +59,7 @@ const CACHE_TTL_MS = 30 * 60_000;
 
 @Injectable()
 export class SettingsService
-  extends EphemeralVoiceSettingsBase
+  extends CooptimusSettingsBase
   implements OnModuleInit
 {
   private readonly logger = new Logger(SettingsService.name);
@@ -393,13 +393,9 @@ export class SettingsService
   isItadConfigured = () => this.exists(SETTING_KEYS.ITAD_API_KEY);
   clearItadConfig = () => this.delete(SETTING_KEYS.ITAD_API_KEY);
 
-  // ─── Co-Optimus (ROK-1397) ───────────────────────────────────
-
-  getCooptimusUserAgent = () => this.get(SETTING_KEYS.COOPTIMUS_USER_AGENT);
-  setCooptimusUserAgent = (ua: string) =>
-    this.set(SETTING_KEYS.COOPTIMUS_USER_AGENT, ua);
-  isCooptimusConfigured = () => this.exists(SETTING_KEYS.COOPTIMUS_USER_AGENT);
-  clearCooptimusConfig = () => this.delete(SETTING_KEYS.COOPTIMUS_USER_AGENT);
+  // ─── Co-Optimus (ROK-1397/1398) ──────────────────────────────
+  // Accessors live on CooptimusSettingsBase (this class extends it) to keep
+  // settings.service.ts under the 300-line cap.
 
   // ─── Common Ground weights (ROK-950) ─────────────────────────
 

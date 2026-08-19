@@ -11,11 +11,14 @@ import { CooptimusForm } from '../CooptimusForm';
 const updateAsync = vi.fn();
 const testAsync = vi.fn();
 const clearAsync = vi.fn();
+const proseAsync = vi.fn();
 let configured = false;
+let proseEnabled = false;
 vi.mock('../../../hooks/admin/use-cooptimus-settings', () => ({
     useCooptimusSettings: () => ({
-        cooptimusStatus: { data: { configured }, isLoading: false },
+        cooptimusStatus: { data: { configured, proseEnabled }, isLoading: false },
         updateCooptimus: { mutateAsync: updateAsync, isPending: false },
+        setCooptimusProse: { mutateAsync: proseAsync, isPending: false },
         testCooptimus: { mutateAsync: testAsync, isPending: false },
         clearCooptimus: { mutateAsync: clearAsync, isPending: false },
     }),
@@ -31,6 +34,29 @@ describe('CooptimusForm', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         configured = false;
+        proseEnabled = false;
+    });
+
+    // ROK-1398: the prose opt-in defaults OFF — the Co-Optimus grant covers the
+    // co-op facts, not their editorial prose.
+    it('renders the prose toggle unchecked by default and enables it on click', async () => {
+        proseAsync.mockResolvedValue({ success: true, message: 'prose on' });
+        const user = userEvent.setup();
+        renderWithProviders(<CooptimusForm />);
+
+        const toggle = screen.getByLabelText(/show editorial prose/i);
+        expect(toggle).not.toBeChecked();
+
+        await user.click(toggle);
+
+        await waitFor(() => expect(proseAsync).toHaveBeenCalledWith({ enabled: true }));
+        expect(toastSuccess).toHaveBeenCalledWith('prose on');
+    });
+
+    it('reflects the stored prose flag when it is already enabled', () => {
+        proseEnabled = true;
+        renderWithProviders(<CooptimusForm />);
+        expect(screen.getByLabelText(/show editorial prose/i)).toBeChecked();
     });
 
     it('saves a trimmed user-agent and clears the input', async () => {

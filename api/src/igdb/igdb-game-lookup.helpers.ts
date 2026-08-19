@@ -3,6 +3,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { IgdbGameDto, GameDetailDto } from '@raid-ledger/contract';
 import { mapDbRowToDetail, mapCooptimusExtras } from './igdb.mappers';
+import { stripCooptimusProse } from './cooptimus-prose.helpers';
 import { discoverGameViaItad } from '../steam/steam-itad-discovery.helpers';
 import type { ItadGame } from '../itad/itad.constants';
 
@@ -35,11 +36,15 @@ export async function lookupGameById(
  * Look up a game by ID and return a full detail DTO.
  * @param db - Database connection
  * @param id - Game ID
+ * @param cooptimusProseEnabled - Operator opt-in for Co-Optimus editorial prose
+ *   (ROK-1398). Required, not defaulted: every caller must decide, and the only
+ *   correct source is `SettingsService.getCooptimusProseEnabled()`.
  * @returns GameDetailDto or null if not found
  */
 export async function lookupGameDetailById(
   db: PostgresJsDatabase<typeof schema>,
   id: number,
+  cooptimusProseEnabled: boolean,
 ): Promise<GameDetailDto | null> {
   const r = await db
     .select()
@@ -48,8 +53,10 @@ export async function lookupGameDetailById(
     .limit(1);
   if (r.length === 0) return null;
   // Detail endpoint carries the Co-Optimus editorial extras; list builders
-  // use bare mapDbRowToDetail and never ship the blob (ROK-1397).
-  return { ...mapDbRowToDetail(r[0]), ...mapCooptimusExtras(r[0]) };
+  // use bare mapDbRowToDetail and never ship the blob (ROK-1397). The prose
+  // inside that blob is stripped unless the operator opted in (ROK-1398).
+  const detail = { ...mapDbRowToDetail(r[0]), ...mapCooptimusExtras(r[0]) };
+  return stripCooptimusProse(detail, cooptimusProseEnabled);
 }
 
 /**

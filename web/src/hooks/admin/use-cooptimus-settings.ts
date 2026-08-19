@@ -6,13 +6,28 @@ import type { OAuthTestResponse, ApiResponse } from './admin-settings-types';
 const COOPTIMUS_KEY = ['admin', 'settings', 'cooptimus'] as const;
 
 /**
+ * ROK-1398: editorial-prose opt-in. Its own route so flipping the toggle does
+ * not require re-entering the allowlisted user-agent.
+ */
+function useProseMutation() {
+    const queryClient = useQueryClient();
+    return useMutation<ApiResponse, Error, { enabled: boolean }>({
+        mutationFn: (body) =>
+            adminFetch('/admin/settings/cooptimus/prose', {
+                method: 'PUT', body: JSON.stringify(body),
+            }, 'Failed to update Co-Optimus prose setting'),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: [...COOPTIMUS_KEY] }),
+    });
+}
+
+/**
  * Hook for Co-Optimus admin settings API operations (ROK-1397).
  * Stores the allowlisted user-agent the site grants us (permission-first).
  */
 export function useCooptimusSettings() {
     const queryClient = useQueryClient();
 
-    const cooptimusStatus = useQuery<{ configured: boolean }>({
+    const cooptimusStatus = useQuery<{ configured: boolean; proseEnabled: boolean }>({
         queryKey: [...COOPTIMUS_KEY],
         queryFn: () => adminFetch('/admin/settings/cooptimus'),
         enabled: !!getAuthToken(),
@@ -27,6 +42,8 @@ export function useCooptimusSettings() {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: [...COOPTIMUS_KEY] }),
     });
 
+    const setCooptimusProse = useProseMutation();
+
     const testCooptimus = useMutation<OAuthTestResponse, Error>({
         mutationFn: () => adminFetch('/admin/settings/cooptimus/test', { method: 'POST' }, 'Failed to test Co-Optimus configuration'),
     });
@@ -36,5 +53,5 @@ export function useCooptimusSettings() {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: [...COOPTIMUS_KEY] }),
     });
 
-    return { cooptimusStatus, updateCooptimus, testCooptimus, clearCooptimus };
+    return { cooptimusStatus, updateCooptimus, setCooptimusProse, testCooptimus, clearCooptimus };
 }
