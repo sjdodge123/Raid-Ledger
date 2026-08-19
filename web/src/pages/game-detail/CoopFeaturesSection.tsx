@@ -138,10 +138,13 @@ function Fact({ label, value, supported }: {
  * plain text otherwise (defensive — sync always sets a url on a match).
  */
 function CooptimusCredit({ url }: { url: string | null }): JSX.Element {
+    // Scheme allowlist: the URL is DB-sourced (sync/admin pin) — never render
+    // a non-http(s) value as a clickable href.
+    const safeUrl = url && /^https?:\/\//i.test(url) ? url : null;
     return (
         <p className="text-xs text-muted pt-1">
-            {url ? (
-                <a href={url} target="_blank" rel="noopener noreferrer"
+            {safeUrl ? (
+                <a href={safeUrl} target="_blank" rel="noopener noreferrer"
                     data-testid="cooptimus-credit"
                     className="text-muted hover:text-foreground underline transition-colors">
                     {CREDIT_TEXT}
