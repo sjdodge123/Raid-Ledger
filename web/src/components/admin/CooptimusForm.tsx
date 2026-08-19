@@ -20,6 +20,51 @@ function CooptimusSetupInstructions() {
     );
 }
 
+/**
+ * ROK-1398: editorial-prose opt-in. Defaults OFF — the Co-Optimus grant covers
+ * the co-op facts; their "Co-Op Experience" blurb and description are only
+ * redistributed once the operator turns this on. Gating is server-side, so the
+ * prose is stripped from the API response while this is off.
+ */
+function useProseToggle() {
+    const { cooptimusStatus, setCooptimusProse } = useCooptimusSettings();
+    const onChange = async (enabled: boolean) => {
+        try {
+            const r = await setCooptimusProse.mutateAsync({ enabled });
+            if (r.success) toast.success(r.message); else toast.error(r.message);
+        } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed to update prose setting'); }
+    };
+    return {
+        enabled: cooptimusStatus.data?.proseEnabled ?? false,
+        disabled: setCooptimusProse.isPending,
+        onChange: (v: boolean) => void onChange(v),
+    };
+}
+
+function CooptimusProseToggle() {
+    const { enabled, disabled, onChange } = useProseToggle();
+    return (
+        <div className="flex items-start gap-3">
+            <input
+                id="cooptimus-prose"
+                type="checkbox"
+                checked={enabled}
+                disabled={disabled}
+                onChange={(e) => onChange(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-[#5b9bd5] disabled:opacity-50"
+            />
+            <label htmlFor="cooptimus-prose" className="text-sm text-secondary">
+                <span className="font-medium text-foreground">Show editorial prose</span>
+                <span className="block text-xs text-muted mt-0.5">
+                    Renders Co-Optimus&apos;s &quot;The Co-Op Experience&quot; blurb and game description on
+                    game detail pages. Leave off unless they have confirmed prose reuse — co-op
+                    facts and the attribution credit render either way.
+                </span>
+            </label>
+        </div>
+    );
+}
+
 function useCooptimusFormHandlers() {
     const { cooptimusStatus, updateCooptimus, testCooptimus, clearCooptimus } = useCooptimusSettings();
     const [userAgent, setUserAgent] = useState('');
@@ -95,6 +140,7 @@ export function CooptimusForm() {
                     className={`w-full px-3 py-2 bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:outline-none focus:ring-2 ${COOPTIMUS_RING}`}
                 />
             </div>
+            <CooptimusProseToggle />
             <TestResultBanner result={s.testResult} />
             <CooptimusActionButtons configured={s.configured} isPending={s.isPending}
                 onTest={s.handleTest} onClear={s.handleClear} />

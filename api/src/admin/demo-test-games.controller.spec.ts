@@ -12,6 +12,12 @@ function createMockService() {
     getGameForTest: jest.fn(),
     setAutoHeartPrefForTest: jest.fn().mockResolvedValue(undefined),
     cancelLineupPhaseJobsForTest: jest.fn().mockResolvedValue(2),
+    seedCooptimusForTest: jest.fn().mockResolvedValue({
+      enrichedGameId: 1,
+      syncedEmptyGameId: 2,
+      unsyncedGameId: 3,
+      cooptimusUrl: 'https://www.co-optimus.com/game/4471/pc/example.html',
+    }),
   };
 }
 
@@ -72,6 +78,21 @@ describe('DemoTestGamesController', () => {
     triggerSteamNudgeTests(getController, getNudge));
   describe('cancelLineupPhaseJobs (ROK-1007)', () =>
     cancelLineupPhaseJobsTests(getController, getService));
+  // ROK-1398: the game-detail smoke spec's beforeAll hard-fails without every
+  // key of this payload, so the controller must pass the seed result through.
+  describe('seedCooptimus (ROK-1398)', () => {
+    it('returns the three fixture ids and the attribution url', async () => {
+      const result = await controller.seedCooptimusForTest();
+      expect(mockService.seedCooptimusForTest).toHaveBeenCalled();
+      expect(result).toEqual({
+        enrichedGameId: 1,
+        syncedEmptyGameId: 2,
+        unsyncedGameId: 3,
+        cooptimusUrl: 'https://www.co-optimus.com/game/4471/pc/example.html',
+      });
+    });
+  });
+
   describe('resetLineups (ROK-1147)', () => {
     it('forwards titlePrefix to the lineup service', async () => {
       const result = await controller.resetLineupsForTest({

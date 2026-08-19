@@ -225,8 +225,13 @@ export class IgdbService {
   async getGameById(id: number): Promise<IgdbGameDto | null> {
     return lookupGameById(this.db, id);
   }
+  /**
+   * Full game detail. Co-Optimus editorial prose is stripped server-side unless
+   * the operator has opted in — the grant covers facts, not prose (ROK-1398).
+   */
   async getGameDetailById(id: number): Promise<GameDetailDto | null> {
-    return lookupGameDetailById(this.db, id);
+    const prose = await this.settingsService.getCooptimusProseEnabled();
+    return lookupGameDetailById(this.db, id, prose);
   }
 
   async queryIgdb(body: string): Promise<IgdbApiGame[]> {

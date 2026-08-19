@@ -7,6 +7,7 @@
  */
 import { test, expect } from './base';
 import type { Page } from '@playwright/test';
+import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
 
 /**
  * Navigate to the first game detail page by clicking the first
@@ -202,5 +203,90 @@ test.describe('Game detail — mobile', () => {
         if (!hasPlayerStats && !hasCommunityActivity) {
             await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
         }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Co-Optimus co-op section (ROK-1398) — runs on both viewport projects
+//
+// Requires a DEMO_MODE seed endpoint the story adds alongside the section:
+//
+//   POST /admin/test/seed-cooptimus  ->  {
+//     enrichedGameId:    number,  // synced + full co-op facts + attribution url
+//     syncedEmptyGameId: number,  // cooptimusSyncedAt set, no co-op entry
+//     unsyncedGameId:    number,  // cooptimusSyncedAt null (never synced)
+//     cooptimusUrl:      string,  // attribution target of enrichedGameId
+//   }
+//
+// (pattern: api/src/admin/demo-test-games.controller.ts). Seeding through the
+// API rather than raw SQL keeps the spec runnable in CI.
+//
+// The Co-Optimus HTTP user-agent is deliberately never referenced here — it is
+// the activation gate for the data grant and must not enter a public repo.
+// ---------------------------------------------------------------------------
+
+const COOP_SECTION = '[data-testid="coop-features-section"]';
+const COOP_CREDIT = /Co-op data from Co-Optimus/i;
+
+type CooptimusSeed = {
+    enrichedGameId: number;
+    syncedEmptyGameId: number;
+    unsyncedGameId: number;
+    cooptimusUrl: string;
+};
+
+test.describe('Game detail — Co-Optimus co-op section (ROK-1398)', () => {
+    let seed: CooptimusSeed;
+
+    test.beforeAll(async () => {
+        const token = await getAdminToken();
+        seed = (await apiPost(token, '/admin/test/seed-cooptimus')) as CooptimusSeed;
+        expect(seed?.enrichedGameId, 'seed-cooptimus must return an enriched game id').toBeTruthy();
+
+        // Poll the source endpoint before any UI assertion — React Query's
+        // staleTime otherwise serves a pre-seed empty fetch (ROK-1156).
+        await pollForCondition(
+            async () => {
+                const game = await apiGet(token, `/games/${seed.enrichedGameId}`);
+                return game?.cooptimusSyncedAt ? game : null;
+            },
+            { timeoutMs: 15_000, description: 'seeded game exposes cooptimusSyncedAt' },
+        );
+    });
+
+    test('enriched game renders the co-op section with its facts', async ({ page }) => {
+        await page.goto(`/games/${seed.enrichedGameId}`);
+        const section = page.locator(COOP_SECTION);
+        await expect(section).toBeVisible({ timeout: 15_000 });
+        await expect(section).toHaveText(/online/i);
+        await expect(section).toHaveText(/campaign/i);
+    });
+
+    test('co-op facts always ship with the Co-Optimus attribution credit', async ({ page }) => {
+        // Contractual (ROK-275 / ROK-1399): the credit is the consideration for
+        // the data grant. If this fails, restore the credit — never the assertion.
+        await page.goto(`/games/${seed.enrichedGameId}`);
+        await expect(page.locator(COOP_SECTION)).toBeVisible({ timeout: 15_000 });
+
+        const credit = page.getByRole('link', { name: COOP_CREDIT });
+        await expect(credit).toBeVisible({ timeout: 10_000 });
+        await expect(credit).toHaveAttribute('href', seed.cooptimusUrl);
+        await expect(credit).toHaveAttribute('target', '_blank');
+        await expect(credit).toHaveAttribute('rel', /noopener/);
+    });
+
+    test('never-synced game shows no co-op section and no layout hole', async ({ page }) => {
+        await page.goto(`/games/${seed.unsyncedGameId}`);
+        await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator(COOP_SECTION)).toHaveCount(0);
+        await expect(page.getByText(COOP_CREDIT)).toHaveCount(0);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+    });
+
+    test('synced game with no co-op entry shows the compact empty line', async ({ page }) => {
+        await page.goto(`/games/${seed.syncedEmptyGameId}`);
+        const section = page.locator(COOP_SECTION);
+        await expect(section).toBeVisible({ timeout: 15_000 });
+        await expect(section).toHaveText(/no co-op support reported/i);
     });
 });

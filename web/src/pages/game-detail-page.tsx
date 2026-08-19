@@ -13,6 +13,7 @@ import { GENRE_MAP } from '../lib/game-utils';
 import { PLATFORM_MAP, MODE_MAP } from './game-detail/game-detail-constants';
 import type { InterestPlayerPreviewDto } from '@raid-ledger/contract';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
+import { CoopFeaturesSection } from './game-detail/CoopFeaturesSection';
 import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
 import { GamePricingSummary } from './game-detail/GamePricingSummary';
 import { PriceBadge } from '../components/games/PriceBadge';
@@ -93,11 +94,26 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
                     <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
                 </div>
             )}
-            {gameId && <CommunityActivitySection gameId={gameId} />}
+            <CoopSupportAndActivity game={game} gameId={gameId} />
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
             <GameMediaSections game={game} streamsData={streamsData} />
             <GameTasteSection gameId={gameId} />
         </div>
+    );
+}
+
+/**
+ * Co-Optimus co-op facts (ROK-1398) followed by community activity. The co-op
+ * section renders nothing for games Co-Optimus has never been asked about.
+ */
+function CoopSupportAndActivity({ game, gameId }: {
+    game: NonNullable<ReturnType<typeof useGameDetail>['data']>; gameId: number | undefined;
+}): JSX.Element {
+    return (
+        <>
+            <CoopFeaturesSection game={game} />
+            {gameId && <CommunityActivitySection gameId={gameId} />}
+        </>
     );
 }
 
