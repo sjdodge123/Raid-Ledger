@@ -105,6 +105,7 @@ export function NominatingComposite(
     atCap: cgAtCap,
     filters,
     setFilters,
+    filtersRestored,
     search,
     setSearch,
     participantCount,
@@ -266,6 +267,7 @@ export function NominatingComposite(
                 search={search}
                 onSearchChange={setSearch}
                 participantCount={participantCount}
+                suppressAutoSeed={filtersRestored}
               />
             </div>
           </div>

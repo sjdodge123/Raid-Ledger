@@ -13,6 +13,7 @@
  * the 300-line soft limit.
  */
 import { useCallback, useMemo, useState } from 'react';
+import { useSessionState } from '../../hooks/use-session-state';
 import type {
     AiSuggestionDto,
     CommonGroundResponseDto,
@@ -28,6 +29,11 @@ import { useAiSuggestionsAvailable } from '../../hooks/use-ai-suggestions-availa
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { mergeAiIntoCommonGround } from './common-ground-ai-merge.helpers';
 
+/** sessionStorage key prefixes for the per-lineup persisted panel state. */
+const FILTERS_KEY_PREFIX = 'common-ground:filters:';
+const SEARCH_KEY_PREFIX = 'common-ground:search:';
+const DEFAULT_FILTERS: CommonGroundParams = { minOwners: 0 };
+
 export interface UseCommonGroundStateResult {
     hasBuilding: boolean;
     mergedData: CommonGroundResponseDto | undefined;
@@ -37,6 +43,13 @@ export interface UseCommonGroundStateResult {
     };
     filters: CommonGroundParams;
     setFilters: (f: CommonGroundParams) => void;
+    /**
+     * True when `filters` came back from sessionStorage (ROK-1400). Callers
+     * pass this to `CommonGroundFilters.suppressAutoSeed` so the ROK-1255
+     * one-shot maxPlayers seed doesn't overwrite a restored "Any" choice on
+     * every remount.
+     */
+    filtersRestored: boolean;
     search: string;
     setSearch: (v: string) => void;
     /**
@@ -81,8 +94,22 @@ export function useCommonGroundState(
     const resolvedId = propLineupId ?? newestBuilding?.id;
     const hasBuilding = propLineupId != null || !!newestBuilding;
 
-    const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0 });
-    const [search, setSearch] = useState('');
+    // ROK-1400 (operator review 2026-08-20): the whole filter set — search,
+    // min owners, players, co-op toggle + size — survives navigating away
+    // and back, keyed per lineup so two lineups don't share a view. Session-
+    // scoped: a fresh browser session starts clean.
+    const {
+        value: filters,
+        setValue: setFilters,
+        restored: filtersRestored,
+    } = useSessionState<CommonGroundParams>(
+        resolvedId != null ? `${FILTERS_KEY_PREFIX}${resolvedId}` : null,
+        DEFAULT_FILTERS,
+    );
+    const { value: search, setValue: setSearch } = useSessionState<string>(
+        resolvedId != null ? `${SEARCH_KEY_PREFIX}${resolvedId}` : null,
+        '',
+    );
 
     const apiParams = useMemo(
         () => ({
@@ -180,6 +207,7 @@ export function useCommonGroundState(
         rawMeta,
         filters,
         setFilters,
+        filtersRestored,
         search,
         setSearch,
         participantCount,
