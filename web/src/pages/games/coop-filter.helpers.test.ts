@@ -27,10 +27,11 @@
  * — callers pass discover rows, search rows, and stale Redis rows whose co-op
  * fields may be entirely absent.
  *
- * Precedence rule (usage plan §1, brief item 3): effective online max is
- * `cooptimusOnlineMax` when non-null AND > 0, else IGDB `playerCount.max`;
- * null/absent on both ⇒ the game is EXCLUDED whenever any co-op predicate is
- * active.
+ * Precedence rule (usage plan §1; zero semantics settled by the operator
+ * 2026-08-20): effective online max is `cooptimusOnlineMax` whenever it is
+ * non-null — 0 included, because a synced "no online co-op" is an answer, not a
+ * gap. Only null/absent falls back to IGDB `playerCount.max`; null/absent on
+ * both ⇒ the game is EXCLUDED whenever any co-op predicate is active.
  *
  * The Co-Optimus HTTP user-agent is deliberately never referenced here.
  */
@@ -97,20 +98,23 @@ describe('ROK-1402 — effectiveOnlineMax precedence', () => {
         expect(effectiveOnlineMax(g)).toBe(8);
     });
 
-    it('falls through to playerCount.max when cooptimusOnlineMax is 0 (synced, no online co-op)', () => {
-        const g = game(3, 'Solo Story', {
+    it('keeps a cooptimusOnlineMax of 0 over playerCount.max (synced, no online co-op)', () => {
+        // Operator decision 2026-08-20: a synced 0 is a real answer, not a gap.
+        // PvP-only titles (a 100-player IGDB lobby, zero online co-op) must drop
+        // out of an "N+ online" predicate once enrichment has run.
+        const g = game(3, 'Pvp Only', {
             cooptimusOnlineMax: 0,
-            playerCount: { min: 1, max: 8 },
+            playerCount: { min: 1, max: 100 },
         });
-        expect(effectiveOnlineMax(g)).toBe(8);
+        expect(effectiveOnlineMax(g)).toBe(0);
     });
 
-    it('returns null when cooptimusOnlineMax is 0 and there is no IGDB player count', () => {
+    it('returns 0 when cooptimusOnlineMax is 0 and there is no IGDB player count', () => {
         const g = game(4, 'Single Player Only', {
             cooptimusOnlineMax: 0,
             playerCount: null,
         });
-        expect(effectiveOnlineMax(g)).toBeNull();
+        expect(effectiveOnlineMax(g)).toBe(0);
     });
 
     it('returns null when both sources are null (never-synced, no IGDB data)', () => {
@@ -200,12 +204,12 @@ describe('ROK-1402 — applyCoopFilters numeric predicate', () => {
         expect(ids(applyCoopFilters(rows, { onlineMinPlayers: 1 }))).not.toContain(4);
     });
 
-    it('lets a cooptimusOnlineMax of 0 fall through to playerCount.max', () => {
-        const zeroWithIgdb = [game(9, 'Zero Coop Eight Igdb', {
+    it('drops a cooptimusOnlineMax of 0 even when IGDB reports a big lobby', () => {
+        const zeroWithIgdb = [game(9, 'Zero Coop Hundred Igdb', {
             cooptimusOnlineMax: 0,
-            playerCount: { min: 1, max: 8 },
+            playerCount: { min: 1, max: 100 },
         })];
-        expect(ids(applyCoopFilters(zeroWithIgdb, { onlineMinPlayers: 4 }))).toEqual([9]);
+        expect(applyCoopFilters(zeroWithIgdb, { onlineMinPlayers: 4 })).toHaveLength(0);
     });
 
     it('excludes a cooptimusOnlineMax of 0 with no IGDB fallback', () => {

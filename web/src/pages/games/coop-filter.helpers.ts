@@ -4,11 +4,16 @@
  * Pure, client-side logic over rows the page already fetched (the `cooptimus*`
  * fields ride every list DTO — no extra request, no contract change).
  *
- * Precedence rule (co-op data usage plan §1): the effective online max is
- * `cooptimusOnlineMax` when non-null AND > 0, otherwise the IGDB
- * `playerCount.max`. Null/absent on both sources means "no co-op data", and
- * such a game is EXCLUDED whenever any co-op predicate is active — never
- * silently kept (the page renders a hint line to say so).
+ * Precedence rule (co-op data usage plan §1; zero semantics settled by the
+ * operator 2026-08-20): the effective online max is `cooptimusOnlineMax`
+ * whenever it is non-null — **including 0**. A synced game Co-Optimus reports
+ * as having no online co-op is a real answer, so it must fail every "N+ online"
+ * predicate; letting a 0 fall back to the IGDB max would keep PvP-only titles
+ * (PUBG-class lobbies of 100) in a co-op filter after enrichment. Only a
+ * null/absent `cooptimusOnlineMax` falls back to `playerCount.max`. Null/absent
+ * on both sources means "no co-op data", and such a game is EXCLUDED whenever
+ * any co-op predicate is active — never silently kept (the page renders a hint
+ * line to say so).
  */
 
 /**
@@ -62,10 +67,10 @@ const SUPPORTED_LOCAL_MIN = 2;
 
 const BOOLEAN_KEYS = ['couchCoop', 'lanCoop', 'splitscreen', 'campaignCoop'] as const;
 
-/** Co-Optimus online max when it reports actual online co-op, else IGDB's max. */
+/** Co-Optimus online max when it has one (0 included), else IGDB's max. */
 export function effectiveOnlineMax(game: CoopFilterableGame): number | null {
     const cooptimus = game.cooptimusOnlineMax;
-    if (typeof cooptimus === 'number' && cooptimus > 0) return cooptimus;
+    if (typeof cooptimus === 'number') return cooptimus;
     const igdbMax = game.playerCount?.max;
     return typeof igdbMax === 'number' ? igdbMax : null;
 }
