@@ -373,8 +373,12 @@ export async function buildCommonGroundResponse(
   filters: CommonGroundQueryDto,
   ctx: ScoringContext | null = null,
 ): Promise<CommonGroundResponseDto> {
-  const rows = await queryCommonGround(db, filters, nominatedIds);
-  const coopDataAvailable = await queryCoopDataAvailable(db);
+  // Independent queries — the availability EXISTS must not add a serial
+  // round-trip to every request, including the debounced keystroke path.
+  const [rows, coopDataAvailable] = await Promise.all([
+    queryCommonGround(db, filters, nominatedIds),
+    queryCoopDataAvailable(db),
+  ]);
   const scored = rows.map((r) => mapCommonGroundRow(r, ctx));
   scored.sort((a, b) => b.score - a.score);
   const themed = scored.map(withThemeAndWhyReason);
