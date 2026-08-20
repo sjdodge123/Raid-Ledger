@@ -17,6 +17,12 @@ interface Props {
      * compatible games immediately. Manual adjustments are preserved.
      */
     participantCount?: number;
+    /**
+     * ROK-1400: skip the ROK-1255 one-shot auto-seed because the filters were
+     * restored from a previous visit. Without this, returning to the panel
+     * re-pins `maxPlayers` and silently undoes a deliberate "Any" choice.
+     */
+    suppressAutoSeed?: boolean;
 }
 
 // ROK-1297 round 5m: mobile-compliant control sizing.
@@ -204,10 +210,14 @@ function useMaxPlayersIntentCapture(
     participantCount: number | undefined,
     filters: CommonGroundParams,
     onChange: (next: CommonGroundParams) => void,
+    suppressAutoSeed = false,
 ): void {
     const intentCapturedRef = useRef(false);
     useEffect(() => {
         if (intentCapturedRef.current) return;
+        // ROK-1400: restored filters are an explicit prior choice, not a
+        // first visit — never overwrite them with the seed.
+        if (suppressAutoSeed) return;
         // ROK-1348: a brand-new lineup has participantCount === 1 (creator
         // only). Auto-pinning maxPlayers to 1 would filter out every
         // multiplayer game, which is pathological for a co-op nomination
@@ -217,16 +227,16 @@ function useMaxPlayersIntentCapture(
         intentCapturedRef.current = true;
         if (filters.maxPlayers != null) return;
         onChange({ ...filters, maxPlayers: participantCount });
-    }, [participantCount, filters, onChange]);
+    }, [participantCount, filters, onChange, suppressAutoSeed]);
 }
 
 /** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount }: Props): JSX.Element {
+export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount, suppressAutoSeed }: Props): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
         [filters, onChange],
     );
-    useMaxPlayersIntentCapture(participantCount, filters, onChange);
+    useMaxPlayersIntentCapture(participantCount, filters, onChange, suppressAutoSeed);
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:repeat(3,minmax(220px,1fr))] gap-3 sm:gap-4 items-center">

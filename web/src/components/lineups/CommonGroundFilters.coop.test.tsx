@@ -188,6 +188,39 @@ describe('CommonGroundFilters — co-op clearable (ROK-1400)', () => {
     });
 });
 
+// ROK-1400: restored filters are a deliberate prior choice. Without the
+// suppression the ROK-1255 one-shot seed re-pins `maxPlayers` on every
+// remount and silently undoes a "Players: Any" the user chose last visit.
+describe('CommonGroundFilters — suppressAutoSeed (ROK-1400)', () => {
+    it('still auto-seeds maxPlayers on a first visit', () => {
+        const onChange = vi.fn();
+        renderFilters(
+            { maxPlayers: undefined },
+            { onChange, participantCount: 4 },
+        );
+
+        expect(onChange).toHaveBeenCalledWith(
+            expect.objectContaining({ maxPlayers: 4 }),
+        );
+    });
+
+    it('does NOT auto-seed maxPlayers when the filters were restored', () => {
+        const onChange = vi.fn();
+        render(
+            <CommonGroundFilters
+                filters={{ ...baseFilters, maxPlayers: undefined }}
+                onChange={onChange}
+                search=""
+                onSearchChange={vi.fn()}
+                participantCount={4}
+                suppressAutoSeed
+            />,
+        );
+
+        expect(onChange).not.toHaveBeenCalled();
+    });
+});
+
 describe('CommonGroundFilters — co-op manual adjustment (ROK-1400)', () => {
     it('emits the adjusted value when the group-size slider changes', () => {
         const onChange = vi.fn();
