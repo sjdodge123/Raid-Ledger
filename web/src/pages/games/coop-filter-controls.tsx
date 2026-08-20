@@ -18,16 +18,19 @@ const COOP_TOGGLES: { key: ToggleKey; label: string }[] = [
 interface CoopFilterControlsProps {
     state: CoopFilterState;
     onChange: (next: CoopFilterState) => void;
+    /** Co-Optimus-only toggles hide until enrichment data exists (see `hasAnyCoopData`). */
+    showModeToggles: boolean;
 }
 
 /** Panel body: online-player minimum plus the co-op mode toggles. */
-export function CoopFilterControls({ state, onChange }: CoopFilterControlsProps): JSX.Element {
+export function CoopFilterControls({ state, onChange, showModeToggles }: CoopFilterControlsProps): JSX.Element {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <MinOnlinePlayersInput
                 value={state.onlineMinPlayers}
                 onChange={(onlineMinPlayers) => onChange({ ...state, onlineMinPlayers })}
             />
+            {showModeToggles && (
             <fieldset>
                 <legend className="text-xs font-medium text-muted mb-2">Co-op modes</legend>
                 <div className="flex flex-wrap gap-3">
@@ -41,6 +44,7 @@ export function CoopFilterControls({ state, onChange }: CoopFilterControlsProps)
                     ))}
                 </div>
             </fieldset>
+            )}
         </div>
     );
 }

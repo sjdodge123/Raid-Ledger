@@ -16,7 +16,7 @@ import { LineupBanner } from "../components/lineups/LineupBanner";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
 import { CoopFilterSection } from "./games/coop-filter-section";
-import { applyCoopFilters, EMPTY_COOP_FILTERS, type CoopFilterState } from "./games/coop-filter.helpers";
+import { applyCoopFilters, hasAnyCoopData, EMPTY_COOP_FILTERS, type CoopFilterState } from "./games/coop-filter.helpers";
 import { DiscoverContent, type PricingMap } from "./games-page-discover";
 import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
 
@@ -52,7 +52,16 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
     if (searchResults) for (const game of searchResults) ids.push(game.id);
     return ids;
   }, [filteredRows, searchResults]);
-  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds };
+  // Computed over RAW rows (pre-filter) so the toggles don't vanish while active.
+  const coopDataAvailable = useMemo(
+    () =>
+      hasAnyCoopData([
+        ...(discoverData?.rows?.flatMap((row) => row.games) ?? []),
+        ...(searchData?.data ?? []),
+      ]),
+    [discoverData, searchData],
+  );
+  return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable };
 }
 
 function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState) {
@@ -115,6 +124,7 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
         onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
         onClose={() => state.setCoopPanelOpen(false)}
         resultCount={data.allGameIds.length}
+        coopDataAvailable={data.coopDataAvailable}
       />
       {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
       {data.isSearching ? (

@@ -828,3 +828,46 @@ describe('GamesPage — ROK-1402: co-op filters compose with search', () => {
     });
 });
 
+
+// ============================================================
+// Operator decision 2026-08-20: the four Co-Optimus-only mode toggles stay
+// hidden until enrichment data exists (they'd only empty the grid); the
+// numeric input keeps its IGDB fallback and is always visible.
+// ============================================================
+
+function mockNoCoopDiscover() {
+    vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
+        data: {
+            rows: [{ slug: 'solo-row', category: 'Solo Row', games: [noCoopDataGame] }],
+        },
+        isLoading: false,
+        error: null,
+    } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
+}
+
+describe('GamesPage — ROK-1402: mode toggles gated on data presence', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        isDesktopViewport = true;
+        mockSearch();
+    });
+
+    it('hides the four mode toggles when no loaded game has Co-Optimus data', () => {
+        mockNoCoopDiscover();
+        renderPage();
+        openCoopPanel();
+        expect(screen.getByLabelText(/min online players/i)).toBeInTheDocument();
+        expect(screen.queryByLabelText(/couch co-op/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/lan co-op/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/split-screen/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/co-op campaign/i)).not.toBeInTheDocument();
+    });
+
+    it('shows the mode toggles when at least one loaded game is enriched', () => {
+        mockCoopDiscover();
+        renderPage();
+        openCoopPanel();
+        expect(screen.getByLabelText(/couch co-op/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/co-op campaign/i)).toBeInTheDocument();
+    });
+});

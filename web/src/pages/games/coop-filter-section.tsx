@@ -19,6 +19,8 @@ interface CoopFilterSectionProps {
     onToggleOpen: () => void;
     onClose: () => void;
     resultCount: number;
+    /** Any loaded game carries Co-Optimus data — gates the mode toggles. */
+    coopDataAvailable: boolean;
 }
 
 /** Closes the desktop inline panel on Escape (the BottomSheet handles its own). */
@@ -41,6 +43,7 @@ export function CoopFilterSection({
     onToggleOpen,
     onClose,
     resultCount,
+    coopDataAvailable,
 }: CoopFilterSectionProps): JSX.Element {
     const activeFilterCount = countActiveCoopFilters(filters);
     useEscapeToClose(isOpen, onClose);
@@ -58,7 +61,7 @@ export function CoopFilterSection({
                 isOpen={isOpen}
                 onToggle={onClose}
             >
-                <CoopFilterControls state={filters} onChange={onFiltersChange} />
+                <CoopFilterControls state={filters} onChange={onFiltersChange} showModeToggles={coopDataAvailable} />
             </FilterPanel>
         </div>
     );
