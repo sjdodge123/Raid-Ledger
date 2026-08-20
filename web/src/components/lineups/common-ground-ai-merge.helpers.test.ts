@@ -109,24 +109,32 @@ describe('aiStubMatchesFilters', () => {
         expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
     });
 
-    // ROK-1400: the co-op gate must apply to AI-only stubs too, or they
-    // slip past a filter every server-returned tile obeyed.
-    it('filters out AI stub whose player count is below minOnlineCoop', () => {
+    // ROK-1400 round 2: the co-op filter is Co-Optimus-verified only and
+    // AiSuggestionDto carries no Co-Optimus fields, so an active co-op
+    // filter excludes EVERY stub — including one whose IGDB player count
+    // looks big enough. That lobby-size estimate deliberately does not
+    // qualify (it is how PvP titles used to sneak through).
+    it('filters out an AI stub with a small playerCount when minOnlineCoop is set', () => {
         const stub = aiOnlyStub(makeAi({ playerCount: { min: 1, max: 2 } }));
         const filters: CommonGroundParams = { minOnlineCoop: 4 };
         expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
     });
 
-    it('keeps AI stub whose player count meets minOnlineCoop', () => {
-        const stub = aiOnlyStub(makeAi({ playerCount: { min: 1, max: 8 } }));
+    it('filters out an AI stub whose playerCount LOOKS big enough', () => {
+        const stub = aiOnlyStub(makeAi({ playerCount: { min: 1, max: 100 } }));
         const filters: CommonGroundParams = { minOnlineCoop: 4 };
-        expect(aiStubMatchesFilters(stub, filters, '')).toBe(true);
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
     });
 
     it('filters out AI stub with null playerCount when minOnlineCoop is set', () => {
         const stub = aiOnlyStub(makeAi({ playerCount: null }));
         const filters: CommonGroundParams = { minOnlineCoop: 4 };
         expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
+    });
+
+    it('keeps AI stubs when the co-op filter is not active', () => {
+        const stub = aiOnlyStub(makeAi({ playerCount: { min: 1, max: 2 } }));
+        expect(aiStubMatchesFilters(stub, {}, '')).toBe(true);
     });
 
     it('matches against search (case-insensitive, trimmed)', () => {
