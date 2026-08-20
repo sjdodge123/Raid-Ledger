@@ -1,7 +1,10 @@
 /**
- * Games page smoke tests — page load, mobile card spacing, mobile search styling.
+ * Games page smoke tests — page load, mobile card spacing, mobile search styling,
+ * co-op FilterPanel (ROK-1402).
  */
 import { test, expect } from './base';
+import type { Page } from '@playwright/test';
+import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
 
 test.describe('Games page', () => {
     test('page loads without crashing', async ({ page }) => {
@@ -69,5 +72,132 @@ test.describe('Regression: ROK-813 — games page mobile search styling', () => 
         }
 
         await context.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1402 — co-op filters on the games library page (FilterPanel)
+//
+// TDD: written before the implementation. Prescribed surface, matching the
+// Players-page FilterPanel precedent:
+//   • `FilterPanelTrigger` (aria-label "Filters") on the discover tab —
+//     distinct from the existing "Genre Filter" FAB.
+//   • Numeric predicate input, aria-label "Min online players".
+//   • Boolean toggles: "Couch co-op", "LAN co-op", "Split-screen",
+//     "Co-op campaign".
+//   • Hint line `[data-testid="coop-filter-hint"]` reading
+//     "Showing games with co-op data", rendered only while a predicate is on.
+//
+// Fixtures come from the DEMO_MODE `POST /admin/test/seed-cooptimus` endpoint
+// (PR #1032) — the same three rows the game-detail spec drives:
+//   enriched     cooptimusOnlineMax 4, splitscreen/campaign true
+//   syncedEmpty  synced, every co-op column null  -> excluded, hint shown
+//   unsynced     never synced, every column null  -> excluded, hint shown
+// None of the three carries an IGDB playerCount, so the precedence rule has no
+// fallback for the two null rows and they drop out of any active predicate.
+//
+// The filter is applied BEFORE the search query is typed so the assertion holds
+// regardless of whether the trigger is also rendered during search — what AC2
+// requires is that the predicate and the query intersect.
+//
+// The Co-Optimus HTTP user-agent is deliberately never referenced here.
+// ---------------------------------------------------------------------------
+
+const COOP_HINT = '[data-testid="coop-filter-hint"]';
+const FIXTURE_QUERY = 'ROK-1398 Co-Op';
+
+type CooptimusSeed = {
+    enrichedGameId: number;
+    syncedEmptyGameId: number;
+    unsyncedGameId: number;
+    cooptimusUrl: string;
+};
+
+/** Open the co-op FilterPanel, set the numeric predicate, then dismiss the panel. */
+async function applyOnlineCoopFilter(page: Page, minPlayers: string): Promise<void> {
+    await page.getByRole('button', { name: /^filters$/i }).click();
+    const input = page.getByLabel(/min online players/i);
+    await expect(input).toBeVisible({ timeout: 10_000 });
+    await input.fill(minPlayers);
+    // Closes the mobile BottomSheet so the results underneath are clickable;
+    // inert on desktop where the panel renders inline.
+    await page.keyboard.press('Escape');
+}
+
+/** Type a query into the games-page search box. */
+async function searchGames(page: Page, query: string): Promise<void> {
+    await page.getByPlaceholder('Search games...').fill(query);
+}
+
+test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
+    let seed: CooptimusSeed;
+
+    test.beforeAll(async () => {
+        const token = await getAdminToken();
+        seed = (await apiPost(token, '/admin/test/seed-cooptimus')) as CooptimusSeed;
+        expect(seed?.enrichedGameId, 'seed-cooptimus must return an enriched game id').toBeTruthy();
+
+        // Poll the source endpoint before any UI assertion — React Query's
+        // staleTime otherwise serves a pre-seed fetch for the whole test (ROK-1156).
+        await pollForCondition(
+            async () => {
+                const res = await apiGet(
+                    token,
+                    `/games/search?q=${encodeURIComponent(FIXTURE_QUERY)}`,
+                );
+                const enriched = res?.data?.find(
+                    (g: { id: number }) => g.id === seed.enrichedGameId,
+                );
+                return enriched?.cooptimusOnlineMax ? res : null;
+            },
+            { timeoutMs: 20_000, description: 'co-op fixtures searchable with cooptimusOnlineMax' },
+        );
+    });
+
+    test('the co-op filter trigger is present on the discover tab', async ({ page }) => {
+        await page.goto('/games');
+        await expect(page.getByRole('button', { name: /^filters$/i })).toBeVisible({
+            timeout: 15_000,
+        });
+    });
+
+    test('an active co-op predicate excludes games with no co-op data', async ({ page }) => {
+        await page.goto('/games');
+        await applyOnlineCoopFilter(page, '4');
+        await searchGames(page, FIXTURE_QUERY);
+
+        // Enriched fixture (online max 4) survives "4+ online players".
+        await expect(page.locator(`a[href="/games/${seed.enrichedGameId}"]`)).toBeVisible({
+            timeout: 15_000,
+        });
+        // Both null-data fixtures are excluded — never silently kept.
+        await expect(page.locator(`a[href="/games/${seed.syncedEmptyGameId}"]`)).toHaveCount(0);
+        await expect(page.locator(`a[href="/games/${seed.unsyncedGameId}"]`)).toHaveCount(0);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+    });
+
+    test('an active co-op predicate renders the co-op-data hint', async ({ page }) => {
+        await page.goto('/games');
+        await expect(page.locator(COOP_HINT)).toHaveCount(0);
+
+        await applyOnlineCoopFilter(page, '4');
+
+        const hint = page.locator(COOP_HINT);
+        await expect(hint).toBeVisible({ timeout: 10_000 });
+        await expect(hint).toHaveText(/showing games with co-op data/i);
+    });
+
+    test('clearing the co-op predicate restores the excluded games', async ({ page }) => {
+        await page.goto('/games');
+        await applyOnlineCoopFilter(page, '4');
+        await searchGames(page, FIXTURE_QUERY);
+        await expect(page.locator(`a[href="/games/${seed.syncedEmptyGameId}"]`)).toHaveCount(0);
+
+        await applyOnlineCoopFilter(page, '');
+
+        await expect(page.locator(`a[href="/games/${seed.syncedEmptyGameId}"]`)).toBeVisible({
+            timeout: 15_000,
+        });
+        await expect(page.locator(COOP_HINT)).toHaveCount(0);
     });
 });

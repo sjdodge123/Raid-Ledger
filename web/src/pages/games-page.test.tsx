@@ -23,6 +23,14 @@ vi.mock('../hooks/use-scroll-direction', () => ({
     useScrollDirection: () => 'up',
 }));
 
+// ROK-1402: FilterPanel renders inline on desktop and as a BottomSheet on
+// mobile. jsdom's matchMedia stub answers `false` for every non-dark query, so
+// drive the breakpoint explicitly instead. Default to desktop (inline panel).
+let isDesktopViewport = true;
+vi.mock('../hooks/use-media-query', () => ({
+    useMediaQuery: () => isDesktopViewport,
+}));
+
 // Prevent rendering complex child components. Mock mirrors GameCarousel's
 // badge behavior so page-level tests can assert badge wiring end-to-end.
 vi.mock('../components/games/GameCarousel', () => ({
@@ -35,7 +43,11 @@ vi.mock('../components/games/GameCarousel', () => ({
         games: { id: number; name: string }[];
         metadata?: Record<string, { playerCount: number; totalSeconds: number }>;
     }) => (
-        <div data-testid="game-carousel" data-category={category}>
+        <div
+            data-testid="game-carousel"
+            data-category={category}
+            data-game-ids={games.map((g) => g.id).join(',')}
+        >
             {category}
             {games.map((g) => {
                 const count = metadata?.[String(g.id)]?.playerCount;
@@ -546,6 +558,273 @@ describe('GamesPage — ROK-565: community-playing discover row', () => {
 
         expect(screen.getAllByText('Popular RPGs').length).toBeGreaterThan(0);
         expect(screen.queryByTestId('community-played-badge')).not.toBeInTheDocument();
+    });
+});
+
+// ============================================================
+// ROK-1402: co-op filters on the games library page (FilterPanel)
+//
+// TDD — written before the implementation. Prescribed surface:
+//   • `FilterPanelTrigger` from `components/ui/filter-panel` (aria-label
+//     "Filters" — distinct from the existing "Genre Filter" FAB) rendered on
+//     the discover tab, wired to a `FilterPanel` whose children are the co-op
+//     controls.
+//   • Numeric input        — aria-label "Min online players"
+//   • Toggles (checkboxes) — "Couch co-op", "LAN co-op", "Split-screen",
+//                            "Co-op campaign"
+//   • Hint line            — data-testid "coop-filter-hint", copy
+//                            "Showing games with co-op data", rendered ONLY
+//                            while at least one co-op predicate is active.
+//
+// The Co-Optimus HTTP user-agent is deliberately never referenced here.
+// ============================================================
+
+const COOP_HINT = 'coop-filter-hint';
+
+/** Enriched: 4-player online + split-screen, RPG genre. */
+const coopRpgGame = {
+    ...mockGame,
+    id: 10,
+    name: 'Coop RPG',
+    genres: [12],
+    cooptimusOnlineMax: 4,
+    cooptimusCouchMax: 2,
+    cooptimusLanMax: 4,
+    cooptimusSplitscreen: true,
+    cooptimusCampaignCoop: true,
+    cooptimusSyncedAt: '2026-08-20T00:00:00.000Z',
+};
+
+/** Never synced, no IGDB player count — excluded whenever a co-op filter is on. */
+const noCoopDataGame = {
+    ...mockGame,
+    id: 11,
+    name: 'No Coop Data',
+    genres: [12],
+};
+
+/** Enriched but Shooter genre — used for the genre-pill composition test. */
+const coopShooterGame = {
+    ...mockGame,
+    id: 12,
+    name: 'Coop Shooter',
+    genres: [5],
+    cooptimusOnlineMax: 8,
+    cooptimusSplitscreen: false,
+    cooptimusSyncedAt: '2026-08-20T00:00:00.000Z',
+};
+
+function mockCoopDiscover() {
+    vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
+        data: {
+            rows: [
+                { slug: 'coop-row', category: 'Coop Row', games: [coopRpgGame] },
+                { slug: 'solo-row', category: 'Solo Row', games: [noCoopDataGame] },
+                { slug: 'shooter-row', category: 'Shooter Coop Row', games: [coopShooterGame] },
+            ],
+        },
+        isLoading: false,
+        error: null,
+    } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
+}
+
+/** Open the co-op FilterPanel via its trigger. */
+function openCoopPanel() {
+    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
+}
+
+/** Set the "N+ online players" numeric predicate. */
+function setOnlineMin(value: string) {
+    fireEvent.change(screen.getByLabelText(/min online players/i), {
+        target: { value },
+    });
+}
+
+/** How many times a discover row category appears across desktop + mobile paths. */
+function rowCount(category: string): number {
+    return screen.queryAllByText(category).length;
+}
+
+describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        isDesktopViewport = true;
+        mockCoopDiscover();
+        mockSearch();
+    });
+
+    it('renders the co-op filter trigger on the discover tab', () => {
+        renderPage();
+        expect(screen.getByRole('button', { name: /^filters$/i })).toBeInTheDocument();
+    });
+
+    it('exposes the numeric input and all four boolean toggles when opened', () => {
+        renderPage();
+        openCoopPanel();
+
+        expect(screen.getByLabelText(/min online players/i)).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: /couch co-op/i })).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: /lan co-op/i })).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: /split-screen/i })).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: /co-op campaign/i })).toBeInTheDocument();
+    });
+
+    it('does not render the co-op hint until a predicate is active', () => {
+        renderPage();
+        openCoopPanel();
+        expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
+    });
+
+    it('renders the "showing games with co-op data" hint while a predicate is active', () => {
+        renderPage();
+        openCoopPanel();
+        setOnlineMin('4');
+
+        const hint = screen.getByTestId(COOP_HINT);
+        expect(hint).toBeInTheDocument();
+        expect(hint).toHaveTextContent(/showing games with co-op data/i);
+    });
+
+    it('renders the panel as a BottomSheet on mobile viewports', () => {
+        isDesktopViewport = false;
+        renderPage();
+        openCoopPanel();
+
+        const sheet = screen.getByRole('dialog');
+        expect(sheet.querySelector('h3')?.textContent).toBe('Filters');
+        expect(screen.getByLabelText(/min online players/i)).toBeInTheDocument();
+    });
+
+    it('excludes rows whose games have no co-op data when the numeric predicate is active', () => {
+        renderPage();
+        expect(rowCount('Solo Row')).toBeGreaterThan(0);
+
+        openCoopPanel();
+        setOnlineMin('4');
+
+        expect(rowCount('Coop Row')).toBeGreaterThan(0);
+        expect(rowCount('Shooter Coop Row')).toBeGreaterThan(0);
+        expect(rowCount('Solo Row')).toBe(0);
+    });
+
+    it('treats a cleared numeric input as inactive (not "N >= 0")', () => {
+        renderPage();
+        openCoopPanel();
+        setOnlineMin('4');
+        expect(rowCount('Solo Row')).toBe(0);
+
+        setOnlineMin('');
+
+        expect(rowCount('Solo Row')).toBeGreaterThan(0);
+        expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
+    });
+
+});
+
+describe('GamesPage — ROK-1402: co-op FilterPanel — part 2', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        isDesktopViewport = true;
+        mockCoopDiscover();
+        mockSearch();
+    });
+
+    it('applies a boolean toggle: split-screen keeps only flag === true rows', () => {
+        renderPage();
+        openCoopPanel();
+        fireEvent.click(screen.getByRole('checkbox', { name: /split-screen/i }));
+
+        expect(rowCount('Coop Row')).toBeGreaterThan(0);
+        expect(rowCount('Shooter Coop Row')).toBe(0);
+        expect(rowCount('Solo Row')).toBe(0);
+        expect(screen.getByTestId(COOP_HINT)).toBeInTheDocument();
+    });
+
+    it('intersects the co-op predicate with the genre pills', () => {
+        renderPage();
+        openCoopPanel();
+        setOnlineMin('4');
+
+        // Select RPG (genre id 12) from the mobile genre sheet.
+        fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
+        const dialog = screen.getByRole('dialog');
+        const rpgBtn = Array.from(dialog.querySelectorAll('button')).find((b) =>
+            b.textContent?.includes('RPG'),
+        );
+        fireEvent.click(rpgBtn!);
+
+        expect(rowCount('Coop Row')).toBeGreaterThan(0);
+        expect(rowCount('Shooter Coop Row')).toBe(0);
+        expect(rowCount('Solo Row')).toBe(0);
+    });
+
+    it('"Clear all" resets the co-op predicates and hides the hint', () => {
+        renderPage();
+        openCoopPanel();
+        setOnlineMin('4');
+        expect(rowCount('Solo Row')).toBe(0);
+
+        fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
+
+        expect(rowCount('Solo Row')).toBeGreaterThan(0);
+        expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
+    });
+
+    it('does not crash on stale rows whose co-op fields are absent', () => {
+        const staleGame = { ...mockGame, id: 20, name: 'Stale Row Game', genres: [12] } as Record<string, unknown>;
+        delete staleGame.playerCount;
+        vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
+            data: { rows: [{ slug: 'stale', category: 'Stale Row', games: [staleGame] }] },
+            isLoading: false,
+            error: null,
+        } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
+
+        renderPage();
+        openCoopPanel();
+        setOnlineMin('2');
+
+        expect(screen.getByTestId(COOP_HINT)).toBeInTheDocument();
+        expect(rowCount('Stale Row')).toBe(0);
+    });
+});
+
+describe('GamesPage — ROK-1402: co-op filters compose with search', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        isDesktopViewport = true;
+        mockCoopDiscover();
+        mockSearch({
+            data: [coopRpgGame, noCoopDataGame],
+            meta: { total: 2, cached: false, source: 'igdb' },
+        });
+    });
+
+    it('intersects the co-op predicate with an active search query', () => {
+        renderPage();
+        // Set the predicate first — the trigger is only rendered outside search
+        // if the dev gates it, so open + set before typing the query.
+        openCoopPanel();
+        setOnlineMin('4');
+
+        fireEvent.change(screen.getByPlaceholderText('Search games...'), {
+            target: { value: 'coop' },
+        });
+
+        const cards = screen.getAllByTestId('game-card').map((c) => c.textContent);
+        expect(cards).toContain('Coop RPG');
+        expect(cards).not.toContain('No Coop Data');
+    });
+
+    it('keeps the co-op hint visible while searching with an active predicate', () => {
+        renderPage();
+        openCoopPanel();
+        setOnlineMin('4');
+
+        fireEvent.change(screen.getByPlaceholderText('Search games...'), {
+            target: { value: 'coop' },
+        });
+
+        expect(screen.getByTestId(COOP_HINT)).toBeInTheDocument();
     });
 });
 
