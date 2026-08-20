@@ -16,7 +16,8 @@ import { LineupBanner } from "../components/lineups/LineupBanner";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
 import { CoopFilterSection } from "./games/coop-filter-section";
-import { applyCoopFilters, hasAnyCoopData, EMPTY_COOP_FILTERS, type CoopFilterState } from "./games/coop-filter.helpers";
+import { applyCoopFilters, hasAnyCoopData, type CoopFilterState } from "./games/coop-filter.helpers";
+import { useCoopFilterState } from "./games/use-coop-filter-state";
 import { DiscoverContent, type PricingMap } from "./games-page-discover";
 import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
 
@@ -31,7 +32,8 @@ function useGamesPageState() {
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
   // ROK-1402: client-side co-op predicates over the already-fetched rows.
-  const [coopFilters, setCoopFilters] = useState<CoopFilterState>(EMPTY_COOP_FILTERS);
+  // sessionStorage-backed so a game-detail round trip doesn't drop the filters.
+  const [coopFilters, setCoopFilters] = useCoopFilterState();
   const [coopPanelOpen, setCoopPanelOpen] = useState(false);
   const scrollDirection = useScrollDirection();
   const isHeaderHidden = scrollDirection === 'down';

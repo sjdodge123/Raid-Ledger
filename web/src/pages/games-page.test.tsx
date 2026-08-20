@@ -133,6 +133,13 @@ function mockSearch(data: Record<string, unknown> | null = null, isLoading = fal
     } as unknown as ReturnType<typeof useGameSearchModule.useGameSearch>);
 }
 
+// ROK-1402: the co-op filters are sessionStorage-backed, and jsdom keeps one
+// storage across every test in the file — clear it so a filter set by one test
+// can never leak into the next one's expectations.
+beforeEach(() => {
+    sessionStorage.clear();
+});
+
 describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 1', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -633,7 +640,12 @@ function openCoopPanel() {
     fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
 }
 
-/** Set the "N+ online players" numeric predicate. */
+/**
+ * Set the "N+ online players" predicate. The control is a range slider
+ * (operator review 2026-08-20 — matches the Common Ground sliders), so 0 is the
+ * "Any" / inactive position rather than an empty string: a range input sanitizes
+ * '' back to its midpoint, which would silently assert the wrong thing.
+ */
 function setOnlineMin(value: string) {
     fireEvent.change(screen.getByLabelText(/min online players/i), {
         target: { value },
@@ -707,16 +719,28 @@ describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
         expect(rowCount('Solo Row')).toBe(0);
     });
 
-    it('treats a cleared numeric input as inactive (not "N >= 0")', () => {
+    it('treats the slider at 0 ("Any") as inactive, not "N >= 0"', () => {
         renderPage();
         openCoopPanel();
         setOnlineMin('4');
         expect(rowCount('Solo Row')).toBe(0);
 
-        setOnlineMin('');
+        setOnlineMin('0');
 
         expect(rowCount('Solo Row')).toBeGreaterThan(0);
         expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
+    });
+
+    it('renders the online minimum as a slider showing "Any" at 0', () => {
+        renderPage();
+        openCoopPanel();
+
+        const slider = screen.getByRole('slider', { name: /min online players/i });
+        expect(slider).toHaveAttribute('type', 'range');
+        expect(screen.getByText('Any')).toBeInTheDocument();
+
+        setOnlineMin('4');
+        expect(screen.getByText('4')).toBeInTheDocument();
     });
 
 });
@@ -869,5 +893,66 @@ describe('GamesPage — ROK-1402: mode toggles gated on data presence', () => {
         openCoopPanel();
         expect(screen.getByLabelText(/couch co-op/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/co-op campaign/i)).toBeInTheDocument();
+    });
+});
+
+// ============================================================
+// ROK-1402 (operator review 2026-08-20): the co-op filters are sessionStorage-
+// backed so opening a game's detail page and coming back does not silently drop
+// them. `renderPage()` mounts a fresh tree, so unmount + re-render reproduces
+// exactly what the router does on that round trip.
+// ============================================================
+
+describe('GamesPage — ROK-1402: co-op filters persist across remount', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        isDesktopViewport = true;
+        mockCoopDiscover();
+        mockSearch();
+    });
+
+    it('restores the co-op predicate after an unmount/remount', () => {
+        const { unmount } = renderPage();
+        openCoopPanel();
+        setOnlineMin('4');
+        expect(rowCount('Solo Row')).toBe(0);
+
+        unmount();
+        renderPage();
+
+        // Predicate is still applied and still disclosed, with no re-interaction.
+        expect(rowCount('Solo Row')).toBe(0);
+        expect(rowCount('Coop Row')).toBeGreaterThan(0);
+        expect(screen.getByTestId(COOP_HINT)).toBeInTheDocument();
+        openCoopPanel();
+        expect(screen.getByRole('slider', { name: /min online players/i })).toHaveValue('4');
+    });
+
+    it('persists a mode toggle and clears the store on "Clear all"', () => {
+        const { unmount } = renderPage();
+        openCoopPanel();
+        fireEvent.click(screen.getByRole('checkbox', { name: /split-screen/i }));
+        expect(rowCount('Shooter Coop Row')).toBe(0);
+
+        unmount();
+        renderPage();
+        expect(rowCount('Shooter Coop Row')).toBe(0);
+
+        openCoopPanel();
+        fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
+        unmount();
+        renderPage();
+
+        expect(rowCount('Shooter Coop Row')).toBeGreaterThan(0);
+        expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
+    });
+
+    it('ignores a corrupt or hand-edited sessionStorage entry', () => {
+        sessionStorage.setItem('games-coop-filters', '{"onlineMinPlayers":"lots","bogus":true}');
+
+        renderPage();
+
+        expect(rowCount('Solo Row')).toBeGreaterThan(0);
+        expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
     });
 });
