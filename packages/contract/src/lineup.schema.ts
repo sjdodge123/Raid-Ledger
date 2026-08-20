@@ -505,6 +505,15 @@ export const CommonGroundResponseSchema = z.object({
          * filter to auto-set on first mount.
          */
         participantCount: z.number(),
+        /**
+         * ROK-1400: whether ANY game in the catalogue has been synced with
+         * Co-Optimus yet (`cooptimus_synced_at IS NOT NULL`). The co-op
+         * group-size filter is Co-Optimus-verified only, so before the first
+         * sync it could only ever return zero rows — the client keeps the
+         * whole control dormant until this flips true. Optional so existing
+         * fixtures and older clients stay valid; treat absent as `false`.
+         */
+        coopDataAvailable: z.boolean().optional(),
     }),
 });
 

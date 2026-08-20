@@ -18,10 +18,7 @@ export function CoopFitHints({
     game: CoopCapacityFields;
     participantCount?: number;
 }): JSX.Element | null {
-    const max = resolveEffectiveOnlineMax(
-        game.cooptimusOnlineMax,
-        game.playerCount?.max,
-    );
+    const max = resolveEffectiveOnlineMax(game.cooptimusOnlineMax);
     if (max == null) return null;
     const tooSmall = participantCount != null && max < participantCount;
     return (
