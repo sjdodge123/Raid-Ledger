@@ -15,6 +15,8 @@ import { FAB } from "../components/ui/fab";
 import { LineupBanner } from "../components/lineups/LineupBanner";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
+import { CoopFilterSection } from "./games/coop-filter-section";
+import { applyCoopFilters, EMPTY_COOP_FILTERS, type CoopFilterState } from "./games/coop-filter.helpers";
 import { DiscoverContent, type PricingMap } from "./games-page-discover";
 import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
 
@@ -28,18 +30,21 @@ function useGamesPageState() {
   const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
+  // ROK-1402: client-side co-op predicates over the already-fetched rows.
+  const [coopFilters, setCoopFilters] = useState<CoopFilterState>(EMPTY_COOP_FILTERS);
+  const [coopPanelOpen, setCoopPanelOpen] = useState(false);
   const scrollDirection = useScrollDirection();
   const isHeaderHidden = scrollDirection === 'down';
-  return { canManage, activeTab, setActiveTab, searchQuery, setSearchQuery, selectedGenres, setSelectedGenres, genreSheetOpen, setGenreSheetOpen, showHidden, setShowHidden, isHeaderHidden };
+  return { canManage, activeTab, setActiveTab, searchQuery, setSearchQuery, selectedGenres, setSelectedGenres, genreSheetOpen, setGenreSheetOpen, showHidden, setShowHidden, isHeaderHidden, coopFilters, setCoopFilters, coopPanelOpen, setCoopPanelOpen };
 }
 
-function useGamesData(searchQuery: string, selectedGenres: Set<string>) {
+function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilters: CoopFilterState) {
   const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
   const { data: searchData, isLoading: searchLoading } = useGameSearch(searchQuery, searchQuery.length >= 2);
   const isSearching = searchQuery.length >= 2;
   const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
-  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters);
-  const searchResults = searchData?.data;
+  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters, coopFilters);
+  const searchResults = searchData?.data ? applyCoopFilters(searchData.data, coopFilters) : searchData?.data;
   const searchSource = searchData?.meta?.source;
   const allGameIds = useMemo(() => {
     const ids: number[] = [];
@@ -50,20 +55,23 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>) {
   return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds };
 }
 
-function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS) {
+function filterDiscoverRows(rows: GameDiscoverRowDto[] | undefined, activeFilters: typeof GENRE_FILTERS, coopFilters: CoopFilterState) {
   return rows
     ?.map((row) => ({
       ...row,
-      games: activeFilters.length > 0
-        ? row.games.filter((g) => activeFilters.some(f => f.match(g.genres)))
-        : row.games,
+      games: applyCoopFilters(
+        activeFilters.length > 0
+          ? row.games.filter((g) => activeFilters.some(f => f.match(g.genres)))
+          : row.games,
+        coopFilters,
+      ),
     }))
     .filter((row) => row.games.length > 0);
 }
 
 export function GamesPage() {
   const state = useGamesPageState();
-  const data = useGamesData(state.searchQuery, state.selectedGenres);
+  const data = useGamesData(state.searchQuery, state.selectedGenres, state.coopFilters);
   return (
     <div className="pb-20 md:pb-0">
       <GamesMobileToolbar activeTab={state.activeTab === "manage" ? "manage" : "discover"} onTabChange={(tab) => state.setActiveTab(tab)} showManageTab={state.canManage} />
@@ -100,6 +108,14 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
   return (
     <WantToPlayProvider gameIds={data.allGameIds}>
       <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
+      <CoopFilterSection
+        filters={state.coopFilters}
+        onFiltersChange={state.setCoopFilters}
+        isOpen={state.coopPanelOpen}
+        onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
+        onClose={() => state.setCoopPanelOpen(false)}
+        resultCount={data.allGameIds.length}
+      />
       {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
       {data.isSearching ? (
         <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />

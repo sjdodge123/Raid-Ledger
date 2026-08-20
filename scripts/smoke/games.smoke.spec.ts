@@ -129,6 +129,17 @@ async function searchGames(page: Page, query: string): Promise<void> {
     await page.getByPlaceholder('Search games...').fill(query);
 }
 
+/**
+ * Search results are rendered twice — a `hidden md:grid` desktop grid and a
+ * `md:hidden` mobile grid — so a bare href locator is ambiguous under strict
+ * mode. Pick the copy the current viewport actually shows (same `:visible`
+ * pattern as `game-research-drawer.smoke.spec.ts`). Exclusion assertions keep
+ * the bare locator: `toHaveCount(0)` must hold across BOTH grids.
+ */
+function visibleGameLink(page: Page, gameId: number) {
+    return page.locator(`a[href="/games/${gameId}"]:visible`).first();
+}
+
 test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
     let seed: CooptimusSeed;
 
@@ -167,7 +178,7 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
         await searchGames(page, FIXTURE_QUERY);
 
         // Enriched fixture (online max 4) survives "4+ online players".
-        await expect(page.locator(`a[href="/games/${seed.enrichedGameId}"]`)).toBeVisible({
+        await expect(visibleGameLink(page, seed.enrichedGameId)).toBeVisible({
             timeout: 15_000,
         });
         // Both null-data fixtures are excluded — never silently kept.
@@ -195,7 +206,7 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
 
         await applyOnlineCoopFilter(page, '');
 
-        await expect(page.locator(`a[href="/games/${seed.syncedEmptyGameId}"]`)).toBeVisible({
+        await expect(visibleGameLink(page, seed.syncedEmptyGameId)).toBeVisible({
             timeout: 15_000,
         });
         await expect(page.locator(COOP_HINT)).toHaveCount(0);
