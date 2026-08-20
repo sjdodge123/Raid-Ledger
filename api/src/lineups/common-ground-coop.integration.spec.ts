@@ -6,17 +6,17 @@
  * not exist yet, so `CommonGroundQuerySchema` strips it and the query is
  * unfiltered). The dev agent builds to make them pass.
  *
- * Precedence rule under test (operator-ratified 2026-08-20):
- *   cooptimus_online_max NOT NULL → use it, INCLUDING zero
- *   cooptimus_online_max NULL     → else player_count->>'max'
- *   both NULL                     → row excluded while the filter is on
+ * Rule under test — **Co-Optimus-verified only** (operator decision
+ * 2026-08-20 round 2, after PUBG passed a "4+ co-op" filter via the old
+ * IGDB fallback):
+ *   cooptimus_online_max > 0  → the ONLY way to match
+ *   cooptimus_online_max = 0  → fails (synced: no online co-op)
+ *   cooptimus_online_max NULL → fails (never synced / unverified)
  *
- * A ZERO `cooptimus_online_max` is a synced "this game has NO online co-op"
- * claim, so it resolves to 0 and FAILS every group size. It must NOT fall
- * through to the IGDB player count — PvP titles carry a large IGDB lobby
- * capacity that has nothing to do with co-op. This deliberately diverges
- * from `resolvePlayerCap` (ROK-1411), which treats zero as absent because
- * it answers a display question, not a filter-correctness one.
+ * IGDB `player_count.max` is a LOBBY-SIZE estimate, not a co-op capability,
+ * and NEVER satisfies this filter. This deliberately diverges from
+ * `resolvePlayerCap` (ROK-1411), which does fall back to player_count
+ * because it answers a display question, not a filter-correctness one.
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -181,7 +181,7 @@ function describeCommonGroundCoop() {
     it('lets a positive cooptimus value WIN over a larger IGDB player_count.max', async () => {
       await createBuildingLineup();
       // IGDB says 16 (generic lobby capacity) but Co-Optimus says online
-      // co-op tops out at 2 — the Co-Optimus value must win, so a group of
+      // co-op tops out at 2 — the Co-Optimus value decides, so a group of
       // 4 does NOT see this game. A COALESCE/GREATEST implementation that
       // takes the IGDB number would wrongly include it.
       const cooptimusWins = await insertOwnedGame('Cooptimus Wins', {
@@ -198,15 +198,24 @@ function describeCommonGroundCoop() {
       expect(ids).not.toContain(cooptimusWins);
     });
 
-    it('falls back to IGDB player_count.max when cooptimus_online_max is NULL', async () => {
+    // Round 2 flip: an unsynced game is UNVERIFIED, so it can never match —
+    // its IGDB player count is a lobby-size estimate, not a co-op capability.
+    // This is the PUBG case that motivated dropping the fallback.
+    it('EXCLUDES an unsynced game no matter how large its IGDB player_count.max', async () => {
       await createBuildingLineup();
-      const igdbOnlyBigEnough = await insertOwnedGame('Igdb Only Eight', {
+      const igdbOnlyBig = await insertOwnedGame('Igdb Only Hundred', {
+        cooptimusOnlineMax: null,
+        playerCount: { min: 1, max: 100 },
+      });
+      const igdbOnlyEight = await insertOwnedGame('Igdb Only Eight', {
         cooptimusOnlineMax: null,
         playerCount: { min: 1, max: 8 },
       });
-      const igdbOnlyTooSmall = await insertOwnedGame('Igdb Only Two', {
-        cooptimusOnlineMax: null,
-        playerCount: { min: 1, max: 2 },
+      // Positive control: a Co-Optimus-verified game still comes back, so
+      // the exclusions above are the filter working, not an empty page.
+      const verified = await insertOwnedGame('Verified Coop', {
+        cooptimusOnlineMax: 4,
+        playerCount: null,
       });
 
       const { status, ids } = await fetchGameIds({
@@ -215,14 +224,12 @@ function describeCommonGroundCoop() {
       });
 
       expect(status).toBe(200);
-      expect(ids).toContain(igdbOnlyBigEnough);
-      expect(ids).not.toContain(igdbOnlyTooSmall);
+      expect(ids).toContain(verified);
+      expect(ids).not.toContain(igdbOnlyBig);
+      expect(ids).not.toContain(igdbOnlyEight);
     });
   }
-  describe(
-    'minOnlineCoop — precedence (positive cooptimus wins)',
-    describePrecedence,
-  );
+  describe('minOnlineCoop — Co-Optimus-verified only', describePrecedence);
 
   // ── Zero is an explicit "no online co-op" claim ──────────────
   //
@@ -471,6 +478,56 @@ function describeCommonGroundCoop() {
     });
   }
   describe('minOnlineCoop — param validation', describeValidation);
+
+  // ── meta.coopDataAvailable (ROK-1400 round 2) ────────────────
+  //
+  // Drives the client's dormant-until-data gate. Keyed on
+  // `cooptimus_synced_at` rather than `cooptimus_online_max` so a sync that
+  // found no co-op entry still counts as "we have data".
+
+  function describeCoopDataAvailable() {
+    async function fetchMeta(): Promise<Record<string, unknown>> {
+      const res = await testApp.request
+        .get('/lineups/common-ground')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .query({ minOwners: 1 });
+      expect(res.status).toBe(200);
+      return res.body.meta as Record<string, unknown>;
+    }
+
+    it('is false when no game has ever been Co-Optimus-synced', async () => {
+      await createBuildingLineup();
+      await insertOwnedGame('Never Synced', {
+        cooptimusOnlineMax: null,
+        cooptimusSyncedAt: null,
+      });
+
+      expect(await fetchMeta()).toMatchObject({ coopDataAvailable: false });
+    });
+
+    it('is true once any game carries a sync timestamp', async () => {
+      await createBuildingLineup();
+      await insertOwnedGame('Synced With Coop', {
+        cooptimusOnlineMax: 4,
+        cooptimusSyncedAt: new Date(),
+      });
+
+      expect(await fetchMeta()).toMatchObject({ coopDataAvailable: true });
+    });
+
+    it('is true for a synced game even when it has NO co-op (zero)', async () => {
+      await createBuildingLineup();
+      // "We checked and this game has no online co-op" is still data — the
+      // control should be live so the user can filter such titles out.
+      await insertOwnedGame('Synced No Coop', {
+        cooptimusOnlineMax: 0,
+        cooptimusSyncedAt: new Date(),
+      });
+
+      expect(await fetchMeta()).toMatchObject({ coopDataAvailable: true });
+    });
+  }
+  describe('meta.coopDataAvailable', describeCoopDataAvailable);
 }
 
 describe(

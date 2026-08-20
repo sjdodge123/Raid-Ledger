@@ -115,6 +115,24 @@ export async function queryCommonGround(
   return rows;
 }
 
+/**
+ * Whether the catalogue has ANY Co-Optimus-synced game (ROK-1400). Drives
+ * `meta.coopDataAvailable` so the client can keep the co-op group-size
+ * control dormant until a sync has actually happened — the filter is
+ * Co-Optimus-verified only, so before that it could only return zero rows.
+ * `cooptimus_synced_at` (not `cooptimus_online_max`) is the right signal:
+ * it is set even for games the sync found no co-op entry for, i.e. "we
+ * checked" rather than "this game has co-op".
+ */
+export async function queryCoopDataAvailable(db: Db): Promise<boolean> {
+  const rows = (await db.execute(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM games WHERE cooptimus_synced_at IS NOT NULL
+    ) AS "available"
+  `)) as unknown as Array<{ available: boolean }>;
+  return rows[0]?.available === true;
+}
+
 /** Build WHERE conditions from filters. */
 function buildWhereConditions(
   filters: CommonGroundFilters,
@@ -151,26 +169,23 @@ function buildWhereConditions(
   }
 
   if (filters.minOnlineCoop != null) {
-    // ROK-1400: keep games whose EFFECTIVE online-co-op max >= N.
+    // ROK-1400: the co-op filter is **Co-Optimus-verified only** (operator
+    // decision 2026-08-20 round 2, after PUBG passed a "4+ co-op" filter
+    // through the old IGDB fallback).
     //
-    // Precedence (operator-ratified 2026-08-20, spike §5 filter-correctness):
-    //   cooptimus_online_max NOT NULL → use it, INCLUDING zero
-    //   cooptimus_online_max NULL     → fall back to IGDB player_count.max
-    //   both NULL                     → excluded (NULL >= N is NULL)
+    //   cooptimus_online_max > 0  → the ONLY way to match
+    //   cooptimus_online_max = 0  → fails (synced: this game has no online co-op)
+    //   cooptimus_online_max NULL → fails naturally (NULL >= N is NULL)
     //
-    // A ZERO cooptimus value means "we synced this game and it has NO online
-    // co-op", so it must FAIL the filter — PUBG-class PvP titles carry a
-    // large IGDB lobby capacity and would otherwise pass a "4+ co-op" filter
-    // on IGDB's number alone. Do NOT reintroduce `NULLIF(..., 0)` here: that
-    // makes zero fall through to IGDB, which is the bug this replaced.
+    // IGDB `player_count.max` is a LOBBY-SIZE estimate, not a co-op
+    // capability, so it NEVER satisfies this filter. Do NOT reintroduce a
+    // COALESCE to `player_count` here, and do NOT reintroduce `NULLIF` —
+    // both were tried and both let PvP titles through.
     //
-    // NOTE: this deliberately DIVERGES from `resolvePlayerCap` (ROK-1411),
-    // which treats zero as absent because it answers a different question
-    // ("what cap do we print on the roster copy?"). Filter correctness and
-    // display fallback are not the same rule.
-    conditions.push(
-      sql`(COALESCE(g.cooptimus_online_max, (g.player_count->>'max')::int) >= ${filters.minOnlineCoop})`,
-    );
+    // NOTE: deliberately DIVERGES from `resolvePlayerCap` (ROK-1411), which
+    // falls back to player_count because it answers a display question
+    // ("what cap do we print on the roster copy?"), not a filter one.
+    conditions.push(sql`(g.cooptimus_online_max >= ${filters.minOnlineCoop})`);
   }
 
   if (filters.search) {
@@ -359,6 +374,7 @@ export async function buildCommonGroundResponse(
   ctx: ScoringContext | null = null,
 ): Promise<CommonGroundResponseDto> {
   const rows = await queryCommonGround(db, filters, nominatedIds);
+  const coopDataAvailable = await queryCoopDataAvailable(db);
   const scored = rows.map((r) => mapCommonGroundRow(r, ctx));
   scored.sort((a, b) => b.score - a.score);
   const themed = scored.map(withThemeAndWhyReason);
@@ -373,6 +389,7 @@ export async function buildCommonGroundResponse(
       nominatedCount: nominatedIds.length,
       maxNominations: nominationCap(nominatorCount),
       participantCount,
+      coopDataAvailable,
     },
   };
 }
