@@ -106,6 +106,7 @@ export function NominatingComposite(
     filters,
     setFilters,
     filtersRestored,
+    coopDataAvailable,
     search,
     setSearch,
     participantCount,
@@ -268,6 +269,7 @@ export function NominatingComposite(
                 onSearchChange={setSearch}
                 participantCount={participantCount}
                 suppressAutoSeed={filtersRestored}
+                coopDataAvailable={coopDataAvailable}
               />
             </div>
           </div>

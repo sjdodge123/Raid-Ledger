@@ -7,7 +7,9 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import type { CommonGroundResponseDto } from '@raid-ledger/contract';
 import { useCommonGroundState } from './use-common-ground-state';
+import { useCommonGround } from '../../hooks/use-lineups';
 
 vi.mock('../../hooks/use-lineups', () => ({
     useActiveLineups: vi.fn(() => ({ data: [] })),
@@ -32,12 +34,40 @@ vi.mock('../../hooks/use-debounced-value', () => ({
 
 const LINEUP = 7;
 
+/** Params the hook actually asked the API for on its latest render. */
+function lastRequestedParams(): Record<string, unknown> {
+    const calls = vi.mocked(useCommonGround).mock.calls;
+    return calls[calls.length - 1][0] as Record<string, unknown>;
+}
+
+/** Make the mocked query resolve with a meta carrying `coopDataAvailable`. */
+function mockCoopDataAvailable(available: boolean): void {
+    vi.mocked(useCommonGround).mockReturnValue({
+        data: {
+            data: [],
+            meta: { coopDataAvailable: available },
+        } as unknown as CommonGroundResponseDto,
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useCommonGround>);
+}
+
 function renderState(lineupId = LINEUP) {
     return renderHook(() => useCommonGroundState(lineupId, true));
 }
 
 beforeEach(() => {
     window.sessionStorage.clear();
+    // Reset call history + any per-test return override so each test sees a
+    // fresh "no response yet" query.
+    vi.mocked(useCommonGround).mockReset();
+    vi.mocked(useCommonGround).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useCommonGround>);
 });
 
 describe('useCommonGroundState — filter persistence (ROK-1400)', () => {
@@ -83,6 +113,37 @@ describe('useCommonGroundState — filter persistence (ROK-1400)', () => {
 
         const second = renderState();
         expect(second.result.current.filters.minOnlineCoop).toBeUndefined();
+    });
+
+    it('does NOT send a persisted minOnlineCoop while the control is dormant', () => {
+        // A filter stored before the catalogue lost/never had Co-Optimus
+        // data. The user can neither see nor clear the toggle, so applying
+        // it would silently empty the grid with no way out.
+        window.sessionStorage.setItem(
+            `common-ground:filters:${LINEUP}`,
+            JSON.stringify({ minOwners: 2, minOnlineCoop: 5 }),
+        );
+        mockCoopDataAvailable(false);
+
+        const { result } = renderState();
+
+        expect(result.current.filters.minOnlineCoop).toBe(5); // still stored
+        expect(result.current.coopDataAvailable).toBe(false);
+        expect(lastRequestedParams()).not.toHaveProperty('minOnlineCoop');
+        expect(lastRequestedParams()).toMatchObject({ minOwners: 2 });
+    });
+
+    it('sends the persisted minOnlineCoop once co-op data is available', () => {
+        window.sessionStorage.setItem(
+            `common-ground:filters:${LINEUP}`,
+            JSON.stringify({ minOwners: 2, minOnlineCoop: 5 }),
+        );
+        mockCoopDataAvailable(true);
+
+        const { result } = renderState();
+
+        expect(result.current.coopDataAvailable).toBe(true);
+        expect(lastRequestedParams()).toMatchObject({ minOnlineCoop: 5 });
     });
 
     it('keys state per lineup — a different lineup starts clean', () => {

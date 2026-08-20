@@ -50,6 +50,14 @@ export interface UseCommonGroundStateResult {
      * every remount.
      */
     filtersRestored: boolean;
+    /**
+     * ROK-1400: whether the catalogue has any Co-Optimus-synced game
+     * (`meta.coopDataAvailable`, latched). Callers pass it to
+     * `CommonGroundFilters.coopDataAvailable`; while false the co-op control
+     * is not rendered AND any persisted `minOnlineCoop` is withheld from the
+     * request.
+     */
+    coopDataAvailable: boolean;
     search: string;
     setSearch: (v: string) => void;
     /**
@@ -111,19 +119,40 @@ export function useCommonGroundState(
         '',
     );
 
+    // ROK-1400: latched from `meta.coopDataAvailable` once the first response
+    // lands. Latched (never flips back) so an in-flight refetch can't make the
+    // co-op control blink out from under the user.
+    const [coopDataAvailable, setCoopDataAvailable] = useState(false);
+
+    // Defensive (operator, round 2): the co-op control is dormant until the
+    // catalogue has Co-Optimus data, but filters persisted from an earlier
+    // visit can still carry `minOnlineCoop`. Never send it while the control
+    // is hidden — a filter the user can neither see nor clear must not
+    // silently empty the grid.
+    const effectiveFilters = useMemo(() => {
+        const { minOnlineCoop, ...withoutCoop } = filters;
+        if (coopDataAvailable || minOnlineCoop == null) return filters;
+        return withoutCoop;
+    }, [filters, coopDataAvailable]);
+
     const apiParams = useMemo(
         () => ({
-            ...filters,
+            ...effectiveFilters,
             search: search.trim() || undefined,
             lineupId: resolvedId,
         }),
-        [filters, search, resolvedId],
+        [effectiveFilters, search, resolvedId],
     );
     const debouncedParams = useDebouncedValue(apiParams, 300);
     const { data, isLoading, isError, refetch } = useCommonGround(
         debouncedParams,
         hasBuilding,
     );
+    // Adjust-state-during-render (React docs pattern): promote the flag as
+    // soon as the response carries it, without a cascading-render effect.
+    if (data?.meta.coopDataAvailable === true && !coopDataAvailable) {
+        setCoopDataAvailable(true);
+    }
     // ROK-931: fetch AI suggestions alongside Common Ground and blend
     // them into the same grid. The map drives the ✨ AI badge + tooltip
     // reasoning on matching cards; AI-only games (not owned yet) are
@@ -147,8 +176,17 @@ export function useCommonGroundState(
     }, [aiAvailable, aiQuery.data]);
 
     const mergedData = useMemo(
-        () => mergeAiIntoCommonGround(data, aiSuggestionsByGameId, filters, search),
-        [data, aiSuggestionsByGameId, filters, search],
+        // Effective (not raw) filters: the AI-stub mirror must agree with what
+        // the server was actually asked for, or a dormant co-op filter would
+        // drop stubs the query itself never filtered on (ROK-1400).
+        () =>
+            mergeAiIntoCommonGround(
+                data,
+                aiSuggestionsByGameId,
+                effectiveFilters,
+                search,
+            ),
+        [data, aiSuggestionsByGameId, effectiveFilters, search],
     );
 
     const atCap =
@@ -208,6 +246,7 @@ export function useCommonGroundState(
         filters,
         setFilters,
         filtersRestored,
+        coopDataAvailable,
         search,
         setSearch,
         participantCount,
