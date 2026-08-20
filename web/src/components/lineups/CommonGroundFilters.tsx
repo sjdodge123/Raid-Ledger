@@ -53,6 +53,26 @@ function MinOwnersSlider({
     );
 }
 
+/** Free-text game name search. */
+function SearchBox({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (v: string) => void;
+}): JSX.Element {
+    return (
+        <input
+            type="search"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Search games..."
+            aria-label="Search games"
+            className="min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground placeholder:text-dim w-full focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+        />
+    );
+}
+
 /** Slider for filtering by player count. */
 function PlayersSlider({
     value,
@@ -96,8 +116,15 @@ function CoopSizeInput({
     value: number;
     onChange: (v: number) => void;
 }): JSX.Element {
+    // Adjust-state-during-render (React docs pattern) rather than a sync
+    // effect: re-seeds the box when the parent hands us a different value
+    // without the cascading-render hazard an effect would introduce.
     const [text, setText] = useState(String(value));
-    useEffect(() => setText(String(value)), [value]);
+    const [lastValue, setLastValue] = useState(value);
+    if (value !== lastValue) {
+        setLastValue(value);
+        setText(String(value));
+    }
     return (
         <label className="flex items-center gap-2 text-sm text-foreground">
             <span className="whitespace-nowrap">Co-op group size</span>
@@ -123,6 +150,29 @@ function CoopSizeInput({
  * filter is active, games with no co-op data at all are excluded by the
  * API, so we say so rather than letting them vanish silently.
  */
+function CoopToggle({
+    active,
+    onToggle,
+}: {
+    active: boolean;
+    onToggle: (on: boolean) => void;
+}): JSX.Element {
+    return (
+        <label className="flex items-center gap-2 text-base text-foreground min-h-[44px]">
+            <input
+                type="checkbox"
+                checked={active}
+                onChange={(e) => onToggle(e.target.checked)}
+                className="w-5 h-5 accent-emerald-500"
+            />
+            <span className="whitespace-nowrap font-medium">
+                Co-op for our group size
+            </span>
+        </label>
+    );
+}
+
+/** Opt-in co-op group-size filter: toggle, size entry, NULL-data hint. */
 function CoopGroupSizeFilter({
     value,
     participantCount,
@@ -135,23 +185,12 @@ function CoopGroupSizeFilter({
     const active = value != null;
     return (
         <div className="flex flex-col gap-1">
-            <label className="flex items-center gap-2 text-base text-foreground min-h-[44px]">
-                <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={(e) =>
-                        onChange(
-                            e.target.checked
-                                ? Math.max(1, participantCount ?? 1)
-                                : undefined,
-                        )
-                    }
-                    className="w-5 h-5 accent-emerald-500"
-                />
-                <span className="whitespace-nowrap font-medium">
-                    Co-op for our group size
-                </span>
-            </label>
+            <CoopToggle
+                active={active}
+                onToggle={(on) =>
+                    onChange(on ? Math.max(1, participantCount ?? 1) : undefined)
+                }
+            />
             {active && (
                 <>
                     <CoopSizeInput value={value} onChange={onChange} />
@@ -164,17 +203,17 @@ function CoopGroupSizeFilter({
     );
 }
 
-/** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount }: Props): JSX.Element {
-    const update = useCallback(
-        (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
-        [filters, onChange],
-    );
-
-    // ROK-1255: pre-set the player-count filter to the lineup's participant
-    // count the FIRST time we see a known value (>0). Captures intent on
-    // entry to the nomination panel without re-pinning when invitees join
-    // or leave mid-building, and without overriding manual adjustments.
+/**
+ * ROK-1255: pre-set the player-count filter to the lineup's participant
+ * count the FIRST time we see a known value (>0). Captures intent on entry
+ * to the nomination panel without re-pinning when invitees join or leave
+ * mid-building, and without overriding manual adjustments.
+ */
+function useMaxPlayersIntentCapture(
+    participantCount: number | undefined,
+    filters: CommonGroundParams,
+    onChange: (next: CommonGroundParams) => void,
+): void {
     const intentCapturedRef = useRef(false);
     useEffect(() => {
         if (intentCapturedRef.current) return;
@@ -188,17 +227,19 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
         if (filters.maxPlayers != null) return;
         onChange({ ...filters, maxPlayers: participantCount });
     }, [participantCount, filters, onChange]);
+}
+
+/** Filter bar for the Common Ground panel. */
+export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount }: Props): JSX.Element {
+    const update = useCallback(
+        (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
+        [filters, onChange],
+    );
+    useMaxPlayersIntentCapture(participantCount, filters, onChange);
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:repeat(3,minmax(220px,1fr))] gap-3 sm:gap-4 items-center">
-            <input
-                type="search"
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search games..."
-                aria-label="Search games"
-                className="min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground placeholder:text-dim w-full focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
+            <SearchBox value={search} onChange={onSearchChange} />
             <MinOwnersSlider
                 value={filters.minOwners ?? 2}
                 onChange={(v) => update({ minOwners: v })}

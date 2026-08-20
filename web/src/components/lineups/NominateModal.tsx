@@ -10,7 +10,8 @@ import { extractSteamAppId } from '../../hooks/use-steam-paste';
 import { getGameBySteamAppId } from '../../lib/api-client';
 import { toast } from '../../lib/toast';
 import { PersonalSuggestionsRow } from './PersonalSuggestionsRow';
-import { CoopFitHints, type CoopCapacityFields } from './coop-fit';
+import { CoopFitHints } from './CoopFitHints';
+import type { CoopCapacityFields } from './coop-fit';
 
 export interface SelectedGame {
     id: number;
