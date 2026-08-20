@@ -1,12 +1,21 @@
 /**
  * ROK-1402 — co-op filter controls rendered as `FilterPanel` children on the
  * games library page (Players-page precedent: inline on desktop, BottomSheet on
- * mobile). Numeric "minimum online players" input + four mode toggles.
+ * mobile). "Min online players" slider + four mode toggles.
  */
 import type { JSX } from 'react';
 import type { CoopFilterState } from './coop-filter.helpers';
 
 type ToggleKey = 'couchCoop' | 'lanCoop' | 'splitscreen' | 'campaignCoop';
+
+/** Highest value the slider offers; 0 means "Any" (predicate inactive). */
+const MAX_ONLINE_PLAYERS = 16;
+
+// Mirrors the Common Ground slider sizing (ROK-1297 round 5m): 44px tap target,
+// full-width track, emerald thumb. Kept as a local copy rather than an import so
+// this page never reaches into the lineups module.
+const SLIDER_CLS =
+    'flex-1 h-11 accent-emerald-500 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5';
 
 const COOP_TOGGLES: { key: ToggleKey; label: string }[] = [
     { key: 'couchCoop', label: 'Couch co-op' },
@@ -26,7 +35,7 @@ interface CoopFilterControlsProps {
 export function CoopFilterControls({ state, onChange, showModeToggles }: CoopFilterControlsProps): JSX.Element {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MinOnlinePlayersInput
+            <MinOnlinePlayersSlider
                 value={state.onlineMinPlayers}
                 onChange={(onlineMinPlayers) => onChange({ ...state, onlineMinPlayers })}
             />
@@ -49,28 +58,30 @@ export function CoopFilterControls({ state, onChange, showModeToggles }: CoopFil
     );
 }
 
-/** Minimum online co-op players. Empty/0/invalid clears the predicate. */
-function MinOnlinePlayersInput({ value, onChange }: {
+/** Minimum online co-op players. 0 reads as "Any" and clears the predicate. */
+function MinOnlinePlayersSlider({ value, onChange }: {
     value: number | undefined;
     onChange: (value: number | undefined) => void;
 }): JSX.Element {
-    const handleChange = (raw: string): void => {
-        const parsed = parseInt(raw, 10);
-        onChange(Number.isFinite(parsed) && parsed > 0 ? parsed : undefined);
-    };
-
+    const current = value ?? 0;
     return (
-        <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted">Online co-op players</span>
+        <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
+            <span className="whitespace-nowrap font-medium">Online</span>
             <input
-                type="number"
+                type="range"
                 aria-label="Min online players"
                 min={0}
-                value={value ? String(value) : ''}
-                onChange={(e) => handleChange(e.target.value)}
-                placeholder="Any"
-                className="w-24 px-2 py-1.5 bg-surface border border-edge rounded text-foreground text-sm placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                max={MAX_ONLINE_PLAYERS}
+                value={current}
+                onChange={(e) => {
+                    const next = Number(e.target.value);
+                    onChange(next > 0 ? next : undefined);
+                }}
+                className={SLIDER_CLS}
             />
+            <span className="text-sm font-mono w-8 text-right text-foreground">
+                {current || 'Any'}
+            </span>
         </label>
     );
 }

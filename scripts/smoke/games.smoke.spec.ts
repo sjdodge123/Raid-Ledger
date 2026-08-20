@@ -82,7 +82,8 @@ test.describe('Regression: ROK-813 — games page mobile search styling', () => 
 // Players-page FilterPanel precedent:
 //   • `FilterPanelTrigger` (aria-label "Filters") on the discover tab —
 //     distinct from the existing "Genre Filter" FAB.
-//   • Numeric predicate input, aria-label "Min online players".
+//   • Online-players predicate: a range slider, aria-label "Min online players"
+//     (0 = "Any"/inactive).
 //   • Boolean toggles: "Couch co-op", "LAN co-op", "Split-screen",
 //     "Co-op campaign".
 //   • Hint line `[data-testid="coop-filter-hint"]` reading
@@ -113,14 +114,22 @@ type CooptimusSeed = {
     cooptimusUrl: string;
 };
 
-/** Open the co-op FilterPanel, set the numeric predicate, then dismiss the panel. */
-async function applyOnlineCoopFilter(page: Page, minPlayers: string): Promise<void> {
+/**
+ * Open the co-op FilterPanel, set the online-players predicate, then dismiss the
+ * panel. The control is a range slider (operator review 2026-08-20), which
+ * `fill()` cannot drive — Home parks it at the minimum and each ArrowRight steps
+ * it up by one, both of which fire the real input events React listens for.
+ * `minPlayers: 0` therefore clears the predicate.
+ */
+async function applyOnlineCoopFilter(page: Page, minPlayers: number): Promise<void> {
     await page.getByRole('button', { name: /^filters$/i }).click();
-    const input = page.getByLabel(/min online players/i);
-    await expect(input).toBeVisible({ timeout: 10_000 });
-    await input.fill(minPlayers);
-    // Closes the mobile BottomSheet so the results underneath are clickable;
-    // inert on desktop where the panel renders inline.
+    const slider = page.getByLabel(/min online players/i);
+    await expect(slider).toBeVisible({ timeout: 10_000 });
+    await slider.focus();
+    await page.keyboard.press('Home');
+    for (let i = 0; i < minPlayers; i++) await page.keyboard.press('ArrowRight');
+    // Closes the panel (BottomSheet on mobile, the inline panel on desktop) so
+    // the results underneath are clickable.
     await page.keyboard.press('Escape');
 }
 
@@ -174,7 +183,7 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
 
     test('an active co-op predicate excludes games with no co-op data', async ({ page }) => {
         await page.goto('/games');
-        await applyOnlineCoopFilter(page, '4');
+        await applyOnlineCoopFilter(page, 4);
         await searchGames(page, FIXTURE_QUERY);
 
         // Enriched fixture (online max 4) survives "4+ online players".
@@ -191,7 +200,7 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
         await page.goto('/games');
         await expect(page.locator(COOP_HINT)).toHaveCount(0);
 
-        await applyOnlineCoopFilter(page, '4');
+        await applyOnlineCoopFilter(page, 4);
 
         const hint = page.locator(COOP_HINT);
         await expect(hint).toBeVisible({ timeout: 10_000 });
@@ -200,11 +209,11 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
 
     test('clearing the co-op predicate restores the excluded games', async ({ page }) => {
         await page.goto('/games');
-        await applyOnlineCoopFilter(page, '4');
+        await applyOnlineCoopFilter(page, 4);
         await searchGames(page, FIXTURE_QUERY);
         await expect(page.locator(`a[href="/games/${seed.syncedEmptyGameId}"]`)).toHaveCount(0);
 
-        await applyOnlineCoopFilter(page, '');
+        await applyOnlineCoopFilter(page, 0);
 
         await expect(visibleGameLink(page, seed.syncedEmptyGameId)).toBeVisible({
             timeout: 15_000,
