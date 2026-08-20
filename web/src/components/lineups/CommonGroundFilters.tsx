@@ -23,6 +23,14 @@ interface Props {
      * re-pins `maxPlayers` and silently undoes a deliberate "Any" choice.
      */
     suppressAutoSeed?: boolean;
+    /**
+     * ROK-1400: whether ANY game has been Co-Optimus-synced yet
+     * (`meta.coopDataAvailable`). The co-op filter is Co-Optimus-verified
+     * only, so until a sync has run it could only ever return zero rows —
+     * the entire control stays dormant (unrendered) rather than offering a
+     * toggle that empties the grid. Absent = not available.
+     */
+    coopDataAvailable?: boolean;
 }
 
 // ROK-1297 round 5m: mobile-compliant control sizing.
@@ -231,7 +239,7 @@ function useMaxPlayersIntentCapture(
 }
 
 /** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount, suppressAutoSeed }: Props): JSX.Element {
+export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount, suppressAutoSeed, coopDataAvailable }: Props): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
         [filters, onChange],
@@ -249,11 +257,14 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
                 value={filters.maxPlayers}
                 onChange={(v) => update({ maxPlayers: v })}
             />
-            <CoopGroupSizeFilter
-                value={filters.minOnlineCoop}
-                participantCount={participantCount}
-                onChange={(v) => update({ minOnlineCoop: v })}
-            />
+            {/* Dormant until the catalogue has Co-Optimus data — see Props. */}
+            {coopDataAvailable && (
+                <CoopGroupSizeFilter
+                    value={filters.minOnlineCoop}
+                    participantCount={participantCount}
+                    onChange={(v) => update({ minOnlineCoop: v })}
+                />
+            )}
         </div>
     );
 }

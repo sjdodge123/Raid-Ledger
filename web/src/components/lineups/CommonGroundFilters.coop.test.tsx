@@ -31,7 +31,14 @@ const baseFilters: CommonGroundParams = {
 
 function renderFilters(
     overrides: Partial<CommonGroundParams> = {},
-    props: { onChange?: ReturnType<typeof vi.fn>; participantCount?: number } = {},
+    props: {
+        onChange?: ReturnType<typeof vi.fn>;
+        participantCount?: number;
+        // Round 2: the control is dormant until the catalogue has
+        // Co-Optimus data. Default true so the co-op suites below exercise
+        // the live control; the dormant path has its own describe block.
+        coopDataAvailable?: boolean;
+    } = {},
 ) {
     const onChange = props.onChange ?? vi.fn();
     const result = render(
@@ -41,6 +48,7 @@ function renderFilters(
             search=""
             onSearchChange={vi.fn()}
             participantCount={props.participantCount}
+            coopDataAvailable={props.coopDataAvailable ?? true}
         />,
     );
     return { onChange, ...result };
@@ -82,6 +90,50 @@ describe('CommonGroundFilters — co-op toggle rendering (ROK-1400)', () => {
         expect(
             screen.getByRole('slider', { name: /co-op group size/i }),
         ).toHaveValue('5');
+    });
+});
+
+// Round 2 (operator): the co-op filter is Co-Optimus-verified only, so
+// before any sync it could only ever empty the grid. Keep it fully dormant
+// — not disabled, not empty-stated — until data exists.
+describe('CommonGroundFilters — dormant without co-op data (ROK-1400)', () => {
+    it('renders no co-op toggle when coopDataAvailable is false', () => {
+        renderFilters({}, { coopDataAvailable: false });
+        expect(
+            screen.queryByRole('checkbox', { name: /co-op for our group size/i }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('renders no co-op toggle when coopDataAvailable is omitted entirely', () => {
+        render(
+            <CommonGroundFilters
+                filters={baseFilters}
+                onChange={vi.fn()}
+                search=""
+                onSearchChange={vi.fn()}
+            />,
+        );
+        expect(
+            screen.queryByRole('checkbox', { name: /co-op for our group size/i }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('hides the slider and hint too, even with a stored minOnlineCoop', () => {
+        renderFilters({ minOnlineCoop: 4 }, { coopDataAvailable: false });
+        expect(
+            screen.queryByRole('slider', { name: /co-op group size/i }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByText(/showing games with co-op data/i),
+        ).not.toBeInTheDocument();
+    });
+
+    it('leaves the other filters untouched while dormant', () => {
+        renderFilters({}, { coopDataAvailable: false });
+        expect(
+            screen.getByRole('slider', { name: /min owners/i }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('slider', { name: /players/i })).toBeInTheDocument();
     });
 });
 
