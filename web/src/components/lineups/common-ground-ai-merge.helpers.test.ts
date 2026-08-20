@@ -109,6 +109,26 @@ describe('aiStubMatchesFilters', () => {
         expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
     });
 
+    // ROK-1400: the co-op gate must apply to AI-only stubs too, or they
+    // slip past a filter every server-returned tile obeyed.
+    it('filters out AI stub whose player count is below minOnlineCoop', () => {
+        const stub = aiOnlyStub(makeAi({ playerCount: { min: 1, max: 2 } }));
+        const filters: CommonGroundParams = { minOnlineCoop: 4 };
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
+    });
+
+    it('keeps AI stub whose player count meets minOnlineCoop', () => {
+        const stub = aiOnlyStub(makeAi({ playerCount: { min: 1, max: 8 } }));
+        const filters: CommonGroundParams = { minOnlineCoop: 4 };
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(true);
+    });
+
+    it('filters out AI stub with null playerCount when minOnlineCoop is set', () => {
+        const stub = aiOnlyStub(makeAi({ playerCount: null }));
+        const filters: CommonGroundParams = { minOnlineCoop: 4 };
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
+    });
+
     it('matches against search (case-insensitive, trimmed)', () => {
         const stub = aiOnlyStub(makeAi({ name: 'Baldur’s Gate 3' }));
         expect(aiStubMatchesFilters(stub, {}, '  baldur ')).toBe(true);

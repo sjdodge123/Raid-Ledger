@@ -9,6 +9,7 @@ import type {
     CommonGroundResponseDto,
 } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../../lib/api-client';
+import { resolveEffectiveOnlineMax } from './coop-fit';
 
 /**
  * Promote an AI suggestion that Common Ground didn't return into the
@@ -55,6 +56,20 @@ export function aiStubMatchesFilters(
         if (!(min <= filters.maxPlayers && max >= filters.maxPlayers)) return false;
     }
     if (filters.maxPlayers != null && !stub.playerCount) return false;
+    // ROK-1400: mirror the co-op group-size gate too, otherwise AI-only
+    // stubs slip past a filter the server applied to every other tile.
+    // Stubs carry no Co-Optimus data, so the effective max is the IGDB
+    // player count — and an absent one is excluded, matching the server's
+    // NULL-data semantics.
+    if (filters.minOnlineCoop != null) {
+        const effectiveMax = resolveEffectiveOnlineMax(
+            null,
+            stub.playerCount?.max,
+        );
+        if (effectiveMax == null || effectiveMax < filters.minOnlineCoop) {
+            return false;
+        }
+    }
     if (filters.genre && !stub.itadTags.includes(filters.genre)) return false;
     const q = search.trim().toLowerCase();
     if (q && !stub.gameName.toLowerCase().includes(q)) return false;
