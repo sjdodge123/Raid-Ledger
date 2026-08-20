@@ -31,8 +31,7 @@ export interface CoopFilterableGame {
  * True when any loaded game carries a Co-Optimus signal. Gates the visibility
  * of the four boolean mode toggles (operator decision 2026-08-20): until the
  * first sync lands, those toggles have no data to match and would only empty
- * the grid — so they stay hidden and self-activate the day data arrives. The
- * numeric predicate stays visible regardless (IGDB fallback keeps it useful).
+ * the grid — so they stay hidden and self-activate the day data arrives.
  */
 export function hasAnyCoopData(games: readonly CoopFilterableGame[]): boolean {
     return games.some(
