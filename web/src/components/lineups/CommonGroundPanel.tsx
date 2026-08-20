@@ -156,6 +156,8 @@ function PanelContent({
     mergedData,
     filters,
     setFilters,
+    filtersRestored,
+    coopDataAvailable,
     participantCount,
     isLoading,
     isError,
@@ -171,6 +173,8 @@ function PanelContent({
     mergedData: CommonGroundResponseDto | undefined;
     filters: CommonGroundParams;
     setFilters: (f: CommonGroundParams) => void;
+    filtersRestored: boolean;
+    coopDataAvailable: boolean;
     participantCount: number;
     isLoading: boolean;
     isError: boolean;
@@ -191,6 +195,8 @@ function PanelContent({
                 search={search}
                 onSearchChange={setSearch}
                 participantCount={participantCount}
+                suppressAutoSeed={filtersRestored}
+                coopDataAvailable={coopDataAvailable}
             />
             {isLoading && <LoadingSkeleton />}
             {isError && <ErrorState onRetry={refetch} />}

@@ -17,6 +17,20 @@ interface Props {
      * compatible games immediately. Manual adjustments are preserved.
      */
     participantCount?: number;
+    /**
+     * ROK-1400: skip the ROK-1255 one-shot auto-seed because the filters were
+     * restored from a previous visit. Without this, returning to the panel
+     * re-pins `maxPlayers` and silently undoes a deliberate "Any" choice.
+     */
+    suppressAutoSeed?: boolean;
+    /**
+     * ROK-1400: whether ANY game has been Co-Optimus-synced yet
+     * (`meta.coopDataAvailable`). The co-op filter is Co-Optimus-verified
+     * only, so until a sync has run it could only ever return zero rows —
+     * the entire control stays dormant (unrendered) rather than offering a
+     * toggle that empties the grid. Absent = not available.
+     */
+    coopDataAvailable?: boolean;
 }
 
 // ROK-1297 round 5m: mobile-compliant control sizing.
@@ -53,6 +67,26 @@ function MinOwnersSlider({
     );
 }
 
+/** Free-text game name search. */
+function SearchBox({
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (v: string) => void;
+}): JSX.Element {
+    return (
+        <input
+            type="search"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Search games..."
+            aria-label="Search games"
+            className="min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground placeholder:text-dim w-full focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+        />
+    );
+}
+
 /** Slider for filtering by player count. */
 function PlayersSlider({
     value,
@@ -83,20 +117,115 @@ function PlayersSlider({
     );
 }
 
-/** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount }: Props): JSX.Element {
-    const update = useCallback(
-        (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
-        [filters, onChange],
+/**
+ * Slider for the co-op group size (ROK-1400). Styled to match the Min
+ * owners / Players sliders above — operator review 2026-08-20 asked for a
+ * slider rather than a number box so the whole panel reads as one control
+ * family. Minimum is 1 because the API schema rejects 0.
+ */
+function CoopSizeSlider({
+    value,
+    onChange,
+}: {
+    value: number;
+    onChange: (v: number) => void;
+}): JSX.Element {
+    return (
+        <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
+            <span className="whitespace-nowrap font-medium">Co-op group size</span>
+            <input
+                type="range"
+                min={1}
+                max={16}
+                value={value}
+                onChange={(e) => onChange(Number(e.target.value))}
+                className={SLIDER_CLS}
+            />
+            <span className="text-sm font-mono w-6 text-right text-foreground">
+                {value}
+            </span>
+        </label>
     );
+}
 
-    // ROK-1255: pre-set the player-count filter to the lineup's participant
-    // count the FIRST time we see a known value (>0). Captures intent on
-    // entry to the nomination panel without re-pinning when invitees join
-    // or leave mid-building, and without overriding manual adjustments.
+/**
+ * ROK-1400 co-op group-size filter — opt-in toggle plus the size entry.
+ * Switching ON seeds the size from `participantCount` (min 1); switching
+ * OFF clears it so the server-side filter goes away entirely. While the
+ * filter is active, games with no co-op data at all are excluded by the
+ * API, so we say so rather than letting them vanish silently.
+ */
+function CoopToggle({
+    active,
+    onToggle,
+}: {
+    active: boolean;
+    onToggle: (on: boolean) => void;
+}): JSX.Element {
+    return (
+        <label className="flex items-center gap-2 text-base text-foreground min-h-[44px]">
+            <input
+                type="checkbox"
+                checked={active}
+                onChange={(e) => onToggle(e.target.checked)}
+                className="w-5 h-5 accent-emerald-500"
+            />
+            <span className="whitespace-nowrap font-medium">
+                Co-op for our group size
+            </span>
+        </label>
+    );
+}
+
+/** Opt-in co-op group-size filter: toggle, size entry, NULL-data hint. */
+function CoopGroupSizeFilter({
+    value,
+    participantCount,
+    onChange,
+}: {
+    value: number | undefined;
+    participantCount: number | undefined;
+    onChange: (v: number | undefined) => void;
+}): JSX.Element {
+    const active = value != null;
+    return (
+        <div className="flex flex-col gap-1">
+            <CoopToggle
+                active={active}
+                onToggle={(on) =>
+                    onChange(on ? Math.max(1, participantCount ?? 1) : undefined)
+                }
+            />
+            {active && (
+                <>
+                    <CoopSizeSlider value={value} onChange={onChange} />
+                    <span className="text-xs text-muted">
+                        Only showing games with co-op data
+                    </span>
+                </>
+            )}
+        </div>
+    );
+}
+
+/**
+ * ROK-1255: pre-set the player-count filter to the lineup's participant
+ * count the FIRST time we see a known value (>0). Captures intent on entry
+ * to the nomination panel without re-pinning when invitees join or leave
+ * mid-building, and without overriding manual adjustments.
+ */
+function useMaxPlayersIntentCapture(
+    participantCount: number | undefined,
+    filters: CommonGroundParams,
+    onChange: (next: CommonGroundParams) => void,
+    suppressAutoSeed = false,
+): void {
     const intentCapturedRef = useRef(false);
     useEffect(() => {
         if (intentCapturedRef.current) return;
+        // ROK-1400: restored filters are an explicit prior choice, not a
+        // first visit — never overwrite them with the seed.
+        if (suppressAutoSeed) return;
         // ROK-1348: a brand-new lineup has participantCount === 1 (creator
         // only). Auto-pinning maxPlayers to 1 would filter out every
         // multiplayer game, which is pathological for a co-op nomination
@@ -106,18 +235,20 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
         intentCapturedRef.current = true;
         if (filters.maxPlayers != null) return;
         onChange({ ...filters, maxPlayers: participantCount });
-    }, [participantCount, filters, onChange]);
+    }, [participantCount, filters, onChange, suppressAutoSeed]);
+}
+
+/** Filter bar for the Common Ground panel. */
+export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount, suppressAutoSeed, coopDataAvailable }: Props): JSX.Element {
+    const update = useCallback(
+        (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
+        [filters, onChange],
+    );
+    useMaxPlayersIntentCapture(participantCount, filters, onChange, suppressAutoSeed);
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:repeat(3,minmax(220px,1fr))] gap-3 sm:gap-4 items-center">
-            <input
-                type="search"
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search games..."
-                aria-label="Search games"
-                className="min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground placeholder:text-dim w-full focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
+            <SearchBox value={search} onChange={onSearchChange} />
             <MinOwnersSlider
                 value={filters.minOwners ?? 2}
                 onChange={(v) => update({ minOwners: v })}
@@ -126,6 +257,14 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
                 value={filters.maxPlayers}
                 onChange={(v) => update({ maxPlayers: v })}
             />
+            {/* Dormant until the catalogue has Co-Optimus data — see Props. */}
+            {coopDataAvailable && (
+                <CoopGroupSizeFilter
+                    value={filters.minOnlineCoop}
+                    participantCount={participantCount}
+                    onChange={(v) => update({ minOnlineCoop: v })}
+                />
+            )}
         </div>
     );
 }

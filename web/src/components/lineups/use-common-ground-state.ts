@@ -13,6 +13,7 @@
  * the 300-line soft limit.
  */
 import { useCallback, useMemo, useState } from 'react';
+import { useSessionState } from '../../hooks/use-session-state';
 import type {
     AiSuggestionDto,
     CommonGroundResponseDto,
@@ -28,6 +29,47 @@ import { useAiSuggestionsAvailable } from '../../hooks/use-ai-suggestions-availa
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { mergeAiIntoCommonGround } from './common-ground-ai-merge.helpers';
 
+/** sessionStorage key prefixes for the per-lineup persisted panel state. */
+const FILTERS_KEY_PREFIX = 'common-ground:filters:';
+const SEARCH_KEY_PREFIX = 'common-ground:search:';
+const DEFAULT_FILTERS: CommonGroundParams = { minOwners: 0 };
+
+/** Whole non-negative integer, for the numeric filter fields. */
+function asCount(raw: unknown, min: number): number | undefined {
+    return typeof raw === 'number' && Number.isInteger(raw) && raw >= min
+        ? raw
+        : undefined;
+}
+
+/**
+ * Allow-list sanitizer for persisted filters (ROK-1400 review). Stored JSON
+ * is untrusted — hand-editable, and shape-drifted blobs outlive deploys. Only
+ * known keys with the right type survive; anything else is dropped rather
+ * than handed to consumers that assume the shape (e.g. `search.trim()`).
+ * Returns null only when the blob isn't a plain object at all, which evicts
+ * the entry entirely.
+ */
+function sanitizeFilters(raw: unknown): CommonGroundParams | null {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return null;
+    }
+    const r = raw as Record<string, unknown>;
+    const clean: CommonGroundParams = {};
+    const minOwners = asCount(r.minOwners, 0);
+    if (minOwners !== undefined) clean.minOwners = minOwners;
+    const maxPlayers = asCount(r.maxPlayers, 1);
+    if (maxPlayers !== undefined) clean.maxPlayers = maxPlayers;
+    const minOnlineCoop = asCount(r.minOnlineCoop, 1);
+    if (minOnlineCoop !== undefined) clean.minOnlineCoop = minOnlineCoop;
+    if (typeof r.genre === 'string') clean.genre = r.genre;
+    return clean;
+}
+
+/** Persisted search must be a string — `search.trim()` runs on it. */
+function sanitizeSearch(raw: unknown): string | null {
+    return typeof raw === 'string' ? raw : null;
+}
+
 export interface UseCommonGroundStateResult {
     hasBuilding: boolean;
     mergedData: CommonGroundResponseDto | undefined;
@@ -37,6 +79,21 @@ export interface UseCommonGroundStateResult {
     };
     filters: CommonGroundParams;
     setFilters: (f: CommonGroundParams) => void;
+    /**
+     * True when `filters` came back from sessionStorage (ROK-1400). Callers
+     * pass this to `CommonGroundFilters.suppressAutoSeed` so the ROK-1255
+     * one-shot maxPlayers seed doesn't overwrite a restored "Any" choice on
+     * every remount.
+     */
+    filtersRestored: boolean;
+    /**
+     * ROK-1400: whether the catalogue has any Co-Optimus-synced game
+     * (`meta.coopDataAvailable`, latched). Callers pass it to
+     * `CommonGroundFilters.coopDataAvailable`; while false the co-op control
+     * is not rendered AND any persisted `minOnlineCoop` is withheld from the
+     * request.
+     */
+    coopDataAvailable: boolean;
     search: string;
     setSearch: (v: string) => void;
     /**
@@ -81,22 +138,59 @@ export function useCommonGroundState(
     const resolvedId = propLineupId ?? newestBuilding?.id;
     const hasBuilding = propLineupId != null || !!newestBuilding;
 
-    const [filters, setFilters] = useState<CommonGroundParams>({ minOwners: 0 });
-    const [search, setSearch] = useState('');
+    // ROK-1400 (operator review 2026-08-20): the whole filter set — search,
+    // min owners, players, co-op toggle + size — survives navigating away
+    // and back, keyed per lineup so two lineups don't share a view. Session-
+    // scoped: a fresh browser session starts clean.
+    const {
+        value: filters,
+        setValue: setFilters,
+        restored: filtersRestored,
+    } = useSessionState<CommonGroundParams>(
+        resolvedId != null ? `${FILTERS_KEY_PREFIX}${resolvedId}` : null,
+        DEFAULT_FILTERS,
+        sanitizeFilters,
+    );
+    const { value: search, setValue: setSearch } = useSessionState<string>(
+        resolvedId != null ? `${SEARCH_KEY_PREFIX}${resolvedId}` : null,
+        '',
+        sanitizeSearch,
+    );
+
+    // ROK-1400: latched from `meta.coopDataAvailable` once the first response
+    // lands. Latched (never flips back) so an in-flight refetch can't make the
+    // co-op control blink out from under the user.
+    const [coopDataAvailable, setCoopDataAvailable] = useState(false);
+
+    // Defensive (operator, round 2): the co-op control is dormant until the
+    // catalogue has Co-Optimus data, but filters persisted from an earlier
+    // visit can still carry `minOnlineCoop`. Never send it while the control
+    // is hidden — a filter the user can neither see nor clear must not
+    // silently empty the grid.
+    const effectiveFilters = useMemo(() => {
+        const { minOnlineCoop, ...withoutCoop } = filters;
+        if (coopDataAvailable || minOnlineCoop == null) return filters;
+        return withoutCoop;
+    }, [filters, coopDataAvailable]);
 
     const apiParams = useMemo(
         () => ({
-            ...filters,
+            ...effectiveFilters,
             search: search.trim() || undefined,
             lineupId: resolvedId,
         }),
-        [filters, search, resolvedId],
+        [effectiveFilters, search, resolvedId],
     );
     const debouncedParams = useDebouncedValue(apiParams, 300);
     const { data, isLoading, isError, refetch } = useCommonGround(
         debouncedParams,
         hasBuilding,
     );
+    // Adjust-state-during-render (React docs pattern): promote the flag as
+    // soon as the response carries it, without a cascading-render effect.
+    if (data?.meta.coopDataAvailable === true && !coopDataAvailable) {
+        setCoopDataAvailable(true);
+    }
     // ROK-931: fetch AI suggestions alongside Common Ground and blend
     // them into the same grid. The map drives the ✨ AI badge + tooltip
     // reasoning on matching cards; AI-only games (not owned yet) are
@@ -120,8 +214,17 @@ export function useCommonGroundState(
     }, [aiAvailable, aiQuery.data]);
 
     const mergedData = useMemo(
-        () => mergeAiIntoCommonGround(data, aiSuggestionsByGameId, filters, search),
-        [data, aiSuggestionsByGameId, filters, search],
+        // Effective (not raw) filters: the AI-stub mirror must agree with what
+        // the server was actually asked for, or a dormant co-op filter would
+        // drop stubs the query itself never filtered on (ROK-1400).
+        () =>
+            mergeAiIntoCommonGround(
+                data,
+                aiSuggestionsByGameId,
+                effectiveFilters,
+                search,
+            ),
+        [data, aiSuggestionsByGameId, effectiveFilters, search],
     );
 
     const atCap =
@@ -180,6 +283,8 @@ export function useCommonGroundState(
         rawMeta,
         filters,
         setFilters,
+        filtersRestored,
+        coopDataAvailable,
         search,
         setSearch,
         participantCount,

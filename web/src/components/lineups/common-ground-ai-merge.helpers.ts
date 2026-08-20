@@ -55,6 +55,13 @@ export function aiStubMatchesFilters(
         if (!(min <= filters.maxPlayers && max >= filters.maxPlayers)) return false;
     }
     if (filters.maxPlayers != null && !stub.playerCount) return false;
+    // ROK-1400: mirror the co-op group-size gate too, otherwise AI-only
+    // stubs slip past a filter the server applied to every other tile.
+    // The filter is Co-Optimus-verified only and `AiSuggestionDto` carries
+    // no Co-Optimus fields at all, so every stub is unverified data and an
+    // active co-op filter excludes all of them. (Their IGDB `playerCount`
+    // is a lobby-size estimate and deliberately does NOT qualify.)
+    if (filters.minOnlineCoop != null) return false;
     if (filters.genre && !stub.itadTags.includes(filters.genre)) return false;
     const q = search.trim().toLowerCase();
     if (q && !stub.gameName.toLowerCase().includes(q)) return false;

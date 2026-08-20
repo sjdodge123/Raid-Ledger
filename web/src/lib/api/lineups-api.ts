@@ -19,6 +19,15 @@ import { API_BASE_URL } from '../config';
 export interface CommonGroundParams {
   minOwners?: number;
   maxPlayers?: number;
+  /**
+   * ROK-1400: minimum online co-op group size. Undefined = filter off.
+   * Co-Optimus-verified only — the server applies
+   * `cooptimus_online_max >= N`, so NULL and 0 both fail and only a positive
+   * Co-Optimus value can match. IGDB `playerCount` is a lobby-size estimate
+   * and never satisfies a co-op filter (deliberate; see the comment in
+   * `api/src/lineups/common-ground-query.helpers.ts`).
+   */
+  minOnlineCoop?: number;
   genre?: string;
   search?: string;
   limit?: number;
@@ -43,6 +52,8 @@ export async function getCommonGround(
   const search = new URLSearchParams();
   if (params.minOwners != null) search.set('minOwners', String(params.minOwners));
   if (params.maxPlayers != null) search.set('maxPlayers', String(params.maxPlayers));
+  if (params.minOnlineCoop != null)
+    search.set('minOnlineCoop', String(params.minOnlineCoop));
   if (params.genre) search.set('genre', params.genre);
   if (params.search) search.set('search', params.search);
   if (params.limit != null) search.set('limit', String(params.limit));

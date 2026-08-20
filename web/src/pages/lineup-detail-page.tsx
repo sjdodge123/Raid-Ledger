@@ -285,6 +285,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           onClose={() => { setModalOpen(false); setPreSelectedGame(null); }}
           lineupId={lineup.id}
           preSelectedGame={preSelectedGame}
+          participantCount={lineup.votingEligibleCount}
         />
       )}
 

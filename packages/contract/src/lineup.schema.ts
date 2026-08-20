@@ -367,6 +367,24 @@ export const CommonGroundQuerySchema = z.object({
     /** Minimum library owners. 0 = show all games (including unowned). */
     minOwners: z.coerce.number().int().min(0).max(15).default(2),
     maxPlayers: z.coerce.number().int().positive().optional(),
+    /**
+     * ROK-1400: minimum online co-op group size the game must support.
+     * **Co-Optimus-verified only** — the server applies
+     * `cooptimus_online_max >= minOnlineCoop`, so:
+     *   - a positive `cooptimus_online_max` is the ONLY way to match
+     *   - `0` fails (synced: this game has no online co-op)
+     *   - `NULL` fails (never synced / unverified)
+     *
+     * IGDB `playerCount.max` is a LOBBY-SIZE estimate, not a co-op
+     * capability, and NEVER satisfies this filter — deliberate, after PvP
+     * titles passed a "4+ co-op" filter through an earlier fallback. See the
+     * comment in `api/src/lineups/common-ground-query.helpers.ts`. Note this
+     * diverges from `resolvePlayerCap` (ROK-1411), which does fall back
+     * because it answers a display question.
+     *
+     * Optional + additive — absent leaves the result set unchanged.
+     */
+    minOnlineCoop: z.coerce.number().int().min(1).optional(),
     genre: z.string().optional(),
     /** Case-insensitive game name search (ILIKE). */
     search: z.string().max(100).optional(),
@@ -494,6 +512,15 @@ export const CommonGroundResponseSchema = z.object({
          * filter to auto-set on first mount.
          */
         participantCount: z.number(),
+        /**
+         * ROK-1400: whether ANY game in the catalogue has been synced with
+         * Co-Optimus yet (`cooptimus_synced_at IS NOT NULL`). The co-op
+         * group-size filter is Co-Optimus-verified only, so before the first
+         * sync it could only ever return zero rows — the client keeps the
+         * whole control dormant until this flips true. Optional so existing
+         * fixtures and older clients stay valid; treat absent as `false`.
+         */
+        coopDataAvailable: z.boolean().optional(),
     }),
 });
 
