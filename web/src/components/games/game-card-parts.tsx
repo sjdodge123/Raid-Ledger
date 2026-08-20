@@ -165,16 +165,68 @@ function StarRating({ rating }: { rating: number }): JSX.Element {
     );
 }
 
+/**
+ * Normalise a Co-Optimus player count (ROK-1399).
+ * Only a finite positive number counts as enriched — `0` ("synced, no co-op"),
+ * `null` (never synced) and `undefined` (stale Redis-cached discover row that
+ * predates the field) all mean "render nothing".
+ */
+function positiveCount(value: number | null | undefined): number | null {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
+        ? value
+        : null;
+}
+
+/**
+ * Compact co-op player-count badge (ROK-1399).
+ * Online co-op wins the visible slot; a couch-only game gets a couch badge.
+ * Deliberately carries no attribution — the Co-Optimus credit lives on the
+ * game detail page (ROK-1398), never on the card.
+ */
+function CoopBadge({
+    online,
+    couch,
+}: {
+    online: number | null;
+    couch: number | null;
+}): JSX.Element | null {
+    if (online == null && couch == null) return null;
+    const count = online ?? couch!;
+    const unit = online != null ? 'online' : 'couch';
+    const couchSuffix = online != null && couch != null ? `, ${couch} couch` : '';
+    return (
+        <span
+            data-testid="card-coop-badge"
+            role="img"
+            aria-label={`Co-op: up to ${count} players ${unit}${couchSuffix}`}
+            className="ml-auto inline-flex items-center whitespace-nowrap text-[10px] text-emerald-300"
+        >
+            {`👥 ${count} ${unit}`}
+            {couchSuffix !== '' && (
+                <span aria-hidden="true" className="ml-0.5">
+                    🛋
+                </span>
+            )}
+        </span>
+    );
+}
+
 /** Star rating + mode info bar below card cover. */
 export function InfoBar({
     rating,
     primaryMode,
+    cooptimusOnlineMax,
+    cooptimusCouchMax,
 }: {
     rating: number | null | undefined;
     primaryMode: string | null;
+    cooptimusOnlineMax?: number | null;
+    cooptimusCouchMax?: number | null;
 }): JSX.Element | null {
     const hasRating = rating != null && rating > 0;
-    if (!hasRating && !primaryMode) return null;
+    const online = positiveCount(cooptimusOnlineMax);
+    const couch = positiveCount(cooptimusCouchMax);
+    if (!hasRating && !primaryMode && online == null && couch == null) return null;
     return (
         <div className="p-2.5 space-y-1">
             <div className="flex items-center gap-2 text-xs text-muted">
@@ -185,6 +237,7 @@ export function InfoBar({
                         <span>{primaryMode}</span>
                     </>
                 )}
+                <CoopBadge online={online} couch={couch} />
             </div>
         </div>
     );

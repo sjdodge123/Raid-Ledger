@@ -36,6 +36,10 @@ interface GameProps {
     gameModes?: number[];
     /** When present, renders a small Steam badge on the card cover. */
     steamAppId?: number | null;
+    /** ROK-1399: max online co-op players (Co-Optimus). Drives the info-bar co-op badge. */
+    cooptimusOnlineMax?: number | null;
+    /** ROK-1399: max couch/local co-op players (Co-Optimus). */
+    cooptimusCouchMax?: number | null;
 }
 
 /** Props shared by both variants. */
@@ -203,7 +207,12 @@ function LinkCard(props: LinkVariantProps): JSX.Element {
             />
             <HeartToggleSection gameId={game.id} />
             {showInfoBar && !compact && (
-                <InfoBar rating={rating} primaryMode={primaryMode} />
+                <InfoBar
+                    rating={rating}
+                    primaryMode={primaryMode}
+                    cooptimusOnlineMax={game.cooptimusOnlineMax}
+                    cooptimusCouchMax={game.cooptimusCouchMax}
+                />
             )}
         </Link>
     );

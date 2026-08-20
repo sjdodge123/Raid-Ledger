@@ -333,3 +333,131 @@ describe('UnifiedGameCard — genre badge', () => {
         expect(screen.queryByText('RPG')).not.toBeInTheDocument();
     });
 });
+
+// ── Co-Optimus co-op badge (ROK-1399) ────────────────────────────────────────
+//
+// Proves the two numeric fields are threaded from the DTO through GameProps
+// into the InfoBar badge. Badge behaviour itself is covered in
+// game-card-parts.test.tsx. Spec: planning-artifacts/specs/ROK-1399.md.
+
+const COOP_BADGE = 'card-coop-badge';
+
+describe('UnifiedGameCard — co-op badge (ROK-1399)', () => {
+    it('threads cooptimusOnlineMax through GameProps into the info bar badge', () => {
+        renderCard(
+            <UnifiedGameCard
+                variant="link"
+                showInfoBar
+                game={createBaseGame({
+                    cooptimusOnlineMax: 4,
+                    cooptimusCouchMax: null,
+                })}
+            />,
+        );
+        const badge = screen.getByTestId(COOP_BADGE);
+        expect(badge).toHaveTextContent(/4\s*online/i);
+        expect(badge.textContent).toContain('👥');
+    });
+
+    it('threads a couch-only game through as a couch badge', () => {
+        renderCard(
+            <UnifiedGameCard
+                variant="link"
+                showInfoBar
+                game={createBaseGame({
+                    cooptimusOnlineMax: 0,
+                    cooptimusCouchMax: 2,
+                })}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(/2\s*couch/i);
+    });
+
+    it('renders no badge for an unenriched game and keeps the card intact', () => {
+        const { rerender } = renderCard(
+            <UnifiedGameCard
+                variant="link"
+                showInfoBar
+                game={createBaseGame({
+                    cooptimusOnlineMax: 4,
+                    cooptimusCouchMax: 2,
+                })}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toBeInTheDocument();
+
+        rerender(
+            <MemoryRouter>
+                <UnifiedGameCard
+                    variant="link"
+                    showInfoBar
+                    game={createBaseGame({
+                        cooptimusOnlineMax: null,
+                        cooptimusCouchMax: null,
+                    })}
+                />
+            </MemoryRouter>,
+        );
+        expect(screen.queryByTestId(COOP_BADGE)).not.toBeInTheDocument();
+        expect(screen.getByText('Elden Ring')).toBeInTheDocument();
+    });
+
+    it('survives the stale-cache shape (fields absent entirely)', () => {
+        // Redis-cached discover rows predating the SELECT change carry neither
+        // field. No badge, no crash, no literal "undefined" in the DOM.
+        const { container, rerender } = renderCard(
+            <UnifiedGameCard
+                variant="link"
+                showInfoBar
+                game={createBaseGame({
+                    cooptimusOnlineMax: 4,
+                    cooptimusCouchMax: 2,
+                })}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toBeInTheDocument();
+
+        rerender(
+            <MemoryRouter>
+                <UnifiedGameCard
+                    variant="link"
+                    showInfoBar
+                    game={createBaseGame()}
+                />
+            </MemoryRouter>,
+        );
+        expect(screen.queryByTestId(COOP_BADGE)).not.toBeInTheDocument();
+        expect(container.textContent).not.toMatch(/undefined|NaN/);
+    });
+
+    it('does not add a Co-Optimus attribution line to the card DOM', () => {
+        // Operator decision: the credit lives on the game detail page
+        // (ROK-1398's CoopFeaturesSection footer), never on the card.
+        const { container, rerender } = renderCard(
+            <UnifiedGameCard
+                variant="link"
+                showInfoBar
+                game={createBaseGame({
+                    cooptimusOnlineMax: 4,
+                    cooptimusCouchMax: 2,
+                })}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toBeInTheDocument();
+        expect(container.textContent).not.toMatch(/co-?optimus/i);
+
+        rerender(
+            <MemoryRouter>
+                <UnifiedGameCard
+                    variant="link"
+                    showInfoBar
+                    game={createBaseGame({
+                        cooptimusOnlineMax: 0,
+                        cooptimusCouchMax: 4,
+                    })}
+                />
+            </MemoryRouter>,
+        );
+        expect(container.textContent).not.toMatch(/co-?optimus/i);
+    });
+});
