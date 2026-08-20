@@ -35,6 +35,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 export interface CommonGroundFilters {
   minOwners: number;
   maxPlayers?: number;
+  /** ROK-1400: minimum supported online co-op group size (see SQL below). */
+  minOnlineCoop?: number;
   genre?: string;
   search?: string;
   limit: number;
@@ -145,6 +147,21 @@ function buildWhereConditions(
         (g.player_count->>'min')::int <= ${filters.maxPlayers}
         AND (g.player_count->>'max')::int >= ${filters.maxPlayers}
       )`,
+    );
+  }
+
+  if (filters.minOnlineCoop != null) {
+    // ROK-1400: keep games whose EFFECTIVE online-co-op max >= N, using the
+    // ROK-1411 `resolvePlayerCap` precedence. NULLIF(...,0) is load-bearing:
+    // a ZERO `cooptimus_online_max` means "synced, no online co-op entry",
+    // NOT a capacity of zero, so it must fall THROUGH to the IGDB player
+    // count rather than pinning the effective max at 0. A positive
+    // cooptimus value WINS even when smaller than the IGDB max (Co-Optimus
+    // measures online co-op; IGDB's max is generic lobby capacity).
+    // Both absent ⇒ COALESCE is NULL ⇒ `NULL >= N` is NULL ⇒ row excluded,
+    // which is the AC-2 "no co-op data is filtered out" semantic.
+    conditions.push(
+      sql`(COALESCE(NULLIF(g.cooptimus_online_max, 0), (g.player_count->>'max')::int) >= ${filters.minOnlineCoop})`,
     );
   }
 

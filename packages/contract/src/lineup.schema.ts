@@ -367,6 +367,17 @@ export const CommonGroundQuerySchema = z.object({
     /** Minimum library owners. 0 = show all games (including unowned). */
     minOwners: z.coerce.number().int().min(0).max(15).default(2),
     maxPlayers: z.coerce.number().int().positive().optional(),
+    /**
+     * ROK-1400: minimum online co-op group size the game must support.
+     * When set, a game is kept only when its EFFECTIVE online-co-op max is
+     * `>= minOnlineCoop`, resolved with the ROK-1411 `resolvePlayerCap`
+     * precedence: a POSITIVE `cooptimusOnlineMax` wins over IGDB
+     * `playerCount.max`; a ZERO cooptimus value is a "no online co-op
+     * recorded" claim (not a capacity of 0) so it falls THROUGH to the IGDB
+     * max; both absent ⇒ the game is excluded while the filter is active.
+     * Optional + additive — absent leaves the result set unchanged.
+     */
+    minOnlineCoop: z.coerce.number().int().min(1).optional(),
     genre: z.string().optional(),
     /** Case-insensitive game name search (ILIKE). */
     search: z.string().max(100).optional(),
