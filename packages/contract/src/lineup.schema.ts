@@ -369,12 +369,19 @@ export const CommonGroundQuerySchema = z.object({
     maxPlayers: z.coerce.number().int().positive().optional(),
     /**
      * ROK-1400: minimum online co-op group size the game must support.
-     * When set, a game is kept only when its EFFECTIVE online-co-op max is
-     * `>= minOnlineCoop`, resolved with the ROK-1411 `resolvePlayerCap`
-     * precedence: a POSITIVE `cooptimusOnlineMax` wins over IGDB
-     * `playerCount.max`; a ZERO cooptimus value is a "no online co-op
-     * recorded" claim (not a capacity of 0) so it falls THROUGH to the IGDB
-     * max; both absent ⇒ the game is excluded while the filter is active.
+     * **Co-Optimus-verified only** — the server applies
+     * `cooptimus_online_max >= minOnlineCoop`, so:
+     *   - a positive `cooptimus_online_max` is the ONLY way to match
+     *   - `0` fails (synced: this game has no online co-op)
+     *   - `NULL` fails (never synced / unverified)
+     *
+     * IGDB `playerCount.max` is a LOBBY-SIZE estimate, not a co-op
+     * capability, and NEVER satisfies this filter — deliberate, after PvP
+     * titles passed a "4+ co-op" filter through an earlier fallback. See the
+     * comment in `api/src/lineups/common-ground-query.helpers.ts`. Note this
+     * diverges from `resolvePlayerCap` (ROK-1411), which does fall back
+     * because it answers a display question.
+     *
      * Optional + additive — absent leaves the result set unchanged.
      */
     minOnlineCoop: z.coerce.number().int().min(1).optional(),

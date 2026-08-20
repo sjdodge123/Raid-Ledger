@@ -21,8 +21,11 @@ export interface CommonGroundParams {
   maxPlayers?: number;
   /**
    * ROK-1400: minimum online co-op group size. Undefined = filter off.
-   * Server resolves the effective max with the ROK-1411 precedence
-   * (positive cooptimusOnlineMax wins, zero falls through to IGDB).
+   * Co-Optimus-verified only — the server applies
+   * `cooptimus_online_max >= N`, so NULL and 0 both fail and only a positive
+   * Co-Optimus value can match. IGDB `playerCount` is a lobby-size estimate
+   * and never satisfies a co-op filter (deliberate; see the comment in
+   * `api/src/lineups/common-ground-query.helpers.ts`).
    */
   minOnlineCoop?: number;
   genre?: string;
