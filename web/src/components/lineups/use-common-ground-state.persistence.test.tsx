@@ -146,6 +146,57 @@ describe('useCommonGroundState — filter persistence (ROK-1400)', () => {
         expect(lastRequestedParams()).toMatchObject({ minOnlineCoop: 5 });
     });
 
+    // Reviewer finding: an unvalidated blob restored straight into state, so
+    // a shape-drifted `search` made `search.trim()` throw and took the whole
+    // panel down for the rest of the tab session — and re-took it down on
+    // every remount, since nothing evicted the bad entry.
+    it('survives a corrupt stored blob and falls back to defaults', () => {
+        window.sessionStorage.setItem(
+            `common-ground:filters:${LINEUP}`,
+            JSON.stringify({ minOwners: 'lots', minOnlineCoop: true, evil: {} }),
+        );
+        window.sessionStorage.setItem(
+            `common-ground:search:${LINEUP}`,
+            JSON.stringify(123),
+        );
+
+        const { result } = renderState();
+
+        // No throw, and nothing bad leaked into the request. `search` is
+        // always present as a key; what matters is that the non-string blob
+        // never reached it (that call is what used to throw).
+        expect(result.current.filters).toEqual({});
+        expect(result.current.search).toBe('');
+        expect(lastRequestedParams().search).toBeUndefined();
+        expect(lastRequestedParams()).not.toHaveProperty('evil');
+        expect(lastRequestedParams()).not.toHaveProperty('minOnlineCoop');
+    });
+
+    it('evicts the rejected search blob so remounts stay healthy', () => {
+        window.sessionStorage.setItem(
+            `common-ground:search:${LINEUP}`,
+            JSON.stringify({ not: 'a string' }),
+        );
+
+        renderState().unmount();
+
+        expect(
+            window.sessionStorage.getItem(`common-ground:search:${LINEUP}`),
+        ).toBeNull();
+        expect(() => renderState()).not.toThrow();
+    });
+
+    it('keeps the good fields of a partially-bad filters blob', () => {
+        window.sessionStorage.setItem(
+            `common-ground:filters:${LINEUP}`,
+            JSON.stringify({ minOwners: 3, maxPlayers: 'nope', genre: 'RPG' }),
+        );
+
+        const { result } = renderState();
+
+        expect(result.current.filters).toEqual({ minOwners: 3, genre: 'RPG' });
+    });
+
     it('keys state per lineup — a different lineup starts clean', () => {
         const first = renderState(LINEUP);
         act(() => first.result.current.setFilters({ minOwners: 9 }));

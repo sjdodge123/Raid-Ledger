@@ -9,20 +9,62 @@
  * key derives from is still loading. When the key later changes, the stored
  * value for the NEW key is re-read, so state follows the entity rather than
  * bleeding between entities.
+ *
+ * Stored JSON is UNTRUSTED: it can be hand-edited, or left behind by an
+ * older build whose shape has since drifted. Always pass `validate` when the
+ * consumer would break on an unexpected shape — a restored value that fails
+ * validation is discarded AND evicted, so a bad blob can't wedge the feature
+ * for the rest of the tab session.
  */
 import { useCallback, useState } from 'react';
 
-/** Read a stored value, falling back on absent / corrupt / unavailable. */
-function readStored<T>(key: string | null, fallback: T): T {
-    if (!key || typeof window === 'undefined') return fallback;
+/**
+ * Narrow untrusted parsed JSON to `T`, or return null to reject it.
+ * Prefer allow-list style: copy known keys with checked types, drop the rest.
+ */
+export type SessionStateValidator<T> = (raw: unknown) => T | null;
+
+function removeStored(key: string): void {
+    try {
+        window.sessionStorage.removeItem(key);
+    } catch {
+        // Blocked storage — nothing to evict, nothing to do.
+    }
+}
+
+interface LoadResult<T> {
+    value: T;
+    /** True only when a stored value survived validation. */
+    restored: boolean;
+}
+
+/** Read + validate in one pass so `restored` can't disagree with `value`. */
+function loadStored<T>(
+    key: string | null,
+    initial: T,
+    validate?: SessionStateValidator<T>,
+): LoadResult<T> {
+    if (!key || typeof window === 'undefined') {
+        return { value: initial, restored: false };
+    }
     try {
         const raw = window.sessionStorage.getItem(key);
-        if (raw == null) return fallback;
-        return JSON.parse(raw) as T;
+        if (raw == null) return { value: initial, restored: false };
+        const parsed: unknown = JSON.parse(raw);
+        if (!validate) return { value: parsed as T, restored: true };
+        const validated = validate(parsed);
+        if (validated == null) {
+            // Shape drift or tampering — evict so we don't re-read it on
+            // every mount for the rest of the session.
+            removeStored(key);
+            return { value: initial, restored: false };
+        }
+        return { value: validated, restored: true };
     } catch {
-        // Unparseable payload or sessionStorage blocked (private mode) —
-        // degrade to the fallback rather than taking the panel down.
-        return fallback;
+        // Unparseable payload, or sessionStorage blocked (private mode).
+        // Evicting is best-effort and itself guarded.
+        removeStored(key);
+        return { value: initial, restored: false };
     }
 }
 
@@ -50,11 +92,9 @@ export interface SessionStateResult<T> {
 export function useSessionState<T>(
     key: string | null,
     initial: T,
+    validate?: SessionStateValidator<T>,
 ): SessionStateResult<T> {
-    const [state, setState] = useState(() => ({
-        value: readStored(key, initial),
-        restored: hasStored(key),
-    }));
+    const [state, setState] = useState(() => loadStored(key, initial, validate));
 
     // Adjust-state-during-render (React docs pattern) rather than a sync
     // effect: when the key changes we must swap to that key's stored value
@@ -62,7 +102,7 @@ export function useSessionState<T>(
     const [lastKey, setLastKey] = useState(key);
     if (key !== lastKey) {
         setLastKey(key);
-        setState({ value: readStored(key, initial), restored: hasStored(key) });
+        setState(loadStored(key, initial, validate));
     }
 
     const setValue = useCallback(
@@ -74,14 +114,4 @@ export function useSessionState<T>(
     );
 
     return { value: state.value, setValue, restored: state.restored };
-}
-
-/** Whether a value is actually present for this key. */
-function hasStored(key: string | null): boolean {
-    if (!key || typeof window === 'undefined') return false;
-    try {
-        return window.sessionStorage.getItem(key) != null;
-    } catch {
-        return false;
-    }
 }

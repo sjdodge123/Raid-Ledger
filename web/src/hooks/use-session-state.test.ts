@@ -62,6 +62,58 @@ describe('useSessionState', () => {
         const { result } = renderHook(() => useSessionState('k', 'default'));
         expect(result.current.value).toBe('default');
     });
+
+    it('evicts an unparseable payload so it cannot wedge later mounts', () => {
+        window.sessionStorage.setItem('k', '{not json');
+        renderHook(() => useSessionState('k', 'default'));
+        expect(window.sessionStorage.getItem('k')).toBeNull();
+    });
+});
+
+// Stored JSON is untrusted: hand-editable, and shape-drifted blobs outlive
+// deploys. Without validation a bad blob restores straight into state and
+// takes the consumer down for the whole tab session.
+describe('useSessionState — validate', () => {
+    const asString = (raw: unknown): string | null =>
+        typeof raw === 'string' ? raw : null;
+
+    it('rejects a value of the wrong shape and uses the initial instead', () => {
+        window.sessionStorage.setItem('k', JSON.stringify({ nope: 1 }));
+        const { result } = renderHook(() =>
+            useSessionState('k', 'default', asString),
+        );
+        expect(result.current.value).toBe('default');
+        expect(result.current.restored).toBe(false);
+    });
+
+    it('evicts a rejected value so it is not re-read on every mount', () => {
+        window.sessionStorage.setItem('k', JSON.stringify(42));
+        renderHook(() => useSessionState('k', 'default', asString));
+        expect(window.sessionStorage.getItem('k')).toBeNull();
+    });
+
+    it('passes a valid value through untouched', () => {
+        window.sessionStorage.setItem('k', JSON.stringify('stored'));
+        const { result } = renderHook(() =>
+            useSessionState('k', 'default', asString),
+        );
+        expect(result.current.value).toBe('stored');
+        expect(result.current.restored).toBe(true);
+    });
+
+    it('lets the validator narrow a partially-bad object', () => {
+        window.sessionStorage.setItem(
+            'k',
+            JSON.stringify({ good: 1, bad: 'drop me' }),
+        );
+        const { result } = renderHook(() =>
+            useSessionState<{ good: number }>('k', { good: 0 }, (raw) => {
+                const r = raw as Record<string, unknown>;
+                return typeof r?.good === 'number' ? { good: r.good } : null;
+            }),
+        );
+        expect(result.current.value).toEqual({ good: 1 });
+    });
 });
 
 describe('useSessionState — storage unavailable', () => {

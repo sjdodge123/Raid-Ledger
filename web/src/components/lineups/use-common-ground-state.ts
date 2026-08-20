@@ -34,6 +34,42 @@ const FILTERS_KEY_PREFIX = 'common-ground:filters:';
 const SEARCH_KEY_PREFIX = 'common-ground:search:';
 const DEFAULT_FILTERS: CommonGroundParams = { minOwners: 0 };
 
+/** Whole non-negative integer, for the numeric filter fields. */
+function asCount(raw: unknown, min: number): number | undefined {
+    return typeof raw === 'number' && Number.isInteger(raw) && raw >= min
+        ? raw
+        : undefined;
+}
+
+/**
+ * Allow-list sanitizer for persisted filters (ROK-1400 review). Stored JSON
+ * is untrusted — hand-editable, and shape-drifted blobs outlive deploys. Only
+ * known keys with the right type survive; anything else is dropped rather
+ * than handed to consumers that assume the shape (e.g. `search.trim()`).
+ * Returns null only when the blob isn't a plain object at all, which evicts
+ * the entry entirely.
+ */
+function sanitizeFilters(raw: unknown): CommonGroundParams | null {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return null;
+    }
+    const r = raw as Record<string, unknown>;
+    const clean: CommonGroundParams = {};
+    const minOwners = asCount(r.minOwners, 0);
+    if (minOwners !== undefined) clean.minOwners = minOwners;
+    const maxPlayers = asCount(r.maxPlayers, 1);
+    if (maxPlayers !== undefined) clean.maxPlayers = maxPlayers;
+    const minOnlineCoop = asCount(r.minOnlineCoop, 1);
+    if (minOnlineCoop !== undefined) clean.minOnlineCoop = minOnlineCoop;
+    if (typeof r.genre === 'string') clean.genre = r.genre;
+    return clean;
+}
+
+/** Persisted search must be a string — `search.trim()` runs on it. */
+function sanitizeSearch(raw: unknown): string | null {
+    return typeof raw === 'string' ? raw : null;
+}
+
 export interface UseCommonGroundStateResult {
     hasBuilding: boolean;
     mergedData: CommonGroundResponseDto | undefined;
@@ -113,10 +149,12 @@ export function useCommonGroundState(
     } = useSessionState<CommonGroundParams>(
         resolvedId != null ? `${FILTERS_KEY_PREFIX}${resolvedId}` : null,
         DEFAULT_FILTERS,
+        sanitizeFilters,
     );
     const { value: search, setValue: setSearch } = useSessionState<string>(
         resolvedId != null ? `${SEARCH_KEY_PREFIX}${resolvedId}` : null,
         '',
+        sanitizeSearch,
     );
 
     // ROK-1400: latched from `meta.coopDataAvailable` once the first response
