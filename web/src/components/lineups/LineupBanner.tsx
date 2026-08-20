@@ -261,7 +261,12 @@ export function LineupBanner(): JSX.Element | null {
                 onStartAnother={() => setStartOpen(true)}
             />
             <OtherActiveLineups primaryLineupId={banner.id} />
-            <NominateModal isOpen={nominateOpen} onClose={() => setNominateOpen(false)} lineupId={banner.id} />
+            <NominateModal
+                isOpen={nominateOpen}
+                onClose={() => setNominateOpen(false)}
+                lineupId={banner.id}
+                participantCount={banner.votingEligibleCount}
+            />
             {canStartAnother && (
                 <StartLineupModal isOpen={startOpen} onClose={() => setStartOpen(false)} />
             )}

@@ -10,6 +10,7 @@ import { extractSteamAppId } from '../../hooks/use-steam-paste';
 import { getGameBySteamAppId } from '../../lib/api-client';
 import { toast } from '../../lib/toast';
 import { PersonalSuggestionsRow } from './PersonalSuggestionsRow';
+import { CoopFitHints, type CoopCapacityFields } from './coop-fit';
 
 export interface SelectedGame {
     id: number;
@@ -23,7 +24,16 @@ interface NominateModalProps {
     lineupId: number;
     /** Pre-selected game from paste detection (ROK-945). */
     preSelectedGame?: SelectedGame | null;
+    /**
+     * ROK-1400: live group size used for the advisory co-op fit warning on
+     * search results. Undefined = unknown, so no warning is shown. Never
+     * blocks a nomination.
+     */
+    participantCount?: number;
 }
+
+/** Search-result row shape, incl. the ROK-1400 co-op capacity fields. */
+type SearchResultGame = { id: number; name: string; coverUrl?: string | null } & CoopCapacityFields;
 
 /** Search input for finding games. */
 function SearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }): JSX.Element {
@@ -40,9 +50,10 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 /** Single search result row. */
-function SearchResultItem({ game, onSelect }: {
-    game: { id: number; name: string; coverUrl?: string | null };
+function SearchResultItem({ game, onSelect, participantCount }: {
+    game: SearchResultGame;
     onSelect: (g: SelectedGame) => void;
+    participantCount?: number;
 }): JSX.Element {
     return (
         <button
@@ -56,19 +67,26 @@ function SearchResultItem({ game, onSelect }: {
                 <div className="w-8 h-10 bg-panel rounded flex items-center justify-center text-dim text-xs">?</div>
             )}
             <span className="text-sm text-foreground truncate">{game.name}</span>
+            <CoopFitHints game={game} participantCount={participantCount} />
         </button>
     );
 }
 
 /** List of search results. */
-function SearchResults({ results, onSelect }: {
-    results: { id: number; name: string; coverUrl?: string | null }[];
+function SearchResults({ results, onSelect, participantCount }: {
+    results: SearchResultGame[];
     onSelect: (g: SelectedGame) => void;
+    participantCount?: number;
 }): JSX.Element {
     return (
         <div className="space-y-1 max-h-60 overflow-y-auto">
             {results.map((game) => (
-                <SearchResultItem key={game.id} game={game} onSelect={onSelect} />
+                <SearchResultItem
+                    key={game.id}
+                    game={game}
+                    onSelect={onSelect}
+                    participantCount={participantCount}
+                />
             ))}
         </div>
     );
@@ -162,7 +180,7 @@ function useSteamUrlAutoResolve(
 }
 
 /** Game nomination modal with search and preview. */
-export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: NominateModalProps): JSX.Element {
+export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame, participantCount }: NominateModalProps): JSX.Element {
     const [query, setQuery] = useState('');
     const [selected, setSelected] = useState<SelectedGame | null>(null);
     const [note, setNote] = useState('');
@@ -232,7 +250,13 @@ export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame }: No
                 <>
                     <SearchInput value={query} onChange={setQuery} />
                     {searchLoading && <p className="text-sm text-muted py-4 text-center">Searching...</p>}
-                    {results.length > 0 && <SearchResults results={results} onSelect={handleSelect} />}
+                    {results.length > 0 && (
+                        <SearchResults
+                            results={results}
+                            onSelect={handleSelect}
+                            participantCount={participantCount}
+                        />
+                    )}
                     {query.length >= 2 && !searchLoading && results.length === 0 && (
                         <p className="text-sm text-muted py-4 text-center">No games found</p>
                     )}

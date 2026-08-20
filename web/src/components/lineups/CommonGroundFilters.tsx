@@ -2,7 +2,7 @@
  * Filter controls for the Common Ground panel (ROK-934).
  * Min owners slider, genre dropdown, max players input.
  */
-import { type JSX, useCallback, useEffect, useRef } from 'react';
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import type { CommonGroundParams } from '../../lib/api-client';
 
 interface Props {
@@ -83,6 +83,87 @@ function PlayersSlider({
     );
 }
 
+/**
+ * Number entry for the co-op group size (ROK-1400). Keeps its own text
+ * state so clearing the box doesn't fight the controlled `value` prop —
+ * an empty box simply emits nothing and leaves the active filter alone
+ * until a real number is typed.
+ */
+function CoopSizeInput({
+    value,
+    onChange,
+}: {
+    value: number;
+    onChange: (v: number) => void;
+}): JSX.Element {
+    const [text, setText] = useState(String(value));
+    useEffect(() => setText(String(value)), [value]);
+    return (
+        <label className="flex items-center gap-2 text-sm text-foreground">
+            <span className="whitespace-nowrap">Co-op group size</span>
+            <input
+                type="number"
+                min={1}
+                value={text}
+                onChange={(e) => {
+                    setText(e.target.value);
+                    const parsed = Number.parseInt(e.target.value, 10);
+                    if (Number.isFinite(parsed) && parsed >= 1) onChange(parsed);
+                }}
+                className="min-h-[44px] w-20 bg-panel border border-edge rounded-md px-2 py-1 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            />
+        </label>
+    );
+}
+
+/**
+ * ROK-1400 co-op group-size filter — opt-in toggle plus the size entry.
+ * Switching ON seeds the size from `participantCount` (min 1); switching
+ * OFF clears it so the server-side filter goes away entirely. While the
+ * filter is active, games with no co-op data at all are excluded by the
+ * API, so we say so rather than letting them vanish silently.
+ */
+function CoopGroupSizeFilter({
+    value,
+    participantCount,
+    onChange,
+}: {
+    value: number | undefined;
+    participantCount: number | undefined;
+    onChange: (v: number | undefined) => void;
+}): JSX.Element {
+    const active = value != null;
+    return (
+        <div className="flex flex-col gap-1">
+            <label className="flex items-center gap-2 text-base text-foreground min-h-[44px]">
+                <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={(e) =>
+                        onChange(
+                            e.target.checked
+                                ? Math.max(1, participantCount ?? 1)
+                                : undefined,
+                        )
+                    }
+                    className="w-5 h-5 accent-emerald-500"
+                />
+                <span className="whitespace-nowrap font-medium">
+                    Co-op for our group size
+                </span>
+            </label>
+            {active && (
+                <>
+                    <CoopSizeInput value={value} onChange={onChange} />
+                    <span className="text-xs text-muted">
+                        Only showing games with co-op data
+                    </span>
+                </>
+            )}
+        </div>
+    );
+}
+
 /** Filter bar for the Common Ground panel. */
 export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount }: Props): JSX.Element {
     const update = useCallback(
@@ -125,6 +206,11 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
             <PlayersSlider
                 value={filters.maxPlayers}
                 onChange={(v) => update({ maxPlayers: v })}
+            />
+            <CoopGroupSizeFilter
+                value={filters.minOnlineCoop}
+                participantCount={participantCount}
+                onChange={(v) => update({ minOnlineCoop: v })}
             />
         </div>
     );
