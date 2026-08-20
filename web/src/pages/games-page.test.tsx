@@ -795,10 +795,18 @@ describe('GamesPage — ROK-1402: co-op FilterPanel — part 2', () => {
     });
 
     it('does not crash on stale rows whose co-op fields are absent', () => {
+        // Paired with an enriched row: under full dormancy a library with no
+        // co-op data at all renders no controls, so the stale-shape safety this
+        // test guards is only reachable once something else has been synced.
         const staleGame = { ...mockGame, id: 20, name: 'Stale Row Game', genres: [12] } as Record<string, unknown>;
         delete staleGame.playerCount;
         vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
-            data: { rows: [{ slug: 'stale', category: 'Stale Row', games: [staleGame] }] },
+            data: {
+                rows: [
+                    { slug: 'coop-row', category: 'Coop Row', games: [coopRpgGame] },
+                    { slug: 'stale', category: 'Stale Row', games: [staleGame] },
+                ],
+            },
             isLoading: false,
             error: null,
         } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
@@ -809,6 +817,7 @@ describe('GamesPage — ROK-1402: co-op FilterPanel — part 2', () => {
 
         expect(screen.getByTestId(COOP_HINT)).toBeInTheDocument();
         expect(rowCount('Stale Row')).toBe(0);
+        expect(rowCount('Coop Row')).toBeGreaterThan(0);
     });
 });
 
@@ -869,30 +878,49 @@ function mockNoCoopDiscover() {
     } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
 }
 
-describe('GamesPage — ROK-1402: mode toggles gated on data presence', () => {
+describe('GamesPage — ROK-1402: the whole section is dormant without co-op data', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         isDesktopViewport = true;
         mockSearch();
     });
 
-    it('hides the four mode toggles when no loaded game has Co-Optimus data', () => {
+    it('renders no trigger, no slider and no toggles when nothing has co-op data', () => {
         mockNoCoopDiscover();
         renderPage();
-        openCoopPanel();
-        expect(screen.getByLabelText(/min online players/i)).toBeInTheDocument();
+
+        // Pre-activation the page must look exactly as it did before ROK-1402.
+        expect(screen.queryByRole('button', { name: /^filters$/i })).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/min online players/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/couch co-op/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/lan co-op/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/split-screen/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/co-op campaign/i)).not.toBeInTheDocument();
+        // The genre FAB — the page's pre-existing filter affordance — is untouched.
+        expect(screen.getByRole('button', { name: /genre filter/i })).toBeInTheDocument();
     });
 
-    it('shows the mode toggles when at least one loaded game is enriched', () => {
+    it('activates the whole section once one loaded game is enriched', () => {
         mockCoopDiscover();
         renderPage();
+
+        expect(screen.getByRole('button', { name: /^filters$/i })).toBeInTheDocument();
         openCoopPanel();
+        expect(screen.getByLabelText(/min online players/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/couch co-op/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/co-op campaign/i)).toBeInTheDocument();
+    });
+
+    it('ignores a stored filter when the library has no co-op data', () => {
+        // The section is hidden, so a restored predicate would empty the grid
+        // with no control on screen to undo it. It must go inert instead.
+        sessionStorage.setItem('games-coop-filters', JSON.stringify({ onlineMinPlayers: 4 }));
+        mockNoCoopDiscover();
+        renderPage();
+
+        expect(rowCount('Solo Row')).toBeGreaterThan(0);
+        expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^filters$/i })).not.toBeInTheDocument();
     });
 });
 

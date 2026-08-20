@@ -94,12 +94,15 @@ test.describe('Regression: ROK-813 — games page mobile search styling', () => 
 //   enriched     cooptimusOnlineMax 4, splitscreen/campaign true
 //   syncedEmpty  synced, every co-op column null  -> excluded, hint shown
 //   unsynced     never synced, every column null  -> excluded, hint shown
-// None of the three carries an IGDB playerCount, so the precedence rule has no
-// fallback for the two null rows and they drop out of any active predicate.
+// Strict semantics (operator 2026-08-20): only `cooptimusOnlineMax` feeds the
+// numeric predicate — there is no IGDB `playerCount` fallback — so both null
+// rows drop out of any active predicate.
 //
-// The filter is applied BEFORE the search query is typed so the assertion holds
-// regardless of whether the trigger is also rendered during search — what AC2
-// requires is that the predicate and the query intersect.
+// Every test searches for the fixtures BEFORE touching the filter. The section
+// is fully dormant until some loaded game carries co-op data, and the seeded
+// fixtures reach the page through search rather than the curated discover rows,
+// so the search is what activates the trigger on a demo-seeded library. It also
+// keeps AC2 honest: the predicate and the query must intersect.
 //
 // The Co-Optimus HTTP user-agent is deliberately never referenced here.
 // ---------------------------------------------------------------------------
@@ -174,8 +177,10 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
         );
     });
 
-    test('the co-op filter trigger is present on the discover tab', async ({ page }) => {
+    test('the co-op filter trigger appears once co-op data is loaded', async ({ page }) => {
         await page.goto('/games');
+        await searchGames(page, FIXTURE_QUERY);
+
         await expect(page.getByRole('button', { name: /^filters$/i })).toBeVisible({
             timeout: 15_000,
         });
@@ -183,8 +188,8 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
 
     test('an active co-op predicate excludes games with no co-op data', async ({ page }) => {
         await page.goto('/games');
-        await applyOnlineCoopFilter(page, 4);
         await searchGames(page, FIXTURE_QUERY);
+        await applyOnlineCoopFilter(page, 4);
 
         // Enriched fixture (online max 4) survives "4+ online players".
         await expect(visibleGameLink(page, seed.enrichedGameId)).toBeVisible({
@@ -198,6 +203,7 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
 
     test('an active co-op predicate renders the co-op-data hint', async ({ page }) => {
         await page.goto('/games');
+        await searchGames(page, FIXTURE_QUERY);
         await expect(page.locator(COOP_HINT)).toHaveCount(0);
 
         await applyOnlineCoopFilter(page, 4);
@@ -209,8 +215,8 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
 
     test('clearing the co-op predicate restores the excluded games', async ({ page }) => {
         await page.goto('/games');
-        await applyOnlineCoopFilter(page, 4);
         await searchGames(page, FIXTURE_QUERY);
+        await applyOnlineCoopFilter(page, 4);
         await expect(page.locator(`a[href="/games/${seed.syncedEmptyGameId}"]`)).toHaveCount(0);
 
         await applyOnlineCoopFilter(page, 0);

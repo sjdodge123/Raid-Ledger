@@ -16,7 +16,7 @@ import { LineupBanner } from "../components/lineups/LineupBanner";
 import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
 import { GENRE_FILTERS } from "./games/games-constants";
 import { CoopFilterSection } from "./games/coop-filter-section";
-import { applyCoopFilters, hasAnyCoopData, type CoopFilterState } from "./games/coop-filter.helpers";
+import { applyCoopFilters, hasAnyCoopData, EMPTY_COOP_FILTERS, type CoopFilterState } from "./games/coop-filter.helpers";
 import { useCoopFilterState } from "./games/use-coop-filter-state";
 import { DiscoverContent, type PricingMap } from "./games-page-discover";
 import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
@@ -45,16 +45,8 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
   const { data: searchData, isLoading: searchLoading } = useGameSearch(searchQuery, searchQuery.length >= 2);
   const isSearching = searchQuery.length >= 2;
   const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
-  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters, coopFilters);
-  const searchResults = searchData?.data ? applyCoopFilters(searchData.data, coopFilters) : searchData?.data;
-  const searchSource = searchData?.meta?.source;
-  const allGameIds = useMemo(() => {
-    const ids: number[] = [];
-    if (filteredRows) for (const row of filteredRows) for (const game of row.games) ids.push(game.id);
-    if (searchResults) for (const game of searchResults) ids.push(game.id);
-    return ids;
-  }, [filteredRows, searchResults]);
-  // Computed over RAW rows (pre-filter) so the toggles don't vanish while active.
+  // Computed over RAW rows (pre-filter) so the section doesn't vanish while a
+  // filter is active and has narrowed the grid down to nothing.
   const coopDataAvailable = useMemo(
     () =>
       hasAnyCoopData([
@@ -63,6 +55,18 @@ function useGamesData(searchQuery: string, selectedGenres: Set<string>, coopFilt
       ]),
     [discoverData, searchData],
   );
+  // Dormant page ⇒ no controls are on screen, so a filter restored from
+  // sessionStorage must not invisibly empty a grid the user cannot unfilter.
+  const effectiveCoopFilters = coopDataAvailable ? coopFilters : EMPTY_COOP_FILTERS;
+  const filteredRows = filterDiscoverRows(discoverData?.rows, activeFilters, effectiveCoopFilters);
+  const searchResults = searchData?.data ? applyCoopFilters(searchData.data, effectiveCoopFilters) : searchData?.data;
+  const searchSource = searchData?.meta?.source;
+  const allGameIds = useMemo(() => {
+    const ids: number[] = [];
+    if (filteredRows) for (const row of filteredRows) for (const game of row.games) ids.push(game.id);
+    if (searchResults) for (const game of searchResults) ids.push(game.id);
+    return ids;
+  }, [filteredRows, searchResults]);
   return { discoverLoading, searchLoading, isSearching, filteredRows, searchResults, searchSource, allGameIds, coopDataAvailable };
 }
 
@@ -119,15 +123,17 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
   return (
     <WantToPlayProvider gameIds={data.allGameIds}>
       <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} />
-      <CoopFilterSection
-        filters={state.coopFilters}
-        onFiltersChange={state.setCoopFilters}
-        isOpen={state.coopPanelOpen}
-        onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
-        onClose={() => state.setCoopPanelOpen(false)}
-        resultCount={data.allGameIds.length}
-        coopDataAvailable={data.coopDataAvailable}
-      />
+      {/* Dormant until the first Co-Optimus sync lands — trigger included. */}
+      {data.coopDataAvailable && (
+        <CoopFilterSection
+          filters={state.coopFilters}
+          onFiltersChange={state.setCoopFilters}
+          isOpen={state.coopPanelOpen}
+          onToggleOpen={() => state.setCoopPanelOpen((open) => !open)}
+          onClose={() => state.setCoopPanelOpen(false)}
+          resultCount={data.allGameIds.length}
+        />
+      )}
       {!data.isSearching && <DesktopGenrePills selectedGenres={state.selectedGenres} onGenresChange={state.setSelectedGenres} />}
       {data.isSearching ? (
         <SearchResults searchLoading={data.searchLoading} searchResults={data.searchResults} searchSource={data.searchSource} searchQuery={state.searchQuery} pricingMap={pricingMap} />

@@ -27,19 +27,20 @@ const COOP_TOGGLES: { key: ToggleKey; label: string }[] = [
 interface CoopFilterControlsProps {
     state: CoopFilterState;
     onChange: (next: CoopFilterState) => void;
-    /** Co-Optimus-only toggles hide until enrichment data exists (see `hasAnyCoopData`). */
-    showModeToggles: boolean;
 }
 
-/** Panel body: online-player minimum plus the co-op mode toggles. */
-export function CoopFilterControls({ state, onChange, showModeToggles }: CoopFilterControlsProps): JSX.Element {
+/**
+ * Panel body: online-player minimum plus the co-op mode toggles. The whole
+ * section is gated on co-op data existing (see `hasAnyCoopData`), so by the time
+ * this renders every control has data to match against.
+ */
+export function CoopFilterControls({ state, onChange }: CoopFilterControlsProps): JSX.Element {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <MinOnlinePlayersSlider
                 value={state.onlineMinPlayers}
                 onChange={(onlineMinPlayers) => onChange({ ...state, onlineMinPlayers })}
             />
-            {showModeToggles && (
             <fieldset>
                 <legend className="text-xs font-medium text-muted mb-2">Co-op modes</legend>
                 <div className="flex flex-wrap gap-3">
@@ -53,7 +54,6 @@ export function CoopFilterControls({ state, onChange, showModeToggles }: CoopFil
                     ))}
                 </div>
             </fieldset>
-            )}
         </div>
     );
 }
@@ -66,7 +66,7 @@ function MinOnlinePlayersSlider({ value, onChange }: {
     const current = value ?? 0;
     return (
         <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
-            <span className="whitespace-nowrap font-medium">Online</span>
+            <span className="whitespace-nowrap font-medium">Online co-op</span>
             <input
                 type="range"
                 aria-label="Min online players"

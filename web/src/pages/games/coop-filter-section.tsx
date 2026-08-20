@@ -2,6 +2,11 @@
  * ROK-1402 — co-op filter trigger + panel + NULL-semantics hint for the games
  * library page. Rendered on the discover tab regardless of the search query so
  * the predicates compose with search as well as with the genre pills.
+ *
+ * The caller renders this only once some loaded game carries Co-Optimus data
+ * (operator decision 2026-08-20 — full dormancy): before the first sync there
+ * is nothing to filter on, so the page must look exactly as it did before this
+ * story, trigger included.
  */
 import { useEffect, type JSX } from 'react';
 import { FilterPanel, FilterPanelTrigger } from '../../components/ui/filter-panel';
@@ -19,8 +24,6 @@ interface CoopFilterSectionProps {
     onToggleOpen: () => void;
     onClose: () => void;
     resultCount: number;
-    /** Any loaded game carries Co-Optimus data — gates the mode toggles. */
-    coopDataAvailable: boolean;
 }
 
 /** Closes the desktop inline panel on Escape (the BottomSheet handles its own). */
@@ -43,7 +46,6 @@ export function CoopFilterSection({
     onToggleOpen,
     onClose,
     resultCount,
-    coopDataAvailable,
 }: CoopFilterSectionProps): JSX.Element {
     const activeFilterCount = countActiveCoopFilters(filters);
     useEscapeToClose(isOpen, onClose);
@@ -61,7 +63,7 @@ export function CoopFilterSection({
                 isOpen={isOpen}
                 onToggle={onClose}
             >
-                <CoopFilterControls state={filters} onChange={onFiltersChange} showModeToggles={coopDataAvailable} />
+                <CoopFilterControls state={filters} onChange={onFiltersChange} />
             </FilterPanel>
         </div>
     );
