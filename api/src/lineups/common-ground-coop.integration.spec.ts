@@ -6,14 +6,17 @@
  * not exist yet, so `CommonGroundQuerySchema` strips it and the query is
  * unfiltered). The dev agent builds to make them pass.
  *
- * Precedence rule under test (mirrors `resolvePlayerCap`, ROK-1411):
- *   effective online max = cooptimus_online_max when > 0,
- *                          else player_count->>'max',
- *                          else NULL (row excluded while the filter is on).
+ * Precedence rule under test (operator-ratified 2026-08-20):
+ *   cooptimus_online_max NOT NULL → use it, INCLUDING zero
+ *   cooptimus_online_max NULL     → else player_count->>'max'
+ *   both NULL                     → row excluded while the filter is on
  *
- * A ZERO `cooptimus_online_max` is a co-op-capability claim ("no online
- * co-op recorded"), NOT a capacity of zero — it falls THROUGH to the IGDB
- * player count rather than excluding the row.
+ * A ZERO `cooptimus_online_max` is a synced "this game has NO online co-op"
+ * claim, so it resolves to 0 and FAILS every group size. It must NOT fall
+ * through to the IGDB player count — PvP titles carry a large IGDB lobby
+ * capacity that has nothing to do with co-op. This deliberately diverges
+ * from `resolvePlayerCap` (ROK-1411), which treats zero as absent because
+ * it answers a display question, not a filter-correctness one.
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -221,22 +224,34 @@ function describeCommonGroundCoop() {
     describePrecedence,
   );
 
-  // ── Zero falls through (the ROK-1411 edge case) ──────────────
+  // ── Zero is an explicit "no online co-op" claim ──────────────
+  //
+  // Operator-ratified 2026-08-20 (spike §5 filter correctness). A synced
+  // `cooptimus_online_max = 0` means "we checked, this game has NO online
+  // co-op", so it must FAIL the filter outright. It must NOT fall through
+  // to the IGDB player count — PUBG-class PvP titles carry a large IGDB
+  // lobby capacity that has nothing to do with co-op, and falling through
+  // would let them pass a "4+ co-op" filter.
 
-  function describeZeroFallthrough() {
-    it('treats cooptimus_online_max = 0 as absent and USES the IGDB max (included)', async () => {
+  function describeZeroExcluded() {
+    it('EXCLUDES cooptimus_online_max = 0 even when the IGDB max is large', async () => {
       await createBuildingLineup();
-      // Synced with Co-Optimus, no online co-op entry recorded (0), but
-      // IGDB knows it supports 8. Zero must NOT exclude the row.
+      // Synced with Co-Optimus, no online co-op recorded (0), but IGDB
+      // claims 8 (generic lobby capacity). Zero WINS — the row is out.
       const zeroWithBigIgdb = await insertOwnedGame('Zero Coop Big Igdb', {
         cooptimusOnlineMax: 0,
         playerCount: { min: 1, max: 8 },
       });
-      // Control: same zero, tiny IGDB max — must NOT come back.
       const zeroWithTinyIgdb = await insertOwnedGame('Zero Coop Tiny Igdb', {
         cooptimusOnlineMax: 0,
         playerCount: { min: 1, max: 1 },
       });
+      // Positive control: proves the query still returns rows, so the two
+      // exclusions above are the filter working rather than an empty page.
+      const genuineCoop = await insertOwnedGame('Genuine Coop', {
+        cooptimusOnlineMax: 6,
+        playerCount: null,
+      });
 
       const { status, ids } = await fetchGameIds({
         minOwners: 1,
@@ -244,27 +259,35 @@ function describeCommonGroundCoop() {
       });
 
       expect(status).toBe(200);
-      expect(ids).toContain(zeroWithBigIgdb);
+      expect(ids).toContain(genuineCoop);
+      expect(ids).not.toContain(zeroWithBigIgdb);
       expect(ids).not.toContain(zeroWithTinyIgdb);
     });
 
-    it('treats cooptimus_online_max = 0 as absent and EXCLUDES when the IGDB max is too small', async () => {
+    it('EXCLUDES cooptimus_online_max = 0 at the smallest possible N (1)', async () => {
       await createBuildingLineup();
+      // N=1 is the loosest filter the schema allows; a zero must still fail
+      // it, which is only true if zero is compared rather than skipped.
       const zeroWithSmallIgdb = await insertOwnedGame('Zero Coop Small Igdb', {
         cooptimusOnlineMax: 0,
         playerCount: { min: 1, max: 2 },
       });
+      const oneCoop = await insertOwnedGame('Solo Coop', {
+        cooptimusOnlineMax: 1,
+        playerCount: null,
+      });
 
       const { status, ids } = await fetchGameIds({
         minOwners: 1,
-        minOnlineCoop: 4,
+        minOnlineCoop: 1,
       });
 
       expect(status).toBe(200);
+      expect(ids).toContain(oneCoop);
       expect(ids).not.toContain(zeroWithSmallIgdb);
     });
 
-    it('excludes cooptimus_online_max = 0 with NULL player_count (nothing to fall through to)', async () => {
+    it('excludes cooptimus_online_max = 0 with NULL player_count', async () => {
       await createBuildingLineup();
       const zeroAndNull = await insertOwnedGame('Zero And Null', {
         cooptimusOnlineMax: 0,
@@ -281,8 +304,8 @@ function describeCommonGroundCoop() {
     });
   }
   describe(
-    'minOnlineCoop — zero falls through to IGDB',
-    describeZeroFallthrough,
+    'minOnlineCoop — zero is an explicit no-online-co-op claim',
+    describeZeroExcluded,
   );
 
   // ── NULL-data semantics (AC 2) ───────────────────────────────

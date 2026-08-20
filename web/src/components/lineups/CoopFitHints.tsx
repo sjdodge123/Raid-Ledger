@@ -30,7 +30,9 @@ export function CoopFitHints({
                 data-testid="coop-max-badge"
                 className="px-1.5 py-0.5 rounded bg-panel border border-edge text-[10px] text-muted whitespace-nowrap"
             >
-                Up to {max} online
+                {/* A synced zero is "no online co-op", not a capacity of 0 —
+                    "Up to 0 online" would read as a data glitch. */}
+                {max === 0 ? 'No online co-op' : `Up to ${max} online`}
             </span>
             {tooSmall && (
                 <span className="text-[10px] text-amber-400 whitespace-nowrap">

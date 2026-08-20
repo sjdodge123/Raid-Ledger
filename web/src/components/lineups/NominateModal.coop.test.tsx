@@ -7,9 +7,9 @@
  *  - `NominateModal` gains `participantCount?: number`.
  *  - Each search-result row renders an element with
  *    `data-testid="coop-max-badge"` whose text contains the EFFECTIVE
- *    online-co-op max, resolved with the ROK-1411 precedence:
- *      positive `cooptimusOnlineMax` wins → else `playerCount.max`
- *      → else no badge at all.
+ *    online-co-op max (operator-ratified 2026-08-20):
+ *      `cooptimusOnlineMax` non-null wins INCLUDING zero (rendered as
+ *      "No online co-op") → else `playerCount.max` → else no badge at all.
  *  - When an effective max exists AND is < `participantCount`, the row
  *    also renders soft warning copy matching
  *    /may not fit your group of {participantCount}/i.
@@ -104,7 +104,10 @@ describe('NominateModal — co-op badge precedence (ROK-1400)', () => {
         expect(screen.getByTestId('coop-max-badge')).toHaveTextContent('8');
     });
 
-    it('treats cooptimusOnlineMax = 0 as absent and uses playerCount.max', () => {
+    // Operator-ratified 2026-08-20: a synced zero means "no online co-op",
+    // so it resolves to 0 rather than falling through to the IGDB number —
+    // the modal must agree with the picker's filter.
+    it('treats cooptimusOnlineMax = 0 as "no online co-op", NOT the playerCount.max', () => {
         mockResults([
             {
                 id: 42,
@@ -116,7 +119,26 @@ describe('NominateModal — co-op badge precedence (ROK-1400)', () => {
         renderWithProviders(
             <NominateModal isOpen onClose={vi.fn()} lineupId={1} participantCount={4} />,
         );
-        expect(screen.getByTestId('coop-max-badge')).toHaveTextContent('6');
+        const badge = screen.getByTestId('coop-max-badge');
+        expect(badge).toHaveTextContent(/no online co-op/i);
+        expect(badge).not.toHaveTextContent('6');
+    });
+
+    it('warns for a zero-co-op game because the effective max is 0', () => {
+        mockResults([
+            {
+                id: 42,
+                name: 'Valheim',
+                cooptimusOnlineMax: 0,
+                playerCount: { min: 1, max: 6 },
+            },
+        ]);
+        renderWithProviders(
+            <NominateModal isOpen onClose={vi.fn()} lineupId={1} participantCount={4} />,
+        );
+        expect(
+            screen.getByText(/may not fit your group of 4/i),
+        ).toBeInTheDocument();
     });
 
     it('renders no badge when there is no co-op data at all', () => {
