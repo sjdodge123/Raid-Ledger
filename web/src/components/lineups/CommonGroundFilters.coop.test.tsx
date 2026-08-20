@@ -7,8 +7,9 @@
  * Prescribed contract:
  *  - `CommonGroundParams.minOnlineCoop?: number` (wired to the API param).
  *  - A checkbox with accessible name /co-op for our group size/i.
- *  - A number control with accessible name /co-op group size/i, rendered
- *    only while the toggle is on.
+ *  - A range slider with accessible name /co-op group size/i, rendered
+ *    only while the toggle is on (operator review 2026-08-20 — matches the
+ *    Min owners / Players sliders rather than a number box).
  *  - Hint copy `showing games with co-op data` while the toggle is on.
  *  - Toggling ON seeds `minOnlineCoop` from `participantCount` (min 1);
  *    toggling OFF clears it to `undefined`.
@@ -70,15 +71,17 @@ describe('CommonGroundFilters — co-op toggle rendering (ROK-1400)', () => {
     it('does NOT render the group-size control while the toggle is off', () => {
         renderFilters({ minOnlineCoop: undefined });
         expect(
-            screen.queryByRole('spinbutton', { name: /co-op group size/i }),
+            screen.queryByRole('slider', { name: /co-op group size/i }),
         ).not.toBeInTheDocument();
     });
 
     it('renders the group-size control with the active value while the toggle is on', () => {
         renderFilters({ minOnlineCoop: 5 });
+        // Range inputs report their value as a string, matching the assertion
+        // style of the sibling Min owners / Players slider tests.
         expect(
-            screen.getByRole('spinbutton', { name: /co-op group size/i }),
-        ).toHaveValue(5);
+            screen.getByRole('slider', { name: /co-op group size/i }),
+        ).toHaveValue('5');
     });
 });
 
@@ -186,14 +189,19 @@ describe('CommonGroundFilters — co-op clearable (ROK-1400)', () => {
 });
 
 describe('CommonGroundFilters — co-op manual adjustment (ROK-1400)', () => {
-    it('emits the adjusted value when the group-size control changes', async () => {
-        const user = userEvent.setup();
+    it('emits the adjusted value when the group-size slider changes', () => {
         const onChange = vi.fn();
         renderFilters({ minOnlineCoop: 4 }, { onChange, participantCount: 4 });
 
-        const input = screen.getByRole('spinbutton', { name: /co-op group size/i });
-        await user.clear(input);
-        await user.type(input, '6');
+        const slider = screen.getByRole('slider', { name: /co-op group size/i });
+        // Range inputs require the native value setter + a change event —
+        // same mechanism the sibling Min owners slider test uses.
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            'value',
+        )?.set;
+        nativeSetter?.call(slider, '6');
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
 
         expect(onChange).toHaveBeenLastCalledWith(
             expect.objectContaining({ minOnlineCoop: 6 }),

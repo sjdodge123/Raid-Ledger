@@ -2,7 +2,7 @@
  * Filter controls for the Common Ground panel (ROK-934).
  * Min owners slider, genre dropdown, max players input.
  */
-import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import { type JSX, useCallback, useEffect, useRef } from 'react';
 import type { CommonGroundParams } from '../../lib/api-client';
 
 interface Props {
@@ -104,41 +104,32 @@ function PlayersSlider({
 }
 
 /**
- * Number entry for the co-op group size (ROK-1400). Keeps its own text
- * state so clearing the box doesn't fight the controlled `value` prop —
- * an empty box simply emits nothing and leaves the active filter alone
- * until a real number is typed.
+ * Slider for the co-op group size (ROK-1400). Styled to match the Min
+ * owners / Players sliders above — operator review 2026-08-20 asked for a
+ * slider rather than a number box so the whole panel reads as one control
+ * family. Minimum is 1 because the API schema rejects 0.
  */
-function CoopSizeInput({
+function CoopSizeSlider({
     value,
     onChange,
 }: {
     value: number;
     onChange: (v: number) => void;
 }): JSX.Element {
-    // Adjust-state-during-render (React docs pattern) rather than a sync
-    // effect: re-seeds the box when the parent hands us a different value
-    // without the cascading-render hazard an effect would introduce.
-    const [text, setText] = useState(String(value));
-    const [lastValue, setLastValue] = useState(value);
-    if (value !== lastValue) {
-        setLastValue(value);
-        setText(String(value));
-    }
     return (
-        <label className="flex items-center gap-2 text-sm text-foreground">
-            <span className="whitespace-nowrap">Co-op group size</span>
+        <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
+            <span className="whitespace-nowrap font-medium">Co-op group size</span>
             <input
-                type="number"
+                type="range"
                 min={1}
-                value={text}
-                onChange={(e) => {
-                    setText(e.target.value);
-                    const parsed = Number.parseInt(e.target.value, 10);
-                    if (Number.isFinite(parsed) && parsed >= 1) onChange(parsed);
-                }}
-                className="min-h-[44px] w-20 bg-panel border border-edge rounded-md px-2 py-1 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                max={16}
+                value={value}
+                onChange={(e) => onChange(Number(e.target.value))}
+                className={SLIDER_CLS}
             />
+            <span className="text-sm font-mono w-6 text-right text-foreground">
+                {value}
+            </span>
         </label>
     );
 }
@@ -193,7 +184,7 @@ function CoopGroupSizeFilter({
             />
             {active && (
                 <>
-                    <CoopSizeInput value={value} onChange={onChange} />
+                    <CoopSizeSlider value={value} onChange={onChange} />
                     <span className="text-xs text-muted">
                         Only showing games with co-op data
                     </span>
