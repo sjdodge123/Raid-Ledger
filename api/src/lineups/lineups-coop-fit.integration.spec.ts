@@ -335,6 +335,69 @@ function describeCoopFitPayloads() {
     });
   }
   describe('fitType precedence (end to end)', describeFitType);
+
+  // ── Banner entries (LineupBanner thumbnail pill) ─────────────
+
+  /**
+   * ROK-1401: the Games-page banner thumbnails render the `👥 N co-op` pill,
+   * so `GET /lineups/banner` entries carry the same RAW value. Gating is
+   * per-entry — an enriched nomination and an unsynced one coexist in one
+   * banner payload.
+   */
+  async function fetchBannerEntries(): Promise<
+    Map<number, Record<string, unknown>>
+  > {
+    const res = await testApp.request
+      .get('/lineups/banner')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    const entries = (res.body.entries ?? []) as Array<Record<string, unknown>>;
+    return new Map(entries.map((e) => [e.gameId as number, e]));
+  }
+
+  function describeBannerEntries() {
+    it('carries a POSITIVE cooptimus_online_max onto a banner entry', async () => {
+      const gameId = await insertGame('ROK-1401 Banner Enriched', {
+        cooptimusOnlineMax: 4,
+        cooptimusSyncedAt: new Date(),
+      });
+      await createLineupWith([gameId]);
+
+      expect((await fetchBannerEntries()).get(gameId)?.cooptimusOnlineMax).toBe(
+        4,
+      );
+    });
+
+    it('gates per entry — enriched and unsynced coexist in one payload', async () => {
+      const enriched = await insertGame('ROK-1401 Banner Mixed Enriched', {
+        cooptimusOnlineMax: 6,
+        cooptimusSyncedAt: new Date(),
+      });
+      const unsynced = await insertGame('ROK-1401 Banner Mixed Unsynced', {
+        playerCount: { min: 1, max: 100 },
+      });
+      await createLineupWith([enriched, unsynced]);
+
+      const entries = await fetchBannerEntries();
+      expect(entries.get(enriched)?.cooptimusOnlineMax).toBe(6);
+      expect(entries.get(unsynced)).toHaveProperty('cooptimusOnlineMax');
+      // No IGDB fallback: a 100-player lobby is not a co-op claim.
+      expect(entries.get(unsynced)?.cooptimusOnlineMax).toBeNull();
+    });
+
+    it('carries a SYNCED ZERO through as 0', async () => {
+      const gameId = await insertGame('ROK-1401 Banner Synced Empty', {
+        cooptimusOnlineMax: 0,
+        cooptimusSyncedAt: new Date(),
+      });
+      await createLineupWith([gameId]);
+
+      expect((await fetchBannerEntries()).get(gameId)?.cooptimusOnlineMax).toBe(
+        0,
+      );
+    });
+  }
+  describe('GET /lineups/banner — entry payload', describeBannerEntries);
 }
 
 describe(

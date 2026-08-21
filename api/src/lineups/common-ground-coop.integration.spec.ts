@@ -528,6 +528,62 @@ function describeCommonGroundCoop() {
     });
   }
   describe('meta.coopDataAvailable', describeCoopDataAvailable);
+
+  // ── Row payload (ROK-1401 co-op pill) ────────────────────────
+
+  /**
+   * ROK-1401: the nominate tile renders a `👥 N co-op` pill, so the Common
+   * Ground row DTO has to carry the RAW `cooptimus_online_max` alongside
+   * `playerCount`. Raw means un-blended: the pill is a Co-Optimus CLAIM and
+   * must never be manufactured from an IGDB lobby size.
+   */
+  async function fetchRow(gameId: number): Promise<Record<string, unknown>> {
+    const res = await testApp.request
+      .get('/lineups/common-ground')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .query({ minOwners: 1, limit: 100 });
+    expect(res.status).toBe(200);
+    const rows = res.body.data as Array<Record<string, unknown>>;
+    const row = rows.find((r) => r.gameId === gameId);
+    expect(row).toBeDefined();
+    return row!;
+  }
+
+  function describeRowPayload() {
+    it('carries a POSITIVE cooptimus_online_max onto the row', async () => {
+      await createBuildingLineup();
+      const gameId = await insertOwnedGame('ROK-1401 CG Enriched', {
+        cooptimusOnlineMax: 4,
+        cooptimusSyncedAt: new Date(),
+      });
+
+      expect((await fetchRow(gameId)).cooptimusOnlineMax).toBe(4);
+    });
+
+    it('carries a SYNCED ZERO through as 0, not null', async () => {
+      await createBuildingLineup();
+      const gameId = await insertOwnedGame('ROK-1401 CG Synced Empty', {
+        cooptimusOnlineMax: 0,
+        cooptimusSyncedAt: new Date(),
+      });
+
+      expect((await fetchRow(gameId)).cooptimusOnlineMax).toBe(0);
+    });
+
+    it('ships NULL for a never-synced game and does NOT blend playerCount', async () => {
+      await createBuildingLineup();
+      const gameId = await insertOwnedGame('ROK-1401 CG Big Lobby PvP', {
+        playerCount: { min: 1, max: 100 },
+      });
+
+      const row = await fetchRow(gameId);
+      expect(row).toHaveProperty('cooptimusOnlineMax');
+      expect(row.cooptimusOnlineMax).toBeNull();
+      // playerCount still ships unchanged on its own key.
+      expect(row.playerCount).toEqual({ min: 1, max: 100 });
+    });
+  }
+  describe('row payload — cooptimusOnlineMax (ROK-1401)', describeRowPayload);
 }
 
 describe(
