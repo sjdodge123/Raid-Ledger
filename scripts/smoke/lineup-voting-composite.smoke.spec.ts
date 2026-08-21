@@ -27,6 +27,7 @@ import {
     apiPost,
     createLineupOrRetry,
     getAdminToken,
+    pollForCondition,
     API_BASE,
 } from './api-helpers';
 
@@ -406,5 +407,112 @@ test.describe('Sv composite — responsive (both viewports)', () => {
                 expect(box.width).toBeLessThanOrEqual(viewport.width);
             }
         }
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROK-1401 — co-op fit badge on the voting row
+//
+// Appended to this existing spec rather than given its own file (the
+// composite/voting fixture already lives here). Two assertions:
+// the badge is VISIBLE on the enriched game's row, and it carries the
+// label the two-rule split demands.
+//
+// Fixture: `POST /admin/test/seed-cooptimus` (DEMO_MODE, ROK-1398) returns
+// an enriched game whose `cooptimusOnlineMax` is a positive, Co-Optimus-
+// verified value. We nominate THAT game into a fresh lineup and advance to
+// voting. The expected label is derived from the live pair
+// (cooptimusOnlineMax, votingEligibleCount) rather than hardcoded, because
+// the eligible-voter pool depends on the demo seed's community size:
+//   onlineMax >= denominator → "✓ fits {denominator}"
+//   onlineMax <  denominator → "⚠ {onlineMax}-player co-op"
+//
+// The Co-Optimus HTTP user-agent is never referenced here — it is the
+// activation gate for the data grant and must not enter a public repo.
+//
+// MUST FAIL until ROK-1401 ships: `data-testid="coop-fit-badge"` does not
+// exist and `LineupEntryResponseDto` carries no `cooptimusOnlineMax`.
+// ─────────────────────────────────────────────────────────────────────
+
+test.describe('Sv composite — co-op fit badge (ROK-1401)', () => {
+    let coopLineupId: number;
+    let coopGameName: string;
+    let expectedBadgeText: RegExp;
+
+    test.beforeAll(async () => {
+        const seed = (await apiPost(
+            adminToken,
+            '/admin/test/seed-cooptimus',
+        )) as { enrichedGameId: number };
+        expect(
+            seed?.enrichedGameId,
+            'seed-cooptimus must return an enriched game id',
+        ).toBeTruthy();
+
+        // Poll the source endpoint before touching the UI — React Query's
+        // staleTime otherwise serves a pre-seed fetch (ROK-1156).
+        const game = await pollForCondition(
+            async () => {
+                const g = await apiGet(
+                    adminToken,
+                    `/games/${seed.enrichedGameId}`,
+                );
+                return typeof g?.cooptimusOnlineMax === 'number' &&
+                    g.cooptimusOnlineMax > 0
+                    ? (g as { name: string; cooptimusOnlineMax: number })
+                    : null;
+            },
+            {
+                timeoutMs: 15_000,
+                description: 'seeded game exposes a positive cooptimusOnlineMax',
+            },
+        );
+        coopGameName = game.name;
+
+        const { id } = await createLineupOrRetry(
+            adminToken,
+            {
+                title: `${workerPrefix}Coop Fit Badge`,
+                buildingDurationHours: 720,
+                votingDurationHours: 720,
+                decidedDurationHours: 720,
+            },
+            workerPrefix,
+        );
+        coopLineupId = id;
+        await apiPost(adminToken, `/lineups/${id}/nominate`, {
+            gameId: seed.enrichedGameId,
+        });
+        await apiPatchRaw(adminToken, `/lineups/${id}/status`, {
+            status: 'voting',
+        });
+
+        const detail = await apiGet(adminToken, `/lineups/${id}`);
+        const denominator = detail?.votingEligibleCount as number;
+        expect(
+            denominator,
+            'voting lineup needs a votingEligibleCount to compare against',
+        ).toBeGreaterThan(0);
+        expectedBadgeText =
+            game.cooptimusOnlineMax >= denominator
+                ? new RegExp(`fits\\s+${denominator}\\b`)
+                : new RegExp(`${game.cooptimusOnlineMax}-player co-op`);
+    });
+
+    test('the enriched game row shows the Co-Optimus fit badge', async ({
+        page,
+    }) => {
+        await page.goto(`/community-lineup/${coopLineupId}`);
+        await expect(page.getByTestId('voting-leaderboard-v2')).toBeVisible({
+            timeout: 20_000,
+        });
+        const badge = page
+            .getByTestId('voting-row')
+            .filter({ hasText: coopGameName })
+            .first()
+            .getByTestId('coop-fit-badge');
+
+        await expect(badge).toBeVisible({ timeout: 20_000 });
+        await expect(badge).toHaveText(expectedBadgeText);
     });
 });
