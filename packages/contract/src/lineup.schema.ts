@@ -306,6 +306,13 @@ const LineupBannerEntrySchema = z.object({
     gameCoverUrl: z.string().nullable(),
     ownerCount: z.number(),
     voteCount: z.number(),
+    /**
+     * ROK-1401: RAW `games.cooptimus_online_max` — the Co-Optimus-verified
+     * online co-op cap. Positive = render the `👥 N co-op` pill; `0` (synced,
+     * no online co-op) and `null` (never synced) render NOTHING. Never falls
+     * back to IGDB `playerCount` — a lobby size is not a co-op capability.
+     */
+    cooptimusOnlineMax: z.number().int().nullable().optional(),
 });
 
 /** Lightweight banner data for the Games page hero. */
@@ -475,6 +482,13 @@ export const CommonGroundGameSchema = z.object({
     earlyAccess: z.boolean(),
     itadTags: z.array(z.string()),
     playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),
+    /**
+     * ROK-1401: RAW `games.cooptimus_online_max` — the Co-Optimus-verified
+     * online co-op cap. Positive = render the `👥 N co-op` pill; `0` (synced,
+     * no online co-op) and `null` (never synced) render NOTHING. Never falls
+     * back to IGDB `playerCount` — a lobby size is not a co-op capability.
+     */
+    cooptimusOnlineMax: z.number().int().nullable().optional(),
     score: z.number(),
     /** ROK-950: per-factor score breakdown (taste, social, intensity, base). */
     scoreBreakdown: CommonGroundScoreBreakdownSchema.optional(),
