@@ -14,12 +14,15 @@
  *   - Cover thumbnail: `<button aria-label="View details for ${gameName}">`.
  *
  * Vote bar normalized to `voterDenominator` (always
- * `lineup.votingEligibleCount`), never derived inside the row.
+ * `lineup.votingEligibleCount`), never derived inside the row. ROK-1401's
+ * co-op fit badge uses that SAME denominator — never `voteCount` /
+ * `totalMembers` / `ownerCount`.
  */
 import type { JSX } from 'react';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { voteBarPct } from './voting-bar.helpers';
 import { VoteToggleButton } from './VoteToggleButton';
+import { CoopFitBadge } from '../CoopFitBadge';
 
 /** Props for {@link VotingRow}. */
 export interface VotingRowProps {
@@ -139,9 +142,17 @@ export function VotingRow(props: VotingRowProps): JSX.Element {
           onOpenDrawer={onOpenDrawer}
         />
         <div className="flex-1 min-w-0">
-          <span className="text-foreground font-semibold text-sm truncate block">
-            {entry.gameName}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-foreground font-semibold text-sm truncate">
+              {entry.gameName}
+            </span>
+            {/* ROK-1401: Co-Optimus-only fit badge vs the eligible voter
+                pool. Renders nothing when the game has no co-op claim. */}
+            <CoopFitBadge
+              onlineMax={entry.cooptimusOnlineMax}
+              groupSize={voterDenominator}
+            />
+          </div>
           <VoteBar
             voteCount={entry.voteCount}
             voterDenominator={voterDenominator}
