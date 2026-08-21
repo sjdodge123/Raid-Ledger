@@ -16,6 +16,7 @@ import { PhaseCountdown } from './phase-countdown';
 import { formatTargetDate } from './lineup-banner-helpers';
 import { TiebreakerBadge } from './tiebreaker/TiebreakerBadge';
 import { OtherActiveLineups } from './OtherActiveLineups';
+import { CoopPill } from './CoopPill';
 
 /** Pulsing green dot indicator for active lineup. */
 function PulsingDot(): JSX.Element {
@@ -108,6 +109,11 @@ function GameThumbnail({ entry }: {
             <span className="text-[10px] text-muted mt-1 block truncate">
                 {entry.ownerCount} own
             </span>
+            {/* ROK-1401: Co-Optimus-verified co-op capability, positive only. */}
+            <CoopPill
+                cooptimusOnlineMax={entry.cooptimusOnlineMax}
+                className="mt-0.5 inline-block"
+            />
         </div>
     );
 }

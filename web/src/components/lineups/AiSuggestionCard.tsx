@@ -13,6 +13,7 @@ import { type JSX } from 'react';
 import type { AiSuggestionDto } from '@raid-ledger/contract';
 import { useNominateGame } from '../../hooks/use-lineups';
 import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
+import { CoopPill } from './CoopPill';
 
 export type AiSuggestionCardMode = 'nominate' | 'pick';
 
@@ -128,7 +129,11 @@ export function AiSuggestionCard(props: AiSuggestionCardProps): JSX.Element {
             <Cover src={suggestion.coverUrl} alt={suggestion.name} reasoning={suggestion.reasoning} />
             <div className="p-3 flex flex-col gap-2 flex-1">
                 <h3 className="text-sm font-medium text-foreground line-clamp-1">{suggestion.name}</h3>
-                <OwnershipPill count={suggestion.ownershipCount} total={suggestion.voterTotal} />
+                <div className="flex flex-wrap items-center gap-1">
+                    <OwnershipPill count={suggestion.ownershipCount} total={suggestion.voterTotal} />
+                    {/* ROK-1401: Co-Optimus-verified co-op capability, positive only. */}
+                    <CoopPill cooptimusOnlineMax={suggestion.cooptimusOnlineMax} />
+                </div>
                 <CardActions
                     mode={mode}
                     atCap={atCap}
