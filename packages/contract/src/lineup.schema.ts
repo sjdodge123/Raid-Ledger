@@ -482,6 +482,10 @@ export const CommonGroundGameSchema = z.object({
      * back to IGDB `playerCount` — a lobby size is not a co-op capability.
      */
     cooptimusOnlineMax: z.number().int().nullable().optional(),
+    /** ROK-1401: RAW `games.cooptimus_couch_max` — `>= 2` means local co-op. */
+    cooptimusCouchMax: z.number().int().nullable().optional(),
+    /** ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. */
+    cooptimusComboCoop: z.boolean().nullable().optional(),
     score: z.number(),
     /** ROK-950: per-factor score breakdown (taste, social, intensity, base). */
     scoreBreakdown: CommonGroundScoreBreakdownSchema.optional(),

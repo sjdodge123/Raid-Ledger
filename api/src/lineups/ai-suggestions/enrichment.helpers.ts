@@ -32,6 +32,10 @@ interface SuggestionRow {
   playerCount: { min: number; max: number } | null;
   /** ROK-1401: raw Co-Optimus online co-op cap (positive / 0 / null). */
   cooptimusOnlineMax: number | null;
+  /** ROK-1401: raw Co-Optimus couch cap — `>= 2` means local co-op. */
+  cooptimusCouchMax: number | null;
+  /** ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. */
+  cooptimusComboCoop: boolean | null;
 }
 
 /**
@@ -69,7 +73,9 @@ async function loadSuggestionMeta(
       g.early_access AS "earlyAccess",
       COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
       g.player_count AS "playerCount",
-      g.cooptimus_online_max AS "cooptimusOnlineMax"
+      g.cooptimus_online_max AS "cooptimusOnlineMax",
+      g.cooptimus_couch_max AS "cooptimusCouchMax",
+      g.cooptimus_combo_coop AS "cooptimusComboCoop"
     FROM games g
     LEFT JOIN game_interests gi ON gi.game_id = g.id
     WHERE g.id IN (${sql.join(
@@ -141,8 +147,11 @@ export async function enrichSuggestions(
       earlyAccess: row.earlyAccess,
       itadTags: row.itadTags ?? [],
       playerCount: row.playerCount,
-      // ROK-1401: raw co-op claim; the card renders the pill only when > 0.
+      // ROK-1401: raw co-op claim; `coopLabel` on the client decides which of
+      // combo/online/local (if any) the card advertises.
       cooptimusOnlineMax: row.cooptimusOnlineMax ?? null,
+      cooptimusCouchMax: row.cooptimusCouchMax ?? null,
+      cooptimusComboCoop: row.cooptimusComboCoop ?? null,
     };
   });
 }

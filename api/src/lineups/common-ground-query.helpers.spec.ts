@@ -61,8 +61,10 @@ describe('mapCommonGroundRow', () => {
     earlyAccess: false,
     itadTags: ['RPG'],
     playerCount: { min: 1, max: 4 },
-    // ROK-1401: rows now carry the raw Co-Optimus co-op cap.
+    // ROK-1401: rows now carry the raw Co-Optimus co-op fields.
     cooptimusOnlineMax: null,
+    cooptimusCouchMax: null,
+    cooptimusComboCoop: null,
     ownerUserIds: [],
   };
 
@@ -103,8 +105,10 @@ describe('deriveGameIntensity', () => {
     earlyAccess: false,
     itadTags: [],
     playerCount: null,
-    // ROK-1401: rows now carry the raw Co-Optimus co-op cap.
+    // ROK-1401: rows now carry the raw Co-Optimus co-op fields.
     cooptimusOnlineMax: null,
+    cooptimusCouchMax: null,
+    cooptimusComboCoop: null,
     ownerUserIds: [],
   };
 
