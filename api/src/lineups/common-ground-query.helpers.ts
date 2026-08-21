@@ -58,6 +58,8 @@ export interface CommonGroundRow {
   earlyAccess: boolean;
   itadTags: string[];
   playerCount: { min: number; max: number } | null;
+  /** ROK-1401: raw Co-Optimus online co-op cap (positive / 0 / null). */
+  cooptimusOnlineMax: number | null;
   /** ROK-950: Steam-library owner user IDs for social-score intersection. */
   ownerUserIds: number[];
 }
@@ -99,6 +101,7 @@ export async function queryCommonGround(
       g.early_access AS "earlyAccess",
       COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
       g.player_count AS "playerCount",
+      g.cooptimus_online_max AS "cooptimusOnlineMax",
       COALESCE(
         array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_library'),
         ARRAY[]::int[]
@@ -304,6 +307,8 @@ export function mapCommonGroundRow(
     earlyAccess: safeRow.earlyAccess,
     itadTags: safeRow.itadTags,
     playerCount: safeRow.playerCount,
+    // ROK-1401: raw co-op claim; the card renders the pill only when > 0.
+    cooptimusOnlineMax: safeRow.cooptimusOnlineMax ?? null,
     score: breakdown.total,
     scoreBreakdown: breakdown,
   };

@@ -30,6 +30,8 @@ interface SuggestionRow {
   earlyAccess: boolean;
   itadTags: string[];
   playerCount: { min: number; max: number } | null;
+  /** ROK-1401: raw Co-Optimus online co-op cap (positive / 0 / null). */
+  cooptimusOnlineMax: number | null;
 }
 
 /**
@@ -66,7 +68,8 @@ async function loadSuggestionMeta(
       g.itad_current_url AS "itadCurrentUrl",
       g.early_access AS "earlyAccess",
       COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
-      g.player_count AS "playerCount"
+      g.player_count AS "playerCount",
+      g.cooptimus_online_max AS "cooptimusOnlineMax"
     FROM games g
     LEFT JOIN game_interests gi ON gi.game_id = g.id
     WHERE g.id IN (${sql.join(
@@ -138,6 +141,8 @@ export async function enrichSuggestions(
       earlyAccess: row.earlyAccess,
       itadTags: row.itadTags ?? [],
       playerCount: row.playerCount,
+      // ROK-1401: raw co-op claim; the card renders the pill only when > 0.
+      cooptimusOnlineMax: row.cooptimusOnlineMax ?? null,
     };
   });
 }
