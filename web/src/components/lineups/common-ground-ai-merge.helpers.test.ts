@@ -78,6 +78,34 @@ function makeResponse(data: CommonGroundGameDto[]): CommonGroundResponseDto {
     };
 }
 
+describe('aiOnlyStub — ROK-1401 Co-Optimus field carry', () => {
+    it('carries all three co-op fields so the merged grid renders the same pill as AiSuggestionCard', () => {
+        const stub = aiOnlyStub(
+            makeAi({
+                cooptimusOnlineMax: 4,
+                cooptimusCouchMax: 2,
+                cooptimusComboCoop: true,
+            }),
+        );
+        expect(stub.cooptimusOnlineMax).toBe(4);
+        expect(stub.cooptimusCouchMax).toBe(2);
+        expect(stub.cooptimusComboCoop).toBe(true);
+    });
+
+    it('passes a co-op-less suggestion through as nullish so no pill renders', () => {
+        const stub = aiOnlyStub(
+            makeAi({
+                cooptimusOnlineMax: null,
+                cooptimusCouchMax: null,
+                cooptimusComboCoop: null,
+            }),
+        );
+        expect(stub.cooptimusOnlineMax ?? null).toBeNull();
+        expect(stub.cooptimusCouchMax ?? null).toBeNull();
+        expect(stub.cooptimusComboCoop ?? null).toBeNull();
+    });
+});
+
 describe('aiStubMatchesFilters', () => {
     it('filters out AI stub when ownerCount is below minOwners', () => {
         const stub = aiOnlyStub(makeAi({ communityOwnerCount: 1 }));

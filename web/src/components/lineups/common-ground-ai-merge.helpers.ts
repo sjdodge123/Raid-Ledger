@@ -34,6 +34,12 @@ export function aiOnlyStub(s: AiSuggestionDto): CommonGroundGameDto {
         earlyAccess: s.earlyAccess,
         itadTags: s.itadTags,
         playerCount: s.playerCount,
+        // ROK-1401: carry the Co-Optimus fields so an AI-only stub rendered as a
+        // CommonGroundGameCard shows the same co-op pill as AiSuggestionCard does
+        // for the identical game. Without these the merged grid silently drops it.
+        cooptimusOnlineMax: s.cooptimusOnlineMax,
+        cooptimusCouchMax: s.cooptimusCouchMax,
+        cooptimusComboCoop: s.cooptimusComboCoop,
         score: s.confidence * 100,
     };
 }
