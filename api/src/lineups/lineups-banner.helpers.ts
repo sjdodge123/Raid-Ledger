@@ -30,8 +30,6 @@ interface BannerEntry {
   gameId: number;
   gameName: string;
   gameCoverUrl: string | null;
-  /** ROK-1401: raw Co-Optimus online co-op cap (positive / 0 / null). */
-  cooptimusOnlineMax?: number | null;
 }
 
 /** Lineup shape used by buildBannerResponse. */
@@ -109,7 +107,6 @@ export async function buildBannerData(
     gameId: e.gameId,
     gameName: e.gameName,
     gameCoverUrl: e.gameCoverUrl,
-    cooptimusOnlineMax: e.cooptimusOnlineMax ?? null,
   }));
   const result = buildBannerResponse(
     { ...lineup, decidedGameName: decidedGame[0]?.name ?? null },
@@ -159,8 +156,6 @@ export function buildBannerResponse(
       gameCoverUrl: e.gameCoverUrl,
       ownerCount: ownerMap.get(e.gameId) ?? 0,
       voteCount: voteMap.get(e.gameId) ?? 0,
-      // ROK-1401: raw co-op claim for the thumbnail pill.
-      cooptimusOnlineMax: e.cooptimusOnlineMax ?? null,
     })),
     tiebreakerActive: false,
     // ROK-1065: visibility surfaced to the banner so the UI can render a
