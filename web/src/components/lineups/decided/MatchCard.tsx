@@ -9,7 +9,6 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { GameRef } from '../../games/GameRef';
-import { CoopFitBadge } from '../CoopFitBadge';
 
 interface MatchCardProps {
   match: MatchDetailResponseDto;
@@ -110,14 +109,6 @@ export function MatchCard({
         name={match.gameName}
         coverUrl={match.gameCoverUrl}
         sub={matchSubLine(match.members.length, isPersonal, match.playerCap)}
-      />
-      {/* ROK-1401: co-op capability vs the LIVE member count. Recomputed on
-          every render so a bandwagon join flips ✓ → ⚠ without a refetch —
-          the persisted `fitType` snapshot is deliberately ignored. */}
-      <CoopFitBadge
-        className="mt-1 ml-12"
-        onlineMax={match.cooptimusOnlineMax}
-        groupSize={match.members.length}
       />
       {isPersonal && (
         <MatchCta
