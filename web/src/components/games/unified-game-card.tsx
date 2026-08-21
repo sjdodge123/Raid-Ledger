@@ -144,7 +144,15 @@ function CardCoverContent({
     selected: boolean;
 }): JSX.Element {
     return (
-        <div className="relative aspect-[3/4] bg-panel">
+        // `overflow-hidden` is load-bearing, not cosmetic (ROK-1401): the cover
+        // is `absolute inset-0` and grows to `scale-105` on group hover. Without
+        // clipping here the extra 2.5% spills PAST the cover box, and because an
+        // absolutely-positioned child paints above its statically-positioned
+        // siblings, that spill lands on top of the InfoBar footer as a bright
+        // full-width band. The card's own `overflow-hidden` only clips at the
+        // outer edge, so it never caught this. Regression-pinned in
+        // unified-game-card.test.tsx.
+        <div className="relative aspect-[3/4] bg-panel overflow-hidden">
             <CardCover game={game} />
             {showRating && rating != null && <RatingBadge rating={rating} />}
             <GradientOverlay />
