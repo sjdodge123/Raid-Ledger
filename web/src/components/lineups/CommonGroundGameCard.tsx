@@ -169,7 +169,11 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
             <OwnerBadge count={game.ownerCount} />
             <PlayerBadge playerCount={game.playerCount} />
             {/* ROK-1401: Co-Optimus-verified co-op capability, positive only. */}
-            <CoopPill cooptimusOnlineMax={game.cooptimusOnlineMax} />
+            <CoopPill
+                cooptimusOnlineMax={game.cooptimusOnlineMax}
+                cooptimusCouchMax={game.cooptimusCouchMax}
+                cooptimusComboCoop={game.cooptimusComboCoop}
+            />
             <WishlistBadge count={game.wishlistCount} />
             <SaleBadge
                 cut={game.itadCurrentCut}

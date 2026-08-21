@@ -40,6 +40,11 @@ interface GameProps {
     cooptimusOnlineMax?: number | null;
     /** ROK-1399: max couch/local co-op players (Co-Optimus). */
     cooptimusCouchMax?: number | null;
+    /**
+     * ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. Additive —
+     * a stale cached row without it simply falls through to online/local.
+     */
+    cooptimusComboCoop?: boolean | null;
 }
 
 /** Props shared by both variants. */
@@ -220,6 +225,7 @@ function LinkCard(props: LinkVariantProps): JSX.Element {
                     primaryMode={primaryMode}
                     cooptimusOnlineMax={game.cooptimusOnlineMax}
                     cooptimusCouchMax={game.cooptimusCouchMax}
+                    cooptimusComboCoop={game.cooptimusComboCoop}
                 />
             )}
         </Link>

@@ -132,7 +132,11 @@ export function AiSuggestionCard(props: AiSuggestionCardProps): JSX.Element {
                 <div className="flex flex-wrap items-center gap-1">
                     <OwnershipPill count={suggestion.ownershipCount} total={suggestion.voterTotal} />
                     {/* ROK-1401: Co-Optimus-verified co-op capability, positive only. */}
-                    <CoopPill cooptimusOnlineMax={suggestion.cooptimusOnlineMax} />
+                    <CoopPill
+                        cooptimusOnlineMax={suggestion.cooptimusOnlineMax}
+                        cooptimusCouchMax={suggestion.cooptimusCouchMax}
+                        cooptimusComboCoop={suggestion.cooptimusComboCoop}
+                    />
                 </div>
                 <CardActions
                     mode={mode}
