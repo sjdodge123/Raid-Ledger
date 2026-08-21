@@ -191,6 +191,14 @@ export const LineupEntryResponseSchema = z.object({
     itadCurrentUrl: z.string().nullable(),
     /** Min/max player count from IGDB (null if unknown). */
     playerCount: z.object({ min: z.number(), max: z.number() }).nullable(),
+    /**
+     * ROK-1401: RAW `games.cooptimus_online_max` — the Co-Optimus-verified
+     * online co-op cap. Positive = a co-op claim the row may advertise;
+     * `0` = synced with no online co-op; `null` = never synced. Deliberately
+     * NOT blended with `playerCount` (an IGDB lobby size is not a co-op
+     * capability) — see `web/src/components/lineups/coop-fit.ts`.
+     */
+    cooptimusOnlineMax: z.number().int().nullable().optional(),
 });
 
 export type LineupEntryResponseDto = z.infer<typeof LineupEntryResponseSchema>;
