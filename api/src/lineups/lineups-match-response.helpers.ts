@@ -99,6 +99,9 @@ export function mapMatchToDto(
       match.gameCooptimusOnlineMax ?? null,
       match.gamePlayerCount?.max ?? null,
     ),
+    // ROK-1401: raw co-op claim alongside playerCap — MatchCard recomputes
+    // the fit badge from this vs the live members.length on every render.
+    cooptimusOnlineMax: match.gameCooptimusOnlineMax ?? null,
     members,
   };
 }

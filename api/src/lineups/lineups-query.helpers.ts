@@ -72,6 +72,8 @@ export function findEntriesWithGames(
       carriedOverFrom: schema.communityLineupEntries.carriedOverFrom,
       createdAt: schema.communityLineupEntries.createdAt,
       playerCount: schema.games.playerCount,
+      // ROK-1401: raw Co-Optimus co-op cap for the VotingRow fit badge.
+      cooptimusOnlineMax: schema.games.cooptimusOnlineMax,
     })
     .from(schema.communityLineupEntries)
     .innerJoin(
