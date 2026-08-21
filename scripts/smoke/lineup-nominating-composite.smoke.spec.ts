@@ -25,6 +25,7 @@ import {
     apiPost,
     apiPatch,
     createLineupOrRetry,
+    pollForCondition,
     API_BASE,
 } from './api-helpers';
 
@@ -294,6 +295,88 @@ test.describe('Nominating composite — responsive (ROK-1297)', () => {
                 expect(box.width).toBeLessThanOrEqual(viewport.width);
             }
         }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1401 — the Co-Optimus co-op pill on a Common Ground tile
+//
+// Fixture: DEMO_MODE `POST /admin/test/seed-cooptimus` (ROK-1398) seeds an
+// enriched game carrying a positive, Co-Optimus-verified
+// `cooptimus_online_max`. The composite's Common Ground panel defaults to
+// `minOwners: 0`, so the (unowned) fixture IS in the result set — but it sorts
+// to the bottom of a 300-row payload, so we reach it through the panel's
+// inline search box rather than scrolling. That also keeps the assertion
+// deterministic under parallel workers: the search names one specific game.
+//
+// The expected count is read off the live `/lineups/common-ground` payload
+// rather than hardcoded, and that endpoint is polled BEFORE the UI is touched
+// (React Query's staleTime otherwise serves a pre-seed fetch — ROK-1156).
+// The Co-Optimus HTTP user-agent is never referenced here.
+// ---------------------------------------------------------------------------
+
+test.describe('Nominating composite — co-op pill on a tile (ROK-1401)', () => {
+    test('an enriched Common Ground tile shows the co-op pill', async ({
+        page,
+    }) => {
+        const seed = (await apiPost(
+            adminToken,
+            '/admin/test/seed-cooptimus',
+        )) as { enrichedGameId?: number };
+        expect(
+            seed?.enrichedGameId,
+            'seed-cooptimus must return an enriched game id',
+        ).toBeTruthy();
+
+        const fixture = await pollForCondition(
+            async () => {
+                const res = await apiGet(
+                    adminToken,
+                    `/lineups/common-ground?minOwners=0&search=${encodeURIComponent(
+                        'ROK-1398 Co-Op Enriched',
+                    )}&lineupId=${lineupId}`,
+                );
+                const row = (
+                    res?.data as
+                        | {
+                              gameId: number;
+                              gameName: string;
+                              cooptimusOnlineMax?: number | null;
+                          }[]
+                        | undefined
+                )?.find((g) => g.gameId === seed.enrichedGameId);
+                return typeof row?.cooptimusOnlineMax === 'number' &&
+                    row.cooptimusOnlineMax > 0
+                    ? row
+                    : null;
+            },
+            {
+                timeoutMs: 15_000,
+                description:
+                    'common-ground row exposes a positive cooptimusOnlineMax',
+            },
+        );
+
+        await gotoNominating(page);
+        const searchBtn = page.getByTestId('sticky-hero-search');
+        await expect(searchBtn).toBeVisible({ timeout: 15_000 });
+        await searchBtn.click();
+
+        const box = page.getByRole('searchbox', { name: /search games/i });
+        await expect(box).toBeVisible({ timeout: 10_000 });
+        await box.fill('ROK-1398 Co-Op Enriched');
+
+        const tile = page
+            .getByTestId('common-ground-tile')
+            .filter({ hasText: fixture.gameName })
+            .first();
+        await expect(tile).toBeVisible({ timeout: 20_000 });
+
+        const pill = tile.getByTestId('coop-pill');
+        await expect(pill).toBeVisible({ timeout: 10_000 });
+        await expect(pill).toHaveText(
+            new RegExp(`${fixture.cooptimusOnlineMax} co-op`),
+        );
     });
 });
 

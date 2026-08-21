@@ -49,7 +49,19 @@ const CLEARED_COOP: GameValues = {
   cooptimusSyncedAt: null,
 };
 
+/**
+ * ROK-1401: the enriched fixture also needs to be reachable from the Common
+ * Ground picker, whose base predicate is
+ * `(g.steam_app_id IS NOT NULL OR g.igdb_id IS NOT NULL)` — a name+slug-only
+ * fixture is invisible there, so the co-op-pill smoke had nothing to assert
+ * on. A sentinel `steam_app_id` is the minimal unlock: the column is NOT
+ * unique (unlike `igdb_id`), so a fixed value cannot collide with a real
+ * game's row, and nothing in DEMO_MODE syncs against it.
+ */
+const FIXTURE_STEAM_APP_ID = 13980001;
+
 const ENRICHED: GameValues = {
+  steamAppId: FIXTURE_STEAM_APP_ID,
   cooptimusId: 4471,
   cooptimusOnlineMax: 4,
   cooptimusCouchMax: 2,
