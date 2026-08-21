@@ -182,6 +182,13 @@ function positiveCount(value: number | null | undefined): number | null {
  * Online co-op wins the visible slot; a couch-only game gets a couch badge.
  * Deliberately carries no attribution — the Co-Optimus credit lives on the
  * game detail page (ROK-1398), never on the card.
+ *
+ * ROK-1401 copy change (operator-ratified): the visible label reads
+ * `👥 5 co-op`, not the previous `👥 5 online` — which the operator read as
+ * "5 people are currently online" rather than "this game supports 5-player
+ * co-op". A couch-only game reads `👥 2 couch co-op`. This matches the
+ * `CoopPill` copy on the lineup surfaces so one vocabulary covers both.
+ * The accessible name keeps the online/couch distinction explicit.
  */
 function CoopBadge({
     online,
@@ -193,6 +200,7 @@ function CoopBadge({
     if (online == null && couch == null) return null;
     const count = online ?? couch!;
     const unit = online != null ? 'online' : 'couch';
+    const label = online != null ? `${count} co-op` : `${count} couch co-op`;
     const couchSuffix = online != null && couch != null ? `, ${couch} couch` : '';
     return (
         <span
@@ -201,7 +209,7 @@ function CoopBadge({
             aria-label={`Co-op: up to ${count} players ${unit}${couchSuffix}`}
             className="ml-auto inline-flex items-center whitespace-nowrap text-[10px] text-emerald-300"
         >
-            {`👥 ${count} ${unit}`}
+            {`👥 ${label}`}
             {couchSuffix !== '' && (
                 <span aria-hidden="true" className="ml-0.5">
                     🛋

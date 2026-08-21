@@ -312,8 +312,8 @@ describe('InfoBar — primaryMode display', () => {
 //     (number | null | undefined).
 //   - ONE compact badge, `data-testid="card-coop-badge"`, rendered only when at
 //     least one of the two counts is a positive number.
-//   - Visible text carries the 👥 glyph + the count ("👥 4 online",
-//     couch-only: "👥 2 couch").
+//   - Visible text carries the 👥 glyph + the count ("👥 4 co-op" since the
+//     ROK-1401 copy change; couch-only reads "👥 2 couch co-op").
 //   - Accessible name (aria-label) names co-op and which mode(s) are covered.
 //   - 0 / null / undefined (unenriched row, or a stale Redis-cached discover
 //     row that predates the SELECT change) → NO badge, no crash, and never a
@@ -324,7 +324,7 @@ describe('InfoBar — primaryMode display', () => {
 const COOP_BADGE = 'card-coop-badge';
 
 describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
-    it('renders "👥 N online" when cooptimusOnlineMax is a positive number', () => {
+    it('renders "👥 N co-op" when cooptimusOnlineMax is a positive number', () => {
         render(
             <InfoBar
                 rating={87}
@@ -334,7 +334,10 @@ describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
             />,
         );
         const badge = screen.getByTestId(COOP_BADGE);
-        expect(badge).toHaveTextContent(/4\s*online/i);
+        // ROK-1401 copy change: "N co-op", not "N online" — the old copy
+        // read as "N people currently online".
+        expect(badge).toHaveTextContent(/4\s*co-?op/i);
+        expect(badge.textContent).not.toMatch(/online/i);
         expect(badge.textContent).toContain('👥');
     });
 
@@ -363,7 +366,7 @@ describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
             />,
         );
         expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
-            /1\s*online/i,
+            /1\s*co-?op/i,
         );
     });
 
@@ -377,7 +380,7 @@ describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
             />,
         );
         expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
-            /32\s*online/i,
+            /32\s*co-?op/i,
         );
     });
 
@@ -393,7 +396,7 @@ describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
             />,
         );
         expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
-            /4\s*online/i,
+            /4\s*co-?op/i,
         );
     });
 
@@ -407,7 +410,7 @@ describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
             />,
         );
         const badge = screen.getByTestId(COOP_BADGE);
-        expect(badge).toHaveTextContent(/4\s*online/i);
+        expect(badge).toHaveTextContent(/4\s*co-?op/i);
         expect(badge.getAttribute('aria-label')).toMatch(/couch/i);
     });
 
@@ -422,7 +425,8 @@ describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
             />,
         );
         const badge = screen.getByTestId(COOP_BADGE);
-        expect(badge).toHaveTextContent(/2\s*couch/i);
+        // Couch-only reads "N couch co-op" (ROK-1401).
+        expect(badge).toHaveTextContent(/2\s*couch co-?op/i);
         expect(badge.textContent).not.toMatch(/online/i);
         expect(badge.getAttribute('aria-label')).toMatch(/couch/i);
         expect(badge.getAttribute('aria-label')).not.toMatch(/online/i);
