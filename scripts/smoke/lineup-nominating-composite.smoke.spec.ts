@@ -374,8 +374,15 @@ test.describe('Nominating composite — co-op pill on a tile (ROK-1401)', () => 
 
         const pill = tile.getByTestId('coop-pill');
         await expect(pill).toBeVisible({ timeout: 10_000 });
+        // ROK-1401 round 3: the copy is one of three shared labels
+        // (combo / online / local co-op) with the count leading. Which KIND a
+        // given fixture resolves to is the helper's job — unit-tested in
+        // web/src/lib/coop-label.test.ts — so the smoke pins the format and
+        // the count rather than re-deriving the priority rule here.
         await expect(pill).toHaveText(
-            new RegExp(`${fixture.cooptimusOnlineMax} co-op`),
+            new RegExp(
+                `^👥 ${fixture.cooptimusOnlineMax} (combo|online|local) co-op$`,
+            ),
         );
     });
 });

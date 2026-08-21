@@ -15,19 +15,49 @@ import { CoopPill } from './CoopPill';
 const PILL = 'coop-pill';
 
 describe('CoopPill — renders for a positive Co-Optimus value', () => {
-    it('renders "👥 N co-op" with the raw cap', () => {
+    // ROK-1401 round 3: copy is one of three shared labels, count first.
+    it('renders "👥 N online co-op" with the raw cap', () => {
         render(<CoopPill cooptimusOnlineMax={4} />);
-        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 4 co-op');
+        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 4 online co-op');
     });
 
     it('renders a solo-capable co-op value', () => {
         render(<CoopPill cooptimusOnlineMax={1} />);
-        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 1 co-op');
+        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 1 online co-op');
     });
 
     it('renders a large cap verbatim without clamping', () => {
         render(<CoopPill cooptimusOnlineMax={32} />);
-        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 32 co-op');
+        expect(screen.getByTestId(PILL)).toHaveTextContent(
+            '👥 32 online co-op',
+        );
+    });
+
+    it('renders "local co-op" for a couch-only game', () => {
+        render(<CoopPill cooptimusOnlineMax={0} cooptimusCouchMax={2} />);
+        const pill = screen.getByTestId(PILL);
+        expect(pill).toHaveTextContent('👥 2 local co-op');
+        expect(pill.textContent).not.toMatch(/online/i);
+    });
+
+    it('renders "combo co-op" when Co-Optimus flags Local + Online', () => {
+        render(
+            <CoopPill
+                cooptimusOnlineMax={4}
+                cooptimusCouchMax={2}
+                cooptimusComboCoop
+            />,
+        );
+        expect(screen.getByTestId(PILL)).toHaveTextContent(
+            '👥 4 combo co-op',
+        );
+    });
+
+    it('stays "online co-op" when both counts exist but the combo flag does not', () => {
+        render(<CoopPill cooptimusOnlineMax={4} cooptimusCouchMax={2} />);
+        expect(screen.getByTestId(PILL)).toHaveTextContent(
+            '👥 4 online co-op',
+        );
     });
 
     it('gives the pill an accessible name naming co-op and online play', () => {
@@ -63,6 +93,18 @@ describe('CoopPill — renders NO element when unverified', () => {
 
     it('renders nothing for a synced ZERO (no online co-op)', () => {
         expectNothingRendered(0);
+    });
+
+    it('renders nothing for a lone couch seat (couch 1 is not local co-op)', () => {
+        const control = render(<CoopPill cooptimusOnlineMax={6} />);
+        expect(screen.getByTestId(PILL)).toBeInTheDocument();
+        control.unmount();
+
+        const { container } = render(
+            <CoopPill cooptimusOnlineMax={0} cooptimusCouchMax={1} />,
+        );
+        expect(screen.queryByTestId(PILL)).toBeNull();
+        expect(container.firstChild).toBeNull();
     });
 
     it('renders nothing for null (never synced)', () => {

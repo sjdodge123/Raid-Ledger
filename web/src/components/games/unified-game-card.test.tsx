@@ -355,12 +355,11 @@ describe('UnifiedGameCard — co-op badge (ROK-1399)', () => {
             />,
         );
         const badge = screen.getByTestId(COOP_BADGE);
-        // ROK-1401 copy: "N co-op", not "N online".
-        expect(badge).toHaveTextContent(/4\s*co-?op/i);
-        expect(badge.textContent).toContain('👥');
+        // ROK-1401 round 3: one of three labels, count first.
+        expect(badge).toHaveTextContent('👥 4 online co-op');
     });
 
-    it('threads a couch-only game through as a couch badge', () => {
+    it('threads a couch-only game through as a local badge', () => {
         renderCard(
             <UnifiedGameCard
                 variant="link"
@@ -372,7 +371,26 @@ describe('UnifiedGameCard — co-op badge (ROK-1399)', () => {
             />,
         );
         expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
-            /2\s*couch co-?op/i,
+            '👥 2 local co-op',
+        );
+    });
+
+    it('threads the Co-Optimus combo flag through GameProps', () => {
+        // ROK-1401: `cooptimusComboCoop` is additive on GameProps — a stale
+        // cached row without it falls through to the online/local labels.
+        renderCard(
+            <UnifiedGameCard
+                variant="link"
+                showInfoBar
+                game={createBaseGame({
+                    cooptimusOnlineMax: 4,
+                    cooptimusCouchMax: 2,
+                    cooptimusComboCoop: true,
+                })}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
+            '👥 4 combo co-op',
         );
     });
 

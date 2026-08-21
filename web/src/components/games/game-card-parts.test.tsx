@@ -324,32 +324,45 @@ describe('InfoBar — primaryMode display', () => {
 const COOP_BADGE = 'card-coop-badge';
 
 describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
-    it('renders "👥 N co-op" when cooptimusOnlineMax is a positive number', () => {
-        render(
+    // ROK-1401 round 3: copy comes from the shared `coopLabel` helper and is
+    // one of exactly three labels — combo / online / local co-op — with the
+    // count leading. The old "👥 4 online" + 🛋 suffix form is gone: it read
+    // as "4 people currently online". Priority is combo > online > local, so
+    // a card never shows two claims.
+
+    function renderBar(props: {
+        online?: number | null;
+        couch?: number | null;
+        combo?: boolean | null;
+        rating?: number | null;
+        primaryMode?: string | null;
+    }) {
+        return render(
             <InfoBar
-                rating={87}
-                primaryMode="Co-operative"
-                cooptimusOnlineMax={4}
-                cooptimusCouchMax={null}
+                rating={props.rating === undefined ? 87 : props.rating}
+                primaryMode={
+                    props.primaryMode === undefined
+                        ? 'Co-operative'
+                        : props.primaryMode
+                }
+                cooptimusOnlineMax={props.online ?? null}
+                cooptimusCouchMax={props.couch ?? null}
+                cooptimusComboCoop={props.combo ?? null}
             />,
         );
+    }
+
+    it('renders "👥 N online co-op" when cooptimusOnlineMax is a positive number', () => {
+        renderBar({ online: 4 });
         const badge = screen.getByTestId(COOP_BADGE);
-        // ROK-1401 copy change: "N co-op", not "N online" — the old copy
-        // read as "N people currently online".
-        expect(badge).toHaveTextContent(/4\s*co-?op/i);
-        expect(badge.textContent).not.toMatch(/online/i);
-        expect(badge.textContent).toContain('👥');
+        expect(badge).toHaveTextContent('👥 4 online co-op');
+        // The old copy is gone, and so is the 🛋 suffix.
+        expect(badge.textContent).not.toMatch(/^👥 4 online$/);
+        expect(badge.textContent).not.toContain('🛋');
     });
 
     it('gives the badge an accessible name naming co-op and online play', () => {
-        render(
-            <InfoBar
-                rating={87}
-                primaryMode="Co-operative"
-                cooptimusOnlineMax={4}
-                cooptimusCouchMax={null}
-            />,
-        );
+        renderBar({ online: 4 });
         const label = screen.getByTestId(COOP_BADGE).getAttribute('aria-label');
         expect(label).toMatch(/co-?op/i);
         expect(label).toMatch(/online/i);
@@ -357,93 +370,76 @@ describe('InfoBar — co-op badge renders when enriched (ROK-1399)', () => {
     });
 
     it('renders for the minimum positive count of 1', () => {
-        render(
-            <InfoBar
-                rating={null}
-                primaryMode="Co-operative"
-                cooptimusOnlineMax={1}
-                cooptimusCouchMax={0}
-            />,
-        );
+        renderBar({ online: 1, couch: 0, rating: null });
         expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
-            /1\s*co-?op/i,
+            '👥 1 online co-op',
         );
     });
 
     it('renders a large count (32) without dropping or truncating the number', () => {
-        render(
-            <InfoBar
-                rating={80}
-                primaryMode="Multiplayer"
-                cooptimusOnlineMax={32}
-                cooptimusCouchMax={null}
-            />,
-        );
+        renderBar({ online: 32, rating: 80, primaryMode: 'Multiplayer' });
         expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
-            /32\s*co-?op/i,
+            '👥 32 online co-op',
         );
     });
 
     it('renders the badge even when rating and primaryMode are both absent', () => {
         // AC1: the badge must survive InfoBar's "nothing to show" early return —
         // an enriched game with no rating and no mode still gets its badge.
-        render(
-            <InfoBar
-                rating={null}
-                primaryMode={null}
-                cooptimusOnlineMax={4}
-                cooptimusCouchMax={null}
-            />,
-        );
+        renderBar({ online: 4, rating: null, primaryMode: null });
         expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
-            /4\s*co-?op/i,
+            '👥 4 online co-op',
         );
     });
 
-    it('adds a couch indicator to the accessible name when couch co-op exists', () => {
-        render(
-            <InfoBar
-                rating={87}
-                primaryMode="Co-operative"
-                cooptimusOnlineMax={4}
-                cooptimusCouchMax={2}
-            />,
-        );
+    it('stays "online co-op" when both counts exist but Co-Optimus set no combo flag', () => {
+        // ROK-1401: `combo` is Co-Optimus's own Local+Online metric, NOT
+        // something we derive from "has both counts". Without the flag the
+        // online claim wins and the couch count is not advertised.
+        renderBar({ online: 4, couch: 2 });
         const badge = screen.getByTestId(COOP_BADGE);
-        expect(badge).toHaveTextContent(/4\s*co-?op/i);
-        expect(badge.getAttribute('aria-label')).toMatch(/couch/i);
+        expect(badge).toHaveTextContent('👥 4 online co-op');
+        expect(badge.textContent).not.toMatch(/local|combo/i);
+        expect(badge.getAttribute('aria-label')).not.toMatch(/couch|local/i);
     });
 
-    it('renders a couch-only badge when online is 0 but couch is positive', () => {
+    it('renders "combo co-op" when Co-Optimus flags Local + Online', () => {
+        renderBar({ online: 4, couch: 2, combo: true });
+        const badge = screen.getByTestId(COOP_BADGE);
+        expect(badge).toHaveTextContent('👥 4 combo co-op');
+        expect(badge.textContent).not.toMatch(/online|local/i);
+    });
+
+    it('renders a local badge when online is 0 but couch supports two players', () => {
         // Console-port edge case: couch co-op exists, online co-op does not.
-        render(
-            <InfoBar
-                rating={87}
-                primaryMode="Co-operative"
-                cooptimusOnlineMax={0}
-                cooptimusCouchMax={2}
-            />,
-        );
+        renderBar({ online: 0, couch: 2 });
         const badge = screen.getByTestId(COOP_BADGE);
-        // Couch-only reads "N couch co-op" (ROK-1401).
-        expect(badge).toHaveTextContent(/2\s*couch co-?op/i);
+        expect(badge).toHaveTextContent('👥 2 local co-op');
         expect(badge.textContent).not.toMatch(/online/i);
-        expect(badge.getAttribute('aria-label')).toMatch(/couch/i);
+        expect(badge.getAttribute('aria-label')).toMatch(/local/i);
         expect(badge.getAttribute('aria-label')).not.toMatch(/online/i);
     });
 
-    it('renders a couch-only badge when online is null but couch is positive', () => {
-        render(
+    it('renders a local badge when online is null but couch supports two players', () => {
+        renderBar({ online: null, couch: 3 });
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
+            '👥 3 local co-op',
+        );
+    });
+
+    it('renders NO badge for a lone couch seat (1 is single-player on a sofa)', () => {
+        const { rerender } = renderBar({ online: null, couch: 2 });
+        expect(screen.getByTestId(COOP_BADGE)).toBeInTheDocument();
+        rerender(
             <InfoBar
                 rating={87}
                 primaryMode="Co-operative"
                 cooptimusOnlineMax={null}
-                cooptimusCouchMax={3}
+                cooptimusCouchMax={1}
+                cooptimusComboCoop={null}
             />,
         );
-        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
-            /3\s*couch/i,
-        );
+        expect(screen.queryByTestId(COOP_BADGE)).not.toBeInTheDocument();
     });
 });
 

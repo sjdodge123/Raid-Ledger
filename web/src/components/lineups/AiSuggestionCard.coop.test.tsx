@@ -26,6 +26,8 @@ function buildSuggestion(
         ownershipCount: 3,
         voterTotal: 5,
         cooptimusOnlineMax: null,
+        cooptimusCouchMax: null,
+        cooptimusComboCoop: null,
         ...overrides,
     } as AiSuggestionDto;
 }
@@ -39,7 +41,7 @@ function renderCard(suggestion: AiSuggestionDto) {
 describe('AiSuggestionCard — co-op pill present when enriched', () => {
     it('renders the pill next to the ownership pill', () => {
         renderCard(buildSuggestion({ cooptimusOnlineMax: 4 }));
-        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 4 co-op');
+        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 4 online co-op');
         expect(screen.getByText('3/5 own')).toBeInTheDocument();
     });
 
@@ -47,8 +49,21 @@ describe('AiSuggestionCard — co-op pill present when enriched', () => {
         // OwnershipPill returns null at voterTotal 0; the co-op pill is
         // independent of it and must still render.
         renderCard(buildSuggestion({ cooptimusOnlineMax: 6, voterTotal: 0 }));
-        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 6 co-op');
+        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 6 online co-op');
         expect(screen.queryByText(/own$/)).toBeNull();
+    });
+
+    it('threads the couch count and combo flag from the suggestion DTO', () => {
+        // ROK-1401 round 3: both ride the AI suggestion DTO additively, off
+        // the same games-row join that already supplies the online max.
+        renderCard(
+            buildSuggestion({
+                cooptimusOnlineMax: 4,
+                cooptimusCouchMax: 2,
+                cooptimusComboCoop: true,
+            }),
+        );
+        expect(screen.getByTestId(PILL)).toHaveTextContent('👥 4 combo co-op');
     });
 });
 
