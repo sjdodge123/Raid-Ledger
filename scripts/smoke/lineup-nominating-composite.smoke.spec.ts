@@ -387,8 +387,9 @@ test.describe('Nominating composite — co-op pill on a tile (ROK-1401)', () => 
     });
 });
 
-// Suppress unused-import warning while keeping the helpers handy for the
-// dev's iteration loop. apiGet / apiPatch will be used when this test
-// gains coverage for adding voter signals (taste vectors, ownership).
-void apiGet;
+// Suppress unused-import warning while keeping the helper handy for the
+// dev's iteration loop. `apiGet` is genuinely used now (the ROK-1401 co-op
+// test polls /lineups/common-ground), so only `apiPatch` still needs this —
+// it will be used when this test gains coverage for adding voter signals
+// (taste vectors, ownership).
 void apiPatch;
