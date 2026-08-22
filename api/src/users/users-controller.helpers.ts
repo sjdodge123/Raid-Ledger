@@ -101,6 +101,15 @@ export function buildPaginatedMeta(
   return { total, page, limit, hasMore: page * limit < total };
 }
 
+/**
+ * Parse the `tzOffset` query param (browser `Date.getTimezoneOffset()`
+ * minutes). Missing or non-numeric values fall back to 0 (UTC).
+ */
+export function parseTzOffset(tzOffsetStr?: string): number {
+  const parsed = tzOffsetStr ? parseInt(tzOffsetStr, 10) : 0;
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 /** Resolve week start date from query param or current week. */
 export function resolveWeekStart(week?: string): Date {
   if (week) {

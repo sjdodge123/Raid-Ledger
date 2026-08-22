@@ -14,6 +14,10 @@ import {
   fetchUpcomingSignedUpEvents,
   buildCommittedDbKeys,
 } from './game-time-committed.helpers';
+import {
+  resolveLocalToday,
+  fetchAbsencesEndingOnOrAfter,
+} from './game-time-absence.helpers';
 
 // Re-export types for backward compatibility
 export type {
@@ -231,17 +235,16 @@ export class GameTimeService {
       );
   }
 
-  /** Get all absences for a user. */
-  async getAbsences(userId: number): Promise<AbsenceRecord[]> {
-    return this.db
-      .select({
-        id: schema.gameTimeAbsences.id,
-        startDate: schema.gameTimeAbsences.startDate,
-        endDate: schema.gameTimeAbsences.endDate,
-        reason: schema.gameTimeAbsences.reason,
-      })
-      .from(schema.gameTimeAbsences)
-      .where(eq(schema.gameTimeAbsences.userId, userId));
+  /**
+   * Get a user's current + future absences for the absence list (ROK-1427).
+   *
+   * Expired absences are filtered out at query time (never deleted) using
+   * "today" in the caller's timezone; `end_date` is inclusive. The composite
+   * view uses its own week-bounded query and still sees past absences.
+   */
+  async getAbsences(userId: number, tzOffset = 0): Promise<AbsenceRecord[]> {
+    const today = resolveLocalToday(tzOffset);
+    return fetchAbsencesEndingOnOrAfter(this.db, userId, today);
   }
 
   /** Get composite view: merge template with event commitments, overrides, and absences. */

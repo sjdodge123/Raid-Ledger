@@ -83,10 +83,15 @@ export async function deleteGameTimeAbsence(
     });
 }
 
-/** List all absences for current user */
+/**
+ * List current + future absences for the current user (ROK-1427).
+ * Sends the browser timezone offset so "expired" is evaluated in the user's
+ * local day, not raw UTC.
+ */
 export async function getGameTimeAbsences(): Promise<AbsenceRecord[]> {
+    const tzOffset = String(new Date().getTimezoneOffset());
     const response = await fetchApi<{ data: AbsenceRecord[] }>(
-        '/users/me/game-time/absences',
+        `/users/me/game-time/absences?tzOffset=${tzOffset}`,
     );
     return response.data;
 }
