@@ -107,6 +107,13 @@ export const MatchDetailResponseSchema = LineupMatchSchema.extend({
      * when the game has no known cap.
      */
     playerCap: z.number().int().nullable(),
+    /**
+     * ROK-1401: RAW `games.cooptimus_online_max`, alongside — NOT replacing —
+     * `playerCap`. `playerCap` answers capacity (with IGDB fallback); this is
+     * the Co-Optimus-only co-op claim the fit badge recomputes against the
+     * LIVE `members.length` on every render.
+     */
+    cooptimusOnlineMax: z.number().int().nullable().optional(),
     /** ROK-1121: lineup creator user ID for early-create override. */
     lineupCreatedById: z.number().int().optional(),
     members: z.array(

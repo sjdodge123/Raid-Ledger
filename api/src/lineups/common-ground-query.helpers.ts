@@ -58,6 +58,12 @@ export interface CommonGroundRow {
   earlyAccess: boolean;
   itadTags: string[];
   playerCount: { min: number; max: number } | null;
+  /** ROK-1401: raw Co-Optimus online co-op cap (positive / 0 / null). */
+  cooptimusOnlineMax: number | null;
+  /** ROK-1401: raw Co-Optimus couch cap — `>= 2` means local co-op. */
+  cooptimusCouchMax: number | null;
+  /** ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. */
+  cooptimusComboCoop: boolean | null;
   /** ROK-950: Steam-library owner user IDs for social-score intersection. */
   ownerUserIds: number[];
 }
@@ -99,6 +105,9 @@ export async function queryCommonGround(
       g.early_access AS "earlyAccess",
       COALESCE(g.itad_tags, '[]'::jsonb) AS "itadTags",
       g.player_count AS "playerCount",
+      g.cooptimus_online_max AS "cooptimusOnlineMax",
+      g.cooptimus_couch_max AS "cooptimusCouchMax",
+      g.cooptimus_combo_coop AS "cooptimusComboCoop",
       COALESCE(
         array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_library'),
         ARRAY[]::int[]
@@ -304,6 +313,11 @@ export function mapCommonGroundRow(
     earlyAccess: safeRow.earlyAccess,
     itadTags: safeRow.itadTags,
     playerCount: safeRow.playerCount,
+    // ROK-1401: raw co-op claim; `coopLabel` on the client decides which of
+    // combo/online/local (if any) the tile advertises.
+    cooptimusOnlineMax: safeRow.cooptimusOnlineMax ?? null,
+    cooptimusCouchMax: safeRow.cooptimusCouchMax ?? null,
+    cooptimusComboCoop: safeRow.cooptimusComboCoop ?? null,
     score: breakdown.total,
     scoreBreakdown: breakdown,
   };

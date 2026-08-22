@@ -100,6 +100,8 @@ function mapEntry(
     itadCurrentShop: pricing?.itadCurrentShop ?? null,
     itadCurrentUrl: pricing?.itadCurrentUrl ?? null,
     playerCount: e.playerCount ?? null,
+    // ROK-1401: raw value — positive / 0 / null, never blended with IGDB.
+    cooptimusOnlineMax: e.cooptimusOnlineMax ?? null,
   };
 }
 

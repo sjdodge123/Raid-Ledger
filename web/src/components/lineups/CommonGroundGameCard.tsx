@@ -11,6 +11,7 @@ import {
     CardTitle,
 } from '../games/game-card-parts';
 import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
+import { CoopPill } from './CoopPill';
 
 interface Props {
     game: CommonGroundGameDto;
@@ -167,6 +168,12 @@ function BadgeRow({ game }: { game: CommonGroundGameDto }): JSX.Element {
         <div className="flex flex-wrap items-center gap-1 mt-1">
             <OwnerBadge count={game.ownerCount} />
             <PlayerBadge playerCount={game.playerCount} />
+            {/* ROK-1401: Co-Optimus-verified co-op capability, positive only. */}
+            <CoopPill
+                cooptimusOnlineMax={game.cooptimusOnlineMax}
+                cooptimusCouchMax={game.cooptimusCouchMax}
+                cooptimusComboCoop={game.cooptimusComboCoop}
+            />
             <WishlistBadge count={game.wishlistCount} />
             <SaleBadge
                 cut={game.itadCurrentCut}

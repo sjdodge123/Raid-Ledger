@@ -9,6 +9,7 @@ import {
   countVotesPerGame,
   countDistinctVoters,
 } from './lineups-query.helpers';
+import { resolvePlayerCap } from './lineups-match-response.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -138,23 +139,65 @@ async function insertMatch(
   await insertMatchMembers(tx, lineupId, match.id, vc.gameId);
 }
 
-/** Determine fit category from voter count and game player limits. */
+/** Capacity bounds for a game, as stored (never pre-blended). */
+export interface FitBounds {
+  /** RAW `games.cooptimus_online_max` — positive / 0 / null. */
+  cooptimusOnlineMax: number | null;
+  /** IGDB `games.player_count`. */
+  playerCount: { min: number; max: number } | null;
+}
+
+/**
+ * ROK-1401: pure capacity classification.
+ *
+ * This is the CAPACITY concern, not the co-op-CLAIM concern. The max follows
+ * the shared ROK-1411 precedence via {@link resolvePlayerCap} (positive
+ * cooptimus wins; `0`/null fall THROUGH to the IGDB max) — do not add a third
+ * precedence helper. The min is always IGDB: Co-Optimus publishes no minimum.
+ * With neither bound usable the match stays `'normal'`.
+ *
+ * The co-op badge rule ("✓ fits N" / "⚠ M-player co-op") is deliberately
+ * DIFFERENT — Co-Optimus-positive only, never IGDB. See
+ * `web/src/components/lineups/coop-fit.ts`.
+ */
+export function classifyFit(
+  bounds: FitBounds,
+  voterCount: number,
+): FitCategory {
+  const max = resolvePlayerCap(
+    bounds.cooptimusOnlineMax,
+    bounds.playerCount?.max ?? null,
+  );
+  const min = bounds.playerCount?.min ?? null;
+  if (max == null && min == null) return 'normal';
+  if (max != null && voterCount > max) return 'oversubscribed';
+  if (min != null && voterCount < min) return 'undersubscribed';
+  return 'perfect';
+}
+
+/** Thin DB wrapper: load the bounds for a game and delegate to classifyFit. */
 async function computeFitCategory(
   db: Db,
   gameId: number,
   voterCount: number,
 ): Promise<FitCategory> {
   const [game] = await db
-    .select({ playerCount: schema.games.playerCount })
+    .select({
+      playerCount: schema.games.playerCount,
+      cooptimusOnlineMax: schema.games.cooptimusOnlineMax,
+    })
     .from(schema.games)
     .where(eq(schema.games.id, gameId))
     .limit(1);
 
-  if (!game?.playerCount) return 'normal';
-  const { min, max } = game.playerCount;
-  if (voterCount > max) return 'oversubscribed';
-  if (voterCount < min) return 'undersubscribed';
-  return 'perfect';
+  if (!game) return 'normal';
+  return classifyFit(
+    {
+      cooptimusOnlineMax: game.cooptimusOnlineMax ?? null,
+      playerCount: game.playerCount ?? null,
+    },
+    voterCount,
+  );
 }
 
 /** Insert match member rows for all voters of a specific game. */

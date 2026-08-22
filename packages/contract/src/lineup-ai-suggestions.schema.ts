@@ -34,6 +34,15 @@ export const AiSuggestionSchema = z.object({
   playerCount: z
     .object({ min: z.number(), max: z.number() })
     .nullable(),
+  /**
+   * ROK-1401: RAW `games.cooptimus_online_max`. Positive => the `👥 N co-op`
+   * pill renders; `0`/`null` => nothing. No IGDB fallback.
+   */
+  cooptimusOnlineMax: z.number().int().nullable().optional(),
+  /** ROK-1401: RAW `games.cooptimus_couch_max` — `>= 2` means local co-op. */
+  cooptimusCouchMax: z.number().int().nullable().optional(),
+  /** ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. */
+  cooptimusComboCoop: z.boolean().nullable().optional(),
 });
 export type AiSuggestionDto = z.infer<typeof AiSuggestionSchema>;
 

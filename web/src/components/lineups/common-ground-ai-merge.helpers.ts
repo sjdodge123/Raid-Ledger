@@ -34,6 +34,12 @@ export function aiOnlyStub(s: AiSuggestionDto): CommonGroundGameDto {
         earlyAccess: s.earlyAccess,
         itadTags: s.itadTags,
         playerCount: s.playerCount,
+        // ROK-1401: carry the Co-Optimus fields so an AI-only stub rendered as a
+        // CommonGroundGameCard shows the same co-op pill as AiSuggestionCard does
+        // for the identical game. Without these the merged grid silently drops it.
+        cooptimusOnlineMax: s.cooptimusOnlineMax,
+        cooptimusCouchMax: s.cooptimusCouchMax,
+        cooptimusComboCoop: s.cooptimusComboCoop,
         score: s.confidence * 100,
     };
 }
@@ -57,11 +63,20 @@ export function aiStubMatchesFilters(
     if (filters.maxPlayers != null && !stub.playerCount) return false;
     // ROK-1400: mirror the co-op group-size gate too, otherwise AI-only
     // stubs slip past a filter the server applied to every other tile.
-    // The filter is Co-Optimus-verified only and `AiSuggestionDto` carries
-    // no Co-Optimus fields at all, so every stub is unverified data and an
-    // active co-op filter excludes all of them. (Their IGDB `playerCount`
-    // is a lobby-size estimate and deliberately does NOT qualify.)
-    if (filters.minOnlineCoop != null) return false;
+    //
+    // ROK-1401: this used to be a blanket `return false`, because
+    // `AiSuggestionDto` carried no Co-Optimus fields and every stub was
+    // therefore unverified. It carries them now, so the mirror is the exact
+    // SQL predicate instead: `cooptimus_online_max >= minOnlineCoop`, where
+    // NULL (never synced) and 0 (synced, no online co-op) both fail. A
+    // blanket exclusion here would hide the very games whose pill we just
+    // taught the tile to render. IGDB `playerCount` still does NOT qualify —
+    // a lobby size is not a co-op capability (that is how PvP titles used to
+    // sneak through).
+    if (filters.minOnlineCoop != null) {
+        const verified = stub.cooptimusOnlineMax;
+        if (verified == null || verified < filters.minOnlineCoop) return false;
+    }
     if (filters.genre && !stub.itadTags.includes(filters.genre)) return false;
     const q = search.trim().toLowerCase();
     if (q && !stub.gameName.toLowerCase().includes(q)) return false;

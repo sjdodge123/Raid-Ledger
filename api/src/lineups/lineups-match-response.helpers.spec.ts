@@ -55,6 +55,8 @@ function makeEntry(overrides: {
     carriedOverFrom: overrides.carriedOverFrom,
     createdAt: NOW,
     playerCount: null as { min: number; max: number } | null,
+    // ROK-1401: entry rows now carry the raw Co-Optimus co-op cap.
+    cooptimusOnlineMax: null as number | null,
   };
 }
 

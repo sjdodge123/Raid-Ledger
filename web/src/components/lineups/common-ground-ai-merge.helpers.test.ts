@@ -78,6 +78,34 @@ function makeResponse(data: CommonGroundGameDto[]): CommonGroundResponseDto {
     };
 }
 
+describe('aiOnlyStub — ROK-1401 Co-Optimus field carry', () => {
+    it('carries all three co-op fields so the merged grid renders the same pill as AiSuggestionCard', () => {
+        const stub = aiOnlyStub(
+            makeAi({
+                cooptimusOnlineMax: 4,
+                cooptimusCouchMax: 2,
+                cooptimusComboCoop: true,
+            }),
+        );
+        expect(stub.cooptimusOnlineMax).toBe(4);
+        expect(stub.cooptimusCouchMax).toBe(2);
+        expect(stub.cooptimusComboCoop).toBe(true);
+    });
+
+    it('passes a co-op-less suggestion through as nullish so no pill renders', () => {
+        const stub = aiOnlyStub(
+            makeAi({
+                cooptimusOnlineMax: null,
+                cooptimusCouchMax: null,
+                cooptimusComboCoop: null,
+            }),
+        );
+        expect(stub.cooptimusOnlineMax ?? null).toBeNull();
+        expect(stub.cooptimusCouchMax ?? null).toBeNull();
+        expect(stub.cooptimusComboCoop ?? null).toBeNull();
+    });
+});
+
 describe('aiStubMatchesFilters', () => {
     it('filters out AI stub when ownerCount is below minOwners', () => {
         const stub = aiOnlyStub(makeAi({ communityOwnerCount: 1 }));
@@ -109,11 +137,11 @@ describe('aiStubMatchesFilters', () => {
         expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
     });
 
-    // ROK-1400 round 2: the co-op filter is Co-Optimus-verified only and
-    // AiSuggestionDto carries no Co-Optimus fields, so an active co-op
-    // filter excludes EVERY stub — including one whose IGDB player count
-    // looks big enough. That lobby-size estimate deliberately does not
-    // qualify (it is how PvP titles used to sneak through).
+    // ROK-1400 round 2 / ROK-1401: the co-op filter is Co-Optimus-verified
+    // ONLY. An IGDB player count — however big — never satisfies it (that is
+    // how PvP titles used to sneak through), so a stub carrying no
+    // Co-Optimus data is still excluded outright. What ROK-1401 changed is
+    // that a stub CAN now carry that data; see the block below.
     it('filters out an AI stub with a small playerCount when minOnlineCoop is set', () => {
         const stub = aiOnlyStub(makeAi({ playerCount: { min: 1, max: 2 } }));
         const filters: CommonGroundParams = { minOnlineCoop: 4 };
@@ -135,6 +163,47 @@ describe('aiStubMatchesFilters', () => {
     it('keeps AI stubs when the co-op filter is not active', () => {
         const stub = aiOnlyStub(makeAi({ playerCount: { min: 1, max: 2 } }));
         expect(aiStubMatchesFilters(stub, {}, '')).toBe(true);
+    });
+
+    // ROK-1401: the stub now carries the Co-Optimus fields, so the filter
+    // mirrors the server's `cooptimus_online_max >= minOnlineCoop` exactly
+    // instead of blanket-excluding every AI stub. Otherwise the grid would
+    // hide a verified 8-player co-op game from a group filtering for 4 —
+    // the same game whose `👥 8 online co-op` pill the tile now renders.
+    it('KEEPS an AI stub whose verified online max satisfies the filter', () => {
+        const stub = aiOnlyStub(makeAi({ cooptimusOnlineMax: 8 }));
+        const filters: CommonGroundParams = { minOnlineCoop: 4 };
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(true);
+    });
+
+    it('keeps an AI stub whose verified online max exactly meets the filter', () => {
+        const stub = aiOnlyStub(makeAi({ cooptimusOnlineMax: 4 }));
+        const filters: CommonGroundParams = { minOnlineCoop: 4 };
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(true);
+    });
+
+    it('drops an AI stub whose verified online max is below the filter', () => {
+        const stub = aiOnlyStub(makeAi({ cooptimusOnlineMax: 2 }));
+        const filters: CommonGroundParams = { minOnlineCoop: 4 };
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
+    });
+
+    // A synced ZERO is real data meaning "no online co-op" — it must fail the
+    // filter, matching the SQL where `0 >= 4` is false.
+    it('drops an AI stub with a synced-zero online max', () => {
+        const stub = aiOnlyStub(makeAi({ cooptimusOnlineMax: 0 }));
+        const filters: CommonGroundParams = { minOnlineCoop: 4 };
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
+    });
+
+    // A big couch count is NOT an online capability — local seats cannot host
+    // a distributed group, so they never satisfy an online co-op filter.
+    it('does NOT let a couch count satisfy the online co-op filter', () => {
+        const stub = aiOnlyStub(
+            makeAi({ cooptimusOnlineMax: null, cooptimusCouchMax: 8 }),
+        );
+        const filters: CommonGroundParams = { minOnlineCoop: 4 };
+        expect(aiStubMatchesFilters(stub, filters, '')).toBe(false);
     });
 
     it('matches against search (case-insensitive, trimmed)', () => {

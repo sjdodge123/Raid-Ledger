@@ -4,6 +4,7 @@
  */
 import type { JSX } from 'react';
 import { HEART_PATH, getRatingClasses } from './game-card-constants';
+import { coopLabel, coopAriaLabel } from '../../lib/coop-label';
 
 /** Game cover image with lazy loading. */
 export function CoverImage({
@@ -166,47 +167,36 @@ function StarRating({ rating }: { rating: number }): JSX.Element {
 }
 
 /**
- * Normalise a Co-Optimus player count (ROK-1399).
- * Only a finite positive number counts as enriched — `0` ("synced, no co-op"),
- * `null` (never synced) and `undefined` (stale Redis-cached discover row that
- * predates the field) all mean "render nothing".
- */
-function positiveCount(value: number | null | undefined): number | null {
-    return typeof value === 'number' && Number.isFinite(value) && value > 0
-        ? value
-        : null;
-}
-
-/**
- * Compact co-op player-count badge (ROK-1399).
- * Online co-op wins the visible slot; a couch-only game gets a couch badge.
+ * Compact co-op badge (ROK-1399, copy per ROK-1401 round 3).
+ *
+ * Copy comes from the shared {@link coopLabel} helper so the games-page card,
+ * the Common Ground / AI tiles and the NominateModal row all speak the same
+ * three-label vocabulary (`combo` / `online` / `local` co-op). The old
+ * `👥 4 online` + 🛋 suffix form is gone: it read as "4 people currently
+ * online", and the kind is now carried by the label itself.
+ *
  * Deliberately carries no attribution — the Co-Optimus credit lives on the
  * game detail page (ROK-1398), never on the card.
  */
 function CoopBadge({
     online,
     couch,
+    combo,
 }: {
-    online: number | null;
-    couch: number | null;
+    online: number | null | undefined;
+    couch: number | null | undefined;
+    combo: boolean | null | undefined;
 }): JSX.Element | null {
-    if (online == null && couch == null) return null;
-    const count = online ?? couch!;
-    const unit = online != null ? 'online' : 'couch';
-    const couchSuffix = online != null && couch != null ? `, ${couch} couch` : '';
+    const resolved = coopLabel({ online, couch, combo });
+    if (!resolved) return null;
     return (
         <span
             data-testid="card-coop-badge"
             role="img"
-            aria-label={`Co-op: up to ${count} players ${unit}${couchSuffix}`}
+            aria-label={coopAriaLabel(resolved)}
             className="ml-auto inline-flex items-center whitespace-nowrap text-[10px] text-emerald-300"
         >
-            {`👥 ${count} ${unit}`}
-            {couchSuffix !== '' && (
-                <span aria-hidden="true" className="ml-0.5">
-                    🛋
-                </span>
-            )}
+            {resolved.label}
         </span>
     );
 }
@@ -217,16 +207,21 @@ export function InfoBar({
     primaryMode,
     cooptimusOnlineMax,
     cooptimusCouchMax,
+    cooptimusComboCoop,
 }: {
     rating: number | null | undefined;
     primaryMode: string | null;
     cooptimusOnlineMax?: number | null;
     cooptimusCouchMax?: number | null;
+    cooptimusComboCoop?: boolean | null;
 }): JSX.Element | null {
     const hasRating = rating != null && rating > 0;
-    const online = positiveCount(cooptimusOnlineMax);
-    const couch = positiveCount(cooptimusCouchMax);
-    if (!hasRating && !primaryMode && online == null && couch == null) return null;
+    const coop = coopLabel({
+        online: cooptimusOnlineMax,
+        couch: cooptimusCouchMax,
+        combo: cooptimusComboCoop,
+    });
+    if (!hasRating && !primaryMode && coop == null) return null;
     return (
         <div className="p-2.5 space-y-1">
             <div className="flex items-center gap-2 text-xs text-muted">
@@ -237,7 +232,11 @@ export function InfoBar({
                         <span>{primaryMode}</span>
                     </>
                 )}
-                <CoopBadge online={online} couch={couch} />
+                <CoopBadge
+                    online={cooptimusOnlineMax}
+                    couch={cooptimusCouchMax}
+                    combo={cooptimusComboCoop}
+                />
             </div>
         </div>
     );

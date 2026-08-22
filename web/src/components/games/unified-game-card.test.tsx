@@ -355,11 +355,11 @@ describe('UnifiedGameCard — co-op badge (ROK-1399)', () => {
             />,
         );
         const badge = screen.getByTestId(COOP_BADGE);
-        expect(badge).toHaveTextContent(/4\s*online/i);
-        expect(badge.textContent).toContain('👥');
+        // ROK-1401 round 3: one of three labels, count first.
+        expect(badge).toHaveTextContent('👥 4 online co-op');
     });
 
-    it('threads a couch-only game through as a couch badge', () => {
+    it('threads a couch-only game through as a local badge', () => {
         renderCard(
             <UnifiedGameCard
                 variant="link"
@@ -370,7 +370,28 @@ describe('UnifiedGameCard — co-op badge (ROK-1399)', () => {
                 })}
             />,
         );
-        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(/2\s*couch/i);
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
+            '👥 2 local co-op',
+        );
+    });
+
+    it('threads the Co-Optimus combo flag through GameProps', () => {
+        // ROK-1401: `cooptimusComboCoop` is additive on GameProps — a stale
+        // cached row without it falls through to the online/local labels.
+        renderCard(
+            <UnifiedGameCard
+                variant="link"
+                showInfoBar
+                game={createBaseGame({
+                    cooptimusOnlineMax: 4,
+                    cooptimusCouchMax: 2,
+                    cooptimusComboCoop: true,
+                })}
+            />,
+        );
+        expect(screen.getByTestId(COOP_BADGE)).toHaveTextContent(
+            '👥 4 combo co-op',
+        );
     });
 
     it('renders no badge for an unenriched game and keeps the card intact', () => {
@@ -459,5 +480,57 @@ describe('UnifiedGameCard — co-op badge (ROK-1399)', () => {
             </MemoryRouter>,
         );
         expect(container.textContent).not.toMatch(/co-?optimus/i);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROK-1401 — hover-zoom must not bleed into the InfoBar footer
+//
+// The cover is `absolute inset-0` and grows to `scale-105` on group hover.
+// An absolutely-positioned child paints ABOVE its statically-positioned
+// siblings, so if the cover wrapper does not clip, that extra ~2.5% lands on
+// top of the footer as a bright full-width band (operator browser-review,
+// 2026-08-21 — measured at 7.8px into a 36px footer, and `elementFromPoint`
+// 4px below the cover returned the IMG instead of the footer).
+//
+// `overflow-hidden` on the wrapper is the fix. The card's OWN `overflow-hidden`
+// does not help — it only clips at the outer card edge, well below the seam.
+// jsdom computes no layout, so this pins the DOM invariant rather than pixels.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('UnifiedGameCard — cover clipping (ROK-1401)', () => {
+    function coverWrapper(container: HTMLElement): HTMLElement {
+        const el = container.querySelector<HTMLElement>('.aspect-\\[3\\/4\\]');
+        expect(el, 'card must render a cover wrapper').not.toBeNull();
+        return el!;
+    }
+
+    it('clips the cover wrapper so the hover zoom cannot overlap the footer', () => {
+        const { container } = renderCard(
+            <UnifiedGameCard
+                variant="link"
+                showInfoBar
+                showRating
+                game={createBaseGame()}
+            />,
+        );
+        const cover = coverWrapper(container);
+        expect(cover.className).toContain('overflow-hidden');
+        // The scaling element really is inside the clipped wrapper.
+        expect(
+            cover.querySelector('.group-hover\\:scale-105'),
+        ).not.toBeNull();
+    });
+
+    it('clips the toggle variant too', () => {
+        const { container } = renderCard(
+            <UnifiedGameCard
+                variant="toggle"
+                selected={false}
+                onToggle={vi.fn()}
+                game={createBaseGame()}
+            />,
+        );
+        expect(coverWrapper(container).className).toContain('overflow-hidden');
     });
 });
