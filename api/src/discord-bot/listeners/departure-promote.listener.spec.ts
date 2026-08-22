@@ -12,9 +12,12 @@ import {
   type MockDb,
 } from '../../common/testing/drizzle-mock';
 import type { ButtonInteraction, Message } from 'discord.js';
+import { EventEmitter } from 'node:events';
 
 /** Test-friendly interface exposing private members needed by specs */
 interface TestableDeparturePromoteListener {
+  onBotConnected: () => void;
+  onBotDisconnected: () => void;
   handlePromote: (
     interaction: ButtonInteraction,
     eventId: number,
@@ -108,7 +111,43 @@ describe('DeparturePromoteListener', () => {
   describe('button routing', () => {
     buttonRoutingTests();
   });
+
+  describe('Regression: ROK-1425 — attach lifecycle', () => {
+    attachLifecycleTests();
+  });
 });
+
+/**
+ * ROK-1425: a listener that never detaches leaves its only handler bound to a
+ * destroyed client after a reconnect (buttons silently stop acking) or stacks
+ * duplicates when CONNECTED double-fires. A real EventEmitter is used so
+ * `listenerCount` reports the genuine number of live handlers.
+ */
+function attachLifecycleTests() {
+  const fakeClient = () => new EventEmitter();
+
+  it('leaves exactly ONE live handler across CONNECTED → DISCONNECTED → CONNECTED', () => {
+    const first = fakeClient();
+    const second = fakeClient();
+    mockClientService.getClient.mockReturnValue(first);
+    listener.onBotConnected();
+    listener.onBotDisconnected();
+    mockClientService.getClient.mockReturnValue(second);
+    listener.onBotConnected();
+
+    expect(first.listenerCount('interactionCreate')).toBe(0);
+    expect(second.listenerCount('interactionCreate')).toBe(1);
+  });
+
+  it('does not stack handlers when CONNECTED fires twice', () => {
+    const client = fakeClient();
+    mockClientService.getClient.mockReturnValue(client);
+    listener.onBotConnected();
+    listener.onBotConnected();
+
+    expect(client.listenerCount('interactionCreate')).toBe(1);
+  });
+}
 
 function promoteSuccessTests() {
   it('promotes bench player via role calculation engine', async () => {

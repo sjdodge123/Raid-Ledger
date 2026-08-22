@@ -15,6 +15,10 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
+import {
   buildConfirmRow,
   editReminderEmbed as editReminderEmbedHelper,
   updateChannelEmbeds as updateChannelEmbedsHelper,
@@ -29,8 +33,10 @@ import {
 @Injectable()
 export class RoachOutInteractionListener {
   private readonly logger = new Logger(RoachOutInteractionListener.name);
-  private boundHandler:
-    ((interaction: import('discord.js').Interaction) => void) | null = null;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'Roach Out interactions',
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -56,17 +62,18 @@ export class RoachOutInteractionListener {
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   onBotConnected(): void {
-    const client = this.clientService.getClient();
-    if (!client) return;
-    if (this.boundHandler) {
-      client.removeListener('interactionCreate', this.boundHandler);
-    }
-    this.boundHandler = (interaction: import('discord.js').Interaction) => {
-      if (interaction.isButton())
-        void this.handleButtonInteraction(interaction);
-    };
-    client.on('interactionCreate', this.boundHandler);
-    this.logger.log('Registered Roach Out interaction handler');
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding('interactionCreate', (interaction) => {
+        if (interaction.isButton())
+          void this.handleButtonInteraction(interaction);
+      }),
+    ]);
+  }
+
+  /** Drop the handler so a reconnect re-attaches to the live client. */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onBotDisconnected(): void {
+    this.binding.detach();
   }
 
   private async handleButtonInteraction(
