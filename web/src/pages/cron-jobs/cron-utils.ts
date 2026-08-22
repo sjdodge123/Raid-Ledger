@@ -4,6 +4,7 @@ const JOB_TITLES: Record<string, string> = {
     EventReminderService_handleStartingSoonReminders: 'Starting Soon Reminders',
     RelayService_handleHeartbeat: 'Relay Heartbeat',
     VersionCheckService_handleCron: 'Version Check',
+    CooptimusSyncService_weeklySync: 'Co-Optimus Co-op Sync',
 };
 
 /** Get a user-friendly display title from the registry name */

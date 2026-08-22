@@ -141,6 +141,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     description: 'Syncs ITAD pricing data for all linked games every 4 hours',
     category: 'Data Sync',
   },
+  CooptimusSyncService_weeklySync: {
+    description:
+      'Syncs Co-Optimus co-op data for never-synced or stale games weekly (Mondays 06:20 UTC)',
+    category: 'Data Sync',
+  },
   ScheduledEventReconciliation_reconcileMissing: {
     description:
       'Creates missing Discord scheduled events for future events every 15 minutes',
