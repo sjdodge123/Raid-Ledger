@@ -35,13 +35,15 @@ export function CoopFitHints({
     });
     const max = resolveEffectiveOnlineMax(game.cooptimusOnlineMax);
     if (coop == null && max == null) return null;
-    // A combo game with neither count still has no number to compare, so it
-    // falls back to the online max (possibly 0) for the warning.
-    const effective = coop?.count ?? max;
+    // The warning is about whether the GROUP can play together, which is an
+    // ONLINE question — so it keys off the online max, never off the label's
+    // count. A local-only game can carry a big couch number (couch 8) while
+    // having zero online co-op; comparing 8 against a group of 6 would drop
+    // the warning for a game the group literally cannot play together
+    // remotely. ROK-1400 shipped this warning on the online max; round 3's
+    // label rework must not change it.
     const tooSmall =
-        participantCount != null &&
-        effective != null &&
-        effective < participantCount;
+        participantCount != null && max != null && max < participantCount;
     return (
         <span className="flex items-center gap-2 shrink-0">
             <span

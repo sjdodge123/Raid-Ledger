@@ -41,6 +41,9 @@ interface ResultFixture {
     name: string;
     coverUrl?: string | null;
     cooptimusOnlineMax?: number | null;
+    /** ROK-1401 round 3: the label helper also reads couch + combo. */
+    cooptimusCouchMax?: number | null;
+    cooptimusComboCoop?: boolean | null;
     playerCount?: { min: number; max: number } | null;
 }
 
@@ -248,5 +251,106 @@ describe('NominateModal — warning never blocks nomination (ROK-1400)', () => {
             expect.objectContaining({ lineupId: 7, body: { gameId: 42 } }),
             expect.any(Object),
         );
+    });
+});
+
+/**
+ * ROK-1401 round 3 regression guard.
+ *
+ * Round 3 rewrote the badge copy to come from the shared `coopLabel` helper,
+ * whose `count` leads with the ONLINE max but falls back to the COUCH max.
+ * The warning must NOT follow that fallback: "may not fit your group" is a
+ * question about whether a distributed group can play together, and that is
+ * answered by the online max alone. Keying it off the label's count silently
+ * dropped ROK-1400's warning for local-only games with a big couch number.
+ */
+describe('NominateModal — the warning keys off ONLINE, not the label count (ROK-1401)', () => {
+    it('still warns for a local-only game with a couch count above the group size', () => {
+        mockResults([
+            {
+                id: 42,
+                name: 'Couch Brawler',
+                cooptimusOnlineMax: 0,
+                cooptimusCouchMax: 8,
+                cooptimusComboCoop: false,
+                playerCount: null,
+            },
+        ]);
+        renderWithProviders(
+            <NominateModal isOpen onClose={vi.fn()} lineupId={1} participantCount={6} />,
+        );
+        // The badge tells the truth about the game (8 local seats)...
+        expect(screen.getByTestId('coop-max-badge')).toHaveTextContent(
+            /8 local co-op/i,
+        );
+        // ...and the warning still fires, because a remote group of 6 cannot
+        // play a game with zero online co-op together.
+        expect(
+            screen.getByText(/may not fit your group of 6/i),
+        ).toBeInTheDocument();
+    });
+
+    it('does NOT warn off a couch count when the game has no online data at all', () => {
+        mockResults([
+            {
+                id: 43,
+                name: 'Unsynced Couch Game',
+                cooptimusOnlineMax: null,
+                cooptimusCouchMax: 3,
+                cooptimusComboCoop: false,
+                playerCount: null,
+            },
+        ]);
+        renderWithProviders(
+            <NominateModal isOpen onClose={vi.fn()} lineupId={1} participantCount={5} />,
+        );
+        expect(screen.getByTestId('coop-max-badge')).toHaveTextContent(
+            /3 local co-op/i,
+        );
+        // No online number means nothing to compare — ROK-1400's rule that an
+        // absent max warns about nothing survives the label rework.
+        expect(screen.queryByText(/may not fit your group/i)).not.toBeInTheDocument();
+    });
+
+    it('warns on the online max for a combo game whose couch count is larger', () => {
+        mockResults([
+            {
+                id: 44,
+                name: 'Combo Game',
+                cooptimusOnlineMax: 2,
+                cooptimusCouchMax: 8,
+                cooptimusComboCoop: true,
+                playerCount: null,
+            },
+        ]);
+        renderWithProviders(
+            <NominateModal isOpen onClose={vi.fn()} lineupId={1} participantCount={5} />,
+        );
+        expect(screen.getByTestId('coop-max-badge')).toHaveTextContent(
+            /2 combo co-op/i,
+        );
+        expect(
+            screen.getByText(/may not fit your group of 5/i),
+        ).toBeInTheDocument();
+    });
+
+    it('shows a countless combo badge without inventing a warning', () => {
+        mockResults([
+            {
+                id: 45,
+                name: 'Countless Combo',
+                cooptimusOnlineMax: null,
+                cooptimusCouchMax: null,
+                cooptimusComboCoop: true,
+                playerCount: null,
+            },
+        ]);
+        renderWithProviders(
+            <NominateModal isOpen onClose={vi.fn()} lineupId={1} participantCount={5} />,
+        );
+        expect(screen.getByTestId('coop-max-badge')).toHaveTextContent(
+            /combo co-op/i,
+        );
+        expect(screen.queryByText(/may not fit your group/i)).not.toBeInTheDocument();
     });
 });
