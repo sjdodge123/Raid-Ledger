@@ -16,8 +16,17 @@
  *   - Phase 1 nudge  — normally start+5,  deferred to start+20.
  *   - Phase 2 alert  — normally start+15, deferred to start+30.
  * Past that deadline the player is treated as absent again and the escalation
- * fires late rather than not at all (the suppression path deliberately writes no
- * `event_reminders_sent` dedup row, so a later tick can still send it).
+ * fires late rather than not at all — but ONLY when the escalation was *fully*
+ * deferred. The suppression path deliberately writes no `event_reminders_sent`
+ * dedup row, so a later tick can still send it.
+ *
+ * In a MIXED group this does not hold, by design: if any absent player was not
+ * running late, Phase 2 fires at start+15 naming them and writes the per-event
+ * `noshow_escalation` dedup row. A straggler whose grace expires afterwards is
+ * then never re-reported, because `checkPhase2` short-circuits on that row. The
+ * host has already been alerted once; a second DM naming one more player is
+ * deliberately not sent. Making stragglers re-reportable would require moving
+ * the dedup from creator-keyed to per-named-user (see ROK-1424 review).
  */
 import { and, eq, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';

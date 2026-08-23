@@ -11,6 +11,7 @@
  * Follows the EventLinkListener test pattern with extracted setup functions
  * and function-scoped describe blocks.
  */
+import { EventEmitter } from 'events';
 import { SteamLinkListener } from './steam-link.listener';
 import { ChannelType, Events } from 'discord.js';
 
@@ -200,15 +201,20 @@ function botConnectedTests() {
     );
   });
 
-  it('does not register twice on duplicate connect events', () => {
-    const mockOn = jest.fn();
-    mockClientService.getClient.mockReturnValue({ on: mockOn });
+  it('leaves exactly one live handler per event when CONNECTED fires twice', () => {
+    // ROK-1425: assert the INVARIANT (net live handlers), not the call count.
+    // DiscordListenerBinding detaches-then-attaches, so `on` is legitimately
+    // called again on a re-attach; what must never happen is two live handlers.
+    // A real EventEmitter is used here because the binding calls removeListener,
+    // which a bare `{ on: jest.fn() }` stub does not implement.
+    const client = new EventEmitter();
+    mockClientService.getClient.mockReturnValue(client);
 
     listener.handleBotConnected();
     listener.handleBotConnected();
 
-    // 2 listeners per connect (messageCreate + interactionCreate), not 4
-    expect(mockOn).toHaveBeenCalledTimes(2);
+    expect(client.listenerCount(Events.MessageCreate)).toBe(1);
+    expect(client.listenerCount('interactionCreate')).toBe(1);
   });
 
   it('skips registration when client is null', () => {

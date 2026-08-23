@@ -219,13 +219,23 @@ function attachLifecycleTests() {
     expect(second.listenerCount('interactionCreate')).toBe(1);
   });
 
-  it('does not stack handlers when CONNECTED fires twice', () => {
-    const client = fakeClient();
-    mockClientService.getClient.mockReturnValue(client);
+  // Reconnect with a MISSED DISCONNECTED — the production failure mode. A
+  // plain double-CONNECTED on the SAME client is not discriminating: the
+  // pre-fix code already called removeListener before re-adding, so that
+  // assertion passed against the very bug this covers. Attaching to a NEW
+  // client without an intervening detach is what actually catches it.
+  it('re-attaches to a new client when DISCONNECTED was missed', () => {
+    const stale = fakeClient();
+    const live = fakeClient();
+    mockClientService.getClient.mockReturnValue(stale);
     listener.onBotConnected();
+    // No onBotDisconnected() — client.destroy() can reject, in which case
+    // DISCONNECTED is never emitted (discord-bot-client.service.ts).
+    mockClientService.getClient.mockReturnValue(live);
     listener.onBotConnected();
 
-    expect(client.listenerCount('interactionCreate')).toBe(1);
+    expect(stale.listenerCount('interactionCreate')).toBe(0);
+    expect(live.listenerCount('interactionCreate')).toBe(1);
   });
 }
 

@@ -110,9 +110,18 @@ export class DiscordListenerBinding {
     for (const binding of this.attached) {
       try {
         binding.emitter.removeListener(binding.event, binding.handler);
-      } catch {
-        // A destroyed client can throw here; the reference is dropped below
-        // regardless, so the handler can never be re-used.
+      } catch (err) {
+        // A destroyed client can throw here, and dropping the reference below
+        // is still the right move. But swallowing this silently would also
+        // absorb e.g. `removeListener is not a function` — where the handler
+        // STAYS attached while the binding forgets it, producing exactly the
+        // orphan this class exists to prevent. Log so it is visible in an
+        // export instead of invisible.
+        this.logger.warn(
+          `${this.label}: removeListener('${binding.event}') threw: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
       }
     }
     this.attached = [];

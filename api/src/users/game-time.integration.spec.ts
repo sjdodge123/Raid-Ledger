@@ -582,7 +582,14 @@ function describeGameTime() {
       testPastAbsencesStayInTheDatabase());
 
     async function testFiltersInTheCallersTimezone() {
-      const tzOffset = 840; // UTC-14, the extreme western offset
+      // Pick the offset from the current UTC hour so the caller's local date is
+      // ALWAYS a different calendar day from the UTC date. With a fixed offset
+      // this assertion is vacuous for part of every day: a raw-UTC (unfixed)
+      // server returns the identical rows whenever local-date === utc-date, so
+      // the test would pass against the very bug it exists to catch.
+      //   UTC hour < 12 -> +720 (UTC-12) puts the caller on YESTERDAY.
+      //   UTC hour >= 12 -> -720 (UTC+12) puts the caller on TOMORROW.
+      const tzOffset = new Date().getUTCHours() < 12 ? 720 : -720;
       const { userId, token } = await createMemberAndLogin(
         testApp,
         'rok1427_tz',

@@ -16,6 +16,10 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
+import {
   DiscordEmbedFactory,
   type EmbedContext,
 } from '../services/discord-embed.factory';
@@ -39,7 +43,10 @@ const MAX_UNFURLS_PER_MESSAGE = 3;
 @Injectable()
 export class EventLinkListener {
   private readonly logger = new Logger(EventLinkListener.name);
-  private listenerAttached = false;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'event link unfurl',
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -53,22 +60,18 @@ export class EventLinkListener {
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   handleBotConnected(): void {
-    const client = this.clientService.getClient();
-    if (!client || this.listenerAttached) return;
-
-    client.on(Events.MessageCreate, (message: Message) => {
-      this.handleMessage(message).catch((err: unknown) => {
-        this.logger.error('Error handling messageCreate for link unfurl:', err);
-      });
-    });
-
-    this.listenerAttached = true;
-    this.logger.log('Event link unfurl listener attached');
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding(Events.MessageCreate, (message: Message) => {
+        this.handleMessage(message).catch((err: unknown) => {
+          this.logger.error('Error handling messageCreate:', err);
+        });
+      }),
+    ]);
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   handleBotDisconnected(): void {
-    this.listenerAttached = false;
+    this.binding.detach();
   }
 
   private async handleMessage(message: Message): Promise<void> {

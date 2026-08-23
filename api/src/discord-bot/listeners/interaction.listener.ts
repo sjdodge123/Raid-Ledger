@@ -8,6 +8,10 @@ import {
   type AutocompleteInteraction,
 } from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { EventCreateCommand } from '../commands/event-create.command';
 import { EventsListCommand } from '../commands/events-list.command';
@@ -35,7 +39,10 @@ export interface CommandInteractionHandler {
 @Injectable()
 export class InteractionListener {
   private readonly logger = new Logger(InteractionListener.name);
-  private listenerAttached = false;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'slash-command interactions',
+  );
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -69,25 +76,21 @@ export class InteractionListener {
    */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   attachListener(): void {
-    const client = this.clientService.getClient();
-    if (!client || this.listenerAttached) return;
-
-    client.on(Events.InteractionCreate, (interaction: Interaction) => {
-      this.handleInteraction(interaction).catch((err) => {
-        this.logger.error('Unhandled error in interaction handler:', err);
-      });
-    });
-
-    this.listenerAttached = true;
-    this.logger.log('Interaction listener attached');
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding(Events.InteractionCreate, (interaction: Interaction) => {
+        this.handleInteraction(interaction).catch((err) => {
+          this.logger.error('Unhandled error in interaction handler:', err);
+        });
+      }),
+    ]);
   }
 
   /**
-   * Reset listener state when bot disconnects (will re-attach on reconnect).
+   * Drop the handler so a reconnect re-attaches to the live client.
    */
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   detachListener(): void {
-    this.listenerAttached = false;
+    this.binding.detach();
   }
 
   private async handleInteraction(interaction: Interaction): Promise<void> {

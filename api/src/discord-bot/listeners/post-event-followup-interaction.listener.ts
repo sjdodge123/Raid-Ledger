@@ -84,7 +84,19 @@ export class PostEventFollowupInteractionListener {
   onBotConnected(): void {
     this.binding.attachToClient(this.clientService.getClient(), [
       gatewayBinding('interactionCreate', (interaction) => {
-        if (interaction.isButton()) void this.handle(interaction);
+        // .catch() rather than a bare `void`: handle()'s own error path awaits
+        // editReply, which rejects on an expired token (10062). That rejection
+        // would otherwise escape as an unhandled rejection — the user sees a
+        // dead button and the AC2 logging records the first error but never
+        // the second failure. Matches steam-link.listener.ts.
+        if (interaction.isButton())
+          void this.handle(interaction).catch((err: unknown) =>
+            this.logger.error(
+              `Follow-up handler rejected for ${interaction.customId}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            ),
+          );
       }),
     ]);
   }

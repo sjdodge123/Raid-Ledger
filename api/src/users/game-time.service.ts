@@ -242,7 +242,10 @@ export class GameTimeService {
    * "today" in the caller's timezone; `end_date` is inclusive. The composite
    * view uses its own week-bounded query and still sees past absences.
    */
-  async getAbsences(userId: number, tzOffset = 0): Promise<AbsenceRecord[]> {
+  async getAbsences(
+    userId: number,
+    tzOffset: number,
+  ): Promise<AbsenceRecord[]> {
     const today = resolveLocalToday(tzOffset);
     return fetchAbsencesEndingOnOrAfter(this.db, userId, today);
   }

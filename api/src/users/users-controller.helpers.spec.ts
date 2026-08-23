@@ -9,6 +9,7 @@ import {
   parseSources,
   parsePlaytimeMin,
   parsePlayHistory,
+  parseTzOffset,
   resolveSources,
   buildPaginatedMeta,
 } from './users-controller.helpers';
@@ -175,5 +176,36 @@ describe('buildPaginatedMeta', () => {
       limit: 20,
       hasMore: false,
     });
+  });
+});
+
+describe('Regression: ROK-1427 — parseTzOffset clamping', () => {
+  it('passes a real offset through unchanged', () => {
+    expect(parseTzOffset('300')).toBe(300); // New York, EST
+    expect(parseTzOffset('-720')).toBe(-720); // Auckland, NZST
+    expect(parseTzOffset('0')).toBe(0);
+  });
+
+  it('falls back to 0 for missing or non-numeric input', () => {
+    expect(parseTzOffset(undefined)).toBe(0);
+    expect(parseTzOffset('')).toBe(0);
+    expect(parseTzOffset('not-a-number')).toBe(0);
+  });
+
+  it('clamps an out-of-range offset to the real IANA span', () => {
+    // Unclamped, 999999 shifts "today" back ~2 years and silently defeats the
+    // expired-absence filter.
+    expect(parseTzOffset('999999')).toBe(840);
+    expect(parseTzOffset('-999999')).toBe(-840);
+  });
+
+  it('clamps a value large enough to overflow the Date range', () => {
+    // Unclamped this reaches resolveLocalToday, where new Date(localMs)
+    // .toISOString() throws RangeError -> unhandled 500 + a Sentry event.
+    const huge = parseTzOffset('999999999999999');
+    expect(huge).toBe(840);
+    expect(() =>
+      new Date(Date.now() - huge * 60 * 1000).toISOString(),
+    ).not.toThrow();
   });
 });
