@@ -23,16 +23,20 @@ export const MANUAL_REMIND_RECIPIENT_TTL = 24 * 3600;
 /**
  * Recurrence window for the automatic scheduling-poll vote nudge.
  * SECONDS (the unit `NotificationDedupService.checkAndMarkSent` expects) —
- * fixed expiry + lazy re-insert yields exactly one nudge per 48h window.
+ * fixed expiry + lazy re-insert yields exactly one nudge per 24h window.
+ *
+ * Was 48h. Deadline-less polls rely on this nudge as their ONLY follow-up
+ * (the deadline reminders require a non-null `phase_deadline`), so a
+ * two-day gap was the slowest feedback loop in the poll flow.
  */
-export const POLL_NUDGE_TTL_SECONDS = 48 * 3600;
+export const POLL_NUDGE_TTL_SECONDS = 24 * 3600;
 
 /**
  * Grace period before a poll member's first automatic nudge (hours).
  * Members are inserted at poll creation, so this doubles as a poll-age
- * floor: the creation-time DM already covered the first two days.
+ * floor: the creation-time DM already covered the first day.
  */
-export const POLL_NUDGE_MIN_MEMBER_AGE_HOURS = 48;
+export const POLL_NUDGE_MIN_MEMBER_AGE_HOURS = 24;
 
 /**
  * Suppress the automatic nudge once a poll's `phase_deadline` is this close

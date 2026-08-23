@@ -14,7 +14,7 @@ export const CreateSchedulingPollSchema = z.object({
     gameId: z.number().int().positive(),
     /** Optional linked event ID (e.g. for reschedule flow). */
     linkedEventId: z.number().int().positive().optional(),
-    /** Optional duration in hours before auto-archiving (1-720). */
+    /** Duration in hours before auto-archiving (1-720). Defaults to 2 weeks. */
     durationHours: z.number().int().min(1).max(720).optional(),
     /** Optional list of user IDs to add as match members. */
     memberUserIds: z.array(z.number().int().positive()).optional(),

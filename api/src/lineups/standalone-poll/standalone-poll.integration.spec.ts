@@ -327,14 +327,13 @@ function describePhaseDuration() {
     expect(hoursUntil).toBeLessThan(50);
   });
 
-  it('should not set phase deadline when durationHours is omitted', async () => {
+  it('should default the phase deadline to 2 weeks when durationHours is omitted', async () => {
     const res = await postSchedulingPoll(adminToken, {
       gameId: testApp.seed.game.id,
     });
 
     expect(res.status).toBe(201);
 
-    // Without durationHours, phaseDeadline should be null (or absent)
     const lineupId = res.body.lineupId as number;
     const [lineup] = await testApp.db
       .select()
@@ -342,8 +341,15 @@ function describePhaseDuration() {
       .limit(1);
 
     expect(lineup.id).toBe(lineupId);
-    // Standalone polls without explicit duration should not auto-expire
-    expect(lineup.phaseDeadline).toBeNull();
+    // A null deadline used to opt the poll out of BOTH the deadline
+    // reminders and the auto-archive job, leaving it open forever.
+    expect(lineup.phaseDeadline).not.toBeNull();
+
+    // Roughly 14 days from now.
+    const deadline = new Date(lineup.phaseDeadline!);
+    const hoursUntil = (deadline.getTime() - Date.now()) / (1000 * 60 * 60);
+    expect(hoursUntil).toBeGreaterThan(14 * 24 - 2);
+    expect(hoursUntil).toBeLessThan(14 * 24 + 2);
   });
 }
 describe('POST /scheduling-polls — phase duration', describePhaseDuration);
