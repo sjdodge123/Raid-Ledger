@@ -12,12 +12,18 @@ import { SettingsService } from '../settings/settings.service';
 import {
   COOPTIMUS_API_BASE,
   COOPTIMUS_RATE_LIMIT_MS,
+  COOPTIMUS_ALLOWED_HOSTS,
 } from './cooptimus.constants';
 import {
   parseCooptimusResponse,
   isEmptyEnvelope,
   type CooptimusEntry,
 } from './cooptimus-xml.util';
+import {
+  parseGamePage,
+  UNKNOWN_PAGE_FACTS,
+  type CooptimusPageFacts,
+} from './cooptimus-page.util';
 
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -109,6 +115,67 @@ export class CooptimusService {
       entries: parseCooptimusResponse(text),
       empty: isEmptyEnvelope(text),
     };
+  }
+
+  /**
+   * The URL originates from an external XML payload, so it is untrusted input
+   * to a server-side request: https only, and only Co-Optimus hosts.
+   */
+  private isAllowedPageUrl(url: string | null): url is string {
+    if (!url) return false;
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return false;
+    }
+    // https ONLY. The allowlisted user-agent is effectively the credential on
+    // their Cloudflare exemption, so it must never cross the wire in plaintext
+    // (Codex pre-push P2). Their own <url> values are all https.
+    if (parsed.protocol !== 'https:') return false;
+    if (!COOPTIMUS_ALLOWED_HOSTS.has(parsed.hostname.toLowerCase())) {
+      this.logger.warn(
+        `Refusing Co-Optimus page fetch for off-domain host: ${parsed.hostname}`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Facts their site renders but `games.php` never returns — combo co-op and
+   * downloadable-only (see cooptimus-page.util for the measurements). One
+   * extra throttled GET per matched game.
+   *
+   * Deliberately non-throwing: the API match already succeeded, so a page that
+   * 404s, times out, or changes shape must degrade to "unknown" rather than
+   * fail the row and burn one of the batch's consecutive-failure budget.
+   */
+  async fetchGamePageFacts(url: string | null): Promise<CooptimusPageFacts> {
+    if (!this.isAllowedPageUrl(url)) return UNKNOWN_PAGE_FACTS;
+    const ua = await this.settingsService.getCooptimusUserAgent();
+    if (!ua) return UNKNOWN_PAGE_FACTS;
+    try {
+      await this.throttle();
+      const res = await fetch(url, {
+        headers: { 'User-Agent': ua, Accept: 'text/html' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        // A 3xx to another host would side-step the allowlist above, so refuse
+        // to follow one at all. Their game URLs answer 200 directly; a redirect
+        // means something changed and "unknown" is the safe answer.
+        redirect: 'error',
+      });
+      if (!res.ok) {
+        this.logger.warn(`Co-Optimus page HTTP ${res.status} for ${url}`);
+        return UNKNOWN_PAGE_FACTS;
+      }
+      return parseGamePage(await res.text());
+    } catch (err) {
+      this.logger.warn(
+        `Co-Optimus page fetch failed for ${url}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return UNKNOWN_PAGE_FACTS;
+    }
   }
 
   /**

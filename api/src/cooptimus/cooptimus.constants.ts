@@ -9,6 +9,18 @@
 
 export const COOPTIMUS_API_BASE = 'https://api.co-optimus.com/games.php';
 
+/**
+ * Hosts the game-page fetch may talk to. The `<url>` we follow comes from an
+ * external XML response, so without this the sync is an SSRF primitive: any
+ * http(s) URL in that field would be requested server-side, from inside the
+ * network, by a trusted background job (Codex pre-push review).
+ */
+export const COOPTIMUS_ALLOWED_HOSTS = new Set([
+  'co-optimus.com',
+  'www.co-optimus.com',
+  'api.co-optimus.com',
+]);
+
 /** robots.txt asks crawl-delay: 1 — stay above it. */
 export const COOPTIMUS_RATE_LIMIT_MS = 1100;
 

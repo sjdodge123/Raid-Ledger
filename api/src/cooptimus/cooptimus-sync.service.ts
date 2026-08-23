@@ -33,9 +33,12 @@ import {
   matchEntries,
   pickPlatformEntry,
   stripEditionSuffix,
-  deriveFeatureFlags,
 } from './cooptimus-match.helpers';
 import type { CooptimusEntry } from './cooptimus-xml.util';
+import {
+  UNKNOWN_PAGE_FACTS,
+  type CooptimusPageFacts,
+} from './cooptimus-page.util';
 
 type GameRow = {
   id: number;
@@ -224,13 +227,66 @@ export class CooptimusSyncService {
     return this.redis.lrange(COOPTIMUS_REVIEW_QUEUE_KEY, 0, -1);
   }
 
+  /**
+   * Page-derived facts already stored for THIS Co-Optimus entry, so an unknown
+   * re-read can preserve them.
+   *
+   * Scoped to `entryId` deliberately: if the game has been remapped to a
+   * different entry (a changed manual pin, or a later match picking another
+   * id), the stored combo/downloadable describe a DIFFERENT game. Carrying
+   * them onto the new entry would republish another title's facts under the
+   * Co-Optimus credit — the same class of bug this commit fixes.
+   */
+  private async readPageDerived(
+    gameId: number,
+    entryId: number,
+  ): Promise<CooptimusPageFacts & { pageFactsAt: string | null }> {
+    const [row] = await this.db
+      .select({
+        cooptimusId: schema.games.cooptimusId,
+        comboCoop: schema.games.cooptimusComboCoop,
+        extras: schema.games.cooptimusExtras,
+      })
+      .from(schema.games)
+      .where(eq(schema.games.id, gameId));
+    if (!row || row.cooptimusId !== entryId) {
+      return { ...UNKNOWN_PAGE_FACTS, pageFactsAt: null };
+    }
+    const extras = (row?.extras ?? {}) as {
+      downloadableOnly?: boolean | null;
+      comboLabel?: string | null;
+      pageFactsAt?: string | null;
+    };
+    // Rows written before page-sourcing carry featurelist-derived `false`
+    // values that were never on any page. Preserving those across an unknown
+    // re-read would resurrect the exact wrong "Not Supported" this commit
+    // removes, so absent provenance means "nothing to preserve".
+    if (!extras.pageFactsAt)
+      return { ...UNKNOWN_PAGE_FACTS, pageFactsAt: null };
+    return {
+      comboCoop: row?.comboCoop ?? null,
+      comboLabel: extras.comboLabel ?? null,
+      downloadableOnly: extras.downloadableOnly ?? null,
+      pageFactsAt: extras.pageFactsAt,
+    };
+  }
+
   private async applyEntries(
     gameId: number,
     entries: CooptimusEntry[],
   ): Promise<void> {
     const chosen = pickPlatformEntry(entries);
     if (!chosen) return;
-    const flags = deriveFeatureFlags(chosen.featurelist);
+    // Combo co-op + downloadable-only exist ONLY on the rendered game page —
+    // games.php never returns them. Unknown stays null so the UI can omit the
+    // row instead of publishing a false negative under their credit.
+    const page = await this.cooptimus.fetchGamePageFacts(chosen.url);
+    // A transient page failure must not DELETE facts an earlier sync sourced
+    // successfully — stale rows re-sync every COOPTIMUS_STALE_AFTER_DAYS, so a
+    // single timeout would otherwise blank the row's combo/downloadable
+    // (Codex pre-push review). `??` keeps the prior value when unknown.
+    const prior = await this.readPageDerived(gameId, chosen.id);
+    const readPage = page.comboCoop !== null || page.downloadableOnly !== null;
     await this.db
       .update(schema.games)
       .set({
@@ -241,7 +297,7 @@ export class CooptimusSyncService {
         cooptimusSplitscreen: chosen.splitscreen,
         cooptimusDropIn: chosen.dropInDropOut,
         cooptimusCampaignCoop: chosen.campaign,
-        cooptimusComboCoop: flags.comboCoop,
+        cooptimusComboCoop: page.comboCoop ?? prior.comboCoop,
         cooptimusUrl: chosen.url,
         cooptimusExtras: {
           system: chosen.system,
@@ -249,7 +305,9 @@ export class CooptimusSyncService {
           featurelist: chosen.featurelist,
           coopExperience: chosen.coopExperience,
           description: chosen.description,
-          downloadableOnly: flags.downloadableOnly,
+          downloadableOnly: page.downloadableOnly ?? prior.downloadableOnly,
+          comboLabel: page.comboLabel ?? prior.comboLabel,
+          pageFactsAt: readPage ? new Date().toISOString() : prior.pageFactsAt,
         },
         cooptimusSyncedAt: new Date(),
       })

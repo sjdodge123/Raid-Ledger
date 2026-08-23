@@ -111,3 +111,108 @@ describe('CooptimusService (ROK-1397)', () => {
     }
   });
 });
+
+describe('CooptimusService.fetchGamePageFacts (game-page source)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const PAGE = (combo: string, extras: string) =>
+    `<div id="coop-features"><dl><dt>Combo Co-Op (Local + Online)</dt>` +
+    `<dd><img src="x"/><em>${combo}</em></dd></dl></div>` +
+    `<ul id="coop-extras">${extras}</ul>`;
+
+  it('sends the granted UA and returns the page-only facts', async () => {
+    const svc = makeService('UA/1.0');
+    const spy = mockFetch(
+      200,
+      PAGE('Up to 4 Local or Online', '<li>Downloadable Only</li>'),
+    );
+
+    const facts = await svc.fetchGamePageFacts(
+      'https://www.co-optimus.com/game/1/PC/x.html',
+    );
+
+    expect(facts).toEqual({
+      comboCoop: true,
+      comboLabel: 'Up to 4 Local or Online',
+      downloadableOnly: true,
+    });
+    const [, init] = spy.mock.calls[0];
+    expect((init?.headers as Record<string, string>)['User-Agent']).toBe(
+      'UA/1.0',
+    );
+  });
+
+  it.each([
+    ['unconfigured UA', null, 'https://www.co-optimus.com/game/1/PC/x.html'],
+    ['null url', 'UA/1.0', null],
+    ['non-http url', 'UA/1.0', 'javascript:alert(1)'],
+    // SSRF guard (Codex pre-push P2): <url> is attacker-influenceable external
+    // input to a SERVER-side request, so anything off-domain is refused before
+    // fetch() is reached — including internal addresses and lookalike hosts.
+    ['internal address', 'UA/1.0', 'http://169.254.169.254/latest/meta-data/'],
+    ['localhost', 'UA/1.0', 'http://127.0.0.1:3000/admin/settings'],
+    ['lookalike host', 'UA/1.0', 'https://co-optimus.com.evil.test/x.html'],
+    ['unparseable url', 'UA/1.0', 'not a url'],
+    // Plaintext would put the allowlisted UA — effectively the credential on
+    // their Cloudflare exemption — on the wire in clear.
+    [
+      'plaintext http on an allowed host',
+      'UA/1.0',
+      'http://www.co-optimus.com/game/1/PC/x.html',
+    ],
+  ])('%s: returns unknown WITHOUT fetching', async (_label, ua, url) => {
+    const svc = makeService(ua);
+    const spy = jest.spyOn(global, 'fetch');
+
+    expect(await svc.fetchGamePageFacts(url)).toEqual({
+      comboCoop: null,
+      comboLabel: null,
+      downloadableOnly: null,
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('degrades to unknown on a non-OK response instead of throwing', async () => {
+    // The API match already succeeded; a page 404 must not fail the row or
+    // spend the sync's consecutive-failure budget.
+    const svc = makeService('UA/1.0');
+    mockFetch(404, 'nope');
+
+    await expect(
+      svc.fetchGamePageFacts('https://www.co-optimus.com/game/1/PC/x.html'),
+    ).resolves.toEqual({
+      comboCoop: null,
+      comboLabel: null,
+      downloadableOnly: null,
+    });
+  });
+
+  it('refuses to follow a redirect (it could leave the allowlisted host)', async () => {
+    const svc = makeService('UA/1.0');
+    const spy = jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValue(new TypeError('unexpected redirect'));
+
+    await expect(
+      svc.fetchGamePageFacts('https://www.co-optimus.com/game/1/PC/x.html'),
+    ).resolves.toEqual({
+      comboCoop: null,
+      comboLabel: null,
+      downloadableOnly: null,
+    });
+    expect(spy.mock.calls[0][1]).toMatchObject({ redirect: 'error' });
+  });
+
+  it('degrades to unknown when the request throws', async () => {
+    const svc = makeService('UA/1.0');
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('ETIMEDOUT'));
+
+    await expect(
+      svc.fetchGamePageFacts('https://www.co-optimus.com/game/1/PC/x.html'),
+    ).resolves.toEqual({
+      comboCoop: null,
+      comboLabel: null,
+      downloadableOnly: null,
+    });
+  });
+});
