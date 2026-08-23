@@ -1,8 +1,8 @@
 /**
- * Recurring 48h vote nudge for scheduling polls.
+ * Recurring 24h vote nudge for scheduling polls.
  *
  * Members of an active poll who have not voted on any still-viable day get a
- * DM every 48 hours until they vote or the poll closes. Complements the
+ * DM every 24 hours until they vote or the poll closes. Complements the
  * deadline-driven reminders (`StandalonePollReminderService`,
  * `LineupReminderService.checkSchedulingReminders`), which only fire when a
  * `phase_deadline` is within 24h — deadline-less polls previously lingered
@@ -102,7 +102,7 @@ export class SchedulingPollNudgeService {
 
   /**
    * Send one nudge unless this (match, user) pair was already nudged inside
-   * the current 48h window.
+   * the current 24h window.
    *
    * @returns True when a notification was created
    */

@@ -222,7 +222,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   SchedulingPollNudgeService_runNudges: {
     description:
-      'DMs members of an active scheduling poll every 48h until they vote on a still-future day. Skips polls whose phase deadline is within 24h (the deadline reminders own that window) and members added in the last 48h.',
+      'DMs members of an active scheduling poll every 24h until they vote on a still-future day. Skips polls whose phase deadline is within 24h (the deadline reminders own that window) and members added in the last 24h.',
     category: 'Notifications',
   },
   SlowQueriesCron_appendDigest: {

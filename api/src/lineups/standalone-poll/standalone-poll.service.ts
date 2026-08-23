@@ -70,6 +70,17 @@ export interface CreatePollInput {
   broadcastExcludeUserIds?: number[];
 }
 
+/**
+ * Fallback poll length when the caller omits `durationHours` (2 weeks).
+ *
+ * A null `phase_deadline` opted the poll out of BOTH the deadline reminder
+ * service and the auto-archive job, so deadline-less polls stayed open
+ * forever with no way to close but a manual lock-in. Every poll now gets a
+ * deadline; two weeks is long enough not to guillotine a slow-moving group.
+ * Stays within the contract's 1-720h bound.
+ */
+const DEFAULT_POLL_DURATION_HOURS = 14 * 24;
+
 @Injectable()
 export class StandalonePollService {
   private readonly logger = new Logger(StandalonePollService.name);
@@ -235,9 +246,8 @@ export class StandalonePollService {
       await this.linkEventToPoll(input.linkedEventId, match.id);
     }
     await this.addMembers(match.id, userId, input.memberUserIds);
-    if (phaseDeadline) {
-      await this.scheduleArchive(lineup.id, phaseDeadline);
-    }
+    // Always set: computeDeadline falls back to DEFAULT_POLL_DURATION_HOURS.
+    await this.scheduleArchive(lineup.id, phaseDeadline);
     this.fireNotifications(
       game,
       lineup.id,
@@ -281,10 +291,10 @@ export class StandalonePollService {
     return game;
   }
 
-  /** Compute phase deadline from optional durationHours. */
-  private computeDeadline(durationHours?: number): Date | null {
-    if (!durationHours) return null;
-    return new Date(Date.now() + durationHours * 60 * 60 * 1000);
+  /** Compute phase deadline from durationHours, defaulting to 2 weeks. */
+  private computeDeadline(durationHours?: number): Date {
+    const hours = durationHours || DEFAULT_POLL_DURATION_HOURS;
+    return new Date(Date.now() + hours * 60 * 60 * 1000);
   }
 
   /** Add creator + provided members to the match. */

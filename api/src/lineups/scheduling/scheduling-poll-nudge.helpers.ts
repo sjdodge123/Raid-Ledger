@@ -1,5 +1,5 @@
 /**
- * Query + copy helpers for the recurring 48h scheduling-poll vote nudge.
+ * Query + copy helpers for the recurring 24h scheduling-poll vote nudge.
  *
  * Split out of `SchedulingPollNudgeService` so both files stay well inside
  * the 300-line / 30-line caps.
@@ -102,9 +102,9 @@ export async function findNudgeablePolls(db: Db): Promise<NudgePoll[]> {
  * Votes are presence-only rows, so a member whose only votes sit on days
  * that have since passed re-enters this audience automatically — the
  * incident case. Deactivated users are filtered here (not just downstream)
- * so we never burn a 48h dedup key on someone who can't receive the DM.
+ * so we never burn a 24h dedup key on someone who can't receive the DM.
  * Members younger than the grace period are held back so the poll's
- * creation-time DM owns the first 48 hours.
+ * creation-time DM owns the first 24 hours.
  *
  * With `staleVotersOnly` (the final-24h deadline handoff), the audience
  * narrows to members who HAVE votes — all necessarily stale here — because

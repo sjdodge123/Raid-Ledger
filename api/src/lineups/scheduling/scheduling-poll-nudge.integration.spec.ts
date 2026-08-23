@@ -1,23 +1,25 @@
 /**
- * Recurring 48h vote nudge for scheduling polls (integration).
+ * Recurring 24h vote nudge for scheduling polls (integration).
  *
- * TDD gate for `SchedulingPollNudgeService`: every 48h, DM each *pending*
+ * TDD gate for `SchedulingPollNudgeService`: every 24h, DM each *pending*
  * member of an active scheduling poll until they vote on a still-viable day
  * or the poll closes. "Pending" = no vote on ANY slot whose `proposed_time`
  * is still in the future, so members whose only votes are on days that have
  * since passed re-enter the audience automatically.
  *
- * Coverage (16 cases):
- *   1. Deadline-less standalone poll + zero-vote member older than 48h -> DM
+ * Coverage (17 cases):
+ *   1. Deadline-less standalone poll + zero-vote member older than 24h -> DM
  *   2. Member voted on a FUTURE slot -> not nudged
  *   3. Member voted ONLY on past slots -> nudged (the incident case)
  *   4. Match whose slots have all passed -> stalled copy variant
  *   5. Match that never had slots -> no-times-proposed copy variant
- *   6. Member added < 48h ago -> not nudged (and the tick is a no-op)
+ *   6. Member added < 24h ago -> not nudged (and the tick is a no-op);
+ *      a member aged between the old 48h grace and the new 24h one IS
+ *      nudged (the ROK cadence cut — would have been silent before)
  *   7. `phase_deadline` inside 24h -> zero-vote members handed off to the
  *      deadline DMs, but STALE voters (invisible to those) are still nudged
  *   8. `phase_deadline` already passed -> suppressed
- *   9. Dedup contract: key shape + 48h TTL in SECONDS; `true` -> no send
+ *   9. Dedup contract: key shape + 24h TTL in SECONDS; `true` -> no send
  *  10. Closed poll (match 'scheduled' / lineup 'archived') -> no candidates
  *  11. Lineup that opted out of the scheduling phase -> excluded
  *  12. Deactivated member -> excluded
@@ -35,7 +37,7 @@ import { SchedulingPollNudgeService } from './scheduling-poll-nudge.service';
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Mirrors POLL_NUDGE_TTL_SECONDS — asserted verbatim so a ms/s slip fails. */
-const NUDGE_TTL_SECONDS = 48 * 3600;
+const NUDGE_TTL_SECONDS = 24 * 3600;
 
 interface PollSetup {
   lineupId: number;
@@ -55,7 +57,7 @@ interface SeedOptions {
   deadlineHours?: number | null;
   /** Extra members beyond the creator. Default 1. */
   members?: number;
-  /** Age of every match-member row in hours. Default 72 (> the 48h grace). */
+  /** Age of every match-member row in hours. Default 72 (> the 24h grace). */
   memberAgeHours?: number;
   /** Hour offsets (from now) of the slots to seed. Default one future slot. */
   slotHours?: number[];
@@ -83,7 +85,7 @@ function describeSchedulingPollNudge(): void {
     createSpy = jest
       .spyOn(notificationService, 'create')
       .mockResolvedValue({ id: 'mock-notif' } as never);
-    // Default: nothing has been nudged yet in this 48h window.
+    // Default: nothing has been nudged yet in this 24h window.
     dedupSpy = jest.spyOn(dedup, 'checkAndMarkSent').mockResolvedValue(false);
   });
 
@@ -333,7 +335,7 @@ function describeSchedulingPollNudge(): void {
 
   // ── 5. member grace period ─────────────────────────────────────────
 
-  it('does not nudge members added less than 48h ago (no-op tick)', async () => {
+  it('does not nudge members added less than 24h ago (no-op tick)', async () => {
     await seedPoll('young', { memberAgeHours: 4 });
 
     const result = await nudgeService.runNudges();
@@ -341,6 +343,17 @@ function describeSchedulingPollNudge(): void {
     expect(createSpy).not.toHaveBeenCalled();
     // No-op ticks must return false so no execution row is recorded.
     expect(result).toBe(false);
+  });
+
+  it('nudges a member aged between the old 48h grace and the new 24h one', async () => {
+    // 36h sits inside the retired 48h grace: before the cadence cut this
+    // member was silent for another half-day. Pins the new boundary so a
+    // revert to 48 fails here rather than only in prod DM volume.
+    const poll = await seedPoll('grace-boundary', { memberAgeHours: 36 });
+
+    await nudgeService.runNudges();
+
+    expect(dmsForUser(poll.memberIds[0]).length).toBe(1);
   });
 
   // ── 6. deadline handoff (inside 24h) ───────────────────────────────
@@ -385,7 +398,7 @@ function describeSchedulingPollNudge(): void {
 
   // ── 8. dedup contract ──────────────────────────────────────────────
 
-  it('marks dedup with the sched-poll-nudge key and a 48h TTL in seconds', async () => {
+  it('marks dedup with the sched-poll-nudge key and a 24h TTL in seconds', async () => {
     const poll = await seedPoll('dedup');
     const member = poll.memberIds[0];
 
@@ -494,6 +507,6 @@ function describeSchedulingPollNudge(): void {
 }
 
 describe(
-  'Scheduling poll 48h vote nudge (integration)',
+  'Scheduling poll 24h vote nudge (integration)',
   describeSchedulingPollNudge,
 );
