@@ -41,6 +41,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import {
   parseOrBadRequest,
+  parseTzOffset,
   resolveWeekStart,
 } from './users-controller.helpers';
 import {
@@ -227,11 +228,10 @@ export class UsersMeController {
     @Query('tzOffset') tzOffsetStr?: string,
   ) {
     const weekStart = resolveWeekStart(week);
-    const tzOffset = tzOffsetStr ? parseInt(tzOffsetStr, 10) : 0;
     const result = await this.gameTimeService.getCompositeView(
       req.user.id,
       weekStart,
-      isNaN(tzOffset) ? 0 : tzOffset,
+      parseTzOffset(tzOffsetStr),
     );
     return { data: result };
   }
@@ -286,11 +286,18 @@ export class UsersMeController {
     await this.gameTimeService.deleteAbsence(req.user.id, id);
   }
 
-  /** List all absences for current user. */
+  /** List current + future absences for current user (ROK-1427). */
   @Get('me/game-time/absences')
   @UseGuards(AuthGuard('jwt'))
-  async getAbsences(@Request() req: AuthenticatedRequest) {
-    return { data: await this.gameTimeService.getAbsences(req.user.id) };
+  async getAbsences(
+    @Request() req: AuthenticatedRequest,
+    @Query('tzOffset') tzOffsetStr?: string,
+  ) {
+    const data = await this.gameTimeService.getAbsences(
+      req.user.id,
+      parseTzOffset(tzOffsetStr),
+    );
+    return { data };
   }
 
   /** Upload a custom avatar (ROK-220). */

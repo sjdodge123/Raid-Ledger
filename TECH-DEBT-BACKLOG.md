@@ -902,3 +902,61 @@ Deferred by design in the ROK-1417 observability spec (plan D5, Tiers 1/2/3). Th
   Suggested: have `--rebuild` actually rebuild the contract workspace (and fail loudly if the emitted `dist` is older than `packages/contract/src`), so a stale `dist` cannot silently invalidate local e2e results.
 - **[nit]** Vite binds **IPv6-only** (`[::1]:5173`), so `curl 127.0.0.1:5173` fails while `localhost:5173` succeeds. Any readiness probe using the IPv4 literal reports the web server down when it is healthy — in `validate-ci.sh` that surfaces as `Playwright: SKIPPED — Dev env not responding`, i.e. silently skipped e2e rather than an error.
   Suggested: probe `localhost` (or try both families) in the e2e gate's readiness check.
+### 2026-08-23 — fix/batch-2026-08-22 (surfaced during per-story reviewer passes on ROK-1424/1425/1427)
+
+- **[med]** `api/src/discord-bot/discord-bot-client.service.ts:329-341` — `emitConnected()` wraps
+  `emitAsync` in ONE try/catch around the whole chain rather than per-listener. EventEmitter2 invokes
+  listeners in a plain loop, so a synchronous throw from any earlier `CONNECTED` subscriber aborts the
+  rest and every listener registered after it silently never attaches. Only trace is
+  `Error in CONNECTED event handlers`. This is an unclosed candidate root cause for ROK-1425 and is
+  NOT fixed by that story's commits.
+  Suggested: wrap each subscriber, or emit per-listener with individual catch + log.
+- **[med]** `api/src/discord-bot/listeners/signup-interaction.listener.ts:103`,
+  `api/src/discord-bot/listeners/pug-invite.listener.ts:89` — null their handler refs on DISCONNECTED
+  without calling `removeListener`. Functionally correct TODAY only because `connect()` always builds a
+  new `Client`; if the client service ever reuses a Client across DISCONNECTED/CONNECTED these stack
+  instantly. Half-migrated pattern now that eight siblings use `DiscordListenerBinding`.
+  Suggested: convert both to `DiscordListenerBinding` for uniformity.
+- **[low]** `api/src/discord-bot/listeners/discord-listener-binding.ts:19-24` — `GatewayBinding` is
+  exported with `handler: (...args: never[]) => void`. Every function is assignable to that, so the
+  `gatewayBinding()` factory can be bypassed with a wrong handler signature that still typechecks.
+  Suggested: brand the type, or don't export it and type `attach` as `ReturnType<typeof gatewayBinding>[]`.
+- **[nit]** `api/src/discord-bot/listeners/reschedule-response.listener.ts` — 298/300 eslint-counted
+  lines. Two lines of headroom before `max-lines` hard-fails CI. Next author must extract first.
+- **[low]** `api/src/notifications/live-noshow-grace.helpers.ts:47-53` — Phase 1 reads the running-late
+  marker off `fetchNonBenchSignups` (filtered to `status='signed_up'` + non-bench) while Phase 2's
+  `fetchLateGraceByUserId` filters only on `eventId` + `runningLateAt IS NOT NULL`. A user benched or
+  roached-out between +5 and +15 gets Phase 2 grace that Phase 1 would not grant. Always errs toward
+  suppressing an alert, and rare.
+  Suggested: add the same `status='signed_up'` predicate to `fetchLateGraceByUserId`.
+- **[low]** `api/src/notifications/live-noshow.helpers.ts:82` — `findLiveEventsInNoShowWindow` requires
+  the event to still be running, so on a short (~30 min) event a default-grace deferral can push the
+  Phase 2 deadline to or past the event end and the escalation never fires at all. Pre-fix it fired at
+  start+15. Probably correct product behavior ("their slot is free to PUG" is useless after the event),
+  but it is an unstated consequence of stacking grace on the phase offset.
+  Suggested: one sentence in the helper's header JSDoc so it reads as intentional.
+- **[nit]** `api/src/notifications/live-noshow-running-late.integration.spec.ts:186,199,221,238,253,316`
+  — `toEqual([...])` against selects with no `orderBy`. Every case expects exactly one row today, so
+  they pass deterministically, but a case that grows to two rows becomes a nondeterministic flake.
+  Suggested: `expect.arrayContaining` + explicit length, or sort uniformly (`:296` already sorts).
+- **[low]** `packages/contract/src/game-time.schema.ts:108-113` — `GameTimeAbsenceInputSchema` is bare
+  `z.string()` for both dates: no format check, no `start <= end`, no past guard. A user can create a
+  2020-01-01 → 2020-01-07 absence, get a 201 and a success toast, and see nothing appear (ROK-1427 now
+  filters it out of the list). Pre-existing weak validation that ROK-1427 makes more visible.
+  Suggested: `.refine()` for `endDate >= startDate`, plus a client-side `min` on the start input or a
+  toast when the created row is already expired.
+- **[low]** `api/src/users/game-time-absence.helpers.ts:36-55` — `fetchAbsencesEndingOnOrAfter` lacks
+  the `isMissingTableError` → `[]` guard that its sibling `fetchAbsences`
+  (`game-time-composite.helpers.ts:105-124`) has for pre-migration DBs. Not a regression (the pre-fix
+  `getAbsences` had no guard either), but the inconsistency is now adjacent and visible.
+- **[nit]** `api/src/users/users-me.controller.ts` (~295) and `api/src/users/game-time.service.ts`
+  (~289) are close to the 300-line `max-lines` error. Both pass today; the next feature touching either
+  will trip CI.
+- **[nit]** `api/src/users/game-time.integration.spec.ts` — `describeRok1427` is 131 lines and
+  `describeGameTime` has grown to ~547 (both over the 60-line `max-lines-per-function` warn; file is
+  ~613 of the 750 test-file cap).
+  Suggested: split to `game-time.absence-expiry.integration.spec.ts` per the TESTING.md
+  `{name}.{concern}.spec.ts` convention on next touch.
+- **[nit]** `api/src/users/game-time.types.ts:47` + `web/src/lib/api/game-time-api.ts:55` —
+  `AbsenceRecord` is hand-duplicated on both sides rather than shared through
+  `packages/contract`, which `project-context.md` prohibits. Pre-existing; this batch does not widen it.

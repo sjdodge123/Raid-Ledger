@@ -5,7 +5,6 @@ import {
   MessageFlags,
   type ButtonInteraction,
   type StringSelectMenuInteraction,
-  type Interaction,
 } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -21,6 +20,10 @@ import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
 import {
   isRescheduleAction,
   isSelectAction,
@@ -47,7 +50,10 @@ import {
 @Injectable()
 export class RescheduleResponseListener {
   private readonly logger = new Logger(RescheduleResponseListener.name);
-  private boundHandler: ((interaction: Interaction) => void) | null = null;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'reschedule response interactions',
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -74,19 +80,20 @@ export class RescheduleResponseListener {
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   onBotConnected(): void {
-    const client = this.clientService.getClient();
-    if (!client) return;
-    if (this.boundHandler) {
-      client.removeListener('interactionCreate', this.boundHandler);
-    }
-    this.boundHandler = (interaction: Interaction) => {
-      if (interaction.isButton())
-        void this.handleButtonInteraction(interaction);
-      else if (interaction.isStringSelectMenu())
-        void this.handleSelectMenuInteraction(interaction);
-    };
-    client.on('interactionCreate', this.boundHandler);
-    this.logger.log('Registered reschedule response interaction handler');
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding('interactionCreate', (interaction) => {
+        if (interaction.isButton())
+          void this.handleButtonInteraction(interaction);
+        else if (interaction.isStringSelectMenu())
+          void this.handleSelectMenuInteraction(interaction);
+      }),
+    ]);
+  }
+
+  /** Drop the handler so a reconnect re-attaches to the live client. */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onBotDisconnected(): void {
+    this.binding.detach();
   }
 
   private async handleButtonInteraction(i: ButtonInteraction): Promise<void> {

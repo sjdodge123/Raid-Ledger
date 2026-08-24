@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import { Test, TestingModule } from '@nestjs/testing';
 import { InteractionListener } from './interaction.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -10,7 +11,7 @@ import { BindingsCommand } from '../commands/bindings.command';
 import { InviteCommand } from '../commands/invite.command';
 import { HelpCommand } from '../commands/help.command';
 import { PlayingCommand } from '../commands/playing.command';
-import { Events, MessageFlags } from 'discord.js';
+import { Events, MessageFlags, type Client } from 'discord.js';
 
 let testModule: TestingModule;
 let listener: InteractionListener;
@@ -158,10 +159,19 @@ function attachListenerTests() {
     expect(mockClient.on).not.toHaveBeenCalled();
   });
 
-  it('should not attach a second listener if already attached', () => {
+  it('leaves exactly one live handler when CONNECTED fires twice', () => {
+    // ROK-1425: assert the INVARIANT (net live handlers), not the call count.
+    // DiscordListenerBinding detaches-then-attaches, so `on` is legitimately
+    // called again on a re-attach; what must never happen is two live handlers.
+    // A real EventEmitter is used here because the binding calls removeListener,
+    // which a bare `{ on: jest.fn() }` stub does not implement.
+    const client = new EventEmitter();
+    clientService.getClient.mockReturnValue(client as unknown as Client);
+
     listener.attachListener();
     listener.attachListener();
-    expect(mockClient.on).toHaveBeenCalledTimes(1);
+
+    expect(client.listenerCount(Events.InteractionCreate)).toBe(1);
   });
 
   it('should allow re-attaching after detachListener is called', () => {

@@ -20,6 +20,11 @@ import {
   fetchPhase2Data,
   isRosterAtCapacity,
 } from './live-noshow.helpers';
+import {
+  fetchLateGraceByUserId,
+  isSignupWithinLateGrace,
+  isUserWithinLateGrace,
+} from './live-noshow-grace.helpers';
 
 /**
  * Live no-show detection service (ROK-588).
@@ -57,8 +62,10 @@ export class LiveNoShowService {
         if (liveEvents.length === 0) return false;
         for (const event of liveEvents) {
           const msSinceStart = now.getTime() - event.startTime.getTime();
-          if (msSinceStart >= PHASE2_OFFSET_MS) await this.checkPhase2(event);
-          if (msSinceStart >= PHASE1_OFFSET_MS) await this.checkPhase1(event);
+          if (msSinceStart >= PHASE2_OFFSET_MS)
+            await this.checkPhase2(event, msSinceStart);
+          if (msSinceStart >= PHASE1_OFFSET_MS)
+            await this.checkPhase1(event, msSinceStart);
         }
       },
     );
@@ -89,24 +96,42 @@ export class LiveNoShowService {
     );
   }
 
-  /** Phase 1: Send reminder DM to absent signed-up players. */
-  private async checkPhase1(event: LiveEvent): Promise<void> {
+  /**
+   * Phase 1: Send reminder DM to absent signed-up players.
+   * ROK-1424: players inside their running-late grace window are skipped —
+   * they already told us they're on the way.
+   */
+  private async checkPhase1(
+    event: LiveEvent,
+    msSinceStart: number,
+  ): Promise<void> {
     const absentPlayers = await getAbsentSignedUpPlayers(
       this.db,
       event.id,
       (eid, did) => this.voiceAttendance!.isUserActive(eid, did),
     );
-    if (absentPlayers.length === 0) return;
+    const dueForNudge = absentPlayers.filter(
+      (p) => !isSignupWithinLateGrace(p, msSinceStart, PHASE1_OFFSET_MS),
+    );
+    if (dueForNudge.length === 0) return;
     const voiceChannelId =
       await this.notificationService.resolveVoiceChannelForEvent(event.id);
-    for (const player of absentPlayers) {
+    for (const player of dueForNudge) {
       if (!player.userId) continue;
       await this.sendPhase1Reminder(event, player.userId, voiceChannelId);
     }
   }
 
-  /** Phase 2: Batch DM the creator about still-absent players. */
-  private async checkPhase2(event: LiveEvent): Promise<void> {
+  /**
+   * Phase 2: Batch DM the creator about still-absent players.
+   * ROK-1424: players inside their running-late grace window are excluded. When
+   * that empties the list the escalation is DEFERRED, not cancelled — no dedup
+   * row is written, so a later tick can still fire it once the grace expires.
+   */
+  private async checkPhase2(
+    event: LiveEvent,
+    msSinceStart: number,
+  ): Promise<void> {
     if (
       await this.hasReminderBeenSent(
         event.id,
@@ -118,10 +143,13 @@ export class LiveNoShowService {
     if (!(await isRosterAtCapacity(this.db, event))) return;
     const phase1Reminded = await getPhase1RemindedUserIds(this.db, event.id);
     if (phase1Reminded.length === 0) return;
-    const stillAbsent = await this.findStillAbsentPlayers(
-      event,
+    const candidates = await this.dropLateGracedUsers(
+      event.id,
       phase1Reminded,
+      msSinceStart,
     );
+    if (candidates.length === 0) return;
+    const stillAbsent = await this.findStillAbsentPlayers(event, candidates);
     if (stillAbsent.length === 0) return;
     await this.insertReminderDedup(
       event.id,
@@ -129,6 +157,23 @@ export class LiveNoShowService {
       'noshow_escalation',
     );
     await this.sendEscalationNotification(event, stillAbsent);
+  }
+
+  /**
+   * ROK-1424: drop users whose running-late grace window has not expired yet.
+   * Returns the Phase 2 candidates that are genuinely overdue.
+   */
+  private async dropLateGracedUsers(
+    eventId: number,
+    userIds: number[],
+    msSinceStart: number,
+  ): Promise<number[]> {
+    const grace = await fetchLateGraceByUserId(this.db, eventId);
+    if (grace.size === 0) return userIds;
+    return userIds.filter(
+      (userId) =>
+        !isUserWithinLateGrace(grace, userId, msSinceStart, PHASE2_OFFSET_MS),
+    );
   }
 
   /** Send the escalation notification to the event creator. */

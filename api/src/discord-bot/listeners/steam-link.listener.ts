@@ -28,6 +28,10 @@ import { SettingsService } from '../../settings/settings.service';
 import { SETTING_KEYS } from '../../drizzle/schema';
 import { LineupsService } from '../../lineups/lineups.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { parseSteamAppIds } from './steam-link.helpers';
 import {
@@ -66,7 +70,10 @@ type Game = { id: number; name: string; igdbId: number | null };
 @Injectable()
 export class SteamLinkListener {
   private readonly logger = new Logger(SteamLinkListener.name);
-  private listenerAttached = false;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'steam link interest',
+  );
   private readonly recentlyProcessed = new Map<string, number>();
 
   constructor(
@@ -110,31 +117,28 @@ export class SteamLinkListener {
   /** Attach message + interaction listeners when the Discord bot connects. */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   handleBotConnected(): void {
-    const client = this.clientService.getClient();
-    if (!client || this.listenerAttached) return;
-
-    client.on(Events.MessageCreate, (message: Message) => {
-      this.handleMessage(message).catch((err: unknown) => {
-        this.logger.error('Steam link listener error:', err);
-      });
-    });
-
-    client.on('interactionCreate', (interaction: Interaction) => {
-      if (interaction.isButton()) {
-        this.handleButtonInteraction(interaction).catch((err: unknown) => {
-          this.logger.error('Steam interest button error:', err);
+    // Both gateway events go through ONE binding array so attach/detach cover
+    // them atomically — neither can be left orphaned without the other.
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding(Events.MessageCreate, (message: Message) => {
+        this.handleMessage(message).catch((err: unknown) => {
+          this.logger.error('Steam link listener error:', err);
         });
-      }
-    });
-
-    this.listenerAttached = true;
-    this.logger.log('Steam link interest listener attached');
+      }),
+      gatewayBinding('interactionCreate', (interaction: Interaction) => {
+        if (interaction.isButton()) {
+          this.handleButtonInteraction(interaction).catch((err: unknown) => {
+            this.logger.error('Steam interest button error:', err);
+          });
+        }
+      }),
+    ]);
   }
 
-  /** Reset listener state on disconnect so it can re-attach. */
+  /** Drop the handlers so a reconnect re-attaches to the live client. */
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   handleBotDisconnected(): void {
-    this.listenerAttached = false;
+    this.binding.detach();
   }
 
   /** Process a messageCreate event for Steam URLs. */

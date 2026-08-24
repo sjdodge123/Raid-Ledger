@@ -6,6 +6,7 @@ import { CharactersService } from '../../characters/characters.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { MessageFlags } from 'discord.js';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
+import { EventEmitter } from 'node:events';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
@@ -17,6 +18,7 @@ import {
 /** Test-friendly interface exposing private members needed by specs */
 interface TestableRescheduleResponseListener {
   onBotConnected: () => void;
+  onBotDisconnected: () => void;
   handleButtonInteraction: (interaction: unknown) => Promise<void>;
   handleConfirm: (interaction: unknown, eventId: number) => Promise<void>;
   handleTentative: (interaction: unknown, eventId: number) => Promise<void>;
@@ -190,7 +192,52 @@ describe('RescheduleResponseListener — confirm', () => {
   describe('handleLinkedConfirm', () => {
     linkedConfirmTests();
   });
+
+  describe('Regression: ROK-1425 — attach lifecycle', () => {
+    attachLifecycleTests();
+  });
 });
+
+/**
+ * ROK-1425: without DISCONNECTED handling the handler stays bound to a
+ * destroyed client after a reconnect (buttons stop acking) or stacks when
+ * CONNECTED double-fires. A real EventEmitter gives a true `listenerCount`.
+ */
+function attachLifecycleTests() {
+  const fakeClient = () => new EventEmitter();
+
+  it('leaves exactly ONE live handler across CONNECTED → DISCONNECTED → CONNECTED', () => {
+    const first = fakeClient();
+    const second = fakeClient();
+    mockClientService.getClient.mockReturnValue(first);
+    listener.onBotConnected();
+    listener.onBotDisconnected();
+    mockClientService.getClient.mockReturnValue(second);
+    listener.onBotConnected();
+
+    expect(first.listenerCount('interactionCreate')).toBe(0);
+    expect(second.listenerCount('interactionCreate')).toBe(1);
+  });
+
+  // Reconnect with a MISSED DISCONNECTED — the production failure mode. A
+  // plain double-CONNECTED on the SAME client is not discriminating: the
+  // pre-fix code already called removeListener before re-adding, so that
+  // assertion passed against the very bug this covers. Attaching to a NEW
+  // client without an intervening detach is what actually catches it.
+  it('re-attaches to a new client when DISCONNECTED was missed', () => {
+    const stale = fakeClient();
+    const live = fakeClient();
+    mockClientService.getClient.mockReturnValue(stale);
+    listener.onBotConnected();
+    // No onBotDisconnected() — client.destroy() can reject, in which case
+    // DISCONNECTED is never emitted (discord-bot-client.service.ts).
+    mockClientService.getClient.mockReturnValue(live);
+    listener.onBotConnected();
+
+    expect(stale.listenerCount('interactionCreate')).toBe(0);
+    expect(live.listenerCount('interactionCreate')).toBe(1);
+  });
+}
 
 function botConnectionTests() {
   it('registers interaction handler when bot connects', () => {
