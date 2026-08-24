@@ -82,18 +82,6 @@ export function pickPlatformEntry(
   return entries.reduce((a, b) => (b.id > a.id ? b : a));
 }
 
-/** Flags only present in the featurelist text (not discrete XML fields). */
-export function deriveFeatureFlags(featurelist: string | null): {
-  comboCoop: boolean;
-  downloadableOnly: boolean;
-} {
-  const fl = featurelist ?? '';
-  return {
-    comboCoop: /combo\s+co-?op/i.test(fl),
-    downloadableOnly: /downloadable\s+only/i.test(fl),
-  };
-}
-
 export type MatchResult =
   | {
       status: 'matched';

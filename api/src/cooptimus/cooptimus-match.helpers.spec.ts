@@ -10,7 +10,6 @@ import {
   titlesMatchExact,
   stripEditionSuffix,
   pickPlatformEntry,
-  deriveFeatureFlags,
   matchEntries,
 } from './cooptimus-match.helpers';
 
@@ -162,20 +161,11 @@ describe('cooptimus-match.helpers (ROK-1397)', () => {
     expect(pickPlatformEntry([])).toBeNull();
   });
 
-  it('derives combo/downloadable flags from featurelist text only', () => {
-    expect(
-      deriveFeatureFlags('Combo Co-Op (Local + Online), Co-Op Campaign'),
-    ).toEqual({
-      comboCoop: true,
-      downloadableOnly: false,
-    });
-    expect(deriveFeatureFlags('Downloadable Only, Drop-In/Drop-Out')).toEqual({
-      comboCoop: false,
-      downloadableOnly: true,
-    });
-    expect(deriveFeatureFlags(null)).toEqual({
-      comboCoop: false,
-      downloadableOnly: false,
-    });
-  });
+  // REMOVED: 'derives combo/downloadable flags from featurelist text only'.
+  // It asserted deriveFeatureFlags() against featurelist strings the live API
+  // never emits — measured over 161 records, <featurelist> only ever contains
+  // "Campaign Co-Op", "Drop-In/Drop-Out", "Splitscreen", "Co-Op Modes". The
+  // test passed while the feature was broken for every game because it encoded
+  // the same false premise as the code. Both flags now come from the game page
+  // (cooptimus-page.util.spec.ts), which is the only place they exist.
 });

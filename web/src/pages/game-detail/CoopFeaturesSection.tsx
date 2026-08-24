@@ -25,7 +25,10 @@ const COUNT_FACTS = [
     { key: 'cooptimusLanMax', label: 'LAN Play or System Link' },
 ] as const;
 
-/** Boolean facts, split across the two blocks. */
+/**
+ * Boolean facts, split across the two blocks. A `null` value means "we could
+ * not determine it" and the row is OMITTED — never rendered as "Not Supported".
+ */
 const CORE_FLAGS = [
     { key: 'cooptimusComboCoop', label: 'Combo Co-Op (Local + Online)' },
 ] as const;
@@ -34,6 +37,18 @@ const EXTRA_FLAGS = [
     { key: 'cooptimusDropIn', label: 'Drop In/Drop Out' },
     { key: 'cooptimusSplitscreen', label: 'Split-Screen' },
 ] as const;
+
+/**
+ * Page-derived facts (combo co-op, downloadable-only) are trustworthy only when
+ * extras records that a page read actually succeeded. Rows written before
+ * page-sourcing hold `false` from a regex over a field that never contained
+ * those tokens, so without this gate they keep rendering "Not Supported" until
+ * a re-sync — the exact false claim, under the Co-Optimus credit, that this is
+ * meant to remove. Absent provenance ⇒ omit the row.
+ */
+function hasPageProvenance(game: GameDetailDto): boolean {
+    return game.cooptimusExtras?.pageFactsAt != null;
+}
 
 /** True once Co-Optimus reported an entry — a 0 count or `false` flag still counts. */
 function hasCoopEntry(game: GameDetailDto): boolean {
@@ -69,7 +84,9 @@ export function CoopFeaturesSection({ game }: { game: GameDetailDto }): JSX.Elem
 /** Player counts plus combo co-op. */
 function CoreFeaturesBlock({ game }: { game: GameDetailDto }): JSX.Element | null {
     const counts = COUNT_FACTS.filter((f) => game[f.key] != null);
-    const flags = CORE_FLAGS.filter((f) => game[f.key] != null);
+    const flags = hasPageProvenance(game)
+        ? CORE_FLAGS.filter((f) => game[f.key] != null)
+        : [];
     if (counts.length === 0 && flags.length === 0) return null;
 
     return (
@@ -82,17 +99,34 @@ function CoreFeaturesBlock({ game }: { game: GameDetailDto }): JSX.Element | nul
                 ))}
                 {flags.map((f) => (
                     <Fact key={f.key} label={f.label} supported={game[f.key] === true}
-                        value={flagLabel(game[f.key] as boolean)} />
+                        value={coreFlagLabel(game, f.key)} />
                 ))}
             </div>
         </div>
     );
 }
 
-/** Campaign / drop-in / split-screen, plus the extras-derived Downloadable Only. */
+/**
+ * Prefer Co-Optimus's own combo wording ("Up to 4 Local or Online") over a bare
+ * "Supported" — their page is the only source for this fact, so we echo it
+ * verbatim rather than paraphrase it underneath their credit.
+ */
+function coreFlagLabel(
+    game: GameDetailDto,
+    key: (typeof CORE_FLAGS)[number]['key'],
+): string {
+    if (key === 'cooptimusComboCoop' && game[key] === true) {
+        return game.cooptimusExtras?.comboLabel ?? flagLabel(true);
+    }
+    return flagLabel(game[key] as boolean);
+}
+
+/** Campaign / drop-in / split-screen, plus the page-derived Downloadable Only. */
 function CoopExtrasBlock({ game }: { game: GameDetailDto }): JSX.Element | null {
     const flags = EXTRA_FLAGS.filter((f) => game[f.key] != null);
-    const downloadableOnly = game.cooptimusExtras?.downloadableOnly;
+    const downloadableOnly = hasPageProvenance(game)
+        ? game.cooptimusExtras?.downloadableOnly
+        : null;
     if (flags.length === 0 && downloadableOnly == null) return null;
 
     return (

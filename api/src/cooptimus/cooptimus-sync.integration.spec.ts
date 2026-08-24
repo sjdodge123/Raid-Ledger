@@ -13,6 +13,10 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { CooptimusSyncService } from './cooptimus-sync.service';
 import { CooptimusService, type CooptimusLookup } from './cooptimus.service';
+import {
+  UNKNOWN_PAGE_FACTS,
+  type CooptimusPageFacts,
+} from './cooptimus-page.util';
 import type { CooptimusEntry } from './cooptimus-xml.util';
 
 function entry(over: Partial<CooptimusEntry>): CooptimusEntry {
@@ -40,6 +44,7 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
   let sync: CooptimusSyncService;
   let cooptimus: CooptimusService;
   let byNameMock: jest.SpyInstance;
+  let pageMock: jest.SpyInstance;
 
   beforeAll(async () => {
     testApp = await getTestApp();
@@ -47,10 +52,24 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
     cooptimus = testApp.app.get(CooptimusService);
   });
 
+  beforeEach(() => {
+    // Safety net: the game-page fetch is a REAL outbound request. Default it to
+    // "unknown" for every test so no spec can ever hit co-optimus.com; tests
+    // that care override it via mockPageFacts().
+    pageMock = jest
+      .spyOn(cooptimus, 'fetchGamePageFacts')
+      .mockResolvedValue(UNKNOWN_PAGE_FACTS);
+  });
+
   afterEach(async () => {
     byNameMock?.mockRestore();
+    pageMock?.mockRestore();
     testApp.seed = await truncateAllTables(testApp.db);
   });
+
+  function mockPageFacts(facts: Partial<CooptimusPageFacts>) {
+    pageMock.mockResolvedValue({ ...UNKNOWN_PAGE_FACTS, ...facts });
+  }
 
   function mockLookup(result: CooptimusLookup | null) {
     byNameMock = jest
@@ -83,6 +102,11 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
     const before = await reload(g.id);
     const countBefore = (await testApp.db.select().from(schema.games)).length;
     mockLookup({ entries: [entry({ steam: 1623730 })], empty: false });
+    mockPageFacts({
+      comboCoop: true,
+      comboLabel: 'Up to 4 Local or Online',
+      downloadableOnly: false,
+    });
 
     const outcome = await sync.syncGame({
       id: g.id,
@@ -101,7 +125,7 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
       cooptimusSplitscreen: false,
       cooptimusDropIn: true,
       cooptimusCampaignCoop: true,
-      cooptimusComboCoop: false,
+      cooptimusComboCoop: true,
       cooptimusUrl: 'https://www.co-optimus.com/game/9814/PC/palworld.html',
     });
     expect(after.cooptimusSyncedAt).not.toBeNull();
@@ -109,6 +133,7 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
       system: 'PC',
       coopExperience: 'Invite your friends.',
       downloadableOnly: false,
+      comboLabel: 'Up to 4 Local or Online',
     });
     // Non-cooptimus fields untouched (the clobber-guard rule).
     expect(after.name).toBe(before.name);
@@ -117,6 +142,138 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
     // UPDATE-only: row count unchanged.
     const countAfter = (await testApp.db.select().from(schema.games)).length;
     expect(countAfter).toBe(countBefore);
+  });
+
+  it('unreadable game page persists NULL combo/downloadable, never false', async () => {
+    // Regression: combo + downloadable-only exist ONLY on the rendered page
+    // (games.php returns neither). The old code inferred them from
+    // <featurelist>, which never contains those tokens, so every game was
+    // written as false — Baldur's Gate III said "Not Supported" while
+    // co-optimus.com said "Up to 4 Local or Online". A page we cannot read
+    // must leave the fact unknown so the UI omits the row.
+    const g = await seedGame('Palworld', 1623730);
+    mockLookup({ entries: [entry({ steam: 1623730 })], empty: false });
+    mockPageFacts(UNKNOWN_PAGE_FACTS);
+
+    expect(
+      await sync.syncGame({
+        id: g.id,
+        name: g.name,
+        steamAppId: g.steamAppId,
+        cooptimusId: null,
+      }),
+    ).toBe('synced');
+
+    const after = await reload(g.id);
+    expect(after.cooptimusComboCoop).toBeNull();
+    expect(after.cooptimusExtras).toMatchObject({ downloadableOnly: null });
+    // The API-sourced facts still land — only the page-sourced ones are unknown.
+    expect(after.cooptimusOnlineMax).toBe(32);
+  });
+
+  it('a transient page failure PRESERVES previously sourced page facts', async () => {
+    // Stale rows re-sync every COOPTIMUS_STALE_AFTER_DAYS. Without the merge, a
+    // single timeout on the re-read would blank combo/downloadable for a game
+    // whose facts we had already read correctly (Codex pre-push review).
+    const g = await seedGame('Palworld', 1623730);
+    const row = {
+      id: g.id,
+      name: g.name,
+      steamAppId: g.steamAppId,
+      cooptimusId: null,
+    };
+    mockLookup({ entries: [entry({ steam: 1623730 })], empty: false });
+    mockPageFacts({
+      comboCoop: true,
+      comboLabel: 'Up to 4 Local or Online',
+      downloadableOnly: true,
+    });
+    expect(await sync.syncGame(row)).toBe('synced');
+
+    // Re-sync while the page is unreadable.
+    mockPageFacts(UNKNOWN_PAGE_FACTS);
+    expect(await sync.syncGame(row)).toBe('synced');
+
+    const after = await reload(g.id);
+    expect(after.cooptimusComboCoop).toBe(true);
+    expect(after.cooptimusExtras).toMatchObject({
+      comboLabel: 'Up to 4 Local or Online',
+      downloadableOnly: true,
+    });
+  });
+
+  it('does NOT carry page facts across a remap to a different entry', async () => {
+    // Preserve-on-transient-failure must be scoped to the SAME Co-Optimus
+    // entry. Remapped to a different game, the stored combo/downloadable
+    // describe another title — republishing them under the Co-Optimus credit
+    // is the very bug this change fixes (Codex pre-push review).
+    const g = await seedGame('Palworld', 1623730);
+    const row = {
+      id: g.id,
+      name: g.name,
+      steamAppId: g.steamAppId,
+      cooptimusId: null,
+    };
+    mockLookup({ entries: [entry({ steam: 1623730 })], empty: false });
+    mockPageFacts({
+      comboCoop: true,
+      comboLabel: 'Up to 4 Local or Online',
+      downloadableOnly: true,
+    });
+    expect(await sync.syncGame(row)).toBe('synced');
+
+    // Now the name resolves to a DIFFERENT Co-Optimus entry and its page is
+    // unreadable. The previous entry's facts must not follow it across.
+    mockLookup({
+      entries: [entry({ id: 12345, steam: 1623730 })],
+      empty: false,
+    });
+    mockPageFacts(UNKNOWN_PAGE_FACTS);
+    expect(await sync.syncGame(row)).toBe('synced');
+
+    const after = await reload(g.id);
+    expect(after.cooptimusId).toBe(12345);
+    expect(after.cooptimusComboCoop).toBeNull();
+    expect(after.cooptimusExtras).toMatchObject({
+      comboLabel: null,
+      downloadableOnly: null,
+    });
+  });
+
+  it('CLEARS legacy featurelist-derived flags rather than preserving them', async () => {
+    // Rows synced before this change hold `false` from the old regex, which was
+    // never page-sourced. On the first post-deploy re-sync, an unknown page read
+    // must NOT resurrect them — otherwise the games this fix exists for keep
+    // rendering "Not Supported" (Codex pre-push review).
+    const g = await seedGame('Palworld', 1623730);
+    await testApp.db
+      .update(schema.games)
+      .set({
+        cooptimusId: 9814,
+        cooptimusComboCoop: false, // legacy value, no pageFactsAt provenance
+        cooptimusExtras: { system: 'PC', downloadableOnly: false },
+        cooptimusSyncedAt: new Date('2026-08-01T00:00:00.000Z'),
+      })
+      .where(eq(schema.games.id, g.id));
+
+    mockLookup({ entries: [entry({ steam: 1623730 })], empty: false });
+    mockPageFacts(UNKNOWN_PAGE_FACTS);
+
+    expect(
+      await sync.syncGame({
+        id: g.id,
+        name: g.name,
+        steamAppId: g.steamAppId,
+        // Unpinned so this takes the name-search path we mocked; the DB row
+        // still carries cooptimusId 9814, which is what the entry-match check
+        // compares against.
+        cooptimusId: null,
+      }),
+    ).toBe('synced');
+
+    const after = await reload(g.id);
+    expect(after.cooptimusComboCoop).toBeNull();
+    expect(after.cooptimusExtras).toMatchObject({ downloadableOnly: null });
   });
 
   it('empty envelope stamps the positive "no co-op entry" state', async () => {

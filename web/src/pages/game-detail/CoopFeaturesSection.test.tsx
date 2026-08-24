@@ -79,7 +79,7 @@ function buildEnrichedGame(overrides: Partial<GameDetailDto> = {}): GameDetailDt
         cooptimusCampaignCoop: true,
         cooptimusComboCoop: true,
         cooptimusUrl: COOPTIMUS_URL,
-        cooptimusExtras: { system: 'PC', downloadableOnly: true },
+        cooptimusExtras: { system: 'PC', downloadableOnly: true, pageFactsAt: '2026-08-23T00:00:00.000Z' },
         ...overrides,
     });
 }
@@ -89,6 +89,7 @@ function proseExtras(overrides: Partial<CooptimusExtrasDto> = {}): CooptimusExtr
     return {
         system: 'PC',
         downloadableOnly: true,
+        pageFactsAt: '2026-08-23T00:00:00.000Z',
         coopExperience: 'Four dwarves dig, shoot, and lose the drop pod together.',
         description: 'A co-op first-person shooter about dwarves mining in space.',
         ...overrides,
@@ -314,5 +315,78 @@ describe('CoopFeaturesSection — prose gating by field presence (AC4)', () => {
         );
         expect(sectionText()).toMatch(/the co-op experience/i);
         expect(screen.queryByRole('button', { name: /more|expand/i })).not.toBeInTheDocument();
+    });
+});
+
+describe('combo co-op is sourced from the Co-Optimus game page', () => {
+    /**
+     * games.php returns no combo element at all — the fact lives only on the
+     * rendered page. Baldur's Gate III showed "Not Supported" here while
+     * co-optimus.com showed "Up to 4 Local or Online", because the old code
+     * regex-matched a featurelist token the API never emits.
+     */
+    it('echoes their exact combo wording rather than a bare "Supported"', () => {
+        render(<CoopFeaturesSection game={buildEnrichedGame({
+            cooptimusComboCoop: true,
+            cooptimusExtras: { system: 'PC', comboLabel: 'Up to 4 Local or Online', pageFactsAt: '2026-08-23T00:00:00.000Z' },
+        })} />);
+        expect(screen.getByText('Up to 4 Local or Online')).toBeInTheDocument();
+    });
+
+    it('falls back to "Supported" when the page gave no wording', () => {
+        // Other boolean facts nulled so "Supported" can only come from combo.
+        render(<CoopFeaturesSection game={buildEnrichedGame({
+            cooptimusComboCoop: true,
+            cooptimusCampaignCoop: null,
+            cooptimusDropIn: null,
+            cooptimusSplitscreen: null,
+            cooptimusExtras: { system: 'PC', pageFactsAt: '2026-08-23T00:00:00.000Z' },
+        })} />);
+        expect(screen.getByText('Combo Co-Op (Local + Online)')).toBeInTheDocument();
+        expect(screen.getByText('Supported')).toBeInTheDocument();
+    });
+
+    it('OMITS the combo row entirely when unknown — never claims "Not Supported"', () => {
+        // null = the page could not be read. Publishing a negative we cannot
+        // source, underneath their attribution credit, is the bug this guards.
+        render(<CoopFeaturesSection game={buildEnrichedGame({ cooptimusComboCoop: null })} />);
+        expect(screen.queryByText('Combo Co-Op (Local + Online)')).not.toBeInTheDocument();
+        expect(screen.getByText('Online Co-Op')).toBeInTheDocument();
+    });
+
+    it('still reports a genuine "Not Supported" the page actually stated', () => {
+        render(<CoopFeaturesSection game={buildEnrichedGame({
+            cooptimusComboCoop: false,
+            cooptimusCampaignCoop: null,
+            cooptimusDropIn: null,
+            cooptimusSplitscreen: null,
+            cooptimusExtras: { system: 'PC', comboLabel: 'Not Supported', pageFactsAt: '2026-08-23T00:00:00.000Z' },
+        })} />);
+        expect(screen.getByText('Combo Co-Op (Local + Online)')).toBeInTheDocument();
+        expect(screen.getByText('Not Supported')).toBeInTheDocument();
+    });
+
+    it('OMITS Downloadable Only when unknown', () => {
+        render(<CoopFeaturesSection game={buildEnrichedGame({
+            cooptimusExtras: { system: 'PC', downloadableOnly: null, pageFactsAt: '2026-08-23T00:00:00.000Z' },
+        })} />);
+        expect(screen.queryByText('Downloadable Only')).not.toBeInTheDocument();
+    });
+});
+
+describe('legacy rows without page provenance', () => {
+    it('omits combo + downloadable entirely when extras has no pageFactsAt', () => {
+        // A row written by the old featurelist regex: false values that were
+        // never on any page. Until it re-syncs, we must show nothing rather
+        // than republish "Not Supported"/"No" under the Co-Optimus credit.
+        render(<CoopFeaturesSection game={buildEnrichedGame({
+            cooptimusComboCoop: false,
+            cooptimusExtras: { system: 'PC', downloadableOnly: false },
+        })} />);
+        expect(screen.queryByText('Combo Co-Op (Local + Online)')).not.toBeInTheDocument();
+        expect(screen.queryByText('Downloadable Only')).not.toBeInTheDocument();
+        // The API-sourced facts are unaffected — they never came from the page.
+        expect(screen.getByText('Online Co-Op')).toBeInTheDocument();
+        expect(screen.getByText('Campaign Co-Op')).toBeInTheDocument();
     });
 });

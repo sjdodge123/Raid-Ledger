@@ -41,8 +41,19 @@ export const CooptimusExtrasSchema = z.object({
     coopExperience: z.string().nullable().optional(),
     /** Their game "Description" prose. */
     description: z.string().nullable().optional(),
-    /** "Downloadable Only" flag parsed from featurelist. */
+    /**
+     * "Downloadable Only", read from the game PAGE — games.php never returns
+     * it. null = we could not determine it (don't render a negative claim).
+     */
     downloadableOnly: z.boolean().nullable().optional(),
+    /** Co-Optimus's own combo wording, e.g. "Up to 4 Local or Online". */
+    comboLabel: z.string().nullable().optional(),
+    /**
+     * When the page-derived facts above were last read successfully. Absent =
+     * they were never page-sourced (rows written by the pre-fix featurelist
+     * regex), so they must not be preserved across an unknown re-read.
+     */
+    pageFactsAt: z.string().nullable().optional(),
 });
 
 export type CooptimusExtrasDto = z.infer<typeof CooptimusExtrasSchema>;
