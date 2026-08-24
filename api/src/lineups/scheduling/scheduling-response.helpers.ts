@@ -42,6 +42,7 @@ export function buildMatchDetailDto(
   gameCoverUrl: string | null,
   lineupCreatedById: number | null = null,
   playerCap: number | null = null,
+  followupForEventId: number | null = null,
 ): MatchDetailResponseDto {
   return {
     id: match.id,
@@ -60,6 +61,8 @@ export function buildMatchDetailDto(
     gameCoverUrl,
     // ROK-1411: per-game player cap (games.player_count.max); null when unknown.
     playerCap,
+    // The ended event this follow-up poll came from; null for ordinary polls.
+    followupForEventId,
     ...(lineupCreatedById !== null ? { lineupCreatedById } : {}),
     members: members.map((m) => ({
       id: m.id,
@@ -140,6 +143,7 @@ export function buildPollResponse(
     gameCoverUrl?: string | null;
     lineupCreatedById?: number | null;
     playerCap?: number | null;
+    followupForEventId?: number | null;
   },
   members: MatchMemberRow[],
   slots: SlotRow[],
@@ -161,6 +165,7 @@ export function buildPollResponse(
       gameCoverUrl,
       lineupCreatedById,
       playerCap,
+      match.followupForEventId ?? null,
     ),
     slots: mapSlotsWithVotes(slots, votes),
     myVotedSlotIds: extractMyVotedSlotIds(votes, userId),

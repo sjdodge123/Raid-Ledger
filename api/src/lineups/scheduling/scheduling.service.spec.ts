@@ -480,6 +480,8 @@ describe('SchedulingService', () => {
       mockDb.limit.mockResolvedValueOnce([
         { status: 'decided', createdBy: 42 },
       ]);
+      // 3. follow-up source lookup — no sentinel row for an ordinary poll
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const result = await service.getSchedulePoll(
         SCHEDULING_MATCH.lineupId,
@@ -493,6 +495,8 @@ describe('SchedulingService', () => {
       // 1. findMatchOrThrow
       mockDb.limit.mockResolvedValueOnce([FULL_MATCH]);
       // 2. lineup join returns no rows
+      mockDb.limit.mockResolvedValueOnce([]);
+      // 3. follow-up source lookup — no sentinel row for an ordinary poll
       mockDb.limit.mockResolvedValueOnce([]);
 
       const result = await service.getSchedulePoll(

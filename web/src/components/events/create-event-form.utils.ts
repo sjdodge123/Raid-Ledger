@@ -49,12 +49,28 @@ function getDefaultState(): FormState {
     };
 }
 
+/**
+ * Prefill state for a create-from-existing-event flow (post-event follow-up).
+ * Carries every configured field forward — title, description, duration, slot
+ * config, cap, reminders, voice, content instances — but deliberately NOT the
+ * old start date/time, which the organizer is choosing fresh. Recurrence is
+ * dropped for the same reason edit mode drops it: a new one-off, not a series.
+ */
+function getCopyModeState(copyFromEvent: EventResponseDto, resolved: string): FormState {
+    return { ...getEditModeState(copyFromEvent, resolved), startDate: '', startTime: '' };
+}
+
 export function getInitialState(
     editEvent: EventResponseDto | undefined,
     resolved: string,
     initialStartTime?: string | null,
+    copyFromEvent?: EventResponseDto | null,
 ): FormState {
-    const state = editEvent ? getEditModeState(editEvent, resolved) : getDefaultState();
+    const state = editEvent
+        ? getEditModeState(editEvent, resolved)
+        : copyFromEvent
+          ? getCopyModeState(copyFromEvent, resolved)
+          : getDefaultState();
     if (!editEvent && initialStartTime) {
         const d = new Date(initialStartTime);
         const dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: resolved, year: 'numeric', month: '2-digit', day: '2-digit' });

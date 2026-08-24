@@ -53,6 +53,11 @@ export interface EventFormProps {
     /** ROK-1371: ended event this create is a follow-up to. Threaded into the
      *  CreateEvent DTO (create mode only) so the server fans out sign-up DMs. */
     followupForEventId?: number | null;
+    /** Event to prefill every configured field from (create mode only). Both
+     *  follow-up paths pass the ended event here; purely client-side, never
+     *  submitted. Distinct from `followupForEventId`, which is the server's
+     *  fan-out signal and fires on the event path only. */
+    copyFromEvent?: EventResponseDto | null;
 }
 
 export const RECURRENCE_OPTIONS = [

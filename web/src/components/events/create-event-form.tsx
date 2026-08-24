@@ -119,15 +119,17 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
 function useCreateEventFormState(
     editEvent?: EventResponseDto, seriesScope?: SeriesScope,
     initialGame?: EventFormProps['initialGame'], initialStartTime?: string | null,
-    schedulingMatchId?: number | null,
+    schedulingMatchId?: number | null, copyFromEvent?: EventResponseDto | null,
 ) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = getTimezoneAbbr(resolved);
     const [form, setForm] = useState<FormState>(() => {
-        const state = getInitialState(editEvent, resolved, initialStartTime);
+        const state = getInitialState(editEvent, resolved, initialStartTime, copyFromEvent);
         if (!editEvent && initialGame) {
             state.game = initialGame as FormState['game'];
-            if (initialGame.playerCount?.max) {
+            // A copy source already carries the previous event's own slot count
+            // and cap — the game-wide default must not overwrite them.
+            if (initialGame.playerCount?.max && !copyFromEvent) {
                 state.slotPlayer = initialGame.playerCount.max;
                 if (!state.maxAttendees) state.maxAttendees = String(initialGame.playerCount.max);
             }
@@ -150,10 +152,10 @@ function useCreateEventFormState(
     return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
 }
 
-export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, followupForEventId }: EventFormProps = {}) {
+export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, followupForEventId, copyFromEvent }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
-    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId);
+    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent);
 
     return (
         <form onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId); }} className="space-y-4 sm:space-y-8">

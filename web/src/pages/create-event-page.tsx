@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
+import { useEvent } from '../hooks/use-events';
 import { CreateEventForm } from '../components/events/create-event-form';
 
 /**
@@ -26,9 +27,17 @@ export function CreateEventPage() {
     // ROK-1371: post-event follow-up deep-link — links the new event back to the
     // ended event so the server fans out quick-sign-up DMs to its attendees.
     const followupForEventId = searchParams.get('followupForEventId') ? parseInt(searchParams.get('followupForEventId')!, 10) : null;
+    // Prefill source for both follow-up paths: the button deep-link sets it
+    // alongside followupForEventId, the poll lock-in resolves it from the
+    // match. Client-side only — never submitted.
+    const copyFromEventId = searchParams.get('copyFromEventId') ? parseInt(searchParams.get('copyFromEventId')!, 10) : null;
+    const { data: copyFromEvent, isLoading: copyLoading, isError: copyFailed } = useEvent(copyFromEventId ?? 0);
 
     const hasGameParam = !!searchParams.get('gameId');
-    if (isLoading || (hasGameParam && registryLoading)) return <PageSpinner />;
+    // The form seeds its state once, in a useState initializer — render it only
+    // after the prefill source resolves, or it opens blank and never refills.
+    // A failed fetch falls through to a blank form rather than blocking create.
+    if (isLoading || (hasGameParam && registryLoading) || (copyFromEventId && copyLoading && !copyFailed)) return <PageSpinner />;
     if (!isAuthenticated) return <Navigate to="/events" replace />;
 
     return (
@@ -37,10 +46,14 @@ export function CreateEventPage() {
                 <BackButton onClick={() => navigate(-1)} label="Back" />
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-foreground mb-2">Create Event</h1>
-                    <p className="text-muted">Set up a new gaming session for your community</p>
+                    <p className="text-muted">
+                        {copyFromEvent
+                            ? `Prefilled from "${copyFromEvent.title}" — pick a time and adjust anything you like`
+                            : 'Set up a new gaming session for your community'}
+                    </p>
                 </div>
                 <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} followupForEventId={followupForEventId} />
+                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} followupForEventId={followupForEventId} copyFromEvent={copyFromEvent ?? null} />
                 </div>
             </div>
         </div>
