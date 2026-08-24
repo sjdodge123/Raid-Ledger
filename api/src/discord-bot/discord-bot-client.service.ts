@@ -14,6 +14,7 @@ import {
   DISCORD_BOT_EVENTS,
   friendlyDiscordErrorMessage,
 } from './discord-bot.constants';
+import { emitIsolated } from './discord-bot-event-dispatch.helpers';
 import {
   createDiscordClient,
   checkBotPermissions,
@@ -326,19 +327,20 @@ export class DiscordBotClientService {
     });
   }
 
+  /**
+   * Fan out CONNECTED with per-subscriber fault isolation (ROK-1425 follow-up).
+   *
+   * Previously this awaited a single `emitAsync` inside one try/catch. That
+   * caught a throwing subscriber but could not resume the chain — every
+   * listener after the thrower silently never attached its gateway handlers.
+   * See discord-bot-event-dispatch.helpers.ts.
+   */
   private async emitConnected(): Promise<void> {
-    if (typeof this.eventEmitter.emitAsync === 'function') {
-      try {
-        await this.eventEmitter.emitAsync(DISCORD_BOT_EVENTS.CONNECTED);
-      } catch (err: unknown) {
-        this.logger.error(
-          'Error in CONNECTED event handlers:',
-          err instanceof Error ? err.message : err,
-        );
-      }
-    } else {
-      this.eventEmitter.emit(DISCORD_BOT_EVENTS.CONNECTED);
-    }
+    await emitIsolated(
+      this.eventEmitter,
+      DISCORD_BOT_EVENTS.CONNECTED,
+      this.logger,
+    );
   }
 
   private async fetchTextChannel(channelId: string): Promise<TextChannel> {

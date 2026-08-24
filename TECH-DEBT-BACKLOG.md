@@ -904,13 +904,14 @@ Deferred by design in the ROK-1417 observability spec (plan D5, Tiers 1/2/3). Th
   Suggested: probe `localhost` (or try both families) in the e2e gate's readiness check.
 ### 2026-08-23 — fix/batch-2026-08-22 (surfaced during per-story reviewer passes on ROK-1424/1425/1427)
 
-- **[med]** `api/src/discord-bot/discord-bot-client.service.ts:329-341` — `emitConnected()` wraps
+- **[RESOLVED 2026-08-24 — PR pending, branch `fix/emit-connected-isolation`]** ~~**[med]**~~ `api/src/discord-bot/discord-bot-client.service.ts:329-341` — `emitConnected()` wraps
   `emitAsync` in ONE try/catch around the whole chain rather than per-listener. EventEmitter2 invokes
   listeners in a plain loop, so a synchronous throw from any earlier `CONNECTED` subscriber aborts the
   rest and every listener registered after it silently never attaches. Only trace is
   `Error in CONNECTED event handlers`. This is an unclosed candidate root cause for ROK-1425 and is
   NOT fixed by that story's commits.
   Suggested: wrap each subscriber, or emit per-listener with individual catch + log.
+  **Fixed:** `emitConnected` now delegates to `emitIsolated` (`discord-bot-event-dispatch.helpers.ts`), which enumerates subscribers and runs each in its own `Promise.allSettled` slot. Premise verified empirically against a real EventEmitter2 (old: A,B then abort; new: A,B,C,D). Regression spec falsified — 8 of 11 cases fail against the pre-fix implementation.
 - **[med]** `api/src/discord-bot/listeners/signup-interaction.listener.ts:103`,
   `api/src/discord-bot/listeners/pug-invite.listener.ts:89` — null their handler refs on DISCONNECTED
   without calling `removeListener`. Functionally correct TODAY only because `connect()` always builds a
