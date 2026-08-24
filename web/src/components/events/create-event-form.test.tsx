@@ -97,11 +97,11 @@ function createQueryClient() {
     });
 }
 
-function renderForm() {
+function renderForm(props: Parameters<typeof CreateEventForm>[0] = {}) {
     return render(
         <QueryClientProvider client={createQueryClient()}>
             <MemoryRouter>
-                <CreateEventForm />
+                <CreateEventForm {...props} />
             </MemoryRouter>
         </QueryClientProvider>,
     );
@@ -438,5 +438,48 @@ describe('buildSubmitDto — gameId unset semantics (ROK-1350)', () => {
     it('edit mode with a selected game whose registry id is unresolved OMITS gameId (preserves existing, never wipes)', async () => {
         const dto = await buildDto({ registryGameId: undefined, isEditMode: true, gameSelected: true });
         expect(dto.gameId).toBeUndefined();
+    });
+});
+
+// ─── Post-event follow-up prefill ─────────────────────────────────────────────
+describe('CreateEventForm copyFromEvent prefill', () => {
+    const endedEvent = {
+        id: 501,
+        title: 'Thursday Deep Rock',
+        description: 'Bring your own beer',
+        startTime: '2026-08-20T20:00:00.000Z',
+        endTime: '2026-08-20T23:00:00.000Z',
+        creator: { id: 1, displayName: 'Jake', avatar: null },
+        game: { id: 42, name: 'Deep Rock Galactic', slug: 'drg', coverUrl: null },
+        signupCount: 4,
+        slotConfig: { type: 'generic', player: 6 },
+        maxAttendees: 6,
+    } as unknown as Parameters<typeof CreateEventForm>[0]['copyFromEvent'];
+
+    it('renders the source event title in the form', () => {
+        renderForm({ copyFromEvent: endedEvent });
+
+        expect(screen.getByDisplayValue('Thursday Deep Rock')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Bring your own beer')).toBeInTheDocument();
+    });
+
+    it('keeps the copied cap when initialGame would otherwise default it', () => {
+        renderForm({
+            copyFromEvent: endedEvent,
+            // The game-wide cap (16) must NOT overwrite the event's own 6.
+            initialGame: {
+                id: 42, name: 'Deep Rock Galactic', slug: 'drg', coverUrl: null,
+                playerCount: { min: 1, max: 16 },
+            },
+        });
+
+        expect(screen.getByLabelText('Max Attendees')).toHaveValue(6);
+        expect(screen.queryByDisplayValue('16')).not.toBeInTheDocument();
+    });
+
+    it('opens blank with no copy source', () => {
+        renderForm();
+
+        expect(screen.queryByDisplayValue('Thursday Deep Rock')).not.toBeInTheDocument();
     });
 });
