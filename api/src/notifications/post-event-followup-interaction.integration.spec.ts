@@ -339,6 +339,21 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       expect(sentinel.attendeesNotifiedAt).toBeNull();
     });
 
+    it('the link carries copyFromEventId so the create form prefills', async () => {
+      const creator = await mkUser(testApp);
+      const ev = await mkEvent(testApp, creator.id, {
+        gameId: testApp.seed.game.id,
+      });
+      await insertSentinel(testApp, ev.id);
+
+      const interaction = mockInteraction();
+      await handleScheduleClick(makeDeps(testApp), interaction, evShape(ev));
+
+      const reply = interaction.editReply.mock.calls[0][0].content as string;
+      const params = new URLSearchParams(reply.split('?')[1]);
+      expect(params.get('copyFromEventId')).toBe(String(ev.id));
+    });
+
     it('M3-AC5: omits gameId in the link when the event has no game', async () => {
       const creator = await mkUser(testApp);
       const ev = await mkEvent(testApp, creator.id, { gameId: null });

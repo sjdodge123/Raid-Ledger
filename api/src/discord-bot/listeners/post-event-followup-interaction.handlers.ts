@@ -85,7 +85,13 @@ export async function handleScheduleClick(
   event: FollowupInteractionEvent,
 ): Promise<void> {
   const clientUrl = await deps.settingsService.getClientUrl();
-  const params = new URLSearchParams({ followupForEventId: String(event.id) });
+  const params = new URLSearchParams({
+    followupForEventId: String(event.id),
+    // Prefill the create form from the ended event. Separate from
+    // `followupForEventId` (a server-side fan-out signal) because the poll
+    // path prefills too but must NOT re-trigger the fan-out.
+    copyFromEventId: String(event.id),
+  });
   if (event.gameId != null) params.set('gameId', String(event.gameId));
   await interaction.editReply({
     content: `Set a time for your follow-up here:\n${clientUrl}/events/new?${params.toString()}`,
@@ -100,6 +106,31 @@ async function claimPollChoice(db: Db, eventId: number): Promise<boolean> {
     RETURNING id
   `);
   return Array.from(rows).length > 0;
+}
+
+/**
+ * Record the poll this prompt opened so the lock-in navigation can resolve the
+ * ended event and prefill the create form. Best-effort: a failure here costs
+ * prefill, never the poll.
+ */
+async function recordPollMatch(
+  deps: PostEventFollowupDeps,
+  eventId: number,
+  matchId: number,
+): Promise<void> {
+  try {
+    await deps.db.execute(sql`
+      UPDATE post_event_followup_sent SET match_id = ${matchId}
+      WHERE event_id = ${eventId}
+    `);
+  } catch (error) {
+    deps.logger.warn(
+      'Follow-up match back-reference failed (%d -> %d): %s',
+      eventId,
+      matchId,
+      errMsg(error),
+    );
+  }
 }
 
 /** Roll the POLL claim back so the organizer can retry (OQ-3). */
@@ -191,6 +222,7 @@ export async function handlePollClick(
   }
   const poll = await openFollowupPoll(deps, interaction, event);
   if (!poll) return;
+  await recordPollMatch(deps, event.id, poll.id);
   await fanOutPoll(deps, event, poll);
   await interaction.editReply({
     content: 'Poll opened — attendees are being invited to vote.',
