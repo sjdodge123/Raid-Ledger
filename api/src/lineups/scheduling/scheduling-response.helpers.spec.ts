@@ -302,3 +302,39 @@ describe('buildPollResponse — isStandalone (ROK-1300)', () => {
     expect(result.isStandalone).toBe(false);
   });
 });
+
+describe('followupForEventId passthrough', () => {
+  it('buildPollResponse surfaces the ended event for a follow-up poll', () => {
+    const res = buildPollResponse(
+      { ...baseMatch, followupForEventId: 77 },
+      baseMembers,
+      baseSlots,
+      [],
+      null,
+      'decided',
+      true,
+    );
+
+    expect(res.match.followupForEventId).toBe(77);
+  });
+
+  it('is null for an ordinary poll, so lock-in adds no copyFromEventId', () => {
+    const res = buildPollResponse(
+      baseMatch,
+      baseMembers,
+      baseSlots,
+      [],
+      null,
+      'decided',
+      true,
+    );
+
+    expect(res.match.followupForEventId).toBeNull();
+  });
+
+  it('buildMatchDetailDto defaults it to null when not supplied', () => {
+    const dto = buildMatchDetailDto(baseMatch, baseMembers, 'Elden Ring', null);
+
+    expect(dto.followupForEventId).toBeNull();
+  });
+});

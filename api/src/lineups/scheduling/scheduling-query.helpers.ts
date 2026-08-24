@@ -21,6 +21,23 @@ export interface ScheduleVoteRow {
 }
 
 /**
+ * Resolve the ended event whose post-event follow-up prompt opened this poll,
+ * or null for an ordinary scheduling poll. Drives the create-event prefill
+ * when the organizer locks a time in.
+ */
+export async function findFollowupSourceEventId(
+  db: Db,
+  matchId: number,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ eventId: schema.postEventFollowupSent.eventId })
+    .from(schema.postEventFollowupSent)
+    .where(eq(schema.postEventFollowupSent.matchId, matchId))
+    .limit(1);
+  return row?.eventId ?? null;
+}
+
+/**
  * Fetch the parent lineup's poll-page metadata (ROK-1300): status, creator,
  * deadline, the scheduling opt-out flag, and `phaseDurationOverride` (which
  * carries the standalone marker). Returns a single-row array.

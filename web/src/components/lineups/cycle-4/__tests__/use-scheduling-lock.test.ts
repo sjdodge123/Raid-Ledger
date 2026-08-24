@@ -173,6 +173,34 @@ describe('useSchedulingLock — commit', () => {
         expect(rescheduleMutate).not.toHaveBeenCalled();
     });
 
+    it('a follow-up poll carries copyFromEventId so the create form prefills', () => {
+        const { result } = renderHook(() =>
+            useSchedulingLock(buildMatch({ followupForEventId: 91 }), MATCH_ID),
+        );
+
+        act(() => result.current.requestLock(buildSlot()));
+
+        const url = (navigate as unknown as { mock: { calls: string[][] } }).mock
+            .calls[0][0];
+        expect(new URLSearchParams(url.split('?')[1]).get('copyFromEventId')).toBe(
+            '91',
+        );
+    });
+
+    it('an ordinary poll omits copyFromEventId', () => {
+        const { result } = renderHook(() =>
+            useSchedulingLock(buildMatch(), MATCH_ID),
+        );
+
+        act(() => result.current.requestLock(buildSlot()));
+
+        const url = (navigate as unknown as { mock: { calls: string[][] } }).mock
+            .calls[0][0];
+        expect(
+            new URLSearchParams(url.split('?')[1]).has('copyFromEventId'),
+        ).toBe(false);
+    });
+
     it('past-time slot aborts with a toast and calls nothing', () => {
         const { result } = renderHook(() =>
             useSchedulingLock(buildMatch({ linkedEventId: 77 }), MATCH_ID),

@@ -21,7 +21,6 @@ import * as schema from '../../drizzle/schema';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
 import {
-  findScheduleSlots,
   findScheduleVotes,
   insertScheduleSlot,
   insertScheduleVote,
@@ -29,10 +28,9 @@ import {
   updateMatchLinkedEvent,
   deleteAllUserVotesForMatch,
   findUserSchedulingMatches,
-  countUniqueVoters,
-  findLineupPollMeta,
   ensureMatchMember,
 } from './scheduling-query.helpers';
+import { loadSchedulePollInputs } from './scheduling-poll-page.helpers';
 import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
   findMatchById,
@@ -98,13 +96,8 @@ export class SchedulingService {
     if (match.lineupId !== lineupId) {
       throw new NotFoundException('Match not found in this lineup');
     }
-    const [gameInfo, [lineup], members, slots, voterCount] = await Promise.all([
-      resolveGameInfo(this.db, match.gameId),
-      findLineupPollMeta(this.db, match.lineupId),
-      findMatchMembers(this.db, [matchId]),
-      findScheduleSlots(this.db, matchId),
-      countUniqueVoters(this.db, matchId),
-    ]);
+    const { pollMatch, lineup, members, slots, voterCount } =
+      await loadSchedulePollInputs(this.db, match, matchId);
     // ROK-1302: a lineup that opted out of the scheduling phase has no poll —
     // 404 the page (the decided UI already hides the CTA; this guards a
     // hand-crafted URL or the lazy slot-create path).
@@ -119,7 +112,7 @@ export class SchedulingService {
     const conflictingSlotIds = slotConflicts?.map((c) => c.slotId);
     return {
       ...buildPollResponse(
-        { ...match, ...gameInfo, lineupCreatedById: lineup?.createdBy ?? null },
+        pollMatch,
         members,
         slots,
         votes,

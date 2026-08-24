@@ -9,7 +9,9 @@
  *     linked event then `completeStandalonePoll(matchId, eventId, startTime)`
  *     so the backend auto-signs-up/re-rosters the slot's voters (ROK-1031);
  *     otherwise navigate to `/events/new?gameId&startTime&matchId` (verbatim
- *     target from `CreateFromSlot::performNavigate`).
+ *     target from `CreateFromSlot::performNavigate`), plus `copyFromEventId`
+ *     when this is a follow-up poll so the create form prefills from the
+ *     ended event instead of opening blank.
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -81,6 +83,11 @@ export function useSchedulingLock(
     if (match.gameId) params.set('gameId', String(match.gameId));
     params.set('startTime', slot.proposedTime);
     params.set('matchId', String(matchId));
+    // Follow-up polls carry the ended event so the create form prefills from
+    // it. Ordinary polls have no source event and open with defaults.
+    if (match.followupForEventId != null) {
+      params.set('copyFromEventId', String(match.followupForEventId));
+    }
     navigate(`/events/new?${params.toString()}`);
   };
 

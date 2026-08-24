@@ -116,6 +116,12 @@ export const MatchDetailResponseSchema = LineupMatchSchema.extend({
     cooptimusOnlineMax: z.number().int().nullable().optional(),
     /** ROK-1121: lineup creator user ID for early-create override. */
     lineupCreatedById: z.number().int().optional(),
+    /**
+     * The ended event whose post-event follow-up prompt opened this poll, when
+     * this is a follow-up poll. Drives the create-event prefill on lock-in.
+     * Null/absent for every ordinary scheduling poll.
+     */
+    followupForEventId: z.number().int().positive().nullable().optional(),
     members: z.array(
         LineupMatchMemberSchema.extend({
             displayName: z.string(),
