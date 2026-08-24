@@ -1,5 +1,5 @@
 {
-  "id": "4977340b-8e6a-47d8-b085-30a7dc31cb7b",
+  "id": "7d3fe1f6-4095-40c8-8964-bfcf69da0913",
   "prevId": "4152f35b-44e5-407b-a423-c2ce02d7f3d5",
   "version": "7",
   "dialect": "postgresql",
@@ -3789,8 +3789,8 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "post_event_followup_sent_match_id_community_lineup_matches_id_fk": {
-          "name": "post_event_followup_sent_match_id_community_lineup_matches_id_fk",
+        "post_event_followup_sent_match_id_fk": {
+          "name": "post_event_followup_sent_match_id_fk",
           "tableFrom": "post_event_followup_sent",
           "tableTo": "community_lineup_matches",
           "columnsFrom": [

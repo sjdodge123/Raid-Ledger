@@ -5,6 +5,7 @@ import {
   timestamp,
   varchar,
   unique,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { events } from './events';
 import { communityLineupMatches } from './community-lineup-matches';
@@ -44,15 +45,22 @@ export const postEventFollowupSent = pgTable(
     attendeesNotifiedAt: timestamp('attendees_notified_at'),
     /**
      * POLL path back-reference to the scheduling match this prompt opened
-     * (follow-up prefill). Lets the lock-in navigation resolve the ended event so the
-     * create form can prefill from it. `set null` on delete: losing the poll
-     * must never cascade-delete the fan-out sentinels above.
+     * (follow-up prefill). Lets the lock-in navigation resolve the ended event
+     * so the create form can prefill from it. `set null` on delete: losing the
+     * poll must never cascade-delete the fan-out sentinels above.
      */
-    matchId: integer('match_id').references(() => communityLineupMatches.id, {
-      onDelete: 'set null',
-    }),
+    matchId: integer('match_id'),
   },
-  (table) => [unique('unique_post_event_followup').on(table.eventId)],
+  (table) => [
+    unique('unique_post_event_followup').on(table.eventId),
+    // Named explicitly: drizzle's generated name for this FK would be 64 chars
+    // and Postgres silently truncates at 63 (ROK-1387 guard).
+    foreignKey({
+      columns: [table.matchId],
+      foreignColumns: [communityLineupMatches.id],
+      name: 'post_event_followup_sent_match_id_fk',
+    }).onDelete('set null'),
+  ],
 );
 
 export type PostEventFollowupSent = typeof postEventFollowupSent.$inferSelect;
