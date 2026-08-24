@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import { EventLinkListener } from './event-link.listener';
 import { ChannelType, Events, EmbedBuilder } from 'discord.js';
 
@@ -148,14 +149,19 @@ function botConnectedTests() {
     );
   });
 
-  it('should not register twice', () => {
-    const mockOn = jest.fn();
-    mockClientService.getClient.mockReturnValue({ on: mockOn });
+  it('leaves exactly one live handler when CONNECTED fires twice', () => {
+    // ROK-1425: assert the INVARIANT (net live handlers), not the call count.
+    // DiscordListenerBinding detaches-then-attaches, so `on` is legitimately
+    // called again on a re-attach; what must never happen is two live handlers.
+    // A real EventEmitter is used here because the binding calls removeListener,
+    // which a bare `{ on: jest.fn() }` stub does not implement.
+    const client = new EventEmitter();
+    mockClientService.getClient.mockReturnValue(client);
 
     listener.handleBotConnected();
     listener.handleBotConnected();
 
-    expect(mockOn).toHaveBeenCalledTimes(1);
+    expect(client.listenerCount(Events.MessageCreate)).toBe(1);
   });
 
   it('should skip if no client', () => {

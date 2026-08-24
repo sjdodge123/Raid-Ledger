@@ -6,7 +6,7 @@ vi.mock('./fetch-api', () => ({
     fetchApi: (...args: unknown[]) => mockFetchApi(...args),
 }));
 
-import { getMyGameTime } from './game-time-api';
+import { getMyGameTime, getGameTimeAbsences } from './game-time-api';
 
 describe('getMyGameTime', () => {
     beforeEach(() => {
@@ -34,5 +34,19 @@ describe('getMyGameTime', () => {
 
         const [endpoint] = mockFetchApi.mock.calls[0];
         expect(endpoint).toContain('tzOffset=300');
+    });
+});
+
+describe('Regression: ROK-1427 — getGameTimeAbsences', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockFetchApi.mockResolvedValue({ data: [] });
+    });
+
+    it('sends the browser tzOffset so expiry is judged in the local day', async () => {
+        await getGameTimeAbsences();
+
+        const [endpoint] = mockFetchApi.mock.calls[0];
+        expect(endpoint).toContain(`tzOffset=${new Date().getTimezoneOffset()}`);
     });
 });

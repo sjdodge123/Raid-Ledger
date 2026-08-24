@@ -14,6 +14,10 @@ import {
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
 import { findLinkedUser } from './signup-interaction.helpers';
 import {
   buildDelayRow,
@@ -36,10 +40,10 @@ const LINK_MSG =
 @Injectable()
 export class RunningLateInteractionListener {
   private readonly logger = new Logger(RunningLateInteractionListener.name);
-  private boundHandler:
-    ((interaction: import('discord.js').Interaction) => void) | null = null;
-  private boundVoiceHandler: ((o: VoiceState, n: VoiceState) => void) | null =
-    null;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'Running Late interactions',
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -65,30 +69,32 @@ export class RunningLateInteractionListener {
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   onBotConnected(): void {
-    const client = this.clientService.getClient();
-    if (!client) return;
-    if (this.boundHandler) {
-      client.removeListener('interactionCreate', this.boundHandler);
-    }
-    this.boundHandler = (interaction: import('discord.js').Interaction) => {
-      if (interaction.isButton())
-        void this.handleButtonInteraction(interaction);
-    };
-    client.on('interactionCreate', this.boundHandler);
-    if (this.boundVoiceHandler) {
-      client.removeListener('voiceStateUpdate', this.boundVoiceHandler);
-    }
-    this.boundVoiceHandler = (oldState: VoiceState, newState: VoiceState) => {
-      // AC3: auto-clear running-late when the user joins the event's voice channel.
-      if (newState.channelId && newState.channelId !== oldState.channelId)
-        void clearRunningLateOnVoiceJoin(
-          this.deps,
-          newState.id,
-          newState.channelId,
-        );
-    };
-    client.on('voiceStateUpdate', this.boundVoiceHandler);
-    this.logger.log('Registered Running Late interaction handler');
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding('interactionCreate', (interaction) => {
+        if (interaction.isButton())
+          void this.handleButtonInteraction(interaction);
+      }),
+      gatewayBinding('voiceStateUpdate', (oldState, newState) => {
+        this.onVoiceStateUpdate(oldState, newState);
+      }),
+    ]);
+  }
+
+  /** Drop both handlers so a reconnect re-attaches to the live client. */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onBotDisconnected(): void {
+    this.binding.detach();
+  }
+
+  /** AC3: auto-clear running-late when the user joins a new voice channel. */
+  private onVoiceStateUpdate(oldState: VoiceState, newState: VoiceState): void {
+    if (!newState.channelId || newState.channelId === oldState.channelId)
+      return;
+    void clearRunningLateOnVoiceJoin(
+      this.deps,
+      newState.id,
+      newState.channelId,
+    );
   }
 
   private async handleButtonInteraction(

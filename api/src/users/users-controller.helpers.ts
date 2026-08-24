@@ -101,6 +101,20 @@ export function buildPaginatedMeta(
   return { total, page, limit, hasMore: page * limit < total };
 }
 
+/**
+ * Parse the `tzOffset` query param (browser `Date.getTimezoneOffset()`
+ * minutes). Missing or non-numeric values fall back to 0 (UTC).
+ */
+export function parseTzOffset(tzOffsetStr?: string): number {
+  const parsed = tzOffsetStr ? parseInt(tzOffsetStr, 10) : 0;
+  if (Number.isNaN(parsed)) return 0;
+  // Real IANA offsets span UTC-12 (+720) .. UTC+14 (-840). Clamping stops a
+  // crafted value from shifting "today" by years (silently defeating the
+  // ROK-1427 filter) and from overflowing the Date range in resolveLocalToday,
+  // which throws RangeError and surfaces as an unhandled 500.
+  return Math.max(-840, Math.min(840, parsed));
+}
+
 /** Resolve week start date from query param or current week. */
 export function resolveWeekStart(week?: string): Date {
   if (week) {

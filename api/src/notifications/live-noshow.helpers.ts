@@ -117,6 +117,16 @@ type AbsentPlayer = {
   userId: number | null;
   discordUserId: string | null;
   discordUsername: string | null;
+  /**
+   * ROK-1424: running-late marker, drives the per-user grace window.
+   * REQUIRED, not optional: `isSignupWithinLateGrace` short-circuits on
+   * `== null`, which `undefined` also satisfies. If these were optional a
+   * future trim of the `fetchNonBenchSignups` select would silently revert
+   * Phase 1 to the ROK-1424 bug with no type error and no unit-test failure.
+   */
+  runningLateAt: Date | null;
+  /** ROK-1424: optional ETA (minutes) chosen with the running-late marker. */
+  lateMinutes: number | null;
 };
 
 /** Fetch non-bench signed-up players for an event. */
@@ -129,6 +139,8 @@ async function fetchNonBenchSignups(
       userId: schema.eventSignups.userId,
       discordUserId: schema.eventSignups.discordUserId,
       discordUsername: schema.eventSignups.discordUsername,
+      runningLateAt: schema.eventSignups.runningLateAt,
+      lateMinutes: schema.eventSignups.lateMinutes,
     })
     .from(schema.eventSignups)
     .where(

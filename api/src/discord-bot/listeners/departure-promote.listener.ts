@@ -13,6 +13,10 @@ import {
 } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
+import {
   editDMResult,
   findFirstBenchPlayer,
   notifyPromotedPlayer,
@@ -28,8 +32,10 @@ import {
 @Injectable()
 export class DeparturePromoteListener {
   private readonly logger = new Logger(DeparturePromoteListener.name);
-  private boundHandler:
-    ((interaction: import('discord.js').Interaction) => void) | null = null;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'departure promote interactions',
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -52,18 +58,19 @@ export class DeparturePromoteListener {
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   onBotConnected(): void {
-    const client = this.clientService.getClient();
-    if (!client) return;
-    if (this.boundHandler) {
-      client.removeListener('interactionCreate', this.boundHandler);
-    }
-    this.boundHandler = (interaction: import('discord.js').Interaction) => {
-      if (interaction.isButton()) {
-        void this.handleButtonInteraction(interaction);
-      }
-    };
-    client.on('interactionCreate', this.boundHandler);
-    this.logger.log('Registered departure promote interaction handler');
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding('interactionCreate', (interaction) => {
+        if (interaction.isButton()) {
+          void this.handleButtonInteraction(interaction);
+        }
+      }),
+    ]);
+  }
+
+  /** Drop the handler so a reconnect re-attaches to the live client. */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onBotDisconnected(): void {
+    this.binding.detach();
   }
 
   /** Route button interactions to promote or dismiss. */

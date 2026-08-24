@@ -182,6 +182,8 @@ describe('LiveNoShowService — batching', () => {
           .mockReturnValue(
             makeSelectFromWhere([{ userId: 10 }, { userId: 11 }]),
           ),
+        // fetchLateGraceByUserId (ROK-1424) -- nobody running late
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch discord IDs
         jest.fn().mockReturnValue(
           makeSelectFromWhere([
@@ -271,6 +273,8 @@ describe('LiveNoShowService — batching', () => {
           .mockReturnValue(
             makeSelectFromWhere([{ userId: 10 }, { userId: 11 }]),
           ),
+        // fetchLateGraceByUserId (ROK-1424) -- nobody running late
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch discord IDs
         jest.fn().mockReturnValue(
           makeSelectFromWhere([
@@ -382,6 +386,8 @@ describe('LiveNoShowService — batching', () => {
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds
         jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 10 }])),
+        // fetchLateGraceByUserId (ROK-1424) -- nobody running late
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch discord IDs -- user has null discordId
         jest
           .fn()
@@ -453,6 +459,8 @@ describe('LiveNoShowService — batching', () => {
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds
         jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 10 }])),
+        // fetchLateGraceByUserId (ROK-1424) -- nobody running late
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch discord IDs -- user not found
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch voice sessions -- no sessions

@@ -8,6 +8,7 @@ import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { RUNNING_LATE_BUTTON_IDS } from '../discord-bot.constants';
+import { EventEmitter } from 'node:events';
 import {
   _resetLateCooldowns,
   clearRunningLateOnVoiceJoin,
@@ -23,6 +24,7 @@ const mockFindLinkedUser = findLinkedUser as jest.Mock;
 /** Test-friendly view exposing the private members the specs drive. */
 interface TestableRunningLateListener {
   onBotConnected: () => void;
+  onBotDisconnected: () => void;
   handleButtonInteraction: (interaction: unknown) => Promise<void>;
   handleLateClick: (interaction: unknown, eventId: number) => Promise<void>;
   handleHereClick: (interaction: unknown, eventId: number) => Promise<void>;
@@ -441,6 +443,51 @@ describe('RunningLateInteractionListener', () => {
       mockFindLinkedUser.mockResolvedValue(null);
       await clearRunningLateOnVoiceJoin(voiceDeps(), 'discord-user-x', 'vc-1');
       expect(mockRunningLateService.clearRunningLate).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * ROK-1425: this listener binds BOTH interactionCreate and voiceStateUpdate,
+   * so both must survive a reconnect without orphaning or stacking. A real
+   * EventEmitter gives a true `listenerCount`.
+   */
+  describe('Regression: ROK-1425 — attach lifecycle', () => {
+    const fakeClient = () => new EventEmitter();
+
+    it('leaves exactly ONE live handler per event across a reconnect', () => {
+      const first = fakeClient();
+      const second = fakeClient();
+      mockClientService.getClient.mockReturnValue(first);
+      listener.onBotConnected();
+      listener.onBotDisconnected();
+      mockClientService.getClient.mockReturnValue(second);
+      listener.onBotConnected();
+
+      expect(first.listenerCount('interactionCreate')).toBe(0);
+      expect(first.listenerCount('voiceStateUpdate')).toBe(0);
+      expect(second.listenerCount('interactionCreate')).toBe(1);
+      expect(second.listenerCount('voiceStateUpdate')).toBe(1);
+    });
+
+    // Reconnect with a MISSED DISCONNECTED — the production failure mode. A
+    // plain double-CONNECTED on the SAME client is not discriminating: the
+    // pre-fix code already called removeListener before re-adding, so that
+    // assertion passed against the very bug this covers. Attaching to a NEW
+    // client without an intervening detach is what actually catches it.
+    it('re-attaches to a new client when DISCONNECTED was missed', () => {
+      const stale = fakeClient();
+      const live = fakeClient();
+      mockClientService.getClient.mockReturnValue(stale);
+      listener.onBotConnected();
+      // No onBotDisconnected() — client.destroy() can reject, in which case
+      // DISCONNECTED is never emitted (discord-bot-client.service.ts).
+      mockClientService.getClient.mockReturnValue(live);
+      listener.onBotConnected();
+
+      expect(stale.listenerCount('interactionCreate')).toBe(0);
+      expect(live.listenerCount('interactionCreate')).toBe(1);
+      expect(stale.listenerCount('voiceStateUpdate')).toBe(0);
+      expect(live.listenerCount('voiceStateUpdate')).toBe(1);
     });
   });
 });

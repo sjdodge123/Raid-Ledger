@@ -138,6 +138,8 @@ describe('LiveNoShowService — phase2', () => {
       maxAttendees?: number | null;
       slotConfig?: unknown;
       activeSignupCount?: number;
+      /** ROK-1424: rows returned by fetchLateGraceByUserId. */
+      lateSignups?: Array<{ userId: number; lateMinutes: number | null }>;
     } = {},
   ) => {
     const {
@@ -151,6 +153,7 @@ describe('LiveNoShowService — phase2', () => {
       maxAttendees = 10,
       slotConfig = null,
       activeSignupCount = 10,
+      lateSignups = [],
     } = options;
 
     const event = makeEvent({
@@ -220,6 +223,11 @@ describe('LiveNoShowService — phase2', () => {
         );
 
         if (phase1Reminded.length > 0) {
+          // 4b. fetchLateGraceByUserId (ROK-1424) -- running-late signups
+          selectMocks.push(
+            jest.fn().mockReturnValue(makeSelectFromWhere(lateSignups)),
+          );
+
           // 5. fetchPhase2Data: batch-fetch discord IDs
           selectMocks.push(
             jest.fn().mockReturnValue(
@@ -489,6 +497,8 @@ describe('LiveNoShowService — phase2', () => {
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds -- creator user 1 was reminded
         jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 1 }])),
+        // fetchLateGraceByUserId (ROK-1424) -- nobody running late
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch discord IDs
         jest
           .fn()
