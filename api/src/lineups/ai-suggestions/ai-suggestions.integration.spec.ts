@@ -116,7 +116,9 @@ function describeAiSuggestions() {
       const queue = testApp.app.get<Queue>(
         getQueueToken(AI_SUGGESTIONS_PREGEN_QUEUE),
       );
-      await (await queue.client).del(quotaCooldownKey(queue.opts.prefix));
+      // ROK-1436: latch moved off `Queue.client` (removed in bullmq 6) onto
+      // the app's REDIS_CLIENT — clear it through the same mock.
+      await testApp.redisMock.client.del(quotaCooldownKey(queue.opts.prefix));
     }
 
     /** Provider + feature flag on, so ONLY the cooldown drives behavior. */

@@ -43,7 +43,7 @@
     "@raid-ledger/contract": "*",
     "@sentry/nestjs": "^10.70.0",
     "bcrypt": "^6.0.0",
-    "bullmq": "^5.76.7",
+    "bullmq": "^6.2.0",
     "chrono-node": "^2.10.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",

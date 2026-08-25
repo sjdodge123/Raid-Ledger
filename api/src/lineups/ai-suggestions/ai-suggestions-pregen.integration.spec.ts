@@ -97,9 +97,12 @@ function describePreGen() {
       // ROK-1376: the quota-cooldown latch is Redis state shared across
       // this spec's BULLMQ_KEY_PREFIX namespace — clear it so a quota
       // test can never bleed a skip into unrelated tests.
-      await (
-        await preGenQueue.client
-      ).del(quotaCooldownKey(preGenQueue.opts.prefix));
+      // ROK-1436: the latch now rides the app's REDIS_CLIENT (bullmq 6
+      // dropped `Queue.client`), so read it off the same mock the service
+      // is wired to rather than the queue's own connection.
+      await testApp.redisMock.client.del(
+        quotaCooldownKey(preGenQueue.opts.prefix),
+      );
     }
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
@@ -595,7 +598,7 @@ function describePreGen() {
       expect(chatSpy).toHaveBeenCalledTimes(1);
 
       // 2. Cooldown latch armed in Redis (TTL key).
-      const client = await preGenQueue!.client;
+      const client = testApp.redisMock.client;
       const latchKey = quotaCooldownKey(preGenQueue!.opts.prefix);
       expect(await client.exists(latchKey)).toBe(1);
       expect(await client.ttl(latchKey)).toBeGreaterThan(0);
@@ -630,7 +633,7 @@ function describePreGen() {
       expect(caught).toBeInstanceOf(Error);
       expect(caught).not.toBeInstanceOf(UnrecoverableError);
       // And the cooldown latch must NOT be armed by a transient failure.
-      const client = await preGenQueue!.client;
+      const client = testApp.redisMock.client;
       expect(
         await client.exists(quotaCooldownKey(preGenQueue!.opts.prefix)),
       ).toBe(0);
