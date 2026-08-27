@@ -54,47 +54,55 @@ describe('GameTimeGrid — part 1', () => {
         expect(cell.dataset.status).toBe('inactive');
     });
 
-    it('click toggles cell from inactive to available', () => {
+    it('never mutates on contact with a cell (ROK-1426)', () => {
+        // The bug: first contact painted, so a touch-drag to scroll filled cells.
+        // Editing now lives in the block layer; cells are inert.
         const onChange = vi.fn();
         render(<GameTimeGrid slots={[]} onChange={onChange} />);
 
         fireEvent.pointerDown(screen.getByTestId('cell-1-10'));
         fireEvent.pointerUp(screen.getByTestId('cell-1-10'));
 
-        expect(onChange).toHaveBeenCalledWith([
-            { dayOfWeek: 1, hour: 10, status: 'available' },
-        ]);
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('leaves the grid scrollable on touch even when interactive (ROK-1426)', () => {
+        render(<GameTimeGrid slots={[]} onChange={vi.fn()} />);
+        expect(screen.getByTestId('game-time-grid')).toHaveStyle({ touchAction: 'pan-y' });
     });
 
 });
 
 describe('GameTimeGrid — part 2', () => {
-    it('click toggles cell from available to inactive (erase)', () => {
+    it('renders availability as a block and leaves the cell inert (ROK-1426)', () => {
         const slots: GameTimeSlot[] = [
             { dayOfWeek: 1, hour: 10, status: 'available' },
+            { dayOfWeek: 1, hour: 11, status: 'available' },
         ];
         const onChange = vi.fn();
         render(<GameTimeGrid slots={slots} onChange={onChange} />);
 
+        // One block for the contiguous run, and the cells no longer carry the fill.
+        expect(screen.getByTestId('slot-block-1-10')).toBeInTheDocument();
+        expect(screen.queryByTestId('slot-block-1-11')).not.toBeInTheDocument();
+        expect(screen.getByTestId('cell-1-10').dataset.status).toBe('inactive');
+
         fireEvent.pointerDown(screen.getByTestId('cell-1-10'));
         fireEvent.pointerUp(screen.getByTestId('cell-1-10'));
-
-        expect(onChange).toHaveBeenCalledWith([]);
+        expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('drag paints multiple cells', () => {
+    it('dragging across cells paints nothing (ROK-1426)', () => {
         const onChange = vi.fn();
         const { getByTestId } = render(
             <GameTimeGrid slots={[]} onChange={onChange} />,
         );
 
         fireEvent.pointerDown(getByTestId('cell-0-8'));
-        expect(onChange).toHaveBeenCalledTimes(1);
-
         fireEvent.pointerEnter(getByTestId('cell-0-9'));
-        expect(onChange).toHaveBeenCalledTimes(2);
-
         fireEvent.pointerUp(getByTestId('cell-0-9'));
+
+        expect(onChange).not.toHaveBeenCalled();
     });
 
     it('readOnly mode prevents interaction', () => {
@@ -175,12 +183,12 @@ describe('GameTimeGrid — part 3', () => {
             expect(onEventClick.mock.calls[0][0]).toMatchObject({ eventId: 1 });
         });
 
-        it('event blocks do not interfere with drag-to-paint', () => {
+        it('event blocks do not make cells mutate on contact (ROK-1426)', () => {
             const onChange = vi.fn();
             render(<GameTimeGrid slots={[]} events={mockEvents} onChange={onChange} />);
 
             fireEvent.pointerDown(screen.getByTestId('cell-3-10'));
-            expect(onChange).toHaveBeenCalledTimes(1);
+            expect(onChange).not.toHaveBeenCalled();
         });
     });
 
@@ -280,12 +288,12 @@ describe('GameTimeGrid — part 6', () => {
             expect(screen.getByTestId('cell-2-10').dataset.status).toBe('blocked');
         });
 
-        it('compact mode does not affect drag-to-paint interaction', () => {
+        it('compact mode is also inert on contact, and still scrollable (ROK-1426)', () => {
             const onChange = vi.fn();
             render(<GameTimeGrid slots={[]} compact onChange={onChange} />);
             fireEvent.pointerDown(screen.getByTestId('cell-2-8'));
-            expect(onChange).toHaveBeenCalledTimes(1);
-            expect(onChange.mock.calls[0][0]).toEqual([{ dayOfWeek: 2, hour: 8, status: 'available' }]);
+            expect(onChange).not.toHaveBeenCalled();
+            expect(screen.getByTestId('game-time-grid')).toHaveStyle({ touchAction: 'pan-y' });
         });
 
         it('compact mode does not affect onCellClick', () => {
