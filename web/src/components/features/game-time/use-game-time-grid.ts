@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import type { GridDims, HeatmapCell } from './game-time-grid.types';

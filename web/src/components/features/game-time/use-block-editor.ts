@@ -28,6 +28,24 @@ export interface BlockEditorApi {
     clearSelection: () => void;
 }
 
+/**
+ * Clamped bounds for moving one edge of a block by `delta` rows. Shared by the
+ * handle drag and the inspector stepper so the two can never disagree about
+ * where a block is allowed to end up: at least one hour long, and never across
+ * a blocked or committed hour.
+ */
+export function edgeBounds(
+    slots: GameTimeSlot[], block: SlotBlock, edge: 'start' | 'end', delta: number, hours: number[],
+): { start: number; end: number } {
+    const day = block.dayOfWeek;
+    if (edge === 'start') {
+        const floor = minStartIndex(slots, day, block.endIndex, hours);
+        return { start: Math.max(floor, Math.min(block.endIndex - 1, block.startIndex + delta)), end: block.endIndex };
+    }
+    const ceiling = maxEndIndex(slots, day, block.startIndex, hours);
+    return { start: block.startIndex, end: Math.min(ceiling, Math.max(block.startIndex + 1, block.endIndex + delta)) };
+}
+
 const isSame = (a: SlotBlock | null, b: SlotBlock): boolean =>
     !!a && a.dayOfWeek === b.dayOfWeek && a.startIndex === b.startIndex && a.endIndex === b.endIndex;
 
@@ -86,14 +104,14 @@ export function useBlockEditor(
         gesture.current = { kind: 'tap', pointerId: e.pointerId, dayOfWeek, index, x0: e.clientX, y0: e.clientY };
     }, []);
 
-    const resizeTo = useCallback((g: Extract<Gesture, { kind: 'resize' }>, delta: number) => {
-        const { block, snapshot } = g;
+    /** Re-derive the whole edit from `base`, so repeated moves cannot drift. */
+    const applyEdge = useCallback((
+        base: GameTimeSlot[], block: SlotBlock, edge: 'start' | 'end', delta: number,
+    ) => {
         const day = block.dayOfWeek;
-        let start = block.startIndex, end = block.endIndex;
-        if (g.edge === 'start') start = Math.max(minStartIndex(snapshot, day, block.endIndex, hours), Math.min(block.endIndex - 1, block.startIndex + delta));
-        else end = Math.min(maxEndIndex(snapshot, day, block.startIndex, hours), Math.max(block.startIndex + 1, block.endIndex + delta));
-        if (start === block.startIndex && end === block.endIndex) { commit(snapshot, day, start); return; }
-        const cleared = setBlockRange(snapshot, day, block.startIndex, block.endIndex, false, hours);
+        const { start, end } = edgeBounds(base, block, edge, delta, hours);
+        if (start === block.startIndex && end === block.endIndex) { commit(base, day, start); return; }
+        const cleared = setBlockRange(base, day, block.startIndex, block.endIndex, false, hours);
         commit(setBlockRange(cleared, day, start, end, true, hours), day, start);
     }, [hours, commit]);
 
@@ -105,10 +123,10 @@ export function useBlockEditor(
             return;
         }
         const delta = steps(e, g.y0);
-        if (g.kind === 'resize') resizeTo(g, delta);
+        if (g.kind === 'resize') applyEdge(g.snapshot, g.block, g.edge, delta);
         else commit(moveBlock(g.snapshot, g.block, g.block.startIndex + delta, hours), g.block.dayOfWeek, g.block.startIndex + delta);
         e.preventDefault();
-    }, [steps, resizeTo, commit, hours]);
+    }, [steps, applyEdge, commit, hours]);
 
     const handleUp = useCallback((e: React.PointerEvent) => {
         const g = gesture.current;
@@ -126,15 +144,8 @@ export function useBlockEditor(
     }, []);
 
     const adjust = useCallback((edge: 'start' | 'end', delta: number) => {
-        if (!selection) return;
-        const day = selection.dayOfWeek;
-        let start = selection.startIndex, end = selection.endIndex;
-        if (edge === 'start') start = Math.max(minStartIndex(slots, day, selection.endIndex, hours), Math.min(selection.endIndex - 1, start + delta));
-        else end = Math.min(maxEndIndex(slots, day, selection.startIndex, hours), Math.max(selection.startIndex + 1, end + delta));
-        if (start === selection.startIndex && end === selection.endIndex) return;
-        const cleared = setBlockRange(slots, day, selection.startIndex, selection.endIndex, false, hours);
-        commit(setBlockRange(cleared, day, start, end, true, hours), day, start);
-    }, [selection, slots, hours, commit]);
+        if (selection) applyEdge(slots, selection, edge, delta);
+    }, [selection, slots, applyEdge]);
 
     const removeSelected = useCallback(() => {
         if (!selection) return;
