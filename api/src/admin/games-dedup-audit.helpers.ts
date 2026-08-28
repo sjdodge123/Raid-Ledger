@@ -11,6 +11,7 @@ import type { PgTable } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { normalizeForDedup } from '../igdb/igdb-search-dedup.helpers';
+import { pickNameGroupWinner } from '../igdb/igdb-name-dedup.helpers';
 import { buildExtraCountQueries } from './games-dedup-extra-counts.helpers';
 
 /** Minimal game-row projection used by the audit pipeline. */
@@ -72,18 +73,24 @@ function dedupKeyFor(row: GameRow): DedupKey | null {
 }
 
 /**
- * Tiebreak the canonical id within a dup group:
- *   1. row with non-null `itadGameId` wins
- *   2. row with non-null `igdbId` wins
- *   3. lowest id wins
+ * Tiebreak the canonical id within a dup group. Delegates to the merge path's
+ * `pickNameGroupWinner` so the audit's "canonical" and the merge's "winner" are
+ * the same row by construction.
+ *
+ * They used to disagree: this function ranked `itadGameId` tier-1 while
+ * `pickNameGroupWinner` ranks it tier-3 (behind igdb+itad and igdb). For a group
+ * of one igdb-only row and one itad-only row the two picked OPPOSITE rows, so
+ * the audit pinned the row the merge was about to delete — and since
+ * `games_dedup_audit.canonical_game_id` is a notNull FK with no `onDelete`, the
+ * delete aborted the whole group. Prod 2026-08-28: Baldur's Gate 3 survived four
+ * consecutive cleanup runs this way.
+ *
+ * Only the igdb-only-vs-itad-only case changes; every other ordering is
+ * unaffected, which is why the pre-existing unit cases still hold.
  */
 export function pickCanonicalId(rows: GameRow[]): number {
   if (rows.length === 0) throw new Error('pickCanonicalId requires ≥1 row');
-  const byItad = rows.filter((r) => r.itadGameId != null);
-  if (byItad.length > 0) return Math.min(...byItad.map((r) => r.id));
-  const byIgdb = rows.filter((r) => r.igdbId != null);
-  if (byIgdb.length > 0) return Math.min(...byIgdb.map((r) => r.id));
-  return Math.min(...rows.map((r) => r.id));
+  return pickNameGroupWinner(rows).id;
 }
 
 /** Per-game downstream-row counts across the 23 FK tables (17 + 6 from ROK-1270). */

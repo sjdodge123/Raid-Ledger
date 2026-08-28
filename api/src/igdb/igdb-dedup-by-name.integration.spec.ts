@@ -317,3 +317,122 @@ describe('POST /admin/games/dedup-cleanup-by-name (integration)', () => {
     expect(res.status).toBe(401);
   });
 });
+
+/**
+ * Regression: the admin name-merge silently failed on exactly the rows with the
+ * most history, because `games_dedup_audit.canonical_game_id` is a notNull FK to
+ * `games.id` with no `onDelete` (therefore RESTRICT). When the audit had pinned
+ * the merge's LOSER as canonical, deleting that loser aborted the group.
+ *
+ * Reproduced from prod 2026-08-28: Baldur's Gate 3 survived as two rows through
+ * four consecutive cleanup runs. `pickCanonicalId` ranks itadGameId tier-1 while
+ * `pickNameGroupWinner` ranks it tier-3, so the two functions disagreed on which
+ * row was the good one — the audit pinned the itad-keyed row, the merge tried to
+ * delete it.
+ */
+describe('Regression: dedup merge vs games_dedup_audit FK', () => {
+  /** Insert an audit row pinning `canonicalId`, mirroring a boot-time refresh. */
+  async function pinAuditCanonical(
+    canonicalId: number,
+    dupIds: number[],
+  ): Promise<void> {
+    await testApp.db.insert(schema.gamesDedupAudit).values({
+      matchType: 'name',
+      matchKey: "baldur's gate 3",
+      canonicalGameId: canonicalId,
+      dupGameIds: dupIds,
+      groupSize: dupIds.length + 1,
+      downstreamCounts: {} as never,
+      uniqueConflicts: {} as never,
+      snapshotAt: new Date(),
+    });
+  }
+
+  it('merges a group whose loser is pinned as an audit canonical', async () => {
+    const winner = await insertGame({
+      name: "Baldur's Gate 3",
+      slug: 'bg3-igdb',
+      igdbId: 119171,
+    });
+    const loser = await insertGame({
+      name: "Baldur's Gate 3",
+      slug: 'bg3-steam',
+      itadGameId: 'itad-bg3',
+      steamAppId: 1086940,
+    });
+    // The audit pins the ITAD-keyed row — which is the merge's loser.
+    await pinAuditCanonical(loser.id, [winner.id]);
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-cleanup-by-name?dryRun=false')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.merged).toBe(1);
+
+    const survivors = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(eq(schema.games.name, "Baldur's Gate 3"));
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0].id).toBe(winner.id);
+  });
+
+  it('carries the loser steam/itad/cover identity onto the winner', async () => {
+    const winner = await insertGame({
+      name: 'Metro Exodus',
+      slug: 'metro-igdb',
+      igdbId: 119172,
+    });
+    const loser = await insertGame({
+      name: 'Metro Exodus',
+      slug: 'metro-steam',
+      itadGameId: 'itad-metro',
+      steamAppId: 412020,
+      coverUrl: 'https://example.test/metro.jpg',
+    });
+    await pinAuditCanonical(loser.id, [winner.id]);
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-cleanup-by-name?dryRun=false')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.body.errors).toEqual([]);
+
+    const [survivor] = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(eq(schema.games.id, winner.id));
+    expect(survivor.steamAppId).toBe(412020);
+    expect(survivor.itadGameId).toBe('itad-metro');
+    expect(survivor.coverUrl).toBe('https://example.test/metro.jpg');
+    expect(survivor.igdbId).toBe(119172); // winner's own value not clobbered
+  });
+
+  it('does not overwrite a value the winner already has', async () => {
+    const winner = await insertGame({
+      name: 'Wasteland 2',
+      slug: 'wl2-w',
+      igdbId: 119173,
+      steamAppId: 240760,
+      coverUrl: 'https://example.test/keep-me.jpg',
+    });
+    await insertGame({
+      name: 'Wasteland 2',
+      slug: 'wl2-l',
+      steamAppId: 999999,
+      coverUrl: 'https://example.test/clobber.jpg',
+    });
+
+    await testApp.request
+      .post('/admin/games/dedup-cleanup-by-name?dryRun=false')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    const [survivor] = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(eq(schema.games.id, winner.id));
+    expect(survivor.steamAppId).toBe(240760);
+    expect(survivor.coverUrl).toBe('https://example.test/keep-me.jpg');
+  });
+});

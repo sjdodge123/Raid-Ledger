@@ -14,6 +14,7 @@ import {
   reassignEventFks,
   reassignLineupFks,
   reassignMiscFks,
+  type Tx,
 } from './igdb-dedup-fk-reassign.helpers';
 import {
   findDuplicateGroupsByNormalizedName,
@@ -234,10 +235,12 @@ async function mergeNameGroup(
 
   await db.transaction(async (tx) => {
     for (const loserId of loserIds) {
+      const carry = await captureCarryColumns(tx, loserId);
       await reassignEventFks(tx, loserId, winner.id);
       await reassignLineupFks(tx, loserId, winner.id);
       await reassignMiscFks(tx, loserId, winner.id);
       await tx.delete(schema.games).where(eq(schema.games.id, loserId));
+      await applyCarryColumns(tx, winner.id, carry);
     }
   });
 
@@ -249,6 +252,73 @@ async function mergeNameGroup(
     winnerId: winner.id,
     loserIds,
   };
+}
+
+/**
+ * Columns a loser can donate to the winner before it is deleted.
+ *
+ * The merge previously dropped these on the floor: it repointed FKs and deleted
+ * the row without copying anything across, so merging an igdb-keyed winner with
+ * a steam/itad-keyed loser silently destroyed the Steam link and ITAD pricing
+ * id. The Steam badge vanished from the card and library matching stopped
+ * resolving the game until an unrelated discovery pass happened to re-attach it.
+ */
+interface CarryColumns {
+  steamAppId: number | null;
+  itadGameId: string | null;
+  coverUrl: string | null;
+}
+
+/** Read the loser's donatable columns while the row still exists. */
+async function captureCarryColumns(
+  tx: Tx,
+  loserId: number,
+): Promise<CarryColumns> {
+  const [row] = await tx
+    .select({
+      steamAppId: schema.games.steamAppId,
+      itadGameId: schema.games.itadGameId,
+      coverUrl: schema.games.coverUrl,
+    })
+    .from(schema.games)
+    .where(eq(schema.games.id, loserId))
+    .limit(1);
+  return row ?? { steamAppId: null, itadGameId: null, coverUrl: null };
+}
+
+/**
+ * Fill NULL columns on the winner from the loser's values — never overwrite a
+ * value the winner already holds.
+ *
+ * MUST run AFTER the loser row is deleted: `steam_app_id` carries a partial
+ * UNIQUE index and `itad_game_id` a plain one, so writing them onto the winner
+ * while the loser still holds them collides (constraints are checked
+ * per-statement, not at commit).
+ */
+async function applyCarryColumns(
+  tx: Tx,
+  winnerId: number,
+  carry: CarryColumns,
+): Promise<void> {
+  const [winner] = await tx
+    .select({
+      steamAppId: schema.games.steamAppId,
+      itadGameId: schema.games.itadGameId,
+      coverUrl: schema.games.coverUrl,
+    })
+    .from(schema.games)
+    .where(eq(schema.games.id, winnerId))
+    .limit(1);
+  if (!winner) return;
+
+  const patch: Partial<CarryColumns> = {};
+  for (const key of ['steamAppId', 'itadGameId', 'coverUrl'] as const) {
+    if (winner[key] == null && carry[key] != null) {
+      Object.assign(patch, { [key]: carry[key] });
+    }
+  }
+  if (Object.keys(patch).length === 0) return;
+  await tx.update(schema.games).set(patch).where(eq(schema.games.id, winnerId));
 }
 
 /** Build a winner/losers report for a name-keyed group (no DB writes). */
