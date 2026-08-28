@@ -174,22 +174,50 @@ test.describe('Game Time blocks — editing', () => {
         const viewportHeight = page.viewportSize()!.height;
         const position = await inspector.evaluate((el) => getComputedStyle(el).position);
 
-        if (test.info().project.name === 'mobile') {
-            // The case that was broken. Wholly inside the viewport AND clear of
-            // the fixed h-14 (56px) tab bar, so every control is actually usable.
-            expect(position).toBe('sticky');
-            expect(box.y).toBeGreaterThanOrEqual(0);
-            expect(box.y + box.height).toBeLessThanOrEqual(viewportHeight - 56);
-        } else {
-            // Desktop keeps the in-flow placement (operator call). It sits under
-            // the grid and scrolls with it, so on a short window the steppers can
-            // land below the fold -- only the top edge is guaranteed reachable.
-            expect(position).toBe('static');
-            expect(box.y).toBeLessThan(viewportHeight);
-            expect(box.y + box.height).toBeGreaterThan(0);
-        }
+        // Pinned on both, so selecting a block never puts its own controls out of
+        // reach: in flow it landed at y=733 in a 727px mobile viewport, and at
+        // 681-771 in a 720px desktop window, which cut off both steppers.
+        expect(position).toBe('sticky');
+        expect(box.y).toBeGreaterThanOrEqual(0);
+
+        // Mobile must additionally clear the fixed h-14 (56px) bottom tab bar,
+        // which desktop does not have.
+        const floor = test.info().project.name === 'mobile' ? 56 : 0;
+        expect(box.y + box.height).toBeLessThanOrEqual(viewportHeight - floor);
 
         await page.getByTestId('remove-block').click();
+    });
+
+    // The block layer covers the cells, so a cell's own onPointerEnter stops
+    // firing while editing -- which silently killed both the hover tooltip and
+    // the hover glow. Hover is reported from the layer instead.
+    test('hovering the grid still shows the tooltip and the glow while editing', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Hover is a mouse affordance');
+        await openGameTime(page);
+        await waitForLayer(page);
+
+        const tooltip = page.getByTestId('game-time-hover-tooltip');
+        await expect(tooltip).toHaveCount(0);
+
+        // Hover a day column, over the layer -- not a cell, which is underneath it.
+        const target = page.getByTestId('slot-day-target-2');
+        const box = (await target.boundingBox())!;
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+        // Names the actual cell, so this fails if the coordinate maths is wrong
+        // rather than merely if something rendered.
+        await expect(tooltip).toBeVisible();
+        await expect(tooltip).toHaveText(/^Tuesday \d{1,2} (AM|PM) – \d{1,2} (AM|PM)/);
+
+        // The glow is painted as the grid's background, so it proves the hover
+        // reached useHoverGlow and not just the tooltip.
+        await expect
+            .poll(async () => page.getByTestId(GRID).evaluate((el) => el.style.background))
+            .toContain('radial-gradient');
+
+        // Leaving the grid clears it.
+        await page.mouse.move(box.x + box.width / 2, box.y - 200);
+        await expect(tooltip).toHaveCount(0);
     });
 
     test('the steppers move the block bounds without dragging', async ({ page }) => {

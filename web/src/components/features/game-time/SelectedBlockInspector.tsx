@@ -17,15 +17,19 @@ const endHourOf = (endIndex: number, hours: number[]): number =>
     endIndex >= hours.length ? (hours[hours.length - 1] + 1) % 24 : hours[endIndex];
 
 /**
- * Sticky on mobile: statically placed the inspector landed at y=733 in a 727px
- * viewport, so selecting a block put every control below the fold with no cue
- * they existed — which defeats the point of having a precise path at all. The
- * offset clears the h-14 bottom tab bar and its safe-area inset. Desktop keeps
- * the static flow placement, where the inspector is already in view.
+ * Pinned, so selecting a block never puts its own controls out of reach.
+ *
+ * In normal flow the inspector sits below a 17-row grid: it rendered at y=733 in
+ * a 727px mobile viewport (everything below the fold, no cue it existed), and at
+ * 681-771 in a 720px-tall desktop window, which keeps the day name and buttons
+ * but cuts off both steppers. Since the stepper is meant to be the precise AND
+ * accessible path, either one defeats it.
+ *
+ * Mobile clears the h-14 bottom tab bar plus its safe-area inset; desktop has no
+ * tab bar, so it sits flush. Opaque either way — it overlays the grid.
  */
 const STICKY = 'sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 '
-    + 'bg-panel/95 backdrop-blur-sm shadow-lg '
-    + 'md:static md:bottom-auto md:z-auto md:bg-panel/60 md:backdrop-blur-none md:shadow-none';
+    + 'bg-panel/95 backdrop-blur-sm shadow-lg md:bottom-0';
 
 /**
  * Editor for the selected block (ROK-1426).

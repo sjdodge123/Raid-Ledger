@@ -204,7 +204,13 @@ describe('GameTimeWidget — part 1', () => {
 });
 
 describe('GameTimeWidget — part 2', () => {
-    it('modal is read-only (cells are not paintable)', () => {
+    // Was 'modal is read-only (cells are not paintable)'. The modal stopped being
+    // read-only in ROK-1426, and the assertion had gone vacuous either way: cells
+    // are no longer an edit surface for ANY grid, so painting one cannot fire
+    // onChange whatever the mode. What still holds is the half worth keeping --
+    // pressing a cell edits nothing. That the modal *is* editable via the block
+    // layer needs real layout, so it is covered by the Playwright smoke instead.
+    it('pressing a cell edits nothing — cells are not the edit surface', () => {
         const handleChange = vi.fn();
         mockEditorData({
             slots: [],
@@ -215,14 +221,13 @@ describe('GameTimeWidget — part 2', () => {
 
         fireEvent.click(screen.getByTestId('game-time-widget'));
 
-        // Try to paint a visible cell — should NOT trigger onChange since grid is readOnly.
         fireEvent.pointerDown(screen.getByTestId('cell-2-18'));
         fireEvent.pointerUp(screen.getByTestId('cell-2-18'));
 
         expect(handleChange).not.toHaveBeenCalled();
     });
 
-    it('modal has "Edit my game time" link to profile', () => {
+    it('modal links out to the profile panel for absences and presets', () => {
         mockEditorData({
             slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         });
@@ -231,7 +236,9 @@ describe('GameTimeWidget — part 2', () => {
 
         fireEvent.click(screen.getByTestId('game-time-widget'));
 
-        const link = screen.getByText(/Edit my game time/);
+        // Relabelled in the ROK-1426 follow-up: it used to say "Edit my game time",
+        // which competed with the now-editable grid directly beneath it.
+        const link = screen.getByText(/Absences and presets/);
         expect(link).toBeInTheDocument();
         expect(link.closest('a')).toHaveAttribute('href', '/profile/gaming');
     });
