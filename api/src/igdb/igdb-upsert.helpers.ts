@@ -298,14 +298,36 @@ async function mergeExistingRows(
     normalizeForDedup,
   );
 
-  for (const { id, row } of merges) await applyIgdbMergeToRow(db, id, row);
-  for (const { id, row } of nameMerges) {
-    await applyIgdbMergeToRow(db, id, row);
-    logger.log(
-      `Merged IGDB ${row.igdbId} into existing game ${id} by normalized name`,
-    );
-  }
+  await applyMergesInIdOrder(db, merges, nameMerges);
   return insertsAfterName;
+}
+
+/**
+ * Apply both merge sets as UPDATEs, ordered by row id.
+ *
+ * The order matters now that the batch runs in one transaction (ROK-1438):
+ * row locks are held to commit, so two concurrent batches that touched the
+ * same two rows in opposite orders could deadlock. A batch's advisory locks
+ * cover the names it is INSERTING, which is not the same set as the names of
+ * the rows it MERGES INTO (a steamAppId merge lands on a row with an
+ * unrelated name), so they don't prevent this on their own. Ascending id is a
+ * total order every caller agrees on, so no cycle can form.
+ */
+async function applyMergesInIdOrder(
+  db: PostgresJsDatabase<typeof schema>,
+  merges: Array<{ id: number; row: GameRow }>,
+  nameMerges: Array<{ id: number; row: GameRow }>,
+): Promise<void> {
+  const byName = new Set(nameMerges.map((m) => m.id));
+  const ordered = [...merges, ...nameMerges].sort((a, b) => a.id - b.id);
+  for (const { id, row } of ordered) {
+    await applyIgdbMergeToRow(db, id, row);
+    if (byName.has(id)) {
+      logger.log(
+        `Merged IGDB ${row.igdbId} into existing game ${id} by normalized name`,
+      );
+    }
+  }
 }
 
 /** Fetch games with missing cover art from the database. */
