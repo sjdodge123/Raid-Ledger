@@ -9,6 +9,7 @@ import { SettingsService } from '../settings/settings.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { ItadService } from '../itad/itad.service';
 import { GameTasteService } from '../game-taste/game-taste.service';
+import { withMockTransaction } from '../common/testing/drizzle-mock';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -116,7 +117,9 @@ describe('IgdbService', () => {
   ];
 
   function createMockDb() {
-    return {
+    // ROK-1438: find-then-insert paths run inside withGameNameLock, which
+    // opens a transaction and issues the advisory-lock SELECT.
+    return withMockTransaction({
       select: jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: jest
@@ -132,7 +135,7 @@ describe('IgdbService', () => {
           }),
         }),
       }),
-    };
+    });
   }
 
   beforeEach(async () => {

@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { and, eq, inArray, isNull, not, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, not } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { GameDetailDto } from '@raid-ledger/contract';
@@ -9,123 +9,92 @@ import {
   findGameByNormalizedName,
   findGameIdsByNormalizedName,
 } from './igdb-name-dedup.helpers';
+import { withGameNameLock } from './games-name-lock.helpers';
+import {
+  buildUpsertSet,
+  buildBatchUpsertSet,
+} from './igdb-upsert-sets.helpers';
 import { normalizeForDedup } from './igdb-search-dedup.helpers';
 
 const logger = new Logger('IgdbUpsertHelpers');
-
-/** Single-row upsert SET. COALESCE preserves existing twitch/steam ids when row is null. */
-function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
-  return {
-    name: row.name,
-    slug: row.slug,
-    coverUrl: row.coverUrl,
-    genres: row.genres,
-    summary: row.summary,
-    rating: row.rating,
-    aggregatedRating: row.aggregatedRating,
-    popularity: row.popularity,
-    gameModes: row.gameModes,
-    themes: row.themes,
-    platforms: row.platforms,
-    screenshots: row.screenshots,
-    videos: row.videos,
-    firstReleaseDate: row.firstReleaseDate,
-    playerCount: row.playerCount,
-    twitchGameId: row.twitchGameId ?? sql`${schema.games.twitchGameId}`,
-    steamAppId: row.steamAppId ?? sql`${schema.games.steamAppId}`,
-    crossplay: row.crossplay,
-    cachedAt: new Date(),
-  };
-}
-
-/** Batch upsert SET (ROK-1024). Mirrors `buildUpsertSet` using `excluded.<column>` per row. */
-function buildBatchUpsertSet() {
-  return {
-    name: sql`excluded.name`,
-    slug: sql`excluded.slug`,
-    coverUrl: sql`excluded.cover_url`,
-    genres: sql`excluded.genres`,
-    summary: sql`excluded.summary`,
-    rating: sql`excluded.rating`,
-    aggregatedRating: sql`excluded.aggregated_rating`,
-    popularity: sql`excluded.popularity`,
-    gameModes: sql`excluded.game_modes`,
-    themes: sql`excluded.themes`,
-    platforms: sql`excluded.platforms`,
-    screenshots: sql`excluded.screenshots`,
-    videos: sql`excluded.videos`,
-    firstReleaseDate: sql`excluded.first_release_date`,
-    playerCount: sql`excluded.player_count`,
-    twitchGameId: sql`COALESCE(excluded.twitch_game_id, ${schema.games.twitchGameId})`,
-    steamAppId: sql`COALESCE(excluded.steam_app_id, ${schema.games.steamAppId})`,
-    crossplay: sql`excluded.crossplay`,
-    cachedAt: sql`now()`,
-  };
-}
 
 /**
  * Upsert a single game row. Merges into existing rows by steamAppId (ROK-986)
  * or normalized canonical name (ROK-1113) before inserting. `onGameChanged`
  * (ROK-1082) fires after commit so callers can enqueue a taste-vector recompute.
+ *
+ * ROK-1438: the whole find-then-insert runs under an advisory lock keyed on the
+ * normalized name, so a concurrent upsert of the same title blocks instead of
+ * read-missing and inserting a twin row.
  */
 export async function upsertSingleGameRow(
   db: PostgresJsDatabase<typeof schema>,
   row: ReturnType<typeof mapApiGameToDbRow>,
   onGameChanged?: (gameId: number) => void,
 ): Promise<void> {
-  if (row.steamAppId && (await mergeBysteamAppId(db, row, onGameChanged)))
-    return;
-  if (await mergeByNormalizedName(db, row, onGameChanged)) return;
-  await db
+  const touchedId = await withGameNameLock(db, row.name, (tx) =>
+    upsertSingleGameRowLocked(tx, row),
+  );
+  // After commit: a rolled-back transaction must not announce writes that
+  // never landed.
+  if (touchedId != null) onGameChanged?.(touchedId);
+}
+
+/**
+ * Find-then-insert body for a single row. MUST run inside the name lock.
+ * Returns the id of the row it merged into or inserted.
+ */
+async function upsertSingleGameRowLocked(
+  tx: PostgresJsDatabase<typeof schema>,
+  row: ReturnType<typeof mapApiGameToDbRow>,
+): Promise<number | null> {
+  if (row.steamAppId) {
+    const bySteam = await mergeBysteamAppId(tx, row);
+    if (bySteam != null) return bySteam;
+  }
+  const byName = await mergeByNormalizedName(tx, row);
+  if (byName != null) return byName;
+
+  // RETURNING covers both branches of the upsert, replacing the follow-up
+  // SELECT the pre-ROK-1438 code needed to resolve the id.
+  const inserted = await tx
     .insert(schema.games)
     .values(row)
     .onConflictDoUpdate({
       target: schema.games.igdbId,
       set: buildUpsertSet(row),
-    });
-  if (onGameChanged) await notifyBySingleIgdbId(db, row.igdbId, onGameChanged);
+    })
+    .returning({ id: schema.games.id });
+  return inserted[0]?.id ?? null;
 }
 
 /**
  * Merge IGDB data into an existing row whose canonical name matches (ROK-1113).
+ * Returns the merged row id, or null when no row matched.
  *
  * Skip if the existing row has a *different* non-null igdbId — IGDB ids are
  * canonical, so a mismatch signals a sequel/variant we should NOT collapse.
  */
 async function mergeByNormalizedName(
-  db: PostgresJsDatabase<typeof schema>,
+  tx: PostgresJsDatabase<typeof schema>,
   row: ReturnType<typeof mapApiGameToDbRow>,
-  onGameChanged?: (gameId: number) => void,
-): Promise<boolean> {
-  const match = await findGameByNormalizedName(db, row.name);
-  if (!match) return false;
-  if (match.igdbId != null && match.igdbId !== row.igdbId) return false;
-  await applyIgdbMergeToRow(db, match.id, row);
-  onGameChanged?.(match.id);
-  return true;
+): Promise<number | null> {
+  const match = await findGameByNormalizedName(tx, row.name);
+  if (!match) return null;
+  if (match.igdbId != null && match.igdbId !== row.igdbId) return null;
+  await applyIgdbMergeToRow(tx, match.id, row);
+  return match.id;
 }
 
-/** Look up the internal id by igdbId and fire the callback. */
-async function notifyBySingleIgdbId(
-  db: PostgresJsDatabase<typeof schema>,
-  igdbId: number,
-  onGameChanged: (gameId: number) => void,
-): Promise<void> {
-  const rows = await db
-    .select({ id: schema.games.id })
-    .from(schema.games)
-    .where(eq(schema.games.igdbId, igdbId))
-    .limit(1);
-  if (rows[0]) onGameChanged(rows[0].id);
-}
-
-/** Merge IGDB data into an existing ITAD-sourced game by steamAppId. */
+/**
+ * Merge IGDB data into an existing ITAD-sourced game by steamAppId.
+ * Returns the merged row id, or null when no row matched.
+ */
 async function mergeBysteamAppId(
-  db: PostgresJsDatabase<typeof schema>,
+  tx: PostgresJsDatabase<typeof schema>,
   row: ReturnType<typeof mapApiGameToDbRow>,
-  onGameChanged?: (gameId: number) => void,
-): Promise<boolean> {
-  const [existing] = await db
+): Promise<number | null> {
+  const [existing] = await tx
     .select({ id: schema.games.id })
     .from(schema.games)
     .where(
@@ -135,10 +104,9 @@ async function mergeBysteamAppId(
       ),
     )
     .limit(1);
-  if (!existing) return false;
-  await applyIgdbMergeToRow(db, existing.id, row);
-  onGameChanged?.(existing.id);
-  return true;
+  if (!existing) return null;
+  await applyIgdbMergeToRow(tx, existing.id, row);
+  return existing.id;
 }
 
 /** Filter out banned games from API results. */
@@ -261,6 +229,11 @@ function applyNameMergeMap(
  * (ROK-1024) and normalized canonical name (ROK-1113), then runs ONE batched
  * INSERT ... ON CONFLICT DO UPDATE for the remainder. `onGameChanged` (ROK-1082)
  * fires per touched row so callers can enqueue a taste-vector recompute.
+ *
+ * ROK-1438: merges + insert run under advisory locks on every incoming
+ * normalized name, taken in sorted order so two overlapping batches cannot
+ * deadlock. The largest batch in the codebase is `discoverPopularGames` at 100
+ * names.
  */
 export async function upsertGamesFromApi(
   db: PostgresJsDatabase<typeof schema>,
@@ -272,21 +245,33 @@ export async function upsertGamesFromApi(
   if (filteredGames.length === 0) return [];
 
   const rows = filteredGames.map((g) => mapApiGameToDbRow(g));
-  const insertsAfter = await mergeExistingRows(db, rows);
+  const results = await withGameNameLock(
+    db,
+    rows.map((r) => r.name),
+    (tx) => applyBatchUpsert(tx, rows),
+  );
+  // After commit, per the ROK-1082 contract.
+  if (onGameChanged) for (const r of results) onGameChanged(r.id);
+  return results.map((g) => mapDbRowToDetail(g));
+}
+
+/** Batch merge + insert body. MUST run inside the name locks. */
+async function applyBatchUpsert(
+  tx: PostgresJsDatabase<typeof schema>,
+  rows: GameRow[],
+): Promise<(typeof schema.games.$inferSelect)[]> {
+  const insertsAfter = await mergeExistingRows(tx, rows);
   if (insertsAfter.length > 0) {
-    await db.insert(schema.games).values(insertsAfter).onConflictDoUpdate({
+    await tx.insert(schema.games).values(insertsAfter).onConflictDoUpdate({
       target: schema.games.igdbId,
       set: buildBatchUpsertSet(),
     });
   }
-
   const igdbIds = rows.map((r) => r.igdbId);
-  const results = await db
+  return tx
     .select()
     .from(schema.games)
     .where(inArray(schema.games.igdbId, igdbIds));
-  if (onGameChanged) for (const r of results) onGameChanged(r.id);
-  return results.map((g) => mapDbRowToDetail(g));
 }
 
 /**

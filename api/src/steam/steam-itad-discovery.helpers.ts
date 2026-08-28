@@ -3,7 +3,7 @@
  * When a Steam game isn't in the DB, looks it up via ITAD and creates a game row.
  */
 import { Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadGame } from '../itad/itad.constants';
@@ -14,6 +14,7 @@ import {
 } from './steam-igdb-enrichment.helpers';
 import { checkAdultContent } from './steam-content-filter.helpers';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
+import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 
 const logger = new Logger('SteamItadDiscovery');
 
@@ -79,8 +80,24 @@ function mergeIgdbEnrichment(
   };
 }
 
-/** Try to merge with an existing game by slug or itadGameId, or insert a new row. */
+/**
+ * Try to merge with an existing game by slug or itadGameId, or insert a new row.
+ *
+ * ROK-1438: the whole find-then-insert runs under an advisory lock keyed on the
+ * normalized name. Steam library syncs run concurrently per user, so two members
+ * owning the same title used to be able to both read-miss and both insert.
+ */
 async function upsertGame(
+  db: PostgresJsDatabase<typeof schema>,
+  row: GameInsertRow,
+): Promise<{ id: number }[]> {
+  return withGameNameLock(db, row.name ?? '', (tx) =>
+    upsertGameLocked(tx, row),
+  );
+}
+
+/** Find-then-insert body. MUST run inside the name lock. */
+async function upsertGameLocked(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
 ): Promise<{ id: number }[]> {
@@ -91,9 +108,9 @@ async function upsertGame(
 
   if (bySlug) {
     // Slug taken by a different Steam game — skip itadGameId merge and create
-    // a new row via insertWithSlugRetry (which suffixes slug + nulls unique fields).
+    // a new row with a suffixed slug + nulled unique fields.
     if (bySlug.steamAppId && bySlug.steamAppId !== row.steamAppId) {
-      return insertWithSlugRetry(db, row);
+      return insertAvoidingUniqueCollisions(db, row);
     }
     return mergeIntoExisting(db, bySlug.id, row);
   }
@@ -113,7 +130,7 @@ async function upsertGame(
     return mergeIntoExisting(db, byNormalized.id, row);
   }
 
-  return insertWithSlugRetry(db, row);
+  return insertAvoidingUniqueCollisions(db, row);
 }
 
 /**
@@ -168,39 +185,61 @@ async function mergeIntoExisting(
   return [{ id: existingId }];
 }
 
-/** Insert a new game row, retrying with appended Steam app ID on slug collision. */
-async function insertWithSlugRetry(
+/**
+ * Insert a new game row, pre-resolving the unique keys that would collide.
+ *
+ * This used to INSERT optimistically and catch the unique violation, retrying
+ * with a suffixed slug. That stopped working once the caller moved inside a
+ * transaction (ROK-1438): under postgres.js a failed statement poisons the
+ * whole transaction, so the catch has no usable connection left to retry on —
+ * the same trap `safeReassign`'s savepoint hit in ROK-1437. Probe first, then
+ * issue exactly ONE insert that cannot violate.
+ *
+ * The resulting row is identical to what the old retry produced: suffixed
+ * slug, and itadGameId/igdbId nulled so they can't collide either.
+ */
+async function insertAvoidingUniqueCollisions(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
 ): Promise<{ id: number }[]> {
-  try {
-    return await db
-      .insert(schema.games)
-      .values(row)
-      .returning({ id: schema.games.id });
-  } catch (err: unknown) {
-    if (isUniqueViolation(err)) {
-      const retryRow = {
+  const values = (await hasUniqueKeyCollision(db, row))
+    ? {
         ...row,
         slug: `${row.slug}-${row.steamAppId}`,
         itadGameId: null,
         igdbId: null,
-      };
-      return db
-        .insert(schema.games)
-        .values(retryRow)
-        .returning({ id: schema.games.id });
-    }
-    throw err;
-  }
+      }
+    : row;
+  return db
+    .insert(schema.games)
+    .values(values)
+    .returning({ id: schema.games.id });
 }
 
-/** Check if an error is a unique constraint violation (handles Drizzle wrapper). */
-function isUniqueViolation(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  if ('code' in err && (err as { code: string }).code === '23505') return true;
-  if ('cause' in err) return isUniqueViolation(err.cause);
-  return false;
+/**
+ * True when slug, itadGameId or igdbId is already owned by an existing row —
+ * i.e. when a plain insert of `row` would raise a unique violation.
+ *
+ * steamAppId is deliberately NOT probed: the suffixed retry row keeps it, so a
+ * steamAppId collision was unrecoverable before this change too and still
+ * surfaces as a raised error rather than a silently different row.
+ */
+async function hasUniqueKeyCollision(
+  db: PostgresJsDatabase<typeof schema>,
+  row: GameInsertRow,
+): Promise<boolean> {
+  const predicates = [eq(schema.games.slug, row.slug ?? '')];
+  if (row.itadGameId) {
+    predicates.push(eq(schema.games.itadGameId, row.itadGameId));
+  }
+  if (row.igdbId != null) {
+    predicates.push(eq(schema.games.igdbId, row.igdbId));
+  }
+  const rows = await db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(or(...predicates));
+  return rows.length > 0;
 }
 
 /** PG error fields extracted from a postgres.js error or its cause chain. */

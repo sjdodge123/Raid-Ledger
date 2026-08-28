@@ -13,6 +13,7 @@ import {
   type NameMatch,
 } from '../src/igdb/igdb-name-dedup.helpers';
 import { normalizeForDedup } from '../src/igdb/igdb-search-dedup.helpers';
+import { withGameNameLock } from '../src/igdb/games-name-lock.helpers';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -282,6 +283,21 @@ export async function upsertSeedGames(
   seeds: GameSeed[],
 ): Promise<number> {
   if (seeds.length === 0) return 0;
+  // ROK-1438: the batched find-then-insert runs under advisory locks on every
+  // seed name, so a boot-time seed overlapping a live sync (allinone restarts
+  // one container at a time) can't read-miss and insert twins.
+  return withGameNameLock(
+    db,
+    seeds.map((s) => s.name),
+    (tx) => upsertSeedGamesLocked(tx, seeds),
+  );
+}
+
+/** Batched find-then-insert body. MUST run inside the name locks. */
+async function upsertSeedGamesLocked(
+  db: Db,
+  seeds: GameSeed[],
+): Promise<number> {
   const present = await selectPresentIgdbIds(
     db,
     seeds.map((s) => s.igdbId),

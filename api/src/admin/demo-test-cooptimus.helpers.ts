@@ -18,6 +18,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
+import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type GameValues = Partial<typeof schema.games.$inferInsert>;
@@ -87,6 +88,20 @@ const ENRICHED: GameValues = {
  * applied, so a rerun cannot inherit a previous fixture's state.
  */
 async function upsertFixtureGame(
+  db: Db,
+  name: string,
+  slug: string,
+  coop: GameValues,
+): Promise<number> {
+  // ROK-1438: serialize the find-then-insert on the normalized name so the
+  // concurrent Playwright workers noted below can't both miss the lookup.
+  return withGameNameLock(db, name, (tx) =>
+    upsertFixtureGameLocked(tx, name, slug, coop),
+  );
+}
+
+/** Find-then-insert body. MUST run inside the name lock. */
+async function upsertFixtureGameLocked(
   db: Db,
   name: string,
   slug: string,

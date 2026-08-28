@@ -2,12 +2,16 @@
  * Unit tests for igdb-upsert.helpers.ts — upsertSingleGameRow and upsertGamesFromApi.
  */
 import { upsertSingleGameRow, upsertGamesFromApi } from './igdb-upsert.helpers';
+import { withMockTransaction } from '../common/testing/drizzle-mock';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { IgdbApiGame } from './igdb.constants';
 
 /** Minimal mock DB that tracks insert/update calls for upsertSingleGameRow. */
 function createUpsertMockDb() {
-  const onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
+  // ROK-1438: the insert now ends in .returning({ id }) so the id resolves
+  // without the follow-up SELECT the old code needed.
+  const returning = jest.fn().mockResolvedValue([{ id: 1 }]);
+  const onConflictDoUpdate = jest.fn().mockReturnValue({ returning });
   const values = jest.fn().mockReturnValue({ onConflictDoUpdate });
   const insert = jest.fn().mockReturnValue({ values });
 
@@ -21,17 +25,19 @@ function createUpsertMockDb() {
   const from = jest.fn().mockReturnValue({ where });
   const select = jest.fn().mockReturnValue({ from });
 
-  return {
+  // ROK-1438: withGameNameLock opens a transaction and issues the lock SELECT.
+  return withMockTransaction({
     insert,
     values,
     onConflictDoUpdate,
+    returning,
     update,
     updateSet,
     updateWhere,
     select,
     from,
     where,
-  };
+  });
 }
 
 describe('upsertSingleGameRow', () => {
@@ -119,7 +125,8 @@ function createBatchUpsertMockDb(selectQueue: SelectCall[]) {
   });
 
   return {
-    db: { select, insert, update } as unknown,
+    // ROK-1438: withGameNameLock opens a transaction and issues the lock SELECT.
+    db: withMockTransaction({ select, insert, update }) as unknown,
     calls,
     insertMock: insert,
     updateMock: update,
