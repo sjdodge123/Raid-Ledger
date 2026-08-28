@@ -17,6 +17,17 @@ const endHourOf = (endIndex: number, hours: number[]): number =>
     endIndex >= hours.length ? (hours[hours.length - 1] + 1) % 24 : hours[endIndex];
 
 /**
+ * Sticky on mobile: statically placed the inspector landed at y=733 in a 727px
+ * viewport, so selecting a block put every control below the fold with no cue
+ * they existed — which defeats the point of having a precise path at all. The
+ * offset clears the h-14 bottom tab bar and its safe-area inset. Desktop keeps
+ * the static flow placement, where the inspector is already in view.
+ */
+const STICKY = 'sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 '
+    + 'bg-panel/95 backdrop-blur-sm shadow-lg '
+    + 'md:static md:bottom-auto md:z-auto md:bg-panel/60 md:backdrop-blur-none md:shadow-none';
+
+/**
  * Editor for the selected block (ROK-1426).
  *
  * The steppers are the precise path — a day column is far narrower than the 44px
@@ -32,7 +43,7 @@ export function SelectedBlockInspector({
 
     return (
         <div
-            className="mt-2 p-2.5 rounded-lg border border-edge bg-panel/60 flex flex-col gap-2"
+            className={`mt-2 p-2.5 rounded-lg border border-edge flex flex-col gap-2 ${STICKY}`}
             data-testid="selected-block-inspector"
         >
             <div className="flex items-center justify-between gap-2">

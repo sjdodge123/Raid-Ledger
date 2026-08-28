@@ -128,6 +128,39 @@ test.describe('Game Time blocks — editing', () => {
         await page.getByTestId('deselect-block').click();
     });
 
+    // Regression: statically placed, the inspector rendered at y=733 in a 727px
+    // mobile viewport -- every control below the fold, with no cue. The stepper
+    // is meant to be the precise AND accessible path, so it has to be on screen.
+    test('the inspector is on screen once a block is selected', async ({ page }) => {
+        await openGameTime(page);
+        await waitForLayer(page);
+
+        await page.locator('[data-testid^="slot-block-"]').first().click();
+        const inspector = page.getByTestId('selected-block-inspector');
+        await expect(inspector).toBeVisible();
+
+        const box = (await inspector.boundingBox())!;
+        const viewportHeight = page.viewportSize()!.height;
+        const position = await inspector.evaluate((el) => getComputedStyle(el).position);
+
+        if (test.info().project.name === 'mobile') {
+            // The case that was broken. Wholly inside the viewport AND clear of
+            // the fixed h-14 (56px) tab bar, so every control is actually usable.
+            expect(position).toBe('sticky');
+            expect(box.y).toBeGreaterThanOrEqual(0);
+            expect(box.y + box.height).toBeLessThanOrEqual(viewportHeight - 56);
+        } else {
+            // Desktop keeps the in-flow placement (operator call). It sits under
+            // the grid and scrolls with it, so on a short window the steppers can
+            // land below the fold -- only the top edge is guaranteed reachable.
+            expect(position).toBe('static');
+            expect(box.y).toBeLessThan(viewportHeight);
+            expect(box.y + box.height).toBeGreaterThan(0);
+        }
+
+        await page.getByTestId('deselect-block').click();
+    });
+
     test('the steppers move the block bounds without dragging', async ({ page }) => {
         await openGameTime(page);
         await waitForLayer(page);
