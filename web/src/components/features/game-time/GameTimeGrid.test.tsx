@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GameTimeGrid } from './GameTimeGrid';
 import type { GameTimeSlot, HeatmapCell } from './GameTimeGrid';
+import { stubGridLayout } from '../../../test/stub-grid-layout';
+
+// jsdom has no layout; GameTimeGrid now refuses zero-sized measurements.
+stubGridLayout();
 
 describe('GameTimeGrid — part 1', () => {
     it('renders 7 day headers (Sunday first)', () => {

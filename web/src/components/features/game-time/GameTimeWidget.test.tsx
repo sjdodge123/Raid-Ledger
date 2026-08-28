@@ -3,6 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { GameTimeWidget } from './GameTimeWidget';
+import { stubGridLayout } from '../../../test/stub-grid-layout';
+
+// jsdom has no layout; GameTimeGrid now refuses zero-sized measurements.
+stubGridLayout();
 
 const useGameTimeEditorMock = vi.fn();
 vi.mock('../../../hooks/use-game-time-editor', () => ({

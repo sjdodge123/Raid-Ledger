@@ -368,6 +368,10 @@ describe('RescheduleModal — part 5', () => {
 // ---------------------------------------------------------------------------
 
 import { useAggregateGameTime } from '../../hooks/use-reschedule';
+import { stubGridLayout } from '../../test/stub-grid-layout';
+
+// jsdom has no layout; GameTimeGrid now refuses zero-sized measurements.
+stubGridLayout();
 
 describe('ROK-475: full 24h scrollable grid — part 1', () => {
     beforeEach(() => {

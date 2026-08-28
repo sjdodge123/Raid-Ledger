@@ -25,6 +25,10 @@ vi.mock('../../../hooks/use-game-time', () => ({
 
 // Get the mocked hook
 import { useGameTimeEditor as mockUseGameTimeEditor } from '../../../hooks/use-game-time-editor';
+import { stubGridLayout } from '../../../test/stub-grid-layout';
+
+// jsdom has no layout; GameTimeGrid now refuses zero-sized measurements.
+stubGridLayout();
 
 function renderPanel(props: Partial<React.ComponentProps<typeof GameTimePanel>> = {}) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

@@ -24,30 +24,44 @@ async function waitForLayer(page: Page): Promise<void> {
     await expect(page.getByTestId(LAYER)).toBeAttached({ timeout: 10_000 });
 }
 
-/** A day with no block on it. Tapping beside an existing block merges into it. */
-async function findEmptyDay(page: Page): Promise<number> {
-    const day = await page.evaluate(() => {
-        for (let d = 0; d < 7; d++) {
-            if (!document.querySelector(`[data-testid^="slot-block-${d}-"]`)) return d;
+/**
+ * A point on a cell that is free to tap: not locked, and not already under a
+ * block. Both matter. A tap on a committed/blocked hour is deliberately a no-op,
+ * and other specs in the suite hand the admin committed hours, so a fixed click
+ * point creates a block when run alone and silently nothing under the full suite
+ * — which is exactly how this went flaky in parallel and passed 15/15 solo.
+ */
+async function freeCellPoint(page: Page): Promise<{ x: number; y: number; day: number }> {
+    const point = await page.evaluate(() => {
+        const blocks = Array.from(document.querySelectorAll('[data-testid^="slot-block-"]'))
+            .map((b) => b.getBoundingClientRect());
+        const covered = (r: DOMRect): boolean => blocks.some((b) =>
+            r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top);
+
+        for (const cell of Array.from(document.querySelectorAll('[data-testid^="cell-"]'))) {
+            // Interactive grids blank `available` so the block layer owns that
+            // fill, so 'inactive' here means "not committed and not blocked".
+            if ((cell as HTMLElement).dataset.status !== 'inactive') continue;
+            const r = cell.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0 || covered(r)) continue;
+            const day = Number((cell as HTMLElement).dataset.testid!.split('-')[1]);
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2, day };
         }
-        return -1;
+        return null;
     });
-    expect(day).toBeGreaterThanOrEqual(0);
-    return day;
+    expect(point, 'no free cell to tap — every visible hour is locked or blocked').not.toBeNull();
+    return point!;
 }
 
 /**
- * Drop a block and return a locator for it. Tests must NOT assume the grid
- * already has one: the local demo DB has seeded availability and CI's fresh DB
- * has none, so anything keyed off an existing block passes locally and fails in
- * CI with "element(s) not found".
+ * Drop a block and return its day. Tests must NOT assume the grid already has
+ * one: the local demo DB has seeded availability and CI's fresh DB has none, so
+ * anything keyed off an existing block passes locally and fails in CI with
+ * "element(s) not found".
  */
 async function createBlock(page: Page): Promise<number> {
-    const day = await findEmptyDay(page);
-    const target = page.getByTestId(`slot-day-target-${day}`);
-    const box = await target.boundingBox();
-    expect(box).not.toBeNull();
-    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    const { x, y, day } = await freeCellPoint(page);
+    await page.mouse.click(x, y);
 
     // A new block is auto-selected, so the inspector proves the tap landed.
     await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
@@ -104,19 +118,20 @@ test.describe('Game Time blocks — editing', () => {
         const existing = await page.locator('[data-testid^="slot-block-"]').count();
 
         // Must be a column with NO block: tapping beside one merges into it and
-        // the count would legitimately stay the same.
-        const emptyDay = await page.evaluate(() => {
+        // the count would legitimately stay the same. The cell must also be
+        // unlocked, since a tap on a committed/blocked hour does nothing.
+        const spot = await page.evaluate(() => {
             for (let d = 0; d < 7; d++) {
-                if (!document.querySelector(`[data-testid^="slot-block-${d}-"]`)) return d;
+                if (document.querySelector(`[data-testid^="slot-block-${d}-"]`)) continue;
+                const cell = document.querySelector(`[data-testid^="cell-${d}-"][data-status="inactive"]`);
+                if (!cell) continue;
+                const r = cell.getBoundingClientRect();
+                return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
             }
-            return -1;
+            return null;
         });
-        expect(emptyDay).toBeGreaterThanOrEqual(0);
-
-        const target = page.getByTestId(`slot-day-target-${emptyDay}`);
-        const box = await target.boundingBox();
-        expect(box).not.toBeNull();
-        await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+        expect(spot).not.toBeNull();
+        await page.mouse.click(spot!.x, spot!.y);
 
         await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
         await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existing + 1);
