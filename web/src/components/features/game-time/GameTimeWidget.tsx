@@ -223,8 +223,8 @@ function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, game
                         fullDayNames={!isMobile}
                     />
                 </div>
-                <WidgetSaveRow editor={editor} onClose={onClose} />
                 {eventTitle && <EventDetailCard title={eventTitle} coverUrl={coverUrl} gameName={gameName} gameId={gameId} timeLabel={eventTimeLabel} creatorUsername={creatorUsername} attendees={attendees} />}
+                <WidgetSaveRow editor={editor} onClose={onClose} />
             </div>
         </Modal>
     );
@@ -234,12 +234,16 @@ function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, game
  * Explicit save (operator call 2026-08-27). People open this modal to check an
  * event against their availability, so an edit made while looking must not
  * persist on its own — unlike the onboarding step, which auto-saves on unmount.
+ *
+ * Pinned to the bottom of the modal body, which scrolls: in flow the button sat
+ * below the grid and the event card, off screen on both viewports. Opaque and
+ * above z-[21], or the event preview-block overlays paint over the Save button.
  */
 function WidgetSaveRow({ editor, onClose }: {
     editor: ReturnType<typeof useGameTimeEditor>; onClose: () => void;
 }) {
     return (
-        <div className="flex items-center justify-end gap-2">
+        <div className="sticky bottom-0 z-30 -mx-4 -mb-6 flex items-center justify-end gap-2 border-t border-edge bg-surface px-4 py-3">
             {editor.isDirty && <span className="mr-auto text-xs text-muted" data-testid="widget-unsaved">Unsaved changes</span>}
             <button
                 type="button" onClick={onClose}
