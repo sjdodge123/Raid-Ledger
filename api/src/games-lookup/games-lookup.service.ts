@@ -7,6 +7,7 @@ import * as schema from '../drizzle/schema';
 import { ItadService } from '../itad/itad.service';
 import { IgdbService } from '../igdb/igdb.service';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
+import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 import { mapDbRowToDetail } from '../igdb/igdb.mappers';
 import type { ItadGame } from '../itad/itad.constants';
 
@@ -69,34 +70,41 @@ export class GamesLookupService {
     return this.fetchDetailById(existingId);
   }
 
+  /**
+   * ROK-1438: find-then-insert under an advisory lock on the normalized name.
+   * The ITAD search above is an external HTTP call and stays OUTSIDE the lock.
+   */
   private async findOrInsertItadRow(
     itadGame: ItadGame,
     steamAppId: number | null,
   ): Promise<number> {
-    const byName = await findGameByNormalizedName(this.db, itadGame.title);
-    if (byName) {
-      await this.mergeItadIntoRow(byName.id, itadGame, steamAppId);
-      return byName.id;
-    }
-    const [row] = await this.db
-      .insert(schema.games)
-      .values({
-        name: itadGame.title,
-        slug: itadGame.slug || itadGame.id,
-        itadGameId: itadGame.id || null,
-        steamAppId,
-        coverUrl: itadGame.assets?.boxart ?? null,
-      })
-      .returning({ id: schema.games.id });
-    return row.id;
+    return withGameNameLock(this.db, itadGame.title, async (tx) => {
+      const byName = await findGameByNormalizedName(tx, itadGame.title);
+      if (byName) {
+        await this.mergeItadIntoRow(tx, byName.id, itadGame, steamAppId);
+        return byName.id;
+      }
+      const [row] = await tx
+        .insert(schema.games)
+        .values({
+          name: itadGame.title,
+          slug: itadGame.slug || itadGame.id,
+          itadGameId: itadGame.id || null,
+          steamAppId,
+          coverUrl: itadGame.assets?.boxart ?? null,
+        })
+        .returning({ id: schema.games.id });
+      return row.id;
+    });
   }
 
   private async mergeItadIntoRow(
+    tx: PostgresJsDatabase<typeof schema>,
     id: number,
     itadGame: ItadGame,
     steamAppId: number | null,
   ): Promise<void> {
-    await this.db
+    await tx
       .update(schema.games)
       .set({
         itadGameId: itadGame.id || null,
@@ -113,26 +121,39 @@ export class GamesLookupService {
     return this.upsertFromIgdb(first);
   }
 
+  /**
+   * ROK-1438: find-then-insert under an advisory lock on the normalized name.
+   * The IGDB search above is an external HTTP call and stays OUTSIDE the lock.
+   */
   private async upsertFromIgdb(hit: GameDetailDto): Promise<GameDetailDto> {
-    const byName = await findGameByNormalizedName(this.db, hit.name);
-    if (byName) {
-      await this.applyIgdbMerge(byName.id, hit);
-      return this.fetchDetailById(byName.id);
-    }
-    const inserted = await this.insertIgdbRow(hit);
-    return this.fetchDetailById(inserted);
+    const id = await withGameNameLock(this.db, hit.name, async (tx) => {
+      const byName = await findGameByNormalizedName(tx, hit.name);
+      if (byName) {
+        await this.applyIgdbMerge(tx, byName.id, hit);
+        return byName.id;
+      }
+      return this.insertIgdbRow(tx, hit);
+    });
+    return this.fetchDetailById(id);
   }
 
-  private async insertIgdbRow(hit: GameDetailDto): Promise<number> {
-    const [row] = await this.db
+  private async insertIgdbRow(
+    tx: PostgresJsDatabase<typeof schema>,
+    hit: GameDetailDto,
+  ): Promise<number> {
+    const [row] = await tx
       .insert(schema.games)
       .values(buildIgdbRowValues(hit))
       .returning({ id: schema.games.id });
     return row.id;
   }
 
-  private async applyIgdbMerge(id: number, hit: GameDetailDto): Promise<void> {
-    await this.db
+  private async applyIgdbMerge(
+    tx: PostgresJsDatabase<typeof schema>,
+    id: number,
+    hit: GameDetailDto,
+  ): Promise<void> {
+    await tx
       .update(schema.games)
       .set(buildIgdbRowValues(hit))
       .where(eq(schema.games.id, id));

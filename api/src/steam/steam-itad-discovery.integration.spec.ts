@@ -119,6 +119,65 @@ function describeItadDiscoveryIntegration() {
     expect(game!.slug).toBe('alpha-game-33333');
   });
 
+  it('two concurrent discoveries sharing a slug both land (ROK-1438)', async () => {
+    // Codex pre-push review, P2. These two titles have DIFFERENT normalized
+    // names, so they take DIFFERENT name advisory locks and genuinely run
+    // concurrently — the name lock does not serialize them. They share a slug,
+    // which is UNIQUE. The interim SELECT-probe design lost this case: both
+    // probes read clean, then the second insert raised 23505 and (being inside
+    // a transaction now) could not be retried. ON CONFLICT DO NOTHING lets the
+    // database arbitrate instead, so the loser falls back to a suffixed slug.
+    const shared = (id: string, title: string): ItadGame => ({
+      id,
+      slug: 'shared-slug',
+      title,
+      type: 'game',
+      mature: false,
+    });
+
+    const results = await Promise.all([
+      discoverGameViaItad(
+        55555,
+        buildDeps(testApp, shared('itad-x', 'Edition One')),
+      ),
+      discoverGameViaItad(
+        66666,
+        buildDeps(testApp, shared('itad-y', 'Edition Two')),
+      ),
+    ]);
+
+    // Neither racer is allowed to fail — that is the whole claim.
+    expect(results[0]).not.toBeNull();
+    expect(results[1]).not.toBeNull();
+
+    // WHICH racer wins the slug is nondeterministic by nature, so assert only
+    // invariants that hold either way. (An earlier version of this test asserted
+    // `itad-x` kept its itadGameId and was itself flaky: when itad-x lost, its
+    // row was the suffixed one with itadGameId nulled.)
+    const rows = await testApp.db
+      .select({
+        slug: schema.games.slug,
+        steamAppId: schema.games.steamAppId,
+        itadGameId: schema.games.itadGameId,
+      })
+      .from(schema.games);
+    const sharedRows = rows.filter((r) => r.slug.startsWith('shared-slug'));
+
+    // Both landed as separate rows.
+    expect(sharedRows).toHaveLength(2);
+    expect(sharedRows.map((r) => r.steamAppId).sort()).toEqual([55555, 66666]);
+
+    // Exactly one kept the bare slug; the loser took the suffixed one built
+    // from its own Steam app id, with its itadGameId nulled.
+    const bare = sharedRows.filter((r) => r.slug === 'shared-slug');
+    const suffixed = sharedRows.filter((r) => r.slug !== 'shared-slug');
+    expect(bare).toHaveLength(1);
+    expect(suffixed).toHaveLength(1);
+    expect(suffixed[0].slug).toBe(`shared-slug-${suffixed[0].steamAppId}`);
+    expect(suffixed[0].itadGameId).toBeNull();
+    expect(bare[0].itadGameId).not.toBeNull();
+  });
+
   it('handles slug + itadGameId both colliding with different games', async () => {
     // Game A: owns the slug
     await testApp.db.insert(schema.games).values({

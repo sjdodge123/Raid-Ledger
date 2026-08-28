@@ -9,6 +9,7 @@ import type { GameDetailDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { mapDbRowToDetail } from './igdb.mappers';
 import { findGameByNormalizedName } from './igdb-name-dedup.helpers';
+import { withGameNameLock } from './games-name-lock.helpers';
 
 /**
  * Upsert a single ITAD game to the database.
@@ -16,16 +17,30 @@ import { findGameByNormalizedName } from './igdb-name-dedup.helpers';
  * Pre-checks for existing rows by steamAppId or igdbId to prevent
  * duplicates with different slugs (ROK-1008).
  * Returns the persisted row with a real DB id.
+ *
+ * ROK-1438: runs under an advisory lock keyed on the normalized name so a
+ * concurrent upsert of the same title cannot read-miss and insert a twin.
  */
 export async function upsertItadGame(
   db: PostgresJsDatabase<typeof schema>,
   game: GameDetailDto,
 ): Promise<GameDetailDto> {
-  const existing = await findExistingByAltKey(db, game);
-  if (existing) return updateExistingRow(db, existing, game);
+  // ROK-1438: serialize the find-then-insert on the normalized name.
+  return withGameNameLock(db, game.name, (tx) =>
+    upsertItadGameLocked(tx, game),
+  );
+}
+
+/** Find-then-insert body. MUST run inside the name lock. */
+async function upsertItadGameLocked(
+  tx: PostgresJsDatabase<typeof schema>,
+  game: GameDetailDto,
+): Promise<GameDetailDto> {
+  const existing = await findExistingByAltKey(tx, game);
+  if (existing) return updateExistingRow(tx, existing, game);
 
   const values = buildItadInsertValues(game);
-  await db
+  await tx
     .insert(schema.games)
     .values(values)
     .onConflictDoUpdate({
@@ -33,7 +48,7 @@ export async function upsertItadGame(
       set: buildItadUpdateSet(game),
     });
 
-  return fetchBySlug(db, game.slug);
+  return fetchBySlug(tx, game.slug);
 }
 
 /** Find an existing game row by steamAppId, igdbId, or normalized name. */

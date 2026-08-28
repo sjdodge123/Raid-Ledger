@@ -14,6 +14,7 @@ import {
 } from './steam-igdb-enrichment.helpers';
 import { checkAdultContent } from './steam-content-filter.helpers';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
+import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 
 const logger = new Logger('SteamItadDiscovery');
 
@@ -79,8 +80,24 @@ function mergeIgdbEnrichment(
   };
 }
 
-/** Try to merge with an existing game by slug or itadGameId, or insert a new row. */
+/**
+ * Try to merge with an existing game by slug or itadGameId, or insert a new row.
+ *
+ * ROK-1438: the whole find-then-insert runs under an advisory lock keyed on the
+ * normalized name. Steam library syncs run concurrently per user, so two members
+ * owning the same title used to be able to both read-miss and both insert.
+ */
 async function upsertGame(
+  db: PostgresJsDatabase<typeof schema>,
+  row: GameInsertRow,
+): Promise<{ id: number }[]> {
+  return withGameNameLock(db, row.name ?? '', (tx) =>
+    upsertGameLocked(tx, row),
+  );
+}
+
+/** Find-then-insert body. MUST run inside the name lock. */
+async function upsertGameLocked(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
 ): Promise<{ id: number }[]> {
@@ -91,9 +108,9 @@ async function upsertGame(
 
   if (bySlug) {
     // Slug taken by a different Steam game — skip itadGameId merge and create
-    // a new row via insertWithSlugRetry (which suffixes slug + nulls unique fields).
+    // a new row with a suffixed slug + nulled unique fields.
     if (bySlug.steamAppId && bySlug.steamAppId !== row.steamAppId) {
-      return insertWithSlugRetry(db, row);
+      return insertAvoidingUniqueCollisions(db, row);
     }
     return mergeIntoExisting(db, bySlug.id, row);
   }
@@ -113,7 +130,7 @@ async function upsertGame(
     return mergeIntoExisting(db, byNormalized.id, row);
   }
 
-  return insertWithSlugRetry(db, row);
+  return insertAvoidingUniqueCollisions(db, row);
 }
 
 /**
@@ -168,39 +185,64 @@ async function mergeIntoExisting(
   return [{ id: existingId }];
 }
 
-/** Insert a new game row, retrying with appended Steam app ID on slug collision. */
-async function insertWithSlugRetry(
+/**
+ * Insert a new game row, falling back to a suffixed slug if any unique key is
+ * already taken.
+ *
+ * Three constraints shaped this, in order:
+ *
+ * 1. The original code INSERTed optimistically and CAUGHT the 23505 to retry.
+ *    That stopped working once the caller moved inside a transaction
+ *    (ROK-1438) — under postgres.js a failed statement poisons the whole
+ *    transaction, so the catch has no usable connection left to retry on.
+ *    Same trap `safeReassign`'s savepoint hit in ROK-1437.
+ * 2. Replacing it with a SELECT probe was racy: two discoveries for DIFFERENT
+ *    normalized names can share a unique key (ITAD returning the same slug for
+ *    two editions), so they take different name locks, both probe clean, and
+ *    the second insert still raises (Codex pre-push review, P2).
+ * 3. `ON CONFLICT DO NOTHING` is neither: a conflict is not an error, so it
+ *    never poisons the transaction, and the DATABASE decides atomically rather
+ *    than a probe guessing ahead of it. An empty RETURNING means some unique
+ *    key collided — then, and only then, insert the suffixed row.
+ *
+ * The suffixed row is identical to what the old retry produced: slug suffixed
+ * with the Steam app id, itadGameId/igdbId nulled so they can't collide either.
+ */
+async function insertAvoidingUniqueCollisions(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
 ): Promise<{ id: number }[]> {
-  try {
-    return await db
-      .insert(schema.games)
-      .values(row)
-      .returning({ id: schema.games.id });
-  } catch (err: unknown) {
-    if (isUniqueViolation(err)) {
-      const retryRow = {
-        ...row,
-        slug: `${row.slug}-${row.steamAppId}`,
-        itadGameId: null,
-        igdbId: null,
-      };
-      return db
-        .insert(schema.games)
-        .values(retryRow)
-        .returning({ id: schema.games.id });
-    }
-    throw err;
-  }
+  const inserted = await insertIfNoConflict(db, row);
+  if (inserted.length > 0) return inserted;
+
+  const suffixed = await insertIfNoConflict(db, {
+    ...row,
+    slug: `${row.slug}-${row.steamAppId}`,
+    itadGameId: null,
+    igdbId: null,
+  });
+  if (suffixed.length > 0) return suffixed;
+
+  // Only reachable when the collision is on a key the suffixed row keeps —
+  // in practice steamAppId, which the old retry could not recover from either.
+  // Fail loudly rather than returning an empty array the caller would index
+  // into and crash on with a confusing `undefined.id`.
+  throw new Error(
+    `Unresolvable unique collision inserting game "${row.name}" ` +
+      `(slug=${row.slug}, steamAppId=${row.steamAppId})`,
+  );
 }
 
-/** Check if an error is a unique constraint violation (handles Drizzle wrapper). */
-function isUniqueViolation(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  if ('code' in err && (err as { code: string }).code === '23505') return true;
-  if ('cause' in err) return isUniqueViolation(err.cause);
-  return false;
+/** INSERT ... ON CONFLICT DO NOTHING. Empty result = some unique key collided. */
+function insertIfNoConflict(
+  db: PostgresJsDatabase<typeof schema>,
+  values: GameInsertRow,
+): Promise<{ id: number }[]> {
+  return db
+    .insert(schema.games)
+    .values(values)
+    .onConflictDoNothing()
+    .returning({ id: schema.games.id });
 }
 
 /** PG error fields extracted from a postgres.js error or its cause chain. */

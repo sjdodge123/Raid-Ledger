@@ -260,6 +260,13 @@ Backups exclude the `drizzle` schema (migration metadata is code, not data) to p
 
 Postgres UNIQUE constraints treat NULL as never-equal, so `ON CONFLICT (igdb_id)` does NOT fire when an existing row has `igdb_id IS NULL`. Any new code that inserts into `games` MUST first call `findGameByNormalizedName(db, name)` (or batch variant `findGameIdsByNormalizedName`) and merge into the existing row when one matches. Otherwise the next dedup migration gets silently undone on the next deploy.
 
+That guard is a READ followed by a separate WRITE, so on its own it loses a race (ROK-1438: two concurrent requests both read, both miss, both insert — confirmed in prod by dup rows with adjacent ids). The guard MUST therefore run inside `withGameNameLock(db, name, (tx) => ...)` (`api/src/igdb/games-name-lock.helpers.ts`), which holds `pg_advisory_xact_lock` on the normalized name for the whole find-then-insert. Use the `tx` it hands you — work issued against the outer `db` runs on another connection and is not covered.
+
+Two consequences inside that transaction:
+
+- **No catch-and-retry around a failing statement.** Under postgres.js a failed statement poisons the whole transaction, savepoints included (memory `reference_postgres_savepoint_does_not_contain_violations.md`). Pre-check for the collision and issue one statement that cannot violate — see `steam-itad-discovery.helpers.ts::hasUniqueKeyCollision`.
+- **Fire success callbacks after the call returns,** not inside it. A rolled-back transaction must not have announced writes that never landed.
+
 Path inventory + reproduction history: memory `reference_games_insert_paths.md`. **Append there when adding a new INSERT-into-`games` path.**
 
 ## Testing

@@ -13,6 +13,7 @@ import { SettingsService } from '../settings/settings.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { ItadService } from '../itad/itad.service';
 import { GameTasteService } from '../game-taste/game-taste.service';
+import { withMockTransaction } from '../common/testing/drizzle-mock';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -74,7 +75,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
   let mockSettingsService: Record<string, jest.Mock>;
 
   function createMockDb() {
-    return {
+    // ROK-1438: find-then-insert paths run inside withGameNameLock, which
+    // opens a transaction and issues the advisory-lock SELECT.
+    return withMockTransaction({
       select: jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: jest
@@ -95,7 +98,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
           .fn()
           .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
       }),
-    };
+    });
   }
 
   beforeEach(async () => {

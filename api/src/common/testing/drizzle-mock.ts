@@ -64,3 +64,23 @@ export function createDrizzleMock(): MockDb {
   };
   return mock;
 }
+
+/**
+ * Give a hand-rolled mock db the transaction surface `withGameNameLock` needs.
+ *
+ * ROK-1438 wrapped every find-then-insert into `games` in a transaction that
+ * first issues an advisory-lock SELECT. Specs that build their own chain mocks
+ * (rather than `createDrizzleMock()`) need `transaction` to pass the same mock
+ * through as the tx handle, and `execute` to swallow the lock statement.
+ *
+ * Mutates and returns `mock` so existing `const m = createXMockDb()` call sites
+ * keep their direct references to the individual jest.fn()s.
+ */
+export function withMockTransaction<T extends object>(mock: T): T {
+  const m = mock as T & { transaction?: jest.Mock; execute?: jest.Mock };
+  m.execute ??= jest.fn().mockResolvedValue(undefined);
+  m.transaction ??= jest
+    .fn()
+    .mockImplementation((cb: (tx: T) => Promise<unknown>) => cb(mock));
+  return mock;
+}
