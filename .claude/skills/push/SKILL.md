@@ -244,9 +244,25 @@ Run Codex as a second-opinion reviewer against `main`. Different model = catches
 ```bash
 which codex >/dev/null 2>&1 && [ -z "$NO_CODEX" ] && [ "$SCOPE" != "docs-only" ] && {
   echo "Running Codex pre-push review (this takes ~30-90s)..."
-  codex review --base main "Pre-push sanity review. Flag CRITICAL bugs only — security, correctness, regressions, contract violations. Skip style nits, naming, doc gaps. Output format: BLOCKERS list (or 'No blockers') + 1-line rationale per finding." 2>&1 | tee /tmp/codex-review-$(git rev-parse --short HEAD).txt
+  codex review --base main 2>&1 | tee /tmp/codex-review-$(git rev-parse --short HEAD).txt
 }
 ```
+
+**Do NOT pass a PROMPT alongside `--base`.** Current `codex` versions reject the
+combination outright:
+
+```
+error: the argument '--base <BRANCH>' cannot be used with '[PROMPT]'
+```
+
+`codex review --base main` already returns a scoped critical-only verdict, so the
+custom prompt isn't needed. Two quirks when reading the output:
+
+- It can run to ~160KB because it echoes the files it inspected. The **verdict is
+  the last non-empty line** — grep for it rather than tailing raw.
+- A `codex_models_manager ... failed to refresh available models: unknown variant`
+  ERROR line is noise from a CLI older than the server's model list. The review
+  still completes; don't treat it as a review failure.
 
 **Verdict handling:**
 
