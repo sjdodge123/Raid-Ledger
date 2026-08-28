@@ -54,18 +54,26 @@ async function freeCellPoint(page: Page): Promise<{ x: number; y: number; day: n
 }
 
 /**
- * Drop a block and return its day. Tests must NOT assume the grid already has
- * one: the local demo DB has seeded availability and CI's fresh DB has none, so
- * anything keyed off an existing block passes locally and fails in CI with
+ * Drop a block and return ITS OWN test id. Tests must NOT assume the grid already
+ * has one: the local demo DB has seeded availability and CI's fresh DB has none,
+ * so anything keyed off an existing block passes locally and fails in CI with
  * "element(s) not found".
+ *
+ * The id is read back off the selection rather than composed from the day,
+ * because the chosen day may already hold a block elsewhere in the column —
+ * `slot-block-${day}-` would then match two and trip strict mode.
  */
-async function createBlock(page: Page): Promise<number> {
-    const { x, y, day } = await freeCellPoint(page);
+async function createBlock(page: Page): Promise<string> {
+    const { x, y } = await freeCellPoint(page);
     await page.mouse.click(x, y);
 
     // A new block is auto-selected, so the inspector proves the tap landed.
     await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
-    return day;
+    const created = page.locator('[data-testid^="slot-block-"][data-selected="true"]');
+    await expect(created).toHaveCount(1);
+    const id = await created.getAttribute('data-testid');
+    expect(id).not.toBeNull();
+    return id!;
 }
 
 test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
@@ -150,8 +158,7 @@ test.describe('Game Time blocks — editing', () => {
         await openGameTime(page);
         await waitForLayer(page);
 
-        const day = await createBlock(page);
-        const block = page.locator(`[data-testid^="slot-block-${day}-"]`);
+        const block = page.getByTestId(await createBlock(page));
         // Created blocks arrive selected; deselect to measure the resting width.
         await page.getByTestId('deselect-block').click();
         await expect(block).toBeVisible();
