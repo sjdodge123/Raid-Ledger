@@ -102,6 +102,44 @@ test.describe('ROK-1040: Event-detail My Game Time modal', () => {
         expect(headerText).not.toMatch(/\d{1,2}/); // no day-of-month digits
     });
 
+    // ROK-1426 AC 5 / operator decision 3: this modal shares the grid and gets the
+    // same block editor -- it is no longer read-only. Saving is explicit, because
+    // people open it to check an event, not to edit.
+    test('the modal edits availability and only persists on Save', async ({ page }) => {
+        await page.goto(`/events/${createdEvent!.id}`);
+        await page.locator('[data-testid="game-time-widget"]').click();
+
+        const dialog = page.locator('[role="dialog"]').filter({ hasText: 'My Game Time' });
+        await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+        // The block editor mounts here, which is what "not read-only" means.
+        await expect(dialog.locator('[data-testid="block-editor-layer"]')).toBeAttached({ timeout: 10_000 });
+
+        // Nothing to persist until the user actually changes something.
+        const save = dialog.getByTestId('widget-save-game-time');
+        await expect(save).toBeDisabled();
+        await expect(dialog.getByTestId('widget-unsaved')).toHaveCount(0);
+
+        // Drop a block on a day that has none, so the edit is unambiguous.
+        const emptyDay = await dialog.evaluate((d) => {
+            for (let i = 0; i < 7; i++) {
+                if (!d.querySelector(`[data-testid^="slot-block-${i}-"]`)) return i;
+            }
+            return -1;
+        });
+        expect(emptyDay).toBeGreaterThanOrEqual(0);
+
+        const target = dialog.getByTestId(`slot-day-target-${emptyDay}`);
+        const box = (await target.boundingBox())!;
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+
+        await expect(dialog.getByTestId('widget-unsaved')).toBeVisible();
+        await expect(save).toBeEnabled();
+
+        await save.click();
+        await expect(save).toBeDisabled();
+    });
+
     test('event detail card avatars resolve through shared MemberAvatarGroup helper', async ({ page }) => {
         await page.goto(`/events/${createdEvent!.id}`);
 

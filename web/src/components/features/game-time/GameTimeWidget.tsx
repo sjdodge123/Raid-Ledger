@@ -185,8 +185,8 @@ function GameTimeWidgetModalHeader({ onClose }: { onClose: () => void }) {
     return (
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-                <p className="text-muted text-xs">Read-only view — your weekly availability with this event highlighted.</p>
-                <p className="text-dim text-xs mt-1">Uses the same compact weekly layout as profile and scheduling.</p>
+                <p className="text-muted text-xs">Your weekly availability, with this event highlighted.</p>
+                <p className="text-dim text-xs mt-1">Tap a day to add a block, or drag a block&apos;s handles — then Save.</p>
             </div>
             <Link
                 to="/profile/gaming"
@@ -214,7 +214,7 @@ function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, game
                 <div className="rounded-lg border border-edge overflow-hidden">
                     <GameTimeGrid
                         slots={editor.slots}
-                        readOnly
+                        onChange={editor.handleChange}
                         tzLabel={editor.tzLabel}
                         previewBlocks={previewBlocks}
                         hourRange={[9, 2]}
@@ -223,9 +223,40 @@ function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, game
                         fullDayNames={!isMobile}
                     />
                 </div>
+                <WidgetSaveRow editor={editor} onClose={onClose} />
                 {eventTitle && <EventDetailCard title={eventTitle} coverUrl={coverUrl} gameName={gameName} gameId={gameId} timeLabel={eventTimeLabel} creatorUsername={creatorUsername} attendees={attendees} />}
             </div>
         </Modal>
+    );
+}
+
+/**
+ * Explicit save (operator call 2026-08-27). People open this modal to check an
+ * event against their availability, so an edit made while looking must not
+ * persist on its own — unlike the onboarding step, which auto-saves on unmount.
+ */
+function WidgetSaveRow({ editor, onClose }: {
+    editor: ReturnType<typeof useGameTimeEditor>; onClose: () => void;
+}) {
+    return (
+        <div className="flex items-center justify-end gap-2">
+            {editor.isDirty && <span className="mr-auto text-xs text-muted" data-testid="widget-unsaved">Unsaved changes</span>}
+            <button
+                type="button" onClick={onClose}
+                className="px-3 py-2 text-xs font-medium rounded-lg border border-edge text-muted hover:text-foreground transition-colors"
+                data-testid="widget-cancel-game-time"
+            >
+                Cancel
+            </button>
+            <button
+                type="button" onClick={() => void editor.save()}
+                disabled={!editor.isDirty || editor.isSaving}
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-default transition-colors"
+                data-testid="widget-save-game-time"
+            >
+                {editor.isSaving ? 'Saving...' : 'Save'}
+            </button>
+        </div>
     );
 }
 
@@ -249,7 +280,7 @@ export function GameTimeWidget(props: GameTimeWidgetProps) {
             {showModal && <GameTimeWidgetModal editor={editor} previewBlocks={previewBlocks}
                 eventTitle={eventTitle} coverUrl={coverUrl} gameName={gameName} gameId={gameId} eventTimeLabel={eventTimeLabel}
                 creatorUsername={creatorUsername} attendees={attendees}
-                onClose={() => setShowModal(false)} />}
+                onClose={() => { editor.discard(); setShowModal(false); }} />}
         </>
     );
 }
