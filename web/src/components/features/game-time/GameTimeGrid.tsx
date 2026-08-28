@@ -73,7 +73,11 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
 
     return (
         <>
-            <div ref={wrapperRef} className={`relative overflow-hidden ${className ?? ''}`}>
+            <div
+                ref={wrapperRef}
+                className={`relative overflow-hidden ${className ?? ''}`}
+                onPointerLeave={() => setHoveredCell(null)}
+            >
                 <HoverTooltip hoveredCell={hoveredCell} isPastCell={view.isPastCell} nextWeekDayDates={dates.nextWeekDayDates} dayDates={dates.dayDates} heatmapMap={maps.heatmapMap} getSlotStatus={view.getSlotStatus} />
                 <GridBody
                     gridRef={gridRef} gridLineBackground={glowBg} setHoveredCell={setHoveredCell}
@@ -89,7 +93,10 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
                 />
                 <GridOverlayLayer todayIndex={todayIndex} currentHour={currentHour} gridDims={gridDims} nextWeekSlots={nextWeekSlots} HOURS={vis.HOURS} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} onEventClick={onEventClick} previewBlocks={previewBlocks} />
                 {isInteractive && gridDims && (
-                    <SlotBlockLayer blocks={blocks} editor={editor} gridDims={gridDims} hours={vis.HOURS} />
+                    <SlotBlockLayer
+                        blocks={blocks} editor={editor} gridDims={gridDims} hours={vis.HOURS}
+                        onHoverCell={(d, h) => setHoveredCell(`${d}:${h}`)}
+                    />
                 )}
             </div>
             {isInteractive && editor.selection && (
@@ -117,7 +124,11 @@ function HoverTooltip({ hoveredCell, isPastCell, nextWeekDayDates, dayDates, hea
     const text = hm ? `${hm.available} of ${hm.total} players available` : formatTooltip(d, h, getSlotStatus(d, h), dateLabel ?? undefined);
 
     return (
-        <div className="absolute z-30 px-2 py-1 bg-overlay text-foreground text-xs rounded whitespace-nowrap pointer-events-none" style={{ top: 0, right: 0 }}>
+        <div
+            className="absolute z-30 px-2 py-1 bg-overlay text-foreground text-xs rounded whitespace-nowrap pointer-events-none"
+            style={{ top: 0, right: 0 }}
+            data-testid="game-time-hover-tooltip"
+        >
             {text}
         </div>
     );

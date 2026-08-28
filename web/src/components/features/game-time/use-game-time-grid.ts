@@ -102,7 +102,12 @@ function measureGrid(el: HTMLElement, rangeStart: number): GridDims | null {
     const allCells = el.querySelectorAll('[data-testid^="cell-0-"]');
     let rowHeight = firstCell.offsetHeight + CELL_GAP;
     if (allCells.length >= 2) {
-        rowHeight = (allCells[1] as HTMLElement).offsetTop - (allCells[0] as HTMLElement).offsetTop;
+        // Row pitch straight from the DOM beats offsetHeight + gap, but only when
+        // the two rows actually report distinct offsets. A zero diff means the
+        // grid has not been laid out yet, so keep the fallback rather than
+        // publishing a rowHeight of 0.
+        const pitch = (allCells[1] as HTMLElement).offsetTop - (allCells[0] as HTMLElement).offsetTop;
+        if (pitch > 0) rowHeight = pitch;
     }
     return { colWidth: firstCell.offsetWidth, rowHeight, headerHeight: el.offsetTop + firstCell.offsetTop, colStartLeft: el.offsetLeft + firstCell.offsetLeft };
 }
@@ -117,7 +122,15 @@ export function useGridMeasurement(
     useEffect(() => {
         const el = gridRef.current;
         if (!el || !wrapperRef.current || !needsMeasurement) return;
-        const doMeasure = () => { const dims = measureGrid(el, rangeStart); if (dims) setGridDims(dims); };
+        // A measurement taken before layout settles reads every box as 0, and a
+        // zero rowHeight makes the editor silently inert: DayTarget divides by it
+        // to find the tapped row, gets Infinity, fails its bounds check and drops
+        // the tap. Hold gridDims at null instead, so the block layer simply does
+        // not mount until the grid has real dimensions.
+        const doMeasure = () => {
+            const dims = measureGrid(el, rangeStart);
+            if (dims && dims.rowHeight > 0 && dims.colWidth > 0) setGridDims(dims);
+        };
         doMeasure();
         const observer = new ResizeObserver(doMeasure);
         observer.observe(el);

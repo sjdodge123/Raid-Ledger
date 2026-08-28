@@ -32,6 +32,29 @@ interface SlotBlockLayerProps {
     editor: BlockEditorApi;
     gridDims: GridDims;
     hours: number[];
+    /** Reports the cell under the pointer, since the layer covers the cells. */
+    onHoverCell?: (dayOfWeek: number, hour: number) => void;
+}
+
+/**
+ * Which cell the pointer is over, in the layer's own coordinate space.
+ *
+ * The day targets and blocks sit above the cells and take the pointer, so a
+ * cell's own onPointerEnter never fires while editing — which silently killed
+ * the hover tooltip and the hover glow. Both are driven from here instead.
+ * Returns null outside the grid body, so the header and gutter don't report.
+ */
+function cellUnderPointer(
+    e: React.PointerEvent, dims: GridDims, hours: number[],
+): { dayOfWeek: number; hour: number } | null {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left - dims.colStartLeft;
+    const y = e.clientY - rect.top - dims.headerHeight;
+    if (x < 0 || y < 0 || !dims.rowHeight || !dims.colWidth) return null;
+    const day = Math.floor(x / (dims.colWidth + 1));
+    const index = Math.floor(y / dims.rowHeight);
+    if (day < 0 || day > 6 || index < 0 || index >= hours.length) return null;
+    return { dayOfWeek: day, hour: hours[index] };
 }
 
 /**
@@ -42,12 +65,22 @@ interface SlotBlockLayerProps {
  * day columns keep touch-action:pan-y — the page scrolls from anywhere except a
  * selected block and its handles.
  */
-export function SlotBlockLayer({ blocks, editor, gridDims, hours }: SlotBlockLayerProps): JSX.Element {
+export function SlotBlockLayer({ blocks, editor, gridDims, hours, onHoverCell }: SlotBlockLayerProps): JSX.Element {
+    // pointerEvents:none on the container, but children opt in — so their events
+    // still bubble to here. One handler covers hovering a day column and hovering
+    // a block, which two separate handlers on those elements would not.
+    const handleMove = (e: React.PointerEvent): void => {
+        editor.handleMove(e);
+        if (!onHoverCell) return;
+        const cell = cellUnderPointer(e, gridDims, hours);
+        if (cell) onHoverCell(cell.dayOfWeek, cell.hour);
+    };
+
     return (
         <div
             className="absolute inset-0 z-[8]"
             style={{ pointerEvents: 'none' }}
-            onPointerMove={editor.handleMove}
+            onPointerMove={handleMove}
             onPointerUp={editor.handleUp}
             onPointerCancel={editor.handleCancel}
             data-testid="block-editor-layer"

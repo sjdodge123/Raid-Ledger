@@ -24,34 +24,60 @@ async function waitForLayer(page: Page): Promise<void> {
     await expect(page.getByTestId(LAYER)).toBeAttached({ timeout: 10_000 });
 }
 
-/** A day with no block on it. Tapping beside an existing block merges into it. */
-async function findEmptyDay(page: Page): Promise<number> {
-    const day = await page.evaluate(() => {
-        for (let d = 0; d < 7; d++) {
-            if (!document.querySelector(`[data-testid^="slot-block-${d}-"]`)) return d;
+/**
+ * The test id of a cell that is free to tap: not locked, and not already under a
+ * block. Both matter. A tap on a committed/blocked hour is deliberately a no-op,
+ * and other specs in the suite hand the admin committed hours via signups.
+ *
+ * Returns an id rather than a point on purpose. Reading a rect here and clicking
+ * those raw coordinates later leaves a window in which the page can shift under
+ * the click — which is how this went flaky in the full parallel suite while
+ * passing 15/15 solo. Clicking the locator re-resolves the box in the browser.
+ */
+async function freeCellTestId(page: Page): Promise<string> {
+    const id = await page.evaluate(() => {
+        const blocks = Array.from(document.querySelectorAll('[data-testid^="slot-block-"]'))
+            .map((b) => b.getBoundingClientRect());
+        const covered = (r: DOMRect): boolean => blocks.some((b) =>
+            r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top);
+
+        for (const cell of Array.from(document.querySelectorAll('[data-testid^="cell-"]'))) {
+            // Interactive grids blank `available` so the block layer owns that
+            // fill, so 'inactive' here means "not committed and not blocked".
+            if ((cell as HTMLElement).dataset.status !== 'inactive') continue;
+            const r = cell.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0 || covered(r)) continue;
+            return (cell as HTMLElement).dataset.testid!;
         }
-        return -1;
+        return null;
     });
-    expect(day).toBeGreaterThanOrEqual(0);
-    return day;
+    expect(id, 'no free cell to tap — every visible hour is locked or blocked').not.toBeNull();
+    return id!;
 }
 
 /**
- * Drop a block and return a locator for it. Tests must NOT assume the grid
- * already has one: the local demo DB has seeded availability and CI's fresh DB
- * has none, so anything keyed off an existing block passes locally and fails in
- * CI with "element(s) not found".
+ * Drop a block and return ITS OWN test id. Tests must NOT assume the grid already
+ * has one: the local demo DB has seeded availability and CI's fresh DB has none,
+ * so anything keyed off an existing block passes locally and fails in CI with
+ * "element(s) not found".
+ *
+ * The id is read back off the selection rather than composed from the day,
+ * because the chosen day may already hold a block elsewhere in the column —
+ * `slot-block-${day}-` would then match two and trip strict mode.
  */
-async function createBlock(page: Page): Promise<number> {
-    const day = await findEmptyDay(page);
-    const target = page.getByTestId(`slot-day-target-${day}`);
-    const box = await target.boundingBox();
-    expect(box).not.toBeNull();
-    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+async function createBlock(page: Page): Promise<string> {
+    // force: the day target sits above the cell and is the real recipient, so the
+    // hit-target check would reject the cell as intercepted. The point is still
+    // taken from the cell's live box immediately before dispatch.
+    await page.getByTestId(await freeCellTestId(page)).click({ force: true });
 
     // A new block is auto-selected, so the inspector proves the tap landed.
     await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
-    return day;
+    const created = page.locator('[data-testid^="slot-block-"][data-selected="true"]');
+    await expect(created).toHaveCount(1);
+    const id = await created.getAttribute('data-testid');
+    expect(id).not.toBeNull();
+    return id!;
 }
 
 test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
@@ -104,19 +130,18 @@ test.describe('Game Time blocks — editing', () => {
         const existing = await page.locator('[data-testid^="slot-block-"]').count();
 
         // Must be a column with NO block: tapping beside one merges into it and
-        // the count would legitimately stay the same.
-        const emptyDay = await page.evaluate(() => {
+        // the count would legitimately stay the same. The cell must also be
+        // unlocked, since a tap on a committed/blocked hour does nothing.
+        const cellId = await page.evaluate(() => {
             for (let d = 0; d < 7; d++) {
-                if (!document.querySelector(`[data-testid^="slot-block-${d}-"]`)) return d;
+                if (document.querySelector(`[data-testid^="slot-block-${d}-"]`)) continue;
+                const cell = document.querySelector(`[data-testid^="cell-${d}-"][data-status="inactive"]`);
+                if (cell) return (cell as HTMLElement).dataset.testid!;
             }
-            return -1;
+            return null;
         });
-        expect(emptyDay).toBeGreaterThanOrEqual(0);
-
-        const target = page.getByTestId(`slot-day-target-${emptyDay}`);
-        const box = await target.boundingBox();
-        expect(box).not.toBeNull();
-        await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+        expect(cellId).not.toBeNull();
+        await page.getByTestId(cellId!).click({ force: true });
 
         await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
         await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existing + 1);
@@ -135,8 +160,7 @@ test.describe('Game Time blocks — editing', () => {
         await openGameTime(page);
         await waitForLayer(page);
 
-        const day = await createBlock(page);
-        const block = page.locator(`[data-testid^="slot-block-${day}-"]`);
+        const block = page.getByTestId(await createBlock(page));
         // Created blocks arrive selected; deselect to measure the resting width.
         await page.getByTestId('deselect-block').click();
         await expect(block).toBeVisible();
@@ -174,22 +198,50 @@ test.describe('Game Time blocks — editing', () => {
         const viewportHeight = page.viewportSize()!.height;
         const position = await inspector.evaluate((el) => getComputedStyle(el).position);
 
-        if (test.info().project.name === 'mobile') {
-            // The case that was broken. Wholly inside the viewport AND clear of
-            // the fixed h-14 (56px) tab bar, so every control is actually usable.
-            expect(position).toBe('sticky');
-            expect(box.y).toBeGreaterThanOrEqual(0);
-            expect(box.y + box.height).toBeLessThanOrEqual(viewportHeight - 56);
-        } else {
-            // Desktop keeps the in-flow placement (operator call). It sits under
-            // the grid and scrolls with it, so on a short window the steppers can
-            // land below the fold -- only the top edge is guaranteed reachable.
-            expect(position).toBe('static');
-            expect(box.y).toBeLessThan(viewportHeight);
-            expect(box.y + box.height).toBeGreaterThan(0);
-        }
+        // Pinned on both, so selecting a block never puts its own controls out of
+        // reach: in flow it landed at y=733 in a 727px mobile viewport, and at
+        // 681-771 in a 720px desktop window, which cut off both steppers.
+        expect(position).toBe('sticky');
+        expect(box.y).toBeGreaterThanOrEqual(0);
+
+        // Mobile must additionally clear the fixed h-14 (56px) bottom tab bar,
+        // which desktop does not have.
+        const floor = test.info().project.name === 'mobile' ? 56 : 0;
+        expect(box.y + box.height).toBeLessThanOrEqual(viewportHeight - floor);
 
         await page.getByTestId('remove-block').click();
+    });
+
+    // The block layer covers the cells, so a cell's own onPointerEnter stops
+    // firing while editing -- which silently killed both the hover tooltip and
+    // the hover glow. Hover is reported from the layer instead.
+    test('hovering the grid still shows the tooltip and the glow while editing', async ({ page }) => {
+        test.skip(test.info().project.name === 'mobile', 'Hover is a mouse affordance');
+        await openGameTime(page);
+        await waitForLayer(page);
+
+        const tooltip = page.getByTestId('game-time-hover-tooltip');
+        await expect(tooltip).toHaveCount(0);
+
+        // Hover a day column, over the layer -- not a cell, which is underneath it.
+        const target = page.getByTestId('slot-day-target-2');
+        const box = (await target.boundingBox())!;
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+        // Names the actual cell, so this fails if the coordinate maths is wrong
+        // rather than merely if something rendered.
+        await expect(tooltip).toBeVisible();
+        await expect(tooltip).toHaveText(/^Tuesday \d{1,2} (AM|PM) – \d{1,2} (AM|PM)/);
+
+        // The glow is painted as the grid's background, so it proves the hover
+        // reached useHoverGlow and not just the tooltip.
+        await expect
+            .poll(async () => page.getByTestId(GRID).evaluate((el) => el.style.background))
+            .toContain('radial-gradient');
+
+        // Leaving the grid clears it.
+        await page.mouse.move(box.x + box.width / 2, box.y - 200);
+        await expect(tooltip).toHaveCount(0);
     });
 
     test('the steppers move the block bounds without dragging', async ({ page }) => {
