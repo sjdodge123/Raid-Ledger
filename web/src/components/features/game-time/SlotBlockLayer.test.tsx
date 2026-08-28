@@ -24,11 +24,19 @@ const HOURS = [19, 20, 21, 22, 23, 0, 1];
 /** jsdom rects are all zeros, so clientY alone selects the row index. */
 const yForIndex = (index: number): number => index * ROW + 5;
 
-function Harness({ initial }: { initial: GameTimeSlot[] }) {
+function Harness({ initial, clearable }: { initial: GameTimeSlot[]; clearable?: boolean }) {
     const [slots, setSlots] = useState<GameTimeSlot[]>(initial);
     const editor = useBlockEditor(slots, setSlots, HOURS, ROW);
     return (
         <>
+            {/* Stands in for Clear / Discard / the day-header toggle: state owned
+                outside the editor, replaced without telling it. */}
+            {clearable && (
+                <>
+                    <button type="button" data-testid="external-clear" onClick={() => setSlots([])} />
+                    <button type="button" data-testid="external-adjust-end-later" onClick={() => editor.adjust('end', 1)} />
+                </>
+            )}
             <SlotBlockLayer blocks={deriveAllBlocks(slots, HOURS)} editor={editor} gridDims={DIMS} hours={HOURS} />
             {editor.selection && (
                 <SelectedBlockInspector
@@ -265,5 +273,62 @@ describe('selected-block inspector', () => {
 
         expect(slotsText()).toBe('5:23');
         expect(screen.queryByTestId('selected-block-inspector')).not.toBeInTheDocument();
+    });
+});
+
+/**
+ * Both cases below came out of the Codex pre-push review and were confirmed
+ * against the code: neither was covered, and each let the editor create or
+ * restore availability the user never asked for.
+ */
+describe('block editor — edits the user did not ask for', () => {
+    it('a tap on a blocked hour creates nothing, not a block on the hour after it', () => {
+        // 19:00 committed, 20:00 free. A tap on the committed row used to skip the
+        // locked hour and still add the rest of the default two-hour range.
+        const initial: GameTimeSlot[] = [{ dayOfWeek: 3, hour: 19, status: 'committed' }];
+        render(<Harness initial={initial} />);
+        const target = screen.getByTestId('slot-day-target-3');
+
+        fireEvent.pointerDown(target, { pointerId: 1, clientX: 10, clientY: yForIndex(0) });
+        fireEvent.pointerUp(layer(), { pointerId: 1, clientX: 10, clientY: yForIndex(0) });
+
+        expect(slotsText()).toBe('');
+        expect(screen.queryByTestId('selected-block-inspector')).not.toBeInTheDocument();
+    });
+
+    it('a tap on a free hour still works, so the locked guard is not blanket', () => {
+        const initial: GameTimeSlot[] = [{ dayOfWeek: 3, hour: 19, status: 'committed' }];
+        render(<Harness initial={initial} />);
+        const target = screen.getByTestId('slot-day-target-3');
+
+        // Index 1 is 20:00 — free, and one row below the committed hour.
+        fireEvent.pointerDown(target, { pointerId: 1, clientX: 10, clientY: yForIndex(1) });
+        fireEvent.pointerUp(layer(), { pointerId: 1, clientX: 10, clientY: yForIndex(1) });
+
+        expect(slotsText()).toBe('3:20,3:21');
+    });
+
+    it('clearing the slots underneath a selection drops it instead of stranding it', () => {
+        render(<Harness initial={avail(2, [20, 21])} clearable />);
+        fireEvent.pointerDown(screen.getByTestId('slot-block-2-20'), { pointerId: 1, clientY: yForIndex(1) });
+        expect(screen.getByTestId('selected-block-inspector')).toBeInTheDocument();
+
+        // Something outside the editor replaces the slots, as Clear / Discard /
+        // the day-header toggle all do.
+        fireEvent.click(screen.getByTestId('external-clear'));
+
+        expect(screen.queryByTestId('selected-block-inspector')).not.toBeInTheDocument();
+    });
+
+    it('a stepper cannot re-add hours that were cleared out from under the selection', () => {
+        render(<Harness initial={avail(2, [20, 21])} clearable />);
+        fireEvent.pointerDown(screen.getByTestId('slot-block-2-20'), { pointerId: 1, clientY: yForIndex(1) });
+        fireEvent.click(screen.getByTestId('external-clear'));
+
+        // The inspector is gone, so drive `adjust` directly -- that is the path a
+        // lingering inspector's stepper would have taken.
+        fireEvent.click(screen.getByTestId('external-adjust-end-later'));
+
+        expect(slotsText()).toBe('');
     });
 });

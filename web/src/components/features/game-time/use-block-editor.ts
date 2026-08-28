@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import {
-    findBlockAt, setBlockRange, moveBlock, maxEndIndex, minStartIndex, type SlotBlock,
+    findBlockAt, setBlockRange, moveBlock, maxEndIndex, minStartIndex, lockedIndices,
+    type SlotBlock,
 } from './slot-blocks.utils';
 
 /** Movement past this many px means the gesture was a drag, not a tap. */
@@ -71,6 +72,16 @@ export function useBlockEditor(
     const [isDragging, setDragging] = useState(false);
     const gesture = useRef<Gesture | null>(null);
 
+    // Blocks are DERIVED from `slots`, so anything that replaces them from
+    // outside this hook -- Clear, Discard, the day-header toggle -- can invalidate
+    // a selection the hook still holds. Re-seat it on every render: the block that
+    // now covers the selection's start, or nothing if it is gone. Without this the
+    // inspector lingers over a block that no longer exists, and its steppers
+    // re-add the very hours the user just cleared.
+    const live = selection
+        ? findBlockAt(slots, selection.dayOfWeek, selection.startIndex, hours)
+        : null;
+
     /** Apply new slots and re-seat the selection onto whatever block now covers `anchor`. */
     const commit = useCallback((next: GameTimeSlot[], dayOfWeek: number, anchor: number) => {
         if (next !== slots) onChange?.(next);
@@ -90,13 +101,13 @@ export function useBlockEditor(
     }, [slots]);
 
     const beginBlock = useCallback((e: React.PointerEvent, block: SlotBlock) => {
-        if (!isSame(selection, block)) { setSelection(block); return; }
+        if (!isSame(live, block)) { setSelection(block); return; }
         // Already selected, so this block owns the pointer and the gesture is a move.
         gesture.current = { kind: 'move', pointerId: e.pointerId, block, y0: e.clientY, snapshot: slots };
         setDragging(true);
         e.currentTarget.setPointerCapture?.(e.pointerId);
         e.preventDefault();
-    }, [selection, slots]);
+    }, [live, slots]);
 
     const beginEmpty = useCallback((e: React.PointerEvent, dayOfWeek: number, index: number) => {
         // No capture and no preventDefault: if this becomes a drag, the browser
@@ -134,6 +145,11 @@ export function useBlockEditor(
         gesture.current = null;
         setDragging(false);
         if (g.kind !== 'tap') return;
+        // A tap on a blocked/committed hour does nothing, as it did before the
+        // block editor. Otherwise setBlockRange skips the locked hour but still
+        // adds the rest of the default range -- tapping a blocked 10:00 with 11:00
+        // free would silently create availability at 11:00.
+        if (lockedIndices(slots, g.dayOfWeek, hours).has(g.index)) return;
         const end = Math.min(hours.length, g.index + DEFAULT_BLOCK_HOURS);
         commit(setBlockRange(slots, g.dayOfWeek, g.index, end, true, hours), g.dayOfWeek, g.index);
     }, [hours, slots, commit]);
@@ -144,19 +160,19 @@ export function useBlockEditor(
     }, []);
 
     const adjust = useCallback((edge: 'start' | 'end', delta: number) => {
-        if (selection) applyEdge(slots, selection, edge, delta);
-    }, [selection, slots, applyEdge]);
+        if (live) applyEdge(slots, live, edge, delta);
+    }, [live, slots, applyEdge]);
 
     const removeSelected = useCallback(() => {
-        if (!selection) return;
-        onChange?.(setBlockRange(slots, selection.dayOfWeek, selection.startIndex, selection.endIndex, false, hours));
+        if (!live) return;
+        onChange?.(setBlockRange(slots, live.dayOfWeek, live.startIndex, live.endIndex, false, hours));
         setSelection(null);
-    }, [selection, slots, hours, onChange]);
+    }, [live, slots, hours, onChange]);
 
     const clearSelection = useCallback(() => setSelection(null), []);
 
     return {
-        selection, isDragging, beginHandle, beginBlock, beginEmpty,
+        selection: live, isDragging, beginHandle, beginBlock, beginEmpty,
         handleMove, handleUp, handleCancel, adjust, removeSelected, clearSelection,
     };
 }
