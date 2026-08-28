@@ -40,8 +40,14 @@ const FAKE_ITAD_GAME: ItadGame = {
 
 function buildMockDb() {
   const insertReturning = jest.fn();
+  // ROK-1438: the discovery insert is now
+  // `.values().onConflictDoNothing().returning()` — a conflict must not raise
+  // inside the transaction, so the DB reports it as an empty result instead.
   const insertValues = jest.fn().mockReturnValue({
     returning: insertReturning,
+    onConflictDoNothing: jest.fn().mockReturnValue({
+      returning: insertReturning,
+    }),
   });
   const insert = jest.fn().mockReturnValue({ values: insertValues });
 
@@ -483,21 +489,21 @@ describe('discoverGameViaItad', () => {
     });
   });
 
-  describe('unique-key pre-check (ROK-1438)', () => {
-    // The old code inserted optimistically and caught the unique violation to
-    // retry with a suffixed slug. That cannot work inside a transaction — a
-    // failed statement poisons it (see ROK-1437 / postgres.js savepoints), so
-    // the collision is now PROBED before the single insert. The resulting row
-    // is unchanged; only the mechanism is.
-    it('uses a suffixed slug when the probe finds a colliding row', async () => {
+  describe('unique-key conflict fallback (ROK-1438)', () => {
+    // The old code inserted optimistically and CAUGHT the 23505 to retry with
+    // a suffixed slug. That cannot work inside a transaction — a failed
+    // statement poisons it (ROK-1437 / postgres.js). A SELECT probe replaced
+    // it briefly but was racy across different normalized names (Codex P2).
+    // Now the insert carries ON CONFLICT DO NOTHING: a conflict is not an
+    // error, and an empty RETURNING is the signal to insert the suffixed row.
+    it('inserts the suffixed row when the first insert conflicts', async () => {
       const mockDb = buildMockDb();
       mockDb.query.games.findFirst
         .mockResolvedValueOnce(undefined) // isBannedBySlug
         .mockResolvedValueOnce(undefined); // upsertGame slug check
-      mockDb.selectWhere
-        .mockResolvedValueOnce([]) // name-dedup prefilter — no candidates
-        .mockResolvedValueOnce([{ id: 55 }]); // unique-key probe — slug taken
-      mockDb.insertReturning.mockResolvedValueOnce([{ id: 101 }]);
+      mockDb.insertReturning
+        .mockResolvedValueOnce([]) // conflict — no row inserted, no error
+        .mockResolvedValueOnce([{ id: 101 }]); // suffixed row lands
 
       const deps = buildDeps({
         db: mockDb.asDeps,
@@ -507,10 +513,32 @@ describe('discoverGameViaItad', () => {
       const result = await discoverGameViaItad(STEAM_APP_ID, deps);
 
       expect(result?.gameId).toBe(101);
-      // Exactly ONE insert — a second attempt would be unreachable in a tx.
+      expect(mockDb.insertValues).toHaveBeenCalledTimes(2);
+      expect(mockDb.insertValues).toHaveBeenLastCalledWith(
+        expect.objectContaining({ slug: `elden-ring-${STEAM_APP_ID}` }),
+      );
+    });
+
+    it('issues exactly ONE insert when nothing conflicts', async () => {
+      const mockDb = buildMockDb();
+      mockDb.query.games.findFirst
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(undefined);
+      mockDb.insertReturning.mockResolvedValueOnce([{ id: 7 }]);
+
+      const deps = buildDeps({
+        db: mockDb.asDeps,
+        lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
+      });
+
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+
+      expect(result?.gameId).toBe(7);
+      // The common path must not pay for the collision path — no probe SELECT,
+      // no speculative second insert.
       expect(mockDb.insertValues).toHaveBeenCalledTimes(1);
       expect(mockDb.insertValues).toHaveBeenCalledWith(
-        expect.objectContaining({ slug: `elden-ring-${STEAM_APP_ID}` }),
+        expect.objectContaining({ slug: 'elden-ring' }),
       );
     });
 
@@ -519,10 +547,9 @@ describe('discoverGameViaItad', () => {
       mockDb.query.games.findFirst
         .mockResolvedValueOnce(undefined)
         .mockResolvedValueOnce(undefined);
-      mockDb.selectWhere
+      mockDb.insertReturning
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ id: 55 }]);
-      mockDb.insertReturning.mockResolvedValueOnce([{ id: 102 }]);
+        .mockResolvedValueOnce([{ id: 102 }]);
 
       enrichFromIgdb.mockResolvedValue({
         igdbId: 119133,
@@ -553,7 +580,7 @@ describe('discoverGameViaItad', () => {
       const result = await discoverGameViaItad(STEAM_APP_ID, deps);
 
       expect(result?.gameId).toBe(102);
-      expect(mockDb.insertValues).toHaveBeenCalledWith(
+      expect(mockDb.insertValues).toHaveBeenLastCalledWith(
         expect.objectContaining({
           slug: `elden-ring-${STEAM_APP_ID}`,
           itadGameId: null,
@@ -762,43 +789,39 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
     });
   });
 
-  describe('a violation the probe cannot pre-resolve (ROK-1438)', () => {
-    it('propagates the violation instead of retrying inside the transaction', async () => {
+  describe('a collision the suffixed row cannot resolve (ROK-1438)', () => {
+    it('throws a legible error rather than returning an empty result', async () => {
       const mockDb = buildMockDb();
       mockDb.query.games.findFirst
         .mockResolvedValueOnce(undefined) // isBannedBySlug
         .mockResolvedValueOnce(undefined); // upsertGame slug check
-      // Probe sees nothing (e.g. a steamAppId collision, which the suffixed
-      // row would not have fixed either), so the insert raises.
-      mockDb.selectWhere.mockResolvedValue([]);
-      mockDb.insertReturning.mockRejectedValueOnce(
-        Object.assign(new Error('unique violation'), { code: '23505' }),
-      );
+      // Both attempts conflict — in practice a steamAppId collision, which the
+      // suffixed row keeps and the OLD retry could not recover from either.
+      mockDb.insertReturning
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
 
       const deps = buildDeps({
         db: mockDb.asDeps,
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
+      // The caller indexes [0].id, so an empty array would surface as a
+      // confusing `undefined.id` TypeError instead of the real cause.
       await expect(discoverGameViaItad(STEAM_APP_ID, deps)).rejects.toThrow(
-        'unique violation',
+        /Unresolvable unique collision inserting game "Elden Ring"/,
       );
-      // Exactly one attempt. Catching and re-inserting here is what ROK-1437
-      // proved does not work: the transaction is already poisoned.
-      expect(mockDb.insertValues).toHaveBeenCalledTimes(1);
+      expect(mockDb.insertValues).toHaveBeenCalledTimes(2);
     });
 
-    it('still nulls the unique fields on the suffixed row when the insert fails', async () => {
+    it('still nulls the unique fields on the suffixed attempt', async () => {
       const mockDb = buildMockDb();
       mockDb.query.games.findFirst
         .mockResolvedValueOnce(undefined)
         .mockResolvedValueOnce(undefined);
-      mockDb.selectWhere
+      mockDb.insertReturning
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ id: 55 }]);
-      mockDb.insertReturning.mockRejectedValueOnce(
-        Object.assign(new Error('retry violation'), { code: '23505' }),
-      );
+        .mockResolvedValueOnce([]);
 
       const deps = buildDeps({
         db: mockDb.asDeps,
@@ -807,7 +830,7 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
 
       await expect(discoverGameViaItad(STEAM_APP_ID, deps)).rejects.toThrow();
 
-      expect(mockDb.insertValues).toHaveBeenCalledWith(
+      expect(mockDb.insertValues).toHaveBeenLastCalledWith(
         expect.objectContaining({
           slug: `elden-ring-${STEAM_APP_ID}`,
           itadGameId: null,
@@ -864,22 +887,20 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
     });
   });
 
-  describe('unique-key probe covers itadGameId, not just slug (ROK-1438)', () => {
+  describe('conflict detection is key-agnostic (ROK-1438)', () => {
     // Replaces the old nested-`cause` unwrapping test: there is no error to
-    // inspect any more, because the collision is detected before the insert.
-    // What still matters is that the probe covers every unique key the old
-    // retry row nulled — a free slug but a taken itadGameId must still
-    // produce the suffixed, nulled row.
-    it('suffixes and nulls when only the itadGameId collides', async () => {
+    // inspect any more. ON CONFLICT DO NOTHING covers EVERY unique constraint
+    // on `games`, so a free slug with a taken itadGameId still falls back to
+    // the suffixed, nulled row without the code having to know which key lost.
+    it('falls back when the conflict is on itadGameId, not slug', async () => {
       const mockDb = buildMockDb();
       mockDb.query.games.findFirst
         .mockResolvedValueOnce(undefined) // isBannedBySlug
         .mockResolvedValueOnce(undefined) // upsertGame slug check — free
         .mockResolvedValueOnce(undefined); // itadGameId findFirst — no merge
-      mockDb.selectWhere
-        .mockResolvedValueOnce([]) // name-dedup prefilter
-        .mockResolvedValueOnce([{ id: 900 }]); // probe hit via itadGameId
-      mockDb.insertReturning.mockResolvedValueOnce([{ id: 900 }]);
+      mockDb.insertReturning
+        .mockResolvedValueOnce([]) // conflicted on itad_game_id
+        .mockResolvedValueOnce([{ id: 900 }]);
 
       const deps = buildDeps({
         db: mockDb.asDeps,
@@ -889,8 +910,7 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
       const result = await discoverGameViaItad(STEAM_APP_ID, deps);
 
       expect(result?.gameId).toBe(900);
-      expect(mockDb.insertValues).toHaveBeenCalledTimes(1);
-      expect(mockDb.insertValues).toHaveBeenCalledWith(
+      expect(mockDb.insertValues).toHaveBeenLastCalledWith(
         expect.objectContaining({
           slug: `elden-ring-${STEAM_APP_ID}`,
           itadGameId: null,

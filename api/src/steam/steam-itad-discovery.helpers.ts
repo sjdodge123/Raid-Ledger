@@ -3,7 +3,7 @@
  * When a Steam game isn't in the DB, looks it up via ITAD and creates a game row.
  */
 import { Logger } from '@nestjs/common';
-import { eq, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadGame } from '../itad/itad.constants';
@@ -186,60 +186,63 @@ async function mergeIntoExisting(
 }
 
 /**
- * Insert a new game row, pre-resolving the unique keys that would collide.
+ * Insert a new game row, falling back to a suffixed slug if any unique key is
+ * already taken.
  *
- * This used to INSERT optimistically and catch the unique violation, retrying
- * with a suffixed slug. That stopped working once the caller moved inside a
- * transaction (ROK-1438): under postgres.js a failed statement poisons the
- * whole transaction, so the catch has no usable connection left to retry on —
- * the same trap `safeReassign`'s savepoint hit in ROK-1437. Probe first, then
- * issue exactly ONE insert that cannot violate.
+ * Three constraints shaped this, in order:
  *
- * The resulting row is identical to what the old retry produced: suffixed
- * slug, and itadGameId/igdbId nulled so they can't collide either.
+ * 1. The original code INSERTed optimistically and CAUGHT the 23505 to retry.
+ *    That stopped working once the caller moved inside a transaction
+ *    (ROK-1438) — under postgres.js a failed statement poisons the whole
+ *    transaction, so the catch has no usable connection left to retry on.
+ *    Same trap `safeReassign`'s savepoint hit in ROK-1437.
+ * 2. Replacing it with a SELECT probe was racy: two discoveries for DIFFERENT
+ *    normalized names can share a unique key (ITAD returning the same slug for
+ *    two editions), so they take different name locks, both probe clean, and
+ *    the second insert still raises (Codex pre-push review, P2).
+ * 3. `ON CONFLICT DO NOTHING` is neither: a conflict is not an error, so it
+ *    never poisons the transaction, and the DATABASE decides atomically rather
+ *    than a probe guessing ahead of it. An empty RETURNING means some unique
+ *    key collided — then, and only then, insert the suffixed row.
+ *
+ * The suffixed row is identical to what the old retry produced: slug suffixed
+ * with the Steam app id, itadGameId/igdbId nulled so they can't collide either.
  */
 async function insertAvoidingUniqueCollisions(
   db: PostgresJsDatabase<typeof schema>,
   row: GameInsertRow,
 ): Promise<{ id: number }[]> {
-  const values = (await hasUniqueKeyCollision(db, row))
-    ? {
-        ...row,
-        slug: `${row.slug}-${row.steamAppId}`,
-        itadGameId: null,
-        igdbId: null,
-      }
-    : row;
+  const inserted = await insertIfNoConflict(db, row);
+  if (inserted.length > 0) return inserted;
+
+  const suffixed = await insertIfNoConflict(db, {
+    ...row,
+    slug: `${row.slug}-${row.steamAppId}`,
+    itadGameId: null,
+    igdbId: null,
+  });
+  if (suffixed.length > 0) return suffixed;
+
+  // Only reachable when the collision is on a key the suffixed row keeps —
+  // in practice steamAppId, which the old retry could not recover from either.
+  // Fail loudly rather than returning an empty array the caller would index
+  // into and crash on with a confusing `undefined.id`.
+  throw new Error(
+    `Unresolvable unique collision inserting game "${row.name}" ` +
+      `(slug=${row.slug}, steamAppId=${row.steamAppId})`,
+  );
+}
+
+/** INSERT ... ON CONFLICT DO NOTHING. Empty result = some unique key collided. */
+function insertIfNoConflict(
+  db: PostgresJsDatabase<typeof schema>,
+  values: GameInsertRow,
+): Promise<{ id: number }[]> {
   return db
     .insert(schema.games)
     .values(values)
+    .onConflictDoNothing()
     .returning({ id: schema.games.id });
-}
-
-/**
- * True when slug, itadGameId or igdbId is already owned by an existing row —
- * i.e. when a plain insert of `row` would raise a unique violation.
- *
- * steamAppId is deliberately NOT probed: the suffixed retry row keeps it, so a
- * steamAppId collision was unrecoverable before this change too and still
- * surfaces as a raised error rather than a silently different row.
- */
-async function hasUniqueKeyCollision(
-  db: PostgresJsDatabase<typeof schema>,
-  row: GameInsertRow,
-): Promise<boolean> {
-  const predicates = [eq(schema.games.slug, row.slug ?? '')];
-  if (row.itadGameId) {
-    predicates.push(eq(schema.games.itadGameId, row.itadGameId));
-  }
-  if (row.igdbId != null) {
-    predicates.push(eq(schema.games.igdbId, row.igdbId));
-  }
-  const rows = await db
-    .select({ id: schema.games.id })
-    .from(schema.games)
-    .where(or(...predicates));
-  return rows.length > 0;
 }
 
 /** PG error fields extracted from a postgres.js error or its cause chain. */

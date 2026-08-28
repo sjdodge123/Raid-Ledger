@@ -119,6 +119,51 @@ function describeItadDiscoveryIntegration() {
     expect(game!.slug).toBe('alpha-game-33333');
   });
 
+  it('two concurrent discoveries sharing a slug both land (ROK-1438)', async () => {
+    // Codex pre-push review, P2. These two titles have DIFFERENT normalized
+    // names, so they take DIFFERENT name advisory locks and genuinely run
+    // concurrently — the name lock does not serialize them. They share a slug,
+    // which is UNIQUE. The interim SELECT-probe design lost this case: both
+    // probes read clean, then the second insert raised 23505 and (being inside
+    // a transaction now) could not be retried. ON CONFLICT DO NOTHING lets the
+    // database arbitrate instead, so the loser falls back to a suffixed slug.
+    const shared = (id: string, title: string): ItadGame => ({
+      id,
+      slug: 'shared-slug',
+      title,
+      type: 'game',
+      mature: false,
+    });
+
+    const results = await Promise.all([
+      discoverGameViaItad(
+        55555,
+        buildDeps(testApp, shared('itad-x', 'Edition One')),
+      ),
+      discoverGameViaItad(
+        66666,
+        buildDeps(testApp, shared('itad-y', 'Edition Two')),
+      ),
+    ]);
+
+    // Neither racer is allowed to fail.
+    expect(results[0]).not.toBeNull();
+    expect(results[1]).not.toBeNull();
+
+    const rows = await testApp.db
+      .select({ id: schema.games.id, slug: schema.games.slug })
+      .from(schema.games)
+      .where(eq(schema.games.itadGameId, 'itad-x'));
+    expect(rows).toHaveLength(1);
+
+    // Exactly one of them holds the bare slug; the other got suffixed.
+    const slugs = (
+      await testApp.db.select({ slug: schema.games.slug }).from(schema.games)
+    ).map((r) => r.slug);
+    expect(slugs).toContain('shared-slug');
+    expect(slugs.filter((sl) => sl.startsWith('shared-slug'))).toHaveLength(2);
+  });
+
   it('handles slug + itadGameId both colliding with different games', async () => {
     // Game A: owns the slug
     await testApp.db.insert(schema.games).values({
