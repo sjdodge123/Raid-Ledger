@@ -56,9 +56,13 @@ describe('GameTimeStep — rendering (ROK-1011)', () => {
         expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
     });
 
-    it('shows drag instruction text', () => {
+    // ROK-1426 replaced drag-to-paint with blocks, so the instruction had to
+    // change with it. Still asserts real copy, and still fails if it goes stale
+    // again: "paint" must be gone, and the block wording must be present.
+    it('instructs the user to add blocks and drag the handles', () => {
         renderWithProviders(<GameTimeStep />);
-        expect(screen.getByText(/paint your weekly availability/i)).toBeInTheDocument();
+        expect(screen.getByText(/add blocks for the hours you're free/i)).toBeInTheDocument();
+        expect(screen.queryByText(/paint your weekly availability/i)).not.toBeInTheDocument();
     });
 
     it('renders the "When Do You Play?" heading', () => {
