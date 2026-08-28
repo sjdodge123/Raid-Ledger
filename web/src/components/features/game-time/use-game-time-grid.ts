@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import type { GridDims, HeatmapCell } from './game-time-grid.types';
 import { DAYS, ALL_HOURS, CELL_GAP } from './game-time-grid.utils';
+
+/** No cell is ever dirty now that painting is gone (ROK-1426). */
+const EMPTY_DIRTY: ReadonlySet<string> = new Set();
 
 /** Builds a slot lookup map keyed by "dayOfWeek:hour" */
 function buildSlotMap(slots: GameTimeSlot[]): Map<string, GameTimeSlot> {
@@ -164,52 +167,27 @@ export function useCellLocked(getSlotStatus: (d: number, h: number) => string | 
     );
 }
 
-/** Toggle cell between paint/erase mode */
-function useToggleCell(
-    slots: GameTimeSlot[], slotMap: Map<string, GameTimeSlot>,
-    onChange: ((slots: GameTimeSlot[]) => void) | undefined,
-    isCellLocked: (d: number, h: number) => boolean,
-    setDirtyCells: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>,
-): (day: number, hour: number, mode: 'paint' | 'erase') => void {
-    return useCallback(
-        (day: number, hour: number, mode: 'paint' | 'erase') => {
-            if (!onChange || isCellLocked(day, hour)) return;
-            const key = `${day}:${hour}`;
-            setDirtyCells(prev => { const next = new Set(prev); next.add(key); return next; });
-            const existing = slotMap.get(key);
-            if (mode === 'paint' && !existing) onChange([...slots, { dayOfWeek: day, hour, status: 'available' }]);
-            else if (mode === 'erase' && existing?.status === 'available') onChange(slots.filter((s) => !(s.dayOfWeek === day && s.hour === hour)));
-        },
-        [slots, onChange, slotMap, isCellLocked, setDirtyCells],
-    );
-}
-
-/** Drag-to-paint interaction handlers */
-export function useDragPaint(
-    slots: GameTimeSlot[], slotMap: Map<string, GameTimeSlot>,
+/**
+ * Read-only slot view: status, locked-ness and past-ness for a cell.
+ *
+ * Drag-to-paint lived here until ROK-1426; availability is now edited as blocks
+ * (see use-block-editor.ts), so nothing in this hook mutates slots. The
+ * dirty-cell tracking that came with painting went with it -- it only ever
+ * mattered for rolling views, and no interactive grid passes rolling props.
+ */
+export function useSlotView(
+    slotMap: Map<string, GameTimeSlot>,
     nextWeekSlotMap: Map<string, GameTimeSlot> | null,
-    onChange: ((slots: GameTimeSlot[]) => void) | undefined,
-    isInteractive: boolean, todayIndex?: number, currentHour?: number,
-) {
-    const dragging = useRef(false);
-    const paintMode = useRef<'paint' | 'erase'>('paint');
-    const [dirtyCells, setDirtyCells] = useState<ReadonlySet<string>>(() => new Set());
+    todayIndex?: number, currentHour?: number,
+): {
+    isPastCell: (d: number, h: number) => boolean;
+    getSlotStatus: (d: number, h: number) => string | undefined;
+    isCellLocked: (d: number, h: number) => boolean;
+} {
     const isPastCell = useIsPastCell(todayIndex, currentHour);
-    const getSlotStatus = useSlotStatus(slotMap, nextWeekSlotMap, isPastCell, dirtyCells);
+    const getSlotStatus = useSlotStatus(slotMap, nextWeekSlotMap, isPastCell, EMPTY_DIRTY);
     const isCellLocked = useCellLocked(getSlotStatus);
-    const toggleCell = useToggleCell(slots, slotMap, onChange, isCellLocked, setDirtyCells);
-    const handlePointerDown = useCallback((day: number, hour: number) => {
-        if (!isInteractive || isCellLocked(day, hour)) return;
-        dragging.current = true;
-        paintMode.current = slotMap.get(`${day}:${hour}`)?.status === 'available' ? 'erase' : 'paint';
-        toggleCell(day, hour, paintMode.current);
-    }, [isInteractive, toggleCell, isCellLocked, slotMap]);
-    const handlePointerEnter = useCallback((day: number, hour: number) => {
-        if (!dragging.current || !isInteractive) return;
-        toggleCell(day, hour, paintMode.current);
-    }, [isInteractive, toggleCell]);
-    const handlePointerUp = useCallback(() => { dragging.current = false; }, []);
-    return { isPastCell, getSlotStatus, isCellLocked, handlePointerDown, handlePointerEnter, handlePointerUp };
+    return { isPastCell, getSlotStatus, isCellLocked };
 }
 
 /** Computes the radial gradient background for hover glow effect */

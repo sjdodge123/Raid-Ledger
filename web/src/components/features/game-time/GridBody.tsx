@@ -21,14 +21,12 @@ export interface CellRenderProps {
     isInteractive: boolean;
     nextWeekSlotMap: Map<string, GameTimeSlot> | null;
     onCellClick?: (d: number, h: number) => void;
-    onPointerDown: (d: number, h: number) => void;
     onPointerEnter: (d: number, h: number) => void;
 }
 
 export interface GridBodyProps extends CellRenderProps {
     gridRef: React.RefObject<HTMLDivElement | null>;
     gridLineBackground: string | undefined;
-    handlePointerUp: () => void;
     setHoveredCell: (v: string | null) => void;
     tzLabel?: string;
     noStickyOffset?: boolean;
@@ -47,21 +45,19 @@ export interface GridBodyProps extends CellRenderProps {
 
 /** Inner grid with day headers and cell rows */
 export function GridBody({
-    gridRef, gridLineBackground, handlePointerUp, setHoveredCell,
+    gridRef, gridLineBackground, setHoveredCell,
     tzLabel, noStickyOffset, isHeaderHidden,
     dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots,
     HOURS, onDayClick, isDayAllActive, ...cellProps
 }: GridBodyProps): JSX.Element {
-    // Read-only/tap grids (e.g. the scheduling availability heatmap) must let
-    // the page scroll vertically on mobile; only the interactive drag-to-paint
-    // editor needs to capture every touch gesture (touch-action: none).
-    const { isInteractive } = cellProps;
+    // ROK-1426: the grid NEVER captures touch gestures any more. Editing happens
+    // in the block layer above it, where only a selected block and its handles
+    // set touch-action: none -- so the page scrolls from anywhere in the grid.
     return (
         <div
             ref={gridRef} className="grid gap-px select-none"
-            style={{ gridTemplateColumns: '52px repeat(7, 1fr)', touchAction: isInteractive ? 'none' : 'pan-y', background: gridLineBackground }}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={() => { handlePointerUp(); setHoveredCell(null); }}
+            style={{ gridTemplateColumns: '52px repeat(7, 1fr)', touchAction: 'pan-y', background: gridLineBackground }}
+            onPointerLeave={() => setHoveredCell(null)}
             data-testid="game-time-grid"
         >
             <TzCorner tzLabel={tzLabel} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} />

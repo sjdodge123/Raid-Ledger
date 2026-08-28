@@ -105,9 +105,12 @@ test.describe('Profile gaming — Game Time (mobile)', () => {
         await expect(page.getByTestId('game-time-grid')).toBeVisible();
         await expect(page.getByTestId('game-time-mobile-editor')).not.toBeVisible();
 
-        // Day-of-week buttons should be visible in the grid header (short names on mobile)
-        await expect(page.getByRole('button', { name: /Mon/ })).toBeVisible();
-        await expect(page.getByRole('button', { name: /Sun/ })).toBeVisible();
+        // Day-of-week buttons should be visible in the grid header (short names on
+        // mobile). Addressed by testid, not by role+name: ROK-1426 blocks are also
+        // role="button" and carry labels like "Mon 7 PM to 9 PM", which made a bare
+        // /Mon/ match two elements.
+        await expect(page.getByTestId('day-header-1')).toHaveText('Mon');
+        await expect(page.getByTestId('day-header-0')).toHaveText('Sun');
     });
 
     test('action buttons remain accessible above grid', async ({ page }) => {

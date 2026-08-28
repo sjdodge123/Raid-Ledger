@@ -387,12 +387,17 @@ test.describe('Onboarding wizard game-time step (ROK-1011)', () => {
         await gameTimeBreadcrumb.click();
         await expect(dialog.getByRole('heading', { name: 'When Do You Play?' })).toBeVisible({ timeout: 10_000 });
 
-        // ROK-1011: Should render GameTimeGrid, not the old accordion editor
-        await expect(dialog.getByTestId('game-time-grid')).toBeVisible();
+        // ROK-1011: Should render GameTimeGrid, not the old accordion editor.
+        // Timed like the assertions around it: the step renders a spinner until the
+        // game-time query resolves, so an un-timed check raced the fetch and this
+        // went flaky on desktop. Same gate exists on main -- not a ROK-1426 change.
+        await expect(dialog.getByTestId('game-time-grid')).toBeVisible({ timeout: 10_000 });
         await expect(dialog.getByTestId('game-time-mobile-editor')).not.toBeVisible();
 
-        // Instruction text should mention drag-to-paint (not "tap days to expand")
-        await expect(dialog.getByText(/paint your weekly availability/i)).toBeVisible();
+        // Instruction text tracks the interaction: ROK-1426 replaced drag-to-paint
+        // with blocks, so it must describe blocks and no longer say "paint".
+        await expect(dialog.getByText(/add blocks for the hours you're free/i)).toBeVisible();
+        await expect(dialog.getByText(/paint your weekly availability/i)).toHaveCount(0);
         await expect(dialog.getByText(/tap days to expand/i)).not.toBeVisible();
     });
 });

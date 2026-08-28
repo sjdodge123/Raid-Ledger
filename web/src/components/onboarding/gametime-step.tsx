@@ -5,9 +5,10 @@ import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
 
 /**
  * Step 4: When Do You Play? (ROK-219).
- * Reuses the GameTimeGrid component for drag-to-paint availability on desktop,
- * and GameTimeMobileEditor (toggle list) on mobile (<768px).
- * Auto-saves when user navigates away via wizard footer.
+ * Reuses GameTimeGrid, which since ROK-1426 edits availability as blocks with
+ * drag handles rather than painted cells — one path for mouse and finger, so
+ * there is no separate mobile editor. Auto-saves when the user navigates away
+ * via the wizard footer.
  */
 function useAutoSaveOnUnmount(save: () => void, isDirty: boolean) {
     const saveRef = useRef(save);
@@ -27,7 +28,7 @@ function GameTimeStepHeader() {
     return (
         <div className="text-center mb-2">
             <h2 className="text-lg font-bold text-foreground">When Do You Play?</h2>
-            <p className="text-muted text-sm mt-1">Paint your weekly availability. Click and drag to mark hours you&apos;re free.</p>
+            <p className="text-muted text-sm mt-1">Add blocks for the hours you&apos;re free, then drag their handles to adjust.</p>
         </div>
     );
 }

@@ -243,12 +243,12 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 4', () => {
 
             renderPanel({ mode: 'profile' });
 
-            // Verify slots are rendered with correct status
-            const cell0 = screen.getByTestId('cell-0-18');
-            const cell1 = screen.getByTestId('cell-1-19');
-
-            expect(cell0.dataset.status).toBe('available');
-            expect(cell1.dataset.status).toBe('available');
+            // ROK-1426: availability renders as blocks in the editor layer, so the
+            // cells beneath deliberately no longer carry the 'available' fill.
+            expect(screen.getByTestId('slot-block-0-18')).toBeInTheDocument();
+            expect(screen.getByTestId('slot-block-1-19')).toBeInTheDocument();
+            expect(screen.getByTestId('cell-0-18').dataset.status).toBe('inactive');
+            expect(screen.getByTestId('cell-1-19').dataset.status).toBe('inactive');
         });
 
     });

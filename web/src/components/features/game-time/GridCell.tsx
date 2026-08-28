@@ -20,7 +20,6 @@ interface GridCellProps {
     isInteractive: boolean;
     nextWeekSlotMap: Map<string, GameTimeSlot> | null;
     onCellClick?: (d: number, h: number) => void;
-    onPointerDown: (d: number, h: number) => void;
     onPointerEnter: (d: number, h: number) => void;
 }
 
@@ -28,7 +27,7 @@ interface GridCellProps {
 export function GridCell({
     dayIndex, hour, rangeStart, rangeEnd, compact, getSlotStatus, isCellLocked,
     isPastCell, eventCellSet, heatmapMap, hoveredCell, hoverDay, hoverHour,
-    isInteractive, nextWeekSlotMap, onCellClick, onPointerDown, onPointerEnter,
+    isInteractive, nextWeekSlotMap, onCellClick, onPointerEnter,
 }: GridCellProps): JSX.Element {
     const vis = computeVisuals(dayIndex, hour, rangeStart, rangeEnd, getSlotStatus, eventCellSet, heatmapMap, hoveredCell, hoverDay, hoverHour, isInteractive, isCellLocked);
     const className = computeCellClasses(compact, vis.rounding, vis.cellClasses, vis.heatmapBg, isInteractive && !vis.locked, !!onCellClick, vis.locked, isPastCell(dayIndex, hour), !!nextWeekSlotMap, vis.isHovered, isInteractive);
@@ -40,7 +39,6 @@ export function GridCell({
             data-testid={`cell-${dayIndex}-${hour}`}
             data-status={getSlotStatus(dayIndex, hour) ?? 'inactive'}
             title={vis.heatmapData ? `${vis.heatmapData.available} of ${vis.heatmapData.total} players available` : undefined}
-            onPointerDown={() => onPointerDown(dayIndex, hour)}
             onPointerEnter={() => onPointerEnter(dayIndex, hour)}
             onClick={onCellClick ? () => onCellClick(dayIndex, hour) : undefined}
         />
