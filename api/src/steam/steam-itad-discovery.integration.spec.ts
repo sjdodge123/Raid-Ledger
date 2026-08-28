@@ -146,22 +146,36 @@ function describeItadDiscoveryIntegration() {
       ),
     ]);
 
-    // Neither racer is allowed to fail.
+    // Neither racer is allowed to fail — that is the whole claim.
     expect(results[0]).not.toBeNull();
     expect(results[1]).not.toBeNull();
 
+    // WHICH racer wins the slug is nondeterministic by nature, so assert only
+    // invariants that hold either way. (An earlier version of this test asserted
+    // `itad-x` kept its itadGameId and was itself flaky: when itad-x lost, its
+    // row was the suffixed one with itadGameId nulled.)
     const rows = await testApp.db
-      .select({ id: schema.games.id, slug: schema.games.slug })
-      .from(schema.games)
-      .where(eq(schema.games.itadGameId, 'itad-x'));
-    expect(rows).toHaveLength(1);
+      .select({
+        slug: schema.games.slug,
+        steamAppId: schema.games.steamAppId,
+        itadGameId: schema.games.itadGameId,
+      })
+      .from(schema.games);
+    const sharedRows = rows.filter((r) => r.slug.startsWith('shared-slug'));
 
-    // Exactly one of them holds the bare slug; the other got suffixed.
-    const slugs = (
-      await testApp.db.select({ slug: schema.games.slug }).from(schema.games)
-    ).map((r) => r.slug);
-    expect(slugs).toContain('shared-slug');
-    expect(slugs.filter((sl) => sl.startsWith('shared-slug'))).toHaveLength(2);
+    // Both landed as separate rows.
+    expect(sharedRows).toHaveLength(2);
+    expect(sharedRows.map((r) => r.steamAppId).sort()).toEqual([55555, 66666]);
+
+    // Exactly one kept the bare slug; the loser took the suffixed one built
+    // from its own Steam app id, with its itadGameId nulled.
+    const bare = sharedRows.filter((r) => r.slug === 'shared-slug');
+    const suffixed = sharedRows.filter((r) => r.slug !== 'shared-slug');
+    expect(bare).toHaveLength(1);
+    expect(suffixed).toHaveLength(1);
+    expect(suffixed[0].slug).toBe(`shared-slug-${suffixed[0].steamAppId}`);
+    expect(suffixed[0].itadGameId).toBeNull();
+    expect(bare[0].itadGameId).not.toBeNull();
   });
 
   it('handles slug + itadGameId both colliding with different games', async () => {
