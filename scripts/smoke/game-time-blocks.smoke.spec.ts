@@ -24,6 +24,36 @@ async function waitForLayer(page: Page): Promise<void> {
     await expect(page.getByTestId(LAYER)).toBeAttached({ timeout: 10_000 });
 }
 
+/** A day with no block on it. Tapping beside an existing block merges into it. */
+async function findEmptyDay(page: Page): Promise<number> {
+    const day = await page.evaluate(() => {
+        for (let d = 0; d < 7; d++) {
+            if (!document.querySelector(`[data-testid^="slot-block-${d}-"]`)) return d;
+        }
+        return -1;
+    });
+    expect(day).toBeGreaterThanOrEqual(0);
+    return day;
+}
+
+/**
+ * Drop a block and return a locator for it. Tests must NOT assume the grid
+ * already has one: the local demo DB has seeded availability and CI's fresh DB
+ * has none, so anything keyed off an existing block passes locally and fails in
+ * CI with "element(s) not found".
+ */
+async function createBlock(page: Page): Promise<number> {
+    const day = await findEmptyDay(page);
+    const target = page.getByTestId(`slot-day-target-${day}`);
+    const box = await target.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+    // A new block is auto-selected, so the inspector proves the tap landed.
+    await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
+    return day;
+}
+
 test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
     test('the grid never captures touch gestures', async ({ page }) => {
         await openGameTime(page);
@@ -105,14 +135,15 @@ test.describe('Game Time blocks — editing', () => {
         await openGameTime(page);
         await waitForLayer(page);
 
-        const first = page.locator('[data-testid^="slot-block-"]').first();
-        await expect(first).toBeVisible();
-        const restingWidth = (await first.boundingBox())!.width;
-        await first.click();
+        const day = await createBlock(page);
+        const block = page.locator(`[data-testid^="slot-block-${day}-"]`);
+        // Created blocks arrive selected; deselect to measure the resting width.
+        await page.getByTestId('deselect-block').click();
+        await expect(block).toBeVisible();
+        const restingWidth = (await block.boundingBox())!.width;
 
-        const block = page.locator('[data-testid^="slot-block-"][data-selected="true"]');
-        await expect(block).toHaveCount(1);
-
+        await block.click();
+        await expect(block).toHaveAttribute('data-selected', 'true');
         await expect(page.locator('[data-testid^="slot-handle-start-"]')).toHaveCount(1);
         await expect(page.locator('[data-testid^="slot-handle-end-"]')).toHaveCount(1);
 
@@ -125,7 +156,7 @@ test.describe('Game Time blocks — editing', () => {
             .poll(async () => Math.round((await block.boundingBox())!.width))
             .toBe(Math.round(expected));
 
-        await page.getByTestId('deselect-block').click();
+        await page.getByTestId('remove-block').click();
     });
 
     // Regression: statically placed, the inspector rendered at y=733 in a 727px
@@ -135,9 +166,9 @@ test.describe('Game Time blocks — editing', () => {
         await openGameTime(page);
         await waitForLayer(page);
 
-        await page.locator('[data-testid^="slot-block-"]').first().click();
+        // Creating a block selects it, which is what opens the inspector.
+        await createBlock(page);
         const inspector = page.getByTestId('selected-block-inspector');
-        await expect(inspector).toBeVisible();
 
         const box = (await inspector.boundingBox())!;
         const viewportHeight = page.viewportSize()!.height;
@@ -158,7 +189,7 @@ test.describe('Game Time blocks — editing', () => {
             expect(box.y + box.height).toBeGreaterThan(0);
         }
 
-        await page.getByTestId('deselect-block').click();
+        await page.getByTestId('remove-block').click();
     });
 
     test('the steppers move the block bounds without dragging', async ({ page }) => {
