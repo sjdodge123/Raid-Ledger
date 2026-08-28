@@ -50,7 +50,7 @@ export function SlotBlockLayer({ blocks, editor, gridDims, hours }: SlotBlockLay
             onPointerMove={editor.handleMove}
             onPointerUp={editor.handleUp}
             onPointerCancel={editor.handleCancel}
-            data-testid="slot-block-layer"
+            data-testid="block-editor-layer"
         >
             {DAYS.map((_, day) => (
                 <DayTarget key={`col-${day}`} day={day} editor={editor} gridDims={gridDims} hours={hours} />

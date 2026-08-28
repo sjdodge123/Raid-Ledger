@@ -47,7 +47,7 @@ function Harness({ initial }: { initial: GameTimeSlot[] }) {
 const avail = (day: number, hours: number[]): GameTimeSlot[] =>
     hours.map((h) => ({ dayOfWeek: day, hour: h, status: 'available' as const }));
 const slotsText = (): string => screen.getByTestId('slots').textContent ?? '';
-const layer = (): HTMLElement => screen.getByTestId('slot-block-layer');
+const layer = (): HTMLElement => screen.getByTestId('block-editor-layer');
 
 describe('block editor — creating', () => {
     it('a tap on empty space drops a two-hour block', () => {

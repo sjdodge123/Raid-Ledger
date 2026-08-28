@@ -9,7 +9,9 @@
 import { test, expect, type Page } from './base';
 
 const GRID = 'game-time-grid';
-const LAYER = 'slot-block-layer';
+const LAYER = 'block-editor-layer';
+/** Mirrors SELECTED_MIN_WIDTH in SlotBlockLayer.tsx. */
+const SELECTED_MIN_WIDTH = 56;
 
 async function openGameTime(page: Page): Promise<void> {
     await page.goto('/profile/gaming/game-time');
@@ -94,12 +96,12 @@ test.describe('Game Time blocks — editing', () => {
         await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existing);
     });
 
-    // KNOWN BROKEN (ROK-1426, not yet fixed): an UNSELECTED block renders ~311px
-    // wide on a 375px viewport -- it should be one ~42px day column. Selecting it
-    // then "widens" it to SELECTED_MIN_WIDTH (56px), which is a shrink. So
-    // gridDims.colWidth is wrong at the time the block layer paints. Do not
-    // un-fixme this until the resting width matches the day column.
-    test.fixme('selecting a block reveals its handles and widens it', async ({ page }) => {
+    // This was `fixme` for a "block renders 311px wide" defect that did not exist:
+    // the layer's old testid was `slot-block-layer`, so `^="slot-block-"` matched
+    // the full-width container before any block and the test compared the layer
+    // against a block. The layer is now `block-editor-layer`; the prefix means a
+    // block and nothing else.
+    test('selecting a block reveals its handles and never shrinks it', async ({ page }) => {
         await openGameTime(page);
         await waitForLayer(page);
 
@@ -114,8 +116,14 @@ test.describe('Game Time blocks — editing', () => {
         await expect(page.locator('[data-testid^="slot-handle-start-"]')).toHaveCount(1);
         await expect(page.locator('[data-testid^="slot-handle-end-"]')).toHaveCount(1);
 
-        // A selected block widens past its column so the handles are reachable.
-        expect((await block.boundingBox())!.width).toBeGreaterThan(restingWidth);
+        // A selected block has to clear a fingertip, so it grows to
+        // SELECTED_MIN_WIDTH on a narrow mobile column (36px -> 56px) and stays
+        // put where the column is already wider (desktop is 114px). Never a
+        // shrink, either way. Polled because width is transitioned.
+        const expected = Math.max(restingWidth, SELECTED_MIN_WIDTH);
+        await expect
+            .poll(async () => Math.round((await block.boundingBox())!.width))
+            .toBe(Math.round(expected));
 
         await page.getByTestId('deselect-block').click();
     });
