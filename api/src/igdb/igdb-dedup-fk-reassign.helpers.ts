@@ -130,13 +130,27 @@ export async function reassignMiscFks(
     loserId,
     winnerId,
   );
-  await safeReassign(tx, 'game_activity_rollups', 'game_id', loserId, winnerId);
+  // Playtime is real data — sum the loser's seconds into the winner's row for
+  // colliding periods before the conflict-delete drops them (migration 0140's
+  // semantics). Every other table below discards the losing row instead.
+  await mergeActivityRollups(tx, loserId, winnerId);
+  await safeReassignWithUnique(
+    tx,
+    'game_activity_rollups',
+    'game_id',
+    loserId,
+    winnerId,
+  );
   await safeReassign(tx, 'availability', 'game_id', loserId, winnerId);
-  await safeReassign(tx, 'characters', 'game_id', loserId, winnerId);
-  await safeReassign(tx, 'event_types', 'game_id', loserId, winnerId);
+  // A user can hold a main on BOTH rows; the partial unique index
+  // `idx_one_main_per_game` (user_id, game_id) WHERE is_main would then abort
+  // the merge. Demote the loser's main rather than delete the character.
+  await demoteDuplicateMains(tx, loserId, winnerId);
+  await safeReassignWithUnique(tx, 'characters', 'game_id', loserId, winnerId);
+  await safeReassignWithUnique(tx, 'event_types', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'event_plans', 'game_id', loserId, winnerId);
   // Table may not exist yet (pending migration) — savepoint protects txn
-  await safeReassign(
+  await safeReassignWithUnique(
     tx,
     'game_interest_suppressions',
     'game_id',
@@ -154,6 +168,58 @@ export async function reassignMiscFks(
     'games_dedup_audit',
     'canonical_game_id',
     loserId,
+  );
+}
+
+/**
+ * Additively merge the loser's activity rollups into the winner's for periods
+ * both rows cover, so merged playtime is summed rather than discarded. Mirrors
+ * step 1a of migration 0140. The conflict-delete in `safeReassignWithUnique`
+ * then removes the loser's now-counted rows, and the plain reassign moves the
+ * non-colliding remainder.
+ */
+async function mergeActivityRollups(
+  tx: Tx,
+  loserId: number,
+  winnerId: number,
+): Promise<void> {
+  await tx.execute(
+    sql.raw(
+      `UPDATE game_activity_rollups w
+          SET total_seconds = w.total_seconds + l.total_seconds
+         FROM game_activity_rollups l
+        WHERE w.game_id = ${winnerId}
+          AND l.game_id = ${loserId}
+          AND l.user_id = w.user_id
+          AND l.period = w.period
+          AND l.period_start = w.period_start`,
+    ),
+  );
+}
+
+/**
+ * Clear `is_main` on the loser's characters where the same user already has a
+ * main on the winner, so the partial unique index cannot see two mains for one
+ * (user, game) after reassignment.
+ */
+async function demoteDuplicateMains(
+  tx: Tx,
+  loserId: number,
+  winnerId: number,
+): Promise<void> {
+  await tx.execute(
+    sql.raw(
+      `UPDATE characters l
+          SET is_main = false
+        WHERE l.game_id = ${loserId}
+          AND l.is_main = true
+          AND EXISTS (
+            SELECT 1 FROM characters w
+             WHERE w.game_id = ${winnerId}
+               AND w.user_id = l.user_id
+               AND w.is_main = true
+          )`,
+    ),
   );
 }
 
@@ -244,8 +310,14 @@ async function deleteConflictingRows(
   loserId: number,
   winnerId: number,
 ): Promise<void> {
-  const contextCol = getContextColumn(table);
-  if (!contextCol) return;
+  const contextCols = getConflictColumns(table);
+  if (!contextCols) return;
+
+  // NULL-safe: `realm` and similar nullable key columns must compare equal when
+  // both sides are NULL, which plain `=` does not do.
+  const join = contextCols
+    .map((c) => `l.${c} IS NOT DISTINCT FROM w.${c}`)
+    .join(' AND ');
 
   const sp = `sp_del_${table}`;
   await tx.execute(sql.raw(`SAVEPOINT ${sp}`));
@@ -256,7 +328,7 @@ async function deleteConflictingRows(
          USING ${table} AS w
          WHERE l.${column} = ${loserId}
            AND w.${column} = ${winnerId}
-           AND l.${contextCol} = w.${contextCol}`,
+           AND ${join}`,
       ),
     );
     await tx.execute(sql.raw(`RELEASE SAVEPOINT ${sp}`));
@@ -266,12 +338,38 @@ async function deleteConflictingRows(
 }
 
 /** Get the context column for unique constraint checks. */
-function getContextColumn(table: string): string | null {
-  const map: Record<string, string> = {
-    community_lineup_entries: 'lineup_id',
-    community_lineup_votes: 'lineup_id',
-    community_lineup_matches: 'lineup_id',
-    game_interest_suppressions: 'user_id',
+/**
+ * Columns that, together with `game_id`, form each table's UNIQUE constraint.
+ *
+ * A reassignment collides when the winner already holds a row matching the
+ * loser's on ALL of these — so they are exactly the columns the pre-delete must
+ * join on. Getting this list wrong in either direction is a real bug: too few
+ * columns over-deletes rows that would not have collided (the previous
+ * single-column `getContextColumn` deleted every loser vote in a lineup, not
+ * just the ones for the same user), too many lets a genuine collision through
+ * and aborts the transaction.
+ *
+ * Savepoints do NOT save us here. With postgres.js a failed statement poisons
+ * the whole transaction — `ROLLBACK TO SAVEPOINT` runs, the loop continues, and
+ * the driver still rejects at commit with the original error. `safeReassign`'s
+ * catch is decorative for constraint violations, which is how ROK-1437's fix
+ * surfaced this as the very next prod failure. Collisions must be PREVENTED.
+ */
+function getConflictColumns(table: string): string[] | null {
+  const map: Record<string, string[]> = {
+    // (lineup_id, game_id)
+    community_lineup_entries: ['lineup_id'],
+    community_lineup_matches: ['lineup_id'],
+    // (lineup_id, user_id, game_id) — user_id was missing, over-deleting votes
+    community_lineup_votes: ['lineup_id', 'user_id'],
+    // (user_id, game_id)
+    game_interest_suppressions: ['user_id'],
+    // (user_id, game_id, name, realm)
+    characters: ['user_id', 'name', 'realm'],
+    // (game_id, slug)
+    event_types: ['slug'],
+    // (user_id, game_id, period, period_start) — additively merged first
+    game_activity_rollups: ['user_id', 'period', 'period_start'],
   };
   return map[table] ?? null;
 }
