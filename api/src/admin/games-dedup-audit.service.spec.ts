@@ -13,6 +13,7 @@ import {
   pickCanonicalId,
   type GameRow,
 } from './games-dedup-audit.helpers';
+import { pickNameGroupWinner } from '../igdb/igdb-name-dedup.helpers';
 
 // ROK-1277: union-find grouping helper. The file
 // `./games-dedup-union-find.helpers` DOES NOT YET EXIST — the dev agent
@@ -139,6 +140,26 @@ describe('pickCanonicalId', () => {
       row({ id: 19, name: 'B', itadGameId: 'y' }),
     ];
     expect(pickCanonicalId(rows)).toBe(19);
+  });
+
+  // Prod 2026-08-28 (Baldur's Gate 3): an igdb-only row paired with an
+  // itad-only row was the one shape where this function and the merge path's
+  // pickNameGroupWinner picked OPPOSITE rows. The audit pinned the itad row as
+  // canonical, the merge tried to delete it, and the notNull FK on
+  // games_dedup_audit.canonical_game_id aborted the group — silently, for four
+  // consecutive cleanup runs. The two must agree.
+  it('prefers the igdb row over an itad-only row (agrees with the merge winner)', () => {
+    const rows = [
+      row({
+        id: 20160,
+        name: 'BG3',
+        itadGameId: 'itad-bg3',
+        steamAppId: 1086940,
+      }),
+      row({ id: 25956, name: 'BG3', igdbId: 119171 }),
+    ];
+    expect(pickCanonicalId(rows)).toBe(25956);
+    expect(pickCanonicalId(rows)).toBe(pickNameGroupWinner(rows).id);
   });
 });
 

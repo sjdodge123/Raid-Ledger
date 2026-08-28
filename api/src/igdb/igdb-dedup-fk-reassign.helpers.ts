@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 
-type Tx = Parameters<
+export type Tx = Parameters<
   Parameters<PostgresJsDatabase<typeof schema>['transaction']>[0]
 >[0];
 
@@ -143,6 +143,41 @@ export async function reassignMiscFks(
     loserId,
     winnerId,
   );
+  // `games_dedup_audit.canonical_game_id` is a notNull FK with NO `onDelete`,
+  // so it RESTRICTs the loser's delete. The row describes a dup group that this
+  // merge is dissolving, so it is deleted rather than repointed — repointing to
+  // the winner would leave a self-referential group behind. The audit is a
+  // regenerable snapshot (TRUNCATE+INSERT on every boot and every audit run),
+  // and migration 0140 likewise truncates it post-merge, so nothing is lost.
+  await deleteReferencing(
+    tx,
+    'games_dedup_audit',
+    'canonical_game_id',
+    loserId,
+  );
+}
+
+/**
+ * Delete rows referencing the loser outright (for RESTRICT FKs whose rows are
+ * meaningless once the group is merged). Savepoint-protected so a missing table
+ * on an older schema cannot abort the enclosing transaction.
+ */
+async function deleteReferencing(
+  tx: Tx,
+  table: string,
+  column: string,
+  loserId: number,
+): Promise<void> {
+  const sp = `sp_del_ref_${table}`;
+  await tx.execute(sql.raw(`SAVEPOINT ${sp}`));
+  try {
+    await tx.execute(
+      sql.raw(`DELETE FROM ${table} WHERE ${column} = ${loserId}`),
+    );
+    await tx.execute(sql.raw(`RELEASE SAVEPOINT ${sp}`));
+  } catch {
+    await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${sp}`));
+  }
 }
 
 /** Delete conflicting loser rows (same user+source), then reassign rest. */
