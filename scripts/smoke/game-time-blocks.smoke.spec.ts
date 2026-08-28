@@ -25,14 +25,17 @@ async function waitForLayer(page: Page): Promise<void> {
 }
 
 /**
- * A point on a cell that is free to tap: not locked, and not already under a
+ * The test id of a cell that is free to tap: not locked, and not already under a
  * block. Both matter. A tap on a committed/blocked hour is deliberately a no-op,
- * and other specs in the suite hand the admin committed hours, so a fixed click
- * point creates a block when run alone and silently nothing under the full suite
- * — which is exactly how this went flaky in parallel and passed 15/15 solo.
+ * and other specs in the suite hand the admin committed hours via signups.
+ *
+ * Returns an id rather than a point on purpose. Reading a rect here and clicking
+ * those raw coordinates later leaves a window in which the page can shift under
+ * the click — which is how this went flaky in the full parallel suite while
+ * passing 15/15 solo. Clicking the locator re-resolves the box in the browser.
  */
-async function freeCellPoint(page: Page): Promise<{ x: number; y: number; day: number }> {
-    const point = await page.evaluate(() => {
+async function freeCellTestId(page: Page): Promise<string> {
+    const id = await page.evaluate(() => {
         const blocks = Array.from(document.querySelectorAll('[data-testid^="slot-block-"]'))
             .map((b) => b.getBoundingClientRect());
         const covered = (r: DOMRect): boolean => blocks.some((b) =>
@@ -44,13 +47,12 @@ async function freeCellPoint(page: Page): Promise<{ x: number; y: number; day: n
             if ((cell as HTMLElement).dataset.status !== 'inactive') continue;
             const r = cell.getBoundingClientRect();
             if (r.width === 0 || r.height === 0 || covered(r)) continue;
-            const day = Number((cell as HTMLElement).dataset.testid!.split('-')[1]);
-            return { x: r.left + r.width / 2, y: r.top + r.height / 2, day };
+            return (cell as HTMLElement).dataset.testid!;
         }
         return null;
     });
-    expect(point, 'no free cell to tap — every visible hour is locked or blocked').not.toBeNull();
-    return point!;
+    expect(id, 'no free cell to tap — every visible hour is locked or blocked').not.toBeNull();
+    return id!;
 }
 
 /**
@@ -64,8 +66,10 @@ async function freeCellPoint(page: Page): Promise<{ x: number; y: number; day: n
  * `slot-block-${day}-` would then match two and trip strict mode.
  */
 async function createBlock(page: Page): Promise<string> {
-    const { x, y } = await freeCellPoint(page);
-    await page.mouse.click(x, y);
+    // force: the day target sits above the cell and is the real recipient, so the
+    // hit-target check would reject the cell as intercepted. The point is still
+    // taken from the cell's live box immediately before dispatch.
+    await page.getByTestId(await freeCellTestId(page)).click({ force: true });
 
     // A new block is auto-selected, so the inspector proves the tap landed.
     await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
@@ -128,18 +132,16 @@ test.describe('Game Time blocks — editing', () => {
         // Must be a column with NO block: tapping beside one merges into it and
         // the count would legitimately stay the same. The cell must also be
         // unlocked, since a tap on a committed/blocked hour does nothing.
-        const spot = await page.evaluate(() => {
+        const cellId = await page.evaluate(() => {
             for (let d = 0; d < 7; d++) {
                 if (document.querySelector(`[data-testid^="slot-block-${d}-"]`)) continue;
                 const cell = document.querySelector(`[data-testid^="cell-${d}-"][data-status="inactive"]`);
-                if (!cell) continue;
-                const r = cell.getBoundingClientRect();
-                return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+                if (cell) return (cell as HTMLElement).dataset.testid!;
             }
             return null;
         });
-        expect(spot).not.toBeNull();
-        await page.mouse.click(spot!.x, spot!.y);
+        expect(cellId).not.toBeNull();
+        await page.getByTestId(cellId!).click({ force: true });
 
         await expect(page.getByTestId('selected-block-inspector')).toBeVisible();
         await expect(page.locator('[data-testid^="slot-block-"]')).toHaveCount(existing + 1);
