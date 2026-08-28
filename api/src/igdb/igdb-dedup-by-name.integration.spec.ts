@@ -436,3 +436,90 @@ describe('Regression: dedup merge vs games_dedup_audit FK', () => {
     expect(survivor.coverUrl).toBe('https://example.test/keep-me.jpg');
   });
 });
+
+/**
+ * Regression: composite-UNIQUE collisions during FK reassignment.
+ *
+ * `game_activity_rollups` is UNIQUE on (user_id, game_id, period, period_start)
+ * and is moved with a plain `safeReassign`, which has no collision handling. If
+ * the same user has a rollup for the SAME period on both the winner and the
+ * loser, the UPDATE violates the constraint.
+ *
+ * Migration 0140 handled this table explicitly with an ADDITIVE merge of
+ * total_seconds; the admin merge path never got the same treatment. Prod
+ * 2026-08-28: after ROK-1437 cleared the audit-FK block, BG3 immediately failed
+ * again on `game_activity_rollups_user_game_period_unique` — the same row pair
+ * that had accumulated playtime under both ids.
+ */
+describe('Regression: rollup collision during merge', () => {
+  it('additively merges colliding activity rollups instead of failing', async () => {
+    const winner = await insertGame({
+      name: 'Deep Rock Galactic',
+      slug: 'drg-igdb',
+      igdbId: 119174,
+    });
+    const loser = await insertGame({
+      name: 'Deep Rock Galactic',
+      slug: 'drg-steam',
+      itadGameId: 'itad-drg',
+      steamAppId: 548430,
+    });
+
+    const userId = testApp.seed.adminUser.id;
+    const period = 'day';
+    const periodStart = '2026-08-01';
+    await testApp.db.insert(schema.gameActivityRollups).values([
+      { userId, gameId: winner.id, period, periodStart, totalSeconds: 100 },
+      { userId, gameId: loser.id, period, periodStart, totalSeconds: 50 },
+    ]);
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-cleanup-by-name?dryRun=false')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.merged).toBe(1);
+
+    const rollups = await testApp.db
+      .select()
+      .from(schema.gameActivityRollups)
+      .where(eq(schema.gameActivityRollups.gameId, winner.id));
+    expect(rollups).toHaveLength(1);
+    // Additive, matching migration 0140's semantics — playtime is not lost.
+    expect(rollups[0].totalSeconds).toBe(150);
+  });
+
+  it('moves a non-colliding rollup across untouched', async () => {
+    const winner = await insertGame({
+      name: 'Factorio',
+      slug: 'factorio-igdb',
+      igdbId: 119175,
+    });
+    const loser = await insertGame({
+      name: 'Factorio',
+      slug: 'factorio-steam',
+      steamAppId: 427520,
+    });
+    const userId = testApp.seed.adminUser.id;
+    await testApp.db.insert(schema.gameActivityRollups).values({
+      userId,
+      gameId: loser.id,
+      period: 'day',
+      periodStart: '2026-08-02',
+      totalSeconds: 77,
+    });
+
+    const res = await testApp.request
+      .post('/admin/games/dedup-cleanup-by-name?dryRun=false')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.body.errors).toEqual([]);
+
+    const rollups = await testApp.db
+      .select()
+      .from(schema.gameActivityRollups)
+      .where(eq(schema.gameActivityRollups.gameId, winner.id));
+    expect(rollups).toHaveLength(1);
+    expect(rollups[0].totalSeconds).toBe(77);
+  });
+});
