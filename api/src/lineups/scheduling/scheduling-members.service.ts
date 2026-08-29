@@ -32,6 +32,11 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { activeUsersFilter } from '../../users/users-active.helpers';
 import { findLineupPollMeta } from './scheduling-query.helpers';
+import {
+  assertSchedulable,
+  assertSchedulingEnabled,
+} from './scheduling-guard.helpers';
+import { addInvitees } from '../lineups-invitees.helpers';
 
 /** Caller identity for poll-roster authorization. */
 export interface PollMemberCaller {
@@ -66,9 +71,20 @@ export class SchedulingMembersService {
     caller: PollMemberCaller,
   ): Promise<AddMatchMembersResult> {
     await this.assertCallerMayManage(lineupId, caller);
-    await this.assertMatchBelongsToLineup(lineupId, matchId);
+    const lineup = await this.loadSchedulableMatch(lineupId, matchId);
     const unique = Array.from(new Set(userIds));
     await this.assertUsersExist(unique);
+
+    // Codex P2: on a PRIVATE lineup, match membership alone is not enough to
+    // participate — `assertCallerMayVote` gates voting/suggesting on
+    // creator|invitee|admin, and private reminders start from the invitee
+    // set. Enrolling a non-invitee would create a member who can never vote
+    // yet still inflates the denominator, making the lock HARDER to reach —
+    // the exact failure this story exists to remove. So mirror the roster
+    // into the invitee list; `addInvitees` is itself idempotent.
+    if (lineup.visibility === 'private') {
+      await addInvitees(this.db, lineupId, unique);
+    }
 
     const inserted = await this.db
       .insert(schema.communityLineupMatchMembers)
@@ -106,14 +122,29 @@ export class SchedulingMembersService {
     }
   }
 
-  /** Guard against enrolling into a match that belongs to another lineup. */
-  private async assertMatchBelongsToLineup(
+  /**
+   * Resolve the match, proving it belongs to this lineup AND that the poll is
+   * still open. Codex P2: every other scheduling mutation rejects a
+   * scheduled/archived match and a lineup that opted out of the scheduling
+   * phase; without these the endpoint could mutate rosters the UI renders as
+   * read-only. Returns the parent lineup's visibility for the private-invitee
+   * mirror above.
+   */
+  private async loadSchedulableMatch(
     lineupId: number,
     matchId: number,
-  ): Promise<void> {
+  ): Promise<{ visibility: string }> {
     const [match] = await this.db
-      .select({ id: schema.communityLineupMatches.id })
+      .select({
+        status: schema.communityLineupMatches.status,
+        visibility: schema.communityLineups.visibility,
+        includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
+      })
       .from(schema.communityLineupMatches)
+      .innerJoin(
+        schema.communityLineups,
+        eq(schema.communityLineupMatches.lineupId, schema.communityLineups.id),
+      )
       .where(
         and(
           eq(schema.communityLineupMatches.id, matchId),
@@ -122,6 +153,9 @@ export class SchedulingMembersService {
       )
       .limit(1);
     if (!match) throw new NotFoundException('Match not found');
+    assertSchedulingEnabled(match);
+    assertSchedulable(match);
+    return { visibility: match.visibility };
   }
 
   /** Unknown/deactivated ids surface as 404 rather than an FK 500. */

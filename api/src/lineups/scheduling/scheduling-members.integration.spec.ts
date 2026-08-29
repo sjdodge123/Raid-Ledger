@@ -260,6 +260,72 @@ function describeSchedulingMembers() {
     expect(res.status).toBe(400);
   });
 
+  // ── Codex P2: poll state guards ───────────────────────────────
+
+  it('400s once the match is no longer accepting changes', async () => {
+    const creator = await createUser('closed-creator');
+    const alice = await createUser('closed-alice');
+    const { lineupId, matchId } = await seedPoll(creator.id);
+    await testApp.db
+      .update(schema.communityLineupMatches)
+      .set({ status: 'scheduled' })
+      .where(eq(schema.communityLineupMatches.id, matchId));
+
+    const res = await postMembers(creator.token, lineupId, matchId, [alice.id]);
+
+    expect(res.status).toBe(400);
+    expect(await loadRoster(matchId)).toHaveLength(1);
+  });
+
+  it('404s when the lineup opted out of the scheduling phase', async () => {
+    const creator = await createUser('optout-creator');
+    const alice = await createUser('optout-alice');
+    const { lineupId, matchId } = await seedPoll(creator.id);
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ includeSchedulingPhase: false })
+      .where(eq(schema.communityLineups.id, lineupId));
+
+    const res = await postMembers(creator.token, lineupId, matchId, [alice.id]);
+
+    expect(res.status).toBe(404);
+    expect(await loadRoster(matchId)).toHaveLength(1);
+  });
+
+  // ── Codex P2: private lineups need the invitee mirror ─────────
+
+  it('mirrors added members into the invitee list on a PRIVATE lineup', async () => {
+    const creator = await createUser('mirror-creator');
+    const alice = await createUser('mirror-alice');
+    const { lineupId, matchId } = await seedPoll(creator.id, 'private');
+
+    const res = await postMembers(creator.token, lineupId, matchId, [alice.id]);
+
+    expect(res.status).toBe(200);
+    // Without the mirror, alice is a match member who can never vote
+    // (assertCallerMayVote gates private polls on creator|invitee|admin) —
+    // she would inflate the denominator and make the lock unreachable.
+    const invitees = await testApp.db
+      .select({ userId: schema.communityLineupInvitees.userId })
+      .from(schema.communityLineupInvitees)
+      .where(eq(schema.communityLineupInvitees.lineupId, lineupId));
+    expect(invitees.map((i) => i.userId)).toContain(alice.id);
+  });
+
+  it('does NOT create invitee rows for a PUBLIC lineup', async () => {
+    const creator = await createUser('nomirror-creator');
+    const alice = await createUser('nomirror-alice');
+    const { lineupId, matchId } = await seedPoll(creator.id, 'public');
+
+    await postMembers(creator.token, lineupId, matchId, [alice.id]);
+
+    const invitees = await testApp.db
+      .select({ userId: schema.communityLineupInvitees.userId })
+      .from(schema.communityLineupInvitees)
+      .where(eq(schema.communityLineupInvitees.lineupId, lineupId));
+    expect(invitees).toHaveLength(0);
+  });
+
   it('works on a private lineup too (admin path)', async () => {
     const creator = await createUser('priv-creator');
     const alice = await createUser('priv-alice');
