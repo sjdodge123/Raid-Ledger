@@ -1,9 +1,15 @@
 /**
- * Invitee multi-select for private lineups (ROK-1065).
+ * Invitee multi-select for community lineups (ROK-1065, ROK-1440).
  *
  * Checkbox list of Discord-linked guild members with a search box —
  * mirrors the `MemberPicker` used in the Schedule a Game poll modal.
  * Parent contract unchanged: controlled `value: number[]` + `onChange`.
+ *
+ * ROK-1440: `mode` varies only the label + hint copy, because the two
+ * visibilities mean different things. On a PRIVATE lineup the list is an
+ * access gate (required, ≥1). On a PUBLIC lineup it is a seed list —
+ * optional, and adding people never stops anyone else from joining.
+ * Defaults to 'private' so pre-existing callers are unchanged.
  */
 import { useMemo, useState, type JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -15,9 +21,25 @@ interface GuildMember {
   discordLinked: boolean;
 }
 
+export type InviteeMultiSelectMode = 'private' | 'public';
+
 export interface InviteeMultiSelectProps {
   value: number[];
   onChange: (next: number[]) => void;
+  /** Copy variant — see file docstring. Defaults to 'private'. */
+  mode?: InviteeMultiSelectMode;
+}
+
+/** Field label per mode. */
+function modeLabel(mode: InviteeMultiSelectMode): string {
+  return mode === 'public' ? 'Invite members (optional)' : 'Invitees';
+}
+
+/** Empty-state hint per mode. */
+function modeHint(mode: InviteeMultiSelectMode): string {
+  return mode === 'public'
+    ? 'Optional — pull in members you know are playing. Anyone else can still see and join.'
+    : 'Pick at least one guild member. Private lineups require ≥1 invitee.';
 }
 
 function useGuildMembers(search: string) {
@@ -75,6 +97,7 @@ function MemberRow({
 export function InviteeMultiSelect({
   value,
   onChange,
+  mode = 'private',
 }: InviteeMultiSelectProps): JSX.Element {
   const [search, setSearch] = useState('');
   const { data: members = [], isLoading } = useGuildMembers(search);
@@ -97,7 +120,7 @@ export function InviteeMultiSelect({
         htmlFor="invitee-search"
         className="block text-sm font-medium text-primary"
       >
-        Invitees
+        {modeLabel(mode)}
       </label>
       <input
         id="invitee-search"
@@ -128,7 +151,7 @@ export function InviteeMultiSelect({
       <p className="text-xs text-muted">
         {value.length > 0
           ? `${value.length} invitee${value.length !== 1 ? 's' : ''} selected`
-          : 'Pick at least one guild member. Private lineups require ≥1 invitee.'}
+          : modeHint(mode)}
       </p>
     </div>
   );

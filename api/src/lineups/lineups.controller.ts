@@ -38,6 +38,7 @@ import {
   type BandwagonJoinResponseDto,
 } from '@raid-ledger/contract';
 import { LineupsService } from './lineups.service';
+import { LineupInviteePermissionsService } from './lineup-invitee-permissions.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 
 interface AuthRequest extends Request {
@@ -50,6 +51,7 @@ export class LineupsController {
   constructor(
     private readonly lineupsService: LineupsService,
     private readonly activityLog: ActivityLogService,
+    private readonly inviteePerms: LineupInviteePermissionsService,
   ) {}
 
   /** POST /lineups — create a new lineup (operator/admin). */
@@ -275,11 +277,13 @@ export class LineupsController {
 
   /**
    * POST /lineups/:id/invitees — add one or more invitees (ROK-1065).
-   * Admin/operator only.
+   *
+   * ROK-1440: lineup creator OR admin/operator. Was `@Roles('operator')`,
+   * which 403'd the non-operator creator that the UI showed the button to.
+   * Authorization now runs in the service so it can read `createdBy`.
    */
   @Post(':id/invitees')
-  @UseGuards(NotDeactivatedGuard, RolesGuard)
-  @Roles('operator')
+  @UseGuards(NotDeactivatedGuard)
   async addInvitees(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: unknown,
@@ -289,6 +293,7 @@ export class LineupsController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
+    await this.inviteePerms.assertCanManage(id, req.user);
     return this.lineupsService.addInvitees(
       id,
       parsed.data.userIds,
@@ -321,16 +326,17 @@ export class LineupsController {
 
   /**
    * DELETE /lineups/:id/invitees/:userId — remove a single invitee (ROK-1065).
-   * Admin/operator only.
+   *
+   * ROK-1440: lineup creator OR admin/operator — mirrors `addInvitees`.
    */
   @Delete(':id/invitees/:userId')
-  @UseGuards(NotDeactivatedGuard, RolesGuard)
-  @Roles('operator')
+  @UseGuards(NotDeactivatedGuard)
   async removeInvitee(
     @Param('id', ParseIntPipe) id: number,
     @Param('userId', ParseIntPipe) userId: number,
     @Req() req: AuthRequest,
   ): Promise<LineupDetailResponseDto> {
+    await this.inviteePerms.assertCanManage(id, req.user);
     return this.lineupsService.removeInvitee(id, userId, req.user.id);
   }
 }

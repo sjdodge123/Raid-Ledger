@@ -1,10 +1,13 @@
 /**
- * Trigger + modal pair for adding invitees to an existing private lineup
- * (ROK-1065).
+ * Trigger + modal pair for adding invitees to an existing lineup
+ * (ROK-1065, ROK-1440).
  *
  * Reuses the same `InviteeMultiSelect` input as the Start Lineup modal so
  * the UX is consistent. Only rendered by the parent (lineup detail page)
  * when the current viewer is the creator, an admin, or an operator.
+ *
+ * ROK-1440: also rendered on PUBLIC lineups, where invitees seed the
+ * participant set without gating access. `visibility` only varies copy.
  */
 import { useState, type JSX } from 'react';
 import { Modal } from '../ui/modal';
@@ -14,11 +17,14 @@ import { toast } from '../../lib/toast';
 
 export interface AddInviteesButtonProps {
   lineupId: number;
+  /** Copy variant only — see file docstring. Defaults to 'private'. */
+  visibility?: 'public' | 'private';
 }
 
 /** Render the "Invite more" button and its modal. */
 export function AddInviteesButton({
   lineupId,
+  visibility = 'private',
 }: AddInviteesButtonProps): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
@@ -34,6 +40,7 @@ export function AddInviteesButton({
       {open && (
         <AddInviteesModal
           lineupId={lineupId}
+          visibility={visibility}
           onClose={() => setOpen(false)}
         />
       )}
@@ -43,9 +50,11 @@ export function AddInviteesButton({
 
 function AddInviteesModal({
   lineupId,
+  visibility,
   onClose,
 }: {
   lineupId: number;
+  visibility: 'public' | 'private';
   onClose: () => void;
 }): JSX.Element {
   const [userIds, setUserIds] = useState<number[]>([]);
@@ -65,9 +74,17 @@ function AddInviteesModal({
   }
 
   return (
-    <Modal isOpen onClose={onClose} title="Add Invitees">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={visibility === 'public' ? 'Add Members' : 'Add Invitees'}
+    >
       <div className="space-y-4">
-        <InviteeMultiSelect value={userIds} onChange={setUserIds} />
+        <InviteeMultiSelect
+          value={userIds}
+          onChange={setUserIds}
+          mode={visibility}
+        />
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
