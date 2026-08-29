@@ -667,7 +667,7 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         expect(overflows).toBe(false);
     });
 
-    test('enrolling a member raises the poll participant count', async ({
+    test('enrolling a member adds exactly that member to the poll roster', async ({
         page,
     }) => {
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
@@ -677,32 +677,66 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
             adminToken,
             `/lineups/${lineupId}/schedule/${matchId}`,
         );
-        const beforeCount = before?.match?.members?.length ?? 0;
+        const existing = new Set<number>(
+            (before?.match?.members ?? []).map(
+                (m: { userId: number }) => m.userId,
+            ),
+        );
+
+        /**
+         * Pick a target deterministically. An earlier version clicked
+         * `[data-testid^="invitee-option-"]).first()`, which takes whichever
+         * option happens to render first — on CI that was already a poll
+         * member, so the roster never grew and the assertion timed out while
+         * passing locally. The picker does not filter out existing members,
+         * so the test has to do it.
+         */
+        const usersRes = await apiGet(adminToken, '/users?limit=200');
+        const candidates: { id: number; username: string }[] =
+            usersRes?.data ?? usersRes ?? [];
+        const target = candidates.find((u) => u && !existing.has(u.id));
+        expect(
+            target,
+            'no community member outside the poll roster to enrol',
+        ).toBeTruthy();
 
         await page.getByTestId('add-poll-members-button').click();
         const search = page.getByTestId('invitee-search');
         await expect(search).toBeVisible({ timeout: 10_000 });
+        // Narrow the list so the target is rendered regardless of page size.
+        await search.fill(target!.username);
 
-        // Pick the first offered member that isn't already on the roster.
-        const firstOption = page
-            .locator('[data-testid^="invitee-option-"]')
-            .first();
-        await expect(firstOption).toBeVisible({ timeout: 10_000 });
-        await firstOption.click();
+        const option = page.getByTestId(`invitee-option-${target!.id}`);
+        await expect(option).toBeVisible({ timeout: 10_000 });
+        await option.click();
         await page.getByTestId('add-poll-members-submit').click();
 
-        // The mutation invalidates the schedule query; assert on the API so
-        // the check does not race the refetch.
+        // Assert THAT member landed, not merely that a count rose — a count
+        // check passes for the wrong member and fails silently for the right
+        // one. The mutation invalidates the schedule query, so poll the API
+        // rather than racing the refetch.
         await pollForCondition(
             async () => {
                 const after = await apiGet(
                     adminToken,
                     `/lineups/${lineupId}/schedule/${matchId}`,
                 );
-                const n = after?.match?.members?.length ?? 0;
-                return n > beforeCount ? after : null;
+                const ids: number[] = (after?.match?.members ?? []).map(
+                    (m: { userId: number }) => m.userId,
+                );
+                // Both conditions: the target is present AND the roster
+                // actually grew. `includes` alone would pass trivially if the
+                // target had somehow already been enrolled, which is the very
+                // failure mode this rewrite exists to rule out.
+                return ids.includes(target!.id) && ids.length > existing.size
+                    ? after
+                    : null;
             },
-            { timeoutMs: 15_000, intervalMs: 500 },
+            {
+                timeoutMs: 15_000,
+                intervalMs: 500,
+                description: `poll roster to contain user ${target?.id}`,
+            },
         );
     });
 });
