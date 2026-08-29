@@ -223,6 +223,7 @@ export {
     getOtherPolls,
     cancelSchedulePoll,
     remindVoters,
+    addPollMembers,
 } from './api/scheduling-api';
 
 // Standalone Scheduling Polls (ROK-977)
