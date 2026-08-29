@@ -33,6 +33,7 @@ import {
   type OtherPollsResponseDto,
   type AggregateGameTimeResponse,
   type RemindVotersResponseDto,
+  AddMatchMembersSchema,
 } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../../auth/optional-jwt.guard';
 import { RolesGuard } from '../../auth/roles.guard';
@@ -40,6 +41,10 @@ import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { SchedulingService } from './scheduling.service';
 import { SchedulingRemindService } from './scheduling-remind.service';
+import {
+  SchedulingMembersService,
+  type AddMatchMembersResult,
+} from './scheduling-members.service';
 
 interface AuthRequest extends Request {
   user: { id: number; username: string; role: string } | null;
@@ -50,6 +55,7 @@ export class SchedulingController {
   constructor(
     private readonly schedulingService: SchedulingService,
     private readonly remindService: SchedulingRemindService,
+    private readonly membersService: SchedulingMembersService,
   ) {}
 
   /** GET /lineups/:lineupId/schedule/:matchId — full poll page. */
@@ -172,6 +178,33 @@ export class SchedulingController {
       id: req.user!.id,
       role: req.user!.role,
     });
+  }
+
+  /**
+   * POST /lineups/:lineupId/schedule/:matchId/members — explicitly enrol
+   * members in this scheduling poll (ROK-1440). Creator/admin/operator only
+   * (enforced in the service). Idempotent: re-adding an existing member is a
+   * no-op, so a double-submit neither fails nor duplicates.
+   */
+  @Post(':lineupId/schedule/:matchId/members')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async addPollMembers(
+    @Param('lineupId', ParseIntPipe) lineupId: number,
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<AddMatchMembersResult> {
+    const parsed = AddMatchMembersSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.membersService.addMembers(
+      lineupId,
+      matchId,
+      parsed.data.userIds,
+      { id: req.user!.id, role: req.user!.role },
+    );
   }
 
   /** DELETE /lineups/:lineupId/schedule/:matchId/votes — retract all votes. */

@@ -24,8 +24,16 @@ export const FitTypeSchema = z.enum([
 
 export type FitTypeDto = z.infer<typeof FitTypeSchema>;
 
-/** How a member was added to a match group. */
-export const MemberSourceSchema = z.enum(['voted', 'bandwagon']);
+/**
+ * How a member was added to a match group.
+ *
+ * ROK-1440: `added` = pulled in explicitly by the lineup creator or an
+ * operator, rather than derived from voting (`voted`) or interest-based
+ * bandwagon clustering (`bandwagon`). Widening this is type-level only —
+ * `community_lineup_match_members.source` is plain `text` in the database
+ * with no CHECK constraint, so no migration is required.
+ */
+export const MemberSourceSchema = z.enum(['voted', 'bandwagon', 'added']);
 
 export type MemberSourceDto = z.infer<typeof MemberSourceSchema>;
 
@@ -69,6 +77,16 @@ export const LineupMatchMemberSchema = z.object({
 });
 
 export type LineupMatchMemberDto = z.infer<typeof LineupMatchMemberSchema>;
+
+/**
+ * Request body for POST /lineups/:lineupId/schedule/:matchId/members
+ * (ROK-1440) — explicitly enrol members in a scheduling poll.
+ */
+export const AddMatchMembersSchema = z.object({
+    userIds: z.array(z.number().int().positive()).min(1).max(50),
+});
+
+export type AddMatchMembersDto = z.infer<typeof AddMatchMembersSchema>;
 
 /** A proposed time slot for scheduling a match. */
 export const LineupScheduleSlotSchema = z.object({
