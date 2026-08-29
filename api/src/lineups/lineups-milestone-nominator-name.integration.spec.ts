@@ -10,6 +10,7 @@
  * and the fix both live in the SQL projection, so only a real Postgres round
  * trip can prove it (a drizzle-mock assertion would pass either way).
  */
+import { sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -20,6 +21,27 @@ function describeMilestoneNominatorName() {
 
   beforeAll(async () => {
     testApp = await getTestApp();
+  });
+
+  /**
+   * `truncateAllTables` uses `DELETE FROM`, not `TRUNCATE ... RESTART
+   * IDENTITY`, so ids climb monotonically for the life of a shard's DB. A
+   * fresh local DB therefore hands out 1-digit ids while CI's shared shard DB
+   * is already into the thousands — which is how a fixture slug that fits
+   * `public_slug varchar(16)` locally can overflow only in CI.
+   *
+   * Advancing the sequence here reproduces the CI id range locally, so this
+   * spec fails on the developer's machine rather than on the PR.
+   */
+  beforeEach(async () => {
+    // GREATEST(...) keeps this above the ids `truncateAllTables` just
+    // re-seeded, so advancing the sequence never collides with a seed row.
+    await testApp.db.execute(
+      sql`SELECT setval(
+        pg_get_serial_sequence('users', 'id'),
+        GREATEST(500000, (SELECT COALESCE(MAX(id), 0) FROM users))
+      )`,
+    );
   });
 
   afterEach(async () => {
@@ -50,13 +72,20 @@ function describeMilestoneNominatorName() {
     return row.id;
   }
 
+  /**
+   * `public_slug` is `varchar(16)` and UNIQUE, so the fixture slug must stay
+   * short enough for any user id the sequence has reached. CI's shared shard
+   * DB hands out 4-digit ids where a fresh local DB hands out 1-digit ones,
+   * so a long prefix passes locally and overflows in CI. `ls-` + id leaves
+   * room for a 13-digit id.
+   */
   async function insertLineup(createdBy: number): Promise<number> {
     const [row] = await testApp.db
       .insert(schema.communityLineups)
       .values({
         title: 'Milestone name lineup',
         createdBy,
-        publicSlug: `milestone-name-${createdBy}`,
+        publicSlug: `ls-${createdBy}`,
       })
       .returning();
     return row.id;
