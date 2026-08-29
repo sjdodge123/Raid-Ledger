@@ -10,6 +10,7 @@ import {
   countDistinctNominators,
 } from './lineups-query.helpers';
 import { nominationCap } from './common-ground-scoring.constants';
+import { displayNameSql } from '../users/display-name.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -73,7 +74,10 @@ export async function getEntryDetails(
     .select({
       gameId: schema.games.id,
       gameName: schema.games.name,
-      nominatorName: schema.users.displayName,
+      // ROK-1439: `display_name` is nullable — coalesce to the notNull
+      // `username` so a nominator who never set one is not rendered as
+      // "Unknown" in the milestone embed.
+      nominatorName: displayNameSql(schema.users).as('nominator_name'),
       coverUrl: schema.games.coverUrl,
     })
     .from(schema.communityLineupEntries)
