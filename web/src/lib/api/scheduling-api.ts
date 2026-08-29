@@ -99,6 +99,21 @@ export async function remindVoters(
   );
 }
 
+/**
+ * Explicitly enrol members in a scheduling poll (ROK-1440). Idempotent —
+ * re-adding an existing member is a server-side no-op.
+ */
+export async function addPollMembers(
+  lineupId: number,
+  matchId: number,
+  userIds: number[],
+): Promise<{ added: number; memberCount: number }> {
+  return fetchApi(`/lineups/${lineupId}/schedule/${matchId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userIds }),
+  });
+}
+
 /** Fetch heatmap availability data for a match. */
 export async function getMatchAvailability(
   lineupId: number,

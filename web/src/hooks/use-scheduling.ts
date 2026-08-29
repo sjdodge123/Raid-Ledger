@@ -22,6 +22,7 @@ import {
   getOtherPolls,
   cancelSchedulePoll,
   remindVoters,
+  addPollMembers,
 } from '../lib/api-client';
 
 /** Query key prefix for scheduling poll queries. */
@@ -150,6 +151,34 @@ export function useRemindVoters() {
       toast.success(`Reminded ${reminded} voter${reminded === 1 ? '' : 's'} (${skipped} skipped)`);
     },
     onError: (err) => { toast.error(err.message || 'Failed to send reminders'); },
+  });
+}
+
+/**
+ * Hook for explicitly enrolling members in a scheduling poll (ROK-1440).
+ * Invalidates the schedule query so the poll's member denominator ("N people
+ * in this poll") and the availability heatmap both refresh.
+ */
+export function useAddPollMembers() {
+  const qc = useQueryClient();
+  return useMutation<
+    { added: number; memberCount: number },
+    Error,
+    { lineupId: number; matchId: number; userIds: number[] }
+  >({
+    mutationFn: ({ lineupId, matchId, userIds }) =>
+      addPollMembers(lineupId, matchId, userIds),
+    onSuccess: ({ added }) => {
+      void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
+      toast.success(
+        added === 0
+          ? 'Already in this poll'
+          : `Added ${added} participant${added === 1 ? '' : 's'}`,
+      );
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to add participants');
+    },
   });
 }
 
