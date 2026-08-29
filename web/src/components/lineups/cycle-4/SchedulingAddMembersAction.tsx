@@ -104,6 +104,7 @@ function AddMembersModal({
             type="button"
             onClick={() => void handleSubmit()}
             disabled={!canSubmit}
+            data-testid="add-poll-members-submit"
             className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
           >
             {addMembers.isPending ? 'Adding…' : 'Add Participants'}

@@ -232,8 +232,12 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
         const privateBtn = screen.getByTestId('visibility-private');
         expect(publicBtn).toHaveAttribute('aria-checked', 'true');
         expect(privateBtn).toHaveAttribute('aria-checked', 'false');
-        // The invitee picker is hidden on public.
-        expect(screen.queryByTestId('invitee-multi-select')).toBeNull();
+        // ROK-1440: the picker is now shown on public too — on a public
+        // lineup it seeds known attendees rather than gating access. It used
+        // to be private-only, which is what this asserted before.
+        expect(
+            screen.getByTestId('invitee-multi-select'),
+        ).toBeInTheDocument();
     });
 
     it('reveals the invitee picker when switched to private', async () => {
@@ -287,7 +291,7 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
         });
     });
 
-    it('omits visibility + inviteeUserIds from submit when public (default)', async () => {
+    it('omits visibility + inviteeUserIds when public with nobody picked', async () => {
         const user = userEvent.setup();
         renderWithProviders(
             <StartLineupModal isOpen={true} onClose={vi.fn()} />,
@@ -296,8 +300,49 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
             screen.getByRole('button', { name: /create lineup/i }),
         );
         const body = mutateAsync.mock.calls[0][0];
+        // ROK-1440: `inviteeUserIds` is omitted because none were picked —
+        // NOT because the lineup is public. A public lineup with no explicit
+        // invites must send exactly the payload it always did.
         expect('visibility' in body).toBe(false);
         expect('inviteeUserIds' in body).toBe(false);
+    });
+
+    // ── ROK-1440: explicit invitees on PUBLIC lineups ──────────────
+
+    it('submits inviteeUserIds on a PUBLIC lineup without sending visibility', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        // Stay on the default public visibility and pick someone.
+        const row = await screen.findByTestId('invitee-option-10');
+        await user.click(row);
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        const body = mutateAsync.mock.calls[0][0];
+        expect(body.inviteeUserIds).toEqual([10]);
+        // Seeding invitees must NOT flip the lineup to private.
+        expect('visibility' in body).toBe(false);
+    });
+
+    it('keeps Create enabled on public with no invitees picked', () => {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(
+            screen.getByRole('button', { name: /create lineup/i }),
+        ).not.toBeDisabled();
+    });
+
+    it('labels the picker as optional on public and required on private', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        expect(screen.getByText(/invite members \(optional\)/i)).toBeInTheDocument();
+        await user.click(screen.getByTestId('visibility-private'));
+        expect(await screen.findByText(/^Invitees$/)).toBeInTheDocument();
     });
 });
 
