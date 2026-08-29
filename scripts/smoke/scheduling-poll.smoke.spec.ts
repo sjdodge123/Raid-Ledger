@@ -609,6 +609,105 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// ROK-1440: explicitly enrol members in the poll roster
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll add participants (ROK-1440)', () => {
+    test('Add Participants is visible for creator/operator, absent for a plain member', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        await expect(
+            page.getByTestId('add-poll-members-button'),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // Same session-swap pattern as the sibling Remind Voters case — a
+        // non-creator member must not get a roster-management affordance.
+        const invitee = await getInviteeFixture();
+        await page.goto('/');
+        await page.evaluate((t) => {
+            localStorage.setItem('raid_ledger_token', t);
+        }, invitee.jwt);
+        await goToPoll(page, lineupId, matchId);
+        await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
+    });
+
+    /**
+     * The toolbar's action cluster is `flex-shrink-0` inside the hero badge
+     * row, so a third button is exactly the kind of addition that can push
+     * the row off-screen. This runs in BOTH the desktop and mobile Playwright
+     * projects, so it pins reachability at each viewport rather than only the
+     * one a developer happened to look at.
+     */
+    test('Add Participants stays inside the viewport and does not cause page overflow', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        const btn = page.getByTestId('add-poll-members-button');
+        await expect(btn).toBeVisible({ timeout: 15_000 });
+
+        const box = await btn.boundingBox();
+        expect(box).not.toBeNull();
+        const viewport = page.viewportSize();
+        expect(viewport).not.toBeNull();
+        // Right edge within the viewport — i.e. not clipped off-screen.
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width);
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+
+        // And the page itself must not gain a horizontal scrollbar.
+        const overflows = await page.evaluate(
+            () =>
+                document.documentElement.scrollWidth >
+                document.documentElement.clientWidth,
+        );
+        expect(overflows).toBe(false);
+    });
+
+    test('enrolling a member raises the poll participant count', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        const before = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        const beforeCount = before?.match?.members?.length ?? 0;
+
+        await page.getByTestId('add-poll-members-button').click();
+        const search = page.getByTestId('invitee-search');
+        await expect(search).toBeVisible({ timeout: 10_000 });
+
+        // Pick the first offered member that isn't already on the roster.
+        const firstOption = page
+            .locator('[data-testid^="invitee-option-"]')
+            .first();
+        await expect(firstOption).toBeVisible({ timeout: 10_000 });
+        await firstOption.click();
+        await page.getByTestId('add-poll-members-submit').click();
+
+        // The mutation invalidates the schedule query; assert on the API so
+        // the check does not race the refetch.
+        await pollForCondition(
+            async () => {
+                const after = await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}`,
+                );
+                const n = after?.match?.members?.length ?? 0;
+                return n > beforeCount ? after : null;
+            },
+            { timeoutMs: 15_000, intervalMs: 500 },
+        );
+    });
+});
+
+// ---------------------------------------------------------------------------
 // AC8 + AC9: Event creation → success state → scheduled badge + event link
 // ---------------------------------------------------------------------------
 
