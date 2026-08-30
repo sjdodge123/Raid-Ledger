@@ -2,7 +2,7 @@
  * Invitee CRUD helpers for community lineups (ROK-1065).
  * Used by the lineups service + controller to manage the invitee roster.
  */
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -10,6 +10,42 @@ import type { LineupInviteeResponseDto } from '@raid-ledger/contract';
 import { activeUsersFilter } from '../users/users-active.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+/** Caller identity for invitee-management authorization (ROK-1440). */
+export interface InviteeManagerCaller {
+  id: number;
+  role: string;
+}
+
+/**
+ * Throw unless the caller may manage this lineup's invitee roster
+ * (ROK-1440).
+ *
+ * Previously both invitee routes were `@Roles('operator')`, while the web UI
+ * showed the "Invite more" button to `isOperator || viewer === createdBy` —
+ * so a non-operator CREATOR saw a button that 403'd. The operator ask is
+ * explicitly "poll creator, admin, or operator", which is the same rule
+ * `scheduling-remind.service.ts::assertCallerMayRemind` already applies to
+ * the sibling Remind-voters action. Mirror it here.
+ */
+export async function assertCallerMayManageInvitees(
+  db: Db,
+  lineupId: number,
+  caller: InviteeManagerCaller,
+): Promise<void> {
+  if (caller.role === 'admin' || caller.role === 'operator') return;
+  const [lineup] = await db
+    .select({ createdBy: schema.communityLineups.createdBy })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  if (!lineup) throw new NotFoundException('Lineup not found');
+  if (lineup.createdBy !== caller.id) {
+    throw new ForbiddenException(
+      'Only the lineup creator or an operator can manage invitees',
+    );
+  }
+}
 
 /**
  * Insert new invitees. Probes the users table first so unknown IDs surface

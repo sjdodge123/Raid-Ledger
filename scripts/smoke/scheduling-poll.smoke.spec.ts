@@ -609,6 +609,139 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// ROK-1440: explicitly enrol members in the poll roster
+// ---------------------------------------------------------------------------
+
+test.describe('Scheduling poll add participants (ROK-1440)', () => {
+    test('Add Participants is visible for creator/operator, absent for a plain member', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        await expect(
+            page.getByTestId('add-poll-members-button'),
+        ).toBeVisible({ timeout: 15_000 });
+
+        // Same session-swap pattern as the sibling Remind Voters case — a
+        // non-creator member must not get a roster-management affordance.
+        const invitee = await getInviteeFixture();
+        await page.goto('/');
+        await page.evaluate((t) => {
+            localStorage.setItem('raid_ledger_token', t);
+        }, invitee.jwt);
+        await goToPoll(page, lineupId, matchId);
+        await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
+    });
+
+    /**
+     * The toolbar's action cluster is `flex-shrink-0` inside the hero badge
+     * row, so a third button is exactly the kind of addition that can push
+     * the row off-screen. This runs in BOTH the desktop and mobile Playwright
+     * projects, so it pins reachability at each viewport rather than only the
+     * one a developer happened to look at.
+     */
+    test('Add Participants stays inside the viewport and does not cause page overflow', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        const btn = page.getByTestId('add-poll-members-button');
+        await expect(btn).toBeVisible({ timeout: 15_000 });
+
+        const box = await btn.boundingBox();
+        expect(box).not.toBeNull();
+        const viewport = page.viewportSize();
+        expect(viewport).not.toBeNull();
+        // Right edge within the viewport — i.e. not clipped off-screen.
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width);
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+
+        // And the page itself must not gain a horizontal scrollbar.
+        const overflows = await page.evaluate(
+            () =>
+                document.documentElement.scrollWidth >
+                document.documentElement.clientWidth,
+        );
+        expect(overflows).toBe(false);
+    });
+
+    test('enrolling a member adds exactly that member to the poll roster', async ({
+        page,
+    }) => {
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+
+        const before = await apiGet(
+            adminToken,
+            `/lineups/${lineupId}/schedule/${matchId}`,
+        );
+        const existing = new Set<number>(
+            (before?.match?.members ?? []).map(
+                (m: { userId: number }) => m.userId,
+            ),
+        );
+
+        /**
+         * Pick a target deterministically. An earlier version clicked
+         * `[data-testid^="invitee-option-"]).first()`, which takes whichever
+         * option happens to render first — on CI that was already a poll
+         * member, so the roster never grew and the assertion timed out while
+         * passing locally. The picker does not filter out existing members,
+         * so the test has to do it.
+         */
+        const usersRes = await apiGet(adminToken, '/users?limit=200');
+        const candidates: { id: number; username: string }[] =
+            usersRes?.data ?? usersRes ?? [];
+        const target = candidates.find((u) => u && !existing.has(u.id));
+        expect(
+            target,
+            'no community member outside the poll roster to enrol',
+        ).toBeTruthy();
+
+        await page.getByTestId('add-poll-members-button').click();
+        const search = page.getByTestId('invitee-search');
+        await expect(search).toBeVisible({ timeout: 10_000 });
+        // Narrow the list so the target is rendered regardless of page size.
+        await search.fill(target!.username);
+
+        const option = page.getByTestId(`invitee-option-${target!.id}`);
+        await expect(option).toBeVisible({ timeout: 10_000 });
+        await option.click();
+        await page.getByTestId('add-poll-members-submit').click();
+
+        // Assert THAT member landed, not merely that a count rose — a count
+        // check passes for the wrong member and fails silently for the right
+        // one. The mutation invalidates the schedule query, so poll the API
+        // rather than racing the refetch.
+        await pollForCondition(
+            async () => {
+                const after = await apiGet(
+                    adminToken,
+                    `/lineups/${lineupId}/schedule/${matchId}`,
+                );
+                const ids: number[] = (after?.match?.members ?? []).map(
+                    (m: { userId: number }) => m.userId,
+                );
+                // Both conditions: the target is present AND the roster
+                // actually grew. `includes` alone would pass trivially if the
+                // target had somehow already been enrolled, which is the very
+                // failure mode this rewrite exists to rule out.
+                return ids.includes(target!.id) && ids.length > existing.size
+                    ? after
+                    : null;
+            },
+            {
+                timeoutMs: 15_000,
+                intervalMs: 500,
+                description: `poll roster to contain user ${target?.id}`,
+            },
+        );
+    });
+});
+
+// ---------------------------------------------------------------------------
 // AC8 + AC9: Event creation → success state → scheduled badge + event link
 // ---------------------------------------------------------------------------
 

@@ -97,9 +97,15 @@ function buildCreatePayload(state: {
     ...(state.channelOverrideId
       ? { channelOverrideId: state.channelOverrideId }
       : {}),
-    // ROK-1065: only send when non-default.
-    ...(state.visibility === 'private'
-      ? { visibility: state.visibility, inviteeUserIds: state.inviteeUserIds }
+    // ROK-1065: visibility only sent when non-default ('private').
+    ...(state.visibility === 'private' ? { visibility: state.visibility } : {}),
+    // ROK-1440: invitees are sent for BOTH visibilities. On a public lineup
+    // they are seeded participants, not an access gate — the contract already
+    // permits `inviteeUserIds` regardless of visibility, and the create
+    // service adds them without checking it. Omitted when empty so a public
+    // lineup with no explicit invites sends exactly what it does today.
+    ...(state.inviteeUserIds.length > 0
+      ? { inviteeUserIds: state.inviteeUserIds }
       : {}),
     // ROK-1067: send the toggle so a public lineup can opt out at create.
     ...(state.visibility === 'public'
@@ -206,12 +212,13 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
             onChange={setPublicShareEnabled}
           />
         )}
-        {visibility === 'private' && (
-          <InviteeMultiSelect
-            value={inviteeUserIds}
-            onChange={setInviteeUserIds}
-          />
-        )}
+        {/* ROK-1440: shown for public lineups too — on public it seeds
+            known attendees without closing the lineup to anyone else. */}
+        <InviteeMultiSelect
+          value={inviteeUserIds}
+          onChange={setInviteeUserIds}
+          mode={visibility}
+        />
         <MoreOptions>
           <div className="border-t border-edge/30 pt-4">
             <ThresholdSlider

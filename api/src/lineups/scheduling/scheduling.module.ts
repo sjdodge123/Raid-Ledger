@@ -15,6 +15,7 @@ import { SchedulingBannerController } from './scheduling-banner.controller';
 import { SchedulingService } from './scheduling.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingRemindService } from './scheduling-remind.service';
+import { SchedulingMembersService } from './scheduling-members.service';
 import { SchedulingPollNudgeService } from './scheduling-poll-nudge.service';
 
 @Module({
@@ -33,6 +34,7 @@ import { SchedulingPollNudgeService } from './scheduling-poll-nudge.service';
     SchedulingService,
     SchedulingPollEmbedService,
     SchedulingRemindService,
+    SchedulingMembersService,
     SchedulingPollNudgeService,
   ],
   exports: [SchedulingService, SchedulingPollEmbedService],

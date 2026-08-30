@@ -28,29 +28,53 @@ import { LineupAbortedBanner } from '../components/lineups/LineupAbortedBanner';
 import { useLineupAbortedAt } from '../lib/lineup-aborted';
 
 /**
- * Render the private-lineup invitee panel (ROK-1065). Creator/operator
+ * Render the lineup invitee panel (ROK-1065, ROK-1440). Creator/operator
  * sees the "Invite more" button; everyone else sees the read-only roster.
+ *
+ * ROK-1440: rendered for public lineups too. The two visibilities mean
+ * different things, so the chrome differs — on PRIVATE the roster is an
+ * access gate (amber callout, the established ROK-1065 treatment); on
+ * PUBLIC it is a seed list, so it gets neutral panel chrome plus an
+ * explicit "anyone else can still join" line. The panel is hidden entirely
+ * on a public lineup with no invitees and no ability to add any, so an
+ * ordinary viewer sees no new empty box.
  */
-function PrivateInviteesSection({
+function LineupInviteesSection({
   lineupId,
   invitees,
   canManage,
+  visibility,
 }: {
   lineupId: number;
   invitees: NonNullable<ReturnType<typeof useLineupDetail>['data']>['invitees'];
   canManage: boolean;
-}): JSX.Element {
+  visibility: 'public' | 'private';
+}): JSX.Element | null {
+  const isPrivate = visibility === 'private';
+  if (!isPrivate && invitees.length === 0 && !canManage) return null;
   return (
     <section
-      data-testid="private-invitees-section"
-      className="mt-4 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5"
+      data-testid="lineup-invitees-section"
+      data-visibility={visibility}
+      className={`mt-4 p-4 rounded-lg border ${
+        isPrivate
+          ? 'border-amber-500/30 bg-amber-500/5'
+          : 'border-edge bg-panel/40'
+      }`}
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <h2 className="text-sm font-semibold text-primary">
-          Invitees ({invitees.length})
+          {isPrivate ? 'Invitees' : 'Invited members'} ({invitees.length})
         </h2>
-        {canManage && <AddInviteesButton lineupId={lineupId} />}
+        {canManage && (
+          <AddInviteesButton lineupId={lineupId} visibility={visibility} />
+        )}
       </div>
+      <p className="text-xs text-muted mb-3">
+        {isPrivate
+          ? 'Only these members can see and join this lineup.'
+          : 'Pulled in directly. Anyone else in the community can still see and join.'}
+      </p>
       <InviteeList
         lineupId={lineupId}
         invitees={invitees}
@@ -220,13 +244,12 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         )}
       </div>
 
-      {lineup.visibility === 'private' && (
-        <PrivateInviteesSection
-          lineupId={lineup.id}
-          invitees={lineup.invitees}
-          canManage={isOperator || user?.id === lineup.createdBy.id}
-        />
-      )}
+      <LineupInviteesSection
+        lineupId={lineup.id}
+        invitees={lineup.invitees}
+        canManage={isOperator || user?.id === lineup.createdBy.id}
+        visibility={lineup.visibility}
+      />
 
       {lineup.visibility === 'private' &&
         lineup.status === 'voting' &&

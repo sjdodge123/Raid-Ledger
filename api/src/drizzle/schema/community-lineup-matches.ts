@@ -66,8 +66,14 @@ export const communityLineupMatches = pgTable(
 /**
  * Members assigned to a match group.
  *
- * Source tracks whether the member voted for the game directly
- * or was added via the bandwagon (interest-based) algorithm.
+ * Source tracks whether the member voted for the game directly, was added
+ * via the bandwagon (interest-based) algorithm, or — ROK-1440 — was enrolled
+ * explicitly by the lineup creator or an operator (`added`).
+ *
+ * The column is plain `text` in the database with no CHECK constraint (see
+ * `0104_community_lineup_voting.sql` / `0113_ensure_community_lineup_tables.sql`),
+ * so this enum is a TypeScript-level narrowing only and widening it needs no
+ * migration.
  */
 export const communityLineupMatchMembers = pgTable(
   'community_lineup_match_members',
@@ -78,7 +84,7 @@ export const communityLineupMatchMembers = pgTable(
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
     source: text('source', {
-      enum: ['voted', 'bandwagon'],
+      enum: ['voted', 'bandwagon', 'added'],
     }).notNull(),
     /**
      * Stamped when the user submits scheduling for THIS match

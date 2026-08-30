@@ -7,6 +7,7 @@ import { PublicLineupController } from './public-lineup.controller';
 import { LineupSubmitController } from './submit/lineup-submit.controller';
 import { LineupSubmitService } from './submit/lineup-submit.service';
 import { LineupsService } from './lineups.service';
+import { LineupInviteePermissionsService } from './lineup-invitee-permissions.service';
 import { PublicLineupService } from './public-lineup.service';
 import { PublicLineupOgService } from './public-lineup-og.service';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
@@ -54,6 +55,7 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
   ],
   providers: [
     LineupsService,
+    LineupInviteePermissionsService,
     LineupSubmitService,
     PublicLineupService,
     PublicLineupOgService,
