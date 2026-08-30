@@ -605,7 +605,15 @@ resolve_local_jwt_secret() {
         printf '%s' "$s"
         return 0
     fi
-    local common_dir main_repo
+    # main_repo MUST be initialized, not just declared: it is assigned only
+    # inside the `if [[ -n "$common_dir" ]]` below, but read unconditionally in
+    # the loop after it. Under `set -u` (line 29) bash 4.4+ treats a declared-
+    # but-unassigned local as UNSET and aborts the function with
+    # "main_repo: unbound variable"; macOS's bash 3.2 treats it as set-and-empty
+    # and carries on. So this failed on Linux — CI runners and the rl-infra
+    # fleet — while passing on the operator's laptop. Surfaced the first time
+    # scripts/test ran in CI (PR #1061).
+    local common_dir main_repo=""
     common_dir=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || true)
     if [[ -n "$common_dir" ]]; then
         # `git rev-parse --git-common-dir` returns either an absolute path
