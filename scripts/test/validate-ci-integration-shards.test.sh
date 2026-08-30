@@ -11,7 +11,7 @@
 #   - $INTEGRATION_SHARDS (default 4) shards
 #   - `npx jest --config api/jest.integration.config.js --runInBand
 #      --verbose --shard=$i/$N` per shard
-#   - NODE_OPTIONS=--max-old-space-size=3072 per shard
+#   - NODE_OPTIONS=--max-old-space-size=4096 per shard
 #   - Fast-fail: first shard failure aborts the loop, returns 1
 #   - M9 sidecar spawned ONCE before loop, NOT per-shard
 #   - Local laptop path (RL_TARGET=local + no /workspace) unchanged: still
@@ -111,9 +111,16 @@ assert_grep '\-\-shard=' "$VALIDATE_CI_PATH" "validate-ci.sh must invoke jest wi
 assert_grep 'npx jest' "$VALIDATE_CI_PATH" "shard loop must call npx jest directly (separate Node process per shard)"
 assert_grep 'jest.integration.config.js' "$VALIDATE_CI_PATH" "shard loop must pass --config api/jest.integration.config.js"
 
-# AC-M10-2: NODE_OPTIONS=--max-old-space-size=3072 per shard.
-CURRENT_TEST_NAME="AC-M10-2: NODE_OPTIONS=--max-old-space-size=3072 per shard"
-assert_grep 'max-old-space-size=3072' "$VALIDATE_CI_PATH" "each shard must run with NODE_OPTIONS=--max-old-space-size=3072"
+# AC-M10-2: NODE_OPTIONS=--max-old-space-size=4096 per shard.
+#
+# The AC was originally written as 3072 (ROK-1331). ROK-1268 later raised the
+# ceiling to 4096 in validate-ci.sh — "3 GB was tripping the OOM carrier under
+# sustained re-runs while still leaving margin on the 7 GB fleet/CI runners" —
+# but this assertion was never updated, so it has been failing ever since. The
+# SCRIPT is correct; this test was stale. Do not lower it back to 3072 without
+# re-litigating ROK-1268.
+CURRENT_TEST_NAME="AC-M10-2: NODE_OPTIONS=--max-old-space-size=4096 per shard"
+assert_grep 'max-old-space-size=4096' "$VALIDATE_CI_PATH" "each shard must run with NODE_OPTIONS=--max-old-space-size=4096"
 
 # AC-M10-6: INTEGRATION_SHARDS env var with default 4.
 CURRENT_TEST_NAME="AC-M10-6: INTEGRATION_SHARDS env var overrides default 4"
@@ -169,12 +176,12 @@ else
     done
 
     # ----- AC-M10-2 behavioral: NODE_OPTIONS on each shard -----
-    CURRENT_TEST_NAME="AC-M10-2 behavioral: NODE_OPTIONS=--max-old-space-size=3072 on each shard"
-    node_opts_count=$(grep -c -E 'NODE_OPTIONS=.*--max-old-space-size=3072.*jest.*--shard=' "$npx_argv_file" || true)
+    CURRENT_TEST_NAME="AC-M10-2 behavioral: NODE_OPTIONS=--max-old-space-size=4096 on each shard"
+    node_opts_count=$(grep -c -E 'NODE_OPTIONS=.*--max-old-space-size=4096.*jest.*--shard=' "$npx_argv_file" || true)
     if [ "$node_opts_count" -eq 4 ]; then
         pass
     else
-        fail "expected NODE_OPTIONS=--max-old-space-size=3072 on all 4 shards, got $node_opts_count (npx argv: $(tr '\n' '|' <"$npx_argv_file"))"
+        fail "expected NODE_OPTIONS=--max-old-space-size=4096 on all 4 shards, got $node_opts_count (npx argv: $(tr '\n' '|' <"$npx_argv_file"))"
     fi
 
     # ----- AC-M10-7 behavioral: M9 sidecar spawned ONCE, torn down ONCE -----

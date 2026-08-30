@@ -44,6 +44,12 @@ jobs:
               - '.eslintrc*'
               - 'vitest.config.*'
               - 'playwright.config.*'
+              # scripts/** was in NO filter, so the lint job — which owns the
+              # shell parse check AND the scripts/test suite — was skipped for
+              # a scripts-only diff, i.e. exactly the changes those checks
+              # exist to protect. Observed on PR #1060, a scripts-only change
+              # that got no shell checking in CI at all.
+              - 'scripts/**'
             api:
               - 'api/src/**'
               - 'api/jest*.config.*'
@@ -132,6 +138,13 @@ jobs:
           for f in scripts/*.sh; do
             bash -n "$f" || exit 1
           done
+
+      # Behavioral shell tests. `bash -n` only proves a script PARSES — it
+      # cannot catch a logic bug like validate-ci.sh's run_step reading exit
+      # code 2 as SKIPPED, which silently reported broken builds as passing
+      # and survived two backlog reports. The suite runs in ~5s.
+      - name: Shell behavior tests (scripts/test)
+        run: ./scripts/test/run-all.sh
 
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:

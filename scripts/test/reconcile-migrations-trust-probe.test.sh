@@ -51,8 +51,6 @@ fail() {
 
 [[ -f "$SCRIPT" ]] || { echo "missing $SCRIPT"; exit 1; }
 
-command -v docker >/dev/null 2>&1 || { echo "docker not available — skipping"; exit 0; }
-
 CONTAINER_NAME="rl-reconcile-trust-test-$$"
 FIXTURE_DIR="$(mktemp -d)"
 
@@ -119,6 +117,26 @@ JSON
 # ---------------------------------------------------------------------------
 # Spin up a throwaway Postgres.
 # ---------------------------------------------------------------------------
+# Docker availability gate. Mirrors the SKIP_BACKUP_INTEGRATION convention in
+# CLAUDE.md: skip locally with a loud warning when Docker is unusable, but
+# HARD-FAIL under CI so the suite can never silently lose this coverage.
+# (A guard that skipped everywhere would recreate the very silent-skip hole the
+# run_step exit-2 fix closed.)
+#
+# Covers BOTH failure modes in one gate — a missing `docker` BINARY and a
+# present binary with no running daemon. They were previously separate, and the
+# binary check skipped with exit 0 before this gate could be reached, which
+# left the CI hard-fail unreachable in exactly the missing-Docker CI scenario
+# it was written for (caught by Codex review).
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    if [ -n "${CI:-}" ]; then
+        echo "FAIL [reconcile-migrations-trust-probe.test.sh] Docker unavailable in CI (binary or daemon) — this suite must not be skipped here."
+        exit 1
+    fi
+    echo "SKIP [reconcile-migrations-trust-probe.test.sh] Docker unavailable (binary or daemon) — start Docker to run this probe locally."
+    exit 0
+fi
+
 echo "Starting throwaway Postgres ($CONTAINER_NAME)..."
 docker run --rm -d \
     --name "$CONTAINER_NAME" \
@@ -128,8 +146,25 @@ docker run --rm -d \
     -p 0:5432 \
     pgvector/pgvector:pg16 >/dev/null || { echo "failed to start container"; exit 1; }
 
+# Readiness must be a TCP query against the real server, NOT socket-based
+# pg_isready. The postgres entrypoint runs initdb, brings up a TEMPORARY
+# bootstrap server on the Unix socket only (listen_addresses=''), runs init
+# scripts, then shuts it down and starts the real server. `docker exec …
+# pg_isready` talks to that same socket, so it can report ready against the
+# bootstrap server; the loop then exits and the first real psql lands
+# mid-shutdown with "FATAL: the database system is shutting down".
+#
+# That is not hypothetical — it failed exactly this way in CI (PR #1061, run
+# 33328321333) while passing on the previous run of the identical file, and it
+# passes locally where a cached image changes the timing.
+#
+# scripts/validate-migrations.sh::wait_for_postgres already solved this and
+# documents the same reasoning; this mirrors it. A TCP success can only come
+# from the final server, and issuing a real query also proves POSTGRES_DB
+# exists rather than merely that a postmaster is listening.
 elapsed=0
-until docker exec "$CONTAINER_NAME" pg_isready -U user -q 2>/dev/null; do
+until docker exec -e PGPASSWORD=password "$CONTAINER_NAME" \
+    psql -h 127.0.0.1 -U user -d raid_ledger -c 'SELECT 1' >/dev/null 2>&1; do
     sleep 1
     elapsed=$((elapsed + 1))
     if [[ "$elapsed" -ge 30 ]]; then echo "Postgres not ready in 30s"; exit 1; fi
