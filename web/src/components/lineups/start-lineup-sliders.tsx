@@ -17,6 +17,35 @@ function clampHours(v: number): number {
   return Math.min(MAX_HOURS, Math.max(0.25, v));
 }
 
+/** Exact-entry companion to the duration track, in hours. */
+function HoursInput({
+  label,
+  testId,
+  value,
+  onChange,
+}: {
+  label: string;
+  testId: string;
+  value: number;
+  onChange: (v: number | '') => void;
+}): JSX.Element {
+  return (
+    <input
+      type="number"
+      data-testid={testId}
+      aria-label={`${label} duration in hours`}
+      min={0.25}
+      max={MAX_HOURS}
+      step="any"
+      value={value}
+      onChange={(e) =>
+        onChange(e.target.value === '' ? '' : clampHours(Number(e.target.value)))
+      }
+      className="w-20 shrink-0 px-2 py-1 text-sm bg-panel border border-edge rounded-lg text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+    />
+  );
+}
+
 /**
  * A duration slider (ROK-1441: hour-granular, was day-granular).
  *
@@ -64,20 +93,11 @@ export function DurationSlider({
           onChange={(e) => onChange(Number(e.target.value))}
           className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
         />
-        <input
-          type="number"
-          data-testid={`${testId}-hours`}
-          aria-label={`${label} duration in hours`}
-          min={0.25}
-          max={MAX_HOURS}
-          step="any"
+        <HoursInput
+          label={label}
+          testId={`${testId}-hours`}
           value={value}
-          onChange={(e) =>
-            onChange(
-              e.target.value === '' ? '' : clampHours(Number(e.target.value)),
-            )
-          }
-          className="w-20 shrink-0 px-2 py-1 text-sm bg-panel border border-edge rounded-lg text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+          onChange={onChange}
         />
       </div>
       <div className="flex justify-between text-xs text-muted/60 mt-1">
