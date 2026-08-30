@@ -119,6 +119,20 @@ JSON
 # ---------------------------------------------------------------------------
 # Spin up a throwaway Postgres.
 # ---------------------------------------------------------------------------
+# Docker availability gate. Mirrors the SKIP_BACKUP_INTEGRATION convention in
+# CLAUDE.md: skip locally with a loud warning when the daemon is not running,
+# but HARD-FAIL under CI so the suite can never silently lose this coverage.
+# (A guard that skipped everywhere would recreate the very silent-skip hole the
+# run_step exit-2 fix closed.)
+if ! docker info >/dev/null 2>&1; then
+    if [ -n "${CI:-}" ]; then
+        echo "FAIL [reconcile-migrations-trust-probe.test.sh] Docker daemon unavailable in CI — this suite must not be skipped here."
+        exit 1
+    fi
+    echo "SKIP [reconcile-migrations-trust-probe.test.sh] Docker daemon not running — start Docker to run this probe locally."
+    exit 0
+fi
+
 echo "Starting throwaway Postgres ($CONTAINER_NAME)..."
 docker run --rm -d \
     --name "$CONTAINER_NAME" \
