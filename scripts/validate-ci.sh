@@ -224,6 +224,28 @@ perf_now_ms() {
   python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || echo "$(( $(date -u +%s) * 1000 ))"
 }
 
+# ---------------------------------------------------------------------------
+# Step skip signalling.
+#
+# `run_step` used to read **exit code 2** as SKIPPED. That silently overloaded a
+# code real tools return for real failures: `npm run build -w web` runs
+# `tsc -b && vite build`, and `tsc -b` exits 2 on a type error. A genuinely
+# broken web build was therefore printed in full, recorded as
+# `Build (all workspaces): SKIPPED`, and the run still ended on a green
+# "All checks passed!" summary — a gate that can wave through a branch that
+# does not compile.
+#
+# A step now declares "not applicable" EXPLICITLY by calling `skip_step`, and
+# must also exit cleanly. Intent and failure can no longer collide, whatever
+# exit code a tool happens to pick.
+# ---------------------------------------------------------------------------
+STEP_SKIPPED=0
+
+# Mark the running step as SKIPPED. Call it, then `return 0`.
+skip_step() {
+  STEP_SKIPPED=1
+}
+
 run_step() {
   local name="$1"
   shift
@@ -232,6 +254,8 @@ run_step() {
   local step_start_ms
   step_start_ms=$(perf_now_ms)
   local rc=0
+  # Reset per step — a skip must be declared by THIS step, never inherited.
+  STEP_SKIPPED=0
   "$@" || rc=$?
   local step_end_ms step_dur
   step_end_ms=$(perf_now_ms)
@@ -244,12 +268,14 @@ print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_co
 " "$name" "$step_dur" "$rc" 2>/dev/null || echo '{}')
   perf_emit_local "validate.step.end" "$step_extra"
 
-  if [ "$rc" -eq 0 ]; then
-    echo -e "${GREEN}$name: PASS${NC}"
-    record_result "$name" "PASS"
-  elif [ "$rc" -eq 2 ]; then
+  # A skip requires BOTH the explicit declaration and a clean exit, so a step
+  # that declares a skip and then fails is still reported as a failure.
+  if [ "$rc" -eq 0 ] && [ "$STEP_SKIPPED" -eq 1 ]; then
     echo -e "${YELLOW}$name: SKIPPED${NC}"
     record_result "$name" "SKIPPED"
+  elif [ "$rc" -eq 0 ]; then
+    echo -e "${GREEN}$name: PASS${NC}"
+    record_result "$name" "PASS"
   else
     echo -e "${RED}$name: FAIL${NC}"
     record_result "$name" "FAIL"
@@ -658,7 +684,8 @@ _spawn_redis_sidecar_if_remote() {
 run_migration_validation() {
   if ! $migrations_changed; then
     echo -e "No migration files changed — skipping"
-    return 2  # SKIPPED
+    skip_step
+    return 0
   fi
   # ROK-1343: Mutagen sync on the rl-infra fleet runner strips POSIX exec
   # bits even though git stores `scripts/validate-migrations.sh` as 100755.
@@ -672,7 +699,8 @@ run_migration_validation() {
 run_container_validation() {
   if ! $container_changed; then
     echo -e "No container files changed — skipping"
-    return 2  # SKIPPED
+    skip_step
+    return 0
   fi
 
   local cname="rl-ci-test-$$"
@@ -848,12 +876,14 @@ run_playwright_e2e() {
   case "$e2e_mode" in
     off)
       echo -e "${YELLOW}--no-e2e passed — skipping Playwright${NC}"
-      return 2
+      skip_step
+      return 0
       ;;
     auto)
       if ! $playwright_relevant; then
         echo -e "No Playwright-relevant files changed — skipping"
-        return 2
+        skip_step
+        return 0
       fi
       if ! check_env_up; then
         echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Playwright${NC}"
@@ -862,7 +892,8 @@ run_playwright_e2e() {
         else
           echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed UI flows.${NC}"
         fi
-        return 2
+        skip_step
+        return 0
       fi
       ;;
     on)
@@ -897,12 +928,14 @@ run_discord_smoke() {
   case "$e2e_mode" in
     off)
       echo -e "${YELLOW}--no-e2e passed — skipping Discord smoke${NC}"
-      return 2
+      skip_step
+      return 0
       ;;
     auto)
       if ! $discord_smoke_relevant; then
         echo -e "No Discord-smoke-relevant files changed — skipping"
-        return 2
+        skip_step
+        return 0
       fi
       if ! check_env_up; then
         echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Discord smoke${NC}"
@@ -911,7 +944,8 @@ run_discord_smoke() {
         else
           echo -e "${YELLOW}  Run ./scripts/deploy_dev.sh first, then re-run validate-ci to cover the changed bot/notification flows.${NC}"
         fi
-        return 2
+        skip_step
+        return 0
       fi
       ;;
     on)
