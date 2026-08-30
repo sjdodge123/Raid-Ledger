@@ -51,8 +51,6 @@ fail() {
 
 [[ -f "$SCRIPT" ]] || { echo "missing $SCRIPT"; exit 1; }
 
-command -v docker >/dev/null 2>&1 || { echo "docker not available — skipping"; exit 0; }
-
 CONTAINER_NAME="rl-reconcile-trust-test-$$"
 FIXTURE_DIR="$(mktemp -d)"
 
@@ -120,16 +118,22 @@ JSON
 # Spin up a throwaway Postgres.
 # ---------------------------------------------------------------------------
 # Docker availability gate. Mirrors the SKIP_BACKUP_INTEGRATION convention in
-# CLAUDE.md: skip locally with a loud warning when the daemon is not running,
-# but HARD-FAIL under CI so the suite can never silently lose this coverage.
+# CLAUDE.md: skip locally with a loud warning when Docker is unusable, but
+# HARD-FAIL under CI so the suite can never silently lose this coverage.
 # (A guard that skipped everywhere would recreate the very silent-skip hole the
 # run_step exit-2 fix closed.)
-if ! docker info >/dev/null 2>&1; then
+#
+# Covers BOTH failure modes in one gate — a missing `docker` BINARY and a
+# present binary with no running daemon. They were previously separate, and the
+# binary check skipped with exit 0 before this gate could be reached, which
+# left the CI hard-fail unreachable in exactly the missing-Docker CI scenario
+# it was written for (caught by Codex review).
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
     if [ -n "${CI:-}" ]; then
-        echo "FAIL [reconcile-migrations-trust-probe.test.sh] Docker daemon unavailable in CI — this suite must not be skipped here."
+        echo "FAIL [reconcile-migrations-trust-probe.test.sh] Docker unavailable in CI (binary or daemon) — this suite must not be skipped here."
         exit 1
     fi
-    echo "SKIP [reconcile-migrations-trust-probe.test.sh] Docker daemon not running — start Docker to run this probe locally."
+    echo "SKIP [reconcile-migrations-trust-probe.test.sh] Docker unavailable (binary or daemon) — start Docker to run this probe locally."
     exit 0
 fi
 
