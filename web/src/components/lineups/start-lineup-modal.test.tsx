@@ -11,7 +11,7 @@
  *     inline error shown).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { StartLineupModal } from './start-lineup-modal';
@@ -413,7 +413,27 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         });
     });
 
-    it('applies the Tonight preset to match-shape + durations', async () => {
+    // ROK-1441: the 15-min shape moved from "Tonight" onto the new "LAN"
+    // preset, and "Tonight" was redefined as same-day (5h a phase).
+    it('applies the LAN preset to match-shape + durations', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByTestId('preset-lan'));
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        // LAN = 100% threshold / 3 votes / 0.25h building / 0.25h voting.
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            matchThreshold: 100,
+            votesPerPlayer: 3,
+            buildingDurationHours: 0.25,
+            votingDurationHours: 0.25,
+        });
+    });
+
+    it('applies the Tonight preset as a same-day 5h-a-phase shape', async () => {
         const user = userEvent.setup();
         renderWithProviders(
             <StartLineupModal isOpen={true} onClose={vi.fn()} />,
@@ -422,12 +442,47 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        // Tonight = 100% threshold / 3 votes / 0.25h building / 0.25h voting.
         expect(mutateAsync.mock.calls[0][0]).toMatchObject({
             matchThreshold: 100,
             votesPerPlayer: 3,
-            buildingDurationHours: 0.25,
-            votingDurationHours: 0.25,
+            buildingDurationHours: 5,
+            votingDurationHours: 5,
+        });
+    });
+
+    it('keeps the duration slider hour-granular instead of snapping to days', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        // Dragging to 5 must submit 5 hours. Pre-ROK-1441 the track was
+        // day-granular and this same interaction submitted 5 * 24 = 120.
+        fireEvent.change(screen.getByTestId('building-duration'), {
+            target: { value: '5' },
+        });
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            buildingDurationHours: 5,
+        });
+    });
+
+    it('reaches the 30-day ceiling through the numeric hours field', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        fireEvent.change(screen.getByTestId('voting-duration-hours'), {
+            target: { value: '720' },
+        });
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            votingDurationHours: 720,
         });
     });
 

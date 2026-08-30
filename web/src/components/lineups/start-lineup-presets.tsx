@@ -10,14 +10,22 @@
 import type { JSX, ReactNode } from 'react';
 import type { PresetKey } from './start-lineup-config';
 
-const PRESET_OPTIONS: ReadonlyArray<readonly [PresetKey, string, string]> = [
-  ['tonight', 'Tonight', 'Pick one game now · ~30 min'],
-  ['thisWeek', 'This Week', 'Plan the weekly session'],
-  ['series', 'Series', 'Long-range, many games'],
-  ['custom', 'Custom', 'Set everything manually'],
+/**
+ * `[key, label, hint, spanClass]`. The span classes tile five options without
+ * an orphaned trailing cell (ROK-1441): mobile is a 2-col grid with Custom
+ * spanning both, desktop a 6-col grid laid out 3-then-2.
+ */
+const PRESET_OPTIONS: ReadonlyArray<
+  readonly [PresetKey, string, string, string]
+> = [
+  ['lan', 'LAN', 'Everyone here now · ~30 min', 'sm:col-span-2'],
+  ['tonight', 'Tonight', 'Play later today · 5h a phase', 'sm:col-span-2'],
+  ['thisWeek', 'This Week', 'Plan the weekly session', 'sm:col-span-2'],
+  ['series', 'Series', 'Long-range, many games', 'sm:col-span-3'],
+  ['custom', 'Custom', 'Set everything manually', 'col-span-2 sm:col-span-3'],
 ];
 
-/** Match-shape preset chooser (Tonight / This Week / Series / Custom). */
+/** Match-shape preset chooser (LAN / Tonight / This Week / Series / Custom). */
 export function PresetChooser({
   value,
   onChange,
@@ -33,9 +41,9 @@ export function PresetChooser({
       <div
         role="radiogroup"
         aria-label="Lineup preset"
-        className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+        className="grid grid-cols-2 gap-2 sm:grid-cols-6"
       >
-        {PRESET_OPTIONS.map(([key, label, hint]) => (
+        {PRESET_OPTIONS.map(([key, label, hint, spanClass]) => (
           <button
             key={key}
             type="button"
@@ -43,7 +51,7 @@ export function PresetChooser({
             aria-checked={value === key}
             data-testid={`preset-${key}`}
             onClick={() => onChange(key)}
-            className={`flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-colors ${
+            className={`flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-colors ${spanClass} ${
               value === key
                 ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-300'
                 : 'bg-panel border-edge text-muted hover:text-foreground'

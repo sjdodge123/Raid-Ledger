@@ -5,15 +5,27 @@
 import type { JSX } from 'react';
 import { formatDurationHours } from './start-lineup-config';
 
-const MIN_DAYS = 1;
-const MAX_DAYS = 30;
+const MIN_HOURS = 1;
+/** Slider ceiling: 7 days. Covers every preset (Series tops out at 96h). */
+const SLIDER_MAX_HOURS = 168;
+/** Legacy 30-day ceiling — reachable via the numeric field, not the drag. */
+const MAX_HOURS = 720;
 const DESCRIPTION_MAX = 500;
 
+/** Clamp a duration into the numeric field's accepted range. */
+function clampHours(v: number): number {
+  return Math.min(MAX_HOURS, Math.max(0.25, v));
+}
+
 /**
- * A duration slider. The slider track is day-granular (1-30) for manual
- * Custom tweaking, but the readout reflects the TRUE current value — so a
- * sub-day preset value renders accurately (e.g. "15 min") and is not clobbered
- * unless the user actually drags the slider (which is a deliberate Custom edit).
+ * A duration slider (ROK-1441: hour-granular, was day-granular).
+ *
+ * The track runs 1h-168h in 1h steps so same-day values like the Tonight
+ * preset's 5h are reachable by drag; before ROK-1441 the smallest draggable
+ * value was 24h, which snapped any sub-day preset value to whole days on the
+ * first touch. The paired numeric field keeps the legacy 30-day ceiling
+ * reachable without a 720-stop drag, and the readout always reflects the TRUE
+ * current value — so a sub-hour preset value still renders as "15 min".
  */
 export function DurationSlider({
   label,
@@ -28,7 +40,10 @@ export function DurationSlider({
   value: number;
   onChange: (v: number | '') => void;
 }): JSX.Element {
-  const days = Math.round(value / 24) || 1;
+  const sliderHours = Math.min(
+    SLIDER_MAX_HOURS,
+    Math.max(MIN_HOURS, Math.round(value)),
+  );
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -37,20 +52,37 @@ export function DurationSlider({
           {formatDurationHours(value)}
         </span>
       </div>
-      <input
-        type="range"
-        name={name}
-        data-testid={testId}
-        min={MIN_DAYS}
-        max={MAX_DAYS}
-        step={1}
-        value={days}
-        onChange={(e) => onChange(Number(e.target.value) * 24)}
-        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-      />
+      <div className="flex items-center gap-3">
+        <input
+          type="range"
+          name={name}
+          data-testid={testId}
+          min={MIN_HOURS}
+          max={SLIDER_MAX_HOURS}
+          step={1}
+          value={sliderHours}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        />
+        <input
+          type="number"
+          data-testid={`${testId}-hours`}
+          aria-label={`${label} duration in hours`}
+          min={0.25}
+          max={MAX_HOURS}
+          step="any"
+          value={value}
+          onChange={(e) =>
+            onChange(
+              e.target.value === '' ? '' : clampHours(Number(e.target.value)),
+            )
+          }
+          className="w-20 shrink-0 px-2 py-1 text-sm bg-panel border border-edge rounded-lg text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+        />
+      </div>
       <div className="flex justify-between text-xs text-muted/60 mt-1">
-        <span>1 day</span>
-        <span>30 days</span>
+        <span>1 hour</span>
+        <span>7 days (up to 30 by hours)</span>
       </div>
     </div>
   );

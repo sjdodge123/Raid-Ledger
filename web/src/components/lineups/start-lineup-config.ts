@@ -6,21 +6,24 @@
  * component files that consume them.
  */
 
-export type PresetKey = 'tonight' | 'thisWeek' | 'series' | 'custom';
+export type PresetKey = 'lan' | 'tonight' | 'thisWeek' | 'series' | 'custom';
 
 /** Canonical settings a preset writes into the form (ROK-1302, operator-spec). */
 export interface PresetValues {
   matchThreshold: number;
   votesPerPlayer: number;
-  /** Building-phase hours. Sub-hour allowed (Tonight = 0.25h = 15 min). */
+  /** Building-phase hours. Sub-hour allowed (LAN = 0.25h = 15 min). */
   buildingDurationHours: number;
   /** Voting-phase hours. Sub-hour allowed. */
   votingDurationHours: number;
 }
 
 /**
- * Operator-specified canonical values (interview 2026-05-31):
- * - Tonight: group together now, one game, ~30 min total, force consensus.
+ * Operator-specified canonical values (interview 2026-05-31; revised ROK-1441):
+ * - LAN: group together in one room now, one game, ~30 min total, force
+ *   consensus. These are the values "Tonight" carried before ROK-1441.
+ * - Tonight: posted during the day, playing the same evening — 5h a phase, so
+ *   an 11:00 lineup finishes building at 16:00 and decides by 21:00.
  * - This Week: weekly-event group, high threshold, time to review.
  * - Series: large group planning months ahead, many parallel matches.
  */
@@ -28,11 +31,17 @@ export const LINEUP_PRESETS: Record<
   Exclude<PresetKey, 'custom'>,
   PresetValues
 > = {
-  tonight: {
+  lan: {
     matchThreshold: 100,
     votesPerPlayer: 3,
     buildingDurationHours: 0.25,
     votingDurationHours: 0.25,
+  },
+  tonight: {
+    matchThreshold: 100,
+    votesPerPlayer: 3,
+    buildingDurationHours: 5,
+    votingDurationHours: 5,
   },
   thisWeek: {
     matchThreshold: 50,
@@ -50,7 +59,7 @@ export const LINEUP_PRESETS: Record<
 
 /**
  * Human-format a duration given in hours. Sub-hour and sub-day values are
- * shown honestly (ROK-1302) so a preset like "Tonight" (0.25h) reads
+ * shown honestly (ROK-1302) so a preset like "LAN" (0.25h) reads
  * "15 min" instead of being rounded up to "1 day".
  */
 export function formatDurationHours(hours: number): string {

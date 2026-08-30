@@ -142,7 +142,7 @@ export function S4After(): JSX.Element {
       <div className="text-sm font-semibold mb-2">Start Community Lineup ✕</div>
       <div className="text-[11px] py-1 text-muted">Title *  [Lineup — May 2026                                ]</div>
       <div className="text-[11px] py-1 text-emerald-300 mt-2">Match shape</div>
-      <div className="text-[11px] py-0.5 text-muted">Preset  [Tonight] [This Week] [Series] [Custom]  <span className="text-[10px] text-muted">→ sets the 3 settings below</span></div>
+      <div className="text-[11px] py-0.5 text-muted">Preset  [LAN] [Tonight] [This Week] [Series] [Custom]  <span className="text-[10px] text-muted">→ sets the 3 settings below</span></div>
       <div className="text-[11px] py-0.5 text-muted">· Match Threshold  35%  ━━━━●━━━━━━━  <span className="text-[10px]">(% of voters needed to form a match)</span></div>
       <div className="text-[11px] py-0.5 text-muted">· Votes per Player  3  ━●━━━━━━━━━ 10  <span className="text-[10px]">(how many games each picks)</span></div>
       <div className="text-[11px] py-0.5 text-muted">· Player Caps  <span className="text-emerald-400">from game metadata</span></div>
