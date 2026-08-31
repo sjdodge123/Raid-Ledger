@@ -61,6 +61,11 @@ export const LINEUP_PRESETS: Record<
  * Human-format a duration given in hours. Sub-hour and sub-day values are
  * shown honestly (ROK-1302) so a preset like "LAN" (0.25h) reads
  * "15 min" instead of being rounded up to "1 day".
+ *
+ * ROK-1441: values above 24h that are not whole days render as `1d 12h`
+ * rather than rounding to a day count. The slider became hour-granular, so
+ * 36h is now reachable by drag; rounding it to "2 days" would show a deadline
+ * 12 hours later than the one actually submitted.
  */
 export function formatDurationHours(hours: number): string {
   if (hours < 1) {
@@ -70,6 +75,11 @@ export function formatDurationHours(hours: number): string {
   if (hours < 24) {
     return `${Math.round(hours)} ${Math.round(hours) === 1 ? 'hour' : 'hours'}`;
   }
-  const days = Math.round(hours / 24);
-  return `${days} ${days === 1 ? 'day' : 'days'}`;
+  const whole = Math.round(hours);
+  const days = Math.floor(whole / 24);
+  const remainder = whole % 24;
+  if (remainder === 0) {
+    return `${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+  return `${days}d ${remainder}h`;
 }
