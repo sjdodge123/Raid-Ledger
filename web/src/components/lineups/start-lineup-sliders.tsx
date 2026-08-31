@@ -2,6 +2,7 @@
  * Slider + text-field subcomponents extracted from StartLineupModal to keep
  * the main file under the 300-line limit (ROK-1064).
  */
+import { useState } from 'react';
 import type { JSX } from 'react';
 import { formatDurationHours } from './start-lineup-config';
 
@@ -17,7 +18,17 @@ function clampHours(v: number): number {
   return Math.min(MAX_HOURS, Math.max(0.25, v));
 }
 
-/** Exact-entry companion to the duration track, in hours. */
+/**
+ * Exact-entry companion to the duration track, in hours.
+ *
+ * Holds the raw string while the field has focus (ROK-1441, Codex review).
+ * Clamping every keystroke made fractional entry impossible: typing "1.5"
+ * coerced the intermediate "1." back to 1, so React re-rendered and ate the
+ * decimal point, and a leading "0" was rewritten to the 0.25 minimum before
+ * the operator could type the rest. The draft is committed and clamped on
+ * blur; in-range intermediates still propagate live so the slider and the
+ * readout track what is being typed.
+ */
 function HoursInput({
   label,
   testId,
@@ -29,6 +40,27 @@ function HoursInput({
   value: number;
   onChange: (v: number | '') => void;
 }): JSX.Element {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  function handleChange(raw: string): void {
+    setDraft(raw);
+    if (raw === '') return;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0.25 && parsed <= MAX_HOURS) {
+      onChange(parsed);
+    }
+  }
+
+  function handleBlur(raw: string): void {
+    setDraft(null);
+    if (raw === '') {
+      onChange('');
+      return;
+    }
+    const parsed = Number(raw);
+    onChange(Number.isFinite(parsed) ? clampHours(parsed) : value);
+  }
+
   return (
     <input
       type="number"
@@ -37,10 +69,9 @@ function HoursInput({
       min={0.25}
       max={MAX_HOURS}
       step="any"
-      value={value}
-      onChange={(e) =>
-        onChange(e.target.value === '' ? '' : clampHours(Number(e.target.value)))
-      }
+      value={draft ?? value}
+      onChange={(e) => handleChange(e.target.value)}
+      onBlur={(e) => handleBlur(e.target.value)}
       className="w-16 shrink-0 px-2 py-1 text-sm bg-panel border border-edge rounded-lg text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
     />
   );

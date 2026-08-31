@@ -469,6 +469,27 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         });
     });
 
+    // ROK-1441 (Codex review): clamping on every keystroke made fractional
+    // entry impossible — "1." coerced back to 1, so the decimal point was
+    // eaten on re-render and the next digit landed as "15".
+    it('accepts a fractional duration typed one character at a time', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+        await user.click(screen.getByText(/more options/i));
+        const field = screen.getByTestId('building-duration-hours');
+        await user.clear(field);
+        await user.type(field, '1.5');
+        expect(field).toHaveValue(1.5);
+        await user.click(
+            screen.getByRole('button', { name: /create lineup/i }),
+        );
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            buildingDurationHours: 1.5,
+        });
+    });
+
     it('reaches the 30-day ceiling through the numeric hours field', async () => {
         const user = userEvent.setup();
         renderWithProviders(
