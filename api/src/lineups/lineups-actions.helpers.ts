@@ -160,6 +160,13 @@ export interface NominateDeps {
   lineupNotifications: LineupNotificationService;
   logger: Logger;
   resolveChannelName: ResolveChannelName;
+  /**
+   * ROK-1444: runs after the entry lands and BEFORE the detail response is
+   * built. The service passes cache invalidation + `maybeAutoAdvance` here, so
+   * a nomination that crosses the early-advance target returns the phase it
+   * caused rather than the one it started in.
+   */
+  afterMutate?: () => Promise<void>;
 }
 
 export interface RemoveNominationDeps {
@@ -204,7 +211,15 @@ export async function runRemoveNomination(
   );
 }
 
-/** Nominate a game into a lineup. */
+/**
+ * Nominate a game into a lineup.
+ *
+ * ROK-1444 (Codex P2): the detail response is built only after `afterMutate`
+ * has run. A nomination can now cross the early-advance target, so building it
+ * first would report `building` for a lineup that just flipped to `voting`
+ * (grace 0), or omit the freshly claimed `pendingAdvanceAt` (default grace) —
+ * the client that caused the transition would be the last to hear about it.
+ */
 export async function runNominate(
   deps: NominateDeps,
   lineupId: number,
@@ -236,6 +251,7 @@ export async function runNominate(
     lineupId,
   );
 
+  await deps.afterMutate?.();
   return buildDetailResponse(
     deps.db,
     lineupId,

@@ -69,7 +69,16 @@ jest.mock('./lineups-notify-hooks.helpers', () => ({
 jest.mock('./lineups-actions.helpers', () => ({
   runCreateLineup: jest.fn(),
   runToggleVote: jest.fn(),
-  runNominate: jest.fn().mockResolvedValue({ id: 1, status: 'building' }),
+  // ROK-1444: the service now hands cache invalidation + auto-advance to
+  // runNominate as `afterMutate`, so it can run BEFORE the detail response is
+  // built. The stub must honour that contract or the invalidation it is
+  // asserting on never fires.
+  runNominate: jest
+    .fn()
+    .mockImplementation(async (deps: { afterMutate?: () => Promise<void> }) => {
+      await deps.afterMutate?.();
+      return { id: 1, status: 'building' };
+    }),
   runRemoveNomination: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('./lineups-invitees-actions.helpers', () => ({
@@ -79,6 +88,7 @@ jest.mock('./lineups-invitees-actions.helpers', () => ({
 jest.mock('./lineups-query.helpers', () => ({
   findLineupById: jest.fn().mockResolvedValue([{ id: 1, status: 'building' }]),
 }));
+
 jest.mock('./lineups-removal.helpers', () => ({
   findEntry: jest.fn().mockResolvedValue({ id: 9, gameId: 5, nominatedBy: 10 }),
   validateRemoval: jest.fn(),

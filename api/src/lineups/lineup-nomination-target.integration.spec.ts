@@ -174,6 +174,29 @@ function describeNominationTarget() {
     expect(await readStatus(lineupId)).toBe('voting');
   });
 
+  it('returns the ADVANCED phase in the nominate response that triggered it', async () => {
+    // Codex P2: `maybeAutoAdvance` runs in the service AFTER runNominate. If
+    // the detail response were built inside runNominate, the POST that crossed
+    // the target would answer `building` for a lineup already flipped to
+    // `voting` — the client that caused the transition would be the last to
+    // hear about it.
+    const a = await createMember('resp-a');
+    const b = await createMember('resp-b');
+    const lineupId = await createLineup(25); // 5 of a 20 cap
+    const games = await createGames(5);
+
+    for (const [i, game] of games.entries()) {
+      const who = i === games.length - 1 ? b : a;
+      const res = await nominate(who.token, lineupId, game.id);
+      expect(res.status).toBe(201);
+      // The final nomination is the one that crosses the target.
+      if (i === games.length - 1) {
+        expect(res.body.status).toBe('voting');
+      }
+    }
+    expect(await readStatus(lineupId)).toBe('voting');
+  });
+
   it('stays in building when the target is not reached (deadline remains the upper bound)', async () => {
     const a = await createMember('under-a');
     const b = await createMember('under-b');
