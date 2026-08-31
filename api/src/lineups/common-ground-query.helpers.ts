@@ -17,7 +17,6 @@ import {
   SALE_BONUS,
   FULL_PRICE_PENALTY,
   SCORING_WEIGHTS,
-  nominationCap,
   type CommonGroundWeights,
 } from './common-ground-scoring.constants';
 import {
