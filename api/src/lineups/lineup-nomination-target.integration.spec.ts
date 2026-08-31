@@ -197,6 +197,50 @@ function describeNominationTarget() {
     expect(await readStatus(lineupId)).toBe('voting');
   });
 
+  it('advances a SOLO-nominator lineup once it reaches the target', async () => {
+    // Operator decision 2026-08-31: a configured target outranks the ROK-1118
+    // >=2-voter guard. Without this, the same-day "Tonight" case that motivated
+    // the story — one keen person nominating everything in the first twenty
+    // minutes — silently ignores the target the modal advertised.
+    const solo = await createMember('solo-a');
+    const lineupId = await createLineup(25); // 5 of a 20 cap
+    const games = await createGames(5);
+
+    for (const game of games) {
+      expect((await nominate(solo.token, lineupId, game.id)).status).toBe(201);
+    }
+
+    expect(await readStatus(lineupId)).toBe('voting');
+  });
+
+  it('still holds a solo lineup below the global nomination floor', async () => {
+    // The floor is the remaining protection: a target low enough to be met at
+    // 2 entries must not advance a near-empty lineup.
+    const solo = await createMember('solo-floor');
+    const lineupId = await createLineup(25);
+    const games = await createGames(3); // 3 < default floor of 4
+
+    for (const game of games) {
+      expect((await nominate(solo.token, lineupId, game.id)).status).toBe(201);
+    }
+
+    expect(await readStatus(lineupId)).toBe('building');
+  });
+
+  it('leaves a solo lineup with NO target on the deadline path', async () => {
+    // The solo guard still applies to every non-target advance, so this is
+    // unchanged from before ROK-1444.
+    const solo = await createMember('solo-none');
+    const lineupId = await createLineup(null);
+    const games = await createGames(8);
+
+    for (const game of games) {
+      expect((await nominate(solo.token, lineupId, game.id)).status).toBe(201);
+    }
+
+    expect(await readStatus(lineupId)).toBe('building');
+  });
+
   it('stays in building when the target is not reached (deadline remains the upper bound)', async () => {
     const a = await createMember('under-a');
     const b = await createMember('under-b');

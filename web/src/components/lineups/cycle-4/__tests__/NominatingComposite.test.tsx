@@ -207,7 +207,7 @@ describe('NominatingComposite — roster-fit group size (ROK-1444)', () => {
             invitees: [2, 3, 4, 5, 6].map((id) => ({
                 id,
                 displayName: `Invitee ${id}`,
-                avatarUrl: null,
+                steamLinked: false,
             })),
             entries: [createMockEntry({ cooptimusOnlineMax: 4 })],
         });
@@ -221,12 +221,37 @@ describe('NominatingComposite — roster-fit group size (ROK-1444)', () => {
         ).toHaveTextContent(/Fits 4 online · group is 6/);
     });
 
+    it('counts the creator once when they are also in the invitee list', async () => {
+        // Codex round-5 P2: `addInvitees` does not exclude the creator, so a
+        // naive `invitees.length + 1` reports five for a real four-person
+        // roster and wrongly flags a 4-player co-op game.
+        const lineup = buildBuildingLineup({
+            // createdBy.id is 1 in the fixture; include it among the invitees.
+            invitees: [1, 2, 3, 4].map((id) => ({
+                id,
+                displayName: `User ${id}`,
+                steamLinked: false,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 4 })],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        // Distinct roster is 4, and the game fits 4 — no warning.
+        expect(
+            screen.queryByTestId('nomination-fit-warning'),
+        ).not.toBeInTheDocument();
+    });
+
     it('leaves a game that still fits the invited roster unflagged', async () => {
         const lineup = buildBuildingLineup({
             invitees: [2, 3].map((id) => ({
                 id,
                 displayName: `Invitee ${id}`,
-                avatarUrl: null,
+                steamLinked: false,
             })),
             entries: [createMockEntry({ cooptimusOnlineMax: 8 })],
         });

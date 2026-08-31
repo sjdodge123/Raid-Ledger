@@ -2,10 +2,13 @@
  * Quorum predicates for lineup auto-advance (ROK-1118, ROK-1296).
  *
  * Building quorum — ready when EITHER branch passes:
- *   a) every expected voter has stamped `nominations_submitted_at`, or
- *   b) ROK-1444: the entry count has crossed the per-lineup
- *      `nomination_target_pct` share of the dynamic nomination cap.
+ *   a) ROK-1444: the entry count has crossed the per-lineup
+ *      `nomination_target_pct` share of the dynamic nomination cap, or
+ *   b) every expected voter has stamped `nominations_submitted_at`.
  *   ...and, for both, total nominations ≥ floor (settings).
+ *
+ * (a) is checked FIRST and is exempt from the ≥2-voter solo guard — see the
+ * comment on the guard for why.
  *
  * Branch (b) exists because (a) is currently unreachable from the web app —
  * `useSubmitNominations` is defined but mounted nowhere, so nothing writes the
@@ -52,20 +55,22 @@ export async function checkBuildingQuorum(
   lineup: LineupRow,
 ): Promise<QuorumResult> {
   const expected = await loadQuorumGatingVoters(db, lineup);
-  if (expected.length < 2) {
-    return { ready: false, reason: 'solo lineup; manual advance required' };
-  }
-  const submitted = await loadNominationSubmitters(db, lineup.id);
-  const shortfall = countMissingSubmissions(expected, submitted);
   const totalNominations = await countNominations(db, lineup.id);
   const floor = await readMinNominations(settings);
 
-  if (shortfall > 0) {
-    // ROK-1444: the submission quorum is short, so fall through to the
-    // count-based early-advance target. Evaluated HERE rather than as its own
-    // trigger so it inherits the revert pause, the grace window and the single
-    // `runStatusTransition` path. Returns not-ready (and performs no writes)
-    // whenever the lineup has no target configured.
+  // ROK-1444: the count target is evaluated BEFORE the ≥2-voter guard.
+  //
+  // Configuring a target is an explicit operator opt-in that says "open voting
+  // once there are enough games", so it outranks the ROK-1118 solo guard —
+  // otherwise a lineup where one keen person nominates everything (exactly the
+  // same-day "Tonight" case this feature was built for) silently ignores the
+  // target the create modal advertised. The global floor still gates the
+  // advance, so this can never fire on one or two games.
+  //
+  // `checkVotingQuorum` deliberately KEEPS its solo guard: others can still
+  // turn up to vote once voting is open, and the phase deadline advances the
+  // lineup regardless, so a solo lineup cannot get stuck by this.
+  if (lineup.nominationTargetPct != null) {
     const target = await evaluateNominationTarget(
       db,
       lineup,
@@ -73,12 +78,19 @@ export async function checkBuildingQuorum(
       floor,
     );
     if (target.ready) return target;
+  }
+
+  if (expected.length < 2) {
+    return { ready: false, reason: 'solo lineup; manual advance required' };
+  }
+  const submitted = await loadNominationSubmitters(db, lineup.id);
+  const shortfall = countMissingSubmissions(expected, submitted);
+  if (shortfall > 0) {
     return {
       ready: false,
       reason: `${shortfall} expected nominator(s) have not submitted`,
     };
   }
-
   if (totalNominations < floor) {
     return {
       ready: false,

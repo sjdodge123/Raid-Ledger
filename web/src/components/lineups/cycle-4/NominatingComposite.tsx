@@ -82,7 +82,13 @@ function rosterSize(
   lineup: LineupDetailResponseDto,
   participantCount: number,
 ): number | undefined {
-  const size = Math.max(participantCount, lineup.invitees.length + 1);
+  // Codex round-5 P2: count DISTINCT people. `addInvitees` does not exclude
+  // the creator, so a creator who is also in the invitee list would otherwise
+  // be counted twice and report the group one person too large — enough to
+  // wrongly flag a 4-player co-op game for a real four-person roster.
+  const invited = new Set(lineup.invitees.map((i) => i.id));
+  invited.add(lineup.createdBy.id);
+  const size = Math.max(participantCount, invited.size);
   return size >= 2 ? size : undefined;
 }
 
