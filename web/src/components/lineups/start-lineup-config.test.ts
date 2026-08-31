@@ -38,6 +38,14 @@ describe('formatDurationHours', () => {
         expect(formatDurationHours(167)).toBe('6d 23h');
     });
 
+    it('does not round a fractional hour to a whole one', () => {
+        // Reachable by typing into the numeric field (step="any").
+        // 1.5 previously rendered "2 hours" — 30 minutes late.
+        expect(formatDurationHours(1.5)).toBe('1h 30m');
+        expect(formatDurationHours(24.5)).toBe('1d 30m');
+        expect(formatDurationHours(36.25)).toBe('1d 12h 15m');
+    });
+
     it('never claims a longer duration than the value given', () => {
         for (let h = 24; h <= 168; h++) {
             const rendered = formatDurationHours(h);
