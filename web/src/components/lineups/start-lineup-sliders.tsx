@@ -41,7 +41,7 @@ function HoursInput({
       onChange={(e) =>
         onChange(e.target.value === '' ? '' : clampHours(Number(e.target.value)))
       }
-      className="w-20 shrink-0 px-2 py-1 text-sm bg-panel border border-edge rounded-lg text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+      className="w-16 shrink-0 px-2 py-1 text-sm bg-panel border border-edge rounded-lg text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
     />
   );
 }
@@ -91,7 +91,7 @@ export function DurationSlider({
           step={1}
           value={sliderHours}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+          className="w-full h-2 bg-overlay rounded-lg appearance-none cursor-pointer accent-emerald-500"
         />
         <HoursInput
           label={label}
@@ -99,10 +99,7 @@ export function DurationSlider({
           value={value}
           onChange={onChange}
         />
-      </div>
-      <div className="flex justify-between text-xs text-muted/60 mt-1">
-        <span>1 hour</span>
-        <span>7 days (up to 30 by hours)</span>
+        <span className="shrink-0 text-xs text-muted">hrs</span>
       </div>
     </div>
   );
@@ -132,7 +129,7 @@ export function VotesPerPlayerSlider({
         step={1}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        className="w-full h-2 bg-overlay rounded-lg appearance-none cursor-pointer accent-emerald-500"
       />
       <div className="flex justify-between text-xs text-muted/60 mt-1">
         <span>1 vote</span>
@@ -166,7 +163,7 @@ export function ThresholdSlider({
         step={5}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        className="w-full h-2 bg-overlay rounded-lg appearance-none cursor-pointer accent-emerald-500"
       />
       <div className="flex justify-between text-xs text-muted/60 mt-1">
         <span>More matches</span>
