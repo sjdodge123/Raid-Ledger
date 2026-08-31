@@ -56,6 +56,10 @@ function buildBuildingLineup(
         stillWaitingOnVoters: [],
         publicShareEnabled: true,
         publicSlug: 'test-lineup',
+        // ROK-1444: early-advance target + its published denominator.
+        nominationTargetPct: null,
+        nominationCap: 20,
+        nominationTargetDisarmedAt: null,
         viewerSubmissions: {
             nominationsSubmittedAt: null,
             votesSubmittedAt: null,
@@ -138,7 +142,7 @@ describe('NominatingComposite — JourneyHero wiring (ROK-1297)', () => {
 
         await waitFor(() => {
             expect(
-                screen.getByText(/0 nominated by 3 voters/i),
+                screen.getByText(/0 \/ 20 nominated by 3 voters/i),
             ).toBeInTheDocument();
         });
         // The community-wide count must NOT leak into the copy.
@@ -158,7 +162,7 @@ describe('NominatingComposite — JourneyHero wiring (ROK-1297)', () => {
 
         await waitFor(() => {
             expect(
-                screen.getByText(/0 nominated by 1 voter\b/i),
+                screen.getByText(/0 \/ 20 nominated by 1 voter\b/i),
             ).toBeInTheDocument();
         });
     });

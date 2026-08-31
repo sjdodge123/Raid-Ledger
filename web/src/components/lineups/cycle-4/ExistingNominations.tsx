@@ -4,17 +4,20 @@
  * gates this section with `hidden md:block`. Extracted from
  * NominatingComposite so the parent stays under the 300-line cap.
  */
-import type { JSX } from 'react';
-import type { LineupEntryResponseDto } from '@raid-ledger/contract';
-import { useRemoveNomination } from '../../../hooks/use-lineups';
-import { NominationCard } from '../NominationCard';
+import type { JSX } from "react";
+import type { LineupEntryResponseDto } from "@raid-ledger/contract";
+import { useRemoveNomination } from "../../../hooks/use-lineups";
+import { NominationCard } from "../NominationCard";
 
 export function ExistingNominations({
   entries,
   lineupId,
+  participantCount,
 }: {
   entries: LineupEntryResponseDto[];
   lineupId: number;
+  /** ROK-1444: eligible-player count used to flag picks the group outgrew. */
+  participantCount?: number;
 }): JSX.Element {
   const removeMutation = useRemoveNomination();
   const handleRemove = (gameId: number): void => {
@@ -42,6 +45,7 @@ export function ExistingNominations({
           <NominationCard
             key={entry.id}
             entry={entry}
+            participantCount={participantCount}
             onRemove={handleRemove}
           />
         ))}
