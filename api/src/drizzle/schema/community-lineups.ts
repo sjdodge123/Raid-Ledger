@@ -119,6 +119,63 @@ export const communityLineups = pgTable('community_lineups', {
   includeSchedulingPhase: boolean('include_scheduling_phase')
     .notNull()
     .default(true),
+  /**
+   * ROK-1444: early-advance target, as a percentage of the dynamic nomination
+   * cap (`nominationCap(distinctNominators)` = max(20, nominators * 5)). When
+   * the entry count reaches this share of the cap, the building phase opens
+   * voting early instead of waiting for `phase_deadline`.
+   *
+   * NULL disables the feature and preserves deadline-only behaviour exactly.
+   * The global `LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS` floor still applies as an
+   * absolute minimum on top of this percentage — a 10% target on a 20-cap
+   * lineup still will not advance at 2 entries when the floor is 4.
+   */
+  nominationTargetPct: smallint('nomination_target_pct'),
+  /**
+   * ROK-1444: monotonic high-water mark of the dynamic nomination cap.
+   *
+   * The live cap is `max(20, distinctNominators * 5)`, and distinct nominators
+   * can DECREASE — removing a nominator's last entry drops the count, which
+   * collapses the cap and RAISES the filled percentage with no new nomination.
+   * That let a deletion satisfy the target and open voting (verified: 21/25 =
+   * 84% became 20/20 = 100% when one member removed their only game).
+   *
+   * Ratcheting the cap upward and never down removes the failure mode entirely
+   * and keeps the publicly-displayed denominator from jittering. Used as the
+   * effective cap by BOTH the target predicate and `validateNominationCap`'s
+   * rejection ceiling — they must not diverge, or a lineup could reject new
+   * nominations at the live ceiling while the target still reads under 100%.
+   */
+  nominationCapPeak: smallint('nomination_cap_peak'),
+  /**
+   * ROK-1444 (rising-edge arm). Stamped the first time the quorum check
+   * OBSERVES the target as not-yet-met. The target may only fire once this is
+   * non-null, which guarantees the advance is triggered by a genuine crossing
+   * rather than a standing condition.
+   *
+   * Why this is needed: carry-over (`carryOverFromLastDecided`) can seed a
+   * brand-new lineup with entries that already satisfy the target, and the
+   * denominator itself moves when the nominator count grows. Without this
+   * latch such a lineup would advance out of building on its first mutation.
+   */
+  nominationTargetBelowSeenAt: timestamp('nomination_target_below_seen_at'),
+  /**
+   * ROK-1444 (sticky disarm — THE revert trap guard). Stamped when an operator
+   * reverts `voting -> building`, and never cleared automatically.
+   *
+   * Deliberately NOT reusing `auto_advance_paused_at`: that stamp is bounded by
+   * `LINEUP_AUTO_ADVANCE_PAUSE_TTL_MS` (24h default), and ROK-1296 could only
+   * make the TTL safe by ALSO clearing the `*_submitted_at` stamps that
+   * satisfied the quorum. A nomination count has no such clearable state — the
+   * entries ARE what the operator reverted in order to edit — so a TTL would
+   * re-advance the lineup the moment it expired. Rising-edge alone is also
+   * insufficient: deleting a weak game and adding a better one re-crosses the
+   * target and IS a rising edge.
+   *
+   * Consequence, by design: a lineup reverted out of voting stays manually
+   * controlled for the rest of its life. Forward transitions do NOT clear it.
+   */
+  nominationTargetDisarmedAt: timestamp('nomination_target_disarmed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

@@ -1,9 +1,16 @@
 /**
  * Quorum predicates for lineup auto-advance (ROK-1118, ROK-1296).
  *
- * Building quorum:
- *   - every expected voter has stamped `nominations_submitted_at` AND
- *   - total nominations ≥ floor (settings).
+ * Building quorum — ready when EITHER branch passes:
+ *   a) every expected voter has stamped `nominations_submitted_at`, or
+ *   b) ROK-1444: the entry count has crossed the per-lineup
+ *      `nomination_target_pct` share of the dynamic nomination cap.
+ *   ...and, for both, total nominations ≥ floor (settings).
+ *
+ * Branch (b) exists because (a) is currently unreachable from the web app —
+ * `useSubmitNominations` is defined but mounted nowhere, so nothing writes the
+ * stamp (a) reads. See `nomination-target.helpers.ts` for the revert-trap guard
+ * that keeps (b) from re-firing on a standing count after an operator revert.
  *
  * Voting quorum:
  *   - every expected voter has stamped `votes_submitted_at`.
@@ -26,6 +33,7 @@ import {
 } from '../../drizzle/schema/app-settings';
 import type { SettingsService } from '../../settings/settings.service';
 import { loadQuorumGatingVoters } from './quorum-voters.helpers';
+import { evaluateNominationTarget } from './nomination-target.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -49,14 +57,28 @@ export async function checkBuildingQuorum(
   }
   const submitted = await loadNominationSubmitters(db, lineup.id);
   const shortfall = countMissingSubmissions(expected, submitted);
+  const totalNominations = await countNominations(db, lineup.id);
+  const floor = await readMinNominations(settings);
+
   if (shortfall > 0) {
+    // ROK-1444: the submission quorum is short, so fall through to the
+    // count-based early-advance target. Evaluated HERE rather than as its own
+    // trigger so it inherits the revert pause, the grace window and the single
+    // `runStatusTransition` path. Returns not-ready (and performs no writes)
+    // whenever the lineup has no target configured.
+    const target = await evaluateNominationTarget(
+      db,
+      lineup,
+      totalNominations,
+      floor,
+    );
+    if (target.ready) return target;
     return {
       ready: false,
       reason: `${shortfall} expected nominator(s) have not submitted`,
     };
   }
-  const totalNominations = await countNominations(db, lineup.id);
-  const floor = await readMinNominations(settings);
+
   if (totalNominations < floor) {
     return {
       ready: false,

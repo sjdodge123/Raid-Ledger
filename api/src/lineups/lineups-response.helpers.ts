@@ -37,6 +37,7 @@ import { buildTiebreakerDetail } from './tiebreaker/tiebreaker-response.helpers'
 import { listInviteesWithProfile } from './lineups-invitees.helpers';
 import { findViewerSubmissions } from './lineups-submissions-query.helpers';
 import { computeVotingEligibleCount } from './voting-eligibility.helpers';
+import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -142,6 +143,12 @@ function mapLineupCore(
     publicSlug: lineup.publicSlug,
     // ROK-1302: whether the decided lineup advances into a scheduling poll.
     includeSchedulingPhase: lineup.includeSchedulingPhase,
+    // ROK-1444: early-advance target + its sticky disarm stamp. The matching
+    // DENOMINATOR (`nominationCap`) is added in `mapToDetailResponse`, which
+    // has the entry rows needed to count distinct nominators.
+    nominationTargetPct: lineup.nominationTargetPct ?? null,
+    nominationTargetDisarmedAt:
+      lineup.nominationTargetDisarmedAt?.toISOString() ?? null,
   };
 }
 
@@ -160,6 +167,14 @@ function mapToDetailResponse(
   const voteMap = new Map(voteCounts.map((v) => [v.gameId, v.voteCount]));
   return {
     ...mapLineupCore(lineup, creator, decidedGame, channelOverrideName),
+    // ROK-1444: publish the DENOMINATOR the nomination target is measured
+    // against. It moves — a fifth distinct nominator takes it 20 -> 25 — so
+    // clients must render it rather than assume the base 20. Derived from the
+    // already-loaded entry rows; no extra query.
+    nominationCap: effectiveNominationCap(
+      new Set(entries.map((e) => e.nominatedById)).size,
+      lineup.nominationCapPeak,
+    ),
     entries: entries.map((e) => mapEntry(e, voteMap, enrichment)),
     totalVoters: voterCount[0]?.total ?? 0,
     totalMembers: enrichment.totalMembers,

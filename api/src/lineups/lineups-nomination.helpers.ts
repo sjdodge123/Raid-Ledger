@@ -15,20 +15,30 @@ import {
   countLineupEntries,
   countDistinctNominators,
 } from './lineups-query.helpers';
-import { nominationCap } from './common-ground-scoring.constants';
+import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Enforce the dynamic nomination cap (base 20, +5 per unique participant). */
+/**
+ * Enforce the dynamic nomination cap (base 20, +5 per unique participant).
+ *
+ * ROK-1444: uses the MONOTONIC cap, not the live one. The ceiling and the
+ * early-advance target must share a denominator — a live ceiling against a
+ * ratcheted target would reject nominations at 20/20 while the target still
+ * read 80% of 25, leaving the lineup stuck until its deadline.
+ */
 export async function validateNominationCap(
   db: Db,
-  lineupId: number,
+  lineup: typeof schema.communityLineups.$inferSelect,
 ): Promise<void> {
   const [[entries], [nominators]] = await Promise.all([
-    countLineupEntries(db, lineupId),
-    countDistinctNominators(db, lineupId),
+    countLineupEntries(db, lineup.id),
+    countDistinctNominators(db, lineup.id),
   ]);
-  const cap = nominationCap(nominators?.count ?? 0);
+  const cap = effectiveNominationCap(
+    nominators?.count ?? 0,
+    lineup.nominationCapPeak,
+  );
   if (entries && entries.count >= cap) {
     throw new BadRequestException(`Lineup has reached the ${cap}-entry cap`);
   }

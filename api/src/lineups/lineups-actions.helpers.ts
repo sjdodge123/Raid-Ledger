@@ -34,6 +34,8 @@ import {
 import { logNomination } from './lineups-activity.helpers';
 import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
 import { carryOverFromLastDecided } from './lineups-carryover.helpers';
+import { armNominationTargetOnCreate } from './quorum/nomination-target.helpers';
+import { ratchetNominationCap } from './lineups-nomination-cap.helpers';
 import {
   fireLineupCreated,
   fireNominationMilestone,
@@ -85,6 +87,10 @@ export async function runCreateLineup(
     void deps.steamNudge.nudgeUnlinkedMembers(row.id);
     await carryOverFromLastDecided(deps.db, row.id);
   }
+  // ROK-1444: arm the early-advance rising edge AFTER carry-over, so a lineup
+  // seeded above its target starts unarmed and advances by deadline instead of
+  // firing on the first mutation.
+  await armNominationTargetOnCreate(deps.db, row);
 
   const delayMs = phaseDeadline.getTime() - Date.now();
   await deps.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
@@ -215,9 +221,12 @@ export async function runNominate(
     role: callerRole,
   });
 
-  await validateNominationCap(deps.db, lineupId);
+  await validateNominationCap(deps.db, lineup);
   await validateGameExists(deps.db, dto.gameId);
   await insertNomination(deps.db, lineupId, dto, userId);
+  // ROK-1444: adding an entry is the only direction that can raise the
+  // distinct-nominator count, so this is the one place the cap ratchets.
+  await ratchetNominationCap(deps.db, lineupId);
   await logNomination(deps.db, deps.activityLog, lineupId, dto, userId);
 
   fireNominationMilestone(
