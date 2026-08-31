@@ -149,6 +149,10 @@ function mapLineupCore(
     nominationTargetPct: lineup.nominationTargetPct ?? null,
     nominationTargetDisarmedAt:
       lineup.nominationTargetDisarmedAt?.toISOString() ?? null,
+    // ROK-1444 (Codex P2): the rising-edge arm. Without publishing this the
+    // nominating page promised "voting opens at N%" for a carry-over lineup
+    // that started above its target and therefore can never fire.
+    nominationTargetArmed: lineup.nominationTargetBelowSeenAt != null,
   };
 }
 

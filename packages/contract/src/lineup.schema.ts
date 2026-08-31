@@ -313,6 +313,14 @@ export const LineupDetailResponseSchema = z.object({
      */
     nominationTargetDisarmedAt: z.string().nullable(),
     /**
+     * ROK-1444: whether the early-advance target is ARMED — i.e. the lineup has
+     * been observed below its target, which the rising-edge guard requires
+     * before it may fire. False for a carry-over-seeded lineup that started at
+     * or above its target: such a lineup will never advance early, so the UI
+     * must not promise "voting opens at N%".
+     */
+    nominationTargetArmed: z.boolean(),
+    /**
      * Viewer's per-phase submission timestamps (ROK-1296, U4 SubmitBar).
      * Both fields are ISO 8601 UTC strings or null. Populated for the
      * authenticated caller from the `community_lineup_user_submissions` row

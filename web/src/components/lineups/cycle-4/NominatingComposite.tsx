@@ -48,12 +48,16 @@ interface JourneyState {
 /**
  * ROK-1444: " · voting opens at N%" when the lineup carries an early-advance
  * target. Empty when the target is off (deadline-only) or has been permanently
- * disarmed by an operator revert, so the copy never promises an advance that
- * can no longer happen.
+ * disarmed by an operator revert, or never armed at all, so the copy never
+ * promises an advance that cannot happen.
  */
 function targetSuffix(lineup: LineupDetailResponseDto): string {
   if (lineup.nominationTargetPct == null) return '';
   if (lineup.nominationTargetDisarmedAt != null) return '';
+  // Codex P2: an UNARMED target can never fire (carry-over seeded the lineup
+  // at or above its target, so there is no rising edge left to cross).
+  // Promising early voting there would be a lie.
+  if (!lineup.nominationTargetArmed) return '';
   return ` · voting opens at ${lineup.nominationTargetPct}%`;
 }
 
@@ -349,6 +353,9 @@ export function NominatingComposite(
         onClose={() => setNominationsDrawerOpen(false)}
         entries={lineup.entries}
         lineupId={lineup.id}
+        // ROK-1444 (Codex P3): the drawer is the MOBILE nominations list, so
+        // it needs the same roster size or fit warnings never show below md.
+        participantCount={rosterSize(lineup, participantCount)}
       />
     </section>
   );

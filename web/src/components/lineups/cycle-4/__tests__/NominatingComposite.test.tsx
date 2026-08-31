@@ -61,6 +61,7 @@ function buildBuildingLineup(
         nominationTargetPct: null,
         nominationCap: 20,
         nominationTargetDisarmedAt: null,
+        nominationTargetArmed: true,
         viewerSubmissions: {
             nominationsSubmittedAt: null,
             votesSubmittedAt: null,
@@ -238,5 +239,63 @@ describe('NominatingComposite — roster-fit group size (ROK-1444)', () => {
         expect(
             screen.queryByTestId('nomination-fit-warning'),
         ).not.toBeInTheDocument();
+    });
+});
+
+/**
+ * ROK-1444 (Codex P2) — the early-advance promise must not outrun reality.
+ *
+ * `targetSuffix` renders " · voting opens at N%". It has to stay silent in
+ * every state where the target cannot actually fire, or the page lies to the
+ * group about how the lineup will end.
+ */
+describe('NominatingComposite — early-advance copy (ROK-1444)', () => {
+    it('promises early voting when the target is armed', async () => {
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: true,
+            nominationTargetDisarmedAt: null,
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(
+            await screen.findByText(/voting opens at 50%/i),
+        ).toBeInTheDocument();
+    });
+
+    it('stays silent when the target was never armed (carry-over seeded above it)', async () => {
+        // A carry-over lineup that started at or above its target has no
+        // rising edge left to cross, so it will only ever advance on the
+        // deadline — promising 50% here would be false.
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: false,
+            nominationTargetDisarmedAt: null,
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
+    });
+
+    it('stays silent once an operator revert has disarmed the target', async () => {
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: true,
+            nominationTargetDisarmedAt: '2026-08-31T00:00:00.000Z',
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
     });
 });

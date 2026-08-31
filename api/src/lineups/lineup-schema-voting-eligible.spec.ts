@@ -50,6 +50,7 @@ function baseLineup(): Record<string, unknown> {
     nominationTargetPct: null,
     nominationCap: 20,
     nominationTargetDisarmedAt: null,
+    nominationTargetArmed: false,
     viewerSubmissions: {
       nominationsSubmittedAt: null,
       votesSubmittedAt: null,
