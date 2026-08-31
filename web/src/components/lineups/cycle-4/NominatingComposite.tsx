@@ -303,7 +303,13 @@ export function NominatingComposite(
         <ExistingNominations
           entries={[...lineup.entries]}
           lineupId={lineup.id}
-          participantCount={lineup.votingEligibleCount}
+          // ROK-1444: the roster-fit flags key off the people actually IN this
+          // lineup (Common Ground's `participantCount` = nominators + voters,
+          // or invitees + creator when private) — NOT `votingEligibleCount`,
+          // which on a public lineup is the whole community. Using the latter
+          // flagged every co-op game on the dev env ("group is 249") and made
+          // the signal worthless.
+          participantCount={participantCount}
         />
       </div>
       {drawerGameId != null && (
