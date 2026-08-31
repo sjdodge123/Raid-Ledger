@@ -22,6 +22,7 @@ import {
   findNominatedGameIds,
 } from './lineups-query.helpers';
 import { loadInvitees } from './lineups-eligibility.helpers';
+import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
 import { computeCombinedVoterVector } from './common-ground-taste.helpers';
 import type { IntensityBucket } from './common-ground-taste.helpers';
 import {
@@ -99,19 +100,32 @@ function averageIntensityBucket(
 async function resolveScoringLineup(
   db: PostgresJsDatabase<typeof schema>,
   filters: CommonGroundQueryDto,
-): Promise<{ id: number; visibility: 'public' | 'private' }> {
+): Promise<{
+  id: number;
+  visibility: 'public' | 'private';
+  /** ROK-1444: needed for the ratcheted cap in the response meta. */
+  nominationCapPeak: number | null;
+}> {
   if (filters.lineupId != null) {
     const [row] = await findLineupById(db, filters.lineupId);
     if (!row) throw new NotFoundException('Lineup not found');
     if (row.status !== 'building') {
       throw new BadRequestException('Lineup is not in building status');
     }
-    return { id: row.id, visibility: row.visibility };
+    return {
+      id: row.id,
+      visibility: row.visibility,
+      nominationCapPeak: row.nominationCapPeak,
+    };
   }
   const [lineup] = await findBuildingLineup(db);
   if (!lineup)
     throw new NotFoundException('No active lineup in building status');
-  return { id: lineup.id, visibility: lineup.visibility };
+  return {
+    id: lineup.id,
+    visibility: lineup.visibility,
+    nominationCapPeak: lineup.nominationCapPeak,
+  };
 }
 
 /**
@@ -163,7 +177,7 @@ export async function runCommonGroundForBuildingLineup(
     db,
     lineup.id,
     nominated,
-    nominators?.count ?? 0,
+    effectiveNominationCap(nominators?.count ?? 0, lineup.nominationCapPeak),
     participantCount,
     filters,
     ctx,

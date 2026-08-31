@@ -56,6 +56,23 @@ export async function loadEffectiveNominationCap(
 }
 
 /**
+ * Effective cap for callers that hold only a lineup id (milestone embeds, the
+ * Common Ground meta). Reads the stored peak itself so every surface that
+ * publishes or gates on a cap agrees with `validateNominationCap`.
+ */
+export async function loadEffectiveNominationCapById(
+  db: Db,
+  lineupId: number,
+): Promise<number> {
+  const [row] = await db
+    .select({ peak: schema.communityLineups.nominationCapPeak })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId));
+  const [nominators] = await countDistinctNominators(db, lineupId);
+  return effectiveNominationCap(nominators?.count ?? 0, row?.peak);
+}
+
+/**
  * Ratchet the stored peak up to the current live cap and return the effective
  * value. Called after an entry is ADDED — the only direction that can raise the
  * distinct-nominator count. `GREATEST` in SQL keeps concurrent nominators from

@@ -328,6 +328,16 @@ function describeNominationTarget() {
       .get(`/lineups/${lineupId}`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.body.nominationCap).toBe(25);
+
+    // Codex review P2: the Common Ground meta drives the web's `atCap`, and
+    // `validateNominationCap` gates on the peak. If this reported the LIVE cap
+    // (20) the lineup would render as full at 20 entries and disable every
+    // nominate button while the API still accepted nominations up to 25.
+    const cg = await testApp.request
+      .get(`/lineups/common-ground?lineupId=${lineupId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(cg.status).toBe(200);
+    expect(cg.body.meta.maxNominations).toBe(25);
   });
 
   // -- The published denominator --------------------------------------------

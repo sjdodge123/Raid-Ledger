@@ -277,6 +277,8 @@ export function findBuildingLineup(db: PostgresJsDatabase<typeof schema>) {
     .select({
       id: schema.communityLineups.id,
       visibility: schema.communityLineups.visibility,
+      // ROK-1444: the Common Ground meta publishes the ratcheted cap.
+      nominationCapPeak: schema.communityLineups.nominationCapPeak,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.status, 'building'))
