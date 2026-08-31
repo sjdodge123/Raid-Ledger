@@ -11,7 +11,7 @@
  * The cap ratchets upward only (`nomination_cap_peak`), so the bar never moves
  * backwards under the group mid-lineup.
  */
-import type { JSX } from "react";
+import type { JSX } from 'react';
 
 /** Percentage used when the operator first switches the target on. */
 export const DEFAULT_NOMINATION_TARGET_PCT = 75;

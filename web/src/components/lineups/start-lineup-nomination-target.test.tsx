@@ -4,13 +4,13 @@
  * The target is OPTIONAL: null means today's deadline-only behaviour, so the
  * off state must stay reachable and must be the default.
  */
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {
   NominationTargetControl,
   DEFAULT_NOMINATION_TARGET_PCT,
-} from "./start-lineup-nomination-target";
+} from './start-lineup-nomination-target';
 
 describe("NominationTargetControl", () => {
   it("renders no slider while the target is off", () => {

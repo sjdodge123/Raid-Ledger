@@ -11,27 +11,27 @@
  * this page. Tabs were removed in the second rework cycle (operator
  * preferred a single nominations list).
  */
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import type { LineupDetailResponseDto } from "@raid-ledger/contract";
-import { JourneyHero } from "../../shared/journey-hero";
-import { LineupParticipantsButton } from "../LineupParticipantsButton";
-import { useNominateGame } from "../../../hooks/use-lineups";
-import { useAuth } from "../../../hooks/use-auth";
-import { useScrollDirection } from "../../../hooks/use-scroll-direction";
-import { CommonGroundHero } from "./CommonGroundHero";
-import { CommonGroundFilters } from "../CommonGroundFilters";
-import { useCommonGroundState } from "../use-common-ground-state";
-import { MyNominationsDrawer } from "./MyNominationsDrawer";
-import { ExistingNominations } from "./ExistingNominations";
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import type { LineupDetailResponseDto } from '@raid-ledger/contract';
+import { JourneyHero } from '../../shared/journey-hero';
+import { LineupParticipantsButton } from '../LineupParticipantsButton';
+import { useNominateGame } from '../../../hooks/use-lineups';
+import { useAuth } from '../../../hooks/use-auth';
+import { useScrollDirection } from '../../../hooks/use-scroll-direction';
+import { CommonGroundHero } from './CommonGroundHero';
+import { CommonGroundFilters } from '../CommonGroundFilters';
+import { useCommonGroundState } from '../use-common-ground-state';
+import { MyNominationsDrawer } from './MyNominationsDrawer';
+import { ExistingNominations } from './ExistingNominations';
 import {
   StickyHeroSearchButton,
   StickyHeroJumpButton,
   StickyHeroBackButton,
-} from "./sticky-hero-buttons";
-import { GameResearchDrawer } from "../../games/GameResearchDrawer";
-import { LineupHeroMeta } from "../LineupHeroMeta";
+} from './sticky-hero-buttons';
+import { GameResearchDrawer } from '../../games/GameResearchDrawer';
+import { LineupHeroMeta } from '../LineupHeroMeta';
 
-type CommonGroundMode = "suggestions" | "search";
+type CommonGroundMode = 'suggestions' | 'search';
 
 export interface NominatingCompositeProps {
   lineup: LineupDetailResponseDto;
@@ -42,18 +42,18 @@ interface JourneyState {
   badge: string;
   task: string;
   sub: string;
-  tone: "action" | "waiting";
+  tone: 'action' | 'waiting';
 }
 
 /**
  * ROK-1444: " · voting opens at N%" when the lineup carries an early-advance
- * target. Empty string when the target is off (deadline-only) or has been
- * permanently disarmed by an operator revert, so the copy never promises an
- * advance that can no longer happen.
+ * target. Empty when the target is off (deadline-only) or has been permanently
+ * disarmed by an operator revert, so the copy never promises an advance that
+ * can no longer happen.
  */
 function targetSuffix(lineup: LineupDetailResponseDto): string {
-  if (lineup.nominationTargetPct == null) return "";
-  if (lineup.nominationTargetDisarmedAt != null) return "";
+  if (lineup.nominationTargetPct == null) return '';
+  if (lineup.nominationTargetDisarmedAt != null) return '';
   return ` · voting opens at ${lineup.nominationTargetPct}%`;
 }
 
@@ -65,28 +65,29 @@ function deriveJourneyState(
   // creator + invitees; public = totalMembers), NOT the community-wide
   // totalMembers — a 3-invitee private lineup no longer reads "by 13 voters".
   const eligible = lineup.votingEligibleCount;
-  const submitted = lineup.viewerSubmissions?.nominationsSubmittedAt != null;
-  const badge = "Step 1 of 4 · Nominating";
+  const submitted =
+    lineup.viewerSubmissions?.nominationsSubmittedAt != null;
+  const badge = 'Step 1 of 4 · Nominating';
   if (submitted) {
     return {
       badge,
       task: "You're done nominating.",
       sub: `${myNominatedCount} nominated · waiting on the rest of the group`,
-      tone: "waiting",
+      tone: 'waiting',
     };
   }
   return {
     badge,
-    task: "Add games to the running.",
+    task: 'Add games to the running.',
     // ROK-1348: the entry count is no longer paired with the voter count
     // (the old "X of Y nominated by Y voters" wrongly used the same Y for
     // both the nomination target and the voter pool).
-    // ROK-1444: the nomination CAP is published alongside the count. It is
-    // the denominator an early-advance target is measured against and it
-    // moves (+5 per extra nominator), so leaving it implicit meant nobody
-    // could see the bar they were nominating toward.
-    sub: `${lineup.entries.length} / ${lineup.nominationCap} nominated by ${eligible} ${eligible === 1 ? "voter" : "voters"}${targetSuffix(lineup)}`,
-    tone: "action",
+    // ROK-1444: the nomination CAP is published beside the count. It is the
+    // denominator the early-advance target is measured against and it moves
+    // (+5 per extra nominator), so leaving it implicit meant nobody could see
+    // the bar they were nominating toward.
+    sub: `${lineup.entries.length} / ${lineup.nominationCap} nominated by ${eligible} ${eligible === 1 ? 'voter' : 'voters'}${targetSuffix(lineup)}`,
+    tone: 'action',
   };
 }
 
@@ -101,7 +102,7 @@ export function NominatingComposite(
   // so the sticky JourneyHero header can host a duplicate Search trigger
   // that's reachable even when scrolled past the panel.
   const [commonGroundMode, setCommonGroundMode] =
-    useState<CommonGroundMode>("suggestions");
+    useState<CommonGroundMode>('suggestions');
   // ROK-1297 round 5h: replace the smooth-scroll-to-section flow with a
   // proper drawer so the user can review/remove their nominations
   // without leaving the Common Ground context.
@@ -150,7 +151,7 @@ export function NominatingComposite(
     return () => observer.disconnect();
   }, []);
   const isHidden =
-    scrollDir === "down" && hasPinned && commonGroundMode !== "search";
+    scrollDir === 'down' && hasPinned && commonGroundMode !== 'search';
 
   const stickyHeaderRef = useRef<HTMLDivElement | null>(null);
 
@@ -165,7 +166,7 @@ export function NominatingComposite(
   // (which the operator rejected): we only adjust scroll position when
   // the user has actively typed a new query.
   useEffect(() => {
-    if (commonGroundMode !== "search") return;
+    if (commonGroundMode !== 'search') return;
     if (!search.trim()) return;
     const id = requestAnimationFrame(() => {
       const cg = document.querySelector('[data-testid="common-ground-hero"]');
@@ -177,7 +178,7 @@ export function NominatingComposite(
       // Only fire when the CG hero is meaningfully off-position. Skip
       // small deltas to avoid jitter on each keystroke.
       if (Math.abs(delta) < 24) return;
-      window.scrollBy({ top: delta, behavior: "smooth" });
+      window.scrollBy({ top: delta, behavior: 'smooth' });
     });
     return () => cancelAnimationFrame(id);
   }, [search, commonGroundMode]);
@@ -199,7 +200,10 @@ export function NominatingComposite(
   };
 
   return (
-    <section data-testid="nominating-composite-view" className="space-y-3">
+    <section
+      data-testid="nominating-composite-view"
+      className="space-y-3"
+    >
       <div ref={sentinelRef} aria-hidden="true" className="h-px" />
       {/* Sticky JourneyHero (ROK-1297 round-4b): sits UNDER the global
           Header (Header.tsx is `sticky top-0` at ~64px tall on mobile
@@ -222,9 +226,9 @@ export function NominatingComposite(
       <div
         ref={stickyHeaderRef}
         className={`sticky top-14 z-20 py-3 bg-backdrop md:bg-surface md:rounded-md md:px-3 will-change-transform md:will-change-auto md:translate-y-0 ${
-          isHidden ? "-translate-y-[calc(100%+3.5rem)]" : "translate-y-0"
+          isHidden ? '-translate-y-[calc(100%+3.5rem)]' : 'translate-y-0'
         }`}
-        style={{ transition: "transform 300ms ease-in-out" }}
+        style={{ transition: 'transform 300ms ease-in-out' }}
       >
         <JourneyHero
           phase="nominating"
@@ -233,16 +237,18 @@ export function NominatingComposite(
           badge={journey.badge}
           task={journey.task}
           action={<LineupParticipantsButton lineupId={lineup.id} />}
-          sub={<LineupHeroMeta lineup={lineup} phaseContext={journey.sub} />}
+          sub={
+            <LineupHeroMeta lineup={lineup} phaseContext={journey.sub} />
+          }
         />
         <div className="flex items-center gap-2 mt-2 px-1">
-          {commonGroundMode === "search" ? (
+          {commonGroundMode === 'search' ? (
             <StickyHeroBackButton
-              onClick={() => setCommonGroundMode("suggestions")}
+              onClick={() => setCommonGroundMode('suggestions')}
             />
           ) : (
             <StickyHeroSearchButton
-              onClick={() => setCommonGroundMode("search")}
+              onClick={() => setCommonGroundMode('search')}
               disabled={false}
             />
           )}
@@ -267,7 +273,7 @@ export function NominatingComposite(
         <div
           className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
           style={{
-            maxHeight: commonGroundMode === "search" ? "600px" : "0px",
+            maxHeight: commonGroundMode === 'search' ? '600px' : '0px',
           }}
         >
           <div className="mt-2 px-1">
@@ -294,7 +300,7 @@ export function NominatingComposite(
         aiSuggestionsByGameId={aiSuggestionsByGameId}
         atCap={cgAtCap}
         nominatingId={
-          nominate.isPending ? (nominate.variables?.body?.gameId ?? null) : null
+          nominate.isPending ? nominate.variables?.body?.gameId ?? null : null
         }
       />
       {/* Nominations section is mobile-hidden — the StickyHeroJumpButton
@@ -303,12 +309,11 @@ export function NominatingComposite(
         <ExistingNominations
           entries={[...lineup.entries]}
           lineupId={lineup.id}
-          // ROK-1444: the roster-fit flags key off the people actually IN this
+          // ROK-1444: roster-fit flags key off the people actually IN this
           // lineup (Common Ground's `participantCount` = nominators + voters,
           // or invitees + creator when private) — NOT `votingEligibleCount`,
           // which on a public lineup is the whole community. Using the latter
-          // flagged every co-op game on the dev env ("group is 249") and made
-          // the signal worthless.
+          // flagged every co-op game on the dev env ("group is 249").
           participantCount={participantCount}
         />
       </div>

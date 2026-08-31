@@ -8,16 +8,16 @@
  * canonical match-shape + phase-duration values; the scheduling toggle controls
  * whether the lineup advances into a scheduling poll after Decided.
  */
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Modal } from "../ui/modal";
-import { useCreateLineup } from "../../hooks/use-lineups";
-import { toast } from "../../lib/toast";
-import { NominationTargetControl } from "./start-lineup-nomination-target";
-import { LineupChannelOverrideSelect } from "./lineup-channel-override-select";
-import { VisibilityToggle } from "./VisibilityToggle";
-import { InviteeMultiSelect } from "./InviteeMultiSelect";
-import { PublicShareToggle } from "./PublicShareToggle";
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Modal } from '../ui/modal';
+import { useCreateLineup } from '../../hooks/use-lineups';
+import { toast } from '../../lib/toast';
+import { NominationTargetControl } from './start-lineup-nomination-target';
+import { LineupChannelOverrideSelect } from './lineup-channel-override-select';
+import { VisibilityToggle } from './VisibilityToggle';
+import { InviteeMultiSelect } from './InviteeMultiSelect';
+import { PublicShareToggle } from './PublicShareToggle';
 import {
   DurationSlider,
   VotesPerPlayerSlider,
@@ -25,14 +25,14 @@ import {
   TitleField,
   DescriptionField,
   TiebreakerPicker,
-} from "./start-lineup-sliders";
+} from './start-lineup-sliders';
 import {
   PresetChooser,
   SchedulingPhaseToggle,
   PlayerCapsNote,
   MoreOptions,
-} from "./start-lineup-presets";
-import { LINEUP_PRESETS, type PresetKey } from "./start-lineup-config";
+} from './start-lineup-presets';
+import { LINEUP_PRESETS, type PresetKey } from './start-lineup-config';
 
 interface Props {
   isOpen: boolean;
@@ -41,7 +41,7 @@ interface Props {
 
 function defaultTitle(): string {
   const now = new Date();
-  const month = now.toLocaleString("en-US", { month: "long" });
+  const month = now.toLocaleString('en-US', { month: 'long' });
   return `Lineup — ${month} ${now.getFullYear()}`;
 }
 
@@ -49,19 +49,18 @@ const DEFAULT_BUILDING_HOURS = 48;
 const DEFAULT_VOTING_HOURS = 24;
 
 function useDurationState() {
-  const [building, setBuilding] = useState<number | "">("");
-  const [voting, setVoting] = useState<number | "">("");
+  const [building, setBuilding] = useState<number | ''>('');
+  const [voting, setVoting] = useState<number | ''>('');
   const [matchThreshold, setMatchThreshold] = useState<number>(35);
   const [votesPerPlayer, setVotesPerPlayer] = useState<number>(3);
-  const [tiebreakerMode, setTiebreakerMode] = useState<
-    "bracket" | "veto" | null
-  >("bracket");
+  const [tiebreakerMode, setTiebreakerMode] =
+    useState<'bracket' | 'veto' | null>('bracket');
   // ROK-1444: null = off (deadline-only advancement), the default.
   const [nominationTargetPct, setNominationTargetPct] = useState<number | null>(
     null,
   );
-  const buildingVal = building === "" ? DEFAULT_BUILDING_HOURS : building;
-  const votingVal = voting === "" ? DEFAULT_VOTING_HOURS : voting;
+  const buildingVal = building === '' ? DEFAULT_BUILDING_HOURS : building;
+  const votingVal = voting === '' ? DEFAULT_VOTING_HOURS : voting;
 
   return {
     building: buildingVal,
@@ -85,7 +84,7 @@ function buildCreatePayload(state: {
   description: string;
   durations: ReturnType<typeof useDurationState>;
   channelOverrideId: string;
-  visibility: "public" | "private";
+  visibility: 'public' | 'private';
   inviteeUserIds: number[];
   publicShareEnabled: boolean;
   includeSchedulingPhase: boolean;
@@ -93,7 +92,7 @@ function buildCreatePayload(state: {
   const { durations } = state;
   return {
     title: state.title.trim(),
-    description: state.description.trim() === "" ? null : state.description,
+    description: state.description.trim() === '' ? null : state.description,
     buildingDurationHours: durations.building,
     votingDurationHours: durations.voting,
     matchThreshold: durations.matchThreshold,
@@ -108,7 +107,7 @@ function buildCreatePayload(state: {
       ? { channelOverrideId: state.channelOverrideId }
       : {}),
     // ROK-1065: visibility only sent when non-default ('private').
-    ...(state.visibility === "private" ? { visibility: state.visibility } : {}),
+    ...(state.visibility === 'private' ? { visibility: state.visibility } : {}),
     // ROK-1440: invitees are sent for BOTH visibilities. On a public lineup
     // they are seeded participants, not an access gate — the contract already
     // permits `inviteeUserIds` regardless of visibility, and the create
@@ -118,7 +117,7 @@ function buildCreatePayload(state: {
       ? { inviteeUserIds: state.inviteeUserIds }
       : {}),
     // ROK-1067: send the toggle so a public lineup can opt out at create.
-    ...(state.visibility === "public"
+    ...(state.visibility === 'public'
       ? { publicShareEnabled: state.publicShareEnabled }
       : { publicShareEnabled: false }),
   };
@@ -129,21 +128,21 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
   const createLineup = useCreateLineup();
   const durations = useDurationState();
   const [title, setTitle] = useState<string>(defaultTitle);
-  const [description, setDescription] = useState<string>("");
-  const [channelOverrideId, setChannelOverrideId] = useState<string>("");
+  const [description, setDescription] = useState<string>('');
+  const [channelOverrideId, setChannelOverrideId] = useState<string>('');
   // ROK-1065: visibility + invitees.
-  const [visibility, setVisibility] = useState<"public" | "private">("public");
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [inviteeUserIds, setInviteeUserIds] = useState<number[]>([]);
   // ROK-1067: public-share toggle (default ON; forced false for private).
   const [publicShareEnabled, setPublicShareEnabled] = useState<boolean>(true);
   // ROK-1302: preset selection + scheduling-phase opt-in (default ON).
-  const [preset, setPreset] = useState<PresetKey>("custom");
+  const [preset, setPreset] = useState<PresetKey>('custom');
   const [includeSchedulingPhase, setIncludeSchedulingPhase] =
     useState<boolean>(true);
 
   function applyPreset(key: PresetKey): void {
     setPreset(key);
-    if (key === "custom") return;
+    if (key === 'custom') return;
     const p = LINEUP_PRESETS[key];
     durations.setMatchThreshold(p.matchThreshold);
     durations.setVotesPerPlayer(p.votesPerPlayer);
@@ -154,33 +153,33 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
   // Any manual match-shape / duration edit drops the preset back to Custom.
   function onThreshold(v: number): void {
     durations.setMatchThreshold(v);
-    setPreset("custom");
+    setPreset('custom');
   }
   function onVotes(v: number): void {
     durations.setVotesPerPlayer(v);
-    setPreset("custom");
+    setPreset('custom');
   }
-  function onBuilding(v: number | ""): void {
+  function onBuilding(v: number | ''): void {
     durations.setBuilding(v);
-    setPreset("custom");
+    setPreset('custom');
   }
-  function onVoting(v: number | ""): void {
+  function onVoting(v: number | ''): void {
     durations.setVoting(v);
-    setPreset("custom");
+    setPreset('custom');
   }
 
   const canSubmit =
-    title.trim() !== "" &&
-    (visibility === "public" || inviteeUserIds.length > 0);
+    title.trim() !== '' &&
+    (visibility === 'public' || inviteeUserIds.length > 0);
 
   async function handleSubmit() {
     const trimmed = title.trim();
     if (!trimmed) {
-      toast.error("Title is required");
+      toast.error('Title is required');
       return;
     }
-    if (visibility === "private" && inviteeUserIds.length === 0) {
-      toast.error("Private lineups require at least one invitee");
+    if (visibility === 'private' && inviteeUserIds.length === 0) {
+      toast.error('Private lineups require at least one invitee');
       return;
     }
     try {
@@ -200,7 +199,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
       navigate(`/community-lineup/${result.id}`);
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to create lineup",
+        err instanceof Error ? err.message : 'Failed to create lineup',
       );
     }
   }
@@ -216,7 +215,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
         <PresetChooser value={preset} onChange={applyPreset} />
         <DescriptionField value={description} onChange={setDescription} />
         <VisibilityToggle value={visibility} onChange={setVisibility} />
-        {visibility === "public" && (
+        {visibility === 'public' && (
           <PublicShareToggle
             enabled={publicShareEnabled}
             onChange={setPublicShareEnabled}
@@ -290,7 +289,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
             disabled={createLineup.isPending || !canSubmit}
             className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
           >
-            {createLineup.isPending ? "Creating..." : "Create Lineup"}
+            {createLineup.isPending ? 'Creating...' : 'Create Lineup'}
           </button>
         </div>
       </div>
