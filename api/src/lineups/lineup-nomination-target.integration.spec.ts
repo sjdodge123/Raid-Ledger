@@ -340,6 +340,67 @@ function describeNominationTarget() {
     expect(cg.body.meta.maxNominations).toBe(25);
   });
 
+  // -- Carry-over pins the cap even with no target (Codex P2) ---------------
+
+  it('pins the cap for a carried-over roster even when no target is configured', async () => {
+    // Codex review P2: the ratchet used to live behind the target's arm, so a
+    // DEADLINE-ONLY lineup seeded by carry-over never pinned its denominator.
+    // Such a lineup could start at 5 nominators (cap 25), lose one nominator's
+    // only entry, collapse to a live cap of 20, and render as full at 20/20
+    // with every nominate button disabled.
+    const members = [];
+    for (const tag of ['co-a', 'co-b', 'co-c', 'co-d', 'co-e']) {
+      members.push(await createMember(tag));
+    }
+    const games = await createGames(5);
+
+    // A finished lineup whose below-threshold matches are carry-over fodder.
+    const [prev] = await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'Carryover Source',
+        createdBy: members[0].userId,
+        status: 'decided',
+        visibility: 'public',
+        // public_slug is varchar(16).
+        publicSlug: `cs-${Date.now()}`.slice(0, 16),
+      })
+      .returning();
+    for (const [i, game] of games.entries()) {
+      await testApp.db.insert(schema.communityLineupEntries).values({
+        lineupId: prev.id,
+        gameId: game.id,
+        nominatedBy: members[i].userId,
+      });
+      await testApp.db.insert(schema.communityLineupMatches).values({
+        lineupId: prev.id,
+        gameId: game.id,
+        status: 'suggested',
+        thresholdMet: false,
+        // Explicit: the DB column has no DEFAULT despite the Drizzle
+        // `.default(0)`, so omitting it inserts NULL and trips NOT NULL.
+        voteCount: 0,
+      });
+    }
+
+    // New lineup with NO nominationTargetPct — the deadline-only default.
+    const lineupId = await createLineup(null);
+
+    const [row] = await testApp.db
+      .select({
+        peak: schema.communityLineups.nominationCapPeak,
+      })
+      .from(schema.communityLineups)
+      .where(eq(schema.communityLineups.id, lineupId));
+    // 5 carried-over nominators -> max(20, 5 * 5) = 25, pinned.
+    expect(row?.peak).toBe(25);
+
+    const res = await testApp.request
+      .get(`/lineups/${lineupId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.body.nominationCap).toBe(25);
+  });
+
   // -- The published denominator --------------------------------------------
 
   it('publishes the nomination cap the target is measured against', async () => {

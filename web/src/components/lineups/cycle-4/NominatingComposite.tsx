@@ -57,6 +57,31 @@ function targetSuffix(lineup: LineupDetailResponseDto): string {
   return ` · voting opens at ${lineup.nominationTargetPct}%`;
 }
 
+/**
+ * ROK-1444: group size for the roster-fit flags.
+ *
+ * Base is Common Ground's `participantCount` — the people actually IN this
+ * lineup (nominators + voters, or invitees + creator when private) — NOT
+ * `votingEligibleCount`, which on a public lineup is the whole community and
+ * flagged every co-op game on the dev env ("group is 249").
+ *
+ * Codex P2: that count only reaches public invitees once they nominate or
+ * vote, so a public lineup seeded with explicit invitees (ROK-1440) reported
+ * `participantCount = 1` and stayed silent for a group of five. Take the
+ * larger of the two views; for a private lineup `participantCount` is already
+ * invitees + creator, so the max is a no-op there.
+ *
+ * Returns undefined below two people: a "group" of one cannot outgrow a co-op
+ * cap, and flagging a synced-zero game at "group is 1" would be noise.
+ */
+function rosterSize(
+  lineup: LineupDetailResponseDto,
+  participantCount: number,
+): number | undefined {
+  const size = Math.max(participantCount, lineup.invitees.length + 1);
+  return size >= 2 ? size : undefined;
+}
+
 function deriveJourneyState(
   lineup: LineupDetailResponseDto,
   myNominatedCount: number,
@@ -309,12 +334,7 @@ export function NominatingComposite(
         <ExistingNominations
           entries={[...lineup.entries]}
           lineupId={lineup.id}
-          // ROK-1444: roster-fit flags key off the people actually IN this
-          // lineup (Common Ground's `participantCount` = nominators + voters,
-          // or invitees + creator when private) — NOT `votingEligibleCount`,
-          // which on a public lineup is the whole community. Using the latter
-          // flagged every co-op game on the dev env ("group is 249").
-          participantCount={participantCount}
+          participantCount={rosterSize(lineup, participantCount)}
         />
       </div>
       {drawerGameId != null && (

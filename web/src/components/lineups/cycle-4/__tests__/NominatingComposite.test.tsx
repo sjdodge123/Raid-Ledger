@@ -16,6 +16,7 @@ import { renderWithProviders } from '../../../../test/render-helpers';
 import { server } from '../../../../test/mocks/server';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { NominatingComposite } from '../NominatingComposite';
+import { createMockEntry } from '../../../../test/lineup-factories';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -184,5 +185,58 @@ describe('NominatingComposite — JourneyHero wiring (ROK-1297)', () => {
             // completion pill (ROK-1294 contract).
             expect(screen.getByText(/You're done here/i)).toBeInTheDocument();
         });
+    });
+});
+
+/**
+ * ROK-1444 (Codex P2) — roster size for the co-op fit flags.
+ *
+ * Common Ground's `participantCount` only counts people who have already
+ * nominated or voted, so a PUBLIC lineup seeded with explicit invitees
+ * (ROK-1440) reported a group of 1 and stayed silent for a group of five.
+ * The composite takes the larger of that count and `invitees + creator`.
+ *
+ * The MSW handler in `beforeEach` returns `participantCount: 5`; these cases
+ * pin the invitee-driven path by asserting on the rendered flag.
+ */
+describe('NominatingComposite — roster-fit group size (ROK-1444)', () => {
+    it('flags a nomination the invited roster has outgrown, before anyone nominates', async () => {
+        const lineup = buildBuildingLineup({
+            // Creator + 5 invitees = 6, larger than the game's 4-player co-op.
+            invitees: [2, 3, 4, 5, 6].map((id) => ({
+                id,
+                displayName: `Invitee ${id}`,
+                avatarUrl: null,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 4 })],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(
+            await screen.findByTestId('nomination-fit-warning'),
+        ).toHaveTextContent(/Fits 4 online · group is 6/);
+    });
+
+    it('leaves a game that still fits the invited roster unflagged', async () => {
+        const lineup = buildBuildingLineup({
+            invitees: [2, 3].map((id) => ({
+                id,
+                displayName: `Invitee ${id}`,
+                avatarUrl: null,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 8 })],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(
+            screen.queryByTestId('nomination-fit-warning'),
+        ).not.toBeInTheDocument();
     });
 });
