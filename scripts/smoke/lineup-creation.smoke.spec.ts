@@ -356,6 +356,75 @@ test.describe('Operator ⋮ menu — phase transitions', () => {
             expect(detail?.status).toBe('building');
         }).toPass({ timeout: 10_000 });
     });
+
+    // ROK-1441: the preset row grew from four options to five (LAN was added).
+    // A naive five-into-four-columns layout strands Custom alone in a
+    // half-empty final row, so assert the tiling at BOTH viewports: the grid
+    // is 2-2-1 at mobile (Custom spanning both columns) and 3-2 at desktop.
+    test('preset row shows five options with no orphaned trailing cell', async ({
+        page,
+    }, testInfo) => {
+        await page.goto('/games?test=open-lineup-modal');
+        const modal = page.locator('[role="dialog"]');
+        await expect(modal).toBeVisible({ timeout: 15_000 });
+
+        for (const key of ['lan', 'tonight', 'thisWeek', 'series', 'custom']) {
+            await expect(
+                modal.locator(`[data-testid="preset-${key}"]`),
+            ).toBeVisible({ timeout: 5_000 });
+        }
+
+        const row = modal.getByRole('radiogroup', { name: 'Lineup preset' });
+        const rowBox = await row.boundingBox();
+        const custom = await modal
+            .locator('[data-testid="preset-custom"]')
+            .boundingBox();
+        const series = await modal
+            .locator('[data-testid="preset-series"]')
+            .boundingBox();
+        if (!rowBox || !custom || !series) {
+            throw new Error('preset row did not lay out');
+        }
+
+        // Custom always closes the final row flush with the grid's right edge.
+        expect(
+            Math.abs(custom.x + custom.width - (rowBox.x + rowBox.width)),
+        ).toBeLessThan(2);
+
+        if (testInfo.project.name === 'mobile') {
+            // 2-col grid: Custom spans both columns on a line of its own.
+            expect(custom.width).toBeGreaterThan(rowBox.width * 0.9);
+            expect(custom.y).toBeGreaterThan(series.y);
+        } else {
+            // 6-col grid: Series and Custom share the final row.
+            expect(Math.abs(custom.y - series.y)).toBeLessThan(2);
+            expect(custom.width).toBeGreaterThan(rowBox.width * 0.4);
+        }
+    });
+
+    // ROK-1441: Tonight is now same-day (5h a phase); the old 15-min shape
+    // lives on LAN. Both must survive the round-trip into the duration fields.
+    test('Tonight writes 5-hour phases and LAN keeps the 15-minute shape', async ({
+        page,
+    }) => {
+        await page.goto('/games?test=open-lineup-modal');
+        const modal = page.locator('[role="dialog"]');
+        await expect(modal).toBeVisible({ timeout: 15_000 });
+
+        await modal.locator('[data-testid="preset-tonight"]').click();
+        await modal.getByText(/more options/i).click();
+
+        const building = modal.locator('[data-testid="building-duration-hours"]');
+        const voting = modal.locator('[data-testid="voting-duration-hours"]');
+        await expect(building).toHaveValue('5', { timeout: 5_000 });
+        await expect(voting).toHaveValue('5');
+
+        await modal.locator('[data-testid="preset-lan"]').click();
+        await expect(building).toHaveValue('0.25', { timeout: 5_000 });
+        await expect(voting).toHaveValue('0.25');
+        // Sub-hour values still read honestly rather than rounding to a day.
+        await expect(modal.getByText('15 min').first()).toBeVisible();
+    });
 });
 
 // ROK-1060: removed the "Admin lineup duration settings" describe block —
