@@ -49,6 +49,19 @@ export interface GameProps {
     currentUserWishlisted?: boolean;
 }
 
+/** Corner chip marking a game as purchasable on Steam. */
+function SteamAvailableChip(): JSX.Element {
+    return (
+        <span
+            data-testid="card-steam-badge"
+            aria-label="Available on Steam"
+            className="ml-auto inline-flex items-center justify-center w-5 h-5 rounded-full bg-black/50 text-emerald-300"
+        >
+            <SteamIcon className="w-3 h-3" />
+        </span>
+    );
+}
+
 /**
  * Genre + price + optional Steam-available badge row below the card title.
  *
@@ -77,15 +90,7 @@ function CardBadgeRow({
                 variant="compact"
                 price="none"
             />
-            {hasSteamAppId && (
-                <span
-                    data-testid="card-steam-badge"
-                    aria-label="Available on Steam"
-                    className="ml-auto inline-flex items-center justify-center w-5 h-5 rounded-full bg-black/50 text-emerald-300"
-                >
-                    <SteamIcon className="w-3 h-3" />
-                </span>
-            )}
+            {hasSteamAppId && <SteamAvailableChip />}
         </div>
     );
 }

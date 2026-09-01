@@ -145,6 +145,27 @@ function RowPrice({ game, mode }: {
     return mode === 'full' ? <PriceTag price={game.price} /> : null;
 }
 
+/**
+ * Ownership + wishlist cluster. The personalized pills sit IMMEDIATELY beside
+ * their aggregate and never replace it (spec §5.1/§7.3) — keeping them in one
+ * component is what makes that ordering impossible to break by accident.
+ */
+function OwnershipPills({ game, full }: {
+    game: GameBadgeData;
+    full: boolean;
+}): JSX.Element {
+    return (
+        <>
+            {game.currentUserOwns && <YouOwnBadge />}
+            {game.ownerCount != null && <OwnerBadge count={game.ownerCount} />}
+            {game.currentUserWishlisted && <YouWishlistedBadge />}
+            {full && game.wishlistCount != null && (
+                <WishlistBadge count={game.wishlistCount} />
+            )}
+        </>
+    );
+}
+
 export type GameBadgeRowVariant = 'compact' | 'full';
 
 /** How much price information the row prints — see {@link RowPrice}. */
@@ -172,12 +193,7 @@ export function GameBadgeRow({
     const full = variant === 'full';
     return (
         <div className={`flex flex-wrap items-center gap-1 ${className}`}>
-            {game.currentUserOwns && <YouOwnBadge />}
-            {game.ownerCount != null && <OwnerBadge count={game.ownerCount} />}
-            {game.currentUserWishlisted && <YouWishlistedBadge />}
-            {full && game.wishlistCount != null && (
-                <WishlistBadge count={game.wishlistCount} />
-            )}
+            <OwnershipPills game={game} full={full} />
             <RowPrice game={game} mode={price} />
             {full && <PlayerBadge playerCount={game.playerCount} />}
             {full && game.earlyAccess && <EarlyAccessBadge />}

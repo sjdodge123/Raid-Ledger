@@ -72,7 +72,7 @@ describe('ROK-1314 AC6 — one price-badge implementation', () => {
         // `git grep` keeps the search scoped to tracked sources (no dist/, no
         // node_modules) and is deterministic across machines. Exit code 1 means
         // "no matches", which is the passing state.
-        let matches = '';
+        let matches: string;
         try {
             matches = execFileSync(
                 'git',
@@ -139,7 +139,7 @@ describe('ROK-1314 AC5 — lineups/GameInfoBadges.tsx is deleted', () => {
     });
 
     it('nothing imports GameInfoBadges', () => {
-        let matches = '';
+        let matches: string;
         try {
             matches = execFileSync(
                 'git',

@@ -52,6 +52,19 @@ function PillCover({
     );
 }
 
+/** The viewer's own two pills, rendered only when the caller opts in. */
+function PersonalPills({ owns, wishlisted }: {
+    owns?: boolean;
+    wishlisted?: boolean;
+}): JSX.Element {
+    return (
+        <>
+            {owns && <YouOwnBadge />}
+            {wishlisted && <YouWishlistedBadge />}
+        </>
+    );
+}
+
 /** Text content: name, badges, optional subtitle. */
 function PillContent({
     name,
@@ -75,8 +88,10 @@ function PillContent({
                     {name}
                 </span>
                 {badge}
-                {currentUserOwns && <YouOwnBadge />}
-                {currentUserWishlisted && <YouWishlistedBadge />}
+                <PersonalPills
+                    owns={currentUserOwns}
+                    wishlisted={currentUserWishlisted}
+                />
                 <PriceBadge pricing={pricing ?? null} />
             </div>
             {subtitle && (
