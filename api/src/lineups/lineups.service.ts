@@ -212,12 +212,15 @@ export class LineupsService {
   /** Get Common Ground games — ownership overlap + taste scoring (ROK-950). */
   getCommonGround(
     filters: CommonGroundQueryDto,
+    /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
+    viewerId: number | null = null,
   ): Promise<CommonGroundResponseDto> {
     return runCommonGroundForBuildingLineup(
       this.db,
       filters,
       this.tasteProfile,
       this.settings,
+      viewerId,
     );
   }
 

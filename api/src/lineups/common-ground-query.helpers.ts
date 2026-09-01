@@ -65,6 +65,8 @@ export interface CommonGroundRow {
   cooptimusComboCoop: boolean | null;
   /** ROK-950: Steam-library owner user IDs for social-score intersection. */
   ownerUserIds: number[];
+  /** ROK-1314: Steam-wishlist user IDs, for the viewer's `currentUserWishlisted`. */
+  wishlistUserIds: number[];
 }
 
 /**
@@ -110,7 +112,11 @@ export async function queryCommonGround(
       COALESCE(
         array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_library'),
         ARRAY[]::int[]
-      ) AS "ownerUserIds"
+      ) AS "ownerUserIds",
+      COALESCE(
+        array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_wishlist'),
+        ARRAY[]::int[]
+      ) AS "wishlistUserIds"
     FROM games g
     LEFT JOIN game_interests gi ON gi.game_id = g.id
     WHERE ${sql.join(conditions, sql` AND `)}
@@ -290,11 +296,16 @@ export function deriveGameIntensity(
 export function mapCommonGroundRow(
   row: CommonGroundRow,
   ctx: ScoringContext | null = null,
+  /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
+  viewerId: number | null = null,
 ): CommonGroundGameDto {
   const safeRow: CommonGroundRow = {
     ...row,
     itadTags: Array.isArray(row.itadTags) ? row.itadTags : [],
     ownerUserIds: Array.isArray(row.ownerUserIds) ? row.ownerUserIds : [],
+    wishlistUserIds: Array.isArray(row.wishlistUserIds)
+      ? row.wishlistUserIds
+      : [],
   };
   const breakdown = computeScoreBreakdown(safeRow, ctx);
   return {
@@ -319,6 +330,11 @@ export function mapCommonGroundRow(
     cooptimusComboCoop: safeRow.cooptimusComboCoop ?? null,
     score: breakdown.total,
     scoreBreakdown: breakdown,
+    // ROK-1314: personalization resolved from the already-aggregated user-id
+    // arrays — no second query, no N+1. Anonymous viewers get explicit false.
+    currentUserOwns: viewerId != null && safeRow.ownerUserIds.includes(viewerId),
+    currentUserWishlisted:
+      viewerId != null && safeRow.wishlistUserIds.includes(viewerId),
   };
 }
 
@@ -392,6 +408,8 @@ export async function buildCommonGroundResponse(
   participantCount: number,
   filters: CommonGroundQueryDto,
   ctx: ScoringContext | null = null,
+  /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
+  viewerId: number | null = null,
 ): Promise<CommonGroundResponseDto> {
   // Independent queries — the availability EXISTS must not add a serial
   // round-trip to every request, including the debounced keystroke path.
@@ -399,7 +417,7 @@ export async function buildCommonGroundResponse(
     queryCommonGround(db, filters, nominatedIds),
     queryCoopDataAvailable(db),
   ]);
-  const scored = rows.map((r) => mapCommonGroundRow(r, ctx));
+  const scored = rows.map((r) => mapCommonGroundRow(r, ctx, viewerId));
   scored.sort((a, b) => b.score - a.score);
   const themed = scored.map(withThemeAndWhyReason);
   assertThemePairing(themed);
