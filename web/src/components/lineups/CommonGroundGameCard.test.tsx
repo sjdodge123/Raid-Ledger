@@ -132,7 +132,8 @@ describe('CommonGroundGameCard — sale badge', () => {
                 atCap={false}
             />,
         );
-        expect(screen.getByText('-40% $11.99')).toBeInTheDocument();
+        // ROK-1314: locked vocabulary — the label is `On Sale`, the figure is appended.
+        expect(screen.getByText('On Sale · $11.99 (-40%)')).toBeInTheDocument();
     });
 
     it('shows discount without price when nonOwnerPrice is null', () => {
@@ -144,7 +145,8 @@ describe('CommonGroundGameCard — sale badge', () => {
                 atCap={false}
             />,
         );
-        expect(screen.getByText('-30%')).toBeInTheDocument();
+        // ROK-1314: no price figure to append, so the locked label stands alone.
+        expect(screen.getByText('On Sale')).toBeInTheDocument();
     });
 
     it('shows plain price when itadCurrentCut is 0 and price is set', () => {

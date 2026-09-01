@@ -2,8 +2,8 @@
  * ROK-1314 — the ONE game badge module.
  *
  * Before this file there were four price treatments and four ownership
- * treatments spread across `CommonGroundGameCard`, `GameInfoBadges` (dead),
- * `NominationCard` and `AiSuggestionCard`, each with its own wording, colour
+ * treatments spread across `CommonGroundGameCard`, the dead lineup badge
+ * module, `NominationCard` and `AiSuggestionCard`, each with its own wording, colour
  * and size. Every game surface now composes `GameBadgeRow` from these
  * primitives, so a badge can only drift in one place.
  *
@@ -73,7 +73,7 @@ export function YouWishlistedBadge(): JSX.Element {
 /**
  * Violet player-count badge. Singular-aware: a 1-player game reads
  * `1 player`, not `1 players` (CommonGround's behaviour won over the
- * `GameInfoBadges` drift — spec §1.4).
+ * dead lineup badge module's always-plural drift — spec §1.4).
  */
 export function PlayerBadge({ playerCount }: {
     playerCount: { min: number; max: number } | null;
@@ -116,7 +116,14 @@ export function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
     );
 }
 
-/** Price element: the locked sale badge, else the neutral plain-price tag. */
+/**
+ * Price element: the locked sale badge, else the neutral plain-price tag.
+ *
+ * `showPrice === false` keeps the `On Sale` / `Best Price` vocabulary but drops
+ * every `$` figure, for surfaces that already print the price in their own body
+ * copy (the nomination card's `$14.99 (-50%) for 4` line). Without that switch
+ * the same number would render twice on one card.
+ */
 function RowPrice({ game, showPrice }: {
     game: GameBadgeData;
     showPrice: boolean;
@@ -131,7 +138,7 @@ function RowPrice({ game, showPrice }: {
             />
         );
     }
-    return <PriceTag price={game.price} />;
+    return showPrice ? <PriceTag price={game.price} /> : null;
 }
 
 export type GameBadgeRowVariant = 'compact' | 'full';
@@ -143,10 +150,17 @@ export type GameBadgeRowVariant = 'compact' | 'full';
  * co-op pill so a 180px card still wraps instead of clipping; `full` renders
  * everything. Both keep the personalized pills — those are the point.
  */
-export function GameBadgeRow({ game, variant = 'full', className = '' }: {
+export function GameBadgeRow({
+    game,
+    variant = 'full',
+    className = '',
+    showPrice = true,
+}: {
     game: GameBadgeData;
     variant?: GameBadgeRowVariant;
     className?: string;
+    /** Opt OUT of the `$` figures when the host surface prints them itself. */
+    showPrice?: boolean;
 }): JSX.Element {
     const full = variant === 'full';
     return (
@@ -157,7 +171,7 @@ export function GameBadgeRow({ game, variant = 'full', className = '' }: {
             {full && game.wishlistCount != null && (
                 <WishlistBadge count={game.wishlistCount} />
             )}
-            <RowPrice game={game} showPrice />
+            <RowPrice game={game} showPrice={showPrice} />
             {full && <PlayerBadge playerCount={game.playerCount} />}
             {full && game.earlyAccess && <EarlyAccessBadge />}
             {full && (

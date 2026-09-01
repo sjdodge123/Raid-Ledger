@@ -87,7 +87,7 @@ export function ScalarPriceBadge({
 /**
  * Neutral price tag for the no-discount case (spec §5.2). Deliberately NOT a
  * sale badge: the sale vocabulary stays two-valued and un-diluted, while the
- * plain `$X` information the old `SaleBadge`/`DealBadge` chips carried is
+ * plain `$X` information the four pre-ROK-1314 sale chips carried is
  * preserved.
  */
 export function PriceTag({ price, className = '' }: {

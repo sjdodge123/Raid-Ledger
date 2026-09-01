@@ -7,6 +7,8 @@ import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { ConfirmationPill } from '../common/ConfirmationPill';
+import { GameBadgeRow } from '../games/game-badges';
+import { fromLineupEntry } from '../games/game-badges.helpers';
 import { resolveEffectiveOnlineMax } from './coop-fit';
 
 interface NominationCardProps {
@@ -20,20 +22,8 @@ interface NominationCardProps {
     participantCount?: number;
 }
 
-/** Ownership badge color: green ≥60%, amber ≥30%, red <30%. */
-function ownershipBadgeClass(count: number, total: number): string {
-    if (total === 0) return 'bg-zinc-500/90';
-    const r = count / total;
-    if (r >= 0.6) return 'bg-emerald-500/90';
-    if (r >= 0.3) return 'bg-amber-500/90';
-    return 'bg-red-500/90';
-}
-
 /** Cover image with gradient, badges, title overlay. */
 function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
-    const badgeClass = ownershipBadgeClass(entry.ownerCount, entry.totalMembers);
-    const onSale = (entry.itadCurrentCut ?? 0) > 0;
-
     return (
         <div className="relative h-48 overflow-hidden">
             {entry.gameCoverUrl ? (
@@ -47,18 +37,6 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
             {entry.carriedOver && (
                 <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[9px] font-medium rounded-full bg-zinc-500/40 text-secondary border border-zinc-500/30">
                     Carried Over
-                </span>
-            )}
-
-            {/* Top-right: ownership tally */}
-            <span className={`absolute top-2 right-2 px-1.5 py-0.5 text-[9px] font-bold text-white rounded ${badgeClass}`}>
-                +{entry.ownerCount}
-            </span>
-
-            {/* On Sale badge below ownership */}
-            {onSale && (
-                <span className="absolute top-8 right-2 px-1.5 py-0.5 text-[9px] font-medium rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    On Sale
                 </span>
             )}
 
@@ -89,6 +67,16 @@ function CardBody({ entry, canRemove, isMine, onRemove }: {
     const priceText = formatPrice(entry);
     return (
         <div className="px-2.5 py-2">
+            {/* ROK-1314: the ONE shared badge strip, replacing the bespoke
+                ratio-coloured +N tally and the hardcoded sale span. The body
+                already prints the price figure, so the row keeps the locked
+                price vocabulary without repeating the number. */}
+            <GameBadgeRow
+                game={fromLineupEntry(entry)}
+                variant="compact"
+                showPrice={false}
+                className="mb-1.5"
+            />
             <div className="flex items-center justify-between">
                 <span className="text-[11px] text-dim">
                     by <span className="text-secondary">{entry.nominatedBy.displayName}</span>

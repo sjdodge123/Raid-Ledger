@@ -251,7 +251,7 @@ describe('GameBadgeRow — price vocabulary', () => {
 
 // ---------------------------------------------------------------------------
 // PlayerBadge singular-awareness — CommonGround's behaviour wins over the
-// GameInfoBadges drift (spec §1.4)
+// dead lineup badge module's always-plural drift (spec §1.4)
 // ---------------------------------------------------------------------------
 
 describe('GameBadgeRow — player count', () => {
