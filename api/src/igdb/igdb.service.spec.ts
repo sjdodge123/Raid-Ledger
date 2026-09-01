@@ -113,6 +113,9 @@ describe('IgdbService', () => {
       cooptimusComboCoop: null,
       cooptimusUrl: null,
       cooptimusSyncedAt: null,
+      // ROK-1314: mapDbRowToDetail seeds both personalization flags false.
+      currentUserOwns: false,
+      currentUserWishlisted: false,
     },
   ];
 
