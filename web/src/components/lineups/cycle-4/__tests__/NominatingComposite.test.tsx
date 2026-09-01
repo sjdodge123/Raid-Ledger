@@ -16,6 +16,7 @@ import { renderWithProviders } from '../../../../test/render-helpers';
 import { server } from '../../../../test/mocks/server';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { NominatingComposite } from '../NominatingComposite';
+import { createMockEntry } from '../../../../test/lineup-factories';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -56,6 +57,11 @@ function buildBuildingLineup(
         stillWaitingOnVoters: [],
         publicShareEnabled: true,
         publicSlug: 'test-lineup',
+        // ROK-1444: early-advance target + its published denominator.
+        nominationTargetPct: null,
+        nominationCap: 20,
+        nominationTargetDisarmedAt: null,
+        nominationTargetArmed: true,
         viewerSubmissions: {
             nominationsSubmittedAt: null,
             votesSubmittedAt: null,
@@ -138,7 +144,7 @@ describe('NominatingComposite — JourneyHero wiring (ROK-1297)', () => {
 
         await waitFor(() => {
             expect(
-                screen.getByText(/0 nominated by 3 voters/i),
+                screen.getByText(/0 \/ 20 nominated by 3 voters/i),
             ).toBeInTheDocument();
         });
         // The community-wide count must NOT leak into the copy.
@@ -158,7 +164,7 @@ describe('NominatingComposite — JourneyHero wiring (ROK-1297)', () => {
 
         await waitFor(() => {
             expect(
-                screen.getByText(/0 nominated by 1 voter\b/i),
+                screen.getByText(/0 \/ 20 nominated by 1 voter\b/i),
             ).toBeInTheDocument();
         });
     });
@@ -180,5 +186,167 @@ describe('NominatingComposite — JourneyHero wiring (ROK-1297)', () => {
             // completion pill (ROK-1294 contract).
             expect(screen.getByText(/You're done here/i)).toBeInTheDocument();
         });
+    });
+});
+
+/**
+ * ROK-1444 (Codex P2) — roster size for the co-op fit flags.
+ *
+ * Common Ground's `participantCount` only counts people who have already
+ * nominated or voted, so a PUBLIC lineup seeded with explicit invitees
+ * (ROK-1440) reported a group of 1 and stayed silent for a group of five.
+ * The composite takes the larger of that count and `invitees + creator`.
+ *
+ * The MSW handler in `beforeEach` returns `participantCount: 5`; these cases
+ * pin the invitee-driven path by asserting on the rendered flag.
+ */
+describe('NominatingComposite — roster-fit group size (ROK-1444)', () => {
+    it('flags a nomination the invited roster has outgrown, before anyone nominates', async () => {
+        const lineup = buildBuildingLineup({
+            // Creator + 5 invitees = 6, larger than the game's 4-player co-op.
+            invitees: [2, 3, 4, 5, 6].map((id) => ({
+                id,
+                displayName: `Invitee ${id}`,
+                steamLinked: false,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 4 })],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(
+            await screen.findByTestId('nomination-fit-warning'),
+        ).toHaveTextContent(/Fits 4 online · group is 6/);
+    });
+
+    it('counts the creator once when they are also in the invitee list', async () => {
+        // rl-review WARNING: `addInvitees` does not exclude the creator, so a
+        // naive `invitees.length + 1` reports 5 for a real 4-person roster.
+        // Asserted POSITIVELY on the rendered number — an absence assertion
+        // would pass vacuously before the Common Ground query resolves.
+        const lineup = buildBuildingLineup({
+            // createdBy.id is 1 in the fixture; include it among the invitees.
+            invitees: [1, 2, 3, 4].map((id) => ({
+                id,
+                displayName: `User ${id}`,
+                steamLinked: false,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 3 })],
+        });
+        // The server dedupes the creator too (`resolveParticipantCount`), so a
+        // correct API sends 4 here, not 5.
+        server.use(
+            http.get(`${API_BASE}/lineups/common-ground`, () =>
+                HttpResponse.json({
+                    data: [],
+                    meta: {
+                        total: 0,
+                        appliedWeights: {
+                            ownerWeight: 10,
+                            saleBonus: 5,
+                            fullPricePenalty: -2,
+                            tasteWeight: 8,
+                            socialWeight: 8,
+                            intensityWeight: 4,
+                        },
+                        activeLineupId: 7,
+                        nominatedCount: 0,
+                        maxNominations: 20,
+                        participantCount: 4,
+                        coopDataAvailable: true,
+                    },
+                }),
+            ),
+        );
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        // A 3-player game against a DISTINCT roster of 4 flags as "group is 4".
+        // If the creator were double-counted it would read "group is 5".
+        expect(
+            await screen.findByTestId('nomination-fit-warning'),
+        ).toHaveTextContent(/Fits 3 online · group is 4/);
+    });
+
+    it('leaves a game that still fits the invited roster unflagged', async () => {
+        const lineup = buildBuildingLineup({
+            invitees: [2, 3].map((id) => ({
+                id,
+                displayName: `Invitee ${id}`,
+                steamLinked: false,
+            })),
+            entries: [createMockEntry({ cooptimusOnlineMax: 8 })],
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(
+            screen.queryByTestId('nomination-fit-warning'),
+        ).not.toBeInTheDocument();
+    });
+});
+
+/**
+ * ROK-1444 (Codex P2) — the early-advance promise must not outrun reality.
+ *
+ * `targetSuffix` renders " · voting opens at N%". It has to stay silent in
+ * every state where the target cannot actually fire, or the page lies to the
+ * group about how the lineup will end.
+ */
+describe('NominatingComposite — early-advance copy (ROK-1444)', () => {
+    it('promises early voting when the target is armed', async () => {
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: true,
+            nominationTargetDisarmedAt: null,
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        expect(
+            await screen.findByText(/voting opens at 50%/i),
+        ).toBeInTheDocument();
+    });
+
+    it('stays silent when the target was never armed (carry-over seeded above it)', async () => {
+        // A carry-over lineup that started at or above its target has no
+        // rising edge left to cross, so it will only ever advance on the
+        // deadline — promising 50% here would be false.
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: false,
+            nominationTargetDisarmedAt: null,
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
+    });
+
+    it('stays silent once an operator revert has disarmed the target', async () => {
+        const lineup = buildBuildingLineup({
+            nominationTargetPct: 50,
+            nominationTargetArmed: true,
+            nominationTargetDisarmedAt: '2026-08-31T00:00:00.000Z',
+        });
+
+        renderWithProviders(
+            <NominatingComposite lineup={lineup} canParticipate={true} />,
+        );
+
+        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
+        expect(screen.queryByText(/voting opens at/i)).not.toBeInTheDocument();
     });
 });

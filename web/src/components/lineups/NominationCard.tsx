@@ -7,10 +7,17 @@ import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { ConfirmationPill } from '../common/ConfirmationPill';
+import { resolveEffectiveOnlineMax } from './coop-fit';
 
 interface NominationCardProps {
     entry: LineupEntryResponseDto;
     onRemove: (gameId: number) => void;
+    /**
+     * ROK-1444: number of people actually IN this lineup. When the group grows
+     * past a nominated game's co-op capacity the card is flagged, so they can
+     * see which existing picks no longer fit before voting opens.
+     */
+    participantCount?: number;
 }
 
 /** Ownership badge color: green ≥60%, amber ≥30%, red <30%. */
@@ -107,15 +114,49 @@ function CardBody({ entry, canRemove, isMine, onRemove }: {
     );
 }
 
+/**
+ * ROK-1444: has the group outgrown this nomination?
+ *
+ * Reuses ROK-1400's rule verbatim so this card and the NominateModal search row
+ * can never disagree: strictly Co-Optimus-verified, online max only. A
+ * never-synced game resolves to null and is NOT flagged — an absent signal is
+ * honest, an invented one is not. Advisory only, exactly like the search-row
+ * warning: it never hides, disables or blocks anything ("soft filter, no hard
+ * gate").
+ */
+function rosterFit(
+    entry: LineupEntryResponseDto,
+    participantCount: number | undefined,
+): { tooSmall: boolean; max: number | null } {
+    const max = resolveEffectiveOnlineMax(entry.cooptimusOnlineMax);
+    return {
+        tooSmall: participantCount != null && max != null && max < participantCount,
+        max,
+    };
+}
+
 /** Single nomination card. */
-export function NominationCard({ entry, onRemove }: NominationCardProps): JSX.Element {
+export function NominationCard({ entry, onRemove, participantCount }: NominationCardProps): JSX.Element {
     const { user } = useAuth();
     const isMine = !!user && entry.nominatedBy.id === user.id;
     const canRemove = isMine || isOperatorOrAdmin(user);
+    const { tooSmall, max } = rosterFit(entry, participantCount);
+    const fitClass = tooSmall
+        ? 'border border-amber-500/70 ring-1 ring-amber-500/30 hover:border-amber-400'
+        : 'border border-edge hover:border-emerald-500/50';
 
     return (
-        <Link to={`/games/${entry.gameId}`} className="block rounded-xl bg-surface border border-edge overflow-hidden hover:border-emerald-500/50 hover:shadow-lg transition-all">
+        <Link
+            to={`/games/${entry.gameId}`}
+            data-testid={tooSmall ? 'nomination-card-too-small' : 'nomination-card'}
+            className={`block rounded-xl bg-surface overflow-hidden hover:shadow-lg transition-all ${fitClass}`}
+        >
             <CardCover entry={entry} />
+            {tooSmall && (
+                <p data-testid="nomination-fit-warning" className="px-2.5 pt-1.5 text-[10px] font-medium text-amber-400">
+                    Fits {max} online · group is {participantCount}
+                </p>
+            )}
             <CardBody entry={entry} canRemove={canRemove} isMine={isMine} onRemove={onRemove} />
         </Link>
     );

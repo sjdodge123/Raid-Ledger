@@ -181,3 +181,50 @@ describe('NominationCard — delete button', () => {
         expect(onRemove).toHaveBeenCalledWith(42);
     });
 });
+
+/**
+ * ROK-1444 — roster-fit highlight.
+ *
+ * When the group outgrows a nominated game the card is flagged so people can
+ * see which existing picks no longer work before voting opens. Reuses
+ * ROK-1400's rule: strictly Co-Optimus-verified, online max only, advisory —
+ * a flagged card stays fully interactive.
+ */
+describe('NominationCard — roster fit (ROK-1444)', () => {
+    it('flags a nomination the grown roster can no longer all play', () => {
+        renderWithProviders(
+            <NominationCard entry={createMockEntry({ cooptimusOnlineMax: 4 })} onRemove={vi.fn()} participantCount={5} />,
+        );
+        expect(screen.getByTestId('nomination-card-too-small')).toBeInTheDocument();
+        expect(screen.getByTestId('nomination-fit-warning')).toHaveTextContent(/Fits 4 online · group is 5/);
+    });
+
+    it('does not flag a game that still fits the roster exactly', () => {
+        renderWithProviders(
+            <NominationCard entry={createMockEntry({ cooptimusOnlineMax: 5 })} onRemove={vi.fn()} participantCount={5} />,
+        );
+        expect(screen.getByTestId('nomination-card')).toBeInTheDocument();
+        expect(screen.queryByTestId('nomination-fit-warning')).not.toBeInTheDocument();
+    });
+
+    it('stays silent for a never-synced game rather than inventing a capacity', () => {
+        renderWithProviders(
+            <NominationCard entry={createMockEntry({ cooptimusOnlineMax: null })} onRemove={vi.fn()} participantCount={99} />,
+        );
+        expect(screen.queryByTestId('nomination-fit-warning')).not.toBeInTheDocument();
+    });
+
+    it('flags a synced ZERO — real data meaning no online co-op', () => {
+        renderWithProviders(
+            <NominationCard entry={createMockEntry({ cooptimusOnlineMax: 0 })} onRemove={vi.fn()} participantCount={2} />,
+        );
+        expect(screen.getByTestId('nomination-fit-warning')).toBeInTheDocument();
+    });
+
+    it('does not flag when the roster size is unknown', () => {
+        renderWithProviders(
+            <NominationCard entry={createMockEntry({ cooptimusOnlineMax: 1 })} onRemove={vi.fn()} />,
+        );
+        expect(screen.queryByTestId('nomination-fit-warning')).not.toBeInTheDocument();
+    });
+});

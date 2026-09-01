@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/modal';
 import { useCreateLineup } from '../../hooks/use-lineups';
 import { toast } from '../../lib/toast';
+import { NominationTargetControl } from './start-lineup-nomination-target';
 import { LineupChannelOverrideSelect } from './lineup-channel-override-select';
 import { VisibilityToggle } from './VisibilityToggle';
 import { InviteeMultiSelect } from './InviteeMultiSelect';
@@ -54,6 +55,10 @@ function useDurationState() {
   const [votesPerPlayer, setVotesPerPlayer] = useState<number>(3);
   const [tiebreakerMode, setTiebreakerMode] =
     useState<'bracket' | 'veto' | null>('bracket');
+  // ROK-1444: null = off (deadline-only advancement), the default.
+  const [nominationTargetPct, setNominationTargetPct] = useState<number | null>(
+    null,
+  );
   const buildingVal = building === '' ? DEFAULT_BUILDING_HOURS : building;
   const votingVal = voting === '' ? DEFAULT_VOTING_HOURS : voting;
 
@@ -63,6 +68,8 @@ function useDurationState() {
     matchThreshold,
     votesPerPlayer,
     tiebreakerMode,
+    nominationTargetPct,
+    setNominationTargetPct,
     setBuilding,
     setVoting,
     setMatchThreshold,
@@ -93,6 +100,8 @@ function buildCreatePayload(state: {
     defaultTiebreakerMode: durations.tiebreakerMode,
     // ROK-1302: always sent so the toggle's state is explicit server-side.
     includeSchedulingPhase: state.includeSchedulingPhase,
+    // ROK-1444: null is meaningful (deadline-only), so send it explicitly.
+    nominationTargetPct: durations.nominationTargetPct,
     // ROK-1064: empty string → omit (use community default).
     ...(state.channelOverrideId
       ? { channelOverrideId: state.channelOverrideId }
@@ -231,6 +240,10 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
             onChange={onVotes}
           />
           <PlayerCapsNote />
+          <NominationTargetControl
+            value={durations.nominationTargetPct}
+            onChange={durations.setNominationTargetPct}
+          />
           <SchedulingPhaseToggle
             enabled={includeSchedulingPhase}
             onChange={setIncludeSchedulingPhase}

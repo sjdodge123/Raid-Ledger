@@ -5,11 +5,8 @@
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import {
-  countLineupEntries,
-  countDistinctNominators,
-} from './lineups-query.helpers';
-import { nominationCap } from './common-ground-scoring.constants';
+import { countLineupEntries } from './lineups-query.helpers';
+import { loadEffectiveNominationCapById } from './lineups-nomination-cap.helpers';
 import { displayNameSql } from '../users/display-name.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -35,12 +32,13 @@ export async function checkNominationMilestone(
   db: Db,
   lineupId: number,
 ): Promise<MilestoneResult | null> {
-  const [[entries], [nominators]] = await Promise.all([
+  const [[entries], cap] = await Promise.all([
     countLineupEntries(db, lineupId),
-    countDistinctNominators(db, lineupId),
+    // ROK-1444: the ratcheted cap. On the live cap a removal could shrink the
+    // denominator and re-cross a milestone, firing a spurious
+    // "100% of nominations filled!" embed for a lineup that lost a game.
+    loadEffectiveNominationCapById(db, lineupId),
   ]);
-
-  const cap = nominationCap(nominators?.count ?? 0);
   const count = entries?.count ?? 0;
   if (cap === 0) return null;
 

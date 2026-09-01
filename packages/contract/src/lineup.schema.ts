@@ -97,6 +97,22 @@ export const CreateLineupSchema = z
          * "Pick a time" CTA is hidden.
          */
         includeSchedulingPhase: z.boolean().default(true).optional(),
+        /**
+         * ROK-1444: open voting early once nominations reach this percentage
+         * of the dynamic nomination cap (max(20, nominators * 5)). Omit or
+         * null to keep today's deadline-only behaviour.
+         *
+         * The global `LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS` floor still applies
+         * as an absolute minimum, so a low percentage cannot advance a lineup
+         * below that floor.
+         */
+        nominationTargetPct: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .nullable()
+            .optional(),
     })
     .refine(
         (d) =>
@@ -277,6 +293,33 @@ export const LineupDetailResponseSchema = z.object({
      * backfill to true (existing behavior).
      */
     includeSchedulingPhase: z.boolean(),
+    /**
+     * ROK-1444: early-advance target as a percentage of `nominationCap`.
+     * Null when the lineup uses deadline-only advancement.
+     */
+    nominationTargetPct: z.number().nullable(),
+    /**
+     * ROK-1444: the DENOMINATOR the target is measured against —
+     * `max(20, distinctNominators * 5)`. Published because it moves: a fifth
+     * nominator raises it 20 -> 25, which changes how many games the lineup
+     * needs. Clients render "<entries> / <nominationCap>" so the bar people
+     * are nominating toward is never implicit.
+     */
+    nominationCap: z.number().int().positive(),
+    /**
+     * ROK-1444: set when an operator reverted `voting -> building`. While
+     * non-null the count target is permanently disarmed and the lineup
+     * advances only by deadline or manual action. Never auto-cleared.
+     */
+    nominationTargetDisarmedAt: z.string().nullable(),
+    /**
+     * ROK-1444: whether the early-advance target is ARMED — i.e. the lineup has
+     * been observed below its target, which the rising-edge guard requires
+     * before it may fire. False for a carry-over-seeded lineup that started at
+     * or above its target: such a lineup will never advance early, so the UI
+     * must not promise "voting opens at N%".
+     */
+    nominationTargetArmed: z.boolean(),
     /**
      * Viewer's per-phase submission timestamps (ROK-1296, U4 SubmitBar).
      * Both fields are ISO 8601 UTC strings or null. Populated for the

@@ -34,6 +34,7 @@ import {
 import { logNomination } from './lineups-activity.helpers';
 import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
 import { carryOverFromLastDecided } from './lineups-carryover.helpers';
+import { armNominationTargetOnCreate } from './quorum/nomination-target.helpers';
 import {
   fireLineupCreated,
   fireNominationMilestone,
@@ -85,6 +86,10 @@ export async function runCreateLineup(
     void deps.steamNudge.nudgeUnlinkedMembers(row.id);
     await carryOverFromLastDecided(deps.db, row.id);
   }
+  // ROK-1444: arm the early-advance rising edge AFTER carry-over, so a lineup
+  // seeded above its target starts unarmed and advances by deadline instead of
+  // firing on the first mutation.
+  await armNominationTargetOnCreate(deps.db, row);
 
   const delayMs = phaseDeadline.getTime() - Date.now();
   await deps.phaseQueue.scheduleTransition(row.id, 'voting', delayMs);
@@ -154,6 +159,13 @@ export interface NominateDeps {
   lineupNotifications: LineupNotificationService;
   logger: Logger;
   resolveChannelName: ResolveChannelName;
+  /**
+   * ROK-1444: runs after the entry lands and BEFORE the detail response is
+   * built. The service passes cache invalidation + `maybeAutoAdvance` here, so
+   * a nomination that crosses the early-advance target returns the phase it
+   * caused rather than the one it started in.
+   */
+  afterMutate?: () => Promise<void>;
 }
 
 export interface RemoveNominationDeps {
@@ -198,7 +210,15 @@ export async function runRemoveNomination(
   );
 }
 
-/** Nominate a game into a lineup. */
+/**
+ * Nominate a game into a lineup.
+ *
+ * ROK-1444 (Codex P2): the detail response is built only after `afterMutate`
+ * has run. A nomination can now cross the early-advance target, so building it
+ * first would report `building` for a lineup that just flipped to `voting`
+ * (grace 0), or omit the freshly claimed `pendingAdvanceAt` (default grace) —
+ * the client that caused the transition would be the last to hear about it.
+ */
 export async function runNominate(
   deps: NominateDeps,
   lineupId: number,
@@ -215,8 +235,9 @@ export async function runNominate(
     role: callerRole,
   });
 
-  await validateNominationCap(deps.db, lineupId);
+  await validateNominationCap(deps.db, lineup);
   await validateGameExists(deps.db, dto.gameId);
+  // ROK-1444: `insertNomination` ratchets `nomination_cap_peak` itself.
   await insertNomination(deps.db, lineupId, dto, userId);
   await logNomination(deps.db, deps.activityLog, lineupId, dto, userId);
 
@@ -227,6 +248,7 @@ export async function runNominate(
     lineupId,
   );
 
+  await deps.afterMutate?.();
   return buildDetailResponse(
     deps.db,
     lineupId,
