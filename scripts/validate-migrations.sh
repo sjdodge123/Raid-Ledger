@@ -43,7 +43,15 @@ cleanup() {
 
 preflight_check() {
   echo -e "${YELLOW}Pre-flight: checking migration journal order...${NC}"
-  "$REPO_ROOT/scripts/fix-migration-order.sh" --check
+  # Invoked via `bash`, not as an executable: Mutagen does not preserve the
+  # executable bit when it syncs the worktree to a fleet runner, so 14 of the
+  # 15 scripts in scripts/ land there as 0644 despite being 0755 in git. The
+  # one exception is this file, which validate-ci.sh chmod +x's at its call
+  # site (validate-ci.sh:722) — a workaround for the same root cause that was
+  # never extended to this nested call. Running through the interpreter is
+  # mode-independent and needs no working-tree mutation. See TECH-DEBT-BACKLOG
+  # 2026-09-01 for the root-cause entry.
+  bash "$REPO_ROOT/scripts/fix-migration-order.sh" --check
 }
 
 start_postgres() {
