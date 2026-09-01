@@ -290,9 +290,10 @@ function describeBadgePersonalization() {
       const lineupId = await createBuildingLineup();
       const game = await insertGame({
         name: 'Entry With Lowest Price',
-        itadCurrentPrice: 19.99,
+        // drizzle types `numeric` columns as string, not number.
+        itadCurrentPrice: '19.99',
         itadCurrentCut: 40,
-        itadLowestPrice: 9.99,
+        itadLowestPrice: '9.99',
       });
       await nominate(lineupId, game.id);
 

@@ -66,6 +66,7 @@ describe('mapCommonGroundRow', () => {
     cooptimusCouchMax: null,
     cooptimusComboCoop: null,
     ownerUserIds: [],
+    wishlistUserIds: [],
   };
 
   it('includes computed score in mapped result', () => {
@@ -110,6 +111,7 @@ describe('deriveGameIntensity', () => {
     cooptimusCouchMax: null,
     cooptimusComboCoop: null,
     ownerUserIds: [],
+    wishlistUserIds: [],
   };
 
   it('returns null when playerCount is unknown', () => {

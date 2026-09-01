@@ -51,7 +51,7 @@ function describeIgdbController() {
 
   function describeSearchGames() {
     it('should return search results for valid query', async () => {
-      const result = await controller.searchGames('valheim');
+      const result = await controller.searchGames('valheim', {});
 
       expect(result.data).toEqual(mockGames);
       expect(result.meta.total).toBe(1);
@@ -60,20 +60,20 @@ function describeIgdbController() {
     });
 
     it('should throw BadRequestException for empty query', async () => {
-      await expect(controller.searchGames('')).rejects.toThrow(
+      await expect(controller.searchGames('', {})).rejects.toThrow(
         BadRequestException,
       );
     });
 
     it('should throw BadRequestException for undefined query', async () => {
       await expect(
-        controller.searchGames(undefined as unknown as string),
+        controller.searchGames(undefined as unknown as string, {}),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException for query exceeding max length', async () => {
       const longQuery = 'a'.repeat(101);
-      await expect(controller.searchGames(longQuery)).rejects.toThrow(
+      await expect(controller.searchGames(longQuery, {})).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -83,7 +83,7 @@ function describeIgdbController() {
         .fn()
         .mockRejectedValue(new Error('IGDB API error: Unauthorized'));
 
-      await expect(controller.searchGames('valheim')).rejects.toThrow(
+      await expect(controller.searchGames('valheim', {})).rejects.toThrow(
         InternalServerErrorException,
       );
     });
@@ -94,7 +94,7 @@ function describeIgdbController() {
         .fn()
         .mockRejectedValue(unexpectedError);
 
-      await expect(controller.searchGames('valheim')).rejects.toThrow(
+      await expect(controller.searchGames('valheim', {})).rejects.toThrow(
         unexpectedError,
       );
     });
