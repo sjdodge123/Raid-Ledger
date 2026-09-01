@@ -38,37 +38,41 @@ export async function handleGameBindingJoin(
   spawnFns?: GameSpawnFns,
   isBot = false,
 ): Promise<void> {
-  if (!isBot) {
-    const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
-    const uid = rlUser?.id ?? null;
-    startVoiceGameTracking(
-      deps,
-      dm.discordUserId,
-      binding.gameId,
-      binding.gameName ?? '',
-      uid,
-    );
-    // ROK-1394: a fixed-game bind holds ≤1 active event, but the degrade path
-    // may have keyed it under `bindingId:null`. Look it up regardless of game
-    // key and reconcile the join into that event (keep it as-is — no game
-    // upgrade) so a later game confirmation never mints a second, sticky-game
-    // event.
-    const existing = deps.adHocEventService.getActiveBindingEventGameId(
-      binding.bindingId,
-    );
-    if (existing) {
-      await joinExistingEvent(
-        deps,
-        channelId,
-        binding,
-        dm,
-        uid,
-        existing.gameId,
-      );
-      return;
-    }
-  }
+  if (!isBot && (await trackAndJoinExisting(deps, channelId, binding, dm)))
+    return;
   await suppressOrCheckThreshold(deps, channelId, binding, spawnFns);
+}
+
+/**
+ * Game-track the joining member and reconcile them into the bind's existing
+ * event if it has one. Returns true when the join was fully handled.
+ *
+ * ROK-1394: a fixed-game bind holds ≤1 active event, but the degrade path may
+ * have keyed it under `bindingId:null`. Look it up regardless of game key and
+ * reconcile the join into that event (keep it as-is — no game upgrade) so a
+ * later game confirmation never mints a second, sticky-game event.
+ */
+async function trackAndJoinExisting(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  dm: DiscordMemberInfo,
+): Promise<boolean> {
+  const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
+  const uid = rlUser?.id ?? null;
+  startVoiceGameTracking(
+    deps,
+    dm.discordUserId,
+    binding.gameId,
+    binding.gameName ?? '',
+    uid,
+  );
+  const existing = deps.adHocEventService.getActiveBindingEventGameId(
+    binding.bindingId,
+  );
+  if (!existing) return false;
+  await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
+  return true;
 }
 
 /** Detect game for a general-lobby join. */
