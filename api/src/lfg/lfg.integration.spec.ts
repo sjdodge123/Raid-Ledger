@@ -11,6 +11,7 @@
  * Count active intents for a game — 1 → 'lfg', >= 2 → 'lfm', 0 → null.
  */
 import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -374,6 +375,14 @@ describe('expiry cron', () => {
   it('is registered in the scheduler and in the admin cron-job registry', async () => {
     const scheduler = testApp.app.get(SchedulerRegistry, { strict: false });
     expect(scheduler.getCronJob(LFG_EXPIRY_JOB_NAME)).toBeDefined();
+
+    // Integration tests set CRON_DISABLED=true, which skips the bootstrap
+    // SchedulerRegistry -> cron_jobs sync (test-app.ts stops the jobs anyway).
+    // Run it explicitly so the admin-registry assertion below exercises the
+    // real path instead of reading an empty table.
+    await testApp.app
+      .get(CronJobService, { strict: false })
+      .syncJobs();
 
     const res = await testApp.request
       .get('/admin/cron-jobs')

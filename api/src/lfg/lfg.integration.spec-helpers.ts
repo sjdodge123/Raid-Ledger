@@ -77,8 +77,10 @@ export interface LfgHeartedGameDto {
   activeCount: number;
 }
 
-/** Raw `lfg_intents` row as returned by the raw-SQL readers below. */
-export interface LfgIntentRow {
+/** Raw `lfg_intents` row as returned by the raw-SQL readers below.
+ * A type alias (not an interface) so it satisfies the
+ * `Record<string, unknown>` constraint on `db.execute<T>()`. */
+export type LfgIntentRow = {
   id: number;
   user_id: number;
   game_id: number;
@@ -88,7 +90,7 @@ export interface LfgIntentRow {
   expires_at: Date;
   converted_to_poll_id: number | null;
   converted_to_event_id: number | null;
-}
+};
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -209,8 +211,11 @@ export async function setExpiresAt(
   intentId: number,
   expiresAt: Date,
 ): Promise<void> {
+  // ISO string, not a bare Date: drizzle passes raw template params straight
+  // through to postgres.js, whose Bind path cannot serialize a Date without a
+  // column mapper. Postgres casts the text to `timestamp` on assignment.
   await testApp.db.execute(
-    sql`UPDATE lfg_intents SET expires_at = ${expiresAt} WHERE id = ${intentId}`,
+    sql`UPDATE lfg_intents SET expires_at = ${expiresAt.toISOString()} WHERE id = ${intentId}`,
   );
 }
 

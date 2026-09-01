@@ -229,7 +229,7 @@ export async function listHeartedWithoutIntent(
         SELECT COUNT(*)::int FROM lfg_intents li
         JOIN users lu ON lu.id = li.user_id
         WHERE li.game_id = ${schema.games.id}
-          AND li.status = 'active' AND li.expires_at > ${now}
+          AND li.status = 'active' AND li.expires_at > ${now.toISOString()}
           AND lu.deactivated_at IS NULL AND lu.banned_at IS NULL
       )`,
     })

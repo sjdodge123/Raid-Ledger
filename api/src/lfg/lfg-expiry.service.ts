@@ -28,7 +28,12 @@ export class LfgExpiryService {
   ) {}
 
   /** Flip every past-`expires_at` active intent to `expired`. */
-  @Cron(LFG_EXPIRY_CRON_EXPRESSION, { name: LFG_EXPIRY_JOB_NAME })
+  // waitForCompletion: a sweep that mutates rows must never overlap itself,
+  // and it makes `fireOnTick()` actually await the handler.
+  @Cron(LFG_EXPIRY_CRON_EXPRESSION, {
+    name: LFG_EXPIRY_JOB_NAME,
+    waitForCompletion: true,
+  })
   async expireIntents(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       LFG_EXPIRY_JOB_NAME,
