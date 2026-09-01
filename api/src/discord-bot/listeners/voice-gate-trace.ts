@@ -17,6 +17,7 @@
  */
 import type { Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
+import type { ResolvedBinding } from './voice-state.helpers';
 
 /** Terminal outcomes of the join → spawn decision chain (greppable tokens). */
 export type GateOutcome =
@@ -29,7 +30,10 @@ export type GateOutcome =
   | 'spawned-immediate'
   | 'feature-disabled'
   | 'lobby-no-game-detected'
-  | 'no-trigger-user';
+  | 'no-trigger-user'
+  // ROK-1445: a general-lobby game group that did not clear `minPlayers` and
+  // was therefore dropped (never folded into another game's roster).
+  | 'group-below-threshold';
 
 /**
  * Fields rendered into the trace line. `gameId: null` is printed literally —
@@ -48,6 +52,21 @@ export interface GateCtx {
   confirmed?: number;
 }
 
+/** Build the gate trace context from a resolved binding (+ optional metrics). */
+export function gateCtx(
+  binding: ResolvedBinding,
+  channelId: string,
+  extra?: Partial<GateCtx>,
+): GateCtx {
+  return {
+    channelId,
+    bindingId: binding.bindingId,
+    purpose: binding.bindingPurpose,
+    gameId: binding.gameId,
+    ...extra,
+  };
+}
+
 const THROTTLE_WINDOW_MS = 60 * 1000;
 const THROTTLE_PRUNE_MS = 10 * 60 * 1000;
 const INERT_WARN_WINDOW_MS = 15 * 60 * 1000;
@@ -57,7 +76,13 @@ interface ThrottleBucket {
   count: number;
 }
 
-/** `${channelId}:${bindingId}:${outcome}` → open 60s window. */
+/**
+ * `${channelId}:${bindingId}:${gameId}:${outcome}` → open 60s window.
+ *
+ * ROK-1445 added `gameId`: one general-lobby channel now holds N concurrent
+ * per-game events, so a channel-wide bucket let one game's drop silently mask
+ * another's for a full minute.
+ */
 const throttleBuckets = new Map<string, ThrottleBucket>();
 /** `bindingId` → last inert-warn timestamp (15-min dedupe). */
 const inertWarnedAt = new Map<string, number>();
@@ -88,7 +113,7 @@ function pruneThrottle(now: number): void {
 
 /**
  * Emit one INFO trace line for a terminal outcome, throttled to one line per
- * `${channelId}:${bindingId}:${outcome}` per 60s. The first emit AFTER a window
+ * `${channelId}:${bindingId}:${gameId}:${outcome}` per 60s. The first emit AFTER a window
  * closes carries `repeat=N` — N being the total emits collapsed in the window
  * that just closed — so a hot loop is visible without flooding the log.
  */
@@ -99,7 +124,7 @@ export function traceGate(
 ): void {
   const now = Date.now();
   pruneThrottle(now);
-  const key = `${ctx.channelId}:${ctx.bindingId}:${outcome}`;
+  const key = `${ctx.channelId}:${ctx.bindingId}:${ctx.gameId ?? 'null'}:${outcome}`;
   const bucket = throttleBuckets.get(key);
   if (bucket && now - bucket.windowStart < THROTTLE_WINDOW_MS) {
     bucket.count += 1;

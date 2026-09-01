@@ -13,27 +13,17 @@ import {
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
 import { handleGameSpecificGroupRoster } from './voice-state-recovery.handlers';
-import { traceGate, warnInertOnce, type GateCtx } from './voice-gate-trace';
+import { gateCtx, traceGate, warnInertOnce } from './voice-gate-trace';
+
+// ROK-1445: `gateCtx` moved to voice-gate-trace.ts (a leaf module) so the new
+// general-lobby group helpers can build a trace context without importing this
+// file, which would close an import cycle. Re-exported for existing callers.
+export { gateCtx };
 
 /** Spawn schedule callbacks for a game-specific binding. */
 export interface GameSpawnFns {
   scheduleSpawn: () => void;
   cancelSpawn: () => void;
-}
-
-/** Build the gate trace context from a resolved binding (+ optional metrics). */
-export function gateCtx(
-  binding: ResolvedBinding,
-  channelId: string,
-  extra?: Partial<GateCtx>,
-): GateCtx {
-  return {
-    channelId,
-    bindingId: binding.bindingId,
-    purpose: binding.bindingPurpose,
-    gameId: binding.gameId,
-    ...extra,
-  };
 }
 
 /**
