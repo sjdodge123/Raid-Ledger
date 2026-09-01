@@ -8,19 +8,18 @@ import {
   startVoiceGameTracking,
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
+import {
+  isBotMember,
+  resolveLobbyGroups,
+  traceDroppedGroups,
+  type LobbyGameGroup,
+} from './voice-lobby-groups.helpers';
 
 /** Discord member info shape. */
 type DiscordMember = {
   discordUserId: string;
   discordUsername: string;
   discordAvatarHash: string | null;
-};
-
-/** Group shape from presence detector. */
-type GameGroup = {
-  gameId: number | null;
-  gameName: string;
-  memberIds: string[];
 };
 
 /** Recover voice state from all bound channels on startup. */
@@ -66,6 +65,11 @@ async function recoverChannel(
   ) => Promise<void>,
 ): Promise<void> {
   trackChannelMembers(deps, channelId, channel);
+  // ROK-1445 review LOW-1: bots are excluded from `trackChannelMembers` above
+  // (counts) and from every roster path, but they must STILL be dispatched —
+  // `handleChannelJoin` is where scheduled-event attendance and ROK-959
+  // sibling suppression run. Skipping them here reproduced the same bug the
+  // dispatch-level filter caused, only on bot restart.
   for (const [memberId, gm] of channel.members) {
     const dm: DiscordMember = {
       discordUserId: memberId,
@@ -86,7 +90,8 @@ function trackChannelMembers(
   channel: VoiceBasedChannel,
 ): void {
   const memberSet = new Set<string>();
-  for (const [memberId] of channel.members) {
+  for (const [memberId, gm] of channel.members) {
+    if (isBotMember(gm)) continue;
     memberSet.add(memberId);
     deps.userChannelMap.set(memberId, channelId);
   }
@@ -110,6 +115,7 @@ export async function handleGameSpecificGroupRoster(
   if (!channel) return false;
   let handled = false;
   for (const [memberId, guildMember] of channel.members) {
+    if (isBotMember(guildMember)) continue;
     const rlUser = await deps.usersService.findByDiscordId(memberId);
     const memberInfo = buildMemberInfo(
       memberId,
@@ -129,77 +135,76 @@ export async function handleGameSpecificGroupRoster(
   return handled;
 }
 
-/** Roster all members from detected groups into ad-hoc events. */
-async function rosterGroupMembers(
-  deps: VoiceHandlerDeps,
-  channel: VoiceBasedChannel,
-  groups: GameGroup[],
-  binding: ResolvedBinding,
-  channelId: string,
-): Promise<void> {
-  const addedMembers = new Set<string>();
-  await addDetectedMembers(
-    deps,
-    channel,
-    groups,
-    binding,
-    addedMembers,
-    channelId,
-  );
-  await addRemainingMembers(
-    deps,
-    channel,
-    groups,
-    binding,
-    addedMembers,
-    channelId,
-  );
-}
-
-/** Handle group detection and event creation for general-lobby channels. */
+/**
+ * Detect the game groups in a general-lobby channel and mint one event per
+ * QUALIFYING group (ROK-1445 AC2). Groups below `minPlayers` are dropped, never
+ * folded into another game's roster (AC5) — but their members keep their
+ * game-activity tracking (AC6) and the drop is traced (AC10).
+ *
+ * `targetGameId` restricts the mint to a single group — a delayed spawn timer
+ * is armed per `(channel, game)` (AC13) and must spawn only the group it was
+ * armed for. Omit it to fan out across every qualifying group.
+ */
 export async function handleGeneralLobbyGroupDetection(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
+  targetGameId?: number | null,
 ): Promise<void> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   if (!channel) return;
-  const voiceMembers = [...channel.members.values()];
-  if (voiceMembers.length === 0) return;
-  const allGroups = await deps.presenceDetector.detectGames(voiceMembers);
-  const allowJustChatting = binding.config?.allowJustChatting ?? false;
-  const groups = filterGroups(allGroups, allowJustChatting);
-  if (groups.length === 0) return;
-  await rosterGroupMembers(deps, channel, groups, binding, channelId);
+  const partition = await resolveLobbyGroups(deps, channelId, binding);
+  traceDroppedGroups(deps, channelId, binding, partition);
+  await trackDroppedMembers(deps, channel, partition.dropped);
+  const selected =
+    targetGameId === undefined
+      ? partition.qualifying
+      : partition.qualifying.filter((g) => g.gameId === targetGameId);
+  if (selected.length === 0) return;
+  await addDetectedMembers(deps, channel, selected, binding, channelId);
 }
 
-/** Filter game groups based on Just Chatting setting. */
-function filterGroups(
-  allGroups: GameGroup[],
-  allowJustChatting: boolean,
-): GameGroup[] {
-  return allowJustChatting
-    ? allGroups.map((g) =>
-        g.gameId === null ? { ...g, gameName: 'Just Chatting' } : g,
-      )
-    : allGroups.filter((g) => g.gameId !== null);
+/**
+ * AC6: dropping the event must NOT drop game-activity tracking. `bufferStart`
+ * is keyed user+game+source and is independent of any event, so a player whose
+ * group never reached `minPlayers` still keeps their play-time record.
+ */
+async function trackDroppedMembers(
+  deps: VoiceHandlerDeps,
+  channel: VoiceBasedChannel,
+  dropped: LobbyGameGroup[],
+): Promise<void> {
+  for (const group of dropped) {
+    for (const memberId of group.memberIds) {
+      const gm = channel.members.get(memberId);
+      if (!gm || isBotMember(gm)) continue;
+      const rlUser = await deps.usersService.findByDiscordId(memberId);
+      startVoiceGameTracking(
+        deps,
+        memberId,
+        group.gameId,
+        group.gameName,
+        rlUser?.id ?? null,
+      );
+    }
+  }
 }
 
-/** Add members from detected game groups to events. */
+/** Add members from qualifying game groups to their own event. */
 async function addDetectedMembers(
   deps: VoiceHandlerDeps,
   channel: VoiceBasedChannel,
-  groups: GameGroup[],
+  groups: LobbyGameGroup[],
   binding: ResolvedBinding,
-  addedMembers: Set<string>,
   channelId?: string,
 ): Promise<void> {
   for (const group of groups) {
     for (const memberId of group.memberIds) {
       const gm = channel.members.get(memberId);
-      if (!gm) continue;
+      // AC9: explicit bot guard on the roster so it cannot regress even if a
+      // bot ever slipped into a detected group.
+      if (!gm || isBotMember(gm)) continue;
       await addGroupMember(deps, memberId, gm, group, binding, channelId);
-      addedMembers.add(memberId);
     }
   }
 }
@@ -209,7 +214,7 @@ async function addGroupMember(
   deps: VoiceHandlerDeps,
   memberId: string,
   gm: GuildMember,
-  group: GameGroup,
+  group: LobbyGameGroup,
   binding: ResolvedBinding,
   channelId?: string,
 ): Promise<void> {
@@ -230,30 +235,4 @@ async function addGroupMember(
     group.gameName,
     rlUser?.id ?? null,
   );
-}
-
-/** Add remaining (undetected) members to the primary event group. */
-async function addRemainingMembers(
-  deps: VoiceHandlerDeps,
-  channel: VoiceBasedChannel,
-  groups: GameGroup[],
-  binding: ResolvedBinding,
-  addedMembers: Set<string>,
-  channelId?: string,
-): Promise<void> {
-  if (groups.length === 0) return;
-  const primaryGroup = groups[0];
-  for (const [memberId, guildMember] of channel.members) {
-    if (addedMembers.has(memberId)) continue;
-    const rlUser = await deps.usersService.findByDiscordId(memberId);
-    const mi = buildMemberInfo(memberId, guildMember, rlUser?.id ?? null);
-    await deps.adHocEventService.handleVoiceJoin(
-      binding.bindingId,
-      mi,
-      binding,
-      primaryGroup.gameId,
-      primaryGroup.gameName,
-      channelId,
-    );
-  }
 }

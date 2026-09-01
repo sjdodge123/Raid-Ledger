@@ -13,27 +13,22 @@ import {
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
 import { handleGameSpecificGroupRoster } from './voice-state-recovery.handlers';
-import { traceGate, warnInertOnce, type GateCtx } from './voice-gate-trace';
+import {
+  gateCtx,
+  traceGate,
+  warnInertOnce,
+  type GateCtx,
+} from './voice-gate-trace';
+
+// ROK-1445: `gateCtx` moved to voice-gate-trace.ts (a leaf module) so the new
+// general-lobby group helpers can build a trace context without importing this
+// file, which would close an import cycle. Re-exported for existing callers.
+export { gateCtx };
 
 /** Spawn schedule callbacks for a game-specific binding. */
 export interface GameSpawnFns {
   scheduleSpawn: () => void;
   cancelSpawn: () => void;
-}
-
-/** Build the gate trace context from a resolved binding (+ optional metrics). */
-export function gateCtx(
-  binding: ResolvedBinding,
-  channelId: string,
-  extra?: Partial<GateCtx>,
-): GateCtx {
-  return {
-    channelId,
-    bindingId: binding.bindingId,
-    purpose: binding.bindingPurpose,
-    gameId: binding.gameId,
-    ...extra,
-  };
 }
 
 /**
@@ -159,8 +154,31 @@ async function resolveGameBindingSpawn(
   });
   if (counted < minPlayers)
     return traceGate(deps.logger, 'below-threshold', ctx);
-  if (allConfirmed) {
+  if (allConfirmed)
+    return spawnAllConfirmed(deps, channelId, binding, ctx, spawnFns);
+  spawnFns?.scheduleSpawn();
+  return traceGate(deps.logger, 'spawn-scheduled', ctx);
+}
+
+/** Immediate spawn when every counted member confirmed the bound game. */
+async function spawnAllConfirmed(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  ctx: GateCtx,
+  spawnFns?: GameSpawnFns,
+): Promise<void> {
+  {
     spawnFns?.cancelSpawn();
+    // ROK-1394 / ROK-1445 review MED-1: the bind may ALREADY hold an active
+    // event — including one the degrade path keyed under `bindingId:null`.
+    // Minting here would key a second event under `bindingId:<gameId>` and
+    // leave the same humans rostered on both. The join paths normally
+    // reconcile into the existing event before reaching this function, but the
+    // bot path deliberately skips that step (it must still reach suppression),
+    // so the guard has to live here too. Mirrors `executeDelayedSpawn`.
+    if (deps.adHocEventService.getActiveBindingEventGameId(binding.bindingId))
+      return;
     // allConfirmed ⟹ every counted member confirmed the bound game, so the
     // sticky game is correct and the ROK-1394 degrade is unreachable here.
     const rostered = await handleGameSpecificGroupRoster(
@@ -174,6 +192,4 @@ async function resolveGameBindingSpawn(
     if (rostered) return traceGate(deps.logger, 'spawned-immediate', ctx);
     return;
   }
-  spawnFns?.scheduleSpawn();
-  return traceGate(deps.logger, 'spawn-scheduled', ctx);
 }

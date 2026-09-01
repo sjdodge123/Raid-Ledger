@@ -360,7 +360,13 @@ describe('PresenceGameDetectorService', () => {
       });
     });
 
-    it('returns majority game when >50% play the same game', async () => {
+    // ROK-1445 changed this rule: a strict majority no longer absorbs the
+    // minority. It used to return ONE group carrying every member id, which
+    // silently attributed the Minecraft player's session to WoW. Each detected
+    // game now keeps its OWN members so the per-group `minPlayers` threshold
+    // can judge them independently. The assertion is strengthened, not
+    // weakened: it now pins the exact membership of both groups.
+    it('keeps the minority game as its own group even when one game has >50%', async () => {
       // u1, u2 play WoW, u3 plays Minecraft → WoW has strict majority (2/3 > 50%)
       // resolveGame calls: u1-WoW (mapping hit), u2-WoW (cache), u3-Minecraft (mapping)
       mockLimitFn
@@ -375,12 +381,14 @@ describe('PresenceGameDetectorService', () => {
 
       const result = await service.detectGames(members as any[]);
 
-      // Majority → all members assigned to WoW
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({
-        gameId: 1,
+      expect(result).toHaveLength(2);
+      expect(result.find((g) => g.gameId === 1)).toMatchObject({
         gameName: 'WoW',
-        memberIds: expect.arrayContaining(['u1', 'u2', 'u3']),
+        memberIds: ['u1', 'u2'],
+      });
+      expect(result.find((g) => g.gameId === 2)).toMatchObject({
+        gameName: 'Minecraft',
+        memberIds: ['u3'],
       });
     });
 
@@ -407,12 +415,13 @@ describe('PresenceGameDetectorService', () => {
       expect(gameIds).toContain(3);
     });
 
-    it('assigns no-game members to the largest game group on split', async () => {
-      // u1 plays WoW (gameId 1), u2 plays WoW (gameId 1), u3 has no game
-      // But 2/3 WoW < majority because of how the threshold works...
-      // Actually 2/3 = 66.7% which IS majority — let's use 4 members with 2 different games
+    // ROK-1445 reversed the null-folding for this path: a presence-null member
+    // must NOT be silently rostered onto the largest game group (they would be
+    // recorded as playing a game nobody knows they play). They are returned as
+    // their own null group; `allowJustChatting` decides downstream whether it
+    // becomes an event, under the same threshold.
+    it('returns no-game members as their own group instead of folding them in', async () => {
       // u1,u2 → WoW; u3 → FFXIV; u4 → no game
-      // No majority → split. u4 (no game) should go to WoW (largest group)
       mockLimitFn
         .mockResolvedValueOnce([{ gameId: 1, gameName: 'WoW' }]) // u1
         .mockResolvedValueOnce([{ gameId: 3, gameName: 'FFXIV' }]); // u3; u2 WoW cached
@@ -426,11 +435,11 @@ describe('PresenceGameDetectorService', () => {
 
       const result = await service.detectGames(members as any[]);
 
-      // u1+u2 = WoW, u3 = FFXIV → 2/4 each = no majority → split
-      // u4 (no game) goes to largest game group (WoW)
       const wowGroup = result.find((g) => g.gameId === 1);
       expect(wowGroup).toBeDefined();
-      expect(wowGroup?.memberIds).toContain('u4');
+      expect(wowGroup?.memberIds).toEqual(['u1', 'u2']);
+      expect(result.find((g) => g.gameId === 3)?.memberIds).toEqual(['u3']);
+      expect(result.find((g) => g.gameId === null)?.memberIds).toEqual(['u4']);
     });
 
     it('respects manual overrides during group detection', async () => {
@@ -448,9 +457,14 @@ describe('PresenceGameDetectorService', () => {
 
       const result = await service.detectGames(members as any[]);
 
-      // u1+u2 have Minecraft override (gameId 5), u3 has null → Minecraft is strict majority (2/3 > 50%)
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ gameId: 5, gameName: 'Minecraft' });
+      // u1+u2 have the Minecraft override (gameId 5); u3 is presence-null.
+      // ROK-1445: the override group holds exactly its own members and the null
+      // member stays separate rather than being folded in by majority.
+      expect(result.find((g) => g.gameId === 5)).toMatchObject({
+        gameName: 'Minecraft',
+        memberIds: ['u1', 'u2'],
+      });
+      expect(result.find((g) => g.gameId === null)?.memberIds).toEqual(['u3']);
     });
 
     it('splits when exactly 50% play the same game (no strict majority)', async () => {
