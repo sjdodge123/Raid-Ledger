@@ -54,11 +54,6 @@ export async function handleChannelJoin(
   } catch (err) {
     ctx.logger.error(`Join tracking failed for ${dm.discordUserId}: ${err}`);
   }
-  // ROK-1445 AC9: bots must never enter `channelMembers` (that map feeds the
-  // game-binding gates too, where a music bot inflating occupancy is the same
-  // bug) nor any roster. Scheduled-event attendance tracking above is
-  // deliberately left alone.
-  if (isBotMember(gm)) return;
   const bindings = await ctx.resolveAllBindings(chId);
   if (bindings.length === 0) {
     traceGate(ctx.logger, 'unbound-channel', {
@@ -68,7 +63,14 @@ export async function handleChannelJoin(
     });
     return;
   }
-  trackChannelMember(ctx.channelMembers, chId, dm.discordUserId);
+  // ROK-1445 AC9: bots must never enter `channelMembers` — that map feeds the
+  // game-binding threshold gates, where a music bot counting toward minPlayers
+  // is the same bug. Scoped to occupancy ONLY: a bot's join still dispatches
+  // every binding, so ROK-959 sibling suppression (and the `extended_until`
+  // write it performs) keeps running. Rosters are excluded separately, in the
+  // counting/roster paths themselves.
+  if (!isBotMember(gm))
+    trackChannelMember(ctx.channelMembers, chId, dm.discordUserId);
   for (const b of bindings) {
     await dispatchBindingJoin(ctx, chId, b, dm, gm);
   }
@@ -85,18 +87,25 @@ async function dispatchBindingJoin(
   if (b.bindingPurpose === 'general-lobby') {
     await dispatchLobbyJoin(ctx, chId, b, dm, gm);
   } else {
-    await handleGameBindingJoin(ctx.deps, chId, b, dm, {
-      scheduleSpawn: () =>
-        scheduleDelayedSpawn(
-          ctx.deps,
-          chId,
-          b.gameId,
-          b,
-          ctx.timers,
-          SPAWN_DELAY_MS,
-        ),
-      cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId, b.gameId),
-    });
+    await handleGameBindingJoin(
+      ctx.deps,
+      chId,
+      b,
+      dm,
+      {
+        scheduleSpawn: () =>
+          scheduleDelayedSpawn(
+            ctx.deps,
+            chId,
+            b.gameId,
+            b,
+            ctx.timers,
+            SPAWN_DELAY_MS,
+          ),
+        cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId, b.gameId),
+      },
+      isBotMember(gm),
+    );
   }
 }
 

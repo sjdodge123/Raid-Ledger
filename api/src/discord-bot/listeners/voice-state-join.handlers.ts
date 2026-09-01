@@ -11,7 +11,7 @@ import {
   handleGameSpecificGroupRoster,
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
-import { lobbyGroupSize } from './voice-lobby-groups.helpers';
+import { isBotMember, lobbyGroupSize } from './voice-lobby-groups.helpers';
 import {
   gateCtx,
   joinExistingEvent,
@@ -20,33 +20,53 @@ import {
 } from './voice-state-gate.handlers';
 import { traceGate, type GateCtx } from './voice-gate-trace';
 
-/** Handle join for a game-specific binding. */
+/**
+ * Handle join for a game-specific binding.
+ *
+ * ROK-1445 AC9 scoping: a bot is never game-tracked and never rostered, but its
+ * join MUST still reach `suppressOrCheckThreshold`. That is where ROK-959
+ * sibling-binding suppression runs its `extended_until` write, and the
+ * companion bot is how the Discord smoke suite simulates a voice join — gating
+ * the whole dispatch on `user.bot` made that test (and every bot-driven voice
+ * smoke test) vacuous.
+ */
 export async function handleGameBindingJoin(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   dm: DiscordMemberInfo,
   spawnFns?: GameSpawnFns,
+  isBot = false,
 ): Promise<void> {
-  const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
-  const uid = rlUser?.id ?? null;
-  startVoiceGameTracking(
-    deps,
-    dm.discordUserId,
-    binding.gameId,
-    binding.gameName ?? '',
-    uid,
-  );
-  // ROK-1394: a fixed-game bind holds ≤1 active event, but the degrade path may
-  // have keyed it under `bindingId:null`. Look it up regardless of game key and
-  // reconcile the join into that event (keep it as-is — no game upgrade) so a
-  // later game confirmation never mints a second, sticky-game event.
-  const existing = deps.adHocEventService.getActiveBindingEventGameId(
-    binding.bindingId,
-  );
-  if (existing) {
-    await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
-    return;
+  if (!isBot) {
+    const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
+    const uid = rlUser?.id ?? null;
+    startVoiceGameTracking(
+      deps,
+      dm.discordUserId,
+      binding.gameId,
+      binding.gameName ?? '',
+      uid,
+    );
+    // ROK-1394: a fixed-game bind holds ≤1 active event, but the degrade path
+    // may have keyed it under `bindingId:null`. Look it up regardless of game
+    // key and reconcile the join into that event (keep it as-is — no game
+    // upgrade) so a later game confirmation never mints a second, sticky-game
+    // event.
+    const existing = deps.adHocEventService.getActiveBindingEventGameId(
+      binding.bindingId,
+    );
+    if (existing) {
+      await joinExistingEvent(
+        deps,
+        channelId,
+        binding,
+        dm,
+        uid,
+        existing.gameId,
+      );
+      return;
+    }
   }
   await suppressOrCheckThreshold(deps, channelId, binding, spawnFns);
 }
@@ -95,6 +115,10 @@ export async function handleGeneralLobbyJoin(
   guildMember: GuildMember | undefined,
   scheduleFns: LobbyScheduleFns,
 ): Promise<void> {
+  // ROK-1445 AC9: a bot is never tracked, counted or rostered into a lobby
+  // event. Unlike the game-binding path this one performs no sibling-binding
+  // suppression, so returning early here costs nothing.
+  if (isBotMember(guildMember)) return;
   const detected = await detectGameForLobby(deps, binding, dm, guildMember);
   if (!detected) {
     if (!guildMember)
