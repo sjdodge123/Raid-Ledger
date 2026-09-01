@@ -8,12 +8,18 @@
  * viewer, and is a single batched read otherwise (no N+1).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { GameDetailDto, GameDiscoverRowDto } from '@raid-ledger/contract';
+import type {
+  GameDetailDto,
+  GameDiscoverRowDto,
+  GameDiscoverResponseDto,
+} from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import {
   loadViewerInterests,
   viewerFlagsFor,
 } from '../lineups/viewer-interests.helpers';
+import { buildDiscoverCategories } from './igdb-discover.helpers';
+import { buildDiscoverRows } from './igdb-discover-merge.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -64,4 +70,31 @@ export async function personalizeDiscoverRows(
     ...row,
     games: row.games.map((g) => ({ ...g, ...viewerFlagsFor(map, g.id) })),
   }));
+}
+
+/** The `IgdbService` surface the discover row builder needs. */
+interface DiscoverDeps {
+  database: Db;
+  redisClient: Parameters<typeof buildDiscoverRows>[2];
+  config: { DISCOVER_CACHE_TTL: number };
+}
+
+/**
+ * Build the `/games/discover` payload and overlay the viewer's badge flags.
+ * Personalization happens AFTER the shared cache read so one viewer's flags
+ * can never be served to another out of the discover cache.
+ */
+export async function buildPersonalizedDiscover(
+  service: DiscoverDeps,
+  viewerId: number | null,
+): Promise<GameDiscoverResponseDto> {
+  const rows = await buildDiscoverRows(
+    buildDiscoverCategories(),
+    service.database,
+    service.redisClient,
+    service.config.DISCOVER_CACHE_TTL,
+  );
+  return {
+    rows: await personalizeDiscoverRows(service.database, viewerId, rows),
+  };
 }

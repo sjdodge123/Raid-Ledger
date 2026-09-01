@@ -48,8 +48,6 @@ import { handleSearchError } from './igdb-controller.helpers';
 import { fetchGameEventTypes } from './igdb-event-types.helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
-import { buildDiscoverCategories } from './igdb-discover.helpers';
-import { buildDiscoverRows } from './igdb-discover-merge.helpers';
 import {
   batchCheckInterests,
   addInterest,
@@ -61,10 +59,11 @@ import { fetchGamePricing } from './igdb-pricing.helpers';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import {
   personalizeGames,
-  personalizeDiscoverRows,
+  buildPersonalizedDiscover,
   viewerIdOf,
   type OptionalViewer,
 } from './igdb-personalization.helpers';
+import { listConfiguredGames } from './igdb-registry.helpers';
 import { parseBatchIds } from './igdb-batch.util';
 import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
 
@@ -120,47 +119,13 @@ export class IgdbController {
   async discoverGames(
     @Req() req: OptionalViewer,
   ): Promise<GameDiscoverResponseDto> {
-    const rows = await buildDiscoverRows(
-      buildDiscoverCategories(),
-      this.igdbService.database,
-      this.igdbService.redisClient,
-      this.igdbService.config.DISCOVER_CACHE_TTL,
-    );
-    // ROK-1314: personalize AFTER the shared cache read so one viewer's
-    // flags can never be served to another from the discover cache.
-    return {
-      rows: await personalizeDiscoverRows(
-        this.igdbService.database,
-        viewerIdOf(req),
-        rows,
-      ),
-    };
+    return buildPersonalizedDiscover(this.igdbService, viewerIdOf(req));
   }
 
   /** GET /games/configured -- Returns enabled games with config columns. */
   @Get('configured')
   async getConfiguredGames(): Promise<GameRegistryListResponseDto> {
-    const db = this.igdbService.database;
-    const rows = await db
-      .select({
-        id: schema.games.id,
-        slug: schema.games.slug,
-        name: schema.games.name,
-        shortName: schema.games.shortName,
-        coverUrl: schema.games.coverUrl,
-        colorHex: schema.games.colorHex,
-        hasRoles: schema.games.hasRoles,
-        hasSpecs: schema.games.hasSpecs,
-        enabled: schema.games.enabled,
-        maxCharactersPerUser: schema.games.maxCharactersPerUser,
-        genres: schema.games.genres,
-        playerCount: schema.games.playerCount,
-      })
-      .from(schema.games)
-      .where(eq(schema.games.enabled, true))
-      .orderBy(schema.games.name);
-    const data = rows.map((r) => ({ ...r, genres: r.genres ?? [] }));
-    return { data, meta: { total: data.length } };
+    return listConfiguredGames(this.igdbService.database);
   }
 
   /** GET /games/:id/event-types -- Returns event types for a game. */

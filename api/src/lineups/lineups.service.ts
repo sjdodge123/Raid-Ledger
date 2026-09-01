@@ -32,7 +32,7 @@ import { AiSuggestionsCacheInvalidator } from './ai-suggestions/cache.helpers';
 import { runCommonGroundForBuildingLineup } from './common-ground-context.helpers';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { getParticipantsResponse } from './lineups-participants.helpers';
-import { findBannerLineup, buildBannerData } from './lineups-banner.helpers';
+import { loadGamesPageBanner } from './lineups-banner.helpers';
 import { buildActiveLineupSummaries } from './lineups-summary.helpers';
 import { buildGroupedMatchesResponse } from './lineups-match-response.helpers';
 import { runMetadataUpdate } from './lineups-metadata.helpers';
@@ -209,10 +209,13 @@ export class LineupsService {
     );
   }
 
-  /** Get Common Ground games — ownership overlap + taste scoring (ROK-950). */
+  /**
+   * Get Common Ground games — ownership overlap + taste scoring (ROK-950).
+   * `viewerId` (ROK-1314) drives the per-viewer own/wishlist badge flags and
+   * is `null` for an anonymous caller.
+   */
   getCommonGround(
     filters: CommonGroundQueryDto,
-    /** ROK-1314: authenticated viewer id, or `null` when anonymous. */
     viewerId: number | null = null,
   ): Promise<CommonGroundResponseDto> {
     return runCommonGroundForBuildingLineup(
@@ -276,9 +279,7 @@ export class LineupsService {
 
   /** Get banner data for the Games page. Returns null if no eligible lineup. */
   async findBanner(): Promise<LineupBannerResponseDto | null> {
-    const [lineup] = await findBannerLineup(this.db);
-    if (!lineup) return null;
-    return buildBannerData(this.db, lineup);
+    return loadGamesPageBanner(this.db);
   }
 
   /** Get grouped matches for decided view (ROK-937). */
