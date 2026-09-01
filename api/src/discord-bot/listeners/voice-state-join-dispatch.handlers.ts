@@ -27,6 +27,7 @@ import {
   type TimerMaps,
 } from './voice-state-leave.handlers';
 import { traceGate } from './voice-gate-trace';
+import { isBotMember } from './voice-lobby-groups.helpers';
 
 const SPAWN_DELAY_MS = 15 * 60 * 1000;
 
@@ -53,6 +54,11 @@ export async function handleChannelJoin(
   } catch (err) {
     ctx.logger.error(`Join tracking failed for ${dm.discordUserId}: ${err}`);
   }
+  // ROK-1445 AC9: bots must never enter `channelMembers` (that map feeds the
+  // game-binding gates too, where a music bot inflating occupancy is the same
+  // bug) nor any roster. Scheduled-event attendance tracking above is
+  // deliberately left alone.
+  if (isBotMember(gm)) return;
   const bindings = await ctx.resolveAllBindings(chId);
   if (bindings.length === 0) {
     traceGate(ctx.logger, 'unbound-channel', {
@@ -81,8 +87,15 @@ async function dispatchBindingJoin(
   } else {
     await handleGameBindingJoin(ctx.deps, chId, b, dm, {
       scheduleSpawn: () =>
-        scheduleDelayedSpawn(ctx.deps, chId, b, ctx.timers, SPAWN_DELAY_MS),
-      cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId),
+        scheduleDelayedSpawn(
+          ctx.deps,
+          chId,
+          b.gameId,
+          b,
+          ctx.timers,
+          SPAWN_DELAY_MS,
+        ),
+      cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId, b.gameId),
     });
   }
 }
@@ -107,9 +120,17 @@ async function dispatchLobbyJoin(
         handleJoinFn: (ch, d, g) => handleChannelJoin(ctx, ch, d, g),
         logError: (m) => ctx.logger.error(m),
       }),
-    scheduleSpawn: () =>
-      scheduleDelayedSpawn(ctx.deps, chId, binding, ctx.timers, SPAWN_DELAY_MS),
-    cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId),
+    scheduleSpawn: (gameId: number | null) =>
+      scheduleDelayedSpawn(
+        ctx.deps,
+        chId,
+        gameId,
+        binding,
+        ctx.timers,
+        SPAWN_DELAY_MS,
+      ),
+    cancelSpawn: (gameId: number | null) =>
+      cancelPendingSpawn(ctx.timers, chId, gameId),
   };
   await handleGeneralLobbyJoin(ctx.deps, chId, binding, dm, gm, fns);
 }

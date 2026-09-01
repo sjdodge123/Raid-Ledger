@@ -169,6 +169,17 @@ export function trackChannelMember(
   members.add(userId);
 }
 
+/**
+ * Key for the listener's `pendingSpawnTimers` map (ROK-1445 AC13).
+ *
+ * One pending spawn per `(channel, game)` — keying by channel alone meant the
+ * second qualifying group in a general lobby could never arm a timer. Defined
+ * here (a leaf module) so the format has exactly one definition.
+ */
+export function spawnTimerKey(channelId: string, gameId: number | null): string {
+  return `${channelId}:${gameId ?? 'null'}`;
+}
+
 /** Clear all timers in a map. */
 export function clearTimerMap(map: Map<string, NodeJS.Timeout>): void {
   for (const timer of map.values()) {
