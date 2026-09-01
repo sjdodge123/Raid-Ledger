@@ -88,7 +88,13 @@ export function GenreBadge({
     label: string;
 }): JSX.Element {
     return (
-        <span className="inline-block px-1.5 py-0.5 text-[10px] bg-white/20 text-white/90 rounded">
+        // ROK-1314: `bg-white/20 text-white/90` measured 1.31:1 over a bright
+        // cover — effectively invisible on light game art. It was tolerable
+        // when this sat alone on the gradient; the badge row now wraps higher
+        // up the artwork where there is no darkening. A dark scrim reads on
+        // any cover (~8.7:1) and keeps genre visually NEUTRAL against the
+        // colour-coded semantic badges beside it.
+        <span className="inline-block px-1.5 py-0.5 text-[10px] bg-black/65 text-white rounded">
             {label}
         </span>
     );

@@ -58,12 +58,22 @@ export function WishlistBadge({ count }: { count: number }): JSX.Element | null 
     );
 }
 
-/** Tonal-amber personalized pill for the viewer's own wishlist. */
+/**
+ * Tonal-amber personalized pill for the viewer's own wishlist.
+ *
+ * Stays tonally distinct from `WishlistBadge` (amber-500) by going LIGHTER
+ * (amber-300) with dark text, rather than by going translucent. The original
+ * `bg-amber-300/20 text-amber-300` measured **1.02:1** against a bright cover
+ * — the same luminance as the artwork behind it, so it disappeared entirely on
+ * light game art while looking fine on dark art. A solid fill with amber-950
+ * text measures ~10.3:1 and matches the opaque treatment every sibling badge
+ * already uses.
+ */
 export function YouWishlistedBadge(): JSX.Element {
     return (
         <span
             data-testid="you-wishlisted-badge"
-            className={`${BADGE_CLS} bg-amber-300/20 text-amber-300 border border-amber-300/40`}
+            className={`${BADGE_CLS} bg-amber-300/95 text-amber-950`}
         >
             You wishlisted
         </span>

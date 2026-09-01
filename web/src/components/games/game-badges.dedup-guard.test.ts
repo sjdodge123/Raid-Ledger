@@ -236,3 +236,57 @@ describe('ROK-1314 — shared game-badges module surface', () => {
         }
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// ROK-1314 follow-up — badge legibility over cover art (operator report
+// 2026-09-01: "the text on these new universal badges is hard to read").
+//
+// The badge row sits ON the cover image. A low-opacity fill takes the
+// luminance of whatever artwork is behind it, so a translucent badge can
+// measure ~1:1 against a bright cover and vanish, while looking perfectly fine
+// on dark art. Measured before the fix: `You wishlisted` 1.02:1, genre 1.31:1
+// (WCAG AA for bold text is 3.0:1).
+//
+// These pin the RULE (an opaque fill), not a specific colour — a palette
+// change is fine, reintroducing a see-through badge over artwork is not.
+// ---------------------------------------------------------------------------
+
+describe('ROK-1314 — badge fills stay legible over cover art', () => {
+    const OPACITY_RE = /bg-([a-z]+)-(\d{2,3})\/(\d{1,3})/g;
+
+    /**
+     * Strip comments before scanning. These guards document the OLD broken
+     * values in prose right next to the fix, so a naive scan flags the
+     * explanation itself — which is exactly what happened when they were
+     * first written. Match code, never commentary.
+     */
+    const codeOnly = (src: string): string =>
+        src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+    it('every badge fill in the shared module is at least 90% opaque', () => {
+        const source = codeOnly(readSource('components/games/game-badges.tsx'));
+        const tooSheer: string[] = [];
+        for (const [match, , , alpha] of source.matchAll(OPACITY_RE)) {
+            if (Number(alpha) < 90) tooSheer.push(match);
+        }
+        expect(tooSheer).toEqual([]);
+    });
+
+    it('the personalized wishlist pill is an opaque fill, not a tint + border', () => {
+        const source = codeOnly(readSource('components/games/game-badges.tsx'));
+        const badge = source.slice(source.indexOf('export function YouWishlistedBadge'));
+        const cls = badge.slice(0, badge.indexOf('</span>'));
+        // A light fill needs DARK text; the old form paired a 20% fill with
+        // amber-300 text on both layers, which is what made it disappear.
+        expect(cls).not.toMatch(/bg-amber-300\/(?:[1-8]?\d)\b/);
+        expect(cls).toMatch(/text-amber-950|text-black|text-\w+-9\d{2}/);
+    });
+
+    it('the genre badge does not use a see-through white fill over artwork', () => {
+        const source = codeOnly(readSource('components/games/game-card-parts.tsx'));
+        const badge = source.slice(source.indexOf('export function GenreBadge'));
+        const cls = badge.slice(0, badge.indexOf('</span>'));
+        expect(cls).not.toMatch(/bg-white\/[1-5]?\d\b/);
+    });
+});
