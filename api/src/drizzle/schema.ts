@@ -55,3 +55,4 @@ export * from './schema/games-dedup-audit';
 export * from './schema/channel-bindings-dedup-audit';
 export * from './schema/refresh-tokens';
 export * from './schema/admin-actions';
+export * from './schema/lfg-intents';
