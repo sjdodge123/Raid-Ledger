@@ -275,7 +275,7 @@ function describeSchedulingToggle() {
 
   // -- Sub-hour duration round-trip -----------------------------------------
 
-  it('persists a sub-hour building duration (Tonight = 0.25h)', async () => {
+  it('persists a sub-hour building duration (LAN = 0.25h)', async () => {
     const before = Date.now();
     const createRes = await createLineup({ buildingDurationHours: 0.25 });
     expect(createRes.status).toBe(201);

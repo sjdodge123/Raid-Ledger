@@ -45,6 +45,53 @@ interface JourneyState {
   tone: 'action' | 'waiting';
 }
 
+/**
+ * ROK-1444: " · voting opens at N%" when the lineup carries an early-advance
+ * target. Empty when the target is off (deadline-only) or has been permanently
+ * disarmed by an operator revert, or never armed at all, so the copy never
+ * promises an advance that cannot happen.
+ */
+function targetSuffix(lineup: LineupDetailResponseDto): string {
+  if (lineup.nominationTargetPct == null) return '';
+  if (lineup.nominationTargetDisarmedAt != null) return '';
+  // Codex P2: an UNARMED target can never fire (carry-over seeded the lineup
+  // at or above its target, so there is no rising edge left to cross).
+  // Promising early voting there would be a lie.
+  if (!lineup.nominationTargetArmed) return '';
+  return ` · voting opens at ${lineup.nominationTargetPct}%`;
+}
+
+/**
+ * ROK-1444: group size for the roster-fit flags.
+ *
+ * Base is Common Ground's `participantCount` — the people actually IN this
+ * lineup (nominators + voters, or invitees + creator when private) — NOT
+ * `votingEligibleCount`, which on a public lineup is the whole community and
+ * flagged every co-op game on the dev env ("group is 249").
+ *
+ * Codex P2: that count only reaches public invitees once they nominate or
+ * vote, so a public lineup seeded with explicit invitees (ROK-1440) reported
+ * `participantCount = 1` and stayed silent for a group of five. Take the
+ * larger of the two views; for a private lineup `participantCount` is already
+ * invitees + creator, so the max is a no-op there.
+ *
+ * Returns undefined below two people: a "group" of one cannot outgrow a co-op
+ * cap, and flagging a synced-zero game at "group is 1" would be noise.
+ */
+function rosterSize(
+  lineup: LineupDetailResponseDto,
+  participantCount: number,
+): number | undefined {
+  // Codex round-5 P2: count DISTINCT people. `addInvitees` does not exclude
+  // the creator, so a creator who is also in the invitee list would otherwise
+  // be counted twice and report the group one person too large — enough to
+  // wrongly flag a 4-player co-op game for a real four-person roster.
+  const invited = new Set(lineup.invitees.map((i) => i.id));
+  invited.add(lineup.createdBy.id);
+  const size = Math.max(participantCount, invited.size);
+  return size >= 2 ? size : undefined;
+}
+
 function deriveJourneyState(
   lineup: LineupDetailResponseDto,
   myNominatedCount: number,
@@ -70,7 +117,11 @@ function deriveJourneyState(
     // ROK-1348: the entry count is no longer paired with the voter count
     // (the old "X of Y nominated by Y voters" wrongly used the same Y for
     // both the nomination target and the voter pool).
-    sub: `${lineup.entries.length} nominated by ${eligible} ${eligible === 1 ? 'voter' : 'voters'}`,
+    // ROK-1444: the nomination CAP is published beside the count. It is the
+    // denominator the early-advance target is measured against and it moves
+    // (+5 per extra nominator), so leaving it implicit meant nobody could see
+    // the bar they were nominating toward.
+    sub: `${lineup.entries.length} / ${lineup.nominationCap} nominated by ${eligible} ${eligible === 1 ? 'voter' : 'voters'}${targetSuffix(lineup)}`,
     tone: 'action',
   };
 }
@@ -293,6 +344,7 @@ export function NominatingComposite(
         <ExistingNominations
           entries={[...lineup.entries]}
           lineupId={lineup.id}
+          participantCount={rosterSize(lineup, participantCount)}
         />
       </div>
       {drawerGameId != null && (
@@ -307,6 +359,9 @@ export function NominatingComposite(
         onClose={() => setNominationsDrawerOpen(false)}
         entries={lineup.entries}
         lineupId={lineup.id}
+        // ROK-1444 (Codex P3): the drawer is the MOBILE nominations list, so
+        // it needs the same roster size or fit warnings never show below md.
+        participantCount={rosterSize(lineup, participantCount)}
       />
     </section>
   );

@@ -5,6 +5,7 @@
 import { and, desc, eq, ne, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { ratchetNominationCap } from './lineups-nomination-cap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -102,6 +103,7 @@ export async function carryOverFromLastDecided(
   const suggestedMatches = await findSuggestedMatches(db, prev.id);
   if (suggestedMatches.length === 0) return;
 
+  let carried = 0;
   for (const match of suggestedMatches) {
     const [entry] = await findOriginalNominator(db, prev.id, match.gameId);
     if (!entry?.nominatedBy) continue; // skip if nominator was deleted
@@ -112,5 +114,16 @@ export async function carryOverFromLastDecided(
       entry.nominatedBy,
       prev.id,
     );
+    carried++;
   }
+  // ROK-1444 (Codex P2): pin `nomination_cap_peak` for the carried-over roster
+  // REGARDLESS of whether an early-advance target is configured. Carry-over is
+  // the only path that can seed a lineup with several distinct nominators
+  // before anyone nominates through `runNominate` (which is where the ratchet
+  // normally fires), so without this a deadline-only lineup could start at
+  // 21/25, lose its fifth nominator's only entry, and collapse to a live cap of
+  // 20 — rendering as full at 20/20 with every nominate button disabled.
+  // A lineup with no carried entries needs no pin: its cap is the base 20,
+  // which is already the floor and cannot shrink.
+  if (carried > 0) await ratchetNominationCap(db, newLineupId);
 }

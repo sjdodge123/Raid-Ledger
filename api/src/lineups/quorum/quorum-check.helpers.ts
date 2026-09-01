@@ -1,9 +1,19 @@
 /**
  * Quorum predicates for lineup auto-advance (ROK-1118, ROK-1296).
  *
- * Building quorum:
- *   - every expected voter has stamped `nominations_submitted_at` AND
- *   - total nominations ≥ floor (settings).
+ * Building quorum — ready when EITHER branch passes:
+ *   a) ROK-1444: the entry count has crossed the per-lineup
+ *      `nomination_target_pct` share of the dynamic nomination cap, or
+ *   b) every expected voter has stamped `nominations_submitted_at`.
+ *   ...and, for both, total nominations ≥ floor (settings).
+ *
+ * (a) is checked FIRST and is exempt from the ≥2-voter solo guard — see the
+ * comment on the guard for why.
+ *
+ * Branch (a) exists because (b) is currently unreachable from the web app —
+ * `useSubmitNominations` is defined but mounted nowhere, so nothing writes the
+ * stamp (b) reads. See `nomination-target.helpers.ts` for the revert-trap guard
+ * that keeps (a) from re-firing on a standing count after an operator revert.
  *
  * Voting quorum:
  *   - every expected voter has stamped `votes_submitted_at`.
@@ -26,6 +36,7 @@ import {
 } from '../../drizzle/schema/app-settings';
 import type { SettingsService } from '../../settings/settings.service';
 import { loadQuorumGatingVoters } from './quorum-voters.helpers';
+import { evaluateNominationTarget } from './nomination-target.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -44,6 +55,31 @@ export async function checkBuildingQuorum(
   lineup: LineupRow,
 ): Promise<QuorumResult> {
   const expected = await loadQuorumGatingVoters(db, lineup);
+  const totalNominations = await countNominations(db, lineup.id);
+  const floor = await readMinNominations(settings);
+
+  // ROK-1444: the count target is evaluated BEFORE the ≥2-voter guard.
+  //
+  // Configuring a target is an explicit operator opt-in that says "open voting
+  // once there are enough games", so it outranks the ROK-1118 solo guard —
+  // otherwise a lineup where one keen person nominates everything (exactly the
+  // same-day "Tonight" case this feature was built for) silently ignores the
+  // target the create modal advertised. The global floor still gates the
+  // advance, so this can never fire on one or two games.
+  //
+  // `checkVotingQuorum` deliberately KEEPS its solo guard: others can still
+  // turn up to vote once voting is open, and the phase deadline advances the
+  // lineup regardless, so a solo lineup cannot get stuck by this.
+  if (lineup.nominationTargetPct != null) {
+    const target = await evaluateNominationTarget(
+      db,
+      lineup,
+      totalNominations,
+      floor,
+    );
+    if (target.ready) return target;
+  }
+
   if (expected.length < 2) {
     return { ready: false, reason: 'solo lineup; manual advance required' };
   }
@@ -55,8 +91,6 @@ export async function checkBuildingQuorum(
       reason: `${shortfall} expected nominator(s) have not submitted`,
     };
   }
-  const totalNominations = await countNominations(db, lineup.id);
-  const floor = await readMinNominations(settings);
   if (totalNominations < floor) {
     return {
       ready: false,
