@@ -95,12 +95,36 @@ export function fromLineupEntry(entry: LineupEntryResponseDto): GameBadgeData {
 }
 
 /**
+ * Structural subset of `GameDetailDto` the badge row actually reads.
+ *
+ * Declared as a `Partial<Pick<...>>` rather than the whole DTO so the minimal
+ * `GameProps` shape `UnifiedGameCard` accepts (id/name/coverUrl and a handful
+ * of optionals) also satisfies it. The Library card and the game detail page
+ * then share one adapter instead of growing a second near-copy.
+ */
+export type GameDetailBadgeInput = Partial<
+    Pick<
+        GameDetailDto,
+        | 'currentUserOwns'
+        | 'currentUserWishlisted'
+        | 'itadCurrentPrice'
+        | 'itadCurrentCut'
+        | 'itadLowestPrice'
+        | 'playerCount'
+        | 'earlyAccess'
+        | 'cooptimusOnlineMax'
+        | 'cooptimusCouchMax'
+        | 'cooptimusComboCoop'
+    >
+>;
+
+/**
  * `/games` detail + discover rows → badge view-model.
  *
  * `GameDetailDto` carries no community aggregates, so `ownerCount` /
  * `wishlistCount` stay `null` and only the viewer's own two flags render.
  */
-export function fromGameDetail(game: GameDetailDto): GameBadgeData {
+export function fromGameDetail(game: GameDetailBadgeInput): GameBadgeData {
     return {
         ...EMPTY,
         currentUserOwns: game.currentUserOwns === true,
@@ -108,7 +132,7 @@ export function fromGameDetail(game: GameDetailDto): GameBadgeData {
         price: game.itadCurrentPrice ?? null,
         cut: game.itadCurrentCut ?? null,
         lowestPrice: game.itadLowestPrice ?? null,
-        playerCount: game.playerCount,
+        playerCount: game.playerCount ?? null,
         earlyAccess: game.earlyAccess === true,
         cooptimusOnlineMax: game.cooptimusOnlineMax ?? null,
         cooptimusCouchMax: game.cooptimusCouchMax ?? null,

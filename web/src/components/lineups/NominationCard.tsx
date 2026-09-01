@@ -74,7 +74,7 @@ function CardBody({ entry, canRemove, isMine, onRemove }: {
             <GameBadgeRow
                 game={fromLineupEntry(entry)}
                 variant="compact"
-                showPrice={false}
+                price="label"
                 className="mb-1.5"
             />
             <div className="flex items-center justify-between">

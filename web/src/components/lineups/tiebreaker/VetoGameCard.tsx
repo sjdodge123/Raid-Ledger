@@ -3,6 +3,11 @@
  * Individual game card for veto mode: cover, name, veto button, strikethrough.
  */
 import type { JSX } from 'react';
+import { GameBadgeRow } from '../../games/game-badges';
+import {
+    fromVetoGameCard,
+    type VetoGameCardData,
+} from '../../games/game-badges.helpers';
 
 interface Props {
     gameId: number;
@@ -15,6 +20,12 @@ interface Props {
     revealed: boolean;
     canVeto: boolean;
     onVeto: () => void;
+    /**
+     * ROK-1314: ownership / wishlist / price facts for the shared compact
+     * badge row. Optional so a stale cached `VetoStatusDto` (whose card
+     * objects predate these fields) renders the card exactly as before.
+     */
+    badges?: VetoGameCardData;
 }
 
 export function VetoGameCard({
@@ -26,6 +37,7 @@ export function VetoGameCard({
     revealed,
     canVeto,
     onVeto,
+    badges,
 }: Props): JSX.Element {
     return (
         <div
@@ -58,6 +70,14 @@ export function VetoGameCard({
             <div className="text-sm font-medium text-foreground mb-2 truncate">
                 {gameName}
             </div>
+
+            {badges && (
+                <GameBadgeRow
+                    game={fromVetoGameCard(badges)}
+                    variant="compact"
+                    className="mb-2"
+                />
+            )}
 
             {revealed ? (
                 <span data-testid="veto-count-revealed" className="text-xs text-muted">

@@ -119,29 +119,36 @@ export function AiBadge({ reasoning }: { reasoning?: string }): JSX.Element {
 /**
  * Price element: the locked sale badge, else the neutral plain-price tag.
  *
- * `showPrice === false` keeps the `On Sale` / `Best Price` vocabulary but drops
- * every `$` figure, for surfaces that already print the price in their own body
- * copy (the nomination card's `$14.99 (-50%) for 4` line). Without that switch
- * the same number would render twice on one card.
+ * `mode` exists because two hosts already print price information of their own
+ * and would otherwise show the same number twice:
+ *   `full`  — badge + `$` figure (the default).
+ *   `label` — locked vocabulary only, no figure (nomination card, whose body
+ *             prints `$14.99 (-50%) for 4`).
+ *   `none`  — no price element at all (unified card, which renders its own
+ *             `PriceBadge` from the richer ITAD pricing payload).
  */
-function RowPrice({ game, showPrice }: {
+function RowPrice({ game, mode }: {
     game: GameBadgeData;
-    showPrice: boolean;
+    mode: GameBadgeRowPrice;
 }): JSX.Element | null {
+    if (mode === 'none') return null;
     if (game.cut != null && game.cut > 0) {
         return (
             <ScalarPriceBadge
                 cut={game.cut}
                 price={game.price}
                 lowestPrice={game.lowestPrice}
-                showPrice={showPrice}
+                showPrice={mode === 'full'}
             />
         );
     }
-    return showPrice ? <PriceTag price={game.price} /> : null;
+    return mode === 'full' ? <PriceTag price={game.price} /> : null;
 }
 
 export type GameBadgeRowVariant = 'compact' | 'full';
+
+/** How much price information the row prints — see {@link RowPrice}. */
+export type GameBadgeRowPrice = 'full' | 'label' | 'none';
 
 /**
  * The one composed badge strip every game surface renders (spec §5.3).
@@ -154,13 +161,13 @@ export function GameBadgeRow({
     game,
     variant = 'full',
     className = '',
-    showPrice = true,
+    price = 'full',
 }: {
     game: GameBadgeData;
     variant?: GameBadgeRowVariant;
     className?: string;
-    /** Opt OUT of the `$` figures when the host surface prints them itself. */
-    showPrice?: boolean;
+    /** Opt down when the host surface prints price information itself. */
+    price?: GameBadgeRowPrice;
 }): JSX.Element {
     const full = variant === 'full';
     return (
@@ -171,7 +178,7 @@ export function GameBadgeRow({
             {full && game.wishlistCount != null && (
                 <WishlistBadge count={game.wishlistCount} />
             )}
-            <RowPrice game={game} showPrice={showPrice} />
+            <RowPrice game={game} mode={price} />
             {full && <PlayerBadge playerCount={game.playerCount} />}
             {full && game.earlyAccess && <EarlyAccessBadge />}
             {full && (

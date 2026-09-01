@@ -76,6 +76,7 @@ export function VetoView({ tiebreaker, lineupId }: Props): JSX.Element {
                         isMyVeto={veto.myVetoGameId === g.gameId}
                         revealed={veto.revealed}
                         canVeto={canVeto}
+                        badges={g}
                         onVeto={() =>
                             vetoMutation.mutate({ lineupId, gameId: g.gameId })
                         }

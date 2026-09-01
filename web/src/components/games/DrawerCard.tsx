@@ -12,6 +12,8 @@ import {
     GenreBadge,
 } from './game-card-parts';
 import { PriceBadge } from './PriceBadge';
+import { GameBadgeRow } from './game-badges';
+import { fromGameDetail } from './game-badges.helpers';
 
 /**
  * ROK-1295 demo integration card for the `/games` index carousel.
@@ -40,11 +42,16 @@ function CoverContent({
             <GradientOverlay />
             <div className="absolute bottom-0 left-0 right-0 p-3">
                 <CardTitle name={game.name} />
-                {primaryGenre && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                        <GenreBadge label={primaryGenre} />
-                    </div>
-                )}
+                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    {primaryGenre && <GenreBadge label={primaryGenre} />}
+                    {/* ROK-1314: the drawer card already renders PriceBadge from
+                        the ITAD pricing payload, so the row prints no price. */}
+                    <GameBadgeRow
+                        game={fromGameDetail(game)}
+                        variant="compact"
+                        price="none"
+                    />
+                </div>
             </div>
         </div>
     );
