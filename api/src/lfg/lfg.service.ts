@@ -79,7 +79,10 @@ export class LfgService {
           activeCount: group.activeCount,
         });
       }
-      return { created: true, body: await this.buildResponse(row, game, userId) };
+      return {
+        created: true,
+        body: await this.buildResponse(row, game, userId),
+      };
     }
     return {
       created: inserted !== null,

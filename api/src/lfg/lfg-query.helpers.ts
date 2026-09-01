@@ -126,7 +126,7 @@ export async function listActiveGroups(
     .where(liveIntent(new Date()))
     .groupBy(schema.games.id)
     .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)));
-  return rows.map((r) => toGroupSummary(r as LfgGroupAggregate));
+  return rows.map((r) => toGroupSummary(r));
 }
 
 /**
@@ -160,7 +160,7 @@ export async function getGroupSummary(
       hasOwnIntent: false,
     });
   }
-  return toGroupSummary(row as LfgGroupAggregate);
+  return toGroupSummary(row);
 }
 
 /**
@@ -197,6 +197,50 @@ export async function listGroupMembers(
   }));
 }
 
+/** Correlated count of eligible active intents for the joined `games` row.
+ * The instant is passed as an ISO string: drizzle hands raw template params
+ * straight to postgres.js, which cannot Bind a bare `Date`. */
+function eligibleCountSubquery(now: Date) {
+  return sql<number>`(
+    SELECT COUNT(*)::int FROM lfg_intents li
+    JOIN users lu ON lu.id = li.user_id
+    WHERE li.game_id = ${schema.games.id}
+      AND li.status = 'active' AND li.expires_at > ${now.toISOString()}
+      AND lu.deactivated_at IS NULL AND lu.banned_at IS NULL
+  )`;
+}
+
+/** Project a hearted-game row onto the wire DTO. */
+function toHeartedGame(row: {
+  gameId: number;
+  gameName: string;
+  gameCoverUrl: string | null;
+  heartedAt: Date;
+  activeCount: number;
+}): LfgHeartedGameDto {
+  return {
+    gameId: row.gameId,
+    gameName: row.gameName,
+    gameCoverUrl: row.gameCoverUrl,
+    heartedAt: row.heartedAt.toISOString(),
+    activeCount: Number(row.activeCount),
+  };
+}
+
+/** Games the viewer already holds a live intent for — excluded from hearts. */
+function ownLiveIntents(db: LfgDb, viewerId: number, now: Date) {
+  return db
+    .select({ gameId: schema.lfgIntents.gameId })
+    .from(schema.lfgIntents)
+    .where(
+      and(
+        eq(schema.lfgIntents.userId, viewerId),
+        eq(schema.lfgIntents.status, 'active'),
+        gt(schema.lfgIntents.expiresAt, now),
+      ),
+    );
+}
+
 /**
  * `GET /lfg/hearted` — the caller's manual hearts with no active intent of
  * their own. Strictly read-only: LFG never writes to `game_interests`.
@@ -209,29 +253,13 @@ export async function listHeartedWithoutIntent(
   viewerId: number,
 ): Promise<LfgHeartedGameDto[]> {
   const now = new Date();
-  const ownActive = db
-    .select({ gameId: schema.lfgIntents.gameId })
-    .from(schema.lfgIntents)
-    .where(
-      and(
-        eq(schema.lfgIntents.userId, viewerId),
-        eq(schema.lfgIntents.status, 'active'),
-        gt(schema.lfgIntents.expiresAt, now),
-      ),
-    );
   const rows = await db
     .select({
       gameId: schema.games.id,
       gameName: schema.games.name,
       gameCoverUrl: schema.games.coverUrl,
       heartedAt: schema.gameInterests.createdAt,
-      activeCount: sql<number>`(
-        SELECT COUNT(*)::int FROM lfg_intents li
-        JOIN users lu ON lu.id = li.user_id
-        WHERE li.game_id = ${schema.games.id}
-          AND li.status = 'active' AND li.expires_at > ${now.toISOString()}
-          AND lu.deactivated_at IS NULL AND lu.banned_at IS NULL
-      )`,
+      activeCount: eligibleCountSubquery(now),
     })
     .from(schema.gameInterests)
     .innerJoin(schema.games, eq(schema.games.id, schema.gameInterests.gameId))
@@ -239,15 +267,12 @@ export async function listHeartedWithoutIntent(
       and(
         eq(schema.gameInterests.userId, viewerId),
         eq(schema.gameInterests.source, 'manual'),
-        notInArray(schema.gameInterests.gameId, ownActive),
+        notInArray(
+          schema.gameInterests.gameId,
+          ownLiveIntents(db, viewerId, now),
+        ),
       ),
     )
     .orderBy(desc(schema.gameInterests.createdAt));
-  return rows.map((r) => ({
-    gameId: r.gameId,
-    gameName: r.gameName,
-    gameCoverUrl: r.gameCoverUrl,
-    heartedAt: r.heartedAt.toISOString(),
-    activeCount: Number(r.activeCount),
-  }));
+  return rows.map(toHeartedGame);
 }

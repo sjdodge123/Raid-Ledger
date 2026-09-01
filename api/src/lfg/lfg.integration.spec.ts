@@ -380,9 +380,7 @@ describe('expiry cron', () => {
     // SchedulerRegistry -> cron_jobs sync (test-app.ts stops the jobs anyway).
     // Run it explicitly so the admin-registry assertion below exercises the
     // real path instead of reading an empty table.
-    await testApp.app
-      .get(CronJobService, { strict: false })
-      .syncJobs();
+    await testApp.app.get(CronJobService, { strict: false }).syncJobs();
 
     const res = await testApp.request
       .get('/admin/cron-jobs')
