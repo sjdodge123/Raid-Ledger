@@ -164,13 +164,34 @@ function addGameInterestTests(
   getController: GetController,
   getMock: GetMockService,
 ) {
-  it('delegates to service', async () => {
+  it('delegates to service, defaulting the source to manual', async () => {
     const result = await getController().addGameInterestForTest({
       userId: 1,
       gameId: 10,
     });
     expect(result).toEqual({ success: true });
-    expect(getMock().addGameInterestForTest).toHaveBeenCalledWith(1, 10);
+    // ROK-1314: `source` is optional and Zod-defaults to 'manual', so callers
+    // that omit it (every pre-existing smoke fixture) are unchanged.
+    expect(getMock().addGameInterestForTest).toHaveBeenCalledWith(
+      1,
+      10,
+      'manual',
+    );
+  });
+
+  it('forwards an explicit steam_library source', async () => {
+    // ROK-1314: the badge-personalization smoke fixture needs to seed real
+    // ownership, which a 'manual' heart deliberately is not.
+    await getController().addGameInterestForTest({
+      userId: 2,
+      gameId: 20,
+      source: 'steam_library',
+    });
+    expect(getMock().addGameInterestForTest).toHaveBeenCalledWith(
+      2,
+      20,
+      'steam_library',
+    );
   });
 }
 
