@@ -18,6 +18,10 @@ import {
   loadViewerInterests,
   viewerFlagsFor,
 } from '../lineups/viewer-interests.helpers';
+import {
+  loadGameAggregates,
+  aggregatesFor,
+} from '../lineups/game-aggregates.helpers';
 import { buildDiscoverCategories } from './igdb-discover.helpers';
 import { buildDiscoverRows } from './igdb-discover-merge.helpers';
 
@@ -34,23 +38,31 @@ export function viewerIdOf(req: OptionalViewer | undefined): number | null {
 }
 
 /**
- * Overlay `currentUserOwns` / `currentUserWishlisted` onto a flat list of
- * game DTOs. Returns copies; the input is not mutated. When `viewerId` is
- * null the DTOs are returned untouched — `mapDbRowToDetail` already seeds
- * both flags to `false`.
+ * Overlay the community aggregates AND the viewer's own flags onto a flat list
+ * of game DTOs. Returns copies; the input is not mutated.
+ *
+ * The aggregates load for EVERY caller, authenticated or not — AC4 requires an
+ * anonymous visitor to still see `N own`. Only the two personalization flags
+ * depend on a viewer, and `loadViewerInterests` self-guards on a null one
+ * (empty map, no query), so anonymous keeps the explicit `false` that
+ * `mapDbRowToDetail` seeds.
  */
 export async function personalizeGames<T extends GameDetailDto>(
   db: Db,
   viewerId: number | null,
   games: T[],
 ): Promise<T[]> {
-  if (viewerId == null || games.length === 0) return games;
-  const map = await loadViewerInterests(
-    db,
-    viewerId,
-    games.map((g) => g.id),
-  );
-  return games.map((g) => ({ ...g, ...viewerFlagsFor(map, g.id) }));
+  if (games.length === 0) return games;
+  const ids = games.map((g) => g.id);
+  const [flags, aggregates] = await Promise.all([
+    loadViewerInterests(db, viewerId, ids),
+    loadGameAggregates(db, ids),
+  ]);
+  return games.map((g) => ({
+    ...g,
+    ...aggregatesFor(aggregates, g.id),
+    ...viewerFlagsFor(flags, g.id),
+  }));
 }
 
 /**
@@ -63,12 +75,19 @@ export async function personalizeDiscoverRows(
   viewerId: number | null,
   rows: GameDiscoverRowDto[],
 ): Promise<GameDiscoverRowDto[]> {
-  if (viewerId == null || rows.length === 0) return rows;
+  if (rows.length === 0) return rows;
   const gameIds = [...new Set(rows.flatMap((r) => r.games.map((g) => g.id)))];
-  const map = await loadViewerInterests(db, viewerId, gameIds);
+  const [flags, aggregates] = await Promise.all([
+    loadViewerInterests(db, viewerId, gameIds),
+    loadGameAggregates(db, gameIds),
+  ]);
   return rows.map((row) => ({
     ...row,
-    games: row.games.map((g) => ({ ...g, ...viewerFlagsFor(map, g.id) })),
+    games: row.games.map((g) => ({
+      ...g,
+      ...aggregatesFor(aggregates, g.id),
+      ...viewerFlagsFor(flags, g.id),
+    })),
   }));
 }
 

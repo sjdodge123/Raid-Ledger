@@ -22,6 +22,8 @@ interface PersonalizedGameDetail {
   name: string;
   currentUserOwns?: boolean;
   currentUserWishlisted?: boolean;
+  ownerCount?: number;
+  wishlistCount?: number;
 }
 
 function describeGameDetailPersonalization() {
@@ -169,6 +171,64 @@ function describeGameDetailPersonalization() {
 
     expect(body.currentUserOwns).toBe(true);
     expect(body.currentUserWishlisted).toBe(true);
+  });
+
+  /**
+   * ROK-1314 follow-up (operator-requested 2026-09-01): the aggregate owner /
+   * wishlist counts must reach the `GameDetailDto` surfaces too, so a Library
+   * card can render `[You own] [N own]` and not just the personalized pill.
+   *
+   * These MUST be served on the PUBLIC path. AC4 requires aggregates to render
+   * for an anonymous visitor, and both interest endpoints
+   * (`/games/:id/interest`, `/games/interest/batch`) are JWT-guarded — so the
+   * aggregate cannot come from there.
+   */
+  describe('aggregate owner / wishlist counts', () => {
+    it('returns the steam_library owner count to an authenticated viewer', async () => {
+      const game = await insertGame('Aggregate Owned Game');
+      const a = await loginAsMember('agg-owner-a');
+      const b = await loginAsMember('agg-owner-b');
+      await addInterest(a.userId, game.id, 'steam_library');
+      await addInterest(b.userId, game.id, 'steam_library');
+
+      const { body } = await fetchDetail(game.id, a.token);
+
+      expect(body.ownerCount).toBe(2);
+      expect(body.currentUserOwns).toBe(true);
+    });
+
+    it('returns the same aggregate to an ANONYMOUS viewer, with both flags false', async () => {
+      const game = await insertGame('Aggregate Anonymous Game');
+      const a = await loginAsMember('agg-anon-a');
+      await addInterest(a.userId, game.id, 'steam_library');
+      await addInterest(a.userId, game.id, 'steam_wishlist');
+
+      const { status, body } = await fetchDetail(game.id);
+
+      expect(status).toBe(200);
+      expect(body.ownerCount).toBe(1);
+      expect(body.wishlistCount).toBe(1);
+      expect(body.currentUserOwns).toBe(false);
+      expect(body.currentUserWishlisted).toBe(false);
+    });
+
+    it('does not count a manual heart as ownership in the aggregate', async () => {
+      const game = await insertGame('Aggregate Manual Heart Game');
+      const a = await loginAsMember('agg-manual-a');
+      await addInterest(a.userId, game.id, 'manual');
+
+      const { body } = await fetchDetail(game.id);
+
+      expect(body.ownerCount).toBe(0);
+      expect(body.wishlistCount).toBe(0);
+    });
+
+    it('reports zero rather than omitting the field for a game nobody owns', async () => {
+      const game = await insertGame('Aggregate Untouched Game');
+      const { body } = await fetchDetail(game.id);
+      expect(body.ownerCount).toBe(0);
+      expect(body.wishlistCount).toBe(0);
+    });
   });
 }
 

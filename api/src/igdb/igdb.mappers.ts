@@ -195,6 +195,8 @@ export function mapDbRowToDetail(
     ...mapCooptimusFields(g),
     // ROK-1314: personalization defaults to an explicit `false` (spec §4.5).
     // Routes with a viewer overlay the real values via `personalizeGames`.
+    ownerCount: 0,
+    wishlistCount: 0,
     currentUserOwns: false,
     currentUserWishlisted: false,
   };

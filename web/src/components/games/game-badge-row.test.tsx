@@ -22,7 +22,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { CommonGroundGameDto } from '@raid-ledger/contract';
 import { GameBadgeRow } from './game-badges';
-import { fromCommonGroundGame } from './game-badges.helpers';
+import { fromCommonGroundGame, fromGameDetail } from './game-badges.helpers';
 
 /**
  * Baseline: nobody owns it, nobody wishlisted it, no discount, no metadata.
@@ -268,5 +268,67 @@ describe('GameBadgeRow — player count', () => {
     it('renders nothing when playerCount is null (spec §6)', () => {
         renderRow({ playerCount: null });
         expect(screen.queryByText(/player/i)).not.toBeInTheDocument();
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// ROK-1314 follow-up (operator-requested 2026-09-01): the `/games`-family
+// surfaces must render the community aggregate alongside the viewer's pill,
+// not the pill alone. `GameDetailDto` now carries ownerCount / wishlistCount.
+// ---------------------------------------------------------------------------
+
+describe('GameBadgeRow — GameDetailDto aggregates (fromGameDetail)', () => {
+    it('renders "You own" ALONGSIDE the owner aggregate on a compact card', () => {
+        render(
+            <GameBadgeRow
+                game={fromGameDetail({ currentUserOwns: true, ownerCount: 62 })}
+                variant="compact"
+            />,
+        );
+        expect(screen.getByText('You own')).toBeInTheDocument();
+        expect(screen.getByText('62 own')).toBeInTheDocument();
+    });
+
+    it('renders the aggregate for a viewer who does NOT own it', () => {
+        render(
+            <GameBadgeRow
+                game={fromGameDetail({ currentUserOwns: false, ownerCount: 62 })}
+                variant="compact"
+            />,
+        );
+        expect(screen.getByText('62 own')).toBeInTheDocument();
+        expect(screen.queryByText('You own')).not.toBeInTheDocument();
+    });
+
+    it('renders the aggregate for an ANONYMOUS viewer (AC4)', () => {
+        render(
+            <GameBadgeRow game={fromGameDetail({ ownerCount: 7 })} variant="compact" />,
+        );
+        expect(screen.getByText('7 own')).toBeInTheDocument();
+        expect(screen.queryByText('You own')).not.toBeInTheDocument();
+        expect(screen.queryByText('You wishlisted')).not.toBeInTheDocument();
+    });
+
+    it('renders no owner badge at all when the DTO omits the aggregate (stale client)', () => {
+        render(
+            <GameBadgeRow
+                game={fromGameDetail({ currentUserOwns: true })}
+                variant="compact"
+            />,
+        );
+        expect(screen.getByText('You own')).toBeInTheDocument();
+        expect(screen.queryByText(/\d+ own$/)).not.toBeInTheDocument();
+    });
+
+    it('keeps the wishlist aggregate out of the compact variant', () => {
+        render(
+            <GameBadgeRow
+                game={fromGameDetail({ ownerCount: 3, wishlistCount: 9 })}
+                variant="compact"
+            />,
+        );
+        expect(screen.getByText('3 own')).toBeInTheDocument();
+        expect(screen.queryByText('9 wishlisted')).not.toBeInTheDocument();
     });
 });

@@ -47,6 +47,17 @@ export interface GameProps {
     currentUserOwns?: boolean;
     /** ROK-1314: has the CURRENT viewer wishlisted this game? */
     currentUserWishlisted?: boolean;
+    /**
+     * ROK-1314 follow-up: community-wide Steam-ownership tally, so the card
+     * renders `[You own] [N own]` and not the pill alone. Absent ⇒ no
+     * aggregate badge (a stale cached row must not render a wrong `0`).
+     *
+     * Distinct from the heart count on the heart button: that is want-to-play
+     * (`manual` hearts included), this is `steam_library` ownership only.
+     */
+    ownerCount?: number;
+    /** ROK-1314 follow-up: community-wide Steam-wishlist tally. */
+    wishlistCount?: number;
 }
 
 /** Corner chip marking a game as purchasable on Steam. */

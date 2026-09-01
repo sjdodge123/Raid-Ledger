@@ -151,6 +151,19 @@ export const GameDetailSchema = z.object({
      * consumers — do not rewire it here. See TECH-DEBT-BACKLOG.md 2026-09-01.
      */
     currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1314 follow-up: community-wide aggregates, so a Library / `/games`
+     * card can render `[You own] [N own]` and not just the personalized pill.
+     *
+     * Served on the PUBLIC path — `GameInterestResponseDto.ownerCount` already
+     * exists but its endpoints are JWT-guarded, and AC4 requires an anonymous
+     * visitor to see aggregates. Counts DISTINCT users with a `steam_library`
+     * / `steam_wishlist` row; a `manual` heart is want-to-play, not ownership,
+     * and is deliberately excluded so this stays distinct from the heart count
+     * the card already shows.
+     */
+    ownerCount: z.number().optional(),
+    wishlistCount: z.number().optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;

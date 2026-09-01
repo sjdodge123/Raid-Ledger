@@ -107,6 +107,8 @@ export type GameDetailBadgeInput = Partial<
         GameDetailDto,
         | 'currentUserOwns'
         | 'currentUserWishlisted'
+        | 'ownerCount'
+        | 'wishlistCount'
         | 'itadCurrentPrice'
         | 'itadCurrentCut'
         | 'itadLowestPrice'
@@ -121,14 +123,22 @@ export type GameDetailBadgeInput = Partial<
 /**
  * `/games` detail + discover rows → badge view-model.
  *
- * `GameDetailDto` carries no community aggregates, so `ownerCount` /
- * `wishlistCount` stay `null` and only the viewer's own two flags render.
+ * ROK-1314 follow-up: `GameDetailDto` now carries the community aggregates
+ * too, so a Library / `/games` card renders `[You own] [N own]` rather than
+ * the personalized pill alone. They stay `null` when the DTO omits them (a
+ * stale cached response), which renders no aggregate rather than a wrong `0`.
+ *
+ * Note this is the STEAM-OWNERSHIP tally, deliberately distinct from the
+ * want-to-play heart count the card's heart button already shows — a `manual`
+ * heart never contributes here.
  */
 export function fromGameDetail(game: GameDetailBadgeInput): GameBadgeData {
     return {
         ...EMPTY,
         currentUserOwns: game.currentUserOwns === true,
         currentUserWishlisted: game.currentUserWishlisted === true,
+        ownerCount: game.ownerCount ?? null,
+        wishlistCount: game.wishlistCount ?? null,
         price: game.itadCurrentPrice ?? null,
         cut: game.itadCurrentCut ?? null,
         lowestPrice: game.itadLowestPrice ?? null,
