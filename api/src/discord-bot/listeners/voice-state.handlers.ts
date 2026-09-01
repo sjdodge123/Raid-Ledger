@@ -256,6 +256,16 @@ async function switchClearsThreshold(
  * toward minPlayers). `confirmedCount` (ROK-1390) counts ONLY members whose
  * detected game positively matches the bound game — the series spawn guard
  * uses it to refuse minting a stored game off pure presence-null counting.
+ *
+ * ROK-1445 review MED-2 — deliberately NO bot filter here, unlike every other
+ * count surface. This is the game-binding path: AC9 targeted the general-lobby
+ * occupancy gate (now filtered in `resolveLobbyGroups`/`humanMembers`), and
+ * AC12 requires ROK-1390/1394 behaviour on fixed-game binds to be preserved
+ * byte-for-byte. Known consequence, tracked in TECH-DEBT-BACKLOG.md: a bot
+ * idling in a game-bound channel is presence-null, so ROK-697 null-counting
+ * makes it count — one human plus one music bot reaches `counted = 2` and
+ * spawns a 1-human event on the delayed path. Fixing it means changing a count
+ * AC12 pins, so it is filed rather than folded in here.
  */
 export async function getGameFilteredCount(
   deps: VoiceHandlerDeps,

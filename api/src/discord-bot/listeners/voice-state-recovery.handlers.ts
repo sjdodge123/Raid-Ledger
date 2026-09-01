@@ -65,9 +65,12 @@ async function recoverChannel(
   ) => Promise<void>,
 ): Promise<void> {
   trackChannelMembers(deps, channelId, channel);
+  // ROK-1445 review LOW-1: bots are excluded from `trackChannelMembers` above
+  // (counts) and from every roster path, but they must STILL be dispatched —
+  // `handleChannelJoin` is where scheduled-event attendance and ROK-959
+  // sibling suppression run. Skipping them here reproduced the same bug the
+  // dispatch-level filter caused, only on bot restart.
   for (const [memberId, gm] of channel.members) {
-    // ROK-1445 AC9: bots never enter counts or rosters.
-    if (isBotMember(gm)) continue;
     const dm: DiscordMember = {
       discordUserId: memberId,
       discordUsername: gm.displayName ?? gm.user?.username ?? 'Unknown',

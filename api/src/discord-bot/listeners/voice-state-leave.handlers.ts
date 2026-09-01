@@ -1,5 +1,9 @@
 import type { GuildMember } from 'discord.js';
-import { spawnTimerKey, type ResolvedBinding } from './voice-state.helpers';
+import {
+  resolveVoiceChannel,
+  spawnTimerKey,
+  type ResolvedBinding,
+} from './voice-state.helpers';
 import type { AdHocEventService } from '../services/ad-hoc-event.service';
 import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import {
@@ -63,13 +67,17 @@ async function removeChannelMember(
   timers: TimerMaps,
 ): Promise<void> {
   const members = deps.channelMembers.get(channelId);
-  if (!members) return;
-  members.delete(userId);
-  if (members.size === 0) deps.channelMembers.delete(channelId);
+  if (members) {
+    members.delete(userId);
+    if (members.size === 0) deps.channelMembers.delete(channelId);
+  }
+  // ROK-1445 review LOW-3: the per-group cancel is driven by live presence, not
+  // by `channelMembers`, so an absent occupancy entry must not skip it.
   if (binding.bindingPurpose === 'general-lobby') {
     await cancelUnqualifiedLobbySpawns(deps, channelId, binding, timers);
     return;
   }
+  if (!members) return;
   if (members.size < (binding.config?.minPlayers ?? 2))
     cancelPendingSpawn(timers, channelId, binding.gameId);
 }
@@ -85,6 +93,12 @@ async function cancelUnqualifiedLobbySpawns(
   binding: ResolvedBinding,
   timers: TimerMaps,
 ): Promise<void> {
+  // ROK-1445 review LOW-2: on a Discord cache miss the channel is
+  // unresolvable, `resolveLobbyGroups` yields zero groups, and the prefix scan
+  // below would cancel EVERY pending spawn on this channel with nothing left to
+  // re-arm them until a fresh join. When membership cannot be determined the
+  // safe default is to cancel NOTHING.
+  if (!resolveVoiceChannel(deps.clientService, channelId)) return;
   const { qualifying } = await resolveLobbyGroups(deps, channelId, binding);
   const keep = new Set(
     qualifying.map((g) => spawnTimerKey(channelId, g.gameId)),
