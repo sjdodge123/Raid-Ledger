@@ -50,6 +50,11 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.gameTimeOverrides, column: schema.gameTimeOverrides.userId },
   { table: schema.gameTimeAbsences, column: schema.gameTimeAbsences.userId },
   { table: schema.gameInterests, column: schema.gameInterests.userId },
+  // ROK-1451: an LFG intent is a personal, time-boxed expression of intent.
+  // Reassigning is meaningless (it belongs to a person, not a role) and keeping
+  // is unsafe — a departed user's intent would still count toward a group and
+  // could push it into LFM, announcing a group nobody asked to form.
+  { table: schema.lfgIntents, column: schema.lfgIntents.userId },
   {
     table: schema.gameInterestSuppressions,
     column: schema.gameInterestSuppressions.userId,
