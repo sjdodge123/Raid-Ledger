@@ -22,6 +22,13 @@ function describeIgdbController() {
       name: 'Valheim',
       slug: 'valheim',
       coverUrl: 'https://example.com/cover.jpg',
+      // ROK-1314: personalizeGames now always overlays the community
+      // aggregates (they must reach anonymous callers too, AC4), so the
+      // controller's response carries them even on this minimal fixture.
+      ownerCount: 0,
+      wishlistCount: 0,
+      currentUserOwns: false,
+      currentUserWishlisted: false,
     },
   ];
 
@@ -30,6 +37,22 @@ function describeIgdbController() {
       searchGames: jest
         .fn()
         .mockResolvedValue({ games: mockGames, cached: true }),
+      /**
+       * ROK-1314: `personalizeGames` overlays the community aggregates for
+       * EVERY caller (anonymous included, AC4), so the controller now reaches
+       * the database on this path where it previously short-circuited. An
+       * empty grouped result is the honest stub — no interests seeded means
+       * the aggregates fall back to explicit zeroes.
+       */
+      database: {
+        select: jest.fn().mockReturnValue({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              groupBy: jest.fn().mockResolvedValue([]),
+            }),
+          }),
+        }),
+      },
     };
 
     const module: TestingModule = await Test.createTestingModule({

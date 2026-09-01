@@ -113,7 +113,10 @@ describe('IgdbService', () => {
       cooptimusComboCoop: null,
       cooptimusUrl: null,
       cooptimusSyncedAt: null,
-      // ROK-1314: mapDbRowToDetail seeds both personalization flags false.
+      // ROK-1314: mapDbRowToDetail seeds the aggregates and both
+      // personalization flags, so the fixture must carry all four.
+      ownerCount: 0,
+      wishlistCount: 0,
       currentUserOwns: false,
       currentUserWishlisted: false,
     },
