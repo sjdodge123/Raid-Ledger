@@ -272,14 +272,27 @@ test.describe('Common Ground — personalized ownership badges (AC1/AC2)', () =>
 // AC9 — the Library page: two viewers, one game, different badge states
 // ---------------------------------------------------------------------------
 
+/**
+ * The Library page renders `searchResults` TWICE — a `hidden md:grid` desktop
+ * grid and a `md:hidden` mobile grid (`web/src/pages/games-page.tsx:242-247`).
+ * Both trees are always in the DOM; CSS hides one. A bare `.first()` therefore
+ * resolves to the DESKTOP copy on every viewport, which is `hidden` under the
+ * mobile project — so scope to the visible tree rather than to DOM order.
+ * This tightens the assertion (the badge must be visible to a real user), it
+ * does not relax it. The absence checks stay page-scoped and unqualified: a
+ * badge that must not exist must not exist in EITHER tree.
+ */
+const visibleBadge = (page: Page, testId: string) =>
+    page.locator(`[data-testid="${testId}"]:visible`);
+
 test.describe('Game Library — two viewers see different badge states (AC9)', () => {
     test('the owner sees "You own" on the library card', async ({ page }) => {
         await loginAs(page, adminToken);
         await openLibraryFor(page);
 
-        await expect(
-            page.getByText('You own', { exact: true }).first(),
-        ).toBeVisible({ timeout: 15_000 });
+        await expect(visibleBadge(page, 'you-own-badge').first()).toBeVisible({
+            timeout: 15_000,
+        });
         // The admin has no wishlist row for this game — the two pills are
         // independent signals, not a single tri-state.
         await expect(
@@ -294,7 +307,7 @@ test.describe('Game Library — two viewers see different badge states (AC9)', (
         await openLibraryFor(page);
 
         await expect(
-            page.getByText('You wishlisted', { exact: true }).first(),
+            visibleBadge(page, 'you-wishlisted-badge').first(),
         ).toBeVisible({ timeout: 15_000 });
         // The invitee owns nothing at all, so a page-scoped absence check is
         // exact here: "You own" must not appear anywhere on their Library.
