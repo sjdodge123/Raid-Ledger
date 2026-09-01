@@ -318,3 +318,56 @@ describe('CommonGroundGameCard — nominate button', () => {
         expect(onNominate).not.toHaveBeenCalled();
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// ROK-1314 "unify up" (operator decision 2026-09-01): the Common Ground tile
+// renders the SAME card chrome as the /games card — genre pill, cover rating
+// badge, rating/mode info bar. Before this, the badge row matched but the two
+// surfaces still read as different components.
+// ---------------------------------------------------------------------------
+
+/** Render with only the chrome fields varied; everything else is the baseline. */
+function renderCard(overrides: Partial<CommonGroundGameDto>) {
+    return render(
+        <CommonGroundGameCard
+            game={buildGame(overrides)}
+            onNominate={vi.fn()}
+            isNominating={false}
+            atCap={false}
+        />,
+    );
+}
+
+describe('CommonGroundGameCard — shared card chrome (ROK-1314)', () => {
+    it('renders the primary genre pill from the genres array', () => {
+        renderCard({ genres: [12] });
+        // 12 -> RPG in GENRE_MAP, the same mapping the /games card uses.
+        expect(screen.getByText('RPG')).toBeInTheDocument();
+    });
+
+    it('renders the cover rating badge, preferring aggregatedRating', () => {
+        renderCard({ rating: 70, aggregatedRating: 93 });
+        expect(screen.getByLabelText('Rating 93')).toBeInTheDocument();
+    });
+
+    it('falls back to rating when aggregatedRating is absent', () => {
+        renderCard({ rating: 81, aggregatedRating: null });
+        expect(screen.getByLabelText('Rating 81')).toBeInTheDocument();
+    });
+
+    it('renders no rating badge for an unrated game', () => {
+        renderCard({ rating: null, aggregatedRating: null });
+        expect(screen.queryByLabelText(/^Rating /)).not.toBeInTheDocument();
+    });
+
+    it('renders the info bar mode from gameModes', () => {
+        renderCard({ gameModes: [1], rating: 88 });
+        expect(screen.getByText('Single')).toBeInTheDocument();
+    });
+
+    it('survives a stale payload carrying none of the chrome fields', () => {
+        const { container } = renderCard({});
+        expect(container.textContent).not.toMatch(/undefined|NaN/);
+    });
+});

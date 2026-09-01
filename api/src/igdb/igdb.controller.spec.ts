@@ -52,7 +52,10 @@ function describeIgdbController() {
             }),
           }),
         }),
-      },
+        // Only the grouped-aggregate chain is exercised here, so the stub is
+        // deliberately partial; cast at this boundary rather than build a
+        // whole PostgresJsDatabase.
+      } as unknown as IgdbService['database'],
     };
 
     const module: TestingModule = await Test.createTestingModule({

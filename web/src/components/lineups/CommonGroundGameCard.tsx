@@ -9,7 +9,12 @@ import {
     CoverPlaceholder,
     GradientOverlay,
     CardTitle,
+    GenreBadge,
+    RatingBadge,
+    InfoBar,
 } from '../games/game-card-parts';
+import { GENRE_MAP } from '../../lib/game-utils';
+import { MODE_MAP } from '../games/game-card-constants';
 import { nominateButtonState, VIEW_ONLY_LABEL } from './nominate-button-state';
 import { AiBadge, GameBadgeRow } from '../games/game-badges';
 import { fromCommonGroundGame } from '../games/game-badges.helpers';
@@ -81,17 +86,31 @@ export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, vi
         ? 'border-violet-500/50 hover:border-violet-400/80'
         : 'border-edge/50 hover:border-emerald-500/50';
     const widthCls = fluid ? 'w-full' : 'w-[180px] flex-shrink-0';
+    // ROK-1314 "unify up": same derivation the /games card uses, so a game
+    // reads identically on both surfaces.
+    const rawRating = game.aggregatedRating ?? game.rating ?? null;
+    const rating = rawRating != null && rawRating > 0 ? rawRating : null;
+    const primaryGenre = game.genres?.[0] != null
+        ? GENRE_MAP[game.genres[0]] ?? null
+        : null;
+    const primaryMode = game.gameModes?.[0] != null
+        ? MODE_MAP[game.gameModes[0]] ?? null
+        : null;
     return (
         <div className={`group relative ${widthCls} rounded-xl overflow-hidden bg-panel border ${borderCls} hover:shadow-lg transition-all cursor-pointer`}>
-            <div className="relative aspect-[3/4] bg-panel">
+            <div className="relative aspect-[3/4] bg-panel overflow-hidden">
                 {aiSuggested && <AiBadge />}
                 {game.coverUrl
                     ? <CoverImage src={game.coverUrl} alt={game.gameName} />
                     : <CoverPlaceholder />}
+                {rating != null && <RatingBadge rating={rating} />}
                 <GradientOverlay />
                 <div className="absolute bottom-0 left-0 right-0 p-3">
                     <CardTitle name={game.gameName} />
-                    <GameBadgeRow game={fromCommonGroundGame(game)} variant="full" />
+                    <div className="flex flex-wrap items-center gap-1 mt-1">
+                        {primaryGenre && <GenreBadge label={primaryGenre} />}
+                        <GameBadgeRow game={fromCommonGroundGame(game)} variant="full" />
+                    </div>
                 </div>
                 {!hideOverlay && (
                     <NominateOverlay
@@ -102,6 +121,7 @@ export function CommonGroundGameCard({ game, onNominate, isNominating, atCap, vi
                     />
                 )}
             </div>
+            <InfoBar rating={rating} primaryMode={primaryMode} />
         </div>
     );
 }

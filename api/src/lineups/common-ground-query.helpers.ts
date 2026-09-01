@@ -71,6 +71,11 @@ export interface CommonGroundRow {
   ownerUserIds: number[];
   /** ROK-1314: Steam-wishlist user IDs, for the viewer's `currentUserWishlisted`. */
   wishlistUserIds: number[];
+  /** ROK-1314 "unify up": same card chrome the /games surfaces render. */
+  genres: number[];
+  rating: number | null;
+  aggregatedRating: number | null;
+  gameModes: number[];
 }
 
 /**
@@ -113,6 +118,10 @@ export async function queryCommonGround(
       g.cooptimus_online_max AS "cooptimusOnlineMax",
       g.cooptimus_couch_max AS "cooptimusCouchMax",
       g.cooptimus_combo_coop AS "cooptimusComboCoop",
+      COALESCE(g.genres, '[]'::jsonb) AS "genres",
+      g.rating AS "rating",
+      g.aggregated_rating AS "aggregatedRating",
+      COALESCE(g.game_modes, '[]'::jsonb) AS "gameModes",
       COALESCE(
         array_agg(gi.user_id) FILTER (WHERE gi.source = 'steam_library'),
         ARRAY[]::int[]
@@ -310,6 +319,8 @@ export function mapCommonGroundRow(
     wishlistUserIds: Array.isArray(row.wishlistUserIds)
       ? row.wishlistUserIds
       : [],
+    genres: Array.isArray(row.genres) ? row.genres : [],
+    gameModes: Array.isArray(row.gameModes) ? row.gameModes : [],
   };
   const breakdown = computeScoreBreakdown(safeRow, ctx);
   return {
@@ -329,6 +340,10 @@ export function mapCommonGroundRow(
     playerCount: safeRow.playerCount,
     // ROK-1401: raw co-op claim; `coopLabel` on the client decides which of
     // combo/online/local (if any) the tile advertises.
+    genres: safeRow.genres,
+    rating: safeRow.rating ?? null,
+    aggregatedRating: safeRow.aggregatedRating ?? null,
+    gameModes: safeRow.gameModes,
     cooptimusOnlineMax: safeRow.cooptimusOnlineMax ?? null,
     cooptimusCouchMax: safeRow.cooptimusCouchMax ?? null,
     cooptimusComboCoop: safeRow.cooptimusComboCoop ?? null,

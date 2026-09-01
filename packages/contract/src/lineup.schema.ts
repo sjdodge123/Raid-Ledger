@@ -562,6 +562,20 @@ export const CommonGroundGameSchema = z.object({
     currentUserOwns: z.boolean().optional(),
     /** ROK-1314: has the CURRENT viewer wishlisted this game? */
     currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1314 "unify up" (operator decision 2026-09-01): the same card chrome
+     * the `/games` surfaces render — genre pill, cover rating badge, and the
+     * rating/mode info bar. Common Ground never carried these, which is why the
+     * two surfaces still looked distinct after the badge row was unified.
+     *
+     * All four already exist on the `games` table; the Common Ground query
+     * simply never selected them. Optional (never `.default()`, which would
+     * make the inferred output type required and break existing DTO literals).
+     */
+    genres: z.array(z.number()).optional(),
+    rating: z.number().nullable().optional(),
+    aggregatedRating: z.number().nullable().optional(),
+    gameModes: z.array(z.number()).optional(),
 });
 
 export type CommonGroundGameDto = z.infer<typeof CommonGroundGameSchema>;
