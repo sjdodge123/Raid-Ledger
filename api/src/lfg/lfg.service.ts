@@ -18,6 +18,7 @@ import type {
   ConvertLfgIntentsDto,
   LfgGroupDetailDto,
   LfgGroupSummaryDto,
+  LfgClearOfferDto,
   LfgHeartedGameDto,
   LfgIntentResponseDto,
 } from '@raid-ledger/contract';
@@ -30,6 +31,7 @@ import {
   listGroupMembers,
   listHeartedWithoutIntent,
 } from './lfg-query.helpers';
+import { listClearOffers } from './lfg-offers.helpers';
 import {
   clearIntent,
   convertGroup,
@@ -125,6 +127,14 @@ export class LfgService {
   /** `GET /lfg/hearted` — cold-start suggestions. Read-only by construction. */
   listHearted(userId: number): Promise<LfgHeartedGameDto[]> {
     return listHeartedWithoutIntent(this.db, userId);
+  }
+
+  /**
+   * `GET /lfg/offers` — Quick Play sessions that OFFER to clear an intent.
+   * Read-only: acting on an offer means calling `DELETE /lfg/:gameId` (AC7c).
+   */
+  listOffers(userId: number): Promise<LfgClearOfferDto[]> {
+    return listClearOffers(this.db, userId);
   }
 
   /**

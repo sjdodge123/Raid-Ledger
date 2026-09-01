@@ -128,3 +128,24 @@ export const LfgHeartedGameSchema = z.object({
     activeCount: z.number(),
 });
 export type LfgHeartedGameDto = z.infer<typeof LfgHeartedGameSchema>;
+
+/**
+ * `GET /lfg/offers` — a Quick Play session the caller took part in AFTER
+ * raising their hand for that game (ROK-1451 AC7).
+ *
+ * Fully DERIVED: no column, no table, no dismissal state. The offer is inert —
+ * clearing happens only when the player calls `DELETE /lfg/:gameId`, so a
+ * dismissed offer is simply one that was never acted on.
+ */
+export const LfgClearOfferSchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    /** The still-active intent this offer would clear. */
+    intentId: z.number(),
+    /** The ad-hoc / Quick Play event that triggered the offer. */
+    eventId: z.number(),
+    /** When the caller was recorded as a participant in that session. */
+    playedAt: z.string(),
+});
+export type LfgClearOfferDto = z.infer<typeof LfgClearOfferSchema>;

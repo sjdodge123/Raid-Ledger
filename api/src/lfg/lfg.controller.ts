@@ -25,6 +25,7 @@ import {
   ConvertLfgIntentsSchema,
   CreateLfgIntentSchema,
   type LfgConvertResponseDto,
+  type LfgClearOfferDto,
   type LfgGroupDetailDto,
   type LfgGroupSummaryDto,
   type LfgHeartedGameDto,
@@ -72,6 +73,15 @@ export class LfgController {
   @Get('hearted')
   listHearted(@Req() req: AuthenticatedRequest): Promise<LfgHeartedGameDto[]> {
     return this.service.listHearted(req.user.id);
+  }
+
+  /**
+   * Quick Play sessions that offer to clear a matching intent. Inert — the
+   * player acts on an offer with `DELETE /lfg/:gameId` (AC7c).
+   */
+  @Get('offers')
+  listOffers(@Req() req: AuthenticatedRequest): Promise<LfgClearOfferDto[]> {
+    return this.service.listOffers(req.user.id);
   }
 
   /** Group detail. 200 with a zero-count group when nobody is looking. */

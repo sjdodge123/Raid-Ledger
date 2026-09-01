@@ -8,11 +8,17 @@ import { LfgController } from './lfg.controller';
 import { LfgService } from './lfg.service';
 import { LfgSignupListener } from './lfg-signup.listener';
 import { LfgExpiryService } from './lfg-expiry.service';
+import { LfgQuickPlayListener } from './lfg-quickplay.listener';
 
 @Module({
   imports: [DrizzleModule, CronJobModule],
   controllers: [LfgController],
-  providers: [LfgService, LfgSignupListener, LfgExpiryService],
+  providers: [
+    LfgService,
+    LfgSignupListener,
+    LfgQuickPlayListener,
+    LfgExpiryService,
+  ],
   exports: [LfgService],
 })
 export class LfgModule {}

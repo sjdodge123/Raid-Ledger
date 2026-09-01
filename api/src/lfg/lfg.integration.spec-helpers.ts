@@ -232,3 +232,47 @@ export function daysFromNow(expiresAt: string | Date): number {
   const ms = new Date(expiresAt).getTime() - Date.now();
   return ms / DAY_MS;
 }
+
+// ─── Quick Play / ad-hoc fixtures (AC7) ──────────────────────────────────────
+
+/**
+ * Create an ad-hoc ("Quick Play") event for a game, started at `startedAt`.
+ * Inserted directly: the real spawn path runs off Discord voice state.
+ */
+export async function createQuickPlayEvent(
+  testApp: TestApp,
+  creatorId: number,
+  gameId: number | null,
+  startedAt: Date,
+  overrides: Partial<typeof schema.events.$inferInsert> = {},
+): Promise<number> {
+  const [event] = await testApp.db
+    .insert(schema.events)
+    .values({
+      title: 'Quick Play session',
+      creatorId,
+      gameId,
+      isAdHoc: true,
+      adHocStatus: 'live',
+      duration: [startedAt, new Date(startedAt.getTime() + 2 * 60 * 60 * 1000)],
+      ...overrides,
+    })
+    .returning();
+  return event.id;
+}
+
+/** Record a user as a participant in an ad-hoc session. */
+export async function addQuickPlayParticipant(
+  testApp: TestApp,
+  eventId: number,
+  userId: number,
+  joinedAt: Date = new Date(),
+): Promise<void> {
+  await testApp.db.insert(schema.adHocParticipants).values({
+    eventId,
+    userId,
+    discordUserId: `discord-${userId}-${eventId}`,
+    discordUsername: `player-${userId}`,
+    joinedAt,
+  });
+}

@@ -40,12 +40,21 @@ export const LFG_EXPIRY_CRON_EXPRESSION = '0 15 * * * *';
  */
 export const LFG_EVENTS = {
   LFM_REACHED: 'lfg.lfm-reached',
+  /** A Quick Play participant holds an active intent on the session's game. */
+  QUICK_PLAY_MATCH: 'lfg.quick-play-match',
 } as const;
 
 /** Payload emitted with {@link LFG_EVENTS.LFM_REACHED}. */
 export interface LfgLfmReachedPayload {
   gameId: number;
   activeCount: number;
+}
+
+/** Payload emitted with {@link LFG_EVENTS.QUICK_PLAY_MATCH}. */
+export interface LfgQuickPlayMatchPayload {
+  userId: number;
+  gameId: number;
+  eventId: number;
 }
 
 /**

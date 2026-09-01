@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
+import { AD_HOC_EVENTS } from '../discord-bot.constants';
 
 export interface VoiceMemberInfo {
   discordUserId: string;
@@ -19,6 +21,7 @@ export class AdHocParticipantService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -31,6 +34,13 @@ export class AdHocParticipantService {
     member: VoiceMemberInfo,
   ): Promise<void> {
     await this.upsertParticipant(eventId, member);
+    // ROK-1451 AC7: generic seam so LFG can OFFER to clear a matching intent.
+    // Signal only — nothing downstream may mutate the participant or the event.
+    this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
+      eventId,
+      userId: member.userId,
+      discordUserId: member.discordUserId,
+    });
     this.logger.debug(
       `Participant ${member.discordUsername} added to event ${eventId}`,
     );

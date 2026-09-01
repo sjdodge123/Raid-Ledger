@@ -1,14 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { AD_HOC_EVENTS } from '../discord-bot.constants';
 
 describe('AdHocParticipantService', () => {
   let service: AdHocParticipantService;
   let mockDb: MockDb;
+  let emitter: { emit: jest.Mock };
 
   const baseMember = {
     discordUserId: 'discord-123',
@@ -19,11 +22,13 @@ describe('AdHocParticipantService', () => {
 
   beforeEach(async () => {
     mockDb = createDrizzleMock();
+    emitter = { emit: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdHocParticipantService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: EventEmitter2, useValue: emitter },
       ],
     }).compile();
 
@@ -31,6 +36,18 @@ describe('AdHocParticipantService', () => {
   });
 
   describe('addParticipant', () => {
+    // ROK-1451 AC7: the generic seam LfgQuickPlayListener subscribes to.
+    it('announces the join so downstream signals can react', async () => {
+      mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
+
+      await service.addParticipant(42, baseMember);
+
+      expect(emitter.emit).toHaveBeenCalledWith(
+        AD_HOC_EVENTS.PARTICIPANT_JOINED,
+        { eventId: 42, userId: 1, discordUserId: 'discord-123' },
+      );
+    });
+
     it('inserts a new participant with upsert on conflict', async () => {
       mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
       await service.addParticipant(42, baseMember);
