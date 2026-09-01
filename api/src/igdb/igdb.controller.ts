@@ -58,6 +58,13 @@ import {
 } from './igdb-interest.helpers';
 import { fetchTwitchStreams } from './igdb-streams.helpers';
 import { fetchGamePricing } from './igdb-pricing.helpers';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
+import {
+  personalizeGames,
+  personalizeDiscoverRows,
+  viewerIdOf,
+  type OptionalViewer,
+} from './igdb-personalization.helpers';
 import { parseBatchIds } from './igdb-batch.util';
 import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
 
@@ -81,12 +88,21 @@ export class IgdbController {
   /** GET /games/search -- Search for games by name. */
   @RateLimit('search')
   @Get('search')
-  async searchGames(@Query('q') query: string): Promise<GameSearchResponseDto> {
+  @UseGuards(OptionalJwtGuard)
+  async searchGames(
+    @Query('q') query: string,
+    @Req() req: OptionalViewer,
+  ): Promise<GameSearchResponseDto> {
     try {
       const validated = GameSearchQuerySchema.parse({ q: query });
       const result = await this.igdbService.searchGames(validated.q);
       return {
-        data: result.games,
+        // ROK-1314: viewer badge flags; no-op when anonymous.
+        data: await personalizeGames(
+          this.igdbService.database,
+          viewerIdOf(req),
+          result.games,
+        ),
         meta: {
           total: result.games.length,
           cached: result.cached,
@@ -100,14 +116,25 @@ export class IgdbController {
 
   /** GET /games/discover -- Returns category rows for the browse page. */
   @Get('discover')
-  async discoverGames(): Promise<GameDiscoverResponseDto> {
+  @UseGuards(OptionalJwtGuard)
+  async discoverGames(
+    @Req() req: OptionalViewer,
+  ): Promise<GameDiscoverResponseDto> {
     const rows = await buildDiscoverRows(
       buildDiscoverCategories(),
       this.igdbService.database,
       this.igdbService.redisClient,
       this.igdbService.config.DISCOVER_CACHE_TTL,
     );
-    return { rows };
+    // ROK-1314: personalize AFTER the shared cache read so one viewer's
+    // flags can never be served to another from the discover cache.
+    return {
+      rows: await personalizeDiscoverRows(
+        this.igdbService.database,
+        viewerIdOf(req),
+        rows,
+      ),
+    };
   }
 
   /** GET /games/configured -- Returns enabled games with config columns. */
@@ -250,12 +277,21 @@ export class IgdbController {
 
   /** GET /games/:id -- Full game detail. */
   @Get(':id')
+  @UseGuards(OptionalJwtGuard)
   async getGameDetail(
     @Param('id', ParseIntPipe) id: number,
+    @Req() req: OptionalViewer,
   ): Promise<GameDetailDto> {
     const game = await this.igdbService.getGameDetailById(id);
     if (!game) throw new NotFoundException('Game not found');
-    return game;
+    // ROK-1314: anonymous viewers keep the explicit `false` seeded by
+    // `mapDbRowToDetail` — no query, no 401 (spec §4.5).
+    const [personalized] = await personalizeGames(
+      this.igdbService.database,
+      viewerIdOf(req),
+      [game],
+    );
+    return personalized;
   }
 
   /** GET /games/:id/streams -- Live Twitch streams for a game (SWR cached). */

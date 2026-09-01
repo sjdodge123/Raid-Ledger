@@ -193,5 +193,9 @@ export function mapDbRowToDetail(
     steamAppId: g.itadGameId ? (g.steamAppId ?? null) : null,
     ...mapItadPricing(g),
     ...mapCooptimusFields(g),
+    // ROK-1314: personalization defaults to an explicit `false` (spec §4.5).
+    // Routes with a viewer overlay the real values via `personalizeGames`.
+    currentUserOwns: false,
+    currentUserWishlisted: false,
   };
 }
