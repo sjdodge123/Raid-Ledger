@@ -38,6 +38,11 @@ import { listInviteesWithProfile } from './lineups-invitees.helpers';
 import { findViewerSubmissions } from './lineups-submissions-query.helpers';
 import { computeVotingEligibleCount } from './voting-eligibility.helpers';
 import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
+import {
+  loadViewerInterests,
+  viewerFlagsFor,
+  type ViewerInterestMap,
+} from './viewer-interests.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -63,6 +68,8 @@ interface EnrichmentMaps {
   eligibleCount: number;
   unlinkedSteamCount: number;
   unlinkedSteamMembers: UnlinkedSteamMember[];
+  /** ROK-1314: viewer's per-game own/wishlist flags (empty when anonymous). */
+  viewerInterests: ViewerInterestMap;
 }
 
 /** Map a single entry row to the response shape with enrichment. */
@@ -100,6 +107,12 @@ function mapEntry(
     itadCurrentCut: pricing?.itadCurrentCut ?? null,
     itadCurrentShop: pricing?.itadCurrentShop ?? null,
     itadCurrentUrl: pricing?.itadCurrentUrl ?? null,
+    // ROK-1314: historical low, so the nomination card resolves `best-price`
+    // with the same rule Common Ground uses.
+    itadLowestPrice: pricing?.itadLowestPrice ?? null,
+    // ROK-1314: additive viewer personalization — explicit false, never
+    // undefined, and never another viewer's flags.
+    ...viewerFlagsFor(enrichment.viewerInterests, e.gameId),
     playerCount: e.playerCount ?? null,
     // ROK-1401: raw value — positive / 0 / null, never blended with IGDB.
     cooptimusOnlineMax: e.cooptimusOnlineMax ?? null,
@@ -249,6 +262,8 @@ async function fetchEnrichment(
   db: Db,
   gameIds: number[],
   audience: LineupAudience,
+  /** ROK-1314: authenticated viewer id, or undefined when anonymous. */
+  viewerId?: number,
 ): Promise<EnrichmentMaps> {
   const isPrivate = audience.visibility === 'private';
   const audienceIds = [
@@ -263,6 +278,7 @@ async function fetchEnrichment(
     totalMembers,
     uc,
     um,
+    viewerInterests,
   ] = await Promise.all([
     countOwnersPerGame(db, gameIds),
     // ROK-1348 (Codex P2): private lineups need owners counted within the
@@ -275,6 +291,9 @@ async function fetchEnrichment(
     countTotalMembers(db),
     countUnlinkedSteamMembers(db, audience),
     findUnlinkedSteamMembers(db, audience),
+    // ROK-1314: one batched lookup over the already-loaded entry game ids.
+    // Skipped entirely (no query) when there is no viewer.
+    loadViewerInterests(db, viewerId, gameIds),
   ]);
   const eligibleOwnerMap = audienceOwnerMap ?? ownerMap;
   // ROK-1348: eligible pool = creator + invitees (private) or totalMembers
@@ -294,6 +313,7 @@ async function fetchEnrichment(
     eligibleCount,
     unlinkedSteamCount: uc,
     unlinkedSteamMembers: um,
+    viewerInterests,
   };
 }
 
@@ -348,6 +368,7 @@ export async function buildDetailResponse(
     db,
     entries.map((e) => e.gameId),
     audience,
+    userId,
   );
   const channelOverrideName = lineup.channelOverrideId
     ? (resolveChannelName?.(lineup.channelOverrideId) ?? null)
