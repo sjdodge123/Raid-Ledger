@@ -52,6 +52,7 @@ export class DemoTestGamesController {
     await this.demoTestService.addGameInterestForTest(
       parsed.userId,
       parsed.gameId,
+      parsed.source,
     );
     return { success: true };
   }
