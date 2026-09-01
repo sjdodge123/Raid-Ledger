@@ -4,11 +4,11 @@
  * TDD NOTE: this file deliberately does NOT import anything from `./lfg.*`.
  * The spec must stay *compilable* before the implementation exists so every
  * test fails on its own real assertion (404 / missing relation) rather than
- * the whole file dying on a module-resolution error. DB-state assertions go
- * through raw SQL for the same reason — `schema.lfgIntents` does not exist yet
- * and would break the build.
+ * the whole file dying on a module-resolution error. It still imports no
+ * `./lfg.*` module; DB-state assertions go through the drizzle schema, which
+ * is shared infrastructure rather than this story's implementation.
  */
-import { sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { type TestApp } from '../common/testing/test-app';
 
@@ -178,17 +178,43 @@ export async function banUser(testApp: TestApp, userId: number): Promise<void> {
   );
 }
 
-// ─── Raw-SQL readers/writers over `lfg_intents` ──────────────────────────────
+// ─── Readers/writers over `lfg_intents` ─────────────────────────────────────
+//
+// TIMEZONE (fleet failure 2026-09-01): these READ through drizzle rather than
+// `db.execute(sql\`SELECT * ...\`)`. `expires_at` is a naive `timestamp`, and the
+// two paths disagree about what that means — drizzle appends `+0000` and reads
+// it as UTC (the convention the app writes with), while a raw `execute` hands
+// the string to postgres.js, which parses it in the *runner's* local zone. On a
+// UTC-6 fleet runner that made every timestamp read 6h off, so `+14 days` came
+// back as 14.25. Reading through drizzle asserts against the app's own
+// representation instead of a second, divergent one.
+
+/** Map a drizzle row to the snake_case shape the spec asserts on. */
+function toRow(r: typeof schema.lfgIntents.$inferSelect): LfgIntentRow {
+  return {
+    id: r.id,
+    user_id: r.userId,
+    game_id: r.gameId,
+    status: r.status,
+    visibility: r.visibility,
+    created_at: r.createdAt,
+    expires_at: r.expiresAt,
+    converted_to_poll_id: r.convertedToPollId,
+    converted_to_event_id: r.convertedToEventId,
+  };
+}
 
 /** Every intent row for a game, oldest first. */
 export async function readIntentsForGame(
   testApp: TestApp,
   gameId: number,
 ): Promise<LfgIntentRow[]> {
-  const rows = await testApp.db.execute<LfgIntentRow>(
-    sql`SELECT * FROM lfg_intents WHERE game_id = ${gameId} ORDER BY id ASC`,
-  );
-  return [...rows];
+  const rows = await testApp.db
+    .select()
+    .from(schema.lfgIntents)
+    .where(eq(schema.lfgIntents.gameId, gameId))
+    .orderBy(asc(schema.lfgIntents.id));
+  return rows.map(toRow);
 }
 
 /** The single intent row for a `(user, game)` pair, or null. */
@@ -197,12 +223,17 @@ export async function readIntent(
   userId: number,
   gameId: number,
 ): Promise<LfgIntentRow | null> {
-  const rows = await testApp.db.execute<LfgIntentRow>(
-    sql`SELECT * FROM lfg_intents
-        WHERE user_id = ${userId} AND game_id = ${gameId}
-        ORDER BY id ASC`,
-  );
-  return rows[0] ?? null;
+  const rows = await testApp.db
+    .select()
+    .from(schema.lfgIntents)
+    .where(
+      and(
+        eq(schema.lfgIntents.userId, userId),
+        eq(schema.lfgIntents.gameId, gameId),
+      ),
+    )
+    .orderBy(asc(schema.lfgIntents.id));
+  return rows[0] ? toRow(rows[0]) : null;
 }
 
 /** Force an intent's `expires_at` — used to build stale / near-expiry states. */
@@ -211,12 +242,13 @@ export async function setExpiresAt(
   intentId: number,
   expiresAt: Date,
 ): Promise<void> {
-  // ISO string, not a bare Date: drizzle passes raw template params straight
-  // through to postgres.js, whose Bind path cannot serialize a Date without a
-  // column mapper. Postgres casts the text to `timestamp` on assignment.
-  await testApp.db.execute(
-    sql`UPDATE lfg_intents SET expires_at = ${expiresAt.toISOString()} WHERE id = ${intentId}`,
-  );
+  // Through drizzle, so the write uses the same UTC convention as the read
+  // above and as the application itself. A raw `execute` here would need a
+  // hand-rolled cast and would reintroduce the timezone split.
+  await testApp.db
+    .update(schema.lfgIntents)
+    .set({ expiresAt })
+    .where(eq(schema.lfgIntents.id, intentId));
 }
 
 /** Count rows in `game_interests` — proves `GET /lfg/hearted` is read-only. */
