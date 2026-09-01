@@ -96,7 +96,10 @@ export class LineupsController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.lineupsService.getCommonGround(parsed.data, req.user?.id ?? null);
+    return this.lineupsService.getCommonGround(
+      parsed.data,
+      req.user?.id ?? null,
+    );
   }
 
   /** GET /lineups/:id — lineup detail by ID. */

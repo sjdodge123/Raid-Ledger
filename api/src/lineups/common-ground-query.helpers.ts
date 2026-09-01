@@ -332,7 +332,8 @@ export function mapCommonGroundRow(
     scoreBreakdown: breakdown,
     // ROK-1314: personalization resolved from the already-aggregated user-id
     // arrays — no second query, no N+1. Anonymous viewers get explicit false.
-    currentUserOwns: viewerId != null && safeRow.ownerUserIds.includes(viewerId),
+    currentUserOwns:
+      viewerId != null && safeRow.ownerUserIds.includes(viewerId),
     currentUserWishlisted:
       viewerId != null && safeRow.wishlistUserIds.includes(viewerId),
   };

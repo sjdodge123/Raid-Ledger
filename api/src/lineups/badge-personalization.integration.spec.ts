@@ -204,7 +204,7 @@ function describeBadgePersonalization() {
       expect(row.ownerCount).toBe(1);
     });
 
-    it('does not leak another viewer\'s flags: two viewers, one row, different answers', async () => {
+    it("does not leak another viewer's flags: two viewers, one row, different answers", async () => {
       await createBuildingLineup();
       const game = await insertGame({ name: 'Two Viewers One Row' });
       const wishlister = await loginAsMember('cg-two-viewers');

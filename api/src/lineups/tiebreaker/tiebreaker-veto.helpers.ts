@@ -7,6 +7,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { findVetoes, findUserVeto } from './tiebreaker-query.helpers';
+import { loadVetoGameBadges, vetoBadgesFor } from './tiebreaker-badges.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -86,7 +87,12 @@ export async function buildVetoStatus(
   gameNames?: Map<number, { name: string; coverUrl: string | null }>,
 ) {
   const tiedGameIds = tiebreaker.tiedGameIds;
-  const vetoes = await findVetoes(db, tiebreaker.id);
+  // ROK-1314: compact badge payload for the veto cards, resolved alongside
+  // the vetoes so the panel costs no extra serial round-trip.
+  const [vetoes, badges] = await Promise.all([
+    findVetoes(db, tiebreaker.id),
+    loadVetoGameBadges(db, tiedGameIds, userId ?? null),
+  ]);
   const isResolved = tiebreaker.status === 'resolved';
   const isRevealed = isResolved || vetoes.some((v) => v.revealed);
   const vetoCap = tiedGameIds.length - 1;
@@ -108,6 +114,8 @@ export async function buildVetoStatus(
     vetoCount: isRevealed ? (vetoCountMap.get(gid) ?? 0) : 0,
     isEliminated: isRevealed ? gid !== survivorId : false,
     isWinner: isRevealed ? gid === survivorId : false,
+    // ROK-1314: additive — aggregates plus the viewer's own flags.
+    ...vetoBadgesFor(badges, gid),
   }));
 
   return {

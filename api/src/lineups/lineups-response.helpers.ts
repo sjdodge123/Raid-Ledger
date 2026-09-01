@@ -5,13 +5,10 @@
 import type {
   LineupDetailResponseDto,
   LineupEntryResponseDto,
-  LineupInviteeResponseDto,
 } from '@raid-ledger/contract';
-import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { NotFoundException } from '@nestjs/common';
 import * as schema from '../drizzle/schema';
-import { loadQuorumGatingVoters } from './quorum/quorum-voters.helpers';
 import {
   findLineupById,
   findEntriesWithGames,
@@ -38,6 +35,7 @@ import { listInviteesWithProfile } from './lineups-invitees.helpers';
 import { findViewerSubmissions } from './lineups-submissions-query.helpers';
 import { computeVotingEligibleCount } from './voting-eligibility.helpers';
 import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
+import { loadStillWaitingOnVoters } from './lineups-quorum-waiting.helpers';
 import {
   loadViewerInterests,
   viewerFlagsFor,
@@ -214,47 +212,6 @@ function mapToDetailResponse(
     // value once invitees + enrichment are available.
     votingEligibleCount: 1,
   };
-}
-
-/**
- * ROK-1258: Resolve the invitees currently blocking quorum — i.e. invitees
- * who are in the active quorum-gating set AND haven't met their full vote
- * allotment. Mirrors `loadQuorumGatingVoters`'s hybrid policy so the panel
- * never names invitees who have already been dropped post-deadline (which
- * would make the panel contradict the auto-advance state). Creator is
- * always excluded — the panel is about who else the creator is waiting on.
- *
- * Returns `[]` for any non-voting or non-private lineup, OR when nobody is
- * blocking quorum (either everyone has met their allotment or the gating
- * set has collapsed under the hybrid policy).
- */
-async function loadStillWaitingOnVoters(
-  db: Db,
-  lineup: typeof schema.communityLineups.$inferSelect,
-  invitees: LineupInviteeResponseDto[],
-): Promise<LineupInviteeResponseDto[]> {
-  if (lineup.status !== 'voting' || lineup.visibility !== 'private') return [];
-  if (invitees.length === 0) return [];
-  const required = lineup.maxVotesPerPlayer ?? 3;
-  const [gatingIds, voteRows] = await Promise.all([
-    loadQuorumGatingVoters(db, lineup),
-    db
-      .select({
-        userId: schema.communityLineupVotes.userId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(schema.communityLineupVotes)
-      .where(eq(schema.communityLineupVotes.lineupId, lineup.id))
-      .groupBy(schema.communityLineupVotes.userId),
-  ]);
-  const gatingSet = new Set(gatingIds);
-  const counts = new Map(voteRows.map((r) => [r.userId, Number(r.count)]));
-  return invitees.filter(
-    (invitee) =>
-      invitee.id !== lineup.createdBy &&
-      gatingSet.has(invitee.id) &&
-      (counts.get(invitee.id) ?? 0) < required,
-  );
 }
 
 /** Fetch enrichment data for lineup entries. */
