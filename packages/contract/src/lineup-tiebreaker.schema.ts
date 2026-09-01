@@ -80,6 +80,19 @@ const VetoGameCardSchema = z.object({
     vetoCount: z.number(),
     isEliminated: z.boolean(),
     isWinner: z.boolean(),
+    /**
+     * ROK-1314: veto cards render the COMPACT badge set only, so this carries
+     * exactly what compact needs — owner/wishlist aggregates, the viewer's own
+     * two flags, and the three price scalars. Deliberately NO playerCount /
+     * earlyAccess / co-op fields: compact excludes them (spec §5.3).
+     */
+    ownerCount: z.number().optional(),
+    wishlistCount: z.number().optional(),
+    currentUserOwns: z.boolean().optional(),
+    currentUserWishlisted: z.boolean().optional(),
+    itadCurrentPrice: z.number().nullable().optional(),
+    itadCurrentCut: z.number().nullable().optional(),
+    itadLowestPrice: z.number().nullable().optional(),
 });
 
 /** Full veto mode status. */

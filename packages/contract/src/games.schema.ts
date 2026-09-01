@@ -129,6 +129,28 @@ export const GameDetailSchema = z.object({
     cooptimusSyncedAt: z.string().nullable().optional(),
     /** ROK-1397: display-only editorial extras. Populated on GET /games/:id ONLY (never on list rows — payload weight). */
     cooptimusExtras: CooptimusExtrasSchema.nullable().optional(),
+    /**
+     * ROK-1314: does the CURRENT viewer own this game? Backed by a
+     * `game_interests` row with `source = 'steam_library'`. A `manual` heart is
+     * want-to-play, NOT ownership.
+     *
+     * `.optional()` WITHOUT `.default()` is deliberate: `.default()` makes the
+     * z.infer OUTPUT type required, which breaks every existing DTO literal in
+     * fixtures and mocks. Optional keeps a stale cached response parseable
+     * (rendered as no personalization). The BACKEND still always emits an
+     * explicit `false` rather than omitting the field — never `undefined` — and
+     * the integration specs assert exactly that.
+     */
+    currentUserOwns: z.boolean().optional(),
+    /**
+     * ROK-1314: has the CURRENT viewer wishlisted this game? Backed by
+     * `game_interests.source = 'steam_wishlist'`. Same defaulting rules.
+     *
+     * NOTE: `GameInterestResponseSchema.wishlistedByMe` is the pre-existing
+     * single-game spelling of this same flag (ROK-418) and keeps its own
+     * consumers — do not rewire it here. See TECH-DEBT-BACKLOG.md 2026-09-01.
+     */
+    currentUserWishlisted: z.boolean().optional(),
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;

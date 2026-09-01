@@ -215,6 +215,16 @@ export const LineupEntryResponseSchema = z.object({
      * capability) — see `web/src/components/lineups/coop-fit.ts`.
      */
     cooptimusOnlineMax: z.number().int().nullable().optional(),
+    /**
+     * ROK-1314: historical lowest ITAD price. Without it a nomination card can
+     * never resolve `best-price`, so the same game would read "On Sale" here and
+     * "Best Price" on Common Ground — the drift ROK-1314 exists to remove.
+     */
+    itadLowestPrice: z.number().nullable().optional(),
+    /** ROK-1314: does the CURRENT viewer own this nominated game? */
+    currentUserOwns: z.boolean().optional(),
+    /** ROK-1314: has the CURRENT viewer wishlisted this nominated game? */
+    currentUserWishlisted: z.boolean().optional(),
 });
 
 export type LineupEntryResponseDto = z.infer<typeof LineupEntryResponseSchema>;
@@ -544,6 +554,14 @@ export const CommonGroundGameSchema = z.object({
      * concocts its own. Capped at 80 chars.
      */
     whyReason: z.string().max(80).optional(),
+    /**
+     * ROK-1314: does the CURRENT viewer own this game? Resolved from the
+     * already-aggregated `ownerUserIds` in the Common Ground query — no extra
+     * round trip. Unauthenticated viewers always get `false`.
+     */
+    currentUserOwns: z.boolean().optional(),
+    /** ROK-1314: has the CURRENT viewer wishlisted this game? */
+    currentUserWishlisted: z.boolean().optional(),
 });
 
 export type CommonGroundGameDto = z.infer<typeof CommonGroundGameSchema>;
