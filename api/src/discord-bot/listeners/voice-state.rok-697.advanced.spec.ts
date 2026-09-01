@@ -785,7 +785,9 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       const spawnedGames = new Set(
         mockAdHocEventService.handleVoiceJoin.mock.calls.map((c) => c[3]),
       );
-      expect(spawnedGames).toEqual(new Set([VALORANT.gameId, MINECRAFT.gameId]));
+      expect(spawnedGames).toEqual(
+        new Set([VALORANT.gameId, MINECRAFT.gameId]),
+      );
     });
 
     /**
