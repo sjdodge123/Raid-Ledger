@@ -10,10 +10,7 @@
  *      nominator), so it must be visible rather than implicit.
  */
 import { test, expect } from "./base";
-import {
-  getAdminToken,
-  createLineupOrRetry,
-} from "./api-helpers";
+import { getAdminToken, createLineupOrRetry } from "./api-helpers";
 
 const FILE_PREFIX = "nomination-target";
 
@@ -54,7 +51,9 @@ test.describe("Nomination target control (create modal)", () => {
     await expect(slider).toHaveAttribute("min", "25");
     await expect(slider).toHaveAttribute("max", "100");
     await expect(slider).toHaveAttribute("step", "5");
-    await expect(slider).toHaveAttribute("value", "75");
+    // React drives the property on a controlled range input; the attribute
+    // only happens to match on first render.
+    await expect(slider).toHaveValue("75");
   });
 });
 

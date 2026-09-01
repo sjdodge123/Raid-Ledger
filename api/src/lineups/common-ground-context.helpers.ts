@@ -105,6 +105,8 @@ async function resolveScoringLineup(
   visibility: 'public' | 'private';
   /** ROK-1444: needed for the ratcheted cap in the response meta. */
   nominationCapPeak: number | null;
+  /** ROK-1444: deduped out of the private participant count. */
+  createdBy: number;
 }> {
   if (filters.lineupId != null) {
     const [row] = await findLineupById(db, filters.lineupId);
@@ -116,6 +118,7 @@ async function resolveScoringLineup(
       id: row.id,
       visibility: row.visibility,
       nominationCapPeak: row.nominationCapPeak,
+      createdBy: row.createdBy,
     };
   }
   const [lineup] = await findBuildingLineup(db);
@@ -125,6 +128,7 @@ async function resolveScoringLineup(
     id: lineup.id,
     visibility: lineup.visibility,
     nominationCapPeak: lineup.nominationCapPeak,
+    createdBy: lineup.createdBy,
   };
 }
 
@@ -135,14 +139,18 @@ async function resolveScoringLineup(
  */
 async function resolveParticipantCount(
   db: PostgresJsDatabase<typeof schema>,
-  lineup: { id: number; visibility: 'public' | 'private' },
+  lineup: { id: number; visibility: 'public' | 'private'; createdBy: number },
   // ROK-1348: reuse the voterIds buildScoringContext already fetched for
   // the public branch instead of querying findLineupVoterIds a second time.
   voterIds: number[],
 ): Promise<number> {
   if (lineup.visibility === 'private') {
     const invitees = await loadInvitees(db, lineup.id);
-    return invitees.length + 1;
+    // ROK-1444 (rl-review): count DISTINCT people. `addInvitees` does not
+    // exclude the creator, so `invitees.length + 1` reported 5 for a genuine
+    // 4-person roster — enough to wrongly flag a 4-player co-op game in the
+    // roster-fit warning and to mis-seed the Common Ground player filter.
+    return new Set([...invitees, lineup.createdBy]).size;
   }
   return voterIds.length;
 }

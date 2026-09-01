@@ -222,9 +222,10 @@ describe('NominatingComposite — roster-fit group size (ROK-1444)', () => {
     });
 
     it('counts the creator once when they are also in the invitee list', async () => {
-        // Codex round-5 P2: `addInvitees` does not exclude the creator, so a
-        // naive `invitees.length + 1` reports five for a real four-person
-        // roster and wrongly flags a 4-player co-op game.
+        // rl-review WARNING: `addInvitees` does not exclude the creator, so a
+        // naive `invitees.length + 1` reports 5 for a real 4-person roster.
+        // Asserted POSITIVELY on the rendered number — an absence assertion
+        // would pass vacuously before the Common Ground query resolves.
         const lineup = buildBuildingLineup({
             // createdBy.id is 1 in the fixture; include it among the invitees.
             invitees: [1, 2, 3, 4].map((id) => ({
@@ -232,18 +233,43 @@ describe('NominatingComposite — roster-fit group size (ROK-1444)', () => {
                 displayName: `User ${id}`,
                 steamLinked: false,
             })),
-            entries: [createMockEntry({ cooptimusOnlineMax: 4 })],
+            entries: [createMockEntry({ cooptimusOnlineMax: 3 })],
         });
+        // The server dedupes the creator too (`resolveParticipantCount`), so a
+        // correct API sends 4 here, not 5.
+        server.use(
+            http.get(`${API_BASE}/lineups/common-ground`, () =>
+                HttpResponse.json({
+                    data: [],
+                    meta: {
+                        total: 0,
+                        appliedWeights: {
+                            ownerWeight: 10,
+                            saleBonus: 5,
+                            fullPricePenalty: -2,
+                            tasteWeight: 8,
+                            socialWeight: 8,
+                            intensityWeight: 4,
+                        },
+                        activeLineupId: 7,
+                        nominatedCount: 0,
+                        maxNominations: 20,
+                        participantCount: 4,
+                        coopDataAvailable: true,
+                    },
+                }),
+            ),
+        );
 
         renderWithProviders(
             <NominatingComposite lineup={lineup} canParticipate={true} />,
         );
 
-        await screen.findByRole('region', { name: /step 1 of 4 · nominating/i });
-        // Distinct roster is 4, and the game fits 4 — no warning.
+        // A 3-player game against a DISTINCT roster of 4 flags as "group is 4".
+        // If the creator were double-counted it would read "group is 5".
         expect(
-            screen.queryByTestId('nomination-fit-warning'),
-        ).not.toBeInTheDocument();
+            await screen.findByTestId('nomination-fit-warning'),
+        ).toHaveTextContent(/Fits 3 online · group is 4/);
     });
 
     it('leaves a game that still fits the invited roster unflagged', async () => {

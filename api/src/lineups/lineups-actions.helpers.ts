@@ -35,7 +35,6 @@ import { logNomination } from './lineups-activity.helpers';
 import { toggleVote as toggleVoteHelper } from './lineups-voting.helpers';
 import { carryOverFromLastDecided } from './lineups-carryover.helpers';
 import { armNominationTargetOnCreate } from './quorum/nomination-target.helpers';
-import { ratchetNominationCap } from './lineups-nomination-cap.helpers';
 import {
   fireLineupCreated,
   fireNominationMilestone,
@@ -238,10 +237,8 @@ export async function runNominate(
 
   await validateNominationCap(deps.db, lineup);
   await validateGameExists(deps.db, dto.gameId);
+  // ROK-1444: `insertNomination` ratchets `nomination_cap_peak` itself.
   await insertNomination(deps.db, lineupId, dto, userId);
-  // ROK-1444: adding an entry is the only direction that can raise the
-  // distinct-nominator count, so this is the one place the cap ratchets.
-  await ratchetNominationCap(deps.db, lineupId);
   await logNomination(deps.db, deps.activityLog, lineupId, dto, userId);
 
   fireNominationMilestone(

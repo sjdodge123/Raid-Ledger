@@ -10,10 +10,10 @@
  * (a) is checked FIRST and is exempt from the ≥2-voter solo guard — see the
  * comment on the guard for why.
  *
- * Branch (b) exists because (a) is currently unreachable from the web app —
+ * Branch (a) exists because (b) is currently unreachable from the web app —
  * `useSubmitNominations` is defined but mounted nowhere, so nothing writes the
- * stamp (a) reads. See `nomination-target.helpers.ts` for the revert-trap guard
- * that keeps (b) from re-firing on a standing count after an operator revert.
+ * stamp (b) reads. See `nomination-target.helpers.ts` for the revert-trap guard
+ * that keeps (a) from re-firing on a standing count after an operator revert.
  *
  * Voting quorum:
  *   - every expected voter has stamped `votes_submitted_at`.

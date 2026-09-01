@@ -49,7 +49,10 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { loadEffectiveNominationCap } from '../lineups-nomination-cap.helpers';
+import {
+  loadEffectiveNominationCap,
+  loadEffectiveNominationCapById,
+} from '../lineups-nomination-cap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -58,18 +61,6 @@ type LineupRow = typeof schema.communityLineups.$inferSelect;
 export interface NominationTargetResult {
   ready: boolean;
   reason?: string;
-}
-
-/**
- * Resolve the live nomination cap (the target's DENOMINATOR) for a lineup.
- * Exported because the detail response publishes it — the bar people nominate
- * toward must never be implicit, since it moves when the roster grows.
- */
-export async function resolveNominationCap(
-  db: Db,
-  lineup: LineupRow,
-): Promise<number> {
-  return loadEffectiveNominationCap(db, lineup);
 }
 
 /** Percentage of the cap currently filled, clamped against a zero cap. */
@@ -107,7 +98,7 @@ export async function evaluateNominationTarget(
     };
   }
 
-  const cap = await resolveNominationCap(db, lineup);
+  const cap = await loadEffectiveNominationCap(db, lineup);
   const pct = nominationTargetPercent(entryCount, cap);
 
   if (pct < target) {
@@ -175,10 +166,12 @@ export async function armNominationTargetOnCreate(
     .select({ id: schema.communityLineupEntries.id })
     .from(schema.communityLineupEntries)
     .where(eq(schema.communityLineupEntries.lineupId, lineup.id));
-  // The cap was already pinned by `carryOverFromLastDecided` when it seeded
-  // entries, so this is a pure read — it must NOT be the ratchet point, or a
-  // deadline-only lineup (target null, early-returned above) would never pin.
-  const cap = await loadEffectiveNominationCap(db, lineup);
+  // Read the cap fresh from the id, not from `lineup`: this runs at creation
+  // with the PRE-carry-over row, whose `nominationCapPeak` is still null.
+  // `carryOverFromLastDecided` has since pinned it, and that — not this — is
+  // the ratchet point, or a deadline-only lineup (target null, early-returned
+  // above) would never pin at all.
+  const cap = await loadEffectiveNominationCapById(db, lineup.id);
   if (nominationTargetPercent(rows.length, cap) < target) {
     await armNominationTarget(db, lineup);
   }

@@ -15,7 +15,10 @@ import {
   countLineupEntries,
   countDistinctNominators,
 } from './lineups-query.helpers';
-import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
+import {
+  effectiveNominationCap,
+  ratchetNominationCap,
+} from './lineups-nomination-cap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -84,4 +87,10 @@ export async function insertNomination(
     }
     throw err;
   }
+  // ROK-1444 (rl-review): ratchet HERE rather than in the caller. Adding an
+  // entry is the only thing that can raise the distinct-nominator count, and
+  // pinning it at the write makes the monotonic cap structurally unforgettable
+  // — the same forget-me shape CLAUDE.md documents for the games-table
+  // name-dedup guard.
+  await ratchetNominationCap(db, lineupId);
 }

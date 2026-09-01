@@ -468,6 +468,43 @@ function describeNominationTarget() {
     expect(res.body.nominationCap).toBe(25);
   });
 
+  // -- Participant count dedupes the creator (rl-review) --------------------
+
+  it('counts the creator once in a private lineup that also invited them', async () => {
+    // rl-review WARNING: `addInvitees` does not exclude the creator, so
+    // `invitees.length + 1` reported 5 for a genuine 4-person roster. That
+    // number drives the Common Ground player filter AND the roster-fit
+    // warning, so an off-by-one wrongly flags a 4-player co-op game.
+    const a = await createMember('dedupe-a');
+    const b = await createMember('dedupe-b');
+    const c = await createMember('dedupe-c');
+
+    const created = await testApp.request
+      .post('/lineups')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        title: 'Dedupe Private',
+        visibility: 'private',
+        // The creator (admin) is deliberately included among the invitees —
+        // nothing in the API or picker prevents it.
+        inviteeUserIds: [
+          testApp.seed.adminUser.id,
+          a.userId,
+          b.userId,
+          c.userId,
+        ],
+      });
+    expect(created.status).toBe(201);
+    const lineupId = created.body.id as number;
+
+    const cg = await testApp.request
+      .get(`/lineups/common-ground?lineupId=${lineupId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(cg.status).toBe(200);
+    // Distinct roster is admin + 3 = 4, NOT 5.
+    expect(cg.body.meta.participantCount).toBe(4);
+  });
+
   // -- The published denominator --------------------------------------------
 
   it('publishes the nomination cap the target is measured against', async () => {

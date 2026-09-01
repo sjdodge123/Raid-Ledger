@@ -277,8 +277,10 @@ export function findBuildingLineup(db: PostgresJsDatabase<typeof schema>) {
     .select({
       id: schema.communityLineups.id,
       visibility: schema.communityLineups.visibility,
-      // ROK-1444: the Common Ground meta publishes the ratcheted cap.
+      // ROK-1444: the Common Ground meta publishes the ratcheted cap, and the
+      // private participant count dedupes the creator out of the invitees.
       nominationCapPeak: schema.communityLineups.nominationCapPeak,
+      createdBy: schema.communityLineups.createdBy,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.status, 'building'))
