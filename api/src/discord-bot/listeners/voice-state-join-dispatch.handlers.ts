@@ -100,27 +100,17 @@ async function dispatchBindingJoin(
   }
 }
 
-/** General-lobby join: wire the presence-recheck + spawn callbacks. */
-async function dispatchLobbyJoin(
+/** Per-(channel, game) spawn callbacks shared by both binding kinds (AC13). */
+function lobbySpawnFns(
   ctx: JoinHandlerCtx,
   chId: string,
   binding: ResolvedBinding,
-  dm: DiscordMemberInfo,
-  gm?: GuildMember,
-): Promise<void> {
-  const fns = {
-    scheduleRecheck: () =>
-      schedulePresenceRecheck({
-        timers: ctx.timers,
-        dm,
-        channelId: chId,
-        guildMember: gm!,
-        userChannelMap: ctx.userChannelMap,
-        presenceDetector: ctx.presenceDetector,
-        handleJoinFn: (ch, d, g) => handleChannelJoin(ctx, ch, d, g),
-        logError: (m) => ctx.logger.error(m),
-      }),
-    scheduleSpawn: (gameId: number | null) =>
+): {
+  scheduleSpawn: (g: number | null) => void;
+  cancelSpawn: (g: number | null) => void;
+} {
+  return {
+    scheduleSpawn: (gameId) =>
       scheduleDelayedSpawn(
         ctx.deps,
         chId,
@@ -129,8 +119,31 @@ async function dispatchLobbyJoin(
         ctx.timers,
         SPAWN_DELAY_MS,
       ),
-    cancelSpawn: (gameId: number | null) =>
-      cancelPendingSpawn(ctx.timers, chId, gameId),
+    cancelSpawn: (gameId) => cancelPendingSpawn(ctx.timers, chId, gameId),
   };
-  await handleGeneralLobbyJoin(ctx.deps, chId, binding, dm, gm, fns);
+}
+
+/** General-lobby join: wire the presence-recheck + spawn callbacks. */
+async function dispatchLobbyJoin(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  binding: ResolvedBinding,
+  dm: DiscordMemberInfo,
+  gm?: GuildMember,
+): Promise<void> {
+  const scheduleRecheck = () =>
+    schedulePresenceRecheck({
+      timers: ctx.timers,
+      dm,
+      channelId: chId,
+      guildMember: gm!,
+      userChannelMap: ctx.userChannelMap,
+      presenceDetector: ctx.presenceDetector,
+      handleJoinFn: (ch, d, g) => handleChannelJoin(ctx, ch, d, g),
+      logError: (m) => ctx.logger.error(m),
+    });
+  await handleGeneralLobbyJoin(ctx.deps, chId, binding, dm, gm, {
+    scheduleRecheck,
+    ...lobbySpawnFns(ctx, chId, binding),
+  });
 }

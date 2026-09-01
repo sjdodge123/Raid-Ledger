@@ -176,7 +176,10 @@ export function trackChannelMember(
  * second qualifying group in a general lobby could never arm a timer. Defined
  * here (a leaf module) so the format has exactly one definition.
  */
-export function spawnTimerKey(channelId: string, gameId: number | null): string {
+export function spawnTimerKey(
+  channelId: string,
+  gameId: number | null,
+): string {
   return `${channelId}:${gameId ?? 'null'}`;
 }
 

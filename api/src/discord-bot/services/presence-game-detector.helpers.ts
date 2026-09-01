@@ -59,7 +59,9 @@ export function applyConsensus(
  * arise when unresolvable activity names fall through game resolution; they are
  * all "no detected game" as far as the lobby threshold is concerned.
  */
-function collapseNullGroups(nullGroups: DetectedGameGroup[]): DetectedGameGroup {
+function collapseNullGroups(
+  nullGroups: DetectedGameGroup[],
+): DetectedGameGroup {
   if (nullGroups.length === 1) return nullGroups[0];
   return {
     ...FALLBACK_GROUP,

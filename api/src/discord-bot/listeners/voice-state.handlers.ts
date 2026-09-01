@@ -173,7 +173,14 @@ export async function handlePresenceChange(
     detected.gameId,
   );
   if (currentState?.memberSet.has(userId)) return;
-  await moveToNewGame(deps, userId, binding, detected, guildMember, !!currentState);
+  await moveToNewGame(
+    deps,
+    userId,
+    binding,
+    detected,
+    guildMember,
+    !!currentState,
+  );
 }
 
 /**
@@ -202,7 +209,10 @@ async function moveToNewGame(
   startVoiceGameTracking(deps, userId, detected.gameId, detected.gameName, uid);
   const channelId =
     deps.userChannelMap.get(userId) ?? guildMember.voice?.channelId;
-  if (!hasActiveEvent && !(await switchClearsThreshold(deps, channelId, binding, detected.gameId)))
+  if (
+    !hasActiveEvent &&
+    !(await switchClearsThreshold(deps, channelId, binding, detected.gameId))
+  )
     return;
   const mi = buildMemberInfo(userId, guildMember, uid);
   await deps.adHocEventService.handleVoiceJoin(

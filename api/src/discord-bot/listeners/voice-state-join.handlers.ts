@@ -18,7 +18,7 @@ import {
   suppressOrCheckThreshold,
   type GameSpawnFns,
 } from './voice-state-gate.handlers';
-import { traceGate } from './voice-gate-trace';
+import { traceGate, type GateCtx } from './voice-gate-trace';
 
 /** Handle join for a game-specific binding. */
 export async function handleGameBindingJoin(
@@ -132,7 +132,7 @@ async function processLobbyMember(
   uid: number | null,
   detected: { gameId: number | null; gameName: string },
 ): Promise<void> {
-  const { deps, channelId, binding, dm, guildMember, scheduleFns } = ctx;
+  const { deps, channelId, binding, guildMember, scheduleFns } = ctx;
   const state = deps.adHocEventService.getActiveState(
     binding.bindingId,
     detected.gameId,
@@ -156,6 +156,17 @@ async function processLobbyMember(
     await handleLobbyThreshold(deps, channelId, binding, scheduleFns, detected);
     return;
   }
+  await joinLobbyEvent(ctx, uid, detected, trace);
+}
+
+/** Join the member into the lobby event that already exists for their game. */
+async function joinLobbyEvent(
+  ctx: LobbyJoinCtx,
+  uid: number | null,
+  detected: { gameId: number | null; gameName: string },
+  trace: GateCtx,
+): Promise<void> {
+  const { deps, channelId, binding, dm } = ctx;
   const mi: VoiceMemberInfo = { ...dm, userId: uid };
   const handled = await deps.adHocEventService.handleVoiceJoin(
     binding.bindingId,
@@ -249,7 +260,12 @@ export async function executeDelayedSpawn(
     return;
   }
   const minPlayers = binding.config?.minPlayers ?? 2;
-  const decision = await resolveGameBindingSpawn(deps, channelId, binding, minPlayers);
+  const decision = await resolveGameBindingSpawn(
+    deps,
+    channelId,
+    binding,
+    minPlayers,
+  );
   if (!decision.shouldSpawn) return;
   // ROK-1394: abort if the fixed-game bind already has ANY active event (a
   // degraded `bindingId:null` session included) so the timer never spawns a
