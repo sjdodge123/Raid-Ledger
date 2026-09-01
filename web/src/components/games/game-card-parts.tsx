@@ -4,7 +4,6 @@
  */
 import type { JSX } from 'react';
 import { HEART_PATH, getRatingClasses } from './game-card-constants';
-import { coopLabel, coopAriaLabel } from '../../lib/coop-label';
 
 /** Game cover image with lazy loading. */
 export function CoverImage({
@@ -172,62 +171,24 @@ function StarRating({ rating }: { rating: number }): JSX.Element {
     );
 }
 
-/**
- * Compact co-op badge (ROK-1399, copy per ROK-1401 round 3).
- *
- * Copy comes from the shared {@link coopLabel} helper so the games-page card,
- * the Common Ground / AI tiles and the NominateModal row all speak the same
- * three-label vocabulary (`combo` / `online` / `local` co-op). The old
- * `👥 4 online` + 🛋 suffix form is gone: it read as "4 people currently
- * online", and the kind is now carried by the label itself.
- *
- * Deliberately carries no attribution — the Co-Optimus credit lives on the
- * game detail page (ROK-1398), never on the card.
- */
-function CoopBadge({
-    online,
-    couch,
-    combo,
-}: {
-    online: number | null | undefined;
-    couch: number | null | undefined;
-    combo: boolean | null | undefined;
-}): JSX.Element | null {
-    const resolved = coopLabel({ online, couch, combo });
-    if (!resolved) return null;
-    return (
-        <span
-            data-testid="card-coop-badge"
-            role="img"
-            aria-label={coopAriaLabel(resolved)}
-            className="ml-auto inline-flex items-center whitespace-nowrap text-[10px] text-emerald-300"
-        >
-            {resolved.label}
-        </span>
-    );
-}
-
 /** Star rating + mode info bar below card cover. */
+/**
+ * ROK-1314: co-op moved OUT of this bar and into the shared `GameBadgeRow`
+ * (operator decision 2026-09-01). The games-page card previously rendered
+ * co-op here via a local `CoopBadge` while Common Ground rendered the shared
+ * `CoopPill` — two implementations of one idea, and once these cards switched
+ * to `variant="full"` they would have shown BOTH. The pill wins: same
+ * `coopLabel` copy, one component, already covered by CoopPill's own tests.
+ */
 export function InfoBar({
     rating,
     primaryMode,
-    cooptimusOnlineMax,
-    cooptimusCouchMax,
-    cooptimusComboCoop,
 }: {
     rating: number | null | undefined;
     primaryMode: string | null;
-    cooptimusOnlineMax?: number | null;
-    cooptimusCouchMax?: number | null;
-    cooptimusComboCoop?: boolean | null;
 }): JSX.Element | null {
     const hasRating = rating != null && rating > 0;
-    const coop = coopLabel({
-        online: cooptimusOnlineMax,
-        couch: cooptimusCouchMax,
-        combo: cooptimusComboCoop,
-    });
-    if (!hasRating && !primaryMode && coop == null) return null;
+    if (!hasRating && !primaryMode) return null;
     return (
         <div className="p-2.5 space-y-1">
             <div className="flex items-center gap-2 text-xs text-muted">
@@ -238,11 +199,6 @@ export function InfoBar({
                         <span>{primaryMode}</span>
                     </>
                 )}
-                <CoopBadge
-                    online={cooptimusOnlineMax}
-                    couch={cooptimusCouchMax}
-                    combo={cooptimusComboCoop}
-                />
             </div>
         </div>
     );

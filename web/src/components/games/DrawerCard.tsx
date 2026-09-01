@@ -48,7 +48,7 @@ function CoverContent({
                         the ITAD pricing payload, so the row prints no price. */}
                     <GameBadgeRow
                         game={fromGameDetail(game)}
-                        variant="compact"
+                        variant="full"
                         price="none"
                     />
                 </div>

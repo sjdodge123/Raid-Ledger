@@ -109,13 +109,7 @@ function LinkCard(props: LinkVariantProps): JSX.Element {
             />
             <HeartToggleSection gameId={game.id} />
             {showInfoBar && !compact && (
-                <InfoBar
-                    rating={rating}
-                    primaryMode={primaryMode}
-                    cooptimusOnlineMax={game.cooptimusOnlineMax}
-                    cooptimusCouchMax={game.cooptimusCouchMax}
-                    cooptimusComboCoop={game.cooptimusComboCoop}
-                />
+                <InfoBar rating={rating} primaryMode={primaryMode} />
             )}
         </Link>
     );

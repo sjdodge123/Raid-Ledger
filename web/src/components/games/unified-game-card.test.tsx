@@ -340,10 +340,18 @@ describe('UnifiedGameCard — genre badge', () => {
 // into the InfoBar badge. Badge behaviour itself is covered in
 // game-card-parts.test.tsx. Spec: planning-artifacts/specs/ROK-1399.md.
 
-const COOP_BADGE = 'card-coop-badge';
+/**
+ * ROK-1314: co-op moved OFF the InfoBar and onto the shared `CoopPill` in
+ * `GameBadgeRow` (operator decision 2026-09-01) — `/games` previously used a
+ * local `CoopBadge` while Common Ground used the pill, two components for one
+ * idea. These assertions are UNCHANGED in substance: the card must still show
+ * co-op, with the same three labels and the same aria-label, because both
+ * components render from the shared `coopLabel` helper. Only the testid moves.
+ */
+const COOP_BADGE = 'coop-pill';
 
-describe('UnifiedGameCard — co-op badge (ROK-1399)', () => {
-    it('threads cooptimusOnlineMax through GameProps into the info bar badge', () => {
+describe('UnifiedGameCard — co-op pill (ROK-1399, moved to GameBadgeRow in ROK-1314)', () => {
+    it('threads cooptimusOnlineMax through GameProps into the co-op pill', () => {
         renderCard(
             <UnifiedGameCard
                 variant="link"

@@ -98,7 +98,7 @@ function CardBadgeRow({
             <PriceBadge pricing={pricing ?? null} />
             <GameBadgeRow
                 game={fromGameDetail(personalization)}
-                variant="compact"
+                variant="full"
                 price="none"
             />
             {hasSteamAppId && <SteamAvailableChip />}
