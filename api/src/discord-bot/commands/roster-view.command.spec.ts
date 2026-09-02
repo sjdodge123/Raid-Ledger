@@ -371,7 +371,7 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
     const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
       embeds: { data: { color?: number } }[];
     };
-    expect(call.embeds[0].data.color).toBe(EMBED_COLORS.ROSTER_UPDATE);
+    expect(call.embeds[0].data.color).toBe(EMBED_COLORS.SYSTEM);
   });
 
   it('should include footer with total and max', async () => {

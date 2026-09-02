@@ -66,7 +66,7 @@ describe('DiscordNotificationEmbedService — core', () => {
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
-    it('should use ROSTER_UPDATE color for slot_vacated type', async () => {
+    it('should use the announcing color for slot_vacated type', async () => {
       const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-3',
@@ -77,10 +77,10 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
-      expect(embed.toJSON().color).toBe(EMBED_COLORS.ROSTER_UPDATE);
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
-    it('should use ROSTER_UPDATE color for bench_promoted type', async () => {
+    it('should use the live color for bench_promoted type', async () => {
       const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-4',
@@ -91,7 +91,7 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Test Community',
       );
 
-      expect(embed.toJSON().color).toBe(EMBED_COLORS.ROSTER_UPDATE);
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
     });
 
     it('should use REMINDER color for event_rescheduled type', async () => {
