@@ -16,6 +16,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { LfgDb } from './lfg-query.helpers';
+import { AD_HOC_ENDED } from './lfg-history.helpers';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -70,7 +71,16 @@ function fetchQuickPlayers(db: LfgDb, gameId: number, since: Date) {
         schema.users,
         eq(schema.users.id, schema.adHocParticipants.userId),
       )
-      .where(and(playableEvent(gameId, since), eq(schema.events.isAdHoc, true)))
+      // `ended` only: a `live` / `grace_period` session outlives its nominal
+      // `upper(duration)`, and a session still in progress is not yet a
+      // "played" signal (Codex P2-c — same rule as `lfg-history.helpers.ts`).
+      .where(
+        and(
+          playableEvent(gameId, since),
+          eq(schema.events.isAdHoc, true),
+          eq(schema.events.adHocStatus, AD_HOC_ENDED),
+        ),
+      )
   );
 }
 

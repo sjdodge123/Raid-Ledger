@@ -23,6 +23,9 @@ import { LFG_HISTORY_LIMIT } from './lfg.constants';
 
 const MINUTE_MS = 60 * 1000;
 
+/** The one `ad_hoc_status` that means the session is genuinely over. */
+export const AD_HOC_ENDED = 'ended';
+
 /** An event row before its participants are counted. */
 interface HistoryEventRow {
   eventId: number;
@@ -45,6 +48,11 @@ interface Participation {
  * `events.game_id` is nullable, so the game is matched with an explicit `eq`
  * rather than a loose join — a null-game event must never land in a game's
  * history.
+ *
+ * A Quick Play needs one more condition: its `duration` is a NOMINAL window
+ * the bot extends while people are still in voice, so a `live` /
+ * `grace_period` session routinely outlives its own `upper(duration)`
+ * (`ad-hoc-event.helpers.ts`). Only `ended` is actually over (Codex P2-b).
  */
 function pastEventsForGame(gameId: number, isAdHoc: boolean) {
   return and(
@@ -53,6 +61,7 @@ function pastEventsForGame(gameId: number, isAdHoc: boolean) {
     sql`upper(${schema.events.duration}) <= ${new Date().toISOString()}::timestamp`,
     sql`${schema.events.cancelledAt} IS NULL`,
     sql`${schema.events.reschedulingPollId} IS NULL`,
+    isAdHoc ? eq(schema.events.adHocStatus, AD_HOC_ENDED) : undefined,
   );
 }
 

@@ -457,6 +457,39 @@ describe('GET /lfg/:gameId/history', () => {
     expect(ids).not.toContain(noGame);
   });
 
+  /**
+   * Codex P2-b — a Quick Play stays `live` / `grace_period` past its nominal
+   * `upper(duration)` until the bot finalises it (`ad-hoc-event.helpers.ts`).
+   * Reporting one of those as a finished session is reporting a session that
+   * is still in progress.
+   */
+  it('excludes a Quick Play the bot has not finalised', async () => {
+    const game = await createGame(testApp, 'Unfinished Quick Play Game');
+    const a = await member('alpha');
+    const quickPlay = async (hoursAgo: number, status: string) => {
+      const id = await createQuickPlayEvent(
+        testApp,
+        a.userId,
+        game.id,
+        new Date(Date.now() - hoursAgo * HOUR_MS),
+        { title: `QP ${status}`, adHocStatus: status },
+      );
+      await addQuickPlayParticipant(testApp, id, a.userId);
+      return id;
+    };
+    const ended = await quickPlay(9, 'ended');
+    const live = await quickPlay(8, 'live');
+    const grace = await quickPlay(7, 'grace_period');
+
+    const ids = (await historyOf(a.token, game.id)).entries.map(
+      (e) => e.eventId,
+    );
+
+    expect(ids).toEqual([ended]);
+    expect(ids).not.toContain(live);
+    expect(ids).not.toContain(grace);
+  });
+
   it('excludes an event that has not finished yet', async () => {
     const game = await createGame(testApp, 'Future Game');
     const a = await member('alpha');
@@ -570,6 +603,25 @@ describe('GET /lfg/:gameId/suggestions', () => {
     expect(index(body.suggestions).get(quickPlayer)!.reasons).toEqual([
       'played',
     ]);
+  });
+
+  /** Codex P2-c — the same lifecycle rule on the `played` signal. */
+  it('withholds `played` for a Quick Play the bot has not finalised', async () => {
+    const game = await createGame(testApp, 'Unfinished Session Game');
+    const caller = await member('caller');
+    const stillPlaying = await createPlainUser(testApp, 'stillplaying');
+    const eventId = await createQuickPlayEvent(
+      testApp,
+      stillPlaying,
+      game.id,
+      new Date(Date.now() - 6 * HOUR_MS),
+      { adHocStatus: 'live' },
+    );
+    await addQuickPlayParticipant(testApp, eventId, stillPlaying);
+
+    const body = await suggestionsOf(caller.token, game.id);
+
+    expect(body.suggestions).toEqual([]);
   });
 
   it('excludes live intent holders, the caller, and ineligible users', async () => {
