@@ -19,13 +19,13 @@
  * Uses only deterministic wait helpers (pollForEmbed / waitForEmbedUpdate /
  * pollForCondition) — never fixed timers.
  */
-import { GuildScheduledEventStatus } from 'discord.js';
-import { getGuild } from '../../client.js';
+import { GuildScheduledEventStatus } from "discord.js";
+import { getGuild } from "../../client.js";
 import {
   pollForEmbed,
   waitForEmbedUpdate,
   pollForCondition,
-} from '../../helpers/polling.js';
+} from "../../helpers/polling.js";
 import {
   createEvent,
   rescheduleEvent,
@@ -36,10 +36,10 @@ import {
   channelForGame,
   enableScheduledEvents,
   disableScheduledEvents,
-} from '../fixtures.js';
-import type { SmokeTest, TestContext } from '../types.js';
-import type { ApiClient } from '../api.js';
-import type { SimpleMessage } from '../../helpers/messages.js';
+} from "../fixtures.js";
+import type { SmokeTest, TestContext } from "../types.js";
+import type { ApiClient } from "../api.js";
+import type { SimpleMessage } from "../../helpers/messages.js";
 
 /** ROK-1459 palette: `announcing` — the colour an OPEN poll must render. */
 const ANNOUNCEMENT_CYAN = 0x38bdf8;
@@ -54,16 +54,16 @@ interface CreatePollResponse {
 async function resolveGameId(ctx: TestContext): Promise<number> {
   const fromCtx = ctx.games[0]?.id ?? ctx.mmoGameId;
   if (fromCtx) return fromCtx;
-  const res = await ctx.api.get<{ data: { id: number }[] }>('/games/configured');
+  const res = await ctx.api.get<{ data: { id: number }[] }>(
+    "/games/configured",
+  );
   const id = res?.data?.[0]?.id;
-  if (!id) throw new Error('Need at least one configured game for the poll');
+  if (!id) throw new Error("Need at least one configured game for the poll");
   return id;
 }
 
 /** Fetch a guild Scheduled Event by title substring (HTTP, not cache). */
-async function findScheduledEventByTitle(
-  title: string,
-): Promise<{
+async function findScheduledEventByTitle(title: string): Promise<{
   id: string;
   status: GuildScheduledEventStatus;
   startsAtMs: number | null;
@@ -86,7 +86,7 @@ function openReschedulePoll(
   gameId: number,
   linkedEventId: number,
 ): Promise<CreatePollResponse> {
-  return api.post<CreatePollResponse>('/scheduling-polls', {
+  return api.post<CreatePollResponse>("/scheduling-polls", {
     gameId,
     linkedEventId,
   });
@@ -117,39 +117,35 @@ function waitForReschedulingEmbed(
     channelId,
     (m) =>
       m.embeds.some(
-        (e) => e.title?.includes(title) && !!e.author?.includes('RESCHEDULING'),
+        (e) => e.title?.includes(title) && !!e.author?.includes("RESCHEDULING"),
       ),
     timeoutMs,
   );
 }
 
 /** Assert the channel embed is back to the live (non-RESCHEDULING) card. */
-function waitForLiveEmbed(
-  channelId: string,
-  title: string,
-  timeoutMs: number,
-) {
+function waitForLiveEmbed(channelId: string, title: string, timeoutMs: number) {
   return waitForEmbedUpdate(
     channelId,
     (m) =>
       m.embeds.some(
         (e) =>
           e.title?.includes(title) &&
-          !e.author?.includes('RESCHEDULING') &&
-          !!e.description?.includes('<t:'),
+          !e.author?.includes("RESCHEDULING") &&
+          !!e.description?.includes("<t:"),
       ),
     timeoutMs,
   );
 }
 
 const pollStartSuppressesEvent: SmokeTest = {
-  name: 'ROK-1370: poll start flips embed to RESCHEDULING and tears down the Scheduled Event',
-  category: 'flow',
+  name: "ROK-1370: poll start flips embed to RESCHEDULING and tears down the Scheduled Event",
+  category: "flow",
   async run(ctx) {
     await enableScheduledEvents(ctx.api);
     const ch = channelForTest(ctx, 0);
     const gameId = ch.gameId ?? (await resolveGameId(ctx));
-    const ev = await createEvent(ctx.api, 'resched-start', { gameId });
+    const ev = await createEvent(ctx.api, "resched-start", { gameId });
     try {
       await pollForEmbed(
         ch.channelId,
@@ -168,7 +164,11 @@ const pollStartSuppressesEvent: SmokeTest = {
       await flushEmbedQueue(ctx.api);
 
       // Embed shows RESCHEDULING and the Scheduled Event is gone.
-      await waitForReschedulingEmbed(ch.channelId, ev.title, ctx.config.timeoutMs);
+      await waitForReschedulingEmbed(
+        ch.channelId,
+        ev.title,
+        ctx.config.timeoutMs,
+      );
       await pollForCondition(
         async () => ((await findScheduledEventByTitle(ev.title)) ? null : true),
         ctx.config.timeoutMs,
@@ -182,13 +182,13 @@ const pollStartSuppressesEvent: SmokeTest = {
 };
 
 const lockInRestoresEventRepeatably: SmokeTest = {
-  name: 'ROK-1370: lock-in restores the live embed + Scheduled Event, repeatably',
-  category: 'flow',
+  name: "ROK-1370: lock-in restores the live embed + Scheduled Event, repeatably",
+  category: "flow",
   async run(ctx) {
     await enableScheduledEvents(ctx.api);
     const ch = channelForTest(ctx, 1);
     const gameId = ch.gameId ?? (await resolveGameId(ctx));
-    const ev = await createEvent(ctx.api, 'resched-cycle', { gameId });
+    const ev = await createEvent(ctx.api, "resched-cycle", { gameId });
     try {
       await pollForEmbed(
         ch.channelId,
@@ -241,41 +241,52 @@ const lockInRestoresEventRepeatably: SmokeTest = {
  * `Vote now ↗` link instead of the old "Vote Now" BUTTON.
  */
 const pollEmbedUsesLinkNotButton: SmokeTest = {
-  name: 'ROK-1461: scheduling poll embed has no components and a Vote now link',
-  category: 'embed',
+  name: "ROK-1461: scheduling poll embed has no components and a Vote now link",
+  category: "embed",
   async run(ctx) {
     const gameId = await resolveGameId(ctx);
     const channelId = channelForGame(ctx, gameId);
-    const poll = await ctx.api.post<CreatePollResponse>('/scheduling-polls', {
+    const poll = await ctx.api.post<CreatePollResponse>("/scheduling-polls", {
       gameId,
       durationHours: 24,
     });
     try {
       await awaitProcessing(ctx.api);
+      // Scope to THIS poll: the channel is shared, so an older poll's card
+      // (same `POLL OPEN` author line) would otherwise satisfy the probe and
+      // the assertions would then run against the wrong embed. `poll.id` IS
+      // the match id (`StandalonePollService.buildResponse` returns
+      // `id: matchId`), which is the `:matchId` segment of the vote route
+      // `/community-lineup/:lineupId/schedule/:matchId`.
+      const voteHref = `/community-lineup/${poll.lineupId}/schedule/${poll.id}`;
+      const isThisPoll = (e: { description: string | null }): boolean =>
+        (e.description ?? "").includes(voteHref);
       const msg = await pollForEmbed(
         channelId,
-        (m: SimpleMessage) =>
-          m.embeds.some((e) => !!e.author?.includes('POLL OPEN')),
+        (m: SimpleMessage) => m.embeds.some(isThisPoll),
         ctx.config.timeoutMs,
       );
-      const embed = msg.embeds.find((e) => !!e.author?.includes('POLL OPEN'));
-      if (!embed) throw new Error('Poll embed vanished between poll and read');
+      const embed = msg.embeds.find(isThisPoll);
+      if (!embed) throw new Error("Poll embed vanished between poll and read");
 
+      if (!embed.author?.includes("POLL OPEN")) {
+        throw new Error(
+          `Expected an open poll to author as "POLL OPEN" (ROK-1461), got "${embed.author}"`,
+        );
+      }
       if (msg.components.length > 0) {
         throw new Error(
           `Expected the poll message to carry no components (ROK-1461), got ${msg.components.length}`,
         );
       }
-      const description = (embed.description ?? '').trimEnd();
-      const last = description.split('\n').pop() ?? '';
-      if (!last.startsWith('[Vote now \u2197](')) {
+      const description = (embed.description ?? "").trimEnd();
+      const last = description.split("\n").pop() ?? "";
+      if (
+        !last.startsWith("[Vote now \u2197](") ||
+        !last.endsWith(`${voteHref})`)
+      ) {
         throw new Error(
-          `Expected the description to end with the "Vote now" masked link, got "${last}"`,
-        );
-      }
-      if (!last.includes(`/schedule/${poll.id}`)) {
-        throw new Error(
-          `Expected the vote link to target /schedule/${poll.id}, got "${last}"`,
+          `Expected the description to end with the "Vote now" masked link to ${voteHref}, got "${last}"`,
         );
       }
       if (embed.color !== ANNOUNCEMENT_CYAN) {
@@ -285,7 +296,7 @@ const pollEmbedUsesLinkNotButton: SmokeTest = {
       }
     } finally {
       await ctx.api
-        .patch(`/lineups/${poll.lineupId}/status`, { status: 'archived' })
+        .patch(`/lineups/${poll.lineupId}/status`, { status: "archived" })
         .catch(() => null);
     }
   },

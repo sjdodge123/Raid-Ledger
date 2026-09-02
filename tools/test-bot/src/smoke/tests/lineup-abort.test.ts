@@ -26,10 +26,22 @@
  *   - Use `pollForEmbed` (never a fixed delay) to look for the channel
  *     embed.
  */
-import { pollForEmbed } from '../../helpers/polling.js';
-import { awaitProcessing, flushEmbedQueue } from '../fixtures.js';
-import type { SmokeTest, TestContext } from '../types.js';
-import type { ApiClient } from '../api.js';
+import { pollForEmbed } from "../../helpers/polling.js";
+import { awaitProcessing, flushEmbedQueue } from "../fixtures.js";
+import type { SimpleEmbed } from "../../helpers/messages.js";
+
+/**
+ * Is this the abort card?
+ *
+ * ROK-1461 moved the `ABORTED` headline off the title and onto the chrome
+ * author line (the title slot now holds the bare lineup name), so a
+ * title-only probe can never match again — check both surfaces.
+ */
+function isAbortedEmbed(e: SimpleEmbed): boolean {
+  return /aborted/i.test(`${e.author ?? ""} ${e.title ?? ""}`);
+}
+import type { SmokeTest, TestContext } from "../types.js";
+import type { ApiClient } from "../api.js";
 
 interface LineupPayload {
   id: number;
@@ -40,9 +52,9 @@ interface LineupPayload {
 
 async function archiveAllLineups(api: ApiClient): Promise<void> {
   try {
-    const res = await api.get<
-      { id: number }[] | { id: number } | null
-    >('/lineups/active');
+    const res = await api.get<{ id: number }[] | { id: number } | null>(
+      "/lineups/active",
+    );
     const list = Array.isArray(res) ? res : res ? [res] : [];
     for (const row of list) {
       if (!row?.id) continue;
@@ -51,7 +63,7 @@ async function archiveAllLineups(api: ApiClient): Promise<void> {
         .post(`/lineups/${row.id}/abort`, {})
         .catch(() =>
           api
-            .patch(`/lineups/${row.id}/status`, { status: 'archived' })
+            .patch(`/lineups/${row.id}/status`, { status: "archived" })
             .catch(() => null),
         );
     }
@@ -63,7 +75,7 @@ async function archiveAllLineups(api: ApiClient): Promise<void> {
 async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() => {
     return api
-      .patch(`/lineups/${id}/status`, { status: 'archived' })
+      .patch(`/lineups/${id}/status`, { status: "archived" })
       .catch(() => null);
   });
 }
@@ -72,9 +84,9 @@ async function createLineup(
   api: ApiClient,
   title: string,
 ): Promise<LineupPayload> {
-  return api.post<LineupPayload>('/lineups', {
+  return api.post<LineupPayload>("/lineups", {
     title,
-    description: 'ROK-1062 abort smoke',
+    description: "ROK-1062 abort smoke",
     buildingDurationHours: 720,
     votingDurationHours: 720,
     decidedDurationHours: 720,
@@ -85,13 +97,13 @@ async function createLineup(
 // ── AC 1: Abort with reason → embed posted with reason line ────────────────
 
 const abortWithReasonPostsEmbed: SmokeTest = {
-  name: 'Abort lineup with reason posts Aborted embed with reason text (ROK-1062)',
-  category: 'embed',
+  name: "Abort lineup with reason posts Aborted embed with reason text (ROK-1062)",
+  category: "embed",
   async run(ctx: TestContext) {
     await archiveAllLineups(ctx.api);
 
     const title = `Abort Reason ${Date.now()}`;
-    const reason = 'Test abort';
+    const reason = "Test abort";
     const lineup = await createLineup(ctx.api, title);
 
     try {
@@ -106,17 +118,17 @@ const abortWithReasonPostsEmbed: SmokeTest = {
         ctx.defaultChannelId,
         (m) =>
           m.embeds.some((e) => {
-            const titleHit = /aborted/i.test(e.title ?? '');
-            const desc = e.description ?? '';
+            const titleHit = isAbortedEmbed(e);
+            const desc = e.description ?? "";
             const byHit = /aborted by/i.test(desc);
             const reasonHit = desc.includes(reason);
             const lineupHit = [
-              e.title ?? '',
-              e.description ?? '',
-              e.footer ?? '',
+              e.title ?? "",
+              e.description ?? "",
+              e.footer ?? "",
               ...e.fields.map((f) => `${f.name} ${f.value}`),
             ]
-              .join(' ')
+              .join(" ")
               .includes(title);
             return titleHit && byHit && reasonHit && lineupHit;
           }),
@@ -131,8 +143,8 @@ const abortWithReasonPostsEmbed: SmokeTest = {
 // ── AC 2: Abort without reason → embed posted, no reason line ──────────────
 
 const abortWithoutReasonOmitsReasonLine: SmokeTest = {
-  name: 'Abort lineup without reason posts Aborted embed without reason text (ROK-1062)',
-  category: 'embed',
+  name: "Abort lineup without reason posts Aborted embed without reason text (ROK-1062)",
+  category: "embed",
   async run(ctx: TestContext) {
     await archiveAllLineups(ctx.api);
 
@@ -150,16 +162,16 @@ const abortWithoutReasonOmitsReasonLine: SmokeTest = {
         ctx.defaultChannelId,
         (m) =>
           m.embeds.some((e) => {
-            const titleHit = /aborted/i.test(e.title ?? '');
-            const desc = e.description ?? '';
+            const titleHit = isAbortedEmbed(e);
+            const desc = e.description ?? "";
             const byHit = /aborted by/i.test(desc);
             const lineupHit = [
-              e.title ?? '',
-              e.description ?? '',
-              e.footer ?? '',
+              e.title ?? "",
+              e.description ?? "",
+              e.footer ?? "",
               ...e.fields.map((f) => `${f.name} ${f.value}`),
             ]
-              .join(' ')
+              .join(" ")
               .includes(title);
             return titleHit && byHit && lineupHit;
           }),
@@ -169,13 +181,11 @@ const abortWithoutReasonOmitsReasonLine: SmokeTest = {
       // Pull the matching embed and assert it does NOT contain "Reason:" or
       // any of the common reason-line phrasing — only the "aborted by" line
       // should be present.
-      const abortedEmbed = msg.embeds.find((e) =>
-        /aborted/i.test(e.title ?? ''),
-      );
-      const desc = abortedEmbed?.description ?? '';
+      const abortedEmbed = msg.embeds.find((e) => isAbortedEmbed(e));
+      const desc = abortedEmbed?.description ?? "";
       const fieldsText = (abortedEmbed?.fields ?? [])
         .map((f) => `${f.name} ${f.value}`)
-        .join(' ');
+        .join(" ");
       const haystack = `${desc} ${fieldsText}`;
       // No reason label/section must appear when reason is absent.
       if (/reason\s*:/i.test(haystack)) {
@@ -203,16 +213,16 @@ const abortWithoutReasonOmitsReasonLine: SmokeTest = {
 // no-reason variant must NOT contain `\n\n`.
 
 const abortReasonVarianceWalkthrough: SmokeTest = {
-  name: 'Abort embed: reason vs no-reason descriptions follow documented variance (ROK-1068 F3)',
-  category: 'embed',
+  name: "Abort embed: reason vs no-reason descriptions follow documented variance (ROK-1068 F3)",
+  category: "embed",
   async run(ctx: TestContext) {
     await archiveAllLineups(ctx.api);
 
     // ── Lineup A: aborted WITH reason ──────────────────────────────
     const reasonTitle = `Variance With ${Date.now()}`;
-    const reasonText = 'Scope creep — restarting next week';
+    const reasonText = "Scope creep — restarting next week";
     const reasonLineup = await createLineup(ctx.api, reasonTitle);
-    let withReasonDesc = '';
+    let withReasonDesc = "";
 
     try {
       await ctx.api.post(`/lineups/${reasonLineup.id}/abort`, {
@@ -226,22 +236,20 @@ const abortReasonVarianceWalkthrough: SmokeTest = {
         (m) =>
           m.embeds.some(
             (e) =>
-              /aborted/i.test(e.title ?? '') &&
+              isAbortedEmbed(e) &&
               [
-                e.title ?? '',
-                e.description ?? '',
-                e.footer ?? '',
+                e.title ?? "",
+                e.description ?? "",
+                e.footer ?? "",
                 ...e.fields.map((f) => `${f.name} ${f.value}`),
               ]
-                .join(' ')
+                .join(" ")
                 .includes(reasonTitle),
           ),
         ctx.config.timeoutMs,
       );
-      const withReasonEmbed = msg.embeds.find((e) =>
-        /aborted/i.test(e.title ?? ''),
-      );
-      withReasonDesc = withReasonEmbed?.description ?? '';
+      const withReasonEmbed = msg.embeds.find((e) => isAbortedEmbed(e));
+      withReasonDesc = withReasonEmbed?.description ?? "";
     } finally {
       await deleteLineup(ctx.api, reasonLineup.id);
     }
@@ -249,7 +257,7 @@ const abortReasonVarianceWalkthrough: SmokeTest = {
     // ── Lineup B: aborted WITHOUT reason ───────────────────────────
     const noReasonTitle = `Variance Without ${Date.now()}`;
     const noReasonLineup = await createLineup(ctx.api, noReasonTitle);
-    let withoutReasonDesc = '';
+    let withoutReasonDesc = "";
 
     try {
       await ctx.api.post(`/lineups/${noReasonLineup.id}/abort`, {});
@@ -261,22 +269,20 @@ const abortReasonVarianceWalkthrough: SmokeTest = {
         (m) =>
           m.embeds.some(
             (e) =>
-              /aborted/i.test(e.title ?? '') &&
+              isAbortedEmbed(e) &&
               [
-                e.title ?? '',
-                e.description ?? '',
-                e.footer ?? '',
+                e.title ?? "",
+                e.description ?? "",
+                e.footer ?? "",
                 ...e.fields.map((f) => `${f.name} ${f.value}`),
               ]
-                .join(' ')
+                .join(" ")
                 .includes(noReasonTitle),
           ),
         ctx.config.timeoutMs,
       );
-      const withoutReasonEmbed = msg.embeds.find((e) =>
-        /aborted/i.test(e.title ?? ''),
-      );
-      withoutReasonDesc = withoutReasonEmbed?.description ?? '';
+      const withoutReasonEmbed = msg.embeds.find((e) => isAbortedEmbed(e));
+      withoutReasonDesc = withoutReasonEmbed?.description ?? "";
     } finally {
       await deleteLineup(ctx.api, noReasonLineup.id);
     }
@@ -296,7 +302,7 @@ const abortReasonVarianceWalkthrough: SmokeTest = {
 
     // Reason variant must contain a blank-line separator + the reason
     // text (per `reasonBlock = '\n\n${trimmedReason}'`).
-    if (!withReasonDesc.includes('\n\n')) {
+    if (!withReasonDesc.includes("\n\n")) {
       throw new Error(
         `With-reason description missing blank-line separator before reason: ${JSON.stringify(withReasonDesc)}`,
       );
@@ -309,7 +315,7 @@ const abortReasonVarianceWalkthrough: SmokeTest = {
 
     // No-reason variant must NOT contain the blank-line separator (the
     // sentence terminates with the period after the actor name).
-    if (withoutReasonDesc.includes('\n\n')) {
+    if (withoutReasonDesc.includes("\n\n")) {
       throw new Error(
         `No-reason description unexpectedly contained blank-line separator (suggests an empty reason block leaked): ${JSON.stringify(withoutReasonDesc)}`,
       );
@@ -318,7 +324,7 @@ const abortReasonVarianceWalkthrough: SmokeTest = {
     // The two descriptions must differ — same prefix, divergent suffix.
     if (withReasonDesc === withoutReasonDesc) {
       throw new Error(
-        'With-reason and no-reason embed descriptions are identical — variance contract violated',
+        "With-reason and no-reason embed descriptions are identical — variance contract violated",
       );
     }
     if (withReasonDesc.length <= withoutReasonDesc.length) {
