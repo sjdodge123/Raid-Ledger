@@ -81,6 +81,8 @@ export type LfgIntentDto = z.infer<typeof LfgIntentSchema>;
 export const LfgGroupSummarySchema = z.object({
     gameId: z.number(),
     gameName: z.string(),
+    /** `games.slug` (NOT NULL UNIQUE) — chips link to `/lfg/:gameSlug`. */
+    gameSlug: z.string(),
     gameCoverUrl: z.string().nullable(),
     /** Active intents held by non-deactivated, non-banned users. */
     activeCount: z.number(),
@@ -122,6 +124,8 @@ export type LfgIntentResponseDto = z.infer<typeof LfgIntentResponseSchema>;
 export const LfgHeartedGameSchema = z.object({
     gameId: z.number(),
     gameName: z.string(),
+    /** `games.slug` (NOT NULL UNIQUE) — prompt entries link to `/lfg/:gameSlug`. */
+    gameSlug: z.string(),
     gameCoverUrl: z.string().nullable(),
     heartedAt: z.string(),
     /** How many other people are already looking for this game. */

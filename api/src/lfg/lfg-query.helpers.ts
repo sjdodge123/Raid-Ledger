@@ -36,6 +36,7 @@ export type LfgDb = PostgresJsDatabase<typeof schema>;
 export interface LfgGroupAggregate {
   gameId: number;
   gameName: string;
+  gameSlug: string;
   gameCoverUrl: string | null;
   viabilityThreshold: number | null;
   activeCount: number;
@@ -108,6 +109,7 @@ export function toGroupSummary(row: LfgGroupAggregate): LfgGroupSummaryDto {
   return {
     gameId: row.gameId,
     gameName: row.gameName,
+    gameSlug: row.gameSlug,
     gameCoverUrl: row.gameCoverUrl,
     activeCount: row.activeCount,
     state: deriveLfgState(row.activeCount),
@@ -123,6 +125,7 @@ function groupColumns(viewerId: number) {
   return {
     gameId: schema.games.id,
     gameName: schema.games.name,
+    gameSlug: schema.games.slug,
     gameCoverUrl: schema.games.coverUrl,
     viabilityThreshold: schema.games.cooptimusOnlineMax,
     activeCount: count(),
@@ -178,6 +181,7 @@ export async function getGroupSummary(
     return toGroupSummary({
       gameId: game.id,
       gameName: game.name,
+      gameSlug: game.slug,
       gameCoverUrl: game.coverUrl,
       viabilityThreshold: game.cooptimusOnlineMax,
       activeCount: 0,
@@ -239,6 +243,7 @@ function eligibleCountSubquery(now: Date) {
 function toHeartedGame(row: {
   gameId: number;
   gameName: string;
+  gameSlug: string;
   gameCoverUrl: string | null;
   heartedAt: Date;
   activeCount: number;
@@ -246,6 +251,7 @@ function toHeartedGame(row: {
   return {
     gameId: row.gameId,
     gameName: row.gameName,
+    gameSlug: row.gameSlug,
     gameCoverUrl: row.gameCoverUrl,
     heartedAt: row.heartedAt.toISOString(),
     activeCount: Number(row.activeCount),
@@ -282,6 +288,7 @@ export async function listHeartedWithoutIntent(
     .select({
       gameId: schema.games.id,
       gameName: schema.games.name,
+      gameSlug: schema.games.slug,
       gameCoverUrl: schema.games.coverUrl,
       heartedAt: schema.gameInterests.createdAt,
       activeCount: eligibleCountSubquery(now),
