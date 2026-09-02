@@ -29,6 +29,8 @@
 import { pollForEmbed } from "../../helpers/polling.js";
 import { awaitProcessing, flushEmbedQueue } from "../fixtures.js";
 import type { SimpleEmbed } from "../../helpers/messages.js";
+import type { SmokeTest, TestContext } from "../types.js";
+import type { ApiClient } from "../api.js";
 
 /**
  * Is this the abort card?
@@ -40,8 +42,29 @@ import type { SimpleEmbed } from "../../helpers/messages.js";
 function isAbortedEmbed(e: SimpleEmbed): boolean {
   return /aborted/i.test(`${e.author ?? ""} ${e.title ?? ""}`);
 }
-import type { SmokeTest, TestContext } from "../types.js";
-import type { ApiClient } from "../api.js";
+
+/**
+ * The abort BODY, with the ROK-1461 trailing masked link removed.
+ *
+ * Slice C appended `\n\n[Open lineup ↗](…)` to every lineup description, so a
+ * bare `includes('\n\n')` probe now fires on the link separator instead of on
+ * a leaked empty reason block — the thing ROK-1068 F3 exists to catch. Peel
+ * the link line (and the blank line that precedes it) off first, so the
+ * variance contract is asserted against the body it was written for.
+ *
+ * The link line is REQUIRED: its absence is a real ROK-1461 regression, not a
+ * reason to skip the check.
+ */
+function abortBody(description: string, label: string): string {
+  const lines = description.trimEnd().split("\n");
+  const last = lines[lines.length - 1] ?? "";
+  if (!last.startsWith("[Open lineup ")) {
+    throw new Error(
+      `${label} description should end with the "Open lineup" masked link (ROK-1461), got: ${JSON.stringify(description)}`,
+    );
+  }
+  return lines.slice(0, -1).join("\n").trimEnd();
+}
 
 interface LineupPayload {
   id: number;
@@ -300,36 +323,41 @@ const abortReasonVarianceWalkthrough: SmokeTest = {
       );
     }
 
+    // ROK-1461: strip the trailing masked link so the blank-line probes below
+    // see the same body shape ROK-1068 F3 was written against.
+    const withReasonBody = abortBody(withReasonDesc, "With-reason");
+    const withoutReasonBody = abortBody(withoutReasonDesc, "No-reason");
+
     // Reason variant must contain a blank-line separator + the reason
     // text (per `reasonBlock = '\n\n${trimmedReason}'`).
-    if (!withReasonDesc.includes("\n\n")) {
+    if (!withReasonBody.includes("\n\n")) {
       throw new Error(
-        `With-reason description missing blank-line separator before reason: ${JSON.stringify(withReasonDesc)}`,
+        `With-reason description missing blank-line separator before reason: ${JSON.stringify(withReasonBody)}`,
       );
     }
-    if (!withReasonDesc.includes(reasonText)) {
+    if (!withReasonBody.includes(reasonText)) {
       throw new Error(
-        `With-reason description missing reason text "${reasonText}": ${withReasonDesc}`,
+        `With-reason description missing reason text "${reasonText}": ${withReasonBody}`,
       );
     }
 
     // No-reason variant must NOT contain the blank-line separator (the
     // sentence terminates with the period after the actor name).
-    if (withoutReasonDesc.includes("\n\n")) {
+    if (withoutReasonBody.includes("\n\n")) {
       throw new Error(
-        `No-reason description unexpectedly contained blank-line separator (suggests an empty reason block leaked): ${JSON.stringify(withoutReasonDesc)}`,
+        `No-reason description unexpectedly contained blank-line separator (suggests an empty reason block leaked): ${JSON.stringify(withoutReasonBody)}`,
       );
     }
 
     // The two descriptions must differ — same prefix, divergent suffix.
-    if (withReasonDesc === withoutReasonDesc) {
+    if (withReasonBody === withoutReasonBody) {
       throw new Error(
         "With-reason and no-reason embed descriptions are identical — variance contract violated",
       );
     }
-    if (withReasonDesc.length <= withoutReasonDesc.length) {
+    if (withReasonBody.length <= withoutReasonBody.length) {
       throw new Error(
-        `With-reason description should be longer than no-reason variant. with=${withReasonDesc.length} (${JSON.stringify(withReasonDesc)}) without=${withoutReasonDesc.length} (${JSON.stringify(withoutReasonDesc)})`,
+        `With-reason description should be longer than no-reason variant. with=${withReasonBody.length} (${JSON.stringify(withReasonBody)}) without=${withoutReasonBody.length} (${JSON.stringify(withoutReasonBody)})`,
       );
     }
   },
