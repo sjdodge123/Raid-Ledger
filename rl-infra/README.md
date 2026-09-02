@@ -107,7 +107,10 @@ rl validate-ci [...args]         # run validate-ci.sh inside your runner
 3. Operator/agent works on the laptop. Saves trigger Mutagen → ~1s to runner.
 4. Heavy commands (`validate-ci`, `env spin`, jest) ship to the runner via
    `rl <cmd>` or operator-only VSCode Remote-SSH terminal. Agents use
-   `mcp__mcp-rl-fleet__rl_run_on_runner` / `rl_validate_ci` instead.
+   `mcp__mcp-rl-fleet__rl_run_on_runner` / `rl_validate_ci` instead. Scripts
+   run through `rl_run_on_runner` must be invoked as `bash scripts/<name>.sh`:
+   Mutagen does not preserve the executable bit, so `./scripts/<name>.sh`
+   fails with `Permission denied` inside the runner.
 5. Local CLI heartbeats every 60s. Missed for 30min → slot auto-released.
 6. `rl release` → destroys child envs, prunes scoped to slot label, resets
    worktree dir, drops the claim.
@@ -574,7 +577,7 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_env_sync_from_local` | Copy data from operator's local raid-ledger-db into an env. mode=`settings` (default) syncs app_settings/local_credentials/consumed_intent_tokens. mode=`full` does full data dump. Requires `RL_ENV_JWT_SECRET` in `/srv/rl-infra/.env` for encrypted app_settings to decrypt at runtime. |
 | `mcp__mcp-rl-fleet__rl_env_clone_prod` | Two-step: refresh operator's local DB from prod (sanitized backup), then push to env. Use `skip_local_refresh=true` for subsequent envs when local DB is already fresh. **ROK-1362: now ASYNC** — runs as a detached LAPTOP task and returns `{ok:true, task_id:'local-…', started_at}` in ~1s. Poll `rl_task_status local-…` / `rl_task_wait local-…` (each wait caps at 120s). |
 | `mcp__mcp-rl-fleet__rl_run_on_runner` | Execute a shell command inside the agent's claimed runner container (in `/workspace`). Requires `rl_claim` first (or `rl_claim_wait` if enqueued). **ROK-1362 bounded:** `timeout_seconds ≤ 120` (default 60) runs SYNC and returns `{stdout, stderr, exit_code}` — for short probes. `timeout_seconds > 120` is AUTO-DISPATCHED as a VM task (not rejected) and returns `{ok:true, routed:'task', task_id, log_url}` — poll it like any task. Use the `>120` form for `npm test`, `npm run build`, `npx playwright test`. |
-| `mcp__mcp-rl-fleet__rl_validate_ci` | Run the full validate-ci.sh pipeline inside the runner — far faster than running locally. Args: `["--no-e2e"]`, `["--only-e2e"]`, etc. |
+| `mcp__mcp-rl-fleet__rl_validate_ci` | Run the full validate-ci.sh pipeline inside the runner — far faster than running locally. Args: `["--no-e2e"]`, `["--only-e2e"]`, etc. Booleans `only_integration` / `only_unit` / `no_coverage` forward `--only-integration` / `--only-unit` / `--no-coverage` (ROK-1467): `--full` OOMs in the unit step on a 4 GiB runner and stops there, so use `only_integration:true` to run just the sharded integration suite (same Redis sidecar + shard count) and `no_coverage:true` to run jest/vitest uninstrumented at a 3 GB heap. Conflicting `--only-*` combos exit 2. Falling back to `rl_run_on_runner`? Invoke it as `bash scripts/validate-ci.sh …`, never `./scripts/validate-ci.sh` — Mutagen syncs the worktree without POSIX exec bits, so the direct form dies with `Permission denied` on the runner (`rl_validate_ci` already uses the `bash` form internally). |
 | `mcp__mcp-rl-fleet__rl_db_url` | Get psql/pgweb URLs for an env's Postgres. Pure metadata — no remote call. |
 | `mcp__mcp-rl-fleet__rl_logs_url` | Generate a Grafana Explore URL pre-filled with a Loki LogQL query (e.g. `{rl_slot="1"}` or `{rl_env="myslug"} \|= "error"`). |
 | `mcp__mcp-rl-fleet__rl_test_plan_create` | After `rl_env_deploy`, post a structured test checklist tied to the slug. Each step takes `description`, optional `expected`, optional `test_url` (deep link rendered as ↗), and optional `reset_hint` (causes the ↻ reset button to render with that hint as tooltip + agent instruction). Steps render on `https://fleet.gamernight.net` env-card section. Testers draft verdicts LOCALLY then hit Submit — agent gets one batched signal per round. Sequential ordering enforced server-side. |

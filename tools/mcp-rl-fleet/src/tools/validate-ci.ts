@@ -24,7 +24,7 @@ import * as task from './task.js';
 
 export const TOOL_NAME = 'rl_validate_ci';
 export const TOOL_DESCRIPTION =
-  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call.";
+  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call.";
 
 export interface ValidateCiParams {
   /** Extra args to pass to validate-ci.sh. */
@@ -39,6 +39,31 @@ export interface ValidateCiParams {
   wait?: boolean;
   /** Wait budget when wait:true. Capped at 120s (ROK-1362). */
   wait_timeout_seconds?: number;
+  /** ROK-1467: forwards --only-integration (sharded integration suite only). */
+  only_integration?: boolean;
+  /** ROK-1467: forwards --only-unit (unit step only). */
+  only_unit?: boolean;
+  /** ROK-1467: forwards --no-coverage (jest/vitest without coverage, 3 GB heap). */
+  no_coverage?: boolean;
+}
+
+/**
+ * Map the ROK-1467 boolean convenience params onto validate-ci.sh flags,
+ * appended after any raw `args`. A flag already present in `args` is not
+ * duplicated — the script would accept it twice, but a doubled flag in the
+ * task log reads like a bug.
+ */
+export function resolveArgs(params: ValidateCiParams): string[] {
+  const args = [...(params.args ?? [])];
+  const flags: Array<[boolean | undefined, string]> = [
+    [params.only_integration, '--only-integration'],
+    [params.only_unit, '--only-unit'],
+    [params.no_coverage, '--no-coverage'],
+  ];
+  for (const [enabled, flag] of flags) {
+    if (enabled === true && !args.includes(flag)) args.push(flag);
+  }
+  return args;
 }
 
 export interface ValidateCiAsyncResult {
@@ -118,7 +143,7 @@ export async function execute(
   const slot = await resolveSlot(sshUser, sshHost, agentId);
 
   // Build the inner command. Bug C: bash <script> instead of bare path.
-  const extraArgs = (params.args ?? []).map((a) => shellQuote(a)).join(' ');
+  const extraArgs = resolveArgs(params).map((a) => shellQuote(a)).join(' ');
   let innerEnv = '';
   if (params.against_env_slug) {
     const slug = params.against_env_slug;
