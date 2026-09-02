@@ -14,6 +14,11 @@
  * Run with `TZ=UTC`: the fixtures write naive `timestamp` / `date` / `tsrange`
  * columns whose meaning is UTC by app convention.
  */
+import {
+  LfgHistoryResponseSchema,
+  LfgOverlapResponseSchema,
+  LfgSuggestionsResponseSchema,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -757,6 +762,42 @@ describe('shared read contract', () => {
     for (const path of paths(game.id)) {
       expect((await authed(path, adminToken)).status).toBe(200);
     }
+  });
+
+  /**
+   * W6 — the spec declares its own DTO shapes (it had to: it was written
+   * before the implementation existed), so nothing else here would notice the
+   * wire body drifting away from the published contract. Parse each response
+   * through the real schema, on data that exercises every array.
+   */
+  it('answers each read with a body its contract schema accepts', async () => {
+    const game = await createGame(testApp, 'Contract Game');
+    const a = await member('alpha');
+    const b = await member('bravo');
+    await postIntent(a.token, game.id);
+    await postIntent(b.token, game.id);
+    const dow = gridDayOfWeek(utcDayOffset(3));
+    await setGameTimeTemplate(testApp, a.userId, dow, [19, 20]);
+    await setGameTimeTemplate(testApp, b.userId, dow, [19, 20]);
+    await attendedEvent(game.id, b.userId, 30);
+    const fan = await createPlainUser(testApp, 'fan');
+    await heartGame(testApp, fan, game.id, 'manual');
+
+    const overlap = LfgOverlapResponseSchema.parse(
+      await overlapOf(a.token, game.id),
+    );
+    const history = LfgHistoryResponseSchema.parse(
+      await historyOf(a.token, game.id),
+    );
+    const suggestions = LfgSuggestionsResponseSchema.parse(
+      await suggestionsOf(a.token, game.id),
+    );
+
+    expect(overlap.windows.length).toBeGreaterThan(0);
+    expect(history.entries.length).toBeGreaterThan(0);
+    expect(suggestions.suggestions).toEqual([
+      expect.objectContaining({ userId: fan, reasons: ['hearted'] }),
+    ]);
   });
 
   it('writes nothing — intent and interest rows are untouched', async () => {
