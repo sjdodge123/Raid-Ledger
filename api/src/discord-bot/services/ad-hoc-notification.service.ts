@@ -42,8 +42,12 @@ interface PendingUpdate {
  * - Batched edit-in-place updates as players join/leave (5s flush interval)
  * - Posts a final summary embed when the event completes
  *
- * Uses the standard buildEventEmbed() layout so ad-hoc embeds match
- * the look of scheduled event embeds (game cover art, roster, timestamps).
+ * ROK-1447: Quick Play no longer borrows the scheduled-event layout. It builds
+ * through `DiscordEmbedFactory.buildQuickPlayEmbed` — a compact card (game-name
+ * title deep-linked to `/games/:id`, roster + `[Open event ↗]`, co-op and sale
+ * badges while LIVE) with NO button row in either state. This service owns the
+ * whole edit loop for those messages; `EmbedSyncProcessor` skips ad-hoc ids so
+ * it cannot rebuild them through the scheduled-event builder.
  */
 @Injectable()
 export class AdHocNotificationService implements OnModuleDestroy {

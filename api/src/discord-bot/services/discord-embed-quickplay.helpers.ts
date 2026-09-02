@@ -65,9 +65,31 @@ function resolveClientUrl(context: EmbedContext): string | undefined {
   return context.clientUrl || process.env.CLIENT_URL;
 }
 
-/** Unix seconds, the only time format a Discord timestamp token takes. */
-function unix(iso: string): number {
-  return Math.floor(new Date(iso).getTime() / 1000);
+/**
+ * A wall-clock time in the community's timezone, e.g. `6:00 PM`.
+ *
+ * Plain text on purpose: Discord does NOT render `<t:…>` markdown inside an
+ * embed FOOTER (it does in a description), so a footer built from timestamp
+ * tokens ships the literal `<t:1788372000:t>` to every reader. The start time
+ * still gets native, per-reader localisation — via `setTimestamp`, which
+ * Discord renders after the footer text.
+ */
+function clockTime(iso: string, timezone?: string | null): string {
+  return new Date(iso).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    ...(timezone ? { timeZone: timezone } : {}),
+  });
+}
+
+/** `6:00–8:45 PM` — the shared meridiem is written once. */
+function clockRange(event: EmbedEventData, timezone?: string | null): string {
+  const start = clockTime(event.startTime, timezone);
+  const end = clockTime(event.endTime, timezone);
+  const [startClock, startMeridiem] = start.split(' ');
+  const trimmed = end.endsWith(` ${startMeridiem}`) ? startClock : start;
+  return `${trimmed}${EN_DASH}${end}`;
 }
 
 /** Participants still in voice — the head-count the LIVE author line reports. */
@@ -85,12 +107,16 @@ function authorLine(event: EmbedEventData, state: QuickPlayState): string {
   return `${OPEN} LIVE ${SEP} Quick Play ${SEP} ${String(activeCount(event))} playing`;
 }
 
-/** `started <t:…:t>` while live; the whole session window once it has ended. */
-function footerLabel(event: EmbedEventData, state: QuickPlayState): string {
-  const start = `<t:${String(unix(event.startTime))}:t>`;
-  return state === 'ended'
-    ? `${start}${EN_DASH}<t:${String(unix(event.endTime))}:t>`
-    : `started ${start}`;
+/**
+ * `started` while live (the native timestamp supplies the time); the session
+ * window once it has ended. Plain text — see `clockTime`.
+ */
+function footerLabel(
+  event: EmbedEventData,
+  state: QuickPlayState,
+  timezone?: string | null,
+): string {
+  return state === 'ended' ? clockRange(event, timezone) : 'started';
 }
 
 /**
@@ -138,10 +164,11 @@ function description(
 function badgeFields(
   event: EmbedEventData,
   state: QuickPlayState,
+  now: number,
 ): Array<EmbedBadge & { inline: true }> {
   const badges = event.game?.badges;
   if (state === 'ended' || !badges) return [];
-  const resolved = [coopBadge(badges), priceBadge(badges, Date.now())];
+  const resolved = [coopBadge(badges), priceBadge(badges, now)];
   return resolved
     .filter((b): b is EmbedBadge => b !== null)
     .map((b) => ({ ...b, inline: true }));
@@ -164,23 +191,30 @@ function applyTitle(
  * @param event - The ad-hoc event, with `game.badges` hydrated when known.
  * @param context - Community name, client URL and timezone.
  * @param state - `'live'` while people are in voice, `'ended'` afterwards.
+ * @param now - Epoch ms the price badge ages against; defaults to the wall
+ *   clock. Injectable so the 24h staleness marker is reachable from a test
+ *   without a time bomb in the fixture (review H1).
  * @returns The chromed embed and its push line. Never a button row.
  */
 export function buildQuickPlayEmbed(
   event: EmbedEventData,
   context: EmbedContext,
   state: QuickPlayState,
+  now: number = Date.now(),
 ): QuickPlayEmbedResult {
   const clientUrl = resolveClientUrl(context);
   const embed = createChannelEmbed({
     state: state === 'ended' ? 'done' : 'live',
     communityName: context.communityName,
     authorLine: authorLine(event, state),
-    footerLabel: footerLabel(event, state),
+    footerLabel: footerLabel(event, state, context.timezone),
   });
+  // Overrides the chrome's "now": the reader sees when the session STARTED,
+  // localised by Discord itself.
+  embed.setTimestamp(new Date(event.startTime));
   applyTitle(embed, event, clientUrl);
   embed.setDescription(description(event, clientUrl, state));
-  const fields = badgeFields(event, state);
+  const fields = badgeFields(event, state, now);
   if (fields.length > 0) embed.addFields(fields);
   const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
   if (thumbnail) embed.setThumbnail(thumbnail);

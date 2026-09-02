@@ -33,6 +33,14 @@ const END = '2026-09-02T20:45:00Z';
 const START_UNIX = Math.floor(Date.parse(START) / 1000);
 const END_UNIX = Math.floor(Date.parse(END) / 1000);
 const COOP_FIELD = '\u{1F465} Co-op';
+/**
+ * The clock the price badge ages against, one hour after the fixture's price
+ * check. Passed EXPLICITLY (review H1): the builder used to read `Date.now()`,
+ * so the strict field pin below silently became a time bomb — it would have
+ * started failing 24h after `START` when the staleness marker appeared.
+ */
+const NOW = Date.parse(START) + 3_600_000;
+const DAY_MS = 86_400_000;
 
 type Mention = NonNullable<EmbedEventData['signupMentions']>[number];
 type Game = NonNullable<EmbedEventData['game']>;
@@ -153,20 +161,36 @@ describe('buildQuickPlayEmbed — chrome', () => {
   });
 
   it('footers the community and the start time at LIVE', () => {
+    // Codex review: Discord does NOT render `<t:…>` markdown inside a footer,
+    // so the time is carried by the embed's native timestamp and the footer
+    // text stays plain.
     const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'live');
-    expect(embed.data.footer?.text).toBe(
-      `Test Guild · started <t:${START_UNIX}:t>`,
-    );
+    expect(embed.data.footer?.text).toBe('Test Guild · started');
+    expect(embed.data.timestamp).toBe(new Date(START).toISOString());
   });
 
   it('footers the community and the session window at ENDED', () => {
     const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'ended');
     const text = embed.data.footer?.text ?? '';
     expect(text.startsWith('Test Guild · ')).toBe(true);
-    expect(text).toContain(`<t:${START_UNIX}:t>`);
-    expect(text).toContain(`<t:${END_UNIX}:t>`);
+    // Same window, rendered as plain wall-clock text in the context timezone
+    // (UTC here) rather than as unrenderable footer markdown.
+    expect(text).toContain('6:00');
+    expect(text).toContain('8:45 PM');
     expect(text).toContain('–');
+    expect(embed.data.timestamp).toBe(new Date(START).toISOString());
   });
+
+  it.each(['live', 'ended'] as const)(
+    'never ships an unrenderable timestamp token in the %s footer',
+    (state) => {
+      const { embed } = buildQuickPlayEmbed(event(), CONTEXT, state);
+      const text = embed.data.footer?.text ?? '';
+      expect(text).not.toContain('<t:');
+      expect(text).not.toContain(`<t:${START_UNIX}`);
+      expect(text).not.toContain(`<t:${END_UNIX}`);
+    },
+  );
 
   it('falls back to the default community name when none is configured', () => {
     const { embed } = buildQuickPlayEmbed(
@@ -324,7 +348,7 @@ describe('buildQuickPlayEmbed — description (AC1, AC5)', () => {
 
 describe('buildQuickPlayEmbed — badge fields (AC3, AC4)', () => {
   it('renders the co-op and price badges inline at LIVE', () => {
-    const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'live');
+    const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'live', NOW);
     expect(embed.data.fields).toEqual([
       {
         name: COOP_FIELD,
@@ -338,6 +362,36 @@ describe('buildQuickPlayEmbed — badge fields (AC3, AC4)', () => {
         inline: true,
       },
     ]);
+  });
+
+  it('ages the price badge against the clock it is given (AC4)', () => {
+    // The staleness marker is the one badge output that depends on WHEN the
+    // embed is rendered, so the builder has to expose the same seam the helper
+    // does — otherwise this path is unreachable from the surface that renders it.
+    const { embed } = buildQuickPlayEmbed(
+      event(),
+      CONTEXT,
+      'live',
+      NOW + 3 * DAY_MS,
+    );
+    const price = (embed.data.fields ?? []).find((f) =>
+      f.name.includes('Sale'),
+    );
+    expect(price?.value).toContain('⚠ checked 3 days ago');
+  });
+
+  it('carries no staleness marker while the price check is fresh', () => {
+    const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'live', NOW);
+    const price = (embed.data.fields ?? []).find((f) =>
+      f.name.includes('Sale'),
+    );
+    expect(price?.value).not.toContain('checked');
+  });
+
+  it('falls back to the wall clock when no clock is supplied', () => {
+    // Production calls the 3-arg form; it must still render a price badge.
+    const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'live');
+    expect(fieldNames(embed.data.fields)).toContain('\u{1F3F7} On Sale');
   });
 
   it('omits the co-op field when Co-Optimus has no claim', () => {
