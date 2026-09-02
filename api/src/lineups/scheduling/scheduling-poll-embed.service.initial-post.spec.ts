@@ -109,12 +109,25 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
     );
   });
 
-  /** Queue the match row, the double-post re-read, then the game row. */
-  function queueRows(match = matchRow(), reread = match): void {
+  /**
+   * Queue the reads the initial-post path makes, in order: the match row,
+   * the lineup's visibility, the postable re-read, then the game row.
+   */
+  function queueRows(
+    match: Record<string, unknown> = matchRow(),
+    opts: {
+      visibility?: 'public' | 'private' | null;
+      /** Rows the conditional claim UPDATE returns ([] = someone else won). */
+      claim?: { id: number }[];
+    } = {},
+  ): void {
+    const visibility =
+      opts.visibility === undefined ? 'public' : opts.visibility;
     mockDb.limit
       .mockResolvedValueOnce([match])
-      .mockResolvedValueOnce([reread])
+      .mockResolvedValueOnce(visibility === null ? [] : [{ visibility }])
       .mockResolvedValueOnce([{ name: 'Elden Ring', coverUrl: null }]);
+    mockDb.returning.mockResolvedValueOnce(opts.claim ?? [{ id: MATCH_ID }]);
   }
 
   it('posts exactly one poll card into the lineup channel', async () => {
@@ -177,15 +190,26 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
     expect(sendEmbed).not.toHaveBeenCalled();
   });
 
-  it('refuses to double-post when a card lands between the flip and the post', async () => {
-    // First read is clean, the re-read inside postInitialEmbed is not: a
-    // concurrent flip (retry, re-entry) already posted the card.
-    queueRows(matchRow(), matchRow({ embedMessageId: 'msg-77' }));
+  it('sends nothing when another poster already claimed the slot', async () => {
+    // The conditional claim UPDATE matched no row: a concurrent delivery
+    // (retry, re-entry) got there first and its card is already going out.
+    queueRows(matchRow(), { claim: [] });
 
     service.onMatchEnteredScheduling({ matchId: MATCH_ID });
     await flush();
 
     expect(sendEmbed).not.toHaveBeenCalled();
+  });
+
+  it('claims the slot on the resolved channel before sending', async () => {
+    queueRows();
+
+    service.onMatchEnteredScheduling({ matchId: MATCH_ID });
+    await flush();
+
+    expect(mockDb.set).toHaveBeenNthCalledWith(1, {
+      embedChannelId: LINEUP_CHANNEL,
+    });
   });
 
   it('posts nothing when no lineup channel is configured', async () => {
@@ -199,7 +223,44 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
     expect(sendEmbed).not.toHaveBeenCalled();
   });
 
-  it('never lets a Discord failure escape the listener', async () => {
+  // ── Private lineups keep their poll out of the public channel ─────────
+
+  it('posts no channel card for a private lineup', async () => {
+    queueRows(matchRow(), { visibility: 'private' });
+
+    service.onMatchEnteredScheduling({ matchId: MATCH_ID });
+    await flush();
+
+    expect(sendEmbed).not.toHaveBeenCalled();
+    expect(mockDb.set).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the lineup row vanished (visibility unknown)', async () => {
+    queueRows(matchRow(), { visibility: null });
+
+    service.onMatchEnteredScheduling({ matchId: MATCH_ID });
+    await flush();
+
+    expect(sendEmbed).not.toHaveBeenCalled();
+  });
+
+  // ── Stale event: the match no longer wants a card ─────────────────────
+
+  it('posts nothing when the claim finds no scheduling match', async () => {
+    // The claim predicate covers both stale cases: a re-decide deleted the
+    // match, or a lock-in/archive moved it out of `scheduling`.
+    queueRows(matchRow(), { claim: [] });
+
+    service.onMatchEnteredScheduling({ matchId: MATCH_ID });
+    await flush();
+
+    expect(sendEmbed).not.toHaveBeenCalled();
+    expect(mockDb.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ embedMessageId: expect.anything() }),
+    );
+  });
+
+  it('never lets a Discord failure escape the listener, and drops the claim', async () => {
     sendEmbed.mockRejectedValue(new Error('discord down'));
     queueRows();
 
@@ -207,6 +268,10 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
       service.onMatchEnteredScheduling({ matchId: MATCH_ID }),
     ).not.toThrow();
     await expect(flush()).resolves.toBeUndefined();
-    expect(mockDb.set).not.toHaveBeenCalled();
+    // No message reference stored, and the claim is released for a retry.
+    expect(mockDb.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ embedMessageId: expect.anything() }),
+    );
+    expect(mockDb.set).toHaveBeenLastCalledWith({ embedChannelId: null });
   });
 });

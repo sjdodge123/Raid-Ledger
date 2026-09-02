@@ -24,8 +24,10 @@ import {
 } from '../lineups-scheduling-hook.helpers';
 import {
   loadMatchForInitialPost,
-  hasPostedEmbed,
+  claimEmbedSlot,
+  releaseEmbedClaim,
 } from './scheduling-poll-post.helpers';
+import { resolveLineupVisibility } from '../lineup-notification-routing.helpers';
 import {
   findScheduleSlots,
   findScheduleVotes,
@@ -84,6 +86,14 @@ export class SchedulingPollEmbedService {
   private async postCardForMatch(matchId: number): Promise<void> {
     const match = await loadMatchForInitialPost(this.db, matchId);
     if (!match || match.embedMessageId) return;
+    // ROK-1473 review: a private lineup DMs its invitees (`notifySchedulingOpen`
+    // routes that) and posts NO channel embed — the poll card must not leak
+    // the game or the poll URL into a public channel. `null` (lineup row gone)
+    // fails closed, same as every other routed lineup notification.
+    const visibility = await resolveLineupVisibility(this.db, {
+      id: match.lineupId,
+    });
+    if (visibility !== 'public') return;
     const channelId = await resolveLineupChannel(
       this.settingsService,
       this.clientService,
@@ -138,17 +148,37 @@ export class SchedulingPollEmbedService {
     const target =
       channelId ?? (await this.channelResolver.resolveChannelForEvent(gameId));
     if (!target) return;
-    // ROK-1473 (D3): last-moment re-read so a retry or a concurrent flip
-    // cannot put a second card in the channel.
-    if (await hasPostedEmbed(this.db, matchId)) return;
+    // ROK-1473 (D3): claim the slot with one conditional UPDATE. Only the
+    // winner sends, so a retry, a concurrent flip, a re-decide that deleted
+    // the match, or a lock-in that moved it on cannot post a stale card.
+    if (!(await claimEmbedSlot(this.db, matchId, target))) return;
+    try {
+      await this.sendClaimedEmbed(matchId, lineupId, gameId, target);
+    } catch (err) {
+      // Release so a later delivery can retry, then let the caller log.
+      await releaseEmbedClaim(this.db, matchId);
+      throw err;
+    }
+  }
+
+  /** Build + send the card for a claimed slot, then store its message id. */
+  private async sendClaimedEmbed(
+    matchId: number,
+    lineupId: number,
+    gameId: number,
+    channelId: string,
+  ): Promise<void> {
     const data = await this.buildEmbedData(matchId, lineupId, gameId);
-    if (!data) return;
+    if (!data) {
+      await releaseEmbedClaim(this.db, matchId);
+      return;
+    }
     const { embed } = this.embedFactory.buildSchedulingPollEmbed(
       data,
       await this.buildContext(),
     );
-    const msg = await this.clientService.sendEmbed(target, embed);
-    await this.storeEmbedRef(matchId, msg.id, target);
+    const msg = await this.clientService.sendEmbed(channelId, embed);
+    await this.storeEmbedRef(matchId, msg.id, channelId);
   }
 
   /** Update the existing embed with latest vote data. */

@@ -4,7 +4,7 @@
  * Extracted from `SchedulingPollEmbedService` so the service stays inside the
  * 300-line cap while gaining the entered-scheduling listener.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -53,24 +53,59 @@ export async function loadMatchForInitialPost(
 }
 
 /**
- * Re-read the match immediately before posting (ROK-1473, D3).
+ * Claim the poll-card slot on a match (ROK-1473 review follow-up).
  *
- * The hook's own guard reads the row before channel resolution awaits, so a
- * concurrent re-entry or retry could still slip a second card in. This is the
- * last check the poster makes.
+ * A read-then-write guard loses the race two concurrent hook deliveries can
+ * create, so the poster CLAIMS the slot with one conditional UPDATE and only
+ * sends when the row comes back. The predicate also swallows the stale-event
+ * cases for free: a re-decide deleted the match (no row), a lock-in/archive
+ * moved it out of `scheduling`, or another poster already claimed it.
  *
  * @param db - Drizzle handle.
  * @param matchId - Match about to receive a card.
- * @returns True when a card already exists and posting must be skipped.
+ * @param channelId - Channel the claiming poster will send to.
+ * @returns True when THIS caller won the claim and must send the card.
  */
-export async function hasPostedEmbed(
+export async function claimEmbedSlot(
   db: Db,
   matchId: number,
+  channelId: string,
 ): Promise<boolean> {
-  const [row] = await db
-    .select({ embedMessageId: schema.communityLineupMatches.embedMessageId })
-    .from(schema.communityLineupMatches)
-    .where(eq(schema.communityLineupMatches.id, matchId))
-    .limit(1);
-  return Boolean(row?.embedMessageId);
+  const rows = await db
+    .update(schema.communityLineupMatches)
+    .set({ embedChannelId: channelId })
+    .where(
+      and(
+        eq(schema.communityLineupMatches.id, matchId),
+        eq(schema.communityLineupMatches.status, 'scheduling'),
+        isNull(schema.communityLineupMatches.embedMessageId),
+        isNull(schema.communityLineupMatches.embedChannelId),
+      ),
+    )
+    .returning({ id: schema.communityLineupMatches.id });
+  return rows.length > 0;
+}
+
+/**
+ * Drop a claim whose send never landed, so a later retry can post.
+ *
+ * Guarded on `embed_message_id IS NULL` — a claim that DID produce a message
+ * must never have its channel cleared out from under the stored reference.
+ *
+ * @param db - Drizzle handle.
+ * @param matchId - Match whose claim should be released.
+ */
+export async function releaseEmbedClaim(
+  db: Db,
+  matchId: number,
+): Promise<void> {
+  await db
+    .update(schema.communityLineupMatches)
+    .set({ embedChannelId: null })
+    .where(
+      and(
+        eq(schema.communityLineupMatches.id, matchId),
+        isNull(schema.communityLineupMatches.embedMessageId),
+      ),
+    );
 }
