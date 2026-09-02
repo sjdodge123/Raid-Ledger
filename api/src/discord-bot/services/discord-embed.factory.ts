@@ -125,18 +125,17 @@ export class DiscordEmbedFactory {
     options?: BuildEventEmbedOptions,
   ): EmbedResult {
     const state = options?.state ?? EMBED_STATES.POSTED;
-    const embed = this.createChannelEventEmbed(event, context, options);
-    const content = buildPushContentForState(event, state, context.timezone);
-    if (options?.multiGroup || TERMINAL_STATES.includes(state)) {
-      return { embed, content };
-    }
-    const base = this.attachButtons(
-      embed,
+    const row = buildRowFor(
       event.id,
+      state,
       resolveClientUrl(context),
-      options?.buttons ?? 'signup',
+      options,
     );
-    return { ...base, content };
+    // Operator, sitting #3: the inline masked event link is emitted only when
+    // no row is attached — the row's `View Event` button is that same link.
+    const embed = this.createChannelEventEmbed(event, context, options, !row);
+    const content = buildPushContentForState(event, state, context.timezone);
+    return row ? { embed, row, content } : { embed, content };
   }
 
   /** Build a cancelled event embed — the CANCELLED row of the grammar table. */
@@ -197,7 +196,8 @@ export class DiscordEmbedFactory {
   private createChannelEventEmbed(
     event: EmbedEventData,
     context: EmbedContext,
-    options?: BuildEventEmbedOptions,
+    options: BuildEventEmbedOptions | undefined,
+    eventLink: boolean,
   ): ChannelEmbed {
     const state = options?.state ?? EMBED_STATES.POSTED;
     const clientUrl = resolveClientUrl(context);
@@ -212,27 +212,32 @@ export class DiscordEmbedFactory {
       clientUrl,
       roster: buildRosterLine(event, this.emojiService),
       pollUrl: options?.pollUrl,
+      eventLink,
     });
     if (body) embed.setDescription(body);
     applyThumbnail(embed, event, state);
     return embed;
   }
+}
 
-  private attachButtons(
-    embed: ChannelEmbed,
-    eventId: number,
-    clientUrl?: string | null,
-    buttons?: EmbedButtonMode,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    if (buttons === 'none') return { embed };
-    if (buttons === 'signup')
-      return { embed, row: buildSignupButtons(eventId, clientUrl) };
-    if (buttons === 'view') {
-      const row = buildViewButton(eventId, clientUrl);
-      return row ? { embed, row } : { embed };
-    }
-    return { embed, row: buttons };
-  }
+/**
+ * The button row for a lifecycle state, or `undefined` when there is none.
+ *
+ * Resolved BEFORE the body is rendered: whether a row exists decides whether
+ * the description keeps its trailing masked `[Open event ↗]` link.
+ */
+function buildRowFor(
+  eventId: number,
+  state: EmbedState,
+  clientUrl: string | undefined,
+  options?: BuildEventEmbedOptions,
+): ActionRowBuilder<ButtonBuilder> | undefined {
+  if (options?.multiGroup || TERMINAL_STATES.includes(state)) return undefined;
+  const buttons = options?.buttons ?? 'signup';
+  if (buttons === 'none') return undefined;
+  if (buttons === 'signup') return buildSignupButtons(eventId, clientUrl);
+  if (buttons === 'view') return buildViewButton(eventId, clientUrl);
+  return buttons;
 }
 
 /** Context URL first, then the deployment-wide fallback. */
