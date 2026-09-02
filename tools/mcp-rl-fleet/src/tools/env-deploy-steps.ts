@@ -10,6 +10,7 @@ import * as envSpin from './env-spin.js';
 import * as envSync from './env-sync.js';
 import * as task from './task.js';
 import { runCloneCore } from './env-clone-prod.js';
+import { runSettingsOverlay } from './env-settings-overlay.js';
 import { buildSshArgs } from '../exec.js';
 import { isStillRunning, type ExecuteStatusReturn } from './task-schemas.js';
 import type { EnvDeployParams } from './env-deploy.js';
@@ -161,8 +162,27 @@ export async function runDeployChain(
     ctx.recordStep('sync_settings', true, 0, 'skipped');
   }
 
+  // 4b. ROK-1469: stamp the SLOT's Discord identity + the VM-side shared-key
+  // bundle over whatever sync_settings just copied. This runs even when the
+  // sync FAILED — the bundle is the laptop-independent path (Docker Desktop
+  // off), and when it seeds keys the deploy is a success, not a failure.
+  let overlayApplied = 0;
+  if (!params.skip_sync) {
+    t = now();
+    ctx.setCurrent('applying slot identity + settings bundle');
+    const ov = await runSettingsOverlay(params.slug);
+    overlayApplied = ov.applied.length;
+    ctx.recordStep(
+      'settings_overlay',
+      ov.ok,
+      now() - t,
+      ov.ok ? `${overlayApplied} key(s)` : undefined,
+      ov.ok ? undefined : (ov.error ?? ov.message),
+    );
+  }
+
   // 5. Restart the allinone so SettingsService re-reads the new rows.
-  if (syncedSettings) {
+  if (syncedSettings || overlayApplied > 0) {
     t = now();
     ctx.setCurrent('restarting for settings');
     try {
@@ -190,7 +210,10 @@ export async function runDeployChain(
     }
   }
 
-  const settingsFailed = !params.skip_sync && !syncedSettings;
+  // A failed sync is only fatal when NOTHING seeded the env's settings. With
+  // the overlay having applied keys from the VM bundle, the env has its
+  // credentials and the deploy succeeded (ROK-1469).
+  const settingsFailed = !params.skip_sync && !syncedSettings && overlayApplied === 0;
   const base = {
     slot,
     url: sp.url,
@@ -207,5 +230,8 @@ export async function runDeployChain(
   if (cloneFailed) {
     return { ...base, ok: false, failed_step: 'clone_prod', error: 'clone_prod_failed', message: `FAILED: clone_prod did not succeed (${cloneFailureDetail ?? 'unknown'}). Container up at ${sp.url} with synced settings but prod data NOT loaded.` };
   }
-  return { ...base, ok: true, message: `Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} / (password in admin_password field).` };
+  const settingsSource = syncedSettings
+    ? `${overlayApplied > 0 ? 'laptop sync + slot identity/bundle overlay' : 'laptop sync'}`
+    : 'VM settings bundle overlay (laptop DB unavailable)';
+  return { ...base, ok: true, message: `Settings: ${settingsSource}. Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} / (password in admin_password field).` };
 }
