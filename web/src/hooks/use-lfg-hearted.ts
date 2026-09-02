@@ -21,5 +21,8 @@ export function useLfgHearted(): UseQueryResult<LfgHeartedGameDto[]> {
         queryFn: getLfgHearted,
         enabled: !!token,
         staleTime: 1000 * 60 * 5,
+        // A heart raised on another surface (or another tab) must not leave a
+        // stale empty list behind the prompt for five minutes.
+        refetchOnMount: 'always',
     });
 }
