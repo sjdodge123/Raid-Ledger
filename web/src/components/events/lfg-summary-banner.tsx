@@ -9,6 +9,15 @@
  *
  * Amber tonal tokens keep it distinct from the emerald scheduling banner
  * directly above it.
+ *
+ * LAYOUT (operator walk): the box metrics are copied from
+ * `SchedulingBanner.tsx:43` / `standalone-poll-banner.tsx:37` —
+ * `mx-4 mb-4 p-4 rounded-xl`. All three banners render OUTSIDE the page's
+ * `max-w-7xl` container (`events-page.tsx:110-114`), so full-bleed IS the
+ * house style here and matching the siblings beats matching the content
+ * column. What was wrong was `justify-between`, which flung "Browse them →"
+ * to the far edge of a wide screen; the siblings keep their content in a
+ * left-aligned flow, so this does too.
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -31,12 +40,16 @@ export function LfgSummaryBanner(): JSX.Element | null {
         <Link
             to="/games?lfg=1"
             data-testid="lfg-summary-banner"
-            className="mx-4 mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 hover:bg-amber-500/20 transition-colors"
+            className="block mx-4 mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-colors"
         >
-            <span className="text-sm font-medium text-amber-300">
-                🎯 {summaryText(count)}
+            <span className="flex flex-wrap items-baseline gap-2">
+                <span className="text-sm font-medium text-amber-300">
+                    🎯 {summaryText(count)}
+                </span>
+                <span className="text-xs text-amber-300/80">
+                    Browse them →
+                </span>
             </span>
-            <span className="text-xs text-amber-300/80">Browse them →</span>
         </Link>
     );
 }

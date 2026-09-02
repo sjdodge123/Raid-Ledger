@@ -83,6 +83,22 @@ describe('LfgSummaryBanner', () => {
         expect(link).toHaveAttribute('href', '/games?lfg=1');
     });
 
+    it('shares the box metrics of the sibling event banners', async () => {
+        // Operator walk: the banner is a full-bleed strip like
+        // `SchedulingBanner` / `StandalonePollBanner` (all three render OUTSIDE
+        // the page's `max-w-7xl` container — `events-page.tsx:110-114`), so it
+        // has to carry their exact box classes. It also must not push its CTA
+        // to the far edge with `justify-between`, which is what made a
+        // wide-screen banner read as two disconnected fragments.
+        renderBanner(2);
+
+        const banner = await screen.findByTestId('lfg-summary-banner');
+        for (const cls of ['mx-4', 'mb-4', 'p-4', 'rounded-xl']) {
+            expect(banner.className).toContain(cls);
+        }
+        expect(banner.className).not.toContain('justify-between');
+    });
+
     it('has no accessibility violations', async () => {
         const { container } = renderBanner(2);
 

@@ -6,6 +6,11 @@
  * At most three entries, then `and N more`; dismissal is session-scoped so it
  * comes back tomorrow but not on the next page view.
  *
+ * LAYOUT (operator walk): the games-page banner stack sits INSIDE
+ * `max-w-7xl mx-auto px-4 py-8` (`games-page.tsx:99-101`), and its sibling
+ * `LineupBanner` carries no horizontal margin of its own — so neither does
+ * this. Padding and radius stay on the events banners' `p-4 rounded-xl`.
+ *
  * Entries deliberately do NOT wear `data-testid="lfg-chip"` — the tile-chip
  * absence assertions in the smoke spec are page-scoped and unqualified, and a
  * prompt entry wearing that testid would make them unprovable (D9).
@@ -73,7 +78,7 @@ export function LfgHeartedPrompt(): JSX.Element | null {
     return (
         <div
             data-testid="lfg-hearted-prompt"
-            className="mx-4 mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30"
+            className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30"
         >
             <div className="flex items-start justify-between gap-3 mb-2">
                 <p className="text-sm font-medium text-amber-300">

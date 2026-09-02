@@ -149,6 +149,18 @@ describe('LfgHeartedPrompt — dismissal (D7)', () => {
         });
     });
 
+    it('does not inset itself inside the page container', async () => {
+        // The games-page banner stack lives INSIDE `max-w-7xl mx-auto px-4`
+        // (`games-page.tsx:99-101`), where `LineupBanner` — the sibling
+        // directly above — carries no horizontal margin. `mx-4` here double
+        // inset the prompt against every other block on the page.
+        renderPrompt(3);
+
+        const prompt = await screen.findByTestId('lfg-hearted-prompt');
+        expect(prompt.className).not.toContain('mx-4');
+        expect(prompt.className).toContain('rounded-xl');
+    });
+
     it('has no accessibility violations', async () => {
         const { container } = renderPrompt(3);
 
