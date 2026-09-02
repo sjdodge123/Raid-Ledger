@@ -11,22 +11,53 @@ import {
   handleGameSpecificGroupRoster,
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
+import { isBotMember, lobbyGroupSize } from './voice-lobby-groups.helpers';
 import {
   gateCtx,
   joinExistingEvent,
   suppressOrCheckThreshold,
   type GameSpawnFns,
 } from './voice-state-gate.handlers';
-import { traceGate } from './voice-gate-trace';
+import { traceGate, type GateCtx } from './voice-gate-trace';
 
-/** Handle join for a game-specific binding. */
+/**
+ * Handle join for a game-specific binding.
+ *
+ * ROK-1445 AC9 scoping: a bot is never game-tracked and never rostered, but its
+ * join MUST still reach `suppressOrCheckThreshold`. That is where ROK-959
+ * sibling-binding suppression runs its `extended_until` write, and the
+ * companion bot is how the Discord smoke suite simulates a voice join — gating
+ * the whole dispatch on `user.bot` made that test (and every bot-driven voice
+ * smoke test) vacuous.
+ */
 export async function handleGameBindingJoin(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   dm: DiscordMemberInfo,
   spawnFns?: GameSpawnFns,
+  isBot = false,
 ): Promise<void> {
+  if (!isBot && (await trackAndJoinExisting(deps, channelId, binding, dm)))
+    return;
+  await suppressOrCheckThreshold(deps, channelId, binding, spawnFns);
+}
+
+/**
+ * Game-track the joining member and reconcile them into the bind's existing
+ * event if it has one. Returns true when the join was fully handled.
+ *
+ * ROK-1394: a fixed-game bind holds ≤1 active event, but the degrade path may
+ * have keyed it under `bindingId:null`. Look it up regardless of game key and
+ * reconcile the join into that event (keep it as-is — no game upgrade) so a
+ * later game confirmation never mints a second, sticky-game event.
+ */
+async function trackAndJoinExisting(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  dm: DiscordMemberInfo,
+): Promise<boolean> {
   const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
   const uid = rlUser?.id ?? null;
   startVoiceGameTracking(
@@ -36,39 +67,12 @@ export async function handleGameBindingJoin(
     binding.gameName ?? '',
     uid,
   );
-  // ROK-1394: a fixed-game bind holds ≤1 active event, but the degrade path may
-  // have keyed it under `bindingId:null`. Look it up regardless of game key and
-  // reconcile the join into that event (keep it as-is — no game upgrade) so a
-  // later game confirmation never mints a second, sticky-game event.
   const existing = deps.adHocEventService.getActiveBindingEventGameId(
     binding.bindingId,
   );
-  if (existing) {
-    await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
-    return;
-  }
-  await suppressOrCheckThreshold(deps, channelId, binding, spawnFns);
-}
-
-/** Result of checkGameBindingThreshold for the listener. */
-export interface ThresholdResult {
-  met: boolean;
-  allConfirmed: boolean;
-}
-
-/** Check threshold for the listener to decide on spawn vs delay. */
-export async function checkThreshold(
-  deps: VoiceHandlerDeps,
-  channelId: string,
-  binding: ResolvedBinding,
-): Promise<ThresholdResult> {
-  const minPlayers = binding.config?.minPlayers ?? 2;
-  const { counted, allConfirmed } = await getGameFilteredCount(
-    deps,
-    channelId,
-    binding,
-  );
-  return { met: counted >= minPlayers, allConfirmed };
+  if (!existing) return false;
+  await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
+  return true;
 }
 
 /** Detect game for a general-lobby join. */
@@ -86,11 +90,14 @@ export async function detectGameForLobby(
   return { gameId: null, gameName: 'Just Chatting' };
 }
 
-/** Schedule function callbacks for lobby join. */
+/**
+ * Schedule function callbacks for a lobby join. `scheduleSpawn`/`cancelSpawn`
+ * take the detected game so the timer is armed per `(channel, game)` (AC13).
+ */
 export interface LobbyScheduleFns {
   scheduleRecheck: () => void;
-  scheduleSpawn: () => void;
-  cancelSpawn: () => void;
+  scheduleSpawn: (gameId: number | null) => void;
+  cancelSpawn: (gameId: number | null) => void;
 }
 
 /** Lobby join context bundling all parameters. */
@@ -112,6 +119,10 @@ export async function handleGeneralLobbyJoin(
   guildMember: GuildMember | undefined,
   scheduleFns: LobbyScheduleFns,
 ): Promise<void> {
+  // ROK-1445 AC9: a bot is never tracked, counted or rostered into a lobby
+  // event. Unlike the game-binding path this one performs no sibling-binding
+  // suppression, so returning early here costs nothing.
+  if (isBotMember(guildMember)) return;
   const detected = await detectGameForLobby(deps, binding, dm, guildMember);
   if (!detected) {
     if (!guildMember)
@@ -149,24 +160,41 @@ async function processLobbyMember(
   uid: number | null,
   detected: { gameId: number | null; gameName: string },
 ): Promise<void> {
-  const { deps, channelId, binding, dm, guildMember, scheduleFns } = ctx;
+  const { deps, channelId, binding, guildMember, scheduleFns } = ctx;
   const state = deps.adHocEventService.getActiveState(
     binding.bindingId,
     detected.gameId,
   );
-  const count = deps.channelMembers.get(channelId)?.size ?? 0;
+  // ROK-1445 AC1: the threshold applies to the GAME GROUP that will populate
+  // the roster, never to channel occupancy.
+  const count = await lobbyGroupSize(deps, channelId, binding, detected.gameId);
   const min = binding.config?.minPlayers ?? 2;
   const trace = gateCtx(binding, channelId, {
     gameId: detected.gameId,
-    members: count,
+    members: deps.channelMembers.get(channelId)?.size ?? 0,
     minPlayers: min,
+    counted: count,
   });
+  // AC10: on a general lobby this IS the sub-threshold drop — the member's game
+  // group is short, so no event is minted for it and they are never folded into
+  // another game's roster.
   if (!state && count < min)
-    return traceGate(deps.logger, 'below-threshold', trace);
+    return traceGate(deps.logger, 'group-below-threshold', trace);
   if (!state && count >= min && guildMember) {
-    await handleLobbyThreshold(deps, channelId, binding, scheduleFns);
+    await handleLobbyThreshold(deps, channelId, binding, scheduleFns, detected);
     return;
   }
+  await joinLobbyEvent(ctx, uid, detected, trace);
+}
+
+/** Join the member into the lobby event that already exists for their game. */
+async function joinLobbyEvent(
+  ctx: LobbyJoinCtx,
+  uid: number | null,
+  detected: { gameId: number | null; gameName: string },
+  trace: GateCtx,
+): Promise<void> {
+  const { deps, channelId, binding, dm } = ctx;
   const mi: VoiceMemberInfo = { ...dm, userId: uid };
   const handled = await deps.adHocEventService.handleVoiceJoin(
     binding.bindingId,
@@ -186,19 +214,20 @@ async function handleLobbyThreshold(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
-  scheduleFns: { scheduleSpawn: () => void; cancelSpawn: () => void },
+  scheduleFns: Pick<LobbyScheduleFns, 'scheduleSpawn' | 'cancelSpawn'>,
+  detected: { gameId: number | null },
 ): Promise<void> {
+  const trace = gateCtx(binding, channelId, { gameId: detected.gameId });
+  // AC15: `shouldSpawnImmediately` requires channel-wide unanimity, so in a
+  // genuinely multi-game lobby it never fires and every spawn takes the
+  // delayed path. That is accepted, not a regression.
   if (await shouldSpawnImmediately(deps, channelId, binding)) {
-    scheduleFns.cancelSpawn();
+    scheduleFns.cancelSpawn(detected.gameId);
     await handleGeneralLobbyGroupDetection(deps, channelId, binding);
-    return traceGate(
-      deps.logger,
-      'spawned-immediate',
-      gateCtx(binding, channelId),
-    );
+    return traceGate(deps.logger, 'spawned-immediate', trace);
   }
-  scheduleFns.scheduleSpawn();
-  return traceGate(deps.logger, 'spawn-scheduled', gateCtx(binding, channelId));
+  scheduleFns.scheduleSpawn(detected.gameId);
+  return traceGate(deps.logger, 'spawn-scheduled', trace);
 }
 
 /** Threshold spawn decision + the game the event should mint with. */
@@ -244,66 +273,59 @@ async function resolveThresholdSpawnGameId(
 }
 
 /**
- * Gate + resolved game for a delayed spawn. `proceed: false` → abort (below
- * threshold). For fixed-game binds `resolvedGameId` carries the ROK-1394
- * degrade decision (`undefined` = sticky game, `null` = degrade); general-lobby
- * binds resolve their game later via presence detection so it stays `undefined`.
+ * Execute a delayed spawn for the ONE `(channel, game)` group its timer was
+ * armed for (ROK-1445 AC13). General-lobby re-resolves its groups at fire time
+ * so a group that fell below `minPlayers` in the meantime simply drops.
  */
-async function resolveDelayedSpawnGate(
-  deps: VoiceHandlerDeps,
-  channelId: string,
-  binding: ResolvedBinding,
-  minPlayers: number,
-): Promise<{ proceed: boolean; resolvedGameId: number | null | undefined }> {
-  if (binding.bindingPurpose !== 'general-lobby' && binding.gameId) {
-    const decision = await resolveThresholdSpawnGameId(
-      deps,
-      channelId,
-      binding,
-      minPlayers,
-    );
-    return {
-      proceed: decision.shouldSpawn,
-      resolvedGameId: decision.resolvedGameId,
-    };
-  }
-  const members = deps.channelMembers.get(channelId);
-  return {
-    proceed: !!members && members.size >= minPlayers,
-    resolvedGameId: undefined,
-  };
-}
-
-/** Execute delayed spawn logic (after timer fires). */
 export async function executeDelayedSpawn(
   deps: VoiceHandlerDeps,
   channelId: string,
+  gameId: number | null,
   binding: ResolvedBinding,
 ): Promise<void> {
+  if (binding.bindingPurpose === 'general-lobby') {
+    await handleGeneralLobbyGroupDetection(deps, channelId, binding, gameId);
+    return;
+  }
   const minPlayers = binding.config?.minPlayers ?? 2;
-  const gate = await resolveDelayedSpawnGate(
+  const decision = await resolveGameBindingSpawn(
     deps,
     channelId,
     binding,
     minPlayers,
   );
-  if (!gate.proceed) return;
+  if (!decision.shouldSpawn) return;
   // ROK-1394: abort if the fixed-game bind already has ANY active event (a
   // degraded `bindingId:null` session included) so the timer never spawns a
-  // duplicate. General-lobby keeps its per-game keying and is checked later.
-  const existing =
-    binding.bindingPurpose === 'general-lobby'
-      ? undefined
-      : deps.adHocEventService.getActiveBindingEventGameId(binding.bindingId);
-  if (existing) return;
-  if (binding.bindingPurpose === 'general-lobby') {
-    await handleGeneralLobbyGroupDetection(deps, channelId, binding);
-  } else {
-    await handleGameSpecificGroupRoster(
-      deps,
-      channelId,
-      binding,
-      gate.resolvedGameId,
-    );
+  // duplicate.
+  if (deps.adHocEventService.getActiveBindingEventGameId(binding.bindingId))
+    return;
+  await handleGameSpecificGroupRoster(
+    deps,
+    channelId,
+    binding,
+    decision.resolvedGameId,
+  );
+}
+
+/**
+ * Threshold decision for a fixed-game bind. A null-game monitor (ROK-1415) has
+ * no game to filter on, so it falls back to raw channel occupancy.
+ */
+async function resolveGameBindingSpawn(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  minPlayers: number,
+): Promise<ThresholdSpawnDecision> {
+  // ROK-1415 (TD1): `binding.gameId == null`, not `!binding.gameId` — a bound
+  // game id of 0 is a real game, not a missing one.
+  if (binding.gameId == null) {
+    const members = deps.channelMembers.get(channelId);
+    return {
+      shouldSpawn: !!members && members.size >= minPlayers,
+      resolvedGameId: undefined,
+    };
   }
+  return resolveThresholdSpawnGameId(deps, channelId, binding, minPlayers);
 }

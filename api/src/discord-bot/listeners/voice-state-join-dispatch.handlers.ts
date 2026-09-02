@@ -27,6 +27,7 @@ import {
   type TimerMaps,
 } from './voice-state-leave.handlers';
 import { traceGate } from './voice-gate-trace';
+import { isBotMember } from './voice-lobby-groups.helpers';
 
 const SPAWN_DELAY_MS = 15 * 60 * 1000;
 
@@ -62,7 +63,14 @@ export async function handleChannelJoin(
     });
     return;
   }
-  trackChannelMember(ctx.channelMembers, chId, dm.discordUserId);
+  // ROK-1445 AC9: bots must never enter `channelMembers` — that map feeds the
+  // game-binding threshold gates, where a music bot counting toward minPlayers
+  // is the same bug. Scoped to occupancy ONLY: a bot's join still dispatches
+  // every binding, so ROK-959 sibling suppression (and the `extended_until`
+  // write it performs) keeps running. Rosters are excluded separately, in the
+  // counting/roster paths themselves.
+  if (!isBotMember(gm))
+    trackChannelMember(ctx.channelMembers, chId, dm.discordUserId);
   for (const b of bindings) {
     await dispatchBindingJoin(ctx, chId, b, dm, gm);
   }
@@ -79,12 +87,49 @@ async function dispatchBindingJoin(
   if (b.bindingPurpose === 'general-lobby') {
     await dispatchLobbyJoin(ctx, chId, b, dm, gm);
   } else {
-    await handleGameBindingJoin(ctx.deps, chId, b, dm, {
-      scheduleSpawn: () =>
-        scheduleDelayedSpawn(ctx.deps, chId, b, ctx.timers, SPAWN_DELAY_MS),
-      cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId),
-    });
+    await handleGameBindingJoin(
+      ctx.deps,
+      chId,
+      b,
+      dm,
+      {
+        scheduleSpawn: () =>
+          scheduleDelayedSpawn(
+            ctx.deps,
+            chId,
+            b.gameId,
+            b,
+            ctx.timers,
+            SPAWN_DELAY_MS,
+          ),
+        cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId, b.gameId),
+      },
+      isBotMember(gm),
+    );
   }
+}
+
+/** Per-(channel, game) spawn callbacks shared by both binding kinds (AC13). */
+function lobbySpawnFns(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  binding: ResolvedBinding,
+): {
+  scheduleSpawn: (g: number | null) => void;
+  cancelSpawn: (g: number | null) => void;
+} {
+  return {
+    scheduleSpawn: (gameId) =>
+      scheduleDelayedSpawn(
+        ctx.deps,
+        chId,
+        gameId,
+        binding,
+        ctx.timers,
+        SPAWN_DELAY_MS,
+      ),
+    cancelSpawn: (gameId) => cancelPendingSpawn(ctx.timers, chId, gameId),
+  };
 }
 
 /** General-lobby join: wire the presence-recheck + spawn callbacks. */
@@ -95,21 +140,19 @@ async function dispatchLobbyJoin(
   dm: DiscordMemberInfo,
   gm?: GuildMember,
 ): Promise<void> {
-  const fns = {
-    scheduleRecheck: () =>
-      schedulePresenceRecheck({
-        timers: ctx.timers,
-        dm,
-        channelId: chId,
-        guildMember: gm!,
-        userChannelMap: ctx.userChannelMap,
-        presenceDetector: ctx.presenceDetector,
-        handleJoinFn: (ch, d, g) => handleChannelJoin(ctx, ch, d, g),
-        logError: (m) => ctx.logger.error(m),
-      }),
-    scheduleSpawn: () =>
-      scheduleDelayedSpawn(ctx.deps, chId, binding, ctx.timers, SPAWN_DELAY_MS),
-    cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId),
-  };
-  await handleGeneralLobbyJoin(ctx.deps, chId, binding, dm, gm, fns);
+  const scheduleRecheck = () =>
+    schedulePresenceRecheck({
+      timers: ctx.timers,
+      dm,
+      channelId: chId,
+      guildMember: gm!,
+      userChannelMap: ctx.userChannelMap,
+      presenceDetector: ctx.presenceDetector,
+      handleJoinFn: (ch, d, g) => handleChannelJoin(ctx, ch, d, g),
+      logError: (m) => ctx.logger.error(m),
+    });
+  await handleGeneralLobbyJoin(ctx.deps, chId, binding, dm, gm, {
+    scheduleRecheck,
+    ...lobbySpawnFns(ctx, chId, binding),
+  });
 }

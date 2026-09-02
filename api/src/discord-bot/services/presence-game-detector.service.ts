@@ -50,9 +50,14 @@ interface ManualOverride {
  * 4. Case-insensitive fuzzy match (ILIKE) against games.name
  * 5. Fallback: "Untitled Gaming Session" with gameId: null
  *
- * Consensus logic:
- * - If a strict majority (>50%) of members play the same game, that game wins
- * - Otherwise, split into separate groups per game
+ * Grouping (ROK-1445):
+ * - One group per detected game, each holding only its OWN members. The old
+ *   strict-majority collapse is gone — it attributed minority players' sessions
+ *   to the majority game.
+ * - Presence-null members are returned as at most one separate null group; they
+ *   are never folded into a game group.
+ * - The caller (`handleGeneralLobbyGroupDetection`) applies `minPlayers` to each
+ *   group individually.
  */
 @Injectable()
 export class PresenceGameDetectorService implements OnModuleInit {

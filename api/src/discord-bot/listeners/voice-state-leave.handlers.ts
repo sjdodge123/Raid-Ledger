@@ -1,5 +1,9 @@
 import type { GuildMember } from 'discord.js';
-import type { ResolvedBinding } from './voice-state.helpers';
+import {
+  resolveVoiceChannel,
+  spawnTimerKey,
+  type ResolvedBinding,
+} from './voice-state.helpers';
 import type { AdHocEventService } from '../services/ad-hoc-event.service';
 import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import {
@@ -8,6 +12,7 @@ import {
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
 import { executeDelayedSpawn } from './voice-state-join.handlers';
+import { resolveLobbyGroups } from './voice-lobby-groups.helpers';
 
 /** Discord member info shape used for scheduling. */
 type DiscordMember = {
@@ -40,7 +45,7 @@ export async function handleChannelLeave(
   }
   const binding = await resolveBindingFn(channelId);
   if (!binding) return;
-  removeChannelMember(deps.channelMembers, channelId, binding, userId, timers);
+  await removeChannelMember(deps, channelId, binding, userId, timers);
   await adHocEventService.handleVoiceLeave(binding.bindingId, userId);
 }
 
@@ -53,47 +58,97 @@ function cancelPendingRecheck(timers: TimerMaps, userId: string): void {
   }
 }
 
-/** Remove a member from channel tracking and cancel spawn if below threshold. */
-function removeChannelMember(
-  channelMembers: Map<string, Set<string>>,
+/** Remove a member from channel tracking and cancel spawns that no longer hold. */
+async function removeChannelMember(
+  deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   userId: string,
   timers: TimerMaps,
-): void {
-  const members = channelMembers.get(channelId);
-  if (!members) return;
-  members.delete(userId);
-  if (members.size === 0) channelMembers.delete(channelId);
-  if (members.size < (binding.config?.minPlayers ?? 2))
-    cancelPendingSpawn(timers, channelId);
-}
-
-/** Cancel a pending spawn timer for a channel. */
-export function cancelPendingSpawn(timers: TimerMaps, channelId: string): void {
-  const timer = timers.pendingSpawnTimers.get(channelId);
-  if (timer) {
-    clearTimeout(timer);
-    timers.pendingSpawnTimers.delete(channelId);
+): Promise<void> {
+  const members = deps.channelMembers.get(channelId);
+  if (members) {
+    members.delete(userId);
+    if (members.size === 0) deps.channelMembers.delete(channelId);
   }
+  // ROK-1445 review LOW-3: the per-group cancel is driven by live presence, not
+  // by `channelMembers`, so an absent occupancy entry must not skip it.
+  if (binding.bindingPurpose === 'general-lobby') {
+    await cancelUnqualifiedLobbySpawns(deps, channelId, binding, timers);
+    return;
+  }
+  if (!members) return;
+  if (members.size < (binding.config?.minPlayers ?? 2))
+    cancelPendingSpawn(timers, channelId, binding.gameId);
 }
 
-/** Schedule a delayed spawn for a channel. */
-export function scheduleDelayedSpawn(
+/**
+ * ROK-1445 AC14: the leave gate is per GROUP, not per channel. One person
+ * leaving a 5-person room must not cancel the pending spawn of a game group
+ * that still clears `minPlayers` — only the group they left behind is cancelled.
+ */
+async function cancelUnqualifiedLobbySpawns(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   timers: TimerMaps,
+): Promise<void> {
+  // ROK-1445 review LOW-2: on a Discord cache miss the channel is
+  // unresolvable, `resolveLobbyGroups` yields zero groups, and the prefix scan
+  // below would cancel EVERY pending spawn on this channel with nothing left to
+  // re-arm them until a fresh join. When membership cannot be determined the
+  // safe default is to cancel NOTHING.
+  if (!resolveVoiceChannel(deps.clientService, channelId)) return;
+  const { qualifying } = await resolveLobbyGroups(deps, channelId, binding);
+  const keep = new Set(
+    qualifying.map((g) => spawnTimerKey(channelId, g.gameId)),
+  );
+  const prefix = `${channelId}:`;
+  for (const key of [...timers.pendingSpawnTimers.keys()]) {
+    if (!key.startsWith(prefix) || keep.has(key)) continue;
+    clearTimeout(timers.pendingSpawnTimers.get(key));
+    timers.pendingSpawnTimers.delete(key);
+  }
+}
+
+/** Cancel the pending spawn timer armed for one `(channel, game)` group. */
+export function cancelPendingSpawn(
+  timers: TimerMaps,
+  channelId: string,
+  gameId: number | null,
+): void {
+  const key = spawnTimerKey(channelId, gameId);
+  const timer = timers.pendingSpawnTimers.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    timers.pendingSpawnTimers.delete(key);
+  }
+}
+
+/**
+ * Schedule a delayed spawn for ONE `(channel, game)` group.
+ *
+ * ROK-1445 AC13: the map used to be keyed by channel alone, so once the first
+ * qualifying group armed its timer the second could never arm one and silently
+ * never spawned. The composite key is what makes N concurrent events possible.
+ */
+export function scheduleDelayedSpawn(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  gameId: number | null,
+  binding: ResolvedBinding,
+  timers: TimerMaps,
   delayMs: number,
 ): void {
-  if (timers.pendingSpawnTimers.has(channelId)) return;
+  const key = spawnTimerKey(channelId, gameId);
+  if (timers.pendingSpawnTimers.has(key)) return;
   const timer = setTimeout(() => {
-    timers.pendingSpawnTimers.delete(channelId);
-    executeDelayedSpawn(deps, channelId, binding).catch((e) =>
-      deps.logger.error(`Delayed spawn error for ${channelId}: ${e}`),
+    timers.pendingSpawnTimers.delete(key);
+    executeDelayedSpawn(deps, channelId, gameId, binding).catch((e) =>
+      deps.logger.error(`Delayed spawn error for ${key}: ${e}`),
     );
   }, delayMs);
-  timers.pendingSpawnTimers.set(channelId, timer);
+  timers.pendingSpawnTimers.set(key, timer);
 }
 
 /** Context for scheduling a presence recheck. */

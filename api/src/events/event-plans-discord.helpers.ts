@@ -5,6 +5,7 @@ import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import type { PollAnswerResult } from './event-plans-poll.helpers';
 import { buildPollEmbedBody } from './event-plans-poll.helpers';
+import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 
 export interface PostDiscordPollParams {
   channelId: string;
@@ -45,7 +46,7 @@ async function buildPollEmbed(
   const embed = new EmbedBuilder()
     .setAuthor({ name: 'Raid Ledger' })
     .setTitle(`\u{1F4C5} ${params.title}`)
-    .setColor(0x8b5cf6);
+    .setColor(EMBED_COLORS.ANNOUNCEMENT);
   const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
   if (clientUrl && clientUrl !== 'auto')
     embed.setURL(`${clientUrl}/events?tab=plans`);

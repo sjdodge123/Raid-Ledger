@@ -100,11 +100,11 @@ describe('DiscordEmbedFactory — buildEventInvite basics', () => {
     factory = createFeaturesFactory();
   });
 
-  it('should use teal PUG invite color', () => {
+  it('uses the needs-you colour for invites', () => {
     expect(
       factory.buildEventInvite(baseEvent, baseContext, 'inviter').embed.toJSON()
         .color,
-    ).toBe(EMBED_COLORS.PUG_INVITE);
+    ).toBe(EMBED_COLORS.REMINDER);
   });
 
   it('should set the title with invite text', () => {

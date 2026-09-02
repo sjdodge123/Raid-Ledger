@@ -248,8 +248,16 @@ function belowThresholdTest() {
   });
 }
 
+/**
+ * ROK-1445 AC3 split this into two cases. The presence-change path used to mint
+ * a NEW event unconditionally, so one member switching to a game nobody else
+ * plays got their own 1-person event whatever `minPlayers` said. Joining an
+ * EXISTING event is still unconditional (a 3rd member switching in must be able
+ * to join); minting a new one now requires the group to clear the threshold.
+ */
 function presenceChangeGameSwitchTest() {
-  it('moves user to new game event when they switch games mid-session', async () => {
+  /** Boot a general-lobby binding on `presence-ch` and return its handler. */
+  async function bootPresenceLobby(): Promise<(...a: unknown[]) => void> {
     let presenceHandler: (...args: unknown[]) => void;
     const mockClient = createMockClient();
     mockClient.on.mockImplementation(
@@ -273,22 +281,18 @@ function presenceChangeGameSwitchTest() {
     (
       listener as unknown as { userChannelMap: Map<string, string> }
     ).userChannelMap.set('u-switch', 'presence-ch');
-    mocks.adHocEventService.getActiveState.mockImplementation(
-      (_bindingId: string, gameId: number | null | undefined) => {
-        if (gameId === 1)
-          return {
-            eventId: 10,
-            memberSet: new Set(['u-switch']),
-            lastExtendedAt: 0,
-          };
-        return undefined;
-      },
-    );
     mocks.presenceDetector.detectGameForMember.mockResolvedValue({
       gameId: 2,
       gameName: 'FFXIV',
     });
-    presenceHandler!(null, {
+    return presenceHandler!;
+  }
+
+  /** Fire the PresenceUpdate that switches `u-switch` onto FFXIV. */
+  async function fireSwitch(
+    presenceHandler: (...a: unknown[]) => void,
+  ): Promise<void> {
+    presenceHandler(null, {
       userId: 'u-switch',
       member: {
         id: 'u-switch',
@@ -299,6 +303,32 @@ function presenceChangeGameSwitchTest() {
       },
     });
     await jest.advanceTimersByTimeAsync(100);
+  }
+
+  it('moves user into an EXISTING event for the game they switch to', async () => {
+    const presenceHandler = await bootPresenceLobby();
+    // Both the old (1) and the switched-to (2) game hold a live event; the
+    // switcher is only on the old one.
+    mocks.adHocEventService.getActiveState.mockImplementation(
+      (_bindingId: string, gameId: number | null | undefined) => {
+        if (gameId === 1)
+          return {
+            eventId: 10,
+            memberSet: new Set(['u-switch']),
+            lastExtendedAt: 0,
+          };
+        if (gameId === 2)
+          return {
+            eventId: 11,
+            memberSet: new Set(['u-other']),
+            lastExtendedAt: 0,
+          };
+        return undefined;
+      },
+    );
+
+    await fireSwitch(presenceHandler);
+
     expect(mocks.adHocEventService.handleVoiceLeave).toHaveBeenCalledWith(
       'bind-presence',
       'u-switch',
@@ -311,6 +341,30 @@ function presenceChangeGameSwitchTest() {
       'FFXIV',
       'presence-ch',
     );
+  });
+
+  it('does NOT mint a new 1-person event when nobody else plays the new game (ROK-1445 AC3)', async () => {
+    const presenceHandler = await bootPresenceLobby();
+    mocks.adHocEventService.getActiveState.mockImplementation(
+      (_bindingId: string, gameId: number | null | undefined) => {
+        if (gameId === 1)
+          return {
+            eventId: 10,
+            memberSet: new Set(['u-switch']),
+            lastExtendedAt: 0,
+          };
+        return undefined;
+      },
+    );
+
+    await fireSwitch(presenceHandler);
+
+    // Still leaves the old event — they genuinely stopped playing that game.
+    expect(mocks.adHocEventService.handleVoiceLeave).toHaveBeenCalledWith(
+      'bind-presence',
+      'u-switch',
+    );
+    expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
   });
 }
 

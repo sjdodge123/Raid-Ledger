@@ -33,11 +33,11 @@ export function getColorForType(type: NotificationType): number {
     recruitment_reminder: EMBED_COLORS.ANNOUNCEMENT,
     lineup_steam_nudge: EMBED_COLORS.ANNOUNCEMENT,
     community_lineup: EMBED_COLORS.ANNOUNCEMENT,
-    slot_vacated: EMBED_COLORS.ROSTER_UPDATE,
-    member_returned: EMBED_COLORS.ROSTER_UPDATE,
-    bench_promoted: EMBED_COLORS.ROSTER_UPDATE,
-    roster_reassigned: EMBED_COLORS.ROSTER_UPDATE,
-    tentative_displaced: EMBED_COLORS.ROSTER_UPDATE,
+    slot_vacated: EMBED_COLORS.ANNOUNCEMENT,
+    member_returned: EMBED_COLORS.SYSTEM,
+    bench_promoted: EMBED_COLORS.SIGNUP_CONFIRMATION,
+    roster_reassigned: EMBED_COLORS.SYSTEM,
+    tentative_displaced: EMBED_COLORS.SYSTEM,
   };
   return map[type] ?? EMBED_COLORS.SYSTEM;
 }

@@ -8,19 +8,10 @@ import {
 } from '../discord-bot.constants';
 import { buildSignupButtons } from './discord-embed-buttons.helpers';
 import { DiscordEmojiService } from './discord-emoji.service';
-import {
-  buildRosterLine,
-  buildViewButton,
-  buildAdHocUpdateEmbed as buildAdHocUpdateEmbedHelper,
-  buildAdHocCompletedEmbed as buildAdHocCompletedEmbedHelper,
-} from './discord-embed.helpers';
+import { buildRosterLine, buildViewButton } from './discord-embed.helpers';
 import { createInviteEmbed } from './discord-embed-invite.helpers';
 import { formatDurationMs } from '../utils/format-duration';
-import {
-  buildCancelledPushContent,
-  buildAdHocSpawnPushContent,
-  buildAdHocCompletedPushContent,
-} from '../utils/push-content';
+import { buildCancelledPushContent } from '../utils/push-content';
 import type { SchedulingPollEmbedData } from './discord-embed-scheduling.types';
 import {
   buildSchedulingPollEmbedBody,
@@ -151,91 +142,12 @@ export class DiscordEmbedFactory {
   }
 
   /** @deprecated Use buildEventEmbed() */
-  buildEventAnnouncement(
-    event: EmbedEventData,
-    context: EmbedContext,
-  ): EmbedResult {
-    return this.buildEventEmbed(event, context, {
-      state: EMBED_STATES.POSTED,
-      buttons: 'signup',
-    });
-  }
-
-  /** @deprecated Use buildEventEmbed() */
   buildEventUpdate(
     event: EmbedEventData,
     context: EmbedContext,
     state: EmbedState,
   ): EmbedResult {
     return this.buildEventEmbed(event, context, { state, buttons: 'signup' });
-  }
-
-  /** Build an ad-hoc spawn embed. */
-  buildAdHocSpawnEmbed(
-    event: { id: number; title: string; gameName?: string },
-    participants: Array<{ discordUserId: string; discordUsername: string }>,
-    context: EmbedContext,
-  ): EmbedResult {
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.LIVE_EVENT)
-      .setTitle(`\uD83C\uDFAE ${event.title}`)
-      .setDescription(
-        `An ad-hoc session has started!` +
-          (event.gameName ? `\n**Game:** ${event.gameName}` : ''),
-      )
-      .addFields({
-        name: '\uD83D\uDC65 Players',
-        value:
-          participants.map((p) => `<@${p.discordUserId}>`).join(', ') || 'None',
-      })
-      .setTimestamp()
-      .setFooter({ text: context.communityName ?? 'Raid Ledger' });
-    const content = buildAdHocSpawnPushContent(event, participants.length);
-    const row = buildViewButton(event.id, context.clientUrl);
-    return row ? { embed, row, content } : { embed, content };
-  }
-
-  /** Build an ad-hoc update embed. */
-  buildAdHocUpdateEmbed(
-    event: { id: number; title: string; gameName?: string },
-    participants: Array<{
-      discordUserId: string;
-      discordUsername: string;
-      isActive: boolean;
-    }>,
-    context: EmbedContext,
-  ): EmbedResult {
-    const activeCount = participants.filter((p) => p.isActive).length;
-    const content = buildAdHocSpawnPushContent(event, activeCount);
-    return {
-      ...buildAdHocUpdateEmbedHelper(event, participants, context),
-      content,
-    };
-  }
-
-  /** Build an ad-hoc completed embed. */
-  buildAdHocCompletedEmbed(
-    event: {
-      id: number;
-      title: string;
-      gameName?: string;
-      startTime: string;
-      endTime: string;
-    },
-    participants: Array<{
-      discordUserId: string;
-      discordUsername: string;
-      totalDurationSeconds: number | null;
-    }>,
-    context: EmbedContext,
-  ): EmbedResult {
-    const ms =
-      new Date(event.endTime).getTime() - new Date(event.startTime).getTime();
-    const content = buildAdHocCompletedPushContent(event, formatDurationMs(ms));
-    return {
-      ...buildAdHocCompletedEmbedHelper(event, participants, context),
-      content,
-    };
   }
 
   /** Build a rescheduling embed (amber, "RESCHEDULING" badge, ROK-1034). */

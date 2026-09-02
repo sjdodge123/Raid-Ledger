@@ -1,6 +1,13 @@
 /**
  * Tests for diagnostic logging in trackScheduledEventJoin (ROK-842).
  * AC 3: trackScheduledEventJoin logs channelId + active event count.
+ *
+ * ROK-1445 (TD3, ROK-1417) changed the SHAPE of that log line, not the facts it
+ * carries: NestJS `Logger` does not substitute printf tokens, so the old
+ * `logger.debug('… channelId=%s activeEvents=%d', channelId, count)` call
+ * literally printed `%s`/`%d` in prod. The values are now interpolated into the
+ * single message string, so these assertions read them out of the message
+ * instead of out of the extra arguments. Same three facts, same strength.
  */
 import { trackScheduledEventJoin } from './voice-state.handlers';
 import type { VoiceHandlerDeps } from './voice-state.handlers';
@@ -77,9 +84,10 @@ describe('trackScheduledEventJoin — diagnostic logging (ROK-842)', () => {
 
     expect(mockLogger.debug).toHaveBeenCalledWith(
       expect.stringContaining('[voice-pipe]'),
-      'voice-ch-123',
-      2,
     );
+    const [message] = mockLogger.debug.mock.calls[0];
+    expect(message).toContain('channelId=voice-ch-123');
+    expect(message).toContain('activeEvents=2');
   });
 
   it('logs DEBUG with count=0 when no active events found', async () => {
@@ -89,9 +97,10 @@ describe('trackScheduledEventJoin — diagnostic logging (ROK-842)', () => {
 
     expect(mockLogger.debug).toHaveBeenCalledWith(
       expect.stringContaining('[voice-pipe]'),
-      'voice-ch-empty',
-      0,
     );
+    const [message] = mockLogger.debug.mock.calls[0];
+    expect(message).toContain('channelId=voice-ch-empty');
+    expect(message).toContain('activeEvents=0');
   });
 
   it('includes correct channelId in the debug log', async () => {
@@ -99,8 +108,8 @@ describe('trackScheduledEventJoin — diagnostic logging (ROK-842)', () => {
 
     await trackScheduledEventJoin(deps, 'specific-channel-id', dm);
 
-    const [, loggedChannelId] = mockLogger.debug.mock.calls[0];
-    expect(loggedChannelId).toBe('specific-channel-id');
+    const [message] = mockLogger.debug.mock.calls[0];
+    expect(message).toContain('channelId=specific-channel-id');
   });
 
   it('includes the correct active event count in the debug log', async () => {
@@ -113,8 +122,8 @@ describe('trackScheduledEventJoin — diagnostic logging (ROK-842)', () => {
 
     await trackScheduledEventJoin(deps, 'multi-event-ch', dm);
 
-    const [, , loggedCount] = mockLogger.debug.mock.calls[0];
-    expect(loggedCount).toBe(3);
+    const [message] = mockLogger.debug.mock.calls[0];
+    expect(message).toContain('activeEvents=3');
   });
 
   it('still calls handleJoin for each active event after logging', async () => {

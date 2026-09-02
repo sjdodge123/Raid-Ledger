@@ -15,7 +15,6 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import {
   applyChrome,
   resolveEmbedTitle,
@@ -44,10 +43,9 @@ export function buildAbortedEmbed(
     .setTitle(resolveEmbedTitle(ctx, '\u{1F6D1}', 'Aborted'))
     .setDescription(
       `This lineup was aborted by **${actorDisplayName}**.` + reasonBlock,
-    )
-    .setColor(EMBED_COLORS.ERROR);
+    );
 
-  applyChrome(embed, ctx, 'Aborted');
+  applyChrome(embed, ctx, 'Aborted', 'cancelled');
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()

@@ -705,108 +705,124 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
     });
 
+    const VALORANT = { gameId: 5, gameName: 'Valorant' };
+    const MINECRAFT = { gameId: 6, gameName: 'Minecraft' };
+    const LOBBY_MEMBERS = [
+      { id: 'user-1', displayName: 'Player1' },
+      { id: 'user-2', displayName: 'Player2' },
+      { id: 'user-3', displayName: 'Player3' },
+      { id: 'user-4', displayName: 'Player4' },
+    ];
+
+    /**
+     * ROK-1445: `minPlayers` is now evaluated per detected GAME GROUP, so a
+     * multi-game lobby needs each game to field its own qualifying group. Two
+     * pairs (Valorant: user-1/user-3, Minecraft: user-2/user-4) keep the
+     * original intent of these tests — the channel is NOT unanimous, so the
+     * immediate path is skipped and the delayed path does the work — while no
+     * longer relying on the outlawed channel-occupancy count.
+     *
+     * `left` models Discord dropping a member from the channel cache so the
+     * detector stops seeing them.
+     */
+    function wireTwoLobbyPairs(left: Set<string>): void {
+      const gameOf = (id: string) =>
+        id === 'user-1' || id === 'user-3' ? VALORANT : MINECRAFT;
+      mockPresenceDetector.detectGameForMember.mockImplementation(
+        (m: { id: string }) => Promise.resolve(gameOf(m.id)),
+      );
+      mockPresenceDetector.detectGames.mockImplementation(
+        (members: Array<{ id: string }>) => {
+          const live = members.map((m) => m.id).filter((id) => !left.has(id));
+          const groups = [VALORANT, MINECRAFT]
+            .map((g) => ({
+              ...g,
+              memberIds: live.filter((id) => gameOf(id).gameId === g.gameId),
+            }))
+            .filter((g) => g.memberIds.length > 0);
+          return Promise.resolve(groups);
+        },
+      );
+    }
+
+    /** Drive every lobby member through the join handler, interleaved. */
+    async function joinAll(
+      handler: (o: unknown, n: unknown) => void,
+    ): Promise<void> {
+      for (const m of LOBBY_MEMBERS) {
+        handler(
+          { channelId: null, id: m.id },
+          {
+            channelId: 'lobby-ch',
+            id: m.id,
+            member: {
+              id: m.id,
+              displayName: m.displayName,
+              user: { username: m.displayName, avatar: null },
+            },
+          },
+        );
+        await jest.advanceTimersByTimeAsync(2100);
+      }
+    }
+
     it('uses delayed spawn in general-lobby when members play different games', async () => {
-      const handler = await setupWithBinding('lobby-ch', lobbyBinding);
-
-      // Different games → not unanimous
-      mockPresenceDetector.detectGameForMember
-        .mockResolvedValueOnce({ gameId: 5, gameName: 'Valorant' })
-        .mockResolvedValueOnce({ gameId: 6, gameName: 'Minecraft' });
-
-      mockPresenceDetector.detectGames.mockResolvedValue([
-        { gameId: 5, gameName: 'Valorant', memberIds: ['user-1'] },
-        { gameId: 6, gameName: 'Minecraft', memberIds: ['user-2'] },
-      ]);
-
+      const handler = await setupWithBinding(
+        'lobby-ch',
+        lobbyBinding,
+        LOBBY_MEMBERS,
+      );
+      wireTwoLobbyPairs(new Set());
       mockAdHocEventService.getActiveState.mockReturnValue(undefined);
 
-      handler(
-        { channelId: null, id: 'user-1' },
-        {
-          channelId: 'lobby-ch',
-          id: 'user-1',
-          member: {
-            id: 'user-1',
-            displayName: 'Player1',
-            user: { username: 'Player1', avatar: null },
-          },
-        },
-      );
-      await jest.advanceTimersByTimeAsync(2100);
+      await joinAll(handler);
 
-      handler(
-        { channelId: null, id: 'user-2' },
-        {
-          channelId: 'lobby-ch',
-          id: 'user-2',
-          member: {
-            id: 'user-2',
-            displayName: 'Player2',
-            user: { username: 'Player2', avatar: null },
-          },
-        },
-      );
-      await jest.advanceTimersByTimeAsync(2100);
-
-      // No immediate spawn
+      // Not unanimous — nothing spawns on the immediate path.
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
 
-      // After 15 minutes, the delayed spawn fires
+      // After 15 minutes both qualifying groups spawn (ROK-1445 AC2).
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
-      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+      const spawnedGames = new Set(
+        mockAdHocEventService.handleVoiceJoin.mock.calls.map((c) => c[3]),
+      );
+      expect(spawnedGames).toEqual(
+        new Set([VALORANT.gameId, MINECRAFT.gameId]),
+      );
     });
 
-    it('cancels general-lobby delayed spawn when player count drops below threshold', async () => {
-      const handler = await setupWithBinding('lobby-ch', lobbyBinding);
-
-      // Different games → delayed spawn
-      mockPresenceDetector.detectGameForMember
-        .mockResolvedValueOnce({ gameId: 5, gameName: 'Valorant' })
-        .mockResolvedValueOnce({ gameId: 6, gameName: 'Minecraft' });
-
+    /**
+     * ROK-1445 AC14: this used to assert that ANY drop in CHANNEL occupancy
+     * cancels the lobby's single pending spawn. The cancel is now per group —
+     * one member leaving must not cancel a spawn for a group that still clears
+     * `minPlayers`. Strengthened accordingly: the short group is cancelled AND
+     * the still-qualifying group is proven to survive.
+     */
+    it('cancels only the general-lobby group that dropped below threshold', async () => {
+      const left = new Set<string>();
+      const handler = await setupWithBinding(
+        'lobby-ch',
+        lobbyBinding,
+        LOBBY_MEMBERS,
+      );
+      wireTwoLobbyPairs(left);
       mockAdHocEventService.getActiveState.mockReturnValue(undefined);
 
-      handler(
-        { channelId: null, id: 'user-1' },
-        {
-          channelId: 'lobby-ch',
-          id: 'user-1',
-          member: {
-            id: 'user-1',
-            displayName: 'Player1',
-            user: { username: 'Player1', avatar: null },
-          },
-        },
-      );
-      await jest.advanceTimersByTimeAsync(2100);
-
-      handler(
-        { channelId: null, id: 'user-2' },
-        {
-          channelId: 'lobby-ch',
-          id: 'user-2',
-          member: {
-            id: 'user-2',
-            displayName: 'Player2',
-            user: { username: 'Player2', avatar: null },
-          },
-        },
-      );
-      await jest.advanceTimersByTimeAsync(2100);
-
-      // Not yet spawned
+      await joinAll(handler);
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
 
-      // Player leaves — drop below threshold → cancel timer
+      // user-3 leaves — Valorant drops to 1, Minecraft is untouched at 2.
+      left.add('user-3');
       handler(
-        { channelId: 'lobby-ch', id: 'user-2' },
-        { channelId: null, id: 'user-2', member: null },
+        { channelId: 'lobby-ch', id: 'user-3' },
+        { channelId: null, id: 'user-3', member: null },
       );
       await jest.advanceTimersByTimeAsync(2100);
 
-      // Advance 15 minutes — timer was cancelled
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
-      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+      const spawnedGames = new Set(
+        mockAdHocEventService.handleVoiceJoin.mock.calls.map((c) => c[3]),
+      );
+      expect(spawnedGames).toEqual(new Set([MINECRAFT.gameId]));
     });
   });
 });

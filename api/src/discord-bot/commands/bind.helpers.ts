@@ -9,6 +9,7 @@ import { and, sql, ilike, eq, notInArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
+import { EMBED_COLORS } from '../discord-bot.constants';
 
 // Re-export autocomplete functions for backward compatibility
 export {
@@ -49,7 +50,7 @@ export function buildBindSuccessEmbed(
     otherSlot,
   );
   const embed = new EmbedBuilder()
-    .setColor(0x34d399)
+    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
     .setTitle('Channel Bound')
     .setDescription(description);
   return { embed, components: buildAdminLinkComponents() };
@@ -124,7 +125,7 @@ export function buildEventBindEmbed(
   ].join('\n');
 
   return new EmbedBuilder()
-    .setColor(0x34d399)
+    .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
     .setTitle('Event Binding Updated')
     .setDescription(description);
 }

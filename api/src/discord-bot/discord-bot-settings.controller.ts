@@ -36,6 +36,7 @@ import {
   type CharacterDto,
 } from '@raid-ledger/contract';
 import { handleValidationError } from './validation.util';
+import { EMBED_COLORS } from './discord-bot.constants';
 
 @Controller('admin/settings/discord-bot')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
@@ -255,7 +256,7 @@ export class DiscordBotSettingsController {
     const embed = new EmbedBuilder()
       .setTitle(`${name} is Online`)
       .setDescription(desc.join('\n'))
-      .setColor(0x10b981)
+      .setColor(EMBED_COLORS.SYSTEM)
       .setFooter({ text: 'Powered by Raid Ledger' })
       .setTimestamp();
     await this.discordBotClientService.sendEmbed(channelId, embed);

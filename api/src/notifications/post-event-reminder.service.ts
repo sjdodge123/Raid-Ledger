@@ -187,7 +187,7 @@ export class PostEventReminderService {
       communityName,
     );
     return new EmbedBuilder()
-      .setColor(EMBED_COLORS.PUG_INVITE)
+      .setColor(EMBED_COLORS.REMINDER)
       .setTitle('Thanks for joining!')
       .setDescription(lines.join('\n'))
       .setFooter({ text: communityName })
