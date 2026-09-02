@@ -76,6 +76,12 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
 
     const event = await this.fetchEvent(eventId);
     if (!event || event.cancelledAt) return;
+    // ROK-1447: Quick Play has its own compact layout and its own batched edit
+    // loop (`AdHocNotificationService`). Tracked messages are looked up purely
+    // by (eventId, guildId), so without this guard any enqueue that reached an
+    // ad-hoc id would rebuild the card through the scheduled-event builder and
+    // silently revert it — losing the badges and re-adding the button row.
+    if (event.isAdHoc) return;
     // ROK-1370: while a reschedule poll is open the embed shows the
     // RESCHEDULING card — computeEmbedState can never return that state, so
     // any sync here (signup withdrawal, roster change, voice update) would

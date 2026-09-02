@@ -6,8 +6,8 @@ import type { ChannelBindingsService } from './channel-bindings.service';
 import type { ChannelResolverService } from './channel-resolver.service';
 import type { SettingsService } from '../../settings/settings.service';
 import {
-  EMBED_GAME_COLUMNS,
-  toEmbedGame,
+  QUICK_PLAY_GAME_COLUMNS,
+  toQuickPlayGame,
   type EmbedGame,
 } from './embed-game.helpers';
 
@@ -79,18 +79,23 @@ async function fetchEvent(
   return event ?? null;
 }
 
-/** Resolve game id + name + cover art (ROK-1460: id drives the title link). */
+/**
+ * Resolve the game the Quick Play embed renders: id + name + cover art
+ * (ROK-1460: the id drives the title link) plus the sale / co-op columns the
+ * badges read (ROK-1447). The projection stays a bounded column map — a bare
+ * `select()` would drag ~40 columns into every 5s embed re-sync.
+ */
 async function resolveGame(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number | null,
 ): Promise<EmbedGame | null> {
   if (!gameId) return null;
   const [row] = await db
-    .select(EMBED_GAME_COLUMNS)
+    .select(QUICK_PLAY_GAME_COLUMNS)
     .from(schema.games)
     .where(eq(schema.games.id, gameId))
     .limit(1);
-  return toEmbedGame(row);
+  return toQuickPlayGame(row);
 }
 
 /** Resolve voice channel, honoring a voice-only per-event override (ROK-1389). */

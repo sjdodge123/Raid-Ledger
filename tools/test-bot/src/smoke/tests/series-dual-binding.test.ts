@@ -345,13 +345,16 @@ const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
       await setPlayingOverride(ctx, game.name);
       await joinVoice(voiceCh.id);
 
-      // The quick-play LIVE embed ("<game> — Quick Play") must land in the
-      // series TEXT announce channel. Without the ROK-1390 series-announce tier
-      // it would fall through to the default bot channel (the series text slot
-      // has gameId=null, so the game-announce tier can't match it).
+      // The quick-play LIVE embed must land in the series TEXT announce
+      // channel. Without the ROK-1390 series-announce tier it would fall
+      // through to the default bot channel (the series text slot has
+      // gameId=null, so the game-announce tier can't match it).
+      //
+      // ROK-1447: the title is now the bare game name — "Quick Play" moved to
+      // the author line, which SimpleEmbed carries since ROK-1459.
       const announced = await pollForEmbed(
         textCh.id,
-        (m) => m.embeds.some((e) => /quick play/i.test(e.title ?? '')),
+        (m) => m.embeds.some((e) => /quick play/i.test(e.author ?? '')),
         ctx.config.timeoutMs,
       );
       if (!announced) {
