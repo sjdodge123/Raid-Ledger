@@ -8,8 +8,11 @@
  */
 import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import { formatDurationMs } from '../utils/format-duration';
-import { maskedLink, openEventLink } from './discord-embed-event-chrome.helpers';
-import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
+import {
+  maskedLink,
+  openEventLink,
+} from './discord-embed-event-chrome.helpers';
+import type { EmbedEventData } from './discord-embed.factory';
 
 const CALENDAR = '\u{1F4C6}'; // 📆
 const SPEAKER = '\u{1F50A}'; // 🔊
