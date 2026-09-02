@@ -72,7 +72,9 @@ function makeEvent(overrides: Record<string, unknown> = {}) {
 function mockEventAndGame(
   mockDb: MockDb,
   eventOverrides: Record<string, unknown> = {},
-  game: { name: string; coverUrl?: string | null } | null = {
+  // ROK-1447: widened from `{ name, coverUrl }` because `resolveGame` now
+  // selects the badge columns too, and cases below stub them.
+  game: Record<string, unknown> | null = {
     name: 'Test Game',
     coverUrl: null,
   },

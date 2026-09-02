@@ -268,14 +268,21 @@ export class AdHocNotificationService implements OnModuleDestroy {
     await this.editTrackedEmbed(tracked, embedData, EMBED_STATES.LIVE);
   }
 
-  /** Build an embed with context and options. */
+  /**
+   * Build the Quick Play embed for a lifecycle state.
+   *
+   * ROK-1447: Quick Play has its own compact builder and no button row in
+   * either state — the title deep-links to the game and the description closes
+   * with `[Open event ↗]`, so a "View Event" button would be a third copy of
+   * the same link.
+   */
   private async buildEmbed(embedData: EmbedEventData, state: string) {
     const context = await buildContext(this.deps);
-    const buttons = state === EMBED_STATES.COMPLETED ? 'none' : 'view';
-    const opts = { state, buttons } as Parameters<
-      DiscordEmbedFactory['buildEventEmbed']
-    >[2];
-    return this.embedFactory.buildEventEmbed(embedData, context, opts);
+    return this.embedFactory.buildQuickPlayEmbed(
+      embedData,
+      context,
+      state === EMBED_STATES.COMPLETED ? 'ended' : 'live',
+    );
   }
 
   /** Edit a tracked embed message with new data. */
