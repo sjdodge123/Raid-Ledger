@@ -13,7 +13,7 @@ import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import { BottomSheet } from "../components/ui/bottom-sheet";
 import { FAB } from "../components/ui/fab";
 import { LineupBanner } from "../components/lineups/LineupBanner";
-import { LfgGroupsProvider } from "../hooks/use-lfg-groups";
+import { LfgGroupsProvider } from "../hooks/lfg-groups-provider";
 import { LfgHeartedPrompt } from "../components/lfg/lfg-hearted-prompt";
 import { LfgFilterChip } from "./games/lfg-filter-chip";
 import { useLfgFilterParam } from "./games/use-lfg-filter-param";
