@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 import { isRemoteTarget, resolveWebUrl } from './scripts/smoke/target';
+import { STORAGE_STATE_PATH } from './scripts/auth-paths';
 
 /**
  * Playwright configuration for UI smoke tests (ROK-653, ROK-913)
@@ -69,7 +70,11 @@ export default defineConfig({
         baseURL: TARGET_BASE_URL,
 
         /* Reuse authenticated state from global setup */
-        storageState: path.resolve('scripts/.auth/admin.json'),
+        /* ROK-1466: the SAME constant global setup writes. This used to be a
+         * second `path.resolve` of the same literal — two derivations that
+         * could disagree, and whose disagreement surfaces only as a per-test
+         * "Error reading storage state ... ENOENT". */
+        storageState: STORAGE_STATE_PATH,
 
         /* Collect trace when retrying the failed test */
         trace: 'on-first-retry',

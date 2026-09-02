@@ -9,6 +9,8 @@
 import { readFile } from 'node:fs/promises';
 import { TOKEN_FILE_PATH } from '../auth-paths';
 import { resolveApiUrl } from './target';
+import { MAX_LOGIN_ATTEMPTS, retryDelayMs } from './login-retry';
+import { readTokenFromStorageState } from './storage-state';
 
 export const API_BASE = resolveApiUrl();
 
@@ -55,8 +57,16 @@ async function readTokenFromDisk(): Promise<string | null> {
     }
 }
 
+// ROK-1466: on the fleet the suite talks to the env over its internal hostname
+// with no Cloudflare hop, so every worker's login hits the API's own rate
+// limiter at once. The old policy (3 attempts, flat 5s/15s, `Retry-After`
+// ignored) gave up inside the limiter's window — `Auth failed after 3 attempts
+// (rate limited)` on every co-op spec. Wait as long as the server asks
+// instead; relaxing the limiter is not an option, it is a production control
+// that DEMO_MODE does not disable.
 async function loginViaApi(): Promise<string> {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < MAX_LOGIN_ATTEMPTS; attempt++) {
         const res = await fetch(`${API_BASE}/auth/local`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -71,14 +81,21 @@ async function loginViaApi(): Promise<string> {
             };
             return access_token;
         }
-        if (res.status === 429) {
-            const wait = attempt === 0 ? 5_000 : 15_000;
-            await new Promise((r) => setTimeout(r, wait));
-            continue;
+        lastStatus = res.status;
+        if (res.status !== 429) {
+            throw new Error(`Auth failed: ${res.status} (${API_BASE}/auth/local)`);
         }
-        throw new Error(`Auth failed: ${res.status}`);
+        const wait = retryDelayMs(attempt, res.headers.get('retry-after'));
+        console.warn(
+            `[api-helpers] /auth/local 429 (attempt ${attempt + 1}/${MAX_LOGIN_ATTEMPTS}) — waiting ${wait}ms`,
+        );
+        await new Promise((r) => setTimeout(r, wait));
     }
-    throw new Error('Auth failed after 3 attempts (rate limited)');
+    throw new Error(
+        `Auth failed after ${MAX_LOGIN_ATTEMPTS} attempts (last status ${lastStatus}) against ${API_BASE}. ` +
+            'Global setup should have written scripts/.auth/admin-token.json so no worker needs to log in — ' +
+            'check the [global-setup] lines at the top of the run.',
+    );
 }
 
 export async function getAdminToken(): Promise<string> {
@@ -87,6 +104,13 @@ export async function getAdminToken(): Promise<string> {
     _tokenPromise = (async () => {
         const fromDisk = await readTokenFromDisk();
         if (fromDisk) return fromDisk;
+        // ROK-1466: global setup writes BOTH admin-token.json and the browser
+        // storageState from the same login. If the token file is missing or
+        // aged out, the storageState copy is still the SAME run's token — read
+        // it before minting a new one, so a run costs exactly one /auth/local
+        // call no matter how many workers ask.
+        const fromStorageState = readTokenFromStorageState();
+        if (fromStorageState) return fromStorageState;
         return loginViaApi();
     })();
     _cachedToken = await _tokenPromise;
