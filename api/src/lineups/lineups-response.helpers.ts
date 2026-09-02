@@ -114,6 +114,14 @@ function mapEntry(
     playerCount: e.playerCount ?? null,
     // ROK-1401: raw value — positive / 0 / null, never blended with IGDB.
     cooptimusOnlineMax: e.cooptimusOnlineMax ?? null,
+    // ROK-1314: rest of the co-op inputs + shared chrome, so the nomination
+    // card renders the same badge set as the other surfaces.
+    cooptimusCouchMax: e.cooptimusCouchMax ?? null,
+    cooptimusComboCoop: e.cooptimusComboCoop ?? null,
+    earlyAccess: e.earlyAccess ?? false,
+    genres: Array.isArray(e.genres) ? e.genres : [],
+    rating: e.rating ?? null,
+    aggregatedRating: e.aggregatedRating ?? null,
   };
 }
 

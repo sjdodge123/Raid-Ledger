@@ -22,6 +22,8 @@ import type { CommonGroundGameDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../test/render-helpers';
 import { UnifiedGameCard } from './unified-game-card';
 import { CommonGroundGameCard } from '../lineups/CommonGroundGameCard';
+import { NominationCard } from '../lineups/NominationCard';
+import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 
 /** One game, expressed in each surface's own DTO. */
 const SHARED_CHROME = {
@@ -139,5 +141,71 @@ describe('ROK-1314 — /games card and Common Ground tile render one system', ()
         expect(
             cg.container.querySelectorAll('[data-testid="card-coop-badge"]'),
         ).toHaveLength(0);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// ROK-1314 — the nomination card is the THIRD surface on this badge system.
+// It was left on `variant="compact"`, which hid the player count, early access
+// and the co-op pill — perverse on the nominated list, which is the one place
+// that already warns about co-op fit. It also stated the discount twice: once
+// as a raw `(-50%)` in the body and once as the badge row's locked wording.
+// ---------------------------------------------------------------------------
+
+function renderNominationCard(overrides: Partial<LineupEntryResponseDto> = {}) {
+    const entry = {
+        id: 1,
+        gameId: 1,
+        gameName: 'Valheim',
+        gameCoverUrl: null,
+        nominatedBy: { id: 9, displayName: 'roknua' },
+        note: null,
+        carriedOver: false,
+        voteCount: 0,
+        createdAt: new Date().toISOString(),
+        totalMembers: 100,
+        nonOwnerCount: 3,
+        itadCurrentPrice: 9.99,
+        itadCurrentCut: 50,
+        itadCurrentShop: 'Steam',
+        itadCurrentUrl: null,
+        itadLowestPrice: 20,
+        ...SHARED_CHROME,
+        ...overrides,
+    } as unknown as LineupEntryResponseDto;
+    return renderWithProviders(
+        <NominationCard entry={entry} onRemove={vi.fn()} />,
+    );
+}
+
+describe('ROK-1314 — the nomination card joins the same badge system', () => {
+    it.each(SHARED_SIGNALS)('shows the %s', (_label, pattern) => {
+        renderNominationCard();
+        expect(screen.getByText(pattern)).toBeInTheDocument();
+    });
+
+    it('renders the co-op pill the fit warning refers to', () => {
+        const { container } = renderNominationCard();
+        expect(
+            container.querySelectorAll('[data-testid="coop-pill"]'),
+        ).toHaveLength(1);
+    });
+
+    it('states the discount ONCE — locked wording on the badge, not in the body', () => {
+        renderNominationCard();
+        // The badge carries what KIND of deal it is...
+        expect(screen.getByText(/On Sale|Best Price/)).toBeInTheDocument();
+        // ...and the body carries cost + how many must buy it, with no
+        // second rendering of the percentage.
+        expect(screen.getByText('$9.99 for 3')).toBeInTheDocument();
+        expect(screen.queryByText(/\(-50%\)/)).not.toBeInTheDocument();
+    });
+
+    it('uses the shared Carried Over badge rather than a bespoke pill', () => {
+        const { container } = renderNominationCard({ carriedOver: true });
+        expect(
+            container.querySelector('[data-testid="carried-over-badge"]'),
+        ).not.toBeNull();
     });
 });

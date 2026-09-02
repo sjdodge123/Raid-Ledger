@@ -54,6 +54,16 @@ function localComponentNames(source: string): string[] {
  * Every badge subcomponent CommonGroundGameCard defines locally today
  * (spec §1.2 #2, §1.3 #1, §1.4). All must move to the shared module.
  */
+/**
+ * Strip comments before scanning. These guards document the OLD broken values
+ * in prose right next to the fix, so a naive scan flags the explanation
+ * itself — which has now caught this file out twice: once on the legibility
+ * fills, once on a comment that legitimately names the locked `On Sale`
+ * wording. Match code, never commentary.
+ */
+const codeOnly = (src: string): string =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
 const COMMON_GROUND_LOCAL_BADGES = [
     'AiBadge',
     'OwnerBadge',
@@ -165,9 +175,10 @@ describe('ROK-1314 AC5 — NominationCard drops its bespoke ownership + sale tre
     });
 
     it('no hardcoded inline "On Sale" span', () => {
-        // The literal must not appear in NominationCard at all — the label now
-        // comes from the shared PriceBadge (spec §0 vocabulary lock).
-        expect(source()).not.toMatch(/On Sale/);
+        // The literal must not appear in NominationCard's CODE — the label now
+        // comes from the shared PriceBadge (spec §0 vocabulary lock). Comments
+        // may legitimately name the locked wording when explaining why.
+        expect(codeOnly(source())).not.toMatch(/On Sale/);
     });
 
     it('renders the shared GameBadgeRow', () => {
@@ -255,14 +266,6 @@ describe('ROK-1314 — shared game-badges module surface', () => {
 describe('ROK-1314 — badge fills stay legible over cover art', () => {
     const OPACITY_RE = /bg-([a-z]+)-(\d{2,3})\/(\d{1,3})/g;
 
-    /**
-     * Strip comments before scanning. These guards document the OLD broken
-     * values in prose right next to the fix, so a naive scan flags the
-     * explanation itself — which is exactly what happened when they were
-     * first written. Match code, never commentary.
-     */
-    const codeOnly = (src: string): string =>
-        src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
     it('every badge fill in the shared module is at least 90% opaque', () => {
         const source = codeOnly(readSource('components/games/game-badges.tsx'));

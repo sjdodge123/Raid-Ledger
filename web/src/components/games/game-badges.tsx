@@ -81,6 +81,23 @@ export function YouWishlistedBadge(): JSX.Element {
 }
 
 /**
+ * Neutral "Carried Over" marker for an entry rolled forward from a prior
+ * lineup. Lived inline in `NominationCard` as a one-off pill in a shape no
+ * other badge used; folded in here so the nomination card has no bespoke
+ * badges left (ROK-1314).
+ */
+export function CarriedOverBadge(): JSX.Element {
+    return (
+        <span
+            data-testid="carried-over-badge"
+            className={`${BADGE_CLS} bg-zinc-600/90 text-white`}
+        >
+            Carried Over
+        </span>
+    );
+}
+
+/**
  * Violet player-count badge. Singular-aware: a 1-player game reads
  * `1 player`, not `1 players` (CommonGround's behaviour won over the
  * dead lineup badge module's always-plural drift — spec §1.4).

@@ -225,6 +225,18 @@ export const LineupEntryResponseSchema = z.object({
     currentUserOwns: z.boolean().optional(),
     /** ROK-1314: has the CURRENT viewer wishlisted this nominated game? */
     currentUserWishlisted: z.boolean().optional(),
+    /**
+     * ROK-1314: the remaining co-op inputs and the shared card chrome, so a
+     * nomination card renders the same badges as Common Ground and `/games`.
+     * The card already warned "Fits N online / group is M" without showing the
+     * co-op badge that warning refers to.
+     */
+    cooptimusCouchMax: z.number().int().nullable().optional(),
+    cooptimusComboCoop: z.boolean().nullable().optional(),
+    earlyAccess: z.boolean().optional(),
+    genres: z.array(z.number()).optional(),
+    rating: z.number().nullable().optional(),
+    aggregatedRating: z.number().nullable().optional(),
 });
 
 export type LineupEntryResponseDto = z.infer<typeof LineupEntryResponseSchema>;

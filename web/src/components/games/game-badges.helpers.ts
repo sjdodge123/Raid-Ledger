@@ -90,7 +90,10 @@ export function fromLineupEntry(entry: LineupEntryResponseDto): GameBadgeData {
         cut: entry.itadCurrentCut,
         lowestPrice: entry.itadLowestPrice ?? null,
         playerCount: entry.playerCount,
+        earlyAccess: entry.earlyAccess === true,
         cooptimusOnlineMax: entry.cooptimusOnlineMax ?? null,
+        cooptimusCouchMax: entry.cooptimusCouchMax ?? null,
+        cooptimusComboCoop: entry.cooptimusComboCoop ?? null,
     };
 }
 

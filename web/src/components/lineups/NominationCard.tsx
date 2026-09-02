@@ -7,8 +7,10 @@ import { Link } from 'react-router-dom';
 import type { LineupEntryResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { ConfirmationPill } from '../common/ConfirmationPill';
-import { GameBadgeRow } from '../games/game-badges';
+import { GameBadgeRow, CarriedOverBadge } from '../games/game-badges';
 import { fromLineupEntry } from '../games/game-badges.helpers';
+import { GenreBadge, RatingBadge } from '../games/game-card-parts';
+import { GENRE_MAP } from '../../lib/game-utils';
 import { resolveEffectiveOnlineMax } from './coop-fit';
 
 interface NominationCardProps {
@@ -24,6 +26,8 @@ interface NominationCardProps {
 
 /** Cover image with gradient, badges, title overlay. */
 function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
+    const rawRating = entry.aggregatedRating ?? entry.rating ?? null;
+    const rating = rawRating != null && rawRating > 0 ? rawRating : null;
     return (
         <div className="relative h-48 overflow-hidden">
             {entry.gameCoverUrl ? (
@@ -33,12 +37,15 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-surface/90 via-surface/40 to-transparent" />
 
-            {/* Top-left: carried over badge */}
+            {/* Top-left: carried over marker, now the shared badge. */}
             {entry.carriedOver && (
-                <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[9px] font-medium rounded-full bg-zinc-500/40 text-secondary border border-zinc-500/30">
-                    Carried Over
+                <span className="absolute top-2 left-2">
+                    <CarriedOverBadge />
                 </span>
             )}
+
+            {/* Top-right: same rating badge the other two surfaces render. */}
+            {rating != null && <RatingBadge rating={rating} />}
 
             {/* Game title overlaid at bottom of cover */}
             <h3 className="absolute bottom-2 left-2.5 right-2.5 text-sm font-semibold text-white truncate">
@@ -48,13 +55,20 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
     );
 }
 
-/** Format price display: "$9.99 for 1" or "$14.99 (-50%) for 2". */
+/**
+ * Cost context: "$9.99" or "$9.99 for 3".
+ *
+ * ROK-1314: the `(-50%)` used to live here too, which stated the discount
+ * TWICE on one card — once as a raw percentage and once as the badge row's
+ * locked `On Sale` / `Best Price`. The badge now owns what KIND of deal it is;
+ * this owns what it costs and how many people would have to buy it
+ * (`nonOwnerCount`), which no shared badge can express.
+ */
 function formatPrice(entry: LineupEntryResponseDto): string | null {
     if (entry.itadCurrentPrice == null) return null;
     const price = `$${entry.itadCurrentPrice.toFixed(2)}`;
-    const cut = (entry.itadCurrentCut ?? 0) > 0 ? ` (-${entry.itadCurrentCut}%)` : '';
     const forCount = entry.nonOwnerCount > 0 ? ` for ${entry.nonOwnerCount}` : '';
-    return `${price}${cut}${forCount}`;
+    return `${price}${forCount}`;
 }
 
 /** Card body: nominator + price on one line, optional note below. */
@@ -65,18 +79,23 @@ function CardBody({ entry, canRemove, isMine, onRemove }: {
     onRemove: (id: number) => void;
 }): JSX.Element {
     const priceText = formatPrice(entry);
+    const primaryGenre = entry.genres?.[0] != null
+        ? GENRE_MAP[entry.genres[0]] ?? null
+        : null;
     return (
         <div className="px-2.5 py-2">
             {/* ROK-1314: the ONE shared badge strip, replacing the bespoke
                 ratio-coloured +N tally and the hardcoded sale span. The body
                 already prints the price figure, so the row keeps the locked
                 price vocabulary without repeating the number. */}
-            <GameBadgeRow
-                game={fromLineupEntry(entry)}
-                variant="compact"
-                price="label"
-                className="mb-1.5"
-            />
+            <div className="flex flex-wrap items-center gap-1 mb-1.5">
+                {primaryGenre && <GenreBadge label={primaryGenre} />}
+                <GameBadgeRow
+                    game={fromLineupEntry(entry)}
+                    variant="full"
+                    price="label"
+                />
+            </div>
             <div className="flex items-center justify-between">
                 <span className="text-[11px] text-dim">
                     by <span className="text-secondary">{entry.nominatedBy.displayName}</span>
