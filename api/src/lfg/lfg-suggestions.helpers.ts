@@ -12,14 +12,14 @@
  *
  * Read-only: no INSERT/UPDATE/DELETE anywhere in this file.
  */
-import { and, eq, gt, inArray, notInArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
 import type {
   LfgSuggestionDto,
   LfgSuggestionReason,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
-import { eligibleUser, type LfgDb } from './lfg-query.helpers';
+import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
 import {
   LFG_SUGGESTIONS_LIMIT,
   LFG_SUGGESTIONS_PLAYED_DAYS,
@@ -118,7 +118,13 @@ function collectCandidates(
   return candidates;
 }
 
-/** Users already in the group — they do not need suggesting into it. */
+/**
+ * Users already in the group — they do not need suggesting into it.
+ *
+ * Reuses the shared `liveIntent()` predicate rather than re-inlining
+ * status + expiry here (S3), which is why `users` is joined: that predicate
+ * carries the eligibility half too.
+ */
 async function fetchLiveHolders(
   db: LfgDb,
   gameId: number,
@@ -126,13 +132,8 @@ async function fetchLiveHolders(
   const rows = await db
     .select({ userId: schema.lfgIntents.userId })
     .from(schema.lfgIntents)
-    .where(
-      and(
-        eq(schema.lfgIntents.gameId, gameId),
-        eq(schema.lfgIntents.status, 'active'),
-        gt(schema.lfgIntents.expiresAt, new Date()),
-      ),
-    );
+    .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
+    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(new Date())));
   return new Set(rows.map((r) => r.userId));
 }
 

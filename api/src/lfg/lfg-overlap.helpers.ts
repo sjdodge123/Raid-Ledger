@@ -74,7 +74,10 @@ export function selectOverlapHours(memberSlots: MemberSlots): OverlapHour[] {
   for (const holders of coverage.values()) {
     if (holders.length > best) best = holders.length;
   }
-  const target = coverage.size > 0 && best === total ? total : best;
+  // `best` IS the answer in both cases: a full-roster hour has
+  // `best === total`, and otherwise the fallback wants exactly the maximum
+  // coverage. `total` is still read above, to reject a group of one (S1).
+  const target = best;
   if (target < 2) return [];
   return [...coverage.entries()]
     .filter(([, holders]) => holders.length === target)
