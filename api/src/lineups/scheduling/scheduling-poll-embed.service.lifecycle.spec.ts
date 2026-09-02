@@ -72,6 +72,8 @@ const GAME_ID = 3;
 const SLOT_ID = 20;
 const SLOT_TIME = '2099-04-01T19:00:00.000Z';
 const CLIENT_URL = 'http://localhost:5173';
+const COMMUNITY = 'Raid-Ledger dev';
+const TIMEZONE = 'America/New_York';
 
 /** Resolves the queued microtasks a fire-and-forget call leaves behind. */
 function flush(): Promise<void> {
@@ -94,7 +96,13 @@ function createEmbedService(
       editEmbed: jest.fn().mockResolvedValue(undefined),
     } as never,
     { resolveChannelForEvent: jest.fn().mockResolvedValue('chan-1') } as never,
-    { getClientUrl: jest.fn().mockResolvedValue(CLIENT_URL) } as never,
+    {
+      getClientUrl: jest.fn().mockResolvedValue(CLIENT_URL),
+      // ROK-1461 (operator walk): the poll reads the SAME branding source as
+      // the lineup card, so the two footers cannot say different names.
+      getBranding: jest.fn().mockResolvedValue({ communityName: COMMUNITY }),
+      getDefaultTimezone: jest.fn().mockResolvedValue(TIMEZONE),
+    } as never,
   );
 }
 
@@ -283,5 +291,47 @@ describe('StandalonePollService.complete — re-renders the poll (AC3)', () => {
     ).resolves.toBe(true);
     await flush();
     expect(pollEmbed.fireUpdateEmbed).toHaveBeenCalledWith(MATCH_ID);
+  });
+});
+
+/**
+ * ROK-1461 operator walk (2026-09-02): the poll footer read
+ * `Raid Ledger · Scheduling Poll` while the lineup card beside it read the
+ * configured community name — the poll passed `clientUrl` alone, so the chrome
+ * fell back to `DEFAULT_COMMUNITY_NAME`.
+ */
+describe('SchedulingPollEmbedService — embed context comes from settings', () => {
+  it('passes the configured community name, client URL and timezone', async () => {
+    const mockDb = createDrizzleMock();
+    const buildSchedulingPollEmbed = jest
+      .fn()
+      .mockReturnValue({ embed: { toJSON: () => ({}) } });
+    const service = createEmbedService(mockDb, buildSchedulingPollEmbed);
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: MATCH_ID,
+        lineupId: LINEUP_ID,
+        gameId: GAME_ID,
+        status: 'scheduling',
+        linkedEventId: null,
+        embedMessageId: 'msg-1',
+        embedChannelId: 'chan-1',
+      },
+    ]);
+    mockDb.limit.mockResolvedValueOnce([
+      { name: 'Elden Ring', coverUrl: null },
+    ]);
+
+    service.fireUpdateEmbed(MATCH_ID);
+    await flush();
+
+    expect(buildSchedulingPollEmbed).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        communityName: COMMUNITY,
+        clientUrl: CLIENT_URL,
+        timezone: TIMEZONE,
+      }),
+    );
   });
 });

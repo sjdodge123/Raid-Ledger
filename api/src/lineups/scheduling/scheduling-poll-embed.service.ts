@@ -8,7 +8,10 @@ import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import { DiscordEmbedFactory } from '../../discord-bot/services/discord-embed.factory';
+import {
+  DiscordEmbedFactory,
+  type EmbedContext,
+} from '../../discord-bot/services/discord-embed.factory';
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../../discord-bot/services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
@@ -65,9 +68,10 @@ export class SchedulingPollEmbedService {
     if (!channelId) return;
     const data = await this.buildEmbedData(matchId, lineupId, gameId);
     if (!data) return;
-    const { embed } = this.embedFactory.buildSchedulingPollEmbed(data, {
-      clientUrl: await this.settingsService.getClientUrl(),
-    });
+    const { embed } = this.embedFactory.buildSchedulingPollEmbed(
+      data,
+      await this.buildContext(),
+    );
     const msg = await this.clientService.sendEmbed(channelId, embed);
     await this.storeEmbedRef(matchId, msg.id, channelId);
   }
@@ -91,14 +95,35 @@ export class SchedulingPollEmbedService {
       await this.loadLockedInTime(match.linkedEventId, status),
     );
     if (!data) return;
-    const { embed } = this.embedFactory.buildSchedulingPollEmbed(data, {
-      clientUrl: await this.settingsService.getClientUrl(),
-    });
+    const { embed } = this.embedFactory.buildSchedulingPollEmbed(
+      data,
+      await this.buildContext(),
+    );
     await this.clientService.editEmbed(
       match.embedChannelId,
       match.embedMessageId,
       embed,
     );
+  }
+
+  /**
+   * Shared embed context from settings (ROK-1461, operator walk 2026-09-02).
+   *
+   * The poll used to pass `clientUrl` ALONE, so the chrome fell back to
+   * `DEFAULT_COMMUNITY_NAME` and the poll footer read `Raid Ledger · …` while
+   * the lineup card next to it read the configured community name. Mirrors
+   * `embed-sync.processor.ts::buildContext` — same branding source, so the two
+   * families cannot drift apart again.
+   *
+   * @returns Community name, web origin and timezone for the poll embed.
+   */
+  private async buildContext(): Promise<EmbedContext> {
+    const [branding, clientUrl, timezone] = await Promise.all([
+      this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
+      this.settingsService.getDefaultTimezone(),
+    ]);
+    return { communityName: branding.communityName, clientUrl, timezone };
   }
 
   /** Build embed data from current DB state. */
