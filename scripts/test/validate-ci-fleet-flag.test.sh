@@ -172,6 +172,8 @@ INVOKE_RC=0
 INVOKE_WORKSPACE_ROOT="/nonexistent-workspace"
 # Pre-set PLAYWRIGHT_AUTH_DIR to assert the export never clobbers a caller's.
 INVOKE_AUTH_DIR=""
+# Simulates an operator-supplied heap ceiling, which must always win.
+INVOKE_NODE_OPTIONS=""
 
 # invoke <rl_target> <base_url> -- <validate-ci flags...>
 # An empty <base_url> leaves BASE_URL unset entirely (the AC1 case).
@@ -193,6 +195,7 @@ invoke() {
             RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
             RL_WORKSPACE_ROOT="$INVOKE_WORKSPACE_ROOT" \
             PLAYWRIGHT_AUTH_DIR="$INVOKE_AUTH_DIR" \
+            NODE_OPTIONS="$INVOKE_NODE_OPTIONS" \
             bash "$VALIDATE_CI_PATH" "$@" 2>"$err_file"
         ) || INVOKE_RC=$?
     else
@@ -250,6 +253,32 @@ assert_grep 'render-rules\.selftest' "$npx_argv_file" "the tools step must run t
 # not coverage.
 CURRENT_TEST_NAME="AC2: the unit step runs the scripts/smoke helper specs"
 assert_grep 'vitest run --config vitest\.config\.ts scripts/smoke' "$npx_argv_file" "the unit step must run the root-config scripts/smoke specs"
+
+# The runner recipe. `--fleet --with-e2e` (task de3ead1d639b) died at
+# "Unit tests (no coverage)": ONE in-band jest process walked into the V8 heap
+# limit at ~2.9 GB on a 4 GiB runner ("Ineffective mark-compacts near heap
+# limit"), and run_step stops on first failure, so the gate never reached e2e.
+# Two workers at 1536 MB each is the shape that has passed repeatedly on this
+# runner class — it fits the cgroup with room for the node parents.
+CURRENT_TEST_NAME="AC9: --fleet runs the unit step with the runner recipe"
+assert_grep 'NODE_OPTIONS=--max-old-space-size=1536 .*jest.*--maxWorkers=2' "$npx_argv_file" "--fleet must run jest 2-up at a 1536 MB ceiling"
+assert_grep 'NODE_OPTIONS=--max-old-space-size=1536 .*vitest run.*--maxWorkers=2' "$npx_argv_file" "--fleet must run vitest 2-up at a 1536 MB ceiling"
+assert_absent 'max-old-space-size=3072' "$npx_argv_file" "--fleet must not use the 3072 default that OOMed"
+
+CURRENT_TEST_NAME="AC9: an operator NODE_OPTIONS still wins under --fleet"
+INVOKE_NODE_OPTIONS="--max-old-space-size=2048"
+invoke remote "$ENV_URL" --fleet --no-e2e
+INVOKE_NODE_OPTIONS=""
+assert_rc 0 "--fleet with a preset NODE_OPTIONS"
+assert_grep 'NODE_OPTIONS=--max-old-space-size=2048 .*jest' "$npx_argv_file" "a preset NODE_OPTIONS must be preserved"
+assert_absent 'max-old-space-size=1536' "$npx_argv_file" "the recipe must not override an explicit operator ceiling"
+assert_grep 'jest.*--maxWorkers=2' "$npx_argv_file" "the worker cap still applies — it is not part of the heap override"
+
+CURRENT_TEST_NAME="AC9: --only-unit --no-coverage is unchanged (no worker cap)"
+invoke local "" --only-unit --no-coverage
+assert_rc 0 "--only-unit --no-coverage"
+assert_absent 'maxWorkers' "$npx_argv_file" "the runner recipe is scoped to --fleet"
+invoke remote "$ENV_URL" --fleet
 
 # W2 (reviewer): a fresh runner has no tools/test-bot/node_modules — the
 # Discord-smoke step says so and installs them. The render-rule self-test in the

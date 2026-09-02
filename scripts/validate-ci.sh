@@ -745,6 +745,24 @@ run_smoke_helper_specs() {
 
 run_unit_tests_no_coverage() {
   local node_opts="${NODE_OPTIONS:-}"
+
+  # ROK-1466: the runner recipe. `--fleet --with-e2e` died here (task
+  # de3ead1d639b) — ONE in-band jest process walked into the V8 heap limit at
+  # ~2.9 GB on a 4 GiB runner ("Ineffective mark-compacts near heap limit") and
+  # run_step stops on first failure, so the gate never reached e2e. The 3072 MB
+  # single-process ceiling below is simply too close to the cgroup: there is no
+  # room for the node parents plus one worker's peak. Two workers at 1536 MB
+  # each is the shape that has passed repeatedly on this runner class.
+  # An explicit operator NODE_OPTIONS always wins; the worker cap is not part of
+  # that override, since it is about process COUNT rather than heap size.
+  # ROK-1470 (unmerged, rebases after this) replaces the literal 1536 with a
+  # heap resolved from the container limit — this block is its rebase target.
+  local -a worker_args=()
+  if $fleet_mode; then
+    worker_args=(--maxWorkers=2)
+    [ -n "$node_opts" ] || node_opts="--max-old-space-size=1536"
+  fi
+
   if [ -z "$node_opts" ]; then
     # Prefer the cgroup-derived ceiling (ROK-1451's clamp) so a slot smaller
     # than 4 GiB is not pinned ABOVE its own limit — the SIGKILL-with-no-summary
@@ -756,8 +774,13 @@ run_unit_tests_no_coverage() {
     node_opts="--max-old-space-size=${heap_mb}"
   fi
   echo "Running unit tests WITHOUT coverage (NODE_OPTIONS=${node_opts})"
-  (cd api && NODE_OPTIONS="$node_opts" npx jest --passWithNoTests) || return $?
-  (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" npx vitest run) || return $?
+  # `${arr[@]+"${arr[@]}"}` — an empty array under `set -u` is an unbound
+  # variable error on bash 3.2 (macOS), and a bare "$arr" would pass an empty
+  # string as a real argv entry.
+  (cd api && NODE_OPTIONS="$node_opts" \
+     npx jest --passWithNoTests ${worker_args[@]+"${worker_args[@]}"}) || return $?
+  (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" \
+     npx vitest run ${worker_args[@]+"${worker_args[@]}"}) || return $?
   run_smoke_helper_specs
 }
 
