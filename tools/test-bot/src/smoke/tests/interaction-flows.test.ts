@@ -190,7 +190,9 @@ const multiUserSignupFlow: SmokeTest = {
         (m) => {
           const embed = m.embeds.find((e) => e.title?.includes(ev.title));
           if (!embed) return false;
-          const match = (embed.description ?? '').match(/ROSTER:\s*(\d+)/);
+          // ROK-1460: the count lives on the chrome author line, not in a
+          // `ROSTER: n` description header.
+          const match = (embed.author ?? '').match(/(\d+) of (\d+)/);
           return match ? parseInt(match[1], 10) >= 3 : false;
         },
         ctx.config.timeoutMs,

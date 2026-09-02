@@ -17,8 +17,43 @@ import {
   channelForTest,
   channelForGame,
 } from '../fixtures.js';
-import { assertEmbedTitle, assertEmbedCount, assertHasButton } from '../assert.js';
+import { assertEmbedTitle, assertEmbedCount, assertHasButton, assertEmbedColor } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import type { SimpleEmbed } from '../../helpers/messages.js';
+import type { ApiClient } from '../api.js';
+
+/** EMBED_COLORS.REMINDER — the `needs_you` colour a soon-to-start event wears. */
+const REMINDER_AMBER = 0xf59e0b;
+/** EMBED_COLORS.ERROR — the `cancelled` colour. */
+const CANCELLED_RED = 0xef4444;
+/** Same fallback the API applies when no community name is configured. */
+const DEFAULT_COMMUNITY = 'Raid Ledger';
+
+/** The community name the chrome renders, read from the API's own branding. */
+async function fetchCommunityName(api: ApiClient): Promise<string> {
+  const branding = await api
+    .get<{ communityName: string | null }>('/system/branding')
+    .catch(() => null);
+  const name = branding?.communityName?.trim();
+  return name ? name : DEFAULT_COMMUNITY;
+}
+
+/**
+ * ROK-1460 replaced the `ROSTER: n/max` description header with the chrome
+ * author line, which carries the same count as `{n} of {max}`. Smoke events are
+ * created 60 minutes out, so their lifecycle state is IMMINENT.
+ */
+function embedShowsSignupCount(
+  e: SimpleEmbed,
+  title: string,
+  count: number,
+): boolean {
+  return (
+    !!e.title?.includes(title) &&
+    !!e.author?.includes(`${count} of `) &&
+    !e.description?.includes('ROSTER:')
+  );
+}
 
 /** Build event overrides for MMO roster testing when game + char available. */
 function mmoOverrides(ctx: TestContext) {
@@ -42,6 +77,20 @@ function embedInChannel(chId: string, title: string, timeoutMs: number) {
     (msg) => msg.embeds.some((e) => e.title?.includes(title)),
     timeoutMs,
   );
+}
+
+/** The author line must carry the state, not the bare community name. */
+function assertAuthorMatches(e: SimpleEmbed, pattern: RegExp): void {
+  if (!e.author || !pattern.test(e.author)) {
+    throw new Error(`Expected author to match ${pattern}, got "${e.author}"`);
+  }
+}
+
+/** The community name lives in the footer once the author carries the state. */
+function assertFooterIs(e: SimpleEmbed, community: string): void {
+  if ((e.footer ?? '').split(' \u00b7 ')[0] !== community) {
+    throw new Error(`Expected footer to start with "${community}", got "${e.footer}"`);
+  }
 }
 
 const eventEmbedPosted: SmokeTest = {
@@ -72,12 +121,7 @@ const embedFilling: SmokeTest = {
       await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
-        (m) =>
-          m.embeds.some(
-            (e) =>
-              e.title?.includes(ev.title) &&
-              e.description?.includes('ROSTER:'),
-          ),
+        (m) => m.embeds.some((e) => embedShowsSignupCount(e, ev.title, 1)),
         ctx.config.timeoutMs,
       );
     } finally {
@@ -98,12 +142,7 @@ const embedTentative: SmokeTest = {
       await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
-        (m) =>
-          m.embeds.some(
-            (e) =>
-              e.title?.includes(ev.title) &&
-              e.description?.includes('ROSTER:'),
-          ),
+        (m) => m.embeds.some((e) => embedShowsSignupCount(e, ev.title, 1)),
         ctx.config.timeoutMs,
       );
     } finally {
@@ -125,27 +164,16 @@ const embedCancelSignup: SmokeTest = {
       // Wait for embed to show the signup in the roster
       await waitForEmbedUpdate(
         ch.channelId,
-        (m) =>
-          m.embeds.some(
-            (e) =>
-              e.title?.includes(ev.title) &&
-              e.description?.includes('ROSTER:'),
-          ),
+        (m) => m.embeds.some((e) => embedShowsSignupCount(e, ev.title, 1)),
         ctx.config.timeoutMs,
       );
       await cancelSignup(ctx.api, ev.id);
       await awaitProcessing(ctx.api);
-      // After cancel, roster count drops to 0: MMO shows "ROSTER: 0/",
-      // non-MMO removes the roster section entirely
+      // After cancel the count drops back to 0 on the author line (ROK-1460:
+      // it used to be the `ROSTER: 0/` description header).
       await waitForEmbedUpdate(
         ch.channelId,
-        (m) =>
-          m.embeds.some(
-            (e) =>
-              e.title?.includes(ev.title) &&
-              (!e.description?.includes('ROSTER:') ||
-                e.description.includes('ROSTER: 0/')),
-          ),
+        (m) => m.embeds.some((e) => embedShowsSignupCount(e, ev.title, 0)),
         ctx.config.timeoutMs,
       );
     } finally {
@@ -166,7 +194,12 @@ const embedCancelled: SmokeTest = {
       await awaitProcessing(ctx.api);
       await waitForEmbedUpdate(
         ch.channelId,
-        (m) => m.embeds.some((e) => e.title?.includes('CANCELLED')),
+        // ROK-1460: CANCELLED moved from the title to the author line; the
+        // title keeps only its strikethrough.
+        (m) =>
+          m.embeds.some(
+            (e) => !!e.author?.includes('CANCELLED') && !!e.title?.includes('~~'),
+          ),
         ctx.config.timeoutMs,
       );
     } finally {
@@ -276,6 +309,40 @@ const nonMmoNoWowAvatars: SmokeTest = {
   },
 };
 
+const embedChromePerState: SmokeTest = {
+  name: 'Event embed chrome: per-state colour + author line (ROK-1460)',
+  category: 'embed',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 7);
+    const community = await fetchCommunityName(ctx.api);
+    const ev = await createEvent(ctx.api, 'embed-chrome', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
+    try {
+      const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
+      const posted = msg.embeds[0];
+      // Smoke events start 60 minutes out -> IMMINENT -> needs_you amber.
+      assertEmbedColor(posted, REMINDER_AMBER);
+      assertAuthorMatches(posted, /STARTS IN \d+ MIN \u00b7 0 of 10/);
+      assertFooterIs(posted, community);
+      await cancelEvent(ctx.api, ev.id);
+      await awaitProcessing(ctx.api);
+      const cancelled = await waitForEmbedUpdate(
+        ch.channelId,
+        (m) => m.embeds.some((e) => !!e.author?.includes('CANCELLED')),
+        ctx.config.timeoutMs,
+      );
+      const card = cancelled.embeds.find((e) => e.author?.includes('CANCELLED'))!;
+      assertEmbedColor(card, CANCELLED_RED);
+      assertAuthorMatches(card, /\u2715 CANCELLED/);
+      assertFooterIs(card, community);
+      if (card.thumbnail) {
+        throw new Error('Cancelled embed must drop the cover art (AC4)');
+      }
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 export const channelEmbedTests: SmokeTest[] = [
   eventEmbedPosted,
   embedFilling,
@@ -285,4 +352,5 @@ export const channelEmbedTests: SmokeTest[] = [
   embedReschedule,
   embedHasButtons,
   nonMmoNoWowAvatars,
+  embedChromePerState,
 ];
