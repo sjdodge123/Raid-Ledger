@@ -154,6 +154,11 @@ const validateCiSchema: Shape = {
   worktree_path: worktreePathSchema,
   against_env_slug: slugSchema.optional(),
   timeout_seconds: z.number().int().min(60).max(7200).optional(),
+  // ROK-1467 — booleans that map onto validate-ci.sh's narrowing flags. The
+  // script rejects conflicting --only-* combinations with exit 2.
+  only_integration: z.boolean().optional(),
+  only_unit: z.boolean().optional(),
+  no_coverage: z.boolean().optional(),
   ...waitFragment,
 };
 registerTool(validateCi.TOOL_NAME, validateCi.TOOL_DESCRIPTION, validateCiSchema, async (p) =>

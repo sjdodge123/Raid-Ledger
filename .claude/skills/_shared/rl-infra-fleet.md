@@ -34,7 +34,7 @@ rl env spin <slug> [--image tag]                  # spin per-env allinone+PG
 rl env list
 rl env destroy <slug>
 
-rl validate-ci [...args]                          # runs validate-ci.sh INSIDE the runner
+rl validate-ci [...args]                          # runs `bash scripts/validate-ci.sh` INSIDE the runner
 rl db <slug> [--web]                              # psql or pgweb
 rl logs [filter]                                  # open Grafana with Loki filter
 rl top                                            # ctop live resource view
@@ -133,6 +133,11 @@ When writing/updating a skill, prefer MCP tools (agents) or the `rl` CLI
 | `docker exec raid-ledger-db psql …`         | `mcp__mcp-rl-fleet__rl_db_url`        |
 | `npx playwright test`                       | `rl_validate_ci` (args=['--only-e2e']) |
 | `./scripts/clone-prod-to-local.sh`          | `mcp__mcp-rl-fleet__rl_env_clone_prod` (target is a test env) |
+
+Anything you run on a runner yourself (`rl_run_on_runner`, `rl shell`) must be
+invoked as `bash scripts/validate-ci.sh …` rather than `./scripts/validate-ci.sh`
+— Mutagen syncs the worktree without POSIX exec bits, so the direct form fails
+with `Permission denied`. `rl validate-ci` / `rl_validate_ci` already do this.
 
 For shell scripts that can't call MCP tools (build pipelines, CI), use the
 `rl` CLI at `rl-infra/cli/rl`. Setting `RL_TARGET=local` (or being on a
