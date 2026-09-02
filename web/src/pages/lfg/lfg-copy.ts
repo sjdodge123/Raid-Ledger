@@ -36,7 +36,11 @@ export const LFG_COPY = {
     invite: 'Invite',
     /** ROK-1455 ships the DM. Until then the button is an inert placeholder. */
     inviteDisabledTitle: 'Invites arrive with ROK-1455',
-    coopDetails: 'Co-op details ↗',
+    /**
+     * Links to the WHOLE game detail page (co-op attribution included), so it
+     * is not labelled as co-op-only — operator walk, 2026-09-02.
+     */
+    detailsLink: 'Details ↗',
     notFoundTitle: "We couldn't find that game",
     notFoundBody: 'The link may be stale, or the game was never added here.',
     backToGames: 'Back to Games',

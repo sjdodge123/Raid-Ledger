@@ -59,7 +59,7 @@ export function LfgHeader({
                     to={`/games/${gameId}`}
                     className="inline-block text-xs font-semibold text-emerald-400 hover:text-emerald-300"
                 >
-                    {LFG_COPY.coopDetails}
+                    {LFG_COPY.detailsLink}
                 </Link>
             </div>
         </header>
