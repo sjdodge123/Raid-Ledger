@@ -29,23 +29,19 @@ import { generatePublicSlug } from '../public-lineup-slug.helpers';
 const CHANNEL = 'test-channel-1473';
 const MESSAGE_ID = 'mock-msg-1473';
 
-/**
- * Poll until a spy has been called at least `count` times.
- * The card is posted fire-and-forget (D4), so the flip returns before it.
- */
-async function waitForCalls(
-  spy: jest.SpyInstance,
-  count: number,
+/** Poll until `check` returns a value, or fail with `label`. */
+async function pollUntil<T>(
+  check: () => Promise<T | null>,
+  label: string,
   timeoutMs = 5000,
-): Promise<void> {
+): Promise<T> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (spy.mock.calls.length >= count) return;
+    const value = await check();
+    if (value !== null) return value;
     await new Promise((r) => setTimeout(r, 50));
   }
-  throw new Error(
-    `Expected ${count} call(s), saw ${spy.mock.calls.length} within ${timeoutMs}ms`,
-  );
+  throw new Error(`Timed out waiting for ${label} after ${timeoutMs}ms`);
 }
 
 function describeSchedulingPollCard() {
@@ -131,22 +127,38 @@ function describeSchedulingPollCard() {
     return match;
   }
 
-  /** Decide the lineup and wait for the fire-and-forget card to land. */
+  /**
+   * Decide the lineup and wait for the fire-and-forget card to PERSIST.
+   *
+   * Waiting on the stored `embed_message_id` (not on the spy) is deliberate:
+   * the decide transition also posts the "matches found" lineup card through
+   * the same `sendEmbed`, so a spy-count wait can return on the wrong embed
+   * and read the match row before the poll card's store write lands.
+   */
   async function decideAndAwaitCard(lineupId: number) {
     await lineupsService.transitionStatus(lineupId, { status: 'decided' });
-    await waitForCalls(sendEmbedSpy, 1);
-    return loadMatch(lineupId);
+    return pollUntil(async () => {
+      const match = await loadMatch(lineupId);
+      return match?.embedMessageId ? match : null;
+    }, `poll card stored for lineup ${lineupId}`);
   }
 
-  /** JSON body of the embed handed to `sendEmbed`. */
-  function sentEmbedJson(): {
-    description?: string;
-    author?: { name: string };
-  } {
-    const embed = sendEmbedSpy.mock.calls[0][1] as {
-      toJSON: () => { description?: string; author?: { name: string } };
-    };
-    return embed.toJSON();
+  /** Description of every embed sent, as plain strings. */
+  function sentDescriptions(): string[] {
+    return sendEmbedSpy.mock.calls.map((call) => {
+      const embed = call[1] as { toJSON?: () => { description?: string } };
+      return embed?.toJSON?.().description ?? '';
+    });
+  }
+
+  /**
+   * The poll-card sends only. The lineup family posts other channel embeds
+   * (matches-found on decide, event-created on lock-in) through the same
+   * client, so duplicate-card assertions must filter by the poll URL.
+   */
+  function pollCardSends(lineupId: number, matchId: number): string[] {
+    const path = `/community-lineup/${lineupId}/schedule/${matchId}`;
+    return sentDescriptions().filter((d) => d.includes(`${path})`));
   }
 
   // ── Matching flip site (voting → decided) ──────────────────────────────
@@ -157,11 +169,15 @@ function describeSchedulingPollCard() {
     const match = await decideAndAwaitCard(lineupId);
 
     expect(match.status).toBe('scheduling');
-    expect(sendEmbedSpy.mock.calls[0][0]).toBe(CHANNEL);
-    expect(sentEmbedJson().description).toContain(
-      `/community-lineup/${lineupId}/schedule/${match.id})`,
+    const cards = pollCardSends(lineupId, match.id);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toContain('[Vote now');
+    const cardCall = sendEmbedSpy.mock.calls.find((call) =>
+      (call[1] as { toJSON?: () => { description?: string } })
+        ?.toJSON?.()
+        .description?.includes(`/schedule/${match.id})`),
     );
-    expect(sentEmbedJson().description).toContain('[Vote now');
+    expect(cardCall?.[0]).toBe(CHANNEL);
   });
 
   it('stores the posted message reference on the match row', async () => {
@@ -178,9 +194,9 @@ function describeSchedulingPollCard() {
     const match = await decideAndAwaitCard(lineupId);
 
     events.emit(LINEUP_MATCH_EVENTS.ENTERED_SCHEDULING, { matchId: match.id });
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 500));
 
-    expect(sendEmbedSpy).toHaveBeenCalledTimes(1);
+    expect(pollCardSends(lineupId, match.id)).toHaveLength(1);
   });
 
   it('edits the stored message on lock-in instead of posting a new card', async () => {
@@ -200,14 +216,18 @@ function describeSchedulingPollCard() {
 
     await schedulingService.createEventFromSlot(match.id, slot.id, voterId);
 
-    await waitForCalls(editEmbedSpy, 1);
+    await pollUntil(
+      () => Promise.resolve(editEmbedSpy.mock.calls.length > 0 || null),
+      'the poll card to be edited on lock-in',
+    );
     const [editChannel, editMessageId] = editEmbedSpy.mock.calls[0] as [
       string,
       string,
     ];
     expect(editChannel).toBe(CHANNEL);
     expect(editMessageId).toBe(MESSAGE_ID);
-    expect(sendEmbedSpy).toHaveBeenCalledTimes(1);
+    // The lock-in EDITS the stored message — it must not post a second card.
+    expect(pollCardSends(lineupId, match.id)).toHaveLength(1);
   });
 
   // ── Private lineups keep the poll out of the channel ──────────────────
@@ -221,7 +241,7 @@ function describeSchedulingPollCard() {
 
     const match = await loadMatch(lineupId);
     expect(match.status).toBe('scheduling');
-    expect(sendEmbedSpy).not.toHaveBeenCalled();
+    expect(pollCardSends(lineupId, match.id)).toHaveLength(0);
     expect(match.embedMessageId).toBeNull();
     expect(match.embedChannelId).toBeNull();
   });
@@ -263,10 +283,12 @@ function describeSchedulingPollCard() {
     );
 
     expect(result.promoted).toBe(true);
-    await waitForCalls(sendEmbedSpy, 1);
-    expect(sentEmbedJson().description).toContain(
-      `/community-lineup/${lineup.id}/schedule/${match.id})`,
-    );
+    const stored = await pollUntil(async () => {
+      const row = await loadMatch(lineup.id);
+      return row?.embedMessageId ? row : null;
+    }, `poll card stored for bandwagon match ${match.id}`);
+    expect(stored.embedChannelId).toBe(CHANNEL);
+    expect(pollCardSends(lineup.id, match.id)).toHaveLength(1);
   });
 }
 

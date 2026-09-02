@@ -707,15 +707,17 @@ function describeMatchingRaceAndIdempotency() {
       tag: 'single',
     });
 
-    await expect(
-      buildMatchesForLineup(testApp.db, lineupId),
-    ).resolves.toBeUndefined();
+    // ROK-1473: the pass now RETURNS the ids it moved into `scheduling` so
+    // the caller can announce them post-commit (the Discord poll card).
+    const schedulingIds = await buildMatchesForLineup(testApp.db, lineupId);
 
     const matches = await testApp.db
       .select()
       .from(schema.communityLineupMatches)
       .where(eq(schema.communityLineupMatches.lineupId, lineupId));
     expect(matches).toHaveLength(1);
+    expect(schedulingIds).toEqual([matches[0].id]);
+    expect(matches[0].status).toBe('scheduling');
 
     const members = await testApp.db
       .select()
@@ -859,16 +861,16 @@ function describeMatchingRaceAndIdempotency() {
     }
 
     // Today this rejects with PostgresError 23505 on uq_match_member_user.
-    // After Commit 3 (.onConflictDoNothing()) it resolves cleanly.
-    await expect(
-      buildMatchesForLineup(testApp.db, lineupId),
-    ).resolves.toBeUndefined();
+    // After Commit 3 (.onConflictDoNothing()) it resolves cleanly — and since
+    // ROK-1473 it resolves with the ids that entered `scheduling`.
+    const schedulingIds = await buildMatchesForLineup(testApp.db, lineupId);
 
     const matches = await testApp.db
       .select()
       .from(schema.communityLineupMatches)
       .where(eq(schema.communityLineupMatches.lineupId, lineupId));
     expect(matches).toHaveLength(1);
+    expect(schedulingIds).toEqual([matches[0].id]);
 
     // The new match must contain the orphan voter's user_id — that is the
     // "silent data loss" path the brief warns about.
