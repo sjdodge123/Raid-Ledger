@@ -67,6 +67,7 @@ else
         "$TEST_DIR/env-settings-overlay.test.sh"
         "$TEST_DIR/env-spin-bot-identity.test.sh"
         "$TEST_DIR/bot-identity-visibility.test.sh"
+        "$TEST_DIR/settings-bundle.test.sh"
     )
 fi
 

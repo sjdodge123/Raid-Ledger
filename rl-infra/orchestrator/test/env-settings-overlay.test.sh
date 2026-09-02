@@ -173,9 +173,58 @@ test_overlay_explicit_slot_wins() {
     eso_teardown
 }
 
+# 6 — D6: the VM-side bundle supplies the shared API keys, and the slot
+#     identity wins on any key collision.
+test_overlay_merges_settings_bundle() {
+    CURRENT_TEST_NAME="D6: bundle keys are applied; slot identity wins collisions"
+    eso_setup
+    export RL_SETTINGS_BUNDLE="$RL_STATE_DIR/bundle.enc"
+    export RL_SETTINGS_BUNDLE_KEY="overlay-test-key"
+    printf '%s' '{"itad_api_key":"itad-from-bundle","discord_bot_token":"stale-laptop-token"}' \
+        | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:RL_SETTINGS_BUNDLE_KEY \
+          -out "$RL_SETTINGS_BUNDLE" 2>/dev/null
+
+    local out rc=0
+    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    assert_exit_code "$rc" "0" "overlay with a bundle should exit 0"
+    local payload
+    payload=$(cat "$ESO_STDIN_CAPTURE" 2>/dev/null || echo "")
+    assert_eq "$(jq -r '.itad_api_key' <<<"$payload" 2>/dev/null || echo parse_err)" \
+        "itad-from-bundle" "shared API key from the bundle reaches the env"
+    assert_eq "$(jq -r '.discord_bot_token' <<<"$payload" 2>/dev/null || echo parse_err)" \
+        "tok-slot-2-secret" "the SLOT identity beats a stale token in the bundle"
+    unset RL_SETTINGS_BUNDLE RL_SETTINGS_BUNDLE_KEY
+    eso_teardown
+}
+
+# 7 — D6: with no slot identity but a bundle present, the overlay still runs
+#     (this is the Docker-Desktop-off path that must not no-op).
+test_overlay_runs_for_bundle_only() {
+    CURRENT_TEST_NAME="D6: bundle alone (no slot identity) still applies"
+    eso_setup
+    unset RL_SLOT_2_DISCORD_BOT_TOKEN RL_SLOT_2_DISCORD_CLIENT_ID RL_SLOT_2_DISCORD_CLIENT_SECRET
+    export RL_SETTINGS_BUNDLE="$RL_STATE_DIR/bundle.enc"
+    export RL_SETTINGS_BUNDLE_KEY="overlay-test-key"
+    printf '%s' '{"itad_api_key":"itad-from-bundle"}' \
+        | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:RL_SETTINGS_BUNDLE_KEY \
+          -out "$RL_SETTINGS_BUNDLE" 2>/dev/null
+
+    local out rc=0
+    out=$("$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    assert_exit_code "$rc" "0" "bundle-only overlay should exit 0"
+    assert_eq "$(jq -r '.skipped // "none"' <<<"$out" 2>/dev/null || echo parse_err)" "none" \
+        "must NOT report skipped when the bundle has keys"
+    assert_eq "$(jq -r '.itad_api_key' "$ESO_STDIN_CAPTURE" 2>/dev/null || echo parse_err)" \
+        "itad-from-bundle" "bundle key reaches the container"
+    unset RL_SETTINGS_BUNDLE RL_SETTINGS_BUNDLE_KEY
+    eso_teardown
+}
+
 run_test "d1-applies-slot-identity" test_overlay_applies_slot_identity
 run_test "d1-skips-unconfigured" test_overlay_skips_unconfigured_slot
 run_test "d1-exec-failure" test_overlay_reports_exec_failure
 run_test "d1-explicit-slot" test_overlay_explicit_slot_wins
+run_test "d6-bundle-merge" test_overlay_merges_settings_bundle
+run_test "d6-bundle-only" test_overlay_runs_for_bundle_only
 
 print_test_summary
