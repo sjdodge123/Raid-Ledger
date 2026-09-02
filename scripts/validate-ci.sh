@@ -738,30 +738,32 @@ resolve_heap_mb() {
 # the ROOT vitest.config.ts, which nothing ever invoked — GitHub CI's web job
 # and this script both `cd web` first, picking up web/vitest.config.ts instead.
 # They are the only coverage the Playwright harness helpers have.
+# Args: $1 - NODE_OPTIONS to run under (defaults to the inherited value). The
+# no-coverage path passes its own resolved value so the fleet heap re-pin
+# applies here too, rather than this one suite silently keeping the runner's
+# injected 3072 ceiling.
 run_smoke_helper_specs() {
+  local node_opts="${1:-${NODE_OPTIONS:-}}"
   echo "--- scripts/smoke helper specs (root vitest config) ---"
-  (cd "$REPO_ROOT" && npx vitest run --config vitest.config.ts scripts/smoke)
+  (cd "$REPO_ROOT" && NODE_OPTIONS="$node_opts" \
+     npx vitest run --config vitest.config.ts scripts/smoke)
+}
+
+# Replace (or add) --max-old-space-size inside a NODE_OPTIONS string, leaving
+# every other flag intact. Echoes the rewritten value.
+# Args: $1 - existing NODE_OPTIONS (may be empty); $2 - heap size in MB.
+_repin_heap() {
+  local opts="$1" heap_mb="$2" stripped
+  # `[[:space:]]*` on both sides so removing the flag never leaves a double
+  # space or a leading/trailing one.
+  stripped="$(printf '%s' "$opts" | sed -E 's/[[:space:]]*--max[-_]old[-_]space[-_]size=[0-9]+[[:space:]]*/ /g')"
+  stripped="$(printf '%s' "$stripped" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+  printf '%s--max-old-space-size=%s' "${stripped:+$stripped }" "$heap_mb"
 }
 
 run_unit_tests_no_coverage() {
   local node_opts="${NODE_OPTIONS:-}"
-
-  # ROK-1466: the runner recipe. `--fleet --with-e2e` died here (task
-  # de3ead1d639b) — ONE in-band jest process walked into the V8 heap limit at
-  # ~2.9 GB on a 4 GiB runner ("Ineffective mark-compacts near heap limit") and
-  # run_step stops on first failure, so the gate never reached e2e. The 3072 MB
-  # single-process ceiling below is simply too close to the cgroup: there is no
-  # room for the node parents plus one worker's peak. Two workers at 1536 MB
-  # each is the shape that has passed repeatedly on this runner class.
-  # An explicit operator NODE_OPTIONS always wins; the worker cap is not part of
-  # that override, since it is about process COUNT rather than heap size.
-  # ROK-1470 (unmerged, rebases after this) replaces the literal 1536 with a
-  # heap resolved from the container limit — this block is its rebase target.
-  local -a worker_args=()
-  if $fleet_mode; then
-    worker_args=(--maxWorkers=2)
-    [ -n "$node_opts" ] || node_opts="--max-old-space-size=1536"
-  fi
+  local -a jest_args=() vitest_args=()
 
   if [ -z "$node_opts" ]; then
     # Prefer the cgroup-derived ceiling (ROK-1451's clamp) so a slot smaller
@@ -773,15 +775,44 @@ run_unit_tests_no_coverage() {
     [ -n "$heap_mb" ] || heap_mb=3072
     node_opts="--max-old-space-size=${heap_mb}"
   fi
+
+  # ROK-1466: the runner recipe, applied LAST and UNCONDITIONALLY in fleet mode.
+  #
+  # `--fleet --with-e2e` died here twice. First (task de3ead1d639b) as ONE
+  # in-band jest process walking into the V8 heap limit at ~2.9 GB on a 4 GiB
+  # runner ("Ineffective mark-compacts near heap limit"); run_step stops on
+  # first failure, so the gate never reached e2e. The first fix only applied
+  # 1536 when NODE_OPTIONS was EMPTY — but the runner container exports
+  # `NODE_OPTIONS=--max-old-space-size=3072` itself, so that branch was dead on
+  # every fleet run and task 35761319dca3 OOM-killed two workers at 3 GB each.
+  # "An inherited NODE_OPTIONS means the operator chose it" is simply false on
+  # this path, so an inherited heap pin is overridden here; unrelated node flags
+  # in NODE_OPTIONS are preserved.
+  #
+  # RL_UNIT_HEAP_MB is therefore the ONLY operator override — nothing sets it
+  # ambiently, so reading it as intent is safe.
+  # ROK-1470 (unmerged, rebases after this) derives that value from the
+  # container memory limit instead of the 1536 literal — this block is its
+  # rebase target.
+  if $fleet_mode; then
+    local unit_heap_mb="${RL_UNIT_HEAP_MB:-1536}"
+    node_opts="$(_repin_heap "$node_opts" "$unit_heap_mb")"
+    # Two workers fit a 4 GiB cgroup with room for the node parents.
+    # --workerIdleMemoryLimit recycles a worker before it grows into the cap;
+    # it is a JEST flag — vitest rejects it, hence the separate arrays.
+    jest_args=(--maxWorkers=2 --workerIdleMemoryLimit=1024MB)
+    vitest_args=(--maxWorkers=2)
+  fi
+
   echo "Running unit tests WITHOUT coverage (NODE_OPTIONS=${node_opts})"
   # `${arr[@]+"${arr[@]}"}` — an empty array under `set -u` is an unbound
   # variable error on bash 3.2 (macOS), and a bare "$arr" would pass an empty
   # string as a real argv entry.
   (cd api && NODE_OPTIONS="$node_opts" \
-     npx jest --passWithNoTests ${worker_args[@]+"${worker_args[@]}"}) || return $?
+     npx jest --passWithNoTests ${jest_args[@]+"${jest_args[@]}"}) || return $?
   (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" \
-     npx vitest run ${worker_args[@]+"${worker_args[@]}"}) || return $?
-  run_smoke_helper_specs
+     npx vitest run ${vitest_args[@]+"${vitest_args[@]}"}) || return $?
+  run_smoke_helper_specs "$node_opts"
 }
 
 # Read the container memory limit and hand it to resolve_heap_mb. Echoes the

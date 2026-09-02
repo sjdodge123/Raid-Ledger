@@ -172,8 +172,11 @@ INVOKE_RC=0
 INVOKE_WORKSPACE_ROOT="/nonexistent-workspace"
 # Pre-set PLAYWRIGHT_AUTH_DIR to assert the export never clobbers a caller's.
 INVOKE_AUTH_DIR=""
-# Simulates an operator-supplied heap ceiling, which must always win.
+# Simulates the NODE_OPTIONS the runner environment injects (this is what
+# defeated the first attempt at the recipe).
 INVOKE_NODE_OPTIONS=""
+# The explicit, unambiguous operator override.
+INVOKE_UNIT_HEAP=""
 
 # invoke <rl_target> <base_url> -- <validate-ci flags...>
 # An empty <base_url> leaves BASE_URL unset entirely (the AC1 case).
@@ -196,6 +199,7 @@ invoke() {
             RL_WORKSPACE_ROOT="$INVOKE_WORKSPACE_ROOT" \
             PLAYWRIGHT_AUTH_DIR="$INVOKE_AUTH_DIR" \
             NODE_OPTIONS="$INVOKE_NODE_OPTIONS" \
+            RL_UNIT_HEAP_MB="$INVOKE_UNIT_HEAP" \
             bash "$VALIDATE_CI_PATH" "$@" 2>"$err_file"
         ) || INVOKE_RC=$?
     else
@@ -258,26 +262,51 @@ assert_grep 'vitest run --config vitest\.config\.ts scripts/smoke' "$npx_argv_fi
 # "Unit tests (no coverage)": ONE in-band jest process walked into the V8 heap
 # limit at ~2.9 GB on a 4 GiB runner ("Ineffective mark-compacts near heap
 # limit"), and run_step stops on first failure, so the gate never reached e2e.
-# Two workers at 1536 MB each is the shape that has passed repeatedly on this
-# runner class — it fits the cgroup with room for the node parents.
-CURRENT_TEST_NAME="AC9: --fleet runs the unit step with the runner recipe"
-assert_grep 'NODE_OPTIONS=--max-old-space-size=1536 .*jest.*--maxWorkers=2' "$npx_argv_file" "--fleet must run jest 2-up at a 1536 MB ceiling"
-assert_grep 'NODE_OPTIONS=--max-old-space-size=1536 .*vitest run.*--maxWorkers=2' "$npx_argv_file" "--fleet must run vitest 2-up at a 1536 MB ceiling"
-assert_absent 'max-old-space-size=3072' "$npx_argv_file" "--fleet must not use the 3072 default that OOMed"
-
-CURRENT_TEST_NAME="AC9: an operator NODE_OPTIONS still wins under --fleet"
-INVOKE_NODE_OPTIONS="--max-old-space-size=2048"
+#
+# The FIRST attempt at the fix was vacuous and shipped broken (task
+# 35761319dca3 still printed NODE_OPTIONS=--max-old-space-size=3072 and
+# OOM-killed two workers). It only set 1536 when NODE_OPTIONS was empty — and
+# the runner environment injects a NODE_OPTIONS of its own, so the branch never
+# fired there. The old test passed because `invoke` supplied an EMPTY
+# NODE_OPTIONS, i.e. it asserted the one condition the runner never meets.
+#
+# So every case below runs with NODE_OPTIONS pre-set the way the runner sets it,
+# and asserts the EFFECTIVE value: the banner the step prints AND the argv the
+# step actually invoked.
+CURRENT_TEST_NAME="AC9: --fleet pins 1536 even when the environment injects 3072"
+INVOKE_NODE_OPTIONS="--max-old-space-size=3072"
 invoke remote "$ENV_URL" --fleet --no-e2e
 INVOKE_NODE_OPTIONS=""
-assert_rc 0 "--fleet with a preset NODE_OPTIONS"
-assert_grep 'NODE_OPTIONS=--max-old-space-size=2048 .*jest' "$npx_argv_file" "a preset NODE_OPTIONS must be preserved"
+assert_rc 0 "--fleet under an injected NODE_OPTIONS"
+assert_out_matches 'Running unit tests WITHOUT coverage \(NODE_OPTIONS=--max-old-space-size=1536\)' "the banner must report the effective 1536 ceiling"
+assert_grep 'NODE_OPTIONS=--max-old-space-size=1536 .*jest.*--maxWorkers=2' "$npx_argv_file" "jest must run 2-up at 1536"
+assert_grep 'jest.*--workerIdleMemoryLimit=1024MB' "$npx_argv_file" "jest must recycle a worker before it grows into the cap"
+assert_grep 'NODE_OPTIONS=--max-old-space-size=1536 .*vitest run.*--maxWorkers=2' "$npx_argv_file" "vitest must run 2-up at 1536"
+assert_absent 'NODE_OPTIONS=--max-old-space-size=3072 .*(jest|vitest run) ' "$npx_argv_file" "the injected 3072 must not survive into the unit step"
+assert_absent 'vitest run.*workerIdleMemoryLimit' "$npx_argv_file" "--workerIdleMemoryLimit is jest-only; vitest would reject it"
+
+CURRENT_TEST_NAME="AC9: RL_UNIT_HEAP_MB is the explicit operator override"
+INVOKE_NODE_OPTIONS="--max-old-space-size=3072"
+INVOKE_UNIT_HEAP="2048"
+invoke remote "$ENV_URL" --fleet --no-e2e
+INVOKE_NODE_OPTIONS=""; INVOKE_UNIT_HEAP=""
+assert_rc 0 "--fleet with RL_UNIT_HEAP_MB"
+assert_out_matches 'NODE_OPTIONS=--max-old-space-size=2048' "the operator ceiling must reach the banner"
+assert_grep 'NODE_OPTIONS=--max-old-space-size=2048 .*jest' "$npx_argv_file" "the operator ceiling must reach jest"
 assert_absent 'max-old-space-size=1536' "$npx_argv_file" "the recipe must not override an explicit operator ceiling"
-assert_grep 'jest.*--maxWorkers=2' "$npx_argv_file" "the worker cap still applies — it is not part of the heap override"
+
+CURRENT_TEST_NAME="AC9: non-heap NODE_OPTIONS flags survive the re-pin"
+INVOKE_NODE_OPTIONS="--enable-source-maps --max-old-space-size=3072"
+invoke remote "$ENV_URL" --fleet --no-e2e
+INVOKE_NODE_OPTIONS=""
+assert_rc 0 "--fleet with a mixed NODE_OPTIONS"
+assert_grep 'NODE_OPTIONS=--enable-source-maps --max-old-space-size=1536 .*jest' "$npx_argv_file" "unrelated node flags must be preserved, only the heap re-pinned"
 
 CURRENT_TEST_NAME="AC9: --only-unit --no-coverage is unchanged (no worker cap)"
 invoke local "" --only-unit --no-coverage
 assert_rc 0 "--only-unit --no-coverage"
 assert_absent 'maxWorkers' "$npx_argv_file" "the runner recipe is scoped to --fleet"
+assert_absent 'workerIdleMemoryLimit' "$npx_argv_file" "the runner recipe is scoped to --fleet"
 invoke remote "$ENV_URL" --fleet
 
 # W2 (reviewer): a fresh runner has no tools/test-bot/node_modules — the
