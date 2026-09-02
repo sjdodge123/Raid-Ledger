@@ -15,7 +15,7 @@ import type {
     LfgGroupSummaryDto,
 } from '@raid-ledger/contract';
 import { getLfgGroup, getLfgGroups } from '../lib/api/lfg-api';
-import { getAuthToken } from './use-auth';
+import { ACCESS_TOKEN_KEY } from '../lib/api/auth-storage-keys';
 import {
     LfgGroupsContext,
     type LfgGroupsContextValue,
@@ -28,7 +28,7 @@ export const LFG_GROUPS_QUERY_KEY = ['lfg', 'groups'] as const;
  * The raw `GET /lfg` list. Disabled while logged out (the route is jwt-gated).
  */
 export function useLfgGroups(): UseQueryResult<LfgGroupSummaryDto[]> {
-    const token = getAuthToken();
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
     return useQuery<LfgGroupSummaryDto[]>({
         queryKey: LFG_GROUPS_QUERY_KEY,
         queryFn: getLfgGroups,
@@ -46,7 +46,7 @@ export function useLfgGroups(): UseQueryResult<LfgGroupSummaryDto[]> {
 export function useLfgGroupDetail(
     gameId: number | undefined,
 ): UseQueryResult<LfgGroupDetailDto> {
-    const token = getAuthToken();
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
     return useQuery<LfgGroupDetailDto>({
         queryKey: ['lfg', 'group', gameId],
         queryFn: () => getLfgGroup(gameId as number),

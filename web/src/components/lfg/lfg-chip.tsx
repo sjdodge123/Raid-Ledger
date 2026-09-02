@@ -63,16 +63,19 @@ function chipLabel(
     return `🎯 ${activeCount} looking · needs ${needed} more`;
 }
 
-/** A chip linking to the game's LFG group. Renders nothing when nobody looks. */
-export function LfgChip({
+/**
+ * The rendered chip. Split from `LfgChip` so the router hook is only reached
+ * when there IS a chip: tiles render on surfaces (onboarding, plain component
+ * tests) that mount no `<Router>`, and an unconditional `useNavigate` would
+ * throw there even though the chip itself is absent.
+ */
+function LfgChipButton({
     activeCount,
     viabilityThreshold,
     state,
     gameSlug,
-}: LfgChipProps): JSX.Element | null {
+}: LfgChipProps & { activeCount: number }): JSX.Element {
     const navigate = useNavigate();
-
-    if (!activeCount || activeCount < 1) return null;
 
     const effectiveState: 'lfg' | 'lfm' =
         state ?? (activeCount >= 2 ? 'lfm' : 'lfg');
@@ -98,4 +101,11 @@ export function LfgChip({
             {label}
         </button>
     );
+}
+
+/** A chip linking to the game's LFG group. Renders nothing when nobody looks. */
+export function LfgChip(props: LfgChipProps): JSX.Element | null {
+    const { activeCount } = props;
+    if (!activeCount || activeCount < 1) return null;
+    return <LfgChipButton {...props} activeCount={activeCount} />;
 }
