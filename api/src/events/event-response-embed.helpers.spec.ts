@@ -16,6 +16,8 @@ import { buildEmbedEventData } from './event-response-embed.helpers';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
+import { DiscordEmbedFactory } from '../discord-bot/services/discord-embed.factory';
+import type { DiscordEmojiService } from '../discord-bot/services/discord-emoji.service';
 
 /** DB type expected by buildEmbedEventData. */
 type EmbedDb = PostgresJsDatabase<typeof schema>;
@@ -51,6 +53,15 @@ function makeMockDb(roleCountRows: unknown[], signupRows: unknown[]): EmbedDb {
     return callCount === 1 ? roleCountChain : signupChain;
   });
   return { select: selectFn } as unknown as EmbedDb;
+}
+
+/** Embed factory with emoji lookups stubbed out. */
+function makeFactory(): DiscordEmbedFactory {
+  return new DiscordEmbedFactory({
+    getRoleEmoji: jest.fn(() => ''),
+    getClassEmoji: jest.fn(() => ''),
+    isUsingCustomEmojis: jest.fn(() => false),
+  } as unknown as DiscordEmojiService);
 }
 
 /** Minimal EventResponseDto fixture. */
@@ -393,6 +404,48 @@ describe('buildEmbedEventData — game field', () => {
       name: 'World of Warcraft',
       coverUrl: 'https://img.example.com/wow.jpg',
     });
+  });
+
+  // ROK-1460 F1 — this projection feeds share / signup re-render / signup reply /
+  // running-late / roach-out / event-link. Dropping `id` here silently removes
+  // the AC3 title link on all six, so the same message gains and loses its link
+  // depending on which writer touched it last.
+  it('hydrates the game id so the title can link to /games/:id', async () => {
+    const db = makeMockDb([], []);
+    const dto = makeEventDto({
+      game: {
+        id: 77,
+        name: 'World of Warcraft',
+        coverUrl: 'https://img.example.com/wow.jpg',
+        slug: 'world-of-warcraft',
+        hasRoles: true,
+      },
+    });
+    const result = await buildEmbedEventData(db, dto, 1);
+    expect(result.game).toMatchObject({
+      id: 77,
+      name: 'World of Warcraft',
+      coverUrl: 'https://img.example.com/wow.jpg',
+    });
+  });
+
+  it('renders a title URL when the projection is handed to the embed factory', async () => {
+    const db = makeMockDb([], []);
+    const dto = makeEventDto({
+      game: {
+        id: 77,
+        name: 'World of Warcraft',
+        coverUrl: 'https://img.example.com/wow.jpg',
+        slug: 'world-of-warcraft',
+        hasRoles: true,
+      },
+    });
+    const data = await buildEmbedEventData(db, dto, 1);
+    const { embed } = makeFactory().buildEventEmbed(data, {
+      communityName: 'Test Guild',
+      clientUrl: 'http://localhost:5173',
+    });
+    expect(embed.data.url).toBe('http://localhost:5173/games/77');
   });
 
   it('sets game to null when event has no game', async () => {

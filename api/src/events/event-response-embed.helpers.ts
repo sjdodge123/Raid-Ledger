@@ -6,6 +6,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type { EmbedEventData } from '../discord-bot/services/discord-embed.factory';
+import { toEmbedGame } from '../discord-bot/services/embed-game.helpers';
 
 const INACTIVE_STATUSES = ['declined', 'roached_out', 'departed'];
 
@@ -116,8 +117,8 @@ export async function buildEmbedEventData(
     slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
     roleCounts,
     signupMentions: buildSignupMentions(signupRows),
-    game: event.game
-      ? { name: event.game.name, coverUrl: event.game.coverUrl }
-      : null,
+    // ROK-1460: the shared seam keeps `id` on the projection, so the six
+    // interactive writers render the same title link as the sync processor.
+    game: toEmbedGame(event.game),
   };
 }
