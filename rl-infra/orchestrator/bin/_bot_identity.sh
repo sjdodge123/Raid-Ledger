@@ -110,20 +110,6 @@ bot_identity::holder() {
     jq -r '.slug // empty' "$f" 2>/dev/null || true
 }
 
-# Record <slug> as the holder of <slot>. Atomic (mktemp + mv) so a concurrent
-# reader never sees a half-written file.
-bot_identity::claim() {
-    local slot="$1" slug="$2" dir tmp
-    dir=$(bot_identity::state_dir)
-    mkdir -p "$dir" 2>/dev/null || return 0
-    chmod 2775 "$dir" 2>/dev/null || true
-    tmp=$(mktemp "${dir}/.slot-${slot}.XXXXXX" 2>/dev/null) || return 0
-    jq -nc --arg slug "$slug" --arg ts "$(date -u +%FT%TZ)" \
-        '{slug: $slug, claimed_at: $ts}' > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
-    mv -f "$tmp" "$(bot_identity::state_file "$slot")" 2>/dev/null || rm -f "$tmp"
-    return 0
-}
-
 # Release <slot> ONLY when <slug> is the recorded holder. Destroying a sibling
 # env on the same slot must never free someone else's identity.
 bot_identity::release() {
@@ -135,15 +121,105 @@ bot_identity::release() {
     return 0
 }
 
-# True when <slot>'s identity is held by a DIFFERENT slug whose allinone
-# container still exists. A claim pointing at a vanished container is stale.
-bot_identity::in_use_by_other() {
-    local slot="$1" slug="$2" holder
+# Atomic compare-and-claim (Codex #4). `set -o noclobber` makes the redirect
+# an O_EXCL create, so two concurrent env-spins on one slot cannot both
+# observe "free" and both claim: the loser's redirect fails.
+#
+#   exit 0            → <slug> now holds the slot identity (or already did)
+#   exit 1 + stdout   → another LIVE env holds it; stdout is that env's slug
+#
+# A claim whose allinone container is gone is stale (env-spin can abort after
+# claiming) and is stolen exactly once — never a wedged slot.
+bot_identity::acquire() {
+    local slot="$1" slug="$2" dir file holder tmp attempt
+    dir=$(bot_identity::state_dir)
+    mkdir -p "$dir" 2>/dev/null || return 0
+    chmod 2775 "$dir" 2>/dev/null || true
+    file=$(bot_identity::state_file "$slot")
+    for attempt in 1 2; do
+        # Atomic create-with-content: write the claim to a temp file, then
+        # hard-link it into place. `ln` fails with EEXIST atomically AND the
+        # winner's file is never observable empty — an O_EXCL `>` redirect
+        # creates a ZERO-BYTE file first, and a rival reading that microsecond
+        # window sees "no holder", declares the claim corrupt and steals it.
+        # (Observed: two concurrent env-spins both winning the slot.)
+        tmp=$(mktemp "${dir}/.slot-${slot}.XXXXXX" 2>/dev/null) || return 0
+        bot_identity::_write_claim "$slug" > "$tmp" 2>/dev/null
+        if ln "$tmp" "$file" 2>/dev/null; then
+            rm -f "$tmp" 2>/dev/null || true
+            return 0
+        fi
+        rm -f "$tmp" 2>/dev/null || true
+        holder=$(bot_identity::holder "$slot")
+        [[ "$holder" == "$slug" ]] && return 0
+        if [[ -z "$holder" ]]; then
+            # Truly unreadable claim (corrupt or a torn write from an older
+            # build). Only reclaim once it has aged out — never on sight.
+            if bot_identity::_file_aged_out "$file"; then
+                rm -f "$file" 2>/dev/null || true
+                continue
+            fi
+            printf 'unknown'
+            return 1
+        fi
+        if ! bot_identity::_holder_is_stale "$slot" "$holder"; then
+            printf '%s' "$holder"
+            return 1
+        fi
+        # Stale holder: container gone AND the claim aged out. Drop it and
+        # retry the atomic create — a rival that wins the retry is reported
+        # normally.
+        rm -f "$file" 2>/dev/null || true
+    done
     holder=$(bot_identity::holder "$slot")
-    [[ -n "$holder" && "$holder" != "$slug" ]] || return 1
-    docker inspect "rl-env-${holder}-allinone" >/dev/null 2>&1 || return 1
-    printf '%s' "$holder"
+    if [[ -n "$holder" && "$holder" != "$slug" ]]; then
+        printf '%s' "$holder"
+        return 1
+    fi
     return 0
+}
+
+# Age of a claim in seconds, from its own timestamp (NOT the file mtime — a
+# claim file can be rewritten by tooling without the lease changing hands).
+# An unparseable timestamp counts as ancient so a corrupt claim can never
+# wedge a slot forever.
+bot_identity::_claim_age_seconds() {
+    local ts="$1" epoch now
+    epoch=$(date -u -d "$ts" +%s 2>/dev/null \
+        || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
+        || echo "")
+    if [[ -z "$epoch" ]]; then printf '999999'; return 0; fi
+    now=$(date -u +%s)
+    printf '%s' "$(( now - epoch ))"
+}
+
+# Is the holder's claim stale — i.e. safe to steal? Only when its container is
+# gone AND the claim is older than the grace window. The window matters: a
+# CONCURRENT env-spin holds the claim for the whole build/boot, during which
+# its container legitimately does not exist yet. Without it, the loser of the
+# race would "reclaim" the winner's identity and both envs would boot on one
+# bot token — exactly the collision the lease prevents.
+bot_identity::_holder_is_stale() {
+    local slot="$1" holder="$2" file age grace
+    docker inspect "rl-env-${holder}-allinone" >/dev/null 2>&1 && return 1
+    file=$(bot_identity::state_file "$slot")
+    age=$(bot_identity::_claim_age_seconds "$(jq -r '.claimed_at // ""' "$file" 2>/dev/null)")
+    grace="${RL_BOT_IDENTITY_CLAIM_GRACE_SECONDS:-300}"
+    (( age >= grace ))
+}
+
+# True when a claim FILE's mtime is older than the grace window. Used only for
+# the unreadable-content case, where there is no timestamp to read.
+bot_identity::_file_aged_out() {
+    local file="$1" grace_min
+    grace_min=$(( ${RL_BOT_IDENTITY_CLAIM_GRACE_SECONDS:-300} / 60 ))
+    (( grace_min < 1 )) && grace_min=1
+    [[ -n "$(find "$file" -mmin "+${grace_min}" 2>/dev/null)" ]]
+}
+
+bot_identity::_write_claim() {
+    jq -nc --arg slug "$1" --arg ts "$(date -u +%FT%TZ)" \
+        '{slug: $slug, claimed_at: $ts}'
 }
 
 # --- Visibility (D2) ---------------------------------------------------------

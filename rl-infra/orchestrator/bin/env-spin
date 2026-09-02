@@ -25,6 +25,7 @@ ENV_SPIN_HANDLED=0
 # container THIS run created (vs an existing PG the recreate flow reused) gets
 # torn down on an unexpected, pre-registration abort so the next attempt
 # starts clean. Reproduced orphan: skip_build:true + missing image → exit 125.
+BOT_IDENTITY_CLAIMED_THIS_RUN=0
 ENV_SPIN_PG_CREATED=0
 ENV_SPIN_PG_REUSED=0
 ENV_SPIN_APP_CREATED=0
@@ -71,6 +72,12 @@ _env_spin_rollback_partial() {
         if (( ${ENV_SPIN_PG_CREATED:-0} == 1 && ${ENV_SPIN_PG_REUSED:-0} == 0 )); then
             docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
         fi
+        # ROK-1469 (Codex #3): an abort that tears its containers down must
+        # also hand the slot's bot identity back, or the slot stays blocked by
+        # a claim pointing at an env that no longer exists.
+        if (( ${BOT_IDENTITY_CLAIMED_THIS_RUN:-0} == 1 )); then
+            bot_identity::release "${SLOT:-}" "${SLUG:-}" 2>/dev/null || true
+        fi
     fi
 }
 trap _env_spin_trap_on_abort EXIT
@@ -83,6 +90,7 @@ trap _env_spin_trap_on_abort EXIT
 # healthy container behind a rollback. Sets two globals read by both emits.
 BOT_IDENTITY_JSON="null"
 OVERLAY_WARNINGS_JSON="[]"
+OVERLAY_APPLIED_COUNT=0
 env_spin::run_overlay() {
     local overlay_bin overlay_out overlay_rc=0 identity detail
     overlay_bin="${RL_ENV_SETTINGS_OVERLAY:-$(dirname "$0")/env-settings-overlay}"
@@ -97,6 +105,24 @@ env_spin::run_overlay() {
     fi
     identity=$(jq -c '.bot_identity // empty' <<<"$overlay_out" 2>/dev/null || true)
     [[ -n "$identity" ]] && BOT_IDENTITY_JSON="$identity"
+    OVERLAY_APPLIED_COUNT=$(jq -r '(.applied // []) | length' <<<"$overlay_out" 2>/dev/null || echo 0)
+    [[ "$OVERLAY_APPLIED_COUNT" =~ ^[0-9]+$ ]] || OVERLAY_APPLIED_COUNT=0
+    return 0
+}
+
+# ROK-1469 (Codex #5): the API booted BEFORE the overlay wrote its rows, and
+# SettingsService caches for 30 minutes while the Discord bot's startup hook
+# has already decided whether to connect. Without a restart the env keeps
+# running on whatever identity it booted with until the cache expires. Only
+# pay for it when the overlay actually wrote something.
+env_spin::restart_for_overlay() {
+    (( ${OVERLAY_APPLIED_COUNT:-0} > 0 )) || return 0
+    docker restart "$APP_CONTAINER" >/dev/null 2>&1 || return 0
+    local _i
+    for _i in $(seq 1 60); do
+        if docker exec "$APP_CONTAINER" curl -fsS "http://${APP_CONTAINER}/api/health" >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
     return 0
 }
 
@@ -149,28 +175,6 @@ if (( EXISTING_COUNT >= MAX_ENVS_PER_SLOT )) && ! grep -qFx "$SLUG" <<<"$EXISTIN
     # env_spin_aborted_unexpectedly JSON line on top of this clean refusal.
     ENV_SPIN_HANDLED=1
     exit 1
-fi
-
-# ROK-1469 D3 — one live bot per slot. The slot owns ONE Discord app; two
-# envs booting with the same token flap the gateway session between them, so
-# the second env is refused rather than silently breaking both. A claim whose
-# container is gone is stale and reclaimed. Slots with no identity configured
-# have nothing to collide over and skip the rule entirely.
-if bot_identity::configured "$SLOT"; then
-    BOT_IDENTITY_HOLDER=$(bot_identity::in_use_by_other "$SLOT" "$SLUG" || true)
-    if [[ -n "$BOT_IDENTITY_HOLDER" ]]; then
-        audit::log env-spin bot-identity-in-use \
-            "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg holder "$BOT_IDENTITY_HOLDER" '{slug:$slug, slot:$slot, held_by:$holder}')"
-        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg holder "$BOT_IDENTITY_HOLDER" \
-            '{ok:false, error:"bot_identity_in_use", slug:$slug, slot:$slot, held_by:$holder,
-              message:"slot \($slot)'"'"'s Discord bot identity is already attached to env \"\($holder)\". Two envs cannot share one bot token — Discord drops the older gateway session.",
-              hint:"Destroy \($holder) (rl_env_destroy) and re-spin, or claim a different slot. Re-spinning \($holder) itself is always allowed."}'
-        ENV_SPIN_HANDLED=1
-        exit 1
-    fi
-    # Take the lease BEFORE touching containers so a concurrent spin on the
-    # same slot loses the race here rather than mid-boot.
-    bot_identity::claim "$SLOT" "$SLUG"
 fi
 
 NOW=$(date -u +%FT%TZ)
@@ -505,6 +509,7 @@ EOF
     rm -f "$IDEM_BOOTSTRAP_STDERR_FILE"
     LAST_PHASE="idempotent_bootstrap_done"
     env_spin::run_overlay
+    env_spin::restart_for_overlay
     LAST_PHASE="idempotent_overlay_done"
 
     jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
@@ -560,6 +565,29 @@ if (( RECREATED == 0 )); then
 fi
 
 LAST_PHASE="image_validated"
+
+# ROK-1469 D3 — one live bot per slot. Placed AFTER every refusal that creates
+# nothing (max-envs, slug-ownership, image-not-found) so a refused spin never
+# leaves the slot's identity claimed by a slug that does not exist (Codex #3),
+# and taken through the atomic compare-and-claim so two concurrent spins on
+# one slot cannot both win it (Codex #4). Slots with no identity configured
+# skip the rule — there is nothing to collide over.
+BOT_IDENTITY_CLAIMED_THIS_RUN=0
+if bot_identity::configured "$SLOT"; then
+    BOT_IDENTITY_HOLDER=""
+    if ! BOT_IDENTITY_HOLDER=$(bot_identity::acquire "$SLOT" "$SLUG"); then
+        audit::log env-spin bot-identity-in-use \
+            "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg holder "$BOT_IDENTITY_HOLDER" '{slug:$slug, slot:$slot, held_by:$holder}')"
+        jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --arg holder "$BOT_IDENTITY_HOLDER" \
+            '{ok:false, error:"bot_identity_in_use", slug:$slug, slot:$slot, held_by:$holder,
+              message:"slot \($slot)'"'"'s Discord bot identity is already attached to env \"\($holder)\". Two envs cannot share one bot token — Discord drops the older gateway session.",
+              hint:"Destroy \($holder) (rl_env_destroy) and re-spin, or claim a different slot. Re-spinning \($holder) itself is always allowed."}'
+        ENV_SPIN_HANDLED=1
+        exit 1
+    fi
+    BOT_IDENTITY_CLAIMED_THIS_RUN=1
+fi
+
 
 # 1. Postgres (per-env, NAS-like). The recreate flow REUSES an existing PG
 # (and its volume — the admin row persists) rather than spinning a new one;
@@ -629,21 +657,24 @@ EXTRA_ENV=()
 if [[ -n "${RL_ENV_JWT_SECRET:-}" ]]; then
     EXTRA_ENV+=(-e "JWT_SECRET=${RL_ENV_JWT_SECRET}")
 fi
-# ROK-1469 D1: the slot's OWN Discord app. Passed as container env so the
-# overlay can re-apply the identity from INSIDE the container (docker exec
-# without a payload) and so `docker inspect` shows which app an env belongs
-# to. The API itself reads app_settings, which env-settings-overlay writes.
+# ROK-1469 D1 + review M4: the slot's OWN Discord app. The token and client
+# secret go in via --env-file, NOT `-e KEY=value`: argv is world-readable
+# through `ps` on the VM and `docker inspect` stores the -e values in the
+# container config forever. The file is 0600, lives only for the `docker run`,
+# and is removed immediately after (docker has already read it by then).
+IDENTITY_ENV_FILE=""
 if bot_identity::configured "$SLOT"; then
-    EXTRA_ENV+=(-e "RL_SLOT_DISCORD_BOT_TOKEN=$(bot_identity::value "$SLOT" BOT_TOKEN)")
-    EXTRA_ENV+=(-e "RL_SLOT_DISCORD_CLIENT_ID=$(bot_identity::value "$SLOT" CLIENT_ID)")
-    _slot_client_secret=$(bot_identity::value "$SLOT" CLIENT_SECRET)
-    if [[ -n "$_slot_client_secret" ]]; then
-        EXTRA_ENV+=(-e "RL_SLOT_DISCORD_CLIENT_SECRET=${_slot_client_secret}")
-    fi
-    _slot_app_name=$(bot_identity::value "$SLOT" APP_NAME)
-    if [[ -n "$_slot_app_name" ]]; then
-        EXTRA_ENV+=(-e "RL_SLOT_DISCORD_APP_NAME=${_slot_app_name}")
-    fi
+    IDENTITY_ENV_FILE=$(mktemp -t rl-env-identity.XXXXXX)
+    chmod 600 "$IDENTITY_ENV_FILE" 2>/dev/null || true
+    {
+        printf 'RL_SLOT_DISCORD_BOT_TOKEN=%s\n' "$(bot_identity::value "$SLOT" BOT_TOKEN)"
+        printf 'RL_SLOT_DISCORD_CLIENT_ID=%s\n' "$(bot_identity::value "$SLOT" CLIENT_ID)"
+        _slot_client_secret=$(bot_identity::value "$SLOT" CLIENT_SECRET)
+        [[ -n "$_slot_client_secret" ]] && printf 'RL_SLOT_DISCORD_CLIENT_SECRET=%s\n' "$_slot_client_secret"
+        _slot_app_name=$(bot_identity::value "$SLOT" APP_NAME)
+        [[ -n "$_slot_app_name" ]] && printf 'RL_SLOT_DISCORD_APP_NAME=%s\n' "$_slot_app_name"
+    } > "$IDENTITY_ENV_FILE"
+    EXTRA_ENV+=(--env-file "$IDENTITY_ENV_FILE")
 fi
 PUBLIC_URL_FLAG=()
 if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
@@ -691,6 +722,9 @@ docker run -d \
     --label "rl.last_touched=${NOW}" \
     "$IMAGE" >/dev/null
 ENV_SPIN_APP_CREATED=1
+# The daemon has consumed the env-file by now; leaving it on disk would keep
+# the token readable to anything that can list $TMPDIR.
+[[ -n "$IDENTITY_ENV_FILE" ]] && rm -f "$IDENTITY_ENV_FILE"
 
 LAST_PHASE="allinone_running"
 
@@ -833,6 +867,7 @@ rm -f "$BOOTSTRAP_STDERR_FILE"
 LAST_PHASE="bootstrap_done"
 
 env_spin::run_overlay
+env_spin::restart_for_overlay
 LAST_PHASE="overlay_done"
 
 # Register.

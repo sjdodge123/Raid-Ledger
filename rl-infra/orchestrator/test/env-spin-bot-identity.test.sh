@@ -66,7 +66,16 @@ case "$1" in
         exit 0
         ;;
     image) shift; [[ "$1" == "inspect" ]] && { printf 'sha256:img\n'; exit 0; }; exit 0 ;;
-    pull|run|rm|exec) exit 0 ;;
+    run)
+        # Capture the env-file contents so the spec can assert what the
+        # container REALLY receives without the values passing through argv.
+        prev=""
+        for a in "$@"; do
+            if [[ "$prev" == "--env-file" ]]; then cat "$a" >> "$RL_STATE_DIR/env-file-contents.log" 2>/dev/null || true; fi
+            prev="$a"
+        done
+        exit 0 ;;
+    pull|rm|exec|restart) exit 0 ;;
     ps) printf '\n'; exit 0 ;;
 esac
 exit 0
@@ -119,17 +128,19 @@ run_spin() {
 # --- D1.1: the slot identity reaches the container as env vars ---------------
 
 test_slot_identity_injected_into_container() {
-    CURRENT_TEST_NAME="D1: docker run injects the slot's RL_SLOT_DISCORD_* env vars"
+    CURRENT_TEST_NAME="D1: the container receives the slot's RL_SLOT_DISCORD_* values"
     bi_setup
     run_spin fresh1
     assert_exit_code "$BI_RC" "0" "fresh spin should succeed"
-    local run_line
-    run_line=$(grep -E '^run .*--name rl-env-fresh1-allinone' "$RL_STATE_DIR/docker-calls.log" | head -1 || true)
-    assert_contains "$run_line" "RL_SLOT_DISCORD_BOT_TOKEN=tok-slot-1-secret" \
+    # Review M4: the values travel in an --env-file, never in argv (see
+    # test_identity_never_passed_via_argv for the negative assertion).
+    local envfile
+    envfile=$(cat "$RL_STATE_DIR/env-file-contents.log" 2>/dev/null || echo "")
+    assert_contains "$envfile" "RL_SLOT_DISCORD_BOT_TOKEN=tok-slot-1-secret" \
         "allinone must receive the slot bot token"
-    assert_contains "$run_line" "RL_SLOT_DISCORD_CLIENT_ID=100000000000000001" \
+    assert_contains "$envfile" "RL_SLOT_DISCORD_CLIENT_ID=100000000000000001" \
         "allinone must receive the slot client id"
-    assert_contains "$run_line" "RL_SLOT_DISCORD_CLIENT_SECRET=csec-slot-1-secret" \
+    assert_contains "$envfile" "RL_SLOT_DISCORD_CLIENT_SECRET=csec-slot-1-secret" \
         "allinone must receive the slot client secret"
     bi_teardown
 }
@@ -298,6 +309,149 @@ test_destroy_of_non_holder_preserves_state() {
     bi_teardown
 }
 
+# --- M4: secrets reach the container by env-file, never argv ---------------
+
+test_identity_never_passed_via_argv() {
+    CURRENT_TEST_NAME="M4: bot token/secret go via --env-file, not docker run argv"
+    bi_setup
+    run_spin nosecrets
+    assert_exit_code "$BI_RC" "0" "fresh spin should succeed"
+    local run_line
+    run_line=$(grep -E '^run .*--name rl-env-nosecrets-allinone' "$RL_STATE_DIR/docker-calls.log" | head -1 || true)
+    # argv is visible in `ps` on the VM and is stored forever in
+    # `docker inspect`'s Config.Cmd/Env — neither may carry a secret.
+    if [[ "$run_line" == *"tok-slot-1-secret"* || "$run_line" == *"csec-slot-1-secret"* ]]; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: secret in docker run argv")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] secret value present in docker run argv"
+    else
+        TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
+    fi
+    assert_contains "$run_line" "--env-file" "the run must use an --env-file"
+    # …and the file itself must have carried the identity.
+    local envfile
+    envfile=$(cat "$RL_STATE_DIR/env-file-contents.log" 2>/dev/null || echo "")
+    assert_contains "$envfile" "RL_SLOT_DISCORD_BOT_TOKEN=tok-slot-1-secret" \
+        "env-file carries the slot bot token"
+    assert_contains "$envfile" "RL_SLOT_DISCORD_CLIENT_SECRET=csec-slot-1-secret" \
+        "env-file carries the slot client secret"
+    # The temp env-file must not survive the spin.
+    local leftovers
+    leftovers=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'rl-env-identity.*' -newer "$RL_STATE_DIR" 2>/dev/null | head -1 || true)
+    assert_eq "$leftovers" "" "the identity env-file must be deleted after the run"
+    bi_teardown
+}
+
+# --- Codex #5: the API must re-read settings the overlay just wrote ---------
+
+test_restart_after_overlay_applied() {
+    CURRENT_TEST_NAME="D1/#5: env-spin restarts the allinone when the overlay applied keys"
+    bi_setup
+    run_spin reloaded
+    assert_exit_code "$BI_RC" "0" "fresh spin should succeed"
+    local restart_line
+    restart_line=$(grep -E '^restart rl-env-reloaded-allinone' "$RL_STATE_DIR/docker-calls.log" | head -1 || true)
+    assert_neq "$restart_line" "" \
+        "the settings cache is 30 min and the bot startup hook already ran — a restart is required"
+    bi_teardown
+}
+
+test_no_restart_when_overlay_applied_nothing() {
+    CURRENT_TEST_NAME="D1/#5: no restart when the overlay applied nothing"
+    bi_setup
+    cat > "$BI_STUB_DIR/overlay-stub" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$BI_OVERLAY_LOG"
+echo '{"ok":true,"applied":[],"skipped":"no_overlay_configured","bot_identity":null}'
+STUB
+    chmod +x "$BI_STUB_DIR/overlay-stub"
+    run_spin unchanged
+    assert_exit_code "$BI_RC" "0" "spin should still succeed"
+    local restart_line
+    restart_line=$(grep -E '^restart rl-env-unchanged-allinone' "$RL_STATE_DIR/docker-calls.log" | head -1 || true)
+    assert_eq "$restart_line" "" "a no-op overlay must not cost a restart"
+    bi_teardown
+}
+
+# --- Codex #3: a refused spin must not leave the slot claimed ---------------
+
+test_refused_spin_does_not_claim_identity() {
+    CURRENT_TEST_NAME="#3: a spin refused by a LATER preflight leaves no identity claim"
+    bi_setup
+    # max_envs_per_slot is the earliest refusal; slug_owned_by_other_slot the
+    # latest. Use the image-not-found refusal: it happens after slot resolution
+    # and creates nothing.
+    cat > "$BI_STUB_DIR/docker" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$RL_STATE_DIR/docker-calls.log"
+case "$1" in
+    inspect) exit 1 ;;
+    image)   exit 1 ;;
+    pull)    exit 1 ;;
+    ps)      printf '\n'; exit 0 ;;
+esac
+exit 0
+STUB
+    chmod +x "$BI_STUB_DIR/docker"
+
+    run_spin refused --image registry.rl.lan:5000/rl-allinone:nope
+    assert_exit_code "$BI_RC" "1" "missing image must refuse"
+    assert_eq "$(jq -r '.error' <<<"$BI_OUT" 2>/dev/null || echo parse_err)" \
+        "image_not_found" "the refusal is the image guard"
+    assert_file_not_exists "$RL_STATE_DIR/bot-identity/slot-1.json" \
+        "a refused spin must not hold the slot's bot identity hostage"
+    bi_teardown
+}
+
+# --- Codex #4: check-then-claim must be atomic ------------------------------
+
+test_identity_claim_is_atomic() {
+    CURRENT_TEST_NAME="#4: concurrent acquire on one slot — exactly one winner"
+    bi_setup
+    # shellcheck disable=SC1091
+    source "$BIN_DIR/_state.sh"
+    # shellcheck disable=SC1091
+    source "$BIN_DIR/_bot_identity.sh"
+
+    # First acquire wins; the second must LOSE while the holder's container
+    # exists (BI_HOLDER_APP_EXISTS drives the docker stub for "holder").
+    local rc1=0 rc2=0
+    bot_identity::acquire 1 holder >/dev/null || rc1=$?
+    local out2
+    out2=$(bot_identity::acquire 1 rival) || rc2=$?
+    assert_exit_code "$rc1" "0" "first acquire wins the slot"
+    assert_exit_code "$rc2" "1" "second acquire must lose"
+    assert_eq "$out2" "holder" "the loser learns who holds it"
+    assert_eq "$(jq -r '.slug' "$RL_STATE_DIR/bot-identity/slot-1.json")" "holder" \
+        "the winner keeps the claim"
+
+    # Re-acquiring as the SAME slug is idempotent (the re-spin path).
+    local rc3=0
+    bot_identity::acquire 1 holder >/dev/null || rc3=$?
+    assert_exit_code "$rc3" "0" "re-acquire by the holder is idempotent"
+    bi_teardown
+}
+
+test_concurrent_spins_only_one_wins() {
+    CURRENT_TEST_NAME="#4: two concurrent env-spins on one slot — exactly one succeeds"
+    bi_setup
+    local out_a="$RL_STATE_DIR/spin-a.json" out_b="$RL_STATE_DIR/spin-b.json"
+    "$ENV_SPIN_BIN" --slug racea > "$out_a" 2>/dev/null &
+    local pid_a=$!
+    "$ENV_SPIN_BIN" --slug raceb > "$out_b" 2>/dev/null &
+    local pid_b=$!
+    wait "$pid_a" 2>/dev/null || true
+    wait "$pid_b" 2>/dev/null || true
+
+    local oks
+    oks=$(cat "$out_a" "$out_b" 2>/dev/null | jq -r 'select(.ok == true) | .slug' | wc -l | tr -d ' ')
+    local refusals
+    refusals=$(cat "$out_a" "$out_b" 2>/dev/null | jq -r 'select(.error == "bot_identity_in_use") | .error' | wc -l | tr -d ' ')
+    assert_eq "$oks" "1" "exactly one spin may own the slot identity"
+    assert_eq "$refusals" "1" "the loser must be refused with bot_identity_in_use"
+    bi_teardown
+}
+
 run_test "d1-identity-env-vars" test_slot_identity_injected_into_container
 run_test "d1-overlay-invoked" test_spin_runs_overlay_and_reports_identity
 run_test "d1-idempotent-overlay" test_idempotent_respin_reapplies_overlay
@@ -308,5 +462,11 @@ run_test "d3-same-slug-respin" test_same_slug_respin_allowed
 run_test "d3-unconfigured-no-refusal" test_unconfigured_slot_never_refuses
 run_test "d3-destroy-clears" test_destroy_clears_identity_holder
 run_test "d3-destroy-non-holder" test_destroy_of_non_holder_preserves_state
+run_test "m4-envfile-not-argv" test_identity_never_passed_via_argv
+run_test "codex5-restart-after-overlay" test_restart_after_overlay_applied
+run_test "codex5-no-restart-when-noop" test_no_restart_when_overlay_applied_nothing
+run_test "codex3-refused-spin-no-claim" test_refused_spin_does_not_claim_identity
+run_test "codex4-acquire-atomic" test_identity_claim_is_atomic
+run_test "codex4-concurrent-spins" test_concurrent_spins_only_one_wins
 
 print_test_summary
