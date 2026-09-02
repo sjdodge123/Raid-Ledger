@@ -59,6 +59,7 @@ still parallel.
 | `events.smoke.spec.ts` | Demo-scoped | `reset-to-seed` once | n/a | ROK-1070: ensures clean events list for mobile-search assertion. |
 | `game-detail.smoke.spec.ts` | Self-contained | None | n/a | Read-only game detail. |
 | `games.smoke.spec.ts` | Self-contained | None | n/a | Read-only game list. |
+| `lfg-group-page.smoke.spec.ts` | Self-contained | None — clears its own intents via `DELETE /lfg/:gameId` for both users in `beforeAll`/`afterAll` | n/a | ROK-1464: picks its fixture game out of `/games/discover` by PROJECT index (desktop 0, mobile 1) because LFG state is keyed by (user, game) and both projects share admin + invitee; skips when the catalogue has fewer slugged games than projects. Writes LFG intents only; the `Find a time` leg creates a standalone scheduling poll whose lineup title is server-generated, so it is NOT prefix-resettable. |
 | `lineup-abort.smoke.spec.ts` | Lineup-scoped | `reset-lineups` | yes | Existing pattern. |
 | `lineup-auto-advance.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `cancel-lineup-phase-jobs` | yes | Existing pattern. |
 | `lineup-creation.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1070: switched bare POST `/lineups` to `createLineupOrRetry`. |
