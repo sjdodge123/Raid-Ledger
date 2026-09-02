@@ -27,7 +27,11 @@ function sanitizeName(name: string): string {
  *
  * @param names - Display names, in the order they should appear.
  * @param cap - Names to render before collapsing the rest into `+N more`.
- * @returns e.g. `**Ana** · **Bo** +4 more`; `''` for an empty roster.
+ * @returns e.g. `**Ana** · **Bo** +4 more`.
+ *
+ * An empty roster returns `''`. Discord REJECTS an empty string as a field
+ * value, so a caller putting this straight into `addFields` must substitute its
+ * own fallback (e.g. `formatRoster(names) || 'None yet'`).
  */
 export function formatRoster(
   names: readonly string[],

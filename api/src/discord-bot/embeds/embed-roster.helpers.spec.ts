@@ -26,6 +26,12 @@ describe('formatRoster — basic rendering (AC4)', () => {
     expect(formatRoster([])).toBe('');
   });
 
+  it('returns a falsy empty roster so callers can substitute a fallback', () => {
+    // Discord rejects '' as a field value — the documented contract is that
+    // callers write `formatRoster(names) || 'None yet'` (ROK-1459 review F5).
+    expect(formatRoster([]) || 'None yet').toBe('None yet');
+  });
+
   it('bolds a single name', () => {
     expect(formatRoster(['Ana'])).toBe('**Ana**');
   });
