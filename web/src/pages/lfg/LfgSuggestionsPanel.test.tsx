@@ -57,6 +57,9 @@ describe('LfgSuggestionsPanel', () => {
         expect(screen.getByText('Hearted this game')).toBeInTheDocument();
     });
 
+});
+
+describe('LfgSuggestionsPanel — invite placeholder', () => {
     it('renders the invite affordance disabled until ROK-1455 lands', () => {
         renderWithProviders(
             <LfgSuggestionsPanel

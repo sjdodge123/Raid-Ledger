@@ -22,6 +22,41 @@ export interface LfgSuggestionsPanelProps {
     isLoading?: boolean;
 }
 
+/** The ranked reason chips for one suggestion. Never empty — the DTO guarantees one. */
+function ReasonChips({
+    reasons,
+}: {
+    reasons: LfgSuggestionDto['reasons'];
+}): JSX.Element {
+    return (
+        <>
+            {reasons.map((reason) => (
+                <span
+                    key={reason}
+                    className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200"
+                >
+                    {REASON_CHIP[reason]}
+                </span>
+            ))}
+        </>
+    );
+}
+
+/** The inert ROK-1455 placeholder. Disabled, never hidden — see the file header. */
+function InvitePlaceholder(): JSX.Element {
+    return (
+        <button
+            type="button"
+            disabled
+            data-testid="lfg-invite-placeholder"
+            title={LFG_COPY.inviteDisabledTitle}
+            className="px-2.5 py-1 rounded-md text-xs font-semibold bg-overlay text-muted opacity-60"
+        >
+            {LFG_COPY.invite}
+        </button>
+    );
+}
+
 /** One suggested player: who they are, why, and the (inert) invite. */
 function SuggestionRow({
     suggestion,
@@ -41,28 +76,13 @@ function SuggestionRow({
                     <span className="text-sm font-medium text-zinc-100">
                         {name}
                     </span>
-                    {suggestion.reasons.map((reason) => (
-                        <span
-                            key={reason}
-                            className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200"
-                        >
-                            {REASON_CHIP[reason]}
-                        </span>
-                    ))}
+                    <ReasonChips reasons={suggestion.reasons} />
                 </div>
                 <p className="text-xs text-muted">
                     {REASON_SUBTITLE[suggestion.reasons[0]]}
                 </p>
             </div>
-            <button
-                type="button"
-                disabled
-                data-testid="lfg-invite-placeholder"
-                title={LFG_COPY.inviteDisabledTitle}
-                className="px-2.5 py-1 rounded-md text-xs font-semibold bg-overlay text-muted opacity-60"
-            >
-                {LFG_COPY.invite}
-            </button>
+            <InvitePlaceholder />
         </li>
     );
 }

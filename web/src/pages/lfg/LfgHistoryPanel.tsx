@@ -39,7 +39,7 @@ function formatDay(iso: string): string {
 }
 
 /** `2h 40m`, `2h`, `45m`. */
-export function formatDurationMinutes(minutes: number): string {
+function formatDurationMinutes(minutes: number): string {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     if (hours === 0) return `${mins}m`;

@@ -60,6 +60,9 @@ describe('LfgOverlapPanel', () => {
         expect(days[0]).toHaveAttribute('data-status', 'none');
     });
 
+});
+
+describe('LfgOverlapPanel — window rows', () => {
     it('lists at most two ranked windows and starts a poll on the exact one clicked', async () => {
         const user = userEvent.setup();
         const onStartPoll = vi.fn();

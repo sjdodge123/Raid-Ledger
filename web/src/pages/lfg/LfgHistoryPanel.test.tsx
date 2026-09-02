@@ -63,6 +63,9 @@ describe('LfgHistoryPanel', () => {
         expect(screen.queryByText(/attended/)).toBeNull();
     });
 
+});
+
+describe('LfgHistoryPanel — formatting and empty state', () => {
     it('drops the minutes on a whole-hour session', () => {
         renderWithProviders(
             <LfgHistoryPanel
