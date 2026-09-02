@@ -12,6 +12,11 @@ import {
   shouldPostEmbed,
   getLeadTimeFromRecurrence,
 } from '../utils/embed-lead-time';
+import {
+  EMBED_GAME_COLUMNS,
+  toEmbedGame,
+  type EmbedGame,
+} from './embed-game.helpers';
 
 const STANDALONE_LEAD_TIME_MS = 6 * 24 * 60 * 60 * 1000; // 6 days
 
@@ -125,17 +130,17 @@ export class EmbedSchedulerService {
     return success;
   }
 
-  /** Fetch game name/cover data for an event. */
+  /** Fetch game id/name/cover data for an event (ROK-1460: id for the link). */
   private async fetchGameData(
     gameId: number | null,
-  ): Promise<{ name: string; coverUrl: string | null } | null> {
+  ): Promise<EmbedGame | null> {
     if (!gameId) return null;
     const [game] = await this.db
-      .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
+      .select(EMBED_GAME_COLUMNS)
       .from(schema.games)
       .where(eq(schema.games.id, gameId))
       .limit(1);
-    return game ? { name: game.name, coverUrl: game.coverUrl } : null;
+    return toEmbedGame(game);
   }
 }
 
@@ -157,7 +162,7 @@ interface DeferredEvent {
 /** Build embed event data from a deferred event row. */
 function buildDeferredEventData(
   event: DeferredEvent,
-  gameData: { name: string; coverUrl: string | null } | null,
+  gameData: EmbedGame | null,
 ): EmbedEventData {
   return {
     id: event.id,
