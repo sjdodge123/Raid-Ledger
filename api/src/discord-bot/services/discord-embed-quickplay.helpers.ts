@@ -127,11 +127,18 @@ function rosterName(m: SignupMention): string {
   return m.displayName || m.username || m.discordUsername || '???';
 }
 
-/** Bold names, `~~struck~~` for anyone who left, capped at six. */
-function rosterBlock(event: EmbedEventData): string {
+/**
+ * Bold names, capped at six.
+ *
+ * The `~~struck~~` mark is LIVE-only: it means "was in this session, gone right
+ * now", which is only information while the session is running. At ENDED
+ * everyone has left by definition, so striking the whole roster through says
+ * nothing — the names render plain (operator decision, 2026-09-02).
+ */
+function rosterBlock(event: EmbedEventData, state: QuickPlayState): string {
   const entries: RosterEntry[] = (event.signupMentions ?? []).map((m) => ({
     name: rosterName(m),
-    ...(m.status === 'left' ? { struck: true } : {}),
+    ...(state === 'live' && m.status === 'left' ? { struck: true } : {}),
   }));
   return formatRoster(entries) || 'Nobody yet';
 }
@@ -148,7 +155,7 @@ function description(
   clientUrl: string | undefined,
   state: QuickPlayState,
 ): string {
-  const lines = [rosterBlock(event)];
+  const lines = [rosterBlock(event, state)];
   if (state === 'ended') lines.push(attendanceLine(event));
   const link = openEventLink(clientUrl, event.id);
   if (link) lines.push(link);

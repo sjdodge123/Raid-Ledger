@@ -701,10 +701,12 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
       expect(description).toContain('Attendance \u00b7 3 players');
       // Quick-play rosters render stored usernames (not <@id> mentions) so
       // ex-guild participants don't leak raw IDs (ROK). ROK-1460 made them bold
-      // display names; all three are struck through because all three left.
-      expect(description).toContain('~~**Aery**~~');
-      expect(description).toContain('~~**Belle**~~');
-      expect(description).toContain('~~**Cassie**~~');
+      // display names; the ~~strike~~ is LIVE-only, so an ENDED roster (where
+      // everyone has left by definition) renders them plain.
+      expect(description).toContain('**Aery**');
+      expect(description).toContain('**Belle**');
+      expect(description).toContain('**Cassie**');
+      expect(description).not.toContain('~~');
       // No raw mention token should leak for any participant (regression guard).
       expect(description).not.toContain('<@disc-');
       expect(description).not.toContain('<@');

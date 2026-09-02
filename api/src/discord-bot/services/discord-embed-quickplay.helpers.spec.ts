@@ -261,13 +261,26 @@ describe('buildQuickPlayEmbed — description (AC1, AC5)', () => {
     expect(embed.data.description).not.toContain('~~**Ana**~~');
   });
 
-  it('keeps the struck names on the ENDED roster', () => {
+  it('un-strikes the ENDED roster — everyone left, so nobody stands out', () => {
+    // Operator decision: at ENDED every participant has left by definition, so
+    // striking them all through says nothing and is not what the design shows.
+    // The strike is a LIVE-only signal: "in the session, but gone right now".
     const data = event({
       signupMentions: [player('Ana', true), player('Bo', true)],
     });
     const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'ended');
-    expect(embed.data.description).toContain('~~**Ana**~~');
-    expect(embed.data.description).toContain('~~**Bo**~~');
+    expect(embed.data.description).toContain('**Ana**');
+    expect(embed.data.description).toContain('**Bo**');
+    expect(embed.data.description).not.toContain('~~**Ana**~~');
+    expect(embed.data.description).not.toContain('~~**Bo**~~');
+  });
+
+  it('carries no strike-through at all on the ENDED roster', () => {
+    const data = event({
+      signupMentions: [player('Ana'), player('Bo', true), player('Cy', true)],
+    });
+    const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'ended');
+    expect(embed.data.description).not.toContain('~~');
   });
 
   it('caps the roster at six names and collapses the rest', () => {
