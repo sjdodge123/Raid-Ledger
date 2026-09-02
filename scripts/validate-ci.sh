@@ -60,6 +60,24 @@
 #                                        # (stop-on-first-failure) so
 #                                        # integration never runs there at all.
 #   ./scripts/validate-ci.sh --only-unit  # Run ONLY the api+web unit step.
+#   ./scripts/validate-ci.sh --fleet     # ONE-CALL FLEET GATE (ROK-1466).
+#                                        # Everything --static runs, PLUS the
+#                                        # unit step without coverage, the
+#                                        # sharded integration suite, and the
+#                                        # e2e steps pointed at an already-
+#                                        # deployed env. Requires an explicit
+#                                        # BASE_URL (or PLAYWRIGHT_BASE_URL) —
+#                                        # a runner container has no localhost
+#                                        # app, so defaulting to :5173 would
+#                                        # hang Playwright's webServer for 120s
+#                                        # and report a misleading failure.
+#                                        # Replaces the three-dispatch dance
+#                                        # (--static, --only-unit --no-coverage,
+#                                        # --only-integration) with one run
+#                                        # whose summary lists every step.
+#                                        # Example:
+#                                        #   BASE_URL=http://rl-env-<slug>-allinone \
+#                                        #     ./scripts/validate-ci.sh --fleet --with-e2e
 #   ./scripts/validate-ci.sh --no-coverage
 #                                        # Modifier for --only-unit / --full:
 #                                        # run jest/vitest WITHOUT --coverage
@@ -167,6 +185,10 @@ no_coverage=false
 # Label for the unit step's summary row — flipped by --no-coverage so a summary
 # can never claim coverage ran when it didn't.
 unit_step_label="Unit tests + coverage"
+# fleet_mode (--fleet): ROK-1466 one-call fleet gate — the full step list with a
+# no-coverage unit step and e2e bound to an explicit BASE_URL. Implies
+# --no-coverage; contradicts --static and every --only-* flag.
+fleet_mode=false
 # static_mode (--static): lite gate — build + typecheck + lint + conditional
 # migration/container checks only. Skips unit, integration, and all e2e.
 # Behavioral coverage is deferred to GitHub CI. See the usage header.
@@ -432,6 +454,53 @@ _resolve_web_url() {
   web_url="http://localhost:5173"
 }
 
+# Echo the URL check_env_up probes for API health. Mirrors check_env_up's own
+# precedence so an "env down" message can name the host that actually failed
+# instead of a hardcoded ":3000/health" (ROK-1466: on the fleet that string was
+# a lie — the probe went to the env, the message blamed localhost).
+#   1. HEALTH_URL                 — explicit override (rl_validate_ci)
+#   2. <web_url>/api/health       — any non-default web target (fleet/allinone)
+#   3. http://localhost:3000/health
+_resolve_health_url() {
+  if [ -n "${HEALTH_URL:-}" ]; then
+    echo "$HEALTH_URL"
+    return 0
+  fi
+  local web_url
+  _resolve_web_url || return 1
+  if [[ "$web_url" != "http://localhost:5173" ]]; then
+    echo "${web_url%/}/api/health"
+  else
+    echo "http://localhost:3000/health"
+  fi
+}
+
+# Export the resolved target so every e2e consumer agrees on ONE host.
+#
+# Three different readers need three different variables and they do NOT share
+# a fallback chain: playwright.config.ts reads PLAYWRIGHT_BASE_URL (and treats
+# either var as "remote, skip webServer"), scripts/playwright-global-setup.ts
+# reads BASE_URL for its page.goto, and every smoke API helper plus the
+# companion bot read API_URL. Exporting only PLAYWRIGHT_BASE_URL — which is
+# what this did before ROK-1466 — produced the exact failure this fixes:
+# validate-ci PROBED the fleet env, then global-setup logged into
+# localhost:3000 and the specs drove localhost:5173.
+#
+# Local-dev targets are left completely untouched: setting BASE_URL for a
+# laptop run would flip playwright.config's IS_REMOTE_TARGET and suppress the
+# webServer auto-start. Only a non-default (remote/allinone) target is exported.
+_export_e2e_target() {
+  local web_url
+  _resolve_web_url || return 0
+  [[ "$web_url" != "http://localhost:5173" ]] || return 0
+  export BASE_URL="$web_url"
+  export PLAYWRIGHT_BASE_URL="$web_url"
+  if [ -z "${API_URL:-}" ]; then
+    export API_URL="${web_url%/}/api"
+  fi
+  echo -e "${YELLOW}E2E targeting: web=${BASE_URL} api=${API_URL}${NC}"
+}
+
 # Returns 0 if the dev env (API + web) is up, 1 otherwise.
 # Quiet on failure — callers decide whether absence is fatal or just a skip signal.
 # Local-dev mode probes API :3000 and Vite :5173 separately. Fleet mode
@@ -458,13 +527,7 @@ check_env_up() {
   #   2. <web_url>/api/health when web_url is non-localhost (fleet)
   #   3. http://localhost:3000/health (local-dev default)
   local health_url
-  if [ -n "${HEALTH_URL:-}" ]; then
-    health_url="$HEALTH_URL"
-  elif [[ "$web_url" != "http://localhost:5173" ]]; then
-    health_url="${web_url%/}/api/health"
-  else
-    health_url="http://localhost:3000/health"
-  fi
+  health_url="$(_resolve_health_url)" || return 1
 
   curl -fsS --max-time 3 --url "$health_url" 2>/dev/null \
     | grep -q '"status":"ok"' || return 1
@@ -1025,7 +1088,7 @@ run_playwright_e2e() {
         return 0
       fi
       if ! check_env_up; then
-        echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Playwright${NC}"
+        echo -e "${YELLOW}Dev env not responding at $(_resolve_health_url) — skipping Playwright${NC}"
         if [ "${RL_TARGET:-local}" = "remote" ]; then
           echo -e "${YELLOW}  Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
         else
@@ -1037,7 +1100,7 @@ run_playwright_e2e() {
       ;;
     on)
       if ! check_env_up; then
-        echo -e "${RED}--with-e2e requested but dev env is not responding on :3000/health.${NC}"
+        echo -e "${RED}--with-e2e requested but dev env is not responding at $(_resolve_health_url).${NC}"
         if [ "${RL_TARGET:-local}" = "remote" ]; then
           echo -e "${RED}Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
         else
@@ -1048,16 +1111,9 @@ run_playwright_e2e() {
       ;;
   esac
 
-  # Resolve the target URL the env probe just validated and export it so
-  # Playwright's `use.baseURL` (playwright.config.ts) actually targets the
-  # fleet env in remote mode. Without this, validate-ci would happily probe
-  # https://slot-N.gamernight.net AND THEN run tests against localhost:5173
-  # (codex round-3 HIGH).
-  local web_url
-  if _resolve_web_url; then
-    export PLAYWRIGHT_BASE_URL="$web_url"
-    echo -e "${YELLOW}Playwright targeting: ${PLAYWRIGHT_BASE_URL}${NC}"
-  fi
+  # Bind BASE_URL / PLAYWRIGHT_BASE_URL / API_URL to the target the env probe
+  # just validated (codex round-3 HIGH; widened to all three in ROK-1466).
+  _export_e2e_target
 
   # Runs BOTH desktop + mobile projects — matches GitHub CI exactly (ROK-935).
   npx playwright test
@@ -1077,7 +1133,7 @@ run_discord_smoke() {
         return 0
       fi
       if ! check_env_up; then
-        echo -e "${YELLOW}Dev env not responding on :3000/health — skipping Discord smoke${NC}"
+        echo -e "${YELLOW}Dev env not responding at $(_resolve_health_url) — skipping Discord smoke${NC}"
         if [ "${RL_TARGET:-local}" = "remote" ]; then
           echo -e "${YELLOW}  Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
         else
@@ -1089,7 +1145,7 @@ run_discord_smoke() {
       ;;
     on)
       if ! check_env_up; then
-        echo -e "${RED}--with-e2e requested but dev env is not responding on :3000/health.${NC}"
+        echo -e "${RED}--with-e2e requested but dev env is not responding at $(_resolve_health_url).${NC}"
         if [ "${RL_TARGET:-local}" = "remote" ]; then
           echo -e "${RED}Slot URL probe failed — ensure your \`rl claim\` slot is up via \`rl_env_deploy({slug: ...})\`.${NC}"
         else
@@ -1099,6 +1155,11 @@ run_discord_smoke() {
       fi
       ;;
   esac
+
+  # ROK-1466: the companion bot reads API_URL. Bind it to the same target the
+  # probe just validated so a fleet run drives the env's API rather than a
+  # localhost:3000 that does not exist inside the runner container.
+  _export_e2e_target
 
   # tools/test-bot is a standalone package, NOT an npm workspace, so the root
   # `npm install` (and the fleet runner image's baked install) does NOT cover
@@ -1303,12 +1364,34 @@ main() {
       --only-integration) _set_only_mode integration; shift ;;
       --only-unit) _set_only_mode unit; shift ;;
       --no-coverage) no_coverage=true; shift ;;
+      --fleet) fleet_mode=true; no_coverage=true; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
     esac
   done
 
   if $no_coverage; then
     unit_step_label="Unit tests (no coverage)"
+  fi
+
+  # ROK-1466: --fleet is the whole gate against a remote env, so it contradicts
+  # both narrowing families, and it REFUSES to run without an explicit target.
+  # Falling back to localhost inside a runner container is the failure this flag
+  # exists to prevent: check_env_up would probe a :3000 nothing listens on, and
+  # (with --with-e2e) Playwright's webServer block would spend 120s trying to
+  # spawn Vite before failing with an error that names neither cause.
+  if $fleet_mode; then
+    if [ -n "$only_mode" ]; then
+      echo -e "${RED}--fleet and --only-${only_mode} are mutually exclusive (--fleet runs every step).${NC}" >&2
+      exit 2
+    fi
+    if $static_mode; then
+      echo -e "${RED}--fleet and --static are mutually exclusive (--fleet includes the behavioral suites --static defers).${NC}" >&2
+      exit 2
+    fi
+    if [ -z "${BASE_URL:-}" ] && [ -z "${PLAYWRIGHT_BASE_URL:-}" ]; then
+      echo -e "${RED}--fleet requires an explicit target: export BASE_URL (or PLAYWRIGHT_BASE_URL) pointing at the deployed env, e.g. BASE_URL=http://rl-env-<slug>-allinone${NC}" >&2
+      exit 2
+    fi
   fi
 
   # --static already skips unit, integration AND e2e, so pairing it with any
